@@ -19,15 +19,31 @@ import type { SmashUpCore } from './domain/types';
 import { getSmashUpCardPreviewMeta } from './ui/cardPreviewHelper';
 
 // ============================================================================
-// ActionLog 共享白名单
+// 白名单定义
 // ============================================================================
 
+/**
+ * 操作日志白名单：记录所有有意义的玩家操作。
+ */
 export const ACTION_ALLOWLIST = [
     SU_COMMANDS.PLAY_MINION,
     SU_COMMANDS.PLAY_ACTION,
     SU_COMMANDS.USE_TALENT,
     SU_COMMANDS.DISCARD_TO_LIMIT,
     FLOW_COMMANDS.ADVANCE_PHASE,
+] as const;
+
+/**
+ * 撤回快照白名单：只包含"玩家主动决策点"命令。
+ * 连锁/系统命令不产生独立快照：
+ * - ADVANCE_PHASE：触发回合结束链条（scoreBases→draw→endTurn→startTurn），
+ *   不是独立决策点，撤回应回到最后一次出牌前
+ * - DISCARD_TO_LIMIT：draw 阶段手牌超限时的弃牌，是 ADVANCE_PHASE 的连锁操作
+ */
+export const UNDO_ALLOWLIST = [
+    SU_COMMANDS.PLAY_MINION,
+    SU_COMMANDS.PLAY_ACTION,
+    SU_COMMANDS.USE_TALENT,
 ] as const;
 
 const SU_NS = 'game-smashup';

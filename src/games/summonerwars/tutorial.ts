@@ -26,11 +26,11 @@ const MATCH_PHASE_DRAW = { type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'draw' 
 
 const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
   id: 'summonerwars-basic',
-  // 骠子使用 random() * 6 取索引: 0-2=melee, 3-4=ranged, 5=special
-  // sequence 模式: random() 返回 (value-1)/1000000
-  // 要让索引=4（ranged），需要 floor(random()*6)=4，即 random() ≈ 0.75-0.83
-  // value = 750001 → random() = 750000/1000000 = 0.75 → floor(0.75*6) = 4 → ranged
-  randomPolicy: { mode: 'sequence', values: [750001] },
+  // 骰子使用 floor(random() * 6) 取面索引（0-5）
+  // sequence 模式: random() 返回 value / 6
+  // 要让索引=4（melee+ranged），需要 floor(value/6 * 6) = floor(value) = 4 → value = 4
+  // STANDARD_DICE_FACES[4] = { faceIndex: 4, marks: ['melee', 'ranged'] }
+  randomPolicy: { mode: 'sequence', values: [4] },
   steps: [
     // ================================================================
     // 第一部分：初始化 + 逐步介绍界面元素

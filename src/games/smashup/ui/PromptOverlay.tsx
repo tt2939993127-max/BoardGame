@@ -131,6 +131,10 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
         }));
     }, [prompt?.options, t]);
 
+    // 通用跳过选项检测：自动分离 id === 'skip' 的选项，渲染为独立按钮
+    const skipOption = useMemo(() => resolvedOptions.find(opt => opt.id === 'skip'), [resolvedOptions]);
+    const nonSkipOptions = useMemo(() => resolvedOptions.filter(opt => opt.id !== 'skip'), [resolvedOptions]);
+
     // ====== 通用卡牌展示模式（弃牌堆查看等，优先级最高） ======
     // 统一渲染：永远显示所有卡牌，可打出的高亮，不分"选择模式"和"查看模式"
     if (displayCards) {
@@ -400,18 +404,31 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 {t('ui.waiting_for_player', { id: prompt.playerId })}
                             </div>
                         ) : (
-                            <div className="flex gap-3">
-                                {resolvedOptions.map((opt, idx) => (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="flex gap-3">
+                                    {nonSkipOptions.map((opt, idx) => (
+                                        <GameButton
+                                            key={`${idx}-${opt.id}`}
+                                            variant="primary"
+                                            size="md"
+                                            onClick={() => handleAction(opt.id, opt.disabled)}
+                                            disabled={opt.disabled}
+                                        >
+                                            {opt.label}
+                                        </GameButton>
+                                    ))}
+                                </div>
+                                {skipOption && (
                                     <GameButton
-                                        key={`${idx}-${opt.id}`}
-                                        variant="primary"
-                                        size="md"
-                                        onClick={() => handleAction(opt.id, opt.disabled)}
-                                        disabled={opt.disabled}
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => handleAction(skipOption.id, skipOption.disabled)}
+                                        disabled={skipOption.disabled}
+                                        className="opacity-70 hover:opacity-100"
                                     >
-                                        {opt.label}
+                                        {skipOption.label}
                                     </GameButton>
-                                ))}
+                                )}
                             </div>
                         )}
                     </div>
@@ -422,8 +439,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
     // ====== 卡牌展示模式（多卡选择） ======
     if (useCardMode) {
-        const cardOptions = resolvedOptions.filter(opt => isCardOption(opt));
-        const textOptions = resolvedOptions.filter(opt => !isCardOption(opt));
+        const cardOptions = nonSkipOptions.filter(opt => isCardOption(opt));
+        const textOptions = nonSkipOptions.filter(opt => !isCardOption(opt));
 
         return (
             <AnimatePresence>
@@ -517,52 +534,72 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                         </div>
                     )}
 
-                    {/* 文本选项（如"跳过"）+ 多选确认 */}
-                    {isMyPrompt && (textOptions.length > 0 || isMulti) && (
-                        <div className="flex gap-3 mt-5">
-                            {textOptions.map((opt, idx) => (
+                    {/* 文本选项 + 跳过按钮 + 多选确认 */}
+                    {isMyPrompt && (textOptions.length > 0 || isMulti || skipOption) && (
+                        <div className="flex flex-col items-center gap-3 mt-5">
+                            {/* 文本选项 + 多选按钮 */}
+                            {(textOptions.length > 0 || isMulti) && (
+                                <div className="flex gap-3">
+                                    {textOptions.map((opt, idx) => (
+                                        <GameButton
+                                            key={`text-${idx}`}
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => handleAction(opt.id, opt.disabled)}
+                                            disabled={opt.disabled}
+                                        >
+                                            {opt.label}
+                                        </GameButton>
+                                    ))}
+                                    {isMulti && (
+                                        <>
+                                            <GameButton
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const allIds = cardOptions.map(o => o.id);
+                                                    setSelectedIds(prev =>
+                                                        prev.length === allIds.length ? [] : (maxSelections !== undefined ? allIds.slice(0, maxSelections) : allIds),
+                                                    );
+                                                }}
+                                            >
+                                                {selectedIds.length === cardOptions.length
+                                                    ? t('ui.deselect_all', { defaultValue: '取消全选' })
+                                                    : t('ui.select_all', { defaultValue: '全选' })}
+                                            </GameButton>
+                                            <GameButton
+                                                variant="primary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    dispatch(INTERACTION_COMMANDS.RESPOND, { optionIds: selectedIds });
+                                                }}
+                                                disabled={!canSubmitMulti}
+                                            >
+                                                {t('ui.confirm', { defaultValue: '确认' })}
+                                                {selectedIds.length > 0 && ` (${selectedIds.length})`}
+                                            </GameButton>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            {/* 独立跳过按钮 */}
+                            {skipOption && (
                                 <GameButton
-                                    key={`text-${idx}`}
                                     variant="secondary"
                                     size="sm"
-                                    onClick={() => handleAction(opt.id, opt.disabled)}
-                                    disabled={opt.disabled}
+                                    onClick={() => {
+                                        if (isMulti) {
+                                            // 多选模式下跳过直接提交，不走 toggle 流程
+                                            dispatch(INTERACTION_COMMANDS.RESPOND, { optionIds: [skipOption.id] });
+                                        } else {
+                                            handleAction(skipOption.id, skipOption.disabled);
+                                        }
+                                    }}
+                                    disabled={skipOption.disabled}
+                                    className="opacity-70 hover:opacity-100"
                                 >
-                                    {opt.label}
+                                    {skipOption.label}
                                 </GameButton>
-                            ))}
-                            {isMulti && (
-                                <>
-                                    <GameButton
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={() => {
-                                            const allIds = cardOptions.map(o => o.id);
-                                            setSelectedIds(prev =>
-                                                prev.length === allIds.length ? [] : (maxSelections !== undefined ? allIds.slice(0, maxSelections) : allIds),
-                                            );
-                                        }}
-                                    >
-                                        {selectedIds.length === cardOptions.length
-                                            ? t('ui.deselect_all', { defaultValue: '取消全选' })
-                                            : t('ui.select_all', { defaultValue: '全选' })}
-                                    </GameButton>
-                                    <GameButton
-                                        variant="primary"
-                                        size="sm"
-                                        onClick={() => {
-                                            // 多选提交：将 optionIds 转换为对应的 value 数组
-                                            const selectedValues = selectedIds
-                                                .map(id => cardOptions.find(opt => opt.id === id)?.value)
-                                                .filter((v): v is NonNullable<typeof v> => v !== undefined);
-                                            dispatch(INTERACTION_COMMANDS.RESPOND, { value: selectedValues });
-                                        }}
-                                        disabled={!canSubmitMulti}
-                                    >
-                                        {t('ui.confirm', { defaultValue: '确认' })}
-                                        {selectedIds.length > 0 && ` (${selectedIds.length})`}
-                                    </GameButton>
-                                </>
                             )}
                         </div>
                     )}
@@ -604,7 +641,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
                     {/* 选项列表 */}
                     <div className="p-4 max-h-[50vh] overflow-y-auto custom-scrollbar flex flex-col gap-2">
-                        {isMyPrompt && hasOptions ? resolvedOptions.map((option, idx) => {
+                        {isMyPrompt && hasOptions ? nonSkipOptions.map((option, idx) => {
                             const isSelected = selectedIds.includes(option.id);
                             return (
                                 <GameButton
@@ -631,6 +668,19 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                     : t('ui.prompt_wait', { defaultValue: '等待对方选择…' })}
                             </div>
                         )}
+                        {/* 独立跳过按钮 */}
+                        {isMyPrompt && skipOption && (
+                            <GameButton
+                                variant="secondary"
+                                size="md"
+                                fullWidth
+                                onClick={() => handleAction(skipOption.id, skipOption.disabled)}
+                                disabled={skipOption.disabled}
+                                className="mt-2 opacity-70 hover:opacity-100 border-dashed"
+                            >
+                                {skipOption.label}
+                            </GameButton>
+                        )}
                     </div>
 
                     {/* 多选确认 */}
@@ -640,13 +690,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => {
-                                    const allIds = resolvedOptions.map(o => o.id);
+                                    const allIds = nonSkipOptions.map(o => o.id);
                                     setSelectedIds(prev =>
                                         prev.length === allIds.length ? [] : (maxSelections !== undefined ? allIds.slice(0, maxSelections) : allIds),
                                     );
                                 }}
                             >
-                                {selectedIds.length === resolvedOptions.length
+                                {selectedIds.length === nonSkipOptions.length
                                     ? t('ui.deselect_all', { defaultValue: '取消全选' })
                                     : t('ui.select_all', { defaultValue: '全选' })}
                             </GameButton>
@@ -654,11 +704,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 variant="primary"
                                 size="sm"
                                 onClick={() => {
-                                    // 多选提交：将 optionIds 转换为对应的 value 数组
-                                    const selectedValues = selectedIds
-                                        .map(id => resolvedOptions.find(opt => opt.id === id)?.value)
-                                        .filter((v): v is NonNullable<typeof v> => v !== undefined);
-                                    dispatch(INTERACTION_COMMANDS.RESPOND, { value: selectedValues });
+                                    dispatch(INTERACTION_COMMANDS.RESPOND, { optionIds: selectedIds });
                                 }}
                                 disabled={!canSubmitMulti}
                             >

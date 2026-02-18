@@ -55,6 +55,7 @@ const AUTO_AUDIT = collectSmashupInteractionAuditAuto();
  */
 const AUTO_WARNING_ALLOWLIST = new Set([
   'domain/abilityHelpers.ts::createSimpleChoice 的第5参数(sourceId)不是字符串字面量，无法自动审计',
+  'abilities/pirates.ts::createSimpleChoice 的第5参数(sourceId)不是字符串字面量，无法自动审计',
 ]);
 
 const MANUAL_SOURCE_SUPPLEMENTS: AuditableInteractionSource[] = [];
@@ -126,4 +127,10 @@ createInteractionCompletenessAuditSuite({
   sources: INTERACTION_SOURCES,
   registeredHandlerIds: getHandlerIds(),
   chains: HANDLER_CHAINS,
+  // resolveOrPrompt 内联回调处理：单候选自动执行，多候选时由后续 handler 链处理
+  // TODO: 考虑让 resolveOrPrompt 自动注册 handler
+  handlerWhitelist: new Set([
+    'miskatonic_mandatory_reading',
+    'miskatonic_thing_on_the_doorstep',
+  ]),
 });

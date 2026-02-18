@@ -284,6 +284,14 @@ export interface TutorialStepSnapshot {
      * 优先级：allowedCommands > infoStep
      */
     infoStep?: boolean;
+    /**
+     * 教程视角切换：指定此步骤期间以哪个玩家的视角观看
+     *
+     * 设置后，MatchRoom 会自动切换 debugPlayerID 到指定玩家。
+     * 步骤结束（推进到下一步）时，MatchRoom 自动恢复到玩家自己的视角（'0'）。
+     * 适用于"对手回合"等需要展示对手视角的步骤。
+     */
+    viewAs?: string;
 }
 
 export interface TutorialManifest {

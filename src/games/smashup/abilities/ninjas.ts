@@ -78,7 +78,7 @@ function ninjaTigerAssassin(ctx: AbilityContext): AbilityResult {
     });
     const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     const interaction = createSimpleChoice(
-        `ninja_tiger_assassin_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的力量≤3的随从（可跳过）', targetType: 'minion' }, [...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), skipOption] as any[], 'ninja_tiger_assassin'
+        `ninja_tiger_assassin_${ctx.now}`, ctx.playerId, '选择要消灭的力量≤3的随从（可跳过）', [...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), skipOption] as any[], { sourceId: 'ninja_tiger_assassin', targetType: 'minion' }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -101,7 +101,7 @@ function ninjaSeeingStars(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
-        `ninja_seeing_stars_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的力量≤3的随从', targetType: 'minion' }, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), 'ninja_seeing_stars'
+        `ninja_seeing_stars_${ctx.now}`, ctx.playerId, '选择要消灭的力量≤3的随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), { sourceId: 'ninja_seeing_stars', targetType: 'minion' }
         );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -185,10 +185,12 @@ function ninjaInfiltrateOnPlay(ctx: AbilityContext): AbilityResult {
         id: `tactic-${i}`,
         label: t.label,
         value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
+        _source: 'ongoing' as const,
     }));
     const interaction = createSimpleChoice(
         `ninja_infiltrate_${ctx.now}`, ctx.playerId,
-        '选择要消灭的战术', options as any[], 'ninja_infiltrate_destroy',
+        '选择要消灭的战术', options as any[],
+        { sourceId: 'ninja_infiltrate_destroy', targetType: 'ongoing' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -210,7 +212,7 @@ function ninjaWayOfDeception(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `ninja_way_of_deception_${ctx.now}`, ctx.playerId, { sourceId: '选择要移动的己方随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'ninja_way_of_deception_choose_minion'
+        `ninja_way_of_deception_${ctx.now}`, ctx.playerId, '选择要移动的己方随从', buildMinionTargetOptions(options), { sourceId: 'ninja_way_of_deception_choose_minion', targetType: 'minion' }
         );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -369,7 +371,7 @@ function ninjaHiddenNinja(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+        return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power }, _source: 'hand' as const };
     });
     const interaction = createSimpleChoice(
         `ninja_hidden_ninja_${ctx.now}`, ctx.playerId,
@@ -529,7 +531,7 @@ export function registerNinjaInteractionHandlers(): void {
         }
         if (candidates.length === 0) return undefined;
         const next = createSimpleChoice(
-            `ninja_way_of_deception_base_${timestamp}`, playerId, { sourceId: '选择目标基地', targetType: 'base' }, buildBaseTargetOptions(candidates, state.core), 'ninja_way_of_deception_choose_base'
+            `ninja_way_of_deception_base_${timestamp}`, playerId, '选择目标基地', buildBaseTargetOptions(candidates, state.core), { sourceId: 'ninja_way_of_deception_choose_base', targetType: 'base' }
             );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { minionUid, minionDefId: minion.defId, fromBaseIndex: baseIndex } } }), events: [] };
     });
@@ -585,7 +587,7 @@ export function registerNinjaInteractionHandlers(): void {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power }, _source: 'hand' as const };
         });
         const next = createSimpleChoice(
             `ninja_disguise_play1_${timestamp}`, playerId,
@@ -615,7 +617,7 @@ export function registerNinjaInteractionHandlers(): void {
                     const def = getCardDef(c.defId) as MinionCardDef | undefined;
                     const name = def?.name ?? c.defId;
                     const pw = def?.power ?? 0;
-                    return { id: `hand-${i}`, label: `${name} (力量 ${pw})`, value: { cardUid: c.uid, defId: c.defId, power: pw } };
+                    return { id: `hand-${i}`, label: `${name} (力量 ${pw})`, value: { cardUid: c.uid, defId: c.defId, power: pw }, _source: 'hand' as const };
                 });
                 const next = createSimpleChoice(
                     `ninja_disguise_play2_${timestamp}`, playerId,
@@ -680,12 +682,12 @@ export function registerNinjaInteractionHandlers(): void {
 
     // 渗透：选择要消灭的战术
     registerInteractionHandler('ninja_infiltrate_destroy', (state, _playerId, value, _iData, _random, timestamp) => {
-        const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        const { cardUid: ongoingUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
         return {
             state,
             events: [{
                 type: SU_EVENTS.ONGOING_DETACHED,
-                payload: { cardUid, defId, ownerId, reason: 'ninja_infiltrate_destroy' },
+                payload: { cardUid: ongoingUid, defId, ownerId, reason: 'ninja_infiltrate_destroy' },
                 timestamp,
             } as OngoingDetachedEvent],
         };

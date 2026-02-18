@@ -39,6 +39,8 @@ interface HandAreaProps {
   bloodSummonSelectingCard?: boolean;
   /** 技能选卡模式：当前正在为技能选择手牌（弃牌/选择，不是打出），绕过魔力检查 */
   abilitySelectingCards?: boolean;
+  /** 有交互模式激活（技能选择/事件卡多步骤），阻止打出新事件卡 */
+  interactionBusy?: boolean;
   className?: string;
 }
 
@@ -182,6 +184,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
   onMagnifyCard,
   bloodSummonSelectingCard = false,
   abilitySelectingCards = false,
+  interactionBusy = false,
   className = '',
 }) => {
   const { t } = useTranslation('game-summonerwars');
@@ -265,6 +268,12 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
     // 事件卡：在对应阶段直接打出
     if (card.cardType === 'event' && isMyTurn) {
+      // 有交互模式激活时（技能选择/事件卡多步骤），阻止打出新事件卡
+      if (interactionBusy) {
+        playDeniedSound();
+        showToast.warning(t('handArea.interactionBusy', '请先完成当前操作'));
+        return;
+      }
       const event = card as EventCard;
       if (event.playPhase === phase || event.playPhase === 'any') {
         onPlayEvent?.(cardId);
@@ -308,7 +317,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, showToast]);
+  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast]);
 
   if (cards.length === 0) {
     return null;

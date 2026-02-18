@@ -202,6 +202,24 @@
     "unitCharged": "Charge {{amount}}:",
     "unitChargeTotal": "(total {{total}})",
     "sourceAbility": "(source: {{abilityName}})",
+    "damageFrom": " from:",
+    "damageFromAbility": "(source: {{abilityName}})",
+    "damageReason": {
+      "curse": "(curse recoil)",
+      "entangle": "(entangle)",
+      "trample": "(trample)",
+      "ice_shards": "(ice shards)",
+      "ice_ram": "(ice ram)",
+      "blood_rune": "(blood rune)",
+      "blood_summon": "(blood summon)",
+      "revive_undead": "(revive undead cost)",
+      "inaction": "(inaction penalty)",
+      "stun": "(stun)",
+      "stun_passthrough": "(stun passthrough)",
+      "holy_protection": "(holy protection)"
+    },
+    "attackDamage": "→ dealt {{damage}} damage",
+    "attackBonus": "(power {{base}}→{{total}})",
     "structureBuilt": "Structure built:",
     "structureHealed": "Structure healed {{amount}}:",
     "structureDestroyed": "Structure destroyed:",
@@ -329,7 +347,8 @@
     "meleeAttack": "Melee Attack",
     "rangedAttack": "Ranged Attack",
     "damage": "{{count}} Damage!",
-    "miss": "Miss"
+    "miss": "Miss",
+    "evasionReduced": "Evasion -{{count}}"
   },
   "handArea": {
     "bloodSummonOnlyLowCost": "Blood Summon only allows unit cards with cost ≤ {{maxCost}}",
@@ -341,7 +360,8 @@
     "noSameNameDiscard": "Cannot discard units with the same name",
     "noDuplicateNameDiscard": "Cannot discard multiple units with the same name",
     "holyArrowAtLeastOne": "Holy Arrow requires discarding at least one unit card",
-    "healingNeedsDiscard": "Healing requires discarding a card"
+    "healingNeedsDiscard": "Healing requires discarding a card",
+    "interactionBusy": "Please complete the current action first"
   },
   "eventCard": {
     "noSummoner": "Your summoner is not on the board",
@@ -359,6 +379,7 @@
     },
     "stun": {
       "selectTarget": "Stun: Select an enemy unit within 3 straight spaces of your summoner",
+      "selectDestination": "Stun: Select push/pull destination",
       "direction": "Stun direction:",
       "distance": "Distance:"
     },
@@ -440,7 +461,8 @@
       "message": "Mind Capture: Control the target or deal {{hits}} damage?"
     },
     "telekinesis": {
-      "message": "{{ability}}: Choose push or pull direction"
+      "message": "{{ability}}: Choose push or pull direction",
+      "selectDestination": "{{ability}}: Select destination for target"
     },
     "afterAttack": {
       "message": "{{ability}}: Select a target"
@@ -498,6 +520,9 @@
     "summonerDefeated": "Summoner Defeated"
   },
   "interaction": {
+    "fireSacrifice": {
+      "mustSelectAlly": "Please select an ally unit to sacrifice"
+    },
     "cannotAttackThere": "Cannot attack that target",
     "outOfRange": "Target is out of attack range",
     "notInLine": "Ranged attacks must be in a straight line",
@@ -516,7 +541,7 @@
     },
     "life_drain": {
       "name": "Life Drain",
-      "description": "Before this unit attacks, you may destroy a friendly unit within 2 spaces. If you do, this unit's attack strength is doubled."
+      "description": "Before this unit attacks, you may destroy a friendly unit within 2 spaces. If you do, special marks (🪓) also count as melee hits (⚔️) for this attack."
     },
     "rage": {
       "name": "Rage",
@@ -552,7 +577,7 @@
     },
     "fire_sacrifice_summon": {
       "name": "Fire Sacrifice",
-      "description": "During your Summon phase, you may destroy a friendly unit instead of paying magic to summon a unit."
+      "description": "When you pay the cost to summon this unit, you must also destroy a friendly unit and place this unit in the destroyed unit's space."
     },
     "mind_capture": {
       "name": "Mind Capture",

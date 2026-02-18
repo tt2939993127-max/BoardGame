@@ -4,7 +4,7 @@
  * 使用领域内核 + 引擎适配器
  */
 
-import type { ActionLogEntry, ActionLogSegment, BreakdownLine, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
+import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
 import {
     createActionLogSystem,
     createCheatSystem,
@@ -12,12 +12,15 @@ import {
     createFlowSystem,
     createLogSystem,
     createInteractionSystem,
+    createSimpleChoiceSystem,
+    createMultistepChoiceSystem,
     createRematchSystem,
     createResponseWindowSystem,
     createTutorialSystem,
     createUndoSystem,
 } from '../../engine';
 import { createGameEngine } from '../../engine/adapter';
+import { buildDamageBreakdownSegment, type DamageSourceResolver } from '../../engine/primitives/actionLogHelpers';
 import { DiceThroneDomain } from './domain';
 import { DICETHRONE_COMMANDS } from './domain/ids';
 import type {
@@ -67,39 +70,53 @@ const ACTION_LOG_ALLOWLIST = [
 const UNDO_ALLOWLIST = [
     'PLAY_CARD',
     'PLAY_UPGRADE_CARD',
+    'SELL_CARD',
+    'SELECT_ABILITY',
     'ADVANCE_PHASE',
 ] as const;
 
 const DT_NS = 'game-dicethrone';
 
-/** 将 sourceAbilityId 解析为可读的 i18n 来源标签 */
+/** DiceThrone 伤害来源解析器（实现 DamageSourceResolver 接口） */
+const dtDamageSourceResolver: DamageSourceResolver = {
+    resolve(sourceAbilityId: string) {
+        // 系统来源映射
+        switch (sourceAbilityId) {
+            case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true, ns: DT_NS };
+            case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true, ns: DT_NS };
+            case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true, ns: DT_NS };
+        }
+        return null;
+    },
+};
+
+/**
+ * 将 sourceAbilityId 解析为可读的 i18n 来源标签
+ * 需要访问 core 状态（技能表查找），所以保留为独立函数而非 resolver 方法
+ */
 function resolveAbilitySourceLabel(
     sourceAbilityId: string | undefined,
     core: DiceThroneCore,
     _playerId: PlayerId,
-): { label: string; isI18n: boolean } | null {
+): { label: string; isI18n: boolean; ns?: string } | null {
     if (!sourceAbilityId) return null;
-    // 系统来源映射
-    switch (sourceAbilityId) {
-        case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true };
-        case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true };
-        case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true };
-    }
+    // 先走 resolver（系统来源）
+    const fromResolver = dtDamageSourceResolver.resolve(sourceAbilityId);
+    if (fromResolver) return fromResolver;
     // 从双方玩家技能表中查找（支持变体 ID）
     for (const pid of Object.keys(core.players)) {
         const found = findPlayerAbility(core, pid, sourceAbilityId);
         if (found?.ability.name) {
-            return { label: found.ability.name, isI18n: found.ability.name.includes('.') };
+            return { label: found.ability.name, isI18n: found.ability.name.includes('.'), ns: DT_NS };
         }
     }
-    // 卡牌 ID 解析：sourceAbilityId 以 'card-' 开头时，查找卡牌名称
+    // 卡牌 ID 解析
     if (sourceAbilityId.startsWith('card-')) {
         const card = findDiceThroneCard(core, sourceAbilityId);
         if (card?.name) {
-            return { label: card.name, isI18n: card.name.includes('.') };
+            return { label: card.name, isI18n: card.name.includes('.'), ns: DT_NS };
         }
     }
-    // fallback：用 sourceAbilityId 本身作为文本
     return { label: sourceAbilityId, isI18n: false };
 }
 
@@ -363,7 +380,7 @@ function formatDiceThroneActionEntry({
 
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;
-            const { targetId, amount, actualDamage, sourceAbilityId, modifiers, breakdown } = damageEvent.payload;
+            const { targetId, amount, actualDamage, sourceAbilityId, modifiers, breakdown, sourcePlayerId } = damageEvent.payload;
             let actorId = targetId;
             if (attackResolved) {
                 if (targetId === attackResolved.payload.defenderId) {
@@ -371,6 +388,9 @@ function formatDiceThroneActionEntry({
                 } else if (sourceAbilityId === 'retribution-reflect') {
                     actorId = attackResolved.payload.defenderId;
                 }
+            } else if (sourcePlayerId && sourcePlayerId !== targetId) {
+                // Token 响应窗口关闭后产生的伤害：用 sourcePlayerId 推断攻击方
+                actorId = sourcePlayerId;
             }
             const dealt = actualDamage ?? amount ?? 0;
             const isSelfDamage = actorId === targetId;
@@ -379,67 +399,19 @@ function formatDiceThroneActionEntry({
             const effectiveSourceId = sourceAbilityId ?? attackResolved?.payload.sourceAbilityId;
             const source = resolveAbilitySourceLabel(effectiveSourceId, core, actorId);
 
-            // 构建 breakdown 明细行（所有伤害都用 breakdown，统一虚线下划线风格）
-            const breakdownLines: BreakdownLine[] = [];
-            
-            // 优先使用新管线的 breakdown 格式
-            if (breakdown) {
-                // 新格式：基础伤害 + 修正步骤
-                // 引擎层 resolveAbilityName 只返回 abilityId（如 'pickpocket'），
-                // 需要用游戏层 resolveAbilitySourceLabel 获取 i18n key（如 'abilities.pickpocket.name'）
-                let baseLabel = breakdown.base.sourceName || breakdown.base.sourceId;
-                let baseLabelIsI18n = breakdown.base.sourceNameIsI18n ?? false;
-                if (!baseLabelIsI18n && source) {
-                    baseLabel = source.label;
-                    baseLabelIsI18n = source.isI18n;
-                }
-                breakdownLines.push({
-                    label: baseLabel,
-                    labelIsI18n: baseLabelIsI18n,
-                    labelNs: baseLabelIsI18n ? DT_NS : undefined,
-                    value: breakdown.base.value,
-                    color: 'neutral',
-                });
-                breakdown.steps.forEach(step => {
-                    breakdownLines.push({
-                        label: step.sourceName || step.sourceId,
-                        labelIsI18n: step.sourceNameIsI18n ?? false,
-                        labelNs: step.sourceNameIsI18n ? DT_NS : undefined,
-                        value: step.value,
-                        color: step.value > 0 ? 'positive' : 'negative',
-                    });
-                });
-            } else if (modifiers && modifiers.length > 0) {
-                // 旧格式（向后兼容）：推算基础伤害 + 各修改器
-                const modTotal = modifiers.reduce((sum, m) => sum + m.value, 0);
-                const baseDamage = dealt - modTotal;
-                breakdownLines.push({
-                    label: 'actionLog.damageSource.original', labelIsI18n: true, labelNs: DT_NS,
-                    value: baseDamage, color: 'neutral',
-                });
-                modifiers.forEach(mod => {
-                    const isI18n = !!mod.sourceName?.includes('.');
-                    breakdownLines.push({
-                        label: mod.sourceName || mod.sourceId || mod.type,
-                        labelIsI18n: isI18n,
-                        labelNs: isI18n ? DT_NS : undefined,
-                        value: mod.value,
-                        color: mod.value > 0 ? 'positive' : 'negative',
-                    });
-                });
-            } else if (source) {
-                // 无修改器但有来源：显示来源名 + 数值
-                breakdownLines.push({
-                    label: source.label, labelIsI18n: source.isI18n, labelNs: source.isI18n ? DT_NS : undefined,
-                    value: dealt, color: 'neutral',
-                });
-            }
-
-            const breakdownSeg: ActionLogSegment = {
-                type: 'breakdown',
-                displayText: String(dealt),
-                lines: breakdownLines,
-            };
+            // 使用引擎层通用工具构建 breakdown segment
+            const breakdownSeg = buildDamageBreakdownSegment(
+                dealt,
+                {
+                    sourceAbilityId: effectiveSourceId,
+                    breakdown,
+                    modifiers,
+                },
+                {
+                    resolve: (sid) => resolveAbilitySourceLabel(sid, core, actorId),
+                },
+                DT_NS,
+            );
 
             // 统一用 before + breakdown + after 模式
             let segments: ActionLogSegment[];
@@ -485,23 +457,13 @@ function formatDiceThroneActionEntry({
             // 解析治疗来源
             const healSource = resolveAbilitySourceLabel(healSourceId, core, command.playerId);
 
-            // 构建 breakdown 明细行
-            const healLines: BreakdownLine[] = [];
-            if (healSource) {
-                healLines.push({
-                    label: healSource.label,
-                    labelIsI18n: healSource.isI18n,
-                    labelNs: healSource.isI18n ? DT_NS : undefined,
-                    value: amount,
-                    color: 'positive',
-                });
-            }
-
-            const healBreakdown: ActionLogSegment = {
-                type: 'breakdown',
-                displayText: String(amount),
-                lines: healLines,
-            };
+            // 使用引擎层通用工具构建 breakdown segment
+            const healBreakdown = buildDamageBreakdownSegment(
+                amount,
+                { sourceAbilityId: healSourceId },
+                { resolve: (sid) => resolveAbilitySourceLabel(sid, core, command.playerId) },
+                DT_NS,
+            );
 
             const afterKey = healSource ? 'actionLog.healAfter.withSource' : 'actionLog.healAfter.plain';
             const afterParams = healSource ? { source: healSource.label } : undefined;
@@ -749,6 +711,8 @@ const systems = [
         snapshotCommandAllowlist: UNDO_ALLOWLIST,
     }),
     createInteractionSystem(),
+    createSimpleChoiceSystem(),
+    createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
         // 使用分类系统（推荐）
@@ -772,7 +736,6 @@ const systems = [
         ],
         interactionLock: {
             requestEvent: 'INTERACTION_REQUESTED',
-            resolveEvents: ['INTERACTION_COMPLETED', 'INTERACTION_CANCELLED'],
         },
     }),
     createTutorialSystem(),
@@ -826,6 +789,7 @@ const COMMAND_TYPES = [
     'SYS_INTERACTION_RESPOND',
     'SYS_INTERACTION_TIMEOUT',
     'SYS_INTERACTION_CANCEL',
+    'SYS_INTERACTION_CONFIRM',
 ];
 
 // 开发环境：验证所有命令都已分类

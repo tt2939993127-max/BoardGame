@@ -84,10 +84,10 @@ describe('远古之物：消灭两个随从选择权', () => {
         const destroyEvents = result.events.filter((e: any) => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents).toHaveLength(0);
 
-        // 应产生多选交互让玩家选择 2 个随从
+        // 应产生单选交互让玩家选择第一个要消灭的随从
         const interaction = (result.state?.sys as any)?.interaction?.current;
         expect(interaction).toBeDefined();
-        expect(interaction?.data?.sourceId).toBe('elder_thing_elder_thing_destroy_select');
+        expect(interaction?.data?.sourceId).toBe('elder_thing_elder_thing_destroy_first');
         expect(interaction?.playerId).toBe('0');
     });
 
@@ -123,7 +123,7 @@ describe('远古之物：消灭两个随从选择权', () => {
         expect(destroyEvents).toHaveLength(1);
     });
 
-    it('多选交互处理：玩家选择 2 个随从后正确消灭', () => {
+    it('两步单选交互处理：玩家依次选择 2 个随从后正确消灭', () => {
         const m1 = makeMinion('m-1', 'test_a', '0', 2);
         const m2 = makeMinion('m-2', 'test_b', '0', 3);
         const m3 = makeMinion('m-3', 'test_c', '0', 4);
@@ -131,19 +131,26 @@ describe('远古之物：消灭两个随从选择权', () => {
         const state = makeState({ bases: [base] });
         const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
-        const handler = getInteractionHandler('elder_thing_elder_thing_destroy_select')!;
-        const result = handler(ms, '0', [
-            { minionUid: 'm-1', defId: 'test_a', baseIndex: 0 },
-            { minionUid: 'm-3', defId: 'test_c', baseIndex: 0 },
-        ], undefined, dummyRandom, 2)!;
+        // 第一步：选择第一个随从
+        const handler1 = getInteractionHandler('elder_thing_elder_thing_destroy_first')!;
+        const result1 = handler1(ms, '0', { minionUid: 'm-1', defId: 'test_a', baseIndex: 0 }, undefined, dummyRandom, 2)!;
 
-        const destroyEvents = result.events.filter((e: any) => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents).toHaveLength(2);
-        const uids = destroyEvents.map((e: any) => e.payload.minionUid);
-        expect(uids).toContain('m-1');
-        expect(uids).toContain('m-3');
-        // m-2 不应被消灭
-        expect(uids).not.toContain('m-2');
+        const destroyEvents1 = result1.events.filter((e: any) => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvents1).toHaveLength(1);
+        expect(destroyEvents1[0].payload.minionUid).toBe('m-1');
+
+        // 应产生第二步交互
+        const interaction2 = (result1.state?.sys as any)?.interaction?.current;
+        expect(interaction2).toBeDefined();
+        expect(interaction2?.data?.sourceId).toBe('elder_thing_elder_thing_destroy_second');
+
+        // 第二步：选择第二个随从
+        const handler2 = getInteractionHandler('elder_thing_elder_thing_destroy_second')!;
+        const result2 = handler2(result1.state!, '0', { minionUid: 'm-3', defId: 'test_c', baseIndex: 0 }, interaction2?.data, dummyRandom, 3)!;
+
+        const destroyEvents2 = result2.events.filter((e: any) => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvents2).toHaveLength(1);
+        expect(destroyEvents2[0].payload.minionUid).toBe('m-3');
     });
 
     it('选择"放牌库底"时不消灭随从', () => {

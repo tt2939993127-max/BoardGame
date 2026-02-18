@@ -601,6 +601,44 @@ describe('克苏鲁之仆派系能力', () => {
             expect(newState.players['0'].deck[0].uid).toBe('dis1');
             expect(newState.players['0'].deck[1].uid).toBe('d1');
         });
+
+        it('交互 min=0 且包含跳过选项', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_recruit_by_force', 'action', '0')],
+                        discard: [makeCard('dis1', 'cthulhu_servitor', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const current = (matchState.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.multi?.min).toBe(0);
+            expect(current?.data?.options?.some((o: any) => o.id === 'skip')).toBe(true);
+        });
+
+        it('选跳过 → 弃牌堆不变，牌库不变', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_recruit_by_force', 'action', '0')],
+                        deck: [makeCard('d1', 'test', 'action', '0')],
+                        discard: [makeCard('dis1', 'cthulhu_servitor', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const handler = getInteractionHandler('cthulhu_recruit_by_force');
+            expect(handler).toBeDefined();
+            // 传空数组模拟跳过（min=0）
+            const result = handler!(matchState, '0', [], undefined, defaultRandom, 1000);
+            expect(result.events.length).toBe(0);
+            // 弃牌堆中的随从仍在弃牌堆
+            expect(matchState.core.players['0'].discard.some((c: any) => c.uid === 'dis1')).toBe(true);
+        });
     });
 
     describe('cthulhu_it_begins_again（再次降临：弃牌堆行动卡洗回牌库）', () => {
@@ -625,9 +663,9 @@ describe('克苏鲁之仆派系能力', () => {
             const current = (matchState.sys as any)?.interaction?.current;
             expect(current).toBeDefined();
             expect(current?.data?.sourceId).toBe('cthulhu_it_begins_again');
-            // 选项只包含行动卡（不含随从）
+            // 选项包含行动卡（不含随从）+ 跳过选项
             const options = current?.data?.options ?? [];
-            expect(options.length).toBe(2);
+            expect(options.length).toBe(3); // 2张行动卡 + 1个跳过
 
             // 解析交互：选择全部行动卡
             const handler = getInteractionHandler('cthulhu_it_begins_again');
@@ -696,6 +734,44 @@ describe('克苏鲁之仆派系能力', () => {
             expect(newState.players['0'].discard.length).toBe(2);
             expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
             expect(newState.players['0'].discard.some(c => c.uid === 'dis2')).toBe(true);
+        });
+
+        it('交互 min=0 且包含跳过选项', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_it_begins_again', 'action', '0')],
+                        discard: [makeCard('dis1', 'test_action', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const current = (matchState.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.multi?.min).toBe(0);
+            expect(current?.data?.options?.some((o: any) => o.id === 'skip')).toBe(true);
+        });
+
+        it('选跳过 → 牌库不变', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_it_begins_again', 'action', '0')],
+                        deck: [makeCard('d1', 'test', 'minion', '0')],
+                        discard: [makeCard('dis1', 'test_action', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const handler = getInteractionHandler('cthulhu_it_begins_again');
+            expect(handler).toBeDefined();
+            // 传空数组模拟跳过（min=0）
+            const result = handler!(matchState, '0', [], undefined, defaultRandom, 1000);
+            expect(result.events.length).toBe(0);
+            // 牌库不变
+            expect(matchState.core.players['0'].deck.some((c: any) => c.uid === 'd1')).toBe(true);
         });
     });
 

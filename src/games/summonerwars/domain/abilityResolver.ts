@@ -89,7 +89,7 @@ export interface AbilityContext {
     cardIds?: string[];
   };
   /** 本次攻击的骰子结果（afterAttack 时可用） */
-  diceResults?: import('../config/dice').DiceFace[];
+  diceResults?: import('../config/dice').DiceFaceResult[];
   /** 时间戳 */
   timestamp: number;
 }

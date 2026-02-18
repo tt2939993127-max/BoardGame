@@ -614,6 +614,102 @@ describe('诡术师派系能力', () => {
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('trickster_disenchant');
     });
+
+    it('trickster_disenchant: 选项使用 cardUid + _source: ongoing（显式声明来源）', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'trickster_disenchant', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1', minions: [],
+                ongoingActions: [{ uid: 'oa1', defId: 'test_ongoing', ownerId: '1' }],
+            }],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        const options = current?.data?.options;
+        expect(options?.length).toBe(1);
+        // 选项 value 使用 cardUid，_source 显式声明为 'ongoing'
+        expect(options[0].value.cardUid).toBe('oa1');
+        expect(options[0]._source).toBe('ongoing');
+    });
+
+    it('trickster_disenchant: 同时收集基地 ongoing 和随从附着行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'trickster_disenchant', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [{
+                    ...makeMinion('m1', 'test', '1', 3),
+                    attachedActions: [{ uid: 'att1', defId: 'test_attached', ownerId: '1' }],
+                }],
+                ongoingActions: [{ uid: 'oa1', defId: 'test_ongoing', ownerId: '0' }],
+            }],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        const options = current?.data?.options;
+        // 应收集到 2 个目标：1 个基地 ongoing + 1 个随从附着
+        expect(options?.length).toBe(2);
+    });
+
+    it('trickster_disenchant: 交互解决后 ongoing 卡被移除并进入弃牌堆', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'trickster_disenchant', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1', minions: [],
+                ongoingActions: [{ uid: 'oa1', defId: 'test_ongoing', ownerId: '1' }],
+            }],
+        });
+
+        // 模拟交互解决：ONGOING_DETACHED 事件
+        const detachEvent = {
+            type: SU_EVENTS.ONGOING_DETACHED,
+            payload: { cardUid: 'oa1', defId: 'test_ongoing', ownerId: '1', reason: 'trickster_disenchant' },
+            timestamp: Date.now(),
+        } as SmashUpEvent;
+        const newCore = reduce(state, detachEvent);
+        // 基地上 ongoing 应被移除
+        expect(newCore.bases[0].ongoingActions.length).toBe(0);
+        // 卡牌应进入所有者弃牌堆
+        expect(newCore.players['1'].discard.some(c => c.uid === 'oa1')).toBe(true);
+    });
+
+    it('trickster_disenchant: 场上无行动卡时返回反馈', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'trickster_disenchant', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        // 无目标时应有 ABILITY_FEEDBACK 事件
+        const feedbackEvents = events.filter(e => e.type === SU_EVENTS.ABILITY_FEEDBACK);
+        expect(feedbackEvents.length).toBe(1);
+        // 不应创建交互
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeUndefined();
+    });
 });
 
 // ============================================================================

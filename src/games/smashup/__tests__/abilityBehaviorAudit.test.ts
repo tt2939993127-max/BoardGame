@@ -248,6 +248,7 @@ describe('SmashUp 能力行为审计', () => {
             'steampunk_zeppelin',         // 飞艇：天赋效果由 abilityRegistry 处理
             'ghost_make_contact',         // 交朋友：控制权转移由特殊逻辑处理
             'zombie_theyre_coming_to_get_you', // 它们为你而来：通过 DiscardPlayProvider 实现弃牌堆出牌
+            'miskatonic_lost_knowledge',  // 通往超凡的门：天赋效果由 abilityRegistry 处理（talent）
         ]);
 
         it('所有 ongoing 行动卡都有对应的效果注册', () => {

@@ -236,6 +236,34 @@ interface FlowHooks<TCore> {
 
 基于快照撤销（`beforeCommand` 存储完整状态）、白名单机制（`snapshotCommandAllowlist`）、多人握手（请求→批准/拒绝/取消）、撤销时清空 EventStream（防特效重播）。
 
+**白名单拆分规范（强制）**：`ActionLogSystem` 和 `UndoSystem` 必须使用**独立的白名单**，不得共享同一个 `ACTION_ALLOWLIST`。
+
+- `ACTION_ALLOWLIST`（操作日志用）：记录所有有意义的玩家操作，包括连锁操作（技能激活、弃牌、阶段推进等）。
+- `UNDO_ALLOWLIST`（撤回快照用）：**只包含玩家主动决策点命令**，连锁/系统命令不产生独立快照。
+
+**判断标准**：一个命令是否应进入 `UNDO_ALLOWLIST`，取决于它是否是玩家的独立决策——即玩家主动选择触发，而非由前一个命令的结果自动触发。
+
+```
+✅ 进入 UNDO_ALLOWLIST（玩家决策点）：
+  - 打出随从/行动卡/事件卡（PLAY_MINION / PLAY_ACTION / PLAY_EVENT）
+  - 移动/召唤/建造（MOVE_UNIT / SUMMON_UNIT / BUILD_STRUCTURE）
+  - 宣告攻击（DECLARE_ATTACK）
+  - 选择技能（SELECT_ABILITY）
+  - 卖卡（SELL_CARD）
+
+❌ 不进入 UNDO_ALLOWLIST（连锁/系统操作）：
+  - 技能激活（ACTIVATE_ABILITY）——由攻击/阶段结束触发
+  - 血契召唤步骤（BLOOD_SUMMON_STEP）——召唤的连锁子步骤
+  - 殉葬火堆治疗（FUNERAL_PYRE_HEAL）——回合开始触发
+  - 弃牌至上限（DISCARD_TO_LIMIT）——阶段推进的连锁操作
+  - 阶段推进（ADVANCE_PHASE）——视游戏而定（见下）
+```
+
+**`ADVANCE_PHASE` 的特殊处理**：
+- **DiceThrone**：玩家手动点击推进阶段（main1→offensiveRoll 等），是独立决策，**进入** `UNDO_ALLOWLIST`。
+- **SmashUp**：触发整个回合结束链条（scoreBases→draw→endTurn→startTurn），撤回应回到最后一次出牌前，**不进入** `UNDO_ALLOWLIST`。
+- **SummonerWars**：系统自动推进，**不进入** `UNDO_ALLOWLIST`。
+
 **`_noSnapshot` 跳过快照（通用机制）**：当一个命令是前一个操作的"后续动作"（如移动后触发的技能），UI 层在 dispatch 时给 payload 加 `_noSnapshot: true`，UndoSystem 会跳过该命令的快照创建，使其与前一个命令共享同一个撤回点。撤回时两个操作作为一个原子单元一起回退。此机制适用于任何游戏，不依赖特定技能/命令类型。
 
 ### 5.6 ActionLogSystem 约束

@@ -60,7 +60,7 @@ describe('Interaction Cleanup', () => {
         sys: { phase: 'offensiveRoll' },
     });
 
-    it('MODIFY_DIE 命令生成 INTERACTION_COMPLETED 事件', () => {
+    it('MODIFY_DIE 命令生成 DIE_MODIFIED 事件（交互完成由 systems 层自动处理）', () => {
         const state = createMockState();
         const command: DiceThroneCommand = {
             type: 'MODIFY_DIE',
@@ -74,16 +74,12 @@ describe('Interaction Cleanup', () => {
         // 验证生成了 DIE_MODIFIED 事件
         expect(events.some(e => e.type === 'DIE_MODIFIED')).toBe(true);
         
-        // 验证生成了 INTERACTION_COMPLETED 事件
-        const interactionCompletedEvent = events.find(e => e.type === 'INTERACTION_COMPLETED');
-        expect(interactionCompletedEvent).toBeDefined();
-        expect(interactionCompletedEvent?.payload).toEqual({
-            interactionId: 'dice-interaction',
-            sourceCardId: '',
-        });
+        // INTERACTION_COMPLETED 不再由 execute 层生成
+        // 骰子交互完成由 systems.ts 的 afterEvents 自动处理（达到 selectCount 时触发）
+        expect(events.some(e => e.type === 'INTERACTION_COMPLETED')).toBe(false);
     });
 
-    it('REROLL_DIE 命令生成 INTERACTION_COMPLETED 事件', () => {
+    it('REROLL_DIE 命令生成 DIE_REROLLED 事件（交互完成由 systems 层自动处理）', () => {
         const state = createMockState();
         const command: DiceThroneCommand = {
             type: 'REROLL_DIE',
@@ -97,16 +93,12 @@ describe('Interaction Cleanup', () => {
         // 验证生成了 DIE_REROLLED 事件
         expect(events.some(e => e.type === 'DIE_REROLLED')).toBe(true);
         
-        // 验证生成了 INTERACTION_COMPLETED 事件
-        const interactionCompletedEvent = events.find(e => e.type === 'INTERACTION_COMPLETED');
-        expect(interactionCompletedEvent).toBeDefined();
-        expect(interactionCompletedEvent?.payload).toEqual({
-            interactionId: 'dice-interaction',
-            sourceCardId: '',
-        });
+        // INTERACTION_COMPLETED 不再由 execute 层生成
+        // 骰子交互完成由 systems.ts 的 afterEvents 自动处理（达到 selectCount 时触发）
+        expect(events.some(e => e.type === 'INTERACTION_COMPLETED')).toBe(false);
     });
 
-    it('REMOVE_STATUS 命令生成 INTERACTION_COMPLETED 事件', () => {
+    it('REMOVE_STATUS 命令生成业务事件（交互完成由 systems 层自动处理）', () => {
         const state = createMockState();
         const command: DiceThroneCommand = {
             type: 'REMOVE_STATUS',
@@ -120,16 +112,13 @@ describe('Interaction Cleanup', () => {
         // 验证生成了 STATUS_REMOVED 事件
         expect(events.some(e => e.type === 'STATUS_REMOVED')).toBe(true);
         
-        // 验证生成了 INTERACTION_COMPLETED 事件
-        const interactionCompletedEvent = events.find(e => e.type === 'INTERACTION_COMPLETED');
-        expect(interactionCompletedEvent).toBeDefined();
-        expect(interactionCompletedEvent?.payload).toEqual({
-            interactionId: 'status-interaction',
-            sourceCardId: '',
-        });
+        // INTERACTION_COMPLETED 不再由 execute 层生成
+        // 状态交互完成由 systems.ts 的 afterEvents 自动处理（检测到 STATUS_REMOVED 时触发）
+        // 这确保 interactionId 与 ResponseWindowSystem 的 interactionLock 匹配
+        expect(events.some(e => e.type === 'INTERACTION_COMPLETED')).toBe(false);
     });
 
-    it('TRANSFER_STATUS 命令生成 INTERACTION_COMPLETED 事件', () => {
+    it('TRANSFER_STATUS 命令生成业务事件（交互完成由 systems 层自动处理）', () => {
         const state = createMockState();
         const command: DiceThroneCommand = {
             type: 'TRANSFER_STATUS',
@@ -146,13 +135,9 @@ describe('Interaction Cleanup', () => {
         // 验证生成了 STATUS_APPLIED 事件（添加到目标玩家）
         expect(events.some(e => e.type === 'STATUS_APPLIED')).toBe(true);
         
-        // 验证生成了 INTERACTION_COMPLETED 事件
-        const interactionCompletedEvent = events.find(e => e.type === 'INTERACTION_COMPLETED');
-        expect(interactionCompletedEvent).toBeDefined();
-        expect(interactionCompletedEvent?.payload).toEqual({
-            interactionId: 'status-interaction',
-            sourceCardId: '',
-        });
+        // INTERACTION_COMPLETED 不再由 execute 层生成
+        // 状态交互完成由 systems.ts 的 afterEvents 自动处理
+        expect(events.some(e => e.type === 'INTERACTION_COMPLETED')).toBe(false);
     });
 
     it('INTERACTION_CANCELLED 事件返还卡牌和 CP', () => {

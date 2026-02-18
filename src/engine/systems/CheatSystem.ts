@@ -42,6 +42,8 @@ export const CHEAT_COMMANDS = {
     SET_STATE: 'SYS_CHEAT_SET_STATE',
     /** 合并部分字段到游戏状态（教程注入 pendingDamage 等场景） */
     MERGE_STATE: 'SYS_CHEAT_MERGE_STATE',
+    /** 删除手牌（按 uid 从手牌移入弃牌堆） */
+    REMOVE_HAND_CARD: 'SYS_CHEAT_REMOVE_HAND_CARD',
 } as const;
 
 // ============================================================================
@@ -112,6 +114,12 @@ export interface RefreshBasePayload {
     baseIndex: number;
 }
 
+export interface RemoveHandCardPayload {
+    playerId: PlayerId;
+    /** 手牌的 uid */
+    cardUid: string;
+}
+
 // ============================================================================
 // 通用资源修改器接口
 // ============================================================================
@@ -139,6 +147,8 @@ export interface CheatResourceModifier<TCore> {
     refreshBase?: (core: TCore, baseIndex: number) => { core: TCore; events: Array<{ type: string; payload: unknown; timestamp: number }> };
     /** 刷新所有基地（可选，SmashUp 专用） */
     refreshAllBases?: (core: TCore) => { core: TCore; events: Array<{ type: string; payload: unknown; timestamp: number }> };
+    /** 删除手牌（按 uid 从手牌移入弃牌堆，可选） */
+    removeHandCard?: (core: TCore, playerId: PlayerId, cardUid: string) => TCore;
 }
 
 // ============================================================================
@@ -345,6 +355,20 @@ export function createCheatSystem<TCore>(
                     halt: true,
                     state: { ...state, core: result.core },
                     events: result.events,
+                };
+            }
+
+            // 处理删除手牌命令
+            if (command.type === CHEAT_COMMANDS.REMOVE_HAND_CARD && modifier.removeHandCard) {
+                const payload = command.payload as RemoveHandCardPayload;
+                const newCore = modifier.removeHandCard(
+                    state.core,
+                    payload.playerId,
+                    payload.cardUid
+                );
+                return {
+                    halt: true,
+                    state: { ...state, core: newCore },
                 };
             }
 

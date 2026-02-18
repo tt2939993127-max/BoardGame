@@ -7,6 +7,7 @@ set -euo pipefail
 #   首次部署：  bash deploy-image.sh
 #   更新版本：  bash deploy-image.sh update
 #   回滚版本：  bash deploy-image.sh rollback <tag>
+#   初始化管理员：bash deploy-image.sh init-admin
 #   查看状态：  bash deploy-image.sh status
 #   查看日志：  bash deploy-image.sh logs [service]
 #
@@ -164,6 +165,28 @@ prompt_env_interactive() {
     log "跳过 SMTP 配置（邮箱验证码功能不可用）"
   fi
 
+  # --- 管理员账号（可选） ---
+  local admin_email="" admin_password="" admin_username=""
+  echo ""
+  echo "${LOG_PREFIX} 管理员账号用于后台管理功能（可选，部署后也可手动创建）。"
+  echo -n "${LOG_PREFIX} 是否配置管理员账号？[y/N] "
+  local admin_choice
+  read -r admin_choice || admin_choice="n"
+  if [[ "$admin_choice" =~ ^[yY] ]]; then
+    echo -n "${LOG_PREFIX}   管理员邮箱："
+    read -r admin_email || admin_email=""
+    echo -n "${LOG_PREFIX}   管理员密码："
+    read -rs admin_password || admin_password=""
+    echo ""
+    echo -n "${LOG_PREFIX}   管理员昵称（回车默认"管理员"）："
+    read -r admin_username || admin_username=""
+    if [ -z "$admin_username" ]; then
+      admin_username="管理员"
+    fi
+  else
+    log "跳过管理员配置（部署后可运行 bash deploy-image.sh init-admin 创建）"
+  fi
+
   # --- SENTRY_DSN（可选） ---
   local sentry_dsn=""
   echo ""
@@ -175,6 +198,16 @@ prompt_env_interactive() {
 # ===== 密钥（必填） =====
 JWT_SECRET=${jwt_secret}
 EOF
+
+  if [ -n "$admin_email" ]; then
+    cat >> .env << EOF
+
+# ===== 管理员账号（首次启动自动创建） =====
+ADMIN_EMAIL=${admin_email}
+ADMIN_PASSWORD=${admin_password}
+ADMIN_USERNAME=${admin_username}
+EOF
+  fi
 
   if [ -n "$smtp_host" ]; then
     cat >> .env << EOF
@@ -265,6 +298,106 @@ ensure_port_available() {
 }
 
 # ============================================================
+# 管理员初始化
+# ============================================================
+
+init_admin_if_configured() {
+  # 从 .env 读取管理员配置
+  local admin_email admin_password admin_username
+  admin_email=$(grep -E '^ADMIN_EMAIL=' .env 2>/dev/null | cut -d= -f2- || true)
+  admin_password=$(grep -E '^ADMIN_PASSWORD=' .env 2>/dev/null | cut -d= -f2- || true)
+  admin_username=$(grep -E '^ADMIN_USERNAME=' .env 2>/dev/null | cut -d= -f2- || true)
+
+  if [ -z "$admin_email" ] || [ -z "$admin_password" ]; then
+    return
+  fi
+
+  log "检测到管理员配置，等待 web 容器就绪..."
+
+  # 等待 web 容器启动（最多 30 秒）
+  local retries=0
+  while [ $retries -lt 15 ]; do
+    if docker compose -f "$COMPOSE_FILE" exec -T web echo "ready" &>/dev/null; then
+      break
+    fi
+    sleep 2
+    retries=$((retries + 1))
+  done
+
+  if [ $retries -ge 15 ]; then
+    log "⚠️  web 容器未就绪，跳过管理员初始化（可稍后运行 bash deploy-image.sh init-admin）"
+    return
+  fi
+
+  log "初始化管理员账号..."
+  if docker compose -f "$COMPOSE_FILE" exec -T -e NODE_ENV=development web \
+    npx tsx scripts/db/init_admin.ts \
+      --email="$admin_email" \
+      --password="$admin_password" \
+      --username="${admin_username:-管理员}" \
+      --actor="deploy-script"; then
+    log "✅ 管理员账号初始化完成"
+  else
+    log "⚠️  管理员初始化失败（可稍后运行 bash deploy-image.sh init-admin 重试）"
+  fi
+}
+
+init_admin() {
+  ensure_compose_file
+
+  # 优先从 .env 读取
+  local admin_email admin_password admin_username
+  local need_save=false
+  admin_email=$(grep -E '^ADMIN_EMAIL=' .env 2>/dev/null | cut -d= -f2- || true)
+  admin_password=$(grep -E '^ADMIN_PASSWORD=' .env 2>/dev/null | cut -d= -f2- || true)
+  admin_username=$(grep -E '^ADMIN_USERNAME=' .env 2>/dev/null | cut -d= -f2- || true)
+
+  if [ -z "$admin_email" ] || [ -z "$admin_password" ]; then
+    # 交互式输入
+    if [ -t 0 ]; then
+      echo -n "${LOG_PREFIX} 管理员邮箱："
+      read -r admin_email || admin_email=""
+      echo -n "${LOG_PREFIX} 管理员密码："
+      read -rs admin_password || admin_password=""
+      echo ""
+      echo -n "${LOG_PREFIX} 管理员昵称（回车默认"管理员"）："
+      read -r admin_username || admin_username=""
+      need_save=true
+    fi
+  fi
+
+  if [ -z "$admin_email" ] || [ -z "$admin_password" ]; then
+    die "缺少管理员邮箱或密码。请在 .env 中配置 ADMIN_EMAIL/ADMIN_PASSWORD，或交互式输入"
+  fi
+
+  admin_username="${admin_username:-管理员}"
+
+  log "初始化管理员账号..."
+  docker compose -f "$COMPOSE_FILE" exec -T -e NODE_ENV=development web \
+    npx tsx scripts/db/init_admin.ts \
+      --email="$admin_email" \
+      --password="$admin_password" \
+      --username="$admin_username" \
+      --actor="deploy-script"
+
+  log "✅ 管理员账号初始化完成"
+
+  # 交互式输入的配置写回 .env，下次无需重复输入
+  if [ "$need_save" = true ] && [ -f ".env" ]; then
+    # 移除已有的 ADMIN_ 行（如果有残留注释等）
+    sed -i '/^#.*管理员账号/d; /^ADMIN_EMAIL=/d; /^ADMIN_PASSWORD=/d; /^ADMIN_USERNAME=/d' .env
+    cat >> .env << EOF
+
+# ===== 管理员账号 =====
+ADMIN_EMAIL=${admin_email}
+ADMIN_PASSWORD=${admin_password}
+ADMIN_USERNAME=${admin_username}
+EOF
+    log "✅ 管理员配置已写入 .env"
+  fi
+}
+
+# ============================================================
 # 部署操作
 # ============================================================
 
@@ -282,6 +415,9 @@ deploy() {
 
   log "启动服务"
   docker compose -f "$COMPOSE_FILE" up -d
+
+  # 等待服务就绪后初始化管理员
+  init_admin_if_configured
 
   echo ""
   log "=========================================="
@@ -343,6 +479,9 @@ case "${1:-deploy}" in
   rollback)
     rollback "${2:-}"
     ;;
+  init-admin)
+    init_admin
+    ;;
   status)
     status
     ;;
@@ -350,7 +489,7 @@ case "${1:-deploy}" in
     logs "${2:-}"
     ;;
   *)
-    echo "用法: $0 [deploy|update|rollback <tag>|status|logs [service]]"
+    echo "用法: $0 [deploy|update|rollback <tag>|init-admin|status|logs [service]]"
     exit 1
     ;;
 esac

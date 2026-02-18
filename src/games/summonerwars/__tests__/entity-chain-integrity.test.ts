@@ -61,7 +61,7 @@ const HANDLED_BY_UI_EVENTS = new Set([
 const HANDLED_BY_EXECUTORS = new Set([
     // 堕落王国
     'soul_transfer_request',    // → executors/necromancer 'soul_transfer'
-    'fire_sacrifice_summon',    // → executors/necromancer 'fire_sacrifice_summon'
+    // fire_sacrifice_summon 已改为 onSummon 触发，在 SUMMON_UNIT 命令流中处理
     // 欺心巫族
     'mind_capture_check',       // → executors/trickster 'mind_capture_resolve'
     'mind_capture_resolve',     // → executors/trickster 'mind_capture_resolve'（决策分支）
@@ -201,7 +201,7 @@ const ACTIVATED_UI_CONFIRMED = new Map<string, string>([
     // 手动触发（Board.tsx 静态按钮 → ACTIVATE_ABILITY）
     ['prepare',        'button:move   — Board.tsx 移动阶段按钮'],
     ['revive_undead',  'button:summon — Board.tsx 召唤阶段按钮 + CardSelectorOverlay'],
-    ['fire_sacrifice_summon', 'button:summon — AbilityButtonsPanel 召唤阶段按钮 + cell interaction 选友方单位'],
+    // fire_sacrifice_summon 已改为 onSummon 触发（trigger: 'onSummon'），不在 activated 列表中
     ['mind_capture_resolve', 'modal:decision — mind_capture 触发后的决策 Modal（控制/伤害）'],
     // 事件卡持续效果（ABILITY_TRIGGERED → useGameEvents → cell interaction）
     ['ice_ram',         'eventCard:ui  — 建筑移动/推拉后 useGameEvents 触发 + StatusBanners + cell interaction'],
@@ -742,10 +742,10 @@ describe('完整流程验证 (Section 9)', () => {
     });
 
     // ================================================================
-    // 5. beforeAttack — life_drain 吸取生命（战力翻倍）
+    // 5. beforeAttack — life_drain 吸取生命（special 标记算近战命中）
     // ================================================================
 
-    it('[beforeAttack/life_drain] DECLARE_ATTACK 带 beforeAttack 产生 STRENGTH_MODIFIED', () => {
+    it('[beforeAttack/life_drain] DECLARE_ATTACK 带 beforeAttack 消灭友方单位并正常攻击', () => {
         core.phase = 'attack';
         core.currentPlayer = '0' as PlayerId;
         const dragos = mkUnit('dragos', { abilities: ['life_drain'], strength: 2, faction: 'necromancer', unitClass: 'summoner' });
@@ -761,12 +761,14 @@ describe('完整流程验证 (Section 9)', () => {
             beforeAttack: { abilityId: 'life_drain', targetUnitId: victimUnit.instanceId },
         });
 
+        // 不再产生 STRENGTH_MODIFIED（效果改为 special 算近战命中）
         const strengthMod = events.find(e =>
             e.type === SW_EVENTS.STRENGTH_MODIFIED
             && (e.payload as Record<string, unknown>).sourceAbilityId === 'life_drain'
         );
-        expect(strengthMod).toBeDefined();
-        expect((strengthMod!.payload as Record<string, unknown>).multiplier).toBe(2);
+        expect(strengthMod).toBeUndefined();
+        // 攻击正常进行
+        expect(events.some(e => e.type === SW_EVENTS.UNIT_ATTACKED)).toBe(true);
         // 牺牲品应被消灭
         const destroyed = events.find(e =>
             e.type === SW_EVENTS.UNIT_DESTROYED
@@ -1225,10 +1227,10 @@ describe('边界/异常场景验证 (Section 10)', () => {
     });
 
     // ================================================================
-    // 5. beforeAttack/life_drain — 无牺牲目标时仅触发事件不翻倍
+    // 5. beforeAttack/life_drain — 无牺牲目标时不触发 special 命中效果
     // ================================================================
 
-    it('[life_drain/边界] 不提供 targetUnitId 时不翻倍战力', () => {
+    it('[life_drain/边界] 不提供 targetUnitId 时不触发 special 命中效果', () => {
         core.phase = 'attack';
         core.currentPlayer = '0' as PlayerId;
         const dragos = mkUnit('dragos-b', { abilities: ['life_drain'], strength: 2, faction: 'necromancer', unitClass: 'summoner' });

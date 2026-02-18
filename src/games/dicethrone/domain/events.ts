@@ -152,6 +152,8 @@ export interface BonusDieRolledEvent extends GameEvent<'BONUS_DIE_ROLLED'> {
         effectKey?: string;
         /** 效果描述的插值参数 */
         effectParams?: Record<string, string | number>;
+        /** 额外伤害加成（如伏击掷骰值加到 pendingDamage） */
+        pendingDamageBonus?: number;
     };
 }
 
@@ -262,6 +264,8 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         amount: number;
         actualDamage: number;
         sourceAbilityId?: string;
+        /** 造成伤害的玩家 ID（用于 Token 响应窗口关闭后的 ActionLog actorId 推断） */
+        sourcePlayerId?: PlayerId;
         /** 伤害修改记录（用于 ActionLog 展示完整的伤害计算过程）【旧格式，向后兼容】 */
         modifiers?: DamageModifier[];
         /** 伤害计算明细（新管线格式，优先使用）*/
@@ -623,7 +627,7 @@ export interface InteractionRequestedEvent extends GameEvent<'INTERACTION_REQUES
     };
 }
 
-/** 交互完成事件（已废弃 - InteractionSystem 自动处理） */
+/** 交互完成事件（已废弃 — 不再生成，交互完成由 systems.ts 直接调用 resolveInteraction） */
 export interface InteractionCompletedEvent extends GameEvent<'INTERACTION_COMPLETED'> {
     payload: {
         interactionId: string;
@@ -637,6 +641,8 @@ export interface InteractionCancelledEvent extends GameEvent<'INTERACTION_CANCEL
         playerId: PlayerId;
         sourceCardId: string;
         cpCost: number;
+        /** 原始交互 ID，用于 ResponseWindowSystem 解锁 interactionLock */
+        interactionId?: string;
     };
 }
 
@@ -812,9 +818,9 @@ export type DiceThroneEvent =
     | DieModifiedEvent
     | DieRerolledEvent
     | RollLimitChangedEvent
-    // | InteractionRequestedEvent    // 已废弃 - 使用 InteractionSystem
-    | InteractionCompletedEvent    // 仍需要 - 用于清理 dt:card-interaction
-    | InteractionCancelledEvent    // 仍需要 - 用于清理 dt:card-interaction
+    | InteractionRequestedEvent    // dt:card-interaction 创建
+    | InteractionCompletedEvent    // 已废弃 — 不再生成，保留类型定义用于向后兼容
+    | InteractionCancelledEvent    // 仍需要 - 用于清理 dt:card-interaction（返还卡牌/CP）
     | TokenResponseRequestedEvent
     | TokenUsedEvent
     | TokenResponseClosedEvent

@@ -8,6 +8,8 @@ import { GameTestRunner } from '../../../engine/testing';
 import { DiceThroneDomain } from '../domain';
 import { TOKEN_IDS, STATUS_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
+import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import type { DiceThroneCore } from '../domain/types';
 import {
     testSystems,
     createQueuedRandom,
@@ -666,15 +668,26 @@ describe('Monk 技能完整覆盖测试', () => {
 
         it('花开见佛: 4莲花造成5伤害+太极上限+1并补满', () => {
             // 4莲花: [6,6,6,6,1]
+            // 需要初始太极>=2才能触发花费2太极使攻击不可防御的选择
+            // 初始太极=5（满），花费2后剩3，postDamage 上限+1=6 并补满到6
             const diceValues = [6, 6, 6, 6, 1, 1, 1, 1, 1];
             const random = createQueuedRandom(diceValues);
+            
+            const setupWithTaiji = (playerIds: PlayerId[], rng: RandomFn): MatchState<DiceThroneCore> => {
+                const state = createNoResponseSetup()(playerIds, rng);
+                const player = state.core.players['0'];
+                if (player) {
+                    player.tokens[TOKEN_IDS.TAIJI] = 5;
+                }
+                return state;
+            };
             
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
-                setup: createNoResponseSetup(),
+                setup: setupWithTaiji,
                 assertFn: assertState,
                 silent: true,
             });
@@ -686,9 +699,11 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'lotus-palm' }),
-                    cmd('ADVANCE_PHASE', '0'), // preDefense 选择是否花费太极
+                    cmd('ADVANCE_PHASE', '0'), // preDefense 选择是否花费太极 → halt
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择花费2太极使攻击不可防御
-                    cmd('ADVANCE_PHASE', '0'), // 不可防御攻击跳过防御骰阶段，直接到 main2
+                    // autoContinue 触发 onPhaseExit(offensiveRoll)，isDefendable=false 直接结算
+                    // 剩余3太极触发 TOKEN_RESPONSE_REQUESTED（beforeDamageDealt 加伤响应）
+                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过加伤响应 → 攻击结算 → postDamage 太极上限+1并补满 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',

@@ -14,6 +14,8 @@ export { ActionBarSkeleton } from './ActionBarSkeleton';
 export { ResourceTraySkeleton } from './ResourceTraySkeleton';
 export { SpotlightSkeleton } from './SpotlightSkeleton';
 export { CardListOverlay } from './CardListOverlay';
+export { CardSpotlightQueue } from './CardSpotlightQueue';
+export type { CardSpotlightQueueProps } from './CardSpotlightQueue';
 export type { CardListOverlayProps, CardListItem } from './CardListOverlay';
 export { CharacterSelectionSkeleton } from './CharacterSelectionSkeleton';
 export type { CharacterSelectionSkeletonProps } from './CharacterSelectionSkeleton';
@@ -44,6 +46,7 @@ export {
     useDragCard,
     useAutoSkipPhase,
     useVisualSequenceGate,
+    useCardSpotlightQueue,
 } from './hooks';
 export type {
     UseGameBoardConfig,
@@ -51,6 +54,9 @@ export type {
     UseResourceTrayConfig,
     UseAutoSkipPhaseConfig,
     UseVisualSequenceGateReturn,
+    SpotlightItem,
+    UseCardSpotlightQueueConfig,
+    UseCardSpotlightQueueReturn,
 } from './hooks';
 
 // 预设渲染函数

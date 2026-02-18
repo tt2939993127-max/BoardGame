@@ -149,7 +149,7 @@ describe('炎术士 GTR 技能覆盖', () => {
                 expect: {
                     turnPhase: 'main2',
                     players: {
-                        '0': { tokens: { [TOKEN_IDS.FIRE_MASTERY]: 2 } },
+                        '0': { tokens: { [TOKEN_IDS.FIRE_MASTERY]: 4 } },
                         '1': { hp: 48 }, // 50 - 2 = 48
                     },
                 },

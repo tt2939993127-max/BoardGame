@@ -19,6 +19,7 @@ export const UI_Z_INDEX = {
     modalRoot: 2000,
     modalOverlay: 2100,
     modalContent: 2200,
+    modalTooltip: 2350,
     toast: 2250,
     tutorial: 2300,
 } as const;

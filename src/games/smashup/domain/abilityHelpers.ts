@@ -760,6 +760,7 @@ export function buildMinionTargetOptions(
         id: `minion-${i}`,
         label: c.label,
         value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+        _source: 'field' as const,
     }));
 }
 
@@ -780,6 +781,7 @@ export function buildBaseTargetOptions(
             id: `base-${i}`,
             label: c.label,
             value: { baseIndex: c.baseIndex, ...(baseDefId && { baseDefId }) },
+            _source: 'base' as const,
         };
     });
 }

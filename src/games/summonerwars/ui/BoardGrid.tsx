@@ -88,6 +88,8 @@ interface BoardGridProps {
   hypnoticLureHighlights: CellCoord[];
   // 攻击后技能高亮（念力/高阶念力/读心传念）
   afterAttackAbilityHighlights: CellCoord[];
+  // 念力终点高亮（棋盘点击终点模式）
+  telekinesisHighlights: CellCoord[];
   // 动画状态
   attackAnimState: { attacker: CellCoord; target: CellCoord; hits: number } | null;
   // 播放摧毁动画中的格子（用于隐藏本体）
@@ -204,6 +206,8 @@ function getCardTargetHighlight(row: number, col: number, props: BoardGridProps)
     return 'ring-2 ring-pink-400 shadow-[0_0_10px_rgba(244,114,182,0.6)] animate-pulse';
   if (props.afterAttackAbilityHighlights.some(p => p.row === row && p.col === col))
     return 'ring-2 ring-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.6)] animate-pulse';
+  if (props.telekinesisHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-teal-300 shadow-[0_0_12px_rgba(94,234,212,0.7)] animate-pulse';
   if (props.bloodSummonHighlights.some(p => p.row === row && p.col === col))
     return 'ring-2 ring-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)] animate-pulse';
   if (props.validEventTargets.some(p => p.row === row && p.col === col))
@@ -241,6 +245,7 @@ function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGr
   const isStunTarget = props.stunHighlights.some(p => p.row === row && p.col === col);
   const isHypnoticLureTarget = props.hypnoticLureHighlights.some(p => p.row === row && p.col === col);
   const isAfterAttackAbilityTarget = props.afterAttackAbilityHighlights.some(p => p.row === row && p.col === col);
+  const isTelekinesisTarget = props.telekinesisHighlights.some(p => p.row === row && p.col === col);
 
   if (isAnnihilateSelected) return 'border-purple-400 bg-purple-400/50 border-2 ring-2 ring-purple-300';
   if (isAnnihilateTarget) return 'border-purple-500 bg-purple-500/30 border-2 animate-pulse';
@@ -254,6 +259,7 @@ function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGr
   if (isStunTarget) return 'border-yellow-400 bg-yellow-400/30 border-2 animate-pulse';
   if (isHypnoticLureTarget) return 'border-pink-400 bg-pink-400/30 border-2 animate-pulse';
   if (isAfterAttackAbilityTarget) return 'border-teal-400 bg-teal-400/30 border-2 animate-pulse';
+  if (isTelekinesisTarget) return 'border-teal-300 bg-teal-300/30 border-2 animate-pulse';
   if (isBloodSummonTarget) return 'border-rose-500 bg-rose-500/30 border-2 animate-pulse';
   if (isValidEventTarget) return 'border-orange-400 bg-orange-400/30 border-2 animate-pulse';
   if (isValidSummon) return 'border-green-400 bg-green-400/30 border-2';
@@ -390,7 +396,6 @@ const UnitCell: React.FC<{
   const life = getEffectiveLife(unit, core);
   const isUnitSelected = core.selectedUnit?.row === row && core.selectedUnit?.col === col;
   const damageRatio = damage / life;
-  const hasAttached = (unit.attachedCards?.length ?? 0) > 0;
   // 卡牌目标高亮（除灭/心灵操控/攻击等模式下让卡牌本体发光）
   const cardHighlight = getCardTargetHighlight(row, col, props);
 
@@ -583,32 +588,7 @@ const UnitCell: React.FC<{
           />
         </div>
         
-        {/* 附加卡名条 - 统一底部（对手卡旋转后自动变为顶部） */}
-        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => {
-          const baseId = attachedCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-          const isHellfireBlade = baseId === 'necro-hellfire-blade';
-          
-          return (
-            <div
-              key={attachedCard.id}
-              className="absolute left-0 right-0 cursor-pointer pointer-events-auto"
-              style={{ zIndex: BOARD_GRID_Z.attachedLabel, bottom: `${idx * 14}%` }}
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onMagnifyEventCard?.(attachedCard);
-              }}
-            >
-              <div className={`text-white text-[0.45vw] text-center leading-tight py-[0.15vw] rounded-sm shadow-md border truncate px-[0.3vw] flex items-center justify-center gap-1 ${
-                isHellfireBlade
-                  ? 'bg-gradient-to-r from-orange-800/95 to-red-700/95 border-orange-500/40'
-                  : 'bg-gradient-to-r from-amber-800/90 to-amber-700/90 border-amber-500/30'
-              }`}>
-                <span>{attachedCard.name}</span>
-                {isHellfireBlade && <span className="text-orange-200 font-bold">+2⚔️</span>}
-              </div>
-            </div>
-          );
-        })}
+
       </div>
     </motion.div>
   );

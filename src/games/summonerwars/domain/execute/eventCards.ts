@@ -22,6 +22,7 @@ import {
   isForceMovePathClear,
   getPlayerUnits,
   calculatePushPullPosition,
+  calculateStunPushPull,
   getUnitAbilities,
   isInStraightLine,
   BOARD_ROWS,
@@ -197,10 +198,11 @@ export function executePlayEvent(
       }
 
       case CARD_IDS.TRICKSTER_STUN: {
-        // 震慑：召唤师3格直线内的一个士兵或英雄，推拉1-3格可穿过单位，对目标和被穿过的单位各造成1伤害
+        // 震慑：召唤师3格直线内的一个士兵或英雄，Force 1-3格（上下左右任意方向）
+        // 可穿过单位，对目标和被穿过的单位各造成1伤害
         // targets[0] = 目标位置
-        // payload.stunDirection = 'push' | 'pull'
-        // payload.stunDistance = 1-3
+        // payload.moveRow / payload.moveCol = 方向向量
+        // payload.distance = 1-3
         const stunSummoner = getSummoner(core, playerId);
         if (stunSummoner && targets && targets.length > 0) {
           const stunTarget = targets[0];
@@ -210,61 +212,29 @@ export function executePlayEvent(
             const stunDist = manhattanDistance(stunSummoner.position, stunTarget);
             if (stunDist > 3 || stunDist === 0 || !isInStraightLine(stunSummoner.position, stunTarget)) break;
 
-            const stunDirection = (payload.stunDirection as 'push' | 'pull') ?? 'push';
-            const stunDistance = Math.min(3, Math.max(1, (payload.stunDistance as number) ?? 1));
+            const stunMoveRow = (payload.moveRow as number) ?? 0;
+            const stunMoveCol = (payload.moveCol as number) ?? 0;
+            const stunDistance = Math.min(3, Math.max(1, (payload.distance as number) ?? 1));
 
             // 稳固免疫检查：有 stable 技能的单位不受推拉，但仍受伤害
             const isStable = getUnitAbilities(stunUnit, core).includes('stable');
 
-            if (!isStable) {
-              // 计算推拉方向向量
-              const dr = stunTarget.row - stunSummoner.position.row;
-              const dc = stunTarget.col - stunSummoner.position.col;
-              let moveRow = 0;
-              let moveCol = 0;
-              if (stunDirection === 'push') {
-                if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? 1 : -1; }
-                else { moveCol = dc > 0 ? 1 : -1; }
-              } else {
-                if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? -1 : 1; }
-                else { moveCol = dc > 0 ? -1 : 1; }
-              }
+            if (!isStable && (stunMoveRow !== 0 || stunMoveCol !== 0)) {
+              // 使用统一的震慑推拉计算（可穿过单位，被建筑阻挡）
+              const { finalPos, passedPositions } = calculateStunPushPull(
+                core, stunTarget, stunMoveRow, stunMoveCol, stunDistance
+              );
 
-              // 逐格推拉，可穿过士兵和英雄，对穿过的单位造成1伤害
-              let currentPos = { ...stunTarget };
-              let lastEmptyPos: CellCoord | null = null;
-              for (let step = 0; step < stunDistance; step++) {
-                const nextPos = {
-                  row: currentPos.row + moveRow,
-                  col: currentPos.col + moveCol,
-                };
-                if (!isValidCoord(nextPos)) break;
-
-                const occupant = getUnitAt(core, nextPos);
-                if (occupant) {
-                  // 穿过单位：对被穿过的单位造成1伤害
-                  events.push({
-                    type: SW_EVENTS.UNIT_DAMAGED,
-                    payload: { position: nextPos, damage: 1, reason: 'stun_passthrough', sourcePlayerId: playerId },
-                    timestamp,
-                  });
-                  // 继续穿过（震慑可穿过士兵和英雄）
-                  currentPos = nextPos;
-                } else if (getStructureAt(core, nextPos)) {
-                  // 建筑阻挡，停止
-                  break;
-                } else {
-                  // 空格：记录为最后一个可停留位置
-                  currentPos = nextPos;
-                  lastEmptyPos = nextPos;
-                }
+              // 对穿过的单位造成1伤害
+              for (const passedPos of passedPositions) {
+                events.push({
+                  type: SW_EVENTS.UNIT_DAMAGED,
+                  payload: { position: passedPos, damage: 1, reason: 'stun_passthrough', sourcePlayerId: playerId },
+                  timestamp,
+                });
               }
 
               // 移动目标到最终空位置
-              const finalPos = lastEmptyPos ?? (
-                (currentPos.row !== stunTarget.row || currentPos.col !== stunTarget.col)
-                  && isCellEmpty(core, currentPos) ? currentPos : null
-              );
               if (finalPos) {
                 events.push({
                   type: SW_EVENTS.UNIT_PUSHED,

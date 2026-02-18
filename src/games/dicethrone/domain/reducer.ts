@@ -69,12 +69,38 @@ const handleBonusDieRolled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS
     event
 ) => {
     const { value } = event.payload;
-    // 只更新规则相关的 pendingAttack.extraRoll，UI 展示由 EventStream 消费
+    const pendingDamageBonus = event.payload.pendingDamageBonus;
+
+    // 更新 pendingAttack.extraRoll
+    let pendingAttack = state.pendingAttack
+        ? { ...state.pendingAttack, extraRoll: { value, resolved: true } }
+        : state.pendingAttack;
+
+    // 如果有 pendingDamageBonus，更新 pendingDamage.currentDamage（伏击等 Token 掷骰加伤）
+    let pendingDamage = state.pendingDamage;
+    if (pendingDamageBonus && pendingDamageBonus > 0 && state.pendingDamage) {
+        const modifiers = [...(state.pendingDamage.modifiers || [])];
+        modifiers.push({
+            type: 'token' as const,
+            value: pendingDamageBonus,
+            sourceId: 'sneak_attack',
+            sourceName: '伏击',
+        });
+        pendingDamage = {
+            ...state.pendingDamage,
+            currentDamage: state.pendingDamage.currentDamage + pendingDamageBonus,
+            modifiers,
+        };
+        // 同步更新 pendingAttack.damage
+        if (pendingAttack) {
+            pendingAttack = { ...pendingAttack, damage: (pendingAttack.damage ?? 0) + pendingDamageBonus };
+        }
+    }
+
     return {
         ...state,
-        pendingAttack: state.pendingAttack
-            ? { ...state.pendingAttack, extraRoll: { value, resolved: true } }
-            : state.pendingAttack,
+        pendingAttack,
+        pendingDamage,
     };
 };
 
@@ -763,10 +789,7 @@ export const reduce = (
         // 已废弃 - 迁移到 InteractionSystem
         // case 'INTERACTION_REQUESTED':
         //     return handleInteractionRequested(state, event);
-        case 'INTERACTION_COMPLETED':
-            // INTERACTION_COMPLETED 事件仍然需要，用于清理 dt:card-interaction
-            // 但 reducer 不需要做任何状态变更（交互状态由 InteractionSystem 管理）
-            return state;
+        // INTERACTION_COMPLETED 已废弃 — 不再生成，交互完成由 systems.ts 直接调用 resolveInteraction
         case 'INTERACTION_CANCELLED':
             return handleInteractionCancelled(state, event);
         case 'TOKEN_RESPONSE_REQUESTED':
@@ -867,7 +890,14 @@ export const reduce = (
 /** 莲花掌：花费2太极使攻击不可防御 */
 registerChoiceEffectHandler('lotus-palm-unblockable-pay', ({ state }) => {
     if (state.pendingAttack?.sourceAbilityId === 'lotus-palm') {
-        return { ...state, pendingAttack: { ...state.pendingAttack, isDefendable: false } };
+        return {
+            pendingAttack: {
+                ...state.pendingAttack,
+                isDefendable: false,
+                // 标记 preDefense 选择已完成，防止 autoContinue 在 CHOICE_RESOLVED 尚未 reduce 时提前触发
+                offensiveRollEndTokenResolved: true,
+            },
+        };
     }
     return undefined;
 });

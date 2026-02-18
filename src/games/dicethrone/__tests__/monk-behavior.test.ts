@@ -141,11 +141,12 @@ describe('僧侣 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // meditation-3-taiji: 获得太极，太极面>=2时弹出选择
+    // meditation-3-taiji: 获得太极，同时投出太极+莲花时弹出选择
     // ========================================================================
     describe('meditation-3-taiji (冥想III-太极)', () => {
-        it('2个太极面时弹出闪避/净化选择', () => {
-            const dice = [1, 2, 3, 4, 5].map(v => createMonkDie(v));
+        it('同时投出太极+莲花时弹出闪避/净化选择', () => {
+            // 骰子: fist,fist,taiji,taiji,lotus → 有太极+莲花
+            const dice = [1, 2, 4, 5, 6].map(v => createMonkDie(v));
             const state = createState({ dice, taiji: 0 });
             const handler = getCustomActionHandler('meditation-3-taiji')!;
             const ctx = buildCtx(state, 'meditation-3-taiji', { targetSelf: true });
@@ -156,8 +157,21 @@ describe('僧侣 Custom Action 运行时行为断言', () => {
             expect(eventsOfType(events, 'CHOICE_REQUESTED')).toHaveLength(1);
         });
 
-        it('1个太极面时不弹出选择', () => {
-            const dice = [1, 1, 1, 4, 1].map(v => createMonkDie(v)); // 1个taiji
+        it('只有太极没有莲花时不弹出选择', () => {
+            // 骰子: fist,fist,fist,taiji,taiji → 有太极但没莲花
+            const dice = [1, 1, 1, 4, 5].map(v => createMonkDie(v));
+            const state = createState({ dice, taiji: 0 });
+            const handler = getCustomActionHandler('meditation-3-taiji')!;
+            const ctx = buildCtx(state, 'meditation-3-taiji', { targetSelf: true });
+            ctx.targetId = '0' as any;
+            const events = handler(ctx);
+
+            expect(eventsOfType(events, 'CHOICE_REQUESTED')).toHaveLength(0);
+        });
+
+        it('只有莲花没有太极时不弹出选择', () => {
+            // 骰子: fist,fist,palm,palm,lotus → 有莲花但没太极
+            const dice = [1, 2, 3, 3, 6].map(v => createMonkDie(v));
             const state = createState({ dice, taiji: 0 });
             const handler = getCustomActionHandler('meditation-3-taiji')!;
             const ctx = buildCtx(state, 'meditation-3-taiji', { targetSelf: true });

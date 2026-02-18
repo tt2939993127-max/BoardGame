@@ -3,6 +3,25 @@ import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './typ
 import { getFactionCards } from '../data/cards';
 
 // ============================================================================
+// 玩家显示名
+// ============================================================================
+
+/** 玩家编号→友好显示名映射（支持 2-4 人） */
+const PLAYER_LABELS = ['一', '二', '三', '四'];
+
+/** 获取玩家友好显示名（如"玩家一"、"玩家二"） */
+export function getPlayerLabel(pid: PlayerId): string {
+    const idx = typeof pid === 'number' ? pid : parseInt(pid, 10);
+    return `玩家${PLAYER_LABELS[idx] ?? (idx + 1)}`;
+}
+
+/** 获取对手友好显示名（如"对手一"） */
+export function getOpponentLabel(pid: PlayerId): string {
+    const idx = typeof pid === 'number' ? pid : parseInt(pid, 10);
+    return `对手${PLAYER_LABELS[idx] ?? (idx + 1)}`;
+}
+
+// ============================================================================
 // 微型机判断
 // ============================================================================
 

@@ -546,8 +546,8 @@ export function registerElderThingInteractionHandlers(): void {
             }
         }
         
-        // 恰好 2 个随从时直接全部消灭（无需选择）
-        if (myMinions.length === 2) {
+        // 恰好 2 个或更少随从时直接全部消灭（无需选择）
+        if (myMinions.length <= 2) {
             const events: SmashUpEvent[] = [];
             for (const t of myMinions) {
                 events.push(destroyMinion(t.minion.uid, t.minion.defId, t.baseIndex, t.minion.owner, 'elder_thing_elder_thing', timestamp));
@@ -659,7 +659,7 @@ export function registerElderThingInteractionHandlers(): void {
                     });
                     const interaction = createSimpleChoice(
                         `elder_thing_shoggoth_destroy_${ctx.opponentIdx}_${timestamp}`, ctx.casterPlayerId,
-                        `修格斯：选择消灭对手在此基地的一个随从`, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.casterPlayerId, effectType: 'destroy' }), { sourceId: 'elder_thing_shoggoth_destroy', targetType: 'minion' }
+                        `修格斯：选择消灭对手在此基地的一个随从`, buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: ctx.casterPlayerId, effectType: 'destroy' }), { sourceId: 'elder_thing_shoggoth_destroy', targetType: 'minion' }
                         );
                     (interaction.data as any).continuationContext = {
                         casterPlayerId: ctx.casterPlayerId,
@@ -732,7 +732,7 @@ export function registerElderThingInteractionHandlers(): void {
                 return { uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: `${name} @ ${baseName}` };
             });
             const interaction = createSimpleChoice(
-                `elder_thing_unfathomable_goals_${pid}_${timestamp}`, pid, { sourceId: '你手中有疯狂卡，必须消灭一个自己的随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'elder_thing_unfathomable_goals'
+                `elder_thing_unfathomable_goals_${pid}_${timestamp}`, pid, '你手中有疯狂卡，必须消灭一个自己的随从', buildMinionTargetOptions(options), { sourceId: 'elder_thing_unfathomable_goals', targetType: 'minion' }
                 );
             (interaction.data as any).continuationContext = {
                 opponents: ctx.opponents,

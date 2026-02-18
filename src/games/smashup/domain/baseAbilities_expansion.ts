@@ -29,6 +29,7 @@ import { registerBaseAbility, registerExtended as registerExtendedBase } from '.
 import { registerProtection, registerTrigger } from './ongoingEffects';
 import type { ProtectionCheckContext } from './ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
+import { getPlayerLabel } from './utils';
 
 // ============================================================================
 // 克苏鲁扩展基地能力
@@ -95,7 +96,7 @@ export function registerExpansionBaseAbilities(): void {
                     uid: c.uid,
                     defId: c.defId,
                     ownerId: pid,
-                    label: `${def?.name ?? c.defId} (${pid}的弃牌堆)`,
+                    label: `${def?.name ?? c.defId} (${getPlayerLabel(pid)}的弃牌堆)`,
                 });
             }
         }

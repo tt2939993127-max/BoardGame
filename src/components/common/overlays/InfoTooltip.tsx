@@ -7,6 +7,8 @@ interface InfoTooltipProps {
     isVisible: boolean;
     position?: 'right' | 'left';
     className?: string; // 额外样式
+    /** 自定义 z-index，弹窗内使用时传入 UI_Z_INDEX.modalTooltip */
+    zIndex?: number;
 }
 
 /**
@@ -18,7 +20,8 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
     content,
     isVisible,
     position = 'right',
-    className = ''
+    className = '',
+    zIndex,
 }) => {
     if (!isVisible) return null;
 
@@ -33,7 +36,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
                 ${position === 'right' ? 'left-full ml-[0.8vw]' : 'right-full mr-[0.8vw]'}
                 ${className}
             `}
-            style={{ zIndex: UI_Z_INDEX.tooltip }}
+            style={{ zIndex: zIndex ?? UI_Z_INDEX.tooltip }}
         >
             {/* 箭头 */}
             <div

@@ -90,6 +90,7 @@ export const GHOST_ACTIONS: ActionCardDef[] = [
         faction: 'ghosts',
         abilityTags: ['ongoing'],
         ongoingTarget: 'minion',
+        playConstraint: 'onlyCardInHand',
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS3, index: 3 },
     },

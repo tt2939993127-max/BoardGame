@@ -740,7 +740,7 @@ const systems = [
     createEventStreamSystem(),
     createLogSystem(),
     createActionLogSystem({ commandAllowlist: ACTION_ALLOWLIST, formatEntry }),
-    createUndoSystem({ snapshotCommandAllowlist: ACTION_ALLOWLIST }),
+    createUndoSystem({ snapshotCommandAllowlist: UNDO_ALLOWLIST }),
     createInteractionSystem(),
     createRematchSystem(),
     createResponseWindowSystem({  // 需要响应窗口时配置注入

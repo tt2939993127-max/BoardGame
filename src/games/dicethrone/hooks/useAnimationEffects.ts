@@ -168,7 +168,14 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const frozenHp = coreHp + damage;
 
         const isOpponent = targetId === opponentId;
-        const startPos = getEffectStartPos(isOpponent ? opponentId : currentPlayerId);
+
+        // 伤害飞行起点规则：
+        // - 我的技能打对手（targetId === opponentId）→ 从我的技能槽飞出
+        // - 对手的技能打我（targetId === currentPlayerId）→ 从对手悬浮窗飞出
+        const startPos = isOpponent
+            ? getAbilityStartPos(sourceId || undefined)   // 我打对手：从我的技能槽飞出
+            : getElementCenter(refs.opponentHeader.current); // 对手打我：从对手悬浮窗飞出
+
         const endPos = getElementCenter(isOpponent ? refs.opponentHp.current : refs.selfHp.current);
 
         return {
@@ -178,7 +185,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             frozenHp,
             damage,
         };
-    }, [currentPlayerId, opponentId, opponent, player, getEffectStartPos, refs.opponentHp, refs.selfHp]);
+    }, [currentPlayerId, opponentId, opponent, player, getAbilityStartPos, refs.opponentHeader, refs.opponentHp, refs.selfHp]);
 
     /**
      * 构建单个治疗事件的 FX 参数
@@ -230,7 +237,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const { playerId, delta } = cpEvent.payload;
 
         if (delta > 0) {
-            // CP 获得：从技能来源飞到目标的 CP 条
+            // CP 获得：只有技能/卡牌/被动触发的 CP 获得才播放动画
+            // 正常阶段推进（income 阶段 +1 CP）不播放动画
+            if (cpEvent.sourceCommandType !== 'ABILITY_EFFECT' && cpEvent.sourceCommandType !== 'PASSIVE_TRIGGER') {
+                return null;
+            }
             const isOpponent = playerId === opponentId;
             const soundKey = resolveCpImpactKey(delta);
             const startPos = getEffectStartPos(isOpponent ? opponentId : currentPlayerId);

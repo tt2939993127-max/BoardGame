@@ -7,10 +7,10 @@
 | 派系 | 米斯卡塔尼克大学 (Miskatonic University) |
 | 卡牌总数 | 4 随从 + 8 行动卡 = 12 种卡牌定义 |
 | 审查交互链数 | 12 |
-| ✅ 通过 | 8 |
-| ⚠️ 语义偏差 | 4 |
+| ✅ 通过 | 10 |
+| ⚠️ 语义偏差 | 2 |
 | ❌ 缺失实现 | 0 |
-| 通过率 | 66.7% |
+| 通过率 | 83.3% |
 
 ## 严重问题清单
 
@@ -19,6 +19,8 @@
 | P0 | miskatonic_it_might_just_work | ✅ 已修复 — 中文版效果：弃1张疯狂卡，己方全体随从+1力量（CARDS_DISCARDED + TEMP_POWER_ADDED） |
 | P0 | miskatonic_thing_on_the_doorstep | ✅ 已修复 — 中文版效果：special，基地计分前消灭最高力量随从（MINION_DESTROYED） |
 | P0 | miskatonic_lost_knowledge | ✅ 已修复 — 中文版效果：ongoing talent，抽疯狂卡+额外随从到此基地 |
+| P0 | miskatonic_psychological_profiling | ✅ 已修复 — 中文版效果：抽疯狂卡+全体己方随从+1力量+额外战术 |
+| P0 | miskatonic_mandatory_reading | ✅ 已修复 — 中文版效果：special，选随从+抽最多3张疯狂卡+每张+2力量 |
 | P1 | miskatonic_those_meddling_kids | ✅ 已修复 — 点击式逐个消灭行动卡（带跳过按钮），支持"任意数量" |
 | P1 | miskatonic_psychologist | i18n 说"你可以将手牌或弃牌堆中的一张疯狂卡返回疯狂牌库"，"可以"暗示可跳过，实现自动执行无跳过；且优先手牌不让玩家选择来源 |
 | P1 | miskatonic_researcher | i18n 说"你可以抽一张疯狂卡"，"可以"暗示可跳过，实现自动执行无跳过选项 |
@@ -67,24 +69,24 @@
 - **结论: ⚠️ 语义偏差** — "可以"应有跳过选项
 
 ### 5. miskatonic_psychological_profiling（这太疯狂了...）
-- i18n: "抽两张卡并抽一张疯狂卡。"
+- i18n: "抽一张疯狂卡。你的每个随从获得+1力量直到回合结束。本回合你可以打出一个额外的战术。"
 - 定义层: ✅ `registerAbility('miskatonic_psychological_profiling', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 抽 2 张牌 + 抽 1 张疯狂卡
-- 状态层: ✅ `CARDS_DRAWN` + `MADNESS_DRAWN` 事件
-- 验证层: ✅ 无前置条件
-- i18n层: ✅ 语义一致（强制效果，无"可以"）
-- 测试层: ✅ `madnessAbilities.test.ts` 有测试
-- **结论: ✅ 通过**
+- 执行层: ✅ 抽 1 张疯狂卡 + 全体己方随从 TEMP_POWER_ADDED +1 + 额外行动（战术）
+- 状态层: ✅ `MADNESS_DRAWN` + `TEMP_POWER_ADDED`（每个己方随从一个）+ `LIMIT_MODIFIED` 事件
+- 验证层: ✅ 无前置条件（强制效果）
+- i18n层: ✅ 语义一致（中文版效果已修正）
+- 测试层: ✅ `madnessAbilities.test.ts` 有测试（3 个用例）
+- **结论: ✅ 通过**（中文版效果已修正）
 
 ### 6. miskatonic_mandatory_reading（最好不知道的事）
-- i18n: "选择一位玩家。该玩家抽两张疯狂卡。你可以额外打出一个战术。"
-- 定义层: ✅ `registerAbility('miskatonic_mandatory_reading', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 使用 `resolveOrPrompt` 选择对手，单对手自动执行。选择后给对手抽 2 张疯狂卡 + 自己获得额外行动
-- 状态层: ✅ 交互处理器正确实现
-- 验证层: ✅ 无对手时只给额外行动
-- i18n层: ⚠️ "你可以额外打出一个战术"暗示可选，实现直接授予额度（玩家可选择不使用，可接受）
-- 测试层: ✅ `madnessAbilities.test.ts` 有测试
-- **结论: ✅ 通过**
+- i18n: "特殊：在一个基地计分前，选择这里的一个随从。抽最多3张疯狂卡。每抽取一张疯狂卡这个随从都获得+2力量。"
+- 定义层: ✅ `registerAbility('miskatonic_mandatory_reading', 'special', ...)` 注册正确
+- 执行层: ✅ 使用 `resolveOrPrompt` 选择基地上的随从，唯一随从自动选择。选择后创建抽疯狂卡数量交互（0-3张），每抽1张该随从 POWER_COUNTER_ADDED +2
+- 状态层: ✅ 交互处理器 `miskatonic_mandatory_reading_draw` 正确实现：`MADNESS_DRAWN`（每张一个）+ `POWER_COUNTER_ADDED`
+- 验证层: ✅ 基地无随从时返回 feedback；疯狂牌库为空时 maxDraw=0 不创建交互
+- i18n层: ✅ 语义一致（中文版效果已修正）
+- 测试层: ✅ `madnessAbilities.test.ts` 有测试（5 个用例）
+- **结论: ✅ 通过**（中文版效果已修正）
 
 ### 7. miskatonic_lost_knowledge（通往超凡的门）
 - i18n: "打出到基地上。天赋：抽一张疯狂卡，你可以额外打出一个随从到这。"

@@ -608,10 +608,12 @@ function handleEntangleEffect(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp } = context;
     const events: DiceThroneEvent[] = [];
 
-    // 减少1次掷骰机会
-    const currentLimit = state.rollLimit ?? 3;
-    const newLimit = Math.max(0, currentLimit - 1);
-    const delta = newLimit - currentLimit;
+    // 减少1次掷骰机会（3 -> 2）
+    // 注意：此 handler 在 offensiveRoll 阶段触发，但 state.rollLimit 可能还是旧阶段的值，
+    // 因此基于默认值 3 计算，确保结果始终是 2。
+    const defaultOffensiveRollLimit = 3;
+    const newLimit = defaultOffensiveRollLimit - 1;
+    const delta = -1;
     events.push({
         type: 'ROLL_LIMIT_CHANGED',
         payload: { playerId: attackerId, delta, newLimit, sourceCardId: sourceAbilityId },

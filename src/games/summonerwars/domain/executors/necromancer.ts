@@ -34,34 +34,6 @@ abilityExecutorRegistry.register('revive_undead', (ctx: SWAbilityContext) => {
   return { events };
 }, { payloadContract: { required: ['targetCardId', 'targetPosition'] } });
 
-/** 火祀召唤 */
-abilityExecutorRegistry.register('fire_sacrifice_summon', (ctx: SWAbilityContext) => {
-  const events: GameEvent[] = [];
-  const { core, sourcePosition, sourceUnit, payload, ownerId: playerId, timestamp } = ctx;
-  const targetUnitId = payload.targetUnitId as string | undefined;
-  if (!targetUnitId) return { events };
-
-  const fsVictim = findBoardUnitByInstanceId(core, targetUnitId)
-    ?? findBoardUnitByCardId(core, targetUnitId, playerId as '0' | '1');
-  if (fsVictim) {
-    events.push(...emitDestroyWithTriggers(core, fsVictim.unit, fsVictim.position, {
-      playerId: playerId as '0' | '1', timestamp, reason: 'fire_sacrifice_summon',
-    }));
-    events.push({
-      type: SW_EVENTS.UNIT_MOVED,
-      payload: { 
-        from: sourcePosition, 
-        to: fsVictim.position, 
-        unitId: sourceUnit.instanceId, 
-        reason: 'fire_sacrifice_summon',
-        path: [sourcePosition, fsVictim.position], // 传送类移动，直接路径
-      },
-      timestamp,
-    });
-  }
-  return { events };
-});
-
 /** 吸取生命 */
 abilityExecutorRegistry.register('life_drain', (ctx: SWAbilityContext) => {
   const events: GameEvent[] = [];
@@ -75,11 +47,7 @@ abilityExecutorRegistry.register('life_drain', (ctx: SWAbilityContext) => {
     events.push(...emitDestroyWithTriggers(core, ldVictim.unit, ldVictim.position, {
       playerId: playerId as '0' | '1', timestamp, reason: 'life_drain',
     }));
-    events.push({
-      type: SW_EVENTS.STRENGTH_MODIFIED,
-      payload: { position: sourcePosition, multiplier: 2, sourceAbilityId: 'life_drain' },
-      timestamp,
-    });
+    // 效果（special 算近战命中）由 execute.ts 的 beforeAttackSpecialCountsAsMelee 处理
   }
   return { events };
 });

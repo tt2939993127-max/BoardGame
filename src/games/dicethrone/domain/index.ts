@@ -102,9 +102,26 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     validate: (state, command) => {
         const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
         const interaction = state.sys?.interaction?.current;
-        const pendingInteraction = interaction?.kind === 'dt:card-interaction'
-            ? interaction.data as InteractionDescriptor
-            : undefined;
+
+        // dt:card-interaction：data 直接是 PendingInteraction（状态选择类）
+        // multistep-choice：骰子类交互，从 meta 构造兼容的 InteractionDescriptor
+        let pendingInteraction: InteractionDescriptor | undefined;
+        if (interaction?.kind === 'dt:card-interaction') {
+            pendingInteraction = interaction.data as InteractionDescriptor;
+        } else if (interaction?.kind === 'multistep-choice') {
+            const meta = (interaction.data as any)?.meta;
+            if (meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie') {
+                // 构造最小兼容结构，validateCommand 只用 playerId 做权限检查
+                pendingInteraction = {
+                    id: interaction.id,
+                    playerId: interaction.playerId,
+                    sourceCardId: (interaction.data as any)?.sourceId ?? '',
+                    type: meta.dtType === 'selectDie' ? 'selectDie' : 'modifyDie',
+                    titleKey: '',
+                } as InteractionDescriptor;
+            }
+        }
+
         return validateCommand(state.core, command, phase, pendingInteraction);
     },
     execute: (state, command, random) => execute(state, command, random),

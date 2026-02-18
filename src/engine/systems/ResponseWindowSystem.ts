@@ -13,6 +13,7 @@ import type { MatchState, PlayerId, GameEvent, ResponseWindowState, ResponseWind
 import { resolveCommandTimestamp, resolveEventTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import { INTERACTION_EVENTS } from './InteractionSystem';
 
 // ============================================================================
 // 响应窗口系统配置
@@ -82,13 +83,12 @@ export interface ResponseWindowSystemConfig {
 
     /**
      * 交互锁定配置：在响应窗口内发起多步交互时锁定推进
-     * payload 约定：requestEvent.payload.interaction.{id, playerId}; resolveEvents.payload.interactionId
+     * payload 约定：requestEvent.payload.interaction.{id, playerId}
+     * 解锁方式：状态驱动——检测 sys.interaction.current 被清空后自动解锁
      */
     interactionLock?: {
         /** 锁定事件类型 */
         requestEvent: string;
-        /** 解锁+推进事件类型 */
-        resolveEvents: string[];
     };
 }
 
@@ -108,6 +108,8 @@ export const RESPONSE_WINDOW_EVENTS = {
     OPENED: 'RESPONSE_WINDOW_OPENED',
     CLOSED: 'RESPONSE_WINDOW_CLOSED',
     RESPONDER_CHANGED: 'RESPONSE_WINDOW_RESPONDER_CHANGED',
+    /** 内部事件：延迟解锁检查（当本轮有 INTERACTION_RESOLVED 时，推迟到下一轮再检查） */
+    _CHECK_UNLOCK: 'SYS_RESPONSE_WINDOW_CHECK_UNLOCK',
 } as const;
 
 // ============================================================================
@@ -347,7 +349,7 @@ export function createResponseWindowSystem<TCore>(
     return {
         id: SYSTEM_IDS.RESPONSE_WINDOW,
         name: '响应窗口系统',
-        priority: 15, // 优先级 15（在 Prompt(20) 之前执行）
+        priority: 15, // 优先级 15（在 FlowSystem(10) 之后、InteractionSystem(20) 之前执行，确保能阻塞 autoContinue）
 
         setup: (): Partial<{ responseWindow: ResponseWindowState }> => ({
             responseWindow: {
@@ -459,6 +461,11 @@ export function createResponseWindowSystem<TCore>(
             let newState = state;
             const additionalEvents: GameEvent[] = [];
             
+            // 检查本轮事件中是否有 INTERACTION_EVENTS.RESOLVED
+            // 如果有，说明本轮可能有更高优先级的系统（如 SmashUpEventSystem priority=50）
+            // 会创建新的 interaction，此时不应立即解锁响应窗口，等下一轮再检查
+            const hasInteractionResolved = events.some(e => e.type === INTERACTION_EVENTS.RESOLVED);
+            
             for (const event of events) {
                 const eventTimestamp = resolveEventTimestamp(event);
                 // 处理响应窗口打开事件
@@ -525,13 +532,27 @@ export function createResponseWindowSystem<TCore>(
                     }
                 }
                 
-                // 交互锁定：解锁事件解除锁定并推进响应者
-                if (interactionLock && interactionLock.resolveEvents.includes(event.type)) {
+                // 交互锁定（状态驱动）：检测 sys.interaction.current 被清空后自动解锁并推进
+                // 同时处理两种情况：
+                // 1. 显式 interactionLock 配置（通过 requestEvent 锁定）
+                // 2. 通用交互阻塞（responseAdvanceEvents 检测到 interaction 存在时自动设置 pendingInteractionId）
+                //
+                // 注意：当本轮事件包含 INTERACTION_EVENTS.RESOLVED 时，不立即解锁，而是发出
+                // _CHECK_UNLOCK 内部事件，驱动下一轮 afterEvents 再检查。
+                // 原因：priority=15 的 ResponseWindowSystem 先于 priority=50 的 SmashUpEventSystem 执行，
+                // 后者可能在同一轮 afterEvents 中创建新的 interaction（如多步交互的第二步）。
+                // 等到下一轮时，若 sys.interaction.current 仍为 null，才真正解锁推进。
+                {
                     const currentWindow = newState.sys.responseWindow?.current;
-                    if (currentWindow && currentWindow.pendingInteractionId) {
-                        const interactionPayload = event.payload as { interactionId: string };
-                        
-                        if (interactionPayload.interactionId === currentWindow.pendingInteractionId) {
+                    if (currentWindow && currentWindow.pendingInteractionId && !newState.sys.interaction.current) {
+                        if (hasInteractionResolved) {
+                            // 本轮有 RESOLVED，推迟到下一轮检查（发出内部驱动事件）
+                            additionalEvents.push({
+                                type: RESPONSE_WINDOW_EVENTS._CHECK_UNLOCK,
+                                payload: {},
+                                timestamp: eventTimestamp,
+                            });
+                        } else {
                             const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
                             const currentResponderId = getCurrentResponderId(unlockedWindow);
                             
@@ -568,18 +589,72 @@ export function createResponseWindowSystem<TCore>(
                     }
                 }
                 
+                // _CHECK_UNLOCK：下一轮检查是否可以解锁（由上面的延迟逻辑触发）
+                if (event.type === RESPONSE_WINDOW_EVENTS._CHECK_UNLOCK) {
+                    const currentWindow = newState.sys.responseWindow?.current;
+                    if (currentWindow && currentWindow.pendingInteractionId && !newState.sys.interaction.current) {
+                        const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
+                        const currentResponderId = getCurrentResponderId(unlockedWindow);
+                        
+                        const nextWindow = skipToNextRespondableResponder(
+                            newState,
+                            advanceToNextResponder(unlockedWindow, currentResponderId!, loopUntilAllPass),
+                            hasRespondableContent,
+                            loopUntilAllPass
+                        );
+                        
+                        if (nextWindow) {
+                            newState = openResponseWindow(newState, nextWindow);
+                            additionalEvents.push({
+                                type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
+                                payload: {
+                                    windowId: currentWindow.id,
+                                    previousResponderId: currentResponderId,
+                                    nextResponderId: getCurrentResponderId(nextWindow),
+                                },
+                                timestamp: eventTimestamp,
+                            });
+                        } else {
+                            newState = closeResponseWindow(newState);
+                            additionalEvents.push({
+                                type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                                payload: {
+                                    windowId: currentWindow.id,
+                                    allPassed: false,
+                                },
+                                timestamp: eventTimestamp,
+                            });
+                        }
+                    }
+                }
+                
                 // 响应者推进：配置的事件触发后推进到下一个响应者
                 for (const adv of advanceEvents) {
                     if (event.type !== adv.eventType) continue;
                     const currentWindow = newState.sys.responseWindow?.current;
                     if (!currentWindow || currentWindow.pendingInteractionId) break;
-                    // 窗口类型约束
+                    // 窗口类型约束（先检查，避免对不匹配的窗口类型误触发锁定）
                     if (adv.windowTypes && !adv.windowTypes.includes(currentWindow.windowType)) continue;
                     const cardPayload = event.payload as { playerId: PlayerId };
                     const currentResponderId = getCurrentResponderId(currentWindow);
-                    
                     // 只有当前响应者的事件才推进
                     if (cardPayload.playerId !== currentResponderId) break;
+                    // 有活跃的交互时暂不推进（等交互完成后由状态驱动解锁推进）
+                    // 同时设置 pendingInteractionId 和 actionTakenThisRound，让状态驱动解锁在交互完成后自动恢复推进
+                    if (newState.sys.interaction?.current) {
+                        const interactionId = newState.sys.interaction.current.id;
+                        const markedForLock = loopUntilAllPass
+                            ? { ...currentWindow, pendingInteractionId: interactionId, actionTakenThisRound: true }
+                            : { ...currentWindow, pendingInteractionId: interactionId };
+                        newState = {
+                            ...newState,
+                            sys: {
+                                ...newState.sys,
+                                responseWindow: { current: markedForLock },
+                            },
+                        };
+                        break;
+                    }
                     
                     // 标记本轮有人执行了动作（用于 loopUntilAllPass 循环判定）
                     const markedWindow = loopUntilAllPass

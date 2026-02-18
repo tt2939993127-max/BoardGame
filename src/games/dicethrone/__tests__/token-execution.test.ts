@@ -696,29 +696,154 @@ describe('缠绕 (Entangle) 掷骰限制', () => {
 // ============================================================================
 
 describe('潜行 (Sneak) 伤害免除', () => {
-    it('潜行逻辑已移至 flowHooks.ts offensiveRoll 退出阶段', () => {
-        // 潜行现在在攻击流程中处理（offensiveRoll 阶段退出时）
-        // 若防御方有潜行，跳过防御掷骰、免除伤害、消耗潜行
-        // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑
-        // 集成测试见 shadow_thief-behavior.test.ts 或 E2E 测试
-        expect(true).toBe(true);
+    it('防御方有潜行时：跳过防御掷骰、免除伤害、消耗潜行', () => {
+        const baseSetup = createNoResponseSetupWithEmptyHand();
+        const runner = createRunner(fixedRandom);
+        const result = runner.run({
+            name: '潜行免除伤害',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 潜行判定 -> main2
+            ],
+            setup: (playerIds, random) => {
+                const state = baseSetup(playerIds, random);
+                // player 0 攻击 player 1，player 1 有潜行
+                state.core.activePlayerId = '0';
+                (state.sys as any).phase = 'offensiveRoll';
+                state.core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
+                state.core.pendingAttack = {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'fist-technique-5',
+                    isUltimate: false,
+                    damage: 5,
+                    bonusDamage: 0,
+                    preDefenseResolved: false,
+                    damageResolved: false,
+                    attackFaceCounts: {},
+                } as any;
+                state.core.rollConfirmed = true;
+                return state;
+            },
+        });
+        const core = result.finalState.core;
+        // 潜行被消耗
+        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(0);
+        // 跳过防御掷骰，直接进入 main2
+        expect(result.finalState.sys.phase).toBe('main2');
+        // 防御方 HP 不变（伤害被免除）
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH);
+    });
+
+    it('终极技能不受潜行影响（规则 §4.4）', () => {
+        const baseSetup = createNoResponseSetupWithEmptyHand();
+        const runner = createRunner(fixedRandom);
+        const result = runner.run({
+            name: '终极技能无视潜行',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll（潜行不生效）
+            ],
+            setup: (playerIds, random) => {
+                const state = baseSetup(playerIds, random);
+                state.core.activePlayerId = '0';
+                (state.sys as any).phase = 'offensiveRoll';
+                state.core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
+                state.core.pendingAttack = {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'ultimate-ability',
+                    isUltimate: true,
+                    damage: 10,
+                    bonusDamage: 0,
+                    preDefenseResolved: false,
+                    damageResolved: false,
+                    attackFaceCounts: {},
+                } as any;
+                state.core.rollConfirmed = true;
+                return state;
+            },
+        });
+        const core = result.finalState.core;
+        // 潜行未被消耗
+        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK]).toBe(1);
+        // 进入防御掷骰阶段（潜行不生效）
+        expect(result.finalState.sys.phase).toBe('defensiveRoll');
+    });
+
+    it('shadow_thief-sneak-prevent handler 已废弃（潜行改为在攻击流程中处理）', () => {
+        const handler = getCustomActionHandler('shadow_thief-sneak-prevent');
+        expect(handler).toBeUndefined();
     });
 });
 
 // ============================================================================
-// 伏击 (Sneak Attack) — custom action 注册验证
+// 伏击 (Sneak Attack) — 增加掷骰伤害
 // ============================================================================
 
-describe('伏击 (Sneak Attack) custom action', () => {
+describe('伏击 (Sneak Attack) 执行逻辑', () => {
     it('shadow_thief-sneak-attack-use handler 已注册', () => {
         const handler = getCustomActionHandler('shadow_thief-sneak-attack-use');
         expect(handler).toBeDefined();
     });
 
-    it('shadow_thief-sneak-prevent handler 已废弃（潜行改为在攻击流程中处理）', () => {
-        const handler = getCustomActionHandler('shadow_thief-sneak-prevent');
-        // 不再注册，因为潜行现在在 flowHooks.ts 中处理
-        expect(handler).toBeUndefined();
+    it('伏击掷骰增加伤害到 pendingDamageBonus', () => {
+        const handler = getCustomActionHandler('shadow_thief-sneak-attack-use')!;
+        expect(handler).toBeDefined();
+
+        // 构造最小上下文
+        const state = {
+            players: {
+                '0': { id: '0', resources: {}, tokens: {}, statusEffects: {}, hand: [], deck: [], discard: [] },
+                '1': { id: '1', resources: {}, tokens: {}, statusEffects: {}, hand: [], deck: [], discard: [] },
+            },
+            pendingAttack: { attackerId: '0', defenderId: '1', damage: 3, isDefendable: true, sourceAbilityId: 'test' },
+            dice: [],
+            selectedCharacters: { '0': 'shadow_thief', '1': 'monk' },
+        } as any;
+
+        let callCount = 0;
+        const events = handler({
+            ctx: { attackerId: '0', defenderId: '1', sourceAbilityId: 'test', state, damageDealt: 0, timestamp: 1 },
+            targetId: '1', attackerId: '0', sourceAbilityId: 'test', state, timestamp: 1,
+            random: { d: () => { callCount++; return 4; }, random: () => 0.5 } as any,
+            action: { type: 'custom', customActionId: 'shadow_thief-sneak-attack-use' },
+        });
+
+        // 应产生 BONUS_DIE_ROLLED 事件
+        const bonusEvents = events.filter((e: any) => e.type === 'BONUS_DIE_ROLLED');
+        expect(bonusEvents).toHaveLength(1);
+        // 掷骰值 4 → pendingDamageBonus = 4
+        expect((bonusEvents[0] as any).payload.pendingDamageBonus).toBe(4);
+        expect((bonusEvents[0] as any).payload.value).toBe(4);
+    });
+
+    it('无 pendingAttack 时不产生事件', () => {
+        const handler = getCustomActionHandler('shadow_thief-sneak-attack-use')!;
+        const state = { players: {}, pendingAttack: null, dice: [], selectedCharacters: {} } as any;
+        const events = handler({
+            ctx: { attackerId: '0', defenderId: '1', sourceAbilityId: 'test', state, damageDealt: 0, timestamp: 1 },
+            targetId: '1', attackerId: '0', sourceAbilityId: 'test', state, timestamp: 1,
+            random: { d: () => 3, random: () => 0.5 } as any,
+            action: { type: 'custom', customActionId: 'shadow_thief-sneak-attack-use' },
+        });
+        expect(events).toHaveLength(0);
+    });
+
+    it('无 random 时不产生事件', () => {
+        const handler = getCustomActionHandler('shadow_thief-sneak-attack-use')!;
+        const state = {
+            players: {},
+            pendingAttack: { attackerId: '0', defenderId: '1' },
+            dice: [], selectedCharacters: {},
+        } as any;
+        const events = handler({
+            ctx: { attackerId: '0', defenderId: '1', sourceAbilityId: 'test', state, damageDealt: 0, timestamp: 1 },
+            targetId: '1', attackerId: '0', sourceAbilityId: 'test', state, timestamp: 1,
+            random: undefined as any,
+            action: { type: 'custom', customActionId: 'shadow_thief-sneak-attack-use' },
+        });
+        expect(events).toHaveLength(0);
     });
 });
 

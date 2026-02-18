@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { DiscoveryTooltip } from './DiscoveryTooltip';
 
 // ============================================================================
 // 核心类型定义
@@ -148,7 +149,7 @@ export const BuffIconBadge: React.FC<BuffIconBadgeProps> = ({ buff, visualConfig
   // 只有来源卡牌有精灵图配置时才可点击
   const clickable = !!onClick && !!buff.spriteConfig;
 
-  return (
+  const badge = (
     <div
       className={`relative w-[1.4vw] h-[1.4vw] rounded-full ${visualConfig.bgColor} flex items-center justify-center shadow-lg border-2 border-white/40 ${clickable ? 'cursor-pointer pointer-events-auto hover:brightness-125 transition-[filter]' : ''}`}
       title={resolvedLabel}
@@ -161,6 +162,18 @@ export const BuffIconBadge: React.FC<BuffIconBadgeProps> = ({ buff, visualConfig
         </div>
       )}
     </div>
+  );
+
+  if (!clickable) return badge;
+
+  return (
+    <DiscoveryTooltip
+      storageKey="buff-icon-click-hint"
+      message="点击可查看卡牌详情"
+      placement="top"
+    >
+      {badge}
+    </DiscoveryTooltip>
   );
 };
 
@@ -199,9 +212,12 @@ export function BuffIcons<TGameState = any, TEntity = any>({
     'bottom-right': 'bottom-[3%] right-[3%]',
   };
 
+  // 有可点击图标时开启 pointer-events，否则保持 none 避免遮挡地图交互
+  const hasClickable = !!onBuffClick && buffs.some(b => !!b.spriteConfig);
+
   return (
     <div
-      className={`absolute ${positionClasses[position]} flex gap-[3%] pointer-events-none z-[15] ${className}`}
+      className={`absolute ${positionClasses[position]} flex gap-[3%] z-[15] ${hasClickable ? 'pointer-events-auto' : 'pointer-events-none'} ${className}`}
     >
       {buffs.map((buff, index) => {
         const visualConfig = registry.getVisualConfig(buff.type);

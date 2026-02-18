@@ -96,7 +96,7 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
 
   return (
     <div
-      className={`absolute ${posClass} flex gap-[0.15vw]`}
+      className={`absolute ${posClass} flex gap-[0.2vw] overflow-visible`}
       style={{ zIndex, [verticalProp]: `${bottomOffset}%` }}
     >
       {activeBoosts.map(boost => {
@@ -105,8 +105,8 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
           return (
             <Icon
               key={`${boost.type}-${i}`}
-              className={`${boost.color} drop-shadow-[0_0_2px_${boost.glow}]`}
-              style={{ width: iconSize, height: iconSize }}
+              className={`${boost.color} drop-shadow-[0_0_2px_${boost.glow}] overflow-visible`}
+              style={{ width: iconSize, height: iconSize, overflow: 'visible' }}
               strokeWidth={2.5}
             />
           );
@@ -117,7 +117,7 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
           return (
             <div
               key={boost.type}
-              className="relative group pointer-events-auto cursor-help flex gap-[0.15vw]"
+              className="relative group pointer-events-auto cursor-help flex gap-[0.2vw] overflow-visible"
               title={boost.tooltip}
             >
               {icons}
@@ -131,7 +131,7 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
 
         // 无 tooltip 时保持原有行为（pointer-events-none）
         return (
-          <div key={boost.type} className="flex gap-[0.15vw] pointer-events-none">
+          <div key={boost.type} className="flex gap-[0.2vw] pointer-events-none overflow-visible">
             {icons}
           </div>
         );

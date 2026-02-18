@@ -240,9 +240,10 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
 }
 
 /** 聚宝盆 I：抽 Card面数量 牌，若有Shadow弃对手1牌 */
-function handleCornucopia({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleCornucopia({ attackerId, ctx, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
+    const defenderId = ctx.defenderId;
 
     const cardCount = faceCounts[FACE.CARD] || 0;
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
@@ -254,12 +255,12 @@ function handleCornucopia({ attackerId, targetId, sourceAbilityId, state, timest
 
     // 若有 Shadow，弃对手1牌
     if (hasShadow && random) {
-        const opponentHand = state.players[targetId]?.hand || [];
+        const opponentHand = state.players[defenderId]?.hand || [];
         if (opponentHand.length > 0) {
             const idx = Math.floor(random.random() * opponentHand.length);
             events.push({
                 type: 'CARD_DISCARDED',
-                payload: { playerId: targetId, cardId: opponentHand[idx].id },
+                payload: { playerId: defenderId, cardId: opponentHand[idx].id },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp: timestamp + 1
             } as CardDiscardedEvent);
@@ -270,14 +271,15 @@ function handleCornucopia({ attackerId, targetId, sourceAbilityId, state, timest
 }
 
 /** 聚宝盆（旧）：若有Shadow丢弃对手1卡 - 保留向后兼容 */
-function handleCornucopiaDiscard({ targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleCornucopiaDiscard({ ctx, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
+    const defenderId = ctx.defenderId;
 
     if (!hasShadow) return [];
     if (!random) return [];
 
-    const targetHand = state.players[targetId]?.hand || [];
+    const targetHand = state.players[defenderId]?.hand || [];
     if (targetHand.length === 0) return [];
 
     // Random discard
@@ -286,7 +288,7 @@ function handleCornucopiaDiscard({ targetId, state, timestamp, random }: CustomA
 
     return [{
         type: 'CARD_DISCARDED',
-        payload: { playerId: targetId, cardId },
+        payload: { playerId: defenderId, cardId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as CardDiscardedEvent];
@@ -509,9 +511,10 @@ function handleStealCp6(params: CustomActionContext) { return handleStealCpWithA
 
 
 /** 聚宝盆 II：每有[Card]抽1。有[Shadow]弃1。有[Bag]得1CP */
-function handleCornucopia2({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleCornucopia2({ attackerId, ctx, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
+    const defenderId = ctx.defenderId;
 
     const cardCount = faceCounts[FACE.CARD] || 0;
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
@@ -524,12 +527,12 @@ function handleCornucopia2({ attackerId, targetId, sourceAbilityId, state, times
 
     // Opponent Discard (if Shadow)
     if (hasShadow && random) {
-        const opponentHand = state.players[targetId]?.hand || [];
+        const opponentHand = state.players[defenderId]?.hand || [];
         if (opponentHand.length > 0) {
             const idx = Math.floor(random.random() * opponentHand.length);
             events.push({
                 type: 'CARD_DISCARDED',
-                payload: { playerId: targetId, cardId: opponentHand[idx].id },
+                payload: { playerId: defenderId, cardId: opponentHand[idx].id },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp: timestamp + 1
             } as CardDiscardedEvent);
@@ -702,13 +705,18 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
 
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: attackerId, targetPlayerId: state.pendingAttack.defenderId, effectKey: 'bonusDie.effect.sneakAttack' },
+        payload: {
+            value: dieValue,
+            face,
+            playerId: attackerId,
+            targetPlayerId: state.pendingAttack.defenderId,
+            effectKey: 'bonusDie.effect.sneakAttack',
+            // 伏击掷骰值加到 pendingDamage.currentDamage
+            pendingDamageBonus: dieValue,
+        },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp
     } as BonusDieRolledEvent);
-
-    // 增加伤害
-    state.pendingAttack.damage = (state.pendingAttack.damage ?? 0) + dieValue;
 
     return events;
 }

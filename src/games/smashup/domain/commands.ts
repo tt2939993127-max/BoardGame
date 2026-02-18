@@ -265,9 +265,29 @@ export function validate(
             if (command.playerId !== currentPlayerId) {
                 return { valid: false, error: 'player_mismatch' };
             }
-            const { minionUid, baseIndex } = command.payload;
+            const { minionUid, ongoingCardUid, baseIndex } = command.payload;
             const targetBase = core.bases[baseIndex];
             if (!targetBase) return { valid: false, error: '无效的基地索引' };
+
+            // ongoing 行动卡天赋
+            if (ongoingCardUid) {
+                const ongoing = targetBase.ongoingActions.find(o => o.uid === ongoingCardUid);
+                if (!ongoing) return { valid: false, error: '基地上没有该持续行动卡' };
+                if (ongoing.ownerId !== command.playerId) {
+                    return { valid: false, error: '只能使用自己的持续行动卡天赋' };
+                }
+                if (ongoing.talentUsed) {
+                    return { valid: false, error: '本回合天赋已使用' };
+                }
+                const oDef = getCardDef(ongoing.defId);
+                if (!oDef || !('abilityTags' in oDef) || !oDef.abilityTags?.includes('talent')) {
+                    return { valid: false, error: '该持续行动卡没有天赋能力' };
+                }
+                return { valid: true };
+            }
+
+            // 随从天赋
+            if (!minionUid) return { valid: false, error: '必须指定随从或持续行动卡' };
             const targetMinion = targetBase.minions.find(m => m.uid === minionUid);
             if (!targetMinion) return { valid: false, error: '基地上没有该随从' };
             if (targetMinion.controller !== command.playerId) {
@@ -330,6 +350,11 @@ function checkPlayConstraint(
     if (constraint === 'requireOwnMinion') {
         const hasOwnMinion = core.bases[baseIndex].minions.some(m => m.owner === playerId);
         if (!hasOwnMinion) return '目标基地上必须有你的随从';
+        return null;
+    }
+    if (constraint === 'onlyCardInHand') {
+        const handSize = core.players[playerId]?.hand.length ?? 0;
+        if (handSize !== 1) return '只能在本卡是你的唯一手牌时打出';
         return null;
     }
     if (typeof constraint === 'object' && constraint.type === 'requireOwnPower') {

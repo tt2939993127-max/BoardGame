@@ -19,10 +19,9 @@ import type {
     ExtraAttackTriggeredEvent,
     TokenConsumedEvent,
     ChoiceRequestedEvent,
-    ChoiceResolvedEvent,
 } from './types';
 import { STATUS_IDS, TOKEN_IDS } from './ids';
-import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue } from './rules';
+import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue, getRollerId } from './rules';
 import { resolveAttack, resolveOffensivePreDefenseEffects, resolvePostDamageEffects } from './attack';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
@@ -126,6 +125,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         return ok ? { ok: true } : { ok: false, error: 'cannot_advance_phase' };
     },
 
+    getCurrentPlayerId: ({ state }) => {
+        const phase = state.sys.phase as TurnPhase;
+        // 防御阶段由防御方推进，其他阶段由回合拥有者推进
+        return phase === 'defensiveRoll'
+            ? getRollerId(state.core, phase)
+            : state.core.activePlayerId;
+    },
+
     getNextPhase: ({ state }) => getNextPhase(state.core, state.sys.phase as TurnPhase),
 
     getActivePlayerId: ({ state, from, to, exitEvents }) => {
@@ -157,6 +164,23 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         const core = state.core;
         const events: GameEvent[] = [];
         const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
+
+        // ========== upkeep 阶段退出：检查脑震荡状态 ==========
+        if (from === 'upkeep' && to === 'income') {
+            const player = core.players[core.activePlayerId];
+            // 脑震荡 (concussion) — 跳过收入阶段并移除
+            // 注意：必须在 onPhaseExit 中处理，onPhaseEnter 返回 GameEvent[] 无法跳过阶段
+            const concussionStacks = player?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+            if (concussionStacks > 0) {
+                events.push({
+                    type: 'STATUS_REMOVED',
+                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.CONCUSSION, stacks: concussionStacks },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+                return { events, overrideNextPhase: 'main1' };
+            }
+        }
 
         // ========== setup 阶段退出：初始化所有玩家角色数据 ==========
         if (from === 'setup') {
@@ -229,6 +253,9 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 events.push(statusRemovedEvent);
                 return { events, overrideNextPhase: 'main2' };
             }
+            // 注意：眩晕 (stun) 不在此处处理。
+            // stun 的规则是：进入 offensiveRoll 时移除 stun，但玩家仍需手动推进离开该阶段。
+            // 因此 stun 在 onPhaseEnter(to=offensiveRoll) 中处理（只移除状态，不跳过阶段）。
         }
 
         // ========== offensiveRoll 阶段退出：攻击前处理 ==========
@@ -556,23 +583,42 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             // Token 响应窗口通过 pendingDamage 管理，需要等待玩家 USE_TOKEN 或 SKIP_TOKEN_RESPONSE
             const hasPendingDamage = core.pendingDamage !== null && core.pendingDamage !== undefined;
             
-            // 检查是否有 SYS_INTERACTION_RESOLVED 事件待处理
-            // 如果有，说明选择刚刚完成，需要等待 CHOICE_RESOLVED 事件被生成和处理
-            const hasInteractionResolved = events.some(e => e.type === 'SYS_INTERACTION_RESOLVED');
+            // 检查是否需要等待 offensiveRollEnd Token 选择的 CHOICE_RESOLVED 被 reduce 进 core。
+            //
+            // 时序问题：SYS_INTERACTION_RESPOND 命令执行后，afterEvents 多轮迭代中：
+            //   round N：DiceThroneEventSystem 产生 CHOICE_RESOLVED，FlowSystem 看到 SYS_INTERACTION_RESOLVED
+            //            但 CHOICE_RESOLVED 在 round N 结束时才 reduce 进 core
+            //   round N+1：CHOICE_RESOLVED 已 reduce，offensiveRollEndTokenResolved=true
+            //
+            // 因此：当 SYS_INTERACTION_RESOLVED 在 events 里，且 offensiveRoll 阶段有
+            // pendingAttack 但 offensiveRollEndTokenResolved 还是 false 时，
+            // 说明 CHOICE_RESOLVED 还没有被 reduce，需要等待下一轮。
+            // 例外：dt:token-response 的 resolveInteraction 也产生 SYS_INTERACTION_RESOLVED，
+            // 但此时 pendingAttack 为 null（已结算），不会误阻塞。
+            const hasSysInteractionResolved = events.some(e => e.type === 'SYS_INTERACTION_RESOLVED');
+            // 时序保护：当 SYS_INTERACTION_RESOLVED 在 events 里，且 offensiveRoll 阶段有
+            // pendingAttack 时，说明本轮 DiceThroneEventSystem 可能产生了 CHOICE_RESOLVED，
+            // 但该事件还没有被 reduce 进 core（reduce 在所有系统 afterEvents 执行完后才发生）。
+            // 必须等待下一轮，确保 CHOICE_RESOLVED 的效果（如 isDefendable=false）已生效。
+            //
+            // 覆盖场景：
+            //   - offensiveRollEnd Token 选择（CRIT/ACCURACY）→ offensiveRollEndTokenResolved=true
+            //   - preDefense 选择（如莲花掌花费太极使攻击不可防御）→ isDefendable=false
+            //
+            // 例外：dt:token-response 的 resolveInteraction 也产生 SYS_INTERACTION_RESOLVED，
+            // 但此时 pendingAttack 为 null（已结算），不会误阻塞。
+            const pendingOffensiveTokenChoice = hasSysInteractionResolved
+                && phase === 'offensiveRoll'
+                && core.pendingAttack !== null
+                && core.pendingAttack !== undefined
+                && core.pendingAttack.offensiveRollEndTokenResolved !== true;
             
-            // 检查是否有 offensiveRollEnd Token 选择的 CHOICE_RESOLVED 事件待处理
-            // 只有 Token 选择（use-crit, use-accuracy, skip）需要等待 offensiveRollEndTokenResolved 标志
-            // 其他选择（如技能效果选择）不需要等待
-            const tokenChoiceCustomIds = ['use-crit', 'use-accuracy', 'skip'];
-            const hasTokenChoiceResolved = events.some(e => 
-                e.type === 'CHOICE_RESOLVED' && 
-                tokenChoiceCustomIds.includes((e as ChoiceResolvedEvent).payload?.customId ?? '')
-            );
-            const tokenChoiceAlreadyResolved = core.pendingAttack?.offensiveRollEndTokenResolved === true;
-            const shouldWaitForTokenChoice = hasTokenChoiceResolved && !tokenChoiceAlreadyResolved;
-            
-            if (!hasActiveInteraction && !hasActiveResponseWindow && !hasPendingDamage && !shouldWaitForTokenChoice && !hasInteractionResolved) {
-                return { autoContinue: true, playerId: core.activePlayerId };
+            if (!hasActiveInteraction && !hasActiveResponseWindow && !hasPendingDamage && !pendingOffensiveTokenChoice) {
+                // autoContinue 的 playerId 必须与 getCurrentPlayerId 返回值一致，
+                // 否则 FlowSystem.afterEvents 中的 player_mismatch 校验会拒绝推进。
+                // defensiveRoll 阶段由防御方（getRollerId）推进，offensiveRoll 由进攻方推进。
+                const autoContinuePlayerId = getRollerId(core, phase);
+                return { autoContinue: true, playerId: autoContinuePlayerId };
             }
             return undefined;
         }
@@ -720,7 +766,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         if (to === 'offensiveRoll') {
             const player = core.players[core.activePlayerId];
 
-            // 眩晕 (stun) — 跳过进攻掷骰阶段并移除
+            // 眩晕 (stun) — 进入 offensiveRoll 时移除，但不跳过阶段
+            // 规则：有眩晕时玩家进入进攻掷骰阶段但无法掷骰（stun 被移除，玩家仍需手动推进）
+            // 注意：不能在 onPhaseExit 中用 overrideNextPhase 跳过，因为测试期望两步推进：
+            //   1. main1 → offensiveRoll（stun 移除）
+            //   2. offensiveRoll → main2（无 pendingAttack，手动推进）
             const stunStacks = player?.statusEffects[STATUS_IDS.STUN] ?? 0;
             if (stunStacks > 0) {
                 events.push({
@@ -728,18 +778,19 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.STUN, stacks: stunStacks },
                     sourceCommandType: command.type,
                     timestamp,
-                } as DiceThroneEvent);
-                // 返回事件但不阻止阶段推进（FlowSystem 会继续到下一阶段）
-                return events;
+                } as StatusRemovedEvent);
             }
 
             // 缠绕 (entangle) — 减少掷骰次数
             const entangleStacks = player?.statusEffects[STATUS_IDS.ENTANGLE] ?? 0;
             if (entangleStacks > 0) {
                 // 缠绕：减少1次掷骰机会（3 -> 2）
-                const currentLimit = core.rollLimit ?? 3;
-                const newLimit = Math.max(0, currentLimit - 1);
-                const delta = newLimit - currentLimit;
+                // 注意：onPhaseEnter 读到的 core.rollLimit 是旧阶段的值（如防御阶段的 1），
+                // 而 PHASE_CHANGED 事件会在 reducer 中将 rollLimit 重置为 3。
+                // 因此这里必须基于重置后的默认值 3 计算，而非读取旧的 core.rollLimit。
+                const defaultOffensiveRollLimit = 3;
+                const newLimit = defaultOffensiveRollLimit - 1; // 3 -> 2
+                const delta = -1;
                 events.push({
                     type: 'ROLL_LIMIT_CHANGED',
                     payload: { playerId: core.activePlayerId, delta, newLimit },
@@ -756,24 +807,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
         }
 
-        // ========== 进入 income 阶段：脑震荡检查 + CP 和抽牌 ==========
+        // ========== 进入 income 阶段：CP 和抽牌 ==========
         if (to === 'income') {
             const player = core.players[core.activePlayerId];
             if (player) {
-                // 脑震荡 (concussion) — 跳过收入阶段并移除
-                const concussionStacks = player.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-                if (concussionStacks > 0) {
-                    events.push({
-                        type: 'STATUS_REMOVED',
-                        payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.CONCUSSION, stacks: concussionStacks },
-                        sourceCommandType: command.type,
-                        timestamp,
-                    } as DiceThroneEvent);
-                    // 跳过收入（不获得 CP 和抽牌）
-                    return events;
-                }
-
-                // CP +1
                 const cpDelta = 1;
                 const cpResult = resourceSystem.modify(
                     player.resources,

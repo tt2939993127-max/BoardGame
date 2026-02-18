@@ -10,6 +10,7 @@ import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { createInteractionSystem } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoiceSystem } from '../../../engine/systems/SimpleChoiceSystem';
 import { createResponseWindowSystem } from '../../../engine/systems/ResponseWindowSystem';
 import { createTutorialSystem } from '../../../engine/systems/TutorialSystem';
 import { createEventStreamSystem } from '../../../engine/systems/EventStreamSystem';
@@ -21,6 +22,7 @@ const PLAYER_IDS = ['0', '1'] as const;
 function buildSystems() {
   return [
     createInteractionSystem<SmashUpCore>(),
+    createSimpleChoiceSystem<SmashUpCore>(),
     createResponseWindowSystem<SmashUpCore>({
       allowedCommands: [],
       responseAdvanceEvents: [{ eventType: 'su:action_played', windowTypes: ['meFirst'] }],

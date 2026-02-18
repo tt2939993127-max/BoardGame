@@ -177,7 +177,7 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
   {
     type: 'hellfireBlade',
     visual: {
-      label: '狱火铸剑 (+2⚔️)',
+      label: '狱火铸剑 (+2 攻击)',
       labelKey: 'buffs.hellfireBlade',
       labelNs: SW_NS,
       icon: FlameIcon,

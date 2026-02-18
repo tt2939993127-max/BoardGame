@@ -4,7 +4,7 @@
 
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
@@ -31,17 +31,20 @@ export const BaseZone: React.FC<{
     isSelectable?: boolean;
     /** 选择模式下该基地不可选（置灰） */
     isDimmed?: boolean;
+    /** 交互驱动的持续行动卡选择：只有这些 UID 的行动卡可被选中 */
+    selectableOngoingUids?: Set<string>;
     isMyTurn: boolean;
     myPlayerId: string | null;
     dispatch: (type: string, payload?: unknown) => void;
     onClick: () => void;
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
+    onOngoingSelect?: (ongoingUid: string) => void;
     onViewMinion: (defId: string) => void;
     onViewAction: (defId: string) => void;
     onViewBase: (defId: string) => void;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isSelectable, isDimmed, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
+}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
@@ -72,15 +75,38 @@ export const BaseZone: React.FC<{
                         const actionText = resolveCardText(actionDef, t);
                         const actionTitle = actionText ? `${actionName}\n${actionText}` : actionName;
                         const pConf = PLAYER_CONFIG[parseInt(oa.ownerId) % PLAYER_CONFIG.length];
+                        // ongoing 行动卡天赋判定
+                        const hasOngoingTalent = actionDef?.abilityTags?.includes('talent') ?? false;
+                        const canUseOngoingTalent = hasOngoingTalent && !oa.talentUsed && isMyTurn && oa.ownerId === myPlayerId;
+                        // 交互驱动的行动卡选择
+                        const isSelectableOngoing = !!selectableOngoingUids?.has(oa.uid);
+                        const isDimmedOngoing = !!selectableOngoingUids && !selectableOngoingUids.has(oa.uid);
                         return (
                             <motion.div
                                 key={oa.uid}
-                                onClick={(e) => { e.stopPropagation(); onViewAction(oa.defId); }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isSelectableOngoing && onOngoingSelect) {
+                                        onOngoingSelect(oa.uid);
+                                    } else if (canUseOngoingTalent) {
+                                        dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
+                                    } else {
+                                        onViewAction(oa.defId);
+                                    }
+                                }}
                                 className={`relative w-[3.8vw] aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
                                     hover:z-50 hover:scale-125 hover:-translate-y-[0.3vw] transition-all
-                                    border-[0.12vw] ${pConf.border} ${pConf.shadow}`}
+                                    border-[0.12vw] ${isDimmedOngoing
+                                        ? 'opacity-40 grayscale cursor-not-allowed'
+                                        : isSelectableOngoing
+                                        ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
+                                        : canUseOngoingTalent ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : `${pConf.border} ${pConf.shadow}`}`}
                                 initial={{ y: 20, opacity: 0, scale: 0.6 }}
-                                animate={{ y: 0, opacity: 1, scale: 1 }}
+                                animate={isSelectableOngoing
+                                    ? { y: 0, opacity: 1, scale: 1, rotate: [-1, 1, -1], transition: { rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } } }
+                                    : canUseOngoingTalent
+                                    ? { y: 0, opacity: 1, scale: 1, rotate: [-1, 1, -1], transition: { rotate: { repeat: Infinity, duration: 1.5, ease: 'easeInOut' } } }
+                                    : { y: 0, opacity: 1, scale: 1 }}
                                 transition={{ type: 'spring', stiffness: 350, damping: 20, delay: idx * 0.06 }}
                             >
                                 <div className="w-full h-full overflow-hidden rounded-[0.1vw]">
@@ -97,6 +123,21 @@ export const BaseZone: React.FC<{
                                         </div>
                                     )}
                                 </div>
+                                {/* 天赋可用发光叠层 */}
+                                {canUseOngoingTalent && (
+                                    <motion.div
+                                        className="absolute inset-0 pointer-events-none z-20 rounded-[0.1vw]"
+                                        animate={{ opacity: [0.3, 0.7, 0.3] }}
+                                        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                                        style={{ background: 'radial-gradient(ellipse at center, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
+                                    />
+                                )}
+                                {/* 天赋已使用标记 */}
+                                {hasOngoingTalent && oa.talentUsed && (
+                                    <div className="absolute -bottom-[0.3vw] left-1/2 -translate-x-1/2 bg-slate-600 text-white text-[0.35vw] font-bold px-[0.2vw] py-[0.02vw] rounded-sm shadow-sm border border-white z-10 whitespace-nowrap">
+                                        {t('ui.talent_used')}
+                                    </div>
+                                )}
                             </motion.div>
                         );
                     })}
@@ -106,6 +147,7 @@ export const BaseZone: React.FC<{
             {/* --- BASE CARD --- */}
             <div
                 onClick={onClick}
+                ref={tokenRef}
                 className={`
                     relative w-[14vw] aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
                     ${isDimmed
@@ -120,8 +162,16 @@ export const BaseZone: React.FC<{
                     backgroundImage: 'repeating-linear-gradient(45deg, #fff 0px, #fff 2px, #fdfdfd 2px, #fdfdfd 4px)',
                 }}
             >
-                {/* Inner Art Area */}
-                <div className="w-full h-full bg-slate-200 border border-slate-300 overflow-hidden relative">
+                {/* Inner Art Area — AnimatePresence 实现基地替换过渡 */}
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={base.defId}
+                        className="w-full h-full bg-slate-200 border border-slate-300 overflow-hidden relative"
+                        initial={{ opacity: 0, scale: 0.85 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.85 }}
+                        transition={{ duration: 0.4, ease: 'easeInOut' }}
+                    >
                     <CardPreview
                         previewRef={baseDef?.previewRef}
                         className="w-full h-full object-cover"
@@ -144,7 +194,8 @@ export const BaseZone: React.FC<{
                             </div>
                         </div>
                     )}
-                </div>
+                    </motion.div>
+                </AnimatePresence>
 
                 {/* 基地可选时的脉冲发光叠层 */}
                 {isSelectable && (
@@ -168,7 +219,6 @@ export const BaseZone: React.FC<{
 
                 {/* Power Token */}
                 <div className="absolute -top-[1.5vw] -right-[1.5vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center"
-                    ref={tokenRef}
                 >
                     <motion.div
                         className={`w-[3.5vw] h-[3.5vw] rounded-full flex items-center justify-center border-[0.2vw] border-dashed shadow-xl transform rotate-12 group-hover/base:scale-110 transition-transform ${isAtBreak
@@ -236,6 +286,8 @@ export const BaseZone: React.FC<{
                                             onMinionSelect={onMinionSelect}
                                             onView={() => onViewMinion(m.defId)}
                                             onViewAction={onViewAction}
+                                            selectableOngoingUids={selectableOngoingUids}
+                                            onOngoingSelect={onOngoingSelect}
                                             isTutorialTargetAllowed={isTutorialTargetAllowed}
                                         />
                                     ))}
@@ -311,8 +363,11 @@ const MinionCard: React.FC<{
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
     onView: () => void;
     onViewAction: (defId: string) => void;
+    /** 交互驱动的持续行动卡选择：只有这些 UID 的行动卡可被选中 */
+    selectableOngoingUids?: Set<string>;
+    onOngoingSelect?: (ongoingUid: string) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ minion, effectivePower, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isDimmed, onMinionSelect, onView, onViewAction, isTutorialTargetAllowed }) => {
+}> = ({ minion, effectivePower, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -431,11 +486,14 @@ const MinionCard: React.FC<{
                 <>
                     <AttachedBadge count={minion.attachedActions.length} />
                     {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
+                    {/* 行动卡选择模式下始终显示（不需要 hover） */}
                     {/* right-0 + pl 桥接：容器左边界与随从卡右边界重叠，消除鼠标移动死区 */}
                     <div
-                        className="absolute top-0 left-full flex flex-col gap-[0.2vw] pl-[0.6vw]
-                            opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100
-                            transition-all duration-150 pointer-events-none group-hover:pointer-events-auto"
+                        className={`absolute top-0 left-full flex flex-col gap-[0.2vw] pl-[0.6vw]
+                            ${selectableOngoingUids
+                                ? 'opacity-100 scale-100 pointer-events-auto'
+                                : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
+                            }`}
                         style={{ zIndex: UI_Z_INDEX.tooltip }}
                     >
                         {minion.attachedActions.map((aa) => {
@@ -443,13 +501,27 @@ const MinionCard: React.FC<{
                             const actionName = resolveCardName(actionDef, t) || aa.defId;
                             const actionText = resolveCardText(actionDef, t);
                             const actionTitle = actionText ? `${actionName}\n${actionText}` : actionName;
+                            const isSelectableAA = !!selectableOngoingUids?.has(aa.uid);
+                            const isDimmedAA = !!selectableOngoingUids && !selectableOngoingUids.has(aa.uid);
                             return (
                                 <motion.div
                                     key={aa.uid}
-                                    onClick={(e) => { e.stopPropagation(); onViewAction(aa.defId); }}
-                                    className="w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (isSelectableAA && onOngoingSelect) {
+                                            onOngoingSelect(aa.uid);
+                                        } else {
+                                            onViewAction(aa.defId);
+                                        }
+                                    }}
+                                    className={`w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
                                         hover:scale-[2] hover:translate-x-[0.8vw] transition-transform duration-150
-                                        border-[0.08vw] border-purple-400 ring-1 ring-purple-300/50"
+                                        border-[0.08vw] ${isDimmedAA
+                                            ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
+                                            : isSelectableAA
+                                            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]'
+                                            : 'border-purple-400 ring-1 ring-purple-300/50'
+                                        }`}
                                     title={actionTitle}
                                 >
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">

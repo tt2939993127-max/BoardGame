@@ -24,6 +24,17 @@ import { SYSTEM_IDS } from './types';
 // ============================================================================
 
 /**
+ * 选项引用来源（显式声明，用于框架层刷新校验）
+ * - 'hand'：手牌中的卡（按 cardUid 校验是否仍在手牌）
+ * - 'discard'：弃牌堆中的卡（按 cardUid 校验是否仍在弃牌堆）
+ * - 'field'：场上随从（按 minionUid 校验是否仍在场上）
+ * - 'base'：基地（按 baseIndex 校验是否仍存在）
+ * - 'ongoing'：场上 ongoing 卡（按 cardUid 校验是否仍附着）
+ * - 'static'：静态选项，不需要校验（如 skip/done/confirm）
+ */
+export type PromptOptionSource = 'hand' | 'discard' | 'field' | 'base' | 'ongoing' | 'static';
+
+/**
  * 交互选项（simple-choice 的单个选项）
  */
 export interface PromptOption<T = unknown> {
@@ -37,6 +48,12 @@ export interface PromptOption<T = unknown> {
      * - 'button' | undefined: 普通按钮
      */
     displayMode?: 'card' | 'button';
+    /**
+     * 选项引用来源（显式声明）。
+     * 框架层刷新时根据此字段决定如何校验选项是否仍然有效。
+     * 未声明时视为 'static'，不做校验（向后兼容）。
+     */
+    _source?: PromptOptionSource;
 }
 
 /**
@@ -76,9 +93,10 @@ export interface SimpleChoiceData<T = unknown> {
      * - 'base': 高亮棋盘上的候选基地，点击基地完成选择
      * - 'minion': 高亮棋盘上的候选随从，点击随从完成选择
      * - 'hand': 高亮手牌区的候选卡牌，点击卡牌完成选择
+     * - 'ongoing': 高亮棋盘上的候选持续行动卡，点击行动卡完成选择
      * - undefined / 'generic': 使用通用弹窗选择
      */
-    targetType?: 'base' | 'minion' | 'hand' | 'generic';
+    targetType?: 'base' | 'minion' | 'hand' | 'ongoing' | 'generic';
     /**
      * 单候选时是否自动解决（跳过玩家选择）。
      * - true（默认）：强制效果，只有一个候选时自动执行
@@ -183,8 +201,8 @@ export interface SimpleChoiceConfig {
     sourceId?: string;
     timeout?: number;
     multi?: PromptMultiConfig;
-    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'hand' | 'generic'） */
-    targetType?: 'base' | 'minion' | 'hand' | 'generic';
+    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'hand' | 'ongoing' | 'generic'） */
+    targetType?: 'base' | 'minion' | 'hand' | 'ongoing' | 'generic';
     /** 单候选时是否自动解决，默认 true（强制效果自动跳过） */
     autoResolveIfSingle?: boolean;
     /**
@@ -259,6 +277,59 @@ export function createSliderChoice(
 }
 
 /**
+ * multistep-choice 专用数据 — 多步调整 → 预览 → 确认
+ *
+ * 中间步骤纯本地执行（localReducer），不经过 pipeline，不发网络请求。
+ * 确认时 toCommands() 生成命令列表，依次 dispatch 到引擎。
+ *
+ * 适用场景：骰子修改（多次 +/- 后确认）、资源分配、多目标选择等。
+ */
+export interface MultistepChoiceData<TStep = unknown, TResult = unknown> {
+    /** 弹窗标题（i18n key） */
+    title: string;
+    /** 来源技能/卡牌 ID */
+    sourceId?: string;
+    /** 最大步骤数（达到后自动确认，可选） */
+    maxSteps?: number;
+    /** 最小步骤数（未达到时禁止确认，默认 0） */
+    minSteps?: number;
+    /**
+     * 本地 reducer：处理中间步骤
+     * 纯客户端执行，不经过 pipeline，不发网络请求。
+     * 返回更新后的累积结果。
+     */
+    localReducer: (current: TResult, step: TStep) => TResult;
+    /**
+     * 结果转命令：确认时将累积结果转换为引擎命令列表
+     * 返回的命令会被依次 dispatch 到引擎。
+     */
+    toCommands: (result: TResult) => Array<{ type: string; payload: unknown }>;
+    /** 初始累积结果 */
+    initialResult: TResult;
+    /** 验证函数：判断当前步骤是否合法（可选） */
+    validateStep?: (current: TResult, step: TStep) => boolean;
+    /** 附加元数据（透传给 UI 层，如骰子模式配置） */
+    meta?: Record<string, unknown>;
+}
+
+/**
+ * 创建 multistep-choice 交互
+ */
+export function createMultistepChoice<TStep, TResult>(
+    id: string,
+    playerId: PlayerId,
+    data: MultistepChoiceData<TStep, TResult>,
+): InteractionDescriptor<MultistepChoiceData<TStep, TResult>> {
+    return {
+        id,
+        kind: 'multistep-choice',
+        playerId,
+        data,
+    };
+}
+
+
+/**
  * 将交互加入队列（替代旧 queuePrompt）
  * 
  * 如果交互有 optionsGenerator：
@@ -316,9 +387,9 @@ export function queueInteraction<TCore>(
 
 /**
  * 解决当前交互并弹出下一个
- * 
+ *
  * 如果下一个交互有 optionsGenerator，则基于当前最新状态生成选项。
- * 否则使用通用刷新逻辑。
+ * 否则使用通用刷新逻辑（根据选项的 _source 字段显式校验）。
  * 这确保了串行交互（如连续弃牌）中，后续交互看到的是最新状态。
  */
 export function resolveInteraction<TCore>(
@@ -383,64 +454,78 @@ export function asSliderChoice(
 }
 
 /**
+ * UI 辅助：从 InteractionDescriptor 提取 multistep-choice 扁平数据
+ */
+export function asMultistepChoice<TStep = unknown, TResult = unknown>(
+    interaction?: InteractionDescriptor,
+): (MultistepChoiceData<TStep, TResult> & { id: string; playerId: PlayerId }) | undefined {
+    if (!interaction || interaction.kind !== 'multistep-choice') return undefined;
+    const data = interaction.data as MultistepChoiceData<TStep, TResult>;
+    return { ...data, id: interaction.id, playerId: interaction.playerId };
+}
+
+/**
  * 通用选项刷新逻辑（框架层）
- * 
- * 自动检测选项中的引用类型（cardUid/minionUid/baseIndex），
- * 基于最新状态过滤仍然有效的选项。
- * 
- * @param state - 最新的游戏状态
- * @param interaction - 当前交互描述符
- * @param originalOptions - 原始选项列表
- * @returns 过滤后的选项列表
+ *
+ * 根据选项的 _source 字段显式校验选项是否仍然有效。
+ * 未声明 _source 的选项视为 'static'，一律保留（向后兼容）。
  */
 function refreshOptionsGeneric<T>(
     state: any,
     interaction: InteractionDescriptor,
     originalOptions: PromptOption<T>[],
 ): PromptOption<T>[] {
-    const filtered = originalOptions.filter((opt) => {
+    return originalOptions.filter((opt) => {
+        const source = opt._source;
         const val = opt.value as any;
-        
-        // 1. 检查 cardUid（手牌）
-        if (val?.cardUid) {
-            const player = state.core?.players?.[interaction.playerId];
-            return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
-        }
-        
-        // 2. 检查 minionUid（场上随从）
-        if (val?.minionUid) {
-            for (const base of state.core?.bases || []) {
-                if (base.minions?.some((m: any) => m.uid === val.minionUid)) {
-                    return true;
-                }
+
+        switch (source) {
+            case 'hand': {
+                const player = state.core?.players?.[interaction.playerId];
+                return player?.hand?.some((c: any) => c.uid === val?.cardUid) ?? false;
             }
-            return false;
+            case 'discard': {
+                const player = state.core?.players?.[interaction.playerId];
+                return player?.discard?.some((c: any) => c.uid === val?.cardUid) ?? false;
+            }
+            case 'field': {
+                for (const base of state.core?.bases || []) {
+                    if (base.minions?.some((m: any) => m.uid === val?.minionUid)) return true;
+                }
+                return false;
+            }
+            case 'base': {
+                return typeof val?.baseIndex === 'number' &&
+                    val.baseIndex >= 0 &&
+                    val.baseIndex < (state.core?.bases?.length || 0);
+            }
+            case 'ongoing': {
+                // ongoing 卡附着在基地或随从上，检查是否仍存在
+                for (const base of state.core?.bases || []) {
+                    if (base.ongoingActions?.some((o: any) => o.uid === val?.cardUid)) return true;
+                    for (const m of base.minions || []) {
+                        if (m.attachedActions?.some((o: any) => o.uid === val?.cardUid)) return true;
+                    }
+                }
+                return false;
+            }
+            case 'static':
+            default:
+                // 未声明来源或 static：一律保留
+                return true;
         }
-        
-        // 3. 检查 baseIndex（基地）
-        if (typeof val?.baseIndex === 'number' && val.baseIndex >= 0) {
-            return val.baseIndex < (state.core?.bases?.length || 0);
-        }
-        
-        // 4. 其他选项（如 skip、done、confirm 等）保留
-        return true;
     });
-    
-    return filtered;
 }
 
 /**
  * 刷新当前交互的选项
- * 
+ *
  * 在状态更新时调用，确保交互选项反映最新状态。
- * 
+ *
  * 刷新策略：
  * 1. 如果手动提供了 optionsGenerator，优先使用
- * 2. 否则使用通用刷新逻辑（自动检测 cardUid/minionUid/baseIndex）
+ * 2. 否则使用通用刷新逻辑（根据选项的 _source 字段显式校验）
  * 3. 如果过滤后无法满足 multi.min 限制，保持原始选项（安全降级）
- * 
- * @param state - 最新的游戏状态
- * @returns 更新后的状态（如果需要刷新）或原状态
  */
 export function refreshInteractionOptions<TCore>(
     state: MatchState<TCore>,
@@ -513,50 +598,16 @@ export function createInteractionSystem<TCore>(
         }),
 
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
-            // ---- simple-choice 响应 ----
-            if (command.type === INTERACTION_COMMANDS.RESPOND) {
-                const current = state.sys.interaction.current;
-                // 只处理 simple-choice 类型的交互
-                // 其他类型（dt:card-interaction 等）由游戏层自己处理
-                if (current && current.kind === 'simple-choice') {
-                    const ts = resolveCommandTimestamp(command);
-                    return handleSimpleChoiceRespond(
-                        state,
-                        command.playerId,
-                        command.payload as { optionId?: string; optionIds?: string[] },
-                        ts,
-                    );
-                }
-                // 非 simple-choice 交互：不处理，让命令通过到游戏层
-                return;
-            }
-
-            // ---- simple-choice 超时 ----
-            if (command.type === INTERACTION_COMMANDS.TIMEOUT) {
-                const ts = resolveCommandTimestamp(command);
-                return handleSimpleChoiceTimeout(state, ts);
-            }
-
-            // ---- 交互取消（离线裁决 / 系统兜底） ----
+            // ---- 交互取消（通用，所有 kind 都能用） ----
             if (command.type === INTERACTION_COMMANDS.CANCEL) {
                 const ts = resolveCommandTimestamp(command);
                 return handleInteractionCancel(state, command.playerId, ts);
             }
 
-            // ---- 阻塞逻辑 ----
+            // ---- 通用阻塞：有交互时阻塞 ADVANCE_PHASE ----
             const current = state.sys.interaction.current;
-            if (current) {
-                if (current.kind === 'simple-choice') {
-                    // simple-choice: 阻塞该玩家的所有非系统命令
-                    if (current.playerId === command.playerId && !command.type.startsWith('SYS_')) {
-                        return { halt: true, error: '请先完成当前选择' };
-                    }
-                } else {
-                    // 其他 kind（dt:card-interaction 等）: 只阻塞 ADVANCE_PHASE（任何玩家）
-                    if (command.type === 'ADVANCE_PHASE') {
-                        return { halt: true, error: '请先完成当前交互' };
-                    }
-                }
+            if (current && command.type === 'ADVANCE_PHASE') {
+                return { halt: true, error: '请先完成当前交互' };
             }
         },
 
@@ -574,130 +625,8 @@ export function createInteractionSystem<TCore>(
     };
 }
 
-// ============================================================================
-// simple-choice 处理函数（移植自 PromptSystem）
-// ============================================================================
 
-function handleSimpleChoiceRespond<TCore>(
-    state: MatchState<TCore>,
-    playerId: PlayerId,
-    payload: { optionId?: string; optionIds?: string[]; mergedValue?: unknown },
-    timestamp: number,
-): HookResult<TCore> {
-    const current = state.sys.interaction.current;
 
-    if (!current) {
-        return { halt: true, error: '没有待处理的选择' };
-    }
-    if (current.playerId !== playerId) {
-        return { halt: true, error: '不是你的选择回合' };
-    }
-    if (current.kind !== 'simple-choice') {
-        return { halt: true, error: '当前交互不是 simple-choice' };
-    }
-
-    const data = current.data as SimpleChoiceData;
-    const isMulti = !!data.multi;
-    let selectedOptions: PromptOption[] = [];
-    let selectedOptionIds: string[] = [];
-
-    if (isMulti) {
-        const optionIds = Array.isArray(payload.optionIds)
-            ? payload.optionIds
-            : typeof payload.optionId === 'string'
-              ? [payload.optionId]
-              : [];
-        const uniqueIds = Array.from(new Set(optionIds)).filter(
-            (id) => typeof id === 'string',
-        );
-        const optionsById = new Map(data.options.map((o) => [o.id, o]));
-        if (uniqueIds.find((id) => !optionsById.has(id))) {
-            return { halt: true, error: '无效的选择' };
-        }
-        if (uniqueIds.find((id) => optionsById.get(id)?.disabled)) {
-            return { halt: true, error: '该选项不可用' };
-        }
-        const minSelections = data.multi?.min ?? 1;
-        const maxSelections = data.multi?.max;
-        if (uniqueIds.length < minSelections) {
-            return { halt: true, error: `至少选择 ${minSelections} 项` };
-        }
-        if (maxSelections !== undefined && uniqueIds.length > maxSelections) {
-            return { halt: true, error: `最多选择 ${maxSelections} 项` };
-        }
-        selectedOptionIds = uniqueIds;
-        selectedOptions = uniqueIds.map((id) => optionsById.get(id)!);
-    } else {
-        if (typeof payload.optionId !== 'string') {
-            return { halt: true, error: '无效的选择' };
-        }
-        const selectedOption = data.options.find(
-            (o) => o.id === payload.optionId,
-        );
-        if (!selectedOption) {
-            return { halt: true, error: '无效的选择' };
-        }
-        if (selectedOption.disabled) {
-            return { halt: true, error: '该选项不可用' };
-        }
-        selectedOptionIds = [selectedOption.id];
-        selectedOptions = [selectedOption];
-    }
-
-    const newState = resolveInteraction(state);
-
-    const resolvedValue = payload.mergedValue !== undefined
-        ? payload.mergedValue
-        : isMulti
-            ? selectedOptions.map((o) => o.value)
-            : selectedOptions[0]?.value;
-
-    const event: GameEvent = {
-        type: INTERACTION_EVENTS.RESOLVED,
-        payload: {
-            interactionId: current.id,
-            playerId,
-            optionId:
-                selectedOptionIds.length > 0 ? selectedOptionIds[0] : null,
-            optionIds: isMulti ? selectedOptionIds : undefined,
-            value: resolvedValue,
-            sourceId: data.sourceId,
-            interactionData: current.data,
-        },
-        timestamp,
-    };
-
-    return { halt: false, state: newState, events: [event] };
-}
-
-function handleSimpleChoiceTimeout<TCore>(
-    state: MatchState<TCore>,
-    timestamp: number,
-): HookResult<TCore> {
-    const current = state.sys.interaction.current;
-
-    if (!current) {
-        return { halt: true, error: '没有待处理的选择' };
-    }
-    if (current.kind !== 'simple-choice') {
-        return { halt: true, error: '当前交互不是 simple-choice' };
-    }
-
-    const data = current.data as SimpleChoiceData;
-    const newState = resolveInteraction(state);
-
-    const event: GameEvent = {
-        type: INTERACTION_EVENTS.EXPIRED,
-        payload: {
-            interactionId: current.id,
-            playerId: current.playerId,
-            sourceId: data.sourceId,
-        },
-        timestamp,
-    };
-
-    return { state: newState, events: [event] };
-}
 
 function handleInteractionCancel<TCore>(
     state: MatchState<TCore>,

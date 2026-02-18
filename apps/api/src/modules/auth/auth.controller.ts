@@ -28,6 +28,18 @@ export class AuthController {
             return this.sendError(res, 400, t('auth.error.invalidEmail'));
         }
 
+        // 速率限制：60 秒冷却 + 10 分钟内最多 5 次
+        const clientIp = this.resolveClientIp(req);
+        const sendStatus = await this.authService.getRegisterCodeSendStatus(email, clientIp);
+        if (sendStatus) {
+            const minutes = Math.ceil(sendStatus.retryAfterSeconds / 60);
+            const seconds = sendStatus.retryAfterSeconds;
+            const message = seconds < 60
+                ? t('auth.error.registerCodeSendTooFrequent', { seconds })
+                : t('auth.error.registerCodeSendLimited', { minutes });
+            return this.sendError(res, 429, message);
+        }
+
         const existingUser = await this.authService.findByEmail(email);
         if (existingUser) {
             return res.status(409).json({
@@ -43,6 +55,7 @@ export class AuthController {
         }
 
         await this.authService.storeEmailCode(email, code);
+        await this.authService.markRegisterCodeSend(email, clientIp);
 
         return res.json({ message: result.message });
     }
@@ -210,7 +223,8 @@ export class AuthController {
         const clientIp = this.resolveClientIp(req);
         const lockStatus = await this.authService.getLoginLockStatus(trimmedAccount, clientIp);
         if (lockStatus) {
-            return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { seconds: lockStatus.retryAfterSeconds }), {
+            const minutes = Math.ceil(lockStatus.retryAfterSeconds / 60);
+            return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { minutes }), {
                 retryAfterSeconds: lockStatus.retryAfterSeconds,
             });
         }
@@ -227,7 +241,8 @@ export class AuthController {
         if (!user) {
             const failure = await this.authService.recordLoginFailure(trimmedAccount, clientIp);
             if (failure.locked) {
-                return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { seconds: failure.retryAfterSeconds ?? 0 }), {
+                const minutes = Math.ceil((failure.retryAfterSeconds ?? 0) / 60);
+                return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { minutes }), {
                     retryAfterSeconds: failure.retryAfterSeconds ?? 0,
                 });
             }

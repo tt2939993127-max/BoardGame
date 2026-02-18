@@ -161,11 +161,14 @@ Flow / Interaction / Undo / Log / EventStream / ResponseWindow / Tutorial / Rema
 | `visual.ts` | 基于 atlasId 的视觉资源解析器 | `VisualResolver` |
 | `spriteAtlas.ts` | 精灵图集注册/裁切/查询（网格式） | `SpriteAtlasRegistry` / `globalSpriteAtlasRegistry` / `computeSpriteStyle` / `computeSpriteAspectRatio` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig` |
 | `actionRegistry.ts` | actionId → handler 注册表 | `ActionHandlerRegistry` |
+| `actionLogHelpers.ts` | ActionLog 通用伤害来源格式化（跨游戏复用） | `buildDamageBreakdownSegment` / `buildDamageSourceAnnotation` / `DamageSourceResolver` |
 | `condition.ts` / `effects.ts` / `dice.ts` / `resources.ts` / `target.ts` / `zones.ts` / `expression.ts` | 其他引擎原语 | — |
 
 ### `engine/fx/` — FxSystem
 
 Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统 + FeedbackPack。游戏侧通过 `fxSetup.ts` 注册渲染器并声明反馈包（音效+震动）。`useFxBus` 接受 `{ playSound, triggerShake }` 注入反馈能力，push 时自动触发 `timing='immediate'` 反馈，渲染器 `onImpact()` 触发 `timing='on-impact'` 反馈。Shader 管线（`src/engine/fx/shader/`）提供 `ShaderCanvas` + `ShaderMaterial` + `ShaderPrecompile` + GLSL 噪声库。
+
+所有三个游戏（SummonerWars / DiceThrone / SmashUp）均已接入 FX 系统。SmashUp 使用 screen 空间定位（无棋盘格），通过 `event.params` 传入 DOM 位置信息。
 
 #### 序列特效（`pushSequence`）
 
@@ -722,6 +725,7 @@ options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.
 - `useAutoSkipPhase` — 无可用操作时自动跳过（注入 `hasAvailableActions` + `hasActiveInteraction`）
 - `useVisualSequenceGate` — 视觉序列门控（`beginSequence`/`endSequence`/`scheduleInteraction`/`isVisualBusy`/`reset`）
 - `useVisualStateBuffer` — 视觉状态缓冲/双缓冲（`freeze`/`freezeBatch`/`release`/`clear`/`get`/`snapshot`/`isBuffering`）
+- `useIsInteractionBusy` — 判断当前是否有活跃引擎交互（`sys.interaction.current` 属于当前玩家），用于阻止手牌打出/格子点击等操作。**面向100个游戏的标准用法**：所有"等待玩家输入"的状态必须走 `sys.interaction`，游戏层通过此 Hook 统一判断忙碌状态，禁止自建 UI 状态机。历史债务（如 summonerwars 的 `abilityMode`）在迁移完成前需在 Board 层 `||` 合并。
 
 **系统层设计原则**：接口+通用骨架在系统层，游戏特化下沉；每游戏独立实例禁止全局单例；UGC 通过 AI 生成符合接口的代码动态注册。
 
@@ -876,6 +880,65 @@ useEffect(() => {
 
 ---
 
+## 卡牌特写队列（CardSpotlightQueue）使用规范
+
+> 路径：`src/components/game/framework/CardSpotlightQueue.tsx` + `hooks/useCardSpotlightQueue.ts`
+
+通用框架组件，用于展示其他玩家打出的卡牌特写。基于 EventStream 驱动，支持队列堆叠（有上限），点击任意位置关闭当前特写。
+
+### 核心特性
+
+- **只显示其他玩家**：自动过滤 `currentPlayerId` 产生的事件
+- **队列有上限**：`maxQueue`（默认 5），超出时丢弃最旧的
+- **点击关闭**：点击空白/卡牌即可关闭当前项，不阻塞其他操作
+- **Undo 安全**：检测到 Undo 回退时自动清空队列
+- **游戏层注入渲染**：框架层管理队列逻辑，游戏层通过 `renderCard` 提供卡牌 UI
+
+### 接入方式（游戏层）
+
+```typescript
+import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game/framework';
+import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
+
+// 1. 定义数据提取函数
+const extractCard = useCallback((event) => {
+    const p = event.payload as { playerId: string; defId: string };
+    return p ? { playerId: p.playerId, cardData: { defId: p.defId } } : null;
+}, []);
+
+// 2. 使用 Hook
+const { queue, dismiss } = useCardSpotlightQueue({
+    entries: getEventStreamEntries(G),
+    currentPlayerId: myPid,
+    triggerEventTypes: ['su:action_played'],  // 触发特写的事件类型
+    extractCard,
+    maxQueue: 5,
+});
+
+// 3. 定义渲染函数
+const renderCard = useCallback((item) => (
+    <div className="..."><CardPreview ... /></div>
+), []);
+
+// 4. 渲染组件
+<CardSpotlightQueue queue={queue} onDismiss={dismiss} renderCard={renderCard} />
+```
+
+### 与 FX 系统的区别
+
+| 维度 | FX 系统 | CardSpotlightQueue |
+|------|---------|-------------------|
+| 交互性 | `pointer-events-none`，纯展示 | 可点击关闭 |
+| 生命周期 | 定时自动消失（`timeoutMs`） | 用户主动关闭 |
+| 适用场景 | 力量浮字、VP 飞行等瞬态特效 | 卡牌特写、需要玩家确认的展示 |
+
+### 已接入游戏
+
+- **SmashUp**：行动卡打出时展示特写（替代原 FX `ACTION_SHOW` 的 800ms 自动消失）
+- **DiceThrone**：待迁移（当前使用游戏层自建的 `CardSpotlightOverlay` + `useCardSpotlight`）
+
+---
+
 ## ActionLogSystem 使用规范（强制）
 
 - ActionLogSystem 只负责收集/落库，禁止系统层硬编码游戏文案
@@ -883,6 +946,42 @@ useEffect(() => {
 - 覆盖所有玩家可见状态变化（伤害/治疗/摧毁/移动/资源/VP），不记录内部系统事件
 - 支持多条日志返回（命令级+同步事件级）
 - 卡牌类日志必须用 `card` 片段支持 hover 预览
+
+### 伤害来源标注（强制，面向百游戏）
+
+**禁止在游戏层手写 breakdown 构建逻辑**，必须使用 `engine/primitives/actionLogHelpers.ts` 提供的通用工具。
+
+每个游戏只需实现一次 `DamageSourceResolver`（约 15 行），框架层自动处理 breakdown 构建：
+
+```typescript
+// 游戏层：实现一次 resolver（约 15 行）
+const myGameDamageSourceResolver: DamageSourceResolver = {
+    resolve(sourceId: string): SourceLabel | null {
+        // 1. 技能注册表查找
+        const ability = abilityRegistry.get(sourceId);
+        if (ability?.name) return { label: ability.name, isI18n: ability.name.includes('.'), ns: MY_NS };
+        // 2. reason → i18n key 映射
+        const knownReasons: Record<string, string> = { curse: 'actionLog.damageReason.curse' };
+        if (knownReasons[sourceId]) return { label: knownReasons[sourceId], isI18n: true, ns: MY_NS };
+        return null;
+    },
+};
+
+// 游戏层：formatEntry 里调用（2 行）
+// 场景 A：带 breakdown tooltip（适合有修改器的伤害，如 DiceThrone）
+const breakdownSeg = buildDamageBreakdownSegment(dealt, { sourceAbilityId, breakdown, modifiers }, resolver, NS);
+
+// 场景 B：轻量来源标注（适合单位伤害，如 SummonerWars）
+const sourceSegs = buildDamageSourceAnnotation({ sourceEntityId, sourceAbilityId, reason }, resolver, NS, 'actionLog.damageFrom', buildCardSegment);
+```
+
+**两个工具函数的适用场景**：
+- `buildDamageBreakdownSegment` — 有修改器明细（Token/状态/护盾加减），生成带 hover tooltip 的数值片段
+- `buildDamageSourceAnnotation` — 无修改器，只需标注"来自 XX"，生成 0-2 个普通 segment
+
+**现有游戏参考**：
+- DiceThrone `game.ts` → `buildDamageBreakdownSegment`（DAMAGE_DEALT / HEAL_APPLIED）
+- SummonerWars `actionLog.ts` → `buildDamageSourceAnnotation`（UNIT_DAMAGED）
 
 ### 音效与动画分流（强制）
 

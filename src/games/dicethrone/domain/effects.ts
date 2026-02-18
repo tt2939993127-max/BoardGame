@@ -230,12 +230,13 @@ function applyOnDamageReceivedTriggers(
     targetId: PlayerId,
     baseDamage: number,
     options: { timestamp: number; random?: RandomFn; sfxKey?: string }
-): { damage: number; events: DiceThroneEvent[] } {
+): { damage: number; events: DiceThroneEvent[]; modifiers: import('./events').DamageModifier[] } {
     const events: DiceThroneEvent[] = [];
+    const modifiers: import('./events').DamageModifier[] = [];
     const { state } = ctx;
     const target = state.players[targetId];
     if (!target) {
-        return { damage: baseDamage, events };
+        return { damage: baseDamage, events, modifiers };
     }
 
     const tokenDefinitions = state.tokenDefinitions ?? [];
@@ -260,7 +261,15 @@ function applyOnDamageReceivedTriggers(
                 case 'modifyStat': {
                     const delta = action.value ?? 0;
                     if (delta !== 0) {
-                        nextDamage += delta * stacks;
+                        const totalDelta = delta * stacks;
+                        nextDamage += totalDelta;
+                        // 记录修正，用于 DAMAGE_DEALT 事件的 modifiers 字段（ActionLog breakdown）
+                        modifiers.push({
+                            type: 'status',
+                            value: totalDelta,
+                            sourceId: def.id,
+                            sourceName: def.name,
+                        });
                     }
                     break;
                 }
@@ -332,7 +341,7 @@ function applyOnDamageReceivedTriggers(
         }
     }
 
-    return { damage: Math.max(0, nextDamage), events };
+    return { damage: Math.max(0, nextDamage), events, modifiers };
 }
 
 /**
@@ -362,6 +371,7 @@ function resolveEffectAction(
             for (const dmgTargetId of damageTargets) {
                 let totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
 
+                let passiveModifiers: import('./events').DamageModifier[] = [];
                 if (totalValue > 0) {
                     const passiveResult = applyOnDamageReceivedTriggers(ctx, dmgTargetId, totalValue, {
                         timestamp,
@@ -370,6 +380,7 @@ function resolveEffectAction(
                     });
                     totalValue = passiveResult.damage;
                     events.push(...passiveResult.events);
+                    passiveModifiers = passiveResult.modifiers;
                 }
 
                 if (totalValue <= 0) continue;
@@ -395,7 +406,8 @@ function resolveEffectAction(
                             totalValue,
                             responseType,
                             sourceAbilityId,
-                            timestamp
+                            timestamp,
+                            passiveModifiers.length > 0 ? passiveModifiers : undefined
                         );
                         const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
                         events.push(tokenResponseEvent);
@@ -416,6 +428,7 @@ function resolveEffectAction(
                         amount: totalValue,
                         actualDamage,
                         sourceAbilityId,
+                        ...(passiveModifiers.length > 0 ? { modifiers: passiveModifiers } : {}),
                     },
                     sourceCommandType: 'ABILITY_EFFECT',
                     timestamp,

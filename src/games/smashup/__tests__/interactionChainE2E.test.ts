@@ -18,7 +18,7 @@ import { smashUpFlowHooks } from '../domain/index';
 import {
     createFlowSystem, createLogSystem, createActionLogSystem, createUndoSystem,
     createInteractionSystem, createRematchSystem, createResponseWindowSystem,
-    createTutorialSystem, createEventStreamSystem,
+    createTutorialSystem, createEventStreamSystem, createSimpleChoiceSystem,
 } from '../../../engine';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createSmashUpEventSystem } from '../domain/systems';
@@ -96,6 +96,7 @@ function buildSystems(): EngineSystem<SmashUpCore>[] {
         createActionLogSystem<SmashUpCore>(),
         createUndoSystem<SmashUpCore>(),
         createInteractionSystem<SmashUpCore>(),
+        createSimpleChoiceSystem<SmashUpCore>(),
         createRematchSystem<SmashUpCore>(),
         createResponseWindowSystem<SmashUpCore>({
             allowedCommands: ['su:play_action'],

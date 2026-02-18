@@ -10,6 +10,8 @@ import {
     createEventStreamSystem,
     createFlowSystem,
     createInteractionSystem,
+    createSimpleChoiceSystem,
+    createMultistepChoiceSystem,
     createLogSystem,
     createRematchSystem,
     createResponseWindowSystem,
@@ -24,7 +26,7 @@ import { summonerWarsFlowHooks } from './domain/flowHooks';
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { registerCriticalImageResolver } from '../../core';
 import { getSummonerWarsCardPreviewRef } from './ui/cardPreviewHelper';
-import { ACTION_ALLOWLIST, formatSummonerWarsActionEntry } from './actionLog';
+import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatSummonerWarsActionEntry } from './actionLog';
 import { summonerWarsCriticalImageResolver } from './criticalImageResolver';
 
 // Summoner Wars 作弊系统配置
@@ -137,8 +139,11 @@ const systems = [
     }),
     createUndoSystem({
         maxSnapshots: 3,
-        snapshotCommandAllowlist: ACTION_ALLOWLIST,
+        snapshotCommandAllowlist: UNDO_ALLOWLIST,
     }),
+    createInteractionSystem(),
+    createSimpleChoiceSystem(),
+    createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem(),
     createTutorialSystem(),

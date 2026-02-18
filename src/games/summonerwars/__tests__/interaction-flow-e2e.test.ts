@@ -415,10 +415,10 @@ describe('冰霜战斧附加 E2E 流程', () => {
     const coreForAttack = { ...coreAfterAttach };
     coreForAttack.phase = 'attack';
 
-    // 构造一个 random 让所有骰子掷出 special 面（0.9 → index 4: melee + special）
+    // 构造一个 random 让所有骰子掷出 special 面（0.75 → index 4: melee + special）
     const specialDiceRandom: RandomFn = {
       shuffle: <T>(arr: T[]) => arr,
-      random: () => 0.9, // 0.9 → index 4 (melee + special)
+      random: () => 0.75, // 0.75 → index 4 (melee + special)
       d: (max: number) => 1,
       range: (min: number) => min,
     };
@@ -1007,8 +1007,8 @@ describe('交缠颂歌 + 连续射击共享 E2E', () => {
     });
     const archer = putUnit(core, { row: 4, col: 4 }, archerCard, '0', { boosts: 1 });
 
-    // 敌方单位（亡灵弓箭手，真实：STR 3, HP 2, ranged(3)）
-    const enemy = mkUnit('necro-undead-archer', { faction: 'necromancer', unitClass: 'common', strength: 3, life: 2, attackType: 'ranged', attackRange: 3, abilities: ['soul_transfer'] });
+    // 敌方单位（亡灵弓箭手，真实：STR 3, HP 2, ranged(3)）— 给足够 HP 以存活两次攻击
+    const enemy = mkUnit('necro-undead-archer', { faction: 'necromancer', unitClass: 'common', strength: 3, life: 10, attackType: 'ranged', attackRange: 3, abilities: ['soul_transfer'] });
     putUnit(core, { row: 2, col: 4 }, enemy, '1');
 
     // 打出交缠颂歌

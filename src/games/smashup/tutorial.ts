@@ -1,18 +1,19 @@
 /**
- * 大杀四方 (Smash Up) - 教学配置（恐龙+海盗 vs 机器人+巫师）
+ * 大杀四方 (Smash Up) - 教学配置（恐龙+米斯卡塔尼克大学 vs 机器人+巫师）
  *
  * 设计原则：每一步只讲一个概念，并高亮对应的 UI 元素。
  * 带着玩家走一遍完整回合，而不是一股脑把信息扔给玩家。
  *
  * 使用作弊命令设置固定手牌，确保教学流程可控：
- * - 玩家派系：恐龙（力量型，简单直观）+ 海盗（移动型，便于演示）
+ * - 玩家派系：恐龙（力量型，简单直观）+ 米斯卡塔尼克大学（含天赋随从，用于演示天赋）
  * - 对手派系：机器人 + 巫师
  * - 通过 MERGE_STATE 设置玩家手牌为教学指定卡牌
  *
  * 教学手牌设计（P0）：
- * - 心理学家 (miskatonic_psychologist, 力量3, onPlay) — onPlay 随从，用于演示打出随从
- * - 机能强化 (dino_augmentation, 标准行动) — 简单行动卡，用于演示打出行动
- * - 战争猛禽 (dino_war_raptor, 力量2) — 备用随从，丰富手牌
+ * - 图书管理员 (miskatonic_librarian, 力量4, talent) — 天赋随从，用于演示天赋激活
+ *   天赋效果：弃1张疯狂卡 → 抽1张牌。教学中注入1张疯狂卡，激活后弃疯狂卡+抽牌，无 Prompt。
+ * - 嚎叫 (dino_howl, 标准行动) — 无交互行动卡（己方随从全体+1力量），用于演示打出行动
+ * - 疯狂卡 (special_madness) — 注入1张，供图书管理员天赋消耗
  */
 
 import type { TutorialManifest } from '../../engine/types';
@@ -60,16 +61,16 @@ export {
 // ============================================================================
 
 /**
- * 教学用固定手牌：只包含教学必需的卡牌
- * - 研究员：天赋随从，教学打出随从 + 激活天赋
- * - 机能强化：简单行动卡，教学打出行动
- * - 战争猛禽：备用随从，让手牌不至于只有 2 张
+ * 教学用固定手牌（P0）：
+ * - 图书管理员：天赋随从（力量4），玩家打出后激活天赋（弃疯狂卡→抽牌）
+ * - 嚎叫：无交互行动卡（己方随从全体+1力量），教学打出行动
+ * - 疯狂卡：供图书管理员天赋消耗，天赋执行后弃掉并抽1张牌
  * uid 使用 'tut-' 前缀避免与游戏生成的 uid 冲突
  */
-const TUTORIAL_HAND: CardInstance[] = [
-    { uid: 'tut-1', defId: 'miskatonic_psychologist', type: 'minion', owner: '0' },
-    { uid: 'tut-2', defId: 'dino_augmentation', type: 'action', owner: '0' },
-    { uid: 'tut-3', defId: 'dino_war_raptor', type: 'minion', owner: '0' },
+const TUTORIAL_HAND_P0: CardInstance[] = [
+    { uid: 'tut-1', defId: 'miskatonic_librarian', type: 'minion', owner: '0' },
+    { uid: 'tut-2', defId: 'dino_howl', type: 'action', owner: '0' },
+    { uid: 'tut-mad', defId: 'special_madness', type: 'action', owner: '0' },
 ];
 
 // ============================================================================
@@ -96,7 +97,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS }, playerId: '1' },
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS }, playerId: '1' },
-                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY } },
                 // 注意：不需要显式 ADVANCE_PHASE。
                 // ALL_FACTIONS_SELECTED 事件清除 factionSelection 后，
                 // FlowSystem.onAutoContinueCheck 会自动推进 factionSelect → startTurn → playCards。
@@ -107,7 +108,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
                     payload: {
                         fields: {
                             players: {
-                                '0': { hand: TUTORIAL_HAND },
+                                '0': { hand: TUTORIAL_HAND_P0 },
                             },
                         },
                     },
@@ -177,7 +178,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             infoStep: true,
         },
 
-        // 7: 打出随从 — 玩家必须打出一张随从卡
+        // 7: 打出随从 — 玩家打出星之眷族（天赋随从，力量5）
         {
             id: 'playMinion',
             content: 'game-smashup:tutorial.steps.playMinion',
@@ -189,7 +190,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             advanceOnEvents: [{ type: SU_EVENTS.MINION_PLAYED }],
         },
 
-        // 8: 打出行动 — 玩家必须打出一张行动卡
+        // 8: 打出行动 — 玩家必须打出一张行动卡（嚎叫：无交互，己方随从全体+1力量）
         {
             id: 'playAction',
             content: 'game-smashup:tutorial.steps.playAction',
@@ -201,7 +202,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             advanceOnEvents: [{ type: SU_EVENTS.ACTION_PLAYED }],
         },
 
-        // 9: 使用天赋 — 点击基地上金色发光的随从激活天赋能力
+        // 9: 使用天赋 — 点击基地上图书管理员激活天赋（弃疯狂卡→抽1张牌，有明显反馈，无 Prompt）
         {
             id: 'useTalent',
             content: 'game-smashup:tutorial.steps.useTalent',
@@ -277,7 +278,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
         // 第五部分：结束抽牌 + 对手回合 + 总结
         // ================================================================
 
-        // 15: 结束抽牌 — 抽牌阶段会自动推进（手牌不超限时）
+        // 15: 抽牌完成说明 — 抽牌阶段自动推进（手牌不超限时无需操作）
         {
             id: 'endDraw',
             content: 'game-smashup:tutorial.steps.endDraw',
@@ -294,6 +295,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             position: 'center',
             requireAction: false,
             showMask: true,
+            viewAs: '1', // 切换到对手视角，让玩家看到 AI 在操作
             aiActions: [
                 // P1 出牌阶段 → 直接结束（不打牌），后续阶段自动推进直到切回 P0
                 { commandType: FLOW_COMMANDS.ADVANCE_PHASE, payload: undefined, playerId: '1' },
@@ -319,13 +321,13 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             requireAction: false,
         },
 
-        // 20: 完成 — 教学结束
+        // 20: 完成 — 教学结束（infoStep=true 确保玩家点 Next 后才退出，lastTutorialStepIdRef 能记录到 'finish'）
         {
             id: 'finish',
             content: 'game-smashup:tutorial.steps.finish',
             highlightTarget: 'su-base-area',
             position: 'bottom',
-            requireAction: false,
+            infoStep: true,
         },
     ],
 };

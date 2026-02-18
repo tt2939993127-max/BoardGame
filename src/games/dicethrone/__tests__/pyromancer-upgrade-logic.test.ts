@@ -37,11 +37,13 @@ describe('Pyromancer 技能升级路径验证', () => {
     it('Burning Soul II 升级校验', () => {
         const ability = getUpgradedAbilityFromCard('card-burning-soul-2');
         expect(ability).toBeDefined();
-        // 验证变体：升级后包含 soul-burn-4 (Fiery Soul x4)
-        const v4 = ability.variants?.find(v => v.id === 'soul-burn-4');
-        expect(v4).toBeDefined();
-        // 应包含施加 Knockdown 效果
-        const knockdown = v4?.effects.find(e => e.action.statusId === STATUS_IDS.KNOCKDOWN);
+        // 验证变体：升级后包含 blazing-soul (2岩浆+2火魂)
+        const blazing = ability.variants?.find(v => v.id === 'blazing-soul');
+        expect(blazing).toBeDefined();
+        // blazing-soul 应包含 increase-fm-limit + gainFM5 + inflictKnockdown
+        const fmLimit = blazing?.effects.find(e => e.action.customActionId === 'increase-fm-limit');
+        expect(fmLimit).toBeDefined();
+        const knockdown = blazing?.effects.find(e => e.action.statusId === STATUS_IDS.KNOCKDOWN);
         expect(knockdown).toBeDefined();
     });
 

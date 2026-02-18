@@ -37,7 +37,6 @@ export const StrengthBoostIndicator: React.FC<StrengthBoostIndicatorProps> = ({
         icon: Swords,
         color: 'text-red-500',
         glow: 'rgba(239,68,68,0.9)',
-        tooltip: strengthBoost.sources.length > 0 ? strengthBoost.sources.join('\n') : undefined,
       });
     }
 
@@ -55,14 +54,15 @@ export const StrengthBoostIndicator: React.FC<StrengthBoostIndicatorProps> = ({
     return entries;
   }, [unit, core]);
 
-  // 每张附加卡名条占 14% 高度
-  const bottomOffset = 3 + attachedCount * 14;
+  // 有附加卡时图标略微上移避开 buff 图标区域，无附加卡保持默认偏移
+  const bottomOffset = 5;
 
   return (
     <BoostIndicator
       boosts={boosts}
       position="bottom-right"
       bottomOffset={bottomOffset}
+      iconSize="1.3vw"
     />
   );
 };

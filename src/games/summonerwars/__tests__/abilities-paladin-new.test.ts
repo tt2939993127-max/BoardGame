@@ -220,9 +220,9 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     state.players['0'].deck = [makeAlly('deck-1'), makeAlly('deck-2'), makeAlly('deck-3')];
     const handSizeBefore = state.players['0'].hand.length;
 
-    // 使用全 special 骰子（0.9 → index 4: melee + special）
+    // 使用全 special 骰子（0.75 → index 4: melee + special）
     // 城塞圣武士战力3，投3个骰子，全部包含 special 标记
-    const allSpecialRandom = createControlledRandom([0.9, 0.9, 0.9]);
+    const allSpecialRandom = createControlledRandom([0.75, 0.75, 0.75]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
@@ -303,7 +303,7 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     const handSizeBefore = state.players['0'].hand.length;
 
     // 2个 melee+special + 1个 melee+ranged（2个 special 标记）
-    const mixedRandom = createControlledRandom([0.9, 0.9, 0.0]);
+    const mixedRandom = createControlledRandom([0.75, 0.75, 0.0]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
@@ -394,9 +394,10 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     state.currentPlayer = '1';
     state.players['1'].attackCount = 0;
 
-    // 攻击者投4个骰子全 melee（命中4），护盾投2个骰子全 special（减2，最少1）
-    // 骰子顺序：攻击者4个 + 护盾2个 = 6个随机值
-    const shieldRandom = createControlledRandom([0.0, 0.0, 0.0, 0.0, 0.9, 0.9]);
+    // 攻击者投4个骰子全 melee（命中4），护盾投2个骰子全 special（减2骰子数，最少1）
+    // 新实现：神圣护盾在 rollDice 之前触发，先投护盾骰再投攻击骰
+    // 骰子顺序：护盾2个 + 攻击者（4-2=2）个 = 4个随机值
+    const shieldRandom = createControlledRandom([0.75, 0.75, 0.0, 0.0]);
 
     const { events } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 4 },
@@ -410,12 +411,11 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     );
     expect(reduceEvents.length).toBe(1);
 
-    // 原始命中4，护盾减2但最少保留1，所以减少到 max(4-2, 1) = 2
-    // 但实际逻辑是 reduction = min(shieldSpecial, hits-1) = min(2, 3) = 2
-    // 最终 hits = 4 - 2 = 2
+    // 护盾2个 special → effectiveStrength 从4减到 max(4-2, 1) = 2
+    // 攻击者投2骰全 melee → hits = 2
     const attacked = events.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
     expect(attacked).toBeDefined();
-    // hits 在 UNIT_ATTACKED payload 中
+    expect((attacked!.payload as any).diceCount).toBe(2); // 骰子数被减少
     expect((attacked!.payload as any).hits).toBe(2);
   });
 
@@ -626,7 +626,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
     state.players['0'].hand.push(makeAlly('discard-card'));
 
     // 牧师战力2，投2个骰子全 special（治疗量2）
-    const allSpecial = createControlledRandom([0.9, 0.9]);
+    const allSpecial = createControlledRandom([0.75, 0.75]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
@@ -679,7 +679,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
     state.players['0'].attackCount = 0;
 
     // 牧师战力2，投2个骰子全 special（治疗量2）
-    const allSpecial = createControlledRandom([0.9, 0.9]);
+    const allSpecial = createControlledRandom([0.75, 0.75]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },

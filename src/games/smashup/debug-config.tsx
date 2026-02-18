@@ -153,7 +153,7 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
 
             {/* 手牌预览 */}
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <h4 className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-3">手牌预览 (P{dealPlayer})</h4>
+                <h4 className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-3">手牌预览 (P{dealPlayer}) - 共 {playerHand.length} 张</h4>
                 <div className="max-h-24 overflow-y-auto">
                     {playerHand.length === 0 ? (
                         <div className="text-[10px] text-slate-400 text-center py-2">手牌为空</div>
@@ -165,6 +165,13 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
                                         {card.type === 'minion' ? '随从' : '行动'}
                                     </span>
                                     <span className="flex-1 truncate">{getCardName(card.defId)}</span>
+                                    <button
+                                        onClick={() => dispatch('SYS_CHEAT_REMOVE_HAND_CARD', { playerId: dealPlayer, cardUid: card.uid })}
+                                        className="px-1.5 py-0.5 bg-red-400 text-white rounded text-[8px] font-bold hover:bg-red-500 shrink-0"
+                                        title="删除此手牌（移入弃牌堆）"
+                                    >
+                                        ✕
+                                    </button>
                                     <span className="text-slate-400 text-[8px] font-mono">{card.defId}</span>
                                 </div>
                             ))}

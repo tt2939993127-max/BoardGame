@@ -50,7 +50,7 @@ function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
     });
     const interaction = createSimpleChoice(
         `steampunk_scrap_diving_${ctx.now}`, ctx.playerId,
@@ -223,7 +223,7 @@ function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
     });
     const interaction = createSimpleChoice(
         `steampunk_mechanic_${ctx.now}`, ctx.playerId,
@@ -254,11 +254,12 @@ function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
         return { events: [grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now)] };
     }
     const options = myOngoings.map((o, i) => ({
-        id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId },
+        id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId }, _source: 'ongoing' as const,
     }));
     const interaction = createSimpleChoice(
         `steampunk_change_of_venue_${ctx.now}`, ctx.playerId,
-        '选择要取回的持续行动卡', options as any[], 'steampunk_change_of_venue',
+        '选择要取回的持续行动卡', options as any[],
+        { sourceId: 'steampunk_change_of_venue', targetType: 'ongoing' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -440,12 +441,12 @@ export function registerSteampunkInteractionHandlers(): void {
     });
 
     registerInteractionHandler('steampunk_change_of_venue', (state, playerId, value, _iData, _random, timestamp) => {
-        const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        const { cardUid: ongoingUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
         const cardDef = getCardDef(defId) as ActionCardDef | undefined;
         // 从基地/随从上移除 ongoing 卡（ONGOING_DETACHED 会把卡放入弃牌堆）
-        const detachEvt = { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp };
+        const detachEvt = { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: ongoingUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp };
         // 从弃牌堆恢复到手牌（为后续 ACTION_PLAYED 准备）
-        const recoverEvt = recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_change_of_venue', timestamp);
+        const recoverEvt = recoverCardsFromDiscard(playerId, [ongoingUid], 'steampunk_change_of_venue', timestamp);
 
         // ongoing 卡需要选择新的附着目标
         if (cardDef?.subtype === 'ongoing') {
@@ -469,7 +470,7 @@ export function registerSteampunkInteractionHandlers(): void {
                     `steampunk_cov_target_${timestamp}`, playerId,
                     '选择要将行动卡附着到的随从', minionOptions, 'steampunk_change_of_venue_target',
                 );
-                const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid, defId } } };
+                const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ongoingUid, defId } } };
                 return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
             }
             // 附着到基地的 ongoing 卡
@@ -481,7 +482,7 @@ export function registerSteampunkInteractionHandlers(): void {
                 `steampunk_cov_target_${timestamp}`, playerId,
                 '选择要将行动卡打出到的基地', baseOptions, 'steampunk_change_of_venue_target',
             );
-            const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid, defId } } };
+            const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ongoingUid, defId } } };
             return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
         }
 
@@ -489,7 +490,7 @@ export function registerSteampunkInteractionHandlers(): void {
         const events: SmashUpEvent[] = [
             detachEvt as SmashUpEvent,
             recoverEvt,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid: ongoingUid, defId }, timestamp } as SmashUpEvent,
             { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
         ];
         const executor = resolveOnPlay(defId);
@@ -498,7 +499,7 @@ export function registerSteampunkInteractionHandlers(): void {
             for (const evt of events) { simCore = reduce(simCore, evt); }
             const ctx: AbilityContext = {
                 state: simCore, matchState: { ...state, core: simCore },
-                playerId, cardUid, defId, baseIndex: 0, random: _random, now: timestamp,
+                playerId, cardUid: ongoingUid, defId, baseIndex: 0, random: _random, now: timestamp,
             };
             const result = executor(ctx);
             events.push(...result.events);

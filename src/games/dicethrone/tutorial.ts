@@ -181,7 +181,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'hand-area',
             position: 'top',
             requireAction: true,
-            allowedCommands: ['PLAY_CARD', 'SYS_INTERACTION_RESPOND'],
+            allowedCommands: ['PLAY_CARD', 'MODIFY_DIE', 'SYS_INTERACTION_RESPOND'],
             advanceOnEvents: [
                 { type: 'DIE_MODIFIED' },
             ],
@@ -221,12 +221,44 @@ export const DiceThroneTutorial: TutorialManifest = {
             aiActions: [
                 { commandType: 'ROLL_DICE', playerId: '1', payload: {} },
                 { commandType: 'CONFIRM_ROLL', playerId: '1', payload: {} },
-                { commandType: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                { commandType: 'ADVANCE_PHASE', playerId: '1', payload: {} },
             ],
             advanceOnEvents: [MATCH_PHASE_MAIN2],
         },
 
-        // ==== 段 C：卡牌介绍 + AI 回合 ====
+        // ==== 段 C：弃牌教学 + 卡牌介绍 + AI 回合 ====
+        {
+            // 自动抽 4 张牌，让手牌超过上限（3 + 4 = 7 张），触发弃牌教学
+            // requireAction: false + aiActions → TutorialContext 自动执行后立即推进
+            id: 'draw-for-discard',
+            content: 'game-dicethrone:tutorial.steps.discardCard',
+            position: 'top',
+            requireAction: false,
+            aiActions: [
+                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
+                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
+                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
+                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
+            ],
+            advanceOnEvents: [
+                { type: 'SYS_TUTORIAL_AI_CONSUMED', match: { stepId: 'draw-for-discard' } },
+            ],
+        },
+        {
+            // 弃牌教学：引导玩家将手牌拖拽到弃牌堆（SELL_CARD 路径）
+            // UI 层 onSellCard/onDiscardCard 均调用 engineMoves.sellCard()，
+            // 且 shouldBlockTutorialAction 以 highlightTarget 为门控，
+            // 所以 highlightTarget 必须是 'discard-pile' 才能放行拖拽操作
+            id: 'discard-card',
+            content: 'game-dicethrone:tutorial.steps.discardCard',
+            highlightTarget: 'discard-pile',
+            position: 'left',
+            requireAction: true,
+            allowedCommands: ['SELL_CARD'],
+            advanceOnEvents: [
+                { type: 'CARD_SOLD', match: { playerId: '0' } },
+            ],
+        },
         {
             id: 'card-enlightenment',
             content: 'game-dicethrone:tutorial.steps.cardEnlightenment',

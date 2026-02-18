@@ -197,3 +197,9 @@
     animation-play-state: paused !important;
     transition: none !important;
 }
+
+/* 首次发现提示气泡上下浮动动画 */
+@keyframes discovery-bob {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-3px); }
+}

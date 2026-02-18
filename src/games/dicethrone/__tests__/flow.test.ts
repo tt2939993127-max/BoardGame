@@ -2180,16 +2180,16 @@ describe('王权骰铸流程测试', () => {
                 commands: [
                     ...advanceTo('offensiveRoll'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-bye-bye' }),
-                    // 新交互系统：使用 SYS_INTERACTION_RESPOND 命令响应交互
-                    // payload 应该是 { optionId: string } 格式
-                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    // dt:card-interaction 模式：玩家在 InteractionOverlay 中选择状态后确认
+                    // Board.tsx 的 handleStatusInteractionConfirm 会 dispatch REMOVE_STATUS
+                    cmd('REMOVE_STATUS', '0', { targetPlayerId: '1', statusId: 'knockdown' }),
                 ],
                 expect: {
                     players: {
                         '1': { statusEffects: { knockdown: 0 } },
                         '0': { discardSize: 1 },
                     },
-                    // 新交互系统：检查 sys.interaction 而非 pendingInteraction
+                    // REMOVE_STATUS 会生成 INTERACTION_COMPLETED 事件清理交互
                     'sys.interaction.current': null,
                 },
             });

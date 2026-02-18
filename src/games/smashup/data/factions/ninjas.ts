@@ -130,11 +130,12 @@ export const NINJA_ACTIONS: ActionCardDef[] = [
     {
         id: 'ninja_poison',
         type: 'action',
-        subtype: 'standard',
+        subtype: 'ongoing',
         name: '下毒',
         nameEn: 'Poison',
         faction: 'ninjas',
         abilityTags: ['ongoing'],
+        ongoingTarget: 'minion',
         count: 2,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 23 },
     },

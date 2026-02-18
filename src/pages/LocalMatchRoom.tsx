@@ -15,6 +15,9 @@ import { useToast } from '../contexts/ToastContext';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 
+// 教程系统正常拦截，不弹 toast
+const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
+
 export const LocalMatchRoom = () => {
     usePerformanceMonitor();
     const { gameId } = useParams();
@@ -62,7 +65,9 @@ export const LocalMatchRoom = () => {
     }, [gameId, i18n.language, t]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
+    // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
     const handleCommandRejected = useCallback((_type: string, error: string) => {
+        if (TUTORIAL_SILENT_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId));
     }, [toast, i18n, gameId]);

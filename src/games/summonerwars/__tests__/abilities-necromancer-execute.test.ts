@@ -244,17 +244,26 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
 // ============================================================================
 
 describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
-  it('消灭友方单位 + 移动到其位置', () => {
+  // 坐标系：玩家0在底部，配置坐标经 row = BOARD_ROWS-1-row 转换
+  // 亡灵法师城门配置 (2,3) → 实际棋盘 (5,3)
+  // 规则：消灭任意友方单位（无位置限制），伊路特-巴尔替换其位置，仍需支付魔力
+
+  function setupFireSacrificeState() {
     const state = createNecroState();
-    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+    clearArea(state, [3, 4], [1, 2, 3, 4]);
+    clearArea(state, [5], [1, 2, 4]); // 保留城门 (5,3)
+    clearArea(state, [6], [1, 2, 3, 4]);
+    return state;
+  }
 
-    const fireSacrifice = placeUnit(state, { row: 4, col: 2 }, {
-      cardId: 'test-fire-sacrifice',
-      card: makeFireSacrifice('test-fire-sacrifice'),
-      owner: '0',
-    });
+  it('召唤时消灭友方单位，放置到牺牲品位置', () => {
+    const state = setupFireSacrificeState();
+    const elutBarCard = makeFireSacrifice('test-elut-bar');
+    state.players['0'].hand.push(elutBarCard);
+    state.players['0'].magic = 10;
 
-    const victim = placeUnit(state, { row: 4, col: 4 }, {
+    // 牺牲品放在任意位置（这里用 (3,2)，远离城门）
+    const victim = placeUnit(state, { row: 3, col: 2 }, {
       cardId: 'test-victim',
       card: makeCultist('test-victim'),
       owner: '0',
@@ -263,10 +272,10 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
     state.phase = 'summon';
     state.currentPlayer = '0';
 
-    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'fire_sacrifice_summon',
-      sourceUnitId: fireSacrifice.instanceId,
-      targetUnitId: victim.instanceId,
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.SUMMON_UNIT, {
+      cardId: 'test-elut-bar',
+      position: { row: 3, col: 2 },
+      sacrificeUnitId: victim.instanceId,
     });
 
     // 应有消灭事件
@@ -275,18 +284,96 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
     );
     expect(destroyEvents.length).toBe(1);
 
-    // 应有移动事件（火祭者移动到被消灭单位位置）
-    const moveEvents = events.filter(
-      e => e.type === SW_EVENTS.UNIT_MOVED && (e.payload as any).reason === 'fire_sacrifice_summon'
+    // 应有召唤事件，位置为牺牲品位置
+    const summonEvents = events.filter(
+      e => e.type === SW_EVENTS.UNIT_SUMMONED && (e.payload as any).cardId === 'test-elut-bar'
     );
-    expect(moveEvents.length).toBe(1);
+    expect(summonEvents.length).toBe(1);
+    expect((summonEvents[0].payload as any).position).toEqual({ row: 3, col: 2 });
 
-    // 火祭者应在 (4,4)
-    expect(newState.board[4][4].unit?.cardId).toBe('test-fire-sacrifice');
-    // 原位置应为空
-    expect(newState.board[4][2].unit).toBeUndefined();
-    // 被消灭单位不在棋盘上
-    expect(newState.board[4][4].unit?.card.name).toBe('火祭召唤师');
+    // 伊路特-巴尔应在牺牲品位置
+    expect(newState.board[3][2].unit?.cardId).toBe('test-elut-bar');
+    expect(newState.board[3][2].unit?.card.name).toBe('火祭召唤师');
+  });
+
+  it('validate：牺牲品在任意位置（含远离城门）都通过', () => {
+    const state = setupFireSacrificeState();
+    const elutBarCard = makeFireSacrifice('test-elut-bar');
+    state.players['0'].hand.push(elutBarCard);
+    state.players['0'].magic = 10;
+
+    // 放在远离城门的位置 (1,1)
+    const victim = placeUnit(state, { row: 1, col: 1 }, {
+      cardId: 'test-victim',
+      card: makeCultist('test-victim'),
+      owner: '0',
+    });
+
+    state.phase = 'summon';
+    state.currentPlayer = '0';
+
+    const result = SummonerWarsDomain.validate(
+      { core: state, sys: {} as any },
+      {
+        type: SW_COMMANDS.SUMMON_UNIT,
+        payload: { cardId: 'test-elut-bar', position: { row: 1, col: 1 }, sacrificeUnitId: victim.instanceId },
+        playerId: '0',
+      }
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('validate：未提供 sacrificeUnitId 时拒绝', () => {
+    const state = setupFireSacrificeState();
+    const elutBarCard = makeFireSacrifice('test-elut-bar');
+    state.players['0'].hand.push(elutBarCard);
+    state.players['0'].magic = 10;
+
+    state.phase = 'summon';
+    state.currentPlayer = '0';
+
+    const result = SummonerWarsDomain.validate(
+      { core: state, sys: {} as any },
+      {
+        type: SW_COMMANDS.SUMMON_UNIT,
+        payload: { cardId: 'test-elut-bar', position: { row: 1, col: 1 } },
+        playerId: '0',
+      }
+    );
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('牺牲品');
+  });
+
+  it('validate：牺牲召唤师时拒绝', () => {
+    const state = setupFireSacrificeState();
+    const elutBarCard = makeFireSacrifice('test-elut-bar');
+    state.players['0'].hand.push(elutBarCard);
+    state.players['0'].magic = 10;
+
+    // 找到召唤师
+    let summonerInstanceId = '';
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 6; c++) {
+        const u = state.board[r][c].unit;
+        if (u && u.owner === '0' && u.card.unitClass === 'summoner') {
+          summonerInstanceId = u.instanceId;
+        }
+      }
+    }
+
+    state.phase = 'summon';
+    state.currentPlayer = '0';
+
+    const result = SummonerWarsDomain.validate(
+      { core: state, sys: {} as any },
+      {
+        type: SW_COMMANDS.SUMMON_UNIT,
+        payload: { cardId: 'test-elut-bar', position: { row: 0, col: 3 }, sacrificeUnitId: summonerInstanceId },
+        playerId: '0',
+      }
+    );
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('召唤师');
   });
 });
 
@@ -295,7 +382,7 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
 // ============================================================================
 
 describe('吸取生命 (life_drain) execute 流程', () => {
-  it('消灭友方单位 + 获得双倍战力', () => {
+  it('消灭友方单位（special 标记算近战命中效果在 DECLARE_ATTACK 路径生效）', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
@@ -326,10 +413,9 @@ describe('吸取生命 (life_drain) execute 流程', () => {
     );
     expect(destroyEvents.length).toBe(1);
 
-    // 应有战力翻倍事件
+    // 不再产生 STRENGTH_MODIFIED 事件（效果改为 special 算近战命中）
     const strengthEvents = events.filter(e => e.type === SW_EVENTS.STRENGTH_MODIFIED);
-    expect(strengthEvents.length).toBe(1);
-    expect((strengthEvents[0].payload as any).multiplier).toBe(2);
+    expect(strengthEvents.length).toBe(0);
   });
 
   it('DECLARE_ATTACK 携带 beforeAttack 时触发牺牲并翻倍战力', () => {
@@ -372,15 +458,16 @@ describe('吸取生命 (life_drain) execute 流程', () => {
     );
     expect(destroyEvents.length).toBe(1);
 
+    // 不再产生 STRENGTH_MODIFIED（效果改为 special 算近战命中）
     const strengthEvents = events.filter(
       e => e.type === SW_EVENTS.STRENGTH_MODIFIED && (e.payload as any).sourceAbilityId === 'life_drain'
     );
-    expect(strengthEvents.length).toBe(1);
-    expect((strengthEvents[0].payload as any).multiplier).toBe(2);
+    expect(strengthEvents.length).toBe(0);
 
     const attackedEvent = events.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
     expect(attackedEvent).toBeDefined();
-    expect((attackedEvent!.payload as any).diceCount).toBe(4);
+    // diceCount 等于基础战力（不翻倍）
+    expect((attackedEvent!.payload as any).diceCount).toBe(2);
 
     expect(newState.board[4][4].unit).toBeUndefined();
   });

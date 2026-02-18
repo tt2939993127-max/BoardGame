@@ -79,7 +79,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
         effects: [
             {
                 description: abilityEffectText('soul-burn', 'fm'),
-                action: { type: 'custom', target: 'self', customActionId: 'soul-burn-fm' }
+                action: { type: 'custom', target: 'self', customActionId: 'soul-burn-2-fm' }
             },
             {
                 description: abilityEffectText('soul-burn', 'damage'),
@@ -237,42 +237,51 @@ export const BURNING_SOUL_2: AbilityDef = {
     sfxKey: PYROMANCER_SFX_SOUL_BURN,
     variants: [
         {
-            id: 'soul-burn-4',
-            trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 4 } },
-            effects: [
-                {
-                    description: abilityEffectText('soul-burn-4', 'main'),
-                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-4-resolve' }
-                },
-                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('soul-burn-4', 'knockdown'))
-            ],
-            priority: 3
-        },
-        {
+            // 2火魂：基本效果（2×火魂数FM + 1×火魂数伤害）
             id: 'soul-burn-2',
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
-            effects: [inflictStatus(STATUS_IDS.BURN, 1, abilityEffectText('soul-burn-2', 'inflictBurn'))],
+            effects: [
+                {
+                    description: abilityEffectText('soul-burn-2', 'fm'),
+                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-2-fm' }
+                },
+                {
+                    description: abilityEffectText('soul-burn-2', 'damage'),
+                    action: { type: 'custom', target: 'opponent', customActionId: 'soul-burn-damage' }
+                }
+            ],
             priority: 1
         },
         {
+            // 3火魂：基本效果 + 施加灼烧
             id: 'soul-burn-3',
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 3 } },
             effects: [
                 {
-                    description: abilityEffectText('soul-burn-3', 'increaseLimit'),
-                    action: { type: 'custom', target: 'self', customActionId: 'increase-fm-limit' }
-                },
-                {
                     description: abilityEffectText('soul-burn-3', 'fm'),
-                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-fm' }
+                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-2-fm' }
                 },
+                inflictStatus(STATUS_IDS.BURN, 1, abilityEffectText('soul-burn-3', 'inflictBurn')),
                 {
                     description: abilityEffectText('soul-burn-3', 'damage'),
                     action: { type: 'custom', target: 'opponent', customActionId: 'soul-burn-damage' }
                 }
             ],
-            priority: 2,
-            tags: ['unblockable']
+            priority: 2
+        },
+        {
+            // 炙热之魂：2岩浆+2火魂，FM上限+1，获得5FM，施加倒地
+            id: 'blazing-soul',
+            trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.MAGMA]: 2, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
+            effects: [
+                {
+                    description: abilityEffectText('blazing-soul', 'increaseLimit'),
+                    action: { type: 'custom', target: 'self', customActionId: 'increase-fm-limit' }
+                },
+                grantToken(TOKEN_IDS.FIRE_MASTERY, 5, abilityEffectText('blazing-soul', 'gainFM5')),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('blazing-soul', 'inflictKnockdown'))
+            ],
+            priority: 3
         }
     ]
 };

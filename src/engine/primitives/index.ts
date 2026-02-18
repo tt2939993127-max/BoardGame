@@ -24,3 +24,4 @@ export * from './damageCalculation';
 export * from './uiHints';
 export * from './mulligan';
 export * from './spriteAtlas';
+export * from './actionLogHelpers';

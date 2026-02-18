@@ -26,21 +26,21 @@ export interface DiceFaceResult {
 /**
  * 标准骰子的6个面
  * 
- * 基于精灵图分析（3x3图集，6个面有内容）：
+ * 基于精灵图实际内容（3x3图集，索引1/2/5为空格）：
  * - 面0 (左上): 剑 + 弓 → melee + ranged
- * - 面1 (中上): 斧 + 弓 → special + ranged
  * - 面3 (左中): 斧 + 弓 → special + ranged
  * - 面4 (中中): 剑 + 弓 → melee + ranged
  * - 面6 (左下): 剑 + 弓 → melee + ranged
  * - 面7 (中下): 剑 + 斧 → melee + special
+ * - 面8 (右下): 剑（单） → melee + special
  */
 export const STANDARD_DICE_FACES: DiceFaceResult[] = [
   { faceIndex: 0, marks: ['melee', 'ranged'] },    // 剑 + 弓
-  { faceIndex: 1, marks: ['special', 'ranged'] },  // 斧 + 弓
   { faceIndex: 3, marks: ['special', 'ranged'] },  // 斧 + 弓
   { faceIndex: 4, marks: ['melee', 'ranged'] },    // 剑 + 弓
   { faceIndex: 6, marks: ['melee', 'ranged'] },    // 剑 + 弓
   { faceIndex: 7, marks: ['melee', 'special'] },   // 剑 + 斧
+  { faceIndex: 8, marks: ['melee'] },               // 剑（单）
 ];
 
 /** 骰子精灵图配置 */
@@ -63,7 +63,10 @@ export function rollDice(count: number, random?: () => number): DiceFaceResult[]
   const rng = random ?? Math.random;
   
   for (let i = 0; i < count; i++) {
-    const index = Math.floor(rng() * STANDARD_DICE_FACES.length);
+    const raw = rng();
+    // 防御性保护：clamp 到 [0, 1) 范围，避免越界（如教程注入的随机值超出范围）
+    const normalized = ((raw % 1) + 1) % 1;
+    const index = Math.floor(normalized * STANDARD_DICE_FACES.length);
     results.push(STANDARD_DICE_FACES[index]);
   }
   

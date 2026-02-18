@@ -169,7 +169,7 @@ describe('AuthModule (e2e)', () => {
             attempts.push({ success: res.body.success, code: res.body.code });
         }
 
-        expect(attempts[0].code).toBe('AUTH_INVALID_CREDENTIALS');
+        expect(attempts[0].code).toBe('AUTH_INVALID_PASSWORD');
         expect(attempts[4].code).toBe('AUTH_LOGIN_LOCKED');
         expect(attempts[4].success).toBe(false);
     });

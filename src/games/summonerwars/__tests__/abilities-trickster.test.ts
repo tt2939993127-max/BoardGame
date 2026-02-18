@@ -67,6 +67,7 @@ function placeUnit(
     hasMoved: overrides.hasMoved ?? false,
     hasAttacked: overrides.hasAttacked ?? false,
     attachedCards: overrides.attachedCards,
+    tempAbilities: overrides.tempAbilities,
   };
   state.board[pos.row][pos.col].unit = unit;
   return unit;
@@ -175,10 +176,10 @@ function executeAndReduce(
 
 describe('掷术师 - 迷魂 (evasion)', () => {
   it('敌方攻击掷出✦时，相邻掷术师减伤1点', () => {
-    // random.random() 返回 0.9 → index 4 → melee + special (✦)
+    // random.random() 返回 0.75 → index 4 → melee + special (✦)
     const specialRandom: RandomFn = {
       ...createTestRandom(),
-      random: () => 0.9,
+      random: () => 0.75,
     };
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
@@ -1161,8 +1162,9 @@ describe('欺心巫族事件卡 - 震慑 (stun)', () => {
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.PLAY_EVENT, {
       cardId: 'trickster-stun',
       targets: [{ row: 3, col: 2 }],
-      stunDirection: 'push',
-      stunDistance: 2,
+      moveRow: -1, // 向上推（远离召唤师方向，召唤师在 row 5，目标在 row 3）
+      moveCol: 0,
+      distance: 2,
     });
 
     // 应有伤害事件（对目标1伤害）
@@ -1216,8 +1218,9 @@ describe('欺心巫族事件卡 - 震慑 (stun)', () => {
     const { events } = executeAndReduce(state, SW_COMMANDS.PLAY_EVENT, {
       cardId: 'trickster-stun',
       targets: [{ row: 3, col: 2 }],
-      stunDirection: 'push', // 推离召唤师（向上）
-      stunDistance: 2,
+      moveRow: -1, // 向上推（远离召唤师方向，召唤师在 row 5，目标在 row 3）
+      moveCol: 0,
+      distance: 2,
     });
 
     // 穿过伤害
@@ -1391,5 +1394,151 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
 
     const strength = calculateEffectiveStrength(summoner, state, otherUnit);
     expect(strength).toBe(3); // 基础战力，无加成
+  });
+});
+
+// ============================================================================
+// 幻化 (illusion) + 迷魂 (evasion) 联动测试
+// ============================================================================
+
+describe('幻化 (illusion) + 迷魂 (evasion) 联动', () => {
+  /** 创建心灵巫女卡牌（illusion） */
+  function makeMindWitch(id: string): UnitCard {
+    return {
+      id, cardType: 'unit', name: '心灵巫女', unitClass: 'common',
+      faction: 'trickster', strength: 2, life: 3, cost: 1,
+      attackType: 'ranged', attackRange: 3,
+      abilities: ['illusion'], deckSymbols: [],
+    };
+  }
+
+  it('幻化复制掷术师技能后，心灵巫女 tempAbilities 包含 evasion', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
+
+    // 心灵巫女在 (4,2)，有 illusion
+    const witch = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 掷术师在 (4,3)，有 evasion + rebound
+    const trickster = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-trickster',
+      card: makeTelekinetic('test-trickster'),
+      owner: '0',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+    state.players['0'].attackCount = 0;
+    state.players['0'].hasAttackedEnemy = false;
+
+    // 执行幻化：心灵巫女复制掷术师技能
+    const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'illusion',
+      sourceUnitId: witch.instanceId,
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    // 应有 ABILITIES_COPIED 事件
+    const copiedEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
+    expect(copiedEvents.length).toBe(1);
+
+    // 心灵巫女的 tempAbilities 应包含 evasion
+    const witchAfter = newState.board[4][2].unit;
+    expect(witchAfter).toBeDefined();
+    expect(witchAfter!.tempAbilities).toBeDefined();
+    expect(witchAfter!.tempAbilities).toContain('evasion');
+
+    // getUnitAbilities 应返回包含 evasion 的列表（通过 tempAbilities 合并）
+    // 直接检查 tempAbilities 字段，因为 getUnitBaseAbilities 会合并它
+    expect(witchAfter!.tempAbilities).toContain('evasion');
+
+    // 掷术师不受影响
+    const tricksterAfter = newState.board[4][3].unit;
+    expect(tricksterAfter?.instanceId).toBe(trickster.instanceId);
+  });
+
+  it('幻化后心灵巫女被近战攻击掷出✦时，迷魂减伤生效', () => {
+    // random.random() 返回 0.75 → index 4 → melee + special (✦)
+    const specialRandom: RandomFn = {
+      ...createTestRandom(),
+      random: () => 0.75,
+    };
+
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
+
+    // 心灵巫女在 (4,3)，通过 tempAbilities 拥有 evasion
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+      tempAbilities: ['evasion', 'rebound'], // 直接注入 tempAbilities，模拟幻化后状态
+    });
+
+    // 敌方近战单位在 (4,2)，攻击心灵巫女
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy', { strength: 3, attackType: 'melee', attackRange: 1 }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '1';
+    state.players['1'].attackCount = 0;
+    state.players['1'].hasAttackedEnemy = false;
+
+    const { events } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 2 },
+      target: { row: 4, col: 3 },
+    }, specialRandom);
+
+    // 应有 DAMAGE_REDUCED 事件（迷魂触发）
+    const reduceEvents = events.filter(e => e.type === SW_EVENTS.DAMAGE_REDUCED);
+    expect(reduceEvents.length).toBeGreaterThan(0);
+    expect((reduceEvents[0].payload as any).sourceAbilityId).toBe('evasion');
+    expect((reduceEvents[0].payload as any).sourceUnitId).toBe(witch.instanceId);
+  });
+
+  it('幻化后心灵巫女被远程攻击时，迷魂不触发（攻击者不相邻）', () => {
+    const specialRandom: RandomFn = {
+      ...createTestRandom(),
+      random: () => 0.75,
+    };
+
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [0, 1, 2, 3, 4, 5]);
+
+    // 心灵巫女在 (4,4)，有 evasion（幻化后）
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+      tempAbilities: ['evasion'],
+    });
+
+    // 敌方远程单位在 (4,1)，距离3格，不相邻
+    placeUnit(state, { row: 4, col: 1 }, {
+      cardId: 'test-enemy-ranged',
+      card: makeEnemy('test-enemy-ranged', { strength: 3, attackType: 'ranged', attackRange: 3 }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '1';
+    state.players['1'].attackCount = 0;
+    state.players['1'].hasAttackedEnemy = false;
+
+    const { events } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 1 },
+      target: { row: 4, col: 4 },
+    }, specialRandom);
+
+    // 远程攻击，攻击者不在心灵巫女相邻格，迷魂不触发
+    const reduceEvents = events.filter(e => e.type === SW_EVENTS.DAMAGE_REDUCED);
+    expect(reduceEvents.length).toBe(0);
   });
 });

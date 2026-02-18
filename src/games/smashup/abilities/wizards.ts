@@ -19,7 +19,7 @@ import {
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, SmashUpEvent, DeckReorderedEvent, MinionCardDef, CardToDeckTopEvent } from '../domain/types';
-import { drawCards } from '../domain/utils';
+import { drawCards, getOpponentLabel } from '../domain/utils';
 import { registerTrigger } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -124,7 +124,7 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
         if (topCard.type === 'action') {
             const def = getCardDef(topCard.defId);
             const name = def?.name ?? topCard.defId;
-            actionCandidates.push({ uid: topCard.uid, defId: topCard.defId, pid, label: `${name}（来自对手 ${pid}）` });
+            actionCandidates.push({ uid: topCard.uid, defId: topCard.defId, pid, label: `${name}（来自${getOpponentLabel(pid)}）` });
         }
     }
     // 合并展示所有对手牌库顶（一个事件，避免多人覆盖）
@@ -191,7 +191,7 @@ function wizardPortal(ctx: AbilityContext): AbilityResult {
         return result;
     }
 
-    // 有随从：让玩家选择要拿哪些（可以不拿）
+    // 有随从：让玩家选择要拿哪些（min:0 表示可以一张都不选）
     const options = minions.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -559,9 +559,10 @@ export function registerWizardInteractionHandlers(): void {
         const ctx = (iData as any)?.continuationContext as { allTopCards: { uid: string; defId: string; type: string }[] };
         if (!ctx) return undefined;
 
-        // value 是多选结果数组（每项 { cardUid, defId }）
-        const picks = Array.isArray(value) ? value as { cardUid: string; defId: string }[] : [value as { cardUid: string; defId: string }];
-        const pickedUids = new Set(picks.map(p => p.cardUid));
+        // value 是多选结果数组（每项 { cardUid, defId }），或跳过 { skip: true }
+        const picks = Array.isArray(value) ? value as { cardUid?: string; defId?: string; skip?: boolean }[] : [value as { cardUid?: string; defId?: string; skip?: boolean }];
+        // 过滤掉 skip 选项，只保留有 cardUid 的选项
+        const pickedUids = new Set(picks.map(p => p.cardUid).filter((uid): uid is string => !!uid));
 
         // 选中的随从放入手牌
         const events: SmashUpEvent[] = [];

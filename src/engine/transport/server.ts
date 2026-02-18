@@ -100,11 +100,16 @@ interface ActiveMatch {
     offlineTimers: Map<string, ReturnType<typeof setTimeout>>;
     /** 命令执行锁（串行执行） */
     executing: boolean;
-    /** 待执行命令队列 */
+    /** 待执行命令队列（普通命令 + batch 任务共用同一队列保证串行） */
     commandQueue: Array<{
         commandType: string;
         payload: unknown;
         playerID: string;
+        resolve: (success: boolean) => void;
+    } | {
+        /** batch 任务标记 */
+        _batch: true;
+        execute: () => Promise<void>;
         resolve: (success: boolean) => void;
     }>;
 }
@@ -246,7 +251,40 @@ export class GameTransportServer {
                     socket.emit('error', matchID, 'unauthorized');
                     return;
                 }
-                await this.handleCommand(matchID, info.playerID, commandType, payload);
+                // 教程 AI 命令：payload 中携带 __tutorialPlayerId 时，以该 ID 作为执行者
+                // 仅在教程模式激活时生效，防止普通玩家伪造 playerId
+                const payloadRecord = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null;
+                const tutorialOverrideId = typeof payloadRecord?.__tutorialPlayerId === 'string'
+                    ? payloadRecord.__tutorialPlayerId
+                    : undefined;
+                const match = this.activeMatches.get(matchID);
+                const isTutorialActive = !!(match?.state?.sys as Record<string, unknown> | undefined)
+                    ?.tutorial && !!(match?.state?.sys as { tutorial?: { active?: boolean } })?.tutorial?.active;
+                const resolvedPlayerId = (tutorialOverrideId && isTutorialActive)
+                    ? tutorialOverrideId
+                    : info.playerID;
+                // 清除 payload 中的 __tutorialPlayerId，避免传入领域层
+                const normalizedPayload = payloadRecord && '__tutorialPlayerId' in payloadRecord
+                    ? (() => { const { __tutorialPlayerId: _ignored, ...rest } = payloadRecord; return rest; })()
+                    : payload;
+                await this.handleCommand(matchID, resolvedPlayerId, commandType, normalizedPayload);
+            });
+
+            socket.on('batch', async (
+                matchID: string,
+                batchId: string,
+                commands: Array<{ type: string; payload: unknown }>,
+                credentials?: string,
+            ) => {
+                if (!matchID || !batchId || !Array.isArray(commands)) return;
+                const info = this.socketIndex.get(socket.id);
+                if (!info || info.matchID !== matchID || !info.playerID) return;
+                const authorized = await this.validateCommandAuth(matchID, info.playerID, info.credentials ?? credentials);
+                if (!authorized) {
+                    socket.emit('batch:rejected', matchID, batchId, 'unauthorized');
+                    return;
+                }
+                await this.handleBatch(socket, matchID, info.playerID, batchId, commands);
             });
 
             socket.on('disconnect', () => {
@@ -531,17 +569,180 @@ export class GameTransportServer {
         try {
             const success = await this.executeCommandInternal(match, playerID, commandType, payload);
 
-            // 处理队列中的后续命令
+            // 处理队列中的后续命令（包括 batch 任务）
             while (match.commandQueue.length > 0) {
                 const next = match.commandQueue.shift()!;
-                const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                next.resolve(queuedSuccess);
+                if ('_batch' in next) {
+                    // batch 任务：执行完整的 batch 逻辑
+                    await next.execute();
+                    next.resolve(true);
+                } else {
+                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                    next.resolve(queuedSuccess);
+                }
             }
 
             return success;
         } finally {
             match.executing = false;
         }
+    }
+
+    /**
+     * 处理批量命令（Task 7）
+     * 
+     * 批次内命令串行执行，任一失败则中止并回滚整个批次。
+     * 成功后返回权威状态（已裁剪 EventStream）。
+     */
+    private async handleBatch(
+        socket: IOSocket,
+        matchID: string,
+        playerID: string,
+        batchId: string,
+        commands: Array<{ type: string; payload: unknown }>,
+    ): Promise<void> {
+        const match = this.activeMatches.get(matchID);
+        if (!match) {
+            socket.emit('batch:rejected', matchID, batchId, 'match_not_found');
+            return;
+        }
+
+        // 串行执行：如果正在执行，将整个 batch 任务排入队列（与 handleCommand 保持一致）
+        if (match.executing) {
+            await new Promise<void>((resolve) => {
+                match.commandQueue.push({
+                    _batch: true,
+                    execute: () => this.executeBatchInternal(socket, match, playerID, batchId, commands),
+                    resolve: () => resolve(),
+                });
+            });
+            return;
+        }
+
+        match.executing = true;
+        // 在执行前保存内存快照，用于批次失败时回滚
+        // rollbackToStateID 依赖存储层，但存储层只保存最新状态，无法回到中间状态
+        const snapshotState = match.state;
+        const snapshotStateID = match.stateID;
+
+        try {
+            // 批次内命令串行执行
+            for (const cmd of commands) {
+                const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload);
+                if (!success) {
+                    // 命令失败 - 从内存快照恢复到批次开始前的状态
+                    match.state = snapshotState;
+                    match.stateID = snapshotStateID;
+                    // 持久化回滚后的状态，确保存储层与内存一致
+                    const rollbackStored = {
+                        G: snapshotState,
+                        _stateID: snapshotStateID,
+                        randomSeed: match.randomSeed,
+                        randomCursor: match.getRandomCursor(),
+                    };
+                    await this.storage.setState(matchID, rollbackStored);
+                    this.broadcastState(match);
+                    socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                    return;
+                }
+            }
+
+            // 批次成功 - 返回权威状态（裁剪 EventStream）
+            const authoritative = this.stripEventStreamFromState(match.state);
+            socket.emit('batch:confirmed', matchID, batchId, authoritative);
+        } finally {
+            // 消费 batch 执行期间排队的普通命令和 batch 任务（与 handleCommand 保持一致）
+            while (match.commandQueue.length > 0) {
+                const next = match.commandQueue.shift()!;
+                if ('_batch' in next) {
+                    await next.execute();
+                    next.resolve(true);
+                } else {
+                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                    next.resolve(queuedSuccess);
+                }
+            }
+            match.executing = false;
+        }
+    }
+
+    /**
+     * batch 核心执行逻辑（供 handleBatch 直接调用和队列消费共用）
+     * 调用方负责设置/清理 match.executing，此方法不修改 executing 标志。
+     */
+    private async executeBatchInternal(
+        socket: IOSocket,
+        match: ActiveMatch,
+        playerID: string,
+        batchId: string,
+        commands: Array<{ type: string; payload: unknown }>,
+    ): Promise<void> {
+        const matchID = match.matchID;
+        const snapshotState = match.state;
+        const snapshotStateID = match.stateID;
+
+        for (const cmd of commands) {
+            const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload);
+            if (!success) {
+                match.state = snapshotState;
+                match.stateID = snapshotStateID;
+                const rollbackStored = {
+                    G: snapshotState,
+                    _stateID: snapshotStateID,
+                    randomSeed: match.randomSeed,
+                    randomCursor: match.getRandomCursor(),
+                };
+                await this.storage.setState(matchID, rollbackStored);
+                this.broadcastState(match);
+                socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                return;
+            }
+        }
+
+        const authoritative = this.stripEventStreamFromState(match.state);
+        socket.emit('batch:confirmed', matchID, batchId, authoritative);
+    }
+
+    /**
+     * 回滚到指定 stateID（从存储层重新加载）
+     */
+    private async rollbackToStateID(match: ActiveMatch, targetStateID: number): Promise<void> {
+        const result = await this.storage.fetch(match.matchID, { state: true });
+        if (!result.state || result.state._stateID !== targetStateID) {
+            console.error(`[GameTransport] Rollback failed: state ${targetStateID} not found`);
+            return;
+        }
+
+        match.state = result.state.G as MatchState<unknown>;
+        match.stateID = targetStateID;
+
+        // 广播回滚后的状态
+        this.broadcastState(match);
+    }
+
+    /**
+     * 裁剪 EventStream（避免客户端重播历史）
+     */
+    private stripEventStreamFromState(state: MatchState<unknown>): MatchState<unknown> {
+        if (!state.sys?.eventStream) {
+            return state;
+        }
+
+        const lastId = state.sys.eventStream.entries.length > 0
+            ? state.sys.eventStream.entries[state.sys.eventStream.entries.length - 1].id
+            : state.sys.eventStream.nextId - 1;
+
+        return {
+            ...state,
+            sys: {
+                ...state.sys,
+                eventStream: {
+                    ...state.sys.eventStream,
+                    entries: [],
+                    nextId: lastId + 1,
+                },
+            },
+        };
     }
 
     private async executeCommandInternal(

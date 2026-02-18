@@ -214,7 +214,7 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `zombie_lend_a_hand_${ctx.now}`, ctx.playerId,
-        '借把手：选择要洗回牌库的卡牌（可跳过）', options, 'zombie_lend_a_hand',
+        '借把手：选择要洗回牌库的卡牌（任意数量，可不选）', options, 'zombie_lend_a_hand',
         undefined, { min: 0, max: player.discard.length },
     );
     // 手动提供 optionsGenerator：从弃牌堆获取所有卡牌

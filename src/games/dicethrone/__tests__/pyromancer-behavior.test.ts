@@ -171,20 +171,21 @@ function sumPayloadField(events: DiceThroneEvent[], type: string, field: string)
 describe('烈焰术士 Custom Action 运行时行为断言', () => {
 
     // ========================================================================
-    // soul-burn-fm: 获得2FM（preDefense 时机）
-    // soul-burn-damage: 骰面fiery_soul数量的伤害（withDamage 时机）
+    // soul-burn-2-fm: 获得 2×火魂骰面数量 FM（基础版和升级版共用）
     // ========================================================================
-    describe('soul-burn-fm (灵魂燃烧 FM获取)', () => {
-        it('获得2FM', () => {
-            const state = createState({ attackerFM: 1 });
-            const handler = getCustomActionHandler('soul-burn-fm')!;
-            const events = handler(buildCtx(state, 'soul-burn-fm'));
+    describe('soul-burn-2-fm (灵魂燃烧 FM获取 — 基础版2火魂)', () => {
+        it('2个火魂面时获得4FM（2×2）', () => {
+            // 骰子: fire,fire,fire,fiery_soul,fiery_soul → 2个fiery_soul
+            const dice = [1, 2, 3, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 1, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
 
-            // FM: 1 + 2 = 3
+            // FM: 1 + 4 = 5
             const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
-            expect((tokenEvents[0] as any).payload.amount).toBe(2);
-            expect((tokenEvents[0] as any).payload.newTotal).toBe(3);
+            expect((tokenEvents[0] as any).payload.amount).toBe(4);
+            expect((tokenEvents[0] as any).payload.newTotal).toBe(5);
 
             // 不产生伤害事件
             const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
@@ -192,9 +193,10 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
         });
 
         it('FM已满时仍尝试授予（由reducer cap）', () => {
-            const state = createState({ attackerFM: 5, fmLimit: 5 });
-            const handler = getCustomActionHandler('soul-burn-fm')!;
-            const events = handler(buildCtx(state, 'soul-burn-fm'));
+            const dice = [1, 2, 3, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 5, fmLimit: 5, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
 
             const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
@@ -227,39 +229,53 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // soul-burn-4-resolve: FM上限+1，获得5FM
+    // soul-burn-2-fm: 获得 2×火魂骰面数量 FM（燃烧之灵 II 专用）
     // ========================================================================
-    describe('soul-burn-4-resolve (4火魂灵魂燃烧)', () => {
-        it('上限+1，然后获得5FM', () => {
-            const state = createState({ attackerFM: 2, fmLimit: 5 });
-            const handler = getCustomActionHandler('soul-burn-4-resolve')!;
-            const events = handler(buildCtx(state, 'soul-burn-4-resolve'));
+    describe('soul-burn-2-fm (燃烧之灵 II FM获取)', () => {
+        it('2个火魂面时获得4FM（2×2）', () => {
+            // 骰子: fire,fire,fire,fiery_soul,fiery_soul → 2个fiery_soul
+            const dice = [1, 2, 3, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
 
-            // TOKEN_LIMIT_CHANGED: 5 → 6
-            const limitEvents = eventsOfType(events, 'TOKEN_LIMIT_CHANGED');
-            expect(limitEvents).toHaveLength(1);
-            expect((limitEvents[0] as any).payload.newLimit).toBe(6);
-
-            // TOKEN_GRANTED: 获得5FM（2+5=7 > 6 → cap到6，实际获得4）
             const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
-            expect((tokenEvents[0] as any).payload.amount).toBe(4); // min(5, 6-2) = 4
-            expect((tokenEvents[0] as any).payload.newTotal).toBe(6);
+            expect((tokenEvents[0] as any).payload.amount).toBe(4); // 2×2=4
+            expect((tokenEvents[0] as any).payload.newTotal).toBe(4);
         });
 
-        it('FM已满时只提升上限，获得量受新上限约束', () => {
-            const state = createState({ attackerFM: 5, fmLimit: 5 });
-            const handler = getCustomActionHandler('soul-burn-4-resolve')!;
-            const events = handler(buildCtx(state, 'soul-burn-4-resolve'));
+        it('3个火魂面时获得6FM（2×3）', () => {
+            const dice = [1, 2, 5, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
 
-            const limitEvents = eventsOfType(events, 'TOKEN_LIMIT_CHANGED');
-            expect((limitEvents[0] as any).payload.newLimit).toBe(6);
-
-            // 5 + 5 = 10 > 6 → cap到6，实际获得1
             const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
-            expect((tokenEvents[0] as any).payload.amount).toBe(1);
-            expect((tokenEvents[0] as any).payload.newTotal).toBe(6);
+            expect((tokenEvents[0] as any).payload.amount).toBe(6); // 2×3=6
+            expect((tokenEvents[0] as any).payload.newTotal).toBe(5); // capped at 5
+        });
+
+        it('4个火魂面时获得8FM（2×4），受上限约束', () => {
+            const dice = [1, 5, 5, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, fmLimit: 5, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
+
+            const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(tokenEvents).toHaveLength(1);
+            expect((tokenEvents[0] as any).payload.amount).toBe(8); // 2×4=8
+            expect((tokenEvents[0] as any).payload.newTotal).toBe(5); // capped at 5
+        });
+
+        it('无火魂面时不产生事件', () => {
+            const dice = [1, 2, 3, 4, 6].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, dice });
+            const handler = getCustomActionHandler('soul-burn-2-fm')!;
+            const events = handler(buildCtx(state, 'soul-burn-2-fm'));
+
+            expect(events).toHaveLength(0);
         });
     });
 
@@ -294,25 +310,25 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // fiery-combo-2-resolve: 造成 5+当前FM 伤害（FM已在preDefense获得）
+    // fiery-combo-2-resolve: 造成 6+当前FM 伤害（FM已在preDefense获得）
     // ========================================================================
     describe('fiery-combo-2-resolve (炽热波纹 II)', () => {
-        it('造成 5+当前FM 伤害', () => {
+        it('造成 6+当前FM 伤害', () => {
             const state = createState({ attackerFM: 3 });
             const handler = getCustomActionHandler('fiery-combo-2-resolve')!;
             const events = handler(buildCtx(state, 'fiery-combo-2-resolve'));
 
             const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
             expect(dmgEvents).toHaveLength(1);
-            expect((dmgEvents[0] as any).payload.amount).toBe(8); // 5+3
+            expect((dmgEvents[0] as any).payload.amount).toBe(9); // 6+3
         });
 
-        it('FM=0时造成5点伤害', () => {
+        it('FM=0时造成6点伤害', () => {
             const state = createState({ attackerFM: 0 });
             const handler = getCustomActionHandler('fiery-combo-2-resolve')!;
             const events = handler(buildCtx(state, 'fiery-combo-2-resolve'));
 
-            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(5);
+            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(6);
         });
     });
 
@@ -521,9 +537,12 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // magma-armor-3-resolve: 基于防御投掷骰面，fire面=2伤害/个，fiery_soul面=1FM/个
+    // magma-armor-3-resolve: 熔火铠甲 III
+    // FM获取: fiery_soul数 + magma数
+    // 条件灼烧: 同时有fire和magma时施加灼烧
+    // 伤害: fire数 + magma数
     // ========================================================================
-    describe('magma-armor-3-resolve (熔岩盔甲 III)', () => {
+    describe('magma-armor-3-resolve (熔火铠甲 III)', () => {
         /** 构建防御上下文 */
         function buildDefenseCtx(state: DiceThroneCore, actionId: string): CustomActionContext {
             const effectCtx = {
@@ -545,24 +564,67 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             };
         }
 
-        it('fire面每个造成2点伤害（dmgPerFire=2），目标为原攻击者', () => {
-            // 骰子: 3个fire + 1个fiery_soul + 1个meteor
-            const dice = [1, 2, 3, 5, 6].map(v => createPyroDie(v));
+        it('fire+magma面造成伤害，fiery_soul+magma面获得FM，同时有fire和magma施加灼烧', () => {
+            // 骰子: 2个fire(1,2) + 1个magma(4) + 1个fiery_soul(5) + 1个meteor(6)
+            const dice = [1, 2, 4, 5, 6].map(v => createPyroDie(v));
             const state = createState({ attackerFM: 0, dice });
             const handler = getCustomActionHandler('magma-armor-3-resolve')!;
             const events = handler(buildDefenseCtx(state, 'magma-armor-3-resolve'));
 
-            const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
-            expect(dmgEvents).toHaveLength(1);
-            expect((dmgEvents[0] as any).payload.amount).toBe(6); // 3个fire × dmgPerFire(2)
-            // 伤害目标必须是原攻击者(1)
-            expect((dmgEvents[0] as any).payload.targetId).toBe('1');
-
-            // 同时获得 1 FM（给自己 = 防御者 = '0'）
+            // FM: fiery_soul(1) + magma(1) = 2
             const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
             expect(tokenEvents).toHaveLength(1);
-            expect((tokenEvents[0] as any).payload.amount).toBe(1);
+            expect((tokenEvents[0] as any).payload.amount).toBe(2);
             expect((tokenEvents[0] as any).payload.targetId).toBe('0');
+
+            // 灼烧: 有fire(2) + magma(1) → 施加灼烧
+            const statusEvents = eventsOfType(events, 'STATUS_APPLIED');
+            expect(statusEvents).toHaveLength(1);
+            expect((statusEvents[0] as any).payload.statusId).toBe(STATUS_IDS.BURN);
+
+            // 伤害: fire(2) + magma(1) = 3
+            const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmgEvents).toHaveLength(1);
+            expect((dmgEvents[0] as any).payload.amount).toBe(3);
+            expect((dmgEvents[0] as any).payload.targetId).toBe('1');
+        });
+
+        it('只有fire面时不施加灼烧，伤害只算fire', () => {
+            // 骰子: 3个fire + 2个fiery_soul
+            const dice = [1, 2, 3, 5, 5].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, dice });
+            const handler = getCustomActionHandler('magma-armor-3-resolve')!;
+            const events = handler(buildDefenseCtx(state, 'magma-armor-3-resolve'));
+
+            // FM: fiery_soul(2) + magma(0) = 2
+            const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(tokenEvents).toHaveLength(1);
+            expect((tokenEvents[0] as any).payload.amount).toBe(2);
+
+            // 无灼烧（没有magma面）
+            const statusEvents = eventsOfType(events, 'STATUS_APPLIED');
+            expect(statusEvents).toHaveLength(0);
+
+            // 伤害: fire(3) + magma(0) = 3
+            const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
+            expect((dmgEvents[0] as any).payload.amount).toBe(3);
+        });
+
+        it('无fire和magma面时无伤害', () => {
+            // 骰子: 3个fiery_soul + 2个meteor
+            const dice = [5, 5, 5, 6, 6].map(v => createPyroDie(v));
+            const state = createState({ attackerFM: 0, dice });
+            const handler = getCustomActionHandler('magma-armor-3-resolve')!;
+            const events = handler(buildDefenseCtx(state, 'magma-armor-3-resolve'));
+
+            // FM: fiery_soul(3) + magma(0) = 3
+            const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(tokenEvents).toHaveLength(1);
+            expect((tokenEvents[0] as any).payload.amount).toBe(3);
+
+            // 无伤害
+            const dmgEvents = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmgEvents).toHaveLength(0);
         });
     });
 

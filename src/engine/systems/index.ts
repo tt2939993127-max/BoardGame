@@ -8,7 +8,10 @@ export * from './types';
 // 系统实现
 export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type PhaseEnterResult, type CanAdvanceResult } from './FlowSystem';
 export { createUndoSystem, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
-export { createInteractionSystem, createSimpleChoice, queueInteraction, resolveInteraction, asSimpleChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type InteractionSystemConfig } from './InteractionSystem';
+export { createInteractionSystem, createSimpleChoice, createMultistepChoice, queueInteraction, resolveInteraction, asSimpleChoice, asMultistepChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type MultistepChoiceData, type InteractionSystemConfig } from './InteractionSystem';
+export { createSimpleChoiceSystem, type SimpleChoiceSystemConfig } from './SimpleChoiceSystem';
+export { createMultistepChoiceSystem, type MultistepChoiceSystemConfig } from './MultistepChoiceSystem';
+export { useMultistepInteraction, type MultistepInteractionState } from './useMultistepInteraction';
 export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs } from './LogSystem';
 export { createEventStreamSystem, getEventStreamEntries } from './EventStreamSystem';
 export { createActionLogSystem, type ActionLogSystemConfig } from './ActionLogSystem';
@@ -21,6 +24,7 @@ export { CharacterSelectionSystem, CHARACTER_SELECTION_COMMANDS, type CharacterS
 // 默认系统集合
 import { createUndoSystem } from './UndoSystem';
 import { createInteractionSystem } from './InteractionSystem';
+import { createSimpleChoiceSystem } from './SimpleChoiceSystem';
 import { createLogSystem } from './LogSystem';
 import { createEventStreamSystem } from './EventStreamSystem';
 import { createRematchSystem } from './RematchSystem';
@@ -46,6 +50,7 @@ export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): Engine
         createActionLogSystem(actionLog),
         createUndoSystem(undo),
         createInteractionSystem(),
+        createSimpleChoiceSystem(),
         createRematchSystem(),
         createResponseWindowSystem(),
         createTutorialSystem(),

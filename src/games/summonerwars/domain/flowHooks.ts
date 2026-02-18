@@ -131,8 +131,14 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
    * 是否允许推进阶段
    */
   canAdvance: () => {
-    // 基本检查通过（游戏结束由引擎层处理）
     return { ok: true };
+  },
+
+  /**
+   * 获取当前活跃玩家（用于 ADVANCE_PHASE 发送者校验）
+   */
+  getCurrentPlayerId: ({ state }) => {
+    return state.core.currentPlayer;
   },
 
   /**

@@ -309,9 +309,10 @@ export const EFFECT_GROUP_DEFS: EffectGroupDef[] = [
   { id: 'particle', label: '粒子类', icon: Flame, colorClass: 'text-purple-400', order: 0 },
   { id: 'impact', label: '打击类', icon: Swords, colorClass: 'text-rose-400', order: 1 },
   { id: 'projectile', label: '投射类', icon: Send, colorClass: 'text-cyan-400', order: 2 },
-  { id: 'ui', label: 'UI 类', icon: Sparkles, colorClass: 'text-amber-400', order: 3 },
-  { id: 'loading', label: '加载类', icon: Hourglass, colorClass: 'text-emerald-400', order: 4 },
+  { id: 'gameplay', label: '玩法类', icon: Castle, colorClass: 'text-orange-400', order: 3 },
+  { id: 'ui', label: 'UI 类', icon: Sparkles, colorClass: 'text-amber-400', order: 4 },
+  { id: 'loading', label: '加载类', icon: Hourglass, colorClass: 'text-emerald-400', order: 5 },
 ];
 
 // 分组定义需要的图标（在此统一导入，避免每个卡片文件重复导入分组图标）
-import { Flame, Swords, Send, Sparkles, Hourglass } from 'lucide-react';
+import { Flame, Swords, Send, Sparkles, Hourglass, Castle } from 'lucide-react';

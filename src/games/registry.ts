@@ -22,7 +22,7 @@ const buildGameImplementations = () => {
             throw new Error(`[GameManifest] 游戏实现缺失: ${manifest.id}`);
         }
 
-        implementations[manifest.id] = { engineConfig, board, tutorial };
+        implementations[manifest.id] = { engineConfig, board, tutorial, latencyConfig: entry.latencyConfig };
     }
 
     return implementations;

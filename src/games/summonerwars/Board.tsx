@@ -548,8 +548,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.setWithdrawMode({ ...interaction.withdrawMode, step: 'selectPosition', costType });
   }, [interaction]);
   const handleCancelWithdraw = useCallback(() => interaction.setWithdrawMode(null), [interaction]);
-  const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
-    interaction.handleConfirmStun(direction, distance);
+  const handleConfirmStun = useCallback(() => {
+    interaction.handleConfirmStun();
   }, [interaction]);
   const handleCancelStun = useCallback(() => {
     interaction.setStunMode(null);
@@ -605,8 +605,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     });
     setAbilityMode(null);
   }, [abilityMode, dispatch, setAbilityMode]);
-  const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
-    interaction.handleConfirmTelekinesis(direction);
+  const handleConfirmTelekinesis = useCallback((_direction?: 'push' | 'pull', _axis?: 'row' | 'col') => {
+    // 念力已改为棋盘点击终点模式，此回调为空实现
+    interaction.handleConfirmTelekinesis();
   }, [interaction]);
   const handleCancelTelekinesis = useCallback(() => interaction.setTelekinesisTargetMode(null), [interaction]);
   // afterMove 技能：充能自身
@@ -728,6 +729,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         stunHighlights={interaction.stunHighlights}
                         hypnoticLureHighlights={interaction.hypnoticLureHighlights}
                         afterAttackAbilityHighlights={interaction.afterAttackAbilityHighlights}
+                        telekinesisHighlights={interaction.telekinesisHighlights}
                         attackAnimState={attackAnimState}
                         destroyingCells={destroyingCells}
                         dyingEntities={dyingEntities}
@@ -793,9 +795,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
                   </div>
 
-                  {/* 对手持续效果 - 紧贴魔力条下方 */}
+                  {/* 对手持续效果 - 紧贴魔力条下方，竖直向下排列 */}
                   {opponentActiveEvents.length > 0 && (
-                    <div className="flex flex-row-reverse items-start gap-1.5" data-testid="sw-opponent-active-events">
+                    <div className="flex flex-col items-end gap-1.5" data-testid="sw-opponent-active-events">
+                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px]">{t('ui.activeEvents')}</span>
                       {opponentActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
                         const charges = ev.charges ?? 0;
@@ -825,17 +828,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                           </div>
                         );
                       })}
-                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px] mt-1">{t('ui.activeEvents')}</span>
                     </div>
                   )}
                 </div>
 
                 {/* 左下区域：玩家名+魔力条 + 持续效果 + 抽牌堆 */}
                 <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3" data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
-                  {/* 玩家持续效果 - 放在魔力条上方 */}
+                  {/* 玩家持续效果 - 放在魔力条上方，竖直向上排列 */}
                   {myActiveEvents.length > 0 && (
-                    <div className="flex flex-row items-end gap-1.5 mb-1" data-testid="sw-my-active-events">
-                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px] mb-1">{t('ui.activeEvents')}</span>
+                    <div className="flex flex-col-reverse items-start gap-1.5 mb-1" data-testid="sw-my-active-events">
+                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px]">{t('ui.activeEvents')}</span>
                       {myActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
                         const charges = ev.charges ?? 0;
@@ -925,6 +927,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     isMyTurn={isMyTurn}
                     core={core}
                     abilityMode={abilityMode}
+                    fireSacrificeSummonMode={interaction.fireSacrificeSummonMode}
+                    onCancelFireSacrifice={() => interaction.handleCardSelect(null)}
                     pendingBeforeAttack={interaction.pendingBeforeAttack}
                     bloodSummonMode={interaction.bloodSummonMode}
                     annihilateMode={interaction.annihilateMode}
@@ -999,6 +1003,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
+                    interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
                   />
                 </div>
               </div>
@@ -1076,6 +1081,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 results={diceResult?.results ?? null}
                 attackType={diceResult?.attackType ?? null}
                 hits={diceResult?.hits ?? 0}
+                damageReduced={diceResult?.damageReduced}
                 isOpponentAttack={diceResult?.isOpponentAttack ?? false}
                 onClose={handleCloseDiceResult}
               />

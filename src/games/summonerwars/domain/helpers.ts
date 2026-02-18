@@ -1089,14 +1089,53 @@ export function hasStableAbilityBase(unit: BoardUnit): boolean {
 }
 
 /**
+ * 计算推拉方向向量（共享逻辑）
+ *
+ * @deprecated Force 规则允许玩家自由选择上下左右任意方向，不应根据 source 位置推断。
+ * 仅保留用于向后兼容，新代码请使用 getForceDestinations。
+ */
+export function getPushPullDirection(
+  targetPos: CellCoord,
+  sourcePos: CellCoord,
+  direction: 'push' | 'pull'
+): { moveRow: number; moveCol: number } {
+  const dr = targetPos.row - sourcePos.row;
+  const dc = targetPos.col - sourcePos.col;
+  let moveRow = 0;
+  let moveCol = 0;
+
+  if (direction === 'push') {
+    if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr >= 0 ? 1 : -1; }
+    else { moveCol = dc >= 0 ? 1 : -1; }
+  } else {
+    if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr >= 0 ? -1 : 1; }
+    else { moveCol = dc >= 0 ? -1 : 1; }
+  }
+  return { moveRow, moveCol };
+}
+
+/**
+ * 获取推拉可用的轴向列表
+ *
+ * @deprecated Force 规则允许玩家自由选择上下左右任意方向，不应根据 source 位置推断。
+ * 仅保留用于向后兼容。
+ */
+export function getPushPullAxes(
+  targetPos: CellCoord,
+  sourcePos: CellCoord,
+): ('row' | 'col')[] {
+  const dr = targetPos.row - sourcePos.row;
+  const dc = targetPos.col - sourcePos.col;
+  if (dr === 0 && dc === 0) return [];
+  if (dr === 0) return ['col'];
+  if (dc === 0) return ['row'];
+  return ['row', 'col'];
+}
+
+/**
  * 计算推拉后的目标位置
  * direction: 'push' = 远离 source, 'pull' = 靠近 source
  * 返回 null 表示无法推拉（出界或被阻挡）
- *
- * 对角线方向选择策略：当 source 和 target 处于对角线位置（|dr| == |dc|）时，
- * 规则要求强制移动沿单一方向（水平或垂直），此时优先选择行方向（垂直）。
- * 这是确定性的 tie-breaking 规则，确保同一局面下推拉结果一致。
- * 桌游中此场景由当前回合玩家自由选择，但数字版为简化交互采用自动选择。
  */
 export function calculatePushPullPosition(
   state: SummonerWarsCore,
@@ -1105,30 +1144,7 @@ export function calculatePushPullPosition(
   distance: number,
   direction: 'push' | 'pull'
 ): CellCoord | null {
-  // 计算方向向量
-  const dr = targetPos.row - sourcePos.row;
-  const dc = targetPos.col - sourcePos.col;
-
-  // 推拉必须沿直线（水平或垂直）
-  // 如果不在直线上，选择主要方向（对角线时优先行方向）
-  let moveRow = 0;
-  let moveCol = 0;
-
-  if (direction === 'push') {
-    // 推：远离 source
-    if (Math.abs(dr) >= Math.abs(dc)) {
-      moveRow = dr > 0 ? 1 : -1;
-    } else {
-      moveCol = dc > 0 ? 1 : -1;
-    }
-  } else {
-    // 拉：靠近 source
-    if (Math.abs(dr) >= Math.abs(dc)) {
-      moveRow = dr > 0 ? -1 : 1;
-    } else {
-      moveCol = dc > 0 ? -1 : 1;
-    }
-  }
+  const { moveRow, moveCol } = getPushPullDirection(targetPos, sourcePos, direction);
 
   // 逐格移动
   let currentPos = { ...targetPos };
@@ -1145,6 +1161,130 @@ export function calculatePushPullPosition(
   }
 
   return currentPos;
+}
+
+/**
+ * 沿指定方向强制移动，可穿过单位，被建筑阻挡（震慑专用）
+ *
+ * @param moveRow 行方向（-1/0/1）
+ * @param moveCol 列方向（-1/0/1）
+ * @returns finalPos: 最终停留位置（null 表示无法移动），passedPositions: 穿过的单位位置
+ */
+export function calculateStunPushPull(
+  state: SummonerWarsCore,
+  targetPos: CellCoord,
+  moveRow: number,
+  moveCol: number,
+  distance: number,
+): { finalPos: CellCoord | null; passedPositions: CellCoord[] } {
+  const passedPositions: CellCoord[] = [];
+
+  let currentPos = { ...targetPos };
+  let lastEmptyPos: CellCoord | null = null;
+
+  for (let step = 0; step < distance; step++) {
+    const nextPos = {
+      row: currentPos.row + moveRow,
+      col: currentPos.col + moveCol,
+    };
+    if (!isValidCoord(nextPos)) break;
+
+    const occupant = getUnitAt(state, nextPos);
+    if (occupant) {
+      // 穿过单位：记录位置（用于造成穿越伤害）
+      passedPositions.push(nextPos);
+      currentPos = nextPos;
+    } else if (getStructureAt(state, nextPos)) {
+      // 建筑阻挡，停止
+      break;
+    } else {
+      // 空格：记录为最后一个可停留位置
+      currentPos = nextPos;
+      lastEmptyPos = nextPos;
+    }
+  }
+
+  // 最终停留在最后一个空格上
+  const finalPos = lastEmptyPos ?? (
+    (currentPos.row !== targetPos.row || currentPos.col !== targetPos.col)
+      && isCellEmpty(state, currentPos) ? currentPos : null
+  );
+
+  return { finalPos, passedPositions };
+}
+
+/**
+ * 获取强制移动（Force）所有可能的终点位置（用于 UI 高亮）
+ *
+ * Force 规则：玩家可以选择上/下/左/右任意方向，与 source 位置无关。
+ * 普通 Force（不穿过单位，被单位和建筑阻挡）。
+ *
+ * @param distance 强制移动格数
+ */
+export function getForceDestinations(
+  state: SummonerWarsCore,
+  targetPos: CellCoord,
+  distance: number,
+): { position: CellCoord; moveRow: number; moveCol: number }[] {
+  const results: { position: CellCoord; moveRow: number; moveCol: number }[] = [];
+
+  const dirs = [
+    { moveRow: -1, moveCol: 0 },
+    { moveRow: 1, moveCol: 0 },
+    { moveRow: 0, moveCol: -1 },
+    { moveRow: 0, moveCol: 1 },
+  ];
+
+  for (const { moveRow, moveCol } of dirs) {
+    let pos = { ...targetPos };
+    let reachable = true;
+    for (let step = 0; step < distance; step++) {
+      const next = { row: pos.row + moveRow, col: pos.col + moveCol };
+      if (!isValidCoord(next) || !isCellEmpty(state, next)) { reachable = false; break; }
+      pos = next;
+    }
+    if (reachable && (pos.row !== targetPos.row || pos.col !== targetPos.col)) {
+      results.push({ position: pos, moveRow, moveCol });
+    }
+  }
+  return results;
+}
+
+/**
+ * 获取震慑所有可能的终点位置（用于 UI 高亮）
+ *
+ * Force 规则：玩家可以选择上/下/左/右任意方向，与 source 位置无关。
+ * 对四个方向分别计算距离 1-3 的所有可达终点（去重）。
+ * 每个终点附带方向向量信息，供 dispatch 时使用。
+ */
+export function getStunDestinations(
+  state: SummonerWarsCore,
+  targetPos: CellCoord,
+): { position: CellCoord; moveRow: number; moveCol: number; distance: number }[] {
+  const results: { position: CellCoord; moveRow: number; moveCol: number; distance: number }[] = [];
+  const seen = new Set<string>();
+
+  // 四个方向：上/下/左/右
+  const dirs = [
+    { moveRow: -1, moveCol: 0 },
+    { moveRow: 1, moveCol: 0 },
+    { moveRow: 0, moveCol: -1 },
+    { moveRow: 0, moveCol: 1 },
+  ];
+
+  for (const { moveRow, moveCol } of dirs) {
+    for (let dist = 1; dist <= 3; dist++) {
+      const { finalPos } = calculateStunPushPull(state, targetPos, moveRow, moveCol, dist);
+      if (finalPos) {
+        const key = `${finalPos.row},${finalPos.col}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push({ position: finalPos, moveRow, moveCol, distance: dist });
+        }
+      }
+    }
+  }
+  return results;
 }
 
 /**

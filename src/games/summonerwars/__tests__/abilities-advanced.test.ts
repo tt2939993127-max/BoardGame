@@ -548,23 +548,21 @@ describe('召唤师 - 复活死灵 (revive_undead)', () => {
 // ============================================================================
 
 describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
-  it('应消灭友方单位并移动到其位置', () => {
+  it('召唤时消灭友方单位，放置到牺牲品位置', () => {
     const state = createTestState();
     // 清空测试区域
     state.board[4][2].unit = undefined;
     state.board[4][3].unit = undefined;
 
-    // 放置伊路特-巴尔
-    const elutBar = placeUnit(state, { row: 4, col: 2 }, {
-      cardId: 'test-elut-bar',
-      card: {
-        id: 'test-elut-bar', cardType: 'unit', name: '伊路特-巴尔',
-        unitClass: 'champion', faction: 'necromancer', strength: 6, life: 6,
-        cost: 6, attackType: 'melee', attackRange: 1,
-        abilities: ['fire_sacrifice_summon'], deckSymbols: [],
-      },
-      owner: '0',
-    });
+    // 将伊路特-巴尔放入手牌
+    const elutBarCard: UnitCard = {
+      id: 'test-elut-bar', cardType: 'unit', name: '伊路特-巴尔',
+      unitClass: 'champion', faction: 'necromancer', strength: 6, life: 6,
+      cost: 6, attackType: 'melee', attackRange: 1,
+      abilities: ['fire_sacrifice_summon'], deckSymbols: [],
+    };
+    state.players['0'].hand.push(elutBarCard);
+    state.players['0'].magic = 10;
 
     // 放置友方牺牲品
     const victim = placeUnit(state, { row: 4, col: 3 }, {
@@ -576,16 +574,16 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
     state.currentPlayer = '0';
     state.phase = 'summon';
 
-    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'fire_sacrifice_summon',
-      sourceUnitId: elutBar.instanceId,
-      targetUnitId: victim.cardId,
+    const { newState } = executeAndReduce(state, SW_COMMANDS.SUMMON_UNIT, {
+      cardId: 'test-elut-bar',
+      position: { row: 4, col: 3 },
+      sacrificeUnitId: victim.instanceId,
     });
 
-    // 牺牲品应被消灭（位置空或被伊路特-巴尔占据）
-    // 伊路特-巴尔应移动到 (4,3)
+    // 伊路特-巴尔应在牺牲品位置 (4,3)
     expect(newState.board[4][3].unit?.cardId).toBe('test-elut-bar');
-    expect(newState.board[4][2].unit).toBeUndefined();
+    // 牺牲品已被消灭
+    expect(newState.board[4][3].unit?.card.name).toBe('伊路特-巴尔');
   });
 });
 
@@ -594,7 +592,7 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
 // ============================================================================
 
 describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
-  it('应消灭友方单位并生成战力翻倍事件', () => {
+  it('应消灭友方单位（special 标记算近战命中效果在 DECLARE_ATTACK 路径生效）', () => {
     const state = createTestState();
     state.board[4][2].unit = undefined;
     state.board[4][3].unit = undefined;
@@ -630,10 +628,9 @@ describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
     // 牺牲品应被消灭
     expect(newState.board[4][3].unit).toBeUndefined();
 
-    // 应有 STRENGTH_MODIFIED 事件（战力翻倍）
+    // 不再产生 STRENGTH_MODIFIED 事件（效果改为 special 算近战命中，在 DECLARE_ATTACK 路径处理）
     const strengthEvents = events.filter(e => e.type === SW_EVENTS.STRENGTH_MODIFIED);
-    expect(strengthEvents.length).toBe(1);
-    expect((strengthEvents[0].payload as any).multiplier).toBe(2);
+    expect(strengthEvents.length).toBe(0);
   });
 });
 

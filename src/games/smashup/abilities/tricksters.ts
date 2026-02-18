@@ -15,6 +15,8 @@ import { registerProtection, registerRestriction, registerTrigger } from '../dom
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { FACTION_DISPLAY_NAMES } from '../domain/ids';
+import { getOpponentLabel } from '../domain/utils';
 
 /** 侏儒 onPlay：消灭力量低于己方随从数量的随从 */
 function tricksterGnome(ctx: AbilityContext): AbilityResult {
@@ -101,11 +103,12 @@ function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map((t, i) => ({
-        id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
+        id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId }, _source: 'ongoing' as const,
     }));
     const interaction = createSimpleChoice(
         `trickster_disenchant_${ctx.now}`, ctx.playerId,
-        '选择要消灭的行动牌', options as any[], 'trickster_disenchant',
+        '选择要消灭的行动牌', options as any[],
+        { sourceId: 'trickster_disenchant', targetType: 'ongoing' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -167,8 +170,8 @@ export function registerTricksterInteractionHandlers(): void {
 
     // 幻想破碎：选择行动卡后消灭
     registerInteractionHandler('trickster_disenchant', (state, _playerId, value, _iData, _random, timestamp) => {
-        const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
-        return { state, events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp }] };
+        const { cardUid: ongoingUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        return { state, events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: ongoingUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp }] };
     });
 
     // 沉睡印记：选择对手后标记（下回合生效）
@@ -263,7 +266,7 @@ function tricksterBlockThePath(ctx: AbilityContext): AbilityResult {
     }
     if (factionSet.size === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = Array.from(factionSet).map((fid, i) => ({
-        id: `faction-${i}`, label: fid, value: { factionId: fid },
+        id: `faction-${i}`, label: FACTION_DISPLAY_NAMES[fid] || fid, value: { factionId: fid },
     }));
     const interaction = createSimpleChoice(
         `trickster_block_the_path_${ctx.now}`, ctx.playerId,
@@ -278,7 +281,7 @@ function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
     const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
     if (opponents.length === 0) return { events: [] };
     const options = opponents.map((pid, i) => ({
-        id: `opp-${i}`, label: `对手 ${pid}`, value: { pid },
+        id: `opp-${i}`, label: getOpponentLabel(pid), value: { pid },
     }));
     const interaction = createSimpleChoice(
         `trickster_mark_of_sleep_${ctx.now}`, ctx.playerId,

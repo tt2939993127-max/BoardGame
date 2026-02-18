@@ -243,7 +243,7 @@ describe('治疗技能链', () => {
 
 describe('Token 响应链', () => {
     it('防御方跳过 token 响应  正常进入 main2', () => {
-        const runner = createRunner(fixedRandom);
+        const runner = createRunner(fixedRandom, false); // silent=false 打印步骤
         const result = runner.run({
             name: 'token response - defender skip',
             setup: createHeroMatchup('barbarian', 'monk', (core) => {
@@ -266,6 +266,11 @@ describe('Token 响应链', () => {
                 },
             },
         });
+        // 调试：打印每步结果
+        console.log('=== Token响应测试步骤 ===');
+        result.steps.forEach(s => console.log(`Step ${s.step} ${s.command} [${s.playerId}]: ${s.success ? 'OK' : 'FAIL:'+s.error} events=[${s.events.join(',')}]`));
+        console.log('finalPhase:', result.finalState.sys.phase);
+        console.log('interaction.current:', JSON.stringify(result.finalState.sys.interaction?.current?.kind));
         expect(result.passed).toBe(true);
     });
 

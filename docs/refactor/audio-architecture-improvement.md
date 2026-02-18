@@ -158,10 +158,13 @@ const COMBAT_FEEDBACK: FeedbackPack = {
 4. ✅ 删除旧的 `FlyingEffectsLayer` 和 `useFlyingEffects`
 5. ✅ E2E 测试验证音效播放时机
 
-### 阶段 2：SmashUp 重构（按需）
+### 阶段 2：SmashUp 迁移到 FX 引擎（✅ 已完成）
 
-1. 参考 DiceThrone 的迁移模式
-2. 处理 SmashUp 特有的动态音效场景
+1. ✅ 创建 `ui/fxSetup.ts` 并注册 4 个渲染器（力量浮字/行动卡展示/VP飞行/基地占领）
+2. ✅ 将 `useGameEvents` 改为使用 `fxBus.push()` 触发视觉特效
+3. ✅ 在 Board 中集成 `useFxBus` + `FxLayer`
+4. ✅ 删除旧的 `SmashUpEffectsLayer`（`ui/BoardEffects.tsx`）
+5. ✅ 非视觉反馈（能力反馈 toast）保留本地状态管理
 
 ### 阶段 3：文档更新（✅ 已完成）
 
@@ -180,3 +183,8 @@ const COMBAT_FEEDBACK: FeedbackPack = {
 - `src/games/dicethrone/ui/fxSetup.ts`：FeedbackPack 声明 + 动态音效解析
 - `src/games/dicethrone/audio.config.ts`：feedbackResolver 只处理即时音效
 - `src/games/dicethrone/hooks/useAnimationEffects.ts`：基于 useFxBus 的事件驱动动画
+
+**SmashUp**：
+- `src/games/smashup/ui/fxSetup.ts`：FeedbackPack 声明 + 4 个渲染器（screen 空间定位）
+- `src/games/smashup/audio.config.ts`：feedbackResolver 只处理即时音效
+- `src/games/smashup/ui/useGameEvents.ts`：基于 fxBus.push() 的事件驱动特效

@@ -19,11 +19,11 @@ import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { getScores } from './domain/index';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
-import { getCardDef, getBaseDef, getMinionDef } from './data/cards';
+import { getCardDef, getBaseDef, getMinionDef, resolveCardName, resolveCardText } from './data/cards';
 import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getPlayerEffectivePowerOnBase } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
-import { useGameAudio, playDeniedSound } from '../../lib/audio/useGameAudio';
-import { registerCardAtlasSource } from '../../components/common/media/CardPreview';
+import { useGameAudio, playDeniedSound, playSound } from '../../lib/audio/useGameAudio';
+import { registerCardAtlasSource, CardPreview } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
 import { loadCardAtlasConfig, initSmashUpCardAtlases } from './ui/cardAtlas';
 
@@ -33,7 +33,8 @@ import { SMASHUP_ATLAS_IDS } from './domain/ids';
 import { SMASH_UP_MANIFEST } from './manifest';
 import { HandArea } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
-import { SmashUpEffectsLayer } from './ui/BoardEffects';
+import { useFxBus, FxLayer } from '../../engine/fx';
+import { smashUpFxRegistry } from './ui/fxSetup';
 import { FactionSelection } from './ui/FactionSelection';
 import { PromptOverlay } from './ui/PromptOverlay';
 import { getFactionMeta } from './ui/factionMeta';
@@ -54,6 +55,9 @@ import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebu
 import { SmashUpDebugConfig } from './debug-config';
 import { UI_Z_INDEX } from '../../core';
 import type { PlayConstraint } from './domain/types';
+import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game/framework';
+import type { SpotlightItem } from '../../components/game/framework';
+import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 
 type Props = GameBoardProps<SmashUpCore>;
 
@@ -275,13 +279,43 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         });
     }, [isMinionSelectPrompt, currentPrompt]);
 
-    // 交互驱动的选择提示标题（基地/随从/手牌选择统一）
+    // 持续行动卡选择交互检测：targetType === 'ongoing'
+    const isOngoingSelectPrompt = useMemo(() => {
+        if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
+        const data = currentInteraction?.data as Record<string, unknown> | undefined;
+        return data?.targetType === 'ongoing';
+    }, [currentPrompt, playerID, currentInteraction]);
+
+    // 可选持续行动卡 UID 集合（高亮候选行动卡）
+    const selectableOngoingUids = useMemo<Set<string>>(() => {
+        if (!isOngoingSelectPrompt || !currentPrompt) return new Set();
+        const uids = new Set<string>();
+        for (const opt of currentPrompt.options) {
+            const val = opt.value as { cardUid?: string; skip?: boolean } | undefined;
+            if (val?.skip === true) continue;
+            if (val?.cardUid) uids.add(val.cardUid);
+        }
+        return uids;
+    }, [isOngoingSelectPrompt, currentPrompt]);
+
+    // 持续行动卡选择中的非行动卡选项（如"跳过"），需要作为浮动按钮显示
+    const ongoingSelectExtraOptions = useMemo(() => {
+        if (!isOngoingSelectPrompt || !currentPrompt) return [];
+        return currentPrompt.options.filter(opt => {
+            const val = opt.value as Record<string, unknown> | undefined;
+            if (!val) return false;
+            return val.skip === true;
+        });
+    }, [isOngoingSelectPrompt, currentPrompt]);
+
+    // 交互驱动的选择提示标题（基地/随从/手牌/行动卡选择统一）
     const interactionSelectTitle = useMemo(() => {
         if (isBaseSelectPrompt && currentPrompt) return currentPrompt.title;
         if (isMinionSelectPrompt && currentPrompt) return currentPrompt.title;
         if (isHandDiscardPrompt && currentPrompt) return currentPrompt.title;
+        if (isOngoingSelectPrompt && currentPrompt) return currentPrompt.title;
         return '';
-    }, [isBaseSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, currentPrompt]);
+    }, [isBaseSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, isOngoingSelectPrompt, currentPrompt]);
 
     // 弃牌堆随从选择交互检测（僵尸领主等）：targetType === 'discard_minion'
     const isDiscardMinionPrompt = useMemo(() => {
@@ -303,8 +337,12 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     // 弃牌堆出牌横排选中的卡 uid（统一状态）
     const [discardStripSelectedUid, setDiscardStripSelectedUid] = useState<string | null>(null);
 
-    // interaction 变化时重置选中状态
+    // interaction 激活时重置手牌选中状态，避免 selectedCardUid 残留干扰基地渲染
     useEffect(() => {
+        if (currentPrompt) {
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
+        }
         setDiscardStripSelectedUid(null);
     }, [currentPrompt?.id]);
 
@@ -353,6 +391,31 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         return new Set(opt.allowedBaseIndices);
     }, [discardStripSelectedUid, isDiscardMinionPrompt, discardMinionAllowedBases, discardPlayOptions, core.bases]);
 
+
+    // Me First! 响应状态判断
+    const responseWindow = G.sys.responseWindow?.current;
+    const isMeFirstResponse = useMemo(() => {
+        if (!responseWindow || responseWindow.windowType !== 'meFirst') return false;
+        const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
+        return playerID === currentResponderId;
+    }, [responseWindow, playerID]);
+
+    // Me First! 期间非 special 卡的禁用集合（置灰）
+    const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
+        if (!isMeFirstResponse || !myPlayer) return undefined;
+        const disabled = new Set<string>();
+        for (const card of myPlayer.hand) {
+            if (card.type !== 'action') {
+                disabled.add(card.uid);
+                continue;
+            }
+            const def = getCardDef(card.defId) as ActionCardDef | undefined;
+            if (def?.subtype !== 'special') {
+                disabled.add(card.uid);
+            }
+        }
+        return disabled.size > 0 ? disabled : undefined;
+    }, [isMeFirstResponse, myPlayer]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
     const meFirstEligibleBaseIndices = useMemo<Set<number>>(() => {
@@ -440,9 +503,57 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         return uids;
     }, [selectedCardMode, playerID, core, deployableBaseIndices]);
 
-    // 事件流消费 → 动画驱动
+    // 基地 DOM 引用（用于 FX 特效定位）
+    const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
+
+    // FX 系统
+    const fxBus = useFxBus(smashUpFxRegistry, { playSound });
+
+    // 事件流消费 → FX 特效驱动
     const myPid = playerID || '0';
-    const gameEvents = useGameEvents({ G, myPlayerId: myPid });
+    const gameEvents = useGameEvents({ G, myPlayerId: myPid, fxBus, baseRefs: baseRefsMap });
+
+    // 行动卡特写队列（只显示其他玩家打出的行动卡，点击关闭）
+    const extractActionCard = useCallback((event: { type: string; payload: unknown }) => {
+        const p = event.payload as { playerId: string; defId: string };
+        if (!p?.playerId || !p?.defId) return null;
+        return { playerId: p.playerId, cardData: { defId: p.defId } };
+    }, []);
+
+    const SPOTLIGHT_TRIGGER_EVENTS = useMemo(() => ['su:action_played'], []);
+
+    const { queue: spotlightQueue, dismiss: dismissSpotlight } = useCardSpotlightQueue<{ defId: string }>({
+        entries: getEventStreamEntries(G),
+        currentPlayerId: myPid,
+        triggerEventTypes: SPOTLIGHT_TRIGGER_EVENTS,
+        extractCard: extractActionCard,
+        maxQueue: 5,
+    });
+
+    // 行动卡特写渲染
+    const renderSpotlightCard = useCallback((item: SpotlightItem<{ defId: string }>) => {
+        const def = getCardDef(item.cardData.defId);
+        const resolvedName = resolveCardName(def, t) || item.cardData.defId;
+        const resolvedText = resolveCardText(def, t);
+        return (
+            <div className="relative w-[20vw] max-w-[320px] aspect-[0.714] bg-white rounded-lg shadow-2xl border-2 border-slate-300 overflow-hidden">
+                <CardPreview
+                    previewRef={def?.previewRef}
+                    className="w-full h-full object-cover"
+                    title={resolvedName}
+                />
+                {!def?.previewRef && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-[#f3f0e8]">
+                        <div className="text-[1.2vw] font-black uppercase text-slate-800 mb-2">{resolvedName}</div>
+                        <div className="text-[0.7vw] text-slate-600 text-center font-mono">{resolvedText}</div>
+                    </div>
+                )}
+                <div className="absolute top-2 right-2 bg-red-500 text-white text-[0.7vw] font-black px-2 py-0.5 rounded shadow-md rotate-6">
+                    {t('ui.played')}
+                </div>
+            </div>
+        );
+    }, [t]);
 
     // 能力反馈 toast（搜索失败等提示）
     useEffect(() => {
@@ -504,9 +615,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             myPlayer?.hand.filter(c => !allowed.includes(c.uid)).map(c => c.uid) ?? []
         );
     }, [isTutorialActive, tutorialStep, myPlayer?.hand]);
-
-    // 基地 DOM 引用（用于力量浮字定位）
-    const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
 
     // 回合切换提示
     const [showTurnNotice, setShowTurnNotice] = useState(false);
@@ -675,6 +783,10 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             );
             if (option) {
                 dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
+            } else {
+                // 点击了不在交互选项中的牌（如新抽到的牌尚未刷新到选项中）
+                playDeniedSound();
+                toast(t('ui.card_not_in_options', { defaultValue: '该卡牌不在当前可选范围内' }));
             }
             return;
         }
@@ -694,6 +806,27 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         }
 
         // Validation for play phase / turn
+        // Me First! 响应期间：允许点击手牌中的 special 卡直接打出
+        if (isMeFirstResponse) {
+            if (card.type !== 'action') {
+                playDeniedSound();
+                return;
+            }
+            const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
+            if (cardDef?.subtype !== 'special') {
+                playDeniedSound();
+                return;
+            }
+            if (cardDef.specialNeedsBase) {
+                // 需要选基地：进入基地选择模式
+                setMeFirstPendingCard({ cardUid: card.uid, defId: card.defId });
+            } else {
+                // 不需要选基地：直接打出
+                dispatch(SU_COMMANDS.PLAY_ACTION, { cardUid: card.uid });
+            }
+            return;
+        }
+
         if (!isMyTurn || phase !== 'playCards') {
             playDeniedSound();
             toast(t('ui.invalid_play'));
@@ -745,7 +878,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse]);
 
     /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
@@ -766,6 +899,18 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             handlePlayOngoingToMinion(selectedCardUid, baseIndex, minionUid);
         }
     }, [selectedCardUid, selectedCardMode, handlePlayOngoingToMinion, isMinionSelectPrompt, selectableMinionUids, currentPrompt, dispatch, ongoingMinionTargetUids]);
+
+    /** 持续行动卡点击回调：交互驱动的行动卡选择 */
+    const handleOngoingSelect = useCallback((ongoingUid: string) => {
+        if (!isOngoingSelectPrompt || !currentPrompt) return;
+        if (!selectableOngoingUids.has(ongoingUid)) return;
+        const option = currentPrompt.options.find(
+            opt => (opt.value as { cardUid?: string })?.cardUid === ongoingUid
+        );
+        if (option) {
+            dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
+        }
+    }, [isOngoingSelectPrompt, selectableOngoingUids, currentPrompt, dispatch]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -1084,7 +1229,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
 
             {/* --- 交互选择提示横幅（基地/随从/手牌选择） --- */}
             <AnimatePresence>
-                {(isBaseSelectPrompt || isMinionSelectPrompt || isHandDiscardPrompt) && (
+                {(isBaseSelectPrompt || isMinionSelectPrompt || isHandDiscardPrompt || isOngoingSelectPrompt) && (
                     <motion.div
                         initial={{ y: -20, opacity: 0, scale: 0.95 }}
                         animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -1179,6 +1324,32 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 )}
             </AnimatePresence>
 
+            {/* --- 持续行动卡选择浮动操作栏（跳过按钮） --- */}
+            <AnimatePresence>
+                {isOngoingSelectPrompt && ongoingSelectExtraOptions.length > 0 && (
+                    <motion.div
+                        initial={{ y: 40, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 40, opacity: 0 }}
+                        className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
+                        style={{ zIndex: UI_Z_INDEX.hint }}
+                    >
+                        <div className="flex gap-3 pointer-events-auto">
+                            {ongoingSelectExtraOptions.map(opt => (
+                                <SmashUpGameButton
+                                    key={opt.id}
+                                    variant="secondary"
+                                    size="md"
+                                    onClick={() => dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: opt.id })}
+                                >
+                                    {opt.label}
+                                </SmashUpGameButton>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* --- MAIN BOARD --- */}
             {/* Scrollable table area */}
             <div className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" data-tutorial-id="su-base-area">
@@ -1190,7 +1361,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                             baseIndex={idx}
                             core={core}
                             turnOrder={core.turnOrder}
-                            isDeployMode={(!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))}
+                            isDeployMode={
+                                (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
+                            }
                             isMinionSelectMode={(selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0)}
                             selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
                             isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
@@ -1205,6 +1378,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                             dispatch={dispatch}
                             onClick={() => handleBaseClick(idx)}
                             onMinionSelect={handleMinionSelect}
+                            onOngoingSelect={handleOngoingSelect}
+                            selectableOngoingUids={isOngoingSelectPrompt ? selectableOngoingUids : undefined}
                             onViewMinion={(defId) => setViewingCard({ defId, type: 'minion' })}
                             onViewAction={handleViewAction}
                             onViewBase={(defId) => setViewingCard({ defId, type: 'base' })}
@@ -1254,7 +1429,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                                 !isTutorialCommandAllowed(SU_COMMANDS.PLAY_MINION) &&
                                 !isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)
                             }
-                            disabledCardUids={handPromptDisabledUids ?? tutorialDisabledUids}
+                            disabledCardUids={meFirstDisabledUids ?? handPromptDisabledUids ?? tutorialDisabledUids}
                             onCardView={handleViewCardDetail}
                         />
 
@@ -1284,15 +1459,10 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 )
             }
 
-            {/* 特效层 */}
-            <SmashUpEffectsLayer
-                powerChanges={gameEvents.powerChanges}
-                onPowerChangeComplete={gameEvents.removePowerChange}
-                actionShows={gameEvents.actionShows}
-                onActionShowComplete={gameEvents.removeActionShow}
-                baseScored={gameEvents.baseScored}
-                onBaseScoredComplete={gameEvents.removeBaseScored}
-                baseRefs={baseRefsMap}
+            {/* FX 特效层 */}
+            <FxLayer
+                bus={fxBus}
+                getCellPosition={() => ({ left: 0, top: 0, width: 0, height: 0 })}
             />
 
             {/* 回合切换提示 */}
@@ -1325,11 +1495,18 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 <SmashUpDebugConfig G={G} dispatch={dispatch} />
             </GameDebugPanel>
 
+            {/* 行动卡特写队列（其他玩家打出的行动卡，点击关闭） */}
+            <CardSpotlightQueue
+                queue={spotlightQueue}
+                onDismiss={dismissSpotlight}
+                renderCard={renderSpotlightCard}
+            />
+
             {/* PREVIEW OVERLAY */}
             <CardMagnifyOverlay target={viewingCard} onClose={() => setViewingCard(null)} />
 
-            {/* PROMPT OVERLAY（手牌弃牌/基地选择/随从选择/弃牌堆出牌交互时隐藏，由对应区域直接处理） */}
-            {!isHandDiscardPrompt && !isBaseSelectPrompt && !isMinionSelectPrompt && !isDiscardMinionPrompt && (
+            {/* PROMPT OVERLAY（手牌弃牌/基地选择/随从选择/行动卡选择/弃牌堆出牌交互时隐藏，由对应区域直接处理） */}
+            {!isHandDiscardPrompt && !isBaseSelectPrompt && !isMinionSelectPrompt && !isOngoingSelectPrompt && !isDiscardMinionPrompt && (
                 <PromptOverlay
                     interaction={G.sys.interaction?.current}
                     dispatch={dispatch}

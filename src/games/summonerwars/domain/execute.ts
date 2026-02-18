@@ -30,6 +30,7 @@ import {
   getEntangleUnits,
   getPlayerUnits,
   getUnitAbilities,
+  getAdjacentCells,
   getUnitMoveEnhancements,
   getPassedThroughUnitPositions,
   getMovePath,
@@ -89,6 +90,7 @@ export function executeCommand(
     case SW_COMMANDS.SUMMON_UNIT: {
       const cardId = payload.cardId as string;
       const position = payload.position as CellCoord;
+      const sacrificeUnitId = payload.sacrificeUnitId as string | undefined;
       const player = core.players[playerId];
       const card = player.hand.find(c => c.id === cardId);
       
@@ -101,9 +103,24 @@ export function executeCommand(
             timestamp,
           });
         }
+
+        // 火祀召唤：消灭牺牲品，召唤位置改为牺牲品位置
+        const hasFireSacrifice = (unitCard.abilities ?? []).includes('fire_sacrifice_summon');
+        let summonPosition = position;
+        if (hasFireSacrifice && sacrificeUnitId) {
+          const victim = findBoardUnitByInstanceId(core, sacrificeUnitId)
+            ?? findBoardUnitByCardId(core, sacrificeUnitId, playerId as '0' | '1');
+          if (victim) {
+            events.push(...emitDestroyWithTriggers(core, victim.unit, victim.position, {
+              playerId: playerId as '0' | '1', timestamp, reason: 'fire_sacrifice_summon',
+            }));
+            summonPosition = victim.position;
+          }
+        }
+
         events.push({
           type: SW_EVENTS.UNIT_SUMMONED,
-          payload: { playerId, cardId, position, card: unitCard },
+          payload: { playerId, cardId, position: summonPosition, card: unitCard },
           timestamp,
         });
 
@@ -111,7 +128,7 @@ export function executeCommand(
         if ((unitCard.abilities ?? []).includes('gather_power')) {
           events.push({
             type: SW_EVENTS.UNIT_CHARGED,
-            payload: { position, delta: 1, sourceAbilityId: 'gather_power' },
+            payload: { position: summonPosition, delta: 1, sourceAbilityId: 'gather_power' },
             timestamp,
           });
         }
@@ -122,7 +139,7 @@ export function executeCommand(
         );
         if (cwEvent) {
           const cwTargetPos = findUnitPositionByInstanceId(core, cwEvent.targetUnitId!);
-          if (cwTargetPos && manhattanDistance(position, cwTargetPos) === 1) {
+          if (cwTargetPos && manhattanDistance(summonPosition, cwTargetPos) === 1) {
             events.push({
               type: SW_EVENTS.UNIT_CHARGED,
               payload: { position: cwTargetPos, delta: 1, sourceAbilityId: 'chant_of_weaving' },
@@ -294,7 +311,8 @@ export function executeCommand(
       let attackerUnit = getUnitAt(core, attacker);
       let workingCore = core;
       let beforeAttackBonus = 0;
-      let beforeAttackMultiplier = 1;
+      const beforeAttackMultiplier = 1;
+      let beforeAttackSpecialCountsAsMelee = false; // life_drain：special 标记也算近战命中
       const rawBeforeAttack = payload.beforeAttack as
         | { abilityId: string; targetUnitId?: string; targetCardId?: string; discardCardIds?: string[] }
         | Array<{ abilityId: string; targetUnitId?: string; targetCardId?: string; discardCardIds?: string[] }>
@@ -337,12 +355,8 @@ export function executeCommand(
                   killer: { unit: sourceUnit, position: attacker },
                   playerId, timestamp, reason: 'life_drain', triggerOnDeath: true,
                 }));
-                lifeDrainEvents.push({
-                  type: SW_EVENTS.STRENGTH_MODIFIED,
-                  payload: { position: attacker, multiplier: 2, sourceAbilityId: 'life_drain' },
-                  timestamp,
-                });
-                beforeAttackMultiplier *= 2;
+                // life_drain 效果：本次攻击 special 标记也算近战命中
+                beforeAttackSpecialCountsAsMelee = true;
               }
               applyBeforeAttackEvents(lifeDrainEvents);
               break;
@@ -450,10 +464,60 @@ export function executeCommand(
       if (attackerUnit && canAttackEnhanced(workingCore, attacker, target)) {
         const targetCell = workingCore.board[target.row]?.[target.col];
         const effectiveStrengthBase = calculateEffectiveStrength(attackerUnit, workingCore, targetCell?.unit ?? undefined);
-        const effectiveStrength = applyBeforeAttackStrength(effectiveStrengthBase);
+        let effectiveStrength = applyBeforeAttackStrength(effectiveStrengthBase);
         const attackType = getAttackType(workingCore, attacker, target);
+
+        // 神圣护盾：科琳3格内友方城塞单位被攻击时，投2骰减少攻击方骰子数（战力-1）
+        if (targetCell?.unit && isFortressUnit(targetCell.unit.card)) {
+          const targetOwner = targetCell.unit.owner;
+          for (let row = 0; row < BOARD_ROWS; row++) {
+            for (let col = 0; col < BOARD_COLS; col++) {
+              const shieldUnit = workingCore.board[row]?.[col]?.unit;
+              if (shieldUnit && shieldUnit.owner === targetOwner) {
+                const abilities = getUnitAbilities(shieldUnit, workingCore);
+                if (abilities.includes('divine_shield')) {
+                  const dist = manhattanDistance({ row, col }, target);
+                  if (dist <= 3) {
+                    // 投掷2个防御骰，每个 special 标记减少攻击方1点战力（最少1）
+                    const shieldDice = rollDice(2, () => random.random());
+                    const shieldSpecial = shieldDice
+                      .flatMap(r => r.marks)
+                      .filter(mark => mark === 'special')
+                      .length;
+                    if (shieldSpecial > 0) {
+                      const reduction = Math.min(shieldSpecial, effectiveStrength - 1); // 战力最少为1
+                      if (reduction > 0) {
+                        effectiveStrength = effectiveStrength - reduction;
+                        events.push({
+                          type: SW_EVENTS.DAMAGE_REDUCED,
+                          payload: {
+                            sourceUnitId: shieldUnit.instanceId,
+                            sourcePosition: { row, col },
+                            value: reduction,
+                            condition: 'divine_shield',
+                            sourceAbilityId: 'divine_shield',
+                            shieldDice,
+                          },
+                          timestamp,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const diceResults = rollDice(effectiveStrength, () => random.random());
         let hits = countHits(diceResults, attackType);
+
+        // 吸取生命：special 标记也算近战命中（1个）
+        if (beforeAttackSpecialCountsAsMelee && attackType === 'melee') {
+          hits = diceResults
+            .flatMap(r => r.marks)
+            .reduce((sum, mark) => (mark === 'melee' || mark === 'special') ? sum + 1 : sum, 0);
+        }
 
         // 冰霜战斧：special = 2个melee（每个 special 标记算作2个近战命中）
         if (attackerUnit.attachedUnits?.some(au => au.card.abilities?.includes('frost_axe'))) {
@@ -466,7 +530,7 @@ export function executeCommand(
             }, 0);
         }
         
-        // 迷魂减伤：检查攻击者相邻是否有敌方掷术师（evasion）
+        // 迷魂减伤：检查攻击者相邻是否有敌方 evasion 单位（含通过幻化获得的）
         const hasSpecialDice = diceResults.some(r => r.marks.includes('special'));
         if (hasSpecialDice) {
           const evasionUnits = getEvasionUnits(workingCore, attacker, attackerUnit.owner);
@@ -490,48 +554,6 @@ export function executeCommand(
           }
         }
 
-        // 神圣护盾：科琳3格内友方城塞单位被攻击时，投2骰减伤
-        if (targetCell?.unit && isFortressUnit(targetCell.unit.card)) {
-          const targetOwner = targetCell.unit.owner;
-          // 查找目标方拥有 divine_shield 的单位（科琳）
-          for (let row = 0; row < BOARD_ROWS; row++) {
-            for (let col = 0; col < BOARD_COLS; col++) {
-              const shieldUnit = workingCore.board[row]?.[col]?.unit;
-              if (shieldUnit && shieldUnit.owner === targetOwner) {
-                const abilities = getUnitAbilities(shieldUnit, workingCore);
-                if (abilities.includes('divine_shield')) {
-                  const dist = manhattanDistance({ row, col }, target);
-                  if (dist <= 3) {
-                    // 投掷2个骰子，计算所有 special（❤️斧🪓）标记数量
-                    const shieldDice = rollDice(2, () => random.random());
-                    const shieldSpecial = shieldDice
-                      .flatMap(r => r.marks)
-                      .filter(mark => mark === 'special')
-                      .length;
-                    if (shieldSpecial > 0) {
-                      const reduction = Math.min(shieldSpecial, hits - 1); // 战力最少为1
-                      if (reduction > 0) {
-                        hits = hits - reduction;
-                        events.push({
-                          type: SW_EVENTS.DAMAGE_REDUCED,
-                          payload: {
-                            sourceUnitId: shieldUnit.instanceId,
-                            sourcePosition: { row, col },
-                            value: reduction,
-                            condition: 'divine_shield',
-                            sourceAbilityId: 'divine_shield',
-                            shieldDice,
-                          },
-                          timestamp,
-                        });
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
 
         events.push({
           type: SW_EVENTS.UNIT_ATTACKED,
@@ -608,6 +630,7 @@ export function executeCommand(
               position: target,
               damage: hits,
               sourcePlayerId: playerId,
+              attackerId: attackerUnit.instanceId,
               ...(attackerHasSoulless ? { skipMagicReward: true } : {}),
             },
             timestamp,

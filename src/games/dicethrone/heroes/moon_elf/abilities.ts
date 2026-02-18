@@ -17,9 +17,10 @@ const damage = (value: number | string, description: string): AbilityEffect => (
     action: { type: 'damage', target: 'opponent', value: typeof value === 'number' ? value : 0 },
 });
 
-const inflictStatus = (statusId: string, value: number, description: string): AbilityEffect => ({
+const inflictStatus = (statusId: string, value: number, description: string, opts?: { timing?: EffectTiming }): AbilityEffect => ({
     description,
     action: { type: 'grantStatus', target: 'opponent', statusId, value },
+    timing: opts?.timing,
 });
 
 const grantToken = (tokenId: string, value: number, description: string, opts?: { timing?: EffectTiming }): AbilityEffect => ({
@@ -88,7 +89,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         sfxKey: MOON_ELF_SFX_HIT,
         trigger: { type: 'smallStraight' },
         effects: [
-            inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot', 'inflictEntangle')),
+            inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot', 'inflictEntangle'), { timing: 'withDamage' }),
             damage(7, abilityEffectText('entangling-shot', 'damage7')),
         ],
     },
@@ -229,7 +230,7 @@ export const ENTANGLING_SHOT_2: AbilityDef = {
     description: abilityText('entangling-shot-2', 'description'),
     sfxKey: MOON_ELF_SFX_HIT,
     trigger: { type: 'smallStraight' },
-    effects: [inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot-2', 'inflictEntangle')), damage(9, abilityEffectText('entangling-shot-2', 'damage9'))],
+    effects: [inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot-2', 'inflictEntangle'), { timing: 'withDamage' }), damage(9, abilityEffectText('entangling-shot-2', 'damage9'))],
 };
 
 export const BLINDING_SHOT_2: AbilityDef = {

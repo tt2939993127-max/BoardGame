@@ -173,8 +173,8 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         const interactions = getLastInteractions();
         expect(interactions.length).toBe(1);
         expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
-        // 应有3个选项（每张疑狂卡一个）
-        expect(interactions[0].data.options.length).toBe(3);
+        // 应有3个疯狂卡选项 + 1个跳过选项
+        expect(interactions[0].data.options.length).toBe(4);
     });
 
     it('手中无疯狂卡时无效果', () => {
@@ -239,7 +239,8 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         const interactions = getLastInteractions();
         expect(interactions.length).toBe(1);
         expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
-        expect(interactions[0].data.options.length).toBe(3);
+        // 3张疯狂卡选项 + 1个跳过选项
+        expect(interactions[0].data.options.length).toBe(4);
     });
 
     it('状态正确（reduce 验证）- 多张疑狂卡产生 PROMPT_CONTINUATION', () => {
@@ -270,6 +271,54 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
         // 手牌中疑狂卡仍在（等待玩家选择）
         expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
+    });
+
+    it('交互 min=0 且包含跳过选项', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'cthulhu_madness_unleashed', 'action', '0'),
+                        makeCard('m1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('m2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                    deck: [makeCard('d1', 'test', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        execPlayAction(state, '0', 'a1');
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.multi?.min).toBe(0);
+        expect(interactions[0].data.options.some((o: any) => o.id === 'skip')).toBe(true);
+    });
+
+    it('选跳过 → 疯狂卡仍在手牌，无抽牌无额外行动', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'cthulhu_madness_unleashed', 'action', '0'),
+                        makeCard('m1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                    deck: [makeCard('d1', 'test', 'minion', '0')],
+                    actionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        execPlayAction(state, '0', 'a1');
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        // 解决交互：选跳过（空数组）
+        const handler = getInteractionHandler('cthulhu_madness_unleashed');
+        expect(handler).toBeDefined();
+        const ms = makeMatchState(state);
+        const result = handler!(ms, '0', [], undefined, defaultRandom, 1000);
+        expect(result.events.length).toBe(0);
+        // 疯狂卡仍在手牌（未弃）
+        expect(state.players['0'].hand.some(c => c.uid === 'm1')).toBe(true);
     });
 });
 

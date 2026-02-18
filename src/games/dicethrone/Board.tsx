@@ -42,6 +42,7 @@ import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { useCurrentChoice, useDiceThroneState } from './hooks/useDiceThroneState';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
+import { diceModifyReducer, diceModifyToCommands, diceSelectReducer, diceSelectToCommands } from './domain/systems';
 // 引擎层 Hooks
 import { useSpectatorMoves } from '../../engine';
 // 游戏特定 Hooks
@@ -267,6 +268,42 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         : undefined;
     const { localState: localInteraction, handlers: interactionHandlers } = useInteractionState(pendingInteraction);
 
+    // 骰子多步交互（multistep-choice，替代旧的 dt:card-interaction 骰子类型）
+    // 注意：MultistepChoiceData 里的函数（localReducer/toCommands）经过 JSON 序列化后会丢失，
+    // 必须在客户端根据 meta 重新注入，不能依赖从服务端传来的 data 字段。
+    const diceMultistepInteraction = React.useMemo(() => {
+        if (sysInteraction?.kind !== 'multistep-choice') return undefined;
+        const meta = (sysInteraction.data as any)?.meta;
+        if (!meta) return undefined;
+
+        if (meta.dtType === 'modifyDie') {
+            const config = meta.dieModifyConfig;
+            return {
+                ...sysInteraction,
+                data: {
+                    ...sysInteraction.data,
+                    localReducer: (current: unknown, step: unknown) =>
+                        diceModifyReducer(current as any, step as DiceModifyStep, config),
+                    toCommands: diceModifyToCommands,
+                },
+            };
+        }
+
+        if (meta.dtType === 'selectDie') {
+            return {
+                ...sysInteraction,
+                data: {
+                    ...sysInteraction.data,
+                    localReducer: (current: unknown, step: unknown) =>
+                        diceSelectReducer(current as any, step as DiceSelectStep),
+                    toCommands: diceSelectToCommands,
+                },
+            };
+        }
+
+        return undefined;
+    }, [sysInteraction]);
+
     // 追踪取消交互时返回的卡牌ID
     const prevInteractionRef = React.useRef<typeof pendingInteraction>(undefined);
     React.useEffect(() => {
@@ -385,15 +422,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         if (pendingInteraction?.sourceCardId) {
             setLastUndoCardId(pendingInteraction.sourceCardId);
         }
-        engineMoves.cancelInteraction();
-    }, [engineMoves, pendingInteraction, setLastUndoCardId]);
+        // 使用 InteractionSystem 的 CANCEL 命令取消当前交互
+        dispatch(INTERACTION_COMMANDS.CANCEL, {});
+    }, [dispatch, pendingInteraction, setLastUndoCardId]);
 
     // 骰子交互配置（需要在 waitingReason 之前定义）
-    const isDiceInteraction = pendingInteraction && (
-        pendingInteraction.type === 'selectDie' || pendingInteraction.type === 'modifyDie'
-    );
+    // 骰子交互现在走 multistep-choice，不再走 dt:card-interaction
+    const isDiceInteraction = !!diceMultistepInteraction;
     // 只有交互所有者才能看到交互 UI
-    const isInteractionOwner = !isSpectator && pendingInteraction?.playerId === rootPid;
+    const isInteractionOwner = !isSpectator && (
+        pendingInteraction?.playerId === rootPid ||
+        (diceMultistepInteraction as any)?.playerId === rootPid
+    );
 
     // 等待对方思考（isFocusPlayer 已在上方定义）
     const isWaitingOpponent = !isFocusPlayer;
@@ -671,7 +711,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         if (currentPhase === 'offensiveRoll') {
             const hasSelectedAbility = Boolean(G.pendingAttack?.sourceAbilityId);
             const hasAvailableAbilities = availableAbilityIdsForRoller.length > 0;
-            const shouldConfirmSkip = !hasSelectedAbility && (!G.rollConfirmed || hasAvailableAbilities);
+            // 只有已经投过骰子后才弹出确认跳过弹窗
+            // 未投骰子时直接跳过（如眩晕状态），不需要确认
+            const shouldConfirmSkip = hasRolled && !hasSelectedAbility && (!G.rollConfirmed || hasAvailableAbilities);
             if (shouldConfirmSkip) {
                 openModal('confirmSkip');
                 return;
@@ -922,6 +964,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         isRolling={isRolling}
                         setIsRolling={(rolling: boolean) => setIsRolling(rolling)}
                         rerollingDiceIds={rerollingDiceIds}
+                        setRerollingDiceIds={setRerollingDiceIds}
                         locale={locale}
                         onToggleLock={(id) => {
                             // 被动重掷选择模式：点击骰子直接执行重掷
@@ -957,7 +1000,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         }}
                         discardHighlighted={discardHighlighted}
                         sellButtonVisible={sellButtonVisible}
-                        interaction={pendingInteraction}
+                        interaction={diceMultistepInteraction ?? pendingInteraction}
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
                         passiveAbilityProps={passiveAbilityProps}
@@ -993,7 +1036,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 playerCp={handOwner.resources[RESOURCE_IDS.CP] ?? 0}
                                 onPlayCard={(cardId) => engineMoves.playCard(cardId)}
                                 onSellCard={(cardId) => {
-                                    if (shouldBlockTutorialAction('discard-pile')) return;
+                                    const blocked = shouldBlockTutorialAction('discard-pile');
+                                    console.log('[Board] onSellCard', {
+                                        cardId,
+                                        blocked,
+                                        tutorialActive: isTutorialActive,
+                                        tutorialStepId: tutorialStep?.id,
+                                        tutorialHighlightTarget: tutorialStep?.highlightTarget,
+                                        requireAction: tutorialStep?.requireAction,
+                                    });
+                                    if (blocked) return;
                                     engineMoves.sellCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');
                                 }}

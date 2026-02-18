@@ -49,9 +49,11 @@ export type AbilityTag = 'onPlay' | 'ongoing' | 'special' | 'talent' | 'extra' |
  * 卡牌打出约束（数据驱动）。
  * - 'requireOwnMinion'：目标基地上必须有自己的至少一个随从
  * - { type: 'requireOwnPower', minPower: N }：目标基地上己方力量必须 ≥ N
+ * - 'onlyCardInHand'：本卡必须是手牌中的唯一一张
  */
 export type PlayConstraint =
     | 'requireOwnMinion'
+    | 'onlyCardInHand'
     | { type: 'requireOwnPower'; minPower: number };
 
 /** 随从卡定义 */
@@ -191,6 +193,8 @@ export interface OngoingActionOnBase {
     uid: string;
     defId: string;
     ownerId: PlayerId;
+    /** 本回合是否已使用天赋（ongoing 行动卡天赋，每回合一次） */
+    talentUsed?: boolean;
     /** 额外元数据（如 block_the_path 存储被限制的派系） */
     metadata?: Record<string, unknown>;
 }
@@ -388,10 +392,13 @@ export interface SelectFactionCommand extends Command<typeof SU_COMMANDS.SELECT_
     };
 }
 
-/** 使用天赋 */
+/** 使用天赋（随从天赋或 ongoing 行动卡天赋） */
 export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT> {
     payload: {
-        minionUid: string;
+        /** 随从天赋时必填 */
+        minionUid?: string;
+        /** ongoing 行动卡天赋时必填 */
+        ongoingCardUid?: string;
         baseIndex: number;
     };
 }
@@ -677,7 +684,10 @@ export interface OngoingDetachedEvent extends GameEvent<typeof SU_EVENTS.ONGOING
 export interface TalentUsedEvent extends GameEvent<typeof SU_EVENTS.TALENT_USED> {
     payload: {
         playerId: PlayerId;
-        minionUid: string;
+        /** 随从天赋时为随从 uid，ongoing 行动卡天赋时为 undefined */
+        minionUid?: string;
+        /** ongoing 行动卡天赋时为卡牌 uid */
+        ongoingCardUid?: string;
         defId: string;
         baseIndex: number;
     };

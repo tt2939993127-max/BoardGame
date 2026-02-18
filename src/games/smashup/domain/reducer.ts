@@ -372,12 +372,54 @@ function executeCommand(
         }
 
         case SU_COMMANDS.USE_TALENT: {
-            const { minionUid, baseIndex } = command.payload;
+            const { minionUid, ongoingCardUid, baseIndex } = command.payload;
             const base = core.bases[baseIndex];
+            const events: SmashUpEvent[] = [];
+
+            // ongoing 行动卡天赋
+            if (ongoingCardUid) {
+                const ongoing = base?.ongoingActions.find(o => o.uid === ongoingCardUid);
+                if (!ongoing) return { events: [] };
+
+                const talentEvt: TalentUsedEvent = {
+                    type: SU_EVENTS.TALENT_USED,
+                    payload: {
+                        playerId: command.playerId,
+                        ongoingCardUid,
+                        defId: ongoing.defId,
+                        baseIndex,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp: now,
+                };
+                events.push(talentEvt);
+
+                // 执行天赋能力
+                const executor = resolveTalent(ongoing.defId);
+                if (executor) {
+                    const ctx: AbilityContext = {
+                        state: core,
+                        matchState: state,
+                        playerId: command.playerId,
+                        cardUid: ongoingCardUid,
+                        defId: ongoing.defId,
+                        baseIndex,
+                        random,
+                        now,
+                    };
+                    const result = executor(ctx);
+                    events.push(...result.events);
+                    if (result.matchState) {
+                        return { events, updatedState: result.matchState };
+                    }
+                }
+                return { events };
+            }
+
+            // 随从天赋
             const minion = base?.minions.find(m => m.uid === minionUid);
             if (!minion) return { events: [] };
 
-            const events: SmashUpEvent[] = [];
             const talentEvt: TalentUsedEvent = {
                 type: SU_EVENTS.TALENT_USED,
                 payload: {
@@ -398,7 +440,7 @@ function executeCommand(
                     state: core,
                     matchState: state,
                     playerId: command.playerId,
-                    cardUid: minionUid,
+                    cardUid: minionUid!,
                     defId: minion.defId,
                     baseIndex,
                     random,

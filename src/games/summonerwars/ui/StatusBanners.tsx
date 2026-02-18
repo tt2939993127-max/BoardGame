@@ -58,6 +58,8 @@ interface StatusBannersProps {
   core: import('../domain/types').SummonerWarsCore; // 添加 core 用于检查单位状态
   // 模式状态
   abilityMode: AbilityModeState | null;
+  fireSacrificeSummonMode: { handCardId: string } | null;
+  onCancelFireSacrifice: () => void;
   pendingBeforeAttack: PendingBeforeAttack | null;
   bloodSummonMode: BloodSummonModeState | null;
   annihilateMode: AnnihilateModeState | null;
@@ -73,7 +75,7 @@ interface StatusBannersProps {
   mindCaptureMode: MindCaptureModeState | null;
   afterAttackAbilityMode: AfterAttackAbilityModeState | null;
   rapidFireMode: import('./modeTypes').RapidFireModeState | null;
-  telekinesisTargetMode: { abilityId: string; targetPosition: CellCoord } | null;
+  telekinesisTargetMode: { abilityId: string; targetPosition: CellCoord; destinations: { position: CellCoord; moveRow: number; moveCol: number }[] } | null;
   magicEventChoiceMode: { cardId: string } | null;
   // 回调
   onCancelAbility: () => void;
@@ -100,14 +102,14 @@ interface StatusBannersProps {
   onCancelGlacialShift: () => void;
   onWithdrawCostSelect: (costType: 'charge' | 'magic') => void;
   onCancelWithdraw: () => void;
-  onConfirmStun: (direction: 'push' | 'pull', distance: number) => void;
+  onConfirmStun: () => void;
   onCancelStun: () => void;
   onCancelHypnoticLure: () => void;
   onConfirmMindCapture: (choice: 'control' | 'damage') => void;
   onCancelAfterAttackAbility: () => void;
   onConfirmRapidFire: () => void;
   onCancelRapidFire: () => void;
-  onConfirmTelekinesis: (direction: 'push' | 'pull') => void;
+  onConfirmTelekinesis: (direction: 'push' | 'pull', axis?: 'row' | 'col') => void;
   onCancelTelekinesis: () => void;
   onAfterMoveSelfCharge: () => void;
   onPlayMagicEvent: () => void;
@@ -121,12 +123,9 @@ interface StatusBannersProps {
 
 const StunBanner: React.FC<{
   stunMode: StunModeState;
-  onConfirmStun: (direction: 'push' | 'pull', distance: number) => void;
   onCancelStun: () => void;
-}> = ({ stunMode, onConfirmStun, onCancelStun }) => {
+}> = ({ stunMode, onCancelStun }) => {
   const { t } = useTranslation('game-summonerwars');
-  const [direction, setDirection] = React.useState<'push' | 'pull'>('push');
-  const [distance, setDistance] = React.useState(1);
 
   if (stunMode.step === 'selectTarget') {
     return (
@@ -139,34 +138,10 @@ const StunBanner: React.FC<{
     );
   }
 
-  // selectDirection 步骤
+  // selectDestination 步骤：提示选择终点
   return (
     <div className="bg-yellow-900/95 px-4 py-2 rounded-lg border border-yellow-500/40 flex items-center gap-3 shadow-lg">
-      <span className="text-yellow-200 text-sm font-bold">{t('statusBanners.stun.direction')}</span>
-      <div className="flex gap-1">
-        <GameButton
-          onClick={() => setDirection('push')}
-          variant={direction === 'push' ? 'primary' : 'secondary'}
-          size="sm"
-        >{t('actions.push')}</GameButton>
-        <GameButton
-          onClick={() => setDirection('pull')}
-          variant={direction === 'pull' ? 'primary' : 'secondary'}
-          size="sm"
-        >{t('actions.pull')}</GameButton>
-      </div>
-      <span className="text-yellow-200 text-sm font-bold">{t('statusBanners.stun.distance')}</span>
-      <div className="flex gap-1">
-        {[1, 2, 3].map(d => (
-          <GameButton
-            key={d}
-            onClick={() => setDistance(d)}
-            variant={distance === d ? 'primary' : 'secondary'}
-            size="sm"
-          >{d}</GameButton>
-        ))}
-      </div>
-      <GameButton onClick={() => onConfirmStun(direction, distance)} variant="primary" size="sm">{t('actions.confirm')}</GameButton>
+      <span className="text-yellow-200 text-sm font-bold">{t('statusBanners.stun.selectDestination', '选择推拉终点')}</span>
       <GameButton onClick={onCancelStun} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
     </div>
   );
@@ -178,7 +153,7 @@ const StunBanner: React.FC<{
 
 export const StatusBanners: React.FC<StatusBannersProps> = ({
   currentPhase, isMyTurn, core,
-  abilityMode, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
+  abilityMode, fireSacrificeSummonMode, onCancelFireSacrifice, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, rapidFireMode, telekinesisTargetMode, magicEventChoiceMode,
   onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
@@ -190,7 +165,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onConfirmSneak, onCancelSneak,
   onConfirmGlacialShift, onCancelGlacialShift,
   onWithdrawCostSelect, onCancelWithdraw,
-  onConfirmStun, onCancelStun,
+  onCancelStun,
   onCancelHypnoticLure,
   onConfirmMindCapture, onCancelAfterAttackAbility,
   onConfirmRapidFire, onCancelRapidFire,
@@ -228,13 +203,23 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
     }
   }
 
+  if (fireSacrificeSummonMode) {
+    return (
+      <div className="bg-red-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-red-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-red-200 text-sm font-bold">
+          {t('statusBanners.ability.fireSacrificeSummon', '火祀召唤：选择一个友方单位作为牺牲品')}
+        </span>
+        <GameButton onClick={onCancelFireSacrifice} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
   if (abilityMode) {
     return (
       <div className="bg-amber-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-amber-200 text-sm font-bold">
           {abilityMode.abilityId === 'revive_undead' && abilityMode.step === 'selectCard' && t('statusBanners.ability.reviveUndead.selectCard')}
           {abilityMode.abilityId === 'revive_undead' && abilityMode.step === 'selectPosition' && t('statusBanners.ability.reviveUndead.selectPosition')}
-          {abilityMode.abilityId === 'fire_sacrifice_summon' && t('statusBanners.ability.fireSacrificeSummon')}
           {abilityMode.abilityId === 'life_drain' && t('statusBanners.ability.lifeDrain')}
           {abilityMode.abilityId === 'infection' && abilityMode.step === 'selectCard' && t('statusBanners.ability.infection.selectCard')}
           {abilityMode.abilityId === 'infection' && abilityMode.step === 'selectPosition' && t('statusBanners.ability.infection.selectPosition')}
@@ -518,7 +503,6 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
     return (
       <StunBanner
         stunMode={stunMode}
-        onConfirmStun={onConfirmStun}
         onCancelStun={onCancelStun}
       />
     );
@@ -552,10 +536,8 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
     return (
       <div className="bg-teal-900/95 px-4 py-2 rounded-lg border border-teal-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-teal-200 text-sm font-bold">
-          {t('statusBanners.telekinesis.message', { ability: abilityName })}
+          {t('statusBanners.telekinesis.selectDestination', { ability: abilityName, defaultValue: `${abilityName}：选择目标移动到的位置` })}
         </span>
-        <GameButton onClick={() => onConfirmTelekinesis('push')} variant="primary" size="sm">{t('actions.push')}</GameButton>
-        <GameButton onClick={() => onConfirmTelekinesis('pull')} variant="secondary" size="sm">{t('actions.pull')}</GameButton>
         <GameButton onClick={onCancelTelekinesis} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
       </div>
     );

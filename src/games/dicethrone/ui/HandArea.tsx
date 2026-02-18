@@ -468,10 +468,16 @@ export const HandArea = ({
         const cardCenterX = cardRect.left + cardRect.width / 2;
         const cardCenterY = cardRect.top + cardRect.height / 2;
         const padding = 20;
-        return cardCenterX >= discardRect.left - padding &&
+        const result = cardCenterX >= discardRect.left - padding &&
             cardCenterX <= discardRect.right + padding &&
             cardCenterY >= discardRect.top - padding &&
             cardCenterY <= discardRect.bottom + padding;
+        console.log('[HandArea] isOverDiscardPile', {
+            cardCenterX, cardCenterY,
+            discardRect: { left: discardRect.left, right: discardRect.right, top: discardRect.top, bottom: discardRect.bottom },
+            result,
+        });
+        return result;
     }, [discardPileRef, draggingCardKey]);
 
     const handleDragEnd = React.useCallback((entry: HandCardEntry, source: 'drag' | 'window' = 'drag') => {
@@ -483,6 +489,16 @@ export const HandArea = ({
         const currentIndex = handEntries.findIndex(item => item.key === entry.key);
         const offset = { x, y };
         const card = entry.card;
+
+        console.log('[HandArea] handleDragEnd', {
+            cardId: card.id,
+            dragOffset: { x, y },
+            overDiscard,
+            canPlayCards,
+            hasOnSellCard: !!onSellCard,
+            discardPileRefExists: !!discardPileRef?.current,
+            discardPileRect: discardPileRef?.current?.getBoundingClientRect(),
+        });
 
         let actionTaken = false;
         // 向上拖拽打出：直接调用引擎，由引擎返回错误
@@ -638,6 +654,14 @@ export const HandArea = ({
                                 dragMomentum={false}
                                 onDragStart={() => {
                                     if (!canDrag) return;
+                                    console.log('[HandArea] onDragStart', {
+                                        cardId: card.id,
+                                        canDrag,
+                                        isDiscardMode,
+                                        canInteract,
+                                        isFlipped,
+                                        isReturning,
+                                    });
                                     dragEndHandledRef.current = false;
                                     draggingCardRef.current = entry;
                                     dragValues.x.set(0);

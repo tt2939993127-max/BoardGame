@@ -13,7 +13,7 @@ import {
   getPlayerUnits, isCellEmpty, getAdjacentCells,
   manhattanDistance, isInStraightLine,
   getStructureAt, isValidCoord, getSummoner, findUnitPositionByInstanceId,
-  hasStableAbility, getUnitAt, getUnitAbilities,
+  hasStableAbility, getUnitAt, getUnitAbilities, getStunDestinations, getForceDestinations,
 } from '../domain/helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import { getBaseCardId, CARD_IDS } from '../domain/ids';
@@ -186,6 +186,9 @@ export function useEventCardModes({
 
   const stunHighlights = useMemo(() => {
     if (!stunMode) return [];
+    if (stunMode.step === 'selectDestination' && stunMode.destinations) {
+      return stunMode.destinations.map(d => d.position);
+    }
     return stunMode.validTargets;
   }, [stunMode]);
 
@@ -210,6 +213,12 @@ export function useEventCardModes({
     }
     return result;
   }, [withdrawMode, core]);
+
+  // 念力终点高亮（棋盘点击终点模式）
+  const telekinesisHighlights = useMemo(() => {
+    if (!telekinesisTargetMode) return [];
+    return telekinesisTargetMode.destinations.map(d => d.position);
+  }, [telekinesisTargetMode]);
 
   // 攻击后技能有效位置（念力/高阶念力/读心传念）
   const afterAttackAbilityHighlights = useMemo(() => {
@@ -284,18 +293,38 @@ export function useEventCardModes({
           setAfterAttackAbilityMode(null);
         } else {
           setAfterAttackAbilityMode(null);
+          const tkTargetPos = { row: gameRow, col: gameCol };
+          const tkDests = getForceDestinations(core, tkTargetPos, 1);
           setTelekinesisTargetMode({
             abilityId: afterAttackAbilityMode.abilityId,
             sourceUnitId: afterAttackAbilityMode.sourceUnitId,
-            targetPosition: { row: gameRow, col: gameCol },
+            sourcePosition: afterAttackAbilityMode.sourcePosition,
+            targetPosition: tkTargetPos,
+            destinations: tkDests,
           });
         }
       }
       return true;
     }
 
-    // 念力推拉方向选择模式下不处理其他点击
-    if (telekinesisTargetMode) return true;
+    // 念力终点点击（棋盘点击终点模式）
+    if (telekinesisTargetMode) {
+      const dest = telekinesisTargetMode.destinations.find(
+        d => d.position.row === gameRow && d.position.col === gameCol
+      );
+      if (dest) {
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+          abilityId: telekinesisTargetMode.abilityId,
+          sourceUnitId: telekinesisTargetMode.sourceUnitId,
+          targetPosition: telekinesisTargetMode.targetPosition,
+          moveRow: dest.moveRow,
+          moveCol: dest.moveCol,
+          _noSnapshot: true,
+        });
+        setTelekinesisTargetMode(null);
+      }
+      return true;
+    }
 
     // 血契召唤多步骤模式
     if (bloodSummonMode) {
@@ -391,12 +420,42 @@ export function useEventCardModes({
       return true;
     }
 
-    // 震慑目标选择模式
+    // 震慑目标+终点选择模式
     if (stunMode) {
       if (stunMode.step === 'selectTarget') {
         const isValid = stunMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
         if (isValid) {
-          setStunMode({ ...stunMode, step: 'selectDirection', targetPosition: { row: gameRow, col: gameCol } });
+          const targetPos = { row: gameRow, col: gameCol };
+          const summoner = getSummoner(core, myPlayerId as '0' | '1');
+          if (summoner) {
+            const dests = getStunDestinations(core, targetPos);
+            if (dests.length > 0) {
+              setStunMode({ ...stunMode, step: 'selectDestination', targetPosition: targetPos, destinations: dests });
+            } else {
+              // 无可达终点（四面被建筑堵死），仍然可以打出（只造成伤害不推拉）
+              dispatch(SW_COMMANDS.PLAY_EVENT, {
+                cardId: stunMode.cardId,
+                targets: [targetPos],
+                direction: 'push',
+                distance: 1,
+              });
+              setStunMode(null);
+              setSelectedHandCardId(null);
+            }
+          }
+        }
+      } else if (stunMode.step === 'selectDestination' && stunMode.destinations && stunMode.targetPosition) {
+        const dest = stunMode.destinations.find(d => d.position.row === gameRow && d.position.col === gameCol);
+        if (dest) {
+          dispatch(SW_COMMANDS.PLAY_EVENT, {
+            cardId: stunMode.cardId,
+            targets: [stunMode.targetPosition],
+            moveRow: dest.moveRow,
+            moveCol: dest.moveCol,
+            distance: dest.distance,
+          });
+          setStunMode(null);
+          setSelectedHandCardId(null);
         }
       }
       return true;
@@ -688,17 +747,9 @@ export function useEventCardModes({
     setSelectedHandCardId(null);
   }, [dispatch, mindControlMode, setSelectedHandCardId]);
 
-  const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
-    if (!stunMode || !stunMode.targetPosition) return;
-    dispatch(SW_COMMANDS.PLAY_EVENT, {
-      cardId: stunMode.cardId,
-      targets: [stunMode.targetPosition],
-      stunDirection: direction,
-      stunDistance: distance,
-    });
-    setStunMode(null);
-    setSelectedHandCardId(null);
-  }, [dispatch, stunMode, setSelectedHandCardId]);
+  const handleConfirmStun = useCallback(() => {
+    // 不再需要：dispatch 已在 handleEventModeClick 中直接完成
+  }, []);
 
   const handleConfirmGlacialShift = useCallback(() => {
     if (!glacialShiftMode || glacialShiftMode.recorded.length === 0) return;
@@ -730,17 +781,10 @@ export function useEventCardModes({
     setSelectedHandCardId(null);
   }, [dispatch, chantEntanglementMode, setSelectedHandCardId]);
 
-  const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
-    if (!telekinesisTargetMode) return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: telekinesisTargetMode.abilityId,
-      sourceUnitId: telekinesisTargetMode.sourceUnitId,
-      targetPosition: telekinesisTargetMode.targetPosition,
-      direction,
-      _noSnapshot: true,
-    });
-    setTelekinesisTargetMode(null);
-  }, [dispatch, telekinesisTargetMode]);
+  const handleConfirmTelekinesis = useCallback((_direction?: 'push' | 'pull', _axis?: 'row' | 'col') => {
+    // 念力已改为棋盘点击终点模式，dispatch 在 handleEventModeClick 中完成
+    // 此回调保留为空实现，供 StatusBanners 向后兼容
+  }, []);
 
   // ---------- 副作用 ----------
 
@@ -780,7 +824,7 @@ export function useEventCardModes({
     validEventTargets, bloodSummonHighlights, annihilateHighlights,
     mindControlHighlights, entanglementHighlights, glacialShiftHighlights,
     sneakHighlights, stunHighlights, hypnoticLureHighlights,
-    withdrawHighlights, afterAttackAbilityHighlights,
+    withdrawHighlights, afterAttackAbilityHighlights, telekinesisHighlights,
     // 回调
     handleEventModeClick, handlePlayEvent,
     handleConfirmMindControl, handleConfirmStun,

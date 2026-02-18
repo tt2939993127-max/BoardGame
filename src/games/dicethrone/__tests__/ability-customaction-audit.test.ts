@@ -218,7 +218,6 @@ describe('CustomAction 覆盖完整性审计', () => {
         'grant-extra-roll-defense',
         'grant-extra-roll-offense',
         // 火法师 L2/L3 升级变体（通过 flowHooks 中的状态效果处理调用）
-        'burning-soul-2-resolve',
         'hot-streak-2-resolve',
         'meteor-2-resolve',
         'pyro-increase-fm-limit',

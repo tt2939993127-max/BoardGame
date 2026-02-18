@@ -8,29 +8,43 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Swords, Crosshair, Zap } from 'lucide-react';
-import type { DiceFace } from '../config/dice';
+import type { DiceFaceResult, DiceMark } from '../config/dice';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, DICE_FACE_SPRITE_MAP } from './cardAtlas';
 import { UI_Z_INDEX } from '../../../core';
 
 interface DiceResultOverlayProps {
-  results: DiceFace[] | null;
+  results: DiceFaceResult[] | null;
   attackType: 'melee' | 'ranged' | null;
   hits: number;
+  /** 被减少的命中数（迷魂/神圣护盾等） */
+  damageReduced?: number;
   /** 是否为对手攻击（用于翻转显示） */
   isOpponentAttack?: boolean;
   duration?: number;
   onClose?: () => void;
 }
 
-/** 获取骰子面的精灵图样式（从 dice.png 裁切） */
-function getDiceFaceStyle(face: DiceFace, faceVariant = 0) {
+/** 获取骰子面的精灵图样式（从 dice.png 裁切，使用帧索引） */
+function getDiceFaceStyleByIndex(faceIndex: number) {
   const source = getSpriteAtlasSource('sw:dice');
   if (!source) return {};
 
-  const spriteIndices = DICE_FACE_SPRITE_MAP[face];
-  const idx = spriteIndices[faceVariant % spriteIndices.length];
-  const atlasStyle = getSpriteAtlasStyle(idx, source.config);
+  const atlasStyle = getSpriteAtlasStyle(faceIndex, source.config);
+  return {
+    backgroundImage: `url(${source.image})`,
+    ...atlasStyle,
+    backgroundRepeat: 'no-repeat' as const,
+  };
+}
 
+/** 获取骰子面的精灵图样式（从标记类型，用于立方体非正面） */
+function getDiceFaceStyleByMark(mark: DiceMark, variant = 0) {
+  const source = getSpriteAtlasSource('sw:dice');
+  if (!source) return {};
+
+  const spriteIndices = DICE_FACE_SPRITE_MAP[mark];
+  const idx = spriteIndices[variant % spriteIndices.length];
+  const atlasStyle = getSpriteAtlasStyle(idx, source.config);
   return {
     backgroundImage: `url(${source.image})`,
     ...atlasStyle,
@@ -40,7 +54,7 @@ function getDiceFaceStyle(face: DiceFace, faceVariant = 0) {
 
 /** 单个3D骰子（使用精灵图） */
 const Dice3D: React.FC<{
-  face: DiceFace;
+  face: DiceFaceResult;
   isHit: boolean;
   index: number;
   size?: string;
@@ -64,7 +78,7 @@ const Dice3D: React.FC<{
   ];
 
   // 每个面使用不同的精灵图变体（增加翻转时的视觉丰富度）
-  const allFaces: DiceFace[] = ['melee', 'ranged', 'special', 'melee', 'ranged', 'melee'];
+  const decorativeFaces: DiceMark[] = ['melee', 'ranged', 'special', 'melee', 'ranged', 'melee'];
 
   return (
     <div
@@ -83,9 +97,10 @@ const Dice3D: React.FC<{
         }}
       >
         {cubeTransforms.map((transform, i) => {
-          // 正面（i===0）显示实际结果，其他面显示随机面
-          const faceType = i === 0 ? face : allFaces[i];
-          const spriteStyle = getDiceFaceStyle(faceType, i);
+          // 正面（i===0）显示实际骰子面，其他面显示装饰性随机面
+          const spriteStyle = i === 0
+            ? getDiceFaceStyleByIndex(face.faceIndex)
+            : getDiceFaceStyleByMark(decorativeFaces[i], i);
 
           return (
             <div
@@ -140,6 +155,7 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
   results,
   attackType,
   hits,
+  damageReduced,
   isOpponentAttack = false,
   duration = 2500,
   onClose,
@@ -214,7 +230,7 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
                   <Dice3D
                     key={index}
                     face={face}
-                    isHit={face === attackType}
+                    isHit={face.marks.includes(attackType as DiceMark)}
                     index={index}
                   />
                 ))}
@@ -238,6 +254,12 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
                     t('diceResult.miss')
                   )}
                 </div>
+                {damageReduced != null && damageReduced > 0 && (
+                  <div className="flex items-center justify-center gap-[0.4vw] text-[1vw] font-semibold text-cyan-300 mt-[0.2vw]"
+                    style={{ textShadow: '0 0 0.8vw rgba(103,232,249,0.5)' }}>
+                    <span>🌀 {t('diceResult.evasionReduced', { count: damageReduced })}</span>
+                  </div>
+                )}
               </motion.div>
             </div>
           </motion.div>

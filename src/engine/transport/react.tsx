@@ -45,6 +45,15 @@ import {
 } from '../pipeline';
 import { TestHarness, isTestEnvironment } from '../testing';
 import { refreshInteractionOptions } from '../systems/InteractionSystem';
+import type { LatencyOptimizationConfig } from './latency/types';
+import { createOptimisticEngine, filterPlayedEvents, type OptimisticEngine as OptimisticEngineType } from './latency/optimisticEngine';
+import type { EventStreamWatermark } from './latency/types';
+
+import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
+import { createLocalInteractionManager, type LocalInteractionManager } from './latency/localInteractionManager';
+
+// re-export 供外部使用（测试等场景）
+export { filterPlayedEvents };
 
 // ============================================================================
 // Context 类型
@@ -144,6 +153,10 @@ export interface GameProviderProps {
     onError?: (error: string) => void;
     /** 连接状态变更回调 */
     onConnectionChange?: (connected: boolean) => void;
+    /** 游戏引擎配置（乐观更新需要在客户端执行 Pipeline） */
+    engineConfig?: GameEngineConfig;
+    /** 延迟优化配置（可选，不传则不启用任何优化） */
+    latencyConfig?: LatencyOptimizationConfig;
 }
 
 export function GameProvider({
@@ -154,17 +167,88 @@ export function GameProvider({
     children,
     onError,
     onConnectionChange,
+    engineConfig,
+    latencyConfig,
 }: GameProviderProps) {
     const [state, setState] = useState<MatchState<unknown> | null>(null);
     const [matchPlayers, setMatchPlayers] = useState<MatchPlayerInfo[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const clientRef = useRef<GameTransportClient | null>(null);
 
+    // 延迟优化组件 refs
+    const optimisticEngineRef = useRef<OptimisticEngineType | null>(null);
+    const batcherRef = useRef<CommandBatcher | null>(null);
+    const localInteractionRef = useRef<LocalInteractionManager | null>(null);
+    // 批次 ID 计数器
+    const batchSeqRef = useRef(0);
+
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
     onErrorRef.current = onError;
     const onConnectionChangeRef = useRef(onConnectionChange);
     onConnectionChangeRef.current = onConnectionChange;
+
+    // 初始化乐观更新引擎
+    useEffect(() => {
+        if (!latencyConfig?.optimistic?.enabled || !engineConfig) {
+            optimisticEngineRef.current = null;
+            return;
+        }
+        optimisticEngineRef.current = createOptimisticEngine({
+            pipelineConfig: {
+                domain: engineConfig.domain,
+                systems: engineConfig.systems as EngineSystem<unknown>[],
+                systemsConfig: engineConfig.systemsConfig,
+            },
+            commandDeterminism: latencyConfig.optimistic.commandDeterminism ?? {},
+            commandAnimationMode: latencyConfig.optimistic.animationMode ?? {},
+            playerIds: [], // 从服务端同步后填充
+        });
+    }, [engineConfig, latencyConfig]);
+
+    // 初始化命令批处理器
+    useEffect(() => {
+        if (!latencyConfig?.batching?.enabled) {
+            batcherRef.current = null;
+            return;
+        }
+        const batcher = createCommandBatcher({
+            windowMs: latencyConfig.batching.windowMs ?? 50,
+            maxBatchSize: latencyConfig.batching.maxBatchSize ?? 10,
+            immediateCommands: latencyConfig.batching.immediateCommands ?? [],
+            onFlush: (commands) => {
+                const client = clientRef.current;
+                if (!client) return;
+                if (commands.length === 1) {
+                    // 单条命令直接发送（不走批量协议）
+                    client.sendCommand(commands[0].type, commands[0].payload);
+                } else {
+                    // 批量发送
+                    const batchId = `b-${++batchSeqRef.current}`;
+                    client.sendBatch(batchId, commands);
+                }
+            },
+        });
+        batcherRef.current = batcher;
+        return () => {
+            batcher.destroy();
+            batcherRef.current = null;
+        };
+    }, [latencyConfig]);
+
+    // 初始化本地交互管理器
+    useEffect(() => {
+        if (!latencyConfig?.localInteraction?.enabled) {
+            localInteractionRef.current = null;
+            return;
+        }
+        localInteractionRef.current = createLocalInteractionManager({
+            interactions: (latencyConfig.localInteraction.interactions ?? {}) as Record<string, {
+                localSteps: string[];
+                localReducer: (state: unknown, stepType: string, payload: unknown) => unknown;
+            }>,
+        });
+    }, [latencyConfig]);
 
     useEffect(() => {
         const client = new GameTransportClient({
@@ -173,8 +257,27 @@ export function GameProvider({
             playerID: playerId,
             credentials,
             onStateUpdate: (newState, players) => {
+                // 乐观更新引擎：调和服务端确认状态
+                const engine = optimisticEngineRef.current;
+                let finalState: MatchState<unknown>;
+                if (engine) {
+                    // 首次收到状态时，从 matchPlayers 更新 playerIds（初始化时为空数组）
+                    if (players.length > 0) {
+                        engine.setPlayerIds(players.map((p) => String(p.id)));
+                    }
+                    const result = engine.reconcile(newState as MatchState<unknown>);
+                    if (result.didRollback && result.optimisticEventWatermark !== null) {
+                        // 回滚：过滤已通过乐观动画播放的事件，防止重复播放
+                        finalState = filterPlayedEvents(result.stateToRender, result.optimisticEventWatermark);
+                    } else {
+                        finalState = result.stateToRender;
+                    }
+                } else {
+                    finalState = newState as MatchState<unknown>;
+                }
+
                 // 实时刷新交互选项（如果策略是 realtime）
-                const refreshedState = refreshInteractionOptions(newState as MatchState<unknown>);
+                const refreshedState = refreshInteractionOptions(finalState);
                 
                 setState(refreshedState);
                 setMatchPlayers(players);
@@ -182,6 +285,10 @@ export function GameProvider({
             onConnectionChange: (connected) => {
                 setIsConnected(connected);
                 onConnectionChangeRef.current?.(connected);
+                // 断线重连时重置乐观引擎
+                if (connected && optimisticEngineRef.current) {
+                    optimisticEngineRef.current.reset();
+                }
             },
             onError: (error) => {
                 onErrorRef.current?.(error);
@@ -198,8 +305,51 @@ export function GameProvider({
     }, [server, matchId, playerId, credentials]);
 
     const dispatch = useCallback((type: string, payload: unknown) => {
-        clientRef.current?.sendCommand(type, payload);
-    }, []);
+        // 内部：走 optimistic engine + batcher/sendCommand 路径
+        const dispatchToNetwork = (cmdType: string, cmdPayload: unknown) => {
+            // 1. 乐观更新
+            const engine = optimisticEngineRef.current;
+            if (engine) {
+                const result = engine.processCommand(cmdType, cmdPayload, playerId ?? '0');
+                if (result.stateToRender) {
+                    const refreshed = refreshInteractionOptions(result.stateToRender);
+                    setState(refreshed);
+                }
+            }
+            // 2. 命令批处理 或 直接发送
+            const batcher = batcherRef.current;
+            if (batcher) {
+                batcher.enqueue(cmdType, cmdPayload);
+            } else {
+                clientRef.current?.sendCommand(cmdType, cmdPayload);
+            }
+        };
+
+        // 0. 本地交互管理器：中间步骤本地消费，不发网络
+        const localMgr = localInteractionRef.current;
+        if (localMgr) {
+            const interactions = latencyConfig?.localInteraction?.interactions ?? {};
+            const isLocalStep = Object.values(interactions).some(
+                (decl) => (decl as { localSteps: string[] }).localSteps.includes(type),
+            );
+            if (isLocalStep) {
+                if (!localMgr.isActive()) {
+                    // 首个中间步骤：自动开始交互，初始状态为空对象
+                    localMgr.begin(type, {});
+                }
+                localMgr.update(type, payload);
+                return;
+            }
+            // 提交命令：commit 后用生成的 payload 继续走 optimistic + batcher 路径
+            if (type in interactions && localMgr.isActive()) {
+                const { commandType, payload: commitPayload } = localMgr.commit();
+                dispatchToNetwork(commandType, commitPayload);
+                return;
+            }
+        }
+
+        dispatchToNetwork(type, payload);
+    }, [playerId, latencyConfig]);  
 
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {
@@ -252,6 +402,13 @@ export interface LocalGameProviderProps {
     children: ReactNode;
     /** 命令被拒绝时的回调（验证失败） */
     onCommandRejected?: (commandType: string, error: string) => void;
+    /**
+     * 当前玩家 ID（可选）。
+     * 设置后会将 playerId 传给 Board（Board 知道"我是谁"）。
+     * 教程模式应传入 '0'，本地同屏对战不传（双方共享视角）。
+     * 注意：本地模式不做 playerView 过滤，所有玩家信息对 Board 可见（单机/教程无需隐藏）。
+     */
+    playerId?: string;
 }
 
 export function LocalGameProvider({
@@ -260,6 +417,7 @@ export function LocalGameProvider({
     seed,
     children,
     onCommandRejected,
+    playerId: localPlayerId,
 }: LocalGameProviderProps) {
     const playerIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
@@ -357,12 +515,12 @@ export function LocalGameProvider({
     const value = useMemo<GameClientContextValue>(() => ({
         state,
         dispatch,
-        playerId: null, // 本地模式无特定玩家身份
+        playerId: localPlayerId ?? null, // 本地模式无特定玩家身份（未传 playerId 时）
         matchPlayers,
         isConnected: true,
         isMultiplayer: false,
         reset,
-    }), [state, dispatch, matchPlayers, reset]);
+    }), [state, dispatch, matchPlayers, reset, localPlayerId, config.domain]);
 
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {

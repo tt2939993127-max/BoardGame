@@ -38,7 +38,7 @@ export const SU_EVENTS = defineEvents({
 
   // ========== 即时反馈（EventStream）==========
   'su:minion_played': { audio: 'immediate', sound: MINION_PLAY_KEY },
-  'su:action_played': { audio: 'immediate', sound: ACTION_PLAY_KEY },
+  'su:action_played': 'fx',                                    // 行动卡展示（FX 系统 FeedbackPack）
   
   'su:cards_drawn': { audio: 'immediate', sound: CARD_DRAW_KEY },
   'su:cards_discarded': { audio: 'immediate', sound: CARD_DISCARD_KEY },
@@ -51,7 +51,7 @@ export const SU_EVENTS = defineEvents({
   'su:turn_started': { audio: 'immediate', sound: TURN_NOTIFY_KEY },
   'su:turn_ended': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
   
-  'su:base_replaced': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
+  'su:base_replaced': { audio: 'immediate', sound: UPDATE_CHIME_KEY },  // 基地替换（本地 AnimatePresence 过渡）
   'su:deck_reshuffled': { audio: 'immediate', sound: CARD_SHUFFLE_KEY },
   'su:deck_reordered': { audio: 'immediate', sound: CARD_SCROLL_KEY },
   'su:base_deck_reordered': { audio: 'immediate', sound: CARD_SCROLL_KEY },

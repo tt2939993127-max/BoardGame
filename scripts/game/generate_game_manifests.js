@@ -66,11 +66,21 @@ const collectGameEntries = async () => {
         const boardPath = path.join(dirPath, 'Board.tsx');
         const tutorialPath = path.join(dirPath, 'tutorial.ts');
         const thumbnailPath = path.join(dirPath, 'thumbnail.tsx');
+        const latencyConfigPath = path.join(dirPath, 'latencyConfig.ts');
 
         const hasGame = await fileExists(gamePath);
         const hasBoard = await fileExists(boardPath);
         const hasTutorial = await fileExists(tutorialPath);
         const hasThumbnail = await fileExists(thumbnailPath);
+        const hasLatencyConfig = await fileExists(latencyConfigPath);
+
+        // 读取 latencyConfig 导出名（如 diceThroneLatencyConfig）
+        let latencyConfigExportName = null;
+        if (hasLatencyConfig) {
+            const content = await fs.readFile(latencyConfigPath, 'utf8');
+            const match = content.match(/export\s+const\s+(\w+LatencyConfig)\b/);
+            latencyConfigExportName = match ? match[1] : null;
+        }
 
         if (meta.type === 'game' && (!hasGame || !hasBoard)) {
             throw new Error(`[Manifest] 游戏缺少实现: ${dirName} (game.ts/Board.tsx)`);
@@ -86,6 +96,8 @@ const collectGameEntries = async () => {
             boardImport: hasBoard ? toImportPath(path.relative(gamesRoot, boardPath)) : null,
             tutorialImport: hasTutorial ? toImportPath(path.relative(gamesRoot, tutorialPath)) : null,
             thumbnailImport: hasThumbnail ? toImportPath(path.relative(gamesRoot, thumbnailPath)) : null,
+            latencyConfigImport: hasLatencyConfig && latencyConfigExportName ? toImportPath(path.relative(gamesRoot, latencyConfigPath)) : null,
+            latencyConfigExportName: latencyConfigExportName,
         });
     }
 
@@ -138,6 +150,9 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
         if (entry.thumbnailImport) {
             lines.push(`import Thumbnail${index} from '${entry.thumbnailImport}';`);
         }
+        if (entry.latencyConfigImport) {
+            lines.push(`import { ${entry.latencyConfigExportName} as latencyConfig${index} } from '${entry.latencyConfigImport}';`);
+        }
         lines.push('');
     });
 
@@ -157,6 +172,9 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
             lines.push(`    thumbnail: <Thumbnail${index} />,`);
         } else {
             lines.push(`    thumbnail: <ManifestGameThumbnail manifest={manifest${index}} />,`);
+        }
+        if (entry.latencyConfigImport) {
+            lines.push(`    latencyConfig: latencyConfig${index},`);
         }
         lines.push('};');
         lines.push('');

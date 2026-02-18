@@ -488,15 +488,25 @@ export function registerBaseAbilities(): void {
             return { id: `card-${i}`, label: def?.name ?? c.defId, value: { cardUid: c.uid, defId: c.defId } };
         });
         
+        const pid = ctx.playerId;
         const interaction = createSimpleChoice(
             `base_haunted_house_al9000_${ctx.now}`,
-            ctx.playerId,
+            pid,
             '鬼屋：选择要弃掉的卡牌',
             initialOptions,
-            { sourceId: 'base_haunted_house_al9000' },
+            { sourceId: 'base_haunted_house_al9000', targetType: 'hand' },
         );
         
-        // 自动注入的 optionsGenerator 会处理选项过滤（InteractionSystem.queueInteraction）
+        // 手牌弃牌类交互：使用 optionsGenerator 动态生成选项
+        // 确保新抽到的牌也能被选择（如幽灵能力同时触发抓牌）
+        (interaction.data as any).optionsGenerator = (state: any) => {
+            const p = state.core?.players?.[pid];
+            if (!p || !p.hand || p.hand.length === 0) return [];
+            return p.hand.map((c: any, i: number) => {
+                const def = getCardDef(c.defId);
+                return { id: `card-${i}`, label: def?.name ?? c.defId, value: { cardUid: c.uid, defId: c.defId } };
+            });
+        };
         
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });

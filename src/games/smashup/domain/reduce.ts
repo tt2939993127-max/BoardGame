@@ -213,7 +213,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     if (i !== targetBaseIndex) return base;
                     return {
                         ...base,
-                        ongoingActions: [...base.ongoingActions, { uid: cardUid, defId, ownerId, ...(metadata ? { metadata } : {}) }],
+                        ongoingActions: [...base.ongoingActions, { uid: cardUid, defId, ownerId, talentUsed: false, ...(metadata ? { metadata } : {}) }],
                     };
                 });
                 return { ...state, bases: newBases };
@@ -368,13 +368,17 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
             const player = state.players[playerId];
-            // 重置天赋使用状态 + 清零临时力量修正
+            // 重置天赋使用状态 + 清零临时力量修正（随从 + ongoing 行动卡）
             const newBases = state.bases.map(base => ({
                 ...base,
                 minions: base.minions.map(m => ({
                     ...m,
                     talentUsed: m.controller === playerId ? false : m.talentUsed,
                     tempPowerModifier: 0,
+                })),
+                ongoingActions: base.ongoingActions.map(o => ({
+                    ...o,
+                    talentUsed: o.ownerId === playerId ? false : o.talentUsed,
                 })),
             }));
             // 检查沉睡印记：被标记的玩家本回合 actionLimit 设为 0
@@ -711,9 +715,20 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.TALENT_USED: {
-            const { minionUid, baseIndex } = (event as TalentUsedEvent).payload;
+            const { minionUid, ongoingCardUid, baseIndex } = (event as TalentUsedEvent).payload;
             const newBases = state.bases.map((base, i) => {
                 if (i !== baseIndex) return base;
+                // ongoing 行动卡天赋
+                if (ongoingCardUid) {
+                    return {
+                        ...base,
+                        ongoingActions: base.ongoingActions.map(o => {
+                            if (o.uid !== ongoingCardUid) return o;
+                            return { ...o, talentUsed: true };
+                        }),
+                    };
+                }
+                // 随从天赋
                 return {
                     ...base,
                     minions: base.minions.map(m => {
@@ -930,19 +945,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { playerId, newDeckUids } = (event as HandShuffledIntoDeckEvent).payload;
             const player = state.players[playerId];
             if (!player) return state;
-            // 手牌 + 原牌库合并，按 newDeckUids 排序
+            // 手牌 + 原牌库合并，按 newDeckUids 排序构建新牌库
             const allCards = [...player.hand, ...player.deck];
             const cardMap = new Map(allCards.map(c => [c.uid, c]));
             const newDeck = newDeckUids
                 .map(uid => cardMap.get(uid))
                 .filter((c): c is CardInstance => c !== undefined);
+            // 只移除被洗入牌库的手牌，保留其余手牌
+            const movedUidSet = new Set(newDeckUids);
+            const remainingHand = player.hand.filter(c => !movedUidSet.has(c.uid));
             return {
                 ...state,
                 players: {
                     ...state.players,
                     [playerId]: {
                         ...player,
-                        hand: [],
+                        hand: remainingHand,
                         deck: newDeck,
                     },
                 },

@@ -21,10 +21,12 @@
    - 存储于 `G.sys.actionLog.entries`，跟随对局状态。
    - 默认 `maxEntries=50`，超出按 FIFO 清理。
 
-2. **共享 allowlist**
-   - 游戏定义 `ACTION_ALLOWLIST`，传给 `UndoSystem.snapshotCommandAllowlist` 与 `ActionLogSystem.commandAllowlist`。
-   - `ActionLogSystem` 与 `UndoSystem` 通过同一判定函数判断（含默认过滤：`SYS_`/`CHEAT_`/`UI_`/`DEV_`），保证规则一致。
-   - 未在 allowlist 的命令：不进入撤回快照，也不生成日志。
+2. **独立 allowlist（规范更新）**
+   - 游戏定义两个独立白名单：`ACTION_ALLOWLIST`（操作日志用）和 `UNDO_ALLOWLIST`（撤回快照用）。
+   - `ACTION_ALLOWLIST` 传给 `ActionLogSystem.commandAllowlist`，记录所有有意义的玩家操作（含连锁操作）。
+   - `UNDO_ALLOWLIST` 传给 `UndoSystem.snapshotCommandAllowlist`，**只包含玩家主动决策点命令**，连锁/系统命令不产生独立快照。
+   - 两者通过同一判定函数过滤（含默认过滤：`SYS_`/`CHEAT_`/`UI_`/`DEV_`）。
+   - 详见 `docs/architecture.md` §5.5「白名单拆分规范」。
 
 3. **单步撤回默认值**
    - `UndoSystem` 默认 `maxSnapshots=1`，允许配置覆盖。

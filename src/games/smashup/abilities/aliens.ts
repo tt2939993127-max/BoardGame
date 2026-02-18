@@ -24,6 +24,7 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerTrigger, registerBaseAbilitySuppression, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
+import { getPlayerLabel } from '../domain/utils';
 
 /** 注册外星人派系所有能力 */
 export function registerAlienAbilities(): void {
@@ -200,7 +201,7 @@ function alienDisintegrator(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
-        `alien_disintegrator_${ctx.now}`, ctx.playerId, { sourceId: '选择要放到牌库底的力量≤3的随从', targetType: 'minion' }, buildMinionTargetOptions(targets), 'alien_disintegrator'
+        `alien_disintegrator_${ctx.now}`, ctx.playerId, '选择要放到牌库底的力量≤3的随从', buildMinionTargetOptions(targets), { sourceId: 'alien_disintegrator', targetType: 'minion' }
     )) };
 }
 
@@ -215,7 +216,7 @@ function alienBeamUp(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
-        `alien_beam_up_${ctx.now}`, ctx.playerId, { sourceId: '选择要返回手牌的随从', targetType: 'minion' }, buildMinionTargetOptions(targets), 'alien_beam_up'
+        `alien_beam_up_${ctx.now}`, ctx.playerId, '选择要返回手牌的随从', buildMinionTargetOptions(targets), { sourceId: 'alien_beam_up', targetType: 'minion' }
     )) };
 }
 
@@ -229,7 +230,7 @@ function alienCropCircles(ctx: AbilityContext): AbilityResult {
     }
     if (baseCandidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
-        `alien_crop_circles_${ctx.now}`, ctx.playerId, { sourceId: '选择一个基地，将随从返回手牌', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, ctx.state), 'alien_crop_circles'
+        `alien_crop_circles_${ctx.now}`, ctx.playerId, '选择一个基地，将随从返回手牌', buildBaseTargetOptions(baseCandidates, ctx.state), { sourceId: 'alien_crop_circles', targetType: 'base' }
     )) };
 }
 
@@ -238,7 +239,7 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
     if (opponents.length === 0) return { events: [] };
     // 数据驱动：强制效果，单对手自动执行
     const opOptions = opponents.map((pid, i) => ({
-        id: `player-${i}`, label: `玩家 ${pid}`, value: { targetPlayerId: pid },
+        id: `player-${i}`, label: getPlayerLabel(pid), value: { targetPlayerId: pid },
     }));
     return resolveOrPrompt(ctx, opOptions, {
         id: 'alien_probe_choose_target',
@@ -281,7 +282,7 @@ function alienTerraform(ctx: AbilityContext): AbilityResult {
         return { events: [] };
     }
     const interaction = createSimpleChoice(
-        `alien_terraform_${ctx.now}`, ctx.playerId, { sourceId: '选择要替换的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, ctx.state), 'alien_terraform'
+        `alien_terraform_${ctx.now}`, ctx.playerId, '选择要替换的基地', buildBaseTargetOptions(baseCandidates, ctx.state), { sourceId: 'alien_terraform', targetType: 'base' }
     );
     console.log('[alien_terraform] created interaction:', interaction.id, 'kind:', interaction.kind, 'playerId:', interaction.playerId);
     const newMatchState = queueInteraction(ctx.matchState, interaction);
@@ -300,7 +301,7 @@ function alienAbduction(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [grantExtraMinion(ctx.playerId, 'alien_abduction', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
-        `alien_abduction_${ctx.now}`, ctx.playerId, { sourceId: '选择要返回手牌的随从', targetType: 'minion' }, buildMinionTargetOptions(targets), 'alien_abduction'
+        `alien_abduction_${ctx.now}`, ctx.playerId, '选择要返回手牌的随从', buildMinionTargetOptions(targets), { sourceId: 'alien_abduction', targetType: 'minion' }
     )) };
 }
 
@@ -395,7 +396,7 @@ export function registerAlienInteractionHandlers(): void {
         }
         if (baseCandidates.length === 0) return undefined;
         const next = createSimpleChoice(
-            `alien_invasion_base_${timestamp}`, playerId, { sourceId: '选择要移动到的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'alien_invasion_choose_base'
+            `alien_invasion_base_${timestamp}`, playerId, '选择要移动到的基地', buildBaseTargetOptions(baseCandidates, state.core), { sourceId: 'alien_invasion_choose_base', targetType: 'base' }
         );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { minionUid, minionDefId: target.defId, fromBaseIndex } } }), events: [] };
     });
@@ -673,12 +674,12 @@ export function registerAlienInteractionHandlers(): void {
             const rest = remaining.slice(1);
             const base = state.core.bases[next.baseIndex];
             const interaction = createSimpleChoice(
-                `alien_scout_return_${timestamp}`, next.controller, { sourceId: '侦察兵：基地记分后，是否将此侦察兵返回手牌？', targetType: 'minion' },
+                `alien_scout_return_${timestamp}`, next.controller, '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
                 [
                     { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: next.uid, minionDefId: next.defId, owner: next.owner, baseIndex: next.baseIndex, baseDefId: base.defId } },
                     { id: 'no', label: '留在基地', value: { returnIt: false } },
                 ],
-                'alien_scout_return'
+                { sourceId: 'alien_scout_return', targetType: 'minion' }
             );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remaining: rest } } }), events };
         }

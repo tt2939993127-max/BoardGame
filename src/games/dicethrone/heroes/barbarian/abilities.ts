@@ -237,7 +237,7 @@ export const SUPPRESS_2: AbilityDef = {
         },
         {
             id: 'suppress-2-mighty',
-            trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
+            trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
             effects: [
                 {
                     description: abilityEffectText('suppress-2-mighty', 'roll3Damage'),
@@ -257,7 +257,7 @@ export const RECKLESS_STRIKE_2: AbilityDef = {
     description: abilityText('reckless-strike-2', 'description'),
     tags: ['ultimate'],
     sfxKey: BARBARIAN_SFX_ULTIMATE,
-    trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 5 } },
+    trigger: { type: 'largeStraight' },
     effects: [damage(20, abilityEffectText('reckless-strike-2', 'damage20')), { description: abilityEffectText('reckless-strike-2', 'selfDamage5'), action: { type: 'damage', target: 'self', value: 5 }, timing: 'postDamage', condition: { type: 'onHit' } }],
 };
 

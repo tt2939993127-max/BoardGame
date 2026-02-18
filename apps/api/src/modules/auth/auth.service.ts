@@ -20,14 +20,20 @@ const RESET_CODE_TTL_SECONDS = 5 * 60;
 const RESET_SEND_INTERVAL_SECONDS = 60;
 const RESET_ATTEMPT_WINDOW_SECONDS = 10 * 60;
 const RESET_MAX_ATTEMPTS = 5;
+// 商业标准：10 分钟内失败 10 次触发锁定，锁定 15 分钟（宽松友好）
 const LOGIN_FAIL_WINDOW_SECONDS = 10 * 60;
-const LOGIN_FAIL_MAX_COUNT = 5;
-const LOGIN_LOCK_SECONDS = 30 * 60;
+const LOGIN_FAIL_MAX_COUNT = 10;
+const LOGIN_LOCK_SECONDS = 15 * 60;
 const LOGIN_FAIL_PREFIX = 'login:fail:';
 const LOGIN_LOCK_PREFIX = 'login:lock:';
 const RESET_CODE_PREFIX = 'reset:code:';
 const RESET_SEND_PREFIX = 'reset:send:';
 const RESET_ATTEMPT_PREFIX = 'reset:attempt:';
+// 注册验证码发送：60 秒冷却，同 IP 10 分钟内最多发 5 次
+const REGISTER_CODE_SEND_INTERVAL_SECONDS = 60;
+const REGISTER_CODE_SEND_MAX = 5;
+const REGISTER_CODE_SEND_WINDOW_SECONDS = 10 * 60;
+const REGISTER_CODE_SEND_PREFIX = 'register:send:';
 
 type RefreshTokenRecord = {
     userId: string;
@@ -335,6 +341,50 @@ export class AuthService {
         await this.cacheManager.set(this.resetSendKey(normalized, ip), nextAllowed, RESET_SEND_INTERVAL_SECONDS);
     }
 
+    // 注册验证码发送速率限制：60 秒冷却 + 10 分钟内最多 5 次
+    async getRegisterCodeSendStatus(email: string, ip: string | null): Promise<{ retryAfterSeconds: number; reason: 'cooldown' | 'limit' } | null> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
+
+        // 检查冷却时间
+        const cooldownKey = this.registerCodeCooldownKey(normalized, ip);
+        const nextAllowed = await this.cacheManager.get<number>(cooldownKey);
+        if (nextAllowed) {
+            const retryAfterSeconds = Math.max(nextAllowed - this.nowSeconds(), 0);
+            if (retryAfterSeconds > 0) return { retryAfterSeconds, reason: 'cooldown' };
+            await this.cacheManager.del(cooldownKey);
+        }
+
+        // 检查频率上限
+        const countKey = this.registerCodeCountKey(normalized, ip);
+        const record = await this.cacheManager.get<{ count: number; firstAt: number }>(countKey);
+        if (record && record.count >= REGISTER_CODE_SEND_MAX) {
+            const retryAfterSeconds = Math.max(REGISTER_CODE_SEND_WINDOW_SECONDS - (this.nowSeconds() - record.firstAt), 0);
+            if (retryAfterSeconds > 0) return { retryAfterSeconds, reason: 'limit' };
+            await this.cacheManager.del(countKey);
+        }
+
+        return null;
+    }
+
+    async markRegisterCodeSend(email: string, ip: string | null): Promise<void> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return;
+        const nowSeconds = this.nowSeconds();
+
+        // 设置冷却
+        const nextAllowed = nowSeconds + REGISTER_CODE_SEND_INTERVAL_SECONDS;
+        await this.cacheManager.set(this.registerCodeCooldownKey(normalized, ip), nextAllowed, REGISTER_CODE_SEND_INTERVAL_SECONDS);
+
+        // 累计计数
+        const countKey = this.registerCodeCountKey(normalized, ip);
+        const existing = await this.cacheManager.get<{ count: number; firstAt: number }>(countKey);
+        const firstAt = existing?.firstAt ?? nowSeconds;
+        const count = (existing?.count ?? 0) + 1;
+        const ttl = Math.max(REGISTER_CODE_SEND_WINDOW_SECONDS - (nowSeconds - firstAt), 1);
+        await this.cacheManager.set(countKey, { count, firstAt }, ttl);
+    }
+
     async getResetAttemptStatus(email: string): Promise<{ retryAfterSeconds: number } | null> {
         const normalized = this.normalizeEmail(email);
         if (!normalized) return null;
@@ -416,6 +466,14 @@ export class AuthService {
 
     private resetAttemptKey(email: string): string {
         return `${RESET_ATTEMPT_PREFIX}${email}`;
+    }
+
+    private registerCodeCooldownKey(email: string, ip: string | null): string {
+        return `${REGISTER_CODE_SEND_PREFIX}cooldown:${email}:${this.normalizeIpKey(ip)}`;
+    }
+
+    private registerCodeCountKey(email: string, ip: string | null): string {
+        return `${REGISTER_CODE_SEND_PREFIX}count:${email}:${this.normalizeIpKey(ip)}`;
     }
 
     private normalizeIpKey(ip: string | null): string {

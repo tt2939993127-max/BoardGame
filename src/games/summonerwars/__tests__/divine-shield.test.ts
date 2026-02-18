@@ -139,11 +139,12 @@ describe('神圣护盾 (divine_shield)', () => {
       },
       {
         random: () => {
-          // 前3个骰子：攻击者投掷（全部命中 melee）
-          // 后2个骰子：神圣护盾投掷（至少1个 special 减伤）
+          // 新实现：先投护盾骰（2个），再投攻击骰（3个）
+          // 前2个骰子：神圣护盾投掷（special 减伤）
+          // 后3个骰子：攻击者投掷（全部命中 melee）
           hitCount++;
-          if (hitCount <= 3) return 0.1; // melee
-          return 0.9; // 护盾骰子投 special (index 4: melee + special)
+          if (hitCount <= 2) return 0.75; // 护盾骰子投 special
+          return 0.1; // 攻击骰子投 melee
         },
         shuffle: <T>(arr: T[]) => arr,
         d: (max: number) => Math.ceil(max / 2),
@@ -258,8 +259,9 @@ describe('神圣护盾 (divine_shield)', () => {
       {
         random: () => {
           hitCount++;
-          if (hitCount <= 1) return 0.1; // 攻击者投 melee
-          return 0.9; // 护盾骰子投 special
+          // 新实现：先投护盾骰（2个），再投攻击骰（1个）
+          if (hitCount <= 2) return 0.75; // 护盾骰子投 special
+          return 0.1; // 攻击者投 melee
         },
         shuffle: <T>(arr: T[]) => arr,
         d: (max: number) => Math.ceil(max / 2),
@@ -271,9 +273,10 @@ describe('神圣护盾 (divine_shield)', () => {
     const attackEvent = events.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
     expect(attackEvent).toBeDefined();
     
-    // 即使护盾减伤，最终 hits 应该至少为 1
-    const hits = (attackEvent!.payload as any).hits;
-    expect(hits).toBeGreaterThanOrEqual(1);
+    // 即使护盾减伤，实际投掷骰子数（diceCount）应该至少为 1
+    // 新实现：神圣护盾减少 effectiveStrength（骰子数），而非 hits
+    const diceCount = (attackEvent!.payload as any).diceCount;
+    expect(diceCount).toBeGreaterThanOrEqual(1);
   });
 
   it('非城塞单位不触发神圣护盾', () => {

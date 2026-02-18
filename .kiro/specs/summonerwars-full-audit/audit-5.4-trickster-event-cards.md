@@ -107,7 +107,7 @@ zh-CN: "指定你的召唤师3个直线视野区格以内的一个士兵或英�
 ### 限定条件全程约束检查
 - "召唤师3个直线视野区格以内" → UI 层 `isInStraightLine && dist <= 3` ✅；execute 层信任 UI 选择（无二次校验，但 UI 已过滤）
 - "一个士兵或英雄" → execute 层 `unitClass !== 'summoner'` ✅，UI 层过滤 ✅
-- "推拉1至3个区格" → execute 层 `Math.min(3, Math.max(1, stunDistance))` ✅
+- "推拉1至3个区格" → execute 层 `Math.min(3, Math.max(1, distance))` ✅，使用 `calculateStunPushPull` 统一计算
 - "可以穿过士兵和英雄" → execute 层遇到 occupant 时继续推进 ✅
 - "对目标和每个被穿过的单位造成1点伤害" → execute 层分别生成 UNIT_DAMAGED 事件 ✅
 

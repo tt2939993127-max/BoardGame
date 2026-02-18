@@ -141,6 +141,7 @@ export const SYSTEM_IDS = {
     FLOW: 'flow',
     UNDO: 'undo',
     INTERACTION: 'interaction',
+    SIMPLE_CHOICE: 'simple-choice',
     LOG: 'log',
     EVENT_STREAM: 'eventStream',
     ACTION_LOG: 'actionLog',

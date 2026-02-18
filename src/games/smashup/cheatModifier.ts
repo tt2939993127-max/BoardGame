@@ -113,8 +113,6 @@ export const smashUpCheatModifier: CheatResourceModifier<SmashUpCore> = {
 
     /**
      * 刷新所有基地（从基地牌库抽取新基地替换所有场上基地）
-     * @param core 游戏状态
-     * @returns 更新后的状态（不生成事件，直接替换状态）
      */
     refreshAllBases: (core: SmashUpCore): { core: SmashUpCore; events: Array<{ type: string; payload: unknown; timestamp: number }> } => {
         const basesCount = core.bases.length;
@@ -139,5 +137,32 @@ export const smashUpCheatModifier: CheatResourceModifier<SmashUpCore> = {
         };
 
         return { core: newCore, events: [] };
+    },
+
+    /**
+     * 删除手牌（按 uid 从手牌移入弃牌堆）
+     */
+    removeHandCard: (core: SmashUpCore, playerId: PlayerId, cardUid: string): SmashUpCore => {
+        const player = core.players[playerId];
+        if (!player) return core;
+
+        const cardIndex = player.hand.findIndex(c => c.uid === cardUid);
+        if (cardIndex === -1) return core;
+
+        const card = player.hand[cardIndex];
+        const newHand = [...player.hand];
+        newHand.splice(cardIndex, 1);
+
+        return {
+            ...core,
+            players: {
+                ...core.players,
+                [playerId]: {
+                    ...player,
+                    hand: newHand,
+                    discard: [...player.discard, card],
+                },
+            },
+        };
     },
 };

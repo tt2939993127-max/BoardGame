@@ -10,6 +10,8 @@ import {
     createEventStreamSystem,
     createLogSystem,
     createInteractionSystem,
+    createSimpleChoiceSystem,
+    createMultistepChoiceSystem,
     createRematchSystem,
     createResponseWindowSystem,
     createTutorialSystem,
@@ -23,7 +25,7 @@ import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
 import { smashUpCheatModifier } from './cheatModifier';
-import { ACTION_ALLOWLIST, formatSmashUpActionEntry } from './actionLog';
+import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatSmashUpActionEntry } from './actionLog';
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
 import { registerCriticalImageResolver } from '../../core';
@@ -44,11 +46,14 @@ const systems: EngineSystem<SmashUpCore>[] = [
         commandAllowlist: ACTION_ALLOWLIST,
         formatEntry: formatSmashUpActionEntry,
     }),
-    createUndoSystem({ maxSnapshots: 3, snapshotCommandAllowlist: ACTION_ALLOWLIST }),
+    createUndoSystem({ maxSnapshots: 3, snapshotCommandAllowlist: UNDO_ALLOWLIST }),
     createInteractionSystem(),
+    createSimpleChoiceSystem(),
+    createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
-        allowedCommands: ['su:play_action'],
+        allowedCommands: ['su:play_action', 'su:dismiss_reveal'],
+        responderExemptCommands: ['su:dismiss_reveal'],
         commandWindowTypeConstraints: {
             'su:play_action': ['meFirst'],
         },

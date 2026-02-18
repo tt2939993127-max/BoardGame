@@ -3,12 +3,15 @@ import { Injectable } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import type { AudioSettingsPayload } from './dtos/audio-settings.dto';
 import { UserAudioSettings, type UserAudioSettingsDocument } from './schemas/user-audio-settings.schema';
+import { UserUISettings, type UserUISettingsDocument } from './schemas/user-ui-settings.schema';
 
 @Injectable()
 export class UserSettingsService {
     constructor(
         @InjectModel(UserAudioSettings.name)
         private readonly audioSettingsModel: Model<UserAudioSettingsDocument>,
+        @InjectModel(UserUISettings.name)
+        private readonly uiSettingsModel: Model<UserUISettingsDocument>,
     ) {}
 
     async getAudioSettings(userId: string): Promise<UserAudioSettingsDocument | null> {
@@ -33,6 +36,19 @@ export class UserSettingsService {
                 $setOnInsert: { userId },
             },
             { new: true, upsert: true }
+        );
+    }
+
+    async getSeenHints(userId: string): Promise<string[]> {
+        const doc = await this.uiSettingsModel.findOne({ userId });
+        return doc?.seenHints ?? [];
+    }
+
+    async markHintSeen(userId: string, hintKey: string): Promise<void> {
+        await this.uiSettingsModel.findOneAndUpdate(
+            { userId },
+            { $addToSet: { seenHints: hintKey }, $setOnInsert: { userId } },
+            { upsert: true }
         );
     }
 }

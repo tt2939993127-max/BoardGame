@@ -27,7 +27,7 @@ import { smashUpFlowHooks } from '../domain/index';
 import {
     createFlowSystem, createLogSystem, createActionLogSystem, createUndoSystem,
     createInteractionSystem, createRematchSystem, createResponseWindowSystem,
-    createTutorialSystem, createEventStreamSystem,
+    createTutorialSystem, createEventStreamSystem, createSimpleChoiceSystem,
 } from '../../../engine';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createSmashUpEventSystem } from '../domain/systems';
@@ -99,6 +99,7 @@ function buildSystems(): EngineSystem<SmashUpCore>[] {
         createActionLogSystem<SmashUpCore>(),
         createUndoSystem<SmashUpCore>(),
         createInteractionSystem<SmashUpCore>(),
+        createSimpleChoiceSystem<SmashUpCore>(),
         createRematchSystem<SmashUpCore>(),
         createResponseWindowSystem<SmashUpCore>({
             allowedCommands: ['su:play_action'],
@@ -771,8 +772,31 @@ describe('DiscardPlayProvider: ghost_spectre', () => {
         expect(p0.discard.some((c: CardInstance) => c.uid === 'sp1')).toBe(false);
         // spectre 在基地上
         expect(r1.finalState.core.bases[0].minions.some((m: MinionOnBase) => m.uid === 'sp1')).toBe(true);
-        // 不消耗正常额度
-        expect(p0.minionsPlayed).toBe(0);
+        // 消耗正常随从额度（幽灵之主替代正常随从打出，不像顽强丧尸是额外打出）
+        expect(p0.minionsPlayed).toBe(1);
+    });
+
+    it('随从额度用完后不能从弃牌堆打出 spectre', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('h1', 'test_minion', '0', 'action')], // 1张手牌 ≤ 2
+                    discard: [makeCard('sp1', 'ghost_spectre', '0', 'minion')],
+                    factions: ['ghosts', 'pirates'] as [string, string],
+                    minionsPlayed: 1, // 已用完随从额度
+                    minionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase('test_base_1')],
+        });
+        const state = makeFullMatchState(core);
+
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_MINION, playerId: '0',
+            payload: { cardUid: 'sp1', baseIndex: 0, fromDiscard: true },
+        }, 'ghost_spectre: 额度用完被拒绝');
+        expect(r1.steps[0]?.success).toBe(false);
     });
 
     it('手牌>2时不能从弃牌堆打出 spectre', () => {

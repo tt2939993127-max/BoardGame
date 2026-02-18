@@ -1,5 +1,6 @@
 {
   "error": {
+    "not_active_player": "Not your turn",
     "player_mismatch": "Not your turn",
     "invalid_phase": "This action is not allowed in the current phase",
     "invalid_character": "Invalid character",

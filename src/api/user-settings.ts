@@ -51,3 +51,23 @@ export const updateAudioSettings = async (token: string, settings: AudioSettings
     const payload = await response.json() as { settings: AudioSettings };
     return payload.settings;
 };
+
+// ============================================================================
+// UI 提示已读状态
+// ============================================================================
+
+export const getSeenHints = async (token: string): Promise<string[]> => {
+    const response = await fetch(`${AUTH_API_URL}/user-settings/ui-hints`, {
+        headers: buildAuthHeaders(token),
+    });
+    if (!response.ok) return [];
+    const data = await response.json() as { seenHints: string[] };
+    return data.seenHints ?? [];
+};
+
+export const markHintSeen = async (token: string, hintKey: string): Promise<void> => {
+    await fetch(`${AUTH_API_URL}/user-settings/ui-hints/${encodeURIComponent(hintKey)}`, {
+        method: 'POST',
+        headers: buildAuthHeaders(token),
+    });
+};

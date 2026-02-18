@@ -17,6 +17,7 @@ import type { EngineSystem } from '../../../engine/systems/types';
 import {
     createFlowSystem,
     createInteractionSystem,
+    createSimpleChoiceSystem,
     createEventStreamSystem,
     createLogSystem,
 } from '../../../engine';
@@ -31,6 +32,7 @@ export const smashUpTestSystems: EngineSystem<SmashUpCore>[] = [
     createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
     createLogSystem(),
     createInteractionSystem(),
+    createSimpleChoiceSystem(),
     createEventStreamSystem(),
     createSmashUpEventSystem(),
 ];

@@ -87,9 +87,10 @@ function robotMicrobotReclaimer(ctx: AbilityContext): AbilityResult {
         const name = def?.name ?? c.defId;
         return { id: `microbot-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
+    const skipOption = { id: 'skip', label: '跳过（不洗回）', value: { skip: true } };
     const interaction = createSimpleChoice(
         `robot_microbot_reclaimer_${ctx.now}`, ctx.playerId,
-        '选择要洗回牌库的微型机（任意数量）', options,
+        '选择要洗回牌库的微型机（任意数量，可跳过）', [...options, skipOption],
         { sourceId: 'robot_microbot_reclaimer', multi: { min: 0, max: microbotsInDiscard.length } },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
@@ -153,7 +154,7 @@ function robotZapbot(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `minion-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+        return { id: `minion-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power }, _source: 'hand' as const };
     });
     options.push({ id: 'skip', label: '跳过', value: { skip: true } as any });
     const interaction = createSimpleChoice(
@@ -285,7 +286,7 @@ export function registerRobotInteractionHandlers(): void {
             return { baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `robot_zapbot_base_${timestamp}`, playerId, { sourceId: '选择打出随从的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'robot_zapbot_base'
+            `robot_zapbot_base_${timestamp}`, playerId, '选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), { sourceId: 'robot_zapbot_base', targetType: 'base' }
         );
         return {
             state: queueInteraction(state, {
@@ -338,7 +339,7 @@ export function registerRobotInteractionHandlers(): void {
             return { baseIndex: i, label: bd?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `robot_hoverbot_base_${timestamp}`, playerId, { sourceId: '选择打出随从的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'robot_hoverbot_base'
+            `robot_hoverbot_base_${timestamp}`, playerId, '选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), { sourceId: 'robot_hoverbot_base', targetType: 'base' }
             );
         return {
             state: queueInteraction(state, {

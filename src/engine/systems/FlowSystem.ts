@@ -132,6 +132,21 @@ export interface FlowHooks<TCore = unknown> {
         events: GameEvent[];
         random: RandomFn;
     }): { autoContinue: boolean; playerId: PlayerId } | void;
+
+    /**
+     * 获取当前活跃玩家 ID（用于 ADVANCE_PHASE 命令的发送者校验）
+     * 
+     * 与 getActivePlayerId 不同：此方法只返回"当前阶段应该操作的玩家"，
+     * 不涉及阶段转换后的活跃玩家计算。
+     * 
+     * 引擎层在执行 ADVANCE_PHASE 前自动校验 command.playerId === getCurrentPlayerId，
+     * 防止快速点击导致命令队列越过回合边界。
+     * 
+     * 可选：未提供时不做校验（向后兼容）。
+     */
+    getCurrentPlayerId?(args: {
+        state: Readonly<MatchState<TCore>>;
+    }): PlayerId;
 }
 
 // ============================================================================
@@ -185,6 +200,18 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
 
     const from = getCurrentPhase(state) || hooks.initialPhase;
     logDev(`[FlowSystem][${logLabel}] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
+
+    // 引擎层通用校验：命令发送者必须是当前活跃玩家
+    // 防止快速点击导致命令队列越过回合边界，推进对手的阶段
+    if (hooks.getCurrentPlayerId) {
+        const currentPlayerId = hooks.getCurrentPlayerId({ state });
+        if (command.playerId !== currentPlayerId) {
+            logDev(`[FlowSystem][${logLabel}] rejected: command.playerId=${command.playerId} !== currentPlayerId=${currentPlayerId}`);
+            return invalidPlayerStrategy === 'error'
+                ? { halt: true, error: 'not_active_player' }
+                : undefined;
+        }
+    }
 
     const can = hooks.canAdvance?.({ state, from, command }) ?? { ok: true };
     if (!can.ok) {

@@ -1390,7 +1390,7 @@ describe('目标选择技能 payload 字段审计', () => {
 
   it('所有需要目标选择的技能都有 validation.customValidator', () => {
     // 白名单：被动技能由特殊系统处理，不需要 customValidator
-    const whitelist = new Set(['fire_sacrifice_passive']);
+    const whitelist = new Set<string>();
     const violations: string[] = [];
     for (const def of singleStepTargetAbilities) {
       if (whitelist.has(def.id)) continue;

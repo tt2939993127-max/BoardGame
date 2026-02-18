@@ -61,9 +61,9 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 ---
 
-## 通用实现缺陷检查维度（D1-D20）
+## 通用实现缺陷检查维度（D1-D24）
 
-> 所有审查/审计/新增功能验证时按维度检查。D1-D10 为原有维度（已扩展），D11-D20 为新增维度。
+> 所有审查/审计/新增功能验证时按维度检查。D1-D10 为原有维度（已扩展），D11-D24 为新增维度。
 
 | # | 维度 | 核心问题 |
 |---|------|---------|
@@ -78,7 +78,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D9 | 幂等与重入 | 重复触发/撤销重做安全？ |
 | D10 | 元数据一致 | categories/tags/meta 与实际行为匹配？ |
 | D11 | **Reducer 消耗路径** | 事件写入的资源/额度/状态，在 reducer 消耗时走的分支是否正确？**多种额度来源并存时消耗优先级是否正确？** |
-| D12 | **写入-消耗对称** | 能力/事件写入的字段，在所有消费点（reducer/validate/UI）是否被正确读取和消耗？写入路径和消耗路径的条件分支是否对称？ |
+| D12 | **写入-消耗对称** | 能力/事件写入的字段，在所有消费点（reducer/validate/UI）是否被正确读取和消耗？写入路径和消耗路径的条件分支是否对称？**Reducer 操作范围是否与 payload 声明的范围一致（禁止全量清空 payload 未涉及的数据）？** |
 | D13 | **多来源竞争** | 同一资源/额度/状态有多个写入来源时，消耗逻辑是否正确区分来源？不同来源的优先级/互斥/叠加规则是否正确？ |
 | D14 | **回合清理完整** | 回合/阶段结束时临时状态（额度/buff/标记/计数器）是否全部正确清理？清理遗漏会导致下回合状态泄漏 |
 | D15 | **UI 状态同步** | UI 展示的数值/状态是否与 core 状态一致？UI 读取的字段是否是 reducer 实际写入的字段？UI 是否遗漏了某些状态来源？**UI 计算参考点是否与描述语义一致？** |
@@ -90,6 +90,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D21 | **触发频率门控** | 触发型技能（`afterAttack`/`afterMove`/`onPhaseStart`/`onPhaseEnd`）是否有使用次数限制？同一效果的不同触发方式（攻击后 vs 代替攻击）是否互斥？ |
 | D22 | **伤害计算管线配置** | 使用 `createDamageCalculation` 时配置项是否正确？`autoCollectStatus`/`autoCollectTokens`/`autoCollectShields` 是否根据业务需求启用？伤害来源和目标是否正确？ |
 | D23 | **架构假设一致性** | 底层架构的隐含假设是否与描述语义冲突？通用验证函数（如 `canAttackEnhanced`）的硬编码规则是否阻止特殊语义实现？阶段/目标/资源的底层约束是否需要为特殊机制开放？ |
+| D24 | **Handler 共返状态一致性** | 交互 handler 同时返回 events 和新 interaction 时，新 interaction 的选项是否基于 events 已生效后的状态计算？（events 尚未 reduce，选项基于旧状态会导致候选列表缺失/过时） |
 
 ### 需要展开的关键维度
 
@@ -262,6 +263,27 @@ Handler: handleXxx
 4. **典型缺陷**：写入用 `cardId`（`target-1`）但读取匹配 `instanceId`（`target-1#1`）；写入到 `baseLimitedMinionQuota[baseIndex]` 但消耗时条件要求 `globalFull` 才读取该字段
 
 > **示例（SummonerWars 交缠颂歌）**：写入 `entanglementTargets` 用 `cardId`，但读取时匹配 `instanceId`，ID 格式不一致导致永远匹配不上
+
+**D12 子项：Reducer 操作范围与 payload 语义对齐（强制）**（新增/修改 reducer case、或修"操作影响了不该影响的数据"时触发）：reducer case 对状态的操作范围是否与事件 payload 声明的范围一致。**核心原则：reducer 只能操作 payload 中显式声明的数据范围，禁止对 payload 未涉及的数据做"全量清空"等隐式操作。当同一事件类型被多个调用方复用时，reducer 必须兼容所有调用方的语义——既能处理"全量操作"也能处理"部分操作"。** 审查方法：
+1. **识别 reducer 中的全量操作**：grep 所有 reducer case 中的 `hand: []`、`discard: []`、`deck: []`、`= []`、`= {}`、`= undefined` 等无条件清空/重置模式
+2. **追踪所有调用方**：grep 该事件类型的所有发射点，列出每个调用方传入的 payload 语义——是"全量操作"（如变化之风把所有手牌洗入牌库）还是"部分操作"（如实地考察只把选中的手牌放牌库底）
+3. **判定**：
+   - 所有调用方都是全量操作 → reducer 无条件清空 ✅ 安全
+   - 存在部分操作的调用方 → reducer 无条件清空 ❌ 会误伤未涉及的数据
+   - 修复策略：reducer 根据 payload 中的 uid 列表精确操作，只移除/修改 payload 声明的数据，保留其余
+4. **新增事件类型时必查**：reducer case 的操作范围是否只覆盖 payload 声明的数据？是否存在"顺便清空"未声明数据的隐式行为？
+5. **复用事件类型时必查**：新调用方的 payload 语义是否与 reducer 的操作范围兼容？如果新调用方是"部分操作"但 reducer 做"全量操作"，必须修改 reducer 为精确操作
+
+**典型缺陷模式**：
+- ❌ reducer 无条件 `hand: []` 但有调用方只移动部分手牌 → 未选中的手牌被误清空
+- ❌ reducer 无条件 `discard: []` 但有调用方只从弃牌堆取回部分卡 → 其余弃牌被误清空
+- ❌ reducer 用 `allCards = [...hand, ...deck]` 合并后重建，但只用 `newDeckUids` 过滤 → 不在 `newDeckUids` 中的手牌被丢弃而非保留
+
+**排查信号**：
+- "选了几张但全部都没了" / "操作影响了不该影响的数据" = 高度怀疑 reducer 操作范围超出 payload
+- 同一事件类型有多个调用方，其中一个是全量操作、另一个是部分操作
+
+> **示例（SmashUp 实地考察）**：`HAND_SHUFFLED_INTO_DECK` 的 reducer 无条件 `hand: []`，对巫师"变化之风"（全部手牌洗入牌库）正确，但对"实地考察"（只把选中的手牌放牌库底）错误——未选中的手牌被误清空。修复：reducer 用 `newDeckUids` 构建 Set，只从手牌中移除在 Set 中的卡，保留其余
 
 **D13 多来源竞争（强制）**（同一资源/额度/状态有多个写入来源时触发）：多个能力/事件可以写入同一个资源字段时，消耗逻辑是否正确区分来源。**核心原则：当多个来源向同一个资源池写入时，消耗逻辑必须明确"消耗的是哪个来源的贡献"，不能混淆。** 审查方法：
 1. **识别多来源字段**：grep 所有写入同一字段的事件/能力（如多个能力都写入 `minionLimit`）
@@ -483,6 +505,43 @@ Handler: handleXxx
 - D2（边界完整）：底层约束是否覆盖所有场景（含特殊语义）？
 - D5（交互完整）：UI 层是否能正确响应特殊语义（如高亮友军目标）？
 
+**D24 Handler 共返状态一致性（强制）**（新增/修改交互 handler 中同时返回 events 和新 interaction 时触发）：交互 handler 同时返回 `{ events, state: queueInteraction(...) }` 时，新 interaction 的选项是否基于 events 已生效后的状态计算？**核心原则：handler 返回的 events 尚未被 reduce，此时 `state.core` 仍是旧状态。如果新 interaction 的选项依赖这些 events 的效果（如弃牌后从弃牌堆选随从），必须手动模拟 events 的效果来构建选项，否则选项列表会缺失/过时。** 审查方法：
+
+**审查触发条件**：
+- 新增/修改任何交互 handler 中同时返回 `events` 数组（非空）和 `queueInteraction` 的代码
+- 修复"交互选项缺失"/"弹窗为空"/"选项列表不对"类 bug
+- handler 返回的 events 会改变后续交互选项的数据来源（如弃牌→弃牌堆变化、消灭随从→场上随从变化、抽牌→手牌变化）
+
+**审查方法**：
+1. **识别共返模式**：grep 所有 handler 中同时包含 `events: [...]`（非空数组）和 `queueInteraction` 的 return 语句
+2. **追踪 events 的状态影响**：列出返回的每个 event 会改变 `state.core` 的哪些字段（如 `CARDS_DISCARDED` → `player.hand` 减少 + `player.discard` 增加）
+3. **追踪新 interaction 的选项数据来源**：新 interaction 的 options 是从 `state.core` 的哪个字段构建的？（如从 `player.discard` 过滤随从）
+4. **判定**：选项数据来源字段是否被 events 影响？
+   - 是 + 选项构建时未考虑 events 的效果 = ❌ 选项基于旧状态，会缺失/过时
+   - 是 + 选项构建时手动合并了 events 的效果 = ✅ 正确
+   - 否（events 不影响选项数据来源）= ✅ 无需处理
+5. **修复策略**：
+   - **手动合并（推荐）**：在构建选项时，将 events 的效果手动叠加到当前状态上。例如：`CARDS_DISCARDED` 事件中的 `cardUids` 对应的牌仍在 `player.hand` 中，需要手动将它们加入候选弃牌堆
+   - **使用 optionsGenerator**：为新 interaction 设置 `optionsGenerator`，在 reduce 后自动基于最新状态重新生成选项（适用于框架支持的场景）
+   - **拆分为两步交互**：先返回 events 不创建新 interaction，等 events reduce 后再由下一个触发点创建 interaction（架构改动较大，通常不推荐）
+
+**典型缺陷模式**：
+- ❌ handler 返回 `CARDS_DISCARDED` + 新 interaction 从 `player.discard` 选随从 → 刚弃的牌不在 `player.discard` 中（还在 `player.hand`），选项缺失
+- ❌ handler 返回 `MINION_DESTROYED` + 新 interaction 从场上选随从 → 被消灭的随从仍在场上，选项包含已失效目标
+- ❌ handler 返回 `CARDS_DRAWN` + 新 interaction 从手牌选牌弃掉 → 刚抽的牌不在 `player.hand` 中，选项缺失
+
+**排查信号**：
+- "交互弹窗为空/无选项" + handler 逻辑看起来正确 = 高度怀疑共返状态不一致
+- handler 中 `eligible.length === 0` 导致跳过交互创建，但实际应该有候选项
+- 交互选项在某些场景下正常（弃牌堆本身有随从）、某些场景下为空（只有刚弃的牌才是随从）
+
+> **示例（SmashUp 亡者崛起）**：handler 返回 `CARDS_DISCARDED`（弃手牌）+ 新 interaction（从弃牌堆选力量<弃牌数的随从）。`CARDS_DISCARDED` 尚未 reduce，刚弃的牌仍在 `player.hand` 而非 `player.discard`。选项构建只从 `player.discard` 过滤 → 刚弃的随从不在候选列表中 → 如果弃牌堆原本没有符合条件的随从，弹窗为空。修复：手动将 `player.hand` 中 `discardUids` 对应的牌合并到候选池 `[...player.discard, ...justDiscarded]`
+
+**关联维度**：
+- D8（时序正确）：events 的 reduce 时机与 interaction 创建时机的先后关系
+- D12（写入-消耗对称）：events 写入的状态变更与 interaction 选项读取的数据源是否对称
+- D17（隐式依赖）：选项构建隐式依赖 events 已被 reduce 的假设
+
 ### 维度选择指南
 
 | 任务 | 必选 | 推荐 |
@@ -507,7 +566,7 @@ Handler: handleXxx
 | 全面审查 | D1-D23 | — |
 | 新增 buff/共享 | D4,D1,D6,D22 | D10,D13,D19 |
 | 重构事件流 | D3,D8,D9 | D10,D4,D17 |
-| 新增交互能力 | D5,D3,D1 | D2,D8,D21,D23 |
+| 新增交互能力 | D5,D3,D1 | D2,D8,D21,D23,D24 |
 | 新增额度/资源机制 | D7,D11,D12,D13,D18 | D14,D15,D16,D19,D20 |
 | 修"额度/资源消耗不对" | D11,D12,D13,D16 | D7,D15,D18 |
 | 修"UI 显示不对" | D15,D3,D12 | D20,D5 |
@@ -518,6 +577,9 @@ Handler: handleXxx
 | 迁移到新伤害计算管线 | D22,D3,D10 | D1,D4 |
 | 新增/修改底层验证函数 | D23,D1,D2 | D5,D8 |
 | 新增跨阶段/非常规目标机制 | D23,D1,D5 | D2,D8 |
+| 修"交互选项缺失/弹窗为空" | D24,D5,D3 | D8,D12,D17 |
+| 修"操作影响了不该影响的数据" | D12,D11,D3 | D16,D18 |
+| 新增/修改 handler 共返 events+interaction | D24,D8,D12 | D3,D17 |
 
 ### 输出格式
 
@@ -527,7 +589,7 @@ Handler: handleXxx
 
 ## 描述→实现全链路审查规范（强制）
 
-> 用户说"审查/审核/检查实现/核对"时按此执行，禁止凭印象回答。
+> 用户说"审计/审查/审核/核对/对一下描述和代码"时按此执行，禁止凭印象回答。"检查"不算触发词，不自动启动审计流程。
 
 **适用**：① 新增技能/效果/被动/光环 ② 修"没效果"bug ③ 审查已有机制 ④ 重构消费链路
 
@@ -671,3 +733,5 @@ ID 只出现在定义+注册 = 消费层缺失。
 | 群情激愤无法让友军在魔力阶段攻击：`validate.ts` 硬编码 `if (core.phase !== 'attack') return false` 拒绝非攻击阶段的攻击命令，即使事件卡授予了跨阶段攻击权限 | 架构假设冲突：底层验证函数假设"攻击只能在攻击阶段"，无法处理事件卡授予的跨阶段攻击特权 | D23 | summonerwars |
 | 抓附（grab）跟随位置错误：UI 用 `getAdjacentCells(grabberPosition)`（抓附单位位置）计算相邻格子，应用 `getAdjacentCells(movedTo)`（移动单位目标位置）。描述"将本单位放置到**该单位相邻的区格**"（该单位=移动的单位） | UI 计算参考点语义错误：event payload 包含多个正确字段（`grabberPosition` 和 `movedTo`），但选择了语义不匹配的输入 | D15 | summonerwars |
 | 群情激愤在 magic 阶段写入 `extraAttacks=1`，但 attack 阶段已过，`TURN_CHANGED` 清理 `extraAttacks=0`。写入→清理之间不包含消费窗口，extraAttacks 永远不会被消费。排查时只验证写入链（事件卡打出→执行→reduce 写入）全部正常，忽略了"写入后何时能用"的时序问题 | 写入-消费窗口不对齐：写入时机在消费窗口之后，状态被回合清理抹掉。排查盲区：只验证写入链不验证消费时序 | D8 | summonerwars |
+| 亡者崛起 handler 返回 `CARDS_DISCARDED`（弃手牌）+ 新 interaction（从弃牌堆选随从），但 `CARDS_DISCARDED` 尚未 reduce，刚弃的牌仍在 `player.hand` 而非 `player.discard`。选项只从 `player.discard` 过滤 → 刚弃的随从不在候选列表 → 弹窗为空/无选项 | Handler 共返状态不一致：handler 同时返回 events 和新 interaction，新 interaction 的选项基于未 reduce 的旧状态构建，缺失 events 带来的状态变更 | D24 | smashup |
+| 实地考察（Field Trip）选择部分手牌放入牌库底，结果全部手牌被清空。`HAND_SHUFFLED_INTO_DECK` reducer 无条件 `hand: []`，但 Field Trip 只移动选中的手牌，未选中的手牌被误清空 | Reducer 操作范围超出 payload 语义：同一事件类型被全量操作（Winds of Change 移动全部手牌）和部分操作（Field Trip 移动选中手牌）复用，reducer 只兼容全量场景，部分操作时误清空未选中数据 | D12 | smashup |

@@ -166,6 +166,60 @@ export class GameTransportClient {
         );
     }
 
+    /**
+     * 发送批量命令（Task 8）
+     * 
+     * @param batchId 批次 ID
+     * @param commands 命令数组
+     * @param onConfirmed 批次确认回调（返回权威状态）
+     * @param onRejected 批次拒绝回调
+     */
+    sendBatch(
+        batchId: string,
+        commands: Array<{ type: string; payload: unknown }>,
+        onConfirmed?: (state: unknown) => void,
+        onRejected?: (reason: string) => void,
+    ): void {
+        if (!this.socket || this._destroyed) return;
+
+        // 注册一次性监听器
+        const confirmHandler = (matchID: string, receivedBatchId: string, state: unknown) => {
+            if (matchID !== this.config.matchID || receivedBatchId !== batchId) return;
+            this.socket?.off('batch:confirmed', confirmHandler);
+            this.socket?.off('batch:rejected', rejectHandler);
+            this.socket?.off('disconnect', disconnectHandler);
+            onConfirmed?.(state);
+        };
+
+        const rejectHandler = (matchID: string, receivedBatchId: string, reason: string) => {
+            if (matchID !== this.config.matchID || receivedBatchId !== batchId) return;
+            this.socket?.off('batch:confirmed', confirmHandler);
+            this.socket?.off('batch:rejected', rejectHandler);
+            this.socket?.off('disconnect', disconnectHandler);
+            onRejected?.(reason);
+        };
+
+        // socket 断开时清理监听器，避免永久泄漏
+        const disconnectHandler = () => {
+            this.socket?.off('batch:confirmed', confirmHandler);
+            this.socket?.off('batch:rejected', rejectHandler);
+            onRejected?.('disconnected');
+        };
+
+        this.socket.on('batch:confirmed', confirmHandler);
+        this.socket.on('batch:rejected', rejectHandler);
+        this.socket.once('disconnect', disconnectHandler);
+
+        // 发送批次
+        this.socket.emit(
+            'batch',
+            this.config.matchID,
+            batchId,
+            commands,
+            this.config.credentials,
+        );
+    }
+
     /** 断开连接并清理资源 */
     disconnect(): void {
         this._destroyed = true;

@@ -145,9 +145,41 @@ export function validateCommand(
           }
         }
       }
+      // 火祀召唤：必须额外消灭一个友方单位，伊路特-巴尔替换其位置
+      const hasFireSacrifice = (unitCard.abilities ?? []).includes('fire_sacrifice_summon');
+      if (hasFireSacrifice) {
+        const sacrificeUnitId = payload.sacrificeUnitId as string | undefined;
+        if (!sacrificeUnitId) {
+          return { valid: false, error: '火祀召唤：必须选择一个友方单位作为牺牲品' };
+        }
+        // 找到牺牲品
+        let sacrificeUnit: BoardUnit | undefined;
+        outer: for (let row = 0; row < BOARD_ROWS; row++) {
+          for (let col = 0; col < BOARD_COLS; col++) {
+            const u = core.board[row]?.[col]?.unit;
+            if (u && (u.instanceId === sacrificeUnitId || u.cardId === sacrificeUnitId)) {
+              sacrificeUnit = u;
+              break outer;
+            }
+          }
+        }
+        if (!sacrificeUnit) {
+          return { valid: false, error: '火祀召唤：找不到指定的牺牲品单位' };
+        }
+        if (sacrificeUnit.owner !== playerId) {
+          return { valid: false, error: '火祀召唤：只能牺牲自己的单位' };
+        }
+        if (sacrificeUnit.card.unitClass === 'summoner') {
+          return { valid: false, error: '火祀召唤：不能牺牲召唤师' };
+        }
+        // 牺牲品位置无限制，伊路特-巴尔替换其位置
+        return { valid: true };
+      }
+
       if (!validPositions.some(p => p.row === position.row && p.col === position.col)) {
         return { valid: false, error: '无效的召唤位置（必须在城门相邻的空格）' };
       }
+
       return { valid: true };
     }
 

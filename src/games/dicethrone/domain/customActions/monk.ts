@@ -39,7 +39,7 @@ function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: 
     } as TokenGrantedEvent];
 }
 
-/** 清修 III：获得太极，若太极≥2则选择闪避或净化 */
+/** 清修 III：获得太极，若同时投出太极+莲花则选择闪避或净化 */
 function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const amountToAdd = faceCounts[DICE_FACE_IDS.TAIJI];
@@ -54,7 +54,8 @@ function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }:
         timestamp,
     } as TokenGrantedEvent];
 
-    if (faceCounts[DICE_FACE_IDS.TAIJI] >= 2) {
+    // 图片条件：同时投出太极+莲花（各至少1个）
+    if (faceCounts[DICE_FACE_IDS.TAIJI] >= 1 && faceCounts[DICE_FACE_IDS.LOTUS] >= 1) {
         events.push({
             type: 'CHOICE_REQUESTED',
             payload: {
@@ -146,6 +147,26 @@ function handleLotusPalmTaijiCapUpAndFill({ targetId, sourceAbilityId, state, ti
     events.push({ type: 'TOKEN_LIMIT_CHANGED', payload: { playerId: targetId, tokenId: TOKEN_IDS.TAIJI, delta: 1, newLimit, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenLimitChangedEvent);
     const currentAmount = player.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
     const newTotal = Math.min(newLimit, Math.max(0, newLimit));
+    const amountToAdd = Math.max(0, newTotal - currentAmount);
+    if (amountToAdd > 0) {
+        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
+    }
+    return events;
+}
+
+/** 花开见佛 II：太极上限+1，然后获得6气（受新上限限制） */
+function handleLotusPalmTaijiCapUpAndGrant6({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const player = state.players[targetId];
+    if (!player) return [];
+    const currentLimitRaw = player.tokenStackLimits?.[TOKEN_IDS.TAIJI];
+    const currentLimit = typeof currentLimitRaw === 'number' ? (currentLimitRaw === 0 ? Infinity : currentLimitRaw) : getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
+    if (currentLimit === Infinity) return [];
+    const events: DiceThroneEvent[] = [];
+    const newLimit = currentLimit + 1;
+    events.push({ type: 'TOKEN_LIMIT_CHANGED', payload: { playerId: targetId, tokenId: TOKEN_IDS.TAIJI, delta: 1, newLimit, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenLimitChangedEvent);
+    // 固定获得6气（受新上限限制）
+    const currentAmount = player.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
+    const newTotal = Math.min(currentAmount + 6, newLimit);
     const amountToAdd = Math.max(0, newTotal - currentAmount);
     if (amountToAdd > 0) {
         events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
@@ -339,6 +360,9 @@ export function registerMonkCustomActions(): void {
         categories: ['choice'],
     });
     registerCustomActionHandler('lotus-palm-taiji-cap-up-and-fill', handleLotusPalmTaijiCapUpAndFill, {
+        categories: ['resource'],
+    });
+    registerCustomActionHandler('lotus-palm-2-taiji-cap-up-and-grant6', handleLotusPalmTaijiCapUpAndGrant6, {
         categories: ['resource'],
     });
     registerCustomActionHandler('thunder-strike-roll-damage', handleThunderStrikeRollDamage, {

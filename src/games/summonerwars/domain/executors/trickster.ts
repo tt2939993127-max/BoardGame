@@ -9,7 +9,8 @@ import {
   getUnitAt,
   getUnitAbilities,
   manhattanDistance,
-  calculatePushPullPosition,
+  isValidCoord,
+  isCellEmpty,
 } from '../helpers';
 import { getEffectiveLife } from '../abilityResolver';
 import { emitDestroyWithTriggers } from '../execute/helpers';
@@ -87,13 +88,36 @@ abilityExecutorRegistry.register('illusion', (ctx: SWAbilityContext) => {
   return { events };
 });
 
-/** 念力 / 高阶念力（共享逻辑，使用 calculatePushPullPosition 统一方向计算） */
+/** 念力 / 高阶念力（共享逻辑，使用 moveRow/moveCol 方向向量，或 direction: 'push'/'pull'） */
 function executeTelekinesis(ctx: SWAbilityContext, maxRange: number): GameEvent[] {
   const events: GameEvent[] = [];
   const { core, sourcePosition, payload, timestamp } = ctx;
   const pushPullTargetPos = payload.targetPosition as CellCoord | undefined;
-  const pushPullDirection = payload.direction as 'push' | 'pull' | undefined;
-  if (!pushPullTargetPos || !pushPullDirection) return events;
+  let moveRow = payload.moveRow as number | undefined;
+  let moveCol = payload.moveCol as number | undefined;
+  let isPull = false;
+
+  // 支持 direction: 'push'/'pull' 字段（从 source→target 方向计算向量）
+  if (moveRow === undefined && moveCol === undefined && payload.direction) {
+    const direction = payload.direction as 'push' | 'pull';
+    isPull = direction === 'pull';
+    const dr = pushPullTargetPos ? pushPullTargetPos.row - sourcePosition.row : 0;
+    const dc = pushPullTargetPos ? pushPullTargetPos.col - sourcePosition.col : 0;
+    // 归一化为单格方向向量
+    const normR = dr === 0 ? 0 : dr > 0 ? 1 : -1;
+    const normC = dc === 0 ? 0 : dc > 0 ? 1 : -1;
+    if (direction === 'push') {
+      // 推：沿 source→target 方向继续移动
+      moveRow = normR;
+      moveCol = normC;
+    } else {
+      // 拉：沿 target→source 方向移动（反向）
+      moveRow = -normR;
+      moveCol = -normC;
+    }
+  }
+
+  if (!pushPullTargetPos || (moveRow === undefined && moveCol === undefined)) return events;
 
   const pushPullTarget = getUnitAt(core, pushPullTargetPos);
   if (!pushPullTarget || pushPullTarget.card.unitClass === 'summoner') return events;
@@ -102,12 +126,13 @@ function executeTelekinesis(ctx: SWAbilityContext, maxRange: number): GameEvent[
   const dist = manhattanDistance(sourcePosition, pushPullTargetPos);
   if (dist > maxRange) return events;
 
-  // 使用统一的推拉位置计算函数（含对角线方向选择策略）
-  const newPos = calculatePushPullPosition(core, pushPullTargetPos, sourcePosition, 1, pushPullDirection);
-  if (newPos) {
-    const eventType = pushPullDirection === 'pull' ? SW_EVENTS.UNIT_PULLED : SW_EVENTS.UNIT_PUSHED;
+  // 沿指定方向移动1格（普通 Force，不穿过单位）
+  const dr = moveRow ?? 0;
+  const dc = moveCol ?? 0;
+  const newPos = { row: pushPullTargetPos.row + dr, col: pushPullTargetPos.col + dc };
+  if (isValidCoord(newPos) && isCellEmpty(core, newPos)) {
     events.push({
-      type: eventType,
+      type: isPull ? SW_EVENTS.UNIT_PULLED : SW_EVENTS.UNIT_PUSHED,
       payload: { targetPosition: pushPullTargetPos, newPosition: newPos },
       timestamp,
     });

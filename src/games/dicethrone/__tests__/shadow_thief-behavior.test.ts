@@ -703,8 +703,10 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             }));
 
             expect(eventsOfType(events, 'BONUS_DIE_ROLLED')).toHaveLength(1);
-            // 检查伤害是否增加到 pendingAttack
-            expect(state.pendingAttack.damage).toBe(8); // 3 + 5
+            // 伤害通过 BONUS_DIE_ROLLED 事件的 pendingDamageBonus 传递（由 reducer 处理）
+            const bonusEvent = eventsOfType(events, 'BONUS_DIE_ROLLED')[0] as any;
+            expect(bonusEvent.payload.pendingDamageBonus).toBe(5);
+            expect(bonusEvent.payload.value).toBe(5);
         });
     });
 

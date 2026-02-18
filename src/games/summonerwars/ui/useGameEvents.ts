@@ -11,7 +11,7 @@ import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, StructureCard } f
 import { SW_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
 import type { DestroyEffectData } from './DestroyEffect';
-import type { DiceFace } from '../config/dice';
+import type { DiceFaceResult } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
 import type { FxBus } from '../../../engine/fx';
 import { SW_FX } from './fxSetup';
@@ -31,10 +31,12 @@ import { useEventStreamCursor } from '../../../engine/hooks';
 
 /** 骰子结果状态 */
 export interface DiceResultState {
-  results: DiceFace[];
+  results: DiceFaceResult[];
   attackType: 'melee' | 'ranged';
   hits: number;
   isOpponentAttack: boolean;
+  /** 本次攻击被减少的命中数（迷魂/神圣护盾等） */
+  damageReduced?: number;
 }
 
 /** 待播放的攻击效果 */
@@ -307,7 +309,7 @@ export function useGameEvents({
       // 攻击事件 - 显示骰子，效果队列化，开启视觉序列门控
       if (event.type === SW_EVENTS.UNIT_ATTACKED) {
         const p = event.payload as {
-          attackType: 'melee' | 'ranged'; diceResults: DiceFace[]; hits: number; diceCount?: number;
+          attackType: 'melee' | 'ranged'; diceResults: DiceFaceResult[]; hits: number; diceCount?: number;
           target: CellCoord; attacker: CellCoord;
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
@@ -332,9 +334,15 @@ export function useGameEvents({
 
         onDiceRollSoundRef.current?.(p.diceCount ?? p.diceResults?.length ?? 1);
 
+        // 收集同批次的减伤事件（DAMAGE_REDUCED 在 UNIT_ATTACKED 之前发射）
+        const damageReduced = newEntries
+          .filter(e => e.event.type === SW_EVENTS.DAMAGE_REDUCED)
+          .reduce((sum, e) => sum + ((e.event.payload as { value?: number }).value ?? 0), 0);
+
         setDiceResult({
           results: p.diceResults, attackType: p.attackType,
           hits: p.hits, isOpponentAttack,
+          damageReduced: damageReduced > 0 ? damageReduced : undefined,
         });
       }
 
@@ -527,10 +535,13 @@ export function useGameEvents({
         if (p.abilityId === 'illusion_copy') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'illusion',
-              step: 'selectUnit',
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'illusion',
+                step: 'selectUnit',
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -539,10 +550,13 @@ export function useGameEvents({
         if (p.abilityId === 'blood_rune_choice') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'blood_rune',
-              step: 'selectUnit', // 复用 selectUnit 步骤表示等待选择
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'blood_rune',
+                step: 'selectUnit', // 复用 selectUnit 步骤表示等待选择
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -550,10 +564,13 @@ export function useGameEvents({
         if (p.abilityId === 'ice_shards_damage') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'ice_shards',
-              step: 'selectUnit', // 复用表示等待确认
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'ice_shards',
+                step: 'selectUnit', // 复用表示等待确认
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -561,10 +578,13 @@ export function useGameEvents({
         if (p.abilityId === 'feed_beast_check') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'feed_beast',
-              step: 'selectUnit', // 选择相邻友方单位或自毁
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'feed_beast',
+                step: 'selectUnit', // 选择相邻友方单位或自毁
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -575,10 +595,13 @@ export function useGameEvents({
         if (p.abilityId === 'afterMove:spirit_bond') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'spirit_bond',
-              step: 'selectUnit',
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'spirit_bond',
+                step: 'selectUnit',
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -586,10 +609,13 @@ export function useGameEvents({
         if (p.abilityId === 'afterMove:ancestral_bond') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'ancestral_bond',
-              step: 'selectUnit',
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'ancestral_bond',
+                step: 'selectUnit',
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -597,10 +623,13 @@ export function useGameEvents({
         if (p.abilityId === 'afterMove:structure_shift') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'structure_shift',
-              step: 'selectUnit',
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'structure_shift',
+                step: 'selectUnit',
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -608,10 +637,13 @@ export function useGameEvents({
         if (p.abilityId === 'afterMove:frost_axe') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAbilityMode({
-              abilityId: 'frost_axe',
-              step: 'selectUnit',
-              sourceUnitId: p.sourceUnitId,
+            const captured = { sourceUnitId: p.sourceUnitId };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'frost_axe',
+                step: 'selectUnit',
+                sourceUnitId: captured.sourceUnitId,
+              });
             });
           }
         }
@@ -620,11 +652,14 @@ export function useGameEvents({
           const iceRamOwner = (event.payload as Record<string, unknown>).iceRamOwner as string;
           const structurePosition = (event.payload as Record<string, unknown>).structurePosition as CellCoord;
           if (iceRamOwner === myPlayerId && structurePosition) {
-            setAbilityMode({
-              abilityId: 'ice_ram',
-              step: 'selectUnit',
-              sourceUnitId: 'ice_ram',
-              structurePosition,
+            const captured = { structurePosition };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'ice_ram',
+                step: 'selectUnit',
+                sourceUnitId: 'ice_ram',
+                structurePosition: captured.structurePosition,
+              });
             });
           }
         }

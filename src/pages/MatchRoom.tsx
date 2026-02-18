@@ -45,6 +45,8 @@ import { resolveCommandError } from '../engine/transport/errorI18n';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
+// 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
+const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
 
 export const MatchRoom = () => {
     usePerformanceMonitor();
@@ -52,7 +54,7 @@ export const MatchRoom = () => {
     const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { tutorial, startTutorial, closeTutorial, isActive, currentStep } = useTutorial();
+    const { tutorial, startTutorial, closeTutorial, isActive, currentStep, isAiExecuting } = useTutorial();
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
@@ -69,10 +71,14 @@ export const MatchRoom = () => {
     }, [toast, i18n, gameId]);
 
     // 本地/教学模式：命令被引擎拒绝时的统一反馈
+    // AI 自动执行命令失败（not_active_player/invalid_phase 等）静默，不打扰用户
+    // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，同样静默
     const handleCommandRejected = useCallback((_type: string, error: string) => {
+        if (isAiExecuting) return;
+        if (TUTORIAL_SILENT_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId));
-    }, [toast, i18n, gameId]);
+    }, [isAiExecuting, toast, i18n, gameId]);
 
     // 包装 Board 组件（注入 CriticalImageGate）
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
@@ -93,10 +99,16 @@ export const MatchRoom = () => {
         return Wrapped;
     }, [gameId, i18n.language, isUgcGame, t]);
 
-    // 从游戏实现中获取引擎配置（教程模式用）
+    // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
         return GAME_IMPLEMENTATIONS[gameId].engineConfig;
+    }, [gameId]);
+
+    // 从游戏实现中获取延迟优化配置
+    const latencyConfig = useMemo(() => {
+        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return undefined;
+        return GAME_IMPLEMENTATIONS[gameId].latencyConfig;
     }, [gameId]);
 
     // 在线模式是否就绪
@@ -491,6 +503,13 @@ export const MatchRoom = () => {
         }
     }, [currentStep?.id, isTutorialRoute]);
 
+    // 教程视角自动切换：步骤指定 viewAs 时切换到对应玩家视角，步骤结束后恢复到 '0'
+    useEffect(() => {
+        if (!isTutorialRoute) return;
+        const targetView = currentStep?.viewAs ?? '0';
+        setPlayerID(targetView);
+    }, [currentStep?.viewAs, isTutorialRoute, setPlayerID]);
+
     useEffect(() => {
         if (!isTutorialRoute) return;
         if (!tutorialStartedRef.current) return;
@@ -826,7 +845,7 @@ export const MatchRoom = () => {
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
                         {hasTutorialBoard && engineConfig && WrappedBoard ? (
-                            <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} onCommandRejected={handleCommandRejected}>
+                            <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                 <BoardBridge
                                     board={WrappedBoard}
                                     loading={<LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
@@ -878,6 +897,8 @@ export const MatchRoom = () => {
                                     matchId={matchId}
                                     playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                     credentials={credentials}
+                                    engineConfig={engineConfig ?? undefined}
+                                    latencyConfig={latencyConfig}
                                     onError={handleGameError}
                                 >
                                     <BoardBridge

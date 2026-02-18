@@ -27,6 +27,14 @@ export interface ClientToServerEvents {
 
     /** 发送命令 */
     'command': (matchID: string, commandType: string, payload: unknown, credentials?: string) => void;
+
+    /** 批量命令：将多个命令合并为一次网络请求发送 */
+    'batch': (
+        matchID: string,
+        batchId: string,
+        commands: Array<{ type: string; payload: unknown }>,
+        credentials?: string,
+    ) => void;
 }
 
 // ============================================================================
@@ -46,6 +54,8 @@ export interface ServerToClientEvents {
         matchID: string,
         state: unknown,
         matchPlayers: MatchPlayerInfo[],
+        /** 元数据，用于乐观更新校验 */
+        meta?: { commandSeq?: number },
     ) => void;
 
     /** 命令执行错误 */
@@ -54,6 +64,12 @@ export interface ServerToClientEvents {
     /** 玩家连接状态变更 */
     'player:connected': (matchID: string, playerID: string) => void;
     'player:disconnected': (matchID: string, playerID: string) => void;
+
+    /** 批次确认（返回权威状态） */
+    'batch:confirmed': (matchID: string, batchId: string, state: unknown) => void;
+
+    /** 批次拒绝 */
+    'batch:rejected': (matchID: string, batchId: string, reason: string) => void;
 }
 
 // ============================================================================

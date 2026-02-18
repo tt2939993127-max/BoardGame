@@ -155,6 +155,13 @@ fxBus.pushSequence([
 - `src/games/<gameId>/ui/fxSetup.ts` — 游戏侧注册表 + 渲染器适配器
 - `src/components/common/animations/` — 底层动画组件（Canvas 2D + Shader 版本共存）
 
+### 游戏接入状态
+| 游戏 | FX 系统 | 说明 |
+|------|---------|------|
+| SummonerWars | ✅ 已接入 | cell 空间定位，4 个 cue（召唤/充能/气浪/受伤） |
+| DiceThrone | ✅ 已接入 | screen 空间定位，6 个 cue（伤害/DoT/治疗/状态/Token/CP） |
+| SmashUp | ✅ 已接入 | screen 空间定位，4 个 cue（力量浮字/行动卡展示/VP飞行/基地占领） |
+
 ---
 
 ## WebGL Shader 特效系统

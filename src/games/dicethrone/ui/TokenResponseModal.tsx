@@ -31,23 +31,36 @@ interface TokenResponseModalProps {
 
 /**
  * 获取 Token 的效果类型分类
+ *
+ * 双时机 Token（如太极，timing 同时包含 beforeDamageDealt 和 beforeDamageReceived）
+ * 在攻击方阶段应归类为 'boost'（加伤），在防御方阶段归类为 'reduce'（减伤）。
  */
-function getTokenCategory(tokenDef: TokenDef): 'boost' | 'reduce' | 'reflect' | 'undefendable' | 'evasive' | 'unknown' {
+function getTokenCategory(
+    tokenDef: TokenDef,
+    responsePhase?: TokenResponsePhase
+): 'boost' | 'reduce' | 'reflect' | 'undefendable' | 'evasive' | 'unknown' {
     const effectType = tokenDef.activeUse?.effect.type;
-    
+
     // 闪避类
     if (effectType === 'rollToNegate') return 'evasive';
-    
+
     // 根据 tokenId 判断特殊效果
     if (tokenDef.id === TOKEN_IDS.RETRIBUTION) return 'reflect';
     if (tokenDef.id === TOKEN_IDS.ACCURACY) return 'undefendable';
     if (tokenDef.id === TOKEN_IDS.PROTECT) return 'reduce';
     if (tokenDef.id === TOKEN_IDS.CRIT) return 'boost';
-    
+
     // 通用判断
     if (effectType === 'modifyDamageDealt') return 'boost';
-    if (effectType === 'modifyDamageReceived') return 'reduce';
-    
+    if (effectType === 'modifyDamageReceived') {
+        // 双时机 Token（如太极）：攻击方阶段用于加伤，防御方阶段用于减伤
+        const timings = tokenDef.activeUse?.timing ?? [];
+        if (responsePhase === 'attackerBoost' && timings.includes('beforeDamageDealt')) {
+            return 'boost';
+        }
+        return 'reduce';
+    }
+
     return 'unknown';
 }
 
@@ -57,10 +70,11 @@ function getTokenCategory(tokenDef: TokenDef): 'boost' | 'reduce' | 'reflect' | 
 function getTokenEffectPreview(
     tokenDef: TokenDef,
     currentDamage: number,
-    amount: number = 1
+    amount: number = 1,
+    responsePhase?: TokenResponsePhase
 ): { damageChange: number; description: string; canUse: boolean } {
-    const category = getTokenCategory(tokenDef);
-    
+    const category = getTokenCategory(tokenDef, responsePhase);
+
     switch (category) {
         case 'boost': {
             // 暴击：+4 伤害，需要当前伤害≥5
@@ -80,7 +94,7 @@ function getTokenEffectPreview(
                 canUse: true,
             };
         }
-        
+
         case 'reduce': {
             // 守护：伤害减半（向上取整）
             if (tokenDef.id === TOKEN_IDS.PROTECT) {
@@ -99,26 +113,24 @@ function getTokenEffectPreview(
                 canUse: true,
             };
         }
-        
+
         case 'reflect': {
-            // 神罚：反弹伤害的一半（向上取整），不减少自己受到的伤害
             const reflectAmount = Math.ceil(currentDamage / 2);
             return {
-                damageChange: 0, // 不减伤
+                damageChange: 0,
                 description: `反弹 ${reflectAmount} 伤害给对手`,
                 canUse: true,
             };
         }
-        
+
         case 'undefendable': {
-            // 精准：使攻击不可防御
             return {
                 damageChange: 0,
                 description: '使攻击不可防御',
                 canUse: true,
             };
         }
-        
+
         case 'evasive': {
             return {
                 damageChange: 0,
@@ -126,7 +138,7 @@ function getTokenEffectPreview(
                 canUse: true,
             };
         }
-        
+
         default:
             return {
                 damageChange: 0,
@@ -159,16 +171,16 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     const isAttackerPhase = responsePhase === 'attackerBoost';
     const isDefenderPhase = responsePhase === 'defenderMitigation';
 
-    // 按效果类型分组 token
+    // 按效果类型分组 token（传入 responsePhase 以正确分类双时机 Token）
     const boostTokens = usableTokens.filter(def => {
-        const cat = getTokenCategory(def);
+        const cat = getTokenCategory(def, responsePhase);
         return cat === 'boost' || cat === 'undefendable';
     });
     const defenseTokens = usableTokens.filter(def => {
-        const cat = getTokenCategory(def);
+        const cat = getTokenCategory(def, responsePhase);
         return cat === 'reduce' || cat === 'reflect';
     });
-    const evasiveTokens = usableTokens.filter(def => getTokenCategory(def) === 'evasive');
+    const evasiveTokens = usableTokens.filter(def => getTokenCategory(def, responsePhase) === 'evasive');
 
     // 检查是否有任何可用操作
     const hasAnyAction = usableTokens.length > 0 && !pendingDamage.isFullyEvaded;
@@ -200,19 +212,19 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
         return null;
     };
 
-    // 渲染单个 Token 卡片
+    // 渲染单个 Token 卡片（传入 responsePhase 以正确计算效果预览和分类）
     const renderTokenCard = (tokenDef: TokenDef, borderColor: string) => {
         const tokenCount = responderState.tokens[tokenDef.id] ?? 0;
         if (tokenCount <= 0) return null;
 
-        const preview = getTokenEffectPreview(tokenDef, pendingDamage.currentDamage);
-        const category = getTokenCategory(tokenDef);
-        
+        const preview = getTokenEffectPreview(tokenDef, pendingDamage.currentDamage, 1, responsePhase);
+        const category = getTokenCategory(tokenDef, responsePhase);
+
         // 暴击需要伤害≥5才能使用
         const isDisabled = !preview.canUse;
 
         return (
-            <div 
+            <div
                 key={tokenDef.id}
                 className={clsx(
                     "bg-slate-800/40 rounded-xl p-4 border",
@@ -331,21 +343,21 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                 {/* Token 使用区域 */}
                 <div className="flex flex-col gap-3">
                     {/* 攻击方：加伤/不可防御 Token */}
-                    {isAttackerPhase && boostTokens.map(tokenDef => 
+                    {isAttackerPhase && boostTokens.map(tokenDef =>
                         renderTokenCard(tokenDef, "border-red-500/20")
                     )}
 
                     {/* 防御方：减伤/反弹 Token */}
-                    {isDefenderPhase && defenseTokens.map(tokenDef => 
-                        renderTokenCard(tokenDef, 
-                            getTokenCategory(tokenDef) === 'reflect' 
-                                ? "border-purple-500/20" 
+                    {isDefenderPhase && defenseTokens.map(tokenDef =>
+                        renderTokenCard(tokenDef,
+                            getTokenCategory(tokenDef, responsePhase) === 'reflect'
+                                ? "border-purple-500/20"
                                 : "border-blue-500/20"
                         )
                     )}
 
                     {/* 防御方：闪避 Token */}
-                    {isDefenderPhase && !pendingDamage.isFullyEvaded && evasiveTokens.map(tokenDef => 
+                    {isDefenderPhase && !pendingDamage.isFullyEvaded && evasiveTokens.map(tokenDef =>
                         renderTokenCard(tokenDef, "border-cyan-500/20")
                     )}
 

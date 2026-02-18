@@ -186,6 +186,49 @@ describe('formatDiceThroneActionEntry', () => {
         }
     });
 
+    it('锁定（status modifier）应记录在 breakdown tooltip 中', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'SKIP_TOKEN_RESPONSE',
+            playerId: '0',
+            payload: {},
+            timestamp: 10,
+        };
+        const damageEvent: DamageDealtEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: '1',
+                amount: 7,
+                actualDamage: 7,
+                sourceAbilityId: 'test-ability',
+                sourcePlayerId: '0',
+                modifiers: [
+                    { type: 'status', value: 2, sourceId: 'targeted', sourceName: 'statusEffects.targeted.name' },
+                ],
+            },
+            timestamp: 11,
+        };
+
+        const entries = normalizeEntries(formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [damageEvent] as GameEvent[],
+        }));
+
+        expect(entries).toHaveLength(1);
+        const breakdownSeg = entries[0].segments.find(s => s.type === 'breakdown');
+        expect(breakdownSeg).toBeTruthy();
+        if (breakdownSeg?.type === 'breakdown') {
+            expect(breakdownSeg.displayText).toBe('7');
+            // 应有 2 行：原始伤害(5) + 锁定(+2)
+            expect(breakdownSeg.lines).toHaveLength(2);
+            expect(breakdownSeg.lines[0].value).toBe(5); // baseDamage = 7 - 2
+            expect(breakdownSeg.lines[1].value).toBe(2);
+            expect(breakdownSeg.lines[1].label).toBe('statusEffects.targeted.name');
+            expect(breakdownSeg.lines[1].labelIsI18n).toBe(true);
+        }
+    });
+
     it('HEAL_APPLIED/STATUS_APPLIED/TOKEN_USED 生成正确的 i18n segment', () => {
         const state = createState();
         const command: Command = {

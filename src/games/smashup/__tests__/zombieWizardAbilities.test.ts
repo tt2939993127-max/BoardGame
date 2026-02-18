@@ -181,6 +181,33 @@ describe('HAND_SHUFFLED_INTO_DECK reducer', () => {
         expect(newState.players['0'].deck.length).toBe(3);
         expect(newState.players['0'].deck.map(c => c.uid)).toEqual(['d1', 'h2', 'h1']);
     });
+
+    it('部分手牌洗入牌库时保留未选中的手牌', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('h1', 'a', 'minion', '0'), makeCard('h2', 'b', 'action', '0'), makeCard('h3', 'c', 'minion', '0')],
+                    deck: [makeCard('d1', 'd', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        // 只把 h1 放到牌库底，h2 和 h3 应保留在手牌
+        const event: SmashUpEvent = {
+            type: SU_EVENTS.HAND_SHUFFLED_INTO_DECK,
+            payload: { playerId: '0', newDeckUids: ['d1', 'h1'], reason: 'field_trip' },
+            timestamp: 0,
+        } as any;
+
+        const newState = reduce(state, event);
+        // 手牌保留 h2, h3
+        expect(newState.players['0'].hand.length).toBe(2);
+        expect(newState.players['0'].hand.map(c => c.uid)).toEqual(['h2', 'h3']);
+        // 牌库为 d1, h1
+        expect(newState.players['0'].deck.length).toBe(2);
+        expect(newState.players['0'].deck.map(c => c.uid)).toEqual(['d1', 'h1']);
+    });
 });
 
 

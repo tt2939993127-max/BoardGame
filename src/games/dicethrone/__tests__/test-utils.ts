@@ -7,6 +7,11 @@ import { DiceThroneDomain } from '../domain';
 import { diceThroneSystemsForTest } from '../game';
 import type { DiceThroneCore, TurnPhase, CardInteractionType, DiceThroneCommand, InteractionDescriptor } from '../domain/types';
 import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types';
+import {
+    diceModifyReducer, diceModifyToCommands, diceSelectReducer, diceSelectToCommands,
+    type DiceModifyStep, type DiceSelectStep, type DiceModifyResult, type DiceSelectResult,
+} from '../domain/systems';
+import type { MultistepChoiceData } from '../../../engine/systems/InteractionSystem';
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import type { AbilityCard } from '../types';
@@ -457,15 +462,17 @@ export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThron
     // pendingInteraction 断言（从 sys.interaction 读取）
     if (expect.pendingInteraction !== undefined) {
         const current = state.sys.interaction.current;
-        const actual = current?.kind === 'dt:card-interaction'
-            ? current.data as InteractionDescriptor
-            : undefined;
 
         if (expect.pendingInteraction === null) {
-            if (actual) errors.push(`pendingInteraction 应为空，实际存在: ${actual.id}`);
-        } else if (!actual) {
+            // 断言无交互：current 必须为空（不限 kind）
+            if (current) {
+                errors.push(`pendingInteraction 应为空，实际存在: kind=${current.kind} id=${current.id}`);
+            }
+        } else if (!current) {
             errors.push(`pendingInteraction 不存在，预期 type=${expect.pendingInteraction.type}`);
-        } else {
+        } else if (current.kind === 'dt:card-interaction') {
+            // 状态选择类交互：data 直接是 InteractionDescriptor
+            const actual = current.data as InteractionDescriptor;
             if (expect.pendingInteraction.type !== undefined && actual.type !== expect.pendingInteraction.type) {
                 errors.push(`pendingInteraction.type 不匹配: 预期 ${expect.pendingInteraction.type}, 实际 ${actual.type}`);
             }
@@ -478,6 +485,44 @@ export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThron
             if (expect.pendingInteraction.dieModifyMode !== undefined && actual.dieModifyConfig?.mode !== expect.pendingInteraction.dieModifyMode) {
                 errors.push(`pendingInteraction.dieModifyMode 不匹配: 预期 ${expect.pendingInteraction.dieModifyMode}, 实际 ${actual.dieModifyConfig?.mode}`);
             }
+        } else if (current.kind === 'multistep-choice') {
+            // 骰子类交互：从 meta 读取 dtType、dieModifyConfig、selectCount
+            const meta = (current.data as MultistepChoiceData)?.meta as Record<string, unknown> | undefined;
+            const dtType = meta?.dtType as string | undefined;
+
+            // type 断言：modifyDie / selectDie
+            if (expect.pendingInteraction.type !== undefined) {
+                if (expect.pendingInteraction.type !== dtType) {
+                    errors.push(`pendingInteraction.type 不匹配: 预期 ${expect.pendingInteraction.type}, 实际 ${dtType}`);
+                }
+            }
+            // playerId 断言
+            if (expect.pendingInteraction.playerId !== undefined && current.playerId !== expect.pendingInteraction.playerId) {
+                errors.push(`pendingInteraction.playerId 不匹配: 预期 ${expect.pendingInteraction.playerId}, 实际 ${current.playerId}`);
+            }
+            // selectCount 断言
+            if (expect.pendingInteraction.selectCount !== undefined) {
+                const actualSelectCount = meta?.selectCount as number | undefined;
+                if (actualSelectCount !== expect.pendingInteraction.selectCount) {
+                    errors.push(`pendingInteraction.selectCount 不匹配: 预期 ${expect.pendingInteraction.selectCount}, 实际 ${actualSelectCount}`);
+                }
+            }
+            // dieModifyMode 断言
+            if (expect.pendingInteraction.dieModifyMode !== undefined) {
+                const dieModifyConfig = meta?.dieModifyConfig as { mode?: string } | undefined;
+                if (dieModifyConfig?.mode !== expect.pendingInteraction.dieModifyMode) {
+                    errors.push(`pendingInteraction.dieModifyMode 不匹配: 预期 ${expect.pendingInteraction.dieModifyMode}, 实际 ${dieModifyConfig?.mode}`);
+                }
+            }
+            // targetOpponentDice 断言
+            if (expect.pendingInteraction.targetOpponentDice !== undefined) {
+                const actualTargetOpponent = meta?.targetOpponentDice as boolean | undefined;
+                if (actualTargetOpponent !== expect.pendingInteraction.targetOpponentDice) {
+                    errors.push(`pendingInteraction.targetOpponentDice 不匹配: 预期 ${expect.pendingInteraction.targetOpponentDice}, 实际 ${actualTargetOpponent}`);
+                }
+            }
+        } else {
+            errors.push(`pendingInteraction kind 未知: ${current.kind}，无法断言`);
         }
     }
 
@@ -486,18 +531,92 @@ export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThron
 
 /**
  * 工具函数：注入 pendingInteraction 到 sys.interaction（测试专用）
+ *
+ * - 状态选择类（selectStatus / selectPlayer / selectTargetStatus）→ dt:card-interaction
+ * - 骰子修改类（modifyDie）→ multistep-choice，注入完整的 MultistepChoiceData（含函数）
+ * - 骰子选择类（selectDie）→ multistep-choice，注入完整的 MultistepChoiceData（含函数）
  */
 export function injectPendingInteraction(
     state: MatchState<DiceThroneCore>,
     interaction: InteractionDescriptor
 ): void {
+    const isDiceType = interaction.type === 'modifyDie' || interaction.type === 'selectDie';
+
+    if (!isDiceType) {
+        // 状态选择类：dt:card-interaction，data 直接存储 InteractionDescriptor
+        state.sys.interaction = {
+            ...state.sys.interaction,
+            current: {
+                id: `dt-interaction-${interaction.id}`,
+                kind: 'dt:card-interaction',
+                playerId: interaction.playerId,
+                data: { ...interaction, sourceId: interaction.sourceCardId },
+            },
+        };
+        return;
+    }
+
+    // 骰子类：multistep-choice，必须在客户端注入函数（JSON 序列化会丢失函数）
+    if (interaction.type === 'modifyDie') {
+        const config = interaction.dieModifyConfig;
+        const mode = config?.mode ?? 'set';
+        const selectCount = interaction.selectCount ?? 1;
+        const maxSteps = (mode === 'copy') ? 1
+            : (mode === 'adjust' || mode === 'any') ? undefined
+            : selectCount;
+
+        const multistepData: MultistepChoiceData<DiceModifyStep, DiceModifyResult> = {
+            title: interaction.titleKey,
+            sourceId: interaction.sourceCardId,
+            maxSteps,
+            minSteps: (mode === 'adjust' || mode === 'any') ? 1 : undefined,
+            initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
+            localReducer: (current, step) => diceModifyReducer(current, step, config),
+            toCommands: diceModifyToCommands,
+            meta: {
+                dtType: 'modifyDie',
+                dieModifyConfig: config,
+                selectCount,
+                targetOpponentDice: interaction.targetOpponentDice ?? false,
+            },
+        };
+
+        state.sys.interaction = {
+            ...state.sys.interaction,
+            current: {
+                id: `dt-dice-modify-${interaction.id}`,
+                kind: 'multistep-choice',
+                playerId: interaction.playerId,
+                data: multistepData,
+            },
+        };
+        return;
+    }
+
+    // selectDie
+    const selectCount = interaction.selectCount ?? 1;
+    const multistepData: MultistepChoiceData<DiceSelectStep, DiceSelectResult> = {
+        title: interaction.titleKey,
+        sourceId: interaction.sourceCardId,
+        maxSteps: selectCount,
+        minSteps: 1,
+        initialResult: { selectedDiceIds: [] },
+        localReducer: diceSelectReducer,
+        toCommands: diceSelectToCommands,
+        meta: {
+            dtType: 'selectDie',
+            selectCount,
+            targetOpponentDice: interaction.targetOpponentDice ?? false,
+        },
+    };
+
     state.sys.interaction = {
         ...state.sys.interaction,
         current: {
-            id: `dt-interaction-${interaction.id}`,
-            kind: 'dt:card-interaction',
+            id: `dt-dice-select-${interaction.id}`,
+            kind: 'multistep-choice',
             playerId: interaction.playerId,
-            data: interaction,
+            data: multistepData,
         },
     };
 }

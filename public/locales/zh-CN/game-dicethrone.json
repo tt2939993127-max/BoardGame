@@ -76,7 +76,8 @@
       "cardEnlightenment": "战斗中你可以使用手牌来改变局势：主要阶段使用行动卡或升级卡，攻击掷骰阶段使用骰面修改卡。接下来轮到对手回合。",
       "aiTurn": "对手回合开始——观察对手如何打牌和攻击。",
       "knockdownExplain": "对手打出了“掌击”，让你陷入了击倒状态！击倒会在攻击掷骰前强制跳过，但可以用净化移除。",
-      "enlightenmentPlay": "打出手牌中的“悟道”来投掷 1 颗骰子。投出莲花面可获得太极、闪避和净化标记。"
+      "enlightenmentPlay": "打出手牌中的“悟道”来投掷 1 颗骰子。投出莲花面可获得太极、闪避和净化标记。",
+      "discardCard": "你的手牌超过了上限（6张）！将多余的牌拖到弃牌堆来弃掉它，弃牌不会获得 CP。"
     }
   },
   "statusEffects": {
@@ -175,7 +176,7 @@
     "sneak": {
       "name": "潜行",
       "description": [
-        "因某次攻击掷骰阶段获得伤害时，不受到伤害且不进行防御掷骰（攻击仍视为\u201c成功\u201d，其他效果可能触发）",
+        "因某次攻击掷骰阶段获得伤害时，不受到伤害且不进行防御掷骰（攻击仍视为“成功”，其他效果可能触发）",
         "经过一个完整的自己回合后，在回合末自动弃除"
       ]
     },
@@ -571,7 +572,21 @@
     "no_pending_attack": "没有待防御的攻击",
     "deck_empty": "牌库和弃牌堆均为空",
     "no_card_to_undo": "没有可撤回的售出卡牌",
-    "card_not_in_discard": "弃牌堆中找不到该卡牌"
+    "card_not_in_discard": "弃牌堆中找不到该卡牌",
+    "no_pending_interaction": "当前没有待处理的交互",
+    "unsupported_character": "不支持的角色",
+    "invalid_die_value": "骰子值无效（需在 1-6 之间）",
+    "no_pending_damage": "当前没有待结算的伤害",
+    "unknown_token": "未知的 Token 类型",
+    "no_token": "Token 数量不足",
+    "invalid_amount": "无效的数量",
+    "no_status": "目标没有该状态效果",
+    "no_knockdown": "目标没有击倒状态",
+    "not_enough_cp": "CP 不足",
+    "no_pending_bonus_dice": "当前没有待结算的奖励骰",
+    "bonus_reroll_limit_reached": "已达到奖励骰重掷次数上限",
+    "not_enough_token": "Token 数量不足以支付费用",
+    "invalid_die_index": "无效的骰子索引"
   },
   "actions": {
     "resolveAttack": "结算攻击",
@@ -937,10 +952,10 @@
       }
     },
     "calm-water-2": {
-      "name": "心如止水 II",
-      "description": "大顺子触发：造成9伤害，获得3气+闪避，施加击倒",
+      "name": "止禅拳法 II",
+      "description": "大顺子触发：造成7伤害，获得3气+闪避，施加击倒",
       "effects": {
-        "damage9": "造成9点伤害",
+        "damage7": "造成7点伤害",
         "gainTaiji3": "然后获得3个太极标记",
         "gainEvasive": "获得1个闪避标记",
         "inflictKnockdown": "施加1个击倒标记"
@@ -1157,31 +1172,33 @@
     },
     "soul-burn-2": {
       "name": "燃烧之灵 II",
-      "description": "2x[火魂]: 施加1燃烧。3x[火魂]: 上限+1，造成2x[火魂]不可防御伤害。",
+      "description": "2火魂: 获得2×[火魂数]FM，造成[火魂数]伤害。3火魂额外施加灼烧。炙热之魂(2岩浆+2火魂): FM上限+1，获得5FM，施加倒地。",
       "effects": {
-        "inflictBurn": "施加1个燃烧标记"
+        "fm": "获得2×火魂骰面数量的火焰精通",
+        "damage": "对所有对手造成等同于火魂骰面数量的伤害"
       }
     },
     "soul-burn-3": {
       "effects": {
-        "increaseLimit": "火焰精通堆叠上限增加1",
-        "fm": "获得2层火焰精通",
+        "fm": "获得2×火魂骰面数量的火焰精通",
+        "inflictBurn": "施加1个燃烧标记",
         "damage": "对所有对手造成等同于火魂骰面数量的伤害"
       }
     },
-    "soul-burn-4": {
-      "name": "燃烧之灵 (4x火魂)",
+    "blazing-soul": {
+      "name": "炙热之魂",
       "effects": {
-        "main": "火焰精通的堆叠上限提升1。然后获得5火焰精通。",
-        "knockdown": "施加1个击倒标记"
+        "increaseLimit": "火焰精通堆叠上限提升1",
+        "gainFM5": "获得5层火焰精通",
+        "inflictKnockdown": "施加倒地"
       }
     },
     "fiery-combo-2": {
       "name": "炽热波纹 II",
-      "description": "小顺子: 获得2精通，造成5+X伤害。2火+2熔岩: 获得2精通，施加燃烧，造成6伤害。",
+      "description": "小顺子: 获得2精通，造成6+X伤害。2火+2火魂: 获得2精通，施加燃烧，造成6伤害。",
       "effects": {
         "gainFM2": "获得2层火焰精通",
-        "main": "造成5点基础伤害。若拥有火焰精通，每层火焰精通额外造成1点伤害。"
+        "main": "造成6点基础伤害。若拥有火焰精通，每层火焰精通额外造成1点伤害。"
       }
     },
     "incinerate": {
@@ -1743,7 +1760,7 @@
     },
     "card-meditation-3": {
       "name": "清修 III",
-      "description": "防御投掷5骰。获得1×气数值的气，造成1×拳伤害。如果投出2个太极，获得闪避 -或- 净化。"
+      "description": "防御投掷5骰。获得1×太极数量的气，造成1×拳数量的伤害。如果投出太极+莲花，获得闪避 -或- 净化。"
     },
     "card-play-six": {
       "name": "玩得六啊！",
@@ -1755,7 +1772,7 @@
     },
     "card-zen-fist-2": {
       "name": "止禅拳法 II",
-      "description": "大顺子触发：造成9伤害，然后获得闪避和3气，施加击倒。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。"
+      "description": "大顺子触发：造成7伤害，然后获得闪避和3气，施加击倒。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。"
     },
     "card-storm-assault-2": {
       "name": "风暴突袭 II",
@@ -1783,7 +1800,7 @@
     },
     "card-contemplation-2": {
       "name": "冥想 II",
-      "description": "3太极触发：获得6气，获得闪避和净化。禅武归一（拳掌太极触发）：造成6伤害，然后获得2气。"
+      "description": "3太极触发：获得6气，获得闪避和净化。禅武归一（2拳+2太极触发）：造成6伤害，然后获得2气。"
     },
     "card-just-this": {
       "name": "就这？",

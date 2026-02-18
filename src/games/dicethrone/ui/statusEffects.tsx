@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 
@@ -450,6 +450,7 @@ export const SelectableStatusBadge = ({
     size = 'normal',
     locale,
     atlas,
+    inModal = false,
 }: {
     effectId: string;
     stacks: number;
@@ -459,6 +460,8 @@ export const SelectableStatusBadge = ({
     size?: 'normal' | 'small';
     locale?: string;
     atlas?: StatusAtlases | null;
+    /** 在弹窗内使用时传 true，确保 tooltip 层级高于弹窗 */
+    inModal?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { color: 'from-gray-500 to-gray-600' };
@@ -522,6 +525,7 @@ export const SelectableStatusBadge = ({
                 content={info.description}
                 isVisible={isHovered}
                 position="right"
+                zIndex={inModal ? UI_Z_INDEX.modalTooltip : undefined}
             />
         </div>
     );
@@ -570,6 +574,7 @@ export const SelectableEffectsContainer = ({
                     size={size}
                     locale={locale}
                     atlas={atlas}
+                    inModal
                 />
             ))}
         </div>

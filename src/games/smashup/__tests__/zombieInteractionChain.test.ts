@@ -21,7 +21,7 @@ import { smashUpFlowHooks } from '../domain/index';
 import {
     createFlowSystem, createLogSystem, createActionLogSystem, createUndoSystem,
     createInteractionSystem, createRematchSystem, createResponseWindowSystem,
-    createTutorialSystem, createEventStreamSystem,
+    createTutorialSystem, createEventStreamSystem, createSimpleChoiceSystem,
 } from '../../../engine';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createSmashUpEventSystem } from '../domain/systems';
@@ -93,6 +93,7 @@ function buildSystems(): EngineSystem<SmashUpCore>[] {
         createActionLogSystem<SmashUpCore>(),
         createUndoSystem<SmashUpCore>(),
         createInteractionSystem<SmashUpCore>(),
+        createSimpleChoiceSystem<SmashUpCore>(),
         createRematchSystem<SmashUpCore>(),
         createResponseWindowSystem<SmashUpCore>({
             allowedCommands: ['su:play_action'],
@@ -406,6 +407,45 @@ describe('zombie_not_enough_bullets（子弹不够）1步链', () => {
 // ============================================================================
 
 describe('zombie_lend_a_hand（借把手）1步链', () => {
+    it('交互 min=0 且不含冗余跳过选项', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('lah1', 'zombie_lend_a_hand', '0', 'action')],
+                    discard: [makeCard('disc-a1', 'pirate_first_mate', '0', 'minion')],
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'lah1' } }, 'lend_a_hand: 打出');
+        const choice = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        // min=0 表示可以不选，不需要额外的 skip 选项
+        expect(choice.multi?.min).toBe(0);
+        expect(choice.options.some((o: any) => o.id === 'skip')).toBe(false);
+    });
+
+    it('提交空选择 → 弃牌堆不变', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('lah1', 'zombie_lend_a_hand', '0', 'action')],
+                    discard: [makeCard('disc-a1', 'pirate_first_mate', '0', 'minion')],
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'lah1' } }, 'lend_a_hand: 打出');
+        // 提交空选择（optionIds: []）等同于跳过
+        const r2 = runCommand(r1.finalState, { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionIds: [] } }, 'lend_a_hand: 空选择');
+        expect(r2.steps[0]?.success).toBe(true);
+        // 弃牌堆不变
+        expect(r2.finalState.core.players['0'].discard.some((c: CardInstance) => c.uid === 'disc-a1')).toBe(true);
+    });
+
     it('多选弃牌堆卡 → 洗回牌库', () => {
         const core = makeState({
             players: {

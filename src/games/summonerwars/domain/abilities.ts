@@ -383,25 +383,16 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
     },
   },
 
-  // 伊路特-巴尔 - 火祀召唤（被动描述：被召唤时替换友方单位）
-  // 注意：实际执行逻辑由下方主动版本 fire_sacrifice_summon 的 custom actionId 驱动
+  // 伊路特-巴尔 - 火祀召唤（召唤时触发：消灭一个友方单位，占据其位置）
+  // trigger: 'onSummon' — 在 SUMMON_UNIT 命令的 validate/execute 中处理，不显示主动按钮
   {
-    id: 'fire_sacrifice_passive',
-    name: abilityText('fire_sacrifice_passive', 'name'),
-    description: abilityText('fire_sacrifice_passive', 'description'),
+    id: 'fire_sacrifice_summon',
+    name: abilityText('fire_sacrifice_summon', 'name'),
+    description: abilityText('fire_sacrifice_summon', 'description'),
     sfxKey: 'fantasy.elemental_sword_fireattack_01',
     trigger: 'onSummon',
-    effects: [
-      { type: 'destroyUnit', target: { unitId: 'selectedAlly' } },
-      { type: 'moveUnit', target: 'self', to: 'victimPosition' },
-    ],
-    cost: { destroyAlly: true },
-    requiresTargetSelection: true,
-    targetSelection: {
-      type: 'unit',
-      filter: { type: 'isOwner', target: 'self', owner: 'self' },
-      count: 1,
-    },
+    effects: [],
+    ui: { requiresButton: false },
   },
 
   // 德拉戈斯 - 吸取生命
@@ -414,7 +405,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
     condition: { type: 'always' },
     effects: [
       { type: 'destroyUnit', target: { unitId: 'selectedAlly' } },
-      { type: 'doubleStrength', target: 'self' },
+      // 效果由 execute.ts 直接处理：special 标记也算近战命中
     ],
     requiresTargetSelection: true,
     targetSelection: {
@@ -658,52 +649,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 主动技能（需要玩家手动激活）
   // ============================================================================
 
-  {
-    id: 'fire_sacrifice_summon',
-    name: abilityText('fire_sacrifice_summon', 'name'),
-    description: abilityText('fire_sacrifice_summon', 'description'),
-    sfxKey: 'fantasy.elemental_sword_fireattack_01',
-    trigger: 'activated',
-    effects: [
-      { type: 'custom', actionId: 'fire_sacrifice_summon' },
-    ],
-    validation: {
-      requiredPhase: 'summon',
-      customValidator: (ctx) => {
-        const targetUnitId = ctx.payload.targetUnitId as string | undefined;
-        if (!targetUnitId) {
-          return { valid: false, error: '必须选择要消灭的友方单位' };
-        }
-        
-        let targetUnit: import('./types').BoardUnit | undefined;
-        for (let row = 0; row < ctx.core.board.length; row++) {
-          for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
-            const unit = ctx.core.board[row]?.[col]?.unit;
-            if (unit && (unit.instanceId === targetUnitId || unit.cardId === targetUnitId)) {
-              targetUnit = unit;
-              break;
-            }
-          }
-          if (targetUnit) break;
-        }
-        
-        if (!targetUnit || targetUnit.owner !== ctx.playerId) {
-          return { valid: false, error: '必须选择一个友方单位' };
-        }
-        
-        return { valid: true };
-      },
-    },
-    ui: {
-      requiresButton: true,
-      buttonPhase: 'summon',
-      buttonLabel: 'abilityButtons.fireSacrificeSummon',
-      buttonVariant: 'secondary',
-      activationStep: 'selectUnit',
-      quickCheck: ({ core, unit, playerId }) =>
-        getPlayerUnits(core, playerId).some(u => u.instanceId !== unit.instanceId),
-    },
-  },
+  // 注意：fire_sacrifice_summon 已改为 onSummon 触发，在 SUMMON_UNIT 命令中处理
+  // 卡牌配置中保留 'fire_sacrifice_summon' ID，但 trigger 为 'onSummon'，不显示按钮
 ];
 
 // 注册所有技能

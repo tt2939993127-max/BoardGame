@@ -17,6 +17,7 @@ import { engineConfig as engineConfig3 } from './dicethrone/game';
 import Board3 from './dicethrone/Board';
 import Tutorial3 from './dicethrone/tutorial';
 import Thumbnail3 from './dicethrone/thumbnail';
+import { diceThroneLatencyConfig as latencyConfig3 } from './dicethrone/latencyConfig';
 
 import manifest4 from './fxpreview/manifest';
 import Thumbnail4 from './fxpreview/thumbnail';
@@ -26,18 +27,21 @@ import { engineConfig as engineConfig5 } from './smashup/game';
 import Board5 from './smashup/Board';
 import Tutorial5 from './smashup/tutorial';
 import Thumbnail5 from './smashup/thumbnail';
+import { smashUpLatencyConfig as latencyConfig5 } from './smashup/latencyConfig';
 
 import manifest6 from './summonerwars/manifest';
 import { engineConfig as engineConfig6 } from './summonerwars/game';
 import Board6 from './summonerwars/Board';
 import Tutorial6 from './summonerwars/tutorial';
 import Thumbnail6 from './summonerwars/thumbnail';
+import { summonerWarsLatencyConfig as latencyConfig6 } from './summonerwars/latencyConfig';
 
 import manifest7 from './tictactoe/manifest';
 import { engineConfig as engineConfig7 } from './tictactoe/game';
 import Board7 from './tictactoe/Board';
 import Tutorial7 from './tictactoe/tutorial';
 import Thumbnail7 from './tictactoe/thumbnail';
+import { ticTacToeLatencyConfig as latencyConfig7 } from './tictactoe/latencyConfig';
 
 import manifest8 from './ugcbuilder/manifest';
 import Thumbnail8 from './ugcbuilder/thumbnail';
@@ -63,6 +67,7 @@ const entry3: GameClientManifestEntry = {
     board: Board3,
     tutorial: Tutorial3,
     thumbnail: <Thumbnail3 />,
+    latencyConfig: latencyConfig3,
 };
 
 const entry4: GameClientManifestEntry = {
@@ -76,6 +81,7 @@ const entry5: GameClientManifestEntry = {
     board: Board5,
     tutorial: Tutorial5,
     thumbnail: <Thumbnail5 />,
+    latencyConfig: latencyConfig5,
 };
 
 const entry6: GameClientManifestEntry = {
@@ -84,6 +90,7 @@ const entry6: GameClientManifestEntry = {
     board: Board6,
     tutorial: Tutorial6,
     thumbnail: <Thumbnail6 />,
+    latencyConfig: latencyConfig6,
 };
 
 const entry7: GameClientManifestEntry = {
@@ -92,6 +99,7 @@ const entry7: GameClientManifestEntry = {
     board: Board7,
     tutorial: Tutorial7,
     thumbnail: <Thumbnail7 />,
+    latencyConfig: latencyConfig7,
 };
 
 const entry8: GameClientManifestEntry = {

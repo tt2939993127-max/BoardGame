@@ -21,3 +21,12 @@ export type { UseVisualSequenceGateReturn } from './useVisualSequenceGate';
 
 export { useVisualStateBuffer } from './useVisualStateBuffer';
 export type { UseVisualStateBufferReturn } from './useVisualStateBuffer';
+
+export { useCardSpotlightQueue } from './useCardSpotlightQueue';
+export type {
+    SpotlightItem,
+    UseCardSpotlightQueueConfig,
+    UseCardSpotlightQueueReturn,
+} from './useCardSpotlightQueue';
+
+export { useIsInteractionBusy } from './useIsInteractionBusy';

@@ -30,6 +30,8 @@ interface TutorialContextType {
     isLastStep: boolean;
     /** 是否正在等待动画完成 */
     isPendingAnimation: boolean;
+    /** AI 命令正在自动执行中（此期间命令失败不应提示用户） */
+    isAiExecuting: boolean;
     startTutorial: (manifest: TutorialManifest) => void;
     nextStep: (reason?: TutorialNextReason) => void;
     closeTutorial: () => void;
@@ -80,6 +82,8 @@ const normalizeTutorialState = (nextTutorial: TutorialState): TutorialState => {
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [tutorial, setTutorial] = useState<TutorialState>({ ...DEFAULT_TUTORIAL_STATE });
     const [isControllerReady, setIsControllerReady] = useState(false);
+    const isAiExecutingRef = useRef(false);
+    const [isAiExecuting, setIsAiExecuting] = useState(false);
     const controllerRef = useRef<TutorialController | null>(null);
     const pendingStartRef = useRef<TutorialManifest | null>(null);
     const executedAiStepsRef = useRef<Set<string>>(new Set());
@@ -102,11 +106,18 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const startTutorial = useCallback((manifest: TutorialManifest) => {
-        if (!controllerRef.current) {
-            pendingStartRef.current = manifest;
-            return;
-        }
-        controllerRef.current.start(manifest);
+        // 立即重置 tutorial state，清除上一个教程的残留数据：
+        // 1. 避免旧教程的提示（TutorialOverlay）在新教程加载期间继续显示
+        // 2. 使 MatchRoom 的 isTutorialReset 判断成立（manifestId=null, steps=[]），允许重新启动
+        setTutorial({ ...DEFAULT_TUTORIAL_STATE });
+        executedAiStepsRef.current = new Set();
+        // 始终存入 pendingStartRef，由 bindDispatch 消费。
+        // 不直接调用 controllerRef.current.start()，因为 controllerRef 可能残留上一个对局
+        // （联机 Board 卸载后 controllerRef 不会被清空），直接 dispatch 会发给已断开的联机服务器。
+        pendingStartRef.current = manifest;
+        // 清空旧 controller，强制等待新 Board 挂载后重新 bindDispatch
+        controllerRef.current = null;
+        setIsControllerReady(false);
     }, []);
 
     const nextStep = useCallback((reason?: TutorialNextReason) => {
@@ -155,6 +166,8 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const controller = controllerRef.current;
             if (!controller) return;
 
+            setIsAiExecuting(true);
+            isAiExecutingRef.current = true;
             aiActions.forEach((action: TutorialAiAction) => {
                 // 如果 aiAction 指定了 playerId，注入到 payload 中供 adapter 使用
                 const actionPayload = action.playerId
@@ -162,6 +175,8 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     : action.payload;
                 controller.dispatchCommand(action.commandType, actionPayload);
             });
+            isAiExecutingRef.current = false;
+            setIsAiExecuting(false);
             controller.consumeAi(stepId);
 
             // 同步调用 next，避免 consumeAi 触发状态更新后 effect 清理导致 advanceTimer 被取消
@@ -182,6 +197,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             isActive: tutorial.active,
             isLastStep: tutorial.active && tutorial.stepIndex >= tutorial.steps.length - 1,
             isPendingAnimation: tutorial.active && !!tutorial.pendingAnimationAdvance,
+            isAiExecuting,
             startTutorial,
             nextStep,
             closeTutorial,
@@ -190,7 +206,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             bindDispatch,
             syncTutorialState,
         };
-    }, [tutorial, bindDispatch, closeTutorial, consumeAi, animationComplete, nextStep, startTutorial, syncTutorialState]);
+    }, [tutorial, isAiExecuting, bindDispatch, closeTutorial, consumeAi, animationComplete, nextStep, startTutorial, syncTutorialState]);
 
     return (
         <TutorialContext.Provider value={value}>
@@ -210,6 +226,12 @@ export const useTutorial = () => {
 export const useTutorialBridge = (tutorial: TutorialState, dispatch: (type: string, payload?: unknown) => void) => {
     const context = useContext(TutorialContext);
     const lastSyncSignatureRef = useRef<string | null>(null);
+    // 用 ref 保持最新的 context 和 dispatch，供挂载时的 effect 使用
+    const contextRef = useRef(context);
+    const dispatchRef = useRef(dispatch);
+    contextRef.current = context;
+    dispatchRef.current = dispatch;
+
     useEffect(() => {
         if (!context) return;
         const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}-${tutorial.aiActions?.length ?? 0}-${tutorial.pendingAnimationAdvance ?? false}`;
@@ -217,7 +239,14 @@ export const useTutorialBridge = (tutorial: TutorialState, dispatch: (type: stri
         lastSyncSignatureRef.current = signature;
         context.syncTutorialState(tutorial);
     }, [context, tutorial]);
+
+    // 每次 Board 挂载时无条件重新绑定 dispatch。
+    // 不能只依赖 [context, dispatch] 的引用变化：当 Board 因 isGameNamespaceReady 切换而卸载/重挂载时，
+    // LocalGameProvider 的 dispatch 引用可能不变（useCallback 依赖稳定），导致 effect 不重新执行，
+    // pendingStartRef 里的 manifest 永远不被消费，教程卡在初始化。
     useEffect(() => {
-        context?.bindDispatch(dispatch);
-    }, [context, dispatch]);
+        // 通过 ref 访问最新值，避免闭包捕获旧引用
+        contextRef.current?.bindDispatch((...args) => dispatchRef.current(...args));
+    // 空依赖：每次挂载执行一次
+    }, []);  
 };

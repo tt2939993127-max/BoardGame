@@ -17,7 +17,7 @@ import {
   getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
   manhattanDistance, getStructureAt, findUnitPositionByInstanceId, getSummoner,
-  getUnitAbilities, hasStableAbility,
+  getUnitAbilities, hasStableAbility, getForceDestinations,
 } from '../domain/helpers';
 import { isUndeadCard, getBaseCardId, CARD_IDS } from '../domain/ids';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
@@ -117,6 +117,8 @@ export function useCellInteraction({
   const [pendingBeforeAttack, setPendingBeforeAttack] = useState<PendingBeforeAttack | null>(null);
   const [magicEventChoiceMode, setMagicEventChoiceMode] = useState<{ cardId: string } | null>(null);
   const [endPhaseConfirmPending, setEndPhaseConfirmPending] = useState(false);
+  // 火祀召唤：选中伊路特-巴尔手牌后，先选牺牲品单位
+  const [fireSacrificeSummonMode, setFireSacrificeSummonMode] = useState<{ handCardId: string } | null>(null);
 
   // 离开魔力阶段时自动清空弃牌选中和事件卡选择模式
   useEffect(() => {
@@ -141,6 +143,8 @@ export function useCellInteraction({
   }, [selectedHandCardId, myHand]);
 
   const validSummonPositions = useMemo(() => {
+    // 火祀召唤模式：先选牺牲品，不显示普通召唤位置
+    if (fireSacrificeSummonMode) return [];
     if (!isMyTurn || !selectedHandCard || selectedHandCard.cardType !== 'unit') return [];
     const player = core.players[myPlayerId as '0' | '1'];
     // 重燃希望：允许在任意阶段召唤
@@ -179,7 +183,7 @@ export function useCellInteraction({
     }
 
     return positions;
-  }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
+  }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard, fireSacrificeSummonMode]);
 
   const validBuildPositions = useMemo(() => {
     if (currentPhase !== 'build' || !isMyTurn || !selectedHandCard) return [];
@@ -225,12 +229,13 @@ export function useCellInteraction({
 
   // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
-    if (!abilityMode || abilityMode.step !== 'selectUnit') return [];
-    if (abilityMode.abilityId === 'fire_sacrifice_summon') {
+    // 火祀召唤：选中伊路特-巴尔手牌后，高亮所有可牺牲的友方单位（非召唤师，任意位置）
+    if (fireSacrificeSummonMode) {
       return getPlayerUnits(core, myPlayerId as '0' | '1')
-        .filter(u => u.instanceId !== abilityMode.sourceUnitId)
+        .filter(u => u.card.unitClass !== 'summoner')
         .map(u => u.position);
     }
+    if (!abilityMode || abilityMode.step !== 'selectUnit') return [];
     if (abilityMode.abilityId === 'life_drain') {
       const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
@@ -369,7 +374,7 @@ export function useCellInteraction({
       return targets;
     }
     return [];
-  }, [abilityMode, core, myPlayerId]);
+  }, [abilityMode, core, myPlayerId, fireSacrificeSummonMode]);
 
   // 获取可移动位置
   const validMovePositions = useMemo(() => {
@@ -573,25 +578,29 @@ export function useCellInteraction({
               targetPosition: { row: gameRow, col: gameCol },
             });
           } else if (abilityMode.abilityId === 'high_telekinesis_instead') {
-            // 高阶念力（代替攻击）：选择目标后进入推拉方向选择
-            const htSourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
+            // 高阶念力（代替攻击）：选择目标后计算所有可达终点，进入棋盘点击终点模式
+            const htTargetPos = { row: gameRow, col: gameCol };
+            const htDests = getForceDestinations(core, htTargetPos, 1);
             setAbilityMode(null);
             eventCardModes.setTelekinesisTargetMode({
               abilityId: 'high_telekinesis_instead',
               sourceUnitId: abilityMode.sourceUnitId,
-              sourcePosition: htSourcePos ?? { row: 0, col: 0 },
-              targetPosition: { row: gameRow, col: gameCol },
+              sourcePosition: findUnitPositionByInstanceId(core, abilityMode.sourceUnitId) ?? undefined,
+              targetPosition: htTargetPos,
+              destinations: htDests,
             });
             return;
           } else if (abilityMode.abilityId === 'telekinesis_instead') {
-            // 念力（代替攻击）：选择目标后进入推拉方向选择
-            const tkSourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
+            // 念力（代替攻击）：选择目标后计算所有可达终点，进入棋盘点击终点模式
+            const tkTargetPos = { row: gameRow, col: gameCol };
+            const tkDests = getForceDestinations(core, tkTargetPos, 1);
             setAbilityMode(null);
             eventCardModes.setTelekinesisTargetMode({
               abilityId: 'telekinesis_instead',
               sourceUnitId: abilityMode.sourceUnitId,
-              sourcePosition: tkSourcePos ?? { row: 0, col: 0 },
-              targetPosition: { row: gameRow, col: gameCol },
+              sourcePosition: findUnitPositionByInstanceId(core, abilityMode.sourceUnitId) ?? undefined,
+              targetPosition: tkTargetPos,
+              destinations: tkDests,
             });
             return;
           } else {
@@ -684,6 +693,27 @@ export function useCellInteraction({
           }
         }
       }
+    }
+
+    // 火祀召唤：选中牺牲品单位后，直接召唤到牺牲品位置
+    if (currentPhase === 'summon' && fireSacrificeSummonMode) {
+      const isValidSacrifice = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
+      if (isValidSacrifice) {
+        const sacrificeUnit = core.board[gameRow]?.[gameCol]?.unit;
+        if (sacrificeUnit) {
+          // 位置传牺牲品位置（validate/execute 会用 sacrificeUnitId 覆盖）
+          dispatch(SW_COMMANDS.SUMMON_UNIT, {
+            cardId: fireSacrificeSummonMode.handCardId,
+            position: { row: gameRow, col: gameCol },
+            sacrificeUnitId: sacrificeUnit.instanceId,
+          });
+          setFireSacrificeSummonMode(null);
+          setSelectedHandCardId(null);
+        }
+      } else {
+        showToast.warning(t('interaction.fireSacrifice.mustSelectAlly'));
+      }
+      return;
     }
 
     // 召唤阶段：执行召唤
@@ -818,6 +848,7 @@ export function useCellInteraction({
   }, [core, dispatch, currentPhase, selectedHandCardId, validSummonPositions, validBuildPositions,
     validMovePositions, validAttackPositions, myPlayerId, fromViewCoord,
     abilityMode, validAbilityPositions, validAbilityUnits,
+    fireSacrificeSummonMode,
     eventCardModes.handleEventModeClick,
     eventCardModes.setTelekinesisTargetMode,
     activeBeforeAttack]);
@@ -907,6 +938,7 @@ export function useCellInteraction({
     // 如果点击的是已选中的卡牌，取消选中
     if (cardId && selectedHandCardId === cardId) {
       setSelectedHandCardId(null);
+      setFireSacrificeSummonMode(null);
       return;
     }
 
@@ -915,8 +947,22 @@ export function useCellInteraction({
       eventCardModes.clearAllEventModes();
     }
 
+    // 火祀召唤：选中伊路特-巴尔时，进入牺牲品选择模式
+    if (cardId && currentPhase === 'summon' && isMyTurn) {
+      const card = myHand.find(c => c.id === cardId);
+      if (card && card.cardType === 'unit' && (card as UnitCard).abilities?.includes('fire_sacrifice_summon')) {
+        const hasAlly = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.card.unitClass !== 'summoner');
+        if (hasAlly) {
+          setFireSacrificeSummonMode({ handCardId: cardId });
+          setSelectedHandCardId(cardId);
+          return;
+        }
+      }
+    }
+
+    setFireSacrificeSummonMode(null);
     setSelectedHandCardId(cardId);
-  }, [eventCardModes.bloodSummonMode, myHand, eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, selectedHandCardId]);
+  }, [eventCardModes.bloodSummonMode, myHand, eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, selectedHandCardId, currentPhase, isMyTurn, core, myPlayerId]);
 
   // 确认弃牌换魔力
   const handleConfirmDiscard = useCallback(() => {
@@ -936,6 +982,8 @@ export function useCellInteraction({
   const handleEndPhase = useCallback(() => {
     // 强制技能激活时禁止推进阶段（如鲜血符文必须二选一）
     if (isMandatoryAbilityActive) return;
+    // 非自己回合时禁止操作（防止快速点击越过回合边界）
+    if (!isMyTurn) return;
     if (eventCardModes.hasActiveEventMode) {
       eventCardModes.clearAllEventModes();
     }
@@ -954,7 +1002,7 @@ export function useCellInteraction({
     dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
   }, [dispatch, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending,
     eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, magicEventChoiceMode,
-    isMandatoryAbilityActive]);
+    isMandatoryAbilityActive, isMyTurn]);
 
   // ---------- 外部技能确认 ----------
 
@@ -1134,6 +1182,7 @@ export function useCellInteraction({
     // 计算值
     validSummonPositions, validBuildPositions, validMovePositions, validAttackPositions,
     validAbilityPositions, validAbilityUnits, actionableUnitPositions, abilityReadyPositions,
+    fireSacrificeSummonMode,
     validEventTargets: eventCardModes.validEventTargets,
     bloodSummonHighlights: eventCardModes.bloodSummonHighlights,
     annihilateHighlights: eventCardModes.annihilateHighlights,
@@ -1145,6 +1194,7 @@ export function useCellInteraction({
     stunHighlights: eventCardModes.stunHighlights,
     hypnoticLureHighlights: eventCardModes.hypnoticLureHighlights,
     afterAttackAbilityHighlights: eventCardModes.afterAttackAbilityHighlights,
+    telekinesisHighlights: eventCardModes.telekinesisHighlights,
     // 回调
     handleCellClick, handleCardClick, handleCardSelect,
     handleConfirmDiscard, handlePlayEvent: eventCardModes.handlePlayEvent, handleEndPhase,
@@ -1158,6 +1208,7 @@ export function useCellInteraction({
     handleConfirmBeforeAttackCards, handleCancelBeforeAttack,
     handlePlayMagicEvent, handleDiscardMagicEvent, handleCancelMagicEventChoice,
     clearAllEventModes: eventCardModes.clearAllEventModes,
+    hasActiveEventMode: eventCardModes.hasActiveEventMode,
     isMandatoryAbilityActive,
   };
 }

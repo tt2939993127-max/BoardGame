@@ -158,7 +158,7 @@ describe('幽灵 ongoing 能力', () => {
     });
 
     describe('ghost_make_contact: 控制对手随从', () => {
-        test('单目标时创建 Interaction', () => {
+        test('唯一手牌时 onPlay 直接返回空事件（控制权由 ONGOING_ATTACHED reduce 处理）', () => {
             const oppMinion = makeMinion({ defId: 'opp_m', uid: 'om-1', controller: '1', owner: '1', basePower: 5 });
             const base = makeBase({ minions: [oppMinion] });
             const state = makeState([base]);
@@ -172,9 +172,30 @@ describe('幽灵 ongoing 能力', () => {
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
+            // 不应弹出交互（目标随从已通过 targetMinionUid 在打出时确定）
             const current = (result.matchState?.sys as any)?.interaction?.current;
-            expect(current).toBeDefined();
-            expect(current?.data?.sourceId).toBe('ghost_make_contact');
+            expect(current).toBeUndefined();
+            expect(result.events).toHaveLength(0);
+        });
+
+        test('非唯一手牌时 onPlay 返回 condition_not_met 反馈', () => {
+            const oppMinion = makeMinion({ defId: 'opp_m', uid: 'om-1', controller: '1', owner: '1', basePower: 5 });
+            const base = makeBase({ minions: [oppMinion] });
+            const state = makeState([base]);
+            state.players['0'].hand = [
+                makeCard('mc-1', 'ghost_make_contact', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS),
+                makeCard('other-1', 'ghost_ghost', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS),
+            ];
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const executor = resolveAbility('ghost_make_contact', 'onPlay')!;
+            const result = executor({
+                state, matchState: ms, playerId: '0', cardUid: 'mc-1', defId: 'ghost_make_contact',
+                baseIndex: 0, random: dummyRandom, now: 1000,
+            });
+
+            expect(result.events).toHaveLength(1);
+            expect((result.events[0] as any).payload?.messageKey).toBe('feedback.condition_not_met');
         });
     });
 });
@@ -632,6 +653,50 @@ describe('米斯卡塔尼克 新增能力', () => {
             const current = interaction?.current;
             expect(current).toBeDefined();
             expect(current?.data?.sourceId).toBe('miskatonic_field_trip');
+        });
+
+        test('交互选项不包含疯狂牌', () => {
+            const base = makeBase();
+            // 手牌中混入疯狂牌
+            const stateWithMadness = makeState([base], {
+                players: {
+                    '0': {
+                        id: '0', vp: 0,
+                        hand: [
+                            makeCard('h1', 'test_minion_a', 'minion', '0', SMASHUP_FACTION_IDS.GHOSTS),
+                            { uid: 'mad1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' } as any,
+                            { uid: 'mad2', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' } as any,
+                        ],
+                        deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.STEAMPUNKS] as [string, string],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS] as [string, string],
+                    },
+                },
+            });
+            const ms = { core: stateWithMadness, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const executor = resolveAbility('miskatonic_field_trip', 'onPlay')!;
+            const result = executor({
+                state: stateWithMadness, matchState: ms, playerId: '0',
+                cardUid: 'ft-1', defId: 'miskatonic_field_trip',
+                baseIndex: 0, random: dummyRandom, now: 1000,
+            });
+
+            const interaction = (result.matchState?.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            // 选项中不应包含疯狂牌（mad1, mad2）
+            const options = current?.data?.options ?? [];
+            const madnessOptions = options.filter((o: any) => o.value?.defId === MADNESS_CARD_DEF_ID);
+            expect(madnessOptions.length).toBe(0);
+            // 只有 h1 这一张普通牌（skip 选项不算）
+            const cardOptions = options.filter((o: any) => o.value?.cardUid);
+            expect(cardOptions.length).toBe(1);
         });
     });
 });

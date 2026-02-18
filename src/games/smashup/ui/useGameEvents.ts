@@ -1,8 +1,11 @@
 /**
  * 大杀四方 - 游戏事件流消费 Hook
  *
- * 使用 EventStreamSystem 消费事件，驱动动画/特效
+ * 使用 EventStreamSystem 消费事件，驱动 FX 特效系统
  * 遵循 lastSeenEventId 模式，首次挂载跳过历史事件
+ *
+ * 视觉特效（力量浮字/行动卡展示/VP飞行/基地占领）通过 fxBus.push() 触发，
+ * 非视觉反馈（能力反馈 toast）保留本地状态管理。
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -12,48 +15,12 @@ import { SU_EVENTS } from '../domain/types';
 import type { AbilityFeedbackEvent } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
 import { useEventStreamCursor } from '../../../engine/hooks';
+import type { FxBus } from '../../../engine/fx';
+import { SU_FX } from './fxSetup';
 
 // ============================================================================
-// 类型
+// 类型（保留供外部引用）
 // ============================================================================
-
-/** 随从入场动画数据 */
-export interface MinionEntryEffect {
-  id: string;
-  defId: string;
-  baseIndex: number;
-  power: number;
-  playerId: string;
-}
-
-/** 行动卡展示动画数据 */
-export interface ActionShowEffect {
-  id: string;
-  defId: string;
-  playerId: string;
-}
-
-/** 基地记分动画数据 */
-export interface BaseScoredEffect {
-  id: string;
-  baseDefId: string;
-  baseIndex: number;
-  rankings: Array<{ playerId: string; power: number; vp: number }>;
-}
-
-/** 力量变化浮字数据 */
-export interface PowerChangeEffect {
-  id: string;
-  baseIndex: number;
-  delta: number;
-}
-
-/** 抽牌动画数据 */
-export interface CardDrawnEffect {
-  id: string;
-  playerId: string;
-  count: number;
-}
 
 /** 能力反馈提示数据 */
 export interface AbilityFeedbackEffect {
@@ -71,21 +38,20 @@ export interface AbilityFeedbackEffect {
 interface UseGameEventsParams {
   G: MatchState<SmashUpCore>;
   myPlayerId: string;
+  /** FX 事件总线 */
+  fxBus: FxBus;
+  /** 基地 DOM 引用（用于定位力量浮字） */
+  baseRefs: React.RefObject<Map<number, HTMLElement>>;
 }
 
-export function useGameEvents({ G }: UseGameEventsParams) {
+export function useGameEvents({ G, fxBus, baseRefs }: UseGameEventsParams) {
   const entries = getEventStreamEntries(G);
   const { consumeNew } = useEventStreamCursor({ entries });
 
-  // 动画队列
-  const [minionEntries, setMinionEntries] = useState<MinionEntryEffect[]>([]);
-  const [actionShows, setActionShows] = useState<ActionShowEffect[]>([]);
-  const [baseScored, setBaseScored] = useState<BaseScoredEffect[]>([]);
-  const [powerChanges, setPowerChanges] = useState<PowerChangeEffect[]>([]);
-  const [cardDrawns, setCardDrawns] = useState<CardDrawnEffect[]>([]);
+  // 非视觉反馈（toast）保留本地状态
   const [feedbacks, setFeedbacks] = useState<AbilityFeedbackEffect[]>([]);
 
-  // 消费事件流
+  // 消费事件流 → 推入 FX 系统
   useEffect(() => {
     const { entries: newEntries } = consumeNew();
     if (newEntries.length === 0) return;
@@ -101,31 +67,20 @@ export function useGameEvents({ G }: UseGameEventsParams) {
             playerId: string; cardUid: string; defId: string;
             baseIndex: number; power: number;
           };
-          setMinionEntries(prev => [...prev, {
-            id: `me-${uidCounter++}`,
-            defId: p.defId,
-            baseIndex: p.baseIndex,
-            power: p.power,
-            playerId: p.playerId,
-          }]);
-          // 力量变化浮字
-          setPowerChanges(prev => [...prev, {
-            id: `pc-${uidCounter++}`,
-            baseIndex: p.baseIndex,
-            delta: p.power,
-          }]);
+          // 力量变化浮字 → FX
+          const baseEl = baseRefs.current?.get(p.baseIndex);
+          if (baseEl) {
+            const rect = baseEl.getBoundingClientRect();
+            fxBus.push(SU_FX.POWER_CHANGE, { space: 'screen' }, {
+              delta: p.power,
+              position: { left: rect.right + 8, top: rect.top - 10 },
+            });
+          }
           break;
         }
 
         case SU_EVENTS.ACTION_PLAYED: {
-          const p = event.payload as {
-            playerId: string; cardUid: string; defId: string;
-          };
-          setActionShows(prev => [...prev, {
-            id: `as-${uidCounter++}`,
-            defId: p.defId,
-            playerId: p.playerId,
-          }]);
+          // 行动卡展示已迁移到 CardSpotlightQueue（点击关闭），不再走 FX 系统
           break;
         }
 
@@ -134,24 +89,10 @@ export function useGameEvents({ G }: UseGameEventsParams) {
             baseIndex: number; baseDefId: string;
             rankings: Array<{ playerId: string; power: number; vp: number }>;
           };
-          setBaseScored(prev => [...prev, {
-            id: `bs-${uidCounter++}`,
-            baseDefId: p.baseDefId,
-            baseIndex: p.baseIndex,
+          // VP 飞行 → FX
+          fxBus.push(SU_FX.BASE_SCORED, { space: 'screen' }, {
             rankings: p.rankings,
-          }]);
-          break;
-        }
-
-        case SU_EVENTS.CARDS_DRAWN: {
-          const p = event.payload as {
-            playerId: string; count: number; cardUids: string[];
-          };
-          setCardDrawns(prev => [...prev, {
-            id: `cd-${uidCounter++}`,
-            playerId: p.playerId,
-            count: p.count,
-          }]);
+          });
           break;
         }
 
@@ -168,39 +109,14 @@ export function useGameEvents({ G }: UseGameEventsParams) {
         }
       }
     }
-  }, [G, consumeNew]);
+  }, [G, consumeNew, fxBus, baseRefs]);
 
-  // 清除已完成的效果
-  const removeMinionEntry = useCallback((id: string) => {
-    setMinionEntries(prev => prev.filter(e => e.id !== id));
-  }, []);
-
-  const removeActionShow = useCallback((id: string) => {
-    setActionShows(prev => prev.filter(e => e.id !== id));
-  }, []);
-
-  const removeBaseScored = useCallback((id: string) => {
-    setBaseScored(prev => prev.filter(e => e.id !== id));
-  }, []);
-
-  const removePowerChange = useCallback((id: string) => {
-    setPowerChanges(prev => prev.filter(e => e.id !== id));
-  }, []);
-
-  const removeCardDrawn = useCallback((id: string) => {
-    setCardDrawns(prev => prev.filter(e => e.id !== id));
-  }, []);
-
+  // 清除已完成的反馈
   const removeFeedback = useCallback((id: string) => {
     setFeedbacks(prev => prev.filter(e => e.id !== id));
   }, []);
 
   return {
-    minionEntries, removeMinionEntry,
-    actionShows, removeActionShow,
-    baseScored, removeBaseScored,
-    powerChanges, removePowerChange,
-    cardDrawns, removeCardDrawn,
     feedbacks, removeFeedback,
   };
 }

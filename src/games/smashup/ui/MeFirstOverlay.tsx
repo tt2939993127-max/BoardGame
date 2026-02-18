@@ -9,8 +9,7 @@ import { CheckCircle } from 'lucide-react';
 import { GameButton } from './GameButton';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore, ActionCardDef } from '../domain/types';
-import { SU_COMMANDS } from '../domain/types';
-import { getCardDef, resolveCardName } from '../data/cards';
+import { getCardDef } from '../data/cards';
 import { UI_Z_INDEX } from '../../../core';
 import { PLAYER_CONFIG } from './playerConfig';
 
@@ -39,19 +38,12 @@ export const MeFirstOverlay: React.FC<{
         dispatch('RESPONSE_PASS');
     }, [dispatch, onSelectCard]);
 
-    const handleCardClick = useCallback((cardUid: string, defId: string) => {
-        const def = getCardDef(defId) as ActionCardDef | undefined;
-        if (def?.specialNeedsBase) {
-            // 需要选基地：进入基地选择模式
-            onSelectCard({ cardUid, defId });
-        } else {
-            // 不需要选基地（如全速航行）：直接打出（不传 targetBaseIndex）
-            onSelectCard(null);
-            dispatch(SU_COMMANDS.PLAY_ACTION, { cardUid });
-        }
-    }, [dispatch, onSelectCard]);
+    // 有交互/展示手牌/正在选择基地出牌时隐藏，避免遮挡场景操作
+    const hasInteraction = !!G.sys.interaction?.current;
+    const hasReveal = !!G.core.pendingReveal;
 
     if (!responseWindow || responseWindow.windowType !== 'meFirst') return null;
+    if (hasInteraction || hasReveal || pendingCard) return null;
 
     const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
     const isMyResponse = playerID === currentResponderId;
@@ -79,16 +71,14 @@ export const MeFirstOverlay: React.FC<{
                 initial={{ scale: 0.7, y: 30 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-            >
+                layout>
                 <div className="text-center mb-3">
                     <h3 className="text-xl font-black uppercase tracking-tight text-amber-800 transform rotate-1">
                         {t('ui.me_first_title')}
                     </h3>
                     <p className="text-sm font-bold text-slate-600 mt-1" data-testid="me-first-status">
                         {isMyResponse
-                            ? pendingCard
-                                ? t('ui.me_first_select_base')
-                                : t('ui.me_first_your_turn')
+                            ? t('ui.me_first_your_turn')
                             : t('ui.me_first_waiting', { player: currentResponderId })
                         }
                     </p>
@@ -96,57 +86,23 @@ export const MeFirstOverlay: React.FC<{
 
                 {isMyResponse && (
                     <div className="flex flex-col gap-2">
-                        {/* 特殊牌列表 */}
-                        {specialCards.length > 0 && !pendingCard && (
-                            <div className="flex flex-wrap gap-2 justify-center mb-2" data-testid="me-first-special-cards">
-                                {specialCards.map(card => {
-                                    const def = getCardDef(card.defId);
-                                    const resolvedName = resolveCardName(def, t) || card.defId;
-                                    return (
-                                        <GameButton
-                                            key={card.uid}
-                                            variant="danger"
-                                            size="sm"
-                                            onClick={() => handleCardClick(card.uid, card.defId)}
-                                            data-testid={`me-first-card-${card.uid}`}
-                                        >
-                                            {resolvedName}
-                                        </GameButton>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {/* 选择基地提示 */}
-                        {pendingCard && (
-                            <div className="text-center mb-2">
-                                <p className="text-sm text-amber-700 font-bold">
-                                    {resolveCardName(getCardDef(pendingCard.defId), t)} — {t('ui.me_first_click_base')}
-                                </p>
-                                <GameButton
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => onSelectCard(null)}
-                                    className="mt-1"
-                                    data-testid="me-first-cancel-select"
-                                >
-                                    {t('ui.cancel')}
-                                </GameButton>
-                            </div>
+                        {/* 提示：从手牌中选择特殊行动卡 */}
+                        {specialCards.length > 0 && (
+                            <p className="text-xs text-center text-amber-700/80 font-medium">
+                                {t('ui.me_first_select_from_hand', { defaultValue: '从手牌中选择特殊行动卡打出' })}
+                            </p>
                         )}
 
                         {/* 让过按钮 */}
-                        {!pendingCard && (
-                            <div className="flex justify-center">
-                                <GameButton
-                                    variant="secondary"
-                                    onClick={handlePass}
-                                    data-testid="me-first-pass-button"
-                                >
-                                    {t('ui.me_first_pass')}
-                                </GameButton>
-                            </div>
-                        )}
+                        <div className="flex justify-center">
+                            <GameButton
+                                variant="secondary"
+                                onClick={handlePass}
+                                data-testid="me-first-pass-button"
+                            >
+                                {t('ui.me_first_pass')}
+                            </GameButton>
+                        </div>
                     </div>
                 )}
 

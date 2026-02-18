@@ -1,5 +1,10 @@
+import React from 'react';
 import type { RefObject } from 'react';
-import type { AbilityCard, Die, TurnPhase, InteractionDescriptor } from '../types';
+import type { AbilityCard, Die, TurnPhase } from '../types';
+import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
+import type { MultistepChoiceData } from '../../../engine/systems/InteractionSystem';
+import { useMultistepInteraction } from '../../../engine/systems/useMultistepInteraction';
+import type { DiceModifyResult, DiceModifyStep, DiceSelectResult, DiceSelectStep } from '../domain/systems';
 import { DiceActions, DiceTray } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
@@ -18,6 +23,7 @@ export const RightSidebar = ({
     isRolling,
     setIsRolling,
     rerollingDiceIds,
+    setRerollingDiceIds,
     locale,
     onToggleLock,
     onRoll,
@@ -47,6 +53,7 @@ export const RightSidebar = ({
     isRolling: boolean;
     setIsRolling: (isRolling: boolean) => void;
     rerollingDiceIds?: number[];
+    setRerollingDiceIds: (ids: number[]) => void;
     locale?: string;
     onToggleLock: (id: number) => void;
     onRoll: () => void;
@@ -71,6 +78,17 @@ export const RightSidebar = ({
     /** 被动能力面板 props */
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
 }) => {
+    // 骰子多步交互状态（统一管理，替代旧的 4 个 useState + useEffect）
+    const isDiceMultistep = interaction?.kind === 'multistep-choice' &&
+        ((interaction.data as any)?.meta?.dtType === 'modifyDie' ||
+         (interaction.data as any)?.meta?.dtType === 'selectDie');
+
+    const diceInteraction = isDiceMultistep
+        ? interaction as InteractionDescriptor<MultistepChoiceData<DiceModifyStep | DiceSelectStep, DiceModifyResult | DiceSelectResult>>
+        : undefined;
+
+    const multistepInteraction = useMultistepInteraction(diceInteraction, dispatch);
+
     return (
         <div
             className="absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
@@ -95,8 +113,8 @@ export const RightSidebar = ({
                     isRolling={isRolling}
                     rerollingDiceIds={rerollingDiceIds}
                     locale={locale}
-                    interaction={interaction}
-                    dispatch={dispatch}
+                    interaction={isDiceMultistep ? interaction : undefined}
+                    multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
                     isPassiveRerollMode={!!passiveAbilityProps?.rerollSelectingAction}
                 />
                 <DiceActions
@@ -109,8 +127,9 @@ export const RightSidebar = ({
                     canInteract={canInteractDice}
                     isRolling={isRolling}
                     setIsRolling={setIsRolling}
-                    interaction={interaction}
-                    dispatch={dispatch}
+                    interaction={isDiceMultistep ? interaction : undefined}
+                    multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
+                    setRerollingDiceIds={setRerollingDiceIds}
                 />
                 {/* 下一阶段按钮：始终占位，隐藏时使用 invisible 且禁用 pointer-events */}
                 <div className={`w-full flex justify-center ${showAdvancePhaseButton ? '' : 'invisible pointer-events-none'}`}>

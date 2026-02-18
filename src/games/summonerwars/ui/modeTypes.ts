@@ -57,12 +57,14 @@ export interface SneakModeState {
   recorded: { position: CellCoord; newPosition: CellCoord }[]; // 已记录的移动
 }
 
-/** 震慑目标+方向选择模式 */
+/** 震慑目标+终点选择模式 */
 export interface StunModeState {
-  step: 'selectTarget' | 'selectDirection';
+  step: 'selectTarget' | 'selectDestination';
   cardId: string;
   validTargets: CellCoord[]; // 召唤师3格直线内的敌方士兵/冠军
   targetPosition?: CellCoord;
+  /** selectDestination 步骤：所有可达终点（附带方向向量和距离） */
+  destinations?: { position: CellCoord; moveRow: number; moveCol: number; distance: number }[];
 }
 
 /** 催眠引诱目标选择模式 */
@@ -84,12 +86,14 @@ export interface PendingBeforeAttack {
   discardCardIds?: string[];
 }
 
-/** 念力推拉方向选择模式 */
+/** 念力推拉方向选择模式（棋盘点击终点） */
 export interface TelekinesisTargetModeState {
   abilityId: 'telekinesis' | 'high_telekinesis' | 'high_telekinesis_instead' | 'telekinesis_instead';
   sourceUnitId: string;
   sourcePosition?: CellCoord;
   targetPosition: CellCoord;
+  /** 所有可达终点（附带方向向量），供棋盘高亮和 dispatch 使用 */
+  destinations: { position: CellCoord; moveRow: number; moveCol: number }[];
 }
 
 /** 连续射击确认模式 */

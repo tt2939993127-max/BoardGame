@@ -37,13 +37,19 @@ const getFireMasteryCount = (ctx: CustomActionContext): number => {
 // ============================================================================
 
 /**
- * 灵魂燃烧 (Soul Burn) — FM 获取部分（preDefense 时机）
- * 获得 2 烈焰精通
+ * 燃烧之灵 — FM 获取部分
+ * 获得 2 × 火魂骰面数量 的火焰精通
+ * 基础版和升级版共用此 handler
  */
-const resolveSoulBurnFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
+const resolveSoulBurn2FM = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    const faces = ctx.state.pendingAttack?.attackDiceFaceCounts
+        ?? getFaceCounts(getActiveDice(ctx.state));
+    const fierySoulCount = faces[PYROMANCER_DICE_FACE_IDS.FIERY_SOUL] || 0;
+    const amountToGain = 2 * fierySoulCount;
+    if (amountToGain <= 0) return [];
+
     const currentFM = getFireMasteryCount(ctx);
     const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
-    const amountToGain = 2;
     const updatedFM = Math.min(currentFM + amountToGain, limit);
 
     return [{
@@ -86,42 +92,6 @@ const resolveSoulBurnDamage = (ctx: CustomActionContext): DiceThroneEvent[] => {
             events.push(...damageCalc.toEvents());
         });
     }
-    return events;
-};
-
-/**
- * 灵魂燃烧 4x火魂 (Burning Soul 4) 结算
- * 根据 i18n 描述：火焰精通堆叠上限+1，然后获得5火焰精通
- * （击倒由 abilities.ts 的独立 inflictStatus 效果处理）
- */
-const resolveSoulBurn4 = (ctx: CustomActionContext): DiceThroneEvent[] => {
-    const events: DiceThroneEvent[] = [];
-    const currentLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
-    const newLimit = currentLimit + 1;
-
-    // 1. 上限+1
-    events.push({
-        type: 'TOKEN_LIMIT_CHANGED',
-        payload: { playerId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, delta: 1, newLimit, sourceAbilityId: ctx.sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: ctx.timestamp
-    } as TokenLimitChangedEvent);
-
-    // 2. 获得5火焰精通（不超过新上限）
-    const currentFM = getFireMasteryCount(ctx);
-    const amountToGain = 5;
-    const updatedFM = Math.min(currentFM + amountToGain, newLimit);
-    const actualGain = updatedFM - currentFM;
-
-    if (actualGain > 0) {
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: actualGain, newTotal: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + 0.1
-        } as TokenGrantedEvent);
-    }
-
     return events;
 };
 
@@ -181,7 +151,7 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
 /**
  * 炽热波纹 II (Hot Streak II) 结算
  * FM 已在 preDefense 阶段通过独立 grantToken 效果获得
- * 此处只负责伤害：造成 5 + 当前FM 点伤害
+ * 此处只负责伤害：造成 6 + 当前FM 点伤害
  * 
  * 【已迁移到新伤害计算管线】
  */
@@ -194,7 +164,7 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const damageCalc = createDamageCalculation({
         source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
         target: { playerId: opponentId },
-        baseDamage: 5,
+        baseDamage: 6,
         state: ctx.state,
         timestamp: ctx.timestamp,
         // 手动添加 FM 修正（因为 tokenDefinitions 可能为空）
@@ -418,6 +388,67 @@ const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerF
     return events;
 }
 
+/**
+ * 熔火铠甲 III (Magma Armor III) 结算
+ * 根据卡牌图片：
+ * - 获得 1×🔥魂(fiery_soul) + 1×🌋(magma) 火焰专精
+ * - 如果同时投出🔥(fire) + 🌋(magma)，施加灼烧
+ * - 造成 1×🔥(fire) + 1×🌋(magma) 伤害
+ */
+const resolveMagmaArmor3 = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    const events: DiceThroneEvent[] = [];
+
+    const activeDice = getActiveDice(ctx.state);
+    const faceCounts = getFaceCounts(activeDice);
+
+    const fireCount = faceCounts[PYROMANCER_DICE_FACE_IDS.FIRE] ?? 0;
+    const magmaCount = faceCounts[PYROMANCER_DICE_FACE_IDS.MAGMA] ?? 0;
+    const fierySoulCount = faceCounts[PYROMANCER_DICE_FACE_IDS.FIERY_SOUL] ?? 0;
+
+    // FM获取：fiery_soul数 + magma数
+    const fmGain = fierySoulCount + magmaCount;
+    if (fmGain > 0) {
+        const currentFM = getFireMasteryCount(ctx);
+        const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+        events.push({
+            type: 'TOKEN_GRANTED',
+            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: fmGain, newTotal: Math.min(currentFM + fmGain, limit), sourceAbilityId: ctx.sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: ctx.timestamp
+        } as TokenGrantedEvent);
+    }
+
+    // 条件灼烧：同时有 fire 和 magma 面
+    if (fireCount > 0 && magmaCount > 0) {
+        const opponentId = ctx.ctx.defenderId;
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: { targetId: opponentId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: ctx.timestamp + 0.05
+        } as StatusAppliedEvent);
+    }
+
+    // 伤害：fire数 + magma数
+    const totalDamage = fireCount + magmaCount;
+    if (totalDamage > 0) {
+        const opponentId = ctx.ctx.defenderId;
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: totalDamage,
+            state: ctx.state,
+            timestamp: ctx.timestamp + 0.1,
+            autoCollectTokens: false,
+            autoCollectStatus: false,
+            autoCollectShields: false,
+        });
+        events.push(...damageCalc.toEvents());
+    }
+
+    return events;
+};
+
 
 /**
  * 炎爆术逻辑
@@ -569,10 +600,8 @@ const resolveIncreaseFMLimit = (ctx: CustomActionContext): DiceThroneEvent[] => 
 // ============================================================================
 
 export function registerPyromancerCustomActions(): void {
-    registerCustomActionHandler('soul-burn-fm', resolveSoulBurnFM, { categories: ['resource'] });
+    registerCustomActionHandler('soul-burn-2-fm', resolveSoulBurn2FM, { categories: ['resource'] });
     registerCustomActionHandler('soul-burn-damage', resolveSoulBurnDamage, { categories: ['damage'] });
-    registerCustomActionHandler('soul-burn-4-resolve', resolveSoulBurn4, { categories: ['resource', 'other'] });
-    registerCustomActionHandler('burning-soul-2-resolve', resolveSoulBurn4, { categories: ['resource', 'other'] });
 
     registerCustomActionHandler('fiery-combo-resolve', resolveFieryCombo, { categories: ['damage', 'resource'] });
     registerCustomActionHandler('fiery-combo-2-resolve', resolveFieryCombo2, { categories: ['damage'] });
@@ -589,7 +618,7 @@ export function registerPyromancerCustomActions(): void {
 
     registerCustomActionHandler('magma-armor-resolve', (ctx) => resolveMagmaArmor(ctx, 1), { categories: ['damage', 'resource', 'defense'] });
     registerCustomActionHandler('magma-armor-2-resolve', (ctx) => resolveMagmaArmor(ctx, 2), { categories: ['damage', 'resource', 'defense'] });
-    registerCustomActionHandler('magma-armor-3-resolve', (ctx) => resolveMagmaArmor(ctx, 3, 2), { categories: ['damage', 'resource', 'defense'] });
+    registerCustomActionHandler('magma-armor-3-resolve', resolveMagmaArmor3, { categories: ['damage', 'resource', 'defense', 'status'] });
 
     registerCustomActionHandler('increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
     registerCustomActionHandler('pyro-increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });

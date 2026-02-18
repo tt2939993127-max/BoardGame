@@ -191,7 +191,7 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
             return { uid: m.uid, defId: m.defId, baseIndex: first.baseIndex, label: `${name} (力量 ${first.minPower}) @ ${baseName}` };
         });
         const interaction = createSimpleChoice(
-            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的最低力量随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'dino_survival_tiebreak'
+            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
         );
         const remainingData = remaining.map(tb => ({
             baseIndex: tb.baseIndex,
@@ -278,7 +278,7 @@ export function registerDinosaurInteractionHandlers(): void {
         }
         if (targets.length === 0) return undefined;
         const next = createSimpleChoice(
-            `dino_natural_selection_target_${timestamp}`, playerId, { sourceId: '选择要消灭的随从', targetType: 'minion' }, buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), 'dino_natural_selection_choose_target'
+            `dino_natural_selection_target_${timestamp}`, playerId, '选择要消灭的随从', buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }), { sourceId: 'dino_natural_selection_choose_target', targetType: 'minion' }
             );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { baseIndex } } }), events: [] };
     });
@@ -316,7 +316,7 @@ export function registerDinosaurInteractionHandlers(): void {
                 return { uid: c.uid, defId: c.defId, baseIndex: next.baseIndex, label: `${name} (力量 ${next.minPower}) @ ${baseName}` };
             });
             const interaction = createSimpleChoice(
-                `dino_sotf_tiebreak_${timestamp}`, playerId, { sourceId: '选择要消灭的最低力量随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'dino_survival_tiebreak'
+                `dino_sotf_tiebreak_${timestamp}`, playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
                 );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remainingBases: rest } } }), events };
         }

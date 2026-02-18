@@ -23,6 +23,8 @@ export interface GameImplementation {
     board: React.ComponentType<Record<string, unknown>>;
     /** 可选的教程配置 */
     tutorial?: TutorialManifest;
+    /** 延迟优化配置（可选，不传则不启用任何优化） */
+    latencyConfig?: import('../engine/transport/latency/types').LatencyOptimizationConfig;
 }
 
 // ============================================================================

@@ -76,7 +76,8 @@
       "cardEnlightenment": "Cards can turn the tide: play action or upgrade cards in Main phases, and dice modifier cards during Offensive Roll. Next up is your opponent's turn.",
       "aiTurn": "Your opponent's turn begins — watch how they play cards and attack.",
       "knockdownExplain": "The opponent played Palm Strike, inflicting Knockdown on you! Knockdown forces you to skip offensive roll, but you can remove it with Purify.",
-      "enlightenmentPlay": "Play the Enlightenment card from your hand to roll 1 die. Rolling a Lotus face grants Taiji, Evasive, and Purify tokens."
+      "enlightenmentPlay": "Play the Enlightenment card from your hand to roll 1 die. Rolling a Lotus face grants Taiji, Evasive, and Purify tokens.",
+      "discardCard": "Your hand exceeds the limit (6 cards)! Drag an extra card to the discard pile to discard it. Discarding does not grant CP."
     }
   },
   "statusEffects": {
@@ -557,7 +558,21 @@
     "no_pending_attack": "No pending attack to defend against",
     "deck_empty": "Deck and discard pile are both empty",
     "no_card_to_undo": "No sold card to undo",
-    "card_not_in_discard": "Card not found in discard pile"
+    "card_not_in_discard": "Card not found in discard pile",
+    "no_pending_interaction": "No pending interaction",
+    "unsupported_character": "Unsupported character",
+    "invalid_die_value": "Invalid die value (must be 1-6)",
+    "no_pending_damage": "No pending damage to respond to",
+    "unknown_token": "Unknown token type",
+    "no_token": "Not enough tokens",
+    "invalid_amount": "Invalid amount",
+    "no_status": "Target does not have that status effect",
+    "no_knockdown": "Target is not knocked down",
+    "not_enough_cp": "Not enough CP",
+    "no_pending_bonus_dice": "No pending bonus dice settlement",
+    "bonus_reroll_limit_reached": "Bonus die reroll limit reached",
+    "not_enough_token": "Not enough tokens to pay the cost",
+    "invalid_die_index": "Invalid die index"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",
@@ -1388,9 +1403,9 @@
     },
     "calm-water-2": {
       "name": "Calm Water II",
-      "description": "Large Straight: deal 9 damage, gain 3 Taiji and 1 Evasive, inflict Knockdown.",
+      "description": "Large Straight: deal 7 damage, gain 3 Taiji and 1 Evasive, inflict Knockdown.",
       "effects": {
-        "damage9": "Deal 9 damage",
+        "damage7": "Deal 7 damage",
         "gainTaiji3": "Then gain 3 Taiji tokens",
         "gainEvasive": "Gain 1 Evasive token",
         "inflictKnockdown": "Inflict 1 Knockdown"
@@ -1588,30 +1603,33 @@
     },
     "soul-burn-2": {
       "name": "Soul Burn II",
-      "description": "2x Fire Soul: inflict Burn. 3x Fire Soul: cap +1 and deal 2× Fire Soul undefendable damage.",
+      "description": "2 Fire Soul: Gain 2×[souls] FM, deal [souls] damage. 3 Fire Soul: also inflict Burn. Blazing Soul (2 Magma + 2 Fire Soul): FM cap +1, gain 5 FM, inflict Knockdown.",
       "effects": {
-        "inflictBurn": "Inflict 1 Burn token"
+        "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
+        "damage": "Deal damage equal to Fire Soul face count to all opponents"
       }
     },
     "soul-burn-3": {
       "effects": {
-        "increaseLimit": "Increase Fire Mastery cap by 1",
-        "main": "Gain Fire Mastery equal to 2× Fire Soul faces and deal 1× Fire Soul undefendable damage to all opponents."
+        "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
+        "inflictBurn": "Inflict 1 Burn token",
+        "damage": "Deal damage equal to Fire Soul face count to all opponents"
       }
     },
-    "soul-burn-4": {
-      "name": "Soul Burn (4x Fire Soul)",
+    "blazing-soul": {
+      "name": "Blazing Soul",
       "effects": {
-        "main": "Increase Fire Mastery cap by 1, then gain 5 Fire Mastery.",
-        "knockdown": "Inflict 1 Knockdown token"
+        "increaseLimit": "Increase Fire Mastery cap by 1",
+        "gainFM5": "Gain 5 Fire Mastery",
+        "inflictKnockdown": "Inflict Knockdown"
       }
     },
     "fiery-combo-2": {
       "name": "Fiery Combo II",
-      "description": "Small Straight: gain 2 Fire Mastery and deal 5+X damage. 2 Fire + 2 Lava: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
+      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Fiery Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
-        "main": "Deal 5 base damage. If you have Fire Mastery, deal +1 damage per Fire Mastery."
+        "main": "Deal 6 base damage. If you have Fire Mastery, deal +1 damage per Fire Mastery."
       }
     },
     "incinerate": {
@@ -1708,7 +1726,7 @@
     },
     "card-meditation-3": {
       "name": "Meditation III",
-      "description": "Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces. If 2+ Taiji, gain Evasive -or- Purify."
+      "description": "Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces. If Taiji + Lotus present, gain Evasive -or- Purify."
     },
     "card-play-six": {
       "name": "Play Six!",
@@ -1748,7 +1766,7 @@
     },
     "card-contemplation-2": {
       "name": "Contemplation II",
-      "description": "3 Taiji: Gain 6 Chi, Evasive and Purify. Zen Combat (Fist+Palm+Taiji): Deal 6 damage, gain 2 Chi."
+      "description": "3 Taiji: Gain 6 Chi, Evasive and Purify. Zen Combat (2 Fist + 2 Taiji): Deal 6 damage, gain 2 Chi."
     },
     "card-just-this": {
       "name": "Just This?",
