@@ -95,17 +95,10 @@ export const GlobalHUD = () => {
     // 定义菜单项（主按钮优先）
     const items: FabAction[] = [];
 
-    // 0. 主按钮：设置
+    // 0. 主按钮：设置（主页不需要红点，社交通知由铃铛承载）
     items.push({
         id: 'settings',
-        icon: (
-            <div className="relative">
-                <Settings size={22} />
-                {totalBadge > 0 && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black/50" />
-                )}
-            </div>
-        ),
+        icon: <Settings size={22} />,
         label: t('hud.actions.settings'),
         content: (
             <div>

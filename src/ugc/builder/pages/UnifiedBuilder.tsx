@@ -711,7 +711,7 @@ function UnifiedBuilderInner() {
             }, true);
           }
         } catch {
-          alert('导入失败：无效的 JSON 文件');
+          toast.error('导入失败：无效的 JSON 文件');
         }
       };
       reader.readAsText(file);

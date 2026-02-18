@@ -53,11 +53,8 @@ export const createQueuedRandom = (values: number[]): RandomFn => {
 
 export const testSystems = diceThroneSystemsForTest as unknown as EngineSystem<DiceThroneCore>[];
 
-// 牌库实际大小：升级卡 1 张，非升级卡 2 张（与 buildDeck 逻辑一致）
-export const initialDeckSize = MONK_CARDS.reduce(
-    (sum, card) => sum + (card.type === 'upgrade' ? 1 : 2),
-    0
-);
+// 牌库实际大小：每张卡牌 1 份，共 33 张（规则标准）
+export const initialDeckSize = MONK_CARDS.length;
 export const expectedHandSize = 4;
 export const expectedDeckAfterDraw4 = initialDeckSize - expectedHandSize;
 export const expectedIncomeCp = Math.min(INITIAL_CP + 1, CP_MAX);

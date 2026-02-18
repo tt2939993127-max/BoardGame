@@ -190,10 +190,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
 ];
 
 export const getShadowThiefStartingDeck = (random: RandomFn): AbilityCard[] => {
-    const deck: AbilityCard[] = [];
-    SHADOW_THIEF_CARDS.forEach(card => {
-        deck.push({ ...card });
-        if (card.type !== 'upgrade') deck.push({ ...card });
-    });
+    // 每张卡牌只放 1 份，共 33 张（规则标准）
+    const deck = SHADOW_THIEF_CARDS.map(card => ({ ...card }));
     return random.shuffle(deck);
 };

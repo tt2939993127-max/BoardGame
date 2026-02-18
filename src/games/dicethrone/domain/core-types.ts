@@ -126,6 +126,8 @@ export interface CardPlayCondition {
     requireMinDiceCount?: number;
     /** 必须本回合已对对手造成至少指定伤害（检查 lastResolvedAttackDamage） */
     requireMinDamageDealt?: number;
+    /** 场上任意玩家必须有至少 1 个状态效果或 token（用于状态移除/转移类卡牌） */
+    requireAnyStatusOnBoard?: boolean;
 }
 
 /** 卡牌多语言文案 */

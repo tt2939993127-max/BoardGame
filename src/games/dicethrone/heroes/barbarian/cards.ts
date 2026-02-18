@@ -279,19 +279,8 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
 ];
 
 export const getBarbarianStartingDeck = (random: RandomFn): AbilityCard[] => {
-    // 构造初始牌库
-    const deck: AbilityCard[] = [];
-
-    BARBARIAN_CARDS.forEach(card => {
-        if (card.type === 'upgrade') {
-            deck.push({ ...card });
-        } else {
-            // Acton x2
-            deck.push({ ...card });
-            deck.push({ ...card });
-        }
-    });
-
+    // 每张卡牌只放 1 份，共 33 张（规则标准）
+    const deck = BARBARIAN_CARDS.map(card => ({ ...card }));
     return random.shuffle(deck);
 };
 

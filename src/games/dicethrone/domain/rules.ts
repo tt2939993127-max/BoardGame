@@ -368,7 +368,8 @@ export type CardPlayFailReason =
     | 'requireOpponentDiceExists'  // 卡牌需要对手有骰子结果
     | 'requireRollConfirmed'       // 卡牌需要骰面已确认（响应对手确认后）
     | 'requireNotRollConfirmed'    // 骰面已确认，不能再打出该卡
-    | 'requireMinDamageDealt';     // 本回合未造成足够伤害
+    | 'requireMinDamageDealt'      // 本回合未造成足够伤害
+    | 'noStatusOnBoard';           // 场上没有任何状态效果或 token
 
 /**
  * 从升级卡效果中提取目标技能 ID
@@ -517,6 +518,21 @@ export const checkPlayCard = (
             const dealt = state.lastResolvedAttackDamage ?? 0;
             if (dealt < cond.requireMinDamageDealt) {
                 return { ok: false, reason: 'requireMinDamageDealt' };
+            }
+        }
+
+        // 检查场上是否有任何状态效果或 token（用于状态移除/转移类卡牌的有效性门控）
+        if (cond.requireAnyStatusOnBoard) {
+            const allPlayerIds = Object.keys(state.players);
+            const hasAny = allPlayerIds.some(pid => {
+                const p = state.players[pid];
+                if (!p) return false;
+                const hasEffects = Object.values(p.statusEffects ?? {}).some(v => v > 0);
+                const hasTokens = Object.values(p.tokens ?? {}).some(v => v > 0);
+                return hasEffects || hasTokens;
+            });
+            if (!hasAny) {
+                return { ok: false, reason: 'noStatusOnBoard' };
             }
         }
     }

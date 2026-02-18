@@ -12,6 +12,7 @@ import { matchSocket } from '../../../../services/matchSocket';
 import { destroyMatch, persistMatchCredentials } from '../../../../hooks/match/useMatchStatus';
 import { getOrCreateGuestId, getGuestName as resolveGuestName } from '../../../../hooks/match/ownerIdentity';
 import { UI_Z_INDEX } from '../../../../core';
+import { useToast } from '../../../../contexts/ToastContext';
 
 const DEBUG_BUTTON_SIZE = 48;
 const EDGE_PADDING = 16;
@@ -30,6 +31,7 @@ interface DebugPanelProps {
 export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events, playerID, autoSwitch = true, children }) => {
     const { t } = useTranslation(['game', 'lobby']);
     const navigate = useNavigate();
+    const toast = useToast();
     const { gameId, matchId: currentMatchId } = useParams<{ gameId: string; matchId: string }>();
     const [searchParams] = useSearchParams();
     const currentPlayerID = searchParams.get('playerID');
@@ -546,7 +548,7 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events,
                                                 navigate(`${newRoomUrl}?playerID=0`);
                                             } catch (error) {
                                                 console.error('[DebugPanel] 创建房间失败:', error);
-                                                alert(`创建房间失败: ${error instanceof Error ? error.message : String(error)}`);
+                                                toast.error(`创建房间失败: ${error instanceof Error ? error.message : String(error)}`);
                                             } finally {
                                                 setIsCreatingRoom(false);
                                             }

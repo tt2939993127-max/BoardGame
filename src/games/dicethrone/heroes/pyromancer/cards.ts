@@ -289,19 +289,8 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
 ];
 
 export const getPyromancerStartingDeck = (random: RandomFn): AbilityCard[] => {
-    // 构造初始牌库
-    const deck: AbilityCard[] = [];
-
-    PYROMANCER_CARDS.forEach(card => {
-        if (card.type === 'upgrade') {
-            deck.push({ ...card });
-        } else {
-            // Action x2 for standard distribution, roughly
-            deck.push({ ...card });
-            deck.push({ ...card });
-        }
-    });
-
+    // 每张卡牌只放 1 份，共 33 张（规则标准）
+    const deck = PYROMANCER_CARDS.map(card => ({ ...card }));
     return random.shuffle(deck);
 };
 

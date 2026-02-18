@@ -26,8 +26,7 @@ import { getAbilitySlotId } from './ui/AbilityOverlays';
 import type { AbilityOverlaysHandle } from './ui/AbilityOverlays';
 import { HandArea } from './ui/HandArea';
 import { loadCardAtlasConfig } from './ui/cardAtlas';
-import { TUTORIAL_COMMANDS } from '../../engine/systems/TutorialSystem';
-import DiceThroneTutorial from './tutorial';
+
 import { DiceThroneCharacterSelection } from './ui/CharacterSelectionAdapter';
 import { TutorialSelectionGate } from '../../components/game/framework';
 import { OpponentHeader } from './ui/OpponentHeader';
@@ -80,10 +79,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     ) as DiceThroneMoveMap;
     const { t, i18n } = useTranslation('game-dicethrone');
     useTutorialBridge(rawG.sys.tutorial, dispatch);
-    const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep, startTutorial } = useTutorial();
+    const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep } = useTutorial();
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
-    const tutorialStartRequestedRef = React.useRef(false);
 
     const isGameOver = rawG.sys.gameover;
     const rootPid = playerID || '0';
@@ -98,19 +96,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 重赛系统（socket）
     const { state: rematchState, vote: handleRematchVote, registerReset } = useRematch();
-
-    React.useEffect(() => {
-        if (gameMode?.mode !== 'tutorial') return;
-        if (rawG.sys.tutorial?.active) {
-            tutorialStartRequestedRef.current = true;
-            return;
-        }
-        if (tutorialStartRequestedRef.current) return;
-        tutorialStartRequestedRef.current = true;
-
-        dispatch(TUTORIAL_COMMANDS.START, { manifest: DiceThroneTutorial });
-        startTutorial(DiceThroneTutorial);
-    }, [gameMode?.mode, rawG.sys.tutorial?.active, startTutorial, dispatch]);
 
     // 注册 reset 回调（当双方都投票后由 socket 触发）
     React.useEffect(() => {
@@ -1037,14 +1022,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 onPlayCard={(cardId) => engineMoves.playCard(cardId)}
                                 onSellCard={(cardId) => {
                                     const blocked = shouldBlockTutorialAction('discard-pile');
-                                    console.log('[Board] onSellCard', {
-                                        cardId,
-                                        blocked,
-                                        tutorialActive: isTutorialActive,
-                                        tutorialStepId: tutorialStep?.id,
-                                        tutorialHighlightTarget: tutorialStep?.highlightTarget,
-                                        requireAction: tutorialStep?.requireAction,
-                                    });
                                     if (blocked) return;
                                     engineMoves.sellCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { MatchState } from '../../../engine/types';
+import type { MatchState, EventStreamEntry } from '../../../engine/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, StructureCard } from '../domain/types';
 import { SW_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
@@ -105,6 +105,12 @@ export interface AfterAttackAbilityModeState {
   sourceUnitId: string;
   sourcePosition: CellCoord;
 }
+
+
+
+// ============================================================================
+// 遗留工具函数（仅供测试引用，运行时已由 useEventStreamCursor 替代）
+// ============================================================================
 
 interface EventStreamDelta {
   newEntries: EventStreamEntry[];

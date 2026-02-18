@@ -24,7 +24,8 @@ export interface ToggleDieLockCommand extends Command<'TOGGLE_DIE_LOCK'> {
 
 /** 确认骰子结果命令 */
 export interface ConfirmRollCommand extends Command<'CONFIRM_ROLL'> {
-    payload: Record<string, never>;
+    // payload 允许额外字段（如 LocalInteractionManager 生成的 steps），但 execute 层不使用
+    payload: Record<string, unknown>;
 }
 
 /** 选择技能命令 */

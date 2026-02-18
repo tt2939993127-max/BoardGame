@@ -9,7 +9,6 @@
  */
 
 import type { LatencyOptimizationConfig } from '../../engine/transport/latency/types';
-import type { MatchState } from '../../engine/types';
 
 // ============================================================================
 // 命令确定性覆盖（仅特殊情况）

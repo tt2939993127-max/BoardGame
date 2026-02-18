@@ -8,31 +8,41 @@ import { MONK_CARDS } from './heroes/monk/cards';
 
 /** 玩家起手牌（教程流程顺序） */
 const TUTORIAL_STARTING_HAND = [
+    'card-deep-thought',   // 弃牌教学用（开局卖掉换 CP）
     'card-play-six',
     'card-enlightenment',
     'card-inner-peace',
-    'card-meditation-2',
+];
+
+/** 牌库顶部顺序（起手牌之后，income 阶段依次抽到） */
+const TUTORIAL_DECK_TOP = [
+    'card-meditation-2',   // Turn 2 income 抽到，用于升级清修
 ];
 
 /** AI 起手牌（保证 card-palm-strike 在手中） */
 const AI_STARTING_HAND = [
     'card-palm-strike',
     'card-inner-peace',
-    'card-inner-peace',
+    'card-deep-thought',
     'card-boss-generous',
 ];
 
-const buildTutorialDeck = (startingHand: string[]): string[] => {
-    const baseDeck = MONK_CARDS.flatMap(card => (card.type === 'upgrade' ? [card.id] : [card.id, card.id]));
+/**
+ * 构建教程牌组：startingHand 在最前（抽为起手牌），deckTop 紧随其后，剩余卡牌在末尾
+ */
+const buildTutorialDeck = (startingHand: string[], deckTop: string[] = []): string[] => {
+    // 每张卡牌 1 份（与 getMonkStartingDeck 一致，共 33 张）
+    const baseDeck = MONK_CARDS.map(card => card.id);
     const remaining = [...baseDeck];
-    startingHand.forEach(id => {
+    // 移除起手牌和牌库顶部的卡牌
+    [...startingHand, ...deckTop].forEach(id => {
         const index = remaining.indexOf(id);
         if (index !== -1) remaining.splice(index, 1);
     });
-    return [...startingHand, ...remaining];
+    return [...startingHand, ...deckTop, ...remaining];
 };
 
-const TUTORIAL_INITIAL_DECK = buildTutorialDeck(TUTORIAL_STARTING_HAND);
+const TUTORIAL_INITIAL_DECK = buildTutorialDeck(TUTORIAL_STARTING_HAND, TUTORIAL_DECK_TOP);
 const AI_TUTORIAL_DECK = buildTutorialDeck(AI_STARTING_HAND);
 
 // ============================================================================
@@ -52,11 +62,6 @@ const MATCH_PHASE_DEFENSE: TutorialEventMatcher = {
 const MATCH_PHASE_MAIN2: TutorialEventMatcher = {
     type: 'SYS_PHASE_CHANGED',
     match: { to: 'main2' },
-};
-
-const MATCH_PHASE_MAIN1: TutorialEventMatcher = {
-    type: 'SYS_PHASE_CHANGED',
-    match: { to: 'main1' },
 };
 
 // ============================================================================
@@ -147,6 +152,19 @@ export const DiceThroneTutorial: TutorialManifest = {
             infoStep: true,
         },
 
+        // ==== 段 A2：弃牌教学（Turn 1 P0 main1，起手就有 4 张牌） ====
+        {
+            id: 'sell-card-intro',
+            content: 'game-dicethrone:tutorial.steps.sellCardIntro',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            allowedCommands: ['SELL_CARD'],
+            advanceOnEvents: [
+                { type: 'CARD_SOLD', match: { playerId: '0' } },
+            ],
+        },
+
         // ==== 段 B：首次攻击 (Turn 1, P0) ====
         {
             id: 'advance',
@@ -225,40 +243,8 @@ export const DiceThroneTutorial: TutorialManifest = {
             ],
             advanceOnEvents: [MATCH_PHASE_MAIN2],
         },
-
-        // ==== 段 C：弃牌教学 + 卡牌介绍 + AI 回合 ====
-        {
-            // 自动抽 4 张牌，让手牌超过上限（3 + 4 = 7 张），触发弃牌教学
-            // requireAction: false + aiActions → TutorialContext 自动执行后立即推进
-            id: 'draw-for-discard',
-            content: 'game-dicethrone:tutorial.steps.discardCard',
-            position: 'top',
-            requireAction: false,
-            aiActions: [
-                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
-                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
-                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
-                { commandType: 'DRAW_CARD', playerId: '0', payload: {} },
-            ],
-            advanceOnEvents: [
-                { type: 'SYS_TUTORIAL_AI_CONSUMED', match: { stepId: 'draw-for-discard' } },
-            ],
-        },
-        {
-            // 弃牌教学：引导玩家将手牌拖拽到弃牌堆（SELL_CARD 路径）
-            // UI 层 onSellCard/onDiscardCard 均调用 engineMoves.sellCard()，
-            // 且 shouldBlockTutorialAction 以 highlightTarget 为门控，
-            // 所以 highlightTarget 必须是 'discard-pile' 才能放行拖拽操作
-            id: 'discard-card',
-            content: 'game-dicethrone:tutorial.steps.discardCard',
-            highlightTarget: 'discard-pile',
-            position: 'left',
-            requireAction: true,
-            allowedCommands: ['SELL_CARD'],
-            advanceOnEvents: [
-                { type: 'CARD_SOLD', match: { playerId: '0' } },
-            ],
-        },
+        // 卡牌介绍放在 opponent-defense 和 ai-turn 之间，
+        // 避免 AI_CONSUMED 清除下一个有 aiActions 步骤的数据
         {
             id: 'card-enlightenment',
             content: 'game-dicethrone:tutorial.steps.cardEnlightenment',

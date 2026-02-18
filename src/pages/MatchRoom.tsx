@@ -54,7 +54,7 @@ export const MatchRoom = () => {
     const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { tutorial, startTutorial, closeTutorial, isActive, currentStep, isAiExecuting } = useTutorial();
+    const { tutorial, startTutorial, closeTutorial, isActive, currentStep } = useTutorial();
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
@@ -71,14 +71,13 @@ export const MatchRoom = () => {
     }, [toast, i18n, gameId]);
 
     // 本地/教学模式：命令被引擎拒绝时的统一反馈
-    // AI 自动执行命令失败（not_active_player/invalid_phase 等）静默，不打扰用户
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，同样静默
+    // AI 命令失败的静默已在 LocalGameProvider 层面通过 __tutorialAiCommand 标记处理
     const handleCommandRejected = useCallback((_type: string, error: string) => {
-        if (isAiExecuting) return;
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId));
-    }, [isAiExecuting, toast, i18n, gameId]);
+    }, [toast, i18n, gameId]);
 
     // 包装 Board 组件（注入 CriticalImageGate）
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
@@ -476,18 +475,16 @@ export const MatchRoom = () => {
         // 等待 i18n 命名空间加载完成，避免在 namespace 加载期间启动教程
         // （namespace 加载会导致 Board 卸载重挂载，重置游戏状态）
         if (!isGameNamespaceReady) return;
-        const isTutorialReset = !isActive
-            && tutorial.manifestId === null
-            && tutorial.steps.length === 0
-            && lastTutorialStepIdRef.current !== 'finish';
-        // 只有首次进入且当前未激活时才启动，避免结束后被再次拉起导致提示闪现
-        if (!isActive && (!tutorialStartedRef.current || isTutorialReset)) {
+        
+        // 只在未激活且未启动过时调用 startTutorial
+        // 不依赖 tutorial.manifestId/steps.length，避免 startTutorial 的 setTutorial 触发循环
+        if (!isActive && !tutorialStartedRef.current) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
             if (impl?.tutorial) {
                 startTutorial(impl.tutorial!);
             }
         }
-    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady, tutorial.manifestId, tutorial.steps.length]);
+    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
 
     useEffect(() => {
         if (!isTutorialRoute) return;

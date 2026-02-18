@@ -7,6 +7,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
+import { useToast } from './ToastContext';
 import type { TutorialAiAction, TutorialManifest, TutorialState, TutorialStepSnapshot } from '../engine/types';
 export type { TutorialManifest } from '../engine/types';
 import { DEFAULT_TUTORIAL_STATE } from '../engine/types';
@@ -30,8 +31,9 @@ interface TutorialContextType {
     isLastStep: boolean;
     /** 是否正在等待动画完成 */
     isPendingAnimation: boolean;
-    /** AI 命令正在自动执行中（此期间命令失败不应提示用户） */
+    /** AI 命令正在自动执行中（ref，同步可读，此期间命令失败不应提示用户） */
     isAiExecuting: boolean;
+    isAiExecutingRef: React.MutableRefObject<boolean>;
     startTutorial: (manifest: TutorialManifest) => void;
     nextStep: (reason?: TutorialNextReason) => void;
     closeTutorial: () => void;
@@ -87,8 +89,17 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const controllerRef = useRef<TutorialController | null>(null);
     const pendingStartRef = useRef<TutorialManifest | null>(null);
     const executedAiStepsRef = useRef<Set<string>>(new Set());
+    // 兜底 timer：防止 bindDispatch 永远不执行导致教程卡死
+    const fallbackTimerRef = useRef<number | undefined>(undefined);
+    const toast = useToast();
 
     const bindDispatch = useCallback((dispatch: DispatchFn) => {
+        // 清除兜底 timer（正常路径：bindDispatch 被调用）
+        if (fallbackTimerRef.current !== undefined) {
+            window.clearTimeout(fallbackTimerRef.current);
+            fallbackTimerRef.current = undefined;
+        }
+        
         controllerRef.current = buildTutorialController(dispatch);
         setIsControllerReady(true);
         if (pendingStartRef.current) {
@@ -106,6 +117,17 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const startTutorial = useCallback((manifest: TutorialManifest) => {
+        // 防重入：如果已经有 pending 的 manifest，且是同一个，跳过
+        if (pendingStartRef.current?.id === manifest.id) {
+            return;
+        }
+        
+        // 清除旧的兜底 timer
+        if (fallbackTimerRef.current !== undefined) {
+            window.clearTimeout(fallbackTimerRef.current);
+            fallbackTimerRef.current = undefined;
+        }
+        
         // 立即重置 tutorial state，清除上一个教程的残留数据：
         // 1. 避免旧教程的提示（TutorialOverlay）在新教程加载期间继续显示
         // 2. 使 MatchRoom 的 isTutorialReset 判断成立（manifestId=null, steps=[]），允许重新启动
@@ -115,9 +137,26 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // 不直接调用 controllerRef.current.start()，因为 controllerRef 可能残留上一个对局
         // （联机 Board 卸载后 controllerRef 不会被清空），直接 dispatch 会发给已断开的联机服务器。
         pendingStartRef.current = manifest;
+        
         // 清空旧 controller，强制等待新 Board 挂载后重新 bindDispatch
         controllerRef.current = null;
         setIsControllerReady(false);
+        
+        // 兜底机制：10 秒后如果 tutorial.active 仍然是 false，强制启动
+        fallbackTimerRef.current = window.setTimeout(() => {
+            console.warn('[TutorialContext] 教程启动超时（10秒），尝试兜底处理');
+            fallbackTimerRef.current = undefined;
+            
+            // 检查是否真的卡住了（pendingStartRef 还有值说明 bindDispatch 没被调用）
+            if (pendingStartRef.current && !controllerRef.current) {
+                console.error('[TutorialContext] 兜底失败：Board 未挂载，无法启动教程');
+                toast.error('教程加载超时，请刷新页面重试');
+            } else if (pendingStartRef.current && controllerRef.current) {
+                console.warn('[TutorialContext] 兜底：强制启动教程');
+                controllerRef.current.start(pendingStartRef.current);
+                pendingStartRef.current = null;
+            }
+        }, 10000);
     }, []);
 
     const nextStep = useCallback((reason?: TutorialNextReason) => {
@@ -169,10 +208,15 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setIsAiExecuting(true);
             isAiExecutingRef.current = true;
             aiActions.forEach((action: TutorialAiAction) => {
-                // 如果 aiAction 指定了 playerId，注入到 payload 中供 adapter 使用
-                const actionPayload = action.playerId
-                    ? { ...(action.payload as Record<string, unknown> ?? {}), __tutorialPlayerId: action.playerId }
-                    : action.payload;
+                // 注入 __tutorialAiCommand 标记，让 LocalGameProvider 在命令失败时静默
+                // 同时注入 __tutorialPlayerId 供 adapter 识别 AI 执行者
+                const actionPayload: Record<string, unknown> = {
+                    ...(action.payload as Record<string, unknown> ?? {}),
+                    __tutorialAiCommand: true,
+                };
+                if (action.playerId) {
+                    actionPayload.__tutorialPlayerId = action.playerId;
+                }
                 controller.dispatchCommand(action.commandType, actionPayload);
             });
             isAiExecutingRef.current = false;
@@ -198,6 +242,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             isLastStep: tutorial.active && tutorial.stepIndex >= tutorial.steps.length - 1,
             isPendingAnimation: tutorial.active && !!tutorial.pendingAnimationAdvance,
             isAiExecuting,
+            isAiExecutingRef,
             startTutorial,
             nextStep,
             closeTutorial,

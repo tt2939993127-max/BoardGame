@@ -77,7 +77,7 @@
       "aiTurn": "Your opponent's turn begins — watch how they play cards and attack.",
       "knockdownExplain": "The opponent played Palm Strike, inflicting Knockdown on you! Knockdown forces you to skip offensive roll, but you can remove it with Purify.",
       "enlightenmentPlay": "Play the Enlightenment card from your hand to roll 1 die. Rolling a Lotus face grants Taiji, Evasive, and Purify tokens.",
-      "discardCard": "Your hand exceeds the limit (6 cards)! Drag an extra card to the discard pile to discard it. Discarding does not grant CP."
+      "sellCardIntro": "You can **sell cards for CP** anytime! **Drag a card to the discard pile** on the left to sell it and gain **1 CP**. Selling is always available, regardless of phase. Try selling a card now!"
     }
   },
   "statusEffects": {
@@ -548,6 +548,7 @@
     "requireRollConfirmed": "Must confirm dice results before playing this card",
     "requireNotRollConfirmed": "Dice results already confirmed, cannot play this card",
     "requireMinDamageDealt": "Not enough damage dealt this attack to play this card",
+    "noStatusOnBoard": "No status effects on the board, cannot play this card",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped",

@@ -7,6 +7,7 @@ import { MatchHistoryModal } from './MatchHistoryModal';
 import { FriendsChatModal, SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
 import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
 import { NOTIFICATION_API_URL } from '../../config/server';
+import { useSocial } from '../../contexts/SocialContext';
 
 const NOTIFICATION_SEEN_KEY = 'notification_last_seen';
 
@@ -18,11 +19,15 @@ interface UserMenuProps {
 export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     const { user } = useAuth();
     const { openModal, closeModal } = useModalStack();
+    const { requests, unreadTotal } = useSocial();
     const { t } = useTranslation(['auth', 'social']);
     const [isOpen, setIsOpen] = useState(false);
     const [hasNewNotification, setHasNewNotification] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const avatarModalIdRef = useRef<string | null>(null);
+
+    // 铃铛红点 = 系统通知 OR 好友请求 OR 未读消息
+    const hasBellBadge = hasNewNotification || requests.length > 0 || unreadTotal > 0;
 
     // 检查是否有新通知（对比 localStorage 记录的上次查看时间）
     useEffect(() => {
@@ -130,7 +135,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                 aria-label="通知"
             >
                 <Bell size={18} />
-                {hasNewNotification && (
+                {hasBellBadge && (
                     <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
                 )}
             </button>

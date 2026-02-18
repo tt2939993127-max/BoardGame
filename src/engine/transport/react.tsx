@@ -329,22 +329,33 @@ export function GameProvider({
         const localMgr = localInteractionRef.current;
         if (localMgr) {
             const interactions = latencyConfig?.localInteraction?.interactions ?? {};
-            const isLocalStep = Object.values(interactions).some(
-                (decl) => (decl as { localSteps: string[] }).localSteps.includes(type),
-            );
-            if (isLocalStep) {
-                if (!localMgr.isActive()) {
-                    // 首个中间步骤：自动开始交互，初始状态为空对象
-                    localMgr.begin(type, {});
-                }
-                localMgr.update(type, payload);
-                return;
-            }
+            
             // 提交命令：commit 后用生成的 payload 继续走 optimistic + batcher 路径
             if (type in interactions && localMgr.isActive()) {
                 const { commandType, payload: commitPayload } = localMgr.commit();
                 dispatchToNetwork(commandType, commitPayload);
                 return;
+            }
+            
+            // 中间步骤：只有在活跃交互中才本地消费
+            const isLocalStep = Object.values(interactions).some(
+                (decl) => (decl as { localSteps: string[] }).localSteps.includes(type),
+            );
+            if (isLocalStep) {
+                if (!localMgr.isActive()) {
+                    // 首个中间步骤：自动开始交互
+                    // 查找该 localStep 属于哪个交互（取第一个匹配的）
+                    const interactionId = Object.keys(interactions).find(
+                        (key) => (interactions[key] as { localSteps: string[] }).localSteps.includes(type),
+                    );
+                    if (interactionId) {
+                        localMgr.begin(interactionId, { lockedDice: new Set() });
+                    }
+                }
+                if (localMgr.isActive()) {
+                    localMgr.update(type, payload);
+                    return;
+                }
             }
         }
 
@@ -446,9 +457,11 @@ export function LocalGameProvider({
             const tutorialOverrideId = typeof payloadRecord?.__tutorialPlayerId === 'string'
                 ? payloadRecord.__tutorialPlayerId
                 : undefined;
-            const normalizedPayload = payloadRecord && '__tutorialPlayerId' in payloadRecord
+            // AI 命令标记：命令失败时不触发 onCommandRejected（避免教程中 AI 操作弹 toast）
+            const isTutorialAiCommand = payloadRecord?.__tutorialAiCommand === true;
+            const normalizedPayload = payloadRecord && ('__tutorialPlayerId' in payloadRecord || '__tutorialAiCommand' in payloadRecord)
                 ? (() => {
-                    const { __tutorialPlayerId: _ignored, ...rest } = payloadRecord;
+                    const { __tutorialPlayerId: _ignored, __tutorialAiCommand: _ignored2, ...rest } = payloadRecord;
                     return rest;
                 })()
                 : payload;
@@ -486,7 +499,10 @@ export function LocalGameProvider({
 
             if (!result.success) {
                 console.warn('[LocalGame] 命令执行失败:', type, result.error);
-                onCommandRejectedRef.current?.(type, result.error ?? 'command_failed');
+                // AI 命令失败时静默，不弹 toast 打扰用户
+                if (!isTutorialAiCommand) {
+                    onCommandRejectedRef.current?.(type, result.error ?? 'command_failed');
+                }
                 return prev;
             }
 

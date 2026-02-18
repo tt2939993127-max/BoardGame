@@ -13,6 +13,12 @@
  *   若消费者的游标不重置，后续新事件 ID < 旧游标值会被全部跳过。
  * - entries 中最大 ID < 游标值（快照恢复后 nextId 回退），
  *   同样需要重置游标并通知消费者。
+ * 
+ * 乐观引擎兼容：
+ * - 乐观引擎在 processCommand/reconcile 过程中可能导致 entries 暂时为空
+ *   （如 wait-confirm 模式剥离 EventStream），这不是 Undo 回退。
+ * - 只有当 entries 的最大 ID 真正回退（小于游标值）时才判定为 Undo 回退。
+ * - entries 暂时为空时保持游标不变，等待下次有内容时正常消费。
  */
 
 import { useCallback, useRef } from 'react';
@@ -34,11 +40,6 @@ export interface UseEventStreamCursorReturn {
     /**
      * 获取自上次调用以来的新事件（自动推进游标）。
      * 
-     * 内部同步处理：
-     * 1. 首次调用：跳过历史事件，返回 { entries: [], didReset: false }
-     * 2. Undo 回退检测：entries 清空或 ID 回退时重置游标，didReset=true
-     * 3. 正常消费：返回 id > lastSeenId 的新事件，推进游标
-     * 
      * 在 useEffect / useLayoutEffect 中调用均可。
      */
     consumeNew: () => ConsumeResult;
@@ -49,7 +50,7 @@ export interface UseEventStreamCursorReturn {
 /**
  * 管理 EventStream 消费游标。
  * 
- * 使用方式（简单场景，不需要 reset 清理）：
+ * 使用方式（简单场景）：
  * ```ts
  * const { consumeNew } = useEventStreamCursor({ entries });
  * useEffect(() => {
@@ -75,12 +76,9 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
 
     const lastSeenIdRef = useRef<number>(-1);
     const isFirstCallRef = useRef(true);
-    const prevEntriesLenRef = useRef(0);
 
     const consumeNew = useCallback((): ConsumeResult => {
-        const prevLen = prevEntriesLenRef.current;
         const curLen = entries.length;
-        prevEntriesLenRef.current = curLen;
 
         // ── 首次调用：跳过历史事件 ──
         if (isFirstCallRef.current) {
@@ -91,19 +89,19 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
             return { entries: [], didReset: false };
         }
 
-        // ── Undo 回退检测 ──
-        // 情况 1：entries 从有到无（快照恢复后 entries 被清空）
-        if (prevLen > 0 && curLen === 0) {
-            lastSeenIdRef.current = -1;
-            return { entries: [], didReset: true };
-        }
-        // 情况 2：entries 存在但最大 ID < 游标（nextId 回退，新事件 ID 比旧游标小）
-        if (curLen > 0 && entries[curLen - 1].id < lastSeenIdRef.current) {
-            lastSeenIdRef.current = entries[curLen - 1].id;
-            return { entries: [...entries], didReset: true };
+        // ── entries 为空：保持游标不变，不消费 ──
+        // 乐观引擎的 wait-confirm 模式会暂时剥离 EventStream，
+        // 这不是 Undo 回退，不应重置游标。
+        if (curLen === 0) {
+            return { entries: [], didReset: false };
         }
 
-        if (curLen === 0) return { entries: [], didReset: false };
+        // ── Undo 回退检测：最大 ID 真正回退 ──
+        const maxId = entries[curLen - 1].id;
+        if (maxId < lastSeenIdRef.current) {
+            lastSeenIdRef.current = maxId;
+            return { entries: [], didReset: true };
+        }
 
         // ── 正常消费 ──
         const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);

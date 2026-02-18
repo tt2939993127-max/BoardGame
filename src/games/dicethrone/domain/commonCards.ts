@@ -164,6 +164,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'instant',
         description: cardText('card-bye-bye', 'description'),
+        playCondition: { requireAnyStatusOnBoard: true },
         effects: [{ description: '移除1状态效果', action: { type: 'custom', target: 'self', customActionId: 'remove-status-1' }, timing: 'immediate' }],
     },
     {
@@ -191,6 +192,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-get-away', 'description'),
+        playCondition: { requireAnyStatusOnBoard: true },
         effects: [{ description: '移出1名玩家身上1个状态', action: { type: 'custom', target: 'select', customActionId: 'remove-status-1' }, timing: 'immediate' }],
     },
     {
@@ -209,6 +211,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-what-status', 'description'),
+        playCondition: { requireAnyStatusOnBoard: true },
         effects: [{ description: '移除1名玩家所有状态', action: { type: 'custom', target: 'self', customActionId: 'remove-all-status' }, timing: 'immediate' }],
     },
     {
@@ -218,6 +221,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-transfer-status', 'description'),
+        playCondition: { requireAnyStatusOnBoard: true },
         effects: [{ description: '转移状态', action: { type: 'custom', target: 'self', customActionId: 'transfer-status' }, timing: 'immediate' }],
     },
 ];

@@ -176,6 +176,15 @@ const WEBP_TEST_DATA =
 let avifSupportPromise: Promise<boolean> | null = null;
 let webpSupportPromise: Promise<boolean> | null = null;
 
+/**
+ * 同步格式偏好缓存
+ * 异步检测完成后写入，供 buildLocalizedImageSet 等同步函数使用。
+ * null = 尚未检测完成，true/false = 检测结果
+ */
+let avifSupportedSync: boolean | null = null;
+// webp 检测结果也缓存，供未来扩展使用（当前 buildLocalizedImageSet 仅判断 avif）
+let _webpSupportedSync: boolean | null = null;
+
 const detectImageSupport = (dataUrl: string): Promise<boolean> => {
     if (typeof Image === 'undefined') return Promise.resolve(false);
     return new Promise((resolve) => {
@@ -200,14 +209,18 @@ const detectImageSupport = (dataUrl: string): Promise<boolean> => {
 };
 
 const supportsAvif = () => {
-    avifSupportPromise ??= detectImageSupport(AVIF_TEST_DATA);
+    avifSupportPromise ??= detectImageSupport(AVIF_TEST_DATA).then(r => { avifSupportedSync = r; return r; });
     return avifSupportPromise;
 };
 
 const supportsWebp = () => {
-    webpSupportPromise ??= detectImageSupport(WEBP_TEST_DATA);
+    webpSupportPromise ??= detectImageSupport(WEBP_TEST_DATA).then(r => { _webpSupportedSync = r; return r; });
     return webpSupportPromise;
 };
+
+// 模块加载时立即启动格式检测，确保 buildLocalizedImageSet 等同步函数尽早获得结果
+supportsAvif();
+supportsWebp();
 
 /**
  * 预加载关键图片（第一阶段：阻塞门禁）
@@ -549,8 +562,9 @@ export function getLocalizedImageUrls(src: string, locale?: string): LocalizedIm
 /**
  * 构建语言化图片集（用于 CSS background-image）
  * 
- * 所有素材已迁移到国际化目录，直接使用 webp 格式（兼容性最好）
- * 不使用 image-set() 语法（部分浏览器不支持或行为不一致）
+ * 所有素材已迁移到国际化目录。
+ * 根据浏览器格式支持能力选择 avif（优先）或 webp，
+ * 与 preloadOptimizedImage 的格式选择逻辑保持一致，确保预加载命中。
  */
 export function buildLocalizedImageSet(src: string, locale?: string): string {
     if (!isString(src) || !src) {
@@ -558,8 +572,10 @@ export function buildLocalizedImageSet(src: string, locale?: string): string {
         return '';
     }
     const { primary } = getLocalizedImageUrls(src, locale);
-    // 直接用 url() 包裹 webp 路径，不用 image-set()（兼容性最好）
-    return `url("${primary.webp}")`;
+    // 根据已检测的格式支持能力选择最佳格式，未检测完成时 fallback 到 webp
+    const url = (avifSupportedSync && primary.avif) ? primary.avif
+        : primary.webp || primary.avif;
+    return `url("${url}")`;
 }
 
 /**

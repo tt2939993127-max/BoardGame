@@ -55,7 +55,7 @@ export function useMovementTrails({ entries }: UseMovementTrailsParams) {
         }
       }
     }
-  }, [consumeNew]);
+  }, [entries, consumeNew]);
 
   // 移除完成的轨迹
   const removeTrail = useCallback((trailId: string) => {

@@ -247,15 +247,8 @@ export const PALADIN_CARDS: AbilityCard[] = [
 ];
 
 export const getPaladinStartingDeck = (random: RandomFn): AbilityCard[] => {
-    const deck: AbilityCard[] = [];
-    PALADIN_CARDS.forEach(card => {
-        if (card.type === 'upgrade') {
-            deck.push({ ...card });
-        } else {
-            deck.push({ ...card });
-            deck.push({ ...card });
-        }
-    });
+    // 每张卡牌只放 1 份，共 33 张（规则标准）
+    const deck = PALADIN_CARDS.map(card => ({ ...card }));
     return random.shuffle(deck);
 };
 

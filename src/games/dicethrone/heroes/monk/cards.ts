@@ -233,15 +233,8 @@ export const MONK_CARDS: AbilityCard[] = [
 ];
 
 export const getMonkStartingDeck = (random: RandomFn): AbilityCard[] => {
-    const deck: AbilityCard[] = [];
-    MONK_CARDS.forEach(card => {
-        if (card.type === 'upgrade') {
-            deck.push({ ...card });
-        } else {
-            deck.push({ ...card });
-            deck.push({ ...card });
-        }
-    });
+    // 每张卡牌只放 1 份，共 33 张（规则标准）
+    const deck = MONK_CARDS.map(card => ({ ...card }));
     return random.shuffle(deck);
 };
 

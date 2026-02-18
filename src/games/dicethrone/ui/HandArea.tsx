@@ -472,11 +472,6 @@ export const HandArea = ({
             cardCenterX <= discardRect.right + padding &&
             cardCenterY >= discardRect.top - padding &&
             cardCenterY <= discardRect.bottom + padding;
-        console.log('[HandArea] isOverDiscardPile', {
-            cardCenterX, cardCenterY,
-            discardRect: { left: discardRect.left, right: discardRect.right, top: discardRect.top, bottom: discardRect.bottom },
-            result,
-        });
         return result;
     }, [discardPileRef, draggingCardKey]);
 
@@ -489,16 +484,6 @@ export const HandArea = ({
         const currentIndex = handEntries.findIndex(item => item.key === entry.key);
         const offset = { x, y };
         const card = entry.card;
-
-        console.log('[HandArea] handleDragEnd', {
-            cardId: card.id,
-            dragOffset: { x, y },
-            overDiscard,
-            canPlayCards,
-            hasOnSellCard: !!onSellCard,
-            discardPileRefExists: !!discardPileRef?.current,
-            discardPileRect: discardPileRef?.current?.getBoundingClientRect(),
-        });
 
         let actionTaken = false;
         // 向上拖拽打出：直接调用引擎，由引擎返回错误
@@ -649,19 +634,14 @@ export const HandArea = ({
                             <motion.div
                                 key={`${cardKey}-${returnVersion}`}
                                 data-card-key={cardKey}
+                                data-can-drag={canDrag}
+                                data-is-flipped={isFlipped}
+                                data-is-discard-mode={isDiscardMode}
                                 drag={canDrag}
                                 dragElastic={0.1}
                                 dragMomentum={false}
                                 onDragStart={() => {
                                     if (!canDrag) return;
-                                    console.log('[HandArea] onDragStart', {
-                                        cardId: card.id,
-                                        canDrag,
-                                        isDiscardMode,
-                                        canInteract,
-                                        isFlipped,
-                                        isReturning,
-                                    });
                                     dragEndHandledRef.current = false;
                                     draggingCardRef.current = entry;
                                     dragValues.x.set(0);
@@ -678,24 +658,12 @@ export const HandArea = ({
                                     if (lastDrag && lastDrag.cardKey === cardKey) {
                                         const timeSinceDrag = Date.now() - lastDrag.timestamp;
                                         if (timeSinceDrag < DRAG_CLICK_DEBOUNCE) {
-                                            console.log('[HandArea] 拖拽后点击被忽略:', {
-                                                cardKey,
-                                                cardId: card.id,
-                                                cardName: card.name,
-                                                timeSinceDrag,
-                                                threshold: DRAG_CLICK_DEBOUNCE,
-                                            });
                                             return;
                                         }
                                     }
 
                                     // 弃牌模式下点击卡牌直接弃置
                                     if (canClickDiscard && onDiscardCard) {
-                                        console.log('[HandArea] 点击弃牌:', {
-                                            cardId: card.id,
-                                            cardName: card.name,
-                                            currentHandIds: hand.map(c => c.id),
-                                        });
                                         // 记录弃牌信息，卡牌从手牌移除后触发飞向弃牌堆动画
                                         pendingDiscardRef.current = {
                                             cardKey,
@@ -707,11 +675,6 @@ export const HandArea = ({
                                     }
                                     // 正常模式下点击打牌
                                     else if (canDrag && onPlayCard) {
-                                        console.log('[HandArea] 点击打牌:', {
-                                            cardId: card.id,
-                                            cardName: card.name,
-                                            currentHandIds: hand.map(c => c.id),
-                                        });
                                         pendingPlayRef.current = {
                                             cardKey,
                                             card,
