@@ -94,7 +94,7 @@
 - **FxCue**：点分层级标识符（如 `fx.summon`、`fx.combat.shockwave`），支持通配符（`fx.combat.*`）
 - **FxRegistry**：Cue → FxRenderer 映射，精确匹配优先于通配符
 - **FxBus**（`useFxBus` hook）：push 事件触发特效，内置并发上限、防抖、安全超时
-- **FxLayer**：通用渲染层组件，查注册表获取 renderer 并渲染，自动注入 `onImpact` 回调
+- **FxLayer**：通用渲染层组件，查注册表获取 renderer 并渲染，自动传递 `onImpact` 回调
 - **FxRenderer**：适配器组件，将 FxEvent 参数映射为底层动画组件 props
 - **FeedbackPack**：反馈包，将音效（`FxSoundConfig`）和震动（`FxShakeConfig`）与视觉特效统一声明
 
@@ -162,7 +162,7 @@ fxBus.pushSequence([
 FX 系统支持 WebGL shader 管线，用于逐像素计算的流体特效。与 Canvas 2D 粒子系统共存，按需使用。
 
 ### 核心组件
-- **`ShaderCanvas`**（`src/engine/fx/shader/ShaderCanvas.tsx`）：管理 WebGL context + fullscreen quad，接受 fragment shader + uniforms + duration，自动处理 DPI/RAF/生命周期。自动注入 `uTime`、`uResolution`、`uProgress` 三个内置 uniform。
+- **`ShaderCanvas`**（`src/engine/fx/shader/ShaderCanvas.tsx`）：管理 WebGL context + fullscreen quad，接受 fragment shader + uniforms + duration，自动处理 DPI/RAF/生命周期。自动提供 `uTime`、`uResolution`、`uProgress` 三个内置 uniform。
 - **`ShaderMaterial`**（`ShaderMaterial.ts`）：shader 编译、program 链接、类型安全的 uniform setter（带 location 缓存）。
 - **GLSL 噪声库**（`glsl/noise.glsl.ts`）：Simplex 2D 噪声 + FBM，以 TS 字符串导出，在 shader 中拼接使用。
 

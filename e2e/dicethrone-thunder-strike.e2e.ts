@@ -5,6 +5,8 @@
  * 1. 触发雷霆万钧技能（3个掌面）
  * 2. 验证投掷3个奖励骰
  * 3. 验证重掷交互显示（有太极标记时）
+ * 
+ * 使用 TestHarness 控制骰子投掷，确保测试稳定可靠。
  */
 
 import { test, expect } from '@playwright/test';
@@ -13,9 +15,8 @@ import {
     selectCharacter,
     readyAndStartGame,
     waitForGameBoard,
-    readCoreState,
-    applyCoreStateDirect,
 } from './helpers/dicethrone';
+import { waitForTestHarness } from './helpers/common';
 
 test.describe('DiceThrone - 雷霆万钧技能', () => {
     test('应该正确显示奖励骰投掷和重掷交互（有太极标记）', async ({ browser }, testInfo) => {
@@ -47,25 +48,28 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
         await waitForGameBoard(guestPage);
         console.log('[Test] 游戏棋盘已加载');
 
-        // 等待初始化完成
-        await hostPage.waitForTimeout(2000);
+        // 等待测试工具就绪
+        await waitForTestHarness(hostPage);
+        console.log('[Test] 测试工具已就绪');
 
-        // 读取初始状态
-        const initialState = await readCoreState(hostPage);
-        console.log('[Test] 初始状态:', {
-            phase: initialState.sys?.phase,
-            activePlayer: initialState.activePlayerId,
+        // 检查测试工具状态
+        const status = await hostPage.evaluate(() => {
+            return window.__BG_TEST_HARNESS__!.getStatus();
         });
+        console.log('[Test] 测试工具状态:', status);
 
         // 修改状态：添加太极标记
-        const modifiedState = { ...initialState };
-        if (modifiedState.players?.['0']) {
-            modifiedState.players['0'].tokens = {
-                ...modifiedState.players['0'].tokens,
-                taiji: 2,
-            };
-        }
-        await applyCoreStateDirect(hostPage, modifiedState);
+        await hostPage.evaluate(() => {
+            window.__BG_TEST_HARNESS__!.state.patch({
+                core: {
+                    players: {
+                        '0': {
+                            tokens: { taiji: 2 }
+                        }
+                    }
+                }
+            });
+        });
         console.log('[Test] 已设置玩家0有2个太极标记');
 
         // 等待状态更新
@@ -80,7 +84,7 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
 
         // 推进到 offensiveRoll 阶段（如果还没有）
         const currentPhase = await hostPage.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
+            const state = window.__BG_TEST_HARNESS__!.state.get();
             return state?.sys?.phase;
         });
         
@@ -93,11 +97,12 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
             }
         }
 
-        // 注入骰子结果：3个掌面（值为3）- 必须在点击掷骰按钮之前注入
+        // 注入骰子值：3个掌面（值为3）+ 2个拳头（值为1）
+        // 武僧骰子映射：1,2=拳头 3=掌 4,5=太极 6=莲花
         await hostPage.evaluate(() => {
-            (window as any).__BG_INJECT_DICE_VALUES__ = [3, 3, 3, 1, 1];
+            window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3, 1, 1]);
         });
-        console.log('[Test] 已注入骰子结果: [3,3,3,1,1] (3个掌面)');
+        console.log('[Test] 已注入骰子值: [3,3,3,1,1]（3个掌面）');
 
         // 点击掷骰按钮
         const rollButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
@@ -106,24 +111,7 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
         console.log('[Test] 已点击掷骰按钮');
 
         // 等待掷骰动画完成
-        await hostPage.waitForTimeout(2000);
-
-        // 读取当前状态并修改骰子值
-        const stateAfterRoll = await readCoreState(hostPage);
-        if (stateAfterRoll.dice && stateAfterRoll.dice.length > 0) {
-            // 修改骰子值为 3个掌面（值为3）
-            stateAfterRoll.dice = stateAfterRoll.dice.map((die: any, i: number) => {
-                const values = [3, 3, 3, 1, 1];
-                return {
-                    ...die,
-                    value: values[i] ?? die.value,
-                };
-            });
-            stateAfterRoll.rollConfirmed = false; // 允许用户确认
-            await applyCoreStateDirect(hostPage, stateAfterRoll);
-            console.log('[Test] 已修改骰子值为: [3,3,3,1,1]');
-            await hostPage.waitForTimeout(500);
-        }
+        await hostPage.waitForTimeout(2500);
 
         // 点击确认按钮
         const confirmButton = hostPage.locator('button').filter({ hasText: /确认|Confirm/i });
@@ -133,6 +121,18 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
 
         // 等待技能按钮出现
         await hostPage.waitForTimeout(1000);
+
+        // 验证骰子值
+        const stateAfterConfirm = await hostPage.evaluate(() => {
+            return window.__BG_TEST_HARNESS__!.state.get();
+        });
+        const diceValues = stateAfterConfirm.core.dice?.map((d: any) => d.value) || [];
+        console.log('[Test] 骰子值:', diceValues);
+        
+        // 验证至少有3个掌面（值为3）
+        const palmCount = diceValues.filter((v: number) => v === 3).length;
+        expect(palmCount).toBeGreaterThanOrEqual(3);
+        console.log('[Test] ✅ 骰子验证通过：有', palmCount, '个掌面');
 
         // 点击雷霆万钧技能按钮
         const thunderStrikeButton = hostPage.locator('button').filter({ hasText: /雷霆万钧|Thunder Strike/i });
@@ -151,6 +151,11 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
 
         // 等待进入防御阶段
         await hostPage.waitForTimeout(1000);
+
+        // 注入 Guest 的骰子值（随意值，不影响测试）
+        await guestPage.evaluate(() => {
+            window.__BG_TEST_HARNESS__!.dice.setValues([1, 2, 3, 4, 5]);
+        });
 
         // Guest 掷骰
         const guestRollButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
@@ -182,12 +187,14 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
         await hostPage.waitForTimeout(3000);
 
         // 读取最终状态
-        const finalState = await readCoreState(hostPage);
+        const finalState = await hostPage.evaluate(() => {
+            return window.__BG_TEST_HARNESS__!.state.get();
+        });
         console.log('[Test] 最终状态:', {
-            hasPendingBonusDice: !!finalState.pendingBonusDiceSettlement,
-            bonusDiceCount: finalState.pendingBonusDiceSettlement?.dice?.length,
-            rerollCostTokenId: finalState.pendingBonusDiceSettlement?.rerollCostTokenId,
-            rerollCostAmount: finalState.pendingBonusDiceSettlement?.rerollCostAmount,
+            hasPendingBonusDice: !!finalState.core.pendingBonusDiceSettlement,
+            bonusDiceCount: finalState.core.pendingBonusDiceSettlement?.dice?.length,
+            rerollCostTokenId: finalState.core.pendingBonusDiceSettlement?.rerollCostTokenId,
+            rerollCostAmount: finalState.core.pendingBonusDiceSettlement?.rerollCostAmount,
         });
 
         // 验证页面上是否显示重掷相关的文本
@@ -200,10 +207,10 @@ test.describe('DiceThrone - 雷霆万钧技能', () => {
         expect(hasRerollText).toBeTruthy();
 
         // 验证状态
-        expect(finalState.pendingBonusDiceSettlement).toBeDefined();
-        expect(finalState.pendingBonusDiceSettlement?.dice).toHaveLength(3);
-        expect(finalState.pendingBonusDiceSettlement?.rerollCostTokenId).toBe('taiji');
-        expect(finalState.pendingBonusDiceSettlement?.rerollCostAmount).toBe(2);
+        expect(finalState.core.pendingBonusDiceSettlement).toBeDefined();
+        expect(finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(3);
+        expect(finalState.core.pendingBonusDiceSettlement?.rerollCostTokenId).toBe('taiji');
+        expect(finalState.core.pendingBonusDiceSettlement?.rerollCostAmount).toBe(2);
         
         console.log('[Test] ✅ 测试通过：奖励骰投掷和重掷交互正确显示');
 

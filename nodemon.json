@@ -10,6 +10,6 @@
     "**/*.spec.*"
   ],
   "ext": "ts",
-  "exec": "tsx server.ts",
+  "exec": "npx tsx server.ts",
   "delay": "2000"
 }

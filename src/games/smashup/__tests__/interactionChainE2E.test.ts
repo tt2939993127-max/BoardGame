@@ -1356,8 +1356,8 @@ describe('P2: ghost_spirit（灵魂）2步链 - 力量=0分支', () => {
     });
 });
 
-describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）2步链', () => {
-    it('选基地 → 多选行动卡 → 消灭选中的行动卡', () => {
+describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）点击式链', () => {
+    it('选基地 → 点击行动卡消灭 → 继续点击或跳过', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1387,7 +1387,7 @@ describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）2步链',
         const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
         expect(choice1.sourceId).toBe('miskatonic_those_meddling_kids');
 
-        // Step 2: 选 base0 → 多选行动卡
+        // Step 2: 选 base0 → 显示点击式行动卡选择
         const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 0);
         const r2 = respond(r1.finalState, '0', baseOpt, 'meddling_kids step2: 选基地');
 
@@ -1395,16 +1395,25 @@ describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）2步链',
         const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
         expect(choice2.sourceId).toBe('miskatonic_those_meddling_kids_select');
 
-        // Step 3: 选第一张行动卡 → 链路结束
+        // Step 3: 点击第一张行动卡 → 消灭，显示下一张
         const actionOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'ongoing1');
-        const r3 = respond(r2.finalState, '0', actionOpt, 'meddling_kids step3: 选行动卡');
+        const r3 = respond(r2.finalState, '0', actionOpt, 'meddling_kids step3: 点击第一张');
 
         expect(r3.steps[0]?.success).toBe(true);
-        expect(r3.finalState.sys.interaction.current).toBeUndefined();
+        // ongoing1 被消灭
+        expect(r3.finalState.core.bases[0].ongoingActions.find(o => o.uid === 'ongoing1')).toBeUndefined();
+        // 还有 ongoing2，应该显示下一个选择
+        const choice3 = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        expect(choice3.sourceId).toBe('miskatonic_those_meddling_kids_select');
 
-        // 验证：ongoing1 被消灭
-        const fc = r3.finalState.core;
-        expect(fc.bases[0].ongoingActions.find(o => o.uid === 'ongoing1')).toBeUndefined();
+        // Step 4: 跳过 → 链路结束
+        const skipOpt = findOption(choice3, (o: any) => o.value?.skip === true);
+        const r4 = respond(r3.finalState, '0', skipOpt, 'meddling_kids step4: 跳过');
+
+        expect(r4.steps[0]?.success).toBe(true);
+        expect(r4.finalState.sys.interaction.current).toBeUndefined();
+        // ongoing2 仍然存在（跳过了）
+        expect(r4.finalState.core.bases[0].ongoingActions.find(o => o.uid === 'ongoing2')).toBeDefined();
     });
 });
 

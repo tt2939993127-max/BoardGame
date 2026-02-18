@@ -30,7 +30,10 @@ export class AuthController {
 
         const existingUser = await this.authService.findByEmail(email);
         if (existingUser) {
-            return this.sendError(res, 409, t('auth.error.emailAlreadyUsed'));
+            return res.status(409).json({
+                error: t('auth.error.emailAlreadyRegistered'),
+                suggestLogin: true,
+            });
         }
 
         const code = generateCode();
@@ -115,7 +118,10 @@ export class AuthController {
         // username 不再要求唯一（仅昵称）；邮箱仍为唯一标识。
         const existingEmail = await this.authService.findByEmail(email);
         if (existingEmail) {
-            return this.sendError(res, 409, t('auth.error.emailAlreadyUsed'));
+            return res.status(409).json({
+                error: t('auth.error.emailAlreadyRegistered'),
+                suggestLogin: true,
+            });
         }
 
         const user = await this.authService.createUser(username, password, email);
@@ -209,6 +215,14 @@ export class AuthController {
             });
         }
 
+        // 先检查邮箱是否存在
+        const existingUser = await this.authService.findByEmail(trimmedAccount);
+        if (!existingUser) {
+            return this.sendAuthFailure(res, 'AUTH_EMAIL_NOT_REGISTERED', t('auth.error.emailNotRegisteredLogin'), {
+                suggestRegister: true,
+            });
+        }
+
         const user = await this.authService.validateUser(trimmedAccount, password);
         if (!user) {
             const failure = await this.authService.recordLoginFailure(trimmedAccount, clientIp);
@@ -217,7 +231,7 @@ export class AuthController {
                     retryAfterSeconds: failure.retryAfterSeconds ?? 0,
                 });
             }
-            return this.sendAuthFailure(res, 'AUTH_INVALID_CREDENTIALS', t('auth.error.invalidCredentials'));
+            return this.sendAuthFailure(res, 'AUTH_INVALID_PASSWORD', t('auth.error.invalidPassword'));
         }
 
         await this.authService.clearLoginFailures(trimmedAccount, clientIp);

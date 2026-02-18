@@ -18,6 +18,8 @@ import { CardPoolPanel } from './deckbuilder/CardPoolPanel';
 import { MyDeckPanel } from './deckbuilder/MyDeckPanel';
 import { serializeDeck, type SerializedCustomDeck } from '../config/deckSerializer';
 import { UI_Z_INDEX } from '../../../core';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getCustomDeck } from '../../../api/custom-deck';
 
 interface DeckBuilderDrawerProps {
     isOpen: boolean;
@@ -41,6 +43,7 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
     onDeckSaved,
 }) => {
     const { t } = useTranslation('game-summonerwars');
+    const { token } = useAuth();
     const deckBuilder = useDeckBuilder({ onDeckSaved });
     const {
         currentDeck,
@@ -86,6 +89,25 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
             console.warn('[DeckBuilderDrawer] 序列化牌组失败:', err);
         }
     }, [onConfirm, onClose, currentDeck, validationResult]);
+    
+    /**
+     * 直接选择已保存的牌组（用于"使用"按钮）
+     * 直接从 API 加载完整牌组数据并传递给父组件，不经过编辑器状态
+     */
+    const handleSelectSavedDeck = useCallback(async (deckId: string) => {
+        if (!onConfirm || !token) return;
+        
+        try {
+            // 直接从 API 获取完整牌组数据（已经是序列化格式）
+            const serialized = await getCustomDeck(token, deckId);
+            
+            // 直接传递给父组件并关闭抽屉
+            onConfirm(serialized);
+            onClose();
+        } catch (err) {
+            console.error('[DeckBuilderDrawer] 加载牌组失败:', err);
+        }
+    }, [onConfirm, onClose, token]);
 
     return (
         <AnimatePresence>
@@ -167,6 +189,7 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
                                 onLoad={loadDeck}
                                 onDelete={deleteDeck}
                                 onConfirm={onConfirm ? handleConfirmDeck : undefined}
+                                onSelectSavedDeck={onConfirm ? handleSelectSavedDeck : undefined}
                             />
                         </div>
                     </motion.div>

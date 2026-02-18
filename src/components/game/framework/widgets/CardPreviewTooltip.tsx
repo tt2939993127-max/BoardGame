@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CardPreview } from '../../../common/media/CardPreview';
+import { MagnifyOverlay } from '../../../common/overlays/MagnifyOverlay';
 import { UI_Z_INDEX, type CardPreviewRef } from '../../../../core';
 
 interface CardPreviewTooltipProps {
@@ -26,6 +27,7 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
     maxDim: maxDimProp,
 }) => {
     const [isHovered, setIsHovered] = useState(false);
+    const [isMagnified, setIsMagnified] = useState(false);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
     const anchorRef = useRef<HTMLSpanElement>(null);
 
@@ -80,17 +82,30 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
         return { left, top, placeRight };
     }, [anchorRect, previewSize]);
 
+    // 放大预览尺寸（点击放大时使用）
+    const magnifySize = useMemo(() => {
+        const ar = aspectRatio ?? (192 / 308);
+        if (ar >= 1) {
+            return { width: 'w-[50vw] max-w-[700px]', aspect: `aspect-[${ar}]` };
+        }
+        return { width: 'w-[30vw] max-w-[450px]', aspect: `aspect-[${ar}]` };
+    }, [aspectRatio]);
+
     return (
         <span className="relative inline-block">
-            {/* 可 hover 的卡牌名称（带下划线） */}
+            {/* 可 hover 预览、可点击放大的卡牌名称 */}
             <span
                 ref={anchorRef}
-                className="underline decoration-dotted decoration-white/40 hover:decoration-white/80 cursor-help transition-colors"
+                className="underline decoration-dotted decoration-white/40 hover:decoration-white/80 cursor-zoom-in transition-colors"
                 onMouseEnter={() => {
                     setIsHovered(true);
                     updateAnchorRect();
                 }}
                 onMouseLeave={() => setIsHovered(false)}
+                onClick={() => {
+                    setIsHovered(false);
+                    setIsMagnified(true);
+                }}
             >
                 {children}
             </span>
@@ -143,6 +158,17 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
                 </div>,
                 portalRoot
             )}
+
+            {/* 点击放大预览 */}
+            <MagnifyOverlay isOpen={isMagnified} onClose={() => setIsMagnified(false)}>
+                <div className={`relative bg-transparent ${magnifySize.width}`} style={{ aspectRatio: aspectRatio ?? (192 / 308) }}>
+                    <CardPreview
+                        previewRef={previewRef}
+                        locale={locale}
+                        className="w-full h-full object-contain rounded-xl shadow-2xl"
+                    />
+                </div>
+            </MagnifyOverlay>
         </span>
     );
 };

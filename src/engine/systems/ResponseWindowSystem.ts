@@ -23,10 +23,33 @@ export interface ResponseWindowSystemConfig {
     hasRespondableContent?: (state: unknown, playerId: PlayerId, windowType: ResponseWindowType, sourceId?: string) => boolean;
 
     /**
-     * 响应窗口期间允许执行的额外游戏命令
+     * 响应窗口期间允许执行的额外游戏命令（白名单模式）
      * 引擎自动包含 RESPONSE_PASS + SYS_INTERACTION_* + SYS_ 前缀系统命令，无需重复列出
+     * 
+     * 注意：如果同时配置了 allowedCommandCategories，则两者取并集
      */
     allowedCommands?: string[];
+
+    /**
+     * 响应窗口期间允许执行的命令分类（推荐）
+     * 
+     * 使用分类系统可以避免遗漏命令，提高可维护性。
+     * 游戏层需要提供 getCommandCategory 函数来查询命令分类。
+     * 
+     * 示例：
+     * ```typescript
+     * allowedCommandCategories: ['tactical', 'ui_interaction', 'state_management']
+     * ```
+     */
+    allowedCommandCategories?: string[];
+
+    /**
+     * 获取命令分类的函数（配合 allowedCommandCategories 使用）
+     * 
+     * @param commandType 命令类型
+     * @returns 命令分类，如果命令未分类则返回 undefined
+     */
+    getCommandCategory?: (commandType: string) => string | undefined;
 
     /** 不受"当前响应者"约束的命令（如 USE_TOKEN 由自身 responderId 校验） */
     responderExemptCommands?: string[];
@@ -282,7 +305,7 @@ function skipToNextRespondableResponder<TCore>(
 export function createResponseWindowSystem<TCore>(
     config: ResponseWindowSystemConfig = {}
 ): EngineSystem<TCore> {
-    const { hasRespondableContent } = config;
+    const { hasRespondableContent, getCommandCategory } = config;
 
     // 合并引擎级 + 游戏级允许命令
     const gameAllowedCommands = config.allowedCommands ?? [];
@@ -290,6 +313,10 @@ export function createResponseWindowSystem<TCore>(
         ...ENGINE_ALLOWED_COMMANDS,
         ...gameAllowedCommands,
     ]);
+    
+    // 允许的命令分类
+    const allowedCategories = new Set(config.allowedCommandCategories ?? []);
+    
     const responderExempt = new Set(config.responderExemptCommands ?? []);
     const windowTypeConstraints = config.commandWindowTypeConstraints ?? {};
     const advanceEvents = config.responseAdvanceEvents ?? [];
@@ -298,6 +325,24 @@ export function createResponseWindowSystem<TCore>(
 
     /** 判断命令是否为 SYS_ 前缀系统命令（始终放行） */
     const isSysCommand = (type: string) => type.startsWith('SYS_');
+    
+    /** 判断命令是否被允许（白名单 + 分类系统） */
+    const isCommandAllowed = (commandType: string): boolean => {
+        // 1. 检查白名单
+        if (allAllowedCommands.has(commandType)) {
+            return true;
+        }
+        
+        // 2. 检查分类系统
+        if (allowedCategories.size > 0 && getCommandCategory) {
+            const category = getCommandCategory(commandType);
+            if (category && allowedCategories.has(category)) {
+                return true;
+            }
+        }
+        
+        return false;
+    };
 
     return {
         id: SYSTEM_IDS.RESPONSE_WINDOW,
@@ -389,8 +434,8 @@ export function createResponseWindowSystem<TCore>(
                 return;
             }
 
-            // 检查命令是否在允许列表中
-            if (allAllowedCommands.has(command.type)) {
+            // 检查命令是否被允许（白名单 + 分类系统）
+            if (isCommandAllowed(command.type)) {
                 // 窗口类型约束检查
                 const constraints = windowTypeConstraints[command.type];
                 if (constraints && !constraints.includes(currentWindow.windowType)) {

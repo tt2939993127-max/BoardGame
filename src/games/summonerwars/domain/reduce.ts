@@ -617,15 +617,19 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 
     case SW_EVENTS.EXTRA_ATTACK_GRANTED: {
       // 额外攻击：重置目标单位的 hasAttacked 并增加 extraAttacks 计数
-      const { targetPosition: eaPos } = payload as { targetPosition: CellCoord; targetUnitId: string };
+      const { targetPosition: eaPos, targetUnitId: _eaUnitId } = payload as { targetPosition: CellCoord; targetUnitId: string };
       const eaBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const eaUnit = eaBoard[eaPos.row]?.[eaPos.col]?.unit;
       if (eaUnit) {
+        const oldExtraAttacks = eaUnit.extraAttacks ?? 0;
+        const newExtraAttacks = oldExtraAttacks + 1;
         eaBoard[eaPos.row][eaPos.col].unit = {
           ...eaUnit,
           hasAttacked: false,
-          extraAttacks: (eaUnit.extraAttacks ?? 0) + 1,
+          extraAttacks: newExtraAttacks,
         };
+      } else {
+        // 单位不存在，忽略
       }
       return { ...core, board: eaBoard };
     }

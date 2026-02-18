@@ -579,8 +579,9 @@ interface SimpleChoiceConfig {
     sourceId?: string;
     timeout?: number;
     multi?: PromptMultiConfig;        // { min?: number; max?: number }
-    targetType?: 'base' | 'minion' | 'generic';
+    targetType?: 'base' | 'minion' | 'hand' | 'discard_minion' | 'generic';
     autoResolveIfSingle?: boolean;    // 默认 true
+    autoCancelOption?: boolean;       // 自动添加取消选项
 }
 ```
 
@@ -589,9 +590,16 @@ interface SimpleChoiceConfig {
 1. **"任意数量"/"any number" → 必须传 `multi: { min: 0, max: N }`**，N 为候选项总数。不传 `multi` 会导致单选模式。
 2. **"恰好 N 个" → `multi: { min: N, max: N }`**。
 3. **"最多 N 个" → `multi: { min: 0, max: N }` 或 `multi: { min: 1, max: N }`**（视是否可跳过）。
-4. **卡牌选项必须声明 `displayMode: 'card'`（强制）**。`PromptOption` 新增 `displayMode?: 'card' | 'button'` 字段，用于显式声明 UI 渲染模式。使用 `buildMinionTargetOptions()` 构建的选项已自动设置。手动构建卡牌选项时必须显式添加 `displayMode: 'card'`。UI 层对未设置 `displayMode` 的选项 fallback 到 `extractDefId` 猜测（向后兼容，但新代码禁止依赖此 fallback）。
-5. **选项代表卡牌时，`option.value` 必须包含 `defId` 字段**。UI 层从 `defId` 查找卡牌预览图。缺少 `defId` → 即使 `displayMode: 'card'` 也无法展示预览图。
-6. **配置对象形式中 `multi` 必须嵌套**：`{ sourceId, multi: { min, max } }` ✅，`{ sourceId, min, max }` ❌（`min`/`max` 作为顶层字段会被忽略）。
+4. **基地/随从/手牌选择必须声明 `targetType`（强制）**：
+   - `targetType: 'base'` — 选择基地（如地形改造、麦田怪圈）
+   - `targetType: 'minion'` — 选择随从（如至高霸主、收集者）
+   - `targetType: 'hand'` — 选择手牌（如幽灵弃牌）
+   - `targetType: 'discard_minion'` — 选择弃牌堆随从（如僵尸领主）
+   - `targetType: 'generic'` — 通用选择（如选择玩家、选择基地牌库中的卡）
+   - **历史债务**：现有 57 个交互依赖自动检测（兼容模式），可以保持现状，修改时顺带添加 `targetType`。
+5. **卡牌选项必须声明 `displayMode: 'card'`（强制）**。`PromptOption` 新增 `displayMode?: 'card' | 'button'` 字段，用于显式声明 UI 渲染模式。使用 `buildMinionTargetOptions()` 构建的选项已自动设置。手动构建卡牌选项时必须显式添加 `displayMode: 'card'`。UI 层对未设置 `displayMode` 的选项 fallback 到 `extractDefId` 猜测（向后兼容，但新代码禁止依赖此 fallback）。
+6. **选项代表卡牌时，`option.value` 必须包含 `defId` 字段**。UI 层从 `defId` 查找卡牌预览图。缺少 `defId` → 即使 `displayMode: 'card'` 也无法展示预览图。
+7. **配置对象形式中 `multi` 必须嵌套**：`{ sourceId, multi: { min, max } }` ✅，`{ sourceId, min, max }` ❌（`min`/`max` 作为顶层字段会被忽略）。
 
 ### PromptOption.displayMode（渲染模式声明）
 
@@ -624,6 +632,9 @@ createSimpleChoice(id, pid, title, opts, { sourceId: 'xxx', min: 0, max: 3 })
 // ❌ 描述说"任意数量"但不传 multi
 createSimpleChoice(id, pid, title, opts, sourceId)  // → 单选模式
 
+// ❌ 基地/随从选择未声明 targetType（依赖自动检测，新代码禁止）
+createSimpleChoice(id, pid, '选择一个基地', baseOptions, 'ability_id')
+
 // ❌ 选项代表卡牌但 value 缺少 defId（无法展示预览图）
 options.map(c => ({ id: c.instanceId, label: c.name, value: { instanceId: c.instanceId } }))
 
@@ -635,6 +646,12 @@ createSimpleChoice(id, pid, title, opts, sourceId, undefined, { min: 0, max: opt
 
 // ✅ 配置对象形式 + multi 嵌套
 createSimpleChoice(id, pid, title, opts, { sourceId: 'xxx', multi: { min: 0, max: opts.length } })
+
+// ✅ 基地选择：显式声明 targetType
+createSimpleChoice(id, pid, '选择一个基地', baseOptions, { sourceId: 'ability_id', targetType: 'base' })
+
+// ✅ 随从选择：显式声明 targetType
+createSimpleChoice(id, pid, '选择一个随从', minionOptions, { sourceId: 'ability_id', targetType: 'minion' })
 
 // ✅ 卡牌选项：displayMode + defId
 options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const }))

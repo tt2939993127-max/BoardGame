@@ -23,7 +23,7 @@ import type {
     CharacterSelectedEvent,
     HostStartedEvent,
     PlayerReadyEvent,
-    PendingInteraction,
+    InteractionDescriptor,
     TokenGrantedEvent,
 } from './types';
 import {
@@ -100,7 +100,7 @@ export function execute(
     // 从 sys.interaction 读取 pendingInteraction（单一权威）
     const sysInteraction = matchState.sys?.interaction?.current;
     const pendingInteraction = sysInteraction?.kind === 'dt:card-interaction'
-        ? sysInteraction.data as PendingInteraction
+        ? sysInteraction.data as InteractionDescriptor
         : undefined;
     const events: DiceThroneEvent[] = [];
     const timestamp = resolveTimestamp(command);
@@ -350,6 +350,18 @@ export function execute(
                         timestamp,
                     } as DiceThroneEvent);
                 }
+                
+                // 生成 INTERACTION_COMPLETED 事件以清理交互状态
+                // 这是骰子修改交互（modifyDie）完成的标志
+                events.push({
+                    type: 'INTERACTION_COMPLETED',
+                    payload: {
+                        interactionId: 'dice-interaction',
+                        sourceCardId: '',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                });
             }
             break;
         }
@@ -382,6 +394,18 @@ export function execute(
                     timestamp,
                 } as DiceThroneEvent);
             }
+            
+            // 生成 INTERACTION_COMPLETED 事件以清理交互状态
+            // 这是骰子重掷交互（selectDie）完成的标志
+            events.push({
+                type: 'INTERACTION_COMPLETED',
+                payload: {
+                    interactionId: 'dice-interaction',
+                    sourceCardId: '',
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            });
             break;
         }
 
@@ -434,6 +458,18 @@ export function execute(
                         }
                     });
                 }
+                
+                // 生成 INTERACTION_COMPLETED 事件以清理交互状态
+                // 这是状态交互（selectStatus/selectPlayer）完成的标志
+                events.push({
+                    type: 'INTERACTION_COMPLETED',
+                    payload: {
+                        interactionId: 'status-interaction', // 通用 ID，systems.ts 会清理任何当前交互
+                        sourceCardId: '',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                });
             }
             break;
         }
@@ -480,6 +516,18 @@ export function execute(
                         timestamp,
                     } as DiceThroneEvent);
                 }
+                
+                // 生成 INTERACTION_COMPLETED 事件以清理交互状态
+                // 这是状态转移交互（selectTargetStatus）完成的标志
+                events.push({
+                    type: 'INTERACTION_COMPLETED',
+                    payload: {
+                        interactionId: 'status-interaction', // 通用 ID，systems.ts 会清理任何当前交互
+                        sourceCardId: '',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                });
             }
             break;
         }

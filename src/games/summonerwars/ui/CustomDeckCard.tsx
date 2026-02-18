@@ -41,6 +41,8 @@ export interface CustomDeckCardProps {
   onEdit: () => void;
   /** 放大预览回调 */
   onMagnify: (factionId: FactionId) => void;
+  /** 是否为占位卡片（显示"自定义牌组"而非具体牌组名） */
+  isPlaceholder?: boolean;
 }
 
 /**
@@ -64,9 +66,15 @@ export const CustomDeckCard: React.FC<CustomDeckCardProps> = ({
   onSelect,
   onEdit,
   onMagnify,
+  isPlaceholder = false,
 }) => {
   // 获取召唤师精灵图 atlasId
   const atlasId = getSummonerAtlasIdByFaction(deck.summonerFaction);
+  
+  // 占位模式下显示"自定义牌组"文本
+  const displayName = isPlaceholder 
+    ? t('factionSelection.customDeck', '自定义牌组')
+    : deck.name;
 
   return (
     <motion.div
@@ -106,7 +114,7 @@ export const CustomDeckCard: React.FC<CustomDeckCardProps> = ({
       {/* 底部渐变遮罩 + 牌组名称 + 放大按钮 */}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent pt-[2vw] pb-[0.4vw] px-[0.5vw] flex items-end justify-between">
         <div className="text-[clamp(10px,0.75vw,16px)] font-bold text-white/90 tracking-wide drop-shadow-md truncate">
-          {deck.name}
+          {displayName}
         </div>
         {/* 放大查看按钮 */}
         <button

@@ -328,6 +328,7 @@ export function executePlayEvent(
       case CARD_IDS.GOBLIN_FRENZY: {
         // 群情激愤（传奇）：所有0费友方单位获得额外攻击
         const frenzyUnits = getPlayerUnits(core, playerId);
+        const affectedUnits: string[] = [];
         for (const u of frenzyUnits) {
           if (u.card.cost === 0 && u.card.unitClass !== 'summoner') {
             events.push({
@@ -339,6 +340,7 @@ export function executePlayEvent(
               },
               timestamp,
             });
+            affectedUnits.push(u.instanceId);
           }
         }
         break;

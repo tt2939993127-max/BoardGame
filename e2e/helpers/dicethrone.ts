@@ -371,16 +371,65 @@ export const waitForTutorialStep = async (page: Page, stepId: string, timeout = 
 };
 
 /**
- * 分发本地命令
+ * 分发本地命令（教程模式）
  */
-export const dispatchLocalCommand = async (page: Page, command: { type: string; payload?: unknown }) => {
-    await page.evaluate((cmd) => {
-        const dispatch = (window as any).__BG_DISPATCH__;
+export const dispatchLocalCommand = async (page: Page, type: string, payload?: unknown) => {
+    await page.evaluate(({ cmdType, cmdPayload }) => {
+        const w = window as Window & { __BG_LOCAL_DISPATCH__?: (type: string, payload?: unknown) => void };
+        const dispatch = w.__BG_LOCAL_DISPATCH__;
         if (dispatch) {
-            dispatch(cmd);
+            dispatch(cmdType, cmdPayload);
         }
-    }, command);
+    }, { cmdType: type, cmdPayload: payload });
     await page.waitForTimeout(300);
+};
+
+/**
+ * 尝试点击 Pass 按钮（如果存在响应窗口）
+ * @returns 是否点击了 Pass 按钮
+ */
+export const maybePassResponse = async (page: Page): Promise<boolean> => {
+    const passButton = page.getByRole('button', { name: /^(Pass|跳过)$/i });
+    if (await passButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await passButton.click();
+        await page.waitForTimeout(300);
+        return true;
+    }
+    return false;
+};
+
+/**
+ * 等待特定阶段
+ */
+export const waitForPhase = async (page: Page, phase: string, timeout = 10000) => {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+        const state = await readCoreState(page);
+        if (state.phase === phase) return;
+        await page.waitForTimeout(300);
+    }
+    throw new Error(`Timeout waiting for phase: ${phase}`);
+};
+
+/**
+ * 推进到进攻投骰阶段
+ */
+export const advanceToOffensiveRoll = async (page: Page) => {
+    const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
+    // 持续点击 Next Phase 直到进入 offensiveRoll 阶段
+    for (let i = 0; i < 10; i++) {
+        if (await advanceButton.isEnabled({ timeout: 1000 }).catch(() => false)) {
+            await advanceButton.click();
+            await page.waitForTimeout(400);
+            // 检查是否到达骰子投掷阶段
+            const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
+            if (await rollButton.isVisible({ timeout: 500 }).catch(() => false)) {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
 };
 
 /**

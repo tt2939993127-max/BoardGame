@@ -175,10 +175,10 @@ function executeAndReduce(
 
 describe('掷术师 - 迷魂 (evasion)', () => {
   it('敌方攻击掷出✦时，相邻掷术师减伤1点', () => {
-    // random.random() 返回 5/6 ≈ 0.833 → index 5 → special (✦)
+    // random.random() 返回 0.9 → index 4 → melee + special (✦)
     const specialRandom: RandomFn = {
       ...createTestRandom(),
-      random: () => 5 / 6,
+      random: () => 0.9,
     };
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
 import { GameButton } from './components/GameButton';
-import type { Die, TurnPhase, PendingInteraction } from '../types';
+import type { Die, TurnPhase, InteractionDescriptor } from '../types';
 import { Dice3D } from './Dice3D';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
@@ -27,7 +27,7 @@ export const DiceTray = ({
     rerollingDiceIds?: number[];
     locale?: string;
     /** 当前骰子交互（从 sys.interaction.current 读取） */
-    interaction?: PendingInteraction;
+    interaction?: InteractionDescriptor;
     /** dispatch 函数（用于响应交互） */
     dispatch: (type: string, payload?: unknown) => void;
     /** 被动重掷选择模式（翡翠色高亮） */
@@ -59,9 +59,11 @@ export const DiceTray = ({
     const maxModifyCount = interaction?.selectCount ?? 1;
 
     const handleDieClick = (dieId: number) => {
-        if (isRolling || !interaction) return;
+        if (isRolling) return;
+        
         if (isInteractionMode) {
             // 交互模式：选择骰子
+            if (!interaction) return;
             const dieIdStr = String(dieId);
             const isSelected = selectedDice.includes(dieIdStr);
             const newSelected = isSelected
@@ -100,11 +102,8 @@ export const DiceTray = ({
                 setTotalAdjustment(totalAdjustment + delta);
             }
             
-            // 响应交互
-            dispatch(INTERACTION_COMMANDS.RESPOND, {
-                optionId: dieIdStr,
-                mergedValue: newValue,
-            });
+            // 立即 dispatch MODIFY_DIE 命令（不等确认按钮）
+            dispatch('MODIFY_DIE', { dieId, newValue });
         }
     };
 
@@ -168,7 +167,7 @@ export const DiceTray = ({
                             )}
 
                             {/* 骰子本体 + 重投按钮 */}
-                            <div className="relative flex flex-col items-center gap-[0.25vw]">
+                            <div className="relative flex flex-col items-center gap-[0.25vw]" data-testid="die">
                                 <div
                                     onClick={() => clickable && handleDieClick(d.id)}
                                     className={`
@@ -249,7 +248,7 @@ export const DiceActions = ({
     isRolling: boolean;
     setIsRolling: (isRolling: boolean) => void;
     /** 当前骰子交互（从 sys.interaction.current 读取） */
-    interaction?: PendingInteraction;
+    interaction?: InteractionDescriptor;
     /** dispatch 函数（用于响应交互） */
     dispatch: (type: string, payload?: unknown) => void;
 }) => {
@@ -280,7 +279,18 @@ export const DiceActions = ({
         if (isInteractionMode) {
             // 交互模式：确认按钮
             if (interaction) {
-                dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: '__confirm__' });
+                // selectDie 类型：批量重掷骰子
+                if (interaction.type === 'selectDie') {
+                    const selected = interaction.selected ?? [];
+                    for (const dieIdStr of selected) {
+                        const dieId = Number(dieIdStr);
+                        dispatch('REROLL_DIE', { dieId });
+                    }
+                }
+                
+                // modifyDie 类型：骰子已经在 handleAdjust 中修改了，只需清理交互
+                // 直接 dispatch CANCEL 命令清理交互（会生成 INTERACTION_CANCELLED 事件）
+                dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: interaction.id });
             }
             return;
         }

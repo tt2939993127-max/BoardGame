@@ -10,6 +10,7 @@ import type { PromptOption as EnginePromptOption, SimpleChoiceConfig } from '../
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import { resolveOnPlay } from './abilityRegistry';
+import { isMinionProtected, type ProtectionType } from './ongoingEffects';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -36,8 +37,41 @@ import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
 import { fireTriggers } from './ongoingEffects';
-import { reduce } from './reduce';
 import { getMinionDef } from '../data/cards';
+
+// ============================================================================
+// 交互选项工厂函数
+// ============================================================================
+
+/**
+ * 创建标准 skip 选项
+ * 
+ * 用于"你可以"类可选效果，提供统一的跳过选项格式。
+ * 
+ * @param label 按钮文本，默认"跳过"
+ * @returns 标准格式的 skip 选项（{ skip: true } + displayMode: 'button'）
+ * 
+ * @example
+ * ```typescript
+ * const options = [
+ *     createSkipOption(),  // 默认"跳过"
+ *     ...minionOptions
+ * ];
+ * 
+ * const options2 = [
+ *     createSkipOption('跳过（不消灭随从）'),  // 自定义文本
+ *     ...minionOptions
+ * ];
+ * ```
+ */
+export function createSkipOption(label: string = '跳过'): EnginePromptOption<{ skip: true }> {
+    return {
+        id: 'skip',
+        label,
+        value: { skip: true },
+        displayMode: 'button'
+    };
+}
 
 // ============================================================================
 // 力量计算便捷函数
@@ -688,15 +722,41 @@ export function openMeFirstWindow(
 // ============================================================================
 
 /**
- * 构建随从目标选择的交互选项
+ * 构建随从目标选择的交互选项（带自动保护过滤）
  * 
  * @param candidates 候选随从列表（含基地索引）
+ * @param context 可选上下文，用于自动过滤受保护的随从
  * @returns 引擎层 PromptOption 数组
  */
 export function buildMinionTargetOptions(
-    candidates: { uid: string; defId: string; baseIndex: number; label: string }[]
+    candidates: { uid: string; defId: string; baseIndex: number; label: string }[],
+    context?: {
+        /** 当前游戏状态（用于保护检查） */
+        state: SmashUpCore;
+        /** 发起效果的玩家（攻击者） */
+        sourcePlayerId: PlayerId;
+        /** 效果类型（用于保护检查） */
+        effectType: ProtectionType;
+    }
 ): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
-    return candidates.map((c, i) => ({
+    let filteredCandidates = candidates;
+
+    // 自动过滤受保护的随从
+    if (context) {
+        filteredCandidates = candidates.filter(c => {
+            const minion = context.state.bases[c.baseIndex]?.minions.find(m => m.uid === c.uid);
+            if (!minion) return false;
+            return !isMinionProtected(
+                context.state,
+                minion,
+                c.baseIndex,
+                context.sourcePlayerId,
+                context.effectType
+            );
+        });
+    }
+
+    return filteredCandidates.map((c, i) => ({
         id: `minion-${i}`,
         label: c.label,
         value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },

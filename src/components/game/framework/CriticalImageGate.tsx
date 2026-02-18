@@ -81,18 +81,16 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             return;
         }
 
-        console.warn(`[CriticalImageGate] starting preload for gameId=${gameId} phaseKey=${phaseKey}`);
         inFlightRef.current = true;
         setReady(false);
         preloadCriticalImages(gameId, currentState, locale)
             .then((warmPaths) => {
-                console.warn(`[CriticalImageGate] preload complete, setting ready=true`);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 preloadWarmImages(warmPaths, locale);
             })
             .catch((err) => {
-                console.warn(`[CriticalImageGate] preload failed, setting ready=true anyway`, err);
+                console.error('[CriticalImageGate] 预加载失败:', err);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
             })

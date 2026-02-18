@@ -313,7 +313,7 @@ export const getAvailableAbilityIds = (
             // 确保 UI 层 find() 取第一个匹配时自动选中最高优先级变体
             const matched: { id: string; priority: number }[] = [];
             for (const variant of def.variants) {
-                const result = combatAbilityManager.checkTrigger(variant.trigger, context);
+                const result = combatAbilityManager.instance.checkTrigger(variant.trigger, context);
                 if (result) {
                     matched.push({ id: variant.id, priority: variant.priority ?? 0 });
                 }
@@ -326,7 +326,7 @@ export const getAvailableAbilityIds = (
         }
 
         if (def.trigger) {
-            const result = combatAbilityManager.checkTrigger(def.trigger, context);
+            const result = combatAbilityManager.instance.checkTrigger(def.trigger, context);
             if (result) {
                 available.push(def.id);
             }
@@ -364,6 +364,7 @@ export type CardPlayFailReason =
     | 'requireIsNotRoller'         // 卡牌需要不是当前投掷方（响应对手骰面）
     | 'requireHasRolled'           // 卡牌需要已经投掷过
     | 'requireDiceExists'          // 卡牌需要有骰子结果
+    | 'requireMinDiceCount'        // 卡牌需要最少骰子数量
     | 'requireOpponentDiceExists'  // 卡牌需要对手有骰子结果
     | 'requireRollConfirmed'       // 卡牌需要骰面已确认（响应对手确认后）
     | 'requireNotRollConfirmed'    // 骰面已确认，不能再打出该卡
@@ -489,7 +490,7 @@ export const checkPlayCard = (
         
         // 检查最少骰子数量（用于需要多颗骰子才能触发的效果，如"俺也一样"需要2颗）
         if (cond.requireMinDiceCount && state.dice.length < cond.requireMinDiceCount) {
-            return { ok: false, reason: 'requireDiceExists' };
+            return { ok: false, reason: 'requireMinDiceCount' };
         }
         
         // 检查对手是否有骰子结果（用于强制对手重掷）

@@ -325,8 +325,9 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some((event) => event.type === 'CHOICE_REQUESTED');
-                if (hasChoice) {
-                    // 需要用户做选择，阻止阶段切换
+                const hasBonusDiceRerollPreDefense = preDefenseEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                if (hasChoice || hasBonusDiceRerollPreDefense) {
+                    // 需要用户做选择或处理奖励骰重掷，阻止阶段切换
                     return { events, halt: true };
                 }
 

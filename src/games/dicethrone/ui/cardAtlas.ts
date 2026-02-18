@@ -13,7 +13,6 @@ export type CardAtlasConfig = SpriteAtlasConfig;
 export const loadCardAtlasConfig = async (): Promise<CardAtlasConfig> => {
     const data: unknown = atlasConfigData;
     if (isSpriteAtlasConfig(data)) {
-        console.log('[loadCardAtlasConfig] loaded config:', { imageW: data.imageW, rows: data.rows, cols: data.cols });
         return data;
     }
     throw new Error('Invalid atlas config format');

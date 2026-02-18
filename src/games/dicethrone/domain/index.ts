@@ -5,7 +5,7 @@
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
 import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, PendingInteraction } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor } from './types';
 import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commandValidation';
 import { execute } from './execute';
@@ -103,7 +103,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
         const interaction = state.sys?.interaction?.current;
         const pendingInteraction = interaction?.kind === 'dt:card-interaction'
-            ? interaction.data as PendingInteraction
+            ? interaction.data as InteractionDescriptor
             : undefined;
         return validateCommand(state.core, command, phase, pendingInteraction);
     },

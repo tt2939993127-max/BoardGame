@@ -262,7 +262,14 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         </span>
         {abilityMode.step === 'selectCards' && (
           <>
-            <GameButton onClick={onConfirmBeforeAttackCards} variant="primary" size="sm">{t('actions.confirmDiscard')}</GameButton>
+            <GameButton
+              onClick={onConfirmBeforeAttackCards}
+              variant="primary"
+              size="sm"
+              disabled={!abilityMode.selectedCardIds || abilityMode.selectedCardIds.length === 0}
+            >
+              {t('actions.confirmDiscard')}
+            </GameButton>
             {abilityMode.context === 'beforeAttack' && (
               <GameButton onClick={onCancelBeforeAttack} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
             )}

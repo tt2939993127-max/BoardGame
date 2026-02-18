@@ -90,6 +90,8 @@ interface UseCellInteractionParams {
   afterAttackAbilityMode: AfterAttackAbilityModeState | null;
   setAfterAttackAbilityMode: (mode: AfterAttackAbilityModeState | null) => void;
   rapidFireMode: import('./modeTypes').RapidFireModeState | null;
+  grabFollowMode: import('./useGameEvents').GrabFollowModeState | null;
+  setGrabFollowMode: (mode: import('./useGameEvents').GrabFollowModeState | null) => void;
 }
 
 // ============================================================================
@@ -104,6 +106,7 @@ export function useCellInteraction({
   mindCaptureMode, setMindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
   rapidFireMode,
+  grabFollowMode, setGrabFollowMode,
 }: UseCellInteractionParams) {
   const { t } = useTranslation('game-summonerwars');
   const showToast = useToast();
@@ -184,8 +187,13 @@ export function useCellInteraction({
     return getValidBuildPositions(core, myPlayerId as '0' | '1');
   }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
 
-  // 技能目标位置（复活死灵、感染、结构变换推拉方向）
+  // 技能目标位置（复活死灵、感染、结构变换推拉方向、抓附跟随）
   const validAbilityPositions = useMemo(() => {
+    // 抓附跟随：移动后的单位相邻的空格
+    if (grabFollowMode) {
+      const adj = getAdjacentCells(grabFollowMode.movedTo);
+      return adj.filter(p => isCellEmpty(core, p));
+    }
     if (!abilityMode) return [];
     // 结构变换第二步：选择推拉方向（目标建筑相邻的空格）
     if (abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition' && abilityMode.targetPosition) {
@@ -213,7 +221,7 @@ export function useCellInteraction({
       return [abilityMode.targetPosition];
     }
     return [];
-  }, [abilityMode, core]);
+  }, [abilityMode, core, grabFollowMode]);
 
   // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
@@ -371,9 +379,18 @@ export function useCellInteraction({
 
   // 获取可攻击位置
   const validAttackPositions = useMemo(() => {
-    if (currentPhase !== 'attack' || !isMyTurn || !core.selectedUnit) return [];
-    const baseTargets = getValidAttackTargetsEnhanced(core, core.selectedUnit);
+    if (!isMyTurn || !core.selectedUnit) return [];
     const selectedUnit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
+    // 非攻击阶段：只有拥有 extraAttacks 的单位或有跨阶段攻击权限时才计算攻击目标
+    if (currentPhase !== 'attack') {
+      const hasExtraAttacks = selectedUnit && (selectedUnit.extraAttacks ?? 0) > 0;
+      const player = core.players[myPlayerId as '0' | '1'];
+      const hasRallyingCry = player?.activeEvents.some(
+        e => getBaseCardId(e.id) === CARD_IDS.BARBARIC_RALLYING_CRY && e.isActive
+      );
+      if (!hasExtraAttacks && !hasRallyingCry) return [];
+    }
+    const baseTargets = getValidAttackTargetsEnhanced(core, core.selectedUnit);
     const hasHealingBeforeAttack = pendingBeforeAttack
       && selectedUnit
       && pendingBeforeAttack.sourceUnitId === selectedUnit.instanceId
@@ -590,6 +607,21 @@ export function useCellInteraction({
       return;
     }
 
+    // 抓附跟随：选择跟随目标位置
+    if (grabFollowMode) {
+      const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
+      if (isValid) {
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+          abilityId: 'grab',
+          sourceUnitId: grabFollowMode.grabberUnitId,
+          targetPosition: { row: gameRow, col: gameCol },
+          _noSnapshot: true,
+        });
+        setGrabFollowMode(null);
+      }
+      return;
+    }
+
     // 结构变换第二步：选择推拉方向
     if (abilityMode && abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
@@ -705,8 +737,9 @@ export function useCellInteraction({
       return;
     }
 
-    // 攻击阶段
-    if (currentPhase === 'attack') {
+    // 攻击阶段（或有跨阶段攻击权限时）
+    const hasExtraAttackTargets = validAttackPositions.length > 0;
+    if (currentPhase === 'attack' || hasExtraAttackTargets) {
       if (core.selectedUnit) {
         if (gameRow === core.selectedUnit.row && gameCol === core.selectedUnit.col) {
           dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: -1, col: -1 } });
@@ -897,7 +930,12 @@ export function useCellInteraction({
 
   useEffect(() => { setEndPhaseConfirmPending(false); }, [currentPhase]);
 
+  // 强制技能模式：这些技能没有"跳过"选项，必须完成后才能推进阶段
+  const isMandatoryAbilityActive = !!abilityMode && ['blood_rune', 'feed_beast'].includes(abilityMode.abilityId);
+
   const handleEndPhase = useCallback(() => {
+    // 强制技能激活时禁止推进阶段（如鲜血符文必须二选一）
+    if (isMandatoryAbilityActive) return;
     if (eventCardModes.hasActiveEventMode) {
       eventCardModes.clearAllEventModes();
     }
@@ -915,7 +953,8 @@ export function useCellInteraction({
     }
     dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
   }, [dispatch, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending,
-    eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, magicEventChoiceMode]);
+    eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, magicEventChoiceMode,
+    isMandatoryAbilityActive]);
 
   // ---------- 外部技能确认 ----------
 
@@ -1119,5 +1158,6 @@ export function useCellInteraction({
     handleConfirmBeforeAttackCards, handleCancelBeforeAttack,
     handlePlayMagicEvent, handleDiscardMagicEvent, handleCancelMagicEventChoice,
     clearAllEventModes: eventCardModes.clearAllEventModes,
+    isMandatoryAbilityActive,
   };
 }

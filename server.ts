@@ -27,6 +27,8 @@ import { buildUgcServerGames } from './src/server/ugcRegistration';
 import { GameTransportServer } from './src/engine/transport/server';
 import type { GameEngineConfig } from './src/engine/transport/server';
 import type { MatchMetadata, MatchStorage } from './src/engine/transport/storage';
+import logger, { gameLogger } from './server/logger';
+import { requestLogger, errorHandler } from './server/middleware/logging';
 
 // ============================================================================
 // 事件常量（与前端保持一致）
@@ -223,6 +225,13 @@ storage = hybridStorage;
 
 // 创建 Koa 应用
 const app = new Koa();
+
+// 全局错误处理（必须在所有中间件之前）
+app.use(errorHandler);
+
+// 请求日志
+app.use(requestLogger);
+
 const httpServer = http.createServer(app.callback());
 
 // 创建 socket.io 服务器（统一实例，多 namespace）
@@ -247,6 +256,10 @@ const gameTransport = new GameTransportServer({
         return playerMeta.credentials === credentials;
     },
     onGameOver: (matchID, gameName, gameover) => {
+        // 记录游戏结束日志
+        const winner = gameover?.winner !== undefined ? String(gameover.winner) : null;
+        gameLogger.matchEnded(matchID, gameName, winner, 0); // duration 需要从 metadata 计算
+        
         // 归档对局结果
         void archiveMatchResult({ matchID, gameName, gameover: gameover as { winner?: string | number } });
         // 通知大厅更新（房间仍存在但标记为 gameover，大厅列表会过滤掉）

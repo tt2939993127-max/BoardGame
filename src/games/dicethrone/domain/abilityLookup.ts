@@ -74,12 +74,12 @@ export function playerAbilityHasDamage(
         // rollDie 可能包含 bonusDamage
         if (e.action.type === 'rollDie') return true;
         // custom action：通过注册的 categories 判断是否包含伤害
-        // 修复：target='self' 的 custom action 内部也可能对对手造成伤害（如灵魂燃烧）
+        // 严格依赖 categories 声明，不再使用 target=opponent 的保守判定
+        // 根据官方规则：只有"造成至少 1 点伤害"的能力才算"攻击"，才会触发防御阶段
+        // 偷窃 CP 等资源转移效果不造成伤害，不应触发防御阶段
         if (e.action.type === 'custom' && e.action.customActionId) {
             const meta = getCustomActionMeta(e.action.customActionId);
             if (meta?.categories.includes('damage')) return true;
-            // categories 包含 dice/other 等可能产生伤害的分类，且 target=opponent → 保守判定为有伤害
-            if (e.action.target === 'opponent') return true;
         }
         return false;
     });

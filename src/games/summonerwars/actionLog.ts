@@ -227,11 +227,13 @@ export function formatSummonerWarsActionEntry({
             }
             case SW_COMMANDS.DECLARE_ATTACK: {
                 const attackEvent = [...events].reverse().find((e) => e.type === SW_EVENTS.UNIT_ATTACKED) as
-                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string; diceResults?: DiceFace[] } } | undefined;
+                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string; diceResults?: DiceFace[]; healingMode?: boolean; healAmount?: number } } | undefined;
                 const hits = attackEvent?.payload?.hits;
                 const diceResults = attackEvent?.payload?.diceResults;
+                const isHealing = attackEvent?.payload?.healingMode === true;
+                const healAmount = attackEvent?.payload?.healAmount ?? 0;
                 const segments: ActionLogSegment[] = [
-                    ...withCardSegments('actionLog.attackUnit', attackEvent?.payload?.attackerId),
+                    ...withCardSegments(isHealing ? 'actionLog.healAttackUnit' : 'actionLog.attackUnit', attackEvent?.payload?.attackerId),
                     textSegment(' → '),
                     ...(attackEvent?.payload?.target
                         ? [i18nSeg('actionLog.position', { row: attackEvent.payload.target.row + 1, col: attackEvent.payload.target.col + 1 })]
@@ -244,12 +246,16 @@ export function formatSummonerWarsActionEntry({
                     segments.push(diceSegment);
                     segments.push(textSegment(' '));
                 }
-                // 添加命中数
-                segments.push(
-                    hits === undefined
-                        ? i18nSeg('actionLog.attackDeclared')
-                        : i18nSeg('actionLog.attackHits', { hits })
-                );
+                // 治疗模式显示治疗量，攻击模式显示命中数
+                if (isHealing) {
+                    segments.push(i18nSeg('actionLog.attackHealing', { amount: healAmount }));
+                } else {
+                    segments.push(
+                        hits === undefined
+                            ? i18nSeg('actionLog.attackDeclared')
+                            : i18nSeg('actionLog.attackHits', { hits })
+                    );
+                }
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
                     timestamp, actorId, kind: command.type,
@@ -561,6 +567,7 @@ export function formatSummonerWarsActionEntry({
                 const abilityName = payload.abilityName ?? formatAbilityName(payload.abilityId);
                 const segments: ActionLogSegment[] = [i18nSeg('actionLog.abilityTriggered', { abilityName }, ['abilityName'])];
                 if (payload.sourceUnitId) {
+                    segments.push(i18nSeg('actionLog.activateAbilitySource'));
                     const sourceSegment = buildCardSegment(payload.sourceUnitId);
                     if (sourceSegment) segments.push(sourceSegment);
                 }

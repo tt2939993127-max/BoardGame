@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower, buildMinionTargetOptions, resolveOrPrompt, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, buildMinionTargetOptions, resolveOrPrompt, buildAbilityFeedback, createSkipOption } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -32,7 +32,7 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
     });
     // "你可以"效果：添加跳过选项
     const minionOptions = buildMinionTargetOptions(options);
-    minionOptions.push({ id: 'skip', label: '跳过', value: { minionUid: '', baseIndex: -1, defId: '' } as any });
+    minionOptions.push(createSkipOption());
     return resolveOrPrompt(ctx, minionOptions, {
         id: 'trickster_gnome',
         title: '选择要消灭的随从（力量低于己方随从数量），或跳过',
@@ -40,8 +40,13 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         targetType: 'minion',
         autoResolveIfSingle: false,
     }, (value) => {
-        if (!value.minionUid) return { events: [] };
-        const target = targets.find(t => t.uid === value.minionUid);
+        // 检查 skip 标记
+        if ((value as any).skip) return { events: [] };
+        
+        const { minionUid } = value as { minionUid?: string };
+        if (!minionUid) return { events: [] };
+        
+        const target = targets.find(t => t.uid === minionUid);
         if (!target) return { events: [] };
         return { events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'trickster_gnome', ctx.now)] };
     });
@@ -147,9 +152,12 @@ export function registerTricksterAbilities(): void {
 export function registerTricksterInteractionHandlers(): void {
     // 侏儒：选择目标后消灭（支持跳过）
     registerInteractionHandler('trickster_gnome', (state, _playerId, value, _iData, _random, timestamp) => {
-        if (value && (value as any).skip) return { state, events: [] };
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
-        if (!minionUid) return { state, events: [] };
+        // 统一检查 skip 标记
+        if ((value as any).skip) return { state, events: [] };
+        
+        const { minionUid, baseIndex } = value as { minionUid?: string; baseIndex?: number };
+        if (!minionUid || baseIndex === undefined) return { state, events: [] };
+        
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);

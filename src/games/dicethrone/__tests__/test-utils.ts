@@ -5,7 +5,7 @@
 
 import { DiceThroneDomain } from '../domain';
 import { diceThroneSystemsForTest } from '../game';
-import type { DiceThroneCore, TurnPhase, CardInteractionType, DiceThroneCommand, PendingInteraction } from '../domain/types';
+import type { DiceThroneCore, TurnPhase, CardInteractionType, DiceThroneCommand, InteractionDescriptor } from '../domain/types';
 import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types';
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
@@ -458,7 +458,7 @@ export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThron
     if (expect.pendingInteraction !== undefined) {
         const current = state.sys.interaction.current;
         const actual = current?.kind === 'dt:card-interaction'
-            ? current.data as PendingInteraction
+            ? current.data as InteractionDescriptor
             : undefined;
 
         if (expect.pendingInteraction === null) {
@@ -489,7 +489,7 @@ export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThron
  */
 export function injectPendingInteraction(
     state: MatchState<DiceThroneCore>,
-    interaction: PendingInteraction
+    interaction: InteractionDescriptor
 ): void {
     state.sys.interaction = {
         ...state.sys.interaction,

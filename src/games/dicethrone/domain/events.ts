@@ -8,7 +8,7 @@ import type { DtResponseWindowType } from './core-types';
 import type {
     DieFace,
     SelectableCharacterId,
-    PendingInteraction,
+    InteractionDescriptor,
     PendingDamage,
     PendingBonusDiceSettlement,
     BonusDieInfo,
@@ -619,7 +619,7 @@ export interface RollLimitChangedEvent extends GameEvent<'ROLL_LIMIT_CHANGED'> {
 /** 交互请求事件（已废弃 - 迁移到 InteractionSystem 的 INTERACTION_REQUESTED） */
 export interface InteractionRequestedEvent extends GameEvent<'INTERACTION_REQUESTED'> {
     payload: {
-        interaction: PendingInteraction;
+        interaction: InteractionDescriptor;
     };
 }
 
@@ -631,13 +631,12 @@ export interface InteractionCompletedEvent extends GameEvent<'INTERACTION_COMPLE
     };
 }
 
-/** 交互取消事件（已废弃 - InteractionSystem 自动处理） */
+/** 交互取消事件 */
 export interface InteractionCancelledEvent extends GameEvent<'INTERACTION_CANCELLED'> {
     payload: {
-        interactionId: string;
+        playerId: PlayerId;
         sourceCardId: string;
         cpCost: number;
-        playerId: PlayerId;
     };
 }
 
@@ -814,8 +813,8 @@ export type DiceThroneEvent =
     | DieRerolledEvent
     | RollLimitChangedEvent
     // | InteractionRequestedEvent    // 已废弃 - 使用 InteractionSystem
-    // | InteractionCompletedEvent    // 已废弃 - 使用 InteractionSystem
-    // | InteractionCancelledEvent    // 已废弃 - 使用 InteractionSystem
+    | InteractionCompletedEvent    // 仍需要 - 用于清理 dt:card-interaction
+    | InteractionCancelledEvent    // 仍需要 - 用于清理 dt:card-interaction
     | TokenResponseRequestedEvent
     | TokenUsedEvent
     | TokenResponseClosedEvent

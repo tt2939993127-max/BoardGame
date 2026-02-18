@@ -401,8 +401,8 @@ export const AssetSlicer = () => {
         const img = imageRef.current;
         const targetShape = customShape || shape;
 
-        let targetX = imgCenterX - (width / 2);
-        let targetY = imgCenterY - (height / 2);
+        const targetX = imgCenterX - (width / 2);
+        const targetY = imgCenterY - (height / 2);
         const targetW = width;
         const targetH = height;
 

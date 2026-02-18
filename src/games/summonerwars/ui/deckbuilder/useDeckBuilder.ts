@@ -363,6 +363,10 @@ export function useDeckBuilder(options: UseDeckBuilderOptions = {}): UseDeckBuil
             
             // 通知父组件刷新
             onDeckSaved?.();
+        } catch (err) {
+            // 重新抛出错误，让调用方处理（显示 Toast）
+            console.error('[useDeckBuilder] 保存牌组失败:', err);
+            throw err;
         } finally {
             setIsLoading(false);
         }

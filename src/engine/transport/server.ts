@@ -18,6 +18,7 @@ import type {
 import type {
     MatchPlayerInfo,
 } from './protocol';
+import { gameLogger } from '../../../server/logger.js';
 import {
     executePipeline,
     createSeededRandom,
@@ -31,7 +32,7 @@ import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
 // - dt:*: 走 DiceThrone 领域命令，确保回滚/清理逻辑完整执行
 const OFFLINE_ADJUDICATION_COMMAND_BY_KIND: Record<string, string> = {
     'simple-choice': INTERACTION_COMMANDS.CANCEL,
-    'dt:card-interaction': 'CANCEL_INTERACTION',
+    'dt:card-interaction': INTERACTION_COMMANDS.CANCEL, // 已迁移到 InteractionSystem
     'dt:token-response': 'SKIP_TOKEN_RESPONSE',
     'dt:bonus-dice': 'SKIP_BONUS_DICE_REROLL',
 };
@@ -151,15 +152,21 @@ const createTrackedRandom = (seed: string, initialCursor = 0): { random: RandomF
             },
             d: (max: number) => {
                 cursor += 1;
-                return base.d(max);
+                return Math.floor(base.random() * max) + 1;
             },
             range: (min: number, max: number) => {
                 cursor += 1;
-                return base.range(min, max);
+                return Math.floor(base.random() * (max - min + 1)) + min;
             },
             shuffle: <T>(array: T[]): T[] => {
                 cursor += Math.max(0, array.length - 1);
-                return base.shuffle(array);
+                // Fisher-Yates shuffle
+                const result = [...array];
+                for (let i = result.length - 1; i > 0; i--) {
+                    const j = Math.floor(base.random() * (i + 1));
+                    [result[i], result[j]] = [result[j], result[i]];
+                }
+                return result;
             },
         },
         getCursor: () => cursor,
@@ -309,6 +316,17 @@ export class GameTransportServer {
         // 环境检查
         if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
             throw new Error('injectState is only available in test/development environment');
+        }
+
+        // 验证状态结构
+        if (!state || typeof state !== 'object') {
+            throw new Error('Invalid state: must be an object');
+        }
+        if (!state.core || typeof state.core !== 'object') {
+            throw new Error('Invalid state: missing or invalid core');
+        }
+        if (!state.sys || typeof state.sys !== 'object') {
+            throw new Error('Invalid state: missing or invalid sys');
         }
 
         // 加载或获取活跃对局
@@ -532,7 +550,22 @@ export class GameTransportServer {
         commandType: string,
         payload: unknown,
     ): Promise<boolean> {
+        const startTime = Date.now();
         const { engineConfig, state, random, playerIds } = match;
+
+        // 诊断日志：PLAY_CARD 命令的状态快照
+        if (commandType === 'PLAY_CARD') {
+            const player = (state.core as any).players?.[playerID];
+            gameLogger.commandExecuted(match.matchID, 'PLAY_CARD_ATTEMPT', playerID, 0);
+            console.log('[GameTransport] PLAY_CARD 状态快照:', {
+                matchID: match.matchID,
+                playerID,
+                cardId: (payload as any)?.cardId,
+                handCardIds: player?.hand?.map((c: any) => c.id) ?? [],
+                handSize: player?.hand?.length ?? 0,
+                phase: (state.sys as any)?.flow?.phase,
+            });
+        }
 
         const command: Command = {
             type: commandType,
@@ -549,7 +582,17 @@ export class GameTransportServer {
 
         const result = executePipeline(pipelineConfig, state, command, random, playerIds);
 
+        const duration = Date.now() - startTime;
+
         if (!result.success) {
+            // 记录失败日志
+            gameLogger.commandFailed(
+                match.matchID,
+                commandType,
+                playerID,
+                new Error(result.error ?? 'command_failed')
+            );
+
             // 通知发送者
             const nsp = this.io.of('/game');
             const sockets = match.connections.get(playerID);
@@ -560,6 +603,9 @@ export class GameTransportServer {
             }
             return false;
         }
+
+        // 记录成功日志
+        gameLogger.commandExecuted(match.matchID, commandType, playerID, duration);
 
         // 更新状态
         match.state = result.state;
@@ -591,6 +637,9 @@ export class GameTransportServer {
     private handleDisconnect(socket: IOSocket): void {
         const info = this.socketIndex.get(socket.id);
         if (!info) return;
+
+        // 记录断开日志
+        gameLogger.socketDisconnected(socket.id, info.matchID, 'client_disconnect');
 
         this.socketIndex.delete(socket.id);
         this.removeSocketFromMatch(socket.id, info);

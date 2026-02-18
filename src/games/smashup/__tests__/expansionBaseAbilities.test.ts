@@ -21,7 +21,7 @@
  * - base_fairy_ring: onMinionPlayed → 首次打出时额外随从+行动额度
  * - base_land_of_balance: onMinionPlayed → Prompt（移动己方随从到此）
  */
-/* eslint-disable @typescript-eslint/no-explicit-any -- 测试文件：事件 payload 访问需要灵活类型 */
+ 
 
 import { describe, expect, it, beforeAll } from 'vitest';
 import { initAllAbilities, resetAbilityInit } from '../abilities';

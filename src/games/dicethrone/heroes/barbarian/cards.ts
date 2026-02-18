@@ -72,9 +72,9 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
                 action: {
                     type: 'rollDie', target: 'self', diceCount: 1,
                     conditionalEffects: [
-                        { face: FACES.STRENGTH, heal: 2, grantStatus: { statusId: STATUS_IDS.CONCUSSION, value: 1, target: 'opponent' } },
+                        { face: FACES.STRENGTH, heal: 2, grantStatus: { statusId: STATUS_IDS.CONCUSSION, value: 1, target: 'opponent' }, effectKey: 'bonusDie.effect.energeticStrength' },
                     ],
-                    defaultEffect: { drawCard: 1 },
+                    defaultEffect: { drawCard: 1, effectKey: 'bonusDie.effect.energeticOther' },
                 },
                 timing: 'immediate',
             },

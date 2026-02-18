@@ -169,7 +169,10 @@ function ParticleLayer({ active, intensity, colors, originY, totalDuration, onIm
   const rafRef = useRef(0);
   const onDoneRef = useRef(onAllParticlesDone);
   const onImpactRef = useRef(onImpact);
-  useEffect(() => { onDoneRef.current = onAllParticlesDone; onImpactRef.current = onImpact; });
+  useEffect(() => { 
+    onDoneRef.current = onAllParticlesDone; 
+    onImpactRef.current = onImpact; 
+  }, [onAllParticlesDone, onImpact]);
 
   const isStrong = intensity === 'strong';
 
@@ -473,7 +476,10 @@ export const SummonHybridEffect: React.FC<SummonHybridEffectProps> = ({
 }) => {
   const onCompleteRef = useRef(onComplete);
   const onImpactRef = useRef(onImpact);
-  useEffect(() => { onCompleteRef.current = onComplete; onImpactRef.current = onImpact; });
+  useEffect(() => { 
+    onCompleteRef.current = onComplete; 
+    onImpactRef.current = onImpact; 
+  }, [onComplete, onImpact]);
 
   const isStrong = intensity === 'strong';
   const totalDuration = isStrong ? 1.4 : 1.1;

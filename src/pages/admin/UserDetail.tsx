@@ -33,6 +33,12 @@ interface UserStats {
     winRate: number;
 }
 
+interface MatchRecord {
+    result?: string;
+    winnerID?: string;
+    [key: string]: unknown;
+}
+
 interface matchID {
     matchID: string;
     gameName: string;
@@ -93,7 +99,7 @@ export default function UserDetailPage() {
                 // Fallback stats calculation
                 if ((!data.stats || data.stats.totalMatches === 0) && items.length > 0) {
                     const total = matchesData.total || items.length;
-                    const wins = items.filter((m: any) => {
+                    const wins = items.filter((m: MatchRecord) => {
                         const resStr = String(m.result || '').toUpperCase();
                         if (resStr.includes('WIN') || resStr.includes('VICTORY')) return true;
                         if (m.winnerID && m.winnerID === id) return true;

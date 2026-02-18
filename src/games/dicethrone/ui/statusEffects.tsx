@@ -70,11 +70,6 @@ export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases>
             const frames = Object.fromEntries(
                 Object.entries(data.frames).map(([key, entry]) => [key, entry.frame])
             );
-            // 临时调试：打印 paladin atlas 帧数据
-            if (id.includes('paladin')) {
-                console.log('[ATLAS DEBUG] paladin frames:', JSON.stringify(frames, null, 2));
-                console.log('[ATLAS DEBUG] fetch URL:', url);
-            }
             return { id, config: { imageW: data.meta.size.w, imageH: data.meta.size.h, frames, imagePath } };
         } catch (e) {
             console.warn(`Failed to load status atlas: ${id}`, e);
@@ -99,10 +94,6 @@ const getStatusIconFrameStyle = (atlas: StatusIconAtlasConfig, frame: StatusIcon
     const yPos = atlas.imageH === frame.h ? 0 : (frame.y / (atlas.imageH - frame.h)) * 100;
     const bgSizeX = (atlas.imageW / frame.w) * 100;
     const bgSizeY = (atlas.imageH / frame.h) * 100;
-    // 临时调试
-    if (debugFrameId === 'holy-strike') {
-        console.log(`[ATLAS DEBUG] holy-strike render: frame=${JSON.stringify(frame)}, xPos=${xPos}%, bgSize=${bgSizeX}%`);
-    }
     return {
         backgroundSize: `${bgSizeX}% ${bgSizeY}%`,
         backgroundPosition: `${xPos}% ${yPos}%`,

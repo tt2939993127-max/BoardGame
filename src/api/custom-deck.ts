@@ -92,6 +92,7 @@ export async function getCustomDeck(token: string, id: string): Promise<Serializ
 
     const doc = await response.json() as RawDeckDocument;
     return {
+        id: doc._id,
         name: doc.name,
         summonerId: doc.summonerId,
         summonerFaction: doc.summonerFaction,

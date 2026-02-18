@@ -208,7 +208,7 @@ export const EVENT_CARDS: EventCard[] = [
     eventType: 'common',
     cost: 0,
     playPhase: 'build',
-    effect: '将本事件放置到一个友方士兵的底层。该单位获得战斗力+2和以下技能：\n诅咒：在本单位攻击之后，对其造成点数等于所掷出⚔数量的伤害。',
+    effect: '将本事件放置到一个友方士兵的底层。该单位获得战斗力+2和以下技能：\n诅咒：在本单位攻击之后，对其造成点数等于所掷出特殊标记数量的伤害。',
     deckSymbols: [DECK_SYMBOLS.FLAME], // 🔥 (图片确认)
     spriteIndex: SPRITE_INDEX.EVENT_HELLFIRE_BLADE,
   },

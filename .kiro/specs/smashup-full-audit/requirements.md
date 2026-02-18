@@ -302,11 +302,11 @@
 1. WHEN 审查 miskatonic_professor（教授）时，THE 审查者 SHALL 验证天赋"弃掉疯狂卡→额外打出战术和/或随从"的条件触发和双额度授予
 2. WHEN 审查 miskatonic_librarian（图书管理员）时，THE 审查者 SHALL 验证天赋"弃掉疯狂卡→抽一张牌"的条件触发
 3. WHEN 审查 miskatonic_psychologist（心理学家）时，THE 审查者 SHALL 验证"从手牌或弃牌堆返回疯狂卡到疯狂牌库"的可选交互和双来源选择
-4. WHEN 审查 miskatonic_book_of_iter（金克丝!）时，THE 审查者 SHALL 验证"查看对手手牌→抽疯狂卡→额外打出两个战术"的三步流程
+4. WHEN 审查 miskatonic_book_of_iter（金克丝!）时，THE 审查者 SHALL 验证"从手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆"的可选交互和多来源选择
 5. WHEN 审查 miskatonic_mandatory_reading（最好不知道的事）时，THE 审查者 SHALL 验证"选择玩家→该玩家抽两张疯狂卡→额外打出战术"的流程
-6. WHEN 审查 miskatonic_lost_knowledge（通往超凡的门）时，THE 审查者 SHALL 验证"手中有两张疯狂卡时展示→抽两张卡→额外打出随从和战术"的条件判断
-7. WHEN 审查 miskatonic_thing_on_the_doorstep（老詹金斯!?）时，THE 审查者 SHALL 验证"搜寻牌库随从或战术→加入手牌→抽疯狂卡"的流程
-8. WHEN 审查 miskatonic_it_might_just_work（它可能有用）时，THE 审查者 SHALL 验证"弃掉两张疯狂卡→消灭基地上随从"的前置条件和目标选择
+6. WHEN 审查 miskatonic_lost_knowledge（通往超凡的门）时，THE 审查者 SHALL 验证"ongoing talent：抽一张疯狂卡→额外打出一个随从到此基地"的流程
+7. WHEN 审查 miskatonic_thing_on_the_doorstep（老詹金斯!?）时，THE 审查者 SHALL 验证"special：基地计分前→消灭该基地最高力量随从"的流程
+8. WHEN 审查 miskatonic_it_might_just_work（它可能有用）时，THE 审查者 SHALL 验证"弃掉一张疯狂卡→己方全体随从+1力量直到回合结束"的前置条件和效果
 9. WHEN 审查 miskatonic_field_trip（实地考察）时，THE 审查者 SHALL 验证"从手牌放任意数量卡到牌库底→每放一张抽一张"的多步交互
 10. WHEN 审查 miskatonic_those_meddling_kids（这些多管闲事的小鬼）时，THE 审查者 SHALL 验证"消灭基地上任意数量战术"的多选交互
 11. IF 发现实现缺失或与描述不一致，THEN THE 审查者 SHALL 记录具体差异并标注修复建议

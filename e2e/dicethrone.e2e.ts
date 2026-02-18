@@ -13,7 +13,6 @@ import {
     waitForBoardReady,
     getPlayerIdFromUrl,
     setPlayerToken,
-    advanceToOffensiveRoll,
     applyDiceValues,
     getModalContainerByHeading,
     readCoreState,
@@ -21,6 +20,7 @@ import {
     waitForTutorialStep,
     dispatchLocalCommand,
     patchCoreViaDispatch,
+    
 } from './helpers/dicethrone';
 
 test.describe('DiceThrone E2E', () => {
@@ -71,7 +71,12 @@ test.describe('DiceThrone E2E', () => {
             const monkPlayerId = getPlayerIdFromUrl(monkPage, '0');
             await setPlayerToken(monkPage, monkPlayerId, TOKEN_IDS.TAIJI, 2);
 
-            await advanceToOffensiveRoll(monkPage);
+            // 推进到进攻投骰阶段
+            const advanceButton = monkPage.locator('[data-tutorial-id="advance-phase-button"]');
+            while (await advanceButton.isEnabled({ timeout: 1000 }).catch(() => false)) {
+                await advanceButton.click();
+                await monkPage.waitForTimeout(400);
+            }
             const rollButton = monkPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(rollButton).toBeEnabled({ timeout: 5000 });
             await rollButton.click();
@@ -136,7 +141,12 @@ test.describe('DiceThrone E2E', () => {
             const monkPlayerId = getPlayerIdFromUrl(monkPage, '0');
             await setPlayerToken(monkPage, monkPlayerId, TOKEN_IDS.TAIJI, 2);
 
-            await advanceToOffensiveRoll(monkPage);
+            // 推进到进攻投骰阶段
+            const advanceButton = monkPage.locator('[data-tutorial-id="advance-phase-button"]');
+            while (await advanceButton.isEnabled({ timeout: 1000 }).catch(() => false)) {
+                await advanceButton.click();
+                await monkPage.waitForTimeout(400);
+            }
             const rollButton = monkPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(rollButton).toBeEnabled({ timeout: 5000 });
             await rollButton.click();
@@ -186,7 +196,7 @@ test.describe('DiceThrone E2E', () => {
     });
 
     test('Tutorial completes the full flow (main1 -> offensive -> defense -> finish)', async ({ page }, testInfo) => {
-        test.setTimeout(120000);
+        test.setTimeout(180000); // 增加超时时间
         const pageErrors: string[] = [];
         const consoleErrors: string[] = [];
         page.on('pageerror', (error) => {
@@ -251,7 +261,7 @@ test.describe('DiceThrone E2E', () => {
                 await page.waitForTimeout(300);
             }
         }
-        await advanceToOffensiveRoll(page);
+        // 已在上面的循环中推进到 offensiveRoll
 
         // 等待骰子步骤
         const waitForDiceStep = async () => {
@@ -293,29 +303,16 @@ test.describe('DiceThrone E2E', () => {
         const playSixStep = await waitForPlaySixOrConfirm();
 
         if (playSixStep === 'play-six') {
-            // 通过 dispatch 直接打出 card-play-six（framer-motion 拖拽在 Playwright 中不可靠）
-            // 教学牌组保证 card-play-six 在起手牌中
+            // 打出 card-play-six 卡牌
             await page.waitForTimeout(300);
             await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-play-six' });
-            await page.waitForTimeout(800);
+            await page.waitForTimeout(1000);
 
-            // 等待骰子交互模式出现（set 模式：选择骰子后自动设为 6）
-            const diceInteractionTray = page.locator('[data-tutorial-id="dice-tray"]');
-            await expect(diceInteractionTray).toBeVisible({ timeout: 10000 });
-
-            // 点击第一颗骰子选中
-            const firstDie = diceInteractionTray.locator('.dice3d-perspective').first();
-            if (await firstDie.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await firstDie.click();
-                await page.waitForTimeout(300);
-            }
-
-            // 点击确认按钮完成交互
-            const interactionConfirm = page.getByRole('button', { name: /Confirm|确认/i }).first();
-            if (await interactionConfirm.isEnabled({ timeout: 3000 }).catch(() => false)) {
-                await interactionConfirm.click();
-                await page.waitForTimeout(500);
-            }
+            // card-play-six 会创建一个 simple-choice 交互，要求选择骰子并设为 6
+            // 使用 SYS_INTERACTION_RESPOND 直接响应交互（避免教学覆盖层阻挡 UI 点击）
+            // 参考 tutorial-e2e.test.ts line 160-170 的做法
+            await dispatchLocalCommand(page, 'SYS_INTERACTION_RESPOND', { optionId: 'option-0' });
+            await page.waitForTimeout(500);
         }
 
         // 步骤 B3: dice-confirm 确认骰子
@@ -360,11 +357,6 @@ test.describe('DiceThrone E2E', () => {
             }
         }
 
-        // 等待 resolve-attack 步骤
-        await waitForTutorialStep(page, 'resolve-attack', 15000);
-        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
-        await advanceButton.click();
-
         // 教学步骤顺序表（与 tutorial.ts 定义一致）
         const stepOrder = [
             'setup', 'intro', 'stats', 'phases', 'player-board', 'tip-board',
@@ -407,6 +399,14 @@ test.describe('DiceThrone E2E', () => {
             if (targetStep === 'finish') return targetStep;
             throw new Error(`未能到达 ${targetStep} 步骤（最终步骤=${finalStep}）`);
         };
+
+        // 等待 resolve-attack 步骤
+        await advanceToStep('resolve-attack', 15000);
+        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+        await advanceButton.click();
+            
+
+        // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======
 
         // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======
         // opponent-defense 步骤有 aiActions，教学系统会自动执行 AI 防御

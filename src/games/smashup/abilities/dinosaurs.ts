@@ -54,7 +54,11 @@ function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
     // 强制效果：消灭一个力量≤2的随从，单候选自动执行
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options), {
+    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId,
+        effectType: 'destroy',
+    }), {
         id: 'dino_laser_triceratops',
         title: '选择要消灭的力量≤2的随从',
         sourceId: 'dino_laser_triceratops',
@@ -88,7 +92,9 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `dino_augmentation_${ctx.now}`, ctx.playerId,
-        '选择一个随从获得+4力量（直到回合结束）', buildMinionTargetOptions(options), 'dino_augmentation',
+        '选择一个随从获得+4力量（直到回合结束）',
+        buildMinionTargetOptions(options),
+        { sourceId: 'dino_augmentation', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -136,7 +142,7 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `dino_natural_selection_${ctx.now}`, ctx.playerId,
         '选择你的一个随从作为参照', buildMinionTargetOptions(options),
-        { sourceId: 'dino_natural_selection_choose_mine', autoCancelOption: true },
+        { sourceId: 'dino_natural_selection_choose_mine', targetType: 'minion', autoCancelOption: true }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -185,8 +191,7 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
             return { uid: m.uid, defId: m.defId, baseIndex: first.baseIndex, label: `${name} (力量 ${first.minPower}) @ ${baseName}` };
         });
         const interaction = createSimpleChoice(
-            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId,
-            '选择要消灭的最低力量随从', buildMinionTargetOptions(options), 'dino_survival_tiebreak',
+            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的最低力量随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'dino_survival_tiebreak'
         );
         const remainingData = remaining.map(tb => ({
             baseIndex: tb.baseIndex,
@@ -273,9 +278,8 @@ export function registerDinosaurInteractionHandlers(): void {
         }
         if (targets.length === 0) return undefined;
         const next = createSimpleChoice(
-            `dino_natural_selection_target_${timestamp}`, playerId,
-            '选择要消灭的随从', buildMinionTargetOptions(targets), 'dino_natural_selection_choose_target',
-        );
+            `dino_natural_selection_target_${timestamp}`, playerId, { sourceId: '选择要消灭的随从', targetType: 'minion' }, buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), 'dino_natural_selection_choose_target'
+            );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { baseIndex } } }), events: [] };
     });
 
@@ -312,9 +316,8 @@ export function registerDinosaurInteractionHandlers(): void {
                 return { uid: c.uid, defId: c.defId, baseIndex: next.baseIndex, label: `${name} (力量 ${next.minPower}) @ ${baseName}` };
             });
             const interaction = createSimpleChoice(
-                `dino_sotf_tiebreak_${timestamp}`, playerId,
-                '选择要消灭的最低力量随从', buildMinionTargetOptions(options), 'dino_survival_tiebreak',
-            );
+                `dino_sotf_tiebreak_${timestamp}`, playerId, { sourceId: '选择要消灭的最低力量随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'dino_survival_tiebreak'
+                );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remainingBases: rest } } }), events };
         }
 

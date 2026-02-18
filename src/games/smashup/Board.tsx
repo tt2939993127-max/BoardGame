@@ -139,35 +139,53 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     // 手牌弃牌交互检测：当前 interaction 的所有选项都对应手牌时，用手牌区直接选择
     const currentInteraction = G.sys.interaction?.current;
     const currentPrompt = useMemo(() => asSimpleChoice(currentInteraction), [currentInteraction]);
+    
     const isHandDiscardPrompt = useMemo(() => {
         if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
         if (!myPlayer || myPlayer.hand.length === 0) return false;
         // 多选交互（如疯狂解放）不走手牌直选，交给 PromptOverlay 处理
         if (currentPrompt.multi) return false;
+        
+        // 优先使用 targetType 字段（数据驱动）
+        const data = currentInteraction?.data as Record<string, unknown> | undefined;
+        if (data?.targetType === 'hand') return true;
+        
+        // 兼容旧模式：所有选项都对应手牌
         const handUids = new Set(myPlayer.hand.map(c => c.uid));
         return currentPrompt.options.length > 0 &&
             currentPrompt.options.every(opt => {
                 const val = opt.value as { cardUid?: string } | undefined;
                 return val?.cardUid && handUids.has(val.cardUid);
             });
-    }, [currentPrompt, playerID, myPlayer]);
+    }, [currentPrompt, playerID, myPlayer, currentInteraction]);
 
     // 手牌交互中不可选的 uid 集合（置灰）
+    // 框架层已支持通用刷新（所有交互自动刷新），此处只处理明确禁用的选项
     const handPromptDisabledUids = useMemo<Set<string> | undefined>(() => {
         if (!isHandDiscardPrompt || !currentPrompt || !myPlayer) return undefined;
-        const selectableUids = new Set<string>();
-        for (const opt of currentPrompt.options) {
-            const val = opt.value as { cardUid?: string } | undefined;
-            if (val?.cardUid) selectableUids.add(val.cardUid);
-        }
+        
+        // 只标记选项中明确禁用的卡牌（opt.disabled === true）
         const disabled = new Set<string>();
-        for (const card of myPlayer.hand) {
-            if (!selectableUids.has(card.uid)) {
-                disabled.add(card.uid);
+        for (const opt of currentPrompt.options) {
+            if (opt.disabled) {
+                const val = opt.value as { cardUid?: string } | undefined;
+                if (val?.cardUid) disabled.add(val.cardUid);
             }
         }
+        
         return disabled.size > 0 ? disabled : undefined;
     }, [isHandDiscardPrompt, currentPrompt, myPlayer]);
+
+    // 手牌选择中的非手牌选项（如"跳过"/"完成"），需要作为浮动按钮显示
+    const handSelectExtraOptions = useMemo(() => {
+        if (!isHandDiscardPrompt || !currentPrompt) return [];
+        return currentPrompt.options.filter(opt => {
+            const val = opt.value as Record<string, unknown> | undefined;
+            if (!val) return false;
+            // 非手牌选项：没有 cardUid 字段的选项（如 skip/done/confirm）
+            return !val.cardUid;
+        });
+    }, [isHandDiscardPrompt, currentPrompt]);
 
     // 基地选择交互检测：当前 interaction 的选项包含有效 baseIndex 时，用基地区直接点击选择
     const isBaseSelectPrompt = useMemo(() => {
@@ -207,8 +225,12 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     const baseSelectExtraOptions = useMemo(() => {
         if (!isBaseSelectPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
-            const val = opt.value as { baseIndex?: number } | undefined;
-            return val != null && typeof val.baseIndex === 'number' && val.baseIndex < 0;
+            const val = opt.value as Record<string, unknown> | undefined;
+            if (!val) return false;
+            // 跳过选项：包含 skip 字段
+            if (val.skip === true) return true;
+            // 完成选项：baseIndex < 0
+            return typeof val.baseIndex === 'number' && val.baseIndex < 0;
         });
     }, [isBaseSelectPrompt, currentPrompt]);
 
@@ -229,15 +251,28 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             });
     }, [currentPrompt, playerID, currentInteraction]);
 
-    // 可选随从 UID 集合（只高亮候选随从）
+    // 可选随从 UID 集合（只高亮候选随从，排除跳过选项）
     const selectableMinionUids = useMemo<Set<string>>(() => {
         if (!isMinionSelectPrompt || !currentPrompt) return new Set();
         const uids = new Set<string>();
         for (const opt of currentPrompt.options) {
-            const val = opt.value as { minionUid?: string } | undefined;
+            const val = opt.value as { minionUid?: string; skip?: boolean } | undefined;
+            // 排除跳过选项（不高亮）
+            if (val?.skip === true) continue;
             if (val?.minionUid) uids.add(val.minionUid);
         }
         return uids;
+    }, [isMinionSelectPrompt, currentPrompt]);
+
+    // 随从选择中的非随从选项（如"跳过"），需要作为浮动按钮显示
+    const minionSelectExtraOptions = useMemo(() => {
+        if (!isMinionSelectPrompt || !currentPrompt) return [];
+        return currentPrompt.options.filter(opt => {
+            const val = opt.value as Record<string, unknown> | undefined;
+            if (!val) return false;
+            // 跳过选项：包含 skip 字段
+            return val.skip === true;
+        });
     }, [isMinionSelectPrompt, currentPrompt]);
 
     // 交互驱动的选择提示标题（基地/随从/手牌选择统一）
@@ -246,7 +281,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         if (isMinionSelectPrompt && currentPrompt) return currentPrompt.title;
         if (isHandDiscardPrompt && currentPrompt) return currentPrompt.title;
         return '';
-    }, [isBaseSelectPrompt, isMinionSelectPrompt, currentPrompt]);
+    }, [isBaseSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, currentPrompt]);
 
     // 弃牌堆随从选择交互检测（僵尸领主等）：targetType === 'discard_minion'
     const isDiscardMinionPrompt = useMemo(() => {
@@ -1073,10 +1108,63 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                         initial={{ y: 40, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 40, opacity: 0 }}
-                        className="fixed bottom-[240px] inset-x-0 z-40 flex justify-center pointer-events-none"
+                        className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
+                        style={{ zIndex: UI_Z_INDEX.hint }}
                     >
                         <div className="flex gap-3 pointer-events-auto">
                             {baseSelectExtraOptions.map(opt => (
+                                <SmashUpGameButton
+                                    key={opt.id}
+                                    variant="secondary"
+                                    size="md"
+                                    onClick={() => dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: opt.id })}
+                                >
+                                    {opt.label}
+                                </SmashUpGameButton>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* --- 随从选择浮动操作栏（跳过按钮） --- */}
+            <AnimatePresence>
+                {isMinionSelectPrompt && minionSelectExtraOptions.length > 0 && (
+                    <motion.div
+                        initial={{ y: 40, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 40, opacity: 0 }}
+                        className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
+                        style={{ zIndex: UI_Z_INDEX.hint }}
+                    >
+                        <div className="flex gap-3 pointer-events-auto">
+                            {minionSelectExtraOptions.map(opt => (
+                                <SmashUpGameButton
+                                    key={opt.id}
+                                    variant="secondary"
+                                    size="md"
+                                    onClick={() => dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: opt.id })}
+                                >
+                                    {opt.label}
+                                </SmashUpGameButton>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* --- 手牌选择浮动操作栏（跳过按钮） --- */}
+            <AnimatePresence>
+                {isHandDiscardPrompt && handSelectExtraOptions.length > 0 && (
+                    <motion.div
+                        initial={{ y: 40, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 40, opacity: 0 }}
+                        className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
+                        style={{ zIndex: UI_Z_INDEX.hint }}
+                    >
+                        <div className="flex gap-3 pointer-events-auto">
+                            {handSelectExtraOptions.map(opt => (
                                 <SmashUpGameButton
                                     key={opt.id}
                                     variant="secondary"

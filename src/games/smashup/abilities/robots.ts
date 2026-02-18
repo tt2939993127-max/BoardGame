@@ -51,7 +51,9 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `robot_microbot_guard_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从（力量低于己方随从数量）', buildMinionTargetOptions(options), 'robot_microbot_guard',
+        '选择要消灭的随从（力量低于己方随从数量）',
+        buildMinionTargetOptions(options),
+        { sourceId: 'robot_microbot_guard', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -115,6 +117,22 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
             ],
             'robot_hoverbot',
         );
+        // 手动提供 optionsGenerator：选项固定，不需要从状态中查找
+        (interaction.data as any).optionsGenerator = (state: any) => {
+            const p = state.core.players[ctx.playerId];
+            // 检查牌库顶是否仍然是同一张卡
+            if (p.deck.length > 0 && p.deck[0].uid === peek.card.uid) {
+                const def = getCardDef(peek.card.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? peek.card.defId;
+                const power = def?.power ?? 0;
+                return [
+                    { id: 'play', label: `打出 ${name}`, value: { cardUid: peek.card.uid, defId: peek.card.defId, power } },
+                    { id: 'skip', label: '放回牌库顶', value: { skip: true } },
+                ];
+            }
+            // 如果牌库顶已变化，只提供跳过选项
+            return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+        };
         return { events, matchState: queueInteraction(ctx.matchState, interaction) };
     }
     // 非随从→放回牌库顶（peek 不移除卡，无需操作）
@@ -162,12 +180,12 @@ function robotTechCenter(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `robot_tech_center_${ctx.now}`, ctx.playerId,
         '选择一个基地（按该基地上你的随从数抽牌）', buildBaseTargetOptions(candidates, ctx.state),
-        { sourceId: 'robot_tech_center', autoCancelOption: true },
+        { sourceId: 'robot_tech_center', targetType: 'base', autoCancelOption: true }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
-/** 核弹机器人
-/** 核弹机器人?onDestroy：被消灭后消灭同基地其他玩家所有随从*/
+
+/** 核弹机器人 onDestroy：被消灭后消灭同基地其他玩家所有随从*/
 function robotNukebotOnDestroy(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -267,8 +285,7 @@ export function registerRobotInteractionHandlers(): void {
             return { baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `robot_zapbot_base_${timestamp}`, playerId,
-            '选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), 'robot_zapbot_base',
+            `robot_zapbot_base_${timestamp}`, playerId, { sourceId: '选择打出随从的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'robot_zapbot_base'
         );
         return {
             state: queueInteraction(state, {
@@ -321,9 +338,8 @@ export function registerRobotInteractionHandlers(): void {
             return { baseIndex: i, label: bd?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `robot_hoverbot_base_${timestamp}`, playerId,
-            '选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), 'robot_hoverbot_base',
-        );
+            `robot_hoverbot_base_${timestamp}`, playerId, { sourceId: '选择打出随从的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'robot_hoverbot_base'
+            );
         return {
             state: queueInteraction(state, {
                 ...next,

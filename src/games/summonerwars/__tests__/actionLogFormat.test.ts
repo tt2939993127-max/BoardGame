@@ -224,4 +224,79 @@ describe('formatSummonerWarsActionEntry — i18n segments', () => {
         const cardSegment = entry[0].segments.find((s) => s.type === 'card');
         expect(cardSegment?.type === 'card' && cardSegment.cardId).toBe('necro-funeral-pyre-0-1');
     });
+
+    it('DECLARE_ATTACK 治疗模式显示治疗量', () => {
+        const command: Command = {
+            type: SW_COMMANDS.DECLARE_ATTACK,
+            playerId: '0',
+            payload: { attacker: { row: 3, col: 3 }, target: { row: 3, col: 4 } },
+        };
+
+        const entry = normalizeEntries(formatSummonerWarsActionEntry({
+            command,
+            state: { core: createCore() } as MatchState<SummonerWarsCore>,
+            events: [{
+                type: SW_EVENTS.UNIT_ATTACKED,
+                payload: {
+                    attacker: { row: 3, col: 3 }, target: { row: 3, col: 4 },
+                    attackerId: 'paladin-temple-priest-0',
+                    attackType: 'melee', diceCount: 2,
+                    baseStrength: 2,
+                    diceResults: [], hits: 0,
+                    healingMode: true, healAmount: 2,
+                },
+                timestamp: 1,
+            } as GameEvent],
+        }));
+
+        // 验证使用治疗标签而非攻击标签
+        const healSeg = findI18nSegment(entry[0].segments, 'actionLog.healAttackUnit');
+        expect(healSeg).toBeTruthy();
+
+        // 验证显示治疗量
+        const healAmountSeg = findI18nSegment(entry[0].segments, 'actionLog.attackHealing');
+        expect(healAmountSeg).toBeTruthy();
+        expect(healAmountSeg!.params).toEqual({ amount: 2 });
+
+        // 验证不显示命中数
+        const hitsSeg = findI18nSegment(entry[0].segments, 'actionLog.attackHits');
+        expect(hitsSeg).toBeUndefined();
+    });
+
+    it('DECLARE_ATTACK 普通攻击显示命中数', () => {
+        const command: Command = {
+            type: SW_COMMANDS.DECLARE_ATTACK,
+            playerId: '0',
+            payload: { attacker: { row: 3, col: 3 }, target: { row: 2, col: 3 } },
+        };
+
+        const entry = normalizeEntries(formatSummonerWarsActionEntry({
+            command,
+            state: { core: createCore() } as MatchState<SummonerWarsCore>,
+            events: [{
+                type: SW_EVENTS.UNIT_ATTACKED,
+                payload: {
+                    attacker: { row: 3, col: 3 }, target: { row: 2, col: 3 },
+                    attackerId: 'necro-undead-warrior-0',
+                    attackType: 'melee', diceCount: 1,
+                    baseStrength: 1,
+                    diceResults: [], hits: 1,
+                },
+                timestamp: 1,
+            } as GameEvent],
+        }));
+
+        // 验证使用攻击标签
+        const attackSeg = findI18nSegment(entry[0].segments, 'actionLog.attackUnit');
+        expect(attackSeg).toBeTruthy();
+
+        // 验证显示命中数
+        const hitsSeg = findI18nSegment(entry[0].segments, 'actionLog.attackHits');
+        expect(hitsSeg).toBeTruthy();
+        expect(hitsSeg!.params).toEqual({ hits: 1 });
+
+        // 验证不显示治疗量
+        const healSeg = findI18nSegment(entry[0].segments, 'actionLog.attackHealing');
+        expect(healSeg).toBeUndefined();
+    });
 });

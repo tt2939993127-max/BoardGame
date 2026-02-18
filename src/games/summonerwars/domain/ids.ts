@@ -57,6 +57,7 @@ export const CARD_IDS = {
   BARBARIC_CHANT_OF_POWER: 'barbaric-chant-of-power',
   BARBARIC_CHANT_OF_GROWTH: 'barbaric-chant-of-growth',
   BARBARIC_CHANT_OF_ENTANGLEMENT: 'barbaric-chant-of-entanglement',
+  BARBARIC_RALLYING_CRY: 'barbaric-rallying-cry',
 } as const;
 
 // ============================================================================

@@ -149,7 +149,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 ### 集成链路测试规范（强制）
 
-> 教训：单元测试直接调用能力函数（如 `triggerBaseAbility`）时会自动注入 `matchState`，
+> 教训：单元测试直接调用能力函数（如 `triggerBaseAbility`）时会自动传递 `matchState` 参数，
 > 但 reducer 层可能漏传参数导致 Interaction 类能力静默失败。单元测试全绿不代表完整链路正确。
 
 **规则**：每个通过 `matchState` / `queueInteraction` 创建交互的能力，必须至少有 1 条通过 `execute()` 走完整链路的集成测试，验证：
@@ -362,6 +362,121 @@ await page.waitForTimeout(500);
 await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 ```
 
+### E2E 测试环境依赖排查（强制）
+
+**E2E 测试依赖三个服务同时运行**：前端开发服务器（Vite）、游戏服务器（game-server）、API 服务器（api-server）。测试失败时必须先检查服务依赖。
+
+#### 推荐工作流
+
+1. **开发模式**（手动启动服务，推荐）：
+   ```bash
+   # 终端 1：启动所有服务
+   npm run dev
+   
+   # 终端 2：运行测试
+   npm run test:e2e
+   ```
+
+2. **CI 模式**（自动启动服务）：
+   ```bash
+   # 单终端：自动启动服务并运行测试
+   npm run test:e2e:ci
+   ```
+
+3. **清理端口占用**（测试异常退出后）：
+   ```bash
+   npm run test:e2e:cleanup
+   ```
+
+#### 测试失败排查顺序
+
+**当 E2E 测试失败时，按以下顺序排查：**
+
+1. **检查端口配置**
+   - 读取 `.env` 文件确认端口配置：
+     - `VITE_DEV_PORT`（默认 3000）
+     - `GAME_SERVER_PORT`（默认 18000）
+     - `API_SERVER_PORT`（默认 18001）
+
+2. **检查服务状态**
+   ```powershell
+   # 检查端口是否被占用
+   netstat -ano | findstr ":3000"
+   netstat -ano | findstr ":18000"
+   netstat -ano | findstr ":18001"
+   
+   # 或使用 PowerShell
+   Get-NetTCPConnection -LocalPort 3000
+   Get-NetTCPConnection -LocalPort 18000
+   Get-NetTCPConnection -LocalPort 18001
+   ```
+
+3. **验证服务可达性**
+   - 前端：访问 `http://localhost:3000`（或 `.env` 中配置的端口）
+   - 游戏服务器：访问 `http://localhost:18000/games`（应返回游戏列表）
+   - API 服务器：访问 `http://localhost:18001/auth/status`（应返回认证状态）
+
+4. **验证代理配置**
+   - 检查 `vite.config.ts` 中的 `server.proxy` 配置是否与 `.env` 端口一致
+
+5. **清理遗留连接**
+   ```bash
+   # 清理测试遗留的端口占用和 WebSocket 连接
+   npm run test:e2e:cleanup
+   ```
+
+#### 端口冲突处理
+
+**如果端口被占用**：
+
+1. **优先清理测试遗留进程**：
+   ```bash
+   npm run test:e2e:cleanup
+   ```
+
+2. **手动终止占用进程**（确认非关键进程后）：
+   ```powershell
+   # 查找占用进程的 PID
+   netstat -ano | findstr ":18000"
+   
+   # 终止进程（替换 <PID> 为实际 PID）
+   taskkill /F /PID <PID>
+   ```
+
+3. **⚠️ 危险操作警告**：
+   - ❌ **禁止**：`taskkill /F /IM node.exe`（会杀掉所有 Node.js 进程）
+   - ❌ **禁止**：`killall node`、`pkill node`（同上）
+   - ❌ **禁止**：`Get-Process node | Stop-Process -Force`（同上）
+   - **原因**：会杀掉其他项目的服务器、VS Code 语言服务器、调试器、正在运行的测试等
+
+#### 为什么会端口占用
+
+E2E 测试会创建多个 BrowserContext 和 WebSocket 连接。如果测试异常退出或清理不完整，这些连接可能不会被正确关闭，导致端口持续被占用。
+
+**解决方案**：
+- 使用 `npm run test:e2e:cleanup` 强制清理所有相关进程
+- 或使用 `node scripts/infra/port-allocator.js <workerId>` 清理特定 worker 的端口
+
+#### 测试超时排查
+
+**如果测试超时（timeout）**：
+
+1. **优先检查服务是否启动**（而非直接修改测试代码的超时时间）
+2. **检查端口配置是否正确**
+3. **检查是否有端口冲突**
+4. **检查网络连接**（防火墙、代理等）
+
+**常见错误**：
+```
+TimeoutError: page.goto: Timeout 30000ms exceeded
+```
+
+**排查步骤**：
+1. 确认前端服务器正在运行（`http://localhost:3000`）
+2. 确认游戏服务器正在运行（`http://localhost:18000/games`）
+3. 确认 API 服务器正在运行（`http://localhost:18001/auth/status`）
+4. 检查浏览器控制台是否有错误（使用 `page.on('console', ...)` 监听）
+
 ### E2E 测试选择器多语言支持（强制）
 
 **问题**：E2E 测试环境的语言可能与手动操作时不同，导致基于文本的选择器失败。
@@ -426,6 +541,258 @@ const cancelButton = banner.locator('button').filter({
 - 原因：代码渲染了英文横幅 "Choose: Play event card or discard for magic"，但测试查找中文 "选择：打出事件卡或弃牌换魔力"
 - 解决：使用正则表达式 `/Choose|选择/` 同时匹配中英文
 - 参考：`e2e/summonerwars-magic-event-choice.e2e.ts`
+
+### TestHarness 测试工具（推荐）
+
+项目提供了统一的测试工具集（TestHarness），用于控制游戏状态、骰子投掷、随机数等，确保 E2E 测试稳定可靠。
+
+#### 核心功能
+
+| 功能 | 说明 | 用途 |
+|------|------|------|
+| 骰子注入 | 精确控制骰子投掷结果 | 消除随机性，测试特定技能触发条件 |
+| 状态注入 | 直接设置游戏状态 | 快速构造测试场景，跳过冗长的准备步骤 |
+| 命令分发 | 直接执行游戏命令 | 绕过 UI 交互，快速推进游戏流程 |
+| 随机数控制 | 控制所有随机数生成 | 确保测试结果可预测、可重复 |
+
+#### 快速开始
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { setupDTOnlineMatch, selectCharacter, readyAndStartGame, waitForGameBoard } from './helpers/dicethrone';
+import { waitForTestHarness } from './helpers/common';
+
+test('雷霆万钧技能测试', async ({ browser }, testInfo) => {
+    const setup = await setupDTOnlineMatch(browser, testInfo.project.use.baseURL);
+    const { hostPage, guestPage, hostContext, guestContext } = setup;
+
+    // 选择角色并开始游戏
+    await selectCharacter(hostPage, 'monk');
+    await selectCharacter(guestPage, 'monk');
+    await readyAndStartGame(hostPage, guestPage);
+    await waitForGameBoard(hostPage);
+
+    // 等待测试工具就绪
+    await waitForTestHarness(hostPage);
+
+    // 注入骰子值：3个掌面（值为3）+ 2个拳头（值为1）
+    await hostPage.evaluate(() => {
+        window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3, 1, 1]);
+    });
+
+    // 修改玩家状态
+    await hostPage.evaluate(() => {
+        window.__BG_TEST_HARNESS__!.state.patch({
+            core: {
+                players: {
+                    '0': { tokens: { taiji: 2 } }
+                }
+            }
+        });
+    });
+
+    // 执行掷骰操作
+    await hostPage.click('[data-tutorial-id="dice-roll-button"]');
+    await hostPage.waitForTimeout(2500);
+    await hostPage.click('button:has-text("确认")');
+
+    // 验证骰子值
+    const state = await hostPage.evaluate(() => {
+        return window.__BG_TEST_HARNESS__!.state.get();
+    });
+    expect(state.core.dice.map(d => d.value)).toEqual([3, 3, 3, 1, 1]);
+
+    // 清理
+    await guestContext.close();
+    await hostContext.close();
+});
+```
+
+#### API 参考
+
+**骰子注入**：
+```typescript
+// 设置骰子值（1-6）
+window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3, 1, 1]);
+
+// 添加骰子值到队列末尾
+window.__BG_TEST_HARNESS__!.dice.enqueue(6, 6);
+
+// 清空队列
+window.__BG_TEST_HARNESS__!.dice.clear();
+
+// 检查剩余骰子数
+window.__BG_TEST_HARNESS__!.dice.remaining();
+```
+
+**状态注入**：
+```typescript
+// 获取当前状态
+const state = window.__BG_TEST_HARNESS__!.state.get();
+
+// 设置状态（完全替换）
+state.core.players['0'].resources.hp = 10;
+window.__BG_TEST_HARNESS__!.state.set(state);
+
+// 部分更新（深度合并，推荐）
+window.__BG_TEST_HARNESS__!.state.patch({
+    core: {
+        players: {
+            '0': {
+                resources: { hp: 10, cp: 5 },
+                tokens: { taiji: 2 }
+            }
+        }
+    }
+});
+```
+
+**命令分发**：
+```typescript
+// 分发命令
+await window.__BG_TEST_HARNESS__!.command.dispatch({
+    type: 'ADVANCE_PHASE',
+    playerId: '0',
+    payload: {}
+});
+```
+
+**随机数控制**：
+```typescript
+// 设置随机数队列（0-1 范围）
+window.__BG_TEST_HARNESS__!.random.setQueue([0.1, 0.5, 0.9]);
+
+// 添加随机数
+window.__BG_TEST_HARNESS__!.random.enqueue(0.2, 0.7);
+
+// 清空队列
+window.__BG_TEST_HARNESS__!.random.clear();
+```
+
+**工具状态查询**：
+```typescript
+// 获取所有工具状态
+const status = window.__BG_TEST_HARNESS__!.getStatus();
+console.log(status);
+// {
+//     random: { enabled: true, queueLength: 5, consumed: 3 },
+//     dice: { remaining: 5, values: [3,3,3,1,1] },
+//     state: { registered: true },
+//     command: { registered: true }
+// }
+
+// 重置所有工具
+window.__BG_TEST_HARNESS__!.reset();
+```
+
+#### 使用场景
+
+**场景 1：测试依赖特定骰子结果的技能**
+```typescript
+// 雷霆万钧技能需要3个掌面（值为3）才能触发
+await page.evaluate(() => {
+    window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3, 1, 1]);
+});
+```
+
+**场景 2：快速构造测试场景**
+```typescript
+// 设置玩家 HP 为 10，跳过冗长的战斗过程
+await page.evaluate(() => {
+    window.__BG_TEST_HARNESS__!.state.patch({
+        core: { players: { '0': { resources: { hp: 10 } } } }
+    });
+});
+```
+
+**场景 3：直接推进游戏阶段**
+```typescript
+// 直接推进到攻击阶段，跳过前置阶段
+await page.evaluate(() => {
+    window.__BG_TEST_HARNESS__!.command.dispatch({
+        type: 'ADVANCE_PHASE',
+        playerId: '0',
+        payload: {}
+    });
+});
+```
+
+#### 最佳实践
+
+1. **总是等待测试工具就绪**
+   ```typescript
+   await waitForTestHarness(page);
+   ```
+
+2. **使用类型断言**
+   ```typescript
+   window.__BG_TEST_HARNESS__!  // 注意感叹号
+   ```
+
+3. **状态修改后等待渲染**
+   ```typescript
+   await page.evaluate(() => {
+       window.__BG_TEST_HARNESS__!.state.patch({ ... });
+   });
+   await page.waitForTimeout(500);  // 等待 React 重新渲染
+   ```
+
+4. **使用有意义的骰子值**
+   ```typescript
+   // ✅ 正确：注释说明骰子含义
+   await page.evaluate(() => {
+       // 武僧骰子：3=掌面，1=拳头
+       window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3, 1, 1]);
+   });
+   ```
+
+5. **测试结束时清理**
+   ```typescript
+   await page.evaluate(() => {
+       window.__BG_TEST_HARNESS__!.reset();
+   });
+   ```
+
+#### 常见陷阱
+
+1. **忘记等待测试工具就绪**
+   ```typescript
+   // ❌ 错误：可能报错 "Cannot read property 'dice' of undefined"
+   await page.evaluate(() => {
+       window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3]);
+   });
+
+   // ✅ 正确
+   await waitForTestHarness(page);
+   await page.evaluate(() => {
+       window.__BG_TEST_HARNESS__!.dice.setValues([3, 3, 3]);
+   });
+   ```
+
+2. **骰子值超出范围**
+   ```typescript
+   // ❌ 错误：骰子值必须是 1-6
+   window.__BG_TEST_HARNESS__!.dice.setValues([0, 7, 10]);
+
+   // ✅ 正确
+   window.__BG_TEST_HARNESS__!.dice.setValues([1, 6, 3]);
+   ```
+
+3. **状态路径错误**
+   ```typescript
+   // ❌ 错误：缺少 core 前缀
+   state.players['0'].hp
+
+   // ✅ 正确
+   state.core.players['0'].resources.hp
+   ```
+
+#### 更多资源
+
+- 完整设计文档：`docs/testing-infrastructure.md`
+- 快速参考：`docs/testing-tools-quick-reference.md`
+- 示例测试：`e2e/example-test-harness-usage.e2e.ts`
+- 实际案例：`e2e/dicethrone-thunder-strike.e2e.ts`
 
 ### 运行方式
 
@@ -722,6 +1089,267 @@ runner.runAll(testCases);
 | `expect` | `StateExpectation` | 预期结果 |
 | `setup` | `(playerIds, random) => state` | 可选，单测自定义初始化 |
 | `skip` | `boolean` | 可选，跳过 |
+
+---
+
+## E2E 状态同步工具
+
+### waitForState 工具集
+
+智能状态轮询工具，替代固定时间等待（`waitForTimeout`），提升测试速度和稳定性。
+
+**位置**: `e2e/helpers/waitForState.ts`
+
+**核心函数**:
+
+| 函数 | 用途 | 示例 |
+|------|------|------|
+| `waitForState` | 通用条件等待 | `await waitForState(page, async () => condition)` |
+| `waitForCoreState` | 等待核心状态 | `await waitForCoreState(page, (core) => core.currentPlayer === '1')` |
+| `waitForSystemState` | 等待系统状态 | `await waitForSystemState(page, (sys) => sys.phase === 'attack')` |
+| `waitForPhaseChange` | 等待阶段变化 | `await waitForPhaseChange(page, 'attack')` |
+| `waitForInteractionComplete` | 等待交互完成 | `await waitForInteractionComplete(page)` |
+| `waitForGameOver` | 等待游戏结束 | `await waitForGameOver(page)` |
+| `waitForStateApplied` | 等待状态应用 | `await waitForStateApplied(page, (core) => core.xxx === yyy)` |
+
+**迁移示例**:
+
+```typescript
+// ❌ 旧方式：固定等待
+await page.waitForTimeout(500);
+
+// ✅ 新方式：等待阶段变化
+await waitForPhaseChange(page, 'attack');
+
+// ❌ 旧方式：固定等待
+await applyCoreState(page, state);
+await page.waitForTimeout(2000);
+
+// ✅ 新方式：等待状态应用
+await applyCoreState(page, state);
+await waitForStateApplied(page, (core) => core.currentPlayer === '1');
+```
+
+**优点**:
+- ✅ 自动适应机器速度（快速机器节省时间，慢速机器不超时）
+- ✅ 精确等待到条件满足（不是"等 500ms"，而是"等到阶段变为 X"）
+- ✅ 清晰的错误信息（超时时显示当前状态和预期状态）
+- ✅ 提升测试速度（平均节省 50% 等待时间）
+
+**完整示例**: 见 `e2e/example-wait-for-state.e2e.ts`
+
+#### waitForState 详细使用指南
+
+##### 1. 基础用法
+
+```typescript
+import { waitForCoreState, waitForPhaseChange, waitForInteractionComplete } from './helpers/waitForState';
+
+// 等待玩家切换
+await waitForCoreState(page, (core) => core.currentPlayer === '1');
+
+// 等待阶段变化
+await waitForPhaseChange(page, 'attack');
+
+// 等待交互完成（没有 pending interaction）
+await waitForInteractionComplete(page);
+
+// 等待游戏结束
+await waitForGameOver(page);
+```
+
+##### 2. 复杂条件等待
+
+```typescript
+// 等待多个条件同时满足
+await waitForCoreState(page, (core) => {
+  return core.currentPlayer === '1' && 
+         core.players['1'].hp > 0 &&
+         core.players['1'].resources.mana >= 3;
+});
+
+// 等待数组长度变化
+await waitForCoreState(page, (core) => {
+  return core.players['0'].hand.length === 5;
+});
+
+// 等待特定单位出现
+await waitForCoreState(page, (core) => {
+  const units = core.bases[0].minions;
+  return units.some(u => u.defId === 'ninja_infiltrator');
+});
+```
+
+##### 3. 状态注入后等待
+
+```typescript
+// 注入状态后必须等待应用完成
+await applyCoreStateDirect(page, {
+  currentPlayer: '1',
+  players: {
+    '1': { hp: 10, resources: { mana: 5 } }
+  }
+});
+
+// 等待状态应用
+await waitForStateApplied(page, (core) => {
+  return core.currentPlayer === '1' && 
+         core.players['1'].resources.mana === 5;
+});
+```
+
+##### 4. 自定义超时时间
+
+```typescript
+// 默认超时 10 秒，可以自定义
+await waitForCoreState(
+  page, 
+  (core) => core.currentPlayer === '1',
+  { timeout: 5000 } // 5 秒超时
+);
+```
+
+##### 5. 错误处理
+
+```typescript
+try {
+  await waitForCoreState(page, (core) => core.currentPlayer === '1');
+} catch (error) {
+  // 超时错误会包含当前状态信息
+  console.error('等待超时，当前状态:', error.message);
+  // 可以截图保存现场
+  await page.screenshot({ path: 'timeout-error.png' });
+  throw error;
+}
+```
+
+#### waitForState 常见问题排查
+
+##### 问题 1：超时但条件看起来应该满足
+
+**症状**：
+```
+TimeoutError: Waiting for condition failed: timeout 10000ms exceeded
+Current state: { currentPlayer: '1', ... }
+```
+
+**排查步骤**：
+1. 检查条件函数是否正确（是否有拼写错误、逻辑错误）
+2. 使用 `readCoreState` 手动读取状态，确认实际值
+3. 检查是否有动画延迟（UI 更新但状态未同步）
+4. 检查是否有其他交互阻塞（pending interaction）
+
+**解决方案**：
+```typescript
+// 调试：先读取当前状态
+const currentState = await readCoreState(page);
+console.log('当前状态:', JSON.stringify(currentState, null, 2));
+
+// 然后调整条件函数
+await waitForCoreState(page, (core) => {
+  console.log('检查条件:', core.currentPlayer); // 添加日志
+  return core.currentPlayer === '1';
+});
+```
+
+##### 问题 2：条件函数抛出异常
+
+**症状**：
+```
+TypeError: Cannot read property 'length' of undefined
+```
+
+**原因**：条件函数访问了不存在的属性
+
+**解决方案**：
+```typescript
+// ❌ 错误：没有检查 null/undefined
+await waitForCoreState(page, (core) => {
+  return core.players['1'].hand.length === 5; // 如果 hand 是 undefined 会报错
+});
+
+// ✅ 正确：添加安全检查
+await waitForCoreState(page, (core) => {
+  const hand = core.players?.['1']?.hand;
+  return hand !== undefined && hand.length === 5;
+});
+```
+
+##### 问题 3：状态更新太快，条件一直不满足
+
+**症状**：等待 `currentPlayer === '1'`，但状态从 '0' 跳到 '2'，跳过了 '1'
+
+**原因**：状态更新太快，轮询间隔（100ms）内状态已经变化多次
+
+**解决方案**：
+```typescript
+// 方案 1：等待最终状态
+await waitForCoreState(page, (core) => core.currentPlayer === '2');
+
+// 方案 2：使用事件监听（如果可用）
+await page.waitForEvent('console', msg => {
+  return msg.text().includes('Player 1 turn started');
+});
+
+// 方案 3：减少轮询间隔（不推荐，会增加 CPU 负载）
+await waitForCoreState(
+  page, 
+  (core) => core.currentPlayer === '1',
+  { interval: 50 } // 50ms 轮询
+);
+```
+
+##### 问题 4：waitForInteractionComplete 一直超时
+
+**症状**：调用 `waitForInteractionComplete` 后一直超时
+
+**排查步骤**：
+1. 检查是否有 pending interaction 未处理
+2. 检查 UI 是否显示了选择框/确认框
+3. 检查是否有 bug 导致 interaction 无法完成
+
+**解决方案**：
+```typescript
+// 调试：读取当前交互状态
+const sysState = await readSystemState(page);
+console.log('当前交互:', sysState.interaction);
+
+// 如果有 pending interaction，需要先处理
+if (sysState.interaction?.pending) {
+  // 点击选项或取消
+  await page.click('[data-testid="interaction-option-0"]');
+}
+
+// 然后再等待完成
+await waitForInteractionComplete(page);
+```
+
+##### 问题 5：测试在 CI 环境超时，本地正常
+
+**原因**：CI 环境机器较慢，默认 10 秒超时不够
+
+**解决方案**：
+```typescript
+// 增加超时时间
+await waitForCoreState(
+  page, 
+  (core) => core.currentPlayer === '1',
+  { timeout: 30000 } // CI 环境使用 30 秒
+);
+
+// 或者使用环境变量
+const timeout = process.env.CI ? 30000 : 10000;
+await waitForCoreState(page, condition, { timeout });
+```
+
+#### waitForState 最佳实践
+
+1. **优先使用专用函数**：`waitForPhaseChange`、`waitForInteractionComplete` 比通用的 `waitForCoreState` 更清晰
+2. **条件函数保持简单**：避免复杂逻辑，只检查必要的条件
+3. **添加安全检查**：使用可选链 `?.` 和 nullish coalescing `??` 避免异常
+4. **合理设置超时**：默认 10 秒适合大多数场景，复杂操作可以增加到 20-30 秒
+5. **失败时截图**：超时时保存截图和状态快照，方便排查问题
+6. **避免过度等待**：不要在每个操作后都加 `waitForState`，只在关键状态变化时使用
 
 ---
 

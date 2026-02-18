@@ -239,7 +239,7 @@ test.describe('Smash Up Tutorial E2E', () => {
         await page.waitForLoadState('domcontentloaded');
         await expect(page.locator('[data-game-id]').first()).toBeVisible({ timeout: 20000 });
 
-        let card = page.locator('[data-game-id="smashup"]');
+        const card = page.locator('[data-game-id="smashup"]');
         if (await card.count() === 0) {
             const allTab = page.getByRole('button', { name: /All Games|全部游戏/i });
             if (await allTab.isVisible().catch(() => false)) await allTab.click();

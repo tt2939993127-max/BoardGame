@@ -16,9 +16,10 @@
 
 | 优先级 | 卡牌 | 问题 |
 |--------|------|------|
-| P0 | miskatonic_it_might_just_work | ✅ 已修复 — 使用 CARDS_DISCARDED 弃牌 |
-| P0 | miskatonic_thing_on_the_doorstep | ✅ 已修复 — 搜索选择交互+洗牌+疯狂卡 |
-| P1 | miskatonic_those_meddling_kids | i18n 说"消灭一个基地上任意数量的战术"，但实现消灭选中基地上**所有**行动卡，无"任意数量"选择 |
+| P0 | miskatonic_it_might_just_work | ✅ 已修复 — 中文版效果：弃1张疯狂卡，己方全体随从+1力量（CARDS_DISCARDED + TEMP_POWER_ADDED） |
+| P0 | miskatonic_thing_on_the_doorstep | ✅ 已修复 — 中文版效果：special，基地计分前消灭最高力量随从（MINION_DESTROYED） |
+| P0 | miskatonic_lost_knowledge | ✅ 已修复 — 中文版效果：ongoing talent，抽疯狂卡+额外随从到此基地 |
+| P1 | miskatonic_those_meddling_kids | ✅ 已修复 — 点击式逐个消灭行动卡（带跳过按钮），支持"任意数量" |
 | P1 | miskatonic_psychologist | i18n 说"你可以将手牌或弃牌堆中的一张疯狂卡返回疯狂牌库"，"可以"暗示可跳过，实现自动执行无跳过；且优先手牌不让玩家选择来源 |
 | P1 | miskatonic_researcher | i18n 说"你可以抽一张疯狂卡"，"可以"暗示可跳过，实现自动执行无跳过选项 |
 | P1 | miskatonic_field_trip | 交互 `min: 1` 强制至少放 1 张，但 i18n 说"任意数量"应允许 0 张（即跳过） |
@@ -86,44 +87,44 @@
 - **结论: ✅ 通过**
 
 ### 7. miskatonic_lost_knowledge（通往超凡的门）
-- i18n: "如果你手中有两张疯狂卡，展示其并抓两张卡。本回合可以额外打出一张随从和战术。"
-- 定义层: ✅ `registerAbility('miskatonic_lost_knowledge', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 检查手牌中疯狂卡 ≥2（排除当前打出的卡），展示疯狂卡 + 抽 2 张 + 额外随从 + 额外行动
-- 状态层: ✅ `REVEAL_HAND` + `CARDS_DRAWN` + `LIMIT_MODIFIED` 事件
-- 验证层: ✅ 疯狂卡 <2 时返回空
+- i18n: "打出到基地上。天赋：抽一张疯狂卡，你可以额外打出一个随从到这。"
+- 定义层: ✅ `registerAbility('miskatonic_lost_knowledge', 'talent', ...)` 注册正确（ongoing talent）
+- 执行层: ✅ 抽 1 张疯狂卡 + 授予额外随从（restrictToBase 限定到 ongoing 所在基地）
+- 状态层: ✅ `MADNESS_DRAWN` + `LIMIT_MODIFIED` 事件
+- 验证层: ✅ 无前置条件
 - i18n层: ✅ 语义一致
-- 测试层: ✅ `madnessAbilities.test.ts` 有测试
-- **结论: ✅ 通过**
+- 测试层: ⚠️ 无专项行为测试（待补充）
+- **结论: ✅ 通过**（中文版效果已修正）
 
 ### 8. miskatonic_it_might_just_work（它可能有用）
-- i18n: "弃掉两张疯狂卡来消灭一个基地上的随从。"
+- i18n: "弃掉一张疯狂卡来使你的每个随从获得+1力量直到回合结束。"
 - 定义层: ✅ `registerAbility('miskatonic_it_might_just_work', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 交互处理器使用 `CARDS_DISCARDED`（弃牌到弃牌堆），语义正确
-- 状态层: ✅ 生成 `CARDS_DISCARDED` + `MINION_DESTROYED` 事件
-- 验证层: ✅ 手牌疯狂卡 <2 时返回空
-- i18n层: ✅ "弃掉"→使用 `CARDS_DISCARDED`，语义一致
-- 测试层: ✅ `madnessPromptAbilities.test.ts` 有测试
-- **结论: ✅ 通过**（已修复）
+- 执行层: ✅ 检查手牌疯狂卡，有则弃 1 张 + 所有己方随从获得 TEMP_POWER_ADDED +1
+- 状态层: ✅ `CARDS_DISCARDED` + `TEMP_POWER_ADDED`（每个己方随从一个）事件
+- 验证层: ✅ 手牌无疯狂卡时返回 feedback
+- i18n层: ✅ 语义一致（中文版效果已修正）
+- 测试层: ✅ `madnessPromptAbilities.test.ts` 有测试（5 个用例）
+- **结论: ✅ 通过**（中文版效果已修正）
 
 ### 9. miskatonic_book_of_iter_the_unseen（金克丝!）
-- i18n: "查看任意一位玩家的手牌。抽一张疯狂卡并额外打出两个战术。"
+- i18n: "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
 - 定义层: ✅ `registerAbility('miskatonic_book_of_iter_the_unseen', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 抽 1 张疯狂卡 + 2 个额外行动 + 选择对手查看手牌（`resolveOrPrompt`）
-- 状态层: ✅ `MADNESS_DRAWN` + `LIMIT_MODIFIED` ×2 + `REVEAL_HAND` 事件
+- 执行层: ✅ 收集手牌/弃牌堆疯狂卡 → 创建选择交互（按来源+数量组合选项 + 跳过）
+- 状态层: ✅ `MADNESS_RETURNED` 事件（每张返回的疯狂卡一个）
 - 验证层: ✅ 无对手手牌时跳过查看
 - i18n层: ✅ 语义一致
 - 测试层: ✅ `interactionCompletenessAudit.test.ts` 有注册
 - **结论: ✅ 通过**
 
 ### 10. miskatonic_thing_on_the_doorstep（老詹金斯!?）
-- i18n: "从牌组搜寻一张随从或战术并加入手牌。抽一张疯狂卡。"
-- 定义层: ✅ `registerAbility('miskatonic_thing_on_the_doorstep', 'onPlay', ...)` 注册正确
-- 执行层: ✅ 搜索牌库中所有非疯狂卡，单候选自动选择（含 CARDS_DRAWN + DECK_RESHUFFLED + MADNESS_DRAWN），多候选创建 `createSimpleChoice` 交互让玩家选择
-- 状态层: ✅ `CARDS_DRAWN` + `DECK_RESHUFFLED` + `MADNESS_DRAWN` 事件
-- 验证层: ✅ 牌库无非疯狂卡时仅抽疯狂卡
-- i18n层: ✅ "搜寻"→有搜索选择交互，语义一致
-- 测试层: ✅ `madnessPromptAbilities.test.ts` 有多候选/单候选/空牌库/reduce 验证测试
-- **结论: ✅ 通过**（已修复）
+- i18n: "特殊：在一个基地计分前，消灭一个在那里拥有最高力量的随从。"
+- 定义层: ✅ `registerAbility('miskatonic_thing_on_the_doorstep', 'special', ...)` 注册正确
+- 执行层: ✅ 找到计分基地上最高力量随从，唯一则直接消灭，多个并列则创建选择交互
+- 状态层: ✅ `MINION_DESTROYED` 事件
+- 验证层: ✅ 基地无随从时返回 feedback
+- i18n层: ✅ 语义一致（中文版效果已修正）
+- 测试层: ✅ `madnessPromptAbilities.test.ts` 有测试（4 个用例）
+- **结论: ✅ 通过**（中文版效果已修正）
 
 ### 11. miskatonic_those_meddling_kids（这些多管闲事的小鬼）
 - i18n: "消灭一个基地上任意数量的战术。"

@@ -13,7 +13,7 @@
  * - base_mushroom_kingdom: onTurnStart → Prompt（移动对手随从）
  * - base_rlyeh: onTurnStart → Prompt（消灭己方随从+1VP）
  */
-/* eslint-disable @typescript-eslint/no-explicit-any -- 测试文件：事件 payload 访问需要灵活类型 */
+ 
 
 import { describe, expect, it, beforeAll } from 'vitest';
 import { initAllAbilities, resetAbilityInit } from '../abilities';

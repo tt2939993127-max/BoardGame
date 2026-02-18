@@ -125,7 +125,7 @@ const LOTUS_PALM_2: AbilityDef = {
     sfxKey: MONK_SFX_KICK_2,
     variants: [
         { id: 'lotus-palm-2-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 3 } }, effects: [damage(2, abilityEffectText('lotus-palm-2-3', 'damage2')), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('lotus-palm-2-3', 'gainEvasive'), { timing: 'postDamage', condition: { type: 'onHit' } }), grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('lotus-palm-2-3', 'gainTaiji2'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 0 },
-        { id: 'lotus-palm-2-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } }, effects: [damage(6, abilityEffectText('lotus-palm-2-4', 'damage6')), { description: abilityEffectText('lotus-palm-2-4', 'taijiCapUp'), action: { type: 'custom', target: 'self', customActionId: 'lotus-palm-taiji-cap-up-and-fill' }, timing: 'postDamage', condition: { type: 'onHit' } }], priority: 1 },
+        { id: 'lotus-palm-2-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } }, effects: [damage(6, abilityEffectText('lotus-palm-2-4', 'damage6')), { description: abilityEffectText('lotus-palm-2-4', 'taijiCapUp'), action: { type: 'custom', target: 'self', customActionId: 'lotus-palm-2-taiji-cap-up-and-grant6' }, timing: 'postDamage', condition: { type: 'onHit' } }], priority: 1 },
         { id: 'lotus-palm-2-5', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 5 } }, effects: [damage(10, abilityEffectText('lotus-palm-2-5', 'damage10')), grantToken(TOKEN_IDS.TAIJI, 6, abilityEffectText('lotus-palm-2-5', 'taijiCapMax'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 2 },
     ],
 };
@@ -138,7 +138,7 @@ const TAIJI_COMBO_2: AbilityDef = {
     sfxKey: MONK_SFX_KICK_1,
     trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3, [DICE_FACE_IDS.PALM]: 1 } },
     effects: [
-        { description: abilityEffectText('taiji-combo-2', 'rollDie'), action: { type: 'rollDie', target: 'self', diceCount: 2, conditionalEffects: [{ face: DICE_FACE_IDS.FIST, bonusDamage: 2 }, { face: DICE_FACE_IDS.PALM, bonusDamage: 3 }, { face: DICE_FACE_IDS.TAIJI, grantToken: { tokenId: TOKEN_IDS.TAIJI, value: 2 } }, { face: DICE_FACE_IDS.LOTUS, triggerChoice: { titleKey: 'choices.evasiveOrPurifyToken', options: [{ tokenId: TOKEN_IDS.EVASIVE, value: 1 }, { tokenId: TOKEN_IDS.PURIFY, value: 1 }] } }] }, timing: 'withDamage' },
+        { description: abilityEffectText('taiji-combo-2', 'rollDie'), action: { type: 'rollDie', target: 'self', diceCount: 2, conditionalEffects: [{ face: DICE_FACE_IDS.FIST, bonusDamage: 2, effectKey: 'bonusDie.effect.fist' }, { face: DICE_FACE_IDS.PALM, bonusDamage: 3, effectKey: 'bonusDie.effect.palm' }, { face: DICE_FACE_IDS.TAIJI, grantToken: { tokenId: TOKEN_IDS.TAIJI, value: 2 }, effectKey: 'bonusDie.effect.taiji' }, { face: DICE_FACE_IDS.LOTUS, triggerChoice: { titleKey: 'choices.evasiveOrPurifyToken', options: [{ tokenId: TOKEN_IDS.EVASIVE, value: 1 }, { tokenId: TOKEN_IDS.PURIFY, value: 1 }] }, effectKey: 'bonusDie.effect.lotus' }] }, timing: 'withDamage' },
         damage(5, abilityEffectText('taiji-combo-2', 'damage5')),
     ],
 };
@@ -207,7 +207,7 @@ export const MONK_CARDS: AbilityCard[] = [
                     { tokenId: TOKEN_IDS.PURIFY, value: 1 },
                 ], effectKey: 'bonusDie.effect.enlightenmentLotus' },
             ],
-            defaultEffect: { drawCard: 1 },
+            defaultEffect: { drawCard: 1, effectKey: 'bonusDie.effect.enlightenmentOther' },
         },
         timing: 'immediate',
     }] },

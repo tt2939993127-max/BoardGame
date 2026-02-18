@@ -250,7 +250,7 @@ describe('tickDurations', () => {
   });
 
   it('连续 tick 直到全部过期', () => {
-    let c = addTag(createTagContainer(), 'Buff.A', { duration: 2 });
+    const c = addTag(createTagContainer(), 'Buff.A', { duration: 2 });
     const r1 = tickDurations(c);
     expect(r1.expired).toEqual([]);
     expect(r1.container['Buff.A']?.duration).toBe(1);

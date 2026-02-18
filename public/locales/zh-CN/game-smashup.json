@@ -641,7 +641,7 @@
     },
     "miskatonic_book_of_iter_the_unseen": {
       "name": "金克丝!",
-      "effectText": "查看任意一位玩家的手牌。抽一张疯狂卡并额外打出两个战术。"
+      "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
     },
     "miskatonic_mandatory_reading": {
       "name": "最好不知道的事",
@@ -649,11 +649,11 @@
     },
     "miskatonic_lost_knowledge": {
       "name": "通往超凡的门",
-      "effectText": "如果你手中有两张疯狂卡，展示其并抓两张卡。本回合可以额外打出一张随从和战术。"
+      "effectText": "打出到基地上。天赋：抽一张疯狂卡，你可以额外打出一个随从到这。"
     },
     "miskatonic_thing_on_the_doorstep": {
       "name": "老詹金斯!?",
-      "effectText": "从牌组搜寻一张随从或战术并加入手牌。抽一张疯狂卡。"
+      "effectText": "特殊：在一个基地计分前，消灭一个在那里拥有最高力量的随从。"
     },
     "miskatonic_psychological_profiling": {
       "name": "这太疯狂了...",
@@ -661,7 +661,7 @@
     },
     "miskatonic_it_might_just_work": {
       "name": "它可能有用",
-      "effectText": "弃掉两张疯狂卡来消灭一个基地上的随从。"
+      "effectText": "弃掉一张疯狂卡来使你的每个随从获得+1力量直到回合结束。"
     },
     "miskatonic_those_meddling_kids": {
       "name": "这些多管闲事的小鬼",

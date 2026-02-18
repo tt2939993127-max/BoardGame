@@ -338,10 +338,12 @@ describe('FlowHooks - onPhaseEnter', () => {
       expect(turnChanged[0].payload).toMatchObject({ from: '0', to: '1' });
     });
 
-    it('弃置当前玩家的普通主动事件', () => {
+    it('弃置新回合玩家的普通主动事件', () => {
+      // 当前玩家 0 的 draw 阶段结束，切换到玩家 1 的 summon 阶段
+      // 应该弃置玩家 1 的主动事件（规则：主动事件在你回合开始时弃置）
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      const normalEvent = makeEventCard('normal-event-0-1', { isActive: true });
-      core.players['0'].activeEvents = [normalEvent];
+      const normalEvent = makeEventCard('normal-event-1-1', { isActive: true });
+      core.players['1'].activeEvents = [normalEvent];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({
@@ -350,16 +352,16 @@ describe('FlowHooks - onPhaseEnter', () => {
 
       const discarded = events.filter(e => e.type === SW_EVENTS.ACTIVE_EVENT_DISCARDED);
       expect(discarded.length).toBe(1);
-      expect(discarded[0].payload).toMatchObject({ playerId: '0', cardId: 'normal-event-0-1' });
+      expect(discarded[0].payload).toMatchObject({ playerId: '1', cardId: 'normal-event-1-1' });
     });
 
     it('殉葬火堆有充能时不自动弃置', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      const funeralPyre = makeEventCard('necro-funeral-pyre-0-1', {
+      const funeralPyre = makeEventCard('necro-funeral-pyre-1-1', {
         isActive: true,
         charges: 2,
       });
-      core.players['0'].activeEvents = [funeralPyre];
+      core.players['1'].activeEvents = [funeralPyre];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({
@@ -375,11 +377,11 @@ describe('FlowHooks - onPhaseEnter', () => {
 
     it('殉葬火堆无充能时正常弃置', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      const funeralPyre = makeEventCard('necro-funeral-pyre-0-1', {
+      const funeralPyre = makeEventCard('necro-funeral-pyre-1-1', {
         isActive: true,
         charges: 0,
       });
-      core.players['0'].activeEvents = [funeralPyre];
+      core.players['1'].activeEvents = [funeralPyre];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({
@@ -392,11 +394,11 @@ describe('FlowHooks - onPhaseEnter', () => {
 
     it('圣洁审判有充能时消耗1充能代替弃置', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      const holyJudgment = makeEventCard('paladin-holy-judgment-0-1', {
+      const holyJudgment = makeEventCard('paladin-holy-judgment-1-1', {
         isActive: true,
         charges: 3,
       });
-      core.players['0'].activeEvents = [holyJudgment];
+      core.players['1'].activeEvents = [holyJudgment];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({
@@ -410,19 +412,19 @@ describe('FlowHooks - onPhaseEnter', () => {
       const charged = events.filter(e => e.type === SW_EVENTS.FUNERAL_PYRE_CHARGED);
       expect(charged.length).toBe(1);
       expect(charged[0].payload).toMatchObject({
-        playerId: '0',
-        eventCardId: 'paladin-holy-judgment-0-1',
+        playerId: '1',
+        eventCardId: 'paladin-holy-judgment-1-1',
         charges: 2, // 3 - 1
       });
     });
 
     it('圣洁审判充能为0时正常弃置', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      const holyJudgment = makeEventCard('paladin-holy-judgment-0-1', {
+      const holyJudgment = makeEventCard('paladin-holy-judgment-1-1', {
         isActive: true,
         charges: 0,
       });
-      core.players['0'].activeEvents = [holyJudgment];
+      core.players['1'].activeEvents = [holyJudgment];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({
@@ -435,10 +437,10 @@ describe('FlowHooks - onPhaseEnter', () => {
 
     it('混合主动事件：普通弃置 + 殉葬火堆保留 + 圣洁审判扣充能', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '0' });
-      core.players['0'].activeEvents = [
-        makeEventCard('some-event-0-1', { isActive: true }),
-        makeEventCard('necro-funeral-pyre-0-2', { isActive: true, charges: 1 }),
-        makeEventCard('paladin-holy-judgment-0-3', { isActive: true, charges: 2 }),
+      core.players['1'].activeEvents = [
+        makeEventCard('some-event-1-1', { isActive: true }),
+        makeEventCard('necro-funeral-pyre-1-2', { isActive: true, charges: 1 }),
+        makeEventCard('paladin-holy-judgment-1-3', { isActive: true, charges: 2 }),
       ];
 
       const state = wrapState(core);
@@ -450,7 +452,7 @@ describe('FlowHooks - onPhaseEnter', () => {
       const discarded = events.filter(e => e.type === SW_EVENTS.ACTIVE_EVENT_DISCARDED);
       expect(discarded.length).toBe(1);
       const discardedPayload = (discarded[0] as GameEvent).payload as { cardId?: string };
-      expect(discardedPayload.cardId).toBe('some-event-0-1');
+      expect(discardedPayload.cardId).toBe('some-event-1-1');
 
       // 圣洁审判扣充能
       const charged = events.filter(e => e.type === SW_EVENTS.FUNERAL_PYRE_CHARGED);
@@ -461,7 +463,7 @@ describe('FlowHooks - onPhaseEnter', () => {
 
     it('无主动事件时只产生 TURN_CHANGED', () => {
       const core = createMinimalCore({ phase: 'draw', currentPlayer: '1' });
-      core.players['1'].activeEvents = [];
+      core.players['0'].activeEvents = [];
 
       const state = wrapState(core);
       const events = summonerWarsFlowHooks.onPhaseEnter!({

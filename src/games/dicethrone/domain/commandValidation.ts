@@ -5,7 +5,7 @@
 
 import type { ValidationResult, PlayerId } from '../../../engine/types';
 import type {
-    PendingInteraction,
+    InteractionDescriptor,
     DiceThroneCore,
     DiceThroneCommand,
     TurnPhase,
@@ -174,6 +174,7 @@ const validateToggleDieLock = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
+    // 只允许在进攻阶段锁定骰子
     if (phase !== 'offensiveRoll') {
         return fail('invalid_phase');
     }
@@ -360,6 +361,11 @@ const validateSellCard = (
     
     const card = player.hand.find(c => c.id === cmd.payload.cardId);
     if (!card) {
+        console.warn('[validateSellCard] 卡牌不在手牌中:', {
+            playerId: state.activePlayerId,
+            cardId: cmd.payload.cardId,
+            handCardIds: player.hand.map(c => c.id),
+        });
         return fail('card_not_in_hand');
     }
     
@@ -419,6 +425,11 @@ const validateReorderCardToEnd = (
     
     const cardIndex = player.hand.findIndex(c => c.id === cmd.payload.cardId);
     if (cardIndex === -1) {
+        console.warn('[validateReorderCardToEnd] 卡牌不在手牌中:', {
+            playerId: state.activePlayerId,
+            cardId: cmd.payload.cardId,
+            handCardIds: player.hand.map(c => c.id),
+        });
         return fail('card_not_in_hand');
     }
     
@@ -436,11 +447,19 @@ const validatePlayCard = (
 ): ValidationResult => {
     const actingPlayerId = playerId;
 
+    console.log('[validatePlayCard] 开始验证:', {
+        playerId: actingPlayerId,
+        cardId: cmd.payload.cardId,
+        phase,
+    });
+
     const player = state.players[actingPlayerId];
     if (!player) {
         console.warn('[validatePlayCard] 验证失败 - 玩家不存在:', { playerId: actingPlayerId });
         return fail('player_not_found');
     }
+    
+    console.log('[validatePlayCard] 手牌:', player.hand.map(c => ({ id: c.id, name: c.name })));
     
     const card = player.hand.find(c => c.id === cmd.payload.cardId);
     if (!card) {
@@ -451,6 +470,8 @@ const validatePlayCard = (
         });
         return fail('card_not_in_hand');
     }
+    
+    console.log('[validatePlayCard] 找到卡牌:', { id: card.id, name: card.name, timing: card.timing, cpCost: card.cpCost });
 
     // 主要阶段牌：仅允许当前回合玩家
     if (card.timing === 'main' && !isMoveAllowed(playerId, state.activePlayerId)) {
@@ -473,11 +494,16 @@ const validatePlayCard = (
             cpCost: card.cpCost,
             playerCP: player.resources[RESOURCE_IDS.CP] ?? 0,
             currentPhase: phase,
+            diceCount: state.dice.length,
+            rollCount: state.rollCount,
+            rollConfirmed: state.rollConfirmed,
+            playCondition: card.playCondition,
             reason: checkResult.reason,
         });
         return fail(checkResult.reason);
     }
     
+    console.log('[validatePlayCard] 验证通过');
     return ok();
 };
 
@@ -501,6 +527,11 @@ const validatePlayUpgradeCard = (
     
     const card = player.hand.find(c => c.id === cmd.payload.cardId);
     if (!card) {
+        console.warn('[validatePlayUpgradeCard] 卡牌不在手牌中:', {
+            playerId: state.activePlayerId,
+            cardId: cmd.payload.cardId,
+            handCardIds: player.hand.map(c => c.id),
+        });
         return fail('card_not_in_hand');
     }
     
@@ -575,7 +606,7 @@ const validateModifyDie = (
     state: DiceThroneCore,
     cmd: ModifyDieCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     // 检查是否有待处理的交互（从 sys.interaction 读取）
     if (!pendingInteraction) {
@@ -603,7 +634,7 @@ const validateRerollDie = (
     state: DiceThroneCore,
     cmd: RerollDieCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     if (!pendingInteraction) {
         return fail('no_pending_interaction');
@@ -625,7 +656,7 @@ const validateRemoveStatus = (
     _state: DiceThroneCore,
     _cmd: RemoveStatusCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     if (!pendingInteraction) {
         return fail('no_pending_interaction');
@@ -643,7 +674,7 @@ const validateTransferStatus = (
     _state: DiceThroneCore,
     _cmd: TransferStatusCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     if (!pendingInteraction) {
         return fail('no_pending_interaction');
@@ -663,7 +694,7 @@ const validateConfirmInteraction = (
     _state: DiceThroneCore,
     cmd: ConfirmInteractionCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     if (!pendingInteraction) {
         return fail('no_pending_interaction');
@@ -687,7 +718,7 @@ const validateCancelInteraction = (
     _state: DiceThroneCore,
     _cmd: CancelInteractionCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
     if (!pendingInteraction) {
         return fail('no_pending_interaction');
@@ -894,7 +925,14 @@ const validateUsePassiveAbility = (
     // rerollDie 需要在投掷阶段且有骰子
     if (action.type === 'rerollDie' && cmd.payload.targetDieId !== undefined) {
         const die = state.dice.find(d => d.id === cmd.payload.targetDieId);
-        if (!die) return fail('die_not_found');
+        if (!die) {
+            console.warn('[validateUsePassiveAbility] 骰子不存在:', {
+                playerId,
+                targetDieId: cmd.payload.targetDieId,
+                diceIds: state.dice.map(d => d.id),
+            });
+            return fail('die_not_found');
+        }
     }
 
     return ok();
@@ -911,8 +949,16 @@ export const validateCommand = (
     state: DiceThroneCore,
     command: DiceThroneCommand,
     phase: TurnPhase,
-    pendingInteraction?: PendingInteraction
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
+    // 诊断日志：追踪所有命令验证
+    console.log('[validateCommand] 验证命令:', {
+        type: command.type,
+        playerId: command.playerId,
+        phase,
+        payload: command.payload,
+    });
+
     if (command.type.startsWith('SYS_')) {
         return ok();
     }

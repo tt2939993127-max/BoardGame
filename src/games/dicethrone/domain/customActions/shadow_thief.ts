@@ -9,6 +9,7 @@ import { CP_MAX } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import type {
     DiceThroneEvent,
+    DamageDealtEvent,
     CpChangedEvent,
     BonusDieRolledEvent,
     StatusAppliedEvent,
@@ -16,11 +17,12 @@ import type {
     TokenGrantedEvent,
     CardDiscardedEvent,
     DamageShieldGrantedEvent,
-    TokenUsedEvent,
+    TokenConsumedEvent,
+    PendingInteraction,
+    InteractionRequestedEvent,
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
-import { createSelectDieInteraction } from '../interactions';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
@@ -167,19 +169,22 @@ function handleStealCpWithAmount({ targetId, attackerId, sourceAbilityId, state,
 function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const sneakStacks = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK] ?? 0;
     const selectCount = sneakStacks > 0 ? 2 : 1;
-    
-    return [createSelectDieInteraction({
+    const interaction: PendingInteraction = {
+        id: `${sourceAbilityId}-${timestamp}`,
         playerId: attackerId,
-        sourceAbilityId,
-        count: selectCount,
+        sourceCardId: sourceAbilityId,
+        type: 'modifyDie',
         titleKey: selectCount === 2 ? 'interaction.selectDiceToChange' : 'interaction.selectDieToChange',
-        onResolve: (selectedDiceIds) => {
-            // This needs UI support to select new values for each die
-            // For now, return an empty array - the full implementation requires
-            // a second interaction to select the new value for each die
-            return [];
-        },
-    })];
+        selectCount,
+        selected: [],
+        dieModifyConfig: { mode: 'any' },
+    };
+    return [{
+        type: 'INTERACTION_REQUESTED',
+        payload: { interaction },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as InteractionRequestedEvent];
 }
 
 /** 肾击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) 【已迁移到新伤害计算管线】 */
@@ -234,28 +239,27 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     return events;
 }
 
-/** 聚宝盆 I：抽 1×Card面 牌，若有Shadow弃对手1牌 */
-function handleCornucopia({ attackerId, sourceAbilityId, state, timestamp, random, ctx }: CustomActionContext): DiceThroneEvent[] {
+/** 聚宝盆 I：抽 Card面数量 牌，若有Shadow弃对手1牌 */
+function handleCornucopia({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
 
     const cardCount = faceCounts[FACE.CARD] || 0;
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
 
-    // 抽 1×Card面 牌（2个Card面 → 抽2张，3个Card面 → 抽3张）
+    // 抽 Card 面数量的牌
     if (cardCount > 0 && random) {
         events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
-    // 若有 Shadow，弃对手1牌（使用 ctx.defenderId 获取对手 ID）
+    // 若有 Shadow，弃对手1牌
     if (hasShadow && random) {
-        const opponentId = ctx.defenderId;
-        const opponentHand = state.players[opponentId]?.hand || [];
+        const opponentHand = state.players[targetId]?.hand || [];
         if (opponentHand.length > 0) {
             const idx = Math.floor(random.random() * opponentHand.length);
             events.push({
                 type: 'CARD_DISCARDED',
-                payload: { playerId: opponentId, cardId: opponentHand[idx].id },
+                payload: { playerId: targetId, cardId: opponentHand[idx].id },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp: timestamp + 1
             } as CardDiscardedEvent);
@@ -505,7 +509,7 @@ function handleStealCp6(params: CustomActionContext) { return handleStealCpWithA
 
 
 /** 聚宝盆 II：每有[Card]抽1。有[Shadow]弃1。有[Bag]得1CP */
-function handleCornucopia2({ attackerId, sourceAbilityId, state, timestamp, random, ctx }: CustomActionContext): DiceThroneEvent[] {
+function handleCornucopia2({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
 
@@ -518,15 +522,14 @@ function handleCornucopia2({ attackerId, sourceAbilityId, state, timestamp, rand
         events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
-    // Opponent Discard (if Shadow)（使用 ctx.defenderId 获取对手 ID）
+    // Opponent Discard (if Shadow)
     if (hasShadow && random) {
-        const opponentId = ctx.defenderId;
-        const opponentHand = state.players[opponentId]?.hand || [];
+        const opponentHand = state.players[targetId]?.hand || [];
         if (opponentHand.length > 0) {
             const idx = Math.floor(random.random() * opponentHand.length);
             events.push({
                 type: 'CARD_DISCARDED',
-                payload: { playerId: opponentId, cardId: opponentHand[idx].id },
+                payload: { playerId: targetId, cardId: opponentHand[idx].id },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp: timestamp + 1
             } as CardDiscardedEvent);
@@ -691,7 +694,7 @@ function handleShadowDefense2({ sourceAbilityId, state, timestamp, ctx, attacker
 /** 伏击：增加掷骰伤害 */
 function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
-    if (!state.pendingDamage) return [];
+    if (!state.pendingAttack) return [];
 
     const dieValue = random.d(6);
     const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
@@ -699,25 +702,13 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
 
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: attackerId, targetPlayerId: state.pendingDamage.targetPlayerId, effectKey: 'bonusDie.effect.sneakAttack' },
+        payload: { value: dieValue, face, playerId: attackerId, targetPlayerId: state.pendingAttack.defenderId, effectKey: 'bonusDie.effect.sneakAttack' },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp
     } as BonusDieRolledEvent);
 
-    // 通过 TOKEN_USED 事件的 damageModifier 来增加伤害
-    // 注意：这里不直接修改 state，而是产生一个事件让 reducer 处理
-    events.push({
-        type: 'TOKEN_USED',
-        payload: {
-            playerId: attackerId,
-            tokenId: TOKEN_IDS.SNEAK_ATTACK,
-            amount: 0, // 已经在 processTokenUsage 中消耗了
-            effectType: 'damageBoost',
-            damageModifier: dieValue,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp
-    } as TokenUsedEvent);
+    // 增加伤害
+    state.pendingAttack.damage = (state.pendingAttack.damage ?? 0) + dieValue;
 
     return events;
 }

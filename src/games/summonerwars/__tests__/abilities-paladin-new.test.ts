@@ -195,7 +195,7 @@ function addEventToHand(
 // ============================================================================
 
 describe('城塞圣武士 - 裁决 (judgment)', () => {
-  it('攻击后按 melee（❤️）数量抓牌', () => {
+  it('攻击后按 special（⚡）数量抓牌', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
@@ -220,14 +220,14 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     state.players['0'].deck = [makeAlly('deck-1'), makeAlly('deck-2'), makeAlly('deck-3')];
     const handSizeBefore = state.players['0'].hand.length;
 
-    // 使用全 melee 骰子（0.0 → melee）
-    // 城塞圣武士战力3，投3个骰子，全部 melee
-    const allMeleeRandom = createControlledRandom([0.0, 0.0, 0.0]);
+    // 使用全 special 骰子（0.9 → index 4: melee + special）
+    // 城塞圣武士战力3，投3个骰子，全部包含 special 标记
+    const allSpecialRandom = createControlledRandom([0.9, 0.9, 0.9]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
       target: { row: 4, col: 3 },
-    }, allMeleeRandom);
+    }, allSpecialRandom);
 
     // 应有 afterAttack 触发的 judgment 抓牌事件
     const drawEvents = events.filter(e =>
@@ -235,13 +235,13 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
       && (e.payload as any).sourceAbilityId === 'judgment'
     );
     expect(drawEvents.length).toBe(1);
-    expect((drawEvents[0].payload as any).count).toBe(3); // 3个 melee
+    expect((drawEvents[0].payload as any).count).toBe(3); // 3个 special
 
     // 手牌应增加3张
     expect(newState.players['0'].hand.length).toBe(handSizeBefore + 3);
   });
 
-  it('无 melee 结果时不抓牌', () => {
+  it('无 special 结果时不抓牌', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
@@ -263,13 +263,13 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     state.players['0'].deck = [makeAlly('deck-1'), makeAlly('deck-2')];
     const handSizeBefore = state.players['0'].hand.length;
 
-    // 全部 ranged 骰子（0.6 → ranged）
-    const allRangedRandom = createControlledRandom([0.6, 0.6, 0.6]);
+    // 全部 melee+ranged 骰子（0.0 → melee+ranged，无 special）
+    const noSpecialRandom = createControlledRandom([0.0, 0.0, 0.0]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
       target: { row: 4, col: 3 },
-    }, allRangedRandom);
+    }, noSpecialRandom);
 
     // 不应有 judgment 抓牌事件
     const drawEvents = events.filter(e =>
@@ -280,7 +280,7 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     expect(newState.players['0'].hand.length).toBe(handSizeBefore);
   });
 
-  it('部分 melee 结果时按实际数量抓牌', () => {
+  it('部分 special 结果时按实际数量抓牌', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
@@ -302,8 +302,8 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     state.players['0'].deck = [makeAlly('deck-1'), makeAlly('deck-2'), makeAlly('deck-3')];
     const handSizeBefore = state.players['0'].hand.length;
 
-    // 2个 melee + 1个 ranged
-    const mixedRandom = createControlledRandom([0.0, 0.0, 0.6]);
+    // 2个 melee+special + 1个 melee+ranged（2个 special 标记）
+    const mixedRandom = createControlledRandom([0.9, 0.9, 0.0]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
@@ -317,6 +317,45 @@ describe('城塞圣武士 - 裁决 (judgment)', () => {
     expect(drawEvents.length).toBe(1);
     expect((drawEvents[0].payload as any).count).toBe(2);
     expect(newState.players['0'].hand.length).toBe(handSizeBefore + 2);
+  });
+
+  it('只有 melee 面时不抓牌', () => {
+    const state = createPaladinState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-warrior',
+      card: makeFortressWarrior('test-warrior'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy', { life: 10 }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+    state.players['0'].attackCount = 0;
+    state.players['0'].deck = [makeAlly('deck-1'), makeAlly('deck-2')];
+    const handSizeBefore = state.players['0'].hand.length;
+
+    // 全部 melee+ranged 骰子（0.0 → melee+ranged，无 special）
+    const allMeleeRandom = createControlledRandom([0.0, 0.0, 0.0]);
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 2 },
+      target: { row: 4, col: 3 },
+    }, allMeleeRandom);
+
+    // 不应有 judgment 抓牌事件
+    const drawEvents = events.filter(e =>
+      e.type === SW_EVENTS.CARD_DRAWN
+      && (e.payload as any).sourceAbilityId === 'judgment'
+    );
+    expect(drawEvents.length).toBe(0);
+    expect(newState.players['0'].hand.length).toBe(handSizeBefore);
   });
 });
 
@@ -355,9 +394,9 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     state.currentPlayer = '1';
     state.players['1'].attackCount = 0;
 
-    // 攻击者投4个骰子全 melee（命中4），护盾投2个骰子全 melee（减2，最少1）
+    // 攻击者投4个骰子全 melee（命中4），护盾投2个骰子全 special（减2，最少1）
     // 骰子顺序：攻击者4个 + 护盾2个 = 6个随机值
-    const shieldRandom = createControlledRandom([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    const shieldRandom = createControlledRandom([0.0, 0.0, 0.0, 0.0, 0.9, 0.9]);
 
     const { events } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 4 },
@@ -372,7 +411,7 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     expect(reduceEvents.length).toBe(1);
 
     // 原始命中4，护盾减2但最少保留1，所以减少到 max(4-2, 1) = 2
-    // 但实际逻辑是 reduction = min(shieldMelee, hits-1) = min(2, 3) = 2
+    // 但实际逻辑是 reduction = min(shieldSpecial, hits-1) = min(2, 3) = 2
     // 最终 hits = 4 - 2 = 2
     const attacked = events.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
     expect(attacked).toBeDefined();
@@ -467,7 +506,7 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     expect(reduceEvents.length).toBe(0);
   });
 
-  it('护盾骰子无 melee 时不减伤', () => {
+  it('护盾骰子无 special 时不减伤', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
@@ -493,13 +532,13 @@ describe('科琳 - 神圣护盾 (divine_shield)', () => {
     state.currentPlayer = '1';
     state.players['1'].attackCount = 0;
 
-    // 攻击者3个 melee，护盾2个 ranged
-    const shieldNoMelee = createControlledRandom([0.0, 0.0, 0.0, 0.6, 0.6]);
+    // 攻击者3个 melee，护盾2个 melee+ranged（无 special）
+    const shieldNoSpecial = createControlledRandom([0.0, 0.0, 0.0, 0.0, 0.0]);
 
     const { events } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 4 },
       target: { row: 4, col: 3 },
-    }, shieldNoMelee);
+    }, shieldNoSpecial);
 
     const reduceEvents = events.filter(e =>
       e.type === SW_EVENTS.DAMAGE_REDUCED
@@ -586,7 +625,8 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
 
     state.players['0'].hand.push(makeAlly('discard-card'));
 
-    const allMelee = createControlledRandom([0.0, 0.0]);
+    // 牧师战力2，投2个骰子全 special（治疗量2）
+    const allSpecial = createControlledRandom([0.9, 0.9]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
@@ -595,7 +635,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
         abilityId: 'healing',
         targetCardId: 'discard-card',
       },
-    }, allMelee);
+    }, allSpecial);
 
     const discardEvents = events.filter(e => e.type === SW_EVENTS.CARD_DISCARDED);
     expect(discardEvents.length).toBe(1);
@@ -608,10 +648,10 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
       && (e.payload as any).sourceAbilityId === 'healing'
     );
     expect(healEvents.length).toBe(1);
-    expect((healEvents[0].payload as any).amount).toBe(2);
+    expect((healEvents[0].payload as any).amount).toBe(4); // 2个骰子，每个有剑+斧，共4个治疗标记
 
     expect(newState.players['0'].hand.find(c => c.id === 'discard-card')).toBeUndefined();
-    expect(newState.board[4][3].unit?.damage).toBe(1);
+    expect(newState.board[4][3].unit?.damage).toBe(0); // 3 - 4 = -1 → 0（过量治疗）
   });
 
   it('治疗模式下攻击友方单位转为治疗', () => {
@@ -638,13 +678,13 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
     state.currentPlayer = '0';
     state.players['0'].attackCount = 0;
 
-    // 牧师战力2，投2个骰子全 melee
-    const allMelee = createControlledRandom([0.0, 0.0]);
+    // 牧师战力2，投2个骰子全 special（治疗量2）
+    const allSpecial = createControlledRandom([0.9, 0.9]);
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
       attacker: { row: 4, col: 2 },
       target: { row: 4, col: 3 },
-    }, allMelee);
+    }, allSpecial);
 
     // 应有治疗事件
     const healEvents = events.filter(e =>
@@ -652,10 +692,10 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
       && (e.payload as any).sourceAbilityId === 'healing'
     );
     expect(healEvents.length).toBe(1);
-    expect((healEvents[0].payload as any).amount).toBe(2); // 2个 melee
+    expect((healEvents[0].payload as any).amount).toBe(4); // 2个骰子，每个有剑+斧，共4个治疗标记
 
     // 友方单位伤害应减少
-    expect(newState.board[4][3].unit?.damage).toBe(1); // 3 - 2 = 1
+    expect(newState.board[4][3].unit?.damage).toBe(0); // 3 - 4 = -1 → 0（过量治疗）
   });
 
   it('治疗模式下不应造成伤害', () => {

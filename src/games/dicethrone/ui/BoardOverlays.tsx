@@ -17,9 +17,10 @@ import { BonusDieOverlay } from './BonusDieOverlay';
 import { CardSpotlightOverlay } from './CardSpotlightOverlay';
 import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
+import { InteractionOverlay } from './InteractionOverlay';
 import { EndgameOverlay } from '../../../components/game/framework/widgets/EndgameOverlay';
 import type { StatusAtlases } from './statusEffects';
-import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
+import type { AbilityCard, DieFace, HeroState, InteractionDescriptor, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
@@ -53,6 +54,16 @@ export interface BoardOverlaysProps {
     isConfirmRemoveKnockdownOpen: boolean;
     onConfirmRemoveKnockdown: () => void;
     onCancelRemoveKnockdown: () => void;
+
+    // 状态选择交互（新增）
+    isStatusInteraction: boolean;
+    pendingInteraction?: InteractionDescriptor;
+    players: Record<PlayerId, HeroState>;
+    currentPlayerId: PlayerId;
+    onSelectStatus: (playerId: PlayerId, statusId: string) => void;
+    onSelectPlayer: (playerId: PlayerId) => void;
+    onConfirmStatusInteraction: () => void;
+    onCancelInteraction: () => void;
 
     // 选择弹窗
     choice: {
@@ -271,6 +282,22 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         onCancel={props.onCancelPurify}
                         locale={props.locale}
                         statusIconAtlas={props.statusIconAtlas}
+                    />
+                )}
+
+                {/* 状态选择交互 */}
+                {props.isStatusInteraction && props.pendingInteraction && (
+                    <InteractionOverlay
+                        key="status-interaction"
+                        interaction={props.pendingInteraction}
+                        players={props.players}
+                        currentPlayerId={props.currentPlayerId}
+                        onSelectStatus={props.onSelectStatus}
+                        onSelectPlayer={props.onSelectPlayer}
+                        onConfirm={props.onConfirmStatusInteraction}
+                        onCancel={props.onCancelInteraction}
+                        statusIconAtlas={props.statusIconAtlas}
+                        locale={props.locale}
                     />
                 )}
 

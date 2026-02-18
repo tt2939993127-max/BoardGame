@@ -117,7 +117,7 @@ function executeRenderCode(
     }
 
     // 创建函数并执行
-    // eslint-disable-next-line no-new-func
+     
     const renderFn = new Function('data', 'React', `
       "use strict";
       const fn = ${compiled.code};

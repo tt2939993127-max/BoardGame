@@ -13,7 +13,7 @@ import type { InteractionDescriptor } from '../../../engine/systems/InteractionS
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState } from '../../../engine/types';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { registerTrigger } from '../domain/ongoingEffects';
+import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 
 /** 注册海盗派系所有能力*/
@@ -97,7 +97,7 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 加农炮 onPlay：消灭至多两个力量≤2的随从 */
+/** 加农炮 onPlay：消灭至多两个力量≤2的随从（点击式交互）*/
 function pirateCannon(ctx: AbilityContext): AbilityResult {
     // 收集所有力量≤2的随从
     const allTargets: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
@@ -114,11 +114,14 @@ function pirateCannon(ctx: AbilityContext): AbilityResult {
         }
     }
     if (allTargets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
-    // 创建选择第一个目标的 Interaction
+    
+    // 创建选择第一个目标的 Interaction（点击式）
     const options = allTargets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
         `pirate_cannon_first_${ctx.now}`, ctx.playerId,
-        '选择第一个要消灭的力量≤2的随从（至多2个）', buildMinionTargetOptions(options), 'pirate_cannon_choose_first',
+        '加农炮：点击第一个要消灭的力量≤2的随从',
+        buildMinionTargetOptions(options),
+        { sourceId: 'pirate_cannon_choose_first', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -393,15 +396,14 @@ function pirateDinghy(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `pirate_dinghy_first_${ctx.now}`, ctx.playerId,
-        '选择要移动的己方随从（至多2个，第1个）', buildMinionTargetOptions(options), 'pirate_dinghy_choose_first',
+        `pirate_dinghy_first_${ctx.now}`, ctx.playerId, { sourceId: '选择要移动的己方随从（至多2个，第1个）', targetType: 'minion' }, buildMinionTargetOptions(options), 'pirate_dinghy_choose_first'
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 上海 onPlay：移动一个对手随从到另一个基地*/
 function pirateShanghai(ctx: AbilityContext): AbilityResult {
-    // 收集所有对手随从
+    // 收集所有对手随从（保护检查在 buildMinionTargetOptions 中）
     const targets: { uid: string; defId: string; baseIndex: number; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -415,10 +417,19 @@ function pirateShanghai(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    const options = buildMinionTargetOptions(
+        targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label })),
+        {
+            state: ctx.state,
+            sourcePlayerId: ctx.playerId,
+            effectType: 'affect',
+        }
+    );
+    if (options.length === 0) return { events: [] };
     const interaction = createSimpleChoice(
         `pirate_shanghai_minion_${ctx.now}`, ctx.playerId,
-        '选择要移动的对手随从', buildMinionTargetOptions(options), 'pirate_shanghai_choose_minion',
+        '选择要移动的对手随从', options, // ✅ 直接使用 options
+        'pirate_shanghai_choose_minion',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -471,8 +482,7 @@ function piratePowderkeg(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `pirate_powderkeg_${ctx.now}`, ctx.playerId,
-        '选择要牺牲的己方随从（同基地力量≤它的随从也会被消灭）', buildMinionTargetOptions(options), 'pirate_powderkeg',
+        `pirate_powderkeg_${ctx.now}`, ctx.playerId, { sourceId: '选择要牺牲的己方随从（同基地力量≤它的随从也会被消灭）', targetType: 'minion' }, buildMinionTargetOptions(options), 'pirate_powderkeg'
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -501,8 +511,7 @@ function buildMoveToBaseInteraction(
     }
     if (candidates.length === 0) return null;
     const interaction = createSimpleChoice(
-        `${interactionIdPrefix}_base_${now}`, playerId,
-        '选择目标基地', buildBaseTargetOptions(candidates, state), sourceId,
+        `${interactionIdPrefix}_base_${now}`, playerId, { sourceId: '选择目标基地', targetType: 'base' }, buildBaseTargetOptions(candidates, state), sourceId
     );
     return {
         ...interaction,
@@ -539,14 +548,18 @@ export function registerPirateInteractionHandlers(): void {
         return { state, events };
     });
 
-    // 加农炮第一步：消灭第一个目标，如有剩余则链式选第二个
+    // 加农炮第一步：消灭第一个目标，显示第二个选择（带跳过）
     registerInteractionHandler('pirate_cannon_choose_first', (state, playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
         if (!target) return undefined;
+        
+        // 消灭第一个随从
         const events: SmashUpEvent[] = [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'pirate_cannon', timestamp)];
+        
+        // 收集剩余的力量≤2的随从（排除刚消灭的）
         const remaining: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
             for (const m of state.core.bases[i].minions) {
@@ -561,20 +574,24 @@ export function registerPirateInteractionHandlers(): void {
                 }
             }
         }
+        
+        // 没有剩余目标，直接结束
         if (remaining.length === 0) return { state, events };
+        
+        // 显示第二个选择（带跳过按钮）
         const next = createSimpleChoice(
             `pirate_cannon_second_${timestamp}`, playerId,
-            '选择第二个要消灭的力量≤2的随从（可选）',
+            '加农炮：点击第二个要消灭的力量≤2的随从（可选）',
             [
                 { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } },
                 ...buildMinionTargetOptions(remaining),
             ] as any[],
-            'pirate_cannon_choose_second',
+            'pirate_cannon_choose_second'
         );
         return { state: queueInteraction(state, next), events };
     });
 
-    // 加农炮第二步（支持跳过）
+    // 加农炮第二步：消灭第二个随从（支持跳过）
     registerInteractionHandler('pirate_cannon_choose_second', (state, _playerId, value, _iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
         if (selected.skip) return { state, events: [] };
@@ -633,8 +650,7 @@ export function registerPirateInteractionHandlers(): void {
         }
         if (candidates.length === 0) return { state, events: [] };
         const next = createSimpleChoice(
-            `pirate_sea_dogs_from_${timestamp}`, playerId,
-            '选择来源基地（移动该派系所有对手随从）', buildBaseTargetOptions(candidates, state.core), 'pirate_sea_dogs_choose_from',
+            `pirate_sea_dogs_from_${timestamp}`, playerId, { sourceId: '选择来源基地（移动该派系所有对手随从）', targetType: 'base' }, buildBaseTargetOptions(candidates, state.core), 'pirate_sea_dogs_choose_from'
         );
         (next.data as any).continuationContext = { factionId };
         return { state: queueInteraction(state, next), events: [] };
@@ -653,14 +669,13 @@ export function registerPirateInteractionHandlers(): void {
         }
         if (destCandidates.length === 0) return { state, events: [] };
         const next = createSimpleChoice(
-            `pirate_sea_dogs_to_${timestamp}`, playerId,
-            '选择目标基地', buildBaseTargetOptions(destCandidates, state.core), 'pirate_sea_dogs_choose_to',
+            `pirate_sea_dogs_to_${timestamp}`, playerId, { sourceId: '选择目标基地', targetType: 'base' }, buildBaseTargetOptions(destCandidates, state.core), 'pirate_sea_dogs_choose_to'
         );
         (next.data as any).continuationContext = { factionId: ctx.factionId, fromBase };
         return { state: queueInteraction(state, next), events: [] };
     });
 
-    // 海狗第三步：选择目标基地后，批量移动
+    // 海狗第三步：选择目标基地后，批量移动（只移动不受保护的随从）
     registerInteractionHandler('pirate_sea_dogs_choose_to', (state, playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
         const ctx = (iData as any)?.continuationContext as { factionId: string; fromBase: number };
@@ -672,6 +687,8 @@ export function registerPirateInteractionHandlers(): void {
             if (m.controller === playerId) continue;
             const def = getCardDef(m.defId);
             if (def?.faction !== ctx.factionId) continue;
+            // 检查是否受保护（手动检查，因为这里是批量移动而非构建选项）
+            if (isMinionProtected(state.core, m, ctx.fromBase, playerId, 'affect')) continue;
             events.push(moveMinion(m.uid, m.defId, ctx.fromBase, destBase, 'pirate_sea_dogs', timestamp));
         }
         return { state, events };
@@ -718,13 +735,12 @@ export function registerPirateInteractionHandlers(): void {
         }
         if (remaining.length === 0) return { state, events };
         const next = createSimpleChoice(
-            `pirate_dinghy_second_${timestamp}`, playerId,
-            '选择第二个要移动的随从（可选）',
+            `pirate_dinghy_second_${timestamp}`, playerId, { sourceId: '选择第二个要移动的随从（可选）', targetType: 'minion' },
             [
                 { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
                 ...buildMinionTargetOptions(remaining),
             ] as any[],
-            'pirate_dinghy_choose_second',
+            'pirate_dinghy_choose_second'
         );
         return { state: queueInteraction(state, next), events };
     });

@@ -418,6 +418,12 @@ export function executeCommand(
           const healAttackType = getAttackType(workingCore, attacker, target);
           const healDiceResults = rollDice(healStrength, () => random.random());
 
+          // 计算治疗量：所有 melee（剑⚔️）和 special（斧🪓）标记的总数
+          const healAmount = healDiceResults
+            .flatMap(r => r.marks)
+            .filter(mark => mark === 'melee' || mark === 'special')
+            .length;
+
           events.push({
             type: SW_EVENTS.UNIT_ATTACKED,
             payload: {
@@ -426,12 +432,10 @@ export function executeCommand(
               attackType: healAttackType, diceCount: healStrength,
               baseStrength: attackerUnit.card.strength,
               diceResults: healDiceResults, hits: 0,
+              healingMode: true, healAmount,
             },
             timestamp,
           });
-
-          // 计算治疗量：melee 面数量
-          const healAmount = healDiceResults.filter(r => r === 'melee').length;
           if (healAmount > 0) {
             events.push({
               type: SW_EVENTS.UNIT_HEALED,
@@ -451,13 +455,19 @@ export function executeCommand(
         const diceResults = rollDice(effectiveStrength, () => random.random());
         let hits = countHits(diceResults, attackType);
 
-        // 冰霜战斧：附加了frost_axe的单位攻击时，⚔️面始终计为命中
+        // 冰霜战斧：special = 2个melee（每个 special 标记算作2个近战命中）
         if (attackerUnit.attachedUnits?.some(au => au.card.abilities?.includes('frost_axe'))) {
-          hits = diceResults.filter(f => f === 'melee' || f === attackType).length;
+          hits = diceResults
+            .flatMap(r => r.marks)
+            .reduce((sum, mark) => {
+              if (mark === attackType) return sum + 1;
+              if (mark === 'special') return sum + 2;
+              return sum;
+            }, 0);
         }
         
         // 迷魂减伤：检查攻击者相邻是否有敌方掷术师（evasion）
-        const hasSpecialDice = diceResults.some(r => r === 'special');
+        const hasSpecialDice = diceResults.some(r => r.marks.includes('special'));
         if (hasSpecialDice) {
           const evasionUnits = getEvasionUnits(workingCore, attacker, attackerUnit.owner);
           if (evasionUnits.length > 0) {
@@ -487,28 +497,35 @@ export function executeCommand(
           for (let row = 0; row < BOARD_ROWS; row++) {
             for (let col = 0; col < BOARD_COLS; col++) {
               const shieldUnit = workingCore.board[row]?.[col]?.unit;
-              if (shieldUnit && shieldUnit.owner === targetOwner
-                && getUnitAbilities(shieldUnit, workingCore).includes('divine_shield')
-                && manhattanDistance({ row, col }, target) <= 3) {
-                // 投掷2个骰子，计算 melee（❤️）数量
-                const shieldDice = rollDice(2, () => random.random());
-                const shieldMelee = shieldDice.filter(r => r === 'melee').length;
-                if (shieldMelee > 0) {
-                  const reduction = Math.min(shieldMelee, hits - 1); // 战力最少为1
-                  if (reduction > 0) {
-                    hits = hits - reduction;
-                    events.push({
-                      type: SW_EVENTS.DAMAGE_REDUCED,
-                      payload: {
-                        sourceUnitId: shieldUnit.instanceId,
-                        sourcePosition: { row, col },
-                        value: reduction,
-                        condition: 'divine_shield',
-                        sourceAbilityId: 'divine_shield',
-                        shieldDice,
-                      },
-                      timestamp,
-                    });
+              if (shieldUnit && shieldUnit.owner === targetOwner) {
+                const abilities = getUnitAbilities(shieldUnit, workingCore);
+                if (abilities.includes('divine_shield')) {
+                  const dist = manhattanDistance({ row, col }, target);
+                  if (dist <= 3) {
+                    // 投掷2个骰子，计算所有 special（❤️斧🪓）标记数量
+                    const shieldDice = rollDice(2, () => random.random());
+                    const shieldSpecial = shieldDice
+                      .flatMap(r => r.marks)
+                      .filter(mark => mark === 'special')
+                      .length;
+                    if (shieldSpecial > 0) {
+                      const reduction = Math.min(shieldSpecial, hits - 1); // 战力最少为1
+                      if (reduction > 0) {
+                        hits = hits - reduction;
+                        events.push({
+                          type: SW_EVENTS.DAMAGE_REDUCED,
+                          payload: {
+                            sourceUnitId: shieldUnit.instanceId,
+                            sourcePosition: { row, col },
+                            value: reduction,
+                            condition: 'divine_shield',
+                            sourceAbilityId: 'divine_shield',
+                            shieldDice,
+                          },
+                          timestamp,
+                        });
+                      }
+                    }
                   }
                 }
               }
@@ -626,13 +643,16 @@ export function executeCommand(
           }
         }
         
-        // 狱火铸剑诅咒效果
+        // 狱火铸剑诅咒效果：攻击后对自己造成等于所掷出⚔（斧🪓special）数量的伤害
         if (hasHellfireBlade(attackerUnit)) {
-          const meleeHits = diceResults.filter(r => r === 'melee').length;
-          if (meleeHits > 0) {
+          const specialHits = diceResults
+            .flatMap(r => r.marks)
+            .filter(mark => mark === 'special')
+            .length;
+          if (specialHits > 0) {
             events.push({
               type: SW_EVENTS.UNIT_DAMAGED,
-              payload: { position: attacker, damage: meleeHits, reason: 'curse', sourcePlayerId: playerId },
+              payload: { position: attacker, damage: specialHits, reason: 'curse', sourcePlayerId: playerId },
               timestamp,
             });
           }

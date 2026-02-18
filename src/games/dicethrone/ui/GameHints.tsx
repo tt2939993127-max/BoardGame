@@ -11,7 +11,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
-import type { PendingInteraction, TurnPhase } from '../domain/types';
+import type { InteractionDescriptor, TurnPhase } from '../domain/types';
 import { UI_Z_INDEX } from '../../../core';
 import { GameButton } from './components/GameButton';
 
@@ -26,7 +26,7 @@ export interface GameHintsProps {
     /** 是否为交互所有者 */
     isInteractionOwner: boolean;
     /** 待处理交互 */
-    pendingInteraction?: PendingInteraction;
+    pendingInteraction?: InteractionDescriptor;
 
     /** 是否在等待对手 */
     isWaitingOpponent: boolean;
@@ -78,7 +78,7 @@ const DiscardHint: React.FC<{ mustDiscardCount: number }> = ({ mustDiscardCount 
 /**
  * 骰子交互提示（画面顶部中央）
  */
-const DiceInteractionHint: React.FC<{ pendingInteraction: PendingInteraction }> = ({ pendingInteraction }) => {
+const DiceInteractionHint: React.FC<{ pendingInteraction: InteractionDescriptor }> = ({ pendingInteraction }) => {
     const { t } = useTranslation('game-dicethrone');
 
     return (

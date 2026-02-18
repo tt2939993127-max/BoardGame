@@ -8,7 +8,7 @@
 import { useMemo } from 'react';
 import type { PlayerId, MatchState, ResponseWindowState } from '../../../engine/types';
 import { asSimpleChoice, type SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
-import type { HeroState, Die, TurnPhase, PendingAttack, PendingInteraction } from '../types';
+import type { HeroState, Die, TurnPhase, PendingAttack, InteractionDescriptor } from '../types';
 import type { DiceThroneCore } from '../domain';
 import { getAvailableAbilityIds, getDefensiveAbilityIds, canAdvancePhase as canAdvancePhaseDomain } from '../domain/rules';
 
@@ -51,7 +51,7 @@ export function getFocusPlayerId(state: EngineState): PlayerId {
     // 3. 交互（骰子修改等）的所有者（从 sys.interaction 读取）
     const cardInteraction = sys.interaction.current;
     if (cardInteraction?.kind === 'dt:card-interaction') {
-        return (cardInteraction.data as PendingInteraction).playerId;
+        return (cardInteraction.data as InteractionDescriptor).playerId;
     }
     
     // 4. 交互（选择）的目标玩家

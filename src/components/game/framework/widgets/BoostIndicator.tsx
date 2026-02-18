@@ -39,6 +39,8 @@ export interface BoostEntry {
   color: string;
   /** 发光颜色（RGBA 字符串） */
   glow: string;
+  /** 可选：鼠标悬停时显示的来源说明（多行用 \n 分隔） */
+  tooltip?: string;
 }
 
 /** 指示器位置 */
@@ -94,11 +96,11 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
 
   return (
     <div
-      className={`absolute ${posClass} flex gap-[0.15vw] pointer-events-none`}
+      className={`absolute ${posClass} flex gap-[0.15vw]`}
       style={{ zIndex, [verticalProp]: `${bottomOffset}%` }}
     >
-      {activeBoosts.map(boost => (
-        Array.from({ length: boost.count }, (_, i) => {
+      {activeBoosts.map(boost => {
+        const icons = Array.from({ length: boost.count }, (_, i) => {
           const Icon = boost.icon;
           return (
             <Icon
@@ -108,8 +110,32 @@ export const BoostIndicator: React.FC<BoostIndicatorProps> = ({
               strokeWidth={2.5}
             />
           );
-        })
-      ))}
+        });
+
+        // 如果有 tooltip，包装在可交互容器中
+        if (boost.tooltip) {
+          return (
+            <div
+              key={boost.type}
+              className="relative group pointer-events-auto cursor-help flex gap-[0.15vw]"
+              title={boost.tooltip}
+            >
+              {icons}
+              {/* 悬停提示框 */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black/90 text-white text-[0.7vw] rounded whitespace-pre-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 min-w-max">
+                {boost.tooltip}
+              </div>
+            </div>
+          );
+        }
+
+        // 无 tooltip 时保持原有行为（pointer-events-none）
+        return (
+          <div key={boost.type} className="flex gap-[0.15vw] pointer-events-none">
+            {icons}
+          </div>
+        );
+      })}
     </div>
   );
 };

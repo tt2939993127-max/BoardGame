@@ -12,6 +12,7 @@
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { waitForState } from './helpers/waitForState';
 import {
   initContext,
   setEnglishLocale,

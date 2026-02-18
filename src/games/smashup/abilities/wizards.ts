@@ -202,6 +202,17 @@ function wizardPortal(ctx: AbilityContext): AbilityResult {
         '传送：选择要放入手牌的随从（可以不选）', options, 'wizard_portal_pick',
         undefined, { min: 0, max: minions.length },
     );
+    // 手动提供 optionsGenerator：从牌库顶过滤随从
+    (interaction.data as any).optionsGenerator = (state: any) => {
+        const p = state.core.players[ctx.playerId];
+        const top5 = p.deck.slice(0, 5);
+        const minionCards = top5.filter((c: any) => c.type === 'minion');
+        return minionCards.map((c: any, i: number) => {
+            const def = getCardDef(c.defId);
+            const name = def?.name ?? c.defId;
+            return { id: `minion-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        });
+    };
     const allTopCards = topCards.map(c => ({ uid: c.uid, defId: c.defId, type: c.type }));
     return {
         events: [revealEvt],
@@ -242,6 +253,16 @@ function wizardPortalOrderRemaining(
         '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options, 'wizard_portal_order',
     );
     const remainingUids = remaining.map(c => ({ uid: c.uid, defId: c.defId }));
+    // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
+    (interaction.data as any).optionsGenerator = (state: any, iData: any) => {
+        const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
+        if (!ctx || !ctx.remaining) return [];
+        return ctx.remaining.map((c: any, i: number) => {
+            const def = getCardDef(c.defId);
+            const name = def?.name ?? c.defId;
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        });
+    };
     return {
         events: drawEvents,
         matchState: queueInteraction(ctx.matchState, {
@@ -333,8 +354,9 @@ function wizardSacrifice(ctx: AbilityContext): AbilityResult {
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
         `wizard_sacrifice_${ctx.now}`, ctx.playerId,
-        '选择要牺牲的随从（抽取等量力量的牌）', buildMinionTargetOptions(options),
-        { sourceId: 'wizard_sacrifice', autoCancelOption: true },
+        '选择要牺牲的随从（抽取等量力量的牌）',
+        buildMinionTargetOptions(options),
+        { sourceId: 'wizard_sacrifice', targetType: 'minion', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -576,6 +598,16 @@ export function registerWizardInteractionHandlers(): void {
             `wizard_portal_order_${timestamp}`, playerId,
             '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options, 'wizard_portal_order',
         );
+        // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
+        (next.data as any).optionsGenerator = (state: any, iData: any) => {
+            const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
+            if (!ctx || !ctx.remaining) return [];
+            return ctx.remaining.map((c: any, i: number) => {
+                const def = getCardDef(c.defId);
+                const name = def?.name ?? c.defId;
+                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            });
+        };
         return {
             state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered: [] } } }),
             events,
@@ -613,6 +645,16 @@ export function registerWizardInteractionHandlers(): void {
             `wizard_portal_order_${timestamp}`, playerId,
             `传送：选择下一张放回牌库顶的牌（已选 ${ordered.length} 张）`, options, 'wizard_portal_order',
         );
+        // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
+        (next.data as any).optionsGenerator = (state: any, iData: any) => {
+            const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
+            if (!ctx || !ctx.remaining) return [];
+            return ctx.remaining.map((c: any, i: number) => {
+                const def = getCardDef(c.defId);
+                const name = def?.name ?? c.defId;
+                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            });
+        };
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered } } }), events: [] };
     });
 

@@ -309,7 +309,7 @@ describe('GameTransportServer（离座与重连）', () => {
 
         await serverInternal.runOfflineAdjudication(match, '0');
 
-        expect(lastCommandType).toBe('CANCEL_INTERACTION');
+        expect(lastCommandType).toBe('SYS_INTERACTION_CANCEL'); // 已迁移到 InteractionSystem
     });
 
     it.each([

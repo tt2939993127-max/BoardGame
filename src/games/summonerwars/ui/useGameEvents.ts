@@ -89,6 +89,14 @@ export interface MindCaptureModeState {
   hits: number;
 }
 
+/** 抓附跟随模式状态 */
+export interface GrabFollowModeState {
+  grabberUnitId: string;
+  grabberPosition: CellCoord;
+  movedUnitId: string;
+  movedTo: CellCoord;
+}
+
 /** 攻击后技能模式状态（念力/高阶念力/读心传念） */
 export interface AfterAttackAbilityModeState {
   abilityId: 'telekinesis' | 'high_telekinesis' | 'mind_transmission';
@@ -184,6 +192,9 @@ export function useGameEvents({
   // 攻击后技能模式（念力/高阶念力/读心传念）
   const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
 
+  // 抓附跟随确认模式
+  const [grabFollowMode, setGrabFollowMode] = useState<GrabFollowModeState | null>(null);
+
   // 连续射击确认模式
   const [rapidFireMode, setRapidFireMode] = useState<RapidFireModeState | null>(null);
 
@@ -261,6 +272,7 @@ export function useGameEvents({
       setAfterAttackAbilityMode(null);
       setRapidFireMode(null);
       setWithdrawTrigger(null);
+      setGrabFollowMode(null);
       gateRef.current.reset();
     }
 
@@ -409,6 +421,27 @@ export function useGameEvents({
               });
             });
           }
+        }
+      }
+
+      // 抓附跟随请求（交互类：通过 gate 调度）
+      if (event.type === SW_EVENTS.GRAB_FOLLOW_REQUESTED) {
+        const p = event.payload as {
+          grabberUnitId: string; grabberPosition: CellCoord;
+          movedUnitId: string; movedTo: CellCoord;
+        };
+        // 检查抓附手是否是我的单位
+        const grabberUnit = core.board[p.grabberPosition.row]?.[p.grabberPosition.col]?.unit;
+        if (grabberUnit && grabberUnit.owner === myPlayerId) {
+          const captured = {
+            grabberUnitId: p.grabberUnitId,
+            grabberPosition: p.grabberPosition,
+            movedUnitId: p.movedUnitId,
+            movedTo: p.movedTo,
+          };
+          gateRef.current.scheduleInteraction(() => {
+            setGrabFollowMode(captured);
+          });
         }
       }
 
@@ -717,6 +750,8 @@ export function useGameEvents({
     setAfterAttackAbilityMode,
     rapidFireMode,
     setRapidFireMode,
+    grabFollowMode,
+    setGrabFollowMode,
     withdrawTrigger,
     setWithdrawTrigger,
     pendingAttackRef,

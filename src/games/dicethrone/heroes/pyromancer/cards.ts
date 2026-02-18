@@ -84,7 +84,7 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
                     conditionalEffects: [
                         { face: PYROMANCER_DICE_FACE_IDS.FIRE, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 }, effectKey: 'bonusDie.effect.infernalEmbrace.fire' },
                     ],
-                    defaultEffect: { drawCard: 1 },
+                    defaultEffect: { drawCard: 1, effectKey: 'bonusDie.effect.infernalEmbrace.1' },
                 },
                 timing: 'immediate'
             }
@@ -143,10 +143,10 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
                     target: 'self',
                     diceCount: 1,
                     conditionalEffects: [
-                        { face: PYROMANCER_DICE_FACE_IDS.FIRE, bonusDamage: 3 },
-                        { face: PYROMANCER_DICE_FACE_IDS.MAGMA, grantStatus: { statusId: STATUS_IDS.BURN, value: 1 } },
-                        { face: PYROMANCER_DICE_FACE_IDS.FIERY_SOUL, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 } },
-                        { face: PYROMANCER_DICE_FACE_IDS.METEOR, grantStatus: { statusId: STATUS_IDS.KNOCKDOWN, value: 1 } },
+                        { face: PYROMANCER_DICE_FACE_IDS.FIRE, bonusDamage: 3, effectKey: 'bonusDie.effect.fire' },
+                        { face: PYROMANCER_DICE_FACE_IDS.MAGMA, grantStatus: { statusId: STATUS_IDS.BURN, value: 1 }, effectKey: 'bonusDie.effect.magma' },
+                        { face: PYROMANCER_DICE_FACE_IDS.FIERY_SOUL, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 }, effectKey: 'bonusDie.effect.fiery_soul' },
+                        { face: PYROMANCER_DICE_FACE_IDS.METEOR, grantStatus: { statusId: STATUS_IDS.KNOCKDOWN, value: 1 }, effectKey: 'bonusDie.effect.meteor' },
                     ]
                 },
                 timing: 'withDamage'

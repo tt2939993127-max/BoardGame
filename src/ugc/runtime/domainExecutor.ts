@@ -240,7 +240,7 @@ export class RuntimeDomainExecutor {
         })();
       `;
       const sandboxEntries = Object.entries(sandbox).filter(([key]) => key !== 'import');
-      // eslint-disable-next-line no-new-func
+       
       const executor = new Function(...sandboxEntries.map(([key]) => key), wrappedCode);
       const result = executor(...sandboxEntries.map(([, value]) => value));
       if (!result || typeof result !== 'object') {

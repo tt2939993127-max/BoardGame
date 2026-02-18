@@ -144,10 +144,7 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             || type === 'SYS_PHASE_CHANGED';
 
         const traceSelectionAudio = (action: string, key: string | null, reason: string) => {
-            if (!shouldTraceSelectionAudio) return;
-            console.log(
-                `[DT_AUDIO_TRACE] source=feedback_resolver action=${action} type=${type} key=${key ?? 'null'} reason=${reason} eventPlayerId=${eventPlayerId ?? 'none'} currentPlayerId=${currentPlayerId ?? 'none'} turnNumber=${G.turnNumber}`
-            );
+            // 音频追踪日志已移除
         };
 
         if (type === 'CHARACTER_SELECTED') {

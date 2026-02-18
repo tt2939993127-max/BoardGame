@@ -7,6 +7,9 @@ import { ManifestGameThumbnail } from '../lobby/thumbnails';
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+        i18n: {
+            language: 'zh-CN',
+        },
     }),
 }));
 
@@ -38,8 +41,8 @@ describe('ManifestGameThumbnail', () => {
         const manifest = buildManifest({ thumbnailPath: 'demo/thumbnails/cover' });
         const html = renderToStaticMarkup(<ManifestGameThumbnail manifest={manifest} />);
         expect(html).toContain('<picture>');
-        // 优化图片会自动指向 compressed/ 目录（avif/webp）
-        expect(html).toContain('src="/assets/demo/thumbnails/compressed/cover.webp"');
+        // 优化图片会自动指向 i18n/zh-CN/ 和 compressed/ 目录（avif/webp）
+        expect(html).toContain('src="/assets/i18n/zh-CN/demo/thumbnails/compressed/cover.webp"');
         expect(html).toContain('image/avif');
     });
 });

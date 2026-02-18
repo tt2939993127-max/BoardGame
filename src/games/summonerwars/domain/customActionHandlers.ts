@@ -67,13 +67,16 @@ swCustomActionRegistry.register('mind_capture_check', ({ ctx, timestamp }) => [{
     timestamp,
 }]);
 
-// --- 裁决抓牌（圣骑士） ---
+// --- 裁决抓牌（圣骑士）：攻击后抓取等于所掷出 special 数量的卡牌 ---
 swCustomActionRegistry.register('judgment_draw', ({ ctx, timestamp }) => {
-    const meleeCount = (ctx.diceResults ?? []).filter(r => r === 'melee').length;
-    if (meleeCount <= 0) return [];
+    const specialCount = (ctx.diceResults ?? [])
+      .flatMap(r => r.marks)
+      .filter(mark => mark === 'special')
+      .length;
+    if (specialCount <= 0) return [];
     return [{
         type: SW_EVENTS.CARD_DRAWN,
-        payload: { playerId: ctx.ownerId, count: meleeCount, sourceAbilityId: 'judgment' },
+        payload: { playerId: ctx.ownerId, count: specialCount, sourceAbilityId: 'judgment' },
         timestamp,
     }];
 });

@@ -183,8 +183,21 @@ export function validateCommand(
     case SW_COMMANDS.DECLARE_ATTACK: {
       const attackerPos = payload.attacker as CellCoord;
       const targetPos = payload.target as CellCoord;
-      if (core.phase !== 'attack') return { valid: false, error: '当前不是攻击阶段' };
+      
+      // ✅ 检查是否有跨阶段攻击权限（群情激愤）
+      const player = core.players[playerId];
+      const hasRallyingCry = player.activeEvents.some(
+        e => getBaseCardId(e.id) === CARD_IDS.BARBARIC_RALLYING_CRY && e.isActive
+      );
+      
+      // ✅ 检查攻击者是否有额外攻击（洞穴地精群情激愤/连续射击等授予的 extraAttacks）
       const attacker = getUnitAt(core, attackerPos);
+      const attackerHasExtraAttacks = attacker && (attacker.extraAttacks ?? 0) > 0;
+      
+      if (core.phase !== 'attack' && !hasRallyingCry && !attackerHasExtraAttacks) {
+        return { valid: false, error: '当前不是攻击阶段' };
+      }
+      
       if (!attacker || attacker.owner !== playerId) return { valid: false, error: '无法使用该单位攻击' };
       if (attacker.hasAttacked) return { valid: false, error: '该单位本回合已攻击' };
       // 凶残单位或有额外攻击的单位不受3次攻击限制

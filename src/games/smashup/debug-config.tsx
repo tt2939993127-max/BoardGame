@@ -20,7 +20,6 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
 
     const [dealPlayer, setDealPlayer] = useState<string>('0');
     const [deckIndex, setDeckIndex] = useState<number>(0);
-    const [selectedBaseIndex, setSelectedBaseIndex] = useState<number>(0);
 
     const player = core?.players?.[dealPlayer as '0' | '1'];
     const playerDeck = player?.deck ?? [];
@@ -33,11 +32,6 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
         return def ? resolveCardDisplayName(def, t) : defId;
     };
 
-    const getBaseName = (defId: string): string => {
-        // 简化基地名称显示
-        return defId.replace('base_', '').replace(/_/g, ' ');
-    };
-
     return (
         <div className="space-y-4">
             {/* 刷新基地调试 */}
@@ -47,41 +41,13 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
                     <div className="text-[9px] text-blue-600 mb-2">
                         场上基地: {core?.bases?.length ?? 0} 个 | 基地牌库: {core?.baseDeck?.length ?? 0} 张
                     </div>
-                    <select 
-                        value={selectedBaseIndex} 
-                        onChange={(e) => setSelectedBaseIndex(Number(e.target.value))} 
-                        className="w-full px-2 py-1.5 text-xs border border-blue-300 rounded bg-white text-gray-900"
-                        data-testid="su-debug-base-select"
-                    >
-                        {(core?.bases ?? []).map((base, idx) => (
-                            <option key={idx} value={idx}>
-                                基地 {idx}: {getBaseName(base.defId)} ({base.minions.length} 随从, {base.ongoingActions.length} 行动)
-                            </option>
-                        ))}
-                    </select>
-                    <div className="text-[9px] text-blue-700 bg-blue-100 p-2 rounded">
+                    <div className="text-[9px] text-blue-700 bg-blue-100 p-2 rounded mb-2">
                         {core?.baseDeck && core.baseDeck.length > 0 ? (
-                            <>下一张基地: {getBaseName(core.baseDeck[0])}</>
+                            <>💡 点击场上基地可刷新单个，或点击下方按钮刷新全部</>
                         ) : (
                             <span className="text-red-500">基地牌库为空</span>
                         )}
                     </div>
-                    <button
-                        onClick={() => {
-                            console.log('[刷新基地] 点击刷新按钮:', {
-                                baseIndex: selectedBaseIndex,
-                                currentBase: core?.bases?.[selectedBaseIndex]?.defId,
-                                nextBase: core?.baseDeck?.[0],
-                                baseDeckLength: core?.baseDeck?.length,
-                            });
-                            dispatch('SYS_CHEAT_REFRESH_BASE', { baseIndex: selectedBaseIndex });
-                        }}
-                        disabled={!core?.baseDeck || core.baseDeck.length === 0}
-                        className="w-full px-3 py-1.5 bg-blue-500 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        data-testid="su-debug-refresh-base-apply"
-                    >
-                        🔄 刷新基地 {selectedBaseIndex}
-                    </button>
                     <button
                         onClick={() => {
                             console.log('[刷新所有基地] 点击刷新按钮:', {

@@ -181,7 +181,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'hand-area',
             position: 'top',
             requireAction: true,
-            allowedCommands: ['PLAY_CARD', 'MODIFY_DIE'],
+            allowedCommands: ['PLAY_CARD', 'SYS_INTERACTION_RESPOND'],
             advanceOnEvents: [
                 { type: 'DIE_MODIFIED' },
             ],
@@ -192,7 +192,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-confirm-button',
             position: 'left',
             requireAction: true,
-            allowedCommands: ['CONFIRM_ROLL', 'CONFIRM_INTERACTION'],
+            allowedCommands: ['CONFIRM_ROLL', 'SYS_INTERACTION_RESPOND'],
             advanceOnEvents: [{ type: 'ROLL_CONFIRMED' }],
         },
         {

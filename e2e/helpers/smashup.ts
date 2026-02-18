@@ -61,21 +61,76 @@ export async function createSmashUpRoomViaAPI(page: Page): Promise<string | null
 // ============================================================================
 
 /** 等待派系选择界面出现 */
-export async function waitForFactionDraft(page: Page, timeout = 30000) {
-    await page.waitForSelector('h1:has-text("Draft Your Factions"), [data-testid="faction-draft"]', { timeout });
+export async function waitForFactionDraft(page: Page, timeout = 60000) {
+    console.log('[SmashUp] 开始等待派系选择界面...');
+    
+    // 先检查页面 URL
+    const url = page.url();
+    console.log('[SmashUp] 当前页面 URL:', url);
+    
+    // 检查页面内容
+    const pageContent = await page.evaluate(() => {
+        const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent);
+        const testIds = Array.from(document.querySelectorAll('[data-testid]')).map(el => el.getAttribute('data-testid'));
+        return { h1s, testIds, bodyText: document.body.innerText.substring(0, 500) };
+    });
+    console.log('[SmashUp] 页面内容:', JSON.stringify(pageContent, null, 2));
+    
+    // 等待派系选择界面的任一标识元素
+    try {
+        await Promise.race([
+            page.waitForSelector('h1:has-text("Draft Your Factions")', { timeout }),
+            page.waitForSelector('h1:has-text("选择派系")', { timeout }),
+            page.waitForSelector('[data-testid="faction-draft"]', { timeout }),
+        ]);
+        console.log('[SmashUp] ✅ 派系选择界面已找到');
+    } catch (error) {
+        console.error('[SmashUp] ❌ 等待派系选择界面超时');
+        console.error('[SmashUp] 错误详情:', error);
+        
+        // 截图保存当前页面状态
+        await page.screenshot({ path: 'test-results/faction-draft-timeout.png', fullPage: true });
+        console.log('[SmashUp] 已保存截图: test-results/faction-draft-timeout.png');
+        
+        throw error;
+    }
 }
 
 /** 通过 UI 选择派系（按索引） */
 export async function selectFaction(page: Page, factionIndex: number) {
-    const factionCards = page.locator('.grid > div');
-    await factionCards.nth(factionIndex).click({ force: true });
+    console.log(`[SmashUp] 选择派系索引: ${factionIndex}`);
+    
+    // 1. 点击派系卡牌打开详情弹窗
+    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') }); // 排除已被选择的
+    const count = await factionCards.count();
+    console.log(`[SmashUp] 找到 ${count} 个可选派系卡牌`);
+    
+    if (count === 0) {
+        console.error('[SmashUp] ❌ 没有找到可选派系卡牌！');
+        await page.screenshot({ path: `test-results/no-faction-cards-${Date.now()}.png`, fullPage: true });
+        throw new Error('没有找到可选派系卡牌');
+    }
+    
+    await factionCards.nth(factionIndex).click();
+    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}，等待详情弹窗...`);
+    
+    // 2. 等待详情弹窗出现
+    await page.waitForSelector('button:has-text("Confirm"), button:has-text("确认")', { timeout: 5000 });
+    console.log('[SmashUp] ✅ 详情弹窗已打开');
+    
+    // 3. 点击弹窗中的确认按钮
+    const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("确认")').first();
+    await confirmButton.click();
+    console.log(`[SmashUp] ✅ 已确认选择派系 ${factionIndex}`);
+    
+    // 4. 等待弹窗关闭
     await page.waitForTimeout(500);
 }
 
-/** 确认派系选择 */
+/** 确认派系选择（已废弃 - 现在在 selectFaction 中完成） */
 export async function confirmFactionSelection(page: Page) {
-    await page.click('button:has-text("Confirm"), button:has-text("确认")', { force: true });
-    await page.waitForTimeout(1000);
+    // 这个函数现在是空的，因为确认逻辑已经移到 selectFaction 中
+    console.log('[SmashUp] confirmFactionSelection 已废弃，确认逻辑在 selectFaction 中完成');
 }
 
 /**
@@ -91,19 +146,32 @@ export async function completeFactionSelection(
     hostFactions: [number, number] = [0, 1],
     guestFactions: [number, number] = [2, 3],
 ) {
+    console.log('[SmashUp] 开始派系选择流程...');
+    console.log('[SmashUp] Host 派系:', hostFactions);
+    console.log('[SmashUp] Guest 派系:', guestFactions);
+    
     // 等待双方都看到派系选择界面
+    console.log('[SmashUp] 等待 Host 派系选择界面...');
     await waitForFactionDraft(hostPage);
+    
+    console.log('[SmashUp] 等待 Guest 派系选择界面...');
     await waitForFactionDraft(guestPage);
 
     // Host 选择两个派系
+    console.log('[SmashUp] Host 开始选择派系...');
     await selectFaction(hostPage, hostFactions[0]);
     await selectFaction(hostPage, hostFactions[1]);
     await confirmFactionSelection(hostPage);
+    console.log('[SmashUp] Host 派系选择完成');
 
     // Guest 选择两个派系
+    console.log('[SmashUp] Guest 开始选择派系...');
     await selectFaction(guestPage, guestFactions[0]);
     await selectFaction(guestPage, guestFactions[1]);
     await confirmFactionSelection(guestPage);
+    console.log('[SmashUp] Guest 派系选择完成');
+    
+    console.log('[SmashUp] ✅ 派系选择流程完成');
 }
 
 /** 等待 SmashUp 棋盘 UI 就绪 */
@@ -209,9 +277,24 @@ export async function setupSmashUpOnlineMatch(
         return null;
     }
     await seedMatchCredentials(guestContext, GAME_NAME, matchId, '1', guestCredentials);
+    console.log('[SmashUp] Guest 导航到对局页面...');
     await guestPage.goto(`/play/${GAME_NAME}/match/${matchId}?playerID=1`, { waitUntil: 'domcontentloaded' });
+    
+    // 等待页面加载完成
+    console.log('[SmashUp] 等待 Guest 页面加载...');
+    await guestPage.waitForTimeout(2000); // 给页面一些时间渲染
+    
+    // 检查页面是否真的加载了
+    const guestPageLoaded = await guestPage.evaluate(() => {
+        return {
+            hasBody: !!document.body,
+            bodyText: document.body?.innerText?.substring(0, 200),
+            h1Count: document.querySelectorAll('h1').length,
+        };
+    });
+    console.log('[SmashUp] Guest 页面加载状态:', JSON.stringify(guestPageLoaded, null, 2));
 
-    // 完成派系选择
+    // 完成派系选择（waitForFactionDraft 内部会等待派系选择界面加载）
     await completeFactionSelection(
         hostPage,
         guestPage,

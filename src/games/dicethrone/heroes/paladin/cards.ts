@@ -130,7 +130,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
                 conditionalEffects: [
                     { face: PALADIN_FACES.PRAY, cp: 4, effectKey: 'bonusDie.effect.godsGrace.pray' },
                 ],
-                defaultEffect: { drawCard: 1 },
+                defaultEffect: { drawCard: 1, effectKey: 'bonusDie.effect.default' },
             },
             timing: 'immediate'
         }]

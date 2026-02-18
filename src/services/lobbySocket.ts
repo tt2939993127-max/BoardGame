@@ -146,24 +146,6 @@ class LobbySocketService {
         }
     }
 
-    private handleVersionRollback(gameId: LobbyGameId, version: number, context: string): boolean {
-        const state = this.getState(gameId);
-        if (!state) return false;
-        if (version < state.version) {
-            console.warn('[LobbySocket] 版本回退，强制刷新', {
-                context,
-                gameId,
-                version,
-                current: state.version,
-            });
-            state.matches = [];
-            state.version = -1;
-            this.requestRefresh(gameId);
-            return true;
-        }
-        return false;
-    }
-
     /**
      * 连接到大厅 Socket 服务
      * E2E 测试环境下（window.__E2E_BLOCK_LOBBY_SOCKET__）跳过连接，
@@ -228,26 +210,21 @@ class LobbySocketService {
         this.socket.on(LOBBY_EVENTS.LOBBY_UPDATE, (payload: LobbySnapshotPayload) => {
             const state = this.getState(payload.gameId);
             if (!state) return;
-            if (this.handleVersionRollback(payload.gameId, payload.version, 'snapshot')) {
-                return;
-            }
-            if (!this.shouldAcceptVersion(payload.gameId, payload.version, true)) {
+            
+            // ✅ 修复：快照更新总是接受（allowEqual=true），且无条件更新版本号
+            // 这样可以处理初始订阅（version=-1）和重新订阅的情况
+            if (state.version === -1 || payload.version >= state.version) {
+                state.matches = payload.matches;
+                state.version = payload.version;
+                this.notifySubscribers(payload.gameId, payload.matches);
+            } else {
                 console.log('[LobbySocket]', tLobbySocket('ignoreSnapshot', { version: payload.version }));
-                return;
             }
-
-            // 日志已移除：快照接收过于频繁
-            state.matches = payload.matches;
-            this.updateVersion(payload.gameId, payload.version);
-            this.notifySubscribers(payload.gameId, payload.matches);
         });
 
         // 接收单个房间创建事件
         this.socket.on(LOBBY_EVENTS.MATCH_CREATED, (payload: LobbyMatchPayload) => {
             if (!this.getState(payload.gameId)) return;
-            if (this.handleVersionRollback(payload.gameId, payload.version, 'matchCreated')) {
-                return;
-            }
             if (!this.shouldAcceptVersion(payload.gameId, payload.version)) {
                 console.log('[LobbySocket]', tLobbySocket('ignoreMatchCreated', { version: payload.version, matchId: payload.match.matchID }));
                 return;
@@ -262,9 +239,6 @@ class LobbySocketService {
         // 接收单个房间更新事件（玩家加入/离开）
         this.socket.on(LOBBY_EVENTS.MATCH_UPDATED, (payload: LobbyMatchPayload) => {
             if (!this.getState(payload.gameId)) return;
-            if (this.handleVersionRollback(payload.gameId, payload.version, 'matchUpdated')) {
-                return;
-            }
             if (!this.shouldAcceptVersion(payload.gameId, payload.version)) {
                 console.log('[LobbySocket]', tLobbySocket('ignoreMatchUpdated', { version: payload.version, matchId: payload.match.matchID }));
                 return;
@@ -279,9 +253,6 @@ class LobbySocketService {
         // 接收房间结束事件
         this.socket.on(LOBBY_EVENTS.MATCH_ENDED, (payload: LobbyMatchEndedPayload) => {
             if (!this.getState(payload.gameId)) return;
-            if (this.handleVersionRollback(payload.gameId, payload.version, 'matchEnded')) {
-                return;
-            }
             if (!this.shouldAcceptVersion(payload.gameId, payload.version)) {
                 console.log('[LobbySocket]', tLobbySocket('ignoreMatchEnded', { version: payload.version, matchId: payload.matchID }));
                 return;
@@ -295,11 +266,28 @@ class LobbySocketService {
 
         this.socket.on(LOBBY_EVENTS.HEARTBEAT, (payload: LobbyHeartbeatPayload) => {
             if (!this.getState(payload.gameId)) return;
-            if (this.handleVersionRollback(payload.gameId, payload.version, 'heartbeat')) {
+            
+            const currentVersion = this.getState(payload.gameId)?.version ?? -1;
+            
+            // ✅ 修复：版本回退检查（服务端重启等异常情况）
+            if (currentVersion > 0 && payload.version < currentVersion) {
+                console.warn('[LobbySocket] 心跳检测到版本回退，强制刷新', {
+                    gameId: payload.gameId,
+                    heartbeatVersion: payload.version,
+                    currentVersion,
+                });
+                const state = this.getState(payload.gameId);
+                if (state) {
+                    state.matches = [];
+                    state.version = payload.version;
+                }
+                this.requestRefresh(payload.gameId);
                 return;
             }
-            const currentVersion = this.getState(payload.gameId)?.version ?? -1;
-            if (payload.version > currentVersion) {
+            
+            // ✅ 修复：版本落后检查（客户端错过了更新）
+            // 但如果当前版本是 -1（初始状态），不触发刷新，等待快照更新
+            if (currentVersion >= 0 && payload.version > currentVersion) {
                 console.log('[LobbySocket]', tLobbySocket('heartbeatStale', { version: payload.version, current: currentVersion }));
                 this.requestRefresh(payload.gameId);
                 return;
@@ -385,8 +373,9 @@ class LobbySocketService {
                 if (this.socket?.connected) {
                     this.socket.emit(LOBBY_EVENTS.UNSUBSCRIBE_LOBBY, { gameId: resolvedGameId });
                 }
+                // ✅ 修复：清空房间列表但保留版本号，避免重新订阅时版本号不匹配
                 state.matches = [];
-                state.version = -1;
+                // 不再重置 version，保留当前版本号以便重新订阅时继续
             }
         };
     }

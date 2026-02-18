@@ -114,8 +114,9 @@ const normalizeUrl = (url: string) => url.replace(/\/$/, '');
 export const getGameServerBaseURL = () => {
     const envUrl = process.env.PW_GAME_SERVER_URL || process.env.VITE_GAME_SERVER_URL;
     if (envUrl) return normalizeUrl(envUrl);
+    // E2E 测试专用端口优先（PW_GAME_SERVER_PORT），避免与开发环境冲突
     const port =
-        process.env.GAME_SERVER_PORT || process.env.PW_GAME_SERVER_PORT || '18000';
+        process.env.PW_GAME_SERVER_PORT || process.env.GAME_SERVER_PORT || '18000';
     return `http://localhost:${port}`;
 };
 
@@ -337,11 +338,31 @@ export const injectSkipImageGate = async (context: BrowserContext) => {
     });
 };
 
+/**
+ * 启用测试模式（注入到浏览器上下文）
+ */
+export const enableTestMode = async (context: BrowserContext) => {
+    await context.addInitScript(() => {
+        (window as any).__E2E_TEST_MODE__ = true;
+    });
+};
+
+/**
+ * 等待测试工具就绪
+ */
+export const waitForTestHarness = async (page: Page, timeout = 5000) => {
+    await page.waitForFunction(
+        () => !!(window as any).__BG_TEST_HARNESS__,
+        { timeout }
+    );
+};
+
 /** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 拦截 CDN + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器 + 跳过图片门禁） */
 export const initContext = async (
     context: BrowserContext,
     opts?: { storageKey?: string; skipTutorial?: boolean },
 ) => {
+    await enableTestMode(context); // 启用测试模式
     await blockAudioRequests(context);
     await blockCdnRequests(context);
     await blockLobbySocket(context);

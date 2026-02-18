@@ -73,11 +73,11 @@ export function usePerformanceMonitor() {
           const p95 = [...frameTimes].sort((a, b) => a - b)[Math.floor(frameTimes.length * 0.95)];
 
           if (fps < WARN_FPS && now - lastWarnTime > WARN_COOLDOWN) {
-            const msg = `[性能监控] 平均 ${fps.toFixed(1)} FPS | P95 帧时 ${p95.toFixed(1)}ms`;
+            const msg = `平均 ${fps.toFixed(1)} FPS | P95 帧时 ${p95.toFixed(1)}ms`;
             if (fps < CRITICAL_FPS) {
-              console.error(`🔴 ${msg} — 严重掉帧，检查动画/渲染逻辑`);
+              console.warn(`🔴 [性能] ${msg} — 严重掉帧`);
             } else {
-              console.warn(`🟡 ${msg} — 低于 60fps，可能存在性能瓶颈`);
+              console.warn(`🟡 [性能] ${msg} — 低于 60fps`);
             }
             lastWarnTime = now;
           }
@@ -117,9 +117,9 @@ export function usePerformanceMonitor() {
         consecutiveGrowth++;
         if (consecutiveGrowth >= MEM_CONSECUTIVE_THRESHOLD) {
           console.warn(
-            `🟠 [内存监控] JS Heap 连续 ${consecutiveGrowth} 次增长 ` +
+            `🟠 [内存] JS Heap 连续 ${consecutiveGrowth} 次增长 ` +
             `| 当前 ${formatMB(heapNow)}MB / 上限 ${formatMB(current.jsHeapSizeLimit)}MB ` +
-            `| 本次增量 +${deltaMB.toFixed(1)}MB — 可能存在内存泄漏，建议打开 DevTools Memory 面板排查`
+            `| 增量 +${deltaMB.toFixed(1)}MB`
           );
         }
       } else {

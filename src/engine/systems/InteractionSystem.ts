@@ -75,9 +75,10 @@ export interface SimpleChoiceData<T = unknown> {
      * 选择目标类型，用于 UI 层决定渲染方式：
      * - 'base': 高亮棋盘上的候选基地，点击基地完成选择
      * - 'minion': 高亮棋盘上的候选随从，点击随从完成选择
+     * - 'hand': 高亮手牌区的候选卡牌，点击卡牌完成选择
      * - undefined / 'generic': 使用通用弹窗选择
      */
-    targetType?: 'base' | 'minion' | 'generic';
+    targetType?: 'base' | 'minion' | 'hand' | 'generic';
     /**
      * 单候选时是否自动解决（跳过玩家选择）。
      * - true（默认）：强制效果，只有一个候选时自动执行
@@ -94,8 +95,12 @@ export interface SimpleChoiceData<T = unknown> {
      * - 连续选择场上单位：第一次选择后单位可能已被消灭/移动
      * 
      * 如果提供了 optionsGenerator，则 options 字段会在交互弹出时被覆盖。
+     * 
+     * @param state - 当前最新的游戏状态
+     * @param data - 交互数据（包含 continuationContext 等上下文信息）
      */
-    optionsGenerator?: <TCore>(state: { core: TCore; sys: any }) => PromptOption<T>[];
+    optionsGenerator?: <TCore>(state: { core: TCore; sys: any }, data: SimpleChoiceData<T>) => PromptOption<T>[];
+
 }
 
 /**
@@ -178,8 +183,8 @@ export interface SimpleChoiceConfig {
     sourceId?: string;
     timeout?: number;
     multi?: PromptMultiConfig;
-    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'generic'） */
-    targetType?: 'base' | 'minion' | 'generic';
+    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'hand' | 'generic'） */
+    targetType?: 'base' | 'minion' | 'hand' | 'generic';
     /** 单候选时是否自动解决，默认 true（强制效果自动跳过） */
     autoResolveIfSingle?: boolean;
     /**
@@ -190,6 +195,7 @@ export interface SimpleChoiceConfig {
      * 取消选项的 value 会包含 __cancel__: true 标记，handler 可以检查此标记来跳过执行
      */
     autoCancelOption?: boolean;
+
 }
 
 /**
@@ -258,6 +264,10 @@ export function createSliderChoice(
  * 如果交互有 optionsGenerator：
  * - 成为 current 时：立即基于当前状态生成选项
  * - 加入 queue 时：保留生成器，延迟到 resolveInteraction 时生成
+ * 
+ * 自动 optionsGenerator 注入（面向100个游戏）：
+ * - 如果交互选项包含 cardUid 字段，自动生成 optionsGenerator
+ * - 确保后续交互看到最新的手牌/场上单位状态
  */
 export function queueInteraction<TCore>(
     state: MatchState<TCore>,
@@ -273,7 +283,8 @@ export function queueInteraction<TCore>(
         if (interaction.kind === 'simple-choice') {
             const data = interaction.data as SimpleChoiceData;
             if (data.optionsGenerator) {
-                const freshOptions = data.optionsGenerator(state);
+                // 传递 state 和 data（包含 continuationContext）给 optionsGenerator
+                const freshOptions = data.optionsGenerator(state, data);
                 interaction = {
                     ...interaction,
                     data: { ...data, options: freshOptions },
@@ -307,6 +318,7 @@ export function queueInteraction<TCore>(
  * 解决当前交互并弹出下一个
  * 
  * 如果下一个交互有 optionsGenerator，则基于当前最新状态生成选项。
+ * 否则使用通用刷新逻辑。
  * 这确保了串行交互（如连续弃牌）中，后续交互看到的是最新状态。
  */
 export function resolveInteraction<TCore>(
@@ -316,11 +328,21 @@ export function resolveInteraction<TCore>(
     let next = queue[0];
     const newQueue = queue.slice(1);
 
-    // 如果下一个交互有选项生成器，基于当前状态生成选项
+    // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
         const data = next.data as SimpleChoiceData;
+        
+        // 优先使用手动提供的 optionsGenerator
+        let freshOptions: PromptOption[];
         if (data.optionsGenerator) {
-            const freshOptions = data.optionsGenerator(state);
+            freshOptions = data.optionsGenerator(state, data);
+        } else {
+            // 使用通用刷新逻辑
+            freshOptions = refreshOptionsGeneric(state, next, data.options);
+        }
+        
+        // 智能处理 multi.min 限制
+        if (!(data.multi?.min && freshOptions.length < data.multi.min)) {
             next = {
                 ...next,
                 data: { ...data, options: freshOptions },
@@ -360,6 +382,110 @@ export function asSliderChoice(
     return { ...data, id: interaction.id, playerId: interaction.playerId };
 }
 
+/**
+ * 通用选项刷新逻辑（框架层）
+ * 
+ * 自动检测选项中的引用类型（cardUid/minionUid/baseIndex），
+ * 基于最新状态过滤仍然有效的选项。
+ * 
+ * @param state - 最新的游戏状态
+ * @param interaction - 当前交互描述符
+ * @param originalOptions - 原始选项列表
+ * @returns 过滤后的选项列表
+ */
+function refreshOptionsGeneric<T>(
+    state: any,
+    interaction: InteractionDescriptor,
+    originalOptions: PromptOption<T>[],
+): PromptOption<T>[] {
+    const filtered = originalOptions.filter((opt) => {
+        const val = opt.value as any;
+        
+        // 1. 检查 cardUid（手牌）
+        if (val?.cardUid) {
+            const player = state.core?.players?.[interaction.playerId];
+            return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
+        }
+        
+        // 2. 检查 minionUid（场上随从）
+        if (val?.minionUid) {
+            for (const base of state.core?.bases || []) {
+                if (base.minions?.some((m: any) => m.uid === val.minionUid)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // 3. 检查 baseIndex（基地）
+        if (typeof val?.baseIndex === 'number' && val.baseIndex >= 0) {
+            return val.baseIndex < (state.core?.bases?.length || 0);
+        }
+        
+        // 4. 其他选项（如 skip、done、confirm 等）保留
+        return true;
+    });
+    
+    return filtered;
+}
+
+/**
+ * 刷新当前交互的选项
+ * 
+ * 在状态更新时调用，确保交互选项反映最新状态。
+ * 
+ * 刷新策略：
+ * 1. 如果手动提供了 optionsGenerator，优先使用
+ * 2. 否则使用通用刷新逻辑（自动检测 cardUid/minionUid/baseIndex）
+ * 3. 如果过滤后无法满足 multi.min 限制，保持原始选项（安全降级）
+ * 
+ * @param state - 最新的游戏状态
+ * @returns 更新后的状态（如果需要刷新）或原状态
+ */
+export function refreshInteractionOptions<TCore>(
+    state: MatchState<TCore>,
+): MatchState<TCore> {
+    const currentInteraction = state.sys.interaction?.current;
+    
+    // 没有当前交互，直接返回
+    if (!currentInteraction) return state;
+    
+    // 只处理 simple-choice 类型
+    if (currentInteraction.kind !== 'simple-choice') return state;
+    
+    const data = currentInteraction.data as SimpleChoiceData;
+    
+    // 优先使用手动提供的 optionsGenerator
+    let freshOptions: PromptOption[];
+    if (data.optionsGenerator) {
+        freshOptions = data.optionsGenerator(state, data);
+    } else {
+        // 使用通用刷新逻辑
+        freshOptions = refreshOptionsGeneric(state, currentInteraction, data.options);
+    }
+    
+    // 智能处理 multi.min 限制
+    // 如果过滤后无法满足最小选择数，保持原始选项（安全降级）
+    if (data.multi?.min && freshOptions.length < data.multi.min) {
+        return state;
+    }
+    
+    // 更新交互选项
+    return {
+        ...state,
+        sys: {
+            ...state.sys,
+            interaction: {
+                ...state.sys.interaction,
+                current: {
+                    ...currentInteraction,
+                    data: { ...data, options: freshOptions },
+                },
+            },
+        },
+    };
+}
+
 // ============================================================================
 // 系统配置
 // ============================================================================
@@ -389,13 +515,20 @@ export function createInteractionSystem<TCore>(
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
             // ---- simple-choice 响应 ----
             if (command.type === INTERACTION_COMMANDS.RESPOND) {
-                const ts = resolveCommandTimestamp(command);
-                return handleSimpleChoiceRespond(
-                    state,
-                    command.playerId,
-                    command.payload as { optionId?: string; optionIds?: string[] },
-                    ts,
-                );
+                const current = state.sys.interaction.current;
+                // 只处理 simple-choice 类型的交互
+                // 其他类型（dt:card-interaction 等）由游戏层自己处理
+                if (current && current.kind === 'simple-choice') {
+                    const ts = resolveCommandTimestamp(command);
+                    return handleSimpleChoiceRespond(
+                        state,
+                        command.playerId,
+                        command.payload as { optionId?: string; optionIds?: string[] },
+                        ts,
+                    );
+                }
+                // 非 simple-choice 交互：不处理，让命令通过到游戏层
+                return;
             }
 
             // ---- simple-choice 超时 ----

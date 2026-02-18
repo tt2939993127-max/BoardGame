@@ -52,7 +52,9 @@ export const ChoiceModal = ({
     statusIconAtlas?: StatusAtlases | null;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isOpen = !!choice;
+    // 防御性检查：如果 choice 存在但 options 为空，不显示模态框
+    const hasValidOptions = choice && choice.options && choice.options.length > 0;
+    const isOpen = !!hasValidOptions;
     const isSlider = !!choice?.slider;
 
     // slider 约定：第一个 option = 确认（value=max），最后一个 = 跳过（value=0）
@@ -146,12 +148,13 @@ export const ChoiceModal = ({
                 ) : (
                     <div className="flex flex-wrap gap-4 w-full justify-center">
                         {choice?.options.map(option => {
+                            const isCancelOption = option.id === '__cancel__';
                             return (
                                 <GameButton
                                     key={option.id}
                                     onClick={() => onResolve(option.id)}
                                     disabled={!canResolve}
-                                    variant={canResolve ? 'primary' : 'secondary'}
+                                    variant={isCancelOption ? 'secondary' : canResolve ? 'primary' : 'secondary'}
                                     className="min-w-[120px]"
                                 >
                                     {resolveOptionLabel(option.label)}

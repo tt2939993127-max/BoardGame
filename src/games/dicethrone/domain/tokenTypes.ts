@@ -197,6 +197,8 @@ export interface RollDieDefaultEffect {
     cp?: number;
     grantToken?: { tokenId: string; value: number; target?: 'self' | 'opponent' };
     grantStatus?: { statusId: string; value: number; target?: 'self' | 'opponent' };
+    /** 自定义效果描述 key（用于骰子特写显示） */
+    effectKey?: string;
 }
 
 /**

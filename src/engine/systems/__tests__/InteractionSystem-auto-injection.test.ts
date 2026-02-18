@@ -1,0 +1,375 @@
+/**
+ * InteractionSystem 通用刷新单元测试
+ * 
+ * 测试场景：
+ * 1. refreshInteractionOptions 自动检测选项类型（cardUid/minionUid/baseIndex）
+ * 2. 基于最新状态过滤选项（只保留仍然有效的选项）
+ * 3. 连续交互时，后续交互看到的是最新的状态
+ * 4. 智能处理 multi.min 限制（降级）
+ */
+
+import { describe, it, expect } from 'vitest';
+import { createInteractionSystem, createSimpleChoice, queueInteraction, resolveInteraction, refreshInteractionOptions } from '../InteractionSystem';
+import type { MatchState } from '../../types';
+
+interface TestCore {
+    players: {
+        [playerId: string]: {
+            hand: Array<{ uid: string; defId: string }>;
+        };
+    };
+}
+
+describe('InteractionSystem - 通用刷新', () => {
+    it('应该自动检测选项中的 cardUid 字段并刷新选项', () => {
+        // 1. 创建初始状态：玩家有 3 张手牌
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-2', defId: 'test-card-2' },
+                            { uid: 'card-3', defId: 'test-card-3' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 2. 创建包含 cardUid 的交互
+        const interaction = createSimpleChoice(
+            'test-interaction',
+            'p1',
+            '选择一张卡牌',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+                { id: 'opt-3', label: '卡牌 3', value: { cardUid: 'card-3', defId: 'test-card-3' } },
+            ],
+        );
+
+        // 3. 将交互加入队列
+        state = queueInteraction(state, interaction);
+
+        // 4. 模拟弃掉 card-2
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-3', defId: 'test-card-3' },
+                        ],
+                    },
+                },
+            },
+        };
+
+        // 5. 调用 refreshInteractionOptions（通用刷新）
+        state = refreshInteractionOptions(state);
+
+        // 6. 验证：选项应该只包含 card-1 和 card-3（card-2 已被弃掉）
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        const cardUids = options.map((opt: any) => opt.value?.cardUid).filter(Boolean);
+
+        expect(cardUids).toHaveLength(2);
+        expect(cardUids).toContain('card-1');
+        expect(cardUids).toContain('card-3');
+        expect(cardUids).not.toContain('card-2');
+    });
+
+    it('连续交互时，第二个交互应该看到最新的手牌状态', () => {
+        // 1. 创建初始状态：玩家有 3 张手牌
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-2', defId: 'test-card-2' },
+                            { uid: 'card-3', defId: 'test-card-3' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 2. 创建第一个交互
+        const interaction1 = createSimpleChoice(
+            'interaction-1',
+            'p1',
+            '第一次选择',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+                { id: 'opt-3', label: '卡牌 3', value: { cardUid: 'card-3', defId: 'test-card-3' } },
+            ],
+        );
+
+        // 3. 创建第二个交互（使用相同的初始选项）
+        const interaction2 = createSimpleChoice(
+            'interaction-2',
+            'p1',
+            '第二次选择',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+                { id: 'opt-3', label: '卡牌 3', value: { cardUid: 'card-3', defId: 'test-card-3' } },
+            ],
+        );
+
+        // 4. 将两个交互加入队列
+        state = queueInteraction(state, interaction1);
+        state = queueInteraction(state, interaction2);
+
+        // 5. 模拟第一次交互完成：弃掉 card-2
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-3', defId: 'test-card-3' },
+                        ],
+                    },
+                },
+            },
+        };
+
+        // 6. 解决第一个交互，弹出第二个交互
+        state = resolveInteraction(state);
+
+        // 7. 验证：第二个交互的选项应该只包含 card-1 和 card-3（card-2 已被弃掉）
+        const currentInteraction = state.sys.interaction.current;
+        expect(currentInteraction).toBeTruthy();
+        expect(currentInteraction?.id).toBe('interaction-2');
+
+        const options = (currentInteraction?.data as any).options || [];
+        const cardUids = options.map((opt: any) => opt.value?.cardUid).filter(Boolean);
+
+        expect(cardUids).toHaveLength(2);
+        expect(cardUids).toContain('card-1');
+        expect(cardUids).toContain('card-3');
+        expect(cardUids).not.toContain('card-2'); // card-2 已被弃掉
+    });
+
+    it('不包含引用字段的交互不应该被过滤', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 创建不包含 cardUid 的交互
+        const interaction = createSimpleChoice(
+            'test-interaction',
+            'p1',
+            '选择一个选项',
+            [
+                { id: 'opt-1', label: '选项 1', value: { action: 'action-1' } },
+                { id: 'opt-2', label: '选项 2', value: { action: 'action-2' } },
+            ],
+        );
+
+        state = queueInteraction(state, interaction);
+
+        // 调用 refreshInteractionOptions
+        state = refreshInteractionOptions(state);
+
+        // 验证：选项应该保持不变（因为不包含引用字段）
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(2);
+    });
+
+    it('手动提供的 optionsGenerator 应该优先使用', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 创建带有手动 optionsGenerator 的交互
+        const customGenerator = () => [
+            { id: 'custom', label: 'Custom Option', value: { custom: true } },
+        ];
+
+        const interaction = createSimpleChoice(
+            'test-interaction',
+            'p1',
+            '选择',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+            ],
+        );
+
+        // 手动注入 optionsGenerator
+        (interaction.data as any).optionsGenerator = customGenerator;
+
+        state = queueInteraction(state, interaction);
+
+        // 调用 refreshInteractionOptions
+        state = refreshInteractionOptions(state);
+
+        // 验证：应该使用手动提供的 optionsGenerator
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(1);
+        expect(options[0].id).toBe('custom');
+    });
+
+    it('选项中包含非卡牌选项（如 skip）时，应该保留这些选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-2', defId: 'test-card-2' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 创建第一个交互
+        const interaction1 = createSimpleChoice(
+            'interaction-1',
+            'p1',
+            '第一次选择',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+            ],
+        );
+
+        // 创建第二个交互（包含 skip 选项）
+        const interaction2 = createSimpleChoice(
+            'interaction-2',
+            'p1',
+            '选择一张卡牌或跳过',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+                { id: 'skip', label: '跳过', value: { skip: true } },
+            ],
+        );
+
+        // 将两个交互加入队列
+        state = queueInteraction(state, interaction1);
+        state = queueInteraction(state, interaction2);
+
+        // 模拟第一次交互完成：弃掉 card-1
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-2', defId: 'test-card-2' },
+                        ],
+                    },
+                },
+            },
+        };
+
+        // 解决第一个交互，弹出第二个交互
+        state = resolveInteraction(state);
+
+        // 验证：skip 选项应该被保留
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+
+        expect(options).toHaveLength(2); // card-2 + skip
+        expect(options.some((opt: any) => opt.value?.skip === true)).toBe(true);
+        expect(options.some((opt: any) => opt.value?.cardUid === 'card-2')).toBe(true);
+        expect(options.some((opt: any) => opt.value?.cardUid === 'card-1')).toBe(false);
+    });
+
+    it('多选交互且 min > 0 时，过滤后无法满足 min 应该保持原始选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                            { uid: 'card-2', defId: 'test-card-2' },
+                            { uid: 'card-3', defId: 'test-card-3' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 创建多选交互（min=2, max=2）
+        const interaction = createSimpleChoice(
+            'multi-select',
+            'p1',
+            '选择 2 张卡牌',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'opt-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+                { id: 'opt-3', label: '卡牌 3', value: { cardUid: 'card-3', defId: 'test-card-3' } },
+            ],
+            { multi: { min: 2, max: 2 } },
+        );
+
+        state = queueInteraction(state, interaction);
+
+        // 模拟弃掉 2 张卡牌，只剩 1 张
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+        };
+
+        // 调用 refreshInteractionOptions
+        state = refreshInteractionOptions(state);
+
+        // 验证：应该保持原始选项（因为过滤后只剩 1 个，无法满足 min=2）
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(3); // 保持原始的 3 个选项
+    });
+});

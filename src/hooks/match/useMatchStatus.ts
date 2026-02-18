@@ -527,7 +527,8 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             failureCountRef.current = 0;
             lastFailureAtRef.current = null;
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
             console.error('获取房间状态失败:', err);
             failureCountRef.current += 1;
             if (!lastFailureAtRef.current) {
@@ -536,7 +537,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             const shouldExposeError = failureCountRef.current >= 3;
             if (shouldExposeError) {
                 // 404 说明房间已不存在，清理本地凭据（避免创建后短暂抖动误判）
-                if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+                if (errorMessage.includes('404') || errorMessage.includes('not found')) {
                     clearMatchCredentials(matchID);
                 }
                 setError(prev => prev ?? '房间不存在或已被删除');
@@ -604,10 +605,11 @@ export async function leaveMatch(
         // 清理本地凭证
         clearMatchCredentials(matchID);
         return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('离开房间失败:', err);
         // 404 说明房间已不存在，视为成功并清理凭据
-        if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+        if (errorMessage.includes('404') || errorMessage.includes('not found')) {
             clearMatchCredentials(matchID);
             return { success: true, cleanedLocal: true, error: 'not_found' };
         }
@@ -650,16 +652,19 @@ export async function rejoinMatch(
 
         // 保存新凭证
         const storageKey = `match_creds_${matchID}`;
-        let existing: any = null;
+        let existing: Record<string, unknown> | null = null;
         try {
             const raw = localStorage.getItem(storageKey);
-            if (raw) existing = JSON.parse(raw);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                existing = typeof parsed === 'object' && parsed !== null ? parsed : null;
+            }
         } catch {
             existing = null;
         }
 
         persistMatchCredentials(matchID, {
-            ...(existing && typeof existing === 'object' ? existing : {}),
+            ...(existing || {}),
             playerID,
             credentials: playerCredentials,
             matchID,

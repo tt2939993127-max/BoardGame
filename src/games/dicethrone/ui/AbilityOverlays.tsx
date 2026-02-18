@@ -204,7 +204,6 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         // 游戏级布局配置：所有用户共享一致的默认布局
         const [slots, setSlots] = React.useState(() => {
             const initial = DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }));
-            console.warn('[AbilityOverlays] 布局数据来源:', JSON.stringify(initial.map(s => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h }))));
             return initial;
         });
         const [editingId, setEditingId] = React.useState<string | null>(null);

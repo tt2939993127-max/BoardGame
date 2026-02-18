@@ -127,7 +127,7 @@ function ZoomableSvg({ viewBox, maxHeight = 'calc(100vh - 120px)', className = '
 // 视图模式
 // ============================================================================
 
-type ViewMode = 'overview' | 'sub-pipeline' | 'sub-systems' | 'sub-testing' | 'story' | 'c4-context' | 'c4-container' | 'layer-detail';
+type ViewMode = 'overview' | 'full' | 'sub-pipeline' | 'sub-systems' | 'sub-testing' | 'story' | 'c4-context' | 'c4-container' | 'layer-detail';
 
 // ============================================================================
 // 主组件
@@ -188,6 +188,8 @@ const ArchitectureView: React.FC = () => {
           <h1 className="text-lg font-bold text-white">🏗️ 架构全景 — 一次操作的完整旅程</h1>
           <span className="text-xs text-slate-500">点击层卡片可展开 · 右侧虚线为跨层连接</span>
           <div className="ml-auto flex gap-2">
+            <button className="text-sm px-3 py-1 rounded bg-orange-900/40 text-orange-400 border border-orange-700/40 hover:bg-orange-900/60"
+              onClick={() => setViewMode('full')}>🗺️ 完整架构图</button>
             <button className="text-sm px-3 py-1 rounded bg-blue-900/40 text-blue-400 border border-blue-700/40 hover:bg-blue-900/60"
               onClick={() => setViewMode('c4-context')}>🏛️ C4 全景</button>
             <button className="text-sm px-3 py-1 rounded bg-purple-900/40 text-purple-400 border border-purple-700/40 hover:bg-purple-900/60"
@@ -328,6 +330,201 @@ const ArchitectureView: React.FC = () => {
             </text>
           </g>
         </ZoomableSvg>
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // 完整架构图: 所有节点 + 层级布局 + 流动动画（无箭头简洁版）
+  // ========================================================================
+  if (viewMode === 'full') {
+    return (
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => { if (selectedNode) closePop(); else setViewMode('overview'); }}>
+        <div className="mb-3 flex items-center gap-3">
+          <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
+          <h1 className="text-lg font-bold text-white">🗺️ 完整架构图 — 所有节点与层级</h1>
+          <span className="text-xs text-slate-500">点击节点查看详情 · 点击空白返回</span>
+        </div>
+        <ZoomableSvg viewBox={`0 0 ${SVG_W} ${SVG_H}`} maxHeight="calc(100vh - 80px)">
+          <style>{`
+            @keyframes flowPulse {
+              0%, 100% { stroke-opacity: 0.2; }
+              50% { stroke-opacity: 0.9; }
+            }
+            .flow-line { 
+              animation: flowPulse 2.5s ease-in-out infinite;
+            }
+          `}</style>
+
+          <defs>
+            <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#e3b341" stopOpacity="0.1" />
+              <stop offset="50%" stopColor="#e3b341" stopOpacity="1" />
+              <stop offset="100%" stopColor="#e3b341" stopOpacity="0.1" />
+            </linearGradient>
+          </defs>
+
+          {/* 层色带 */}
+          {LAYER_BANDS.map(band => {
+            const r = bandRect(band);
+            return (
+              <g key={band.id}>
+                <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={band.color + '08'} stroke={band.color + '30'} strokeWidth={1} rx={8} />
+                <text x={r.x - 12} y={r.y + 18} fontSize={11} fill={band.color} fontWeight="600" textAnchor="end">{band.label}</text>
+                <text x={r.x - 12} y={r.y + 32} fontSize={9} fill="#6e7681" textAnchor="end">{band.note}</text>
+              </g>
+            );
+          })}
+
+          {/* 主故事线流动动画（无箭头） */}
+          {EDGES.filter((_, i) => STORY_EDGE_IDS.has(i)).map((edge, idx) => {
+            const path = edgePath(edge);
+            if (!path) return null;
+            return (
+              <path
+                key={`story-${idx}`}
+                d={path}
+                stroke="#e3b341"
+                strokeWidth={2.5}
+                fill="none"
+                className="flow-line"
+                style={{ animationDelay: `${idx * 0.3}s` }}
+              />
+            );
+          })}
+
+          {/* 所有节点 */}
+          {NODES.map(node => {
+            const r = nodeRect(node);
+            const hasDetail = node.details || node.iface || node.dataFlow || node.realExample;
+            const hasExpand = node.expandable;
+            const isHovered = hoveredNode === node.id;
+            const isSelected = selectedNode?.id === node.id;
+
+            return (
+              <g
+                key={node.id}
+                onMouseEnter={() => setHoveredNode(node.id)}
+                onMouseLeave={() => setHoveredNode(null)}
+                onClick={(e) => handleNodeClick(node, e)}
+                style={{ cursor: hasDetail || hasExpand ? 'pointer' : 'default' }}
+              >
+                <rect
+                  x={r.x}
+                  y={r.y}
+                  width={r.w}
+                  height={r.h}
+                  fill={node.color + (isSelected ? '40' : isHovered ? '25' : '18')}
+                  stroke={node.color + (isSelected ? 'cc' : isHovered ? '80' : '50')}
+                  strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1.5}
+                  strokeDasharray={node.dashed ? '5 3' : undefined}
+                  rx={6}
+                />
+                <text x={r.x + r.w / 2} y={r.y + 18} fontSize={12} fill="white" fontWeight="600" textAnchor="middle">
+                  {node.label}
+                </text>
+                <text x={r.x + r.w / 2} y={r.y + 34} fontSize={9} fill="#8b949e" textAnchor="middle">
+                  {node.desc}
+                </text>
+                {hasExpand && (
+                  <text x={r.x + r.w - 8} y={r.y + 14} fontSize={10} fill={node.color} textAnchor="end">🔍</text>
+                )}
+                {node.storyIndex && (
+                  <>
+                    <circle cx={r.x + 10} cy={r.y + 10} r={8} fill="#e3b341" />
+                    <text x={r.x + 10} y={r.y + 14} fontSize={10} fill="#0d1117" fontWeight="700" textAnchor="middle">{node.storyIndex}</text>
+                  </>
+                )}
+              </g>
+            );
+          })}
+        </ZoomableSvg>
+
+        {/* 节点详情弹窗 */}
+        {selectedNode && selectedDeps && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              maxWidth: 700,
+              maxHeight: '80vh',
+              overflow: 'auto',
+              background: '#161b22',
+              border: '1px solid #30363d',
+              borderRadius: 8,
+              padding: 20,
+              zIndex: 100,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'white', margin: 0 }}>{selectedNode.label}</h3>
+              <button onClick={closePop} style={{ background: 'none', border: 'none', color: '#8b949e', fontSize: 20, cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: 12, color: '#8b949e', marginBottom: 16 }}>{selectedNode.desc}</p>
+
+            {selectedNode.details && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#58a6ff', marginBottom: 8 }}>📋 详细说明</h4>
+                {selectedNode.details.map((d, i) => (
+                  <p key={i} style={{ fontSize: 11, color: '#c9d1d9', marginBottom: 6, lineHeight: 1.5 }}>{d}</p>
+                ))}
+              </div>
+            )}
+
+            {selectedNode.iface && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#bc8cff', marginBottom: 8 }}>🔌 接口签名</h4>
+                <pre style={{ fontSize: 10, color: '#c9d1d9', background: '#0d1117', padding: 10, borderRadius: 4, overflow: 'auto' }}>
+                  {selectedNode.iface.join('\n')}
+                </pre>
+              </div>
+            )}
+
+            {selectedNode.dataFlow && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#3fb950', marginBottom: 8 }}>🔄 数据流向</h4>
+                {selectedNode.dataFlow.map((d, i) => (
+                  <p key={i} style={{ fontSize: 11, color: '#c9d1d9', marginBottom: 6, lineHeight: 1.5 }}>→ {d}</p>
+                ))}
+              </div>
+            )}
+
+            {selectedNode.realExample && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#f0883e', marginBottom: 8 }}>🎲 骰子王座案例</h4>
+                <pre style={{ fontSize: 10, color: '#c9d1d9', background: '#0d1117', padding: 10, borderRadius: 4, overflow: 'auto' }}>
+                  {selectedNode.realExample.join('\n')}
+                </pre>
+              </div>
+            )}
+
+            {selectedDeps.upstream.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#58a6ff', marginBottom: 8 }}>⬆️ 上游依赖 ({selectedDeps.upstream.length})</h4>
+                {selectedDeps.upstream.map((e, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#8b949e', marginBottom: 4 }}>
+                    ← {e.node.label} {e.label && `(${e.label})`}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedDeps.downstream.length > 0 && (
+              <div>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#3fb950', marginBottom: 8 }}>⬇️ 下游消费 ({selectedDeps.downstream.length})</h4>
+                {selectedDeps.downstream.map((e, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#8b949e', marginBottom: 4 }}>
+                    → {e.node.label} {e.label && `(${e.label})`}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

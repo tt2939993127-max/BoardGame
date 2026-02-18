@@ -113,6 +113,9 @@ export const HandArea = ({
     const cardBackImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARD_BG, locale), [locale]);
     const handAreaRef = React.useRef<HTMLDivElement>(null);
     const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
+    // 防止拖拽后触发点击：记录最近拖拽的卡牌和时间
+    const lastDragEndRef = React.useRef<{ cardKey: string; timestamp: number } | null>(null);
+    const DRAG_CLICK_DEBOUNCE = 300; // 拖拽后 300ms 内忽略点击
 
     const handEntries = React.useMemo<HandCardEntry[]>(() => {
         const prevEntries = handEntriesRef.current;
@@ -485,6 +488,9 @@ export const HandArea = ({
         // 向上拖拽打出：直接调用引擎，由引擎返回错误
         if (y < DRAG_PLAY_THRESHOLD) {
             if (onPlayCard) {
+                // 记录拖拽操作，防止后续点击事件重复触发
+                lastDragEndRef.current = { cardKey: entry.key, timestamp: Date.now() };
+                
                 pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
                 if (pendingPlayTimeoutRef.current) {
                     window.clearTimeout(pendingPlayTimeoutRef.current);
@@ -503,6 +509,9 @@ export const HandArea = ({
             if (!canPlayCards && onError) {
                 onError(t('error.notYourTurn'));
             } else if (onSellCard) {
+                // 记录拖拽操作，防止后续点击事件重复触发
+                lastDragEndRef.current = { cardKey: entry.key, timestamp: Date.now() };
+                
                 // 和拖拽打出一样，记录 pending 状态，卡牌移除后触发飞向弃牌堆动画
                 pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
                 if (pendingPlayTimeoutRef.current) {
@@ -640,8 +649,29 @@ export const HandArea = ({
                                 onDrag={(_, info) => canDrag && handleDrag(cardKey, info)}
                                 onDragEnd={() => canDrag && handleDragEnd(entry, 'drag')}
                                 onClick={() => {
+                                    // 防止拖拽后立即触发点击：检查是否刚完成拖拽
+                                    const lastDrag = lastDragEndRef.current;
+                                    if (lastDrag && lastDrag.cardKey === cardKey) {
+                                        const timeSinceDrag = Date.now() - lastDrag.timestamp;
+                                        if (timeSinceDrag < DRAG_CLICK_DEBOUNCE) {
+                                            console.log('[HandArea] 拖拽后点击被忽略:', {
+                                                cardKey,
+                                                cardId: card.id,
+                                                cardName: card.name,
+                                                timeSinceDrag,
+                                                threshold: DRAG_CLICK_DEBOUNCE,
+                                            });
+                                            return;
+                                        }
+                                    }
+
                                     // 弃牌模式下点击卡牌直接弃置
                                     if (canClickDiscard && onDiscardCard) {
+                                        console.log('[HandArea] 点击弃牌:', {
+                                            cardId: card.id,
+                                            cardName: card.name,
+                                            currentHandIds: hand.map(c => c.id),
+                                        });
                                         // 记录弃牌信息，卡牌从手牌移除后触发飞向弃牌堆动画
                                         pendingDiscardRef.current = {
                                             cardKey,
@@ -650,6 +680,28 @@ export const HandArea = ({
                                         };
                                         setDiscardingCardKey(cardKey);
                                         onDiscardCard(card.id);
+                                    }
+                                    // 正常模式下点击打牌
+                                    else if (canDrag && onPlayCard) {
+                                        console.log('[HandArea] 点击打牌:', {
+                                            cardId: card.id,
+                                            cardName: card.name,
+                                            currentHandIds: hand.map(c => c.id),
+                                        });
+                                        pendingPlayRef.current = {
+                                            cardKey,
+                                            card,
+                                            offset: { x: 0, y: 0 },
+                                            originalIndex: i,
+                                        };
+                                        if (pendingPlayTimeoutRef.current) {
+                                            window.clearTimeout(pendingPlayTimeoutRef.current);
+                                        }
+                                        pendingPlayTimeoutRef.current = window.setTimeout(() => {
+                                            resetDragValues(cardKey, 'drag');
+                                            clearPendingPlay();
+                                        }, PENDING_PLAY_TIMEOUT);
+                                        onPlayCard(card.id);
                                     }
                                 }}
                                 onHoverStart={() => {

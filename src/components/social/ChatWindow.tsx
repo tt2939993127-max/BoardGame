@@ -123,17 +123,11 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
         }
     };
 
-    if (!friend && !conversation) {
-        return <div className="flex-1 flex items-center justify-center text-[#8c7b64]">{t('social:chat.userNotFound')}</div>;
-    }
-
-    const username = friend?.username || conversation?.username || t('common:unknownUser');
-    const isOnline = friend?.online || conversation?.online || false;
-
     // 临时日志：确认布局高度是否生效（问题解决后会删除）
     useEffect(() => {
-        if (!containerRef.current) return;
         const el = containerRef.current;
+        if (!el) return;
+        
         const log = (reason: string) => {
             const rect = el.getBoundingClientRect();
             console.log(`[ChatWindow] reason=${reason} targetUserId=${targetUserId} height=${Math.round(rect.height)}px width=${Math.round(rect.width)}px`);
@@ -156,6 +150,13 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
             window.clearInterval(intervalId);
         };
     }, [targetUserId]);
+
+    if (!friend && !conversation) {
+        return <div className="flex-1 flex items-center justify-center text-[#8c7b64]">{t('social:chat.userNotFound')}</div>;
+    }
+
+    const username = friend?.username || conversation?.username || t('common:unknownUser');
+    const isOnline = friend?.online || conversation?.online || false;
 
     return (
         <div ref={containerRef} className="flex flex-col h-full bg-parchment-card-bg">

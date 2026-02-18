@@ -1043,7 +1043,16 @@ export function canAttackEnhanced(
   if (!targetUnit && !targetStructure) return false;
 
   const targetOwner = targetUnit?.owner ?? targetStructure?.owner;
-  if (targetOwner === attackerUnit.owner) return false;
+  
+  // ✅ 治疗模式允许攻击友军（圣殿牧师）
+  const isHealingMode = attackerUnit.healingMode || getUnitAbilities(attackerUnit, state).includes('healing');
+  if (targetOwner === attackerUnit.owner) {
+    if (!isHealingMode) return false;
+    // 治疗模式：只能攻击友方士兵/英雄，且必须相邻
+    if (!targetUnit) return false;
+    if (targetUnit.card.unitClass !== 'common' && targetUnit.card.unitClass !== 'champion') return false;
+    return manhattanDistance(attacker, target) === 1;
+  }
 
   const distance = manhattanDistance(attacker, target);
 

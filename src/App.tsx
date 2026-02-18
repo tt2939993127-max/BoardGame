@@ -1,8 +1,12 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DebugProvider } from './contexts/DebugContext';
+import { TestHarness } from './engine/testing';
 
 const queryClient = new QueryClient();
+
+// 初始化测试工具（仅在测试环境生效）
+TestHarness.init();
 import { TutorialProvider } from './contexts/TutorialContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';

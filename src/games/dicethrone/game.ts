@@ -37,6 +37,7 @@ import type {
     CardDrawnEvent,
     BonusDieRolledEvent,
 } from './domain/types';
+import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
 import { getNextPhase, getRollerId, getActiveDice } from './domain/rules';
 import { findPlayerAbility } from './domain/abilityLookup';
@@ -750,14 +751,21 @@ const systems = [
     createInteractionSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
-        allowedCommands: [
-            'PLAY_CARD',
-            'USE_TOKEN', 'SKIP_TOKEN_RESPONSE',
-            'MODIFY_DIE', 'REROLL_DIE',
-            'REMOVE_STATUS', 'TRANSFER_STATUS',
-            'CONFIRM_INTERACTION', 'CANCEL_INTERACTION',
-            'USE_PASSIVE_ABILITY',
+        // 使用分类系统（推荐）
+        allowedCommandCategories: [
+            CommandCategory.TACTICAL,
+            CommandCategory.UI_INTERACTION,
+            CommandCategory.STATE_MANAGEMENT,
         ],
+        getCommandCategory,
+        
+        // 保留旧的白名单配置作为补充（可选）
+        // 如果某些命令需要特殊处理，可以在这里添加
+        allowedCommands: [
+            // 所有命令都已通过分类系统管理，这里留空
+            // 如果需要添加特殊命令，可以在这里添加
+        ],
+        
         responderExemptCommands: ['USE_TOKEN', 'SKIP_TOKEN_RESPONSE', 'USE_PASSIVE_ABILITY'],
         responseAdvanceEvents: [
             { eventType: 'CARD_PLAYED' },
@@ -798,8 +806,7 @@ const COMMAND_TYPES = [
     'REROLL_DIE',
     'REMOVE_STATUS',
     'TRANSFER_STATUS',
-    'CONFIRM_INTERACTION',
-    'CANCEL_INTERACTION',
+    // CONFIRM_INTERACTION 和 CANCEL_INTERACTION 已废弃 - 使用 InteractionSystem 的 RESPOND/CANCEL
     // 选角相关
     'SELECT_CHARACTER',
     'HOST_START_GAME',
@@ -820,6 +827,12 @@ const COMMAND_TYPES = [
     'SYS_INTERACTION_TIMEOUT',
     'SYS_INTERACTION_CANCEL',
 ];
+
+// 开发环境：验证所有命令都已分类
+// 只在浏览器环境中运行（Node.js 环境中 import.meta.env 不存在）
+if (typeof window !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env.DEV) {
+    validateCommandCategories(COMMAND_TYPES);
+}
 
 // 适配器配置
 const adapterConfig = {

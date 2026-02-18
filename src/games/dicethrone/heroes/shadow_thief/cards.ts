@@ -57,7 +57,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
                 conditionalEffects: [
                     { face: SHADOW_THIEF_DICE_FACE_IDS.SHADOW, grantToken: { tokenId: 'sneak_attack', value: 1 }, cp: 2, effectKey: 'bonusDie.effect.oneWithShadowsHit' },
                 ],
-                defaultEffect: { drawCard: 1 },
+                defaultEffect: { drawCard: 1, effectKey: 'bonusDie.effect.oneWithShadowsMiss' },
             },
             timing: 'immediate',
         }]

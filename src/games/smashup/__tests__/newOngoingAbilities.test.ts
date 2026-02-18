@@ -12,7 +12,7 @@
  
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, TempPowerAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent } from '../domain/types';
+import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, TempPowerAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent, TurnStartedEvent } from '../domain/types';
 import { countMadnessCards, madnessVpPenalty } from '../domain/abilityHelpers';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from '../domain/baseAbilities';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
@@ -347,6 +347,23 @@ describe('cthulhu_furthering_the_cause 触发', () => {
         expect(next.turnDestroyedMinions).toBeDefined();
         expect(next.turnDestroyedMinions!.length).toBe(1);
         expect(next.turnDestroyedMinions![0]).toEqual({ defId: 'test_minion', baseIndex: 0, owner: '1' });
+    });
+
+    it('reducer: TURN_CHANGED 清空 turnDestroyedMinions', () => {
+        const state = makeState({
+            turnDestroyedMinions: [
+                { defId: 'test_minion', baseIndex: 0, owner: '1' },
+                { defId: 'test_minion2', baseIndex: 1, owner: '1' },
+            ],
+        });
+
+        const evt: TurnStartedEvent = {
+            type: SU_EVENTS.TURN_STARTED,
+            payload: { playerId: '1', turnNumber: 2 },
+            timestamp: 0,
+        };
+        const next = reduce(state, evt);
+        expect(next.turnDestroyedMinions).toEqual([]);
     });
 });
 

@@ -29,4 +29,13 @@ export * from './systems';
 export * from './hooks';
 
 // 测试工具
-export { GameTestRunner, type TestCase, type TestResult, type StateExpectation } from './testing';
+export { 
+    isTestEnvironment, 
+    enableTestMode, 
+    disableTestMode,
+    RandomInjector,
+    DiceInjector,
+    StateInjector,
+    CommandProxy,
+    TestHarness,
+} from './testing';

@@ -101,7 +101,16 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                 });
             }, 1000);
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('email.error.sendFailed'));
+            const error = err as Error & { suggestLogin?: boolean };
+            setError(error.message || t('email.error.sendFailed'));
+            
+            // 如果邮箱已注册，延迟后自动切换到登录页面
+            if (error.suggestLogin) {
+                setTimeout(() => {
+                    switchMode('login');
+                    setAccount(email); // 预填邮箱
+                }, 1500);
+            }
         } finally {
             setIsSendingCode(false);
         }
@@ -163,7 +172,31 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                 onClose();
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('error.operationFailed'));
+            const error = err as Error & { code?: string; suggestRegister?: boolean; suggestLogin?: boolean };
+            
+            // 登录时邮箱未注册，提供注册引导
+            if (mode === 'login' && error.code === 'AUTH_EMAIL_NOT_REGISTERED') {
+                setError(error.message);
+                // 延迟 1.5 秒后自动切换到注册页面
+                setTimeout(() => {
+                    switchMode('register');
+                    setEmail(account); // 预填邮箱
+                }, 1500);
+                return;
+            }
+            
+            // 注册时邮箱已存在，提供登录引导
+            if (mode === 'register' && error.suggestLogin) {
+                setError(error.message);
+                // 延迟 1.5 秒后自动切换到登录页面
+                setTimeout(() => {
+                    switchMode('login');
+                    setAccount(email); // 预填邮箱
+                }, 1500);
+                return;
+            }
+            
+            setError(error.message || t('error.operationFailed'));
         } finally {
             setIsLoading(false);
         }
@@ -240,9 +273,13 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                 </div>
 
                 {error && (
-                    <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center">
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center"
+                    >
                         {error}
-                    </div>
+                    </motion.div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5 font-serif">

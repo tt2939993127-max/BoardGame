@@ -70,6 +70,20 @@ function getActionableUnitHints(
       }
       break;
     }
+    // 魔力阶段等非攻击阶段：有额外攻击的单位也显示为可攻击（群情激愤等跨阶段攻击）
+    default: {
+      for (const u of units) {
+        if ((u.extraAttacks ?? 0) > 0 && !u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
+          hints.push({
+            type: 'actionable',
+            position: u.position,
+            entityId: u.instanceId,
+            actions: ['attack'],
+          });
+        }
+      }
+      break;
+    }
   }
 
   return hints;

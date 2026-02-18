@@ -6,7 +6,7 @@ import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
-import type { PendingInteraction } from './domain/types';
+import type { InteractionDescriptor } from './domain/types';
 import { getUsableTokensForTiming } from './domain/tokenResponse';
 import { isCardPlayableInResponseWindow } from './domain/rules';
 import { useTranslation } from 'react-i18next';
@@ -262,8 +262,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 使用 useInteractionState Hook 管理交互状态（从 sys.interaction 读取）
     const sysInteraction = rawG.sys.interaction?.current;
-    const pendingInteraction: PendingInteraction | undefined = sysInteraction?.kind?.startsWith('dt:')
-        ? sysInteraction.data as PendingInteraction
+    const pendingInteraction: InteractionDescriptor | undefined = sysInteraction?.kind === 'dt:card-interaction'
+        ? sysInteraction.data as InteractionDescriptor
         : undefined;
     const { localState: localInteraction, handlers: interactionHandlers } = useInteractionState(pendingInteraction);
 
@@ -559,7 +559,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 return;
             }
         }
-        engineMoves.confirmInteraction(activeInteraction.id);
+        // REMOVE_STATUS 和 TRANSFER_STATUS 命令会自动生成 INTERACTION_COMPLETED 事件清理交互
     };
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
@@ -1077,16 +1077,25 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     onBonusDieClose={handleBonusDieClose}
 
                     // 奖励骰重掷交互
-                    pendingBonusDiceSettlement={G.pendingBonusDiceSettlement}
+                    // 只有攻击者才能操作重投；防御方/观察者以 displayOnly 模式展示
+                    pendingBonusDiceSettlement={G.pendingBonusDiceSettlement
+                        ? G.pendingBonusDiceSettlement.attackerId === rootPid
+                            ? G.pendingBonusDiceSettlement
+                            : { ...G.pendingBonusDiceSettlement, displayOnly: true }
+                        : undefined}
                     canRerollBonusDie={Boolean(
                         G.pendingBonusDiceSettlement &&
                         G.pendingBonusDiceSettlement.attackerId === rootPid &&
-                        (player.tokens?.[TOKEN_IDS.TAIJI] ?? 0) >= (G.pendingBonusDiceSettlement?.rerollCostAmount ?? 1) &&
+                        (player.tokens?.[G.pendingBonusDiceSettlement.rerollCostTokenId] ?? 0) >= (G.pendingBonusDiceSettlement.rerollCostAmount ?? 1) &&
                         (G.pendingBonusDiceSettlement.maxRerollCount === undefined ||
                             G.pendingBonusDiceSettlement.rerollCount < G.pendingBonusDiceSettlement.maxRerollCount)
                     )}
-                    onRerollBonusDie={(dieIndex) => engineMoves.rerollBonusDie(dieIndex)}
-                    onSkipBonusDiceReroll={() => engineMoves.skipBonusDiceReroll()}
+                    onRerollBonusDie={G.pendingBonusDiceSettlement?.attackerId === rootPid
+                        ? (dieIndex) => engineMoves.rerollBonusDie(dieIndex)
+                        : undefined}
+                    onSkipBonusDiceReroll={G.pendingBonusDiceSettlement?.attackerId === rootPid
+                        ? () => engineMoves.skipBonusDiceReroll()
+                        : undefined}
 
                     // Token 响应
                     pendingDamage={pendingDamage}

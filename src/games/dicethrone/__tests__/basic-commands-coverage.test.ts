@@ -130,12 +130,14 @@ describe('TOGGLE_DIE_LOCK 锁定/解锁骰子', () => {
         expect(core.dice[0].value).toBe(2);
     });
 
-    it('非 offensiveRoll 阶段锁定骰子失败', () => {
+    it('非 offensiveRoll/defensiveRoll 阶段锁定骰子失败', () => {
         const state = createInitializedState(['0', '1'], fixedRandom);
         // main1 阶段
         const result = tryCmd(state, cmd('TOGGLE_DIE_LOCK', '0', { dieId: 0 }));
         expect(result.success).toBe(false);
     });
+
+
 
     it('非当前玩家锁定骰子失败', () => {
         const diceValues = [3, 3, 3, 3, 3];

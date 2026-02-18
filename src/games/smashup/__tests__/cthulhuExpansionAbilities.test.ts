@@ -304,7 +304,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
             expect(current?.data?.sourceId).toBe('miskatonic_those_meddling_kids');
         });
 
-        it('消灭基地上所有持续行动卡（通过 interaction handler）', () => {
+        it('消灭基地上所有持续行动卡（通过 interaction handler 逐个点击）', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -324,26 +324,30 @@ describe('米斯卡塔尼克大学派系能力', () => {
 
             // 先打出卡 → 创建 interaction
             const { matchState } = execPlayAction(state, '0', 'a1');
-            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
+            // 第一步：选择基地 0 → 创建点击式行动卡选择
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
             const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
             expect(step1.events.length).toBe(0); // 不直接产生消灭事件
-            // 第二步：选择消灭所有行动卡
+            // 第二步：点击第一张行动卡
             const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
             expect(selectHandler).toBeDefined();
-            const step2 = selectHandler!(step1.state ?? matchState, '0', [
+            const step2 = selectHandler!(step1.state ?? matchState, '0',
                 { cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                { continuationContext: { baseIndex: 0 } } as any, defaultRandom, 1001);
+            const detachEvents1 = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            expect(detachEvents1.length).toBe(1);
+            expect(detachEvents1[0].payload.cardUid).toBe('o1');
+            // 第三步：点击第二张行动卡
+            const step3 = selectHandler!(step2.state ?? matchState, '0',
                 { cardUid: 'o2', defId: 'test_ongoing2', ownerId: '0' },
-            ], undefined, defaultRandom, 1001);
-            const detachEvents = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
-            expect(detachEvents.length).toBe(2);
-            const uids = detachEvents.map((e: any) => e.payload.cardUid);
-            expect(uids).toContain('o1');
-            expect(uids).toContain('o2');
+                { continuationContext: { baseIndex: 0 } } as any, defaultRandom, 1002);
+            const detachEvents2 = step3.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            expect(detachEvents2.length).toBe(1);
+            expect(detachEvents2[0].payload.cardUid).toBe('o2');
         });
 
-        it('消灭随从上附着的行动卡（通过 interaction handler）', () => {
+        it('消灭随从上附着的行动卡（通过 interaction handler 逐个点击）', () => {
             const minionWithActions: MinionOnBase = {
                 ...makeMinion('m1', 'test', '1', 3),
                 attachedActions: [
@@ -365,24 +369,27 @@ describe('米斯卡塔尼克大学派系能力', () => {
             });
 
             const { matchState } = execPlayAction(state, '0', 'a1');
-            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
+            // 第一步：选择基地 0 → 创建点击式行动卡选择
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
             const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
             expect(step1.events.length).toBe(0);
-            // 第二步：选择消灭所有行动卡
+            // 第二步：点击第一张行动卡
             const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
             expect(selectHandler).toBeDefined();
-            const step2 = selectHandler!(step1.state ?? matchState, '0', [
+            const step2 = selectHandler!(step1.state ?? matchState, '0',
                 { cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                { continuationContext: { baseIndex: 0 } } as any, defaultRandom, 1001);
+            const detachEvents1 = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            expect(detachEvents1.length).toBe(1);
+            expect(detachEvents1[0].payload.cardUid).toBe('o1');
+            // 第三步：点击附着的行动卡
+            const step3 = selectHandler!(step2.state ?? matchState, '0',
                 { cardUid: 'att1', defId: 'test_attached', ownerId: '1' },
-            ], undefined, defaultRandom, 1001);
-            const detachEvents = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
-            // 1 ongoing + 1 attached = 2
-            expect(detachEvents.length).toBe(2);
-            const uids = detachEvents.map((e: any) => e.payload.cardUid);
-            expect(uids).toContain('o1');
-            expect(uids).toContain('att1');
+                { continuationContext: { baseIndex: 0 } } as any, defaultRandom, 1002);
+            const detachEvents2 = step3.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            expect(detachEvents2.length).toBe(1);
+            expect(detachEvents2[0].payload.cardUid).toBe('att1');
         });
 
         it('多个基地有行动卡时创建 Prompt 选择', () => {
@@ -461,16 +468,17 @@ describe('米斯卡塔尼克大学派系能力', () => {
 
             // 先打出卡 → 创建基地选择 interaction
             const { events: playEvents, matchState } = execPlayAction(state, '0', 'a1');
-            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
+            // 第一步：选择基地 0 → 创建点击式行动卡选择
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
             const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
-            // step1 应创建多选交互，不直接产生消灭事件
             expect(step1.events.length).toBe(0);
             const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
             expect(selectHandler).toBeDefined();
-            // 第二步：选择消灭 o1
-            const step2 = selectHandler!(step1.state ?? matchState, '0', [{ cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' }], undefined, defaultRandom, 1001);
+            // 第二步：点击消灭 o1
+            const step2 = selectHandler!(step1.state ?? matchState, '0',
+                { cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                { continuationContext: { baseIndex: 0 } } as any, defaultRandom, 1001);
             const allEvents = [...playEvents, ...step2.events];
             const newState = applyEvents(state, allEvents);
             // 基地上不应有持续行动卡

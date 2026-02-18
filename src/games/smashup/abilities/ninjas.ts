@@ -55,7 +55,9 @@ function ninjaMaster(ctx: AbilityContext): AbilityResult {
     const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     const interaction = createSimpleChoice(
         `ninja_master_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从（可跳过）', [...buildMinionTargetOptions(options), skipOption] as any[], 'ninja_master',
+        '选择要消灭的随从（可跳过）',
+        [...buildMinionTargetOptions(options), skipOption] as any[],
+        { sourceId: 'ninja_master', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -76,8 +78,7 @@ function ninjaTigerAssassin(ctx: AbilityContext): AbilityResult {
     });
     const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     const interaction = createSimpleChoice(
-        `ninja_tiger_assassin_${ctx.now}`, ctx.playerId,
-        '选择要消灭的力量≤3的随从（可跳过）', [...buildMinionTargetOptions(options), skipOption] as any[], 'ninja_tiger_assassin',
+        `ninja_tiger_assassin_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的力量≤3的随从（可跳过）', targetType: 'minion' }, [...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), skipOption] as any[], 'ninja_tiger_assassin'
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -100,9 +101,8 @@ function ninjaSeeingStars(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
-        `ninja_seeing_stars_${ctx.now}`, ctx.playerId,
-        '选择要消灭的力量≤3的随从', buildMinionTargetOptions(options), 'ninja_seeing_stars',
-    );
+        `ninja_seeing_stars_${ctx.now}`, ctx.playerId, { sourceId: '选择要消灭的力量≤3的随从', targetType: 'minion' }, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), 'ninja_seeing_stars'
+        );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -210,9 +210,8 @@ function ninjaWayOfDeception(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `ninja_way_of_deception_${ctx.now}`, ctx.playerId,
-        '选择要移动的己方随从', buildMinionTargetOptions(options), 'ninja_way_of_deception_choose_minion',
-    );
+        `ninja_way_of_deception_${ctx.now}`, ctx.playerId, { sourceId: '选择要移动的己方随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'ninja_way_of_deception_choose_minion'
+        );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -240,7 +239,7 @@ function ninjaDisguise(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `ninja_disguise_base_${ctx.now}`, ctx.playerId,
         '伪装：选择一个基地', buildBaseTargetOptions(baseCandidates, ctx.state),
-        { sourceId: 'ninja_disguise_choose_base', autoCancelOption: true },
+        { sourceId: 'ninja_disguise_choose_base', targetType: 'base', autoCancelOption: true }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ctx.cardUid } } }) };
 }
@@ -265,9 +264,8 @@ function ninjaDisguiseSelectMinions(ctx: AbilityContext, baseIndex: number): Abi
     });
     const interaction = createSimpleChoice(
         `ninja_disguise_select_${ctx.now}`, ctx.playerId,
-        `伪装：选择 1-${maxSelect} 个己方随从`, buildMinionTargetOptions(options),
-        'ninja_disguise_choose_minions', undefined, { min: 1, max: maxSelect },
-    );
+        `伪装：选择 1-${maxSelect} 个己方随从`, buildMinionTargetOptions(options), { sourceId: 'ninja_disguise_choose_minions', targetType: 'minion' }, undefined, { min: 1, max: maxSelect }
+        );
     return { events: [], matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ctx.cardUid, baseIndex } } }) };
 }
 
@@ -531,9 +529,8 @@ export function registerNinjaInteractionHandlers(): void {
         }
         if (candidates.length === 0) return undefined;
         const next = createSimpleChoice(
-            `ninja_way_of_deception_base_${timestamp}`, playerId,
-            '选择目标基地', buildBaseTargetOptions(candidates, state.core), 'ninja_way_of_deception_choose_base',
-        );
+            `ninja_way_of_deception_base_${timestamp}`, playerId, { sourceId: '选择目标基地', targetType: 'base' }, buildBaseTargetOptions(candidates, state.core), 'ninja_way_of_deception_choose_base'
+            );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { minionUid, minionDefId: minion.defId, fromBaseIndex: baseIndex } } }), events: [] };
     });
 
@@ -568,9 +565,8 @@ export function registerNinjaInteractionHandlers(): void {
         });
         const next = createSimpleChoice(
             `ninja_disguise_select_${timestamp}`, playerId,
-            `伪装：选择 1-${maxSelect} 个己方随从`, buildMinionTargetOptions(options),
-            'ninja_disguise_choose_minions', undefined, { min: 1, max: maxSelect },
-        );
+            `伪装：选择 1-${maxSelect} 个己方随从`, buildMinionTargetOptions(options), { sourceId: 'ninja_disguise_choose_minions', targetType: 'minion' }, undefined, { min: 1, max: maxSelect }
+            );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { cardUid: ctx?.cardUid, baseIndex } } }), events: [] };
     });
 

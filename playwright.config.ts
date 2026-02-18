@@ -73,21 +73,21 @@ if (useDevServers) {
 const webServerConfig = shouldStartServers
     ? [
         {
-            command: `npx vite --port ${port} --strictPort`,
+            command: `npx vite --port ${port}`,
             url: baseURL,
-            reuseExistingServer: true,
+            reuseExistingServer: !process.env.CI, // CI 环境不复用，本地开发可以复用
             timeout: 120000,
         },
         {
             command: `cross-env USE_PERSISTENT_STORAGE=false GAME_SERVER_PORT=${gameServerPort} npm run dev:game`,
             url: `http://localhost:${gameServerPort}/games`,
-            reuseExistingServer: true,
+            reuseExistingServer: !process.env.CI,
             timeout: 120000,
         },
         {
             command: `cross-env API_SERVER_PORT=${apiServerPort} npm run dev:api`,
             url: `http://localhost:${apiServerPort}/health`,
-            reuseExistingServer: true,
+            reuseExistingServer: !process.env.CI,
             timeout: 120000,
         },
     ]

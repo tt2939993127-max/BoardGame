@@ -482,7 +482,7 @@ export function registerBaseAbilities(): void {
         // 多张手牌→Prompt 选择弃哪张
         if (!ctx.matchState) return { events: [] };
         
-        // 先生成初始选项（基于当前状态）
+        // 生成初始选项（基于当前状态）
         const initialOptions = player.hand.map((c, i) => {
             const def = getCardDef(c.defId);
             return { id: `card-${i}`, label: def?.name ?? c.defId, value: { cardUid: c.uid, defId: c.defId } };
@@ -496,14 +496,7 @@ export function registerBaseAbilities(): void {
             { sourceId: 'base_haunted_house_al9000' },
         );
         
-        // 注入选项生成器（用于队列中的交互）
-        (interaction.data as any).optionsGenerator = (state: any) => {
-            const currentPlayer = state.core.players[ctx.playerId];
-            return currentPlayer.hand.map((c: any, i: number) => {
-                const def = getCardDef(c.defId);
-                return { id: `card-${i}`, label: def?.name ?? c.defId, value: { cardUid: c.uid, defId: c.defId } };
-            });
-        };
+        // 自动注入的 optionsGenerator 会处理选项过滤（InteractionSystem.queueInteraction）
         
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });

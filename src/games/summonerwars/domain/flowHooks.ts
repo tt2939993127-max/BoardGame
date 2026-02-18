@@ -225,10 +225,12 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
         timestamp,
       });
       
-      // 弃置当前玩家的所有主动事件
+      // 弃置即将开始新回合的玩家的所有主动事件
+      // 规则："你的主动事件在你回合开始时弃置" = 施放该事件的玩家在自己下一回合开始时弃置
+      // 此时 nextPlayer 即将开始新回合，所以弃置 nextPlayer 的主动事件
       // 殉葬火堆有充能时不自动弃置，等待玩家选择治疗目标（由 UI 触发 FUNERAL_PYRE_HEAL 命令）
-      const currentPlayer = core.players[playerId];
-      for (const activeEvent of currentPlayer.activeEvents) {
+      const newTurnPlayer = core.players[nextPlayer];
+      for (const activeEvent of newTurnPlayer.activeEvents) {
         const cardBaseId = getBaseCardId(activeEvent.id);
         if (cardBaseId === CARD_IDS.NECRO_FUNERAL_PYRE && (activeEvent.charges ?? 0) > 0) {
           // 有充能的殉葬火堆：不自动弃置，由 UI 处理
@@ -238,14 +240,14 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
           // 圣洁审判有充能时：消耗1充能代替弃置
           events.push({
             type: SW_EVENTS.FUNERAL_PYRE_CHARGED,
-            payload: { playerId, eventCardId: activeEvent.id, charges: (activeEvent.charges ?? 0) - 1 },
+            payload: { playerId: nextPlayer, eventCardId: activeEvent.id, charges: (activeEvent.charges ?? 0) - 1 },
             timestamp,
           });
           continue;
         }
         events.push({
           type: SW_EVENTS.ACTIVE_EVENT_DISCARDED,
-          payload: { playerId, cardId: activeEvent.id },
+          payload: { playerId: nextPlayer, cardId: activeEvent.id },
           timestamp,
         });
       }

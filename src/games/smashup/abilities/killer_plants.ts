@@ -264,8 +264,9 @@ function killerPlantBudding(ctx: AbilityContext): AbilityResult {
     // Prompt 选择场上随从
     const interaction = createSimpleChoice(
         `killer_plant_budding_choose_${ctx.now}`, ctx.playerId,
-        '出芽生殖：选择一个场上的随从', buildMinionTargetOptions(candidates),
-        { sourceId: 'killer_plant_budding_choose', autoCancelOption: true },
+        '出芽生殖：选择一个场上的随从',
+        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        { sourceId: 'killer_plant_budding_choose', targetType: 'minion', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }

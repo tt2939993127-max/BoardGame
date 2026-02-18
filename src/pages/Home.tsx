@@ -26,6 +26,7 @@ import {
     readStoredMatchCredentials,
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
+import type { MatchPlayer } from '../services/matchApi';
 import { getOrCreateGuestId, getGuestName as resolveGuestName, getOwnerKey as resolveOwnerKey } from '../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { LanguageSwitcher } from '../components/common/i18n/LanguageSwitcher';
@@ -280,7 +281,7 @@ export const Home = () => {
                 setActiveMatch({
                     matchID: local.matchID,
                     gameName: local.gameName,
-                    players: match.players.map((p: any) => ({
+                    players: match.players.map((p: MatchPlayer) => ({
                         id: p.id,
                         name: p.name,
                         isConnected: p.isConnected,

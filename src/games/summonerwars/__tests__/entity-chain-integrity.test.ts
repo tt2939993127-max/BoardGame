@@ -798,9 +798,9 @@ describe('完整流程验证 (Section 9)', () => {
 
         const attackEvent = events.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
         expect(attackEvent).toBeDefined();
-        const diceResults = (attackEvent!.payload as Record<string, unknown>).diceResults as string[];
+        const diceResults = (attackEvent!.payload as Record<string, unknown>).diceResults as Array<{ faceIndex: number; marks: string[] }>;
         // testRandom() random=0.5 → 6骰中一定有 special 面
-        if (diceResults.some(r => r === 'special')) {
+        if (diceResults.some(r => r.marks.includes('special'))) {
             const reduced = events.find(e =>
                 e.type === SW_EVENTS.DAMAGE_REDUCED
                 && (e.payload as Record<string, unknown>).sourceAbilityId === 'evasion'

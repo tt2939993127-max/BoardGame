@@ -19,7 +19,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import type { PendingInteraction } from '../domain/types';
+import type { InteractionDescriptor } from '../domain/types';
 import type { Die } from '../domain/types';
 
 /**
@@ -71,7 +71,7 @@ const INITIAL_STATE: LocalInteractionState = {
  * @param pendingInteraction - 当前待处理的交互（来自游戏状态）
  * @returns 本地状态和处理器
  */
-export function useInteractionState(pendingInteraction?: PendingInteraction) {
+export function useInteractionState(pendingInteraction?: InteractionDescriptor) {
     const [localState, setLocalState] = useState<LocalInteractionState>(INITIAL_STATE);
 
     // 当 pendingInteraction 变化时自动重置状态

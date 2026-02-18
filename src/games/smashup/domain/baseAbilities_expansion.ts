@@ -38,36 +38,42 @@ import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 export function registerExpansionBaseAbilities(): void {
 
     // ── 疯人院（The Asylum）──────────────────────────────────────
-    // "在一个玩家打出一个随从到这后，该玩家可以将一张疯狂卡从手牌或弃牌堆返回疯狂牌堆?
+    // "在一个玩家打出一个随从到这后，该玩家可以将一张疯狂卡从手牌或弃牌堆返回疯狂牌堆"
+    // 疯狂卡都是同一张牌（special_madness），按来源分组显示，无需逐张列出
     registerBaseAbility('base_the_asylum', 'onMinionPlayed', (ctx) => {
         if (!ctx.state.madnessDeck) return { events: [] };
         const player = ctx.state.players[ctx.playerId];
         if (!player) return { events: [] };
 
-        // 收集手牌和弃牌堆中的疯狂卡?
-        const madnessCards: { uid: string; source: 'hand' | 'discard' }[] = [];
-        for (const c of player.hand) {
-            if (c.defId === MADNESS_CARD_DEF_ID) {
-                madnessCards.push({ uid: c.uid, source: 'hand' });
-            }
-        }
-        for (const c of player.discard) {
-            if (c.defId === MADNESS_CARD_DEF_ID) {
-                madnessCards.push({ uid: c.uid, source: 'discard' });
-            }
-        }
+        const handMadness = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+        const discardMadness = player.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
 
-        // 无疯狂卡 ?不生成 Prompt
-        if (madnessCards.length === 0) return { events: [] };
+        if (handMadness.length === 0 && discardMadness.length === 0) return { events: [] };
 
-        const options: { id: string; label: string; value: Record<string, unknown>; displayMode?: 'card' | 'button' }[] = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
-            ...madnessCards.map((m, i) => ({
-                id: `madness-${i}`,
-                label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
-                value: { cardUid: m.uid, defId: MADNESS_CARD_DEF_ID, source: m.source },
-            })),
-        ];
+        // 按来源分组的按钮选项（返回1张）
+        const options: any[] = [];
+        if (handMadness.length > 0) {
+            options.push({
+                id: 'hand',
+                label: `从手牌返回 (${handMadness.length}张)`,
+                value: { source: 'hand' },
+                displayMode: 'button' as const,
+            });
+        }
+        if (discardMadness.length > 0) {
+            options.push({
+                id: 'discard',
+                label: `从弃牌堆返回 (${discardMadness.length}张)`,
+                value: { source: 'discard' },
+                displayMode: 'button' as const,
+            });
+        }
+        options.push({
+            id: 'skip',
+            label: '跳过',
+            value: { skip: true },
+            displayMode: 'button' as const,
+        });
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
@@ -115,6 +121,7 @@ export function registerExpansionBaseAbilities(): void {
 
     // ── 密斯卡托尼克大学基地（Miskatonic University Base）────────
     // "在这个基地计分后，冠军可以搜寻他的手牌和弃牌堆中任意数量的疯狂卡，然后返回到疯狂卡牌库。"
+    // 疯狂卡都是同一张牌（special_madness），按来源+数量分组显示按钮，无需逐张列出
     registerBaseAbility('base_miskatonic_university_base', 'afterScoring', (ctx) => {
         if (!ctx.state.madnessDeck) return { events: [] };
         if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
@@ -124,34 +131,59 @@ export function registerExpansionBaseAbilities(): void {
         const winner = ctx.state.players[winnerId];
         if (!winner) return { events: [] };
 
-        // 收集冠军手牌和弃牌堆中的疯狂卡
-        const madnessCards: { uid: string; source: 'hand' | 'discard' }[] = [];
-        for (const c of winner.hand) {
-            if (c.defId === MADNESS_CARD_DEF_ID) {
-                madnessCards.push({ uid: c.uid, source: 'hand' });
-            }
-        }
-        for (const c of winner.discard) {
-            if (c.defId === MADNESS_CARD_DEF_ID) {
-                madnessCards.push({ uid: c.uid, source: 'discard' });
-            }
-        }
+        const handMadness = winner.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+        const discardMadness = winner.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+        const totalCount = handMadness.length + discardMadness.length;
 
         // 无疯狂卡 → 跳过
-        if (madnessCards.length === 0) return { events: [] };
+        if (totalCount === 0) return { events: [] };
 
-        // "任意数量"→多选交互，min: 0 允许跳过
-        const options = madnessCards.map((m, i) => ({
-            id: `madness-${i}`,
-            label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
-            value: { cardUid: m.uid, defId: MADNESS_CARD_DEF_ID, source: m.source },
-        }));
+        // 按来源+数量分组的按钮选项
+        const options: any[] = [];
+
+        if (handMadness.length > 0) {
+            for (let i = 1; i <= handMadness.length; i++) {
+                options.push({
+                    id: `hand-${i}`,
+                    label: `从手牌返回 ${i} 张`,
+                    value: { source: 'hand', count: i },
+                    displayMode: 'button' as const,
+                });
+            }
+        }
+
+        if (discardMadness.length > 0) {
+            for (let i = 1; i <= discardMadness.length; i++) {
+                options.push({
+                    id: `discard-${i}`,
+                    label: `从弃牌堆返回 ${i} 张`,
+                    value: { source: 'discard', count: i },
+                    displayMode: 'button' as const,
+                });
+            }
+        }
+
+        // 两个来源都有时，添加"全部返回"选项
+        if (handMadness.length > 0 && discardMadness.length > 0) {
+            options.push({
+                id: 'all',
+                label: `全部返回 (手牌${handMadness.length}张 + 弃牌堆${discardMadness.length}张)`,
+                value: { source: 'all', handCount: handMadness.length, discardCount: discardMadness.length },
+                displayMode: 'button' as const,
+            });
+        }
+
+        options.push({
+            id: 'skip',
+            label: '不返回',
+            value: { skip: true },
+            displayMode: 'button' as const,
+        });
 
         if (ctx.matchState) {
             const interaction = createSimpleChoice(
                 `base_miskatonic_university_base_${winnerId}_${ctx.now}`, winnerId,
-                '密大基地：选择返回任意数量的疯狂卡到疯狂牌库', options as any[], 'base_miskatonic_university_base',
-                undefined, { min: 0, max: madnessCards.length },
+                `密大基地：你有 ${totalCount} 张疯狂卡可以返回到疯狂牌库`, options as any[], 'base_miskatonic_university_base',
             );
             ctx.matchState = queueInteraction(ctx.matchState, interaction);
         }
@@ -587,10 +619,17 @@ export function registerExpansionBaseAbilities(): void {
 /** 注册扩展包基地能力的交互解决处理函数 */
 export function registerExpansionBaseInteractionHandlers(): void {
 
+    // 疯人院：按来源返回1张疯狂卡（可跳过）
     registerInteractionHandler('base_the_asylum', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as { skip?: boolean; cardUid?: string; source?: string };
+        const selected = value as { skip?: boolean; source?: 'hand' | 'discard' };
         if (selected.skip) return { state, events: [] };
-        return { state, events: [returnMadnessCard(playerId, selected.cardUid!, '疑人院：返回疯狂卡', timestamp)] };
+        
+        const player = state.core.players[playerId];
+        const madnessCards = selected.source === 'hand' ? player.hand : player.discard;
+        const madnessCard = madnessCards.find(c => c.defId === MADNESS_CARD_DEF_ID);
+        
+        if (!madnessCard) return { state, events: [] };
+        return { state, events: [returnMadnessCard(playerId, madnessCard.uid, '疯人院：返回疯狂卡', timestamp)] };
     });
 
     registerInteractionHandler('base_innsmouth_base', (state, _playerId, value, _iData, _random, timestamp) => {
@@ -603,14 +642,37 @@ export function registerExpansionBaseInteractionHandlers(): void {
         } as CardToDeckBottomEvent)] };
     });
 
+    // 密大基地：按来源+数量返回疯狂卡（按钮单选，和金克丝同模式）
     registerInteractionHandler('base_miskatonic_university_base', (state, playerId, value, _iData, _random, timestamp) => {
-        // 多选：value 是数组（任意数量的疯狂卡）
-        const selected = value as Array<{ cardUid: string; source: string }>;
-        if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
+        const selected = value as { 
+            skip?: boolean;
+            source?: 'hand' | 'discard' | 'all';
+            count?: number;
+            handCount?: number;
+            discardCount?: number;
+        };
+        if (selected.skip) return { state, events: [] };
+        
+        const player = state.core.players[playerId];
         const events: SmashUpEvent[] = [];
-        for (const item of selected) {
-            events.push(returnMadnessCard(playerId, item.cardUid, '密大基地：返回疯狂卡', timestamp));
+        
+        if (selected.source === 'all') {
+            const handMadness = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+            const discardMadness = player.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+            for (const card of handMadness) {
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+            }
+            for (const card of discardMadness) {
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+            }
+        } else {
+            const madnessCards = selected.source === 'hand' ? player.hand : player.discard;
+            const toReturn = madnessCards.filter(c => c.defId === MADNESS_CARD_DEF_ID).slice(0, selected.count);
+            for (const card of toReturn) {
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+            }
         }
+        
         return { state, events };
     });
 

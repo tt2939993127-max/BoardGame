@@ -67,7 +67,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => (
 export const parseNamespaceLiteral = (value: string): string[] => {
     const trimmed = value.trim();
     const namespaces: string[] = [];
-    const regex = /['\"]([^'\"]+)['\"]/g;
+    const regex = /['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(trimmed)) !== null) {
         namespaces.push(match[1]);
@@ -80,7 +80,7 @@ const parseNamespaceArgument = (argument: string): { namespaces: string[]; dynam
     if (!trimmed) {
         return { namespaces: [DEFAULT_NAMESPACE], dynamic: false, fromArray: false };
     }
-    const firstMatch = trimmed.match(/^(\[[\s\S]*?\]|['"][^'"]+['"])/);
+    const firstMatch = trimmed.match(/^([\s\S]*?]|['"][^'"]+['"])/);
     if (!firstMatch) {
         return { namespaces: [DEFAULT_NAMESPACE], dynamic: true, fromArray: false };
     }
@@ -93,7 +93,7 @@ const parseNamespaceArgument = (argument: string): { namespaces: string[]; dynam
     if (token.startsWith('[')) {
         const cleaned = token
             .replace(/['"][^'"]*['"]/g, '')
-            .replace(/[\s,\[\]]/g, '');
+            .replace(/[\s,[\]]/g, '');
         if (cleaned.length > 0) {
             dynamic = true;
         }
@@ -142,7 +142,7 @@ const loadLocales = (): { locales: LocalesByLanguage; namespaceFiles: string[] }
 };
 
 const findNsOverride = (snippet: string): string[] => {
-    const match = snippet.match(/\bns\s*:\s*(\[[^\]]*\]|['\"][^'\"]+['\"])/);
+    const match = snippet.match(/\bns\s*:\s*(\[[^\]]*\]|['"][^'"]+['"])/);
     if (!match) return [];
     return parseNamespaceLiteral(match[1]);
 };
@@ -396,7 +396,7 @@ export const collectReferencesFromContent = (
         pushReference(parsed.key, namespaces, line, source);
     }
 
-    const toastRegex = /toast\.\w+\s*\(\s*\{[\s\S]*?kind\s*:\s*['"]i18n['"][\s\S]*?\}\s*[,\)\n]/g;
+    const toastRegex = /toast\.\w+\s*\(\s*\{[\s\S]*?kind\s*:\s*['"]i18n['"][\s\S]*?\}\s*[,)\n]/g;
     let toastMatch: RegExpExecArray | null;
     while ((toastMatch = toastRegex.exec(content)) !== null) {
         const contextStart = Math.max(0, toastMatch.index - 300);

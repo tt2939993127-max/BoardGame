@@ -85,19 +85,16 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
 
     const handleSelectCharacter = (characterId: SelectableCharacterId) => {
-        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_select key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId} characterId=${characterId}`);
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
         onSelect(characterId);
     };
 
     const handleReady = () => {
-        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_ready key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId}`);
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
         onReady();
     };
 
     const handleStart = () => {
-        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_start key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId}`);
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
         onStart();
     };

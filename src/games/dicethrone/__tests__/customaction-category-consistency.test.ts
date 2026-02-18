@@ -243,6 +243,8 @@ describe('CustomAction categories 与 handler 输出一致性审计', () => {
             'pyro-blast-2-roll',
             // 火法师炎爆术 III：有 FM 时走 reroll 分支（BONUS_DICE_REROLL_REQUESTED），不直接产生 DAMAGE_DEALT
             'pyro-blast-3-roll',
+            // 圣骑士神圣祝福防御：只有致死伤害 + 有 Blessing token 时才触发，产生 DAMAGE_DEALT（将 HP 设为 1）
+            'paladin-blessing-prevent',
         ]);
 
         for (const actionId of registeredIds) {

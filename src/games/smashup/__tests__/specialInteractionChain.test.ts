@@ -271,6 +271,44 @@ describe('Protection (affect): ghost_incorporeal', () => {
         // 自己（P1）的效果 → 不受保护
         expect(isMinionProtected(core, protectedMinion, 0, '1', 'affect')).toBe(false);
     });
+
+    it('incorporeal 保护的随从不出现在对手效果的目标选项中（通用过滤）', () => {
+        // 验证 buildMinionTargetOptions 的 context 参数自动过滤受保护的随从
+        // P0 打出"上海"（移动对手随从），P1 的随从附着 incorporeal
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('sh1', 'pirate_shanghai', '0', 'action')],
+                    factions: ['pirates', 'aliens'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [
+                    makeMinion('prot1', 'test_minion', '1', 3, {
+                        attachedActions: [{ uid: 'inc1', defId: 'ghost_incorporeal', ownerId: '1', metadata: {} }],
+                    }),
+                    makeMinion('normal1', 'test_minion', '1', 2),
+                ]),
+                makeBase('test_base_2'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+
+        // 打出上海 → 选对手随从移动
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'sh1' },
+        }, 'shanghai vs incorporeal');
+        expect(r1.steps[0]?.success).toBe(true);
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        expect(choice1).toBeDefined();
+        
+        // 验证：prot1（受保护）不在选项中，normal1（未保护）在选项中
+        const options = choice1.options;
+        expect(options.some(o => o.value?.minionUid === 'prot1')).toBe(false);
+        expect(options.some(o => o.value?.minionUid === 'normal1')).toBe(true);
+    });
 });
 
 // ============================================================================

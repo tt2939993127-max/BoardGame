@@ -114,6 +114,4 @@ export function initSmashUpCardAtlases() {
         image: 'smashup/cards/cards4',
         config: generateUniformAtlasConfig(1943, 2048, 6, 8),
     });
-
-    console.log('[initSmashUpCardAtlases] 注册完成');
 }

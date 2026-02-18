@@ -4,8 +4,8 @@
  * 测试覆盖：
  * - 正确加载自定义牌组列表
  * - 4列网格布局保持不变
- * - 卡片顺序正确（默认阵营 → 自定义牌组 → "+"按钮）
- * - "+"按钮仅在自定义牌组数量 < 2 时显示
+ * - 卡片顺序正确（默认阵营 → 自定义牌组（最多1个） → "+"按钮）
+ * - "+"按钮始终显示（有牌组时显示"更多"，无牌组时显示"新建"）
  * - 选择自定义牌组后状态更新
  */
 
@@ -170,7 +170,7 @@ describe('FactionSelection', () => {
     });
   });
 
-  it('应该最多显示 2 个自定义牌组', async () => {
+  it('应该只显示第一个自定义牌组', async () => {
     const mockDecks: SavedDeckSummary[] = [
       {
         id: 'deck-1',
@@ -200,12 +200,12 @@ describe('FactionSelection', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('custom-deck-card-deck-1')).toBeInTheDocument();
-      expect(screen.getByTestId('custom-deck-card-deck-2')).toBeInTheDocument();
+      expect(screen.queryByTestId('custom-deck-card-deck-2')).not.toBeInTheDocument();
       expect(screen.queryByTestId('custom-deck-card-deck-3')).not.toBeInTheDocument();
     });
   });
 
-  it('应该在自定义牌组数量 < 2 时显示"+"按钮', async () => {
+  it('应该在有自定义牌组时显示"更多牌组"按钮', async () => {
     const mockDecks: SavedDeckSummary[] = [
       {
         id: 'deck-1',
@@ -220,39 +220,12 @@ describe('FactionSelection', () => {
     render(<FactionSelection {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('factionSelection.newDeck')).toBeInTheDocument();
+      // 当有牌组时，显示"更多牌组"按钮
+      expect(screen.getByText('factionSelection.moreDeck')).toBeInTheDocument();
     });
   });
 
-  it('应该在自定义牌组数量 = 2 时不显示"+"按钮', async () => {
-    const mockDecks: SavedDeckSummary[] = [
-      {
-        id: 'deck-1',
-        name: '牌组1',
-        summonerFaction: 'phoenix_elves' as any,
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01',
-      },
-      {
-        id: 'deck-2',
-        name: '牌组2',
-        summonerFaction: 'tundra_orcs' as any,
-        createdAt: '2024-01-02',
-        updatedAt: '2024-01-02',
-      },
-    ];
-    mockListCustomDecks.mockResolvedValue(mockDecks);
-
-    render(<FactionSelection {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('custom-deck-card-deck-1')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText('factionSelection.newDeck')).not.toBeInTheDocument();
-  });
-
-  it('应该在没有自定义牌组时显示"+"按钮', async () => {
+  it('应该在没有自定义牌组时显示"新建牌组"按钮', async () => {
     mockListCustomDecks.mockResolvedValue([]);
 
     render(<FactionSelection {...defaultProps} />);

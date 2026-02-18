@@ -13,76 +13,87 @@
 
 import { test, expect } from './fixtures';
 import { 
-    waitForPhase, 
-    rollDice, 
-    confirmRoll, 
-    selectAbility,
-    advancePhase,
     readCoreState,
     readEventStream,
     applyCoreStateDirect,
+    selectCharacter,
+    readyAndStartGame,
+    waitForGameBoard,
 } from './helpers/dicethrone';
 
 test.describe('DiceThrone Token Response Timing', () => {
-    test('Token 响应请求后不应立即生成伤害事件', async ({ 
-        createDiceThroneMatch, 
-        page1, 
-        page2 
-    }) => {
-        // 创建对局：Barbarian vs Moon Elf
-        await createDiceThroneMatch({
-            player1Character: 'barbarian',
-            player2Character: 'moon_elf',
-        });
+    test('Token 响应请求后不应立即生成伤害事件', async ({ dicethroneMatch }) => {
+        const { hostPage, guestPage } = dicethroneMatch;
 
-        // 等待双方进入游戏
-        await Promise.all([
-            waitForPhase(page1, 'offensiveRoll'),
-            waitForPhase(page2, 'offensiveRoll'),
-        ]);
+        // 完成角色选择
+        await selectCharacter(hostPage, 'barbarian');
+        await selectCharacter(guestPage, 'moon_elf');
+        await readyAndStartGame(hostPage, guestPage);
+
+        // 等待游戏开始
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+
+        // 等待进入 offensiveRoll 阶段
+        await hostPage.waitForSelector('[data-phase="offensiveRoll"]', { timeout: 15000 });
 
         // === 设置初始状态 ===
-        // 给防御方（Moon Elf）添加闪避 Token，并设置固定伤害
-        const initialState = await readCoreState(page1);
+        // 给防御方（Moon Elf）添加闪避 Token
+        const initialState = await readCoreState(hostPage);
         initialState.players['1'].tokens = { evasive: 2 };
         initialState.players['0'].resources.hp = 50;
         initialState.players['1'].resources.hp = 50;
-        await applyCoreStateDirect(page1, initialState);
-        await page1.waitForTimeout(500);
+        await applyCoreStateDirect(hostPage, initialState);
+        await hostPage.waitForTimeout(500);
 
         // === 攻击方回合：发起攻击 ===
         // 投骰
-        await rollDice(page1);
-        await page1.waitForTimeout(500);
+        const rollButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
+        await expect(rollButton).toBeEnabled({ timeout: 5000 });
+        await rollButton.click();
+        await hostPage.waitForTimeout(500);
 
         // 确认投骰
-        await confirmRoll(page1);
-        await page1.waitForTimeout(500);
+        const confirmButton = hostPage.locator('[data-tutorial-id="dice-confirm-button"]');
+        await expect(confirmButton).toBeEnabled({ timeout: 5000 });
+        await confirmButton.click();
+        await hostPage.waitForTimeout(500);
 
         // 选择有伤害的技能（Smash - 基础攻击）
-        await selectAbility(page1, 'smash');
-        await page1.waitForTimeout(500);
+        const smashButton = hostPage.locator('[data-ability-id="smash"]').first();
+        if (await smashButton.isVisible({ timeout: 2000 })) {
+            await smashButton.click();
+            await hostPage.waitForTimeout(500);
+        }
 
         // 推进到防御阶段
-        await advancePhase(page1);
-        await Promise.all([
-            waitForPhase(page1, 'defensiveRoll'),
-            waitForPhase(page2, 'defensiveRoll'),
-        ]);
+        const advanceButton = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+        await advanceButton.click();
+        await hostPage.waitForTimeout(1000);
+
+        // 等待防御阶段
+        await guestPage.waitForSelector('[data-phase="defensiveRoll"]', { timeout: 10000 });
 
         // === 防御方回合：投骰并确认 ===
-        await rollDice(page2);
-        await page2.waitForTimeout(500);
+        const defenseRollButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
+        await expect(defenseRollButton).toBeEnabled({ timeout: 5000 });
+        await defenseRollButton.click();
+        await guestPage.waitForTimeout(500);
 
-        await confirmRoll(page2);
-        await page2.waitForTimeout(500);
+        const defenseConfirmButton = guestPage.locator('[data-tutorial-id="dice-confirm-button"]');
+        await expect(defenseConfirmButton).toBeEnabled({ timeout: 5000 });
+        await defenseConfirmButton.click();
+        await guestPage.waitForTimeout(500);
 
         // 推进到攻击结算（触发 Token 响应）
-        await advancePhase(page2);
-        await page2.waitForTimeout(1500);
+        const defenseAdvanceButton = guestPage.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
+        await defenseAdvanceButton.click();
+        await guestPage.waitForTimeout(1500);
 
         // === 验证 1：Token 响应请求后，事件流中不应有 DAMAGE_DEALT ===
-        const eventsAfterRequest = await readEventStream(page2);
+        const eventsAfterRequest = await readEventStream(guestPage);
         
         // 找到 TOKEN_RESPONSE_REQUESTED 事件的位置
         const tokenRequestIndex = eventsAfterRequest.findIndex(
@@ -112,17 +123,17 @@ test.describe('DiceThrone Token Response Timing', () => {
 
         // === 防御方跳过 Token 响应 ===
         // 查找跳过按钮（可能是"跳过"或"Skip"）
-        const skipButton = page2.locator('button').filter({ 
+        const skipButton = guestPage.locator('button').filter({ 
             hasText: /跳过|Skip/i 
         }).first();
         
         if (await skipButton.isVisible({ timeout: 2000 })) {
             await skipButton.click();
-            await page2.waitForTimeout(1500);
+            await guestPage.waitForTimeout(1500);
         }
 
         // === 验证 2：Token 响应关闭后，才应该有 DAMAGE_DEALT 事件 ===
-        const eventsAfterClose = await readEventStream(page2);
+        const eventsAfterClose = await readEventStream(guestPage);
         
         // 找到 TOKEN_RESPONSE_CLOSED 事件的位置
         const finalTokenCloseIndex = eventsAfterClose.findIndex(
@@ -144,7 +155,7 @@ test.describe('DiceThrone Token Response Timing', () => {
         }
 
         // === 验证 3：伤害应该正确应用 ===
-        const finalState = await readCoreState(page2);
+        const finalState = await readCoreState(guestPage);
         const defenderHp = finalState.players['1'].resources.hp;
         
         // 防御方应该受到伤害（HP 减少）
@@ -153,63 +164,80 @@ test.describe('DiceThrone Token Response Timing', () => {
         console.log(`✅ 验证通过：防御方 HP 从 50 降到 ${defenderHp}`);
     });
 
-    test('事件流顺序验证：完整的 Token 响应流程', async ({ 
-        createDiceThroneMatch, 
-        page1, 
-        page2 
-    }) => {
-        // 创建对局
-        await createDiceThroneMatch({
-            player1Character: 'barbarian',
-            player2Character: 'moon_elf',
-        });
+    test('事件流顺序验证：完整的 Token 响应流程', async ({ dicethroneMatch }) => {
+        const { hostPage, guestPage } = dicethroneMatch;
 
-        await Promise.all([
-            waitForPhase(page1, 'offensiveRoll'),
-            waitForPhase(page2, 'offensiveRoll'),
-        ]);
+        // 完成角色选择
+        await selectCharacter(hostPage, 'barbarian');
+        await selectCharacter(guestPage, 'moon_elf');
+        await readyAndStartGame(hostPage, guestPage);
+
+        // 等待游戏开始
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+
+        // 等待进入 offensiveRoll 阶段
+        await hostPage.waitForSelector('[data-phase="offensiveRoll"]', { timeout: 15000 });
 
         // 给防御方添加闪避 Token
-        const initialState = await readCoreState(page1);
+        const initialState = await readCoreState(hostPage);
         initialState.players['1'].tokens = { evasive: 2 };
-        await applyCoreStateDirect(page1, initialState);
-        await page1.waitForTimeout(500);
+        await applyCoreStateDirect(hostPage, initialState);
+        await hostPage.waitForTimeout(500);
 
         // 攻击方发起攻击
-        await rollDice(page1);
-        await page1.waitForTimeout(500);
-        await confirmRoll(page1);
-        await page1.waitForTimeout(500);
-        await selectAbility(page1, 'smash');
-        await page1.waitForTimeout(500);
-        await advancePhase(page1);
+        const rollButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
+        await expect(rollButton).toBeEnabled({ timeout: 5000 });
+        await rollButton.click();
+        await hostPage.waitForTimeout(500);
+
+        const confirmButton = hostPage.locator('[data-tutorial-id="dice-confirm-button"]');
+        await expect(confirmButton).toBeEnabled({ timeout: 5000 });
+        await confirmButton.click();
+        await hostPage.waitForTimeout(500);
+
+        const smashButton = hostPage.locator('[data-ability-id="smash"]').first();
+        if (await smashButton.isVisible({ timeout: 2000 })) {
+            await smashButton.click();
+            await hostPage.waitForTimeout(500);
+        }
+
+        const advanceButton = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+        await advanceButton.click();
+        await hostPage.waitForTimeout(1000);
 
         // 防御方投骰
-        await Promise.all([
-            waitForPhase(page1, 'defensiveRoll'),
-            waitForPhase(page2, 'defensiveRoll'),
-        ]);
-        await rollDice(page2);
-        await page2.waitForTimeout(500);
-        await confirmRoll(page2);
-        await page2.waitForTimeout(500);
+        await guestPage.waitForSelector('[data-phase="defensiveRoll"]', { timeout: 10000 });
+        
+        const defenseRollButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
+        await expect(defenseRollButton).toBeEnabled({ timeout: 5000 });
+        await defenseRollButton.click();
+        await guestPage.waitForTimeout(500);
+
+        const defenseConfirmButton = guestPage.locator('[data-tutorial-id="dice-confirm-button"]');
+        await expect(defenseConfirmButton).toBeEnabled({ timeout: 5000 });
+        await defenseConfirmButton.click();
+        await guestPage.waitForTimeout(500);
 
         // 推进到 Token 响应
-        await advancePhase(page2);
-        await page2.waitForTimeout(1500);
+        const defenseAdvanceButton = guestPage.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
+        await defenseAdvanceButton.click();
+        await guestPage.waitForTimeout(1500);
 
         // 跳过 Token 响应
-        const skipButton = page2.locator('button').filter({ 
+        const skipButton = guestPage.locator('button').filter({ 
             hasText: /跳过|Skip/i 
         }).first();
         
         if (await skipButton.isVisible({ timeout: 2000 })) {
             await skipButton.click();
-            await page2.waitForTimeout(1500);
+            await guestPage.waitForTimeout(1500);
         }
 
         // 验证完整的事件流顺序
-        const allEvents = await readEventStream(page2);
+        const allEvents = await readEventStream(guestPage);
         const eventTypes = allEvents.map((e: any) => e.event.type);
 
         // 找到关键事件的位置

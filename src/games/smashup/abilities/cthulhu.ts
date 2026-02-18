@@ -85,8 +85,8 @@ function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `cthulhu_recruit_by_force_${ctx.now}`, ctx.playerId,
-        '选择要放到牌库顶的随从（任意数量）', options as any[], 'cthulhu_recruit_by_force',
-        undefined, { min: 0, max: eligibleMinions.length },
+        '选择要放到牌库顶的随从（任意数量）', options as any[],
+        { sourceId: 'cthulhu_recruit_by_force', multi: { min: 0, max: eligibleMinions.length } },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -108,6 +108,16 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
         '选择要洗回牌库的战术（任意数量）', options,
         { sourceId: 'cthulhu_it_begins_again', multi: { min: 0, max: actionsInDiscard.length } },
     );
+    // 手动提供 optionsGenerator：从弃牌堆过滤行动卡
+    (interaction.data as any).optionsGenerator = (state: any) => {
+        const p = state.core.players[ctx.playerId];
+        const actions = p.discard.filter((c: any) => c.type === 'action');
+        return actions.map((c: any, i: number) => {
+            const def = getCardDef(c.defId);
+            const name = def?.name ?? c.defId;
+            return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        });
+    };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -172,7 +182,9 @@ function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
         `cthulhu_corruption_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从', buildMinionTargetOptions(options), 'cthulhu_corruption',
+        '选择要消灭的随从',
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        { sourceId: 'cthulhu_corruption', targetType: 'minion' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -200,8 +212,8 @@ function cthulhuMadnessUnleashed(ctx: AbilityContext): AbilityResult {
     }));
     const interaction = createSimpleChoice(
         `cthulhu_madness_unleashed_${ctx.now}`, ctx.playerId,
-        '选择要弃掉的疑狂卡（每张抽1牌+额外行动）', options as any[], 'cthulhu_madness_unleashed',
-        undefined, { min: 0, max: madnessInHand.length },
+        '选择要弃掉的疑狂卡（每张抽1牌+额外行动）', options as any[],
+        { sourceId: 'cthulhu_madness_unleashed', multi: { min: 0, max: madnessInHand.length } },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -351,8 +363,8 @@ function cthulhuChosenBeforeScoring(ctx: TriggerContext): TriggerResult {
             { id: 'yes', label: '是（抽疯狂卡，+2力量）', value: { activate: true, uid: first.uid, baseIndex: first.baseIndex, baseDefId: firstBaseDefId, controller: first.controller } },
             { id: 'no', label: '否（不触发）', value: { activate: false } },
         ],
-        'cthulhu_chosen_confirm',
-    );
+        'cthulhu_chosen_confirm'
+        );
     const ms = queueInteraction(ctx.matchState, {
         ...interaction,
         data: { ...interaction.data, continuationContext: { remaining } },
@@ -630,8 +642,8 @@ export function registerCthulhuInteractionHandlers(): void {
                     { id: 'yes', label: '是（抽疯狂卡，+2力量）', value: { activate: true, uid: next.uid, baseIndex: next.baseIndex, baseDefId: nextBaseDefId, controller: next.controller } },
                     { id: 'no', label: '否（不触发）', value: { activate: false } },
                 ],
-                'cthulhu_chosen_confirm',
-            );
+                'cthulhu_chosen_confirm'
+                );
             return {
                 state: queueInteraction(state, {
                     ...interaction,

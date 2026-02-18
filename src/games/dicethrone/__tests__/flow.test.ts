@@ -969,11 +969,11 @@ describe('王权骰铸流程测试', () => {
             const events = resolveEffectsToEvents(effects, 'immediate', ctx, { random: fixedRandom });
             const event = events.find(e => e.type === 'INTERACTION_REQUESTED') as any;
             expect(event).toBeDefined();
-            // createSelectStatusInteraction 使用标准的 simple-choice 交互类型
-            expect(event.payload?.kind).toBe('simple-choice');
-            // 验证选项是否正确生成（应该只包含自身的状态）
-            expect(event.payload?.data?.options).toBeDefined();
-            expect(Array.isArray(event.payload?.data?.options)).toBe(true);
+            // 原始实现直接创建 PendingInteraction
+            expect(event.payload?.interaction).toBeDefined();
+            expect(event.payload?.interaction?.type).toBe('selectStatus');
+            // 验证交互配置正确（仅限自身）
+            expect(event.payload?.interaction?.targetPlayerIds).toEqual(['0']);
         });
     });
 
@@ -1906,7 +1906,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-play-six' }),
                     cmd('MODIFY_DIE', '0', { dieId: 0, newValue: 6 }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -1929,7 +1928,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-me-too' }),
                     cmd('MODIFY_DIE', '0', { dieId: 1, newValue: 2 }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -1952,7 +1950,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-surprise' }),
                     cmd('MODIFY_DIE', '0', { dieId: 2, newValue: 6 }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     diceValues: [1, 2, 6, 4, 5],
@@ -1975,7 +1972,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('PLAY_CARD', '0', { cardId: 'card-unexpected' }),
                     cmd('MODIFY_DIE', '0', { dieId: 0, newValue: 6 }),
                     cmd('MODIFY_DIE', '0', { dieId: 1, newValue: 6 }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     diceValues: [6, 6, 3, 4, 5],
@@ -1997,7 +1993,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-flick' }),
                     cmd('MODIFY_DIE', '0', { dieId: 0, newValue: 3 }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     diceValues: [3, 2, 2, 2, 2],
@@ -2018,7 +2013,8 @@ describe('王权骰铸流程测试', () => {
                     ...advanceTo('offensiveRoll'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-worthy-of-me' }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId, selectedDiceIds: [0, 1] }),
+                    cmd('REROLL_DIE', '0', { dieId: 0 }),
+                    cmd('REROLL_DIE', '0', { dieId: 1 }),
                 ],
                 expect: {
                     diceValues: [6, 6, 3, 4, 5],
@@ -2039,7 +2035,11 @@ describe('王权骰铸流程测试', () => {
                     ...advanceTo('offensiveRoll'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-i-can-again' }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId, selectedDiceIds: [0, 1, 2, 3, 4] }),
+                    cmd('REROLL_DIE', '0', { dieId: 0 }),
+                    cmd('REROLL_DIE', '0', { dieId: 1 }),
+                    cmd('REROLL_DIE', '0', { dieId: 2 }),
+                    cmd('REROLL_DIE', '0', { dieId: 3 }),
+                    cmd('REROLL_DIE', '0', { dieId: 4 }),
                 ],
                 expect: {
                     diceValues: [2, 3, 4, 5, 6],
@@ -2074,7 +2074,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-give-hand' }),
-                    cmd('CONFIRM_INTERACTION', '0', { interactionId, selectedDiceIds: [0] }),
+                    cmd('REROLL_DIE', '0', { dieId: 0 }),
                 ],
                 expect: {
                     turnPhase: 'defensiveRoll',
@@ -2106,7 +2106,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('PLAY_CARD', '1', { cardId: 'card-give-hand' }),
-                    cmd('CONFIRM_INTERACTION', '1', { interactionId, selectedDiceIds: [0] }),
+                    cmd('REROLL_DIE', '1', { dieId: 0 }),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -2156,7 +2156,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('PLAY_CARD', '1', { cardId: 'card-surprise' }),
                     cmd('MODIFY_DIE', '1', { dieId: 0, newValue: 6 }),
-                    cmd('CONFIRM_INTERACTION', '1', { interactionId }),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',

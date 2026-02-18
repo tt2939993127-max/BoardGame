@@ -545,8 +545,13 @@ function resolveEffectAction(
                 // 查找匹配的条件效果
                 const matchedEffect = action.conditionalEffects?.find(e => e.face === face);
                 
-                // 使用自定义 effectKey（如果提供），否则使用通用 key
-                const effectKey = matchedEffect?.effectKey ?? `bonusDie.effect.${face}`;
+                // 确定 effectKey：
+                // 1. 如果有匹配的 conditionalEffect，使用它的 effectKey
+                // 2. 否则如果有 defaultEffect.effectKey，使用它
+                // 3. 最后使用通用的 bonusDie.effect.${face}
+                const effectKey = matchedEffect?.effectKey 
+                    ?? action.defaultEffect?.effectKey 
+                    ?? `bonusDie.effect.${face}`;
                 
                 rollDice.push({ index: i, value, face, effectKey });
 
@@ -1028,13 +1033,13 @@ export function resolveEffectsToEvents(
         faceCounts: getFaceCounts(activeDice),
     };
 
-    const timedEffects = combatAbilityManager.getEffectsByTiming(effects, timing);
+    const timedEffects = combatAbilityManager.instance.getEffectsByTiming(effects, timing);
 
     for (const effect of timedEffects) {
         if (!effect.action) {
             continue;
         }
-        if (!combatAbilityManager.checkEffectCondition(effect, resolutionCtx)) {
+        if (!combatAbilityManager.instance.checkEffectCondition(effect, resolutionCtx)) {
             continue;
         }
 

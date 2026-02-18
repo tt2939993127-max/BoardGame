@@ -151,13 +151,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     bonusEffectKey = p.effectKey;
                     bonusEffectParams = p.effectParams;
                 } else {
-                    const p = payload as BonusDieRerolledPayload;
-                    bonusValue = p.newValue;
-                    bonusFace = p.newFace;
-                    bonusPlayerId = p.playerId;
-                    bonusTargetId = p.targetPlayerId;
-                    bonusEffectKey = p.effectKey;
-                    bonusEffectParams = p.effectParams;
+                    // BONUS_DIE_REROLLED：重掷事件不触发独立特写（用户已在 BonusDieOverlay 中看到）
+                    continue;
                 }
 
                 const bonusPid = normalizePlayerId(bonusPlayerId);

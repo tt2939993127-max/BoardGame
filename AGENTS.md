@@ -31,7 +31,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
 - `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、传输层架构（`GameBoardProps`/`GameTransportServer`）、游戏结束检测（`sys.gameover`）、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、`createSimpleChoice` API 使用规范（两种调用约定、multi 参数位置、`PromptOption.displayMode` 渲染模式声明、选项 defId 要求）、领域建模前置审查。
-- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D20 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审计"、"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
+- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D23 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、触发频率门控（D21）、伤害计算管线配置（D22）、架构假设一致性（D23）、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审计"、"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
 - `docs/ai-rules/ui-ux.md` — **开发/修改 UI 组件、布局、样式、游戏界面时必读**。含审美准则、多端布局、游戏 UI 特化、设计系统引用。
 - `docs/ai-rules/global-systems.md` — **使用/修改全局 Context（Toast/Modal/音频/教学/认证）时必读**。含 Context 系统、实时服务层。
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
@@ -107,8 +107,21 @@ Keep this managed block so 'openspec update' can refresh the instructions.
     3. 确认无误后再手动删除源（如需要）
   - **IDE 工具优先**：单文件操作优先用 `smartRelocate`（自动更新引用）或 `fsWrite`/`strReplace`。
 - **关键逻辑注释（强制）**：涉及全局状态/架构入口/默认行为必须写清晰中文注释。
-- **日志不需要开关，调试完后将移除（强制）**。日志格式用 key=value 展开关键字段。
+- **生产日志系统（强制）**：项目使用 Winston 日志系统（`server/logger.ts`），所有服务端关键操作必须记录日志。详见 `docs/logging-system.md`。
+  - **业务日志**：使用 `gameLogger` 记录房间创建、命令执行、游戏结束、WebSocket 连接/断开、作弊检测等关键事件
+  - **HTTP 日志**：Koa 中间件自动记录所有 HTTP 请求（排除 `/health` 和 `/metrics`）
+  - **错误日志**：所有未捕获异常和命令失败必须记录完整堆栈
+  - **日志格式**：JSON 格式（生产环境）+ 彩色文本（开发环境），使用 key=value 结构化字段
+  - **日志存储**：`logs/` 目录，按日期自动轮转，普通日志保留 30 天，错误日志保留 90 天
+  - **临时调试日志**：允许临时日志用于排障，不得引入额外 debug 开关，问题解决后必须清理
 - **新增功能必须补充测试（强制）**：新增功能/技能/API 必须同步补充测试，覆盖正常+异常场景。详见 `docs/automated-testing.md`。
+- **E2E 测试必须使用 TestHarness（强制）**：E2E 测试中涉及随机性（骰子、抽牌、洗牌）或需要快速构造测试场景时，必须使用 `TestHarness` 测试工具集。禁止依赖真随机导致测试不稳定。详见 `docs/automated-testing.md`「TestHarness 测试工具」节和 `docs/testing-tools-quick-reference.md`。
+  - **骰子注入**：`window.__BG_TEST_HARNESS__!.dice.setValues([3,3,3,1,1])` 精确控制骰子结果
+  - **状态注入**：`window.__BG_TEST_HARNESS__!.state.patch({...})` 快速构造测试场景
+  - **命令分发**：`window.__BG_TEST_HARNESS__!.command.dispatch({...})` 直接执行游戏命令
+  - **随机数控制**：`window.__BG_TEST_HARNESS__!.random.setQueue([...])` 控制所有随机数
+  - **使用前必须**：`await waitForTestHarness(page)` 等待工具就绪
+  - **示例参考**：`e2e/example-test-harness-usage.e2e.ts`、`e2e/dicethrone-thunder-strike.e2e.ts`
 - **单文件行数限制（强制）**：单个源码文件不得超过 1000 行，超过必须拆分。
 - **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。**图片文字辨识零猜测原则（强制）**：任何文字（名称、描述、数值、关键词）只要有一点看不清或不确定，必须立即停止当前数据录入工作，向用户说明哪些位置无法辨认，并索要更清晰的图片。禁止根据上下文、常识或英文原版"猜测"看不清的中文文字。已猜测录入的数据视为缺陷，必须重新核对。
 - **框架复用优先（强制）**：禁止为特定游戏实现无法复用的系统。三层模型：`/core/ui/` 契约层 → `/components/game/framework/` 骨架层 → `/games/<gameId>/` 游戏层。新增组件/Hook 前必须搜索已有实现。详见 `docs/ai-rules/engine-systems.md`。
@@ -132,16 +145,17 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **回归 bug 先 diff 再修（强制）**：遇到"之前好好的现在不行了"类问题，第一步必须 `git log` + `git show`/`git diff` 对比最后正常版本，找到引入问题的变更点。禁止跳过 diff 直接假设根因并重写代码。详见 `docs/ai-rules/golden-rules.md`「Bug 修复必须先 diff 原始版本」节。
 - **资源/文件归属先查消费链路（强制）**：对任何文件做出"应该提交/应该忽略/应该放 CDN/应该本地"等归属判断前，**必须先追踪该文件的实际消费链路**——运行时谁加载它、从哪个 URL/路径加载、是生成产物还是手写源码、生成脚本是什么。禁止仅凭文件名、扩展名或"看起来像元数据"就下结论。**教训**：`registry.json` 看起来是"纯 JSON 元数据应该提交到 git"，实际运行时从 R2 CDN fetch，本地副本是脚本生成产物，不该入库。
 - **事实/未知/假设**：提出方案前必须列出已知事实（来源）、未知但关键的信息、假设（含验证方法）。
-- **修 Bug 证据优先**：证据不足时不得直接改代码"试试"，只能给出最小验证步骤或临时日志方案。
-- **首次修复未解决且未定位原因**：必须添加临时日志获取证据，标注采集点与清理计划。
+- **修 Bug 证据优先**：证据不足时不得直接改代码"试试"，只能给出最小验证步骤或查看生产日志。
+- **首次修复未解决且未定位原因**：必须查看生产日志（`logs/error-*.log`）或添加临时日志获取证据，标注采集点与清理计划。
 - **禁止用"强制/绕过"掩盖问题**：不得放开安全限制/扩大白名单/关闭校验来掩盖根因。
+- **写入-消费全链路排查（强制）**：排查"写入了但没生效"类 bug 时，禁止只验证写入链（定义→执行→reduce 写入）就判定"逻辑正常"。必须同时验证消费链路：**写入的状态何时被消费？消费窗口是否在写入之后？写入到消费之间是否有清理逻辑会先抹掉状态？** 画出完整的阶段/回合时间线，标注写入时机、消费窗口、清理时机三个点，确认写入→消费→清理的顺序正确。详见 `docs/ai-rules/testing-audit.md`「D8 子项：写入-消费窗口对齐」。**教训**：群情激愤在 magic 阶段写入 extraAttacks，但 attack 阶段已过，TURN_CHANGED 清理 extraAttacks，写入→清理之间不包含消费窗口，功能永远不生效但写入链全部正常。
 - **连续两次未解决**：必须切换为"假设列表 → 验证方法 → 多方案对比"排查模式。
-- **临时日志规则**：允许临时日志用于排障，不得引入额外 debug 开关，问题解决后必须清理。
 - **输出总结**：每次回复末尾必须包含 `## 总结` 区块。
 - **百游戏自检（强制）**：每次修改代码后，必须在总结中回答"这样能不能支持未来 100 个游戏？"，并检查以下维度：
   - ❌ 是否引入游戏特化硬编码（如 `if (gameId === 'dicethrone')`）
   - ❌ 是否破坏框架复用性（如在框架层 import 游戏层）
   - ❌ 是否违反数据驱动原则（如用 switch-case 硬编码技能逻辑）
+  - ❌ **反思是通用处理吗？**（修复方案是否只针对当前游戏/当前 bug，还是能覆盖同类问题？）
   - ✅ 配置是否显式声明（AI 能直接看到吗？）
   - ✅ 是否提供了智能默认值（90% 场景能用默认吗？）
   - ✅ 新增游戏需要写多少行代码（目标：≤ 20 行）
@@ -149,6 +163,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ### 2. 工具链与调研规范
 - **核心工具 (MCP)**：Serena MCP（首选，代码检索/增删改查）、Sequential Thinking（分步思考）、Context7 MCP（官方库文档）。
 - **检索与降级**：优先 Serena + Context7；不足时用 `web.run`（记录检索式与日期）。遇 429/5xx 执行退避。
+- **npm 脚本可靠性（强制）**：所有 `package.json` 中的脚本必须使用 `npx` 前缀调用 node_modules 中的工具（如 `npx tsx`、`npx vite`），确保在任何环境下都能正常工作。禁止依赖全局安装或 PATH 环境变量。**原因**：不同开发者的环境配置不同，依赖全局工具会导致"在我机器上能跑"的问题。
 
 ---
 
@@ -224,6 +239,13 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 ```
 / (repo root)
 ├── server.ts                      # 游戏服务入口（Koa + socket.io + GameTransportServer）
+├── server/                        # 服务端共享模块
+│   ├── logger.ts                  # 日志系统（Winston + 按日期轮转）
+│   └── middleware/                # Koa 中间件
+│       └── logging.ts             # HTTP 请求日志 + 错误处理
+├── logs/                          # 日志文件目录（自动轮转，不提交到 git）
+│   ├── app-YYYY-MM-DD.log         # 所有日志（保留 30 天）
+│   └── error-YYYY-MM-DD.log       # 错误日志（保留 90 天）
 ├── src/
 │   ├── pages/                    # 页面入口（Home/MatchRoom/LocalMatchRoom）
 │   ├── components/               # 通用 UI 组件
@@ -237,9 +259,9 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 │   ├── services/                 # socket 通信封装
 │   ├── hooks/                    # 通用 Hooks
 │   └── ugc/                      # UGC Builder
-├── server/                       # 服务端共享模块
 ├── public/                       # 静态资源（含本地化 JSON）
 ├── docs/                         # 研发文档
+│   └── logging-system.md         # 日志系统文档
 ├── e2e/                          # Playwright E2E 测试
 └── openspec/                     # 变更规范与提案
 ```
@@ -260,6 +282,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 | Board Props 契约 | `src/engine/transport/protocol.ts` |
 | 国际化入口 | `src/lib/i18n/` |
 | 音频管理器 | `src/lib/audio/AudioManager.ts` |
+| **日志系统** | **`server/logger.ts`**（生产日志，详见 `docs/logging-system.md`） |
+| **日志中间件** | **`server/middleware/logging.ts`**（HTTP 请求日志 + 错误处理） |
 | 游戏逻辑 | `src/games/<游戏名>/game.ts` |
 | 游戏 UI | `src/games/<游戏名>/Board.tsx` |
 | 领域 ID 常量表 | `src/games/<游戏名>/domain/ids.ts` |
@@ -361,29 +385,45 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 
 #### 动态选项生成（强制）
 - **问题**：同时触发多个交互时，后续交互创建时基于初始状态，可能包含已失效的选项（如已弃掉的手牌、已消灭的随从）。
-- **错误做法**：
+- **解决方案（通用刷新，面向100个游戏）**：
+  - 框架层在 `refreshInteractionOptions` 和 `resolveInteraction` 中**自动刷新所有交互选项**
+  - 自动检测选项类型（cardUid/minionUid/baseIndex），基于最新状态过滤
+  - **无需手动修改每个交互创建点**，框架层自动处理
+  - **100% 覆盖**：所有交互（单选、多选、任意类型）都自动刷新
+  - **智能降级**：过滤后无法满足 multi.min 限制时，保持原始选项（安全）
+- **工作原理**：
+  1. 创建交互时，使用初始选项（基于创建时的状态）
+  2. 状态更新后，`refreshInteractionOptions` 自动刷新当前交互的选项
+  3. 弹出下一个交互时，`resolveInteraction` 自动刷新该交互的选项
+  4. 自动检测选项类型：
+     - `cardUid` → 检查是否在手牌中
+     - `minionUid` → 检查是否在场上
+     - `baseIndex` → 检查基地是否存在
+     - 其他选项（skip/done/confirm）→ 保留
+  5. 智能降级：过滤后无法满足 multi.min 限制时，保持原始选项
+- **适用场景**：
+  - ✅ 单选交互（任意选项类型）
+  - ✅ 多选交互（任意选项类型，包括 min > 0）
+  - ✅ 手牌选择（cardUid）
+  - ✅ 场上单位选择（minionUid）
+  - ✅ 基地选择（baseIndex）
+  - ✅ 非引用选项（skip/done/confirm）
+- **手动覆盖**（特殊场景）：
   ```typescript
-  // ❌ 错误：创建交互时直接传入当前手牌，后续交互弹出时手牌可能已变化
-  const handCards = state.players[playerId].hand;
-  createInteraction({
-    type: 'choice',
-    options: handCards.map(card => ({ id: card.id, label: card.name }))
-  });
-  ```
-- **正确做法**：
-  ```typescript
-  // ✅ 正确：使用 optionsGenerator 延迟生成，确保基于最新状态
-  const interaction = createInteraction({
-    type: 'choice',
-    options: state.players[playerId].hand.map(card => ({ id: card.id, label: card.name }))
-  });
-  (interaction.data as any).optionsGenerator = (state) => {
-    return state.players[playerId].hand.map(card => ({ id: card.id, label: card.name }));
+  // 复杂刷新逻辑（如从弃牌堆/牌库/continuationContext 中过滤）
+  const interaction = createSimpleChoice(id, playerId, title, initialOptions, sourceId);
+  (interaction.data as any).optionsGenerator = (state, iData) => {
+      // 从弃牌堆过滤随从（通用刷新只处理 hand）
+      const p = state.core.players[playerId];
+      const minions = p.discard.filter((c: any) => c.type === 'minion');
+      return minions.map((c: any) => ({
+          id: `discard-${c.uid}`,
+          label: getMinionName(c.defId),
+          value: { cardUid: c.uid, defId: c.defId }
+      }));
   };
   ```
-- **适用场景**：所有"选择手牌/场上单位/弃牌堆卡牌"类交互。
-- **工作原理**：第一个交互使用初始选项，后续交互从队列弹出时调用生成器刷新选项。
-- **历史债务**：SmashUp 的幽灵/鬼屋已迁移，其他游戏的"选择手牌/单位"交互需逐步迁移。
+- **覆盖率**：100%（所有交互自动刷新）
 
 #### Reducer 必须结构共享（强制）
 - `reduce(core, event)` 中**禁止 `JSON.parse(JSON.stringify())`**（全量深拷贝）。

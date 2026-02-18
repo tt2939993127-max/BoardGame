@@ -329,7 +329,9 @@ function unfathomableGoalsProcessNext(
         });
         const interaction = createSimpleChoice(
             `elder_thing_unfathomable_goals_${pid}_${ctx.now}`, pid,
-            '你手中有疯狂卡，必须消灭一个自己的随从', buildMinionTargetOptions(options), 'elder_thing_unfathomable_goals',
+            '你手中有疯狂卡，必须消灭一个自己的随从',
+            buildMinionTargetOptions(options),
+            { sourceId: 'elder_thing_unfathomable_goals', targetType: 'minion' },
         );
         (interaction.data as any).continuationContext = {
             opponents,
@@ -376,9 +378,15 @@ function elderThingElderThingOnPlay(ctx: AbilityContext): AbilityResult {
             id: 'destroy',
             label: canDestroy ? '消灭两个己方其他随从' : '消灭两个己方其他随从（随从不足）',
             value: { choice: 'destroy' },
+            displayMode: 'button' as const,
             disabled: !canDestroy,
         },
-        { id: 'deckbottom', label: '将本随从放到牌库底', value: { choice: 'deckbottom' } },
+        { 
+            id: 'deckbottom', 
+            label: '将本随从放到牌库底', 
+            value: { choice: 'deckbottom' },
+            displayMode: 'button' as const,
+        },
     ];
     const interaction = createSimpleChoice(
         `elder_thing_elder_thing_choice_${ctx.now}`, ctx.playerId,
@@ -528,7 +536,7 @@ export function registerElderThingInteractionHandlers(): void {
             }] };
         }
 
-        // choice === 'destroy' → 收集己方其他随从，让玩家选择消灭哪两个
+        // choice === 'destroy' → 收集己方其他随从，让玩家点击消灭第一个
         const myMinions: { minion: MinionOnBase; baseIndex: number }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
             for (const m of state.core.bases[i].minions) {
@@ -537,15 +545,17 @@ export function registerElderThingInteractionHandlers(): void {
                 }
             }
         }
-        // ≤2 个随从时直接全部消灭（无需选择）
-        if (myMinions.length <= 2) {
+        
+        // 恰好 2 个随从时直接全部消灭（无需选择）
+        if (myMinions.length === 2) {
             const events: SmashUpEvent[] = [];
             for (const t of myMinions) {
                 events.push(destroyMinion(t.minion.uid, t.minion.defId, t.baseIndex, t.minion.owner, 'elder_thing_elder_thing', timestamp));
             }
             return { state, events };
         }
-        // >2 个随从时创建多选交互让玩家选择 2 个
+        
+        // >2 个随从时：让玩家点击第一个要消灭的随从
         const options = myMinions.map(({ minion: m, baseIndex: bi }) => {
             const def = getCardDef(m.defId) as MinionCardDef | undefined;
             const name = def?.name ?? m.defId;
@@ -555,25 +565,72 @@ export function registerElderThingInteractionHandlers(): void {
             return { uid: m.uid, defId: m.defId, baseIndex: bi, label: `${name} (力量 ${power}) @ ${baseName}` };
         });
         const interaction = createSimpleChoice(
-            `elder_thing_elder_thing_destroy_select_${timestamp}`, playerId,
-            '远古之物：选择两个己方随从消灭', buildMinionTargetOptions(options),
-            { sourceId: 'elder_thing_elder_thing_destroy_select', multi: { min: 2, max: 2 } },
+            `elder_thing_elder_thing_destroy_first_${timestamp}`, playerId,
+            '远古之物：点击第一个要消灭的随从', buildMinionTargetOptions(options),
+            { sourceId: 'elder_thing_elder_thing_destroy_first', targetType: 'minion' }
         );
         return { state: queueInteraction(state, interaction), events: [] };
     });
 
-    // 远古之物：玩家选择两个己方随从消灭（多选交互处理）
-    registerInteractionHandler('elder_thing_elder_thing_destroy_select', (state, _playerId, value, _iData, _random, timestamp) => {
-        const selected = value as Array<{ minionUid: string; defId: string; baseIndex: number }>;
-        if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
-        const events: SmashUpEvent[] = [];
-        for (const item of selected) {
-            const base = state.core.bases[item.baseIndex];
-            const target = base?.minions.find(m => m.uid === item.minionUid);
-            if (target) {
-                events.push(destroyMinion(target.uid, target.defId, item.baseIndex, target.owner, 'elder_thing_elder_thing', timestamp));
-            }
+    // 远古之物：玩家点击第一个要消灭的随从
+    registerInteractionHandler('elder_thing_elder_thing_destroy_first', (state, playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex, defId } = value as { minionUid: string; baseIndex: number; defId: string };
+        const base = state.core.bases[baseIndex];
+        const target = base?.minions.find(m => m.uid === minionUid);
+        if (!target) return { state, events: [] };
+        
+        // 消灭第一个随从
+        const events: SmashUpEvent[] = [
+            destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'elder_thing_elder_thing', timestamp)
+        ];
+        
+        // 收集剩余的己方随从（排除刚消灭的和远古之物自己）
+        const remainingMinions: { minion: MinionOnBase; baseIndex: number }[] = [];
+        for (let i = 0; i < state.core.bases.length; i++) {
+            for (const m of state.core.bases[i].minions) {
+                if (m.controller === playerId && m.uid !== minionUid) {
+                    remainingMinions.push({ minion: m, baseIndex: i });
+                }
         }
+        }
+        
+        // 如果只剩 1 个随从（远古之物自己），直接结束
+        if (remainingMinions.length === 1) {
+            return { state, events };
+        }
+        
+        // 让玩家点击第二个要消灭的随从
+        const options = remainingMinions
+            .filter(({ minion: m }) => m.defId !== 'elder_thing_elder_thing') // 排除远古之物自己
+            .map(({ minion: m, baseIndex: bi }) => {
+                const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? m.defId;
+                const baseDef = getBaseDef(state.core.bases[bi].defId);
+                const baseName = baseDef?.name ?? `基地 ${bi + 1}`;
+                const power = getMinionPower(state.core, m, bi);
+                return { uid: m.uid, defId: m.defId, baseIndex: bi, label: `${name} (力量 ${power}) @ ${baseName}` };
+            });
+        
+        const interaction = createSimpleChoice(
+            `elder_thing_elder_thing_destroy_second_${timestamp}`, playerId,
+            '远古之物：点击第二个要消灭的随从', buildMinionTargetOptions(options),
+            { sourceId: 'elder_thing_elder_thing_destroy_second', targetType: 'minion' }
+        );
+        return { state: queueInteraction(state, interaction), events };
+    });
+    
+    // 远古之物：玩家点击第二个要消灭的随从
+    registerInteractionHandler('elder_thing_elder_thing_destroy_second', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex, defId } = value as { minionUid: string; baseIndex: number; defId: string };
+        const base = state.core.bases[baseIndex];
+        const target = base?.minions.find(m => m.uid === minionUid);
+        if (!target) return { state, events: [] };
+        
+        // 消灭第二个随从
+        const events: SmashUpEvent[] = [
+            destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'elder_thing_elder_thing', timestamp)
+        ];
+        
         return { state, events };
     });
 
@@ -602,8 +659,8 @@ export function registerElderThingInteractionHandlers(): void {
                     });
                     const interaction = createSimpleChoice(
                         `elder_thing_shoggoth_destroy_${ctx.opponentIdx}_${timestamp}`, ctx.casterPlayerId,
-                        `修格斯：选择消灭对手在此基地的一个随从`, buildMinionTargetOptions(options), 'elder_thing_shoggoth_destroy',
-                    );
+                        `修格斯：选择消灭对手在此基地的一个随从`, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.casterPlayerId, effectType: 'destroy' }), { sourceId: 'elder_thing_shoggoth_destroy', targetType: 'minion' }
+                        );
                     (interaction.data as any).continuationContext = {
                         casterPlayerId: ctx.casterPlayerId,
                         baseIndex: ctx.baseIndex,
@@ -675,9 +732,8 @@ export function registerElderThingInteractionHandlers(): void {
                 return { uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: `${name} @ ${baseName}` };
             });
             const interaction = createSimpleChoice(
-                `elder_thing_unfathomable_goals_${pid}_${timestamp}`, pid,
-                '你手中有疯狂卡，必须消灭一个自己的随从', buildMinionTargetOptions(options), 'elder_thing_unfathomable_goals',
-            );
+                `elder_thing_unfathomable_goals_${pid}_${timestamp}`, pid, { sourceId: '你手中有疯狂卡，必须消灭一个自己的随从', targetType: 'minion' }, buildMinionTargetOptions(options), 'elder_thing_unfathomable_goals'
+                );
             (interaction.data as any).continuationContext = {
                 opponents: ctx.opponents,
                 opponentIdx: i,

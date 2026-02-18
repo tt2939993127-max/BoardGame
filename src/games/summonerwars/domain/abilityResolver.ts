@@ -902,20 +902,129 @@ export function calculateEffectiveStrength(
 
 /**
  * 计算单位的战力增幅量（用于 UI 显示）
- * 返回有效战力与基础战力的差值，排除已有蓝点指示器展示的冲锋加成
+ * 返回有效战力与基础战力的差值及加成来源，排除已有蓝点指示器展示的冲锋加成
  */
 export function getStrengthBoostForDisplay(
   unit: UnitInstance,
   state: SummonerWarsCore
-): number {
-  const effective = calculateEffectiveStrength(unit, state);
-  let delta = Math.max(0, effective - unit.card.strength);
-  // 冲锋加成已由蓝点指示器展示，扣除
-  const displayAbilities = getUnitAbilities(unit, state);
-  if (displayAbilities.some(a => a.id === 'charge') && unit.boosts > 0) {
-    delta = Math.max(0, delta - unit.boosts);
+): { delta: number; sources: string[] } {
+  const sources: string[] = [];
+  let totalBonus = 0;
+  
+  const abilities = getUnitAbilities(unit, state);
+  const abilityIds = new Set(abilities.map(a => a.id));
+  
+  // 附加事件卡加成（如狱火铸剑 +2）
+  if (unit.attachedCards) {
+    for (const attached of unit.attachedCards) {
+      if (getBaseCardId(attached.id) === CARD_IDS.NECRO_HELLFIRE_BLADE) {
+        totalBonus += 2;
+        sources.push('狱火铸剑 +2');
+      }
+    }
   }
-  return delta;
+  
+  // 成群结队（围攻）加成
+  const player = state.players[unit.owner];
+  const hasSwarm = player.activeEvents.some(ev => 
+    getBaseCardId(ev.id) === CARD_IDS.GOBLIN_SWARM
+  );
+  if (hasSwarm) {
+    // 计算相邻友方单位数量（需要攻击目标才能计算，这里只能显示潜在加成）
+    // 由于 UI 显示时没有攻击目标，我们显示"成群结队（攻击时生效）"
+    sources.push('成群结队（攻击时生效）');
+  }
+  
+  // 城塞精锐：2格内每有一个友方城塞单位+1战力
+  if (abilityIds.has('fortress_elite')) {
+    let eliteBonus = 0;
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        const other = state.board[row]?.[col]?.unit;
+        if (other && other.owner === unit.owner && other.instanceId !== unit.instanceId
+          && isFortressUnit(other.card)
+          && manhattanDistance(unit.position, { row, col }) <= 2) {
+          eliteBonus += 1;
+        }
+      }
+    }
+    if (eliteBonus > 0) {
+      totalBonus += eliteBonus;
+      sources.push(`城塞精锐 +${eliteBonus}`);
+    }
+  }
+  
+  // 辉光射击：每2点魔力+1战力
+  if (abilityIds.has('radiant_shot')) {
+    const playerMagic = state.players[unit.owner]?.magic ?? 0;
+    const radiantBonus = Math.floor(playerMagic / 2);
+    if (radiantBonus > 0) {
+      totalBonus += radiantBonus;
+      sources.push(`辉光射击 +${radiantBonus}`);
+    }
+  }
+  
+  // 冰霜飞弹：相邻每有一个友方建筑+1战力
+  if (abilityIds.has('frost_bolt')) {
+    let frostBonus = 0;
+    const dirs = [
+      { row: -1, col: 0 }, { row: 1, col: 0 },
+      { row: 0, col: -1 }, { row: 0, col: 1 },
+    ];
+    for (const d of dirs) {
+      const adjPos = { row: unit.position.row + d.row, col: unit.position.col + d.col };
+      if (adjPos.row < 0 || adjPos.row >= BOARD_ROWS || adjPos.col < 0 || adjPos.col >= BOARD_COLS) continue;
+      const adjCell = state.board[adjPos.row]?.[adjPos.col];
+      if (adjCell?.structure && adjCell.structure.owner === unit.owner) {
+        frostBonus += 1;
+      } else if (adjCell?.unit && adjCell.unit.owner === unit.owner
+        && getUnitAbilities(adjCell.unit, state).map(a => a.id).includes('mobile_structure')) {
+        frostBonus += 1;
+      }
+    }
+    if (frostBonus > 0) {
+      totalBonus += frostBonus;
+      sources.push(`冰霜飞弹 +${frostBonus}`);
+    }
+  }
+  
+  // 高阶冰霜飞弹：2格内每有一个友方建筑+1战力
+  if (abilityIds.has('greater_frost_bolt')) {
+    let greaterFrostBonus = 0;
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        const dist = manhattanDistance(unit.position, { row, col });
+        if (dist === 0 || dist > 2) continue;
+        const cell = state.board[row]?.[col];
+        if (cell?.structure && cell.structure.owner === unit.owner) {
+          greaterFrostBonus += 1;
+        } else if (cell?.unit && cell.unit.owner === unit.owner
+          && getUnitAbilities(cell.unit, state).map(a => a.id).includes('mobile_structure')) {
+          greaterFrostBonus += 1;
+        }
+      }
+    }
+    if (greaterFrostBonus > 0) {
+      totalBonus += greaterFrostBonus;
+      sources.push(`高阶冰霜飞弹 +${greaterFrostBonus}`);
+    }
+  }
+  
+  // 圣洁审判：友方主动事件区有 paladin-holy-judgment 时，友方士兵+1战力
+  if (unit.card.unitClass === 'common') {
+    const hasHolyJudgment = player.activeEvents.some(ev => {
+      return getBaseCardId(ev.id) === CARD_IDS.PALADIN_HOLY_JUDGMENT && (ev.charges ?? 0) > 0;
+    });
+    if (hasHolyJudgment) {
+      totalBonus += 1;
+      sources.push('圣洁审判 +1');
+    }
+  }
+  
+  // 冲锋加成已由蓝点指示器展示，不在这里显示
+  // （冲锋加成在 calculateEffectiveStrength 中计算，但 UI 用蓝点显示）
+  
+  return { delta: totalBonus, sources };
 }
 
 /**

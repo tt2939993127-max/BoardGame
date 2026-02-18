@@ -147,7 +147,7 @@ function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneE
     const footCount = faceCounts[FACE.FOOT] || 0;
     const moonCount = faceCounts[FACE.MOON] || 0;
 
-    // 发射骰子事件（显示5骰结果）
+    // 发射骰子事件（显示5骰结果汇总）
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { 
@@ -155,13 +155,12 @@ function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneE
             face: diceFaces[0], 
             playerId: attackerId, 
             targetPlayerId: targetId, 
-            effectKey: 'bonusDie.effect.explodingArrow', 
+            effectKey: 'bonusDie.effect.explodingArrow.result', 
             effectParams: { 
-                diceValues, 
-                diceFaces,
                 bowCount,
                 footCount,
-                moonCount
+                moonCount,
+                damage: 3 + (2 * bowCount) + (1 * footCount)
             } 
         },
         sourceCommandType: 'ABILITY_EFFECT',
@@ -230,12 +229,15 @@ function handleExplodingArrowResolve2(context: CustomActionContext): DiceThroneE
             face: diceFaces[0], 
             playerId: attackerId, 
             targetPlayerId: targetId, 
-            effectKey: 'bonusDie.effect.explodingArrow', 
-            effectParams: { diceValues, diceFaces, bowCount, footCount, moonCount } 
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
+            effectKey: 'bonusDie.effect.explodingArrow.result',
+            effectParams: {
+                bowCount,
+                footCount,
+                moonCount,
+                damage: 3 + (1 * bowCount) + (2 * footCount)
+            }
+        }
+    });
 
     // 计算伤害：3 + 1×弓 + 2×足（II级公式与I级不同，与III级相同）
     const damageAmount = 3 + (1 * bowCount) + (2 * footCount);
@@ -299,12 +301,15 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
             face: diceFaces[0], 
             playerId: attackerId, 
             targetPlayerId: targetId, 
-            effectKey: 'bonusDie.effect.explodingArrow', 
-            effectParams: { diceValues, diceFaces, bowCount, footCount, moonCount } 
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
+            effectKey: 'bonusDie.effect.explodingArrow.result',
+            effectParams: {
+                bowCount,
+                footCount,
+                moonCount,
+                damage: 3 + (1 * bowCount) + (2 * footCount)
+            }
+        }
+    });
 
     // 计算伤害：3 + 1×弓 + 2×足（III级公式与I级不同）
     const damageAmount = 3 + (1 * bowCount) + (2 * footCount);
@@ -431,14 +436,21 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    
+    // 根据骰面设置不同的 effectKey
+    const isMoon = face === FACE.MOON;
+    const effectKey = isMoon 
+        ? 'bonusDie.effect.moonShadowStrike.moon'  // 月面：施加debuff
+        : 'bonusDie.effect.moonShadowStrike.other'; // 其他：抽牌
+    
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.moonShadowStrike', effectParams: { value } },
+        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey, effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
 
-    if (face === FACE.MOON) {
+    if (isMoon) {
         // 月：施加致盲 + 缠绕 + 锁定
         events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
         events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
@@ -460,18 +472,31 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
     // 投掷5骰，统计弓面数量
-    let bowCount = 0;
+    const diceValues: number[] = [];
+    const diceFaces: string[] = [];
     for (let i = 0; i < 5; i++) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.volley', effectParams: { value } },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as BonusDieRolledEvent);
-        if (face === FACE.BOW) bowCount++;
+        diceValues.push(value);
+        diceFaces.push(face);
     }
+    
+    const bowCount = diceFaces.filter(f => f === FACE.BOW).length;
+    
+    // 发射一个汇总事件，显示弓面数量和伤害加成
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: { 
+            value: diceValues[0], 
+            face: diceFaces[0], 
+            playerId: attackerId, 
+            targetPlayerId: targetId, 
+            effectKey: 'bonusDie.effect.volley.result', 
+            effectParams: { bowCount, bonusDamage: bowCount } 
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as BonusDieRolledEvent);
 
     // 增加弓面数量的伤害（作为攻击修正加到 pendingAttack）
     if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
@@ -538,9 +563,16 @@ function handleBlindedCheck(context: CustomActionContext): DiceThroneEvent[] {
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    
+    // 根据骰值设置不同的 effectKey
+    const isMiss = value <= 2;
+    const effectKey = isMiss
+        ? 'bonusDie.effect.blinded.miss'  // 1-2：攻击失败
+        : 'bonusDie.effect.blinded.hit';   // 3-6：攻击成功
+    
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: attackerId, effectKey: 'bonusDie.effect.blinded' },
+        payload: { value, face, playerId: attackerId, targetPlayerId: attackerId, effectKey },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
@@ -557,7 +589,7 @@ function handleBlindedCheck(context: CustomActionContext): DiceThroneEvent[] {
     }
 
     // 1-2：攻击失败，将 pendingAttack 标记为无效
-    if (value <= 2) {
+    if (isMiss) {
         // 通过将 pendingAttack 的 sourceAbilityId 清空来使攻击无效
         // 这样 resolveAttack 不会产生伤害事件
         if (state.pendingAttack) {

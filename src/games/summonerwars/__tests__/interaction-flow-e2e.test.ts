@@ -369,7 +369,7 @@ describe('冰霜战斧附加 E2E 流程', () => {
     clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
   });
 
-  it('铁匠附加到远程士兵后，攻击时⚔️面也计为命中', () => {
+  it('铁匠附加到远程士兵后，攻击时⚡面也计为命中', () => {
     core.phase = 'move';
     core.currentPlayer = '0' as PlayerId;
 
@@ -409,16 +409,16 @@ describe('冰霜战斧附加 E2E 流程', () => {
     const smithAfter = getUnitAt(coreAfterAttach, { row: 4, col: 3 });
     expect(smithAfter).toBeUndefined();
 
-    // --- 步骤2：弓箭手攻击敌方，验证⚔️面也命中 ---
-    // 使用特殊 random：所有骰子都掷出 melee（⚔️）面
-    // 远程攻击正常只有 ranged 面命中，但 frost_axe 让 melee 面也命中
+    // --- 步骤2：弓箭手攻击敌方，验证⚡面也命中 ---
+    // 使用特殊 random：所有骰子都掷出 special（⚡）面
+    // 远程攻击正常只有 ranged 面命中，但 frost_axe 让 special 面也命中
     const coreForAttack = { ...coreAfterAttach };
     coreForAttack.phase = 'attack';
 
-    // 构造一个 random 让所有骰子掷出 melee 面（index 0）
-    const meleeDiceRandom: RandomFn = {
+    // 构造一个 random 让所有骰子掷出 special 面（0.9 → index 4: melee + special）
+    const specialDiceRandom: RandomFn = {
       shuffle: <T>(arr: T[]) => arr,
-      random: () => 0, // Math.floor(0 * 6) = 0 → melee 面
+      random: () => 0.9, // 0.9 → index 4 (melee + special)
       d: (max: number) => 1,
       range: (min: number) => min,
     };
@@ -427,19 +427,22 @@ describe('冰霜战斧附加 E2E 流程', () => {
       coreForAttack, SW_COMMANDS.DECLARE_ATTACK, {
         attacker: { row: 4, col: 4 },
         target: { row: 2, col: 4 },
-      }, meleeDiceRandom
+      }, specialDiceRandom
     );
 
     const attackEvent = attackEvents.find(e => e.type === SW_EVENTS.UNIT_ATTACKED);
     expect(attackEvent).toBeDefined();
     const atkPayload = attackEvent!.payload as Record<string, unknown>;
-    const diceResults = atkPayload.diceResults as string[];
+    const diceResults = atkPayload.diceResults as Array<{ faceIndex: number; marks: string[] }>;
     const hits = atkPayload.hits as number;
 
-    // 所有骰子都是 melee 面，远程攻击正常0命中
-    // 但 frost_axe 让 melee 面也计为命中
-    expect(diceResults.every(d => d === 'melee')).toBe(true);
-    expect(hits).toBe(diceResults.length); // 全部命中
+    // 所有骰子都包含 special 标记，远程攻击正常只有 ranged 标记命中
+    // frost_axe 让 special = 2个melee命中
+    expect(diceResults.every(d => d.marks.includes('special'))).toBe(true);
+    // 每个面有 melee + special 两个标记
+    // 远程攻击：melee 不算命中，special 算2个命中
+    // 所以每个骰子贡献2个命中，总共 diceResults.length * 2
+    expect(hits).toBe(diceResults.length * 2);
   });
 });
 

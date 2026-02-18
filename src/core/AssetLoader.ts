@@ -236,8 +236,6 @@ export async function preloadCriticalImages(
     const criticalPaths = [...new Set([...staticCritical, ...resolved.critical])];
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
-    console.log(`[preloadCriticalImages] gameId=${gameId} locale=${locale} criticalCount=${criticalPaths.length} warmCount=${warmPaths.length} hasGameState=${gameState !== undefined}`);
-
     if (criticalPaths.length === 0) {
         return warmPaths;
     }
@@ -253,13 +251,8 @@ export async function preloadCriticalImages(
     // Promise.allSettled + 10s 超时竞争
     const startTime = Date.now();
     await Promise.race([
-        Promise.allSettled(promises).then(() => {
-            console.log(`[preloadCriticalImages] all settled in ${Date.now() - startTime}ms`);
-        }),
-        new Promise<void>((resolve) => setTimeout(() => {
-            console.warn(`[preloadCriticalImages] TIMEOUT after ${CRITICAL_PRELOAD_TIMEOUT_MS}ms`);
-            resolve();
-        }, CRITICAL_PRELOAD_TIMEOUT_MS)),
+        Promise.allSettled(promises),
+        new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
     ]);
 
     return warmPaths;

@@ -134,7 +134,7 @@ export async function executeActionHook({
   };
 
   try {
-    // eslint-disable-next-line no-new-func
+     
     const executor = new Function('payload', `"use strict"; const fn = ${jsCode}; if (typeof fn !== 'function') { throw new Error('动作钩子必须返回函数'); } return fn(payload);`);
     let result = executor(payload) as unknown;
     if (result && typeof (result as Promise<unknown>).then === 'function') {

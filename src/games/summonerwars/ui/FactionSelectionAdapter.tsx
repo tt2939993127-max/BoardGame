@@ -46,6 +46,8 @@ export interface FactionSelectionProps {
   selectedFactions: Record<PlayerId, FactionId | 'unselected'>;
   readyPlayers: Record<PlayerId, boolean>;
   playerNames: Record<PlayerId, string>;
+  /** 自定义牌组数据（从游戏状态同步） */
+  customDeckData?: Partial<Record<PlayerId, SerializedCustomDeck>>;
   onSelect: (factionId: FactionId) => void;
   onReady: () => void;
   onStart: () => void;
@@ -68,6 +70,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   selectedFactions,
   readyPlayers,
   playerNames,
+  customDeckData,
   onSelect,
   onReady,
   onStart,
@@ -93,14 +96,14 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
     return allPids.size > 0 ? Array.from(allPids).sort() : ['0', '1'];
   }, [selectedFactions, readyPlayers, playerNames]);
 
-  // 自定义牌组选择状态（按玩家 ID 存储）
-  const [customDeckSelections, setCustomDeckSelections] = useState<Record<string, CustomDeckInfo>>({});
+  // 自定义牌组选择状态（本地 UI 状态，用于临时存储，已废弃，改用游戏状态中的 customDeckData）
+  // const [customDeckSelections, setCustomDeckSelections] = useState<Record<string, CustomDeckInfo>>({});
   
   // 已保存的自定义牌组列表
   const [savedDecks, setSavedDecks] = useState<SavedDeckSummary[]>([]);
   
-  // 当前选中的自定义牌组 ID（用于高亮显示）
-  const [selectedCustomDeckId, setSelectedCustomDeckId] = useState<string | null>(null);
+  // 当前选中的自定义牌组 ID（用于高亮显示，已废弃，改用游戏状态判断）
+  // const [selectedCustomDeckId, setSelectedCustomDeckId] = useState<string | null>(null);
   
   // 编辑中的牌组 ID（用于传递给 DeckBuilderDrawer）
   const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
@@ -164,8 +167,6 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   useEffect(() => {
     if (savedDecks.length === 0) return;
     
-    let cancelled = false;
-    
     const preloadImages = async () => {
       const loadPromises = savedDecks.map(deck => {
         return new Promise<void>((resolve) => {
@@ -195,8 +196,6 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
     };
     
     void preloadImages();
-    
-    return () => { cancelled = true; };
   }, [savedDecks]);
 
   // 当前玩家已选阵营（包括自定义牌组的情况）
@@ -279,27 +278,16 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
    * 加载完整牌组数据并通知父组件
    */
   const handleSelectCustomDeck = useCallback(async (deckId: string) => {
-    if (!token) return;
+    if (!token) {
+      console.warn('[FactionSelection] 无 token，无法加载自定义牌组');
+      return;
+    }
     
     try {
       // 1. 获取完整牌组数据
       const fullDeck = await getCustomDeck(token, deckId);
       
-      // 2. 更新选中状态
-      setSelectedCustomDeckId(deckId);
-      
-      // 3. 存储牌组信息（用于 PlayerStatusCard 显示）
-      setCustomDeckSelections(prev => ({
-        ...prev,
-        [currentPlayerId]: {
-          deckId: fullDeck.id,
-          deckName: fullDeck.name,
-          summonerName: fullDeck.summonerId,
-          summonerFaction: fullDeck.summonerFaction,
-        },
-      }));
-      
-      // 4. 通知父组件
+      // 2. 通知父组件（SELECT_CUSTOM_DECK 命令会自动处理阵营选择和状态同步）
       onSelectCustomDeck?.(fullDeck);
     } catch (err) {
       console.error('[FactionSelection] 加载自定义牌组失败:', err);
@@ -309,7 +297,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
         { dedupeKey: `select-deck-${deckId}-failed` }
       );
     }
-  }, [token, currentPlayerId, onSelectCustomDeck, toast]);
+  }, [token, onSelectCustomDeck, toast]);
   
   /**
    * 处理编辑牌组
@@ -321,35 +309,26 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   }, []);
   
   /**
-   * 处理新建牌组
-   * 打开构建器且不传递牌组 ID
+   * 打开牌组选择器
+   * 显示所有已保存的牌组供用户选择
    */
-  const handleNewDeck = useCallback(() => {
+  const handleOpenDeckSelector = useCallback(() => {
+    // 打开构建器，不传递 editingDeckId，让用户在"已保存的牌组"列表中选择
     setEditingDeckId(null);
     setIsDeckBuilderOpen(true);
   }, []);
 
   /**
    * 处理自定义牌组确认
-   * 将牌组数据存储到本地状态用于 UI 展示，并通过回调通知父组件
+   * 通过回调通知父组件，状态同步由游戏状态管理
    */
   const handleConfirmCustomDeck = useCallback((deck: SerializedCustomDeck) => {
-    // 记录自定义牌组选择信息（用于 PlayerStatusCard 展示）
-    setCustomDeckSelections(prev => ({
-      ...prev,
-      [currentPlayerId]: {
-        deckName: deck.name,
-        summonerName: deck.summonerId,
-        summonerFaction: deck.summonerFaction,
-      },
-    }));
-
-    // 通知父组件（如果有回调）
+    // 通知父组件（SELECT_CUSTOM_DECK 命令会自动处理阵营选择和状态同步）
     onSelectCustomDeck?.(deck);
 
     // 关闭抽屉
     setIsDeckBuilderOpen(false);
-  }, [currentPlayerId, onSelectCustomDeck]);
+  }, [onSelectCustomDeck]);
 
   if (!isOpen) return null;
 
@@ -405,9 +384,14 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
         <div className="flex-shrink-0">
           <div className="grid grid-cols-4 gap-[0.8vw] max-w-[72vw] mx-auto">
             {availableFactions.map((faction, index) => {
-              const isSelectedByMe = selectedFactions[currentPlayerId] === faction.id;
+              // 预设阵营卡片的选中判断：排除通过自定义牌组选择该阵营的情况
+              const isSelectedByMe = selectedFactions[currentPlayerId] === faction.id 
+                && !customDeckData?.[currentPlayerId];
+              
+              // 占用玩家判断：同样排除自定义牌组选择
               const occupyingPlayers = playerIds.filter(
                 pid => selectedFactions[pid as PlayerId] === faction.id
+                  && !customDeckData?.[pid as PlayerId]
               );
 
               return (
@@ -425,58 +409,57 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
               );
             })}
 
-            {/* 自定义牌组卡片（最多显示 2 个） */}
-            {savedDecks.slice(0, 2).map((deck, deckIndex) => {
-              const isSelectedByMe = selectedCustomDeckId === deck.id;
-              // 多玩家占用逻辑：检查哪些玩家选择了这个自定义牌组
-              const occupyingPlayers = playerIds.filter(
-                pid => customDeckSelections[pid]?.deckId === deck.id
-              );
-              
-              return (
-                <CustomDeckCard
-                  key={deck.id}
-                  deck={deck}
-                  index={availableFactions.length + deckIndex}
-                  isSelectedByMe={isSelectedByMe}
-                  occupyingPlayers={occupyingPlayers}
-                  t={t}
-                  onSelect={() => handleSelectCustomDeck(deck.id)}
-                  onEdit={() => handleEditDeck(deck.id)}
-                  onMagnify={handleMagnifyCard}
-                />
-              );
-            })}
-            
-            {/* "+"按钮（仅当自定义牌组数量 < 2 时显示） */}
-            {savedDecks.length < 2 && (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                whileHover={{ scale: 1.02, y: -4 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{
-                  delay: (availableFactions.length + savedDecks.length) * 0.06,
-                  duration: 0.3,
-                  scale: { type: 'spring', stiffness: 400, damping: 20 }
-                }}
-                className={clsx(
-                  'relative rounded-lg overflow-hidden cursor-pointer group',
-                  'border-2 border-dashed border-white/20 hover:border-amber-400/60 transition-colors shadow-lg flex flex-col items-center justify-center bg-white/5'
+            {/* 自定义牌组列表（最多显示 2 个） */}
+            {/* 自定义牌组（最多显示 1 个） */}
+            {savedDecks.length > 0 && (
+              <CustomDeckCard
+                key={savedDecks[0].id}
+                deck={savedDecks[0]}
+                index={availableFactions.length}
+                isSelectedByMe={
+                  selectedFactions[currentPlayerId] === savedDecks[0].summonerFaction &&
+                  customDeckData?.[currentPlayerId]?.id === savedDecks[0].id
+                }
+                occupyingPlayers={playerIds.filter(
+                  pid => customDeckData?.[pid as PlayerId]?.id === savedDecks[0].id
                 )}
-                onClick={handleNewDeck}
-              >
-                <div className="w-16 h-16 rounded-full border-2 border-white/20 flex items-center justify-center mb-4 group-hover:border-amber-400/80 transition-colors">
-                  <span className="text-3xl text-white/50 group-hover:text-amber-400 font-light">+</span>
-                </div>
-                <div className="text-white/70 font-bold uppercase tracking-widest text-sm group-hover:text-amber-100">
-                  {t('factionSelection.newDeck')}
-                </div>
-                <div className="text-white/30 text-[10px] mt-1">
-                  {t('factionSelection.clickToBuild')}
-                </div>
-              </motion.div>
+                t={t}
+                onSelect={() => handleSelectCustomDeck(savedDecks[0].id)}
+                onEdit={() => handleEditDeck(savedDecks[0].id)}
+                onMagnify={handleMagnifyCard}
+                isPlaceholder={false}
+              />
             )}
+            
+            {/* "+"按钮（始终显示在末尾） */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ scale: 1.02, y: -4 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{
+                delay: (availableFactions.length + (savedDecks.length > 0 ? 1 : 0)) * 0.06,
+                duration: 0.3,
+                scale: { type: 'spring', stiffness: 400, damping: 20 }
+              }}
+              className={clsx(
+                'relative rounded-lg overflow-hidden cursor-pointer group',
+                'border-2 border-dashed border-white/20 hover:border-amber-400/60 transition-colors shadow-lg flex flex-col items-center justify-center bg-white/5'
+              )}
+              onClick={handleOpenDeckSelector}
+            >
+              <div className="w-16 h-16 rounded-full border-2 border-white/20 flex items-center justify-center mb-4 group-hover:border-amber-400/80 transition-colors">
+                <span className="text-3xl text-white/50 group-hover:text-amber-400 font-light">+</span>
+              </div>
+              <div className="text-white/70 font-bold uppercase tracking-widest text-sm group-hover:text-amber-100">
+                {savedDecks.length > 0 ? t('factionSelection.moreDeck') : t('factionSelection.newDeck')}
+              </div>
+              <div className="text-white/30 text-[10px] mt-1">
+                {savedDecks.length > 1 
+                  ? t('factionSelection.totalDecks', { count: savedDecks.length })
+                  : t('factionSelection.clickToBuild')}
+              </div>
+            </motion.div>
           </div>
         </div>
 
@@ -528,18 +511,29 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
 
             {/* 玩家状态面板（固定宽度） */}
             <div className="flex flex-col gap-[1.2vh] min-w-[14vw] justify-center">
-              {playerIds.map(pid => (
-                <PlayerStatusCard
-                  key={pid}
-                  pid={pid}
-                  isMe={pid === currentPlayerId}
-                  factionId={selectedFactions[pid as PlayerId]}
-                  isReady={!!readyPlayers[pid as PlayerId]}
-                  playerName={playerNames[pid as PlayerId]}
-                  customDeckInfo={customDeckSelections[pid]}
-                  t={t}
-                />
-              ))}
+              {playerIds.map(pid => {
+                // 从游戏状态获取自定义牌组信息
+                const customDeck = customDeckData?.[pid as PlayerId];
+                const customDeckInfo = customDeck ? {
+                  deckId: customDeck.id,
+                  deckName: customDeck.name,
+                  summonerName: customDeck.summonerId,
+                  summonerFaction: customDeck.summonerFaction,
+                } : undefined;
+                
+                return (
+                  <PlayerStatusCard
+                    key={pid}
+                    pid={pid}
+                    isMe={pid === currentPlayerId}
+                    factionId={selectedFactions[pid as PlayerId]}
+                    isReady={!!readyPlayers[pid as PlayerId]}
+                    playerName={playerNames[pid as PlayerId]}
+                    customDeckInfo={customDeckInfo}
+                    t={t}
+                  />
+                );
+              })}
 
               {/* 操作按钮区（固定高度，避免布局跳动） */}
               <div className="h-[5vh] flex items-center justify-center">

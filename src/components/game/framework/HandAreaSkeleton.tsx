@@ -272,7 +272,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     const getSortFn = useMemo(() => {
         if (!sortCode) return undefined;
         try {
-            // eslint-disable-next-line no-new-func
+             
             return new Function('a', 'b', `return (${sortCode})(a, b)`) as (a: TCard, b: TCard) => number;
         } catch {
             return undefined;
@@ -283,7 +283,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     const getFilterFn = useMemo(() => {
         if (!filterCode) return undefined;
         try {
-            // eslint-disable-next-line no-new-func
+             
             return new Function('card', 'ctx', `return (${filterCode})(card, ctx)`) as (card: TCard, ctx: HandAreaFilterContext) => boolean;
         } catch {
             return undefined;
@@ -329,7 +329,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         if (!layoutCode) return undefined;
         try {
             // layoutCode 应该是函数体字符串
-            // eslint-disable-next-line no-new-func
+             
             return new Function('index', 'total', `return (${layoutCode})(index, total)`) as (index: number, total: number) => React.CSSProperties;
         } catch {
             return undefined;
@@ -340,7 +340,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     const getSelectStyle = useMemo(() => {
         if (!selectEffectCode) return undefined;
         try {
-            // eslint-disable-next-line no-new-func
+             
             return new Function('isSelected', `return (${selectEffectCode})(isSelected)`) as (isSelected: boolean) => React.CSSProperties;
         } catch {
             return undefined;

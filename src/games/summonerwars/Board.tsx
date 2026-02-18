@@ -104,6 +104,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleSelectFaction = useCallback((factionId: FactionId) => {
     dispatch(SW_COMMANDS.SELECT_FACTION, { factionId });
   }, [dispatch]);
+  const handleSelectCustomDeck = useCallback((deck: import('./config/deckSerializer').SerializedCustomDeck) => {
+    dispatch(SW_COMMANDS.SELECT_CUSTOM_DECK, { deckData: deck });
+  }, [dispatch]);
   const handlePlayerReady = useCallback(() => {
     dispatch(SW_COMMANDS.PLAYER_READY, {});
   }, [dispatch]);
@@ -277,6 +280,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode, setRapidFireMode,
+    grabFollowMode, setGrabFollowMode,
     withdrawTrigger, setWithdrawTrigger,
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
@@ -301,6 +305,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode,
+    grabFollowMode, setGrabFollowMode,
   });
 
   // 桥接：useGameEvents 检测到 afterAttack 触发 withdraw → 设置 useEventCardModes 的 withdrawMode
@@ -647,7 +652,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               selectedFactions={G.core.selectedFactions}
               readyPlayers={G.core.readyPlayers ?? {}}
               playerNames={playerNames as Record<PlayerId, string>}
+              customDeckData={G.core.customDeckData}
               onSelect={handleSelectFaction}
+              onSelectCustomDeck={handleSelectCustomDeck}
               onReady={handlePlayerReady}
               onStart={handleHostStart}
             />
@@ -880,7 +887,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         {t('action.discardSelected', { count: interaction.selectedCardsForDiscard.length })}
                       </GameButton>
                     )}
-                    <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
+                    <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn || interaction.isMandatoryAbilityActive} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
                       {interaction.endPhaseConfirmPending
                         ? t(currentPhase === 'move' ? 'action.confirmEndMove' : 'action.confirmEndAttack', {
                             count: currentPhase === 'move'

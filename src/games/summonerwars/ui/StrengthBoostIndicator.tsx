@@ -29,14 +29,15 @@ export const StrengthBoostIndicator: React.FC<StrengthBoostIndicatorProps> = ({
   const boosts = useMemo<BoostEntry[]>(() => {
     const entries: BoostEntry[] = [];
 
-    const strengthDelta = getStrengthBoostForDisplay(unit, core);
-    if (strengthDelta > 0) {
+    const strengthBoost = getStrengthBoostForDisplay(unit, core);
+    if (strengthBoost.delta > 0) {
       entries.push({
         type: 'strength',
-        count: strengthDelta,
+        count: strengthBoost.delta,
         icon: Swords,
         color: 'text-red-500',
         glow: 'rgba(239,68,68,0.9)',
+        tooltip: strengthBoost.sources.length > 0 ? strengthBoost.sources.join('\n') : undefined,
       });
     }
 

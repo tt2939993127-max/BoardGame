@@ -529,45 +529,44 @@ const handleRollLimitChanged: EventHandler<Extract<DiceThroneEvent, { type: 'ROL
 // };
 
 /**
- * 处理交互取消事件（已废弃 - 迁移到 InteractionSystem）
- * - 清除 pendingInteraction
+ * 处理交互取消事件
  * - 把卡牌从弃牌堆还回手牌
  * - 返还已扣除的 CP
  */
-// const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 'INTERACTION_CANCELLED' }>> = (
-//     state,
-//     event
-// ) => {
-//     const { sourceCardId, cpCost, playerId } = event.payload;
-//     let players = state.players;
+const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 'INTERACTION_CANCELLED' }>> = (
+    state,
+    event
+) => {
+    const { sourceCardId, cpCost, playerId } = event.payload;
+    let players = state.players;
 
-//     const player = state.players[playerId];
-//     if (player && sourceCardId) {
-//         const [card, newDiscard] = removeCard(player.discard, sourceCardId);
-//         let newHand = player.hand;
-//         let finalDiscard = player.discard;
-//         if (card) {
-//             newHand = [...player.hand, card];
-//             finalDiscard = newDiscard;
-//         }
+    const player = state.players[playerId];
+    if (player && sourceCardId) {
+        const [card, newDiscard] = removeCard(player.discard, sourceCardId);
+        let newHand = player.hand;
+        let finalDiscard = player.discard;
+        if (card) {
+            newHand = [...player.hand, card];
+            finalDiscard = newDiscard;
+        }
 
-//         let newResources = player.resources;
-//         if (cpCost > 0) {
-//             const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
-//             newResources = { ...player.resources, [RESOURCE_IDS.CP]: currentCp + cpCost };
-//         }
+        let newResources = player.resources;
+        if (cpCost > 0) {
+            const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+            newResources = { ...player.resources, [RESOURCE_IDS.CP]: currentCp + cpCost };
+        }
 
-//         players = {
-//             ...state.players,
-//             [playerId]: { ...player, hand: newHand, discard: finalDiscard, resources: newResources },
-//         };
-//     }
+        players = {
+            ...state.players,
+            [playerId]: { ...player, hand: newHand, discard: finalDiscard, resources: newResources },
+        };
+    }
 
-//     return {
-//         ...state,
-//         players,
-//     };
-// };
+    return {
+        ...state,
+        players,
+    };
+};
 
 // ============================================================================
 // 奖励骰重掷事件处理器
@@ -764,10 +763,12 @@ export const reduce = (
         // 已废弃 - 迁移到 InteractionSystem
         // case 'INTERACTION_REQUESTED':
         //     return handleInteractionRequested(state, event);
-        // case 'INTERACTION_COMPLETED':
-        //     return handleInteractionCompleted(state, event);
-        // case 'INTERACTION_CANCELLED':
-        //     return handleInteractionCancelled(state, event);
+        case 'INTERACTION_COMPLETED':
+            // INTERACTION_COMPLETED 事件仍然需要，用于清理 dt:card-interaction
+            // 但 reducer 不需要做任何状态变更（交互状态由 InteractionSystem 管理）
+            return state;
+        case 'INTERACTION_CANCELLED':
+            return handleInteractionCancelled(state, event);
         case 'TOKEN_RESPONSE_REQUESTED':
             return handleTokenResponseRequested(state, event);
         case 'TOKEN_USED':

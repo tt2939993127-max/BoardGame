@@ -6,6 +6,7 @@
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/waitForState';
 
 const setEnglishLocale = async (context: BrowserContext | Page) => {
   await context.addInitScript(() => {
@@ -276,7 +277,9 @@ const dismissLobbyConfirmIfNeeded = async (page: Page) => {
     .or(page.locator('button:has-text("Confirm")'));
   if (await confirmButton.isVisible().catch(() => false)) {
     await confirmButton.click();
-    await page.waitForTimeout(1000);
+    await waitForState(page, async () => {
+      return !(await confirmButton.isVisible().catch(() => false));
+    }, { timeout: 2000, message: '等待确认对话框关闭' });
   }
 };
 
@@ -454,17 +457,26 @@ const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
   // Host 选择第一个阵营
   const factionCards = (page: Page) => page.locator('.grid > div');
   await factionCards(hostPage).nth(0).click();
-  await hostPage.waitForTimeout(500);
+  await waitForState(hostPage, async () => {
+    const selectedCount = await hostPage.locator('.grid > div[data-selected="true"]').count();
+    return selectedCount > 0;
+  }, { timeout: 2000, message: '等待派系选择生效' });
 
   // Guest 选择第二个阵营
   await factionCards(guestPage).nth(1).click();
-  await guestPage.waitForTimeout(500);
+  await waitForState(guestPage, async () => {
+    const selectedCount = await guestPage.locator('.grid > div[data-selected="true"]').count();
+    return selectedCount > 0;
+  }, { timeout: 2000, message: '等待派系选择生效' });
 
   // Guest 点击准备
   const readyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i });
   await expect(readyButton).toBeVisible({ timeout: 5000 });
   await readyButton.click();
-  await hostPage.waitForTimeout(500);
+  await waitForState(hostPage, async () => {
+    const startButton = await hostPage.locator('button').filter({ hasText: /开始游戏|Start Game/i }).isEnabled().catch(() => false);
+    return startButton;
+  }, { timeout: 2000, message: '等待开始按钮启用' });
 
   // Host 点击开始游戏
   const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game/i });
@@ -573,7 +585,10 @@ const advancePhase = async (page: Page, fromPhase: string) => {
   // move/attack 阶段有剩余行动时，第一次点击会进入确认状态（按钮变红），需要再点一次
   const stillSamePhase = await getCurrentPhase(page).catch(() => fromPhase) === fromPhase;
   if (stillSamePhase) {
-    await page.waitForTimeout(300);
+    await waitForState(page, async () => {
+      const buttonClass = await endPhaseButton.getAttribute('class');
+      return buttonClass?.includes('bg-red') || false;
+    }, { timeout: 1000, message: '等待确认状态' }).catch(() => {});
     await endPhaseButton.click();
   }
   await expect.poll(() => getCurrentPhase(page), { timeout: 8000 }).not.toBe(fromPhase);
@@ -1123,7 +1138,10 @@ test.describe('SummonerWars', () => {
     // 选中攻击者
     await clickBoardElement(hostPage, `[data-testid="sw-unit-${attackSetup.attacker.row}-${attackSetup.attacker.col}"]`);
     // 等待单位被选中（高亮出现）
-    await hostPage.waitForTimeout(500);
+    await waitForCoreState(hostPage, (core: any) => {
+      return core.selectedUnit?.row === attackSetup.attacker.row && 
+             core.selectedUnit?.col === attackSetup.attacker.col;
+    }, { timeout: 2000, message: '等待单位被选中' });
 
     // 验证目标格子有 valid-attack 标记
     const targetCell = hostPage.getByTestId(`sw-cell-${attackSetup.target.row}-${attackSetup.target.col}`);
@@ -1493,7 +1511,7 @@ test.describe('SummonerWars', () => {
     await closeDebugPanelIfOpen(hostPage);
 
     // 等待状态应用
-    await hostPage.waitForTimeout(500);
+    await waitForPhaseChange(hostPage, 'move', { timeout: 2000 });
 
     // 验证当前是移动阶段
     const currentPhase = await getCurrentPhase(hostPage);
@@ -1668,7 +1686,10 @@ test.describe('SummonerWars', () => {
     await waitForPhase(hostPage, 'build');
 
     // 等待一段时间确认阶段没有被自动跳过
-    await hostPage.waitForTimeout(1000);
+    await waitForState(hostPage, async () => {
+      const phase = await getCurrentPhase(hostPage);
+      return phase === 'build';
+    }, { timeout: 1500, message: '验证阶段保持在 build' });
     const currentPhase = await getCurrentPhase(hostPage);
     expect(currentPhase).toBe('build');
 
@@ -1785,7 +1806,10 @@ test.describe('SummonerWars', () => {
     const gameOverCore = removeSummonerFromCore(coreState, '1');
     await applyCoreState(hostPage, gameOverCore);
     // 等待状态应用和游戏结束检测
-    await hostPage.waitForTimeout(2000);
+    await waitForState(hostPage, async () => {
+      const sys = await hostPage.evaluate(() => (window as any).__BG_STATE__?.sys);
+      return sys?.gameover !== null && sys?.gameover !== undefined;
+    }, { timeout: 3000, message: '等待游戏结束检测' });
     await closeDebugPanelIfOpen(hostPage);
 
     // 验证结算界面出现

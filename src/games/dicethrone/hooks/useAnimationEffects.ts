@@ -399,21 +399,12 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     // 状态效果 / Token 变化：基于 prev/current 快照对比
     // ========================================================================
 
-    // 首次挂载标记（用于快照对比类 effect，与事件流游标独立）
-    const mountedRef = useRef(false);
-
     // 追踪上一次的状态效果
     const prevOpponentStatusRef = useRef<Record<string, number>>({ ...(opponent?.statusEffects || {}) });
     const prevPlayerStatusRef = useRef<Record<string, number>>({ ...(player?.statusEffects || {}) });
     // 追踪上一次的 Token
     const prevOpponentTokensRef = useRef<Record<string, number>>({ ...(opponent?.tokens || {}) });
     const prevPlayerTokensRef = useRef<Record<string, number>>({ ...(player?.tokens || {}) });
-
-    // 首次挂载后标记为已就绪
-    useEffect(() => {
-        const raf = requestAnimationFrame(() => { mountedRef.current = true; });
-        return () => cancelAnimationFrame(raf);
-    }, []);
 
     /**
      * 监听对手状态效果变化（增益/减益/移除动画）
@@ -424,35 +415,33 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const prevStatus = prevOpponentStatusRef.current;
         const currentStatus = opponent.statusEffects || {};
 
-        if (mountedRef.current) {
-            Object.entries(currentStatus).forEach(([effectId, stacks]) => {
-                const prevStacks = prevStatus[effectId] ?? 0;
-                if (stacks > prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.STATUS, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: info.color,
-                        startPos: getEffectStartPos(opponentId),
-                        endPos: getElementCenter(refs.opponentBuff.current),
-                        soundKey: resolveStatusImpactKey(false),
-                    });
-                }
-            });
+        Object.entries(currentStatus).forEach(([effectId, stacks]) => {
+            const prevStacks = prevStatus[effectId] ?? 0;
+            if (stacks > prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.STATUS, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: info.color,
+                    startPos: getEffectStartPos(opponentId),
+                    endPos: getElementCenter(refs.opponentBuff.current),
+                    soundKey: resolveStatusImpactKey(false),
+                });
+            }
+        });
 
-            Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
-                const currentStacks = currentStatus[effectId] ?? 0;
-                if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.STATUS, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: 'from-slate-400 to-slate-600',
-                        startPos: getElementCenter(refs.opponentBuff.current),
-                        isRemove: true,
-                        soundKey: resolveStatusImpactKey(true),
-                    });
-                }
-            });
-        }
+        Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
+            const currentStacks = currentStatus[effectId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.STATUS, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.opponentBuff.current),
+                    isRemove: true,
+                    soundKey: resolveStatusImpactKey(true),
+                });
+            }
+        });
 
         prevOpponentStatusRef.current = { ...currentStatus };
     }, [opponent?.statusEffects, opponent, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff, fxBus]);
@@ -464,35 +453,33 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const prevStatus = prevPlayerStatusRef.current;
         const currentStatus = player.statusEffects || {};
 
-        if (mountedRef.current) {
-            Object.entries(currentStatus).forEach(([effectId, stacks]) => {
-                const prevStacks = prevStatus[effectId] ?? 0;
-                if (stacks > prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.STATUS, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: info.color,
-                        startPos: getEffectStartPos(currentPlayerId),
-                        endPos: getElementCenter(refs.selfBuff.current),
-                        soundKey: resolveStatusImpactKey(false),
-                    });
-                }
-            });
+        Object.entries(currentStatus).forEach(([effectId, stacks]) => {
+            const prevStacks = prevStatus[effectId] ?? 0;
+            if (stacks > prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.STATUS, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: info.color,
+                    startPos: getEffectStartPos(currentPlayerId),
+                    endPos: getElementCenter(refs.selfBuff.current),
+                    soundKey: resolveStatusImpactKey(false),
+                });
+            }
+        });
 
-            Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
-                const currentStacks = currentStatus[effectId] ?? 0;
-                if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.STATUS, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: 'from-slate-400 to-slate-600',
-                        startPos: getElementCenter(refs.selfBuff.current),
-                        isRemove: true,
-                        soundKey: resolveStatusImpactKey(true),
-                    });
-                }
-            });
-        }
+        Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
+            const currentStacks = currentStatus[effectId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.STATUS, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.selfBuff.current),
+                    isRemove: true,
+                    soundKey: resolveStatusImpactKey(true),
+                });
+            }
+        });
 
         prevPlayerStatusRef.current = { ...currentStatus };
     }, [player.statusEffects, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff, fxBus]);
@@ -506,35 +493,33 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const prevTokens = prevOpponentTokensRef.current;
         const currentTokens = opponent.tokens || {};
 
-        if (mountedRef.current) {
-            Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
-                const prevStacks = prevTokens[tokenId] ?? 0;
-                if (stacks > prevStacks) {
-                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.TOKEN, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: info.color,
-                        startPos: getEffectStartPos(opponentId),
-                        endPos: getElementCenter(refs.opponentBuff.current),
-                        soundKey: resolveTokenImpactKey(false),
-                    });
-                }
-            });
+        Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
+            const prevStacks = prevTokens[tokenId] ?? 0;
+            if (stacks > prevStacks) {
+                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.TOKEN, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: info.color,
+                    startPos: getEffectStartPos(opponentId),
+                    endPos: getElementCenter(refs.opponentBuff.current),
+                    soundKey: resolveTokenImpactKey(false),
+                });
+            }
+        });
 
-            Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
-                const currentStacks = currentTokens[tokenId] ?? 0;
-                if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.TOKEN, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: 'from-slate-400 to-slate-600',
-                        startPos: getElementCenter(refs.opponentBuff.current),
-                        isRemove: true,
-                        soundKey: resolveTokenImpactKey(true),
-                    });
-                }
-            });
-        }
+        Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
+            const currentStacks = currentTokens[tokenId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.TOKEN, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.opponentBuff.current),
+                    isRemove: true,
+                    soundKey: resolveTokenImpactKey(true),
+                });
+            }
+        });
 
         prevOpponentTokensRef.current = { ...currentTokens };
     }, [opponent?.tokens, opponent, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff, fxBus]);
@@ -546,35 +531,33 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const prevTokens = prevPlayerTokensRef.current;
         const currentTokens = player.tokens || {};
 
-        if (mountedRef.current) {
-            Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
-                const prevStacks = prevTokens[tokenId] ?? 0;
-                if (stacks > prevStacks) {
-                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.TOKEN, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: info.color,
-                        startPos: getEffectStartPos(currentPlayerId),
-                        endPos: getElementCenter(refs.selfBuff.current),
-                        soundKey: resolveTokenImpactKey(false),
-                    });
-                }
-            });
+        Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
+            const prevStacks = prevTokens[tokenId] ?? 0;
+            if (stacks > prevStacks) {
+                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.TOKEN, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: info.color,
+                    startPos: getEffectStartPos(currentPlayerId),
+                    endPos: getElementCenter(refs.selfBuff.current),
+                    soundKey: resolveTokenImpactKey(false),
+                });
+            }
+        });
 
-            Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
-                const currentStacks = currentTokens[tokenId] ?? 0;
-                if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
-                    fxBus.push(DT_FX.TOKEN, {}, {
-                        content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
-                        color: 'from-slate-400 to-slate-600',
-                        startPos: getElementCenter(refs.selfBuff.current),
-                        isRemove: true,
-                        soundKey: resolveTokenImpactKey(true),
-                    });
-                }
-            });
-        }
+        Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
+            const currentStacks = currentTokens[tokenId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                fxBus.push(DT_FX.TOKEN, {}, {
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.selfBuff.current),
+                    isRemove: true,
+                    soundKey: resolveTokenImpactKey(true),
+                });
+            }
+        });
 
         prevPlayerTokensRef.current = { ...currentTokens };
     }, [player.tokens, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff, fxBus]);

@@ -377,6 +377,52 @@ export const advanceToPhase = async (page: Page, targetPhase: string, maxSteps =
 export const cloneState = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 // ============================================================================
+// 旧版兼容函数（用于未迁移的测试）
+// ============================================================================
+
+/**
+ * 完成阵营选择（旧版 UI 点击方式）
+ * 新测试应使用 selectFactionsViaDispatch 或 setupSWOnlineMatch
+ */
+export const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
+  const selectionHeading = (page: Page) =>
+    page.locator('h1').filter({ hasText: /选择你的阵营|Choose your faction/i });
+  await expect(selectionHeading(hostPage)).toBeVisible({ timeout: 20000 });
+  await expect(selectionHeading(guestPage)).toBeVisible({ timeout: 20000 });
+
+  const factionCards = (page: Page) => page.locator('.grid > div');
+  await factionCards(hostPage).nth(0).click();
+  await hostPage.waitForTimeout(500);
+  await factionCards(guestPage).nth(1).click();
+  await guestPage.waitForTimeout(500);
+
+  const readyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i });
+  await expect(readyButton).toBeVisible({ timeout: 5000 });
+  await readyButton.click();
+  await hostPage.waitForTimeout(500);
+
+  const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game/i });
+  await expect(startButton).toBeVisible({ timeout: 5000 });
+  await expect(startButton).toBeEnabled({ timeout: 5000 });
+  await startButton.click();
+};
+
+/**
+ * 点击棋盘内元素（绕过 CSS transform 缩放问题）
+ * MapContainer 使用 CSS transform 缩放，Playwright 坐标计算与实际像素位置不一致
+ * 使用 dispatchEvent 直接触发点击事件
+ */
+export const clickBoardElement = async (page: Page, selector: string) => {
+  const clicked = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    return true;
+  }, selector);
+  if (!clicked) throw new Error(`无法点击元素: ${selector}`);
+};
+
+// ============================================================================
 // 在线对局创建（双人）
 // ============================================================================
 
@@ -476,4 +522,18 @@ export const setupSWOnlineMatch = async (
   }
 
   return { hostPage, guestPage, hostContext, guestContext, matchId };
+};
+
+/**
+ * 旧版兼容：通过 UI 创建在线对局（使用默认阵营）
+ * 新测试应使用 setupSWOnlineMatch 并显式指定阵营
+ */
+export const setupOnlineMatchViaUI = async (
+  browser: Browser,
+  baseURL: string | undefined,
+): Promise<Omit<SWMatchSetup, 'matchId'> | null> => {
+  const result = await setupSWOnlineMatch(browser, baseURL, 'necromancer', 'trickster');
+  if (!result) return null;
+  const { matchId, ...rest } = result;
+  return rest;
 };

@@ -84,9 +84,6 @@ export function playSound(key: SoundKey): void {
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
     if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
-        if (DT_TRACE_SOUND_KEYS.has(key)) {
-            console.log(`[DT_AUDIO_TRACE] source=play_sound action=throttle key=${key} deltaMs=${now - lastPlayed}`);
-        }
         return;
     }
     lastPlayedTime.set(key, now);
@@ -102,9 +99,6 @@ export function playSound(key: SoundKey): void {
     }
 
     const result = AudioManager.play(key);
-    if (DT_TRACE_SOUND_KEYS.has(key)) {
-        console.log(`[DT_AUDIO_TRACE] source=play_sound action=play key=${key} result=${result ?? 'null'}`);
-    }
     
     // 仅在音效确实加载失败时标记为永久失败并回退到合成音
     // （因并发加载限制被跳过的不算失败）
@@ -366,16 +360,9 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             }
             
             // 框架层自动过滤 UI 本地交互事件（音效已由 UI 组件本地播放）
-            if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
-                const eventId = (entry as { id?: number }).id;
-                console.log(`[DT_AUDIO_TRACE] source=event_stream action=check_metadata eventId=${eventId ?? 'none'} type=${event.type} hasAudioMetadata=${!!event.audioMetadata} isLocalUIEvent=${event.audioMetadata?.isLocalUIEvent ?? 'undefined'}`);
-            }
+            // 音频追踪日志已移除
             
             if (event.audioMetadata?.isLocalUIEvent) {
-                if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
-                    const eventId = (entry as { id?: number }).id;
-                    console.log(`[DT_AUDIO_TRACE] source=event_stream action=skip_local_ui eventId=${eventId ?? 'none'} type=${event.type} reason=isLocalUIEvent`);
-                }
                 continue;
             }
             
@@ -388,9 +375,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             if (!key) continue;
             if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
                 const eventId = (entry as { id?: number }).id;
-                const payload = (event as { payload?: Record<string, unknown> }).payload;
-                const eventPlayerId = payload && typeof payload.playerId === 'string' ? payload.playerId : 'none';
-                console.log(`[DT_AUDIO_TRACE] source=event_stream action=resolved eventId=${eventId ?? 'none'} type=${event.type} key=${key} eventPlayerId=${eventPlayerId} totalNewEntries=${newEntries.length}`);
             }
             // 立即播放（去重）
             if (!playedKeys.has(key)) {

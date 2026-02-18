@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { AbilityCard, Die, TurnPhase, PendingInteraction } from '../types';
+import type { AbilityCard, Die, TurnPhase, InteractionDescriptor } from '../types';
 import { DiceActions, DiceTray } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
@@ -63,7 +63,7 @@ export const RightSidebar = ({
     discardHighlighted: boolean;
     sellButtonVisible: boolean;
     /** 当前骰子交互（从 sys.interaction.current 读取） */
-    interaction?: PendingInteraction;
+    interaction?: InteractionDescriptor;
     /** dispatch 函数（用于响应交互） */
     dispatch: (type: string, payload?: unknown) => void;
     /** 已激活的攻击修正卡 */

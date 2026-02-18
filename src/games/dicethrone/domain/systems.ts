@@ -6,7 +6,7 @@
 import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { INTERACTION_EVENTS, queueInteraction, resolveInteraction, createSimpleChoice } from '../../../engine/systems/InteractionSystem';
-import type { PromptOption, SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
+import type { PromptOption } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type {
     DiceThroneCore,
@@ -41,10 +41,9 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
             let newState = state;
             const nextEvents: GameEvent[] = [];
 
-            console.log('[DT Systems] afterEvents called with', events.length, 'events');
-            
+            console.log('[systems.ts] Processing events:', events.map(e => e.type));
+
             for (const event of events) {
-                console.log('[DT Systems] Processing event', event.type);
                 const dtEvent = event as DiceThroneEvent;
                 
                 // 处理 CHOICE_REQUESTED 事件 -> 创建 Prompt
@@ -86,56 +85,104 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     newState = queueInteraction(newState, interaction);
                 }
 
-                // ---- INTERACTION_REQUESTED → queue interaction with onResolve callback ----
-                // 新的交互工厂（createSelectStatusInteraction 等）返回 INTERACTION_REQUESTED 事件
-                // 这些事件包含 onResolve 回调，需要在交互解决时调用
+                // ---- INTERACTION_REQUESTED → 转换为 simple-choice ----
                 if (dtEvent.type === 'INTERACTION_REQUESTED') {
-                    const payload = dtEvent.payload as {
-                        kind?: string;
-                        playerId: string;
-                        sourceId?: string;
-                        data?: { options?: PromptOption[]; [key: string]: unknown };
-                        onResolve?: (value: unknown) => DiceThroneEvent[];
-                        // 兼容 createSimpleChoice 返回的字段（直接在 payload 上）
-                        id?: string;
-                        title?: string;
-                        options?: PromptOption[];
-                    };
+                    const payload = (dtEvent as InteractionRequestedEvent).payload;
+                    const pendingInteraction = payload.interaction;
+                    const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
                     
-                    // 检查是否是新的交互格式（payload 包含 id 和 data）
-                    if (payload.id && payload.data) {
-                        // 直接使用 payload 作为 InteractionDescriptor
-                        const interaction: InteractionDescriptor = {
-                            id: payload.id,
-                            kind: payload.kind ?? 'simple-choice',
-                            playerId: payload.playerId,
-                            data: payload.data,
-                        };
-                        
-                        // 如果有 onResolve 回调，将其存储在 interaction.data 中
-                        // 这样在 SYS_INTERACTION_RESOLVED 时可以通过 payload.interactionData 访问
-                        if (payload.onResolve) {
-                            (interaction.data as { onResolve?: (value: unknown) => DiceThroneEvent[] }).onResolve = payload.onResolve;
+                    // 将旧的 PendingInteraction 转换为 simple-choice
+                    // 根据 type 生成选项
+                    let options: PromptOption[] = [];
+                    
+                    if (pendingInteraction.type === 'selectStatus') {
+                        // 收集所有玩家的所有状态效果作为选项
+                        const targetPlayerIds = pendingInteraction.targetPlayerIds || Object.keys(newState.core.players);
+                        let optionIndex = 0;
+                        for (const targetPlayerId of targetPlayerIds) {
+                            const player = newState.core.players[targetPlayerId];
+                            if (player) {
+                                Object.entries(player.statusEffects).forEach(([statusId, stacks]) => {
+                                    if (stacks > 0) {
+                                        options.push({
+                                            id: `option-${optionIndex++}`,
+                                            label: `statusEffects.${statusId}.name`,
+                                            value: { playerId: targetPlayerId, statusId },
+                                        });
+                                    }
+                                });
+                            }
                         }
+                    } else if (pendingInteraction.type === 'selectPlayer') {
+                        // 选择玩家
+                        const targetPlayerIds = pendingInteraction.targetPlayerIds || Object.keys(newState.core.players);
+                        options = targetPlayerIds.map((playerId, index) => ({
+                            id: `option-${index}`,
+                            label: `players.${playerId}.name`,
+                            value: { playerId },
+                        }));
+                    } else if (pendingInteraction.type === 'selectTargetStatus') {
+                        // 选择要转移的状态（从所有玩家收集）
+                        const targetPlayerIds = pendingInteraction.targetPlayerIds || Object.keys(newState.core.players);
+                        let optionIndex = 0;
+                        for (const fromPlayerId of targetPlayerIds) {
+                            const player = newState.core.players[fromPlayerId];
+                            if (player) {
+                                Object.entries(player.statusEffects).forEach(([statusId, stacks]) => {
+                                    if (stacks > 0) {
+                                        // 为每个状态生成"转移到哪个玩家"的选项
+                                        const otherPlayerIds = targetPlayerIds.filter(pid => pid !== fromPlayerId);
+                                        for (const toPlayerId of otherPlayerIds) {
+                                            options.push({
+                                                id: `option-${optionIndex++}`,
+                                                label: `statusEffects.${statusId}.name`,
+                                                value: { fromPlayerId, toPlayerId, statusId },
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    
+                    // 创建 simple-choice 交互
+                    // 如果没有可选选项（如场上无状态效果），直接跳过交互
+                    if (options.length === 0) {
+                        // 无可选项，不创建交互，生成 INTERACTION_COMPLETED 事件通知领域层
+                        nextEvents.push({
+                            type: 'INTERACTION_COMPLETED',
+                            payload: {
+                                interactionId: `dt-interaction-${pendingInteraction.id}`,
+                                sourceCardId: pendingInteraction.sourceCardId ?? '',
+                            },
+                            sourceCommandType: 'INTERACTION_AUTO_SKIP',
+                            timestamp: eventTimestamp,
+                        } as DiceThroneEvent);
+                    } else {
+                        // 卡牌打出的交互支持取消（返还卡牌和 CP）
+                        const hasSourceCard = Boolean(pendingInteraction.sourceCardId);
+                        const interaction = createSimpleChoice(
+                            `dt-interaction-${pendingInteraction.id}`,
+                            pendingInteraction.playerId,
+                            pendingInteraction.titleKey,
+                            options,
+                            {
+                                sourceId: pendingInteraction.sourceCardId,
+                                autoCancelOption: hasSourceCard,
+                            }
+                        );
+                        
+                        // 保存原始 interactionData 以便兼容层使用
+                        (interaction.data as any).originalInteractionData = pendingInteraction;
                         
                         newState = queueInteraction(newState, interaction);
                     }
                 }
-                
-                // ---- INTERACTION_QUEUED → queue (新模式) ----
-                // 新的 custom action handlers 直接产生 INTERACTION_QUEUED 事件
-                if (dtEvent.type === 'INTERACTION_QUEUED') {
-                    const payload = dtEvent.payload as { interaction: InteractionDescriptor };
-                    newState = queueInteraction(newState, payload.interaction);
-                }
 
-                // @deprecated - 旧交互系统已废弃
-                /*
                 // ---- INTERACTION_COMPLETED / INTERACTION_CANCELLED → resolve ----
                 if (dtEvent.type === 'INTERACTION_COMPLETED' || dtEvent.type === 'INTERACTION_CANCELLED') {
                     newState = resolveInteraction(newState);
                 }
-                */
 
                 // ---- TOKEN_RESPONSE_REQUESTED → queue/update dt:token-response ----
                 // 业务数据仅存 core.pendingDamage；sys.interaction 只做阻塞标记
@@ -193,32 +240,188 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     newState = resolveInteraction(newState);
                 }
 
+                // ---- SYS_INTERACTION_CANCELLED → 生成领域 INTERACTION_CANCELLED 事件（返还卡牌） ----
+                if (event.type === INTERACTION_EVENTS.CANCELLED) {
+                    const payload = event.payload as {
+                        interactionId: string;
+                        playerId: string;
+                        sourceId?: string;
+                        interactionData?: any;
+                    };
+                    
+                    // 从 interactionData 中提取卡牌信息
+                    // simple-choice 的 data 中有 originalInteractionData（PendingInteraction）
+                    // dt:card-interaction 的 data 直接就是 PendingInteraction
+                    const interactionData = payload.interactionData;
+                    let cpCost = 0;
+                    let sourceCardId = '';
+                    
+                    if (interactionData && typeof interactionData === 'object') {
+                        const original = interactionData.originalInteractionData;
+                        if (original && typeof original === 'object') {
+                            // simple-choice 兼容层：从 originalInteractionData 提取
+                            sourceCardId = original.sourceCardId ?? '';
+                        } else {
+                            // dt:card-interaction：直接从 data 提取
+                            sourceCardId = interactionData.sourceCardId ?? '';
+                        }
+                        // cpCost 不在交互数据中，从弃牌堆的卡牌定义获取
+                        if (sourceCardId) {
+                            const player = newState.core.players[payload.playerId];
+                            const card = player?.discard.find((c: any) => c.id === sourceCardId);
+                            cpCost = card?.cpCost ?? 0;
+                        }
+                    }
+                    
+                    // 生成领域 INTERACTION_CANCELLED 事件（reducer 会返还卡牌和 CP）
+                    if (sourceCardId || cpCost > 0) {
+                        const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+                        nextEvents.push({
+                            type: 'INTERACTION_CANCELLED',
+                            payload: {
+                                playerId: payload.playerId,
+                                sourceCardId,
+                                cpCost,
+                            },
+                            sourceCommandType: 'SYS_INTERACTION_CANCEL', // 已迁移到 InteractionSystem
+                            timestamp: eventTimestamp,
+                        } as DiceThroneEvent);
+                    }
+                }
+
+                // ---- SYS_INTERACTION_RESOLVED → 处理旧交互类型（兼容层） ----
+                // 旧的 selectStatus/selectPlayer/selectTargetStatus 交互需要转换为业务命令
+                if (event.type === INTERACTION_EVENTS.RESOLVED) {
+                    const payload = event.payload as {
+                        interactionId: string;
+                        playerId: string;
+                        optionId: string | null;
+                        value: any;
+                        sourceId?: string;
+                        interactionData?: any;
+                    };
+                    
+                    const interactionData = payload.interactionData;
+                    const originalInteractionData = interactionData?.originalInteractionData;
+                    
+                    console.log('[systems.ts] SYS_INTERACTION_RESOLVED compatibility layer:', {
+                        interactionData,
+                        originalInteractionData,
+                        interactionType: originalInteractionData?.type,
+                        value: payload.value,
+                    });
+                    
+                    if (originalInteractionData && typeof originalInteractionData === 'object') {
+                        const interactionType = originalInteractionData.type;
+                        const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+                        
+                        // 检查是否选择了取消选项（autoCancelOption 生成的 __cancel__ 选项）
+                        const isCancelled = payload.value && typeof payload.value === 'object' && (payload.value as any).__cancel__ === true;
+                        if (isCancelled) {
+                            // 取消：生成 INTERACTION_CANCELLED 事件返还卡牌和 CP
+                            const sourceCardId = originalInteractionData.sourceCardId ?? '';
+                            let cpCost = 0;
+                            if (sourceCardId) {
+                                const player = newState.core.players[payload.playerId];
+                                const card = player?.discard.find((c: any) => c.id === sourceCardId);
+                                cpCost = card?.cpCost ?? 0;
+                            }
+                            if (sourceCardId || cpCost > 0) {
+                                nextEvents.push({
+                                    type: 'INTERACTION_CANCELLED',
+                                    payload: {
+                                        playerId: payload.playerId,
+                                        sourceCardId,
+                                        cpCost,
+                                    },
+                                    sourceCommandType: 'INTERACTION_RESOLVED_CANCEL',
+                                    timestamp: eventTimestamp,
+                                } as DiceThroneEvent);
+                            }
+                        } else {
+                        // selectStatus: 选择状态后执行 REMOVE_STATUS
+                        if (interactionType === 'selectStatus' && payload.value) {
+                            console.log('[systems.ts] Handling selectStatus interaction');
+                            const { playerId: targetPlayerId, statusId } = payload.value;
+                            if (targetPlayerId && statusId) {
+                                // 直接生成 STATUS_REMOVED 事件（不通过命令）
+                                const targetPlayer = newState.core.players[targetPlayerId];
+                                if (targetPlayer) {
+                                    const currentStacks = targetPlayer.statusEffects[statusId] ?? 0;
+                                    console.log('[systems.ts] Generating STATUS_REMOVED event:', {
+                                        targetPlayerId,
+                                        statusId,
+                                        currentStacks,
+                                    });
+                                    if (currentStacks > 0) {
+                                        nextEvents.push({
+                                            type: 'STATUS_REMOVED',
+                                            payload: { targetId: targetPlayerId, statusId, stacks: currentStacks },
+                                            sourceCommandType: 'INTERACTION_RESOLVED',
+                                            timestamp: eventTimestamp,
+                                        } as DiceThroneEvent);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // selectPlayer: 选择玩家后执行 REMOVE_STATUS（移除所有状态）
+                        if (interactionType === 'selectPlayer' && payload.value) {
+                            const { playerId: targetPlayerId } = payload.value;
+                            if (targetPlayerId) {
+                                const targetPlayer = newState.core.players[targetPlayerId];
+                                if (targetPlayer) {
+                                    // 移除所有状态效果
+                                    Object.entries(targetPlayer.statusEffects).forEach(([statusId, stacks]) => {
+                                        if (stacks > 0) {
+                                            nextEvents.push({
+                                                type: 'STATUS_REMOVED',
+                                                payload: { targetId: targetPlayerId, statusId, stacks },
+                                                sourceCommandType: 'INTERACTION_RESOLVED',
+                                                timestamp: eventTimestamp,
+                                            } as DiceThroneEvent);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        
+                        // selectTargetStatus: 选择状态后执行 TRANSFER_STATUS
+                        if (interactionType === 'selectTargetStatus' && payload.value) {
+                            const { fromPlayerId, toPlayerId, statusId } = payload.value;
+                            if (fromPlayerId && toPlayerId && statusId) {
+                                const fromPlayer = newState.core.players[fromPlayerId];
+                                const toPlayer = newState.core.players[toPlayerId];
+                                if (fromPlayer && toPlayer) {
+                                    const fromStacks = fromPlayer.statusEffects[statusId] ?? 0;
+                                    if (fromStacks > 0) {
+                                        // 移除源玩家的状态
+                                        nextEvents.push({
+                                            type: 'STATUS_REMOVED',
+                                            payload: { targetId: fromPlayerId, statusId, stacks: fromStacks },
+                                            sourceCommandType: 'INTERACTION_RESOLVED',
+                                            timestamp: eventTimestamp,
+                                        } as DiceThroneEvent);
+                                        // 给目标玩家添加状态
+                                        const toStacks = toPlayer.statusEffects[statusId] ?? 0;
+                                        nextEvents.push({
+                                            type: 'STATUS_APPLIED',
+                                            payload: { targetId: toPlayerId, statusId, stacks: fromStacks, newTotal: toStacks + fromStacks },
+                                            sourceCommandType: 'INTERACTION_RESOLVED',
+                                            timestamp: eventTimestamp,
+                                        } as DiceThroneEvent);
+                                    }
+                                }
+                            }
+                        }
+                        } // 关闭 isCancelled else 块
+                    }
+                }
+
                 // 处理 Prompt 响应 -> 生成 CHOICE_RESOLVED 领域事件
                 const resolvedEvent = handlePromptResolved(event);
                 if (resolvedEvent) {
                     nextEvents.push(resolvedEvent);
-                }
-                
-                // ---- SYS_INTERACTION_RESOLVED → 调用 onResolve 回调生成后续事件 ----
-                // 根据交互类型和响应值生成相应的领域事件
-                if (event.type === INTERACTION_EVENTS.RESOLVED) {
-                    const payload = event.payload as {
-                        interactionId: string;
-                        value: unknown;
-                        sourceId?: string;
-                        interactionData?: unknown;
-                    };
-                    
-                    // 检查 interactionData 中是否有 onResolve 回调
-                    // createSelectStatusInteraction 等工厂函数会将 onResolve 存储在这里
-                    const interactionData = payload.interactionData as { onResolve?: (value: unknown) => DiceThroneEvent[] } | undefined;
-                    if (interactionData?.onResolve && typeof interactionData.onResolve === 'function') {
-                        // 调用 onResolve 回调生成后续事件
-                        const resolvedEvents = interactionData.onResolve(payload.value);
-                        if (Array.isArray(resolvedEvents)) {
-                            nextEvents.push(...resolvedEvents);
-                        }
-                    }
                 }
 
                 // ---- 被动能力触发器：ABILITY_ACTIVATED + pray 面 → 获得 CP ----
@@ -299,10 +502,10 @@ export function handlePromptResolved(
         type: 'CHOICE_RESOLVED',
         payload: {
             playerId: payload.playerId,
-            statusId: payload.value?.statusId,
-            tokenId: payload.value?.tokenId,
-            value: payload.value?.value ?? 0,
-            customId: payload.value?.customId,
+            statusId: payload.value.statusId,
+            tokenId: payload.value.tokenId,
+            value: payload.value.value,
+            customId: payload.value.customId,
             sourceAbilityId: payload.sourceId,
         },
         sourceCommandType: 'RESOLVE_CHOICE',

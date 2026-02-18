@@ -29,6 +29,7 @@ import {
     useCallback,
     useMemo,
 } from 'react';
+import * as React from 'react';
 import type { ReactNode } from 'react';
 import type { MatchState, PlayerId, Command, GameEvent, RandomFn } from '../types';
 import type { EngineSystem } from '../systems/types';
@@ -42,6 +43,8 @@ import {
     createInitialSystemState,
     type PipelineConfig,
 } from '../pipeline';
+import { TestHarness, isTestEnvironment } from '../testing';
+import { refreshInteractionOptions } from '../systems/InteractionSystem';
 
 // ============================================================================
 // Context 类型
@@ -170,7 +173,10 @@ export function GameProvider({
             playerID: playerId,
             credentials,
             onStateUpdate: (newState, players) => {
-                setState(newState as MatchState<unknown>);
+                // 实时刷新交互选项（如果策略是 realtime）
+                const refreshedState = refreshInteractionOptions(newState as MatchState<unknown>);
+                
+                setState(refreshedState);
                 setMatchPlayers(players);
             },
             onConnectionChange: (connected) => {
@@ -194,6 +200,26 @@ export function GameProvider({
     const dispatch = useCallback((type: string, payload: unknown) => {
         clientRef.current?.sendCommand(type, payload);
     }, []);
+
+    // 注册测试工具访问器（仅在测试环境生效）
+    useEffect(() => {
+        if (!isTestEnvironment()) return;
+        
+        const harness = TestHarness.getInstance();
+        
+        // 注册状态访问器
+        harness.state.register(
+            () => state,
+            (newState) => setState(newState as MatchState<unknown>)
+        );
+        
+        // 注册命令分发器
+        harness.command.register(async (command) => {
+            dispatch(command.type, command.payload);
+        });
+        
+        console.log('[GameProvider] 测试工具访问器已注册');
+    }, [state, dispatch]);
 
     const value = useMemo<GameClientContextValue>(() => ({
         state,
@@ -306,7 +332,9 @@ export function LocalGameProvider({
                 return prev;
             }
 
-            return result.state;
+            // 实时刷新交互选项（如果策略是 realtime）
+            const refreshedState = refreshInteractionOptions(result.state);
+            return refreshedState;
         });
     }, [config, playerIds]);
 
@@ -335,6 +363,26 @@ export function LocalGameProvider({
         isMultiplayer: false,
         reset,
     }), [state, dispatch, matchPlayers, reset]);
+
+    // 注册测试工具访问器（仅在测试环境生效）
+    useEffect(() => {
+        if (!isTestEnvironment()) return;
+        
+        const harness = TestHarness.getInstance();
+        
+        // 注册状态访问器
+        harness.state.register(
+            () => state,
+            (newState) => setState(newState as MatchState<unknown>)
+        );
+        
+        // 注册命令分发器
+        harness.command.register(async (command) => {
+            dispatch(command.type, command.payload);
+        });
+        
+        console.log('[LocalGameProvider] 测试工具访问器已注册');
+    }, [state, dispatch]);
 
     // E2E 测试支持：在本地/教程模式下暴露 dispatch 和 state 到 window，供 Playwright 直接操作
     useEffect(() => {
@@ -369,6 +417,9 @@ export function LocalGameProvider({
  * Board 组件通过 props 接收 G/dispatch 等，
  * BoardBridge 从 Context 读取并注入。
  *
+ * 使用 ErrorBoundary 确保 Board 组件在渲染错误时不会崩溃整个应用。
+ * 使用条件渲染确保 Board 只在 props 完全就绪时才渲染。
+ *
  * ```tsx
  * <GameProvider ...>
  *   <BoardBridge board={DiceThroneBoard} />
@@ -383,6 +434,130 @@ export function BoardBridge<TCore = unknown>({
     loading?: React.ReactNode;
 }) {
     const props = useBoardProps<TCore>();
-    if (!props) return Loading ?? null;
-    return <Board {...props} />;
+    
+    // 确保 props 完全就绪后才渲染 Board
+    // 这避免了 React 18 并发渲染可能导致的 Provider 时序问题
+    if (!props) {
+        return Loading ?? null;
+    }
+    
+    // 使用 key 强制在 props 变化时重新挂载组件
+    // 这确保了组件状态的清洁重置
+    const stableKey = props.playerID ?? 'board';
+    
+    return (
+        <BoardErrorBoundary fallback={Loading}>
+            <Board key={stableKey} {...props} />
+        </BoardErrorBoundary>
+    );
+}
+
+/**
+ * Board 组件的错误边界
+ * 
+ * 捕获 Board 渲染过程中的错误，防止整个应用崩溃。
+ * 常见错误包括：
+ * - AudioProvider 未初始化
+ * - 其他 Context Provider 缺失
+ * - 组件内部逻辑错误
+ * 
+ * 自动重试机制：
+ * - 捕获错误后等待 500ms 自动重试
+ * - 最多重试 5 次
+ * - 重试期间显示 loading fallback
+ */
+class BoardErrorBoundary extends React.Component<
+    { children: React.ReactNode; fallback?: React.ReactNode },
+    { hasError: boolean; error?: Error; retryCount: number }
+> {
+    private retryTimer: NodeJS.Timeout | null = null;
+    private readonly maxRetries = 5;
+
+    constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false, retryCount: 0 };
+    }
+
+    static getDerivedStateFromError(error: Error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        console.error('[BoardBridge] Board 组件渲染错误:', error, errorInfo);
+        console.error('[BoardBridge] 错误堆栈:', error.stack);
+        
+        // 检查是否为可恢复错误
+        const isRecoverable = error.message?.includes('AudioProvider') || 
+                              error.message?.includes('useAudio') ||
+                              error.message?.includes('Context');
+        
+        if (isRecoverable && this.state.retryCount < this.maxRetries) {
+            // 指数退避：500ms, 1000ms, 2000ms, 4000ms, 5000ms (最大)
+            const delay = Math.min(500 * Math.pow(2, this.state.retryCount), 5000);
+            
+            console.warn(`[BoardBridge] 检测到可恢复错误，将在 ${delay}ms 后重试 (${this.state.retryCount + 1}/${this.maxRetries})`);
+            
+            this.retryTimer = setTimeout(() => {
+                console.log(`[BoardBridge] 重试渲染 (${this.state.retryCount + 1}/${this.maxRetries})`);
+                this.setState(prev => ({
+                    hasError: false,
+                    error: undefined,
+                    retryCount: prev.retryCount + 1
+                }));
+            }, delay);
+        } else {
+            if (this.state.retryCount >= this.maxRetries) {
+                console.error('[BoardBridge] 已达到最大重试次数，放弃重试');
+            } else {
+                console.error('[BoardBridge] 错误不可恢复，不进行重试');
+            }
+        }
+    }
+
+    componentDidUpdate(prevProps: { children: React.ReactNode }) {
+        // 如果 children 变化，重置错误状态和重试计数
+        if (this.state.hasError && prevProps.children !== this.props.children) {
+            console.log('[BoardBridge] children 变化，重置错误状态');
+            this.setState({ hasError: false, error: undefined, retryCount: 0 });
+        }
+    }
+
+    componentWillUnmount() {
+        if (this.retryTimer) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+        }
+    }
+
+    render() {
+        if (this.state.hasError) {
+            // 如果还在重试范围内，显示 loading fallback
+            if (this.state.retryCount < this.maxRetries && this.props.fallback) {
+                return this.props.fallback;
+            }
+            
+            // 超过重试次数或没有 fallback，显示错误信息
+            if (this.props.fallback && this.state.retryCount >= this.maxRetries) {
+                return this.props.fallback;
+            }
+            
+            return (
+                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
+                    <div className="text-center">
+                        <div className="mb-2">游戏加载失败</div>
+                        <div className="text-xs text-white/50 mb-2">
+                            {this.state.error?.message || '未知错误'}
+                        </div>
+                        {this.state.retryCount >= this.maxRetries && (
+                            <div className="text-xs text-white/30">
+                                已重试 {this.maxRetries} 次
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
 }

@@ -83,14 +83,17 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
+        // displayOnly 模式：允许自动关闭和点击背景关闭（防御方/观察者视角）
+        const isInteractive = !displayOnly;
 
         return (
             <SpotlightContainer
                 id="bonus-dice-reroll"
                 isVisible={isVisible}
                 onClose={onClose}
-                disableAutoClose
-                disableBackdropClose
+                disableAutoClose={isInteractive}
+                disableBackdropClose={isInteractive}
+                autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
             >
                 <div className="flex flex-col items-center gap-[1.5vw]">
@@ -171,12 +174,14 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         transition={{ delay: 0.8 }}
                     >
                         <GameButton
-                            onClick={onSkipReroll}
+                            onClick={displayOnly ? onClose : onSkipReroll}
                             variant={canReroll ? 'primary' : 'secondary'}
                             size="md"
                             className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
                         >
-                            {canReroll ? t('bonusDie.confirmDamage') : t('bonusDie.continue')}
+                            {displayOnly
+                                ? t('bonusDie.continue')
+                                : canReroll ? t('bonusDie.confirmDamage') : t('bonusDie.continue')}
                         </GameButton>
                     </motion.div>
                 </div>

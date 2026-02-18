@@ -38,6 +38,9 @@ export function useHorizontalDragScroll<T extends HTMLElement = HTMLDivElement>(
 
   // 清理函数引用，用于 callback ref 卸载时调用
   const cleanupRef = useRef<(() => void) | null>(null);
+  
+  // 保存 click 抑制的 timeout ID，用于组件卸载时清理
+  const clickSuppressTimeoutRef = useRef<number | null>(null);
 
   /**
    * Callback ref：元素挂载/卸载时自动绑定/解绑 wheel 监听。
@@ -69,6 +72,11 @@ export function useHorizontalDragScroll<T extends HTMLElement = HTMLDivElement>(
 
       cleanupRef.current = () => {
         el.removeEventListener('wheel', handleWheel);
+        // 清理可能存在的 click 抑制 timeout
+        if (clickSuppressTimeoutRef.current !== null) {
+          clearTimeout(clickSuppressTimeoutRef.current);
+          clickSuppressTimeoutRef.current = null;
+        }
       };
     },
     [wheel],
@@ -132,9 +140,16 @@ export function useHorizontalDragScroll<T extends HTMLElement = HTMLDivElement>(
         ev.preventDefault();
       };
       el.addEventListener('click', suppress, { capture: true });
+      
+      // 清理之前的 timeout（如果存在）
+      if (clickSuppressTimeoutRef.current !== null) {
+        clearTimeout(clickSuppressTimeoutRef.current);
+      }
+      
       // 200ms 后强制移除，不依赖 once（避免点击 pointer-events-none 元素时监听器永久存在）
-      setTimeout(() => {
+      clickSuppressTimeoutRef.current = window.setTimeout(() => {
         el.removeEventListener('click', suppress, { capture: true });
+        clickSuppressTimeoutRef.current = null;
       }, 200);
     }
   }, []);

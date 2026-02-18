@@ -55,7 +55,7 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 
 **前端**：React 19 · TypeScript · Vite · Tailwind CSS · Framer Motion · Three.js · React Router · TanStack Query · i18next
 
-**后端**：自研游戏引擎 (Koa + Socket.IO) · NestJS · MongoDB · Redis
+**后端**：自研游戏引擎 (Koa + Socket.IO) · NestJS · MongoDB · Redis · Winston (日志系统)
 
 **基础设施**：Docker · Docker Compose · GitHub Actions CI/CD · Cloudflare Pages / R2
 
@@ -70,11 +70,16 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 │   ├── services/        # Socket 服务（lobby / match / social）
 │   ├── ugc/             # 简易原型构建工具与运行时
 │   └── server/          # 服务端共享模块（DB / 存储 / 模型）
+├── server/              # 服务端基础设施
+│   ├── logger.ts        # Winston 日志系统
+│   └── middleware/      # Koa 中间件（日志 / 错误处理）
+├── logs/                # 日志文件目录（自动轮转）
 ├── apps/api/            # NestJS API 服务（认证 / 管理 / 社交）
 ├── server.ts            # 游戏服务器入口（Koa + GameTransportServer）
 ├── docker/              # Dockerfile 与 Nginx 配置
 ├── scripts/             # 构建 / 部署 / 资源处理脚本
 ├── docs/                # 项目文档
+│   └── logging-system.md  # 日志系统文档
 └── e2e/                 # Playwright 端到端测试
 ```
 

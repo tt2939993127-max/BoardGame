@@ -74,6 +74,7 @@ export function registerGhostAbilities(): void {
 function ghostGhost(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
+    
     if (discardable.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
     
     // 先生成初始选项（基于当前状态）
@@ -84,25 +85,15 @@ function ghostGhost(ctx: AbilityContext): AbilityResult {
     });
     const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     
+    const allOptions = [...initialOptions, skipOption];
+    
     const interaction = createSimpleChoice(
         `ghost_ghost_${ctx.now}`,
         ctx.playerId,
         '选择要弃掉的手牌（可跳过）',
-        [...initialOptions, skipOption] as any[],
-        { sourceId: 'ghost_ghost' },
+        allOptions as any[],
+        { sourceId: 'ghost_ghost', targetType: 'hand' },
     );
-    
-    // 注入选项生成器（用于队列中的交互）
-    (interaction.data as any).optionsGenerator = (state: any) => {
-        const currentPlayer = state.core.players[ctx.playerId];
-        const currentDiscardable = currentPlayer.hand.filter((c: any) => c.uid !== ctx.cardUid);
-        const options = currentDiscardable.map((c: any, i: number) => {
-            const def = getCardDef(c.defId);
-            const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
-        });
-        return [...options, { id: 'skip', label: '跳过', value: { skip: true } }];
-    };
     
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -204,7 +195,9 @@ function ghostMakeContact(ctx: AbilityContext): AbilityResult {
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
         `ghost_make_contact_${ctx.now}`, ctx.playerId,
-        '选择要控制的对手随从', buildMinionTargetOptions(options), 'ghost_make_contact',
+        '选择要控制的对手随从',
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
+        { sourceId: 'ghost_make_contact', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -239,7 +232,7 @@ function ghostSpirit(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `ghost_spirit_${ctx.now}`, ctx.playerId,
         '选择要消灭的随从（需弃等量力量的手牌）', buildMinionTargetOptions(options),
-        { sourceId: 'ghost_spirit', autoCancelOption: true },
+        { sourceId: 'ghost_spirit', targetType: 'minion', autoCancelOption: true }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -328,8 +321,12 @@ export function registerGhostInteractionHandlers(): void {
         const power = getMinionPower(state.core, target, baseIndex);
         const player = state.core.players[playerId];
         const discardable = player.hand.filter(c => c.uid !== minionUid);
-        // 手牌不够弃→无法消灭，直接结束
-        if (discardable.length < power) return { state, events: [] };
+        
+        // 手牌不够弃→无法消灭，直接跳过（不创建交互）
+        if (discardable.length < power) {
+            return { state, events: [] };
+        }
+        
         // 力量为 0 → 无需弃牌直接消灭（但仍需确认"你可以"）
         if (power === 0) {
             const base = state.core.bases[baseIndex];
@@ -340,26 +337,24 @@ export function registerGhostInteractionHandlers(): void {
                 [
                     { id: 'yes', label: '消灭', value: { confirm: true, minionUid, minionDefId: targetMinion?.defId, baseIndex, baseDefId: base.defId } },
                     { id: 'no', label: '跳过', value: { confirm: false, minionDefId: targetMinion?.defId } },
-                ],
-                'ghost_spirit_confirm',
-            );
+                ], { sourceId: 'ghost_spirit_confirm', targetType: 'minion' }
+                );
             return { state: queueInteraction(state, confirmInteraction), events: [] };
         }
-        // 力量>0 → 让玩家选择弃哪些牌（多选，恰好 power 张）
+        
+        // 力量>0 → 让玩家选择弃哪些牌（多选，恰好 power 张，或者不选任何牌跳过）
         const cardOptions = discardable.map((c, i) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
             return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
         });
+        // 使用 min=0 允许不选（跳过），max=power 限制上限
+        // 但在 handler 中只接受 0 张（跳过）或 power 张（执行）
         const discardInteraction = createSimpleChoice(
             `ghost_spirit_discard_${timestamp}`, playerId,
-            `选择 ${power} 张手牌弃置来消灭该随从`,
-            [
-                ...cardOptions,
-                { id: 'skip', label: '跳过（不弃牌不消灭）', value: { skip: true } },
-            ] as any[],
-            'ghost_spirit_discard',
-            undefined, { min: power, max: power },
+            `选择 ${power} 张手牌弃置来消灭该随从（可跳过）`,
+            cardOptions as any[],
+            { sourceId: 'ghost_spirit_discard', multi: { min: 0, max: power } },
         );
         return {
             state: queueInteraction(state, {
@@ -374,12 +369,26 @@ export function registerGhostInteractionHandlers(): void {
     registerInteractionHandler('ghost_spirit_discard', (state, playerId, value, iData, _random, timestamp) => {
         const ctx = iData?.continuationContext as { minionUid: string; baseIndex: number; requiredCount: number } | undefined;
         if (!ctx) return undefined;
-        // 跳过
-        if (value && (value as any).skip) return { state, events: [] };
+        
         // 多选模式：value 可能是数组或单个对象
-        const selected = Array.isArray(value) ? value : [value];
+        const selected = Array.isArray(value) ? value : value ? [value] : [];
         const cardUids = selected.map((v: any) => v.cardUid).filter(Boolean) as string[];
-        if (cardUids.length !== ctx.requiredCount) return undefined;
+        
+        // 只接受两种情况：
+        // 1. 选择 0 张卡牌 → 跳过（不执行效果）
+        // 2. 选择恰好 power 张卡牌 → 执行效果
+        // 其他情况（1-2 张等部分选择）→ 拒绝（返回 undefined 让系统提示错误）
+        if (cardUids.length === 0) {
+            // 跳过
+            return { state, events: [] };
+        }
+        
+        if (cardUids.length !== ctx.requiredCount) {
+            // 部分选择，拒绝
+            return undefined;
+        }
+        
+        // 执行效果：弃牌并消灭随从
         const base = state.core.bases[ctx.baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === ctx.minionUid);
@@ -477,9 +486,8 @@ export function registerGhostInteractionHandlers(): void {
             return { baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `ghost_the_dead_rise_base_${timestamp}`, playerId,
-            '亡者崛起：选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), 'ghost_the_dead_rise_base',
-        );
+            `ghost_the_dead_rise_base_${timestamp}`, playerId, { sourceId: '亡者崛起：选择打出随从的基地', targetType: 'base' }, buildBaseTargetOptions(baseCandidates, state.core), 'ghost_the_dead_rise_base'
+            );
         return {
             state: queueInteraction(state, {
                 ...next,

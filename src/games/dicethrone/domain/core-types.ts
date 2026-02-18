@@ -179,12 +179,12 @@ export interface PendingAttack {
 }
 
 // ============================================================================
-// 卡牌交互系统类型（已废弃 - 迁移到 InteractionSystem）
+// 卡牌交互系统类型
 // ============================================================================
-// 注意：以下类型已废弃，保留仅用于测试兼容性
-// 新代码应使用 src/games/dicethrone/domain/interactions/ 中的工厂函数
+// 注意：这些类型用于 DiceThrone 的自定义交互系统（直接点击交互）
+// 不同于引擎层的 InteractionSystem（选择 + 确认按钮交互）
 
-/** 交互类型（已废弃） */
+/** 交互类型 */
 export type CardInteractionType =
     | 'selectDie'
     | 'modifyDie'
@@ -192,8 +192,8 @@ export type CardInteractionType =
     | 'selectStatus'
     | 'selectTargetStatus';
 
-/** 待处理的卡牌交互（已废弃） */
-export interface PendingInteraction {
+/** 待处理的卡牌交互 */
+export interface InteractionDescriptor {
     id: string;
     playerId: PlayerId;
     sourceCardId: string;
@@ -221,6 +221,9 @@ export interface PendingInteraction {
     }>;
     targetOpponentDice?: boolean;
 }
+
+/** @deprecated 使用 InteractionDescriptor 代替 */
+export type PendingInteraction = InteractionDescriptor;
 
 
 /**

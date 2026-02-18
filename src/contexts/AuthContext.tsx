@@ -31,7 +31,24 @@ interface AuthContextType {
     isLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// 创建一个默认的 noop 实现，避免在 Provider 外部使用时崩溃
+const defaultAuthContext: AuthContextType = {
+    user: null,
+    token: null,
+    login: async () => { throw new Error('AuthProvider 未初始化'); },
+    register: async () => { throw new Error('AuthProvider 未初始化'); },
+    sendRegisterCode: async () => { throw new Error('AuthProvider 未初始化'); },
+    sendResetCode: async () => { throw new Error('AuthProvider 未初始化'); },
+    resetPassword: async () => { throw new Error('AuthProvider 未初始化'); },
+    logout: () => { throw new Error('AuthProvider 未初始化'); },
+    sendEmailCode: async () => { throw new Error('AuthProvider 未初始化'); },
+    verifyEmail: async () => { throw new Error('AuthProvider 未初始化'); },
+    changePassword: async () => { throw new Error('AuthProvider 未初始化'); },
+    updateAvatar: async () => { throw new Error('AuthProvider 未初始化'); },
+    isLoading: true,
+};
+
+const AuthContext = createContext<AuthContextType>(defaultAuthContext);
 
 const parseErrorMessage = async (response: Response, fallback: string) => {
     let text = '';
@@ -74,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const parsedUser = JSON.parse(savedUser) as User;
                 setToken(savedToken);
                 setUser(parsedUser);
-            } catch (error) {
+            } catch {
                 localStorage.removeItem('auth_token');
                 localStorage.removeItem('auth_user');
             }
@@ -107,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const payload = await response.json().catch(() => null) as null | {
             success: boolean;
             message?: string;
-            data?: { token?: string; user?: User };
+            code?: string;
+            data?: { token?: string; user?: User; suggestRegister?: boolean };
         };
 
         if (!response.ok || !payload) {
@@ -115,7 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (!payload.success) {
-            throw new Error(payload.message || '登录失败');
+            const error = new Error(payload.message || '登录失败') as Error & { code?: string; suggestRegister?: boolean };
+            error.code = payload.code;
+            error.suggestRegister = payload.data?.suggestRegister;
+            throw error;
         }
 
         const token = payload.data?.token ?? '';
@@ -139,8 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const message = await parseErrorMessage(response, '发送验证码失败');
-            throw new Error(message);
+            const errorData = await response.json().catch(() => null) as null | { error?: string; suggestLogin?: boolean };
+            const error = new Error(errorData?.error || '发送验证码失败') as Error & { suggestLogin?: boolean };
+            error.suggestLogin = errorData?.suggestLogin;
+            throw error;
         }
     }, []);
 
@@ -165,8 +188,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const message = await parseErrorMessage(response, '注册失败');
-            throw new Error(message);
+            const errorData = await response.json().catch(() => null) as null | { error?: string; suggestLogin?: boolean };
+            const error = new Error(errorData?.error || '注册失败') as Error & { suggestLogin?: boolean };
+            error.suggestLogin = errorData?.suggestLogin;
+            throw error;
         }
 
         const data = await response.json();
@@ -337,8 +362,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth 必须在 AuthProvider 内使用');
-    }
+    // Context 现在总是有值（要么是 Provider 提供的，要么是默认值）
     return context;
 }

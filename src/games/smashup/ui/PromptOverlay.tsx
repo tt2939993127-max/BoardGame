@@ -93,7 +93,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
     // 所有 hooks 必须在条件返回之前调用（React hooks 规则）
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
-    const isMulti = !!prompt?.multi && isMyPrompt;
+    const isMulti = !!prompt?.multi; // 多选功能不应该依赖 isMyPrompt
     const minSelections = isMulti ? (prompt?.multi?.min ?? 0) : 0;
     const maxSelections = isMulti ? prompt?.multi?.max : undefined;
     const hasOptions = (prompt?.options?.length ?? 0) > 0;
@@ -460,6 +460,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 return (
                                     <motion.div
                                         key={`card-${idx}-${option.id}`}
+                                        data-testid={`prompt-card-${idx}`}
+                                        data-option-id={option.id}
                                         initial={{ y: 40, opacity: 0 }}
                                         animate={{ y: 0, opacity: 1 }}
                                         transition={{ delay: idx * 0.05, type: 'spring', stiffness: 400, damping: 25 }}
@@ -548,7 +550,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                     <GameButton
                                         variant="primary"
                                         size="sm"
-                                        onClick={() => dispatch(INTERACTION_COMMANDS.RESPOND, { optionIds: selectedIds })}
+                                        onClick={() => {
+                                            // 多选提交：将 optionIds 转换为对应的 value 数组
+                                            const selectedValues = selectedIds
+                                                .map(id => cardOptions.find(opt => opt.id === id)?.value)
+                                                .filter((v): v is NonNullable<typeof v> => v !== undefined);
+                                            dispatch(INTERACTION_COMMANDS.RESPOND, { value: selectedValues });
+                                        }}
                                         disabled={!canSubmitMulti}
                                     >
                                         {t('ui.confirm', { defaultValue: '确认' })}
@@ -645,7 +653,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                             <GameButton
                                 variant="primary"
                                 size="sm"
-                                onClick={() => dispatch(INTERACTION_COMMANDS.RESPOND, { optionIds: selectedIds })}
+                                onClick={() => {
+                                    // 多选提交：将 optionIds 转换为对应的 value 数组
+                                    const selectedValues = selectedIds
+                                        .map(id => resolvedOptions.find(opt => opt.id === id)?.value)
+                                        .filter((v): v is NonNullable<typeof v> => v !== undefined);
+                                    dispatch(INTERACTION_COMMANDS.RESPOND, { value: selectedValues });
+                                }}
                                 disabled={!canSubmitMulti}
                             >
                                 {t('ui.confirm', { defaultValue: '确认' })}
