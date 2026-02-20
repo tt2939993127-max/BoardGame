@@ -311,6 +311,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
         if (meta.dtType === 'modifyDie') {
             const config = meta.dieModifyConfig;
+            const isManualConfirmMode = config?.mode === 'any' || config?.mode === 'adjust';
             return {
                 ...sysInteraction,
                 data: {
@@ -318,10 +319,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     localReducer: (current: unknown, step: unknown) =>
                         diceModifyReducer(current as any, step as DiceModifyStep, config),
                     toCommands: diceModifyToCommands,
-                    // any/adjust 模式：用 modCount 作为语义步骤数
-                    getCompletedSteps: (config?.mode === 'any' || config?.mode === 'adjust')
-                        ? (result: unknown) => (result as { modCount: number }).modCount
-                        : undefined,
+                    // any/adjust 模式：手动确认，禁用 auto-confirm
+                    maxSteps: isManualConfirmMode ? undefined : (sysInteraction.data as any).maxSteps,
+                    minSteps: isManualConfirmMode ? 1 : (sysInteraction.data as any).minSteps,
                 },
             };
         }

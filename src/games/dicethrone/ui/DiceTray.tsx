@@ -290,22 +290,38 @@ export const DiceActions = ({
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);
 
+    // 骰子动画最短播放时间保护
+    // 乐观更新会瞬间产生新 rollCount，但骰子翻滚动画需要一定时间。
+    // 记录 setIsRolling(true) 的时刻，rollCount 变化时检查是否已过最短时间。
+    const MIN_ROLL_ANIMATION_MS = 800;
+    const rollStartTimeRef = useRef<number>(0);
+
     // 监听 rollCount 变化停止动画
-    // 框架层 animationDelay 配置保证乐观状态延迟渲染，
-    // rollCount 变化时动画已经播放了足够时间
     const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const prevRollCountRef = useRef(rollCount);
 
     useEffect(() => {
         if (rollCount !== prevRollCountRef.current) {
             prevRollCountRef.current = rollCount;
-            // 结果到了，停止动画（Dice3D 的 CSS transition 会平滑过渡到最终面）
             if (isRolling) {
+                // 清理之前的安全超时
                 if (rollTimeoutRef.current) {
                     clearTimeout(rollTimeoutRef.current);
                     rollTimeoutRef.current = null;
                 }
-                setIsRolling(false);
+                // 检查动画是否已播放足够时间
+                const elapsed = Date.now() - rollStartTimeRef.current;
+                const remaining = MIN_ROLL_ANIMATION_MS - elapsed;
+                if (remaining <= 0) {
+                    // 已过最短时间，立即停止
+                    setIsRolling(false);
+                } else {
+                    // 延迟停止，让动画播放完
+                    rollTimeoutRef.current = setTimeout(() => {
+                        rollTimeoutRef.current = null;
+                        setIsRolling(false);
+                    }, remaining);
+                }
             }
         }
     }, [rollCount, isRolling, setIsRolling]);
@@ -324,6 +340,7 @@ export const DiceActions = ({
         }
         if (!isRollPhase || !canInteract || rollConfirmed || rollCount >= rollLimit) return;
         setIsRolling(true);
+        rollStartTimeRef.current = Date.now();
         onRoll();
         // 安全超时：防止服务器长时间无响应时骰子一直转
         if (rollTimeoutRef.current) clearTimeout(rollTimeoutRef.current);

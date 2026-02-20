@@ -71,7 +71,10 @@ describe('响应窗口交互锁定：骰子修改类（modifyDie）', () => {
         const result2 = runner.run({
             name: '修改骰子',
             setup: () => result1.finalState,
-            commands: [cmd('MODIFY_DIE', '1', { dieId: 0, newValue: 4 })],
+            commands: [
+                cmd('MODIFY_DIE', '1', { dieId: 0, newValue: 4 }),
+                cmd('SYS_INTERACTION_CONFIRM', '1'),
+            ],
         });
         expect(result2.finalState.core.dice.find((d: any) => d.id === 0)?.value).toBe(4);
         expect(result2.finalState.sys.interaction?.current).toBeUndefined();

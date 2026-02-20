@@ -46,7 +46,7 @@
   - ⚠️ 声明 `'deterministic'` → 跳过 probe，**必须确保命令真的不调用 `random`**，否则产生静默 bug
   - **教训**：SummonerWars `DECLARE_ATTACK` 被错误声明为 `'deterministic'`（注释写"不含掷骰"），实际 execute 里就是掷骰子的地方，导致打死召唤师后胜利画面延迟到下一回合才出现。
 - **AnimationMode**：按命令粒度控制 `'optimistic'`（保留 EventStream 立即触发动画）或 `'wait-confirm'`（剥离 EventStream 等确认后触发）。默认 `'wait-confirm'`。
-- **AnimationDelay（乐观状态延迟渲染）**：乐观预测会瞬间产生新状态，但某些命令需要播放动画（如骰子翻滚）。在 `animationDelay` 中按命令类型声明延迟毫秒数，`GameProvider` 会延迟将乐观状态渲染到 UI，给动画留出时间。服务端确认状态到达时自动取消延迟（服务端状态优先）。未声明的命令立即渲染（0ms）。示例：`animationDelay: { 'ROLL_DICE': 800 }`。
+- **骰子动画最短播放时间**：乐观预测会瞬间产生新状态（如 `rollCount` 变化），但骰子翻滚动画需要时间。**不在框架层延迟 `setState`**（会阻塞 EventStream 事件传递，破坏伤害/治疗等动画），而是在 UI 层（如 `DiceActions`）用 `MIN_ROLL_ANIMATION_MS` + `rollStartTimeRef` 保护最短播放时间。这是纯 UI 层关注点，不属于框架层职责。
 - **EventStream 水位线**（`optimisticEventWatermark`）：记录已通过乐观动画播放的最大事件 ID，回滚时过滤已播放事件防止动画重复。
 - **Pending 命令队列 + Replay**：服务端确认后基于新状态重放剩余 pending 命令，而非直接覆盖。`snapshotPhase` 校验防止已执行命令被重复 replay。
 

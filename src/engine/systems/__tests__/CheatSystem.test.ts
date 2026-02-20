@@ -60,7 +60,7 @@ describe('CheatSystem', () => {
                 };
             },
         };
-        const system = createCheatSystem(modifier, { devOverride: true });
+        const system = createCheatSystem(modifier);
         const state = createTestState({ players: { '0': { statusEffects: {} } } });
         const command: Command = {
             type: CHEAT_COMMANDS.SET_STATUS,
@@ -84,7 +84,7 @@ describe('CheatSystem', () => {
         const system = createCheatSystem<TestCore>({
             getResource: () => 0,
             setResource: (core) => core,
-        }, { devOverride: true });
+        });
         const state = createTestState({ players: { '0': { statusEffects: { knockdown: 1 } } } });
         const command: Command = {
             type: CHEAT_COMMANDS.SET_STATUS,
@@ -104,12 +104,9 @@ describe('CheatSystem', () => {
         expect(state.core.players['0'].statusEffects.knockdown).toBe(1);
     });
 
-    it('非开发模式应拦截作弊命令', () => {
-        const system = createCheatSystem<TestCore>({
-            getResource: () => 0,
-            setResource: (core) => core,
-        }, { devOverride: false });
-        const state = createTestState({ players: { '0': { statusEffects: { knockdown: 1 } } } });
+    it('无 modifier 时作弊命令直接跳过', () => {
+        const system = createCheatSystem<TestCore>();
+        const state = createTestState({ players: { '0': { statusEffects: {} } } });
         const command: Command = {
             type: CHEAT_COMMANDS.SET_STATUS,
             playerId: '0',
@@ -124,7 +121,6 @@ describe('CheatSystem', () => {
             playerIds: ['0', '1'],
         });
 
-        expect(result?.halt).toBe(true);
-        expect(result?.error).toBe('作弊命令仅在开发模式下可用');
+        expect(result).toBeUndefined();
     });
 });

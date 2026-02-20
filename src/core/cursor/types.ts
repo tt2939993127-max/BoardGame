@@ -48,7 +48,7 @@ export interface CursorTheme {
      * GameCursorProvider 收到 playerID 后自动选择对应子主题；未匹配时回退到主题本身。
      * 其他游戏可通过同样机制实现阵营差异化光标。
      */
-    playerThemes?: Record<string, Pick<CursorTheme, 'default' | 'pointer' | 'grabbing' | 'grab' | 'zoomIn' | 'notAllowed' | 'previewSvgs'>>;
+    playerThemes?: Record<string, Pick<CursorTheme, 'default' | 'pointer' | 'grabbing' | 'grab' | 'zoomIn' | 'notAllowed' | 'help' | 'previewSvgs'>>;
 }
 
 /** 用户光标偏好（持久化数据） */

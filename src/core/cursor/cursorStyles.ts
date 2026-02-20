@@ -105,7 +105,7 @@ export const STYLE_FUTURISTIC_TECH: CursorStyleTemplate = {
 export function createFuturisticPlayerTheme(
     color: string,
     filterId: string,
-): Pick<import('./types').CursorTheme, 'default' | 'pointer' | 'grabbing' | 'grab' | 'zoomIn' | 'notAllowed' | 'previewSvgs'> {
+): Pick<import('./types').CursorTheme, 'default' | 'pointer' | 'grabbing' | 'grab' | 'zoomIn' | 'notAllowed' | 'help' | 'previewSvgs'> {
     const svgs = makeFuturisticSvgs(color, filterId);
     const built = buildCursors(svgs, { zoomIn: [13, 13] });
     return { ...built, previewSvgs: svgs };

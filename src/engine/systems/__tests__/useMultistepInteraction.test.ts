@@ -1,6 +1,6 @@
 /**
  * useMultistepInteraction hook 单元测试
- * 重点验证 getCompletedSteps 回调对 auto-confirm 的影响
+ * 重点验证 any/adjust 模式下禁用 auto-confirm，用户必须手动确认
  */
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -18,17 +18,18 @@ interface DiceModifyStep {
     newValue: number;
 }
 
-function createDiceModifyInteraction(
-    maxSteps: number,
-    useGetCompletedSteps: boolean,
+/** 创建 any 模式交互（无 maxSteps，手动确认） */
+function createAnyModeInteraction(
+    minSteps = 1,
 ): InteractionDescriptor<MultistepChoiceData<DiceModifyStep, DiceModifyResult>> {
     return {
-        id: 'test-dice-modify',
+        id: 'test-any-mode',
         kind: 'multistep-choice',
         playerId: '0',
         data: {
-            title: '测试骰子修改',
-            maxSteps,
+            title: '测试 any 模式',
+            maxSteps: undefined, // 禁用 auto-confirm
+            minSteps,
             initialResult: { modifications: {}, modCount: 0 },
             localReducer: (current, step) => {
                 const isNewDie = !(step.dieId in current.modifications);
@@ -42,109 +43,177 @@ function createDiceModifyInteraction(
                     type: 'MODIFY_DIE',
                     payload: { dieId: Number(dieId), newValue },
                 })),
-            getCompletedSteps: useGetCompletedSteps
-                ? (result) => result.modCount
-                : undefined,
+        },
+    };
+}
+
+/** 创建 set 模式交互（有 maxSteps，自动确认） */
+function createSetModeInteraction(
+    maxSteps: number,
+): InteractionDescriptor<MultistepChoiceData<DiceModifyStep, DiceModifyResult>> {
+    return {
+        id: 'test-set-mode',
+        kind: 'multistep-choice',
+        playerId: '0',
+        data: {
+            title: '测试 set 模式',
+            maxSteps,
+            initialResult: { modifications: {}, modCount: 0 },
+            localReducer: (current, step) => ({
+                modifications: { ...current.modifications, [step.dieId]: step.newValue },
+                modCount: current.modCount + 1,
+            }),
+            toCommands: (result) =>
+                Object.entries(result.modifications).map(([dieId, newValue]) => ({
+                    type: 'MODIFY_DIE',
+                    payload: { dieId: Number(dieId), newValue },
+                })),
         },
     };
 }
 
 describe('useMultistepInteraction', () => {
-    describe('getCompletedSteps 防止同一骰子多次调整触发提前 auto-confirm', () => {
-        it('无 getCompletedSteps 时，对同一骰子 step 两次触发 auto-confirm（旧行为/bug）', async () => {
+    describe('any 模式（无 maxSteps，手动确认）', () => {
+        it('对同一骰子多次 +/- 不触发 auto-confirm', () => {
             const dispatch = vi.fn();
-            const interaction = createDiceModifyInteraction(2, false);
+            const interaction = createAnyModeInteraction();
 
             const { result } = renderHook(() =>
                 useMultistepInteraction(interaction, dispatch),
             );
 
-            // 对同一颗骰子（dieId=0）调整两次
+            // 对同一颗骰子反复调整
             act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 3 }); });
+            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 4 }); });
             act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 5 }); });
 
-            // 等待 queueMicrotask
-            await vi.waitFor(() => {
-                expect(dispatch).toHaveBeenCalled();
-            });
-
-            // 旧行为：stepCount=2 >= maxSteps=2，触发 auto-confirm
-            // 只修改了 1 颗骰子但提前确认了（这是 bug）
-            const calls = dispatch.mock.calls.map(c => c[0]);
-            expect(calls).toContain('SYS_INTERACTION_CONFIRM');
-            expect(result.current.result?.modCount).toBe(1); // 只改了 1 颗
-        });
-
-        it('有 getCompletedSteps 时，对同一骰子 step 两次不触发 auto-confirm', () => {
-            const dispatch = vi.fn();
-            const interaction = createDiceModifyInteraction(2, true);
-
-            const { result } = renderHook(() =>
-                useMultistepInteraction(interaction, dispatch),
-            );
-
-            // 对同一颗骰子（dieId=0）调整两次
-            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 3 }); });
-            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 5 }); });
-
-            // 不应触发 auto-confirm（modCount=1 < maxSteps=2）
+            // 不应 auto-confirm
             expect(dispatch).not.toHaveBeenCalled();
-            expect(result.current.stepCount).toBe(2);
+            expect(result.current.stepCount).toBe(3);
             expect(result.current.result?.modCount).toBe(1);
+            // minSteps=1，已修改 1 颗骰子，可以手动确认
+            expect(result.current.canConfirm).toBe(true);
         });
 
-        it('有 getCompletedSteps 时，修改两颗不同骰子后触发 auto-confirm', async () => {
+        it('修改多颗骰子后仍不 auto-confirm，需手动确认', () => {
             const dispatch = vi.fn();
-            const interaction = createDiceModifyInteraction(2, true);
+            const interaction = createAnyModeInteraction();
 
             const { result } = renderHook(() =>
                 useMultistepInteraction(interaction, dispatch),
             );
 
-            // 修改两颗不同骰子
             act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 6 }); });
             act(() => { result.current.step({ action: 'setAny', dieId: 1, newValue: 6 }); });
 
-            // 等待 queueMicrotask
-            await vi.waitFor(() => {
-                expect(dispatch).toHaveBeenCalled();
-            });
-
-            // modCount=2 >= maxSteps=2，触发 auto-confirm
-            const calls = dispatch.mock.calls.map(c => c[0]);
-            expect(calls).toContain('MODIFY_DIE');
-            expect(calls).toContain('SYS_INTERACTION_CONFIRM');
+            // 不应 auto-confirm（maxSteps=undefined）
+            expect(dispatch).not.toHaveBeenCalled();
             expect(result.current.result?.modCount).toBe(2);
+            expect(result.current.canConfirm).toBe(true);
         });
 
-        it('有 getCompletedSteps 时，先调整同一骰子多次再改第二颗，正确触发 auto-confirm', async () => {
+        it('手动 confirm 正确 dispatch 命令', () => {
             const dispatch = vi.fn();
-            const interaction = createDiceModifyInteraction(2, true);
+            const interaction = createAnyModeInteraction();
 
             const { result } = renderHook(() =>
                 useMultistepInteraction(interaction, dispatch),
             );
 
-            // 对骰子 0 调整 3 次（模拟用户反复 +/-）
-            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 2 }); });
+            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 5 }); });
+            act(() => { result.current.step({ action: 'setAny', dieId: 2, newValue: 3 }); });
+
+            // 手动确认
+            act(() => { result.current.confirm(); });
+
+            const calls = dispatch.mock.calls.map(c => c[0]);
+            expect(calls.filter(c => c === 'MODIFY_DIE')).toHaveLength(2);
+            expect(calls).toContain('SYS_INTERACTION_CONFIRM');
+        });
+
+        it('未达到 minSteps 时 canConfirm=false', () => {
+            const dispatch = vi.fn();
+            const interaction = createAnyModeInteraction(1);
+
+            const { result } = renderHook(() =>
+                useMultistepInteraction(interaction, dispatch),
+            );
+
+            // 未做任何修改
+            expect(result.current.canConfirm).toBe(false);
+
+            // 做一次修改后
             act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 3 }); });
-            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 4 }); });
+            expect(result.current.canConfirm).toBe(true);
+        });
+    });
 
-            // 此时 modCount=1，不应 auto-confirm
-            expect(dispatch).not.toHaveBeenCalled();
+    describe('set 模式（有 maxSteps，自动确认）', () => {
+        it('达到 maxSteps 时自动 confirm', async () => {
+            const dispatch = vi.fn();
+            const interaction = createSetModeInteraction(1);
 
-            // 修改第二颗骰子
-            act(() => { result.current.step({ action: 'setAny', dieId: 2, newValue: 6 }); });
+            const { result } = renderHook(() =>
+                useMultistepInteraction(interaction, dispatch),
+            );
 
-            // 等待 queueMicrotask
+            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 6 }); });
+
             await vi.waitFor(() => {
                 expect(dispatch).toHaveBeenCalled();
             });
 
-            // modCount=2 >= maxSteps=2，触发 auto-confirm
+            const calls = dispatch.mock.calls.map(c => c[0]);
+            expect(calls).toContain('MODIFY_DIE');
+            expect(calls).toContain('SYS_INTERACTION_CONFIRM');
+        });
+    });
+
+    describe('getCompletedSteps 回调', () => {
+        it('使用 getCompletedSteps 时，按语义步骤数判断 auto-confirm', async () => {
+            const dispatch = vi.fn();
+            const interaction: InteractionDescriptor<MultistepChoiceData<DiceModifyStep, DiceModifyResult>> = {
+                id: 'test-with-getter',
+                kind: 'multistep-choice',
+                playerId: '0',
+                data: {
+                    title: '测试 getCompletedSteps',
+                    maxSteps: 2,
+                    initialResult: { modifications: {}, modCount: 0 },
+                    localReducer: (current, step) => {
+                        const isNewDie = !(step.dieId in current.modifications);
+                        return {
+                            modifications: { ...current.modifications, [step.dieId]: step.newValue },
+                            modCount: isNewDie ? current.modCount + 1 : current.modCount,
+                        };
+                    },
+                    toCommands: (result) =>
+                        Object.entries(result.modifications).map(([dieId, newValue]) => ({
+                            type: 'MODIFY_DIE',
+                            payload: { dieId: Number(dieId), newValue },
+                        })),
+                    getCompletedSteps: (result) => result.modCount,
+                },
+            };
+
+            const { result } = renderHook(() =>
+                useMultistepInteraction(interaction, dispatch),
+            );
+
+            // 对同一骰子 step 两次 → modCount=1，不触发
+            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 3 }); });
+            act(() => { result.current.step({ action: 'setAny', dieId: 0, newValue: 5 }); });
+            expect(dispatch).not.toHaveBeenCalled();
+
+            // 修改第二颗 → modCount=2 >= maxSteps=2，触发
+            act(() => { result.current.step({ action: 'setAny', dieId: 1, newValue: 6 }); });
+
+            await vi.waitFor(() => {
+                expect(dispatch).toHaveBeenCalled();
+            });
+
             const calls = dispatch.mock.calls.map(c => c[0]);
             expect(calls).toContain('SYS_INTERACTION_CONFIRM');
-            expect(result.current.result?.modCount).toBe(2);
         });
     });
 });

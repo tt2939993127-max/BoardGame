@@ -62,6 +62,7 @@ describe('弹一手在响应窗口中的行为', () => {
             setup: () => result1.finalState,
             commands: [
                 cmd('MODIFY_DIE', '1', { dieId: 0, newValue: 4 }),
+                cmd('SYS_INTERACTION_CONFIRM', '1'),
             ],
         });
 

@@ -36,6 +36,7 @@ const defaultPreviewSvgs: CursorPreviewSvgs = {
     grabbing: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M8 15 C8 13 10 12 11 13 L11 16 M11 13 C11 11 13 10 14 11 L14 16 M14 11 C14 9 16 9 17 10 L17 16 M17 10 C17 9 19 8.5 20 10 L20 16 L20 22 C20 25 17 28 13 28 C9 28 7 25 7 22 L7 18 C7 16 8 15 8 15 Z" fill="white" stroke="#333" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
     zoomIn: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="14" cy="14" r="9" fill="white" stroke="#333" stroke-width="2"/><line x1="21" y1="21" x2="29" y2="29" stroke="#333" stroke-width="3" stroke-linecap="round"/><line x1="10" y1="14" x2="18" y2="14" stroke="#333" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="10" x2="14" y2="18" stroke="#333" stroke-width="2" stroke-linecap="round"/></svg>`,
     notAllowed: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#ccc" stroke="#333" stroke-width="2"/><line x1="8" y1="16" x2="24" y2="16" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/></svg>`,
+    help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="white" stroke="#333" stroke-width="2"/><text x="16" y="22" text-anchor="middle" font-size="18" font-weight="bold" font-family="Arial,sans-serif" fill="#333">?</text></svg>`,
 };
 
 // ---------------------------------------------------------------------------

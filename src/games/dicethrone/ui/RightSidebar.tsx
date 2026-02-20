@@ -102,15 +102,15 @@ export const RightSidebar = ({
         let hydratedData: MultistepChoiceData<DiceModifyStep | DiceSelectStep, DiceModifyResult | DiceSelectResult>;
         if (meta.dtType === 'modifyDie') {
             const config = meta.dieModifyConfig;
+            const isManualConfirmMode = config?.mode === 'any' || config?.mode === 'adjust';
             hydratedData = {
                 ...data,
                 initialResult: data.initialResult ?? { modifications: {}, modCount: 0, totalAdjustment: 0 },
                 localReducer: (current: any, step: any) => diceModifyReducer(current, step, config),
                 toCommands: diceModifyToCommands as any,
-                // any/adjust 模式：用 modCount 作为语义步骤数
-                getCompletedSteps: (config?.mode === 'any' || config?.mode === 'adjust')
-                    ? (result: any) => (result as DiceModifyResult).modCount
-                    : undefined,
+                // any/adjust 模式：maxSteps 应为 undefined（手动确认），hydration 时修正
+                maxSteps: isManualConfirmMode ? undefined : data.maxSteps,
+                minSteps: isManualConfirmMode ? 1 : data.minSteps,
             };
         } else {
             hydratedData = {

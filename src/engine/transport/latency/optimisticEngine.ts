@@ -80,8 +80,6 @@ export interface OptimisticEngineConfig {
     commandDeterminism?: CommandDeterminismMap;
     /** 命令动画模式声明（可选，未声明则全部使用 'wait-confirm'） */
     commandAnimationMode?: CommandAnimationMap;
-    /** 命令乐观状态延迟渲染（毫秒），未声明的命令立即渲染 */
-    commandAnimationDelay?: Record<string, number>;
     /** 玩家 ID 列表 */
     playerIds: string[];
     /** 本地随机数生成器（可选，默认 Math.random） */
@@ -239,7 +237,6 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
     const { pipelineConfig } = config;
     const commandDeterminism: CommandDeterminismMap = config.commandDeterminism ?? {};
     const commandAnimationMode: CommandAnimationMap = config.commandAnimationMode ?? {};
-    const commandAnimationDelay: Record<string, number> = config.commandAnimationDelay ?? {};
     let localRandom: RandomFn = config.localRandom ?? createDefaultRandom();
 
     /** 基于 localRandom 创建 probe（复用同一个，每次 processCommand 前 reset） */
@@ -473,12 +470,12 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
 
             // 没有确认状态时无法预测
             if (!currentState) {
-                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
             }
 
             // 未预测命令屏障：前序命令未被预测，当前预测基础状态不完整，跳过预测
             if (unpredictedBarrier) {
-                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
             }
 
             // 显式声明为非确定性：
@@ -487,7 +484,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             const explicitDecl = getExplicitDeterminism(type, currentState, payload);
             if (explicitDecl === 'non-deterministic' && !isRandomSynced) {
                 unpredictedBarrier = true;
-                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
             }
 
             // 尝试本地执行 Pipeline
@@ -525,14 +522,14 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 if (!result.success) {
                     // 本地验证失败，不更新乐观状态，仍发送到服务端
                     // 注意：pipeline 在 validate 阶段失败时不会消耗 random，无需恢复
-                    return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                    return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
                 }
 
                 // Random Probe 自动检测（仅未同步时生效）：
                 // 若 pipeline 执行期间调用了随机数 → 丢弃乐观结果
                 if (useProbe && randomProbe.wasUsed()) {
                     unpredictedBarrier = true;
-                    return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                    return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
                 }
 
                 // 根据动画模式决定是否保留 EventStream
@@ -579,12 +576,12 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                     snapshotPhase: (currentState as MatchState<unknown> & { sys: { phase?: string } }).sys?.phase,
                 });
 
-                return { stateToRender: predictedState, shouldSend: true, animationMode: mode, animationDelayMs: commandAnimationDelay[type] ?? 0 };
+                return { stateToRender: predictedState, shouldSend: true, animationMode: mode };
             } catch {
                 // Pipeline 执行异常，不更新乐观状态
                 // 恢复 localRandom：pipeline 可能已消耗随机数
                 if (isRandomSynced) rebuildLocalRandom();
-                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm', animationDelayMs: 0 };
+                return { stateToRender: null, shouldSend: true, animationMode: 'wait-confirm' };
             }
         },
 

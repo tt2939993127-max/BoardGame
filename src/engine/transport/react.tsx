@@ -31,7 +31,7 @@ import {
 } from 'react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
-import type { MatchState, PlayerId, Command, GameEvent, RandomFn } from '../types';
+import type { MatchState, Command, GameEvent, RandomFn } from '../types';
 import type { EngineSystem } from '../systems/types';
 import type { MatchPlayerInfo } from './protocol';
 import type { GameBoardProps } from './protocol';
@@ -47,7 +47,6 @@ import { TestHarness, isTestEnvironment } from '../testing';
 import { refreshInteractionOptions } from '../systems/InteractionSystem';
 import type { LatencyOptimizationConfig } from './latency/types';
 import { createOptimisticEngine, filterPlayedEvents, type OptimisticEngine as OptimisticEngineType } from './latency/optimisticEngine';
-import type { EventStreamWatermark } from './latency/types';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 
@@ -179,8 +178,9 @@ export function GameProvider({
     const batcherRef = useRef<CommandBatcher | null>(null);
     // 批次 ID 计数器
     const batchSeqRef = useRef(0);
-    // 乐观状态延迟渲染定时器（animationDelay 配置驱动）
-    const animationDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // [已移除] animationDelay 机制：延迟整个 setState 会阻塞 EventStream 事件传递，
+    // 破坏所有基于 EventStream 的动画（伤害飞行、治疗、状态效果等）。
+    // 骰子动画最短播放时间改为在 UI 层（DiceActions）用 useMinDuration 保护。
 
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
@@ -202,7 +202,6 @@ export function GameProvider({
             },
             commandDeterminism: latencyConfig.optimistic.commandDeterminism ?? {},
             commandAnimationMode: latencyConfig.optimistic.animationMode ?? {},
-            commandAnimationDelay: latencyConfig.optimistic.animationDelay ?? {},
             playerIds: [], // 从服务端同步后填充
         });
     }, [engineConfig, latencyConfig]);
@@ -244,11 +243,6 @@ export function GameProvider({
             playerID: playerId,
             credentials,
             onStateUpdate: (newState, players, meta, randomMeta) => {
-                // 服务端状态到达，取消乐观延迟定时器（服务端状态是权威的）
-                if (animationDelayTimerRef.current) {
-                    clearTimeout(animationDelayTimerRef.current);
-                    animationDelayTimerRef.current = null;
-                }
                 // 乐观更新引擎：调和服务端确认状态
                 const engine = optimisticEngineRef.current;
                 let finalState: MatchState<unknown>;
@@ -297,11 +291,6 @@ export function GameProvider({
         return () => {
             client.disconnect();
             clientRef.current = null;
-            // 清理乐观延迟定时器
-            if (animationDelayTimerRef.current) {
-                clearTimeout(animationDelayTimerRef.current);
-                animationDelayTimerRef.current = null;
-            }
         };
     }, [server, matchId, playerId, credentials]);
 
@@ -336,19 +325,7 @@ export function GameProvider({
                 const result = engine.processCommand(cmdType, cmdPayload, playerId ?? '0');
                 if (result.stateToRender) {
                     const refreshed = refreshInteractionOptions(result.stateToRender);
-                    if (result.animationDelayMs > 0) {
-                        // 延迟渲染乐观状态，给动画留时间（如骰子翻滚）
-                        // 取消之前的延迟定时器（快速连续命令时只保留最新的）
-                        if (animationDelayTimerRef.current) {
-                            clearTimeout(animationDelayTimerRef.current);
-                        }
-                        animationDelayTimerRef.current = setTimeout(() => {
-                            animationDelayTimerRef.current = null;
-                            setState(refreshed);
-                        }, result.animationDelayMs);
-                    } else {
-                        setState(refreshed);
-                    }
+                    setState(refreshed);
                 }
             }
             // 2. 命令批处理 或 直接发送

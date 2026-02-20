@@ -1,12 +1,12 @@
 /**
- * Cheat 系统（仅开发模式）
+ * Cheat 系统
  * 
  * 提供调试用的作弊命令，用于快速测试游戏状态。
+ * 教程系统也依赖作弊命令注入固定手牌/资源。
  */
 
 import type { PlayerId } from '../types';
 import type { EngineSystem, HookResult } from './types';
-import { resolveDevFlag } from '../env';
 import { SYSTEM_IDS } from './types';
 
 // ============================================================================
@@ -184,30 +184,17 @@ function deepMerge(
 // 创建 Cheat 系统
 // ============================================================================
 
-export interface CheatSystemConfig {
-    /** 用于测试或特殊环境的开发模式覆盖 */
-    devOverride?: boolean;
-}
+// ============================================================================
 
 export function createCheatSystem<TCore>(
     modifier?: CheatResourceModifier<TCore>,
-    config: CheatSystemConfig = {}
 ): EngineSystem<TCore> {
-    const isDev = resolveDevFlag(config.devOverride);
     return {
         id: SYSTEM_IDS.CHEAT,
         name: 'Cheat 系统',
         priority: 1, // 最高优先级，确保作弊命令最先处理
 
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
-            // 仅在开发模式下生效
-            if (!isDev) {
-                if (command.type.startsWith('SYS_CHEAT_')) {
-                    return { halt: true, error: '作弊命令仅在开发模式下可用' };
-                }
-                return;
-            }
-
             if (!modifier) return;
 
             // 处理设置资源命令

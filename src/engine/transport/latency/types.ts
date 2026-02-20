@@ -101,16 +101,6 @@ export interface OptimisticConfig {
     commandDeterminism?: CommandDeterminismMap;
     /** 命令动画模式声明（可选，未声明则全部使用 'wait-confirm'） */
     animationMode?: CommandAnimationMap;
-    /**
-     * 命令乐观状态延迟渲染（毫秒）
-     *
-     * 乐观预测会瞬间产生新状态，但某些命令需要播放动画（如骰子翻滚、抽牌）。
-     * 配置延迟后，GameProvider 会延迟将乐观状态渲染到 UI，给动画留出时间。
-     *
-     * key 为命令类型，value 为延迟毫秒数。未声明的命令立即渲染（0ms）。
-     * 仅对乐观预测成功的命令生效（stateToRender !== null）。
-     */
-    animationDelay?: Record<string, number>;
 }
 
 // ============================================================================
@@ -270,8 +260,6 @@ export interface ProcessCommandResult {
     shouldSend: boolean;
     /** 本次命令的动画模式（供 GameProvider 决策是否需要水位线处理） */
     animationMode: AnimationMode;
-    /** 乐观状态延迟渲染毫秒数（0 表示立即渲染） */
-    animationDelayMs: number;
 }
 
 /**

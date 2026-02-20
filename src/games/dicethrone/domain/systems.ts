@@ -236,24 +236,21 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     if (pendingInteraction.type === 'modifyDie') {
                         const config = pendingInteraction.dieModifyConfig;
                         const selectCount = pendingInteraction.selectCount ?? 1;
+                        const mode = config?.mode;
 
-                        // copy 模式：UI 层需要选 2 颗骰子（源+目标），toCommands 生成 2 个 MODIFY_DIE
-                        // set/any/adjust 模式：maxSteps=selectCount（选满后自动 confirm）
-                        const maxSteps = selectCount;
+                        // any/adjust 模式：用户需要反复 +/- 调整骰子值，禁用 auto-confirm，由用户手动确认
+                        // set/copy 模式：每次点击选中一颗骰子，选满后自动 confirm
+                        const isManualConfirmMode = mode === 'any' || mode === 'adjust';
+                        const maxSteps = isManualConfirmMode ? undefined : selectCount;
 
                         const multistepData: MultistepChoiceData<DiceModifyStep, DiceModifyResult> = {
                             title: pendingInteraction.titleKey,
                             sourceId: pendingInteraction.sourceCardId,
                             maxSteps,
-                            minSteps: undefined,
+                            minSteps: isManualConfirmMode ? 1 : undefined,
                             initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
                             localReducer: (current, step) => diceModifyReducer(current, step, config),
                             toCommands: diceModifyToCommands,
-                            // any/adjust 模式下，每次 +/- 都是一次 step()，但只有修改不同骰子才算"完成一步"
-                            // 使用 modCount（已修改的不同骰子数）作为语义步骤数，防止同一骰子多次调整触发提前 auto-confirm
-                            getCompletedSteps: (config?.mode === 'any' || config?.mode === 'adjust')
-                                ? (result) => result.modCount
-                                : undefined,
                             meta: {
                                 dtType: 'modifyDie',
                                 dieModifyConfig: config,
