@@ -239,8 +239,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             window.clearTimeout(aiTimerRef.current);
         }
 
-        // setup 步骤（首步）使用更短延迟，加速教程初始化
-        const delay = tutorial.stepIndex === 0 ? 300 : 1000;
+        // 首步（setup）零延迟执行 AI 动作，避免 CriticalImageGate 在 setup 阶段
+        // 触发一次预加载后又因 phaseKey 变化触发第二次预加载。
+        // 后续步骤保留 1s 延迟，给玩家阅读提示文本的时间。
+        const delay = tutorial.stepIndex === 0 ? 0 : 1000;
 
         aiTimerRef.current = window.setTimeout(() => {
             aiTimerRef.current = undefined;

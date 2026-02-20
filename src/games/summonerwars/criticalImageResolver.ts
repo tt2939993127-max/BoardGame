@@ -100,7 +100,19 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
     }
 
     if (isInFactionSelectPhase(core)) {
-        // 选角阶段：hero 图集 + 地图/卡背为关键
+        // 教程模式下 setup 阶段不预加载全量选角资源：
+        // 教程会自动执行 SELECT_FACTION + HOST_START_GAME，用户看不到选角界面，
+        // 预加载全部阵营的 hero 图集是浪费。等进入 playing 阶段后按实际选角结果预加载。
+        const isTutorial = state.sys?.tutorial?.active === true;
+        if (isTutorial) {
+            return {
+                critical: [...SELECTION_CRITICAL],
+                warm: [],
+                phaseKey: 'tutorial-setup',
+            };
+        }
+
+        // 正常选角阶段：hero 图集 + 地图/卡背为关键
         // 骰子/传送门/tip 选角用不到，放 warm 后台软加载
         const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);

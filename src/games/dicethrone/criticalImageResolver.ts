@@ -128,7 +128,16 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
     const selectedCharacters = extractSelectedCharacters(core);
 
     if (isInSetupPhase(core)) {
-        // 角色选择阶段：selection 资源为 critical，gameplay 资源为 warm
+        // 教程模式下 setup 阶段不预加载选角资源：
+        // 教程会自动执行 SELECT_CHARACTER + HOST_START_GAME，用户看不到选角界面，
+        // 预加载全部角色的 selection 资源是浪费（6 角色 × 2 资源 = 12 张图）。
+        // 等 aiActions 执行完进入 playing 阶段后，再按实际选角结果预加载。
+        const isTutorial = state.sys?.tutorial?.active === true;
+        if (isTutorial) {
+            return { critical: [...COMMON_CRITICAL_PATHS], warm: [], phaseKey: 'tutorial-setup' };
+        }
+
+        // 正常选角阶段：selection 资源为 critical，gameplay 资源为 warm
         const critical = [
             ...COMMON_CRITICAL_PATHS,
             ...IMPLEMENTED_CHARACTERS.flatMap(c => getCharAssetsByTag(c, 'selection')),
@@ -159,11 +168,10 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
         ...myChars.flatMap(getAllCharAssets),
     ];
 
-    const unselected = IMPLEMENTED_CHARACTERS.filter(c => !selectedCharacters.includes(c));
-    const warm = [
-        ...opponentChars.flatMap(getAllCharAssets),
-        ...unselected.flatMap(getAllCharAssets),
-    ];
+    // 只 warm 预加载对手角色的资源，不预加载未选角色的资源。
+    // 未选角色在游戏进行中不会出现，预加载它们只会浪费连接、
+    // 与关键图片和音频竞争带宽（教程场景尤其明显）。
+    const warm = opponentChars.flatMap(getAllCharAssets);
 
     const sortedChars = [...selectedCharacters].sort().join(',');
     return { critical, warm, phaseKey: `playing:${sortedChars}` };

@@ -11,8 +11,6 @@ vi.mock('../../../../core', () => ({
     preloadCriticalImages,
     preloadWarmImages,
     areAllCriticalImagesCached: vi.fn().mockReturnValue(false),
-    signalCriticalImagesReady: vi.fn(),
-    resetCriticalImagesSignal: vi.fn(),
 }));
 
 vi.mock('../../../../core/CriticalImageResolverRegistry', () => ({

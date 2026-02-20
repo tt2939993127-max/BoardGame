@@ -56,12 +56,6 @@ const _win = typeof window !== 'undefined' ? window as Window & {
         preloadedImages: Map<string, HTMLImageElement>;
         preloadedAudio: Map<string, HTMLAudioElement>;
     };
-    /** 关键图片就绪信号（HMR 存活） */
-    __BG_CRITICAL_IMAGES_SIGNAL__?: {
-        resolver: (() => void) | null;
-        promise: Promise<void> | null;
-        signaled: boolean;
-    };
 } : undefined;
 
 if (_win && !_win.__BG_ASSET_CACHE__) {
@@ -519,110 +513,6 @@ async function preloadAudioFile(src: string): Promise<void> {
         };
         audio.src = src;
     });
-}
-
-// ============================================================================
-// 关键图片就绪信号（音频预加载延迟机制）
-// ============================================================================
-
-/**
- * 关键图片就绪信号
- *
- * 浏览器对同域名有 6 个并发连接限制，音频预加载（Howler XHR）和图片预加载
- * 共享连接池。如果音频请求先占满连接，关键图片（卡牌图集等）会排队变成 pending，
- * 导致 CriticalImageGate 超时放行后卡牌区域仍显示空白。
- *
- * 此信号让音频预加载等待关键图片就绪后再开始，确保视觉资源优先。
- * 信号状态挂在 window 上，HMR 时不会丢失。
- *
- * 两阶段延迟：
- * 1. 等待 CriticalImageGate 预加载完成（signalCriticalImagesReady）
- * 2. 额外延迟一个空闲窗口（requestIdleCallback / 2s），让 Board 渲染后的
- *    CSS background-image 请求先占满连接（浏览器可能不复用 new Image() 缓存）
- */
-/** 超时保底：即使 CriticalImageGate 未调用 signal，也不会永远阻塞音频 */
-const AUDIO_DEFER_TIMEOUT_MS = 12_000;
-
-/** 获取/初始化 HMR 安全的信号容器 */
-function getSignalStore() {
-    if (!_win) return { resolver: null as (() => void) | null, promise: null as Promise<void> | null, signaled: false };
-    if (!_win.__BG_CRITICAL_IMAGES_SIGNAL__) {
-        _win.__BG_CRITICAL_IMAGES_SIGNAL__ = { resolver: null, promise: null, signaled: false };
-    }
-    return _win.__BG_CRITICAL_IMAGES_SIGNAL__;
-}
-
-function ensureCriticalImagesPromise(): Promise<void> {
-    const store = getSignalStore();
-    // 已经 signaled → 直接返回已 resolved 的 promise
-    if (store.signaled) {
-        if (!store.promise) store.promise = Promise.resolve();
-        return store.promise;
-    }
-    if (!store.promise) {
-        store.promise = new Promise<void>((resolve) => {
-            store.resolver = resolve;
-        });
-        // 超时保底
-        setTimeout(() => {
-            if (store.resolver) {
-                store.resolver();
-                store.resolver = null;
-                store.signaled = true;
-            }
-        }, AUDIO_DEFER_TIMEOUT_MS);
-    }
-    return store.promise;
-}
-
-/**
- * 标记关键图片已就绪，延迟一个空闲窗口后释放音频预加载。
- * 由 CriticalImageGate 在预加载完成后调用。
- *
- * 延迟原因：CriticalImageGate 用 <link rel="preload"> + new Image() 预加载，
- * Board 渲染后 CSS background-image 会从 HTTP 缓存命中（preload 保证）。
- * 额外等待让 Board 首帧渲染完成，再释放音频预加载。
- */
-export function signalCriticalImagesReady(): void {
-    const store = getSignalStore();
-    // 已经 signaled，不重复处理
-    if (store.signaled) return;
-    store.signaled = true;
-    if (!store.resolver) {
-        // 没有等待者，确保 promise 是 resolved 状态
-        store.promise = Promise.resolve();
-        return;
-    }
-    // 延迟释放：让 Board 渲染后的图片请求先从 preload 缓存命中
-    const resolver = store.resolver;
-    store.resolver = null;
-    if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(() => resolver(), { timeout: POST_SIGNAL_DELAY_MS });
-    } else {
-        setTimeout(resolver, POST_SIGNAL_DELAY_MS);
-    }
-}
-
-/**
- * 等待关键图片就绪。
- * 音频预加载应在此 Promise resolve 后再开始，避免与图片竞争连接。
- * 如果 CriticalImageGate 未启用或不存在，12s 超时后自动放行。
- */
-export function waitForCriticalImages(): Promise<void> {
-    return ensureCriticalImagesPromise();
-}
-
-/**
- * 重置关键图片信号（用于游戏切换/卸载时清理）。
- */
-export function resetCriticalImagesSignal(): void {
-    const store = getSignalStore();
-    if (store.resolver) {
-        store.resolver();
-        store.resolver = null;
-    }
-    store.promise = null;
-    store.signaled = false;
 }
 
 // ============================================================================

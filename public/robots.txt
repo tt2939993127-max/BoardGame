@@ -2,13 +2,11 @@
 User-agent: *
 Allow: /
 
-# Directories to exclude from indexing
+# 不索引的目录
 Disallow: /admin/
 Disallow: /dev/
 Disallow: /devtools/
+Disallow: /play/*/local
 
-# Host
-Host: https://bg.example.com
-
-# Sitemap
-Sitemap: https://bg.example.com/sitemap.xml
+Host: https://easyboardgame.top
+Sitemap: https://easyboardgame.top/sitemap.xml

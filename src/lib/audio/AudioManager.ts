@@ -541,30 +541,65 @@ class AudioManagerClass {
     }
 
     /**
-     * 预加载指定音效 key 列表
-     * 提前创建 Howl 实例并下载音频文件，消除首次播放延迟。
+     * 预加载音效（空闲时分批，不与图片竞争连接）
+     *
+     * 音频预加载是"锦上添花"——晚几百毫秒用户感知不到，
+     * 但如果抢占了图片的 HTTP 连接，卡牌图集会 pending 导致白屏。
+     *
+     * 策略：每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback
+     * 在浏览器空闲时加载下一批，确保图片请求始终优先。
      * 已加载或已失败的 key 会被跳过。
      */
     preloadKeys(keys: SoundKey[]): void {
-        for (const key of keys) {
-            if (this.sounds.has(key) || this.failedKeys.has(key)) continue;
-            const definition = this.soundDefinitions.get(key) ?? this.resolveRegistrySoundDefinition(key);
-            if (!definition) continue;
-            this.soundDefinitions.set(key, definition);
-            const howl = new Howl({
-                src: Array.isArray(definition.src) ? definition.src : [definition.src],
-                volume: (definition.volume ?? 1.0) * this._sfxVolume,
-                loop: definition.loop ?? false,
-                sprite: definition.sprite,
-                preload: true,
-                onloaderror: (_id, error) => {
-                    console.error(`[Audio] preload_failed key=${key} src=${formatSrcForLog(definition.src)} error=${String(error)}`);
-                    this.failedKeys.add(key);
-                },
-            });
-            this.sounds.set(key, howl);
+        // 过滤出需要加载的 key
+        const pending = keys.filter(key =>
+            !this.sounds.has(key) && !this.failedKeys.has(key)
+        );
+        if (pending.length === 0) return;
+
+        const PRELOAD_BATCH_SIZE = 2;
+        let index = 0;
+
+        const loadBatch = () => {
+            const end = Math.min(index + PRELOAD_BATCH_SIZE, pending.length);
+            for (; index < end; index++) {
+                const key = pending[index];
+                // 二次检查（前一批可能已触发按需加载）
+                if (this.sounds.has(key) || this.failedKeys.has(key)) continue;
+                const definition = this.soundDefinitions.get(key) ?? this.resolveRegistrySoundDefinition(key);
+                if (!definition) continue;
+                this.soundDefinitions.set(key, definition);
+                const howl = new Howl({
+                    src: Array.isArray(definition.src) ? definition.src : [definition.src],
+                    volume: (definition.volume ?? 1.0) * this._sfxVolume,
+                    loop: definition.loop ?? false,
+                    sprite: definition.sprite,
+                    preload: true,
+                    onloaderror: (_id, error) => {
+                        console.error(`[Audio] preload_failed key=${key} src=${formatSrcForLog(definition.src)} error=${String(error)}`);
+                        this.failedKeys.add(key);
+                    },
+                });
+                this.sounds.set(key, howl);
+            }
+            // 还有剩余 → 空闲时继续
+            if (index < pending.length) {
+                if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(() => loadBatch(), { timeout: 3000 });
+                } else {
+                    setTimeout(loadBatch, 200);
+                }
+            }
+        };
+
+        // 首批也走空闲调度，不立即发起 XHR
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(() => loadBatch(), { timeout: 3000 });
+        } else {
+            setTimeout(loadBatch, 200);
         }
     }
+
 
     /**
      * 停止指定音效（不影响 BGM）

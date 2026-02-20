@@ -10,7 +10,6 @@ import type { AudioRuntimeContext, BgmDefinition, BgmGroupId, GameAudioConfig, S
 import { resolveAudioEvent, resolveFeedback, resolveBgmGroup, resolveBgmKey } from './audioRouting';
 import { useAudio } from '../../contexts/AudioContext';
 import { COMMON_AUDIO_BASE_PATH, loadCommonAudioRegistry } from './commonRegistry';
-import { waitForCriticalImages } from '../../core/AssetLoader';
 
 interface UseGameAudioOptions<G, Ctx = unknown, Meta extends Record<string, unknown> = Record<string, unknown>> {
     config: GameAudioConfig;
@@ -219,12 +218,9 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 AudioManager.registerRegistryEntries(registry.entries, COMMON_AUDIO_BASE_PATH);
                 setRegistryLoaded(true);
 
-                // P1: 关键音效预加载延迟到关键图片就绪后，避免与图集竞争 HTTP 连接
+                // 关键音效预加载（preloadKeys 内部已走 requestIdleCallback 空闲调度，不会与图片竞争连接）
                 if (config.criticalSounds && config.criticalSounds.length > 0) {
-                    waitForCriticalImages().then(() => {
-                        if (!active) return;
-                        AudioManager.preloadKeys(config.criticalSounds!);
-                    });
+                    AudioManager.preloadKeys(config.criticalSounds);
                 }
             })
             .catch((error) => {
@@ -288,10 +284,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         if (pending.length === 0) return;
 
         pending.forEach((key) => contextualPreloadRef.current.add(key));
-        // 延迟到关键图片就绪后再预加载，避免与图集竞争 HTTP 连接
-        waitForCriticalImages().then(() => {
-            AudioManager.preloadKeys(pending);
-        });
+        // preloadKeys 内部已走 requestIdleCallback 空闲调度，不会与图片竞争连接
+        AudioManager.preloadKeys(pending);
     }, [registryLoaded, contextualPreloadSignature, contextualPreloadKeys.length]);
 
     useEffect(() => {

@@ -25,8 +25,9 @@ export const SEO: React.FC<SEOProps> = ({
     ogType = 'website',
     canonical,
 }) => {
-    const siteTitle = '桌游教学与联机平台';
-    const fullTitle = title ? `${title} | ${siteTitle}` : siteTitle;
+    const siteName = '易桌游';
+    const siteTitle = `${siteName} - 桌游教学与联机平台`;
+    const fullTitle = title ? `${title} | ${siteName}` : siteTitle;
 
     return (
         <>

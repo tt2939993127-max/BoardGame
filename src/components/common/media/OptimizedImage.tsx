@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ImgHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getLocalizedImageUrls, isImagePreloaded, markImageLoaded } from '../../../core/AssetLoader';
+import { getLocalizedImageUrls, getLocalizedLocalAssetPath, isImagePreloaded, markImageLoaded } from '../../../core/AssetLoader';
 
 type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
     /** 原始资源路径（相对于游戏目录，如 dicethrone/images/...） */
@@ -24,31 +24,67 @@ export const SHIMMER_BG: React.CSSProperties = {
 };
 
 /**
- * 回退层级：
- * 0 = localized 路径（i18n/{locale}/...）
- * 1 = fallbackSrc（显式指定的备选源）
+ * 回退策略（CDN 不稳定时自动降级）：
+ * 0 = CDN 国际化路径（首选）
+ * 1 = CDN 重试（加 ?retry=1 绕过浏览器缓存，处理瞬时连接中断）
+ * 2 = 本地 /assets/ 路径（CDN 完全不可用时降级）
+ * 3 = 最终失败，显示错误状态
  */
+const CDN_RETRY_LEVEL = 1;
+const LOCAL_FALLBACK_LEVEL = 2;
+const FINAL_ERROR_LEVEL = 3;
+
+/** 判断 src 是否为 CDN 外部 URL（http/https），本地路径无需重试/降级 */
+const isCdnUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
+
+/** 为 URL 追加重试参数，绕过浏览器对失败请求的缓存 */
+const appendRetryParam = (url: string, retry: number) => {
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}retry=${retry}`;
+};
+
 export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, onError, onLoad: onLoadProp, style: styleProp, placeholder = true, className, ...rest }: OptimizedImageProps) => {
     const { i18n } = useTranslation();
-    // 优先使用传入的 locale，否则从 i18next 获取当前语言
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     const [fallbackLevel, setFallbackLevel] = React.useState(0);
     const preloaded = isImagePreloaded(src, effectiveLocale);
     const [loaded, setLoaded] = React.useState(() => preloaded);
     const [errored, setErrored] = React.useState(false);
     const imgRef = React.useRef<HTMLImageElement>(null);
-    
-    // 预计算所有层级的 URL
+
+    // CDN 国际化路径
     const localizedUrls = getLocalizedImageUrls(src, effectiveLocale);
-    const level0Urls = localizedUrls.primary;  // i18n/{locale}/...
-    const level1Urls = localizedUrls.fallback;  // 不带 i18n 前缀的回退路径
+    const cdnUrl = localizedUrls.primary.webp;
 
-    // 根据当前 fallbackLevel 选择活跃 URL
-    const activeUrls = fallbackLevel === 0 ? level0Urls : level1Urls;
+    // 本地降级路径（/assets/i18n/{locale}/...compressed/xxx.webp）
+    const localUrl = React.useMemo(() => {
+        if (!isCdnUrl(cdnUrl)) return cdnUrl; // 已经是本地路径，无需降级
+        // 从原始 src 构建本地国际化压缩路径
+        const localBase = getLocalizedLocalAssetPath(src, effectiveLocale);
+        // 插入 compressed/ 并替换扩展名为 .webp
+        const base = localBase.replace(/\.[^/.]+$/, '');
+        const lastSlash = base.lastIndexOf('/');
+        const dir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
+        const filename = lastSlash >= 0 ? base.substring(lastSlash + 1) : base;
+        if (dir.endsWith('/compressed') || dir === 'compressed') {
+            return `${base}.webp`;
+        }
+        return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
+    }, [cdnUrl, src, effectiveLocale]);
 
-    const isSvg = isSvgSource(activeUrls.webp);
-    const currentSrc = activeUrls.webp;
-    
+    // 根据 fallbackLevel 计算当前实际 src
+    const currentSrc = React.useMemo(() => {
+        if (!isCdnUrl(cdnUrl)) return cdnUrl; // 本地路径不走降级
+        switch (fallbackLevel) {
+            case 0: return cdnUrl;
+            case CDN_RETRY_LEVEL: return appendRetryParam(cdnUrl, 1);
+            case LOCAL_FALLBACK_LEVEL: return localUrl;
+            default: return cdnUrl;
+        }
+    }, [cdnUrl, localUrl, fallbackLevel]);
+
+    const isSvg = isSvgSource(currentSrc);
+
     // src 或 locale 变化时完全重置
     React.useLayoutEffect(() => {
         setFallbackLevel(0);
@@ -81,15 +117,25 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
         markImageLoaded(src, effectiveLocale, event.currentTarget);
+        if (fallbackLevel === LOCAL_FALLBACK_LEVEL) {
+            console.warn('[OptimizedImage] CDN 不可用，已降级到本地资源:', src);
+        }
         onLoadProp?.(event);
     };
 
     const handleError: React.ReactEventHandler<HTMLImageElement> = (event) => {
-        console.error('[OptimizedImage] 加载失败:', currentSrc, 'fallbackLevel=', fallbackLevel);
-        // 旧路径资源已被删除，不再 fallback，直接报错
-        setErrored(true);
-        setLoaded(true);
-        onError?.(event);
+        // 非 CDN 路径或已到最终失败层级，直接报错
+        if (!isCdnUrl(cdnUrl) || fallbackLevel >= LOCAL_FALLBACK_LEVEL) {
+            console.error('[OptimizedImage] 加载失败（所有回退已用尽）:', src, 'fallbackLevel=', fallbackLevel);
+            setErrored(true);
+            setLoaded(true);
+            onError?.(event);
+            return;
+        }
+        // 还有回退层级，推进到下一级
+        const nextLevel = fallbackLevel + 1;
+        console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel}:`, src);
+        setFallbackLevel(nextLevel);
     };
 
     const showShimmer = placeholder && !loaded;
@@ -102,10 +148,10 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     };
 
     if (isSvg) {
-        return <img ref={imgRef} src={activeUrls.webp} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />;
+        return <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />;
     }
 
     return (
-        <img ref={imgRef} src={activeUrls.webp} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />
+        <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />
     );
 };

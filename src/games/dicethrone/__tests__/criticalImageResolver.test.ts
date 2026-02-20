@@ -93,14 +93,15 @@ describe('diceThroneCriticalImageResolver', () => {
         expect(result.critical).not.toContain('dicethrone/images/shadow_thief/dice');
     });
 
-    it('未选角色的资源在 warm 中', () => {
+    it('未选角色的资源不在 warm 中（不浪费连接预加载不会出现的角色）', () => {
         const result = diceThroneCriticalImageResolver(
             makeState(true, { '0': 'monk', '1': 'barbarian' }),
             undefined,
             '0',
         );
-        expect(result.warm).toContain('dicethrone/images/pyromancer/ability-cards');
-        expect(result.warm).toContain('dicethrone/images/pyromancer/dice');
+        // 未选角色（pyromancer）在游戏中不会出现，不应预加载
+        expect(result.warm).not.toContain('dicethrone/images/pyromancer/ability-cards');
+        expect(result.warm).not.toContain('dicethrone/images/pyromancer/dice');
     });
 
     it('critical 和 warm 无重叠', () => {

@@ -180,6 +180,8 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 4. **路径格式与图片引用一致**：相对于 `/assets/`，不含 `compressed/`（预加载 API 内部自动处理）。
 5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
 6. **phaseKey 必须稳定**：`CriticalImageGate` 依据 `phaseKey` 判断是否重新预加载，未变化时不会重复触发。
+7. **教程模式 setup 阶段跳过全量选角资源（强制）**：教程会自动执行 aiActions（SELECT_CHARACTER/SELECT_FACTION + HOST_START_GAME），用户看不到选角界面。resolver 必须检查 `state.sys?.tutorial?.active === true`，在教程 setup 阶段只返回通用资源（背景/地图等），不预加载全部角色/阵营的选角资源。等 aiActions 执行完进入 playing 阶段后，再按实际选角结果预加载。
+8. **音频预加载不得阻塞图片加载（强制）**：`AudioManager.preloadKeys` 内部使用 `requestIdleCallback` + 小批量（每批 2 个）空闲调度，确保音频 XHR 不会与图片请求竞争浏览器的 6 个并发连接。无需在调用侧做额外延迟处理。
 7. **精灵图初始化（统一模式）**：
    - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从 `CriticalImageGate` 预加载缓存中的 `HTMLImageElement.naturalWidth/Height` 自动解析，零配置文件、零额外网络请求。SmashUp 和 SummonerWars 均使用此模式。
    - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，config 从静态 JSON 文件 import（构建时内联）。DiceThrone 使用此模式（`ability-cards-common.atlas.json`）。
@@ -191,12 +193,17 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 ```typescript
 import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
+import type { MatchState } from '../../engine/types';
 
 export const <gameId>CriticalImageResolver: CriticalImageResolver = (
     gameState: unknown,
 ): CriticalImageResolverResult => {
+    const state = gameState as MatchState<YourCoreType>;
+    const core = state?.core;
     // 1. 无状态时：预加载选择界面所需资源
-    // 2. 选择阶段：所有可选项的预览图为 critical
+    // 2. 选择阶段：
+    //    - 教程模式（state.sys?.tutorial?.active）→ 只返回通用资源，跳过全量选角
+    //    - 正常模式 → 所有可选项的预览图为 critical
     // 3. 游戏进行中：已选项的完整资源为 critical，未选项放 warm
     return {
         critical: [...],
@@ -230,6 +237,7 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 - [ ] 新资源路径已加入 `criticalImageResolver.ts` 的对应阶段
 - [ ] 选择阶段：预览图（player-board/hero/tip）在 critical 中
 - [ ] 游戏阶段：完整资源（卡牌图集/骰子/状态图标）在 critical 中
+- [ ] 教程模式 setup 阶段：检查 `sys.tutorial.active`，只返回通用资源
 - [ ] 精灵图初始化函数已支持 `locale` 参数（从 Board props 提取并传递）
 - [ ] 系统 A 注册时调用 `getLocalizedAssetPath` → `getOptimizedImageUrls`
 - [ ] 系统 B 注册时传递原始路径（不调用 `getLocalizedAssetPath`）
