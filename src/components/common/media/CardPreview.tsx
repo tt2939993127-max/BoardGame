@@ -6,6 +6,7 @@ import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/prim
 import {
     registerCardAtlasSource,
     getCardAtlasSource,
+    getLazyRegistration,
     type CardAtlasSource as RegistryCardAtlasSource,
 } from './cardAtlasRegistry';
 
@@ -128,7 +129,8 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     const { i18n } = useTranslation();
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     // 传入 locale 以支持懒解析模式（从预加载缓存读取图片尺寸）
-    const source = getCardAtlasSource(atlasId, effectiveLocale);
+    const [resolvedSource, setResolvedSource] = useState(() => getCardAtlasSource(atlasId, effectiveLocale));
+    const source = resolvedSource ?? getCardAtlasSource(atlasId, effectiveLocale);
 
     // 使用统一的 isImagePreloaded 检查（与 CriticalImageGate 共享缓存）
     const preloaded = source ? isImagePreloaded(source.image, effectiveLocale) : false;
@@ -180,7 +182,54 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [checkKey, source?.image, effectiveLocale]);
 
-    if (!source) return null;
+    // Fallback：source 为 undefined 时（CriticalImageGate 预加载超时/失败），
+    // 自行加载图片获取尺寸，触发懒解析提升
+    useEffect(() => {
+        if (source) return; // 已有 source，无需 fallback
+        const lazy = getLazyRegistration(atlasId);
+        if (!lazy) return; // 非懒注册，无法 fallback
+
+        let cancelled = false;
+        const urls = getLocalizedImageUrls(lazy.image, effectiveLocale);
+        const candidates = [...new Set([urls.primary.webp, urls.fallback.webp].filter(Boolean))];
+
+        const tryFallback = (idx: number) => {
+            if (idx >= candidates.length || cancelled) return;
+            const url = candidates[idx];
+            const img = new Image();
+            img.onload = () => {
+                if (cancelled) return;
+                // 注册到预加载缓存，使 getCardAtlasSource 下次能解析成功
+                markImageLoaded(lazy.image, effectiveLocale, img);
+                // 重新尝试获取 source（此时缓存已有图片，懒解析应成功）
+                const newSource = getCardAtlasSource(atlasId, effectiveLocale);
+                if (newSource && !cancelled) {
+                    setResolvedSource(newSource);
+                    setLoaded(true);
+                }
+            };
+            img.onerror = () => tryFallback(idx + 1);
+            img.src = url;
+        };
+
+        tryFallback(0);
+        return () => { cancelled = true; };
+    }, [source, atlasId, effectiveLocale]);
+
+    if (!source) {
+        // 显示 shimmer 占位而非 null，等待 fallback 加载完成
+        const lazy = getLazyRegistration(atlasId);
+        if (lazy) {
+            return (
+                <div
+                    className={`atlas-shimmer ${className ?? ''}`}
+                    title={title}
+                    style={style}
+                />
+            );
+        }
+        return null;
+    }
 
     const atlasStyle = computeSpriteStyle(index, source.config);
     const backgroundImage = buildLocalizedImageSet(source.image, effectiveLocale);

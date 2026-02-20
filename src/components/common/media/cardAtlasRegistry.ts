@@ -60,6 +60,16 @@ export function getCardAtlasSource(id: string, locale?: string): CardAtlasSource
         return source;
     }
 
-    // 图片尚未预加载（边缘情况），返回 undefined，AtlasCard 会显示 shimmer 并等待加载
+    // 图片尚未预加载（边缘情况），返回 undefined，AtlasCard 会 fallback 加载
     return undefined;
 }
+
+/**
+ * 获取懒注册信息（供 AtlasCard fallback 加载使用）
+ * 当 getCardAtlasSource 返回 undefined 时，AtlasCard 可以用此函数获取 image 路径，
+ * 自行加载图片并注册到缓存中。
+ */
+export function getLazyRegistration(id: string): LazyGridRegistration | undefined {
+    return lazyRegistry.get(id);
+}
+
