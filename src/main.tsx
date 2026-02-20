@@ -26,25 +26,17 @@ if (SENTRY_DSN) {
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  let hasRendered = false;
-  const renderApp = () => {
-    if (hasRendered) return;
-    hasRendered = true;
-    createRoot(rootElement).render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
-  };
+  // 立即渲染，不等 i18n 初始化完成。
+  // react-i18next 已配置 useSuspense: false，未就绪时组件用 key 作 fallback，不会崩溃。
+  // i18n 初始化完成后 react-i18next 会自动触发重渲染，文本无缝切换。
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
 
-  const fallbackTimer = window.setTimeout(renderApp, 2000);
-  void i18nInitPromise
-    .then(() => {
-      window.clearTimeout(fallbackTimer);
-      renderApp();
-    })
-    .catch(() => {
-      window.clearTimeout(fallbackTimer);
-      renderApp();
-    });
+  // 后台继续等待 i18n 完成（仅用于错误捕获，不阻塞渲染）
+  void i18nInitPromise.catch(() => {
+    console.warn('[i18n] 初始化失败，将使用 fallback key 显示文本');
+  });
 }

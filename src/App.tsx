@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { DebugProvider } from './contexts/DebugContext';
 import { TestHarness } from './engine/testing';
 import { TutorialProvider } from './contexts/TutorialContext';
@@ -60,6 +61,14 @@ const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications')
 
 const App = () => {
   const { t } = useTranslation('lobby');
+
+  // 兜底：App 挂载时移除 index.html 的静态占位（LoadingScreen 不出现时的情况）
+  useEffect(() => {
+    const initialLoader = document.getElementById('initial-loader');
+    if (initialLoader) {
+      initialLoader.remove();
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

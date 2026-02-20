@@ -224,16 +224,26 @@ export async function preloadCriticalImages(
 
     const effectiveLocale = locale || 'zh-CN';
     const startTime = performance.now();
-    const promises = criticalPaths
-        .filter(Boolean)
-        .map((p) => {
-            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
-            return preloadOptimizedImage(localizedPath);
-        });
 
-    // Promise.allSettled + 10s 超时竞争
+    // 限制并发数为 6（HTTP/1.1 同域连接上限），避免全量并发把连接池占满
+    // 导致音频 XHR 反而先完成，图片全部排队"待处理"
+    const CRITICAL_CONCURRENCY = 6;
+    const filtered = criticalPaths.filter(Boolean);
+    let cursor = 0;
+    const runWorker = async (): Promise<void> => {
+        while (cursor < filtered.length) {
+            const p = filtered[cursor++];
+            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+            await preloadOptimizedImage(localizedPath);
+        }
+    };
+    const allDone = Promise.all(
+        Array.from({ length: Math.min(CRITICAL_CONCURRENCY, filtered.length) }, () => runWorker()),
+    );
+
+    // 有限并发 + 10s 超时竞争
     await Promise.race([
-        Promise.allSettled(promises),
+        allDone,
         new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
     ]);
 

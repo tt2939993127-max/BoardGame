@@ -22,9 +22,6 @@ import type {
     MadnessReturnedEvent,
     BaseDeckReorderedEvent,
     BaseReplacedEvent,
-    RevealHandEvent,
-    RevealDeckTopEvent,
-    RevealDismissedEvent,
     TempPowerAddedEvent,
     BreakpointModifiedEvent,
     BaseDeckShuffledEvent,
@@ -1058,73 +1055,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return { ...state, baseDeck: [...topDefIds, ...remaining] };
         }
 
-        // 展示手牌（写入 pendingReveal，UI 层读取后展示）
-        case SU_EVENTS.REVEAL_HAND: {
-            const { targetPlayerId, viewerPlayerId, cards, reason, sourcePlayerId } = (event as RevealHandEvent).payload;
-            return {
-                ...state,
-                pendingReveal: {
-                    type: 'hand',
-                    targetPlayerId,
-                    viewerPlayerId,
-                    cards,
-                    sourcePlayerId,
-                    reason,
-                },
-            };
-        }
-
-        // 展示牌库顶（写入 pendingReveal，UI 层读取后展示）
-        case SU_EVENTS.REVEAL_DECK_TOP: {
-            const { targetPlayerId, viewerPlayerId, cards, reason, sourcePlayerId } = (event as RevealDeckTopEvent).payload;
-            return {
-                ...state,
-                pendingReveal: {
-                    type: 'deck_top',
-                    targetPlayerId,
-                    viewerPlayerId,
-                    cards,
-                    sourcePlayerId,
-                    reason,
-                },
-            };
-        }
-
-        // 关闭卡牌展示（逐个确认或直接清除）
-        case SU_EVENTS.REVEAL_DISMISSED: {
-            const reveal = state.pendingReveal;
-            if (!reveal) return state;
-
-            // 非 'all' 模式：直接清除
-            if (reveal.viewerPlayerId !== 'all') {
-                return { ...state, pendingReveal: undefined };
-            }
-
-            // 'all' 模式：记录确认者，全部确认后清除
-            const { confirmPlayerId } = (event as RevealDismissedEvent).payload;
-            const confirmed = [...(reveal.confirmedPlayerIds ?? [])];
-            if (confirmPlayerId && !confirmed.includes(confirmPlayerId)) {
-                confirmed.push(confirmPlayerId);
-            }
-
-            // 计算需要确认的玩家：所有玩家 - 被展示者
-            const targetIds = Array.isArray(reveal.targetPlayerId)
-                ? reveal.targetPlayerId
-                : [reveal.targetPlayerId];
-            const allPlayerIds = Object.keys(state.players);
-            const needConfirmIds = allPlayerIds.filter(pid => !targetIds.includes(pid));
-
-            // 全部确认 → 清除展示
-            if (needConfirmIds.every(pid => confirmed.includes(pid))) {
-                return { ...state, pendingReveal: undefined };
-            }
-
-            // 部分确认 → 更新 confirmedPlayerIds
-            return {
-                ...state,
-                pendingReveal: { ...reveal, confirmedPlayerIds: confirmed },
-            };
-        }
+        // 展示手牌（纯事件，UI 通过 EventStream 消费展示，不写入 core）
+        case SU_EVENTS.REVEAL_HAND:
+        case SU_EVENTS.REVEAL_DECK_TOP:
+            return state;
 
         // 临时力量修正（回合结束自动清零）
         case SU_EVENTS.TEMP_POWER_ADDED: {

@@ -152,7 +152,7 @@ function elderThingTouchOfMadness(ctx: AbilityContext): AbilityResult {
 function elderThingPowerOfMadness(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
-    // 收集所有对手的手牌用于合并展示（避免多人时 pendingReveal 覆盖）
+    // 收集所有对手的手牌用于合并展示（避免多人时多次展示覆盖）
     const allRevealCards: { uid: string; defId: string }[] = [];
     const revealTargetIds: string[] = [];
 

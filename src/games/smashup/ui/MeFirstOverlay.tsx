@@ -38,12 +38,11 @@ export const MeFirstOverlay: React.FC<{
         dispatch('RESPONSE_PASS');
     }, [dispatch, onSelectCard]);
 
-    // 有交互/展示手牌/正在选择基地出牌时隐藏，避免遮挡场景操作
+    // 有交互/正在选择基地出牌时隐藏，避免遮挡场景操作
     const hasInteraction = !!G.sys.interaction?.current;
-    const hasReveal = !!G.core.pendingReveal;
 
     if (!responseWindow || responseWindow.windowType !== 'meFirst') return null;
-    if (hasInteraction || hasReveal || pendingCard) return null;
+    if (hasInteraction || pendingCard) return null;
 
     const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
     const isMyResponse = playerID === currentResponderId;

@@ -322,30 +322,6 @@ export function validate(
             return { valid: true };
         }
 
-        case SU_COMMANDS.DISMISS_REVEAL: {
-            if (!core.pendingReveal) {
-                return { valid: false, error: '没有待展示的卡牌' };
-            }
-            // 'all' 模式下：所有非被展示者都需要确认，排除已确认的玩家
-            if (core.pendingReveal.viewerPlayerId === 'all') {
-                const targetIds = Array.isArray(core.pendingReveal.targetPlayerId)
-                    ? core.pendingReveal.targetPlayerId
-                    : [core.pendingReveal.targetPlayerId];
-                // 被展示者不需要确认
-                if (targetIds.includes(command.playerId)) {
-                    return { valid: false, error: '被展示者不需要确认' };
-                }
-                // 已确认的玩家不能重复确认
-                const confirmed = core.pendingReveal.confirmedPlayerIds ?? [];
-                if (confirmed.includes(command.playerId)) {
-                    return { valid: false, error: '你已经确认过了' };
-                }
-            } else if (command.playerId !== core.pendingReveal.viewerPlayerId) {
-                return { valid: false, error: '只有查看者可以关闭展示' };
-            }
-            return { valid: true };
-        }
-
         default:
             // RESPONSE_PASS 由引擎 ResponseWindowSystem 处理，领域层直接放行
             if ((command as { type: string }).type === 'RESPONSE_PASS') {

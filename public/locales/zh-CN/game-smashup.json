@@ -91,8 +91,10 @@
     "action_global_quota": "通用额度",
     "action_extra_hint": "含额外行动额度 +{{extra}}",
     "close": "关闭",
-    "reveal_your_hand_shown": "你的手牌已展示给对手",
+    "reveal_your_hand_shown": "你的手牌正在被展示",
     "reveal_confirmed": "已确认",
+    "reveal_queue_hint": "{{count}} 条展示待查看 · 点击继续",
+    "reveal_dismiss_hint": "点击任意位置关闭",
     "deselect_all": "取消全选",
     "select_all": "全选"
   },

@@ -50,8 +50,8 @@ const systems: EngineSystem<SmashUpCore>[] = [
     createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
-        allowedCommands: ['su:play_action', 'su:dismiss_reveal'],
-        responderExemptCommands: ['su:dismiss_reveal'],
+        allowedCommands: ['su:play_action'],
+        responderExemptCommands: [],
         commandWindowTypeConstraints: {
             'su:play_action': ['meFirst'],
         },

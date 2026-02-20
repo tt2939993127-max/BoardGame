@@ -110,7 +110,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
 /** 聚集秘术 onPlay：展示每个对手牌库顶给所有人，选择其中一张行动卡作为额外行动打出 */
 function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
-    // 收集所有对手牌库顶卡牌，合并为一个展示事件（避免多人时 pendingReveal 覆盖）
+    // 收集所有对手牌库顶卡牌，合并为一个展示事件（避免多人时多次展示覆盖）
     const allRevealCards: { uid: string; defId: string }[] = [];
     const revealTargetIds: string[] = [];
     const actionCandidates: { uid: string; defId: string; pid: string; label: string }[] = [];
