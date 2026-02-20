@@ -64,8 +64,8 @@ export const GameModal = ({
                             </div>
                         )}
 
-                        {/* Content */}
-                        <div className="p-6 sm:p-8 text-slate-300 leading-relaxed text-center relative z-10 flex flex-col items-center">
+                        {/* Content — z-20 高于 Footer z-10，确保内部 tooltip 不被 Footer 遮挡 */}
+                        <div className="p-6 sm:p-8 text-slate-300 leading-relaxed text-center relative z-20 flex flex-col items-center">
                             {children}
                         </div>
 

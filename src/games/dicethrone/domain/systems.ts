@@ -249,6 +249,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
                             localReducer: (current, step) => diceModifyReducer(current, step, config),
                             toCommands: diceModifyToCommands,
+                            // any/adjust 模式下，每次 +/- 都是一次 step()，但只有修改不同骰子才算"完成一步"
+                            // 使用 modCount（已修改的不同骰子数）作为语义步骤数，防止同一骰子多次调整触发提前 auto-confirm
+                            getCompletedSteps: (config?.mode === 'any' || config?.mode === 'adjust')
+                                ? (result) => result.modCount
+                                : undefined,
                             meta: {
                                 dtType: 'modifyDie',
                                 dieModifyConfig: config,

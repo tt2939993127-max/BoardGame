@@ -569,6 +569,10 @@ export function injectPendingInteraction(
             initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
             localReducer: (current, step) => diceModifyReducer(current, step, config),
             toCommands: diceModifyToCommands,
+            // any/adjust 模式：用 modCount 作为语义步骤数
+            getCompletedSteps: (mode === 'any' || mode === 'adjust')
+                ? (result) => result.modCount
+                : undefined,
             meta: {
                 dtType: 'modifyDie',
                 dieModifyConfig: config,

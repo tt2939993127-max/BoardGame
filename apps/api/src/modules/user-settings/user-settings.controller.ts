@@ -112,13 +112,35 @@ export class UserSettingsController {
     @Put('cursor')
     async updateCursorPreference(
         @CurrentUser() currentUser: { userId: string } | null,
-        @Body() body: { cursorTheme?: string; overrideScope?: string },
+        @Body() body: {
+            cursorTheme?: string;
+            overrideScope?: string;
+            highContrast?: boolean;
+            gameVariants?: Record<string, string>;
+        },
         @Res() res: Response
     ) {
         if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
         const cursorTheme = typeof body.cursorTheme === 'string' ? body.cursorTheme : 'default';
         const overrideScope = body.overrideScope === 'all' ? 'all' : 'home';
-        await this.userSettingsService.upsertCursorPreference(currentUser.userId, cursorTheme, overrideScope);
-        return res.status(201).json({ settings: { cursorTheme, overrideScope } });
+        const highContrast = body.highContrast === true;
+        const gameVariants = normalizeGameVariants(body.gameVariants);
+        await this.userSettingsService.upsertCursorPreference(
+            currentUser.userId, cursorTheme, overrideScope, highContrast, gameVariants,
+        );
+        return res.status(201).json({ settings: { cursorTheme, overrideScope, highContrast, gameVariants } });
     }
+}
+
+
+/** gameVariants 只允许 string→string 映射，过滤非法值 */
+function normalizeGameVariants(input?: Record<string, string>): Record<string, string> {
+    if (!input || typeof input !== 'object') return {};
+    const result: Record<string, string> = {};
+    for (const [key, val] of Object.entries(input)) {
+        if (typeof key === 'string' && typeof val === 'string') {
+            result[key] = val;
+        }
+    }
+    return result;
 }

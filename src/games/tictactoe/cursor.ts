@@ -69,6 +69,12 @@ const neonSvgs = {
     notAllowed: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <path d="M8 8 L24 24 M24 8 L8 24" stroke="#f472b6" stroke-width="3" stroke-linecap="round"/>
         <rect x="6" y="6" width="20" height="20" fill="none" stroke="#e0f2fe" stroke-width="1.5" stroke-dasharray="4 4"/>
+    </svg>`,
+
+    // 提示
+    help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="11" fill="none" stroke="#22d3ee" stroke-width="2"/>
+        <text x="16" y="22" text-anchor="middle" font-size="17" font-weight="bold" font-family="Arial,sans-serif" fill="#22d3ee">?</text>
     </svg>`
 };
 

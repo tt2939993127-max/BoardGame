@@ -87,7 +87,7 @@ export const LocalMatchRoom = () => {
             <GameHUD mode="local" />
             <div className="w-full h-full">
                 <GameModeProvider mode="local">
-                    <GameCursorProvider themeId={gameConfig?.cursorTheme}>
+                    <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
                     {engineConfig && WrappedBoard ? (
                         <LocalGameProvider config={engineConfig} numPlayers={2} seed={gameSeed} onCommandRejected={handleCommandRejected}>
                             <BoardBridge

@@ -30,6 +30,9 @@ function buildGlobalCursorCSS(theme: CursorTheme, highContrast: boolean): string
     if (t.zoomIn) {
         rules.push(`[style*="cursor: zoom-in"], [style*="cursor:zoom-in"], .cursor-zoom-in { cursor: ${t.zoomIn}; }`);
     }
+    if (t.help) {
+        rules.push(`[style*="cursor: help"], [style*="cursor:help"], .cursor-help { cursor: ${t.help}; }`);
+    }
     return rules.join('\n');
 }
 
@@ -43,6 +46,7 @@ function applyHighContrastGlobal(theme: CursorTheme): CursorTheme {
         ...(s.grabbing ? { grabbing: svgCursor(injectOutlineFilter(s.grabbing), 14, 16, 'grabbing') } : {}),
         ...(s.zoomIn ? { zoomIn: svgCursor(injectOutlineFilter(s.zoomIn), 13, 13, 'zoom-in') } : {}),
         ...(s.notAllowed ? { notAllowed: svgCursor(injectOutlineFilter(s.notAllowed), 16, 16, 'not-allowed') } : {}),
+        ...(s.help ? { help: svgCursor(injectOutlineFilter(s.help), 16, 16, 'help') } : {}),
     };
 }
 

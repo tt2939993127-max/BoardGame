@@ -308,6 +308,14 @@ export interface MultistepChoiceData<TStep = unknown, TResult = unknown> {
     initialResult: TResult;
     /** 验证函数：判断当前步骤是否合法（可选） */
     validateStep?: (current: TResult, step: TStep) => boolean;
+    /**
+     * 从累积结果中提取"已完成步骤数"（可选）。
+     * 用于 auto-confirm 判定：当返回值 >= maxSteps 时自动确认。
+     * 未提供时退化为按 step() 调用次数计数。
+     * 典型场景：骰子 any 模式下，每次 +/- 都是一次 step()，
+     * 但只有修改了不同骰子才算"完成一步"。
+     */
+    getCompletedSteps?: (result: TResult) => number;
     /** 附加元数据（透传给 UI 层，如骰子模式配置） */
     meta?: Record<string, unknown>;
 }

@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
@@ -342,18 +342,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
             </div>
 
-            {/* 资源预加载层 - 离屏渲染确保图片被浏览器加载 */}
-            <div
-                className="fixed left-0 top-[-10000px] w-px h-px overflow-hidden opacity-0 pointer-events-none"
-                aria-hidden="true"
-            >
-                {availableCharacters.map(char => (
-                    <React.Fragment key={char.id}>
-                        <OptimizedImage src={ASSETS.PLAYER_BOARD(char.id)} locale={locale} alt="" />
-                        <OptimizedImage src={ASSETS.TIP_BOARD(char.id)} locale={locale} alt="" />
-                    </React.Fragment>
-                ))}
-            </div>
+            {/* 资源预加载已由 CriticalImageGate 统一处理，无需额外离屏渲染 */}
 
             {/* 放大预览弹窗 - OptimizedImage 自动处理本地化路径 */}
             <MagnifyOverlay

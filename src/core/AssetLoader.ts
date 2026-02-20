@@ -202,6 +202,9 @@ export async function preloadCriticalImages(
     locale?: string,
     playerID?: string | null,
 ): Promise<string[]> {
+    // 取消旧的 warm 预加载队列，释放连接池给 critical 请求
+    cancelWarmPreload();
+
     const assets = gameAssetsRegistry.get(gameId);
     const staticCritical = assets?.criticalImages ?? [];
     const staticWarm = assets?.warmImages ?? [];
@@ -280,20 +283,50 @@ export function areAllCriticalImagesCached(
 
 
 /**
+ * 暖加载取消令牌。每次调用 preloadWarmImages 时生成新令牌，
+ * 旧令牌自动失效，尚未开始的 warm 请求不再发起。
+ * 已发出的网络请求无法取消（Image 不支持 abort），但可以阻止队列中后续请求。
+ */
+let warmAbortToken = 0;
+
+/**
+ * 取消当前正在进行的暖加载队列。
+ * 由 preloadCriticalImages 在启动新一轮关键图片预加载时调用，
+ * 释放浏览器连接池给 critical 请求。
+ */
+export function cancelWarmPreload(): void {
+    warmAbortToken++;
+}
+
+/**
  * 预加载暖图片（第二阶段：后台预取）
  *
- * 在空闲时执行，不阻塞主线程。
+ * 在空闲时执行，有限并发（3 路），不阻塞主线程。
+ * 支持取消：新的 critical 预加载启动时会调用 cancelWarmPreload()，
+ * 队列中尚未开始的 warm 请求将被跳过。
  */
+const WARM_CONCURRENCY = 3;
+
 export function preloadWarmImages(paths: string[], locale?: string): void {
     if (paths.length === 0) return;
 
+    // 生成新令牌，自动使旧的 warm 队列失效
+    const token = ++warmAbortToken;
     const effectiveLocale = locale || 'zh-CN';
-    const doPreload = () => {
-        for (const p of paths) {
-            if (!p) continue;
-            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
-            preloadOptimizedImage(localizedPath); // fire-and-forget
-        }
+
+    const doPreload = async () => {
+        let cursor = 0;
+        const run = async (): Promise<void> => {
+            while (cursor < paths.length) {
+                if (warmAbortToken !== token) return; // 已取消
+                const p = paths[cursor++];
+                if (!p) continue;
+                const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+                await preloadOptimizedImage(localizedPath);
+            }
+        };
+        // 启动 N 路并发 worker
+        await Promise.all(Array.from({ length: Math.min(WARM_CONCURRENCY, paths.length) }, () => run()));
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -482,22 +515,33 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
 const preloadFailCount = new Map<string, number>();
 const MAX_PRELOAD_RETRIES = 2;
 
+/** 正在加载中的 Promise 去重表，避免同一 URL 并发多次请求 */
+const inFlightPreloads = new Map<string, Promise<void>>();
+
 async function preloadOptimizedImage(src: string): Promise<void> {
     const { webp } = getOptimizedImageUrls(src);
     if (!webp) return;
     // 已成功加载过的跳过（naturalWidth > 0 表示真正加载成功）
     const cached = preloadedImages.get(webp);
     if (cached && cached.naturalWidth > 0) return;
-    const ok = await preloadImageWithResult(webp, SINGLE_IMAGE_TIMEOUT_MS);
-    if (!ok) {
-        // 超时/失败：记录失败次数，超过阈值后标记为已处理（空 Image 占位）。
-        // 避免持续 404 的图片导致每次阶段切换都重新等待 10s 超时。
-        const count = (preloadFailCount.get(webp) ?? 0) + 1;
-        preloadFailCount.set(webp, count);
-        if (count >= MAX_PRELOAD_RETRIES) {
-            preloadedImages.set(webp, new Image());
+    // 同一 URL 正在加载中 → 复用已有 Promise，不发新请求
+    const inFlight = inFlightPreloads.get(webp);
+    if (inFlight) return inFlight;
+    const promise = (async () => {
+        const ok = await preloadImageWithResult(webp, SINGLE_IMAGE_TIMEOUT_MS);
+        if (!ok) {
+            // 超时/失败：记录失败次数，超过阈值后标记为已处理（空 Image 占位）。
+            // 避免持续 404 的图片导致每次阶段切换都重新等待 10s 超时。
+            const count = (preloadFailCount.get(webp) ?? 0) + 1;
+            preloadFailCount.set(webp, count);
+            if (count >= MAX_PRELOAD_RETRIES) {
+                preloadedImages.set(webp, new Image());
+            }
         }
-    }
+    })();
+    inFlightPreloads.set(webp, promise);
+    promise.finally(() => inFlightPreloads.delete(webp));
+    return promise;
 }
 
 async function preloadAudioFile(src: string): Promise<void> {

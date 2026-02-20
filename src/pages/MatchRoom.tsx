@@ -658,6 +658,14 @@ export const MatchRoom = () => {
             });
         }
 
+        // Board 被 CriticalImageGate 卸载（phaseKey 变化触发重新预加载）时，
+        // 关闭教程弹窗，避免弹窗悬浮在 LoadingScreen 上方。
+        // Board 重新挂载后 isBoardMounted 恢复为 true，弹窗会重新打开。
+        if (tutorialModalIdRef.current && !isBoardMounted) {
+            closeModal(tutorialModalIdRef.current);
+            tutorialModalIdRef.current = null;
+        }
+
         if (!isActive && tutorialModalIdRef.current) {
             closeModal(tutorialModalIdRef.current);
             tutorialModalIdRef.current = null;
@@ -941,7 +949,7 @@ export const MatchRoom = () => {
 
             {/* 游戏棋盘 - 全屏 */}
             <div className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}>
-                <GameCursorProvider themeId={gameConfig?.cursorTheme} playerID={effectivePlayerID}>
+                <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
                         {hasTutorialBoard && engineConfig && WrappedBoard ? (

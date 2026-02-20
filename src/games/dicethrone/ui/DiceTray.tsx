@@ -290,15 +290,16 @@ export const DiceActions = ({
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);
 
-    // 等待服务器结果：监听 rollCount 变化来停止动画，而非固定 setTimeout
-    // 这样骰子动画会一直转到服务器返回真实结果，再平滑过渡到最终面
+    // 监听 rollCount 变化停止动画
+    // 框架层 animationDelay 配置保证乐观状态延迟渲染，
+    // rollCount 变化时动画已经播放了足够时间
     const rollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const prevRollCountRef = useRef(rollCount);
 
     useEffect(() => {
         if (rollCount !== prevRollCountRef.current) {
             prevRollCountRef.current = rollCount;
-            // 服务器结果到了，停止动画（Dice3D 的 CSS transition 会平滑过渡到最终值）
+            // 结果到了，停止动画（Dice3D 的 CSS transition 会平滑过渡到最终面）
             if (isRolling) {
                 if (rollTimeoutRef.current) {
                     clearTimeout(rollTimeoutRef.current);
@@ -309,7 +310,7 @@ export const DiceActions = ({
         }
     }, [rollCount, isRolling, setIsRolling]);
 
-    // 清理安全超时
+    // 清理定时器
     useEffect(() => {
         return () => {
             if (rollTimeoutRef.current) clearTimeout(rollTimeoutRef.current);

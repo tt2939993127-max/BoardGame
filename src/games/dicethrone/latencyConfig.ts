@@ -42,6 +42,12 @@ export const diceThroneLatencyConfig: LatencyOptimizationConfig = {
             'REROLL_BONUS_DIE': 'optimistic',
             // 注：ADVANCE_PHASE / RESPONSE_PASS 由引擎层内置 optimistic 默认值，无需重复声明
         },
+        // 乐观状态延迟渲染：给骰子翻滚动画留出时间
+        animationDelay: {
+            'ROLL_DICE': 800,
+            'REROLL_DIE': 600,
+            'REROLL_BONUS_DIE': 600,
+        },
     },
     batching: {
         enabled: true,

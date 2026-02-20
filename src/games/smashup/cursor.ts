@@ -16,6 +16,7 @@ const comicSvgs = {
     grabbing: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M8 15 C8 13 10 12 11 13 L11 16 M11 13 C11 11 13 10 14 11 L14 16 M14 11 C14 9 16 9 17 10 L17 16 M17 10 C17 9 19 8.5 20 10 L20 16 L20 22 C20 25 17 28 13 28 C9 28 7 25 7 22 L7 18 C7 16 8 15 8 15 Z" fill="#fef3c7" stroke="#1e293b" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
     zoomIn: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="13" cy="13" r="9" fill="#fef3c7" stroke="#1e293b" stroke-width="2"/><line x1="20" y1="20" x2="28" y2="28" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/><line x1="9" y1="13" x2="17" y2="13" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/><line x1="13" y1="9" x2="13" y2="17" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/></svg>`,
     notAllowed: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#ef4444" stroke="#1e293b" stroke-width="2"/><line x1="9" y1="9" x2="23" y2="23" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/><line x1="23" y1="9" x2="9" y2="23" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/></svg>`,
+    help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#fef3c7" stroke="#1e293b" stroke-width="2"/><text x="16" y="22" text-anchor="middle" font-size="18" font-weight="bold" font-family="Arial,sans-serif" fill="#1e293b">?</text></svg>`,
 };
 const comic: CursorTheme = {
     id: 'smashup', gameId: 'smashup', label: '大杀四方', variantLabel: '漫画手绘',
@@ -29,6 +30,7 @@ const graffitiSvgs = {
     grabbing: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M8 15 C8 13 10 12 11 13 L11 16 M11 13 C11 11 13 10 14 11 L14 16 M14 11 C14 9 16 9 17 10 L17 16 M17 10 C17 9 19 8.5 20 10 L20 16 L20 22 C20 25 17 28 13 28 C9 28 7 25 7 22 L7 18 C7 16 8 15 8 15 Z" fill="#84cc16" stroke="#1a2e05" stroke-width="2" stroke-linejoin="bevel"/><line x1="4" y1="12" x2="7" y2="15" stroke="#facc15" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/><line x1="3" y1="17" x2="6" y2="19" stroke="#facc15" stroke-width="1" stroke-linecap="round" opacity="0.7"/></svg>`,
     zoomIn: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M5 5 L9 3 L13 5 L17 3 L21 5 L23 9 L21 13 L23 17 L21 21 L17 23 L13 21 L9 23 L5 21 L3 17 L5 13 L3 9 Z" fill="#84cc16" stroke="#1a2e05" stroke-width="1.5" stroke-linejoin="bevel"/><line x1="22" y1="22" x2="29" y2="29" stroke="#1a2e05" stroke-width="3" stroke-linecap="round"/><line x1="9" y1="13" x2="17" y2="13" stroke="#1a2e05" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="9" x2="13" y2="17" stroke="#1a2e05" stroke-width="2" stroke-linecap="round"/></svg>`,
     notAllowed: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M4 8 L8 4 L16 6 L24 4 L28 8 L26 16 L28 24 L24 28 L16 26 L8 28 L4 24 L6 16 Z" fill="#dc2626" stroke="#1a2e05" stroke-width="2" stroke-linejoin="bevel"/><line x1="10" y1="10" x2="22" y2="22" stroke="#1a2e05" stroke-width="3" stroke-linecap="round"/><line x1="22" y1="10" x2="10" y2="22" stroke="#1a2e05" stroke-width="3" stroke-linecap="round"/></svg>`,
+    help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M4 8 L8 4 L16 6 L24 4 L28 8 L26 16 L28 24 L24 28 L16 26 L8 28 L4 24 L6 16 Z" fill="#84cc16" stroke="#1a2e05" stroke-width="2" stroke-linejoin="bevel"/><text x="16" y="22" text-anchor="middle" font-size="18" font-weight="bold" font-family="Arial,sans-serif" fill="#1a2e05">?</text></svg>`,
 };
 const graffiti: CursorTheme = {
     id: 'smashup-graffiti', gameId: 'smashup', label: '大杀四方', variantLabel: '爆裂涂鸦',
@@ -88,6 +90,13 @@ const popArtSvgs = {
         <circle cx="16" cy="16" r="12" fill="#FF2A2A" stroke="#000000" stroke-width="2.5"/>
         <line x1="10" y1="10" x2="22" y2="22" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
         <line x1="22" y1="10" x2="10" y2="22" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+    </svg>`,
+
+    // 线索（问号）
+    help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="12" fill="#000000" transform="translate(2, 2)"/>
+        <circle cx="16" cy="16" r="12" fill="#FFE600" stroke="#000000" stroke-width="2.5"/>
+        <text x="16" y="22" text-anchor="middle" font-size="18" font-weight="bold" font-family="Arial,sans-serif" fill="#000000">?</text>
     </svg>`
 };
 

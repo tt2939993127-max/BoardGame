@@ -107,6 +107,10 @@ export const RightSidebar = ({
                 initialResult: data.initialResult ?? { modifications: {}, modCount: 0, totalAdjustment: 0 },
                 localReducer: (current: any, step: any) => diceModifyReducer(current, step, config),
                 toCommands: diceModifyToCommands as any,
+                // any/adjust 模式：用 modCount 作为语义步骤数
+                getCompletedSteps: (config?.mode === 'any' || config?.mode === 'adjust')
+                    ? (result: any) => (result as DiceModifyResult).modCount
+                    : undefined,
             };
         } else {
             hydratedData = {

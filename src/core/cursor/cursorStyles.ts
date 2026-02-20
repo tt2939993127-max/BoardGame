@@ -12,8 +12,8 @@ import { buildCursors } from './themes';
 export interface CursorStyleTemplate {
     styleId: string;
     styleLabel: string;
-    svgs: CursorPreviewSvgs & { default: string; pointer: string; grabbing?: string; zoomIn?: string; notAllowed?: string };
-    hotspots?: { grabbing?: [number, number]; zoomIn?: [number, number]; notAllowed?: [number, number] };
+    svgs: CursorPreviewSvgs & { default: string; pointer: string; grabbing?: string; zoomIn?: string; notAllowed?: string; help?: string };
+    hotspots?: { grabbing?: [number, number]; zoomIn?: [number, number]; notAllowed?: [number, number]; help?: [number, number] };
 }
 
 /** 从共享样式模板创建游戏光标主题 */
@@ -64,6 +64,8 @@ function makeFuturisticSvgs(color: string, filterId: string): CursorStyleTemplat
         zoomIn: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs>${glow}</defs><circle cx="13" cy="13" r="8.5" fill="none" stroke="${color}" stroke-width="1.6" filter="url(#${filterId}-g)"/><circle cx="13" cy="13" r="5" fill="none" stroke="${hi}" stroke-width="0.8"/><line x1="13" y1="4" x2="13" y2="7" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/><line x1="13" y1="19" x2="13" y2="22" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/><line x1="4" y1="13" x2="7" y2="13" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/><line x1="19" y1="13" x2="22" y2="13" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/><line x1="10" y1="13" x2="16" y2="13" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/><line x1="13" y1="10" x2="13" y2="16" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/><line x1="20" y1="20" x2="28" y2="28" stroke="${color}" stroke-width="2.5" stroke-linecap="round" filter="url(#${filterId}-g)"/></svg>`,
         // 禁止：圆环 + 横杠（明确禁止符）
         notAllowed: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs>${glow}</defs><circle cx="16" cy="16" r="11" fill="rgba(26,32,44,0.65)" stroke="${color}" stroke-width="1.6" filter="url(#${filterId}-g)"/><line x1="8" y1="16" x2="24" y2="16" stroke="#ff1744" stroke-width="2.8" stroke-linecap="round" filter="url(#${filterId}-g)"/></svg>`,
+        // 帮助：圆环 + 问号
+        help: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs>${glow}</defs><circle cx="16" cy="16" r="11" fill="rgba(26,32,44,0.65)" stroke="${color}" stroke-width="1.6" filter="url(#${filterId}-g)"/><text x="16" y="21" text-anchor="middle" font-size="16" font-weight="bold" font-family="Arial,sans-serif" fill="${color}">?</text></svg>`,
     };
 }
 

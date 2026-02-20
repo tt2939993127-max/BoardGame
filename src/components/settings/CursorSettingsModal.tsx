@@ -42,13 +42,14 @@ const defaultPreviewSvgs: CursorPreviewSvgs = {
 // 共享 SVG 预览
 // ---------------------------------------------------------------------------
 
-const CURSOR_STATE_KEYS: (keyof CursorPreviewSvgs)[] = ['default', 'pointer', 'grabbing', 'zoomIn', 'notAllowed'];
+const CURSOR_STATE_KEYS: (keyof CursorPreviewSvgs)[] = ['default', 'pointer', 'grabbing', 'zoomIn', 'notAllowed', 'help'];
 const CURSOR_STATE_I18N: Partial<Record<keyof CursorPreviewSvgs, string>> = {
     default: 'cursor.stateDefault',
     pointer: 'cursor.statePointer',
     grabbing: 'cursor.stateGrabbing',
     zoomIn: 'cursor.stateZoomIn',
     notAllowed: 'cursor.stateNotAllowed',
+    help: 'cursor.stateHelp',
 };
 
 function toSvgDataUri(svg: string): string {
@@ -108,7 +109,7 @@ function VariantPickerModal({
                 {/* 表头 */}
                 <div className="px-4 pt-3 pb-1 flex items-center">
                     <span className="w-28 shrink-0" />
-                    <div className="grid grid-cols-5 gap-4 flex-1">
+                    <div className="grid grid-cols-6 gap-4 flex-1">
                         {stateLabels.map(({ key, label }) => (
                             <span key={key} className="text-center text-[10px] text-parchment-light-text font-bold truncate">
                                 {label}
@@ -139,7 +140,7 @@ function VariantPickerModal({
                                         {variant.variantLabel}
                                     </span>
                                 </div>
-                                <div className="grid grid-cols-5 gap-4 flex-1">
+                                <div className="grid grid-cols-6 gap-4 flex-1">
                                     {CURSOR_STATE_KEYS.map((key) => {
                                         const svg = variant.previewSvgs[key];
                                         if (!svg) return <div key={key} className="flex justify-center"><div className="w-7 h-7" /></div>;

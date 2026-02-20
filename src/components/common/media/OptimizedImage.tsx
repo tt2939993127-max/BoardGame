@@ -32,7 +32,18 @@ export const SHIMMER_BG: React.CSSProperties = {
  */
 const CDN_RETRY_LEVEL = 1;
 const LOCAL_FALLBACK_LEVEL = 2;
-const FINAL_ERROR_LEVEL = 3;
+
+/** 指数退避自动重试配置 */
+const AUTO_RETRY_MAX = 5;           // 最多自动重试 5 轮
+const AUTO_RETRY_BASE_MS = 2000;    // 首次 2s
+const AUTO_RETRY_MAX_MS = 30000;    // 上限 30s
+
+/** 计算指数退避延迟（带 ±25% 抖动，避免多图同时重试雪崩） */
+const getRetryDelay = (attempt: number) => {
+    const base = Math.min(AUTO_RETRY_BASE_MS * 2 ** attempt, AUTO_RETRY_MAX_MS);
+    const jitter = base * (0.75 + Math.random() * 0.5); // [0.75x, 1.25x]
+    return Math.round(jitter);
+};
 
 /** 判断 src 是否为 CDN 外部 URL（http/https），本地路径无需重试/降级 */
 const isCdnUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
@@ -51,6 +62,17 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     const [loaded, setLoaded] = React.useState(() => preloaded);
     const [errored, setErrored] = React.useState(false);
     const imgRef = React.useRef<HTMLImageElement>(null);
+    /** 自动重试轮次（所有回退用尽后从 0 开始计数） */
+    const autoRetryRef = React.useRef(0);
+    const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    /** 重置回退链，从 CDN 首选路径重新开始 */
+    const resetFallbackChain = React.useCallback(() => {
+        retryTimerRef.current = null;
+        setFallbackLevel(0);
+        setErrored(false);
+        setLoaded(false);
+    }, []);
 
     // CDN 国际化路径
     const localizedUrls = getLocalizedImageUrls(src, effectiveLocale);
@@ -89,6 +111,11 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     React.useLayoutEffect(() => {
         setFallbackLevel(0);
         setErrored(false);
+        autoRetryRef.current = 0;
+        if (retryTimerRef.current) {
+            clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = null;
+        }
         if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
             setLoaded(true);
         } else if (isImagePreloaded(src, effectiveLocale)) {
@@ -116,6 +143,7 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
 
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
+        autoRetryRef.current = 0; // 加载成功，重置重试计数
         markImageLoaded(src, effectiveLocale, event.currentTarget);
         if (fallbackLevel === LOCAL_FALLBACK_LEVEL) {
             console.warn('[OptimizedImage] CDN 不可用，已降级到本地资源:', src);
@@ -124,12 +152,22 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     };
 
     const handleError: React.ReactEventHandler<HTMLImageElement> = (event) => {
-        // 非 CDN 路径或已到最终失败层级，直接报错
+        // 非 CDN 路径或已到最终失败层级 → 进入自动重试
         if (!isCdnUrl(cdnUrl) || fallbackLevel >= LOCAL_FALLBACK_LEVEL) {
-            console.error('[OptimizedImage] 加载失败（所有回退已用尽）:', src, 'fallbackLevel=', fallbackLevel);
-            setErrored(true);
-            setLoaded(true);
-            onError?.(event);
+            const attempt = autoRetryRef.current;
+            if (attempt < AUTO_RETRY_MAX) {
+                // 指数退避自动重试：重置回退链从头再来
+                autoRetryRef.current = attempt + 1;
+                const delay = getRetryDelay(attempt);
+                console.warn(`[OptimizedImage] 所有回退已用尽，${delay}ms 后自动重试（第 ${attempt + 1}/${AUTO_RETRY_MAX} 轮）:`, src);
+                retryTimerRef.current = setTimeout(resetFallbackChain, delay);
+            } else {
+                // 超过最大重试次数，最终放弃
+                console.error('[OptimizedImage] 加载失败（已达最大重试次数）:', src);
+                setErrored(true);
+                setLoaded(true);
+                onError?.(event);
+            }
             return;
         }
         // 还有回退层级，推进到下一级
@@ -137,6 +175,29 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel}:`, src);
         setFallbackLevel(nextLevel);
     };
+
+    // 监听网络恢复事件：断网恢复后立即重试，不等定时器
+    React.useEffect(() => {
+        if (!errored && autoRetryRef.current === 0) return; // 没有失败过，不需要监听
+        const handleOnline = () => {
+            if (autoRetryRef.current > 0 && autoRetryRef.current < AUTO_RETRY_MAX) {
+                console.info('[OptimizedImage] 网络恢复，立即重试:', src);
+                if (retryTimerRef.current) {
+                    clearTimeout(retryTimerRef.current);
+                }
+                resetFallbackChain();
+            }
+        };
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, [errored, src, resetFallbackChain]);
+
+    // 组件卸载时清理定时器
+    React.useEffect(() => {
+        return () => {
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        };
+    }, []);
 
     const showShimmer = placeholder && !loaded;
 

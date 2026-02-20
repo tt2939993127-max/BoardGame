@@ -34,12 +34,13 @@ export function svgCursor(svg: string, hotX: number, hotY: number, fallback: str
 }
 
 export function buildCursors(
-    svgs: { default: string; pointer: string; grabbing?: string; zoomIn?: string; notAllowed?: string },
-    hotspots?: { grabbing?: [number, number]; zoomIn?: [number, number]; notAllowed?: [number, number] },
+    svgs: { default: string; pointer: string; grabbing?: string; zoomIn?: string; notAllowed?: string; help?: string },
+    hotspots?: { grabbing?: [number, number]; zoomIn?: [number, number]; notAllowed?: [number, number]; help?: [number, number] },
 ) {
     const gh = hotspots?.grabbing ?? [14, 16];
     const zh = hotspots?.zoomIn ?? [16, 16];
     const nh = hotspots?.notAllowed ?? [16, 16];
+    const hh = hotspots?.help ?? [16, 16];
     return {
         default: svgCursor(svgs.default, 6, 3, 'default'),
         pointer: svgCursor(svgs.pointer, 14, 3, 'pointer'),
@@ -47,6 +48,7 @@ export function buildCursors(
         ...(svgs.grabbing ? { grabbing: svgCursor(svgs.grabbing, gh[0], gh[1], 'grabbing') } : {}),
         ...(svgs.zoomIn ? { zoomIn: svgCursor(svgs.zoomIn, zh[0], zh[1], 'zoom-in') } : {}),
         ...(svgs.notAllowed ? { notAllowed: svgCursor(svgs.notAllowed, nh[0], nh[1], 'not-allowed') } : {}),
+        ...(svgs.help ? { help: svgCursor(svgs.help, hh[0], hh[1], 'help') } : {}),
     };
 }
 

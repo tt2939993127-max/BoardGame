@@ -20,6 +20,14 @@ export class UserUISettings {
     @Prop({ type: String, default: 'home' })
     cursorOverrideScope!: string;
 
+    /** 光标高对比模式（白色外描边） */
+    @Prop({ type: Boolean, default: false })
+    cursorHighContrast!: boolean;
+
+    /** 每个游戏记住的变体 ID（gameId → themeId） */
+    @Prop({ type: Object, default: {} })
+    cursorGameVariants!: Record<string, string>;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

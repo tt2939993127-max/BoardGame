@@ -52,20 +52,40 @@ export class UserSettingsService {
         );
     }
 
-    async getCursorPreference(userId: string): Promise<{ cursorTheme: string; overrideScope: string } | null> {
+    async getCursorPreference(userId: string): Promise<{
+        cursorTheme: string;
+        overrideScope: string;
+        highContrast: boolean;
+        gameVariants: Record<string, string>;
+    } | null> {
         const doc = await this.uiSettingsModel.findOne({ userId });
         if (!doc || (!doc.cursorTheme && !doc.cursorOverrideScope)) return null;
         return {
             cursorTheme: doc.cursorTheme || 'default',
             overrideScope: doc.cursorOverrideScope || 'home',
+            highContrast: doc.cursorHighContrast === true,
+            gameVariants: (doc.cursorGameVariants && typeof doc.cursorGameVariants === 'object')
+                ? doc.cursorGameVariants
+                : {},
         };
     }
 
-    async upsertCursorPreference(userId: string, cursorTheme: string, overrideScope: string): Promise<void> {
+    async upsertCursorPreference(
+        userId: string,
+        cursorTheme: string,
+        overrideScope: string,
+        highContrast: boolean,
+        gameVariants: Record<string, string>,
+    ): Promise<void> {
         await this.uiSettingsModel.findOneAndUpdate(
             { userId },
             {
-                $set: { cursorTheme, cursorOverrideScope: overrideScope },
+                $set: {
+                    cursorTheme,
+                    cursorOverrideScope: overrideScope,
+                    cursorHighContrast: highContrast,
+                    cursorGameVariants: gameVariants,
+                },
                 $setOnInsert: { userId },
             },
             { upsert: true }

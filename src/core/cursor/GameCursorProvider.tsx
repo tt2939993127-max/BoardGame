@@ -54,8 +54,10 @@ export function useCursorPlayerID(currentPlayer: string | null | undefined) {
 }
 
 interface GameCursorProviderProps {
-    /** 游戏 manifest 中声明的光标主题 ID */
+    /** 游戏 manifest 中声明的光标主题 ID（回退默认值） */
     themeId?: string;
+    /** 游戏 ID（用于查询 gameVariants 中用户选择的变体） */
+    gameId?: string;
     /**
      * 当前玩家 ID（如 '0'、'1'）。
      * 若主题声明了 playerThemes，则按此 ID 选择阵营专属光标；未匹配时回退到主题默认值。
@@ -75,6 +77,7 @@ function applyHighContrast(theme: CursorTheme, previewSvgs: CursorTheme['preview
         ...(s.grabbing ? { grabbing: svgCursor(injectOutlineFilter(s.grabbing), 14, 16, 'grabbing') } : {}),
         ...(s.zoomIn ? { zoomIn: svgCursor(injectOutlineFilter(s.zoomIn), 13, 13, 'zoom-in') } : {}),
         ...(s.notAllowed ? { notAllowed: svgCursor(injectOutlineFilter(s.notAllowed), 16, 16, 'not-allowed') } : {}),
+        ...(s.help ? { help: svgCursor(injectOutlineFilter(s.help), 16, 16, 'help') } : {}),
     };
 }
 
@@ -98,11 +101,14 @@ function buildCursorCSS(containerId: string, theme: CursorTheme): string {
     if (theme.zoomIn) {
         rules.push(`${scope} [style*="cursor: zoom-in"], ${scope} [style*="cursor:zoom-in"], ${scope} .cursor-zoom-in { cursor: ${theme.zoomIn}; }`);
     }
+    if (theme.help) {
+        rules.push(`${scope} [style*="cursor: help"], ${scope} [style*="cursor:help"], ${scope} .cursor-help { cursor: ${theme.help}; }`);
+    }
 
     return rules.join('\n');
 }
 
-export function GameCursorProvider({ themeId, playerID: propPlayerID, children }: GameCursorProviderProps) {
+export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, children }: GameCursorProviderProps) {
     const containerId = 'game-cursor-scope';
     const { preference } = useCursorPreference();
     const [dynamicPlayerID, setDynamicPlayerIDState] = useState<string | null>(null);
@@ -119,14 +125,19 @@ export function GameCursorProvider({ themeId, playerID: propPlayerID, children }
 
     // 决定实际使用的光标主题
     const effectiveThemeId = useMemo(() => {
+        // 用户选了覆盖所有游戏
         if (preference.overrideScope === 'all' && preference.cursorTheme !== 'default') {
             return preference.cursorTheme;
         }
         if (preference.overrideScope === 'all' && preference.cursorTheme === 'default') {
             return undefined;
         }
+        // 仅主页模式：优先使用用户为该游戏选择的变体，回退到 manifest 默认值
+        if (gameId && preference.gameVariants[gameId]) {
+            return preference.gameVariants[gameId];
+        }
         return themeId;
-    }, [preference, themeId]);
+    }, [preference, themeId, gameId]);
 
     const cssText = useMemo(() => {
         if (!effectiveThemeId) return null;

@@ -13,6 +13,7 @@ export interface CursorPreviewSvgs {
     grabbing?: string;
     zoomIn?: string;
     notAllowed?: string;
+    help?: string;
 }
 
 /** 光标状态 → CSS cursor 值的映射 */
@@ -39,6 +40,8 @@ export interface CursorTheme {
     zoomIn?: string;
     /** 禁用状态 */
     notAllowed?: string;
+    /** 帮助/提示（悬停查看更多信息） */
+    help?: string;
     /**
      * 按玩家阵营切换的子主题映射。
      * key 为 playerID 字符串（如 '0'、'1'），value 为该阵营专属的光标 CSS 值集合。

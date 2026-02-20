@@ -117,3 +117,9 @@ registerCursorThemes([{
 - "设为当前" → 保存 `cursorTheme` 到 DB（`isDirty` 时可点）
 - 高对比 / 覆盖范围 → 即时保存（独立偏好，不走 pending 流程）
 - 主网格卡片预览：优先显示 `gameVariants[gameId]` 记住的变体，回退到注册表第一个
+
+### 游戏内光标选择逻辑（`GameCursorProvider`）
+
+- `overrideScope='all'` + `cursorTheme` 非 default → 用户选的光标覆盖所有游戏
+- `overrideScope='all'` + `cursorTheme='default'` → 不注入自定义光标
+- `overrideScope='home'` → 优先使用 `gameVariants[gameId]`（用户为该游戏选的变体），回退到 manifest 声明的 `themeId`

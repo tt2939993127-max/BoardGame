@@ -76,20 +76,26 @@ export function useMultistepInteraction<TStep = unknown, TResult = unknown>(
             const next = prev + 1;
             // maxSteps 达到时自动 confirm
             // 直接使用上方已计算好的 newResult，不依赖 ref（避免 React 批量更新导致 ref 仍是旧值）
-            if (data.maxSteps !== undefined && next >= data.maxSteps) {
-                if (newResult === null) return next;
-                if (confirmedRef.current) return next; // 已经 confirm 过，跳过
-                confirmedRef.current = true;
-                const commands = data.toCommands(newResult);
-                // 捕获当前 interactionId，防止闭包中引用变化
-                const confirmId = interactionId;
-                // 用 queueMicrotask 确保在当前 React 渲染批次完成后再 dispatch
-                queueMicrotask(() => {
-                    for (const cmd of commands) {
-                        dispatch(cmd.type, cmd.payload);
-                    }
-                    dispatch(INTERACTION_COMMANDS.CONFIRM, { interactionId: confirmId });
-                });
+            if (data.maxSteps !== undefined && newResult !== null) {
+                // 优先使用 getCompletedSteps 从结果中提取语义步骤数（如已修改的不同骰子数），
+                // 未提供时退化为按 step() 调用次数计数
+                const completedSteps = data.getCompletedSteps
+                    ? data.getCompletedSteps(newResult)
+                    : next;
+                if (completedSteps >= data.maxSteps) {
+                    if (confirmedRef.current) return next; // 已经 confirm 过，跳过
+                    confirmedRef.current = true;
+                    const commands = data.toCommands(newResult);
+                    // 捕获当前 interactionId，防止闭包中引用变化
+                    const confirmId = interactionId;
+                    // 用 queueMicrotask 确保在当前 React 渲染批次完成后再 dispatch
+                    queueMicrotask(() => {
+                        for (const cmd of commands) {
+                            dispatch(cmd.type, cmd.payload);
+                        }
+                        dispatch(INTERACTION_COMMANDS.CONFIRM, { interactionId: confirmId });
+                    });
+                }
             }
             return next;
         });
