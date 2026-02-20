@@ -520,7 +520,7 @@ describe('食人花 ongoing 能力', () => {
     });
 
     describe('killer_plant_blossom: 绽放', () => {
-        test('给予3个额外随从额度', () => {
+        test('给予3个同名额外随从额度', () => {
             const base = makeBase();
             const state = makeState([base]);
 
@@ -534,6 +534,7 @@ describe('食人花 ongoing 能力', () => {
             result.events.forEach(e => {
                 expect(e.type).toBe(SU_EVENTS.LIMIT_MODIFIED);
                 expect((e as any).payload.limitType).toBe('minion');
+                expect((e as any).payload.sameNameOnly).toBe(true);
             });
         });
     });

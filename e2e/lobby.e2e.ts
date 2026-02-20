@@ -32,8 +32,9 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByRole('button', { name: /Local|本地/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /Tutorial|教程/i })).toBeVisible();
 
-        // Switch to leaderboard tab to ensure tab switch works
+        // Switch to leaderboard tab and verify data loads (not stuck on loading)
         await page.getByRole('button', { name: /Leaderboard|排行榜/i }).click();
-        await expect(page.getByText(/Loading|Top Wins|加载|胜场/i)).toBeVisible();
+        // 排行榜应完成加载：显示"Top Wins/胜场排行"（有数据）或"No data/暂无数据"（空），不能一直卡在 loading
+        await expect(page.getByText(/Top Wins|胜场排行|No data|暂无数据/i)).toBeVisible({ timeout: 10000 });
     });
 });

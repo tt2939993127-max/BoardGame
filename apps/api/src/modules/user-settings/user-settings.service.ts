@@ -51,6 +51,26 @@ export class UserSettingsService {
             { upsert: true }
         );
     }
+
+    async getCursorPreference(userId: string): Promise<{ cursorTheme: string; overrideScope: string } | null> {
+        const doc = await this.uiSettingsModel.findOne({ userId });
+        if (!doc || (!doc.cursorTheme && !doc.cursorOverrideScope)) return null;
+        return {
+            cursorTheme: doc.cursorTheme || 'default',
+            overrideScope: doc.cursorOverrideScope || 'home',
+        };
+    }
+
+    async upsertCursorPreference(userId: string, cursorTheme: string, overrideScope: string): Promise<void> {
+        await this.uiSettingsModel.findOneAndUpdate(
+            { userId },
+            {
+                $set: { cursorTheme, cursorOverrideScope: overrideScope },
+                $setOnInsert: { userId },
+            },
+            { upsert: true }
+        );
+    }
 }
 
 function normalizeBgmSelections(

@@ -2,7 +2,7 @@
  * 圣骑士 (Paladin) GTR 技能运行时覆盖测试
  *
  * 通过 GameTestRunner 走完整管线验证技能效果：
- * 1. blessing-of-might — 不可防御 3 伤害 + 暴击 + 精准（onOffensiveRollEnd CHOICE 流程）
+ * 1. blessing-of-might — 不可防御 3 伤害 + 暴击 + 精准（preDefense 授予，offensiveRollEnd 门控过滤无弹窗）
  * 2. holy-strike-small — 小顺 5 伤害 + 治疗 1（可防御，BONUS_DICE_REROLL 流程）
  * 3. vengeance — 获得神罚 + 2 CP（无伤害，跳过防御）
  * 4. unyielding-faith — 终极：不可防御 10 伤害 + 治疗 5 + 神圣祝福
@@ -12,8 +12,8 @@
  * - holy-defense 生成 displayOnly 的 BONUS_DICE_REROLL_REQUESTED
  *   SKIP_BONUS_DICE_REROLL 必须由 settlement.attackerId（防御方）发出
  * - grantToken 效果在 preDefense 时机执行
- *   暴击/精准 Token 的时机是 onOffensiveRollEnd，会在攻击掷骰阶段结束时触发 CHOICE_REQUESTED
- *   SYS_INTERACTION_RESPOND 'skip' 跳过使用 Token
+ *   不可防御攻击的 offensiveRollEnd Token 使用阶段会被门控过滤：
+ *   暴击门控（伤害≥5）+ 精准门控（攻击已不可防御时无意义）
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,6 +30,7 @@ import {
 import type { DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
+import { BLESSING_OF_MIGHT_2 } from '../heroes/paladin/abilities';
 
 // ============================================================================
 // 自定义 Setup：双方圣骑士，移除响应卡避免干扰
@@ -84,10 +85,8 @@ describe('圣骑士 GTR 技能覆盖', () => {
         it('3 剑 + 1 祈祷造成 3 不可防御伤害 + 获得暴击和精准', () => {
             // 进攻骰: [1,1,1,6,3] → 3 sword + 1 pray + 1 helm
             // 流程：preDefense 授予 CRIT+ACCURACY → 不可防御
-            //   → offensiveRoll exit → CHOICE_REQUESTED (onOffensiveRollEnd Token)
-            //   → 由于伤害=3 < 5，暴击被门控，只有精准可用
-            //   → SYS_INTERACTION_RESPOND 跳过 → resolveAttack → 3 伤害 → main2
-            // 选项顺序：option-0=ACCURACY, option-1=skip（暴击因伤害<5被门控）
+            //   → offensiveRoll exit → 暴击门控(3<5)过滤 + 精准门控(已不可防御)过滤
+            //   → offensiveRollEndTokens 为空 → 直接结算 → 3 伤害 → main2
             const random = createQueuedRandom([1, 1, 1, 6, 3]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
@@ -101,8 +100,7 @@ describe('圣骑士 GTR 技能覆盖', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'blessing-of-might' }),
-                    cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → halt (CHOICE_REQUESTED for onOffensiveRollEnd tokens)
-                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }), // 跳过使用 Token (option-1=skip，因为只有 ACCURACY 可用) → auto-continue → main2
+                    cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → 不可防御+门控过滤 → 直接结算 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -226,6 +224,86 @@ describe('圣骑士 GTR 技能覆盖', () => {
                             tokens: { [TOKEN_IDS.BLESSING_OF_DIVINITY]: 1 },
                         },
                         '1': { hp: 40 },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+    });
+
+    // ========================================================================
+    // blessing-of-might-2 — 力量祝福 II（升级版，含两个变体）
+    // ========================================================================
+    describe('力量祝福 II (blessing-of-might-2)', () => {
+        /** 升级 setup：将 blessing-of-might 替换为 BLESSING_OF_MIGHT_2 */
+        function createPaladinLevel2Setup() {
+            return (playerIds: PlayerId[], random: RandomFn): MatchState<DiceThroneCore> => {
+                const base = createPaladinSetup()(playerIds, random);
+                const idx = base.core.players['0'].abilities.findIndex(a => a.id === 'blessing-of-might');
+                if (idx >= 0) base.core.players['0'].abilities[idx] = BLESSING_OF_MIGHT_2 as any;
+                base.core.players['0'].abilityLevels['blessing-of-might'] = 2;
+                return base;
+            };
+        }
+
+        it('神力信徒 II: 3剑1祈祷 → 4不可防御伤害 + 暴击 + 精准（无弹窗）', () => {
+            // 进攻骰: [1,1,1,6,3] → 3 sword + 1 pray + 1 helm
+            // 触发 blessing-of-might-2-main（priority 1）
+            // preDefense 授予 CRIT+ACCURACY → 不可防御
+            // offensiveRollEnd 门控：暴击(4<5)过滤 + 精准(已不可防御)过滤 → 无弹窗
+            const random = createQueuedRandom([1, 1, 1, 6, 3]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup: createPaladinLevel2Setup(), assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '神力信徒II 3剑1祈祷=4不可防御伤害+暴击+精准',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'blessing-of-might-2-main' }),
+                    cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → 门控过滤 → 直接结算 → main2
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { tokens: { [TOKEN_IDS.CRIT]: 1, [TOKEN_IDS.ACCURACY]: 1 } },
+                        '1': { hp: 46 },  // 50 - 4 = 46
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('进攻姿态: 2剑1祈祷 → 2不可防御伤害 + 选择暴击或精准', () => {
+            // 进攻骰: [1,1,6,3,3] → 2 sword + 1 pray + 2 helm
+            // 触发 blessing-of-might-2-stance（priority 0）
+            // preDefense 弹出选择：暴击 or 精准
+            // 选择暴击（option-0）→ 获得 1 暴击 Token
+            const random = createQueuedRandom([1, 1, 6, 3, 3]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup: createPaladinLevel2Setup(), assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '进攻姿态 2剑1祈祷=2不可防御伤害+选择暴击',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'blessing-of-might-2-stance' }),
+                    cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → preDefense choice → halt
+                    // 选择暴击（option-0 = crit）→ 自动继续 → 不可防御 → 直接结算 → main2
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { tokens: { [TOKEN_IDS.CRIT]: 1 } },
+                        '1': { hp: 48 },  // 50 - 2 = 48
                     },
                 },
             });

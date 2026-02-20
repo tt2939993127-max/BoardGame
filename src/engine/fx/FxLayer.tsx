@@ -71,7 +71,10 @@ export const FxLayer: React.FC<FxLayerProps> = ({
       <AnimatePresence>
         {activeEffects.map(event => {
           const entry = registry.resolve(event.cue);
-          if (!entry) return null;
+          if (!entry) {
+            console.warn('[FxLayer] 未找到 cue 注册:', event.cue);
+            return null;
+          }
 
           const Renderer = entry.renderer;
           return (

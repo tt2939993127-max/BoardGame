@@ -70,16 +70,34 @@ export function validate(
                 return { valid: true };
             }
 
-            // 正常手牌打出：全局额度 + 基地限定额度
-            // 只有当全局额度已用完且该基地也没有限定额度时才拒绝
+            // 正常手牌打出：全局额度 + 同名额度 + 基地限定额度
             const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
+            const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
             const globalQuotaRemaining = player.minionLimit - player.minionsPlayed;
-            if (globalQuotaRemaining <= 0 && baseQuota <= 0) {
+            if (globalQuotaRemaining <= 0 && sameNameRemaining <= 0 && baseQuota <= 0) {
                 return { valid: false, error: '本回合随从额度已用完' };
             }
             const card = player.hand.find(c => c.uid === command.payload.cardUid);
             if (!card) return { valid: false, error: '手牌中没有该卡牌' };
             if (card.type !== 'minion') return { valid: false, error: '该卡牌不是随从' };
+            // 同名额度检查：全局额度用完后，如果只剩同名额度，必须匹配已锁定的 defId
+            if (globalQuotaRemaining <= 0 && sameNameRemaining > 0 && baseQuota <= 0) {
+                // 已锁定 defId 时，只能打出同名随从
+                if (player.sameNameMinionDefId !== null && player.sameNameMinionDefId !== undefined && card.defId !== player.sameNameMinionDefId) {
+                    return { valid: false, error: '额外出牌只能打出同名随从' };
+                }
+            }
+            // 基地限定同名额度检查：全局额度和全局同名额度都用完后，使用基地限定额度时检查同名约束
+            if (globalQuotaRemaining <= 0 && sameNameRemaining <= 0 && baseQuota > 0) {
+                if (player.baseLimitedSameNameRequired?.[baseIndex]) {
+                    // 必须与该基地上已有随从同名
+                    const base = core.bases[baseIndex];
+                    const baseDefIds = new Set(base.minions.map(m => m.defId));
+                    if (!baseDefIds.has(card.defId)) {
+                        return { valid: false, error: '只能打出与该基地上随从同名的随从' };
+                    }
+                }
+            }
             // 全局力量限制检查：额外出牌机会可能有力量上限（如家园：力量≤2）
             if (player.extraMinionPowerMax !== undefined && player.minionsPlayed >= 1) {
                 const minionDef = getMinionDef(card.defId);

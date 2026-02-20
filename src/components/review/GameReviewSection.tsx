@@ -112,7 +112,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
                             {user && (
                                 <button
                                     onClick={handleOpenReviewModal}
-                                    className="flex items-center gap-1.5 text-[10px] font-bold text-parchment-base-text hover:text-parchment-brown transition-colors uppercase tracking-widest underline decoration-parchment-base-text/20 underline-offset-4"
+                                    className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold text-parchment-card-bg bg-parchment-brown hover:bg-parchment-brown/80 rounded transition-colors uppercase tracking-widest shadow-sm"
                                 >
                                     {myReview ? t('form.edit', '修改') : t('form.writeReview', '写评价')}
                                 </button>

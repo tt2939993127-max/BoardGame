@@ -85,6 +85,8 @@
     "minion_short": "Minion",
     "minion_global_quota": "Global Quota",
     "minion_power_cap": "Power Cap ≤{{max}}",
+    "same_name_quota": "Same-name Quota +{{count}}",
+    "same_name_only": "Extra plays must be same-name minions",
     "action_short": "Action",
     "action_global_quota": "Global Quota",
     "action_extra_hint": "Includes extra action quota +{{extra}}",
@@ -1186,5 +1188,13 @@
       "name": "The Stadium",
       "abilityText": "After a minion here is destroyed, its controller draws a card."
     }
+  },
+  "endgame": {
+    "victory": "Victory",
+    "defeat": "Defeat",
+    "draw": "Draw",
+    "gameOver": "Game Over",
+    "scoreTrack": "Score Track",
+    "madnessPenalty": "Madness ×{{count}} (-{{penalty}})"
   }
 }

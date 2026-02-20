@@ -122,18 +122,18 @@ public/assets/atlas-configs/
     └── ability-cards-common.atlas.json   # DiceThrone 非规则网格，需要精确裁切坐标
 ```
 
-**各游戏策略**：
-- **DiceThrone**：`loadCardAtlasConfig()` 从 `/assets/atlas-configs/dicethrone/` 加载 JSON（非规则网格）
-- **SmashUp**：`loadCardAtlasConfig(path, defaultGrid)` 通过 `getLocalizedAssetPath()` + 固定 locale 探测图片尺寸 + 行列数生成配置（规则网格，不需要 JSON，尺寸与语言无关但文件在 i18n/ 目录下）
-- **SummonerWars**：`initSpriteAtlases(locale)` 使用硬编码的 `SpriteAtlasConfig` 常量（规则网格，不需要 JSON）
+**统一图集注册模式**：
+- **均匀网格**：`registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })` — 尺寸从 CriticalImageGate 预加载缓存自动解析，零配置文件。SmashUp 和 SummonerWars 使用此模式。
+- **不规则网格**：`registerCardAtlasSource(id, { image, config })` — config 从静态 JSON import（构建时内联）。DiceThrone 使用此模式（`ability-cards-common.atlas.json`）。
+- **注册时机**：所有游戏在模块顶层同步注册，确保首帧渲染时 atlas 已可用。
 
 ### 各游戏图集加载模式
 
-| 游戏 | 加载方式 | 说明 |
-|------|----------|------|
-| SmashUp | `loadCardAtlasConfig(path, defaultGrid)` | 图片尺寸探测走 `getLocalizedAssetPath()` + 固定 locale（文件在 i18n/ 目录下），注册到系统 B |
-| DiceThrone | `loadCardAtlasConfig()` | 共享 JSON 配置（语言无关），注册到系统 B |
-| SummonerWars | `initSpriteAtlases(locale)` | 内部调用 `getLocalizedAssetPath`，注册到系统 A |
+| 游戏 | 注册方式 | 网格类型 | 说明 |
+|------|----------|----------|------|
+| SmashUp | `registerLazyCardAtlasSource` | 均匀 | 模块顶层 `initSmashUpAtlases()` 同步注册，尺寸懒解析 |
+| DiceThrone | `registerCardAtlasSource` | 不规则 | 模块顶层 `initDiceThroneCardAtlases()` 同步注册，config 从 JSON import |
+| SummonerWars | `registerLazyCardAtlasSource` + `globalSpriteAtlasRegistry` | 均匀 | `initSpriteAtlases(locale)` 在 useEffect 中调用（需 locale 构建 URL），cardAtlasRegistry 懒解析 |
 
 ## CDN 部署
 

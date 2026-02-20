@@ -43,6 +43,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                onClick={(e) => e.stopPropagation()}
                 className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
             >
                 {/* 关闭按钮 */}
@@ -63,7 +64,10 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                     </div>
                     <div className="flex-1 overflow-hidden">
                         <FriendList
-                            onSelectFriend={(id) => setSelectedFriendId(id)}
+                            onSelectFriend={(id) => {
+                                if (!id) return;
+                                setSelectedFriendId(id);
+                            }}
                             activeFriendId={selectedFriendId || undefined}
                         />
                     </div>

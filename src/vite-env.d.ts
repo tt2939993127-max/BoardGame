@@ -10,3 +10,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
     readonly env: ImportMetaEnv;
 }
+
+/** 构建时注入的 locale JSON content hash 映射（由 vite-locale-hash 插件生成） */
+declare const __LOCALE_HASHES__: Record<string, string>;

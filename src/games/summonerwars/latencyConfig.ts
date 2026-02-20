@@ -3,7 +3,7 @@
  *
  * 召唤师战争大部分命令为确定性操作（召唤、移动、建造等），
  * 仅攻击确认（掷骰子）和开始游戏（洗牌）依赖随机数。
- * 技能激活可能触发随机效果，保守标记为非确定性。
+ * 技能激活由 Random Probe 自动检测确定性（当前所有执行器均不调用 random）。
  */
 
 import type { LatencyOptimizationConfig } from '../../engine/transport/latency/types';
@@ -51,8 +51,6 @@ const NON_DETERMINISTIC_COMMANDS = [
     SW_COMMANDS.HOST_START_GAME,
     // 确认攻击 → 掷骰子（random.random）
     SW_COMMANDS.CONFIRM_ATTACK,
-    // 激活技能 → 部分技能可能触发随机效果
-    SW_COMMANDS.ACTIVATE_ABILITY,
 ] as const;
 
 // ============================================================================
@@ -77,6 +75,9 @@ export const summonerWarsLatencyConfig: LatencyOptimizationConfig = {
             ...Object.fromEntries(
                 NON_DETERMINISTIC_COMMANDS.map(cmd => [cmd, 'non-deterministic' as const]),
             ),
+            // 技能激活：不显式声明，由 Random Probe 自动检测。
+            // 确定性技能（心灵捕获/幻化/念力等）自动乐观预测；
+            // 未来若新增含随机效果的技能，probe 检测到 random 调用后自动回退，无需手动维护。
         },
         // 乐观动画：确定性命令立即播放动画，不等服务端确认
         animationMode: {
@@ -94,6 +95,8 @@ export const summonerWarsLatencyConfig: LatencyOptimizationConfig = {
             [FLOW_COMMANDS.ADVANCE_PHASE]: 'optimistic',
             // 魔力弃牌 → 立即反馈
             [SW_COMMANDS.DISCARD_FOR_MAGIC]: 'optimistic',
+            // 技能激活 → 确定性，立即反馈（心灵捕获/幻化/念力等）
+            [SW_COMMANDS.ACTIVATE_ABILITY]: 'optimistic',
         },
     },
     batching: {

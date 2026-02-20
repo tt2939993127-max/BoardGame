@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Mail, History, Image, MessageSquare, Bell } from 'lucide-react';
+import { LogOut, Mail, History, Image, MessageSquare, Bell, MousePointer2 } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
 import { FriendsChatModal, SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
 import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
+import { CursorSettingsModal } from '../settings/CursorSettingsModal';
 import { NOTIFICATION_API_URL } from '../../config/server';
 import { useSocial } from '../../contexts/SocialContext';
 
@@ -25,6 +26,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     const [hasNewNotification, setHasNewNotification] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const avatarModalIdRef = useRef<string | null>(null);
+    const cursorModalIdRef = useRef<string | null>(null);
 
     // 铃铛红点 = 系统通知 OR 好友请求 OR 未读消息
     const hasBellBadge = hasNewNotification || requests.length > 0 || unreadTotal > 0;
@@ -124,6 +126,29 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
         });
     };
 
+    const handleOpenCursor = () => {
+        setIsOpen(false);
+        if (cursorModalIdRef.current) {
+            closeModal(cursorModalIdRef.current);
+            cursorModalIdRef.current = null;
+        }
+        cursorModalIdRef.current = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                cursorModalIdRef.current = null;
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <CursorSettingsModal
+                    isOpen
+                    onClose={close}
+                    closeOnBackdrop={closeOnBackdrop}
+                />
+            ),
+        });
+    };
+
     if (!user) return null;
 
     return (
@@ -187,6 +212,15 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                     >
                         <Image size={16} />
                         {t('auth:menu.setAvatar')}
+                    </button>
+
+                    {/* 光标设置 */}
+                    <button
+                        onClick={handleOpenCursor}
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
+                    >
+                        <MousePointer2 size={16} />
+                        {t('auth:menu.setCursor')}
                     </button>
 
                     {/* 绑定邮箱 */}

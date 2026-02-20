@@ -13,7 +13,6 @@ import type {
     PlayerId,
 } from '../../engine/types';
 import { FLOW_COMMANDS } from '../../engine';
-import { FLOW_EVENTS } from '../../engine/systems/FlowSystem';
 import { SU_COMMANDS, SU_EVENTS } from './domain';
 import type { SmashUpCore, MinionPowerBreakdown } from './domain/types';
 import { getSmashUpCardPreviewMeta } from './ui/cardPreviewHelper';
@@ -179,85 +178,6 @@ export function formatSmashUpActionEntry({
             segments,
         });
     };
-
-    const commandEntry = (() => {
-        switch (command.type) {
-            case SU_COMMANDS.PLAY_MINION: {
-                const payload = command.payload as { cardUid?: string; baseIndex?: number };
-                const minionEvent = [...events].reverse().find(
-                    e => e.type === SU_EVENTS.MINION_PLAYED
-                ) as { payload?: { defId?: string; baseIndex?: number } } | undefined;
-                const defId = minionEvent?.payload?.defId ?? payload?.cardUid;
-                const baseDefId = minionEvent?.payload?.baseIndex !== undefined
-                    ? getBaseDefId(minionEvent.payload.baseIndex)
-                    : getBaseDefId(payload.baseIndex);
-                const baseLabel = formatBaseLabel(baseDefId, minionEvent?.payload?.baseIndex ?? payload.baseIndex);
-                const segments = withCardSegments('actionLog.playMinion', defId);
-                if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
-                }
-                return { id: `${command.type}-${actorId}-${timestamp}`, timestamp, actorId, kind: command.type, segments };
-            }
-            case SU_COMMANDS.PLAY_ACTION: {
-                const actionEvent = [...events].reverse().find(
-                    e => e.type === SU_EVENTS.ACTION_PLAYED
-                ) as { payload?: { defId?: string } } | undefined;
-                const defId = actionEvent?.payload?.defId ?? (command.payload as { cardUid?: string })?.cardUid;
-                return {
-                    id: `${command.type}-${actorId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: withCardSegments('actionLog.playAction', defId),
-                };
-            }
-            case SU_COMMANDS.USE_TALENT: {
-                const talentEvent = [...events].reverse().find(
-                    e => e.type === SU_EVENTS.TALENT_USED
-                ) as { payload?: { defId?: string } } | undefined;
-                const defId = talentEvent?.payload?.defId ?? (command.payload as { minionUid?: string })?.minionUid;
-                return {
-                    id: `${command.type}-${actorId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: withCardSegments('actionLog.useTalent', defId),
-                };
-            }
-            case SU_COMMANDS.DISCARD_TO_LIMIT: {
-                const payload = command.payload as { cardUids?: string[] };
-                const count = payload?.cardUids?.length ?? 0;
-                return {
-                    id: `${command.type}-${actorId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: [i18nSeg('actionLog.discardToLimit', { count })],
-                };
-            }
-            case FLOW_COMMANDS.ADVANCE_PHASE: {
-                const phaseEvent = [...events].reverse().find(
-                    e => e.type === FLOW_EVENTS.PHASE_CHANGED
-                ) as { payload?: { to?: string } } | undefined;
-                const phaseKey = phaseEvent?.payload?.to
-                    ? `phases.${phaseEvent.payload.to}`
-                    : '';
-                return {
-                    id: `${command.type}-${actorId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: [i18nSeg('actionLog.advancePhase', { phase: phaseKey }, ['phase'])],
-                };
-            }
-            default:
-                return null;
-        }
-    })();
-
-    if (commandEntry) {
-        entries.push(commandEntry);
-    }
 
     events.forEach((event, index) => {
         const entryTimestamp = typeof event.timestamp === 'number' ? event.timestamp : timestamp;

@@ -5,10 +5,21 @@ interface LeaderboardTabProps {
     leaderboardData: {
         leaderboard: { name: string; wins: number; matches: number }[];
     } | null;
+    error?: boolean;
 }
 
-export const LeaderboardTab = ({ leaderboardData }: LeaderboardTabProps) => {
+export const LeaderboardTab = ({ leaderboardData, error }: LeaderboardTabProps) => {
     const { t } = useTranslation('lobby');
+
+    if (error) {
+        return (
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                <div className="flex flex-col items-center justify-center h-40 gap-3">
+                    <p className="text-[#8c7b64] text-xs italic tracking-wider">{t('leaderboard.error')}</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!leaderboardData) {
         return (

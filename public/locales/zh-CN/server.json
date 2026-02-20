@@ -31,7 +31,10 @@
       "invalidResetCode": "验证码错误或已过期",
       "resetCodeExpired": "验证码已过期，请重新获取",
       "resetCodeMismatch": "验证码不正确",
-      "resetLocked": "重置失败次数过多，请在 {{seconds}} 秒后再试"
+      "resetLocked": "重置失败次数过多，请在 {{seconds}} 秒后再试",
+      "avatarMissingFile": "请选择图片文件",
+      "avatarInvalidType": "仅支持 JPG、PNG、WebP、GIF 格式",
+      "avatarUploadFailed": "头像上传失败"
     },
     "success": {
       "register": "注册成功",
@@ -40,7 +43,8 @@
       "logout": "退出登录成功",
       "refreshToken": "令牌刷新成功",
       "resetCodeSent": "验证码已发送",
-      "passwordReset": "密码重置成功"
+      "passwordReset": "密码重置成功",
+      "avatarUpdated": "头像更新成功"
     }
   },
   "friend": {

@@ -635,7 +635,7 @@
       "sliderHint": "Spend {{value}} CP → Gain {{value}} Fire Mastery",
       "skip": "Skip"
     },
-    "critOrAccuracy": "Choose a token to gain"
+    "critOrAccuracy": "Choose to gain Crit or Accuracy"
   },
   "common": {
     "cancel": "Cancel",
@@ -727,6 +727,18 @@
         "gainTaiji6": "Gain 6 Taiji tokens",
         "gainEvasive": "Gain 1 Evasive token",
         "gainPurify": "Gain 1 Purify token"
+      }
+    },
+    "zen-forget-2-3": {
+      "name": "Zen Forget II",
+      "description": "3 Taiji: gain 6 Chi, plus Evasive and Purify"
+    },
+    "zen-forget-2-zen-combat": {
+      "name": "Zen Combat",
+      "description": "2 Fist + 2 Taiji: deal 6 damage, gain 2 Taiji on hit",
+      "effects": {
+        "damage6": "Deal 6 damage",
+        "gainTaiji2": "Gain 2 Taiji tokens"
       }
     },
     "harmony": {
@@ -977,10 +989,16 @@
       }
     },
     "holy-strike-large": {
+      "name": "Holy Strike (Large Straight)",
+      "description": "Large Straight: heal 2, deal 8 damage",
       "effects": {
         "heal2": "Heal 2",
         "damage8": "Deal 8 damage"
       }
+    },
+    "holy-strike-small": {
+      "name": "Holy Strike (Small Straight)",
+      "description": "Small Straight: heal 1, deal 5 damage"
     },
     "holy-strike-2": {
       "name": "Holy Strike II",
@@ -991,6 +1009,14 @@
         "heal2": "Heal 2",
         "damage9": "Deal 9 damage"
       }
+    },
+    "holy-strike-2-small": {
+      "name": "Holy Strike II (Small Straight)",
+      "description": "Small Straight: heal 1, deal 7 damage"
+    },
+    "holy-strike-2-large": {
+      "name": "Holy Strike II (Large Straight)",
+      "description": "Large Straight: heal 2, deal 9 damage"
     },
     "holy-light": {
       "name": "Holy Light",
@@ -1026,6 +1052,14 @@
         "gainRetributionToAny": "1 player gains 1 Retribution token",
         "gain4CP": "Gain 4 CP"
       }
+    },
+    "vengeance-2-mix": {
+      "name": "Retribution",
+      "description": "1 each of Sword, Helm, Heart, Pray: heal 1, deal 3 undefendable damage, gain Retribution"
+    },
+    "vengeance-2-main": {
+      "name": "Vengeance II",
+      "description": "3 Helm + 1 Pray: 1 player gains Retribution, gain 4 CP"
     },
     "righteous-prayer": {
       "name": "Righteous Prayer",
@@ -1122,12 +1156,16 @@
       "description": "Two variants: Deadeye Shot and Focus"
     },
     "deadeye-shot": {
+      "name": "Deadeye Shot",
+      "description": "3 Bow + 2 Moon: inflict Targeted, deal 6 damage",
       "effects": {
         "inflictTargeted": "Inflict 1 Targeted token",
         "damage6": "Deal 6 damage"
       }
     },
     "focus": {
+      "name": "Focus",
+      "description": "2 Bow + 1 Moon: inflict Targeted and Entangle",
       "effects": {
         "inflictTargeted": "Inflict 1 Targeted token",
         "inflictEntangle": "Inflict 1 Entangle token"
@@ -1150,6 +1188,8 @@
       }
     },
     "silencing-trace": {
+      "name": "Silencing Trace",
+      "description": "3 Foot: gain Evasive, deal 2 undefendable damage",
       "effects": {
         "gainEvasive": "Gain 1 Evasive token"
       }
@@ -1206,6 +1246,8 @@
       }
     },
     "dark-moon": {
+      "name": "Dark Moon",
+      "description": "3 Moon: gain Evasive, inflict Blinded, Entangle, Targeted",
       "effects": {
         "gainEvasive": "Gain 1 Evasive token",
         "inflictBlinded": "Inflict 1 Blinded token",
@@ -1232,6 +1274,8 @@
       }
     },
     "moons-blessing": {
+      "name": "Moon's Blessing",
+      "description": "1 Bow + 2 Foot + 1 Moon: gain 3 Evasive, inflict Entangle",
       "effects": {
         "gainEvasive3": "Gain 3 Evasive tokens",
         "inflictEntangle": "Inflict 1 Entangle token"
@@ -1422,6 +1466,14 @@
         "inflictKnockdown": "Inflict 1 Knockdown"
       }
     },
+    "calm-water-2-large-straight": {
+      "name": "Calm Water II",
+      "description": "Large Straight: deal 7 damage, gain 3 Taiji + Evasive, inflict Knockdown"
+    },
+    "calm-water-2-way-of-monk": {
+      "name": "Way of the Monk",
+      "description": "All 4 symbols present: gain 2 Evasive, deal 3 unblockable damage"
+    },
     "slap": {
       "name": "Slap",
       "description": "Basic slash attack; damage scales with number of Sword faces.",
@@ -1511,12 +1563,16 @@
       }
     },
     "suppress-2-battle-cry": {
+      "name": "Battle Cry",
+      "description": "2 Sword + 2 Heart: heal 2, deal 2 undefendable damage",
       "effects": {
         "heal2": "Heal 2",
         "damage2Unblockable": "Deal 2 undefendable damage"
       }
     },
     "suppress-2-mighty": {
+      "name": "Mighty II",
+      "description": "3 Sword + 2 Strength: roll 3 dice, deal total as damage; if >9, inflict Concussion",
       "effects": {
         "roll3Damage": "Roll 3 dice, deal total as damage; if total >9, inflict Concussion"
       }
@@ -1579,12 +1635,16 @@
       }
     },
     "violent-assault-2-crush": {
+      "name": "Crushing Blow",
+      "description": "5 Strength: inflict Concussion, deal 2 undefendable damage",
       "effects": {
         "inflictConcussion": "Inflict 1 Concussion token",
         "damage2Unblockable": "Deal 2 undefendable damage"
       }
     },
     "violent-assault-2-shake": {
+      "name": "Earth Shaker",
+      "description": "4 Strength: inflict Daze, deal 7 undefendable damage",
       "effects": {
         "inflictDaze": "Inflict 1 Daze token",
         "damage7Unblockable": "Deal 7 undefendable damage"
@@ -1629,6 +1689,7 @@
     },
     "blazing-soul": {
       "name": "Blazing Soul",
+      "description": "2 Magma + 2 Fire Soul: FM cap +1, gain 5 Fire Mastery, inflict Knockdown",
       "effects": {
         "increaseLimit": "Increase Fire Mastery cap by 1",
         "gainFM5": "Gain 5 Fire Mastery",
@@ -1644,6 +1705,8 @@
       }
     },
     "incinerate": {
+      "name": "Incinerate",
+      "description": "2 Fire + 2 Fire Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "inflictBurn": "Inflict 1 Burn token",
@@ -1661,6 +1724,8 @@
       }
     },
     "meteor-shower": {
+      "name": "Meteor Shower",
+      "description": "3 Meteor: inflict Knockdown, Burn, Stun",
       "effects": {
         "inflictKnockdown": "Inflict 1 Knockdown token",
         "inflictBurn": "Inflict 1 Burn token",

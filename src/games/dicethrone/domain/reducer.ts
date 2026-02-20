@@ -144,11 +144,21 @@ const handlePlayerReady: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_R
 
 /**
  * 处理奖励骰结算事件
- * 清除 pendingBonusDiceSettlement，应用伤害和状态效果
+ * 清除 pendingBonusDiceSettlement。
+ * 非 displayOnly 时标记 pendingAttack.bonusDiceResolved，
+ * 避免 autoContinue 重入 defensiveRoll exit 时重复执行 resolveAttack。
  */
 const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_SETTLED' }>> = (
-    state
-) => ({ ...state, pendingBonusDiceSettlement: undefined });
+    state,
+    event
+) => {
+    const isDisplayOnly = !!(event.payload as any)?.displayOnly;
+    // 非 displayOnly 时，标记 pendingAttack.bonusDiceResolved
+    const pendingAttack = !isDisplayOnly && state.pendingAttack
+        ? { ...state.pendingAttack, bonusDiceResolved: true }
+        : state.pendingAttack;
+    return { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
+};
 
 /**
  * 创建重置后的骰子数组（纯函数，结构共享）

@@ -98,6 +98,8 @@ interface ActiveMatch {
     spectatorSockets: Set<string>;
     /** 离线裁决定时器：playerID → timer */
     offlineTimers: Map<string, ReturnType<typeof setTimeout>>;
+    /** 最后执行命令的玩家 ID（供 broadcastState 携带到 meta，乐观引擎用于区分自己/对手的命令） */
+    lastCommandPlayerId: string | null;
     /** 命令执行锁（串行执行） */
     executing: boolean;
     /** 待执行命令队列（普通命令 + batch 任务共用同一队列保证串行） */
@@ -173,6 +175,7 @@ const createTrackedRandom = (seed: string, initialCursor = 0): { random: RandomF
                 }
                 return result;
             },
+            getCursor: () => cursor,
         },
         getCursor: () => cursor,
     };
@@ -855,10 +858,36 @@ export class GameTransportServer {
         // 更新状态
         match.state = result.state;
         match.stateID += 1;
+        // 记录最后执行命令的玩家，供 broadcastState 携带到 meta
+        match.lastCommandPlayerId = playerID;
+
+        // 撤回恢复：检测 UndoSystem 是否请求重置随机数游标
+        const restoredCursor = (result.state.sys?.undo as { restoredRandomCursor?: number } | undefined)?.restoredRandomCursor;
+        if (typeof restoredCursor === 'number' && restoredCursor >= 0) {
+            // 重建 trackedRandom，从快照记录的游标位置恢复随机序列
+            const rebuilt = createTrackedRandom(match.randomSeed, restoredCursor);
+            match.random = rebuilt.random;
+            match.getRandomCursor = rebuilt.getCursor;
+            logger.info('[UndoServer] random-cursor-restored', {
+                matchID: match.matchID,
+                restoredCursor,
+            });
+            // 清除信号，避免持久化到存储层
+            match.state = {
+                ...match.state,
+                sys: {
+                    ...match.state.sys,
+                    undo: {
+                        ...match.state.sys.undo,
+                        restoredRandomCursor: undefined,
+                    },
+                },
+            };
+        }
 
         // 持久化
         const storedState: StoredMatchState = {
-            G: result.state,
+            G: match.state,
             _stateID: match.stateID,
             randomSeed: match.randomSeed,
             randomCursor: match.getRandomCursor(),
@@ -981,8 +1010,11 @@ export class GameTransportServer {
         const nsp = this.io.of('/game');
         const matchPlayers = this.buildMatchPlayers(match);
 
-        // 附带 stateID 元数据，供乐观引擎精确匹配（替代 JSON.stringify 深度比较）
-        const meta = { stateID: match.stateID };
+        // 附带 stateID + lastCommandPlayerId 元数据，供乐观引擎精确匹配
+        const meta: { stateID: number; lastCommandPlayerId?: string } = { stateID: match.stateID };
+        if (match.lastCommandPlayerId) {
+            meta.lastCommandPlayerId = match.lastCommandPlayerId;
+        }
 
         // 对每个已连接的玩家发送经 playerView 过滤 + 传输裁剪的状态
         for (const [playerID, sockets] of match.connections) {
@@ -1060,6 +1092,7 @@ export class GameTransportServer {
             getRandomCursor: trackedRandom.getCursor,
             playerIds,
             stateID: result.state._stateID,
+            lastCommandPlayerId: null,
             connections: new Map(),
             spectatorSockets: new Set(),
             offlineTimers: new Map(),

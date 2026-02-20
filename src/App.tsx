@@ -1,15 +1,13 @@
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DebugProvider } from './contexts/DebugContext';
 import { TestHarness } from './engine/testing';
-
-const queryClient = new QueryClient();
-
-// 初始化测试工具（仅在测试环境生效）
-TestHarness.init();
 import { TutorialProvider } from './contexts/TutorialContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';
+import { CursorPreferenceProvider } from './core/cursor/CursorPreferenceContext';
 import { AudioProvider } from './contexts/AudioContext';
 import { ModalStackProvider } from './contexts/ModalStackContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -21,6 +19,7 @@ import { Toaster } from 'react-hot-toast';
 import { GlobalHUD } from './components/system/GlobalHUD';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { InteractionGuardProvider } from './components/game/framework';
+import AdminGuard from './components/auth/AdminGuard';
 
 import { Home } from './pages/Home';
 import { MatchRoom } from './pages/MatchRoom';
@@ -28,15 +27,17 @@ import { LocalMatchRoom } from './pages/LocalMatchRoom';
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
 
+const queryClient = new QueryClient();
+
+// 初始化测试工具（仅在测试环境生效）
+TestHarness.init();
+
 /**
  * 教程路由专用包装组件。
  * 与在线对局使用不同的组件类型，强制 React 在路由切换时完全卸载/重建 MatchRoom，
  * 防止从在线对局导航到教程时组件实例复用导致 state/ref 泄漏（教程卡在"初始化中"）。
  */
 const TutorialMatchRoom = () => <MatchRoom />;
-
-import React from 'react';
-import { useTranslation } from 'react-i18next';
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
@@ -57,9 +58,6 @@ const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
 
-
-import AdminGuard from './components/auth/AdminGuard';
-
 const App = () => {
   const { t } = useTranslation('lobby');
 
@@ -69,6 +67,7 @@ const App = () => {
         <ToastProvider>
           <ModalStackProvider>
             <AuthProvider>
+              <CursorPreferenceProvider>
               <SocialProvider>
                 <AudioProvider>
                   <InteractionGuardProvider>
@@ -124,6 +123,7 @@ const App = () => {
                   </InteractionGuardProvider>
                 </AudioProvider>
               </SocialProvider>
+              </CursorPreferenceProvider>
             </AuthProvider>
           </ModalStackProvider>
         </ToastProvider>

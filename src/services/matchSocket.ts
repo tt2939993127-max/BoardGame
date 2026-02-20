@@ -7,6 +7,7 @@
 import { io, Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
+import { onPageVisible } from './visibilityResync';
 
 // 重赛事件常量（与服务端 server.ts 保持一致）
 export const REMATCH_EVENTS = {
@@ -65,6 +66,7 @@ class MatchSocketService {
     private currentState: RematchVoteState = { votes: {}, ready: false, revision: 0 };
     private lastAcceptedRevision = 0;
     private currentChatMatchId: string | null = null;
+    private _cleanupVisibility: (() => void) | null = null;
 
     /**
      * 连接到对局 Socket 服务
@@ -85,12 +87,13 @@ class MatchSocketService {
             path: '/lobby-socket',
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
             timeout: 10000,
         });
 
         this.setupEventHandlers();
+        this.setupVisibilityHandler();
     }
 
     /**
@@ -140,6 +143,7 @@ class MatchSocketService {
             }
             this.lastAcceptedRevision = incomingRev;
             this.currentState = state;
+            console.log('[MatchSocket] 收到重赛状态更新', { votes: state.votes, ready: state.ready, revision: state.revision });
             this.notifyStateCallbacks(state);
         });
 
@@ -295,6 +299,7 @@ class MatchSocketService {
             console.warn('[MatchSocket] 投票失败：未加入对局');
             return;
         }
+        console.log('[MatchSocket] 发送投票', { matchId: this.currentMatchId, playerId: this.currentPlayerId });
         this.socket.emit(REMATCH_EVENTS.VOTE);
     }
 
@@ -375,6 +380,10 @@ class MatchSocketService {
     disconnect(): void {
         this.leaveMatch();
         this.leaveChat();
+        if (this._cleanupVisibility) {
+            this._cleanupVisibility();
+            this._cleanupVisibility = null;
+        }
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
@@ -383,6 +392,27 @@ class MatchSocketService {
         this.stateCallbacks.clear();
         this.resetCallbacks.clear();
         this.chatCallbacks.clear();
+    }
+
+    /**
+     * 页面恢复可见时主动重连
+     *
+     * 后台标签页冻结期间 socket.io 心跳可能超时导致静默断线。
+     * 恢复可见时检查连接状态，断线则强制重连（connect 事件中会自动 rejoin）。
+     */
+    private resync(): void {
+        if (!this.socket) return;
+        if (this.socket.connected) return; // 连接正常，无需操作
+        console.log('[MatchSocket] 页面恢复可见，重新连接');
+        this.socket.connect();
+    }
+
+    /**
+     * 注册 visibilitychange 监听
+     */
+    private setupVisibilityHandler(): void {
+        if (this._cleanupVisibility) return;
+        this._cleanupVisibility = onPageVisible(() => this.resync());
     }
 }
 

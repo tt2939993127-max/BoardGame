@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import { AUTH_API_URL } from '../config/server';
+import { onPageVisible } from './visibilityResync';
 
 export const SOCIAL_EVENTS = {
     // 服务端 -> 客户端
@@ -88,11 +89,12 @@ class SocialSocketService {
                 auth: { token },
                 transports: ['websocket', 'polling'],
                 reconnection: true,
-                reconnectionAttempts: 5,
+                reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
                 reconnectionDelay: 1000,
             });
 
             this.setupEventHandlers();
+            this.setupVisibilityHandler();
             return;
         }
 
@@ -134,6 +136,10 @@ class SocialSocketService {
     }
 
     disconnect(): void {
+        if (this._cleanupVisibility) {
+            this._cleanupVisibility();
+            this._cleanupVisibility = null;
+        }
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
@@ -180,6 +186,33 @@ class SocialSocketService {
     get connected(): boolean {
         return this.isConnected;
     }
+
+    /**
+     * 页面恢复可见时主动重连/重新同步
+     *
+     * 后台标签页冻结期间 socket.io 心跳可能超时导致静默断线，
+     * 恢复可见时主动检查连接状态并重连。
+     */
+    private resync(): void {
+        if (!this.socket || !this.token) return;
+        if (this.socket.connected) {
+            // 连接正常：无需额外操作（社交事件是推送模式，不需要主动拉取）
+            return;
+        }
+        // 连接已断：强制重连
+        console.log('[SocialSocket] 页面恢复可见，重新连接');
+        this.socket.connect();
+    }
+
+    /**
+     * 注册 visibilitychange 监听（在 connect 时自动调用）
+     */
+    private setupVisibilityHandler(): void {
+        if (this._cleanupVisibility) return; // 已注册
+        this._cleanupVisibility = onPageVisible(() => this.resync());
+    }
+
+    private _cleanupVisibility: (() => void) | null = null;
 }
 
 export const socialSocket = new SocialSocketService();

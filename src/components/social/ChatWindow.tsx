@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSocial } from '../../contexts/SocialContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { Send, Gamepad2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type { Message } from '../../services/social.types';
 import { socialSocket, SOCIAL_EVENTS, type NewMessagePayload } from '../../services/socialSocket';
+import { MAX_CHAT_LENGTH } from '../../shared/chat';
 
 // NOTE: 该组件是“好友私聊”窗口，不是局内聊天。局内聊天在 `src/components/game/GameHUD.tsx`。
 
@@ -20,9 +22,11 @@ interface ChatWindowProps {
 export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
     const { friends, sendMessage, getMessages, markAsRead, conversations } = useSocial();
     const { user } = useAuth();
+    const toast = useToast();
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation(['social', 'common']);
@@ -100,19 +104,31 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
 
     const handleSend = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!inputValue.trim()) return;
+        const content = inputValue.trim();
+        if (!content || sending) return;
 
-        const content = inputValue;
+        if (content.length > MAX_CHAT_LENGTH) {
+            toast.warning(t('social:chat.tooLong', { count: MAX_CHAT_LENGTH }));
+            return;
+        }
+
         setInputValue(''); // 乐观清空
+        setSending(true);
 
         try {
             const msg = await sendMessage(targetUserId, content);
             // 本地追加
-            setMessages(prev => [...prev, msg]);
+            setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
             scrollToBottom();
         } catch (error) {
             console.error('Failed to send', error);
             setInputValue(content); // 回滚
+            toast.error(t('social:chat.sendFailed'));
+        } finally {
+            setSending(false);
         }
     };
 
@@ -123,38 +139,8 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
         }
     };
 
-    // 临时日志：确认布局高度是否生效（问题解决后会删除）
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        
-        const log = (reason: string) => {
-            const rect = el.getBoundingClientRect();
-            console.log(`[ChatWindow] reason=${reason} targetUserId=${targetUserId} height=${Math.round(rect.height)}px width=${Math.round(rect.width)}px`);
-        };
-
-        // 强制定时打印：用来证明组件是否真的渲染、以及高度是否变化
-        log('mount');
-        const intervalId = window.setInterval(() => log('tick'), 1500);
-
-        // 兼容旧浏览器 / 被禁用场景
-        if (typeof ResizeObserver === 'undefined') {
-            console.log('[ChatWindow] ResizeObserver=undefined');
-            return () => window.clearInterval(intervalId);
-        }
-
-        const ro = new ResizeObserver(() => log('resize'));
-        ro.observe(el);
-        return () => {
-            ro.disconnect();
-            window.clearInterval(intervalId);
-        };
-    }, [targetUserId]);
-
-    if (!friend && !conversation) {
-        return <div className="flex-1 flex items-center justify-center text-[#8c7b64]">{t('social:chat.userNotFound')}</div>;
-    }
-
+    // 即使 friends/conversations 尚未加载完成，也不阻塞聊天窗口渲染
+    // 用户可能从会话列表点击（有 conversation 无 friend）或从好友列表点击（有 friend 无 conversation）
     const username = friend?.username || conversation?.username || t('common:unknownUser');
     const isOnline = friend?.online || conversation?.online || false;
 
@@ -193,18 +179,17 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
                     )}
                 </div>
 
-                {/* 信息区：跟悬浮球预览同排，展示最近一条消息摘要 */}
-                <div className="px-4 pb-3 text-xs text-parchment-light-text">
-                    <div className="leading-5">
-                        {t('social:chat.roomLabel')}{(inviteData?.matchId ?? '').slice(0, 12) || t('social:chat.emptyValue')}
+                {/* 信息区：仅在有邀请数据时显示房间信息 */}
+                {inviteData && (
+                    <div className="px-4 pb-3 text-xs text-parchment-light-text">
+                        <div className="leading-5">
+                            {t('social:chat.roomLabel')}{inviteData.matchId.slice(0, 12) || t('social:chat.emptyValue')}
+                        </div>
+                        <div className="leading-5">
+                            {t('social:chat.meLabel')}{user?.username || user?.id || t('social:chat.emptyValue')}
+                        </div>
                     </div>
-                    <div className="leading-5">
-                        {t('social:chat.meLabel')}{user?.username || user?.id || t('social:chat.emptyValue')}
-                    </div>
-                    <div className="mt-1 leading-5 text-[11px] text-parchment-base-text/70 truncate">
-                        {messages.length > 0 ? messages[messages.length - 1]?.content : t('social:chat.noMessages')}
-                    </div>
-                </div>
+                )}
             </div>
 
             {/* 消息列表 */}
@@ -247,16 +232,23 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={t('social:chat.placeholder')}
-                        className="flex-1 bg-parchment-base-bg border border-parchment-card-border/40 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-parchment-base-text transition-colors"
+                        maxLength={MAX_CHAT_LENGTH}
+                        disabled={sending}
+                        className="flex-1 bg-parchment-base-bg border border-parchment-card-border/40 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-parchment-base-text transition-colors disabled:opacity-60"
                     />
                     <button
                         type="submit"
-                        disabled={!inputValue.trim()}
+                        disabled={!inputValue.trim() || sending}
                         className="absolute right-2 p-1.5 bg-parchment-base-text text-parchment-card-bg rounded-full hover:bg-parchment-brown disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Send size={14} />
                     </button>
                 </form>
+                {inputValue.length >= MAX_CHAT_LENGTH * 0.8 && (
+                    <div className="text-right text-[10px] text-parchment-light-text mt-1 pr-1">
+                        {inputValue.length}/{MAX_CHAT_LENGTH}
+                    </div>
+                )}
             </div>
         </div>
     );

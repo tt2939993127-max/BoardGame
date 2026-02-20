@@ -93,4 +93,32 @@ export class UserSettingsController {
         await this.userSettingsService.markHintSeen(currentUser.userId, key);
         return res.status(201).json({ ok: true });
     }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('cursor')
+    async getCursorPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Res() res: Response
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        const settings = await this.userSettingsService.getCursorPreference(currentUser.userId);
+        if (!settings) {
+            return res.json({ empty: true, settings: null });
+        }
+        return res.json({ empty: false, settings });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Put('cursor')
+    async updateCursorPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Body() body: { cursorTheme?: string; overrideScope?: string },
+        @Res() res: Response
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        const cursorTheme = typeof body.cursorTheme === 'string' ? body.cursorTheme : 'default';
+        const overrideScope = body.overrideScope === 'all' ? 'all' : 'home';
+        await this.userSettingsService.upsertCursorPreference(currentUser.userId, cursorTheme, overrideScope);
+        return res.status(201).json({ settings: { cursorTheme, overrideScope } });
+    }
 }

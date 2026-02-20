@@ -12,6 +12,14 @@ export class UserUISettings {
     @Prop({ type: [String], default: [] })
     seenHints!: string[];
 
+    /** 光标主题 ID（'default' 表示系统默认） */
+    @Prop({ type: String, default: 'default' })
+    cursorTheme!: string;
+
+    /** 光标覆盖范围：'home' 仅主页，'all' 覆盖所有游戏 */
+    @Prop({ type: String, default: 'home' })
+    cursorOverrideScope!: string;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

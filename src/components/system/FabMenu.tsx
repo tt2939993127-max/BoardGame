@@ -77,10 +77,12 @@ export const FabMenu = ({
     const getInitialPosition = useCallback(() => {
         const maxLeft = window.innerWidth - BUTTON_SIZE - EDGE_PADDING;
         const maxTop = window.innerHeight - BUTTON_SIZE - EDGE_PADDING;
-        if (initialPosition === 'bottom-right') return { left: maxLeft, top: maxTop };
-        if (initialPosition === 'bottom-left') return { left: EDGE_PADDING, top: maxTop };
-        if (initialPosition === 'top-right') return { left: maxLeft, top: EDGE_PADDING };
-        return { left: EDGE_PADDING, top: EDGE_PADDING };
+        // 默认位置往内偏移，不贴边
+        const DEFAULT_INSET = 48;
+        if (initialPosition === 'bottom-right') return { left: maxLeft - DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
+        if (initialPosition === 'bottom-left') return { left: EDGE_PADDING + DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
+        if (initialPosition === 'top-right') return { left: maxLeft - DEFAULT_INSET, top: EDGE_PADDING + DEFAULT_INSET };
+        return { left: EDGE_PADDING + DEFAULT_INSET, top: EDGE_PADDING + DEFAULT_INSET };
     }, [initialPosition]);
 
     // 加载保存的位置（支持百分比格式，兼容旧绝对坐标）

@@ -454,10 +454,17 @@ export function grantExtraMinion(
     now: number,
     /** 限定额度只能用于指定基地（不设则为全局额度） */
     restrictToBase?: number,
+    /** 额外选项 */
+    options?: { sameNameOnly?: boolean; sameNameDefId?: string },
 ): LimitModifiedEvent {
     return {
         type: SU_EVENTS.LIMIT_MODIFIED,
-        payload: { playerId, limitType: 'minion', delta: 1, reason, ...(restrictToBase !== undefined ? { restrictToBase } : {}) },
+        payload: {
+            playerId, limitType: 'minion', delta: 1, reason,
+            ...(restrictToBase !== undefined ? { restrictToBase } : {}),
+            ...(options?.sameNameOnly ? { sameNameOnly: true } : {}),
+            ...(options?.sameNameDefId ? { sameNameDefId: options.sameNameDefId } : {}),
+        },
         timestamp: now,
     };
 }

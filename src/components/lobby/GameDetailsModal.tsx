@@ -67,6 +67,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [leaderboardData, setLeaderboardData] = useState<{
         leaderboard: { name: string; wins: number; matches: number }[];
     } | null>(null);
+    const [leaderboardError, setLeaderboardError] = useState(false);
 
     // 创建房间弹窗状态
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
@@ -79,14 +80,23 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
+            setLeaderboardError(false);
             fetch(`${GAME_SERVER_URL}/games/${normalizedGameId}/leaderboard`)
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
                 .then(data => {
                     if (data && !data.error) {
                         setLeaderboardData(data);
+                    } else {
+                        setLeaderboardError(true);
                     }
                 })
-                .catch(err => console.error('Failed to fetch leaderboard:', err));
+                .catch(err => {
+                    console.error('Failed to fetch leaderboard:', err);
+                    setLeaderboardError(true);
+                });
         }
     }, [isOpen, activeTab, normalizedGameId]);
 
@@ -947,7 +957,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             />
                         )}
                         {activeTab === 'leaderboard' && (
-                            <LeaderboardTab leaderboardData={leaderboardData} />
+                            <LeaderboardTab leaderboardData={leaderboardData} error={leaderboardError} />
                         )}
                         {activeTab === 'reviews' && (
                             <div className="flex-1 overflow-hidden h-full">

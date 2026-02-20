@@ -1177,6 +1177,12 @@ describe('欺心巫族事件卡 - 震慑 (stun)', () => {
     // 应有推拉事件
     const pushEvents = events.filter(e => e.type === SW_EVENTS.UNIT_PUSHED);
     expect(pushEvents.length).toBe(1);
+
+    // 验证伤害实际生效：目标被推到 (1,2)，伤害应作用于新位置
+    const pushedUnit = newState.board[1][2].unit;
+    expect(pushedUnit).toBeDefined();
+    expect(pushedUnit!.cardId).toBe('test-stun-target');
+    expect(pushedUnit!.damage).toBe(1); // 震慑造成1伤害
   });
 
   it('穿过单位时对被穿过的单位造成1伤害', () => {

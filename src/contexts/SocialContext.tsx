@@ -83,11 +83,28 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (!token) return;
         try {
             const data = await authenticatedFetch('/messages/conversations');
-            setConversations(data.conversations);
+            // 服务端返回 { user: { id, username }, lastMessage, unread }
+            // 前端 Conversation 类型需要 { userId, username, online, lastMessage, unreadCount }
+            const mapped: Conversation[] = (data.conversations ?? []).map((conv: any) => ({
+                userId: conv.user?.id ?? conv.userId ?? '',
+                username: conv.user?.username ?? conv.username ?? '',
+                online: conv.online ?? false,
+                lastMessage: conv.lastMessage ? {
+                    id: conv.lastMessage.id ?? conv.lastMessage._id ?? '',
+                    from: conv.lastMessage.fromSelf ? (user?.id ?? '') : (conv.user?.id ?? conv.userId ?? ''),
+                    to: conv.lastMessage.fromSelf ? (conv.user?.id ?? conv.userId ?? '') : (user?.id ?? ''),
+                    content: conv.lastMessage.content ?? '',
+                    type: conv.lastMessage.type ?? 'text',
+                    read: true,
+                    createdAt: conv.lastMessage.createdAt ?? new Date().toISOString(),
+                } : undefined,
+                unreadCount: conv.unread ?? conv.unreadCount ?? 0,
+            })).filter((c: Conversation) => c.userId); // 过滤掉无效条目
+            setConversations(mapped);
         } catch (error) {
             console.error('[SocialContext] Failed to fetch conversations:', error);
         }
-    }, [authenticatedFetch, token]);
+    }, [authenticatedFetch, token, user?.id]);
 
     // WebSocket 连接管理：连接生命周期只跟鉴权状态走，避免热更新触发断开
     useEffect(() => {
@@ -213,14 +230,23 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({ toUserId, content, type }),
         });
 
-        // 发送成功后立即刷新会话列表与该会话消息历史
+        // 发送成功后立即刷新会话列表
         await refreshConversations();
 
-        // fire-and-forget：不阻塞 UI
-        void authenticatedFetch(`/messages/${toUserId}`).catch(() => undefined);
+        // 服务端返回 { message: "成功提示", messageData: { id, toUser } }
+        // 构造本地 Message 对象
+        const msg: Message = {
+            id: data.messageData?.id ?? crypto.randomUUID(),
+            from: user?.id ?? '',
+            to: toUserId,
+            content,
+            type,
+            read: true,
+            createdAt: new Date().toISOString(),
+        };
 
-        return data.message;
-    }, [authenticatedFetch, refreshConversations]);
+        return msg;
+    }, [authenticatedFetch, refreshConversations, user?.id]);
 
     const markAsRead = useCallback(async (fromUserId: string) => {
         await authenticatedFetch(`/messages/read/${fromUserId}`, { method: 'POST' });

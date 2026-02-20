@@ -20,6 +20,8 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
 
     const [dealPlayer, setDealPlayer] = useState<string>('0');
     const [deckIndex, setDeckIndex] = useState<number>(0);
+    const [vpDelta, setVpDelta] = useState<number>(1);
+    const [vpPlayer, setVpPlayer] = useState<string>('0');
 
     const player = core?.players?.[dealPlayer as '0' | '1'];
     const playerDeck = player?.deck ?? [];
@@ -34,6 +36,41 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
 
     return (
         <div className="space-y-4">
+            {/* 分数调整 */}
+            <div className="bg-rose-50 p-3 rounded-lg border border-rose-200" data-testid="su-debug-vp">
+                <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-3">分数调整 (VP)</h4>
+                <div className="space-y-2">
+                    <div className="flex gap-2 items-center">
+                        <select value={vpPlayer} onChange={(e) => setVpPlayer(e.target.value)} className="flex-1 px-2 py-1.5 text-xs border border-rose-300 rounded bg-white text-gray-900">
+                            <option value="0">P0 (VP: {core?.players?.['0']?.vp ?? 0})</option>
+                            <option value="1">P1 (VP: {core?.players?.['1']?.vp ?? 0})</option>
+                        </select>
+                        <input
+                            type="number"
+                            value={vpDelta}
+                            onChange={(e) => setVpDelta(Number(e.target.value))}
+                            className="w-16 px-2 py-1.5 text-xs border border-rose-300 rounded bg-white text-center text-gray-900"
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => dispatch('SYS_CHEAT_ADD_RESOURCE', { playerId: vpPlayer, resourceId: 'vp', delta: vpDelta })}
+                            className="flex-1 px-3 py-1.5 bg-rose-500 text-white rounded text-xs font-bold hover:bg-rose-600"
+                            data-testid="su-debug-vp-add"
+                        >
+                            ➕ 增加 {vpDelta} VP
+                        </button>
+                        <button
+                            onClick={() => dispatch('SYS_CHEAT_ADD_RESOURCE', { playerId: vpPlayer, resourceId: 'vp', delta: -vpDelta })}
+                            className="flex-1 px-3 py-1.5 bg-gray-500 text-white rounded text-xs font-bold hover:bg-gray-600"
+                            data-testid="su-debug-vp-sub"
+                        >
+                            ➖ 减少 {vpDelta} VP
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             {/* 刷新基地调试 */}
             <div className="bg-blue-50 p-3 rounded-lg border border-blue-200" data-testid="su-debug-refresh-base">
                 <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">刷新基地</h4>

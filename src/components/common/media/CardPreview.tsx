@@ -127,15 +127,20 @@ interface AtlasCardProps {
 function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCardProps) {
     const { i18n } = useTranslation();
     const effectiveLocale = locale || i18n.language || 'zh-CN';
-    const source = getCardAtlasSource(atlasId);
+    // 传入 locale 以支持懒解析模式（从预加载缓存读取图片尺寸）
+    const source = getCardAtlasSource(atlasId, effectiveLocale);
 
     // 使用统一的 isImagePreloaded 检查（与 CriticalImageGate 共享缓存）
     const preloaded = source ? isImagePreloaded(source.image, effectiveLocale) : false;
     const [loaded, setLoaded] = useState(() => preloaded);
 
+    // 同步修正：如果 loaded 为 false 但缓存已就绪，立即同步为 true，
+    // 避免 useEffect 异步更新导致的一帧 shimmer 闪烁
+    const effectiveLoaded = loaded || preloaded;
+
     const localizedUrls = source ? getLocalizedImageUrls(source.image, effectiveLocale) : null;
     const checkUrls = localizedUrls
-        ? [localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean)
+        ? [...new Set([localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean))]
         : [];
     const checkKey = checkUrls.join('|');
 
@@ -182,7 +187,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
 
     return (
         <div
-            className={`${loaded ? '' : 'atlas-shimmer'} ${className ?? ''}`}
+            className={`${effectiveLoaded ? '' : 'atlas-shimmer'} ${className ?? ''}`}
             title={title}
             style={{
                 backgroundImage,

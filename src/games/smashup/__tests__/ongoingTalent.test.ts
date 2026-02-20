@@ -370,6 +370,11 @@ describe('innsmouth_sacred_circle（宗教圆环 ongoing talent）', () => {
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
         expect(types).toContain(SU_EVENTS.LIMIT_MODIFIED);
+
+        // 验证 LIMIT_MODIFIED 包含 sameNameOnly 和 restrictToBase 约束
+        const limitEvt = events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED) as any;
+        expect(limitEvt.payload.sameNameOnly).toBe(true);
+        expect(limitEvt.payload.restrictToBase).toBe(0);
     });
 
     it('手牌无同名随从时返回反馈', () => {

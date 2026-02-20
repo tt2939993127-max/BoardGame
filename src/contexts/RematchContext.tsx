@@ -81,6 +81,7 @@ export function RematchProvider({
 
         // 订阅重置触发
         const unsubReset = matchSocket.subscribeReset(async () => {
+            console.log('[RematchContext] subscribeReset 触发', { matchId, playerId, hasStarted: hasRematchStartedRef.current });
             if (hasRematchStartedRef.current) return;
             hasRematchStartedRef.current = true;
             clearResetTimeout();
@@ -91,11 +92,13 @@ export function RematchProvider({
             const rawGameName = stored?.gameName;
             const gameName = rawGameName ? rawGameName.toLowerCase() : '';
             const credentials = stored?.credentials;
+            console.log('[RematchContext] 凭据检查', { currentMatchId, currentPlayerId, gameName, hasCredentials: !!credentials, stored });
             const playerName = stored?.playerName;
 
             if (currentMatchId && currentPlayerId && gameName && credentials) {
                 if (currentPlayerId === '0') {
                     try {
+                        console.log('[RematchContext] P0 发起 playAgain', { gameName, currentMatchId });
                         const guestId = user?.id ? undefined : getOrCreateGuestId();
                         const { nextMatchID } = await matchApi.playAgain(gameName, currentMatchId, {
                             playerID: currentPlayerId,
@@ -116,6 +119,7 @@ export function RematchProvider({
                             throw new Error('[RematchContext] claim-seat-failed');
                         }
                         matchSocket.broadcastNewRoom(`/play/${gameName}/match/${nextMatchID}`);
+                        console.log('[RematchContext] P0 新房间已创建，跳转', { nextMatchID, gameName });
                         window.location.href = `/play/${gameName}/match/${nextMatchID}?playerID=${currentPlayerId}`;
                         return;
                     } catch (error) {

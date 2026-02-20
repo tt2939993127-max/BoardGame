@@ -1,11 +1,14 @@
 /**
  * 召唤师战争 - 卡牌图集配置
  * 底层使用引擎层 SpriteAtlasRegistry，本文件保留游戏特有的阵营映射逻辑
+ *
+ * 统一模式：均匀网格只声明 rows/cols，尺寸从预加载缓存自动解析。
+ * cardAtlasRegistry 使用懒解析（渲染时解析），globalSpriteAtlasRegistry 在 initSpriteAtlases 时即时解析。
  */
 
 import type { CSSProperties } from 'react';
-import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
-import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
+import { getOptimizedImageUrls, getLocalizedAssetPath, getPreloadedImageElement } from '../../../core/AssetLoader';
+import { registerLazyCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 import type { FactionId } from '../domain/types';
 import { resolveFactionId } from '../config/factions';
 import {
@@ -13,6 +16,7 @@ import {
   type SpriteAtlasSource,
   computeSpriteStyle,
   computeSpriteAspectRatio,
+  generateUniformAtlasConfig,
   globalSpriteAtlasRegistry,
 } from '../../../engine/primitives/spriteAtlas';
 
@@ -39,91 +43,38 @@ export function getFrameAspectRatio(index: number, atlas: SpriteAtlasConfig): nu
   return computeSpriteAspectRatio(index, atlas);
 }
 
-// ========== 通用精灵图配置 ==========
+// ========== 均匀网格声明（只需 rows/cols，尺寸从预加载缓存解析） ==========
 
-/**
- * hero.png 配置（召唤师 + 传送门）
- * 所有阵营统一：原图 2088x1458，2帧，每帧 1044x729
- */
-export const HERO_ATLAS: SpriteAtlasConfig = {
-  imageW: 2088,
-  imageH: 1458,
-  cols: 2,
-  rows: 1,
-  colStarts: [0, 1044],
-  colWidths: [1044, 1044],
-  rowStarts: [0],
-  rowHeights: [729],
-};
-/**
- * Portal.png 配置（传送门 / 城门，所有阵营共用）
- * 压缩后 2048x1430，2帧，每帧 1024x715
- * 帧0 = 起始城门（10HP），帧1 = 传送门（5HP）
- */
-export const PORTAL_ATLAS: SpriteAtlasConfig = {
-  imageW: 2048,
-  imageH: 1430,
-  cols: 2,
-  rows: 1,
-  colStarts: [0, 1024],
-  colWidths: [1024, 1024],
-  rowStarts: [0],
-  rowHeights: [715],
-};
+/** 阵营图集网格声明 */
+interface AtlasGridDecl {
+  rows: number;
+  cols: number;
+}
 
+/** 所有阵营共用的 hero 网格（2帧横排） */
+const HERO_GRID: AtlasGridDecl = { rows: 1, cols: 2 };
+/** 所有阵营共用的 portal 网格（2帧横排） */
+const PORTAL_GRID: AtlasGridDecl = { rows: 1, cols: 2 };
+/** 通用 cards 网格（2列6行） */
+const CARDS_GRID: AtlasGridDecl = { rows: 6, cols: 2 };
+/** dice 网格（3×3） */
+const DICE_GRID: AtlasGridDecl = { rows: 3, cols: 3 };
 
-
-/**
- * cards.png 配置（通用版，5个阵营共用）
- * 原图 2088x4374，2列6行，每帧 1044x729
- */
-export const CARDS_ATLAS: SpriteAtlasConfig = {
-  imageW: 2088,
-  imageH: 4374,
-  cols: 2,
-  rows: 6,
-  colStarts: [0, 1044],
-  colWidths: [1044, 1044],
-  rowStarts: [0, 729, 1458, 2187, 2916, 3645],
-  rowHeights: [729, 729, 729, 729, 729, 729],
-};
-
-/**
- * cards.png 配置（Necromancer 专用，尺寸略有不同）
- * 原图 2100x4410，2列6行，每帧 1050x735
- */
-export const NECROMANCER_CARDS_ATLAS: SpriteAtlasConfig = {
-  imageW: 2100,
-  imageH: 4410,
-  cols: 2,
-  rows: 6,
-  colStarts: [0, 1050],
-  colWidths: [1050, 1050],
-  rowStarts: [0, 735, 1470, 2205, 2940, 3675],
-  rowHeights: [735, 735, 735, 735, 735, 735],
-};
-
-// 向后兼容别名
+// 向后兼容：导出旧常量名（供 devtools 等外部引用）
+// 新代码不应使用这些常量，应通过注册表获取 config
+// 这些是"典型尺寸"的硬编码回退，仅在预加载缓存不可用时使用
+/** @deprecated 使用注册表获取 config */
+export const HERO_ATLAS: SpriteAtlasConfig = generateUniformAtlasConfig(2088, 1458, 1, 2);
+/** @deprecated 使用注册表获取 config */
+export const PORTAL_ATLAS: SpriteAtlasConfig = generateUniformAtlasConfig(2048, 1430, 1, 2);
+/** @deprecated 使用注册表获取 config */
+export const CARDS_ATLAS: SpriteAtlasConfig = generateUniformAtlasConfig(2088, 4374, 6, 2);
+/** @deprecated 使用注册表获取 config */
+export const NECROMANCER_CARDS_ATLAS: SpriteAtlasConfig = generateUniformAtlasConfig(2100, 4410, 6, 2);
+/** @deprecated 使用注册表获取 config */
+export const DICE_ATLAS: SpriteAtlasConfig = generateUniformAtlasConfig(1024, 1024, 3, 3);
+/** @deprecated */
 export const NECROMANCER_HERO_ATLAS = HERO_ATLAS;
-
-/**
- * dice.png 配置（骰子面精灵图）
- * 3x3 布局，约 1024x1024
- * 索引映射：
- * - 0: 近战（大交叉剑）  1: 空  2: 空
- * - 3: 远程（交叉斧弓）  4: 近战（交叉剑）  5: 空
- * - 6: 近战（交叉剑）    7: 远程（剑+弓）    8: 特殊（单剑）
- */
-export const DICE_ATLAS: SpriteAtlasConfig = {
-  imageW: 1024,
-  imageH: 1024,
-  cols: 3,
-  rows: 3,
-  colStarts: [0, 341, 682],
-  colWidths: [341, 341, 342],
-  rowStarts: [0, 341, 682],
-  rowHeights: [341, 341, 342],
-};
 
 /** 骰子面对应的精灵图帧索引 */
 export const DICE_FACE_SPRITE_MAP = {
@@ -187,6 +138,18 @@ export function resolveCardAtlasId(card: { id: string; faction?: FactionId | str
   return getFactionAtlasId('necromancer', atlasType);
 }
 
+/**
+ * 从预加载缓存解析图片尺寸并生成均匀网格配置
+ * 如果缓存中没有（边缘情况），返回 null
+ */
+function resolveUniformConfig(imagePath: string, grid: AtlasGridDecl, locale: string): SpriteAtlasConfig | null {
+  const img = getPreloadedImageElement(imagePath, locale);
+  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    return generateUniformAtlasConfig(img.naturalWidth, img.naturalHeight, grid.rows, grid.cols);
+  }
+  return null;
+}
+
 /** 初始化精灵图注册（所有阵营） */
 export function initSpriteAtlases(locale?: string): void {
   const effectiveLocale = locale || 'zh-CN';
@@ -195,26 +158,34 @@ export function initSpriteAtlases(locale?: string): void {
     const heroBase = `summonerwars/hero/${dir}/hero`;
     const localizedHeroBase = getLocalizedAssetPath(heroBase, effectiveLocale);
     const heroUrls = getOptimizedImageUrls(localizedHeroBase);
-    registerSpriteAtlas(`sw:${dir.toLowerCase()}:hero`, {
-      image: heroUrls.webp,
-      config: HERO_ATLAS,
-    });
-    registerCardAtlasSource(`sw:${dir.toLowerCase()}:hero`, {
+    // globalSpriteAtlasRegistry：即时解析尺寸（initSpriteAtlases 在 CriticalImageGate 之后调用）
+    const heroConfig = resolveUniformConfig(heroBase, HERO_GRID, effectiveLocale);
+    if (heroConfig) {
+      registerSpriteAtlas(`sw:${dir.toLowerCase()}:hero`, {
+        image: heroUrls.webp,
+        config: heroConfig,
+      });
+    }
+    // cardAtlasRegistry：懒解析（渲染时从缓存读取尺寸）
+    registerLazyCardAtlasSource(`sw:${dir.toLowerCase()}:hero`, {
       image: heroBase,
-      config: HERO_ATLAS,
+      grid: HERO_GRID,
     });
 
     const cardsBase = `summonerwars/hero/${dir}/cards`;
     const localizedCardsBase = getLocalizedAssetPath(cardsBase, effectiveLocale);
     const cardsUrls = getOptimizedImageUrls(localizedCardsBase);
-    const cardsConfig = dir === 'Necromancer' ? NECROMANCER_CARDS_ATLAS : CARDS_ATLAS;
-    registerSpriteAtlas(`sw:${dir.toLowerCase()}:cards`, {
-      image: cardsUrls.webp,
-      config: cardsConfig,
-    });
-    registerCardAtlasSource(`sw:${dir.toLowerCase()}:cards`, {
+    // 每个阵营的 cards 图片尺寸可能不同（如 Necromancer），从缓存自动解析
+    const cardsConfig = resolveUniformConfig(cardsBase, CARDS_GRID, effectiveLocale);
+    if (cardsConfig) {
+      registerSpriteAtlas(`sw:${dir.toLowerCase()}:cards`, {
+        image: cardsUrls.webp,
+        config: cardsConfig,
+      });
+    }
+    registerLazyCardAtlasSource(`sw:${dir.toLowerCase()}:cards`, {
       image: cardsBase,
-      config: cardsConfig,
+      grid: CARDS_GRID,
     });
   }
 
@@ -222,25 +193,31 @@ export function initSpriteAtlases(locale?: string): void {
   const diceBase = 'summonerwars/common/dice';
   const localizedDiceBase = getLocalizedAssetPath(diceBase, effectiveLocale);
   const diceUrls = getOptimizedImageUrls(localizedDiceBase);
-  registerSpriteAtlas('sw:dice', {
-    image: diceUrls.webp,
-    config: DICE_ATLAS,
-  });
-  registerCardAtlasSource('sw:dice', {
+  const diceConfig = resolveUniformConfig(diceBase, DICE_GRID, effectiveLocale);
+  if (diceConfig) {
+    registerSpriteAtlas('sw:dice', {
+      image: diceUrls.webp,
+      config: diceConfig,
+    });
+  }
+  registerLazyCardAtlasSource('sw:dice', {
     image: diceBase,
-    config: DICE_ATLAS,
+    grid: DICE_GRID,
   });
 
   // 传送门精灵图（所有阵营共用）
   const portalBase = 'summonerwars/common/Portal';
   const localizedPortalBase = getLocalizedAssetPath(portalBase, effectiveLocale);
   const portalUrls = getOptimizedImageUrls(localizedPortalBase);
-  registerSpriteAtlas('sw:portal', {
-    image: portalUrls.webp,
-    config: PORTAL_ATLAS,
-  });
-  registerCardAtlasSource('sw:portal', {
+  const portalConfig = resolveUniformConfig(portalBase, PORTAL_GRID, effectiveLocale);
+  if (portalConfig) {
+    registerSpriteAtlas('sw:portal', {
+      image: portalUrls.webp,
+      config: portalConfig,
+    });
+  }
+  registerLazyCardAtlasSource('sw:portal', {
     image: portalBase,
-    config: PORTAL_ATLAS,
+    grid: PORTAL_GRID,
   });
 }

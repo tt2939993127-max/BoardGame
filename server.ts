@@ -244,6 +244,12 @@ const io = new IOServer(httpServer, {
         methods: ['GET', 'POST'],
         credentials: true,
     },
+    // 心跳配置：适当放宽以减少后台标签页的误断线
+    // 默认 pingInterval=25s + pingTimeout=20s = 45s 断线
+    // 调整为 pingInterval=30s + pingTimeout=60s = 90s 断线
+    // 给后台标签页更多缓冲时间（Chrome 节流 timer 到 1 次/分钟）
+    pingInterval: 30000,
+    pingTimeout: 60000,
 });
 
 // 创建游戏传输服务器
@@ -251,7 +257,7 @@ const gameTransport = new GameTransportServer({
     io,
     storage,
     games: SERVER_ENGINES,
-    offlineGraceMs: 3000,
+    offlineGraceMs: 15000,
     authenticate: async (matchID, playerID, credentials, metadata) => {
         if (!credentials) return false;
         const playerMeta = metadata.players[playerID];
@@ -680,38 +686,7 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
     }
 });
 
-// GET /games/:name/:matchID — 获取对局信息
-router.get('/games/:name/:matchID', async (ctx) => {
-    const matchID = ctx.params.matchID;
-
-    // 排除已知的子路由
-    if (matchID === 'create' || matchID === 'leaderboard') {
-        return;
-    }
-
-    const result = await storage.fetch(matchID, { metadata: true });
-    if (!result.metadata) {
-        ctx.throw(404, `Match ${matchID} not found`);
-        return;
-    }
-
-    const metadata = result.metadata;
-    ctx.body = {
-        matchID,
-        gameName: metadata.gameName,
-        players: Object.entries(metadata.players).map(([id, data]) => ({
-            id: Number(id),
-            name: data.name,
-            isConnected: data.isConnected,
-        })),
-        setupData: metadata.setupData,
-        createdAt: metadata.createdAt,
-        updatedAt: metadata.updatedAt,
-        gameover: metadata.gameover,
-    };
-});
-
-// GET /games/:name/leaderboard — 排行榜
+// GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = ctx.params.name;
     try {
@@ -742,6 +717,37 @@ router.get('/games/:name/leaderboard', async (ctx) => {
         ctx.status = 500;
         ctx.body = { error: 'Internal Server Error' };
     }
+});
+
+// GET /games/:name/:matchID — 获取对局信息
+router.get('/games/:name/:matchID', async (ctx) => {
+    const matchID = ctx.params.matchID;
+
+    // 排除已知的子路由（create 由 POST 处理，此处防止 GET 误匹配）
+    if (matchID === 'create') {
+        return;
+    }
+
+    const result = await storage.fetch(matchID, { metadata: true });
+    if (!result.metadata) {
+        ctx.throw(404, `Match ${matchID} not found`);
+        return;
+    }
+
+    const metadata = result.metadata;
+    ctx.body = {
+        matchID,
+        gameName: metadata.gameName,
+        players: Object.entries(metadata.players).map(([id, data]) => ({
+            id: Number(id),
+            name: data.name,
+            isConnected: data.isConnected,
+        })),
+        setupData: metadata.setupData,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+        gameover: metadata.gameover,
+    };
 });
 
 app.use(router.routes());

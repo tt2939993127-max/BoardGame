@@ -26,6 +26,7 @@ import {
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
 import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
+import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
@@ -41,9 +42,12 @@ import { LoadingScreen } from '../components/system/LoadingScreen';
 import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
+import { preloadWarmImages } from '../core';
+import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
+import { GameCursorProvider } from '../core/cursor';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -113,6 +117,7 @@ export const MatchRoom = () => {
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
+    const { user } = useAuth();
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const isUgcGame = Boolean(gameConfig?.isUgc);
@@ -288,6 +293,23 @@ export const MatchRoom = () => {
         };
     }, [gameId, i18n]);
 
+    // 大厅阶段暖预加载：在 i18n namespace 就绪后，后台预取当前游戏的图片资源。
+    // 与 socket 连接/状态同步并行执行，利用等待时间把图片拉到浏览器缓存，
+    // 减少 CriticalImageGate 挂载后的实际加载时间。
+    // 使用 preloadWarmImages（requestIdleCallback）不阻塞主线程。
+    const lobbyPreloadStartedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!gameId || !isGameNamespaceReady || isTutorialRoute || isUgcGame) return;
+        if (lobbyPreloadStartedRef.current === gameId) return;
+        lobbyPreloadStartedRef.current = gameId;
+        // resolver 无状态降级：返回该游戏的基础资源列表
+        const resolved = resolveCriticalImages(gameId, undefined, i18n.language);
+        const allPaths = [...new Set([...resolved.critical, ...resolved.warm])];
+        if (allPaths.length > 0) {
+            preloadWarmImages(allPaths, i18n.language);
+        }
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
+
 
     // 从地址查询参数中获取 playerID
     const urlPlayerID = searchParams.get('playerID');
@@ -347,7 +369,7 @@ export const MatchRoom = () => {
 
         setIsAutoJoining(true);
         const guestId = getOrCreateGuestId();
-        const playerName = t('player.guest', { id: guestId, ns: 'lobby' });
+        const playerName = user?.username || t('player.guest', { id: guestId, ns: 'lobby' });
 
         let retryCount = 0;
         const maxRetries = 5;
@@ -376,7 +398,7 @@ export const MatchRoom = () => {
                     return;
                 }
                 const targetPlayerID = String(openSeat.id);
-                const { success } = await rejoinMatch(gameId, matchId, targetPlayerID, playerName, { guestId });
+                const { success } = await rejoinMatch(gameId, matchId, targetPlayerID, playerName, { guestId: user?.id ? undefined : guestId });
                 if (cancelled) return;
                 if (success) {
                     // rejoinMatch 内部已调用 persistMatchCredentials，
@@ -417,7 +439,7 @@ export const MatchRoom = () => {
             }
             autoJoinStartedRef.current = false;
         };
-    }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, t]);
+    }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, t, user]);
 
     // 获取凭据
     const credentials = useMemo(() => {
@@ -919,6 +941,7 @@ export const MatchRoom = () => {
 
             {/* 游戏棋盘 - 全屏 */}
             <div className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}>
+                <GameCursorProvider themeId={gameConfig?.cursorTheme}>
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
                         {hasTutorialBoard && engineConfig && WrappedBoard ? (
@@ -993,6 +1016,7 @@ export const MatchRoom = () => {
                         </div>
                     )
                 )}
+                </GameCursorProvider>
             </div>
 
         </div>

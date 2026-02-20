@@ -120,6 +120,7 @@ export function createUndoSystem<TCore>(
         : null;
 
     let pendingSnapshot: MatchState<TCore> | null = null;
+    let pendingSnapshotCursor = -1;
     let shouldClearPendingRequest = false;
 
     return {
@@ -134,8 +135,9 @@ export function createUndoSystem<TCore>(
             },
         }),
 
-        beforeCommand: ({ state, command, playerIds }): HookResult<TCore> | void => {
+        beforeCommand: ({ state, command, playerIds, random }): HookResult<TCore> | void => {
             pendingSnapshot = null;
+            pendingSnapshotCursor = -1;
             shouldClearPendingRequest = false;
 
             if (UNDO_COMMAND_SET.has(command.type) && !playerIds.includes(command.playerId)) {
@@ -185,9 +187,11 @@ export function createUndoSystem<TCore>(
                 ? clearPendingRequest(state)
                 : state;
             pendingSnapshot = createSnapshot(snapshotSource);
+            // 记录快照创建时的随机数游标，撤回恢复时用于重建随机序列
+            pendingSnapshotCursor = random.getCursor?.() ?? -1;
         },
 
-        afterEvents: ({ state, command, events }): HookResult<TCore> | void => {
+        afterEvents: ({ state, command, events, random }): HookResult<TCore> | void => {
             const type = command.type;
             const isUndoCommand = Object.values(UNDO_COMMANDS).includes(type as typeof UNDO_COMMANDS[keyof typeof UNDO_COMMANDS]);
             if (isUndoCommand) return;
@@ -199,7 +203,7 @@ export function createUndoSystem<TCore>(
             }
 
             if (pendingSnapshot) {
-                nextState = appendSnapshot(nextState, pendingSnapshot, maxSnapshots);
+                nextState = appendSnapshot(nextState, pendingSnapshot, maxSnapshots, pendingSnapshotCursor);
             }
 
             // 事件驱动快照：检测到回合切换等关键事件时，用当前状态（事件 reduce 后）创建快照
@@ -214,10 +218,13 @@ export function createUndoSystem<TCore>(
             );
             if (hasSnapshotEvent || hasNewTurn) {
                 const eventSnapshot = createSnapshot(nextState);
-                nextState = appendSnapshot(nextState, eventSnapshot, maxSnapshots);
+                // 事件驱动快照使用当前 cursor（事件 reduce 后的位置）
+                const currentCursor = random.getCursor?.() ?? -1;
+                nextState = appendSnapshot(nextState, eventSnapshot, maxSnapshots, currentCursor);
             }
 
             pendingSnapshot = null;
+            pendingSnapshotCursor = -1;
             shouldClearPendingRequest = false;
 
             if (nextState !== state) {
@@ -315,14 +322,19 @@ function createSnapshot<TCore>(
 function appendSnapshot<TCore>(
     state: MatchState<TCore>,
     snapshot: MatchState<TCore>,
-    maxSnapshots: number
+    maxSnapshots: number,
+    randomCursor = -1
 ): MatchState<TCore> {
     const snapshots = [...state.sys.undo.snapshots];
     snapshots.push(snapshot);
+
+    const cursors = [...(state.sys.undo.snapshotCursors ?? [])];
+    cursors.push(randomCursor);
     
     // 限制快照数量
     while (snapshots.length > maxSnapshots) {
         snapshots.shift();
+        cursors.shift();
     }
 
     return {
@@ -332,6 +344,7 @@ function appendSnapshot<TCore>(
             undo: {
                 ...state.sys.undo,
                 snapshots,
+                snapshotCursors: cursors,
             },
         },
     };
@@ -361,10 +374,14 @@ function handleRequestUndo<TCore>(
     if (!requireApproval || requiredApprovals === 0) {
         const previousState = undo.snapshots[undo.snapshots.length - 1] as MatchState<TCore>;
         const newSnapshots = undo.snapshots.slice(0, -1);
+        const cursors = undo.snapshotCursors ?? [];
+        const restoredCursor = cursors[cursors.length - 1] ?? -1;
+        const newCursors = cursors.slice(0, -1);
 
         logUndoServer('request-approved-direct', {
             requesterId,
             historyLen: undo.snapshots.length,
+            restoredRandomCursor: restoredCursor,
         });
         
         return {
@@ -376,7 +393,9 @@ function handleRequestUndo<TCore>(
                     undo: {
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
+                        snapshotCursors: newCursors,
                         pendingRequest: undefined,
+                        restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },
                 },
             },
@@ -432,6 +451,9 @@ function handleApproveUndo<TCore>(
         // 执行撤销
         const previousState = undo.snapshots[undo.snapshots.length - 1] as MatchState<TCore>;
         const newSnapshots = undo.snapshots.slice(0, -1);
+        const cursors = undo.snapshotCursors ?? [];
+        const restoredCursor = cursors[cursors.length - 1] ?? -1;
+        const newCursors = cursors.slice(0, -1);
 
         logUndoServer('approve-applied', {
             approverId,
@@ -440,6 +462,7 @@ function handleApproveUndo<TCore>(
             beforeSnapshotLen: undo.snapshots.length,
             afterSnapshotLen: newSnapshots.length,
             restoredPhase: (previousState as any).sys?.phase,
+            restoredRandomCursor: restoredCursor,
         });
         
         return {
@@ -451,7 +474,9 @@ function handleApproveUndo<TCore>(
                     undo: {
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
+                        snapshotCursors: newCursors,
                         pendingRequest: undefined,
+                        restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },
                 },
             },

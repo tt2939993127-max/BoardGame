@@ -136,7 +136,8 @@ describe('雷霆万钧技能', () => {
                 { type: 'ROLL_DICE', playerId: '1', payload: {} }, // 防御方掷骰
                 { type: 'CONFIRM_ROLL', playerId: '1', payload: {} },
                 { type: 'RESPONSE_PASS', playerId: '1', payload: {} }, // 跳过防御技能
-                { type: 'ADVANCE_PHASE', playerId: '1', payload: {} }, // defensiveRoll → main2（触发攻击结算）
+                { type: 'ADVANCE_PHASE', playerId: '1', payload: {} }, // defensiveRoll exit → 攻击结算 + displayOnly 结算暂停
+                { type: 'SKIP_BONUS_DICE_REROLL', playerId: '0', payload: {} }, // 确认骰子结果 → 推进到 main2
             ],
         });
 
@@ -148,7 +149,12 @@ describe('雷霆万钧技能', () => {
         // 验证命令执行成功
         expect(result.steps[0].success).toBe(true);
 
-        // 验证没有 pendingBonusDiceSettlement（直接结算）
+        // ADVANCE_PHASE 后 displayOnly settlement 被设置，SKIP_BONUS_DICE_REROLL 后被清除
+        // 验证中间状态：ADVANCE_PHASE 步骤应产生 BONUS_DICE_REROLL_REQUESTED
+        const advanceStep = result.steps.find(s => s.step === 9);
+        expect(advanceStep?.events).toContain('BONUS_DICE_REROLL_REQUESTED');
+
+        // 最终状态：settlement 已被 SKIP_BONUS_DICE_REROLL 清除
         expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
 
         // 验证事件流中有 BONUS_DIE_ROLLED 事件

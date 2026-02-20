@@ -178,6 +178,8 @@ export interface PendingAttack {
     attackDiceFaceCounts?: Record<string, number>;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
+    /** 奖励骰是否已通过 BONUS_DICE_SETTLED 结算（避免 autoContinue 重入时重复执行 resolveAttack） */
+    bonusDiceResolved?: boolean;
 }
 
 // ============================================================================

@@ -272,14 +272,14 @@ function killerPlantBudding(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 绽放 onPlay：额外打出?个随从
+ * 绽放 onPlay：额外打出至多三个同名随从
  */
 function killerPlantBlossom(ctx: AbilityContext): AbilityResult {
     return {
         events: [
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now),
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now),
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now),
+            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
+            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
+            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
         ],
     };
 }

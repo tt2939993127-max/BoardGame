@@ -113,3 +113,6 @@ test-results/
 playwright-report/
 blob-report/
 e2e/screenshots/
+
+# 用户上传文件
+uploads/

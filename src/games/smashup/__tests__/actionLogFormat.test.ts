@@ -52,11 +52,11 @@ describe('formatSmashUpActionEntry', () => {
         });
         const entries = normalizeEntries(result);
 
-        const commandEntry = entries.find((entry) => entry.kind === SU_COMMANDS.PLAY_MINION);
+        const commandEntry = entries.find((entry) => entry.kind === SU_EVENTS.MINION_PLAYED);
         expect(commandEntry).toBeTruthy();
         // 应包含 i18n segment（playMinion）和 card segment
         const i18nKeys = getI18nKeys(commandEntry!.segments);
-        expect(i18nKeys).toContain('actionLog.playMinion');
+        expect(i18nKeys).toContain('actionLog.minionPlayed');
         const cardSegments = commandEntry?.segments.filter(segment => segment.type === 'card');
         expect(cardSegments?.[0]).toMatchObject({ cardId: 'pirate_king' });
         // 应包含 onBase i18n segment

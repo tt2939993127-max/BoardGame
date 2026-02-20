@@ -109,9 +109,9 @@ const NINJA_ACTION_KEYS = [
     'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_03_krst',
 ];
 const ROBOT_MINION_KEYS = [
-    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robot_monster_a',
-    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robot_monster_b',
-    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_a',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a3',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a4',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_b2',
 ];
 const ROBOT_ACTION_KEYS = [
     'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a1',

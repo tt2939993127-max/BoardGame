@@ -75,34 +75,42 @@ export const getCardAtlasStyle = (index: number, atlas: CardAtlasConfig) => {
     return computeSpriteStyle(index, atlas) as CSSProperties;
 };
 
-import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
+import { registerLazyCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 
 /**
- * 初始化 SmashUp 卡牌图集（模块加载时同步注册）
- * 使用硬编码的均匀网格配置，避免运行时异步加载 JSON 导致的竞态条件
+ * 初始化 SmashUp 所有图集（模块加载时同步注册）
+ * 使用懒解析模式：只声明 image + rows/cols，首次渲染时自动从预加载缓存读取图片尺寸。
+ * CriticalImageGate 保证图片在 Board 渲染前已预加载到缓存中。
  */
-export function initSmashUpCardAtlases() {
-    // cards1: 6x8 grid
-    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS1, {
-        image: 'smashup/cards/cards1',
-        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+export function initSmashUpAtlases() {
+    // --- 卡牌图集（6列8行 / 7列8行） ---
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS1, {
+        image: 'smashup/cards/cards1', grid: { rows: 6, cols: 8 },
+    });
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS2, {
+        image: 'smashup/cards/cards2', grid: { rows: 7, cols: 8 },
+    });
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS3, {
+        image: 'smashup/cards/cards3', grid: { rows: 6, cols: 8 },
+    });
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS4, {
+        image: 'smashup/cards/cards4', grid: { rows: 6, cols: 8 },
     });
 
-    // cards2: 7x8 grid
-    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS2, {
-        image: 'smashup/cards/cards2',
-        config: generateUniformAtlasConfig(1666, 2048, 7, 8),
+    // --- 基地图集（不同行列数） ---
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.BASE1, {
+        image: 'smashup/base/base1', grid: { rows: 4, cols: 4 },
     });
-
-    // cards3: 6x8 grid
-    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS3, {
-        image: 'smashup/cards/cards3',
-        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.BASE2, {
+        image: 'smashup/base/base2', grid: { rows: 2, cols: 4 },
     });
-
-    // cards4: 6x8 grid
-    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS4, {
-        image: 'smashup/cards/cards4',
-        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.BASE3, {
+        image: 'smashup/base/base3', grid: { rows: 2, cols: 4 },
+    });
+    registerLazyCardAtlasSource(SMASHUP_ATLAS_IDS.BASE4, {
+        image: 'smashup/base/base4', grid: { rows: 3, cols: 4 },
     });
 }
+
+/** @deprecated 使用 initSmashUpAtlases 代替 */
+export const initSmashUpCardAtlases = initSmashUpAtlases;

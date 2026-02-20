@@ -14,6 +14,7 @@ const entry: GameManifestEntry = {
     playerOptions: [2],
     tags: ['tactical', 'card_driven', 'dice_driven'],
     bestPlayers: [2],
+    cursorTheme: 'summonerwars',
 };
 
 export const SUMMONER_WARS_MANIFEST: GameManifestEntry = entry;

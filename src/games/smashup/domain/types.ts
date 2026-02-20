@@ -232,8 +232,14 @@ export interface PlayerState {
     usedDiscardPlayAbilities?: string[];
     /** 基地限定额外随从额度（baseIndex → 额外额度），只能打到指定基地 */
     baseLimitedMinionQuota?: Record<number, number>;
+    /** 基地限定额度是否要求同名（baseIndex → true），与 baseLimitedMinionQuota 配合 */
+    baseLimitedSameNameRequired?: Record<number, boolean>;
     /** 额外出牌的力量上限（如家园给的额外出牌只能打力量≤2的随从），回合结束清零 */
     extraMinionPowerMax?: number;
+    /** 同名额外随从约束：剩余额度数 */
+    sameNameMinionRemaining?: number;
+    /** 同名额外随从约束：已锁定的 defId（null = 尚未锁定，string = 已锁定） */
+    sameNameMinionDefId?: string | null;
     /** 选择的派系 */
     factions: [FactionId, FactionId];
 }
@@ -558,6 +564,10 @@ export interface LimitModifiedEvent extends GameEvent<'su:limit_modified'> {
         restrictToBase?: number;
         /** 额外出牌的力量上限（如家园：力量≤2），不设则无限制 */
         powerMax?: number;
+        /** 同名限制：这些额度只能用于打出同一 defId 的随从（第一个打出时锁定） */
+        sameNameOnly?: boolean;
+        /** 预锁定的 defId（与 sameNameOnly 配合使用，跳过首次锁定直接限定） */
+        sameNameDefId?: string;
     };
 }
 

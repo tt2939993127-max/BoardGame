@@ -77,7 +77,8 @@
     "loading": "Loading...",
     "title": "Top Wins",
     "empty": "No data",
-    "record": "{{wins}} W / {{matches}} G"
+    "record": "{{wins}} W / {{matches}} G",
+    "error": "Failed to load leaderboard"
   },
   "player": {
     "guest": "Guest{{id}}"

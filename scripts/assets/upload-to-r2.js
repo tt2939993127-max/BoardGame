@@ -26,7 +26,7 @@ const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.c
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 const COMPRESSED_EXTS = new Set(['.ogg', '.webp']);
 const COMPRESSED_DIR_NAME = 'compressed';
-const DATA_EXTS = new Set(['.json', '.svg']);
+const DATA_EXTS = new Set(['.svg']);
 const AUDIO_DIR_NAMES = new Set(['sfx', 'bgm']);
 
 // S3 客户端
@@ -62,13 +62,9 @@ function getAllFiles(dir, fileList = []) {
   return fileList;
 }
 
-// 压缩媒体 + 数据文件（注册表、svg 等，但不包括 atlas.json）+ 音频文件
+// 压缩媒体 + SVG + 音频文件（JSON 配置文件从本地加载，不上传到 CDN）
 function shouldUpload(filePath) {
   const ext = extname(filePath).toLowerCase();
-  // atlas.json 配置文件从本地加载，不上传到 CDN
-  if (filePath.endsWith('.atlas.json')) {
-    return false;
-  }
   if (DATA_EXTS.has(ext)) {
     return true;
   }

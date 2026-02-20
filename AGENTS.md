@@ -150,6 +150,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **首次修复未解决且未定位原因**：必须查看生产日志（`logs/error-*.log`）或添加临时日志获取证据，标注采集点与清理计划。
 - **禁止用"强制/绕过"掩盖问题**：不得放开安全限制/扩大白名单/关闭校验来掩盖根因。
 - **写入-消费全链路排查（强制）**：排查"写入了但没生效"类 bug 时，禁止只验证写入链（定义→执行→reduce 写入）就判定"逻辑正常"。必须同时验证消费链路：**写入的状态何时被消费？消费窗口是否在写入之后？写入到消费之间是否有清理逻辑会先抹掉状态？** 画出完整的阶段/回合时间线，标注写入时机、消费窗口、清理时机三个点，确认写入→消费→清理的顺序正确。详见 `docs/ai-rules/testing-audit.md`「D8 子项：写入-消费窗口对齐」。**教训**：群情激愤在 magic 阶段写入 extraAttacks，但 attack 阶段已过，TURN_CHANGED 清理 extraAttacks，写入→清理之间不包含消费窗口，功能永远不生效但写入链全部正常。
+- **API→Context→UI 三层数据链路排查（强制）**：排查"UI 不响应/数据不显示/点击无效"类 bug 时，禁止只在 UI 组件层反复猜测。必须从数据源头开始，逐层核查三层链路：① **API 层**：服务端实际返回的字段名和结构是什么？② **Context/Store 层**：前端拿到数据后是否做了正确的字段映射？存进 state 的数据结构是否与类型定义一致？③ **UI 组件层**：组件读取的字段名是否与 state 中的字段名匹配？**每层都必须实际查看代码确认，禁止假设"中间层肯定没问题"。** 截图/控制台中的异常信号（如显示 `?`/`undefined`/`NaN`、React key 警告）是数据层问题的强指示，必须立即往上游追溯。**教训**：聊天选择好友无法开始聊天，在 UI 组件层反复猜了一整轮，实际根因是 `SocialContext.refreshConversations` 没有做服务端→前端的字段映射（服务端返回 `{ user: { id, username }, unread }`，前端期望 `{ userId, username, unreadCount }`），导致 `conv.userId` 为 `undefined`。
 - **连续两次未解决**：必须切换为"假设列表 → 验证方法 → 多方案对比"排查模式。
 - **输出总结**：每次回复末尾必须包含 `## 总结` 区块。
 - **百游戏自检（强制）**：每次修改代码后，必须在总结中回答"这样能不能支持未来 100 个游戏？"，并检查以下维度：
@@ -497,8 +498,10 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **代码行为**：`OptimizedImage` 和 `CardPreview` 会自动从 `i18next` 获取当前语言（`i18n.language`），无需手动传递 `locale` prop。路径自动转换：`dicethrone/images/foo.png` → `i18n/zh-CN/dicethrone/images/foo.png`。
   - **无需手动传递 locale（强制）**：所有使用 `OptimizedImage`/`CardPreview` 的地方，禁止手动传递 `locale` prop（除非测试或特殊场景需要覆盖）。组件会自动从 i18next 获取当前语言。
   - **图集加载最佳实践（强制）**：
-    - **图集配置（.atlas.json）与语言无关**：统一存放在 `/assets/atlas-configs/` 目录，`loadCardAtlasConfig` 不需要 locale 参数。SmashUp 全部使用规则网格（`defaultGrid`），不需要 JSON 配置文件。
-    - **SummonerWars 模式**：调用 `initSpriteAtlases(locale)` 时，必须在组件内通过 `useEffect` 调用并传递 `i18n.language`，因为它同时注册图片路径（需要国际化）。
+    - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从预加载缓存自动解析，零配置文件。SmashUp 和 SummonerWars 均使用此模式。
+    - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，config 从静态 JSON import。DiceThrone 使用此模式。
+    - **注册时机**：模块顶层同步注册，禁止在 `useEffect` 中异步注册（消除首帧 shimmer）。
+    - **SummonerWars 模式**：`initSpriteAtlases(locale)` 同时注册 `cardAtlasRegistry`（懒解析）和 `globalSpriteAtlasRegistry`（即时解析），后者需要 locale，必须在组件 `useEffect` 中调用。
     - **核心原则**：图片资源需要国际化（路径包含 `/i18n/{locale}/`），图集配置文件不需要国际化。
   - **未来扩展**：英文版上线时，将英文图片放入 `i18n/en/<gameId>/`，代码无需修改。
   - **CDN 部署**：运行 `npm run assets:upload -- --sync` 同步到 CDN。

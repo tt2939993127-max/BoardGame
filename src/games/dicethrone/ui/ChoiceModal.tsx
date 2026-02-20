@@ -150,17 +150,17 @@ export const ChoiceModal = ({
                     )
                 ) : (
                     (() => {
-                        // 检测是否所有选项都是 token 类型（排除 __cancel__）
-                        const nonCancelOptions = choice?.options.filter(o => o.id !== '__cancel__') ?? [];
-                        const isTokenChoice = nonCancelOptions.length > 0 && nonCancelOptions.every(o => o.tokenId);
-                        const cancelOption = choice?.options.find(o => o.id === '__cancel__');
+                        // 将选项分为 token 图标和普通按钮（skip/cancel 等）
+                        const tokenOptions = choice?.options.filter(o => o.tokenId) ?? [];
+                        const nonTokenOptions = choice?.options.filter(o => !o.tokenId) ?? [];
+                        const isTokenChoice = tokenOptions.length > 0;
 
                         if (isTokenChoice) {
-                            // Token 图标模式：渲染可点击的 token 图标 + 悬浮 tooltip
+                            // Token 图标模式：渲染可点击的 token 图标 + 底部跳过/取消按钮
                             return (
                                 <div className="flex flex-col items-center gap-4 w-full">
                                     <div className="flex gap-6 justify-center">
-                                        {nonCancelOptions.map(option => (
+                                        {tokenOptions.map(option => (
                                             <TokenChoiceIcon
                                                 key={option.id}
                                                 option={option}
@@ -172,16 +172,17 @@ export const ChoiceModal = ({
                                             />
                                         ))}
                                     </div>
-                                    {cancelOption && (
+                                    {nonTokenOptions.map(option => (
                                         <GameButton
-                                            onClick={() => onResolve(cancelOption.id)}
+                                            key={option.id}
+                                            onClick={() => onResolve(option.id)}
                                             disabled={!canResolve}
                                             variant="secondary"
                                             className="min-w-[100px]"
                                         >
-                                            {resolveOptionLabel(cancelOption.label)}
+                                            {resolveOptionLabel(option.label)}
                                         </GameButton>
-                                    )}
+                                    ))}
                                 </div>
                             );
                         }

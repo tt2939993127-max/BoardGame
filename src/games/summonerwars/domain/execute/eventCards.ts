@@ -219,6 +219,9 @@ export function executePlayEvent(
             // 稳固免疫检查：有 stable 技能的单位不受推拉，但仍受伤害
             const isStable = getUnitAbilities(stunUnit, core).includes('stable');
 
+            // 记录推移后的最终位置，用于后续伤害事件定位
+            let stunFinalPos: CellCoord | null = null;
+
             if (!isStable && (stunMoveRow !== 0 || stunMoveCol !== 0)) {
               // 使用统一的震慑推拉计算（可穿过单位，被建筑阻挡）
               const { finalPos, passedPositions } = calculateStunPushPull(
@@ -236,6 +239,7 @@ export function executePlayEvent(
 
               // 移动目标到最终空位置
               if (finalPos) {
+                stunFinalPos = finalPos;
                 events.push({
                   type: SW_EVENTS.UNIT_PUSHED,
                   payload: { targetPosition: stunTarget, newPosition: finalPos },
@@ -245,9 +249,11 @@ export function executePlayEvent(
             }
 
             // 对目标造成1伤害（无论是否有 stable，伤害都生效）
+            // 如果目标被推移了，伤害应作用于移动后的位置，否则用原始位置
+            const stunDamagePos = stunFinalPos ?? stunTarget;
             events.push({
               type: SW_EVENTS.UNIT_DAMAGED,
-              payload: { position: stunTarget, damage: 1, reason: 'stun', sourcePlayerId: playerId },
+              payload: { position: stunDamagePos, damage: 1, reason: 'stun', sourcePlayerId: playerId },
               timestamp,
             });
           }

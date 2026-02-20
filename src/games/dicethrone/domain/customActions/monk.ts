@@ -7,15 +7,13 @@ import { RESOURCE_IDS } from '../resources';
 import { TOKEN_IDS, DICE_FACE_IDS } from '../ids';
 import type {
     DiceThroneEvent,
-    DamageDealtEvent,
     TokenGrantedEvent,
     ChoiceRequestedEvent,
     BonusDieRolledEvent,
     TokenLimitChangedEvent,
     RollLimitChangedEvent,
 } from '../types';
-import { buildDrawEvents } from '../deckEvents';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 
@@ -188,66 +186,22 @@ type ThunderStrikeBonusConfig = {
 import { STATUS_IDS } from '../ids';
 import type {
     StatusAppliedEvent,
-    BonusDiceRerollRequestedEvent,
     BonusDieInfo,
-    PendingBonusDiceSettlement,
 } from '../types';
 
+/**
+ * 雷霆万钧/雷霆一击通用：投掷多骰 + 可选重掷 + 总和伤害 + 阈值效果
+ * 使用通用 createBonusDiceWithReroll，仅提供"无 token 时的结算逻辑"
+ */
 const createThunderStrikeRollDamageEvents = (
-    { targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext,
+    ctx: CustomActionContext,
     config: ThunderStrikeBonusConfig
 ): DiceThroneEvent[] => {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-    const dice: BonusDieInfo[] = [];
+    const { targetId, attackerId, sourceAbilityId, state, timestamp } = ctx;
 
-    // 投掷奖励骰
-    for (let i = 0; i < config.diceCount; i++) {
-        const value = random.d(6);
-        const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        dice.push({ index: i, value, face });
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: targetId,
-                effectKey: config.dieEffectKey,
-                effectParams: { value, index: i },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i,
-        } as BonusDieRolledEvent);
-    }
-
-    const attacker = state.players[attackerId];
-    const hasToken = (attacker?.tokens?.[config.rerollCostTokenId] ?? 0) >= config.rerollCostAmount;
-
-    if (hasToken) {
-        const settlement: PendingBonusDiceSettlement = {
-            id: `${sourceAbilityId}-${timestamp}`,
-            sourceAbilityId,
-            attackerId,
-            targetId,
-            dice,
-            rerollCostTokenId: config.rerollCostTokenId,
-            rerollCostAmount: config.rerollCostAmount,
-            rerollCount: 0,
-            maxRerollCount: config.maxRerollCount,
-            rerollEffectKey: config.rerollEffectKey,
-            threshold: config.threshold,
-            thresholdEffect: config.thresholdEffect,
-            readyToSettle: false,
-        };
-        events.push({
-            type: 'BONUS_DICE_REROLL_REQUESTED',
-            payload: { settlement },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as BonusDiceRerollRequestedEvent);
-    } else {
-        // 【已迁移到新伤害计算管线】
+    return createBonusDiceWithReroll(ctx, config, (dice: BonusDieInfo[]) => {
+        const events: DiceThroneEvent[] = [];
+        // 总和伤害
         const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
         const damageCalc = createDamageCalculation({
             source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -257,7 +211,8 @@ const createThunderStrikeRollDamageEvents = (
             timestamp,
         });
         events.push(...damageCalc.toEvents());
-        
+
+        // 阈值效果（如 >=12 施加倒地）
         if (config.threshold !== undefined && totalDamage >= config.threshold && config.thresholdEffect === 'knockdown') {
             const target = state.players[targetId];
             const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
@@ -271,9 +226,8 @@ const createThunderStrikeRollDamageEvents = (
                 timestamp,
             } as StatusAppliedEvent);
         }
-    }
-
-    return events;
+        return events;
+    });
 };
 
 /**

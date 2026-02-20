@@ -31,7 +31,10 @@
       "invalidResetCode": "Invalid or expired verification code",
       "resetCodeExpired": "Verification code expired, please request a new one",
       "resetCodeMismatch": "Verification code is incorrect",
-      "resetLocked": "Too many reset attempts. Try again in {{seconds}} seconds"
+      "resetLocked": "Too many reset attempts. Try again in {{seconds}} seconds",
+      "avatarMissingFile": "Please select an image file",
+      "avatarInvalidType": "Only JPG, PNG, WebP, GIF formats are supported",
+      "avatarUploadFailed": "Failed to upload avatar"
     },
     "success": {
       "register": "Registration successful",
@@ -40,7 +43,8 @@
       "logout": "Logged out successfully",
       "refreshToken": "Token refreshed successfully",
       "resetCodeSent": "Verification code sent",
-      "passwordReset": "Password reset successfully"
+      "passwordReset": "Password reset successfully",
+      "avatarUpdated": "Avatar updated successfully"
     }
   },
   "friend": {

@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Req, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { CookieOptions, Request, Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
@@ -411,6 +412,66 @@ export class AuthController {
                 banned: user.banned,
             },
         });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('upload-avatar')
+    @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+    async uploadAvatar(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype?: string; size: number } | undefined,
+        @Body() body: { cropX?: string; cropY?: string; cropWidth?: string; cropHeight?: string },
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        if (!currentUser?.userId) {
+            return this.sendError(res, 401, t('auth.error.loginRequired'));
+        }
+        if (!file) {
+            return this.sendError(res, 400, t('auth.error.avatarMissingFile'));
+        }
+
+        // 校验文件类型
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (file.mimetype && !allowedMimes.includes(file.mimetype)) {
+            return this.sendError(res, 400, t('auth.error.avatarInvalidType'));
+        }
+
+        // 解析裁剪参数（FormData 传过来的是字符串）
+        const cropData = (body.cropWidth && body.cropHeight)
+            ? {
+                x: Number(body.cropX) || 0,
+                y: Number(body.cropY) || 0,
+                width: Number(body.cropWidth) || 0,
+                height: Number(body.cropHeight) || 0,
+            }
+            : undefined;
+
+        try {
+            const result = await this.authService.uploadAvatarFile(
+                currentUser.userId,
+                file.buffer,
+                cropData
+            );
+            if (!result) {
+                return this.sendError(res, 404, t('auth.error.userNotFound'));
+            }
+
+            return res.json({
+                message: t('auth.success.avatarUpdated') || 'Avatar updated',
+                user: {
+                    id: result.user._id.toString(),
+                    username: result.user.username,
+                    avatar: result.user.avatar,
+                    role: result.user.role,
+                    banned: result.user.banned,
+                },
+            });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : t('auth.error.avatarUploadFailed');
+            return this.sendError(res, 500, message);
+        }
     }
 
     @Post('refresh')

@@ -266,6 +266,12 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
                     events.push(...postDamageEvents);
 
+                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
+                    const hasBonusDiceRerollOffDR = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    if (hasBonusDiceRerollOffDR) {
+                        return { events, halt: true };
+                    }
+
                     // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                     const { dazeEvents, triggered } = checkDazeExtraAttack(
                         core, events, command.type, timestamp
@@ -279,6 +285,36 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     const afterAttackWindowOffDR = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
                     if (afterAttackWindowOffDR) {
                         events.push(afterAttackWindowOffDR);
+                        return { events, halt: true };
+                    }
+
+                    return { events, overrideNextPhase: 'main2' };
+                }
+
+                // 奖励骰已通过 BONUS_DICE_SETTLED 结算（autoContinue 重入），
+                // 伤害已由 SKIP_BONUS_DICE_REROLL 的 DAMAGE_DEALT 事件应用，
+                // 只需生成 ATTACK_RESOLVED 并推进到 main2
+                if (core.pendingAttack.bonusDiceResolved) {
+                    const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = core.pendingAttack;
+                    const totalDamage = core.pendingAttack.resolvedDamage ?? 0;
+                    events.push({
+                        type: 'ATTACK_RESOLVED',
+                        payload: { attackerId, defenderId, sourceAbilityId, defenseAbilityId, totalDamage },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as AttackResolvedEvent);
+
+                    const { dazeEvents, triggered } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (triggered) {
+                        events.push(...dazeEvents);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    const afterAttackWindowBD = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindowBD) {
+                        events.push(afterAttackWindowBD);
                         return { events, halt: true };
                     }
 
@@ -447,9 +483,15 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             if (core.pendingAttack) {
                 // 如果伤害已通过 Token 响应结算，只执行 postDamage 效果
                 if (core.pendingAttack.damageResolved) {
-                    // 执行 postDamage 效果（如击倒）并生成 ATTACK_RESOLVED 事件
+                    // 执行 withDamage 剩余效果（跳过 damage）+ postDamage + ATTACK_RESOLVED
                     const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
                     events.push(...postDamageEvents);
+
+                    // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
+                    const hasBonusDiceRerollPost = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    if (hasBonusDiceRerollPost) {
+                        return { events, halt: true };
+                    }
 
                     // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                     const { dazeEvents: dazeEventsPost, triggered: dazeTriggeredPost } = checkDazeExtraAttack(
@@ -464,6 +506,36 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     const afterAttackWindow1 = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
                     if (afterAttackWindow1) {
                         events.push(afterAttackWindow1);
+                        return { events, halt: true };
+                    }
+
+                    return { events, overrideNextPhase: 'main2' };
+                }
+
+                // 奖励骰已通过 BONUS_DICE_SETTLED 结算（autoContinue 重入），
+                // 伤害已由 SKIP_BONUS_DICE_REROLL 的 DAMAGE_DEALT 事件应用，
+                // 只需生成 ATTACK_RESOLVED 并推进到 main2
+                if (core.pendingAttack.bonusDiceResolved) {
+                    const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = core.pendingAttack;
+                    const totalDamage = core.pendingAttack.resolvedDamage ?? 0;
+                    events.push({
+                        type: 'ATTACK_RESOLVED',
+                        payload: { attackerId, defenderId, sourceAbilityId, defenseAbilityId, totalDamage },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as AttackResolvedEvent);
+
+                    const { dazeEvents: dazeEventsPost, triggered: dazeTriggeredPost } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (dazeTriggeredPost) {
+                        events.push(...dazeEventsPost);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    const afterAttackWindowBD = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindowBD) {
+                        events.push(afterAttackWindowBD);
                         return { events, halt: true };
                     }
 

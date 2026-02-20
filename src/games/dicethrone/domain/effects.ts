@@ -28,6 +28,7 @@ import type {
     CpChangedEvent,
     BonusDieInfo,
     BonusDiceRerollRequestedEvent,
+    PendingBonusDiceSettlement,
 } from './types';
 import { CP_MAX } from './types';
 import { buildDrawEvents } from './deckEvents';
@@ -215,6 +216,137 @@ export function createDisplayOnlySettlement(
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDiceRerollRequestedEvent;
+}
+
+// ============================================================================
+// 通用奖励骰投掷 + 可选重掷
+// ============================================================================
+
+/**
+ * 奖励骰投掷配置
+ * 封装"投掷多骰 + 检查 token → 可重掷 / displayOnly"的通用逻辑
+ */
+export interface BonusDiceRollConfig {
+    /** 投掷骰子数量 */
+    diceCount: number;
+    /** 重掷消耗的 Token ID */
+    rerollCostTokenId: string;
+    /** 每次重掷消耗的 Token 数量 */
+    rerollCostAmount: number;
+    /** 最大可重掷次数 */
+    maxRerollCount?: number;
+    /** 骰子效果描述 key（用于 UI） */
+    dieEffectKey: string;
+    /** 重掷特写文案 key（用于 UI） */
+    rerollEffectKey: string;
+    /** 结算阈值（如 12，用于判断是否触发额外效果） */
+    threshold?: number;
+    /** 达到阈值时的额外效果 */
+    thresholdEffect?: 'knockdown';
+    /** displayOnly 模式下是否显示总伤害（默认 true） */
+    showTotal?: boolean;
+    /** 覆盖伤害/状态目标（默认使用 ctx.targetId） */
+    damageTargetId?: PlayerId;
+}
+
+/**
+ * 通用奖励骰投掷 + 可选重掷
+ *
+ * 投掷指定数量的骰子，检查攻击方是否有足够 token 进行重掷：
+ * - 有 token → 创建可重掷的 settlement（UI 显示重掷按钮）
+ * - 无 token → 创建 displayOnly settlement（UI 仅展示骰子结果）+ 调用 resolveNoToken 生成结算事件
+ *
+ * @param ctx custom action 上下文
+ * @param config 投掷配置
+ * @param resolveNoToken 无 token 时的结算回调，接收骰子列表，返回额外事件（伤害/状态等）
+ */
+export function createBonusDiceWithReroll(
+    ctx: CustomActionContext,
+    config: BonusDiceRollConfig,
+    resolveNoToken: (dice: BonusDieInfo[]) => DiceThroneEvent[],
+): DiceThroneEvent[] {
+    const { attackerId, sourceAbilityId, state, timestamp, random } = ctx;
+    const targetId = config.damageTargetId ?? ctx.targetId;
+    if (!random) return [];
+
+    const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
+
+    // 投掷奖励骰
+    for (let i = 0; i < config.diceCount; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        dice.push({ index: i, value, face });
+        events.push({
+            type: 'BONUS_DIE_ROLLED',
+            payload: {
+                value,
+                face,
+                playerId: attackerId,
+                targetPlayerId: targetId,
+                effectKey: config.dieEffectKey,
+                effectParams: { value, index: i },
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + i,
+        } as BonusDieRolledEvent);
+    }
+
+    const attacker = state.players[attackerId];
+    const hasToken = (attacker?.tokens?.[config.rerollCostTokenId] ?? 0) >= config.rerollCostAmount;
+
+    if (hasToken) {
+        // 有足够 token，创建可重掷的 settlement
+        const settlement: PendingBonusDiceSettlement = {
+            id: `${sourceAbilityId}-${timestamp}`,
+            sourceAbilityId,
+            attackerId,
+            targetId,
+            dice,
+            rerollCostTokenId: config.rerollCostTokenId,
+            rerollCostAmount: config.rerollCostAmount,
+            rerollCount: 0,
+            maxRerollCount: config.maxRerollCount,
+            rerollEffectKey: config.rerollEffectKey,
+            threshold: config.threshold,
+            thresholdEffect: config.thresholdEffect,
+            readyToSettle: false,
+        };
+        events.push({
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as BonusDiceRerollRequestedEvent);
+    } else {
+        // 无足够 token，创建 displayOnly settlement + 直接结算
+        events.push({
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: {
+                settlement: {
+                    id: `${sourceAbilityId}-display-${timestamp}`,
+                    sourceAbilityId,
+                    attackerId,
+                    targetId,
+                    dice,
+                    rerollCostTokenId: '',
+                    rerollCostAmount: 0,
+                    rerollCount: 0,
+                    maxRerollCount: 0,
+                    readyToSettle: false,
+                    displayOnly: true,
+                    showTotal: config.showTotal ?? true,
+                },
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as BonusDiceRerollRequestedEvent);
+
+        // 调用方提供的结算逻辑（伤害/状态等）
+        events.push(...resolveNoToken(dice));
+    }
+
+    return events;
 }
 
 // ============================================================================
@@ -983,7 +1115,7 @@ export function resolveEffectsToEvents(
     effects: AbilityEffect[],
     timing: EffectTiming,
     ctx: EffectContext,
-    config?: { bonusDamage?: number; bonusDamageOnce?: boolean; random?: RandomFn }
+    config?: { bonusDamage?: number; bonusDamageOnce?: boolean; random?: RandomFn; skipDamage?: boolean }
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     let bonusApplied = false;
@@ -1007,6 +1139,18 @@ export function resolveEffectsToEvents(
         if (!effect.action) {
             continue;
         }
+        // skipDamage：Token 响应后重新执行 withDamage 时，跳过已结算的伤害效果
+        // 同时跳过产生伤害的 custom action（如雷霆万钧的 thunder-strike-roll-damage），
+        // 避免 custom action 被重复执行导致骰子二次投掷和 random 队列偏移
+        if (config?.skipDamage) {
+            if (effect.action.type === 'damage') {
+                continue;
+            }
+            if (effect.action.type === 'custom' && effect.action.customActionId
+                && isCustomActionCategory(effect.action.customActionId, 'damage')) {
+                continue;
+            }
+        }
         if (!combatAbilityManager.instance.checkEffectCondition(effect, resolutionCtx)) {
             continue;
         }
@@ -1023,6 +1167,13 @@ export function resolveEffectsToEvents(
         const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey);
         events.push(...effectEvents);
 
+        // TOKEN_RESPONSE_REQUESTED 意味着伤害被挂起等待玩家响应，
+        // 后续效果（如 rollDie）应在 Token 响应完成后由 resolvePostDamageEffects 执行。
+        // 此处必须中断，否则 rollDie 会消耗 random 值，导致后续重新执行时 random 队列偏移。
+        if (effectEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED')) {
+            break;
+        }
+
         // 如果产生伤害且只允许一次加成
         if (effectEvents.some(e => e.type === 'DAMAGE_DEALT') && config?.bonusDamageOnce) {
             bonusApplied = true;
@@ -1032,6 +1183,34 @@ export function resolveEffectsToEvents(
 
         // 更新 resolutionCtx.damageDealt 用于后续条件检查
         resolutionCtx.damageDealt = ctx.damageDealt;
+    }
+
+    // rollDie 累加的 bonusDamage 未被后续 damage 动作消费时，作为独立伤害事件发出
+    // 场景：正义冲击 damage(5) 在 rollDie 之前，rollDie 的 bonusDamage 无后续 damage 消费
+    if (ctx.accumulatedBonusDamage && ctx.accumulatedBonusDamage > 0) {
+        const timestamp = ctx.timestamp ?? 0;
+        const targetId = ctx.defenderId;
+        const target = ctx.state.players[targetId];
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        const bonusDmg = ctx.accumulatedBonusDamage;
+        const actualDamage = target ? Math.min(bonusDmg, targetHp) : 0;
+
+        // 直接发出 DAMAGE_DEALT，不经过 Token 响应检查
+        // 因为 bonusDamage 是同一次攻击的附加伤害，Token 响应已在主伤害时处理
+        const bonusDmgEvent: DamageDealtEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId,
+                amount: bonusDmg,
+                actualDamage,
+                sourceAbilityId: ctx.sourceAbilityId,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        };
+        events.push(bonusDmgEvent);
+        ctx.damageDealt += actualDamage;
+        ctx.accumulatedBonusDamage = 0;
     }
 
     return events;

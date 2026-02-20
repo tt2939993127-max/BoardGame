@@ -108,6 +108,18 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 > **示例（SmashUp 完成仪式）**：描述"打出到一个你至少拥有一个随从的基地上"，但 `ActionCardDef` 无 `playConstraint` 字段 → 验证层和 UI 层均无检查 → 玩家可以打出到空基地上。修复：添加 `playConstraint: 'requireOwnMinion'`，验证层和 UI 层同步检查
 
+**D2 子项：额度授予约束审计（强制）**（新增/修改 `grantExtraMinion`/`grantExtraAction` 调用时触发）：卡牌描述中授予额外出牌额度时附带的约束条件（同名、指定基地、力量上限等），必须在事件 payload 中完整编码，并在验证层（commands.ts）、归约层（reduce.ts）、UI 层（Board.tsx）三层全部体现。**核心原则：`grantExtraMinion(playerId, reason, now)` 只授予了"数量"，描述中的"同名"/"指定基地"/"力量≤N"等约束如果不显式传入 payload，就会被静默丢弃——额度变成无约束的通用额度。** 审查方法：
+1. **识别带约束的额度授予**：grep 所有 `grantExtraMinion`/`grantExtraAction` 调用点，交叉对比卡牌描述中的约束条件（"同名"/"到这里"/"力量≤N"等）
+2. **检查 payload 完整性**：描述含"同名" → payload 必须有 `sameNameOnly: true`（可选 `sameNameDefId`）；描述含"到这里/到此基地" → 必须有 `restrictToBase`；描述含"力量≤N" → 必须有 `powerMax`
+3. **检查三层消费**：
+   - **reduce.ts**：`LIMIT_MODIFIED` case 是否根据 payload 写入正确的状态字段（`sameNameMinionRemaining`/`baseLimitedMinionQuota`/`baseLimitedSameNameRequired`）
+   - **commands.ts**：`PLAY_MINION` 验证是否在对应额度路径上检查约束（同名 defId 匹配、基地限定同名匹配）
+   - **Board.tsx**：`deployableBaseIndices` 计算是否根据约束过滤不可选基地/不可选卡牌
+4. **组合约束**：`restrictToBase` + `sameNameOnly` 同时存在时（如宗教圆环），三层必须同时检查基地限定 AND 同名约束
+
+> **示例（SmashUp 繁荣生长）**：描述"额外打出至多3个同名随从"，但 `grantExtraMinion` 只传了 `(playerId, reason, now)` 无 `sameNameOnly` → 额度变成无约束通用额度，玩家可打出任意3个不同随从。修复：传入 `{ sameNameOnly: true }`
+> **示例（SmashUp 宗教圆环）**：描述"额外打出一个与此基地上随从同名的随从到这里"，需要 `restrictToBase` + `sameNameOnly` 双重约束。只传 `restrictToBase` → 可打出任意随从到该基地
+
 **D4 查询一致性 — 深入审查**（新增 buff/共享机制或修"没效果"时触发）：① 识别统一查询入口并列出 ② grep 原始字段访问（含 `.tsx`），排除合法场景 ③ 判定：查询结果会因 buff/光环/临时效果改变？→ 必须走统一入口。只关心"印刷值"→ 可直接访问 ④ 输出绕过清单：文件+行号+当前代码+应改为。
 
 **D3 子项：引擎 API 调用契约审计（强制）**（新增/修改引擎 API 调用时触发）：引擎 API 支持多种调用约定（位置参数 vs 配置对象、重载签名等），参数位置/嵌套层级错误不会报类型错误但会导致功能静默失效。**核心原则：多约定 API 是静默失效的高发区，每次调用必须确认使用的是哪种约定，并验证参数位置与该约定一致。** 审查方法：

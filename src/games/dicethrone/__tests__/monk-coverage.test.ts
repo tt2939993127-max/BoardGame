@@ -749,6 +749,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认 displayOnly 奖励骰结果 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',

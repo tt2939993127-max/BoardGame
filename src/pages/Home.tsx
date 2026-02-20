@@ -39,8 +39,10 @@ import * as matchApi from '../services/matchApi';
 import { SEO } from '../components/common/SEO';
 import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
+import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 
 export const Home = () => {
+    useGlobalCursor();
     const [activeCategory, setActiveCategory] = useState<Category>('All');
     const [, setSearchParams] = useSearchParams();
     const navigate = useNavigate();

@@ -25,4 +25,6 @@ export interface GameManifestEntry {
     criticalImages?: string[];
     /** 暖加载图片路径列表（相对于 /assets/），进入对局后后台预取 */
     warmImages?: string[];
+    /** 游戏光标主题 ID（对应 src/core/cursor/themes.ts 中的注册表） */
+    cursorTheme?: string;
 }

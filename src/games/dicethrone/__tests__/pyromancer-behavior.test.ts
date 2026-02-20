@@ -833,10 +833,12 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
                 },
             }));
 
+            // displayOnly 模式：有 BONUS_DICE_REROLL_REQUESTED 但标记为 displayOnly
             const rerollEvents = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
-            expect(rerollEvents).toHaveLength(0);
+            expect(rerollEvents).toHaveLength(1);
+            expect((rerollEvents[0] as any).payload.settlement.displayOnly).toBe(true);
             // 应该有直接结算的伤害/状态事件
-            expect(events.length).toBeGreaterThan(2); // 至少有 BONUS_DIE_ROLLED + 效果
+            expect(events.length).toBeGreaterThan(2); // 至少有 BONUS_DIE_ROLLED + displayOnly + 效果
         });
     });
 });

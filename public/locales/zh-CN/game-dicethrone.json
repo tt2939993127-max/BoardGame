@@ -649,7 +649,7 @@
       "sliderHint": "花费 {{value}} CP → 获得 {{value}} 火焰专精",
       "skip": "不花费"
     },
-    "critOrAccuracy": "选择获得一个标记"
+    "critOrAccuracy": "选择获得暴击或精准标记"
   },
   "common": {
     "cancel": "取消",
@@ -777,6 +777,18 @@
         "gainTaiji6": "获得6个太极标记",
         "gainEvasive": "获得1个闪避标记",
         "gainPurify": "获得1个净化标记"
+      }
+    },
+    "zen-forget-2-3": {
+      "name": "物我两忘 II",
+      "description": "3太极触发：获得6气，获得闪避和净化"
+    },
+    "zen-forget-2-zen-combat": {
+      "name": "禅武合一",
+      "description": "2拳+2太极触发：造成6伤害，命中获得2气",
+      "effects": {
+        "damage6": "造成6点伤害",
+        "gainTaiji2": "获得2个太极标记"
       }
     },
     "fireball": {
@@ -975,6 +987,14 @@
         "inflictKnockdown": "施加1个击倒标记"
       }
     },
+    "calm-water-2-large-straight": {
+      "name": "止禅拳法 II",
+      "description": "大顺子触发：造成7伤害，获得3气+闪避，施加击倒"
+    },
+    "calm-water-2-way-of-monk": {
+      "name": "武僧之路",
+      "description": "拳掌太极莲花各1触发：获得2闪避，造成3不可防御伤害"
+    },
     "meditation": {
       "name": "冒想",
       "description": "防御时的冒想状态",
@@ -1083,12 +1103,16 @@
       }
     },
     "suppress-2-battle-cry": {
+      "name": "战吼",
+      "description": "2剑+2心触发：恢复2血，造成2不可防御伤害",
       "effects": {
         "heal2": "恢复2点生命值",
         "damage2Unblockable": "造成2点不可防御伤害"
       }
     },
     "suppress-2-mighty": {
+      "name": "力大无穷 II",
+      "description": "3剑+2星触发：投掷3骰造成总和伤害，>9施加脑震荡",
       "effects": {
         "roll3Damage": "投掷3颗骰子，造成其点数总和的伤害；若总数>9，施加脑震荡"
       }
@@ -1151,12 +1175,16 @@
       }
     },
     "violent-assault-2-crush": {
+      "name": "粉碎重击",
+      "description": "5星触发：施加脑震荡，造成2不可防御伤害",
       "effects": {
         "inflictConcussion": "施加1个脑震荡标记",
         "damage2Unblockable": "造成2点不可防御伤害"
       }
     },
     "violent-assault-2-shake": {
+      "name": "撼地重击",
+      "description": "4星触发：施加眩晕，造成7不可防御伤害",
       "effects": {
         "inflictDaze": "施加1个眩晕标记",
         "damage7Unblockable": "造成7点不可防御伤害"
@@ -1205,6 +1233,7 @@
     },
     "blazing-soul": {
       "name": "炙热之魂",
+      "description": "2岩浆+2火魂触发：精通上限+1，获得5精通，施加倒地",
       "effects": {
         "increaseLimit": "火焰精通堆叠上限提升1",
         "gainFM5": "获得5层火焰精通",
@@ -1221,6 +1250,7 @@
     },
     "incinerate": {
       "name": "引燃",
+      "description": "2火+2火魂触发：获得2精通，施加燃烧，造成6伤害",
       "effects": {
         "gainFM2": "获得2层火焰精通",
         "inflictBurn": "施加1个燃烧标记",
@@ -1239,6 +1269,7 @@
     },
     "meteor-shower": {
       "name": "流星雨 (3陨石)",
+      "description": "3陨石触发：施加击倒、燃烧、眩晕",
       "effects": {
         "inflictKnockdown": "施加1个击倒标记",
         "inflictBurn": "施加1个燃烧标记",
@@ -1451,10 +1482,16 @@
       }
     },
     "holy-strike-large": {
+      "name": "神圣攻击 (大顺子)",
+      "description": "大顺子触发：恢复2血，造成8伤害",
       "effects": {
         "heal2": "恢复2点生命值",
         "damage8": "造成8点伤害"
       }
+    },
+    "holy-strike-small": {
+      "name": "神圣攻击 (小顺子)",
+      "description": "小顺子触发：恢复1血，造成5伤害"
     },
     "holy-strike-2": {
       "name": "神圣攻击 II",
@@ -1465,6 +1502,14 @@
         "heal2": "恢复2点生命值",
         "damage9": "造成9点伤害"
       }
+    },
+    "holy-strike-2-small": {
+      "name": "神圣攻击 II (小顺子)",
+      "description": "小顺子触发：恢复1血，造成7伤害"
+    },
+    "holy-strike-2-large": {
+      "name": "神圣攻击 II (大顺子)",
+      "description": "大顺子触发：恢复2血，造成9伤害"
     },
     "holy-light": {
       "name": "圣光",
@@ -1500,6 +1545,14 @@
         "gainRetributionToAny": "1名玩家获得1个神罚标记",
         "gain4CP": "获得4CP"
       }
+    },
+    "vengeance-2-mix": {
+      "name": "反击",
+      "description": "剑盔心祈祷各1触发：恢复1血，造成3不可防御伤害，获得神罚"
+    },
+    "vengeance-2-main": {
+      "name": "复仇 II",
+      "description": "3盔+1祈祷触发：1名玩家获得神罚，获得4CP"
     },
     "righteous-prayer": {
       "name": "正义祷告",
@@ -1596,12 +1649,16 @@
       "description": "包含赐死射击与专注两个变体"
     },
     "deadeye-shot": {
+      "name": "赐死射击",
+      "description": "3弓+2月触发：施加锁定，造成6伤害",
       "effects": {
         "inflictTargeted": "施加1个锁定标记",
         "damage6": "造成6点伤害"
       }
     },
     "focus": {
+      "name": "专注",
+      "description": "2弓+1月触发：施加锁定和缠绕",
       "effects": {
         "inflictTargeted": "施加1个锁定标记",
         "inflictEntangle": "施加1个缠绕标记"
@@ -1624,6 +1681,8 @@
       }
     },
     "silencing-trace": {
+      "name": "消音追踪",
+      "description": "3足触发：获得闪避，造成2不可防御伤害",
       "effects": {
         "gainEvasive": "获得1个闪避标记"
       }
@@ -1680,6 +1739,8 @@
       }
     },
     "dark-moon": {
+      "name": "暗月",
+      "description": "3月触发：获得闪避，施加致盲、缠绕、锁定",
       "effects": {
         "gainEvasive": "获得1个闪避标记",
         "inflictBlinded": "施加1个致盲标记",
@@ -1706,6 +1767,8 @@
       }
     },
     "moons-blessing": {
+      "name": "月之祝福",
+      "description": "1弓+2足+1月触发：获得3闪避，施加缠绕",
       "effects": {
         "gainEvasive3": "获得3个闪避标记",
         "inflictEntangle": "施加1个缠绕标记"

@@ -143,13 +143,29 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 弃牌堆额外出牌（consumesNormalLimit=false）不消耗正常额度
             const shouldIncrementPlayed = !fromDiscard || consumesNormalLimit !== false;
 
-            // 基地限定额度消耗：如果该基地有限定额度且全局额度已用完，优先消耗限定额度
+            // 同名额度消耗：全局额度已用完且有同名额度剩余时，优先消耗同名额度
+            const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
+            const globalFull0 = player.minionsPlayed >= player.minionLimit;
+            const useSameNameQuota = shouldIncrementPlayed && globalFull0 && sameNameRemaining > 0;
+            let newSameNameRemaining = player.sameNameMinionRemaining;
+            let newSameNameDefId = player.sameNameMinionDefId;
+            if (useSameNameQuota) {
+                newSameNameRemaining = sameNameRemaining - 1;
+                // 锁定 defId（首次使用时从 null 锁定为实际 defId）
+                if (newSameNameDefId === null || newSameNameDefId === undefined) {
+                    newSameNameDefId = defId;
+                }
+            }
+
+            // 基地限定额度消耗：如果该基地有限定额度且全局额度和同名额度都已用完，优先消耗限定额度
             const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
             const globalFull = player.minionsPlayed >= player.minionLimit;
-            const useBaseQuota = shouldIncrementPlayed && globalFull && baseQuota > 0;
+            const useBaseQuota = shouldIncrementPlayed && !useSameNameQuota && globalFull && baseQuota > 0;
             let newBaseLimitedMinionQuota = player.baseLimitedMinionQuota;
             let finalMinionsPlayed = player.minionsPlayed;
-            if (useBaseQuota) {
+            if (useSameNameQuota) {
+                // 消耗同名额度，不增加全局 minionsPlayed
+            } else if (useBaseQuota) {
                 // 消耗基地限定额度，不增加全局 minionsPlayed
                 newBaseLimitedMinionQuota = {
                     ...player.baseLimitedMinionQuota,
@@ -174,6 +190,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         },
                         usedDiscardPlayAbilities: newUsedAbilities,
                         baseLimitedMinionQuota: newBaseLimitedMinionQuota,
+                        sameNameMinionRemaining: newSameNameRemaining,
+                        sameNameMinionDefId: newSameNameDefId,
                     },
                 },
                 bases: newBases,
@@ -412,7 +430,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         minionsPlayedPerBase: undefined,
                         usedDiscardPlayAbilities: undefined,
                         baseLimitedMinionQuota: undefined,
+                        baseLimitedSameNameRequired: undefined,
                         extraMinionPowerMax: undefined,
+                        sameNameMinionRemaining: undefined,
+                        sameNameMinionDefId: null,
                     },
                 },
             };
@@ -521,24 +542,42 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.LIMIT_MODIFIED: {
-            const { playerId, limitType, delta, restrictToBase, powerMax } = event.payload;
+            const { playerId, limitType, delta, restrictToBase, powerMax, sameNameOnly, sameNameDefId } = event.payload;
             const player = state.players[playerId];
             if (limitType === 'minion') {
                 // 基地限定额度：写入 baseLimitedMinionQuota
                 if (restrictToBase !== undefined) {
                     const oldQuota = player.baseLimitedMinionQuota ?? {};
+                    const updatedPlayer: typeof player = {
+                        ...player,
+                        baseLimitedMinionQuota: {
+                            ...oldQuota,
+                            [restrictToBase]: (oldQuota[restrictToBase] ?? 0) + delta,
+                        },
+                    };
+                    // 同名约束标记
+                    if (sameNameOnly) {
+                        updatedPlayer.baseLimitedSameNameRequired = {
+                            ...(player.baseLimitedSameNameRequired ?? {}),
+                            [restrictToBase]: true,
+                        };
+                    }
                     return {
                         ...state,
-                        players: {
-                            ...state.players,
-                            [playerId]: {
-                                ...player,
-                                baseLimitedMinionQuota: {
-                                    ...oldQuota,
-                                    [restrictToBase]: (oldQuota[restrictToBase] ?? 0) + delta,
-                                },
-                            },
-                        },
+                        players: { ...state.players, [playerId]: updatedPlayer },
+                    };
+                }
+                // 同名限制额度：不增加全局 minionLimit，写入独立的 sameNameMinionRemaining
+                if (sameNameOnly) {
+                    const updatedPlayer = {
+                        ...player,
+                        sameNameMinionRemaining: (player.sameNameMinionRemaining ?? 0) + delta,
+                        // 预锁定 defId 或首次设置时初始化为 null（尚未锁定）
+                        sameNameMinionDefId: sameNameDefId ?? (player.sameNameMinionDefId !== undefined ? player.sameNameMinionDefId : null),
+                    };
+                    return {
+                        ...state,
+                        players: { ...state.players, [playerId]: updatedPlayer },
                     };
                 }
                 // 全局额度（带力量限制时记录 extraMinionPowerMax）

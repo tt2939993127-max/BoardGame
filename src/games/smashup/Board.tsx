@@ -23,13 +23,12 @@ import { getCardDef, getBaseDef, getMinionDef, resolveCardName, resolveCardText 
 import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getPlayerEffectivePowerOnBase } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
 import { useGameAudio, playDeniedSound, playSound } from '../../lib/audio/useGameAudio';
-import { registerCardAtlasSource, CardPreview } from '../../components/common/media/CardPreview';
+import { CardPreview } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
-import { loadCardAtlasConfig, initSmashUpCardAtlases } from './ui/cardAtlas';
+import { initSmashUpAtlases } from './ui/cardAtlas';
 
-// 同步注册 cards1-4 图集（硬编码尺寸），确保 FactionSelection 首次渲染时 atlas 已可用
-initSmashUpCardAtlases();
-import { SMASHUP_ATLAS_IDS } from './domain/ids';
+// 同步注册所有图集（cards1-4 + base1-4，懒解析模式），确保首次渲染时 atlas 注册已就绪
+initSmashUpAtlases();
 import { SMASH_UP_MANIFEST } from './manifest';
 import { HandArea } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
@@ -54,6 +53,9 @@ import { LoadingScreen } from '../../components/system/LoadingScreen';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { SmashUpDebugConfig } from './debug-config';
 import { UI_Z_INDEX } from '../../core';
+import { EndgameOverlay } from '../../components/game/framework/widgets/EndgameOverlay';
+import { useEndgame } from '../../hooks/game/useEndgame';
+import { SmashUpEndgameContent, SmashUpEndgameActions } from './ui/SmashUpEndgame';
 import type { PlayConstraint } from './domain/types';
 import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game/framework';
 import type { SpotlightItem } from '../../components/game/framework';
@@ -81,7 +83,7 @@ function checkPlayConstraintUI(
 
 const getPhaseNameKey = (phase: string) => `phases.${phase}`;
 
-const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) => {
+const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, matchData, isMultiplayer }) => {
     const { t } = useTranslation('game-smashup');
     const core = G.core;
     const gameMode = useGameMode();
@@ -95,6 +97,15 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     const isGameOver = G.sys.gameover;
     const rootPid = playerID || '0';
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
+
+    // 重赛系统（通用 hook）
+    const { overlayProps: endgameProps, isSpectator } = useEndgame({
+        result: isGameOver || undefined,
+        playerID,
+        reset,
+        matchData,
+        isMultiplayer,
+    });
 
     const [selectedCardUid, setSelectedCardUid] = useState<string | null>(null);
     const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | null>(null);
@@ -115,20 +126,29 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
 
     // 弃牌堆可打出卡牌选项（仅在出牌阶段且是自己回合时计算）
     // 随从额度已满时，过滤掉消耗正常额度的选项（不消耗额度的额外打出仍然可用）
-    // 但需要考虑基地限定额度：如果有基地限定额度，则保留可以打到对应基地的选项
+    // 但需要考虑基地限定额度和同名额度：如果有额度，则保留可以打到对应基地的选项
     const discardPlayOptions = useMemo(() => {
         if (!isMyTurn || phase !== 'playCards' || !playerID) return [];
         const all = getDiscardPlayOptions(core, playerID);
         const globalQuotaFull = myPlayer ? myPlayer.minionsPlayed >= myPlayer.minionLimit : false;
         if (!globalQuotaFull) return all;
         
-        // 全局额度已满，检查基地限定额度
+        // 全局额度已满，检查同名额度和基地限定额度
+        const sameNameRemaining = myPlayer?.sameNameMinionRemaining ?? 0;
+        const sameNameDefId = myPlayer?.sameNameMinionDefId;
         const baseQuota = myPlayer?.baseLimitedMinionQuota ?? {};
         const hasBaseQuota = Object.values(baseQuota).some(v => v > 0);
         
         return all.filter(opt => {
             // 不消耗正常额度的选项（额外打出）始终保留
             if (!opt.consumesNormalLimit) return true;
+            // 同名额度可用时，检查 defId 是否匹配
+            if (sameNameRemaining > 0) {
+                // 尚未锁定 defId 或 defId 匹配时可用
+                if (sameNameDefId === null || sameNameDefId === undefined || opt.defId === sameNameDefId) {
+                    return true;
+                }
+            }
             // 消耗正常额度的选项：只有当有基地限定额度且可以打到对应基地时才保留
             if (!hasBaseQuota) return false;
             if (opt.allowedBaseIndices === 'all') {
@@ -457,12 +477,44 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             }
         }
 
+        // 同名额度检查：全局额度用完且只剩同名额度时，defId 必须匹配
+        if (selectedCardMode === 'minion' && player) {
+            const globalRemaining = player.minionLimit - player.minionsPlayed;
+            const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
+            const baseQuotaTotal = Object.values(player.baseLimitedMinionQuota ?? {}).reduce((s, v) => s + v, 0);
+            if (globalRemaining <= 0 && sameNameRemaining > 0 && baseQuotaTotal <= 0) {
+                // 已锁定 defId 且不匹配时阻止
+                if (player.sameNameMinionDefId !== null && player.sameNameMinionDefId !== undefined && card.defId !== player.sameNameMinionDefId) {
+                    return {
+                        deployableBaseIndices: indices,
+                        deployBlockReason: t('ui.same_name_only', {
+                            defaultValue: '额外出牌只能打出同名随从',
+                        }),
+                    };
+                }
+            }
+        }
+
+        // 预计算额度状态（用于基地限定同名约束过滤）
+        const globalRemaining2 = player ? player.minionLimit - player.minionsPlayed : 0;
+        const sameNameRemaining2 = player?.sameNameMinionRemaining ?? 0;
+        const onlyBaseQuota = selectedCardMode === 'minion' && globalRemaining2 <= 0 && sameNameRemaining2 <= 0;
+
         for (let i = 0; i < core.bases.length; i++) {
             if (selectedCardMode === 'minion') {
                 // 打出随从：检查 play_minion 限制
                 const minionDef = getMinionDef(card.defId);
                 const basePower = minionDef?.power ?? 0;
                 if (!isOperationRestricted(core, i, playerID, 'play_minion', { minionDefId: card.defId, basePower })) {
+                    // 基地限定同名约束：只剩基地限定额度时，检查该基地是否有额度且满足同名约束
+                    if (onlyBaseQuota) {
+                        const bQuota = player?.baseLimitedMinionQuota?.[i] ?? 0;
+                        if (bQuota <= 0) continue; // 该基地无额度
+                        if (player?.baseLimitedSameNameRequired?.[i]) {
+                            const baseDefIds = new Set(core.bases[i].minions.map(m => m.defId));
+                            if (!baseDefIds.has(card.defId)) continue; // 不满足同名约束
+                        }
+                    }
                     // 随从打出约束（数据驱动）
                     if (minionDef?.playConstraint) {
                         if (checkPlayConstraintUI(minionDef.playConstraint, core, i, playerID)) {
@@ -639,23 +691,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         setIsSubmitting(false);
     }, [phase, currentPid]);
 
-    // 卡牌图集：同步注册（硬编码尺寸），避免异步竞态导致 FactionSelection 首次渲染时 atlas 为空
-    // initSmashUpCardAtlases 在模块顶层调用，确保 Board 渲染前 cards1-4 已注册
-    useEffect(() => {
-        const load = async (id: string, path: string, defaultGrid: { rows: number; cols: number }) => {
-            try {
-                const config = await loadCardAtlasConfig(path, defaultGrid);
-                registerCardAtlasSource(id, { image: path, config });
-            } catch (e) {
-                console.error(`Atlas load failed: ${id}`, e);
-            }
-        };
-        // 基地图集：异步加载（需要图片尺寸检测，尺寸与语言无关）
-        load(SMASHUP_ATLAS_IDS.BASE1, 'smashup/base/base1', { rows: 4, cols: 4 });
-        load(SMASHUP_ATLAS_IDS.BASE2, 'smashup/base/base2', { rows: 2, cols: 4 });
-        load(SMASHUP_ATLAS_IDS.BASE3, 'smashup/base/base3', { rows: 2, cols: 4 });
-        load(SMASHUP_ATLAS_IDS.BASE4, 'smashup/base/base4', { rows: 3, cols: 4 });
-    }, []);
+    // 卡牌和基地图集已在模块顶层 initSmashUpAtlases() 同步注册，无需异步加载
 
     // --- Handlers ---
     const handlePlayMinion = useCallback((cardUid: string, baseIndex: number) => {
@@ -1103,9 +1139,10 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                                     {(() => {
                                         const baseQuota = myPlayer.baseLimitedMinionQuota ?? {};
                                         const baseQuotaTotal = Object.values(baseQuota).reduce((s, v) => s + v, 0);
+                                        const sameNameRemaining = myPlayer.sameNameMinionRemaining ?? 0;
                                         const globalRemaining = Math.max(0, myPlayer.minionLimit - myPlayer.minionsPlayed);
-                                        const totalRemaining = globalRemaining + baseQuotaTotal;
-                                        const hasExtra = baseQuotaTotal > 0 || myPlayer.extraMinionPowerMax !== undefined;
+                                        const totalRemaining = globalRemaining + baseQuotaTotal + sameNameRemaining;
+                                        const hasExtra = baseQuotaTotal > 0 || myPlayer.extraMinionPowerMax !== undefined || sameNameRemaining > 0;
                                         return (
                                             <div className="relative group/minion">
                                                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded border-2 shadow-md text-xs font-black whitespace-nowrap cursor-default ${
@@ -1141,6 +1178,16 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                                                         })}
                                                         {myPlayer.extraMinionPowerMax !== undefined && (
                                                             <div className="text-orange-300 border-t border-slate-700 pt-0.5">{t('ui.minion_power_cap', { defaultValue: '力量限制 ≤{{max}}', max: myPlayer.extraMinionPowerMax })}</div>
+                                                        )}
+                                                        {sameNameRemaining > 0 && (
+                                                            <div className="text-cyan-300 border-t border-slate-700 pt-0.5">
+                                                                {t('ui.same_name_quota', { defaultValue: '同名额度 +{{count}}', count: sameNameRemaining })}
+                                                                {myPlayer.sameNameMinionDefId && (() => {
+                                                                    const def = getMinionDef(myPlayer.sameNameMinionDefId);
+                                                                    const name = def ? t(`cards.${myPlayer.sameNameMinionDefId}.name`, { defaultValue: def.name }) : myPlayer.sameNameMinionDefId;
+                                                                    return <span className="text-cyan-200 ml-1">({name})</span>;
+                                                                })()}
+                                                            </div>
                                                         )}
                                                     </div>
                                                     <div className="absolute right-3 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-slate-600" />
@@ -1523,6 +1570,21 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 playerID={playerID}
                 pendingCard={meFirstPendingCard}
                 onSelectCard={setMeFirstPendingCard}
+            />
+
+            {/* 自定义结束页面（计分轨风格） */}
+            <EndgameOverlay
+                {...endgameProps}
+                renderContent={(props) => (
+                    <SmashUpEndgameContent
+                        {...props}
+                        core={core}
+                        myPlayerId={playerID}
+                    />
+                )}
+                renderActions={(actionsProps) => (
+                    <SmashUpEndgameActions {...actionsProps} />
+                )}
             />
         </div>
         </UndoProvider>

@@ -28,6 +28,7 @@ interface AuthContextType {
     verifyEmail: (email: string, code: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     updateAvatar: (avatar: string) => Promise<User>;
+    uploadAvatar: (file: File, cropData?: { x: number; y: number; width: number; height: number }) => Promise<User>;
     isLoading: boolean;
 }
 
@@ -45,6 +46,7 @@ const defaultAuthContext: AuthContextType = {
     verifyEmail: async () => { throw new Error('AuthProvider 未初始化'); },
     changePassword: async () => { throw new Error('AuthProvider 未初始化'); },
     updateAvatar: async () => { throw new Error('AuthProvider 未初始化'); },
+    uploadAvatar: async () => { throw new Error('AuthProvider 未初始化'); },
     isLoading: true,
 };
 
@@ -323,6 +325,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return updatedUser;
     }, [token, user]);
 
+    const uploadAvatar = useCallback(async (file: File, cropData?: { x: number; y: number; width: number; height: number }) => {
+        if (!token) throw new Error('请先登录');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        if (cropData) {
+            formData.append('cropX', String(cropData.x));
+            formData.append('cropY', String(cropData.y));
+            formData.append('cropWidth', String(cropData.width));
+            formData.append('cropHeight', String(cropData.height));
+        }
+
+        const response = await fetch(`${AUTH_API_URL}/upload-avatar`, {
+            method: 'POST',
+            headers: {
+                'Accept-Language': i18n.language,
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const message = await parseErrorMessage(response, '头像上传失败');
+            throw new Error(message);
+        }
+
+        const data = await response.json();
+        const updatedUser = { ...user, ...data.user } as User;
+        setUser(updatedUser);
+        localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+        return updatedUser;
+    }, [token, user]);
+
     const contextValue = useMemo(() => ({
         user,
         token,
@@ -336,6 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyEmail,
         changePassword,
         updateAvatar,
+        uploadAvatar,
         isLoading,
     }), [
         user,
@@ -350,6 +386,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyEmail,
         changePassword,
         updateAvatar,
+        uploadAvatar,
         isLoading,
     ]);
 

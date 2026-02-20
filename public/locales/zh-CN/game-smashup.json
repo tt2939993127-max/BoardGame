@@ -85,6 +85,8 @@
     "minion_short": "随从",
     "minion_global_quota": "通用额度",
     "minion_power_cap": "力量限制 ≤{{max}}",
+    "same_name_quota": "同名额度 +{{count}}",
+    "same_name_only": "额外出牌只能打出同名随从",
     "action_short": "战术",
     "action_global_quota": "通用额度",
     "action_extra_hint": "含额外行动额度 +{{extra}}",
@@ -1186,5 +1188,13 @@
       "name": "体育场",
       "abilityText": "这里的一个随从被消灭后，它的控制者抽一张卡牌。"
     }
+  },
+  "endgame": {
+    "victory": "胜利",
+    "defeat": "落败",
+    "draw": "平局",
+    "gameOver": "游戏结束",
+    "scoreTrack": "计分轨",
+    "madnessPenalty": "疯狂卡 ×{{count}} (-{{penalty}})"
   }
 }

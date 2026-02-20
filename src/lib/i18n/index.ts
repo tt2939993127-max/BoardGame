@@ -4,6 +4,25 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import { DEFAULT_LANGUAGE, I18N_NAMESPACES, SUPPORTED_LANGUAGES } from './types';
 
+// 构建时注入的 locale JSON content hash 映射
+// 开发模式为空对象（Vite dev server 不缓存）
+const localeHashes: Record<string, string> = __LOCALE_HASHES__;
+
+/**
+ * 根据语言和 namespace 生成带 content hash 的加载路径
+ * 内容不变 → hash 不变 → CDN/浏览器继续用缓存
+ * 内容变了 → hash 变了 → 缓存自动失效
+ */
+function getLoadPath(lngs: string[], namespaces: string[]): string {
+    const lng = lngs[0];
+    const ns = namespaces[0];
+    const key = `${lng}/${ns}.json`;
+    const hash = localeHashes[key];
+    return hash
+        ? `/locales/${key}?v=${hash}`
+        : `/locales/${key}`;
+}
+
 export const i18nInitPromise = i18n
     .use(Backend)
     .use(LanguageDetector)
@@ -17,7 +36,7 @@ export const i18nInitPromise = i18n
             escapeValue: false,
         },
         backend: {
-            loadPath: '/locales/{{lng}}/{{ns}}.json',
+            loadPath: getLoadPath,
         },
         detection: {
             order: ['localStorage', 'navigator'],

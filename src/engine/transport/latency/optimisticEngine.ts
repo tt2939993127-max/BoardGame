@@ -35,7 +35,7 @@ export interface OptimisticEngine {
     processCommand(type: string, payload: unknown, playerId: string): ProcessCommandResult;
 
     /** 服务端确认状态到达时调用 */
-    reconcile(confirmedState: MatchState<unknown>, meta?: { stateID?: number }): ReconcileResult;
+    reconcile(confirmedState: MatchState<unknown>, meta?: { stateID?: number; lastCommandPlayerId?: string }): ReconcileResult;
 
     /** 获取当前应渲染的状态（乐观状态或确认状态） */
     getCurrentState(): MatchState<unknown> | null;
@@ -498,7 +498,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             }
         },
 
-        reconcile(serverState: MatchState<unknown>, meta?: { stateID?: number }): ReconcileResult {
+        reconcile(serverState: MatchState<unknown>, meta?: { stateID?: number; lastCommandPlayerId?: string }): ReconcileResult {
             // 更新确认状态
             confirmedState = serverState;
 
@@ -522,15 +522,15 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
 
             // 尝试识别服务端确认的是哪个 pending 命令。
             //
-            // 优先使用 stateID 精确匹配（O(1)，无误判风险）：
-            //   服务端每次命令执行后 stateID 递增 1，
-            //   pending[0].predictedStateID 是基于 confirmedStateID 推算的预期值。
-            //   若 meta.stateID === pending[0].predictedStateID，说明服务端确认了 pending[0]。
+            // 使用 stateID + lastCommandPlayerId 双重校验：
+            //   1. stateID 匹配：meta.stateID === pending[0].predictedStateID
+            //   2. 玩家匹配：meta.lastCommandPlayerId === pending[0].playerId
+            //   两者都满足才认为是自己的命令被确认。
+            //   仅 stateID 匹配但玩家不匹配 → 对手的命令执行，不是自己的确认。
             //
-            // Fallback 到 JSON.stringify 深度比较（向后兼容旧版服务端不传 stateID）：
+            // Fallback 到 JSON.stringify 深度比较（向后兼容旧版服务端不传 meta）：
             //   若 pending[0].predictedState.core 与 serverState.core 序列化相同，
             //   说明本地预测准确，服务端确认了 pending[0]。
-            //   风险：两个不同命令产生相同 core 序列化时会误判（极低概率）。
             const baseForReplay = serverState;
             let commandsToReplay = pendingCommands;
             let firstCommandConfirmed = false;
@@ -540,8 +540,21 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 meta?.stateID !== undefined &&
                 firstPending.predictedStateID !== undefined
             ) {
-                // stateID 精确匹配
-                firstCommandConfirmed = meta.stateID === firstPending.predictedStateID;
+                // stateID + playerId 双重校验：
+                // stateID 匹配确保是正确的状态版本，
+                // playerId 匹配确保是自己的命令（而非对手的命令恰好产生相同 stateID）
+                const stateIDMatch = meta.stateID === firstPending.predictedStateID;
+                const playerMatch = meta.lastCommandPlayerId === undefined
+                    || meta.lastCommandPlayerId === firstPending.playerId;
+                firstCommandConfirmed = stateIDMatch && playerMatch;
+
+                // 开发环境诊断：stateID 匹配但 playerId 不匹配 → 对手命令，非自己的确认
+                if (process.env.NODE_ENV === 'development' && stateIDMatch && !playerMatch) {
+                    console.debug(
+                        '[OptimisticEngine] stateID 匹配但 playerId 不匹配（对手命令），跳过确认',
+                        { serverStateID: meta.stateID, lastCommandPlayer: meta.lastCommandPlayerId, pendingPlayer: firstPending.playerId },
+                    );
+                }
             } else {
                 // Fallback: JSON.stringify 深度比较
                 firstCommandConfirmed =

@@ -1514,7 +1514,8 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // -> main2
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -1550,8 +1551,9 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，太极不足以重掷但可用于加伤，触发 Token 响应窗口
-                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 攻击方跳过太极加伤 → autoContinue → main2
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果
+                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 攻击方跳过太极加伤 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -1775,7 +1777,8 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // -> main2
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -1826,7 +1829,8 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // -> main2
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
                 expect: {
                     turnPhase: 'main2',

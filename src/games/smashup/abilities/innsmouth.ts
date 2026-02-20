@@ -239,7 +239,7 @@ function innsmouthSacredCircle(ctx: AbilityContext): AbilityResult {
     const hasMatch = player.hand.some(c => c.type === 'minion' && minionDefIds.has(c.defId));
     if (!hasMatch) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    return { events: [grantExtraMinion(ctx.playerId, 'innsmouth_sacred_circle', ctx.now, sacredBaseIndex)] };
+    return { events: [grantExtraMinion(ctx.playerId, 'innsmouth_sacred_circle', ctx.now, sacredBaseIndex, { sameNameOnly: true })] };
 }
 
 /**
@@ -274,7 +274,7 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
         const grantCount = Math.min(2, matchCount);
         const events: SmashUpEvent[] = [];
         for (let i = 0; i < grantCount; i++) {
-            events.push(grantExtraMinion(ctx.playerId, 'innsmouth_spreading_the_word', ctx.now));
+            events.push(grantExtraMinion(ctx.playerId, 'innsmouth_spreading_the_word', ctx.now, undefined, { sameNameOnly: true, sameNameDefId: chosenDefId }));
         }
         return { events };
     }
@@ -299,7 +299,7 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
 
 /** 注册印斯茅斯派系的交互解决处理函数 */
 export function registerInnsmouthInteractionHandlers(): void {
-    // 散播谣言：玩家选择一个随从名后，授予额外随从额度
+    // 散播谣言：玩家选择一个随从名后，授予额外同名随从额度
     registerInteractionHandler('innsmouth_spreading_the_word', (state, playerId, value, _iData, _random, timestamp) => {
         const { defId } = value as { defId: string };
         const player = state.core.players[playerId];
@@ -307,7 +307,7 @@ export function registerInnsmouthInteractionHandlers(): void {
         const grantCount = Math.min(2, matchCount);
         const events: SmashUpEvent[] = [];
         for (let i = 0; i < grantCount; i++) {
-            events.push(grantExtraMinion(playerId, 'innsmouth_spreading_the_word', timestamp));
+            events.push(grantExtraMinion(playerId, 'innsmouth_spreading_the_word', timestamp, undefined, { sameNameOnly: true, sameNameDefId: defId }));
         }
         return { state, events };
     });

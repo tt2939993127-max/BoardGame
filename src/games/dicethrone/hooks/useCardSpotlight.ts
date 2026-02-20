@@ -106,6 +106,10 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         const { entries: newEntries } = consumeNew();
         if (newEntries.length === 0) return;
 
+        // 如果同一批事件中有 BONUS_DICE_REROLL_REQUESTED，
+        // 跳过 BONUS_DIE_ROLLED 的单骰特写（多骰面板已展示全部骰子）
+        const hasBonusDiceSettlement = newEntries.some(e => e.event.type === 'BONUS_DICE_REROLL_REQUESTED');
+
         const selfId = normalizePlayerId(currentPlayerId);
 
         for (const entry of newEntries) {
@@ -135,6 +139,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
 
             // ---- 奖励骰特写：BONUS_DIE_ROLLED / BONUS_DIE_REROLLED ----
             if (BONUS_DIE_EVENT_TYPES.has(type)) {
+                // 多骰面板（BonusDieOverlay reroll 模式）已展示全部骰子，跳过单骰特写
+                if (hasBonusDiceSettlement) continue;
                 let bonusValue: number;
                 let bonusFace: DieFace | undefined;
                 let bonusPlayerId: PlayerId;

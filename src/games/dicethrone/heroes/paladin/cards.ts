@@ -101,6 +101,8 @@ export const PALADIN_CARDS: AbilityCard[] = [
         timing: 'instant',
         description: cardText('card-absolution', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 4 },
+        // 仅能在被攻击后打出 → 防御投掷阶段 + 必须是防御方（当前投掷方）
+        playCondition: { phase: 'defensiveRoll', requireIsRoller: true },
         effects: [{
             description: '被攻击后投掷1骰防御',
             action: {

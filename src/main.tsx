@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+// 触发所有游戏光标主题的自注册（副作用 import，必须在组件渲染前）
+import './games/cursorRegistry';
 // 初始化 i18n（语言检测 + 本地缓存）
 import { i18nInitPromise } from './lib/i18n';
 import App from './App.tsx';

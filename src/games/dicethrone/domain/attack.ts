@@ -118,23 +118,30 @@ export const resolveAttack = (
         };
 
         // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
+        // 注意：resolveEffectsToEvents 遇到 TOKEN_RESPONSE_REQUESTED 会自动 break，
+        // 不会执行后续的 rollDie 等效果（避免消耗 random 值）
         const withDamageEvents = resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
             bonusDamage,
             bonusDamageOnce: true,
             random,
         });
         
-        // 如果有 Token 响应请求，只返回到 TOKEN_RESPONSE_REQUESTED 为止的事件
-        // DAMAGE_DEALT 等后续事件应该在 Token 响应完成后再生成
-        const tokenResponseIndex = withDamageEvents.findIndex((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-        if (tokenResponseIndex !== -1) {
-            // 只推入 TOKEN_RESPONSE_REQUESTED 及之前的事件（不包含 DAMAGE_DEALT）
-            attackEvents.push(...withDamageEvents.slice(0, tokenResponseIndex + 1));
+        // 如果有 Token 响应请求或需要用户交互的奖励骰重掷请求，提前返回（不生成 ATTACK_RESOLVED）
+        // - TOKEN_RESPONSE_REQUESTED：伤害被挂起等待玩家 Token 响应
+        // - BONUS_DICE_REROLL_REQUESTED（非 displayOnly）：骰子还未结算，需要用户交互（如重掷）
+        // 注意：displayOnly 的 BONUS_DICE_REROLL_REQUESTED 仅用于 UI 展示多骰结果，不阻止结算
+        const hasTokenResponse = withDamageEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+        const hasInteractiveBonusDiceReroll = withDamageEvents.some(e =>
+            e.type === 'BONUS_DICE_REROLL_REQUESTED'
+            && !(e as any).payload?.settlement?.displayOnly
+        );
+        if (hasTokenResponse || hasInteractiveBonusDiceReroll) {
+            attackEvents.push(...withDamageEvents);
             events.push(...attackEvents);
             return events;
         }
         
-        // 没有 Token 响应，正常推入所有事件
+        // 没有挂起的响应/结算，正常推入所有事件
         attackEvents.push(...withDamageEvents);
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
@@ -159,8 +166,11 @@ export const resolveAttack = (
 };
 
 /**
- * 仅执行 postDamage 效果（用于 Token 响应后的攻击结算）
- * 当伤害已通过 Token 响应结算时，只需要执行 postDamage 效果（如击倒）
+ * Token 响应后的攻击结算：执行 withDamage 中被截断的非伤害效果 + postDamage 效果
+ * 
+ * 背景：resolveEffectsToEvents 遇到 TOKEN_RESPONSE_REQUESTED 会自动 break，
+ * 不执行后续效果（如 rollDie），避免消耗 random 值。
+ * 此函数在 Token 响应完成后重新执行 withDamage（跳过已结算的 damage）+ postDamage。
  */
 export const resolvePostDamageEffects = (
     state: DiceThroneCore,
@@ -176,10 +186,9 @@ export const resolvePostDamageEffects = (
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
     
     // 使用 Token 响应后记录的最终伤害值（用于 onHit 条件判断）
-    // 如果没有记录，则使用原始伤害值
     const damageDealt = pending.resolvedDamage ?? pending.damage ?? 0;
 
-    // 执行攻击技能的 postDamage 效果
+    // 执行攻击技能的 withDamage 剩余效果（跳过 damage）+ postDamage 效果
     if (sourceAbilityId) {
         const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
         const attackCtx: EffectContext = {
@@ -191,6 +200,9 @@ export const resolvePostDamageEffects = (
             timestamp,
         };
 
+        // 重新执行 withDamage 效果，但跳过 damage 类型（伤害已通过 Token 响应结算）
+        // 这样 rollDie、grantToken 等被截断的效果能正确执行
+        events.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, { random, skipDamage: true }));
         events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
     }
 
@@ -202,7 +214,7 @@ export const resolvePostDamageEffects = (
             defenderId,
             sourceAbilityId,
             defenseAbilityId,
-            totalDamage: damageDealt, // 使用实际造成的伤害值
+            totalDamage: damageDealt,
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,

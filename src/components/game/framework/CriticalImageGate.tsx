@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingScreen } from '../../system/LoadingScreen';
-import { preloadCriticalImages, preloadWarmImages } from '../../../core';
+import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
 
 export interface CriticalImageGateProps {
@@ -56,6 +56,18 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     const needsPreload = effectiveEnabled && !!gameId && stateKey === 'ready'
         && lastReadyKeyRef.current !== runKey;
 
+    // 同步快速路径：如果所有关键图片已在缓存中，直接标记完成，跳过异步预加载。
+    // 典型场景：页面刷新后浏览器磁盘缓存命中 → preloadedImages Map 已填充 →
+    // 无需再走 useEffect 异步流程（至少 2-3 帧 LoadingScreen 闪烁）。
+    if (needsPreload && gameId && gameState
+        && areAllCriticalImagesCached(gameId, gameState, locale, playerID)) {
+        lastReadyKeyRef.current = runKey;
+    }
+
+    // 重新计算：快速路径可能已更新 lastReadyKeyRef
+    const effectiveNeedsPreload = effectiveEnabled && !!gameId && stateKey === 'ready'
+        && lastReadyKeyRef.current !== runKey;
+
     // 记录 inFlight 期间是否有新的 runKey 到达，需要在当前预加载完成后重跑
     const pendingRunKeyRef = useRef<string | null>(null);
     // 强制触发 effect 重新执行的计数器
@@ -85,6 +97,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         }
 
         if (lastReadyKeyRef.current === runKey) {
+            // 同步快速路径已标记完成，确保 ready 状态同步
+            if (!ready) setReady(true);
             return;
         }
 
@@ -118,8 +132,13 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
      
     }, [effectiveEnabled, gameId, locale, phaseKey, playerID, runKey, stateKey, retryTick]);
 
-    // needsPreload 同步阻塞：phaseKey 变化的同一渲染帧就拦住，不泄漏一帧给 children
-    if (!ready || needsPreload) {
+    // 渲染判断：
+    // 1. effectiveNeedsPreload=true → 需要预加载，显示 LoadingScreen
+    // 2. effectiveNeedsPreload=false 且 ready=true → 正常渲染
+    // 3. effectiveNeedsPreload=false 且 ready=false → 同步快速路径命中，
+    //    useEffect 还没来得及 setReady(true)，但图片已全部缓存，直接渲染
+    const shouldBlock = effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey);
+    if (shouldBlock) {
         return <LoadingScreen description={loadingDescription} />;
     }
 

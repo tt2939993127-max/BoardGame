@@ -24,8 +24,8 @@ import { EndgameOverlay } from '../../components/game/framework/widgets/EndgameO
 import { UndoProvider } from '../../contexts/UndoContext';
 import { getUndoSnapshotCount } from '../../engine/systems/UndoSystem';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
-import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
+import { useEndgame } from '../../hooks/game/useEndgame';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
@@ -143,8 +143,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 聚焦到单个单位/建筑时放大到 1.8x，让卡牌清晰可见
   const MAP_PAN_SCALE = 1.8;
 
-  // 重赛系统
-  const { state: rematchState, vote: handleRematchVote } = useRematch();
+  // 重赛系统（通用 hook，同时修复缺失的 registerReset）
+  const { overlayProps: endgameProps } = useEndgame({
+    result: isGameOver || undefined,
+    playerID,
+    reset,
+    matchData,
+    isMultiplayer,
+  });
 
   // 初始化精灵图
   useEffect(() => { initSpriteAtlases(effectiveLocale); }, [effectiveLocale]);
@@ -1088,16 +1094,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               />
 
               {/* 结束页面遮罩（视觉序列进行中延迟显示，确保死亡动画播完） */}
-              <EndgameOverlay
-                isGameOver={!!isGameOver && !isVisualBusy}
-                result={isGameOver}
-                playerID={playerID}
-                reset={isSpectator ? undefined : reset}
-                isMultiplayer={isSpectator ? false : isMultiplayer}
-                totalPlayers={matchData?.length}
-                rematchState={rematchState}
-                onVote={isSpectator ? undefined : handleRematchVote}
-              />
+              <EndgameOverlay {...endgameProps} isGameOver={!!isGameOver && !isVisualBusy} />
 
               {/* 调试面板 */}
               {debugPanel}

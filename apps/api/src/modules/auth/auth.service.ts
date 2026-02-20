@@ -189,6 +189,72 @@ export class AuthService {
         );
     }
 
+    /**
+     * 处理头像文件上传：裁剪为正方形、压缩为 WebP、保存到 uploads/avatars/
+     */
+    async uploadAvatarFile(
+        userId: string,
+        fileBuffer: Buffer,
+        cropData?: { x: number; y: number; width: number; height: number }
+    ): Promise<{ url: string; user: UserDocument } | null> {
+        let sharpModule: typeof import('sharp');
+        try {
+            sharpModule = (await import('sharp')).default;
+        } catch {
+            throw new Error('图片处理库未安装，请安装 sharp');
+        }
+
+        const AVATAR_SIZE = 256;
+        const AVATAR_QUALITY = 85;
+
+        let pipeline = sharpModule(fileBuffer);
+
+        // 前端传了裁剪区域则先裁剪
+        if (cropData && cropData.width > 0 && cropData.height > 0) {
+            pipeline = pipeline.extract({
+                left: Math.round(cropData.x),
+                top: Math.round(cropData.y),
+                width: Math.round(cropData.width),
+                height: Math.round(cropData.height),
+            });
+        }
+
+        const outputBuffer = await pipeline
+            .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: 'cover' })
+            .webp({ quality: AVATAR_QUALITY })
+            .toBuffer();
+
+        const { join } = await import('path');
+        const { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } = await import('fs');
+
+        const uploadsDir = join(process.cwd(), 'uploads', 'avatars');
+        if (!existsSync(uploadsDir)) {
+            mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const fileName = `${userId}-${Date.now()}.webp`;
+        const filePath = join(uploadsDir, fileName);
+        writeFileSync(filePath, outputBuffer);
+
+        // 清理该用户的旧头像文件
+        const prefix = `${userId}-`;
+        for (const file of readdirSync(uploadsDir)) {
+            if (file.startsWith(prefix) && file !== fileName) {
+                try { unlinkSync(join(uploadsDir, file)); } catch { /* 忽略 */ }
+            }
+        }
+
+        const avatarUrl = `/assets/avatars/${fileName}`;
+        const user = await this.userModel.findByIdAndUpdate(
+            userId,
+            { avatar: avatarUrl },
+            { new: true }
+        );
+
+        if (!user) return null;
+        return { url: avatarUrl, user };
+    }
+
     createToken(user: UserDocument): string {
         return jwt.sign(
             { userId: user._id.toString(), username: user.username },

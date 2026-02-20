@@ -14,14 +14,10 @@ import type {
     ChoiceRequestedEvent,
     BonusDieRolledEvent,
     TokenLimitChangedEvent,
-    BonusDiceRerollRequestedEvent,
-    BonusDieInfo,
-    PendingBonusDiceSettlement,
 } from '../types';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
 import { registerChoiceEffectHandler } from '../choiceEffects';
 import { resourceSystem } from '../resourceSystem';
-import { buildDrawEvents } from '../deckEvents';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 // ============================================================================
@@ -441,62 +437,45 @@ const getPyroBlastDieEffect = (face: string) => {
 };
 
 const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount: number; maxRerollCount?: number; dieEffectKey: string; rerollEffectKey: string }): DiceThroneEvent[] => {
-    if (!ctx.random) return [];
-    const dice: BonusDieInfo[] = [];
-    const events: DiceThroneEvent[] = [];
     // 伤害/状态目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
     const opponentId = ctx.ctx.defenderId;
 
-    for (let i = 0; i < config.diceCount; i++) {
-        const value = ctx.random.d(6);
-        const face = getPlayerDieFace(ctx.state, ctx.attackerId, value) ?? '';
-        dice.push({ index: i, value, face });
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: { value, face, playerId: ctx.attackerId, targetPlayerId: opponentId, effectKey: config.dieEffectKey, effectParams: { value, index: i } },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + i
-        } as BonusDieRolledEvent);
-    }
-
-    let rollingFM = getFireMasteryCount(ctx);
-    const fmLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
-    const hasFM = rollingFM >= 1;
-    if (hasFM && config.maxRerollCount) {
-        const settlement: PendingBonusDiceSettlement = {
-            id: `${ctx.sourceAbilityId}-${ctx.timestamp}`,
-            sourceAbilityId: ctx.sourceAbilityId,
-            attackerId: ctx.attackerId,
-            targetId: opponentId,
-            dice,
+    return createBonusDiceWithReroll(
+        ctx,
+        {
+            diceCount: config.diceCount,
             rerollCostTokenId: TOKEN_IDS.FIRE_MASTERY,
-            rerollCostAmount: 1,
-            rerollCount: 0,
+            rerollCostAmount: config.maxRerollCount ? 1 : Infinity, // 无 maxRerollCount 时不可重掷
             maxRerollCount: config.maxRerollCount,
+            dieEffectKey: config.dieEffectKey,
             rerollEffectKey: config.rerollEffectKey,
-            readyToSettle: false,
             showTotal: false,
-        };
-        events.push({ type: 'BONUS_DICE_REROLL_REQUESTED', payload: { settlement }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp } as BonusDiceRerollRequestedEvent);
-    } else {
-        dice.forEach((d, idx) => {
-            const eff = getPyroBlastDieEffect(d.face);
-            if (eff.damage) events.push({ type: 'DAMAGE_DEALT', payload: { targetId: opponentId, amount: eff.damage, actualDamage: eff.damage, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as DamageDealtEvent);
-            if (eff.burn) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
-            if (eff.fm) {
-                rollingFM = Math.min(rollingFM + eff.fm, fmLimit);
-                const newTotal = rollingFM;
-                events.push({
-                    type: 'TOKEN_GRANTED',
-                    payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: eff.fm, newTotal, sourceAbilityId: ctx.sourceAbilityId },
-                    sourceCommandType: 'ABILITY_EFFECT',
-                    timestamp: ctx.timestamp + 5 + idx
-                } as TokenGrantedEvent);
-            }
-            if (eff.knockdown) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.KNOCKDOWN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
-        });
-    }
-    return events;
+            damageTargetId: opponentId,
+        },
+        (dice) => {
+            const events: DiceThroneEvent[] = [];
+            let rollingFM = getFireMasteryCount(ctx);
+            const fmLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+
+            dice.forEach((d, idx) => {
+                const eff = getPyroBlastDieEffect(d.face);
+                if (eff.damage) events.push({ type: 'DAMAGE_DEALT', payload: { targetId: opponentId, amount: eff.damage, actualDamage: eff.damage, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as DamageDealtEvent);
+                if (eff.burn) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
+                if (eff.fm) {
+                    rollingFM = Math.min(rollingFM + eff.fm, fmLimit);
+                    const newTotal = rollingFM;
+                    events.push({
+                        type: 'TOKEN_GRANTED',
+                        payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: eff.fm, newTotal, sourceAbilityId: ctx.sourceAbilityId },
+                        sourceCommandType: 'ABILITY_EFFECT',
+                        timestamp: ctx.timestamp + 5 + idx
+                    } as TokenGrantedEvent);
+                }
+                if (eff.knockdown) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.KNOCKDOWN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
+            });
+            return events;
+        },
+    );
 };
 
 /**

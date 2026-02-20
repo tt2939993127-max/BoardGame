@@ -17,7 +17,9 @@ export {
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,
+    areAllCriticalImagesCached,
     isImagePreloaded,
+    getPreloadedImageElement,
     markImageLoaded,
     // 便捷工具 API
     assetsPath,
@@ -28,6 +30,8 @@ export {
     buildLocalizedImageSet,
     buildOptimizedImageSet,
     getDirectAssetPath,
+    getLocalAssetPath,
+    getLocalizedLocalAssetPath,
 } from './AssetLoader';
 export {
     registerCriticalImageResolver,

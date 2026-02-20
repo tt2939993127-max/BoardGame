@@ -182,25 +182,34 @@ const BaseScoredRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onIm
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const timer = setTimeout(stableComplete, 1500);
+    const timer = setTimeout(stableComplete, 2500);
     return () => clearTimeout(timer);
   }, [stableComplete]);
 
   if (!rankings || rankings.length === 0) { stableComplete(); return null; }
 
   const t = i18next.getFixedT(null, 'game-smashup');
+  const validRankings = rankings.filter(r => r.vp > 0);
+  if (validRankings.length === 0) { stableComplete(); return null; }
 
-  return React.createElement(React.Fragment, null,
-    ...rankings.map((r, i) => {
-      if (r.vp <= 0) return null;
+  // 使用 motion.div 作为根元素（与其他渲染器一致），确保 AnimatePresence 能正确追踪
+  return React.createElement(motion.div, {
+    className: 'fixed inset-0 pointer-events-none',
+    style: { zIndex: UI_Z_INDEX.overlayRaised },
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: 0.2 },
+  },
+    ...validRankings.map((r, i) => {
       const startY = 30 + i * 20;
       return React.createElement(motion.div, {
         key: `${event.id}-${r.playerId}`,
-        className: 'fixed pointer-events-none select-none',
-        style: { left: '50%', top: `${startY}%`, zIndex: UI_Z_INDEX.overlayRaised },
+        className: 'absolute pointer-events-none select-none',
+        style: { left: '50%', top: `${startY}%` },
         initial: { opacity: 1, scale: 1.5, x: '-50%' },
         animate: { opacity: 0, scale: 0.8, y: -80, x: '-50%' },
-        transition: { duration: 1, ease: 'easeOut' },
+        transition: { duration: 2, ease: 'easeOut', delay: i * 0.3 },
       },
         React.createElement('div', {
           className: 'flex items-center gap-2 bg-yellow-400/90 text-slate-900 px-3 py-1.5 rounded-full shadow-xl border-2 border-yellow-600',
@@ -354,7 +363,7 @@ function createRegistry(): FxRegistry {
   }, ACTION_SHOW_FEEDBACK);
 
   registry.register(SU_FX.BASE_SCORED, BaseScoredRenderer, {
-    timeoutMs: 3000,
+    timeoutMs: 4000,
   }, BASE_SCORED_FEEDBACK);
 
   registry.register(SU_FX.ABILITY_TRIGGERED, AbilityTriggeredRenderer, {

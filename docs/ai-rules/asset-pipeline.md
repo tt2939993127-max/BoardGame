@@ -180,9 +180,11 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 4. **路径格式与图片引用一致**：相对于 `/assets/`，不含 `compressed/`（预加载 API 内部自动处理）。
 5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
 6. **phaseKey 必须稳定**：`CriticalImageGate` 依据 `phaseKey` 判断是否重新预加载，未变化时不会重复触发。
-7. **精灵图初始化**：
-   - **图集配置文件（.atlas.json）与语言无关**：统一存放在 `/assets/atlas-configs/` 目录，`loadCardAtlasConfig` 不需要 locale 参数。SmashUp 的 `loadCardAtlasConfig(path, defaultGrid)` 内部使用 `getLocalizedAssetPath()` + 固定 locale（`zh-CN`）探测图片尺寸（尺寸与语言无关，但文件只存在于 `i18n/` 目录下），不接受外部 locale 参数。
-   - **SummonerWars 的 `initSpriteAtlases(locale)` 需要传递 locale**：因为它同时注册图片路径（需要国际化），必须在组件内通过 `useEffect` 调用并监听 `i18n.language`。
+7. **精灵图初始化（统一模式）**：
+   - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从 `CriticalImageGate` 预加载缓存中的 `HTMLImageElement.naturalWidth/Height` 自动解析，零配置文件、零额外网络请求。SmashUp 和 SummonerWars 均使用此模式。
+   - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，config 从静态 JSON 文件 import（构建时内联）。DiceThrone 使用此模式（`ability-cards-common.atlas.json`）。
+   - **注册时机**：所有游戏在模块顶层同步注册（`initXxxAtlases()`），确保首帧渲染时 atlas 已可用。禁止在 `useEffect` 中异步注册。
+   - **SummonerWars 的 `initSpriteAtlases(locale)`**：同时注册 `cardAtlasRegistry`（懒解析）和 `globalSpriteAtlasRegistry`（即时解析），后者需要 locale 构建完整 URL，必须在组件 `useEffect` 中调用并监听 `i18n.language`。
    - **图片资源需要国际化**：图片路径通过 `getLocalizedAssetPath` 或组件自动处理 `/i18n/{locale}/` 前缀。图集注册时 `image` 字段传相对路径，渲染层（`buildLocalizedImageSet`）按语言解析 URL。
 
 ### 解析器模板

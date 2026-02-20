@@ -8,8 +8,8 @@ import { EndgameOverlay } from '../../components/game/framework/widgets/EndgameO
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useDebug } from '../../contexts/DebugContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
-import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
+import { useEndgame } from '../../hooks/game/useEndgame';
 import { motion } from 'framer-motion';
 import { useGameAudio, playSound, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { TIC_TAC_TOE_AUDIO_CONFIG } from './audio.config';
@@ -158,15 +158,14 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, 
     const { isActive, currentStep } = useTutorial();
     const { setPlayerID } = useDebug();
 
-    // 重赛系统（多人模式使用 socket）
-    const { state: rematchState, vote: handleRematchVote, registerReset } = useRematch();
-
-    // 注册 reset 回调（当双方都投票后由 socket 触发）
-    useEffect(() => {
-        if (isMultiplayer && reset) {
-            registerReset(reset);
-        }
-    }, [isMultiplayer, reset, registerReset]);
+    // 重赛系统（通用 hook）
+    const { overlayProps: endgameProps } = useEndgame({
+        result: isGameOver || undefined,
+        playerID,
+        reset,
+        matchData,
+        isMultiplayer,
+    });
 
     // 音效系统
     useGameAudio({
@@ -464,16 +463,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, 
                 </div>
 
                 {/* 统一结束页面遮罩 */}
-                <EndgameOverlay
-                    isGameOver={!!isGameOver}
-                    result={isGameOver}
-                    playerID={playerID}
-                    reset={isSpectator ? undefined : reset}
-                    isMultiplayer={isSpectator ? false : isMultiplayer}
-                    totalPlayers={matchData?.length}
-                    rematchState={rematchState}
-                    onVote={isSpectator ? undefined : handleRematchVote}
-                />
+                <EndgameOverlay {...endgameProps} />
                 {!isSpectator && (
                     <GameDebugPanel G={G} dispatch={dispatch} playerID={playerID} autoSwitch={!isMultiplayer} />
                 )}

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedLocalAssetPath, UI_Z_INDEX } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 
@@ -57,7 +57,8 @@ export type StatusAtlases = Record<string, StatusIconAtlasConfig>;
 export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases> => {
     const promises = Object.entries(STATUS_ATLAS_PATHS).map(async ([id, path]) => {
         try {
-            const url = getLocalizedAssetPath(path, locale);
+            // JSON 配置文件始终从本地 /assets/ 加载，不走 R2 CDN
+            const url = getLocalizedLocalAssetPath(path, locale);
             const response = await fetch(url);
             if (!response.ok) return null;
             const data: unknown = await response.json();

@@ -7,6 +7,7 @@
 import { io, Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
+import { onPageVisible } from './visibilityResync';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {
@@ -98,8 +99,8 @@ class LobbySocketService {
     private statusSubscribers: Set<(status: { connected: boolean; lastError?: string }) => void> = new Set();
     private isConnected = false;
     private reconnectAttempts = 0;
-    private maxReconnectAttempts = 5;
     private lobbyStateByGame: Map<LobbyGameId, LobbyState> = new Map();
+    private _cleanupVisibility: (() => void) | null = null;
 
     private ensureState(gameId: LobbyGameId): LobbyState {
         const existing = this.lobbyStateByGame.get(gameId);
@@ -168,12 +169,13 @@ class LobbySocketService {
             path: '/lobby-socket',
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionAttempts: this.maxReconnectAttempts,
+            reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
             timeout: 10000,
         });
 
         this.setupEventHandlers();
+        this.setupVisibilityHandler();
     }
 
     /**
@@ -414,6 +416,10 @@ class LobbySocketService {
      * 断开连接
      */
     disconnect(): void {
+        if (this._cleanupVisibility) {
+            this._cleanupVisibility();
+            this._cleanupVisibility = null;
+        }
         if (this.socket) {
             this.socket.emit(LOBBY_EVENTS.UNSUBSCRIBE_LOBBY);
             this.socket.disconnect();
@@ -424,6 +430,33 @@ class LobbySocketService {
                 state.version = -1;
             });
         }
+    }
+
+    /**
+     * 页面恢复可见时主动重连并刷新房间列表
+     *
+     * 后台标签页冻结期间 socket.io 心跳可能超时导致静默断线。
+     * 恢复可见时检查连接状态：
+     * - 已断线：强制重连（connect 事件中会自动重新订阅）
+     * - 仍连接：主动请求刷新（可能错过了增量更新）
+     */
+    private resync(): void {
+        if (!this.socket) return;
+        if (this.socket.connected) {
+            // 连接正常但可能错过了增量更新，请求刷新
+            this.requestRefresh();
+            return;
+        }
+        console.log('[LobbySocket] 页面恢复可见，重新连接');
+        this.socket.connect();
+    }
+
+    /**
+     * 注册 visibilitychange 监听
+     */
+    private setupVisibilityHandler(): void {
+        if (this._cleanupVisibility) return;
+        this._cleanupVisibility = onPageVisible(() => this.resync());
     }
 
     /**

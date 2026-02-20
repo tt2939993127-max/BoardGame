@@ -25,7 +25,7 @@ export interface GameTransportClientConfig {
     /** 认证凭证 */
     credentials?: string;
     /** 状态更新回调 */
-    onStateUpdate?: (state: unknown, matchPlayers: MatchPlayerInfo[], meta?: { stateID?: number }) => void;
+    onStateUpdate?: (state: unknown, matchPlayers: MatchPlayerInfo[], meta?: { stateID?: number; lastCommandPlayerId?: string }) => void;
     /** 连接状态变更回调 */
     onConnectionChange?: (connected: boolean) => void;
     /** 玩家连接/断开回调 */
@@ -232,6 +232,24 @@ export class GameTransportClient {
             this.socket = null;
         }
         this._connectionState = 'disconnected';
+    }
+
+    /**
+     * 主动重新同步状态
+     *
+     * 页面恢复可见时调用：浏览器后台标签页可能冻结 JS 执行，
+     * 导致 state:update 消息虽到达 WebSocket 缓冲区但回调未执行，
+     * 或心跳超时导致静默断线。重新 sync 确保状态最新。
+     */
+    resync(): void {
+        if (this._destroyed || !this.socket) return;
+        if (this.socket.connected) {
+            // 连接正常：直接发送 sync 获取最新状态
+            this.sendSync();
+        } else {
+            // 连接已断：强制重连（socket.io 可能因后台节流未及时重连）
+            this.socket.connect();
+        }
     }
 
     /** 发送 sync 请求并启动超时重试 */

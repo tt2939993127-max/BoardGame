@@ -35,7 +35,9 @@
         "roomLabel": "Room: ",
         "meLabel": "Me: ",
         "noMessages": "No messages yet",
-        "emptyValue": "--"
+        "emptyValue": "--",
+        "tooLong": "Message cannot exceed {{count}} characters",
+        "sendFailed": "Failed to send, please try again"
     },
     "modal": {
         "title": "Social",

@@ -101,7 +101,7 @@ export const FriendList = ({ onSelectFriend, activeFriendId }: FriendListProps) 
                             </div>
                         </button>
 
-                        <div className="h-px bg-parchment-card-border/20 mx-1" />
+                        <div key="divider" className="h-px bg-parchment-card-border/20 mx-1" />
 
                         {sortedConversations.length === 0 && (
                             <div className="text-center text-parchment-light-text py-8 text-sm italic opacity-70">

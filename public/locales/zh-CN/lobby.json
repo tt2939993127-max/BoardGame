@@ -77,7 +77,8 @@
     "loading": "加载中...",
     "title": "胜场排行",
     "empty": "暂无数据",
-    "record": "{{wins}} 胜 / {{matches}} 局"
+    "record": "{{wins}} 胜 / {{matches}} 局",
+    "error": "排行榜加载失败"
   },
   "player": {
     "guest": "游客{{id}}"

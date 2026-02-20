@@ -243,6 +243,40 @@ export async function preloadCriticalImages(
 }
 
 /**
+ * 同步检查所有关键图片是否已在缓存中
+ *
+ * 用于 CriticalImageGate 的快速路径：如果所有图片都已预加载过，
+ * 可以跳过异步预加载流程，避免刷新时闪一帧 LoadingScreen。
+ */
+export function areAllCriticalImagesCached(
+    gameId: string,
+    gameState?: unknown,
+    locale?: string,
+    playerID?: string | null,
+): boolean {
+    const assets = gameAssetsRegistry.get(gameId);
+    const staticCritical = assets?.criticalImages ?? [];
+
+    let resolved: CriticalImageResolverResult = { critical: [], warm: [] };
+    if (gameState !== undefined) {
+        resolved = resolveCriticalImages(gameId, gameState, locale, playerID);
+    }
+
+    const criticalPaths = [...new Set([...staticCritical, ...resolved.critical])];
+    if (criticalPaths.length === 0) return true;
+
+    const effectiveLocale = locale || 'zh-CN';
+    for (const p of criticalPaths) {
+        if (!p) continue;
+        const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+        const { webp } = getOptimizedImageUrls(localizedPath);
+        if (!webp || !preloadedImages.has(webp)) return false;
+    }
+    return true;
+}
+
+
+/**
  * 预加载暖图片（第二阶段：后台预取）
  *
  * 在空闲时执行，不阻塞主线程。
@@ -297,6 +331,18 @@ export function markImageLoaded(src: string, locale?: string): void {
     const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
     const { webp } = getOptimizedImageUrls(localizedPath);
     if (webp) preloadedImages.set(webp, new Image());
+}
+
+/**
+ * 获取已预加载的 HTMLImageElement（供图集懒解析尺寸）
+ * 接受原始资源路径（自动转换为 optimized URL 后查找缓存）
+ * 返回 null 表示图片尚未预加载
+ */
+export function getPreloadedImageElement(src: string, locale?: string): HTMLImageElement | null {
+    const effectiveLocale = locale || 'zh-CN';
+    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
+    const { webp } = getOptimizedImageUrls(localizedPath);
+    return preloadedImages.get(webp) ?? null;
 }
 
 /**
@@ -372,7 +418,13 @@ async function preloadOptimizedImage(src: string): Promise<void> {
     const { webp } = getOptimizedImageUrls(src);
     if (!webp) return;
     if (preloadedImages.has(webp)) return;
-    await preloadImageWithResult(webp, SINGLE_IMAGE_TIMEOUT_MS);
+    const ok = await preloadImageWithResult(webp, SINGLE_IMAGE_TIMEOUT_MS);
+    if (!ok) {
+        // 即使加载失败/超时，也标记为已处理。
+        // 避免 CriticalImageGate 放行后 AtlasCard 仍显示 shimmer 闪烁。
+        // 背景图片会由浏览器自行重试加载。
+        preloadedImages.set(webp, new Image());
+    }
 }
 
 async function preloadAudioFile(src: string): Promise<void> {
@@ -464,6 +516,13 @@ export function getOptimizedImageUrls(src: string): ImageUrlSet {
     const lastSlash = base.lastIndexOf('/');
     const dir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
     const filename = lastSlash >= 0 ? base.substring(lastSlash + 1) : base;
+
+    // 防御性检查：如果路径已包含 /compressed/，不再重复插入
+    if (dir.endsWith(`/${COMPRESSED_SUBDIR}`) || dir === COMPRESSED_SUBDIR) {
+        const webpUrl = `${base}.webp`;
+        return { avif: webpUrl, webp: webpUrl };
+    }
+
     const compressedBase = dir ? `${dir}/${COMPRESSED_SUBDIR}/${filename}` : `${COMPRESSED_SUBDIR}/${filename}`;
     const webpUrl = `${compressedBase}.webp`;
     return {
@@ -555,4 +614,32 @@ export function buildOptimizedImageSet(src: string): string {
  */
 export function getDirectAssetPath(relativePath: string): string {
     return assetsPath(relativePath);
+}
+
+/**
+ * 构建本地资源路径（始终走 /assets/，不走 CDN）
+ * 用于 JSON 配置文件等不应上传到 R2 的资源
+ */
+export function getLocalAssetPath(path: string): string {
+    if (!isString(path) || !path) return '/assets';
+    if (isPassthroughSource(path)) return path;
+    const trimmed = path.startsWith('/') ? path.slice(1) : path;
+    return `/assets/${trimmed}`;
+}
+
+/**
+ * 构建本地语言化资源路径（始终走 /assets/，不走 CDN）
+ * 用于 JSON 配置文件等不应上传到 R2 的资源
+ */
+export function getLocalizedLocalAssetPath(path: string, locale?: string): string {
+    if (!locale || isPassthroughSource(path)) return getLocalAssetPath(path);
+    // 去掉可能的前缀
+    let relative = path;
+    if (relative.startsWith('/assets/')) relative = relative.slice('/assets/'.length);
+    if (relative.startsWith(assetsBaseUrl + '/')) relative = relative.slice(assetsBaseUrl.length + 1);
+    relative = relative.replace(/^\/+/, '');
+    // 幂等性检查
+    const localizedPrefix = `${LOCALIZED_ASSETS_SUBDIR}/${locale}/`;
+    if (relative.startsWith(localizedPrefix)) return `/assets/${relative}`;
+    return `/assets/${localizedPrefix}${relative}`;
 }

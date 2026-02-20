@@ -27,7 +27,8 @@ import type { AbilityOverlaysHandle } from './ui/AbilityOverlays';
 import { AbilityChoiceModal, type AbilityChoiceOption } from './ui/AbilityChoiceModal';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { HandArea } from './ui/HandArea';
-import { loadCardAtlasConfig } from './ui/cardAtlas';
+// cardAtlas 模块加载时已同步注册所有英雄图集，无需异步加载
+import './ui/cardAtlas';
 
 import { DiceThroneCharacterSelection } from './ui/CharacterSelectionAdapter';
 import { TutorialSelectionGate } from '../../components/game/framework';
@@ -38,9 +39,8 @@ import { playSound as playSoundFn } from '../../lib/audio/useGameAudio';
 import { RightSidebar } from './ui/RightSidebar';
 import { BoardOverlays } from './ui/BoardOverlays';
 import { GameHints } from './ui/GameHints';
-import { registerCardAtlasSource } from '../../components/common/media/CardPreview';
-import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
+import { useEndgame } from '../../hooks/game/useEndgame';
 import { useCurrentChoice, useDiceThroneState } from './hooks/useDiceThroneState';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { diceModifyReducer, diceModifyToCommands, diceSelectReducer, diceSelectToCommands } from './domain/systems';
@@ -133,15 +133,14 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 从 access.turnPhase 读取阶段（单一权威：来自 sys.phase）
     const currentPhase = access.turnPhase;
 
-    // 重赛系统（socket）
-    const { state: rematchState, vote: handleRematchVote, registerReset } = useRematch();
-
-    // 注册 reset 回调（当双方都投票后由 socket 触发）
-    React.useEffect(() => {
-        if (!isSpectator && reset) {
-            registerReset(reset);
-        }
-    }, [reset, registerReset, isSpectator]);
+    // 重赛系统（通用 hook）
+    const { overlayProps: _endgameProps, rematchState, vote: handleRematchVote } = useEndgame({
+        result: isGameOver || undefined,
+        playerID,
+        reset,
+        matchData,
+        isMultiplayer,
+    });
 
     useAutoSkipSelection({
         currentPhase,
@@ -213,8 +212,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         setLastUndoCardId,
     } = useUIState();
 
-    // Atlas 配置（保持独立，用于资源加载）
-    const [_cardAtlasRevision, setCardAtlasRevision] = React.useState(0);
+    // 防御方/观察者关闭 displayOnly 奖励骰面板后，不再重复弹出
+    const [dismissedBonusDiceId, setDismissedBonusDiceId] = React.useState<string | null>(null);
+    // settlement 变化时自动重置（新一轮奖励骰）
+    const currentSettlementId = G.pendingBonusDiceSettlement?.id;
+    React.useEffect(() => {
+        if (currentSettlementId && currentSettlementId !== dismissedBonusDiceId) {
+            setDismissedBonusDiceId(null);
+        }
+    }, [currentSettlementId, dismissedBonusDiceId]);
+
+    // Atlas 配置（状态图标仍需异步加载）
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
 
     // 使用 useCardSpotlight Hook 管理卡牌和额外骰子特写
@@ -668,45 +676,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         [access.lastEffectSourceByPlayerId, G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, getAbilityStartPos]
     );
 
-    // 提取对局中所有英雄 ID（稳定引用，避免 G.players 引用变化导致重复加载）
-    const heroCharIds = React.useMemo(() => {
-        const ids: string[] = [];
-        for (const pid of Object.keys(G.players)) {
-            const charId = G.players[pid]?.characterId;
-            if (charId && charId !== 'unselected' && !ids.includes(charId)) ids.push(charId);
-        }
-        return ids.sort().join(',');
-    }, [G.players]);
-
-    // 动态加载对局中所有英雄的卡牌图集
-    React.useEffect(() => {
-        if (!heroCharIds) return;
-        let isActive = true;
-        const loadAtlas = async (atlasId: string, imageBase: string) => {
-            try {
-                const config = await loadCardAtlasConfig();
-                if (!isActive) return;
-                registerCardAtlasSource(atlasId, {
-                    image: imageBase,
-                    config,
-                });
-                setCardAtlasRevision(prev => prev + 1);
-            } catch {
-                // 忽略单个图集加载失败
-            }
-        };
-
-        for (const charId of heroCharIds.split(',')) {
-            const atlasId = `dicethrone:${charId}-cards`;
-            // imageBase 始终不带扩展名，用于 buildLocalizedImageSet
-            const imageBase = `dicethrone/images/${charId}/ability-cards`;
-            void loadAtlas(atlasId, imageBase);
-        }
-
-        return () => {
-            isActive = false;
-        };
-    }, [heroCharIds]);
+    // 卡牌图集已在 cardAtlas.ts 模块顶层同步注册，无需异步加载
 
     React.useEffect(() => {
         let isActive = true;
@@ -1091,7 +1061,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     />
                 </div>
 
-                {/* HandArea 不再依赖 cardAtlasRevision，确保手牌始终渲染 */}
+                {/* HandArea：图集已同步注册，始终可渲染 */}
                 {(() => {
                     const mustDiscardCount = Math.max(0, handOwner.hand.length - HAND_LIMIT);
                     const isDiscardMode = currentPhase === 'discard' && mustDiscardCount > 0 && canOperateView;
@@ -1202,14 +1172,23 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
                     // 额外骰子
                     bonusDie={bonusDie}
-                    onBonusDieClose={handleBonusDieClose}
+                    onBonusDieClose={() => {
+                        handleBonusDieClose();
+                        // 防御方/观察者关闭 displayOnly 面板时，记录已关闭的 settlement id
+                        if (G.pendingBonusDiceSettlement && G.pendingBonusDiceSettlement.attackerId !== rootPid) {
+                            setDismissedBonusDiceId(G.pendingBonusDiceSettlement.id);
+                        }
+                    }}
 
                     // 奖励骰重掷交互
                     // 只有攻击者才能操作重投；防御方/观察者以 displayOnly 模式展示
+                    // 防御方关闭后不再重复弹出（dismissedBonusDiceId 记录已关闭的 settlement）
                     pendingBonusDiceSettlement={G.pendingBonusDiceSettlement
                         ? G.pendingBonusDiceSettlement.attackerId === rootPid
                             ? G.pendingBonusDiceSettlement
-                            : { ...G.pendingBonusDiceSettlement, displayOnly: true }
+                            : dismissedBonusDiceId === G.pendingBonusDiceSettlement.id
+                                ? undefined
+                                : { ...G.pendingBonusDiceSettlement, displayOnly: true }
                         : undefined}
                     canRerollBonusDie={Boolean(
                         G.pendingBonusDiceSettlement &&
