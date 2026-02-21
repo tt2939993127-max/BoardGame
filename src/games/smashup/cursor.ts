@@ -105,4 +105,4 @@ const popArt: CursorTheme = {
     previewSvgs: popArtSvgs, ...buildCursors(popArtSvgs, { zoomIn: [13, 13] }),
 };
 
-registerCursorThemes([comic, graffiti, popArt]);
+registerCursorThemes([popArt, comic, graffiti]);

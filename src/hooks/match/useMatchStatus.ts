@@ -347,7 +347,9 @@ export function validateStoredMatchSeat(
         return { shouldClear: true, reason: 'seat_empty' };
     }
     if (stored.playerName && seat.name !== stored.playerName) {
-        return { shouldClear: true, reason: 'name_mismatch' };
+        // 用户名变更后 localStorage 中的 playerName 可能与 match metadata 中的 seat.name 不一致，
+        // 这是正常情况，不应清除凭据。凭据（随机 nanoid）才是真正的认证手段。
+        return { shouldClear: false };
     }
 
     return { shouldClear: false };
@@ -675,6 +677,7 @@ export async function rejoinMatch(
             credentials: playerCredentials,
             matchID,
             gameName,
+            playerName,
         });
 
         return { success: true, credentials: playerCredentials };

@@ -84,7 +84,7 @@ src/games/cursorRegistry.ts      # 统一 import 触发注册（在 src/main.tsx
 
 1. 在 `src/games/<gameId>/cursor.ts` 定义 SVG + 调用 `registerCursorThemes()`
 2. 在 `src/games/cursorRegistry.ts` 加一行 `import '../<gameId>/cursor'`
-3. 在 `src/games/<gameId>/manifest.ts` 设置 `cursorTheme: '<themeId>'`
+3. 在 `src/games/<gameId>/manifest.ts` 设置 `cursorTheme: '<themeId>'`（**必须与注册的主题 ID 一致**）
 
 ```typescript
 // cursor.ts 最小模板（新增游戏约 10 行）
@@ -97,6 +97,11 @@ registerCursorThemes([{
 ```
 
 多变体：在同一文件定义多个主题对象，一次性传入 `registerCursorThemes([theme1, theme2, ...])`。
+
+**注册顺序规范（强制）**：
+- **manifest 配置的主题必须放在注册数组的第一位**，确保主页网格显示与游戏内默认主题一致。
+- 示例：`manifest.ts` 中 `cursorTheme: 'mygame-variant2'` → `cursor.ts` 中 `registerCursorThemes([variant2, variant1, variant3])`
+- **架构保障**：`getDefaultThemePerGame(manifests)` 优先使用 manifest 配置，注册顺序作为备用方案。
 
 ### 共享样式模板
 

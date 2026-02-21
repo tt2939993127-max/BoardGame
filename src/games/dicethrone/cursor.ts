@@ -103,4 +103,4 @@ const critical: CursorTheme = {
     previewSvgs: criticalSvgs, ...buildCursors(criticalSvgs, { zoomIn: [13, 13] }),
 };
 
-registerCursorThemes([gold, flame, dice, critical]);
+registerCursorThemes([critical, gold, flame, dice]);

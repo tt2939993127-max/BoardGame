@@ -114,4 +114,4 @@ const ethereal: CursorTheme = {
     previewSvgs: etherealSvgs, ...buildCursors(etherealSvgs, { zoomIn: [13, 13] }),
 };
 
-registerCursorThemes([steel, rune, ethereal]);
+registerCursorThemes([ethereal, steel, rune]);

@@ -83,9 +83,41 @@ export function getThemesByGameId(gameId: string): CursorTheme[] {
     return THEMES_BY_GAME[gameId] ?? [];
 }
 
-/** 每个游戏的默认（第一个）变体，用于主网格 */
-export function getDefaultThemePerGame(): CursorTheme[] {
+/**
+ * 每个游戏的默认变体，用于主网格。
+ * 优先使用 manifest 中配置的 cursorTheme，回退到第一个注册的主题。
+ * 
+ * @param manifests 游戏清单数组（可选），用于获取 manifest 中配置的默认主题
+ */
+export function getDefaultThemePerGame(manifests?: Array<{ id: string; cursorTheme?: string }>): CursorTheme[] {
     const seen = new Set<string>();
+    const result: CursorTheme[] = [];
+    
+    // 如果提供了 manifests，优先使用 manifest 配置
+    if (manifests) {
+        for (const manifest of manifests) {
+            if (seen.has(manifest.id)) continue;
+            seen.add(manifest.id);
+            
+            // 优先使用 manifest 中配置的主题
+            if (manifest.cursorTheme) {
+                const theme = THEMES_BY_ID[manifest.cursorTheme];
+                if (theme) {
+                    result.push(theme);
+                    continue;
+                }
+            }
+            
+            // 回退到该游戏的第一个注册主题
+            const gameThemes = THEMES_BY_GAME[manifest.id];
+            if (gameThemes && gameThemes.length > 0) {
+                result.push(gameThemes[0]);
+            }
+        }
+        return result;
+    }
+    
+    // 兼容旧逻辑：没有 manifests 时，返回每个游戏的第一个注册主题
     return ALL_THEMES.filter((t) => {
         if (seen.has(t.gameId)) return false;
         seen.add(t.gameId);

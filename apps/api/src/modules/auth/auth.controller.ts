@@ -407,6 +407,9 @@ export class AuthController {
             return this.sendError(res, 404, t('auth.error.userNotFound'));
         }
 
+        // 用户名变更后签发新 JWT（JWT payload 包含 username 字段）
+        const token = this.authService.createToken(user);
+
         return res.json({
             message: t('auth.success.usernameUpdated'),
             user: {
@@ -418,6 +421,7 @@ export class AuthController {
                 role: user.role,
                 banned: user.banned,
             },
+            token,
         });
     }
 

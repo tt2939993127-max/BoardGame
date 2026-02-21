@@ -19,6 +19,7 @@ import {
 } from '../../core/cursor/themes';
 import { useCursorPreference } from '../../core/cursor/CursorPreferenceContext';
 import type { CursorPreviewSvgs } from '../../core/cursor/types';
+import { getAllGames } from '../../config/games.config';
 
 interface CursorSettingsModalProps {
     isOpen: boolean;
@@ -168,7 +169,8 @@ function VariantPickerModal({
 export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: CursorSettingsModalProps) => {
     const { t } = useTranslation('auth');
     const { preference, updatePreference } = useCursorPreference();
-    const defaultPerGame = useMemo(() => getDefaultThemePerGame(), []);
+    const manifests = useMemo(() => getAllGames().map(g => ({ id: g.id, cursorTheme: g.cursorTheme })), []);
+    const defaultPerGame = useMemo(() => getDefaultThemePerGame(manifests), [manifests]);
 
     // pending：本地选中状态，不影响实际生效的 preference
     const [pendingThemeId, setPendingThemeId] = useState<string>(preference.cursorTheme);
@@ -181,6 +183,21 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
         if (pendingThemeId === 'default') return null;
         return getCursorTheme(pendingThemeId) ?? null;
     }, [pendingThemeId]);
+
+    /** 获取某游戏的默认主题 ID（优先 gameVariants，回退到 manifest 配置） */
+    const getGameDefaultTheme = (gameId: string): string => {
+        // 优先使用用户记住的变体
+        if (preference.gameVariants[gameId]) {
+            return preference.gameVariants[gameId];
+        }
+        // 回退到 manifest 配置的默认主题
+        const defaultTheme = defaultPerGame.find(t => t.gameId === gameId);
+        if (defaultTheme) {
+            return defaultTheme.id;
+        }
+        // 最后回退到注册顺序第一个（理论上不应该走到这里）
+        return getThemesByGameId(gameId)[0]?.id ?? '';
+    };
 
     /** 获取某游戏记住的变体 ID（优先 gameVariants，回退到注册表第一个） */
     const getRememberedVariant = (gameId: string, fallbackThemeId: string): string => {
@@ -335,7 +352,7 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
             {variantGameId && (
                 <VariantPickerModal
                     gameId={variantGameId}
-                    activeThemeId={preference.gameVariants[variantGameId] ?? getThemesByGameId(variantGameId)[0]?.id ?? ''}
+                    activeThemeId={getGameDefaultTheme(variantGameId)}
                     onSelect={handleSelectVariant}
                     onClose={() => setVariantGameId(null)}
                 />

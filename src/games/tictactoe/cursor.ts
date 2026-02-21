@@ -84,4 +84,5 @@ const neonSketch: CursorTheme = {
 };
 
 // 保持原有的科技风格作为选项，增加新的霓虹手绘
-registerCursorThemes([base, neonSketch]);
+// 注册顺序：neonSketch 在前，与 manifest 配置一致
+registerCursorThemes([neonSketch, base]);

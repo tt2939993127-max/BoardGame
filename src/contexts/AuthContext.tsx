@@ -325,6 +325,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updatedUser = { ...user, ...data.user } as User;
         setUser(updatedUser);
         localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+
+        // 用户名变更后服务端签发了新 JWT，同步更新本地 token
+        if (data.token) {
+            setToken(data.token);
+            localStorage.setItem('auth_token', data.token);
+        }
+
+        // 同步更新所有已存储的 match credentials 中的 playerName，
+        // 避免 validateStoredMatchSeat 因 name_mismatch 清除凭据
+        const newUsername = updatedUser.username;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith('match_creds_')) continue;
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) continue;
+                const creds = JSON.parse(raw);
+                if (creds?.playerName && creds.playerName !== newUsername) {
+                    creds.playerName = newUsername;
+                    localStorage.setItem(key, JSON.stringify(creds));
+                }
+            } catch {
+                // 忽略解析失败
+            }
+        }
+
         return updatedUser;
     }, [token, user]);
 
