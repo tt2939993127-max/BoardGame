@@ -109,10 +109,12 @@ async function listRemoteObjects(prefix) {
 }
 
 // 静态资源缓存策略：
-// - 资源路径不含 content hash，同一路径内容可能更新
-// - CDN 边缘缓存 1 天（s-maxage），更新后最多 24h 全网生效
-// - 浏览器缓存也是 1 天（max-age），确保用户能及时拿到新资源
-const CACHE_CONTROL_MEDIA = 'public, max-age=86400, s-maxage=86400';
+// - 图片/音频素材（webp、ogg）内容极少变更（卡牌图集、音效等），
+//   使用长缓存减少 CDN 回源频率，降低冷启动概率。
+// - 浏览器缓存 7 天（max-age），CDN 边缘缓存 30 天（s-maxage）。
+// - 如果素材确实更新了，运行 npm run assets:upload:force 重新上传，
+//   然后在 Cloudflare Dashboard 手动 Purge Cache 即可立即生效。
+const CACHE_CONTROL_MEDIA = 'public, max-age=604800, s-maxage=2592000';
 // JSON/SVG 等数据文件可能更新较频繁，缓存 1 小时
 const CACHE_CONTROL_DATA = 'public, max-age=3600, s-maxage=3600';
 

@@ -1,6 +1,7 @@
-import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useReducer, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { buildLocalizedImageSet, getLocalizedImageUrls, isImagePreloaded, markImageLoaded, type CardPreviewRef } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedImageUrls, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
+import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { OptimizedImage } from './OptimizedImage';
 import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
 import {
@@ -145,6 +146,26 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         ? [...new Set([localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean))]
         : [];
     const checkKey = checkUrls.join('|');
+
+    // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
+    // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer
+    const [, bumpTick] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+        if (!source) return;
+        const localizedPath = getLocalizedAssetPath(source.image, effectiveLocale);
+        const { webp } = getOptimizedImageUrls(localizedPath);
+        if (!webp) return;
+        // 防御竞态：订阅前图片可能已在后台加载完成，立即检查一次
+        if (isImagePreloaded(source.image, effectiveLocale)) {
+            setLoaded(true);
+        }
+        return onImageReady((url) => {
+            if (url === webp) {
+                setLoaded(true);
+                bumpTick();
+            }
+        });
+    }, [source?.image, effectiveLocale]);
 
     useEffect(() => {
         // 如果已预加载，直接标记为已加载

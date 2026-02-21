@@ -5,7 +5,7 @@
 import { Howl, Howler } from 'howler';
 import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages } from '../../core/AssetLoader';
+import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady } from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -534,6 +534,13 @@ class AudioManagerClass {
         let index = 0;
 
         const loadBatch = () => {
+            // 同步重检：requestIdleCallback 回调执行时，状态可能已被新一轮
+            // preloadCriticalImages 重置为 blocked（round 2 开始）。
+            // 此时必须重新等待，不能继续加载音频抢占连接池。
+            if (!isCriticalImagesReady()) {
+                scheduleAfterImages(() => loadBatch());
+                return;
+            }
             const end = Math.min(index + PRELOAD_BATCH_SIZE, pending.length);
             for (; index < end; index++) {
                 const key = pending[index];
@@ -563,8 +570,6 @@ class AudioManagerClass {
 
         /** 等关键图片就绪后在空闲时执行回调 */
         const scheduleAfterImages = (fn: () => void) => {
-            // 每次重新调用 waitForCriticalImages() 获取最新 Promise，
-            // 确保阶段切换（reset）后仍然等待新一轮图片完成
             waitForCriticalImages().then(() => {
                 if (typeof requestIdleCallback === 'function') {
                     requestIdleCallback(() => fn(), { timeout: 3000 });

@@ -179,13 +179,40 @@ export async function preloadGameAssets(gameId: string): Promise<void> {
     }
 
     await Promise.all(promises);
-    console.log(`[AssetLoader] 游戏 ${gameId} 资源预加载完成`);
 }
 
-/** 关键图片超时（ms） */
-const CRITICAL_PRELOAD_TIMEOUT_MS = 10_000;
-/** 单张图片预加载超时（ms），CDN 有缓存时通常 <1s，超时说明网络异常 */
-const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
+/** 单张图片预加载超时（ms）。仅防 404/网络断开，不防慢。CDN 冷启动可能 >10s */
+const SINGLE_IMAGE_TIMEOUT_MS = 30_000;
+
+// ============================================================================
+// 图片就绪通知（后台加载完成 → 通知 UI 组件重渲染）
+// ============================================================================
+
+/**
+ * 图片后台加载完成通知机制。
+ *
+ * 场景：preloadCriticalImages 超时放行后，图片仍在后台加载。
+ * 加载完成时通过此机制通知订阅的 UI 组件（CardPreview/AtlasCard）触发重渲染，
+ * 消除 shimmer 占位。
+ *
+ * 设计：简单的 Set<callback> 发布/订阅，按 URL 精确匹配。
+ * 不用 EventTarget 是因为需要在 SSR 环境安全运行。
+ */
+type ImageReadyCallback = (url: string) => void;
+const _imageReadyListeners = new Set<ImageReadyCallback>();
+
+/** 订阅图片后台加载完成事件，返回取消订阅函数 */
+export function onImageReady(callback: ImageReadyCallback): () => void {
+    _imageReadyListeners.add(callback);
+    return () => { _imageReadyListeners.delete(callback); };
+}
+
+/** 内部：触发图片就绪通知 */
+function _emitImageReady(url: string): void {
+    for (const cb of _imageReadyListeners) {
+        try { cb(url); } catch { /* 订阅者异常不影响其他订阅者 */ }
+    }
+}
 
 // ============================================================================
 // 关键图片就绪信号（供音频预加载等待）
@@ -194,79 +221,102 @@ const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
 /**
  * 关键图片就绪信号。
  *
- * 音频预加载必须等待此信号 resolve 后才能发起 XHR，
+ * 音频预加载必须等待此信号后才能发起 XHR，
  * 避免音频请求与图片请求竞争 HTTP 连接池（同域 6 并发上限）。
  *
- * 设计要点：
- * - _criticalImagesReady 是当前轮次的 Promise，reset 时替换
- * - waitForCriticalImages 直接返回当前 Promise（调用方不应缓存）
- * - AudioManager.preloadKeys 在每批加载前重新调用 waitForCriticalImages，
- *   确保始终等待最新轮次的图片完成
- * - 15s 保底超时，防止图片预加载异常时音频永远阻塞
+ * 设计：简单的布尔标志 + 轮询。比 Promise 更可靠，不存在
+ * "初始 Promise 被意外 resolve"或"reset 后旧 Promise 悬空"的问题。
+ *
+ * 状态机：
+ * - 'blocked'：有关键图片正在加载，音频必须等待
+ * - 'ready'：关键图片已就绪（或无关键图片），音频可以加载
+ *
+ * 初始状态为 blocked：音频系统可能在 CriticalImageGate 挂载前就调用 preloadKeys，
+ * 必须默认阻塞，由 CriticalImageGate 显式 signal ready。
+ * 15s 保底：防止图片预加载异常时音频永远阻塞。
  */
-let _criticalImagesReadyResolve: (() => void) | null = null;
-let _criticalImagesReady: Promise<void> = new Promise<void>((resolve) => {
-    _criticalImagesReadyResolve = resolve;
-});
+let _criticalImagesState: 'blocked' | 'ready' = 'blocked';
 let _criticalImagesEpoch = 0;
-// 15s 保底：图片预加载异常时不阻塞音频
-{
-    const initEpoch = _criticalImagesEpoch;
-    setTimeout(() => {
-        if (_criticalImagesEpoch === initEpoch) {
-            _criticalImagesReadyResolve?.();
-            _criticalImagesReadyResolve = null;
-        }
-    }, 15_000);
-}
 
 /**
  * 等待关键图片就绪（供 AudioManager 调用）
  *
- * 返回当前轮次的 Promise。调用方应在每次需要等待时重新调用，
- * 不要缓存返回值（reset 后旧 Promise 不会 resolve）。
+ * 轮询检查状态标志，200ms 间隔，15s 保底超时。
+ * 比 Promise 方案更可靠：不存在"旧 Promise 被意外 resolve"的竞态。
  */
 export function waitForCriticalImages(): Promise<void> {
-    return _criticalImagesReady;
+    if (_criticalImagesState === 'ready') return Promise.resolve();
+    return new Promise<void>((resolve) => {
+        const POLL_MS = 200;
+        const MAX_WAIT_MS = 15_000;
+        let elapsed = 0;
+        let lastEpoch = _criticalImagesEpoch;
+        const check = () => {
+            if (_criticalImagesState === 'ready') { resolve(); return; }
+            // epoch 变化 = 新一轮 preload 开始（状态已重置为 blocked），重置计时器继续等待
+            if (_criticalImagesEpoch !== lastEpoch) {
+                lastEpoch = _criticalImagesEpoch;
+                elapsed = 0;
+            }
+            elapsed += POLL_MS;
+            if (elapsed >= MAX_WAIT_MS) {
+                console.warn('[AssetLoader] 关键图片等待超时（15s），放行音频预加载');
+                resolve();
+                return;
+            }
+            setTimeout(check, POLL_MS);
+        };
+        setTimeout(check, POLL_MS);
+    });
 }
 
 /**
- * 手动触发关键图片就绪信号（供 CriticalImageGate 快速路径调用）
- * 当所有图片已在缓存中、跳过 preloadCriticalImages 时使用。
- */
-export function signalCriticalImagesReady(): void {
-    _criticalImagesReadyResolve?.();
-    _criticalImagesReadyResolve = null;
-}
-
-/**
- * 重置信号（每次新的 preloadCriticalImages 调用时重置，用于阶段切换）
+ * 标记关键图片就绪（供 CriticalImageGate 调用）
  *
- * 不 resolve 旧 Promise。AudioManager.preloadKeys 在每批加载前
- * 重新调用 waitForCriticalImages() 获取最新 Promise，不会悬空。
+ * 必须传入调用方记录的 epoch，只有 epoch 匹配时才 signal。
+ * 防止旧轮次的延迟回调覆盖新轮次的 blocked 状态。
+ * 不传 epoch 时无条件 signal（向后兼容，但不推荐）。
+ */
+export function signalCriticalImagesReady(epoch?: number): void {
+    if (epoch !== undefined && epoch !== _criticalImagesEpoch) return;
+    _criticalImagesState = 'ready';
+}
+
+/**
+ * 获取当前 epoch（供 CriticalImageGate 记录，传给 signalCriticalImagesReady）
+ */
+export function getCriticalImagesEpoch(): number {
+    return _criticalImagesEpoch;
+}
+
+/**
+ * 同步检查关键图片是否已就绪（供 AudioManager loadBatch 每批次前检查）
+ *
+ * 与 waitForCriticalImages() 不同，这是纯同步调用，不阻塞。
+ * 用于音频 loadBatch 在 requestIdleCallback 回调中重新确认状态，
+ * 防止"round 1 ready → 音频通过 → round 2 reset blocked"的竞态窗口。
+ */
+export function isCriticalImagesReady(): boolean {
+    return _criticalImagesState === 'ready';
+}
+
+/**
+ * 重置信号为阻塞状态（每次新的 preloadCriticalImages 调用时重置）
  */
 function resetCriticalImagesSignal(): void {
     _criticalImagesEpoch++;
-    const epoch = _criticalImagesEpoch;
-    _criticalImagesReady = new Promise<void>((resolve) => {
-        _criticalImagesReadyResolve = resolve;
-    });
-    // 15s 保底
-    setTimeout(() => {
-        if (_criticalImagesEpoch === epoch) {
-            _criticalImagesReadyResolve?.();
-            _criticalImagesReadyResolve = null;
-        }
-    }, 15_000);
+    _criticalImagesState = 'blocked';
 }
 
 /**
  * 预加载关键图片（第一阶段：阻塞门禁）
  *
  * 合并静态清单（GameAssets.criticalImages）与动态解析器输出，
- * 等待所有关键图片加载完成或 10s 超时后放行。
- * 单张图片加载失败不阻塞其他图片。
+ * 等待所有关键图片加载完成。不设整体超时——图片素材确定存在，
+ * 只是 CDN 冷启动可能慢，宁可多等也不要渲染空白界面。
+ * 单张图片有 30s 超时防 404/网络断开。
  *
+ * @param onProgress 可选进度回调，参数为 (loaded, total)
  * @returns 暖加载图片路径列表（可传给 preloadWarmImages）
  */
 export async function preloadCriticalImages(
@@ -274,6 +324,7 @@ export async function preloadCriticalImages(
     gameState?: unknown,
     locale?: string,
     playerID?: string | null,
+    onProgress?: (loaded: number, total: number) => void,
 ): Promise<string[]> {
     // 取消旧的 warm 预加载队列，释放连接池给 critical 请求
     cancelWarmPreload();
@@ -294,44 +345,48 @@ export async function preloadCriticalImages(
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
     if (criticalPaths.length === 0) {
-        _criticalImagesReadyResolve?.();
-        _criticalImagesReadyResolve = null;
+        // 无关键图片（如教程 factionSelect 阶段）：不 signal，保持 blocked。
+        // 后续阶段（playing）会再次调用 preloadCriticalImages 并在完成后 signal。
+        // 不能在这里 signal——音频会立即抢连接，比下一阶段的图片请求更快。
         return warmPaths;
     }
 
     const effectiveLocale = locale || 'zh-CN';
     const startTime = performance.now();
 
-    // 限制并发数为 6（HTTP/1.1 同域连接上限），避免全量并发把连接池占满
-    // 导致音频 XHR 反而先完成，图片全部排队"待处理"
+    // 限制并发数为 6（HTTP/1.1 同域连接上限）
     const CRITICAL_CONCURRENCY = 6;
     const filtered = criticalPaths.filter(Boolean);
+    const total = filtered.length;
+    let loaded = 0;
     let cursor = 0;
+
+    onProgress?.(0, total);
+
     const runWorker = async (): Promise<void> => {
         while (cursor < filtered.length) {
             const p = filtered[cursor++];
             const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
             await preloadOptimizedImage(localizedPath);
+            loaded++;
+            onProgress?.(loaded, total);
         }
     };
-    const allDone = Promise.all(
+
+    // 等待所有关键图片加载完成，不设整体超时
+    await Promise.all(
         Array.from({ length: Math.min(CRITICAL_CONCURRENCY, filtered.length) }, () => runWorker()),
     );
 
-    // 有限并发 + 10s 超时竞争
-    await Promise.race([
-        allDone,
-        new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
-    ]);
-
     const elapsed = performance.now() - startTime;
     if (elapsed > 500) {
-        console.warn(`[AssetLoader] ${gameId} 关键图片预加载耗时 ${elapsed.toFixed(0)}ms（${filtered.length} 张）`);
+        console.warn(`[AssetLoader] ${gameId} 关键图片预加载耗时 ${elapsed.toFixed(0)}ms（${total} 张）`);
     }
 
-    // 关键图片就绪，解除音频预加载阻塞
-    _criticalImagesReadyResolve?.();
-    _criticalImagesReadyResolve = null;
+    // 关键图片就绪 — 但不立即 resolve 音频信号。
+    // 返回 warmPaths 给 CriticalImageGate，由它启动 warm 预加载后再 resolve 信号，
+    // 确保 warm 图片（如基地图集）先于音频占住连接池。
+    // 信号由 CriticalImageGate 在调用 preloadWarmImages 之后手动 signalCriticalImagesReady()。
 
     return warmPaths;
 }
@@ -637,10 +692,12 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
             ? setTimeout(() => {
                 console.debug(`[AssetLoader] 图片加载超时（${timeoutMs}ms），跳过: ${src}`);
                 // 超时 ≠ 失败：浏览器的 Image 请求仍在后台继续。
-                // 注册后台回调，加载完成后自动更新缓存，下次访问直接命中。
+                // 注册后台回调，加载完成后自动更新缓存并通知 UI 组件。
                 img.onload = () => {
                     preloadedImages.set(src, img);
                     removePreloadLink(src);
+                    // 通知订阅者：超时的图片已在后台加载完成
+                    _emitImageReady(src);
                 };
                 finish(false);
             }, timeoutMs)
