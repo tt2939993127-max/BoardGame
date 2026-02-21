@@ -98,6 +98,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **目录/游戏边界严格区分（强制）**：修改/引用前必须以完整路径与所属 gameId 核对，禁止把不同游戏/模块的目录当成同一个。
 - **规则文档指代（强制）**：当我说"规则"时，默认指该游戏目录下 `rule/` 文件夹中的规则 Markdown。
 - **改游戏规则/机制前先读规则文档（强制）**：修改会影响玩法/回合/结算/效果等"规则或机制"时，必须先读 `src/games/<gameId>/rule/` 下的规则文档。
+- **Git 分支创建规范（强制）**：所有新分支必须从主分支（main/master）创建，禁止从其他功能分支分出。用户说"新建分支"时，默认指从主分支创建。
 - **Git 变更回退与暂存规范（强制）**：涉及 `git restore`/`reset --hard`/`stash` 等操作时，**必须先说明原因并获得许可**。PowerShell 恢复文件禁止用管道/Out-File，必须用 `cmd /c "git show <ref>:<file> > <file>"`。
 - **禁止使用 --no-verify（强制）**：`git commit --no-verify` 和 `git push --no-verify` 会跳过 lint-staged 和 pre-push 钩子，可能导致不合规代码入库。任何情况下都禁止使用。
 - **文件移动/复制规范（强制）**：

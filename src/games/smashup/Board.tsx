@@ -1553,7 +1553,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                 {/* 卡牌展示浮层（非阻塞，点击关闭） */}
                 <RevealOverlay
                     entries={eventStreamEntries}
-                    currentPlayerId={myPid}
                 />
 
                 {/* PREVIEW OVERLAY */}

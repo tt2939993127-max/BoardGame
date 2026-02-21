@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingScreen } from '../../system/LoadingScreen';
-import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached, signalCriticalImagesReady } from '../../../core';
+import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached, signalCriticalImagesReady, getCriticalImagesEpoch } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
 
 export interface CriticalImageGateProps {
@@ -43,6 +43,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     const [ready, setReady] = useState(!effectiveEnabled);
     const inFlightRef = useRef(false);
     const lastReadyKeyRef = useRef<string | null>(null);
+    const [loadingProgress, setLoadingProgress] = useState<string | undefined>(undefined);
 
 
     const gameStateRef = useRef(gameState);
@@ -67,7 +68,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     if (needsPreload && gameId && gameState
         && areAllCriticalImagesCached(gameId, gameState, locale, playerID)) {
         lastReadyKeyRef.current = runKey;
-        // 快速路径跳过了 preloadCriticalImages，手动 resolve 信号，解除音频预加载阻塞
+        // 快速路径跳过了 preloadCriticalImages，手动 signal。
+        // 空 criticalPaths 时 areAllCriticalImagesCached 返回 true，signal 是安全的——
+        // 下一阶段 preloadCriticalImages 开头会 reset 回 blocked。
         signalCriticalImagesReady();
     }
 
@@ -120,18 +123,32 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         pendingRunKeyRef.current = null;
         inFlightRef.current = true;
         setReady(false);
-        preloadCriticalImages(gameId, currentState, locale, playerID)
+
+        // 记录本轮 epoch，signal 时传入防止旧轮次的延迟回调覆盖新轮次的 blocked 状态
+        // preloadCriticalImages 内部会 resetCriticalImagesSignal() 自增 epoch，
+        // 所以必须在调用之后读取
+        const preloadPromise = preloadCriticalImages(gameId, currentState, locale, playerID, (loaded, total) => {
+            setLoadingProgress(`${loaded}/${total}`);
+        });
+        const epoch = getCriticalImagesEpoch();
+
+        preloadPromise
             .then((warmPaths) => {
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 onReady?.();
                 preloadWarmImages(warmPaths, locale, gameId);
+                // 无条件 signal：空 criticalPaths 时 preloadCriticalImages 已 signal 过（幂等），
+                // 有图片时这里是真正的 signal 点
+                signalCriticalImagesReady(epoch);
             })
             .catch((err) => {
                 console.error('[CriticalImageGate] 预加载失败:', err);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 onReady?.();
+                // 预加载失败也要 resolve 信号，不阻塞音频
+                signalCriticalImagesReady(epoch);
             })
             .finally(() => {
                 inFlightRef.current = false;
@@ -151,7 +168,10 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     //    useEffect 还没来得及 setReady(true)，但图片已全部缓存，直接渲染
     const shouldBlock = effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey);
     if (shouldBlock) {
-        return <LoadingScreen description={loadingDescription} />;
+        const desc = loadingProgress
+            ? (loadingDescription ? `${loadingDescription}（${loadingProgress}）` : `加载资源 ${loadingProgress}`)
+            : loadingDescription;
+        return <LoadingScreen description={desc} />;
     }
 
     return <>{children}</>;

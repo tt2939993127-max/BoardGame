@@ -20,7 +20,7 @@ import { getCardDef, resolveCardName } from '../data/cards';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
 import { useEventStreamCursor } from '../../../engine/hooks';
 import type { EventStreamEntry, PlayerId } from '../../../engine/types';
-import { SU_EVENTS } from '../domain/events';
+import { SU_EVENTS } from '../domain/types';
 
 // ============================================================================
 // 类型
