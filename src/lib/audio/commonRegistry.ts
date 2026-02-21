@@ -18,7 +18,6 @@ export interface AudioRegistryEntry {
 
 export interface AudioRegistryPayload {
     version: number;
-    generatedAt: string;
     source: string;
     total: number;
     entries: AudioRegistryEntry[];
