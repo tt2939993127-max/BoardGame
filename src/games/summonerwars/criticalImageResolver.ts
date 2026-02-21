@@ -143,6 +143,9 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
     const unselectedFactions = ALL_FACTIONS.filter(f => !selectedFactions.includes(f));
     const unselectedCardsAtlases = unselectedFactions.map(getCardsAtlasPath);
 
+    // 教程模式下不 warm 预加载未选阵营：教程阵营固定，未选阵营永远不会出现
+    const isTutorial = state.sys?.tutorial?.active === true;
+
     return {
         critical: [
             ...SELECTION_CRITICAL,
@@ -150,7 +153,7 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
             ...selectedHeroAtlases,
             ...selectedCardsAtlases,
         ],
-        warm: [...unselectedCardsAtlases],
+        warm: isTutorial ? [] : [...unselectedCardsAtlases],
         phaseKey: 'playing',
     };
 };

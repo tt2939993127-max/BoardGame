@@ -21,6 +21,8 @@ export {
     isImagePreloaded,
     getPreloadedImageElement,
     markImageLoaded,
+    waitForCriticalImages,
+    signalCriticalImagesReady,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,

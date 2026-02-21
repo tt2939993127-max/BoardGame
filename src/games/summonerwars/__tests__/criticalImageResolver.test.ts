@@ -114,10 +114,26 @@ describe('summonerWarsCriticalImageResolver', () => {
         expect(result.critical).toContain('summonerwars/hero/Paladin/hero');
         expect(result.critical).toContain('summonerwars/hero/Paladin/cards');
 
-        // 未选阵营 cards 为 warm
+        // 未选阵营 cards 为 warm（非教程模式）
         expect(result.warm).toContain('summonerwars/hero/Trickster/cards');
         expect(result.critical).not.toContain('summonerwars/hero/Trickster/cards');
 
+        expect(result.phaseKey).toBe('playing');
+    });
+
+    it('教程模式游戏进行中：未选阵营不进入 warm', () => {
+        const state = {
+            ...makeState(true, { '0': 'necromancer', '1': 'necromancer' }),
+            sys: { tutorial: { active: true } },
+        };
+        const result = summonerWarsCriticalImageResolver(state);
+
+        // 已选阵营资源仍为 critical
+        expect(result.critical).toContain('summonerwars/hero/Necromancer/hero');
+        expect(result.critical).toContain('summonerwars/hero/Necromancer/cards');
+
+        // 教程模式：warm 为空，不预加载未选阵营
+        expect(result.warm).toHaveLength(0);
         expect(result.phaseKey).toBe('playing');
     });
 

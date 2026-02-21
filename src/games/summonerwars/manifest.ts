@@ -15,6 +15,7 @@ const entry: GameManifestEntry = {
     tags: ['tactical', 'card_driven', 'dice_driven'],
     bestPlayers: [2],
     cursorTheme: 'summonerwars-ethereal',
+    fontFamily: { display: 'Bebas Neue' },
 };
 
 export const SUMMONER_WARS_MANIFEST: GameManifestEntry = entry;

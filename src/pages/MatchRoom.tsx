@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
-import { GAME_IMPLEMENTATIONS } from '../games/registry';
+import { loadGameImplementation, getGameImplementation } from '../games/registry';
 import { GameProvider, LocalGameProvider, BoardBridge, useGameClient } from '../engine/transport/react';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { GameBoardProps } from '../engine/transport/protocol';
@@ -123,6 +123,20 @@ export const MatchRoom = () => {
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
 
+    // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
+    const [gameImplReady, setGameImplReady] = useState(false);
+    useEffect(() => {
+        if (!gameId || isUgcGame) return;
+        let cancelled = false;
+        setGameImplReady(false);
+        loadGameImplementation(gameId).then(() => {
+            if (!cancelled) setGameImplReady(true);
+        }).catch(() => {
+            if (!cancelled) setGameImplReady(true); // 允许显示错误状态
+        });
+        return () => { cancelled = true; };
+    }, [gameId, isUgcGame]);
+
     // 在线模式：命令被服务端拒绝时的统一反馈
     const handleGameError = useCallback((error: string) => {
         if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
@@ -145,8 +159,10 @@ export const MatchRoom = () => {
     const tRef = useRef(t);
     tRef.current = t;
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
-        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
-        const Board = GAME_IMPLEMENTATIONS[gameId].board as unknown as ComponentType<GameBoardProps>;
+        if (!gameId || !gameImplReady) return null;
+        const impl = getGameImplementation(gameId);
+        if (!impl) return null;
+        const Board = impl.board as unknown as ComponentType<GameBoardProps>;
         const Wrapped: ComponentType<GameBoardProps> = (props) => (
             <CriticalImageGate
                 gameId={gameId}
@@ -161,19 +177,19 @@ export const MatchRoom = () => {
         );
         Wrapped.displayName = 'WrappedOnlineBoard';
         return Wrapped;
-    }, [gameId, i18n.language, isUgcGame]);
+    }, [gameId, i18n.language, isUgcGame, gameImplReady]);
 
     // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
-        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
-        return GAME_IMPLEMENTATIONS[gameId].engineConfig;
-    }, [gameId]);
+        if (!gameId || !gameImplReady) return null;
+        return getGameImplementation(gameId)?.engineConfig ?? null;
+    }, [gameId, gameImplReady]);
 
     // 从游戏实现中获取延迟优化配置
     const latencyConfig = useMemo(() => {
-        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return undefined;
-        return GAME_IMPLEMENTATIONS[gameId].latencyConfig;
-    }, [gameId]);
+        if (!gameId || !gameImplReady) return undefined;
+        return getGameImplementation(gameId)?.latencyConfig;
+    }, [gameId, gameImplReady]);
 
     // 在线模式是否就绪
     const hasOnlineBoard = Boolean(WrappedBoard && gameId && !isUgcGame);
@@ -549,22 +565,43 @@ export const MatchRoom = () => {
     // startTutorial 可以直接通过 controller 执行 START 命令，
     // setState 在 useLayoutEffect 中同步触发重新渲染，
     // CriticalImageGate 直接看到 playing 阶段的 state，只需预加载一次。
+    const gameImplReadyRef = useRef(gameImplReady);
+    gameImplReadyRef.current = gameImplReady;
+
     useLayoutEffect(() => {
         if (!isTutorialRoute) return;
         // 等待 i18n 命名空间加载完成，避免在 namespace 加载期间启动教程
         // （namespace 加载会导致 Board 卸载重挂载，重置游戏状态）
         if (!isGameNamespaceReady) return;
+        // 等待游戏实现加载完成，否则 getGameImplementation 返回 null
+        if (!gameImplReadyRef.current) return;
         
         // 只在未激活且未启动过时调用 startTutorial
         // 不依赖 tutorial.manifestId/steps.length，避免 startTutorial 的 setTutorial 触发循环
         if (!isActive && !tutorialStartedRef.current) {
-            const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
+            const impl = gameId ? getGameImplementation(gameId) : null;
             if (impl?.tutorial) {
                 tutorialStartedRef.current = true;
                 startTutorial(impl.tutorial!);
             }
         }
     }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
+
+    // gameImplReady 变为 true 时补触发一次教程启动
+    // 场景：dev 模式首次加载时 i18n namespace 先于游戏实现加载完成，
+    // 上面的 useLayoutEffect 执行时 gameImplReady 还是 false（通过 ref 读取），
+    // 等游戏实现加载完后需要重新尝试启动教程。
+    useEffect(() => {
+        if (!gameImplReady) return;
+        if (!isTutorialRoute) return;
+        if (!isGameNamespaceReady) return;
+        if (isActive || tutorialStartedRef.current) return;
+        const impl = gameId ? getGameImplementation(gameId) : null;
+        if (impl?.tutorial) {
+            tutorialStartedRef.current = true;
+            startTutorial(impl.tutorial!);
+        }
+    }, [gameImplReady, isTutorialRoute, isGameNamespaceReady, isActive, gameId, startTutorial]);
 
     // 组件真正卸载时清理教程
     // 使用 setTimeout(0) 延迟执行：如果是 StrictMode 的 unmount→remount，
@@ -948,11 +985,19 @@ export const MatchRoom = () => {
             )}
 
             {/* 游戏棋盘 - 全屏 */}
-            <div className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}>
+            <div
+                className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}
+                style={{
+                    '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                    '--font-game-body': gameConfig?.fontFamily?.body ? `'${gameConfig.fontFamily.body}', serif` : undefined,
+                } as React.CSSProperties}
+            >
                 <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
-                        {hasTutorialBoard && engineConfig && WrappedBoard ? (
+                        {!gameImplReady ? (
+                            <LoadingScreen fullScreen={false} title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                        ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                             <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                 <TutorialDispatchBridge>
                                     <BoardBridge

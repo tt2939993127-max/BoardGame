@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
-import * as Sentry from '@sentry/react';
 import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
 
@@ -101,19 +100,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     }, []);
 
-    // 联动监控服务：标识用户信息
+    // 联动监控服务：标识用户信息（Sentry 异步加载，不阻塞首屏）
     useEffect(() => {
-        if (user) {
-            // 在 Sentry 中设置用户信息
-            Sentry.setUser({
-                id: user.id,
-                username: user.username,
-                email: user.email,
-            });
-        } else {
-            // 登出时清理
-            Sentry.setUser(null);
-        }
+        void import('@sentry/react').then((Sentry) => {
+            if (user) {
+                Sentry.setUser({
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                });
+            } else {
+                Sentry.setUser(null);
+            }
+        });
     }, [user]);
 
     const login = useCallback(async (email: string, password: string) => {

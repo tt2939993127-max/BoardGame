@@ -187,6 +187,52 @@ const CRITICAL_PRELOAD_TIMEOUT_MS = 10_000;
 /** 单张图片预加载超时（ms），CDN 有缓存时通常 <1s，超时说明网络异常 */
 const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
 
+// ============================================================================
+// 关键图片就绪信号（供音频预加载等待）
+// ============================================================================
+
+/**
+ * 关键图片就绪信号。
+ *
+ * 音频预加载必须等待此信号 resolve 后才能发起 XHR，
+ * 避免音频请求与图片请求竞争 HTTP 连接池（同域 6 并发上限）。
+ *
+ * - preloadCriticalImages 完成时 resolve
+ * - 15s 保底超时，防止图片预加载异常时音频永远阻塞
+ * - 无关键图片时（criticalPaths 为空）立即 resolve
+ */
+let _criticalImagesReadyResolve: (() => void) | null = null;
+let _criticalImagesReady: Promise<void> = new Promise<void>((resolve) => {
+    _criticalImagesReadyResolve = resolve;
+});
+// 15s 保底：图片预加载异常时不阻塞音频
+setTimeout(() => _criticalImagesReadyResolve?.(), 15_000);
+
+/**
+ * 等待关键图片就绪（供 AudioManager 调用）
+ * 已就绪时立即 resolve，未就绪时等待信号。
+ */
+export function waitForCriticalImages(): Promise<void> {
+    return _criticalImagesReady;
+}
+
+/**
+ * 手动触发关键图片就绪信号（供 CriticalImageGate 快速路径调用）
+ * 当所有图片已在缓存中、跳过 preloadCriticalImages 时使用。
+ */
+export function signalCriticalImagesReady(): void {
+    _criticalImagesReadyResolve?.();
+}
+
+/** 重置信号（每次新的 preloadCriticalImages 调用时重置，用于阶段切换） */
+function resetCriticalImagesSignal(): void {
+    _criticalImagesReady = new Promise<void>((resolve) => {
+        _criticalImagesReadyResolve = resolve;
+    });
+    // 重置后重新设置 15s 保底
+    setTimeout(() => _criticalImagesReadyResolve?.(), 15_000);
+}
+
 /**
  * 预加载关键图片（第一阶段：阻塞门禁）
  *
@@ -204,6 +250,8 @@ export async function preloadCriticalImages(
 ): Promise<string[]> {
     // 取消旧的 warm 预加载队列，释放连接池给 critical 请求
     cancelWarmPreload();
+    // 重置就绪信号，阻塞音频预加载直到本轮关键图片完成
+    resetCriticalImagesSignal();
 
     const assets = gameAssetsRegistry.get(gameId);
     const staticCritical = assets?.criticalImages ?? [];
@@ -219,6 +267,7 @@ export async function preloadCriticalImages(
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
     if (criticalPaths.length === 0) {
+        _criticalImagesReadyResolve?.();
         return warmPaths;
     }
 
@@ -251,6 +300,9 @@ export async function preloadCriticalImages(
     if (elapsed > 500) {
         console.warn(`[AssetLoader] ${gameId} 关键图片预加载耗时 ${elapsed.toFixed(0)}ms（${criticalPaths.length} 张）`);
     }
+
+    // 关键图片就绪，解除音频预加载阻塞
+    _criticalImagesReadyResolve?.();
 
     return warmPaths;
 }

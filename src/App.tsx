@@ -22,11 +22,13 @@ import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { InteractionGuardProvider } from './components/game/framework';
 import AdminGuard from './components/auth/AdminGuard';
 
-import { Home } from './pages/Home';
-import { MatchRoom } from './pages/MatchRoom';
-import { LocalMatchRoom } from './pages/LocalMatchRoom';
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
+
+// 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
+const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
+const MatchRoom = React.lazy(() => import('./pages/MatchRoom').then(m => ({ default: m.MatchRoom })));
+const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoom').then(m => ({ default: m.LocalMatchRoom })));
 
 const queryClient = new QueryClient();
 
@@ -38,7 +40,11 @@ TestHarness.init();
  * 与在线对局使用不同的组件类型，强制 React 在路由切换时完全卸载/重建 MatchRoom，
  * 防止从在线对局导航到教程时组件实例复用导致 state/ref 泄漏（教程卡在"初始化中"）。
  */
-const TutorialMatchRoom = () => <MatchRoom />;
+const TutorialMatchRoom = React.lazy(() =>
+    import('./pages/MatchRoom').then(m => ({
+        default: () => <m.MatchRoom />,
+    }))
+);
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
@@ -84,9 +90,9 @@ const App = () => {
                       <TutorialProvider>
                         <BrowserRouter>
                           <Routes>
-                          <Route path="/" element={<Home />} />
-                          <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
-                          <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
+                          <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
+                          <Route path="/play/:gameId/match/:matchId" element={<React.Suspense fallback={<LoadingScreen />}><MatchRoom /></React.Suspense>} />
+                          <Route path="/play/:gameId/local" element={<React.Suspense fallback={<LoadingScreen />}><LocalMatchRoom /></React.Suspense>} />
                           <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
                           <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                           <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
@@ -96,7 +102,7 @@ const App = () => {
                           <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
                           {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
                               强制 React 在在线↔教程路由切换时完全卸载/重建，防止状态泄漏 */}
-                          <Route path="/play/:gameId/tutorial" element={<TutorialMatchRoom />} />
+                          <Route path="/play/:gameId/tutorial" element={<React.Suspense fallback={<LoadingScreen />}><TutorialMatchRoom /></React.Suspense>} />
                           <Route path="/maintenance" element={<MaintenancePage />} />
 
                           {/* Admin Routes */}

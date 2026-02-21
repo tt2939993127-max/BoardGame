@@ -27,4 +27,11 @@ export interface GameManifestEntry {
     warmImages?: string[];
     /** 游戏光标主题 ID（对应 src/core/cursor/themes.ts 中的注册表） */
     cursorTheme?: string;
+    /** 游戏专属字体（自托管在 public/fonts/，@font-face 在 src/fonts.css） */
+    fontFamily?: {
+        /** 标题/装饰字体（英雄名、阶段名、卡牌标题等） */
+        display: string;
+        /** 正文字体（卡牌描述、规则提示等），不填则用全局默认 */
+        body?: string;
+    };
 }

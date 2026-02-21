@@ -5,7 +5,7 @@
 import { Howl, Howler } from 'howler';
 import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition, AudioCategory } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import { assetsPath, getOptimizedAudioUrl } from '../../core/AssetLoader';
+import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages } from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -546,8 +546,9 @@ class AudioManagerClass {
      * 音频预加载是"锦上添花"——晚几百毫秒用户感知不到，
      * 但如果抢占了图片的 HTTP 连接，卡牌图集会 pending 导致白屏。
      *
-     * 策略：每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback
-     * 在浏览器空闲时加载下一批，确保图片请求始终优先。
+     * 策略：
+     * 1. 等待关键图片就绪信号（waitForCriticalImages），确保图片优先
+     * 2. 每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback 空闲调度
      * 已加载或已失败的 key 会被跳过。
      */
     preloadKeys(keys: SoundKey[]): void {
@@ -592,12 +593,14 @@ class AudioManagerClass {
             }
         };
 
-        // 首批也走空闲调度，不立即发起 XHR
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(() => loadBatch(), { timeout: 3000 });
-        } else {
-            setTimeout(loadBatch, 200);
-        }
+        // 等关键图片就绪后再开始首批加载（避免抢连接池）
+        waitForCriticalImages().then(() => {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(() => loadBatch(), { timeout: 3000 });
+            } else {
+                setTimeout(loadBatch, 200);
+            }
+        });
     }
 
 

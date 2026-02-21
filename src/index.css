@@ -1,11 +1,11 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
 @theme {
-    /* Fonts */
+    /* Fonts（字体文件自托管在 public/fonts/，@font-face 在 fonts.css） */
     --font-sans: 'Inter', system-ui, sans-serif;
     --font-serif: 'Crimson Text', serif;
     --font-heading: 'Inter', sans-serif;
-    --font-pixel: 'Press Start 2P', cursive;
 
     /* Parchment Theme (Classic Retro) */
     --color-parchment-yellow: #EBC944;
@@ -77,6 +77,12 @@
     button:not(:disabled) {
         cursor: pointer;
     }
+}
+
+/* 游戏专属字体：manifest.fontFamily 通过 MatchRoom/LocalMatchRoom 注入为 CSS 变量，
+   自动应用到游戏容器内的标题元素，首页等非游戏页面不受影响 */
+[style*="--font-game-display"] :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--font-game-display);
 }
 
 /* Scrollbars */

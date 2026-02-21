@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingScreen } from '../../system/LoadingScreen';
-import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached } from '../../../core';
+import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached, signalCriticalImagesReady } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
 
 export interface CriticalImageGateProps {
@@ -67,6 +67,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     if (needsPreload && gameId && gameState
         && areAllCriticalImagesCached(gameId, gameState, locale, playerID)) {
         lastReadyKeyRef.current = runKey;
+        // 快速路径跳过了 preloadCriticalImages，手动 resolve 信号，解除音频预加载阻塞
+        signalCriticalImagesReady();
     }
 
     // 重新计算：快速路径可能已更新 lastReadyKeyRef
@@ -88,6 +90,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             inFlightRef.current = false;
             lastReadyKeyRef.current = null;
             pendingRunKeyRef.current = null;
+            // 门禁禁用时也 resolve 信号，不阻塞音频
+            signalCriticalImagesReady();
             return;
         }
         if (stateKey !== 'ready') {
