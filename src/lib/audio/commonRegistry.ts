@@ -1,16 +1,18 @@
 /**
  * 通用音频注册表加载器
- * 直接 import src/ 下的 JSON（Vite 会在构建时打包）
+ * 
+ * 运行时使用精简版 registry-slim.json（~69KB，仅含代码引用的条目）
+ * 全量 registry.json（~3MB，10000+ 条）仅供 AudioBrowser 开发工具使用
+ * 
+ * 精简版由 scripts/audio/generate-slim-registry.mjs 生成
  */
-import type { AudioCategory, BgmDefinition, GameAudioConfig, SoundDefinition } from './types';
-// 直接 import src/ 下的 JSON，Vite 会自动处理
-import registryData from '../../assets/audio/registry.json';
+import type { BgmDefinition, GameAudioConfig, SoundDefinition } from './types';
+import registryData from '../../assets/audio/registry-slim.json';
 
 export interface AudioRegistryEntry {
     key: string;
     src: string;
     type: 'sfx' | 'bgm';
-    category?: AudioCategory;
 }
 
 export interface AudioRegistryPayload {
@@ -26,9 +28,8 @@ export const COMMON_AUDIO_BASE_PATH = 'common/audio';
 let configPromise: Promise<GameAudioConfig> | null = null;
 
 /**
- * 直接使用静态 import 的 JSON
- * Vite 会在构建时将 JSON 打包到产物中
- * 修改 registry.json 后刷新页面即可生效，无需上传 CDN
+ * 加载精简版注册表（~69KB，静态 import，零延迟）
+ * 全量版由 AudioBrowser 单独动态加载
  */
 export const loadCommonAudioRegistry = (): Promise<AudioRegistryPayload> => {
     return Promise.resolve(registryData as AudioRegistryPayload);
@@ -49,13 +50,11 @@ export const buildCommonAudioConfig = (registry: AudioRegistryPayload): GameAudi
                 key: entry.key,
                 name: extractNameFromSrc(entry.src),
                 src: entry.src,
-                category: entry.category,
             });
             continue;
         }
         sounds[entry.key] = {
             src: entry.src,
-            category: entry.category,
         };
     }
 

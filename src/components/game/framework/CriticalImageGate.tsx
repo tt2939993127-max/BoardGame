@@ -125,7 +125,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 onReady?.();
-                preloadWarmImages(warmPaths, locale);
+                preloadWarmImages(warmPaths, locale, gameId);
             })
             .catch((err) => {
                 console.error('[CriticalImageGate] 预加载失败:', err);

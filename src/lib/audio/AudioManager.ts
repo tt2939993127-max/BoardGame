@@ -3,7 +3,7 @@
  * 提供全局音效播放、静音、音量控制
  */
 import { Howl, Howler } from 'howler';
-import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition, AudioCategory } from './types';
+import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
 import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages } from '../../core/AssetLoader';
 
@@ -48,7 +48,6 @@ class AudioManagerClass {
     private bgms: Map<string, Howl> = new Map();
     private bgmDefinitions: Map<string, BgmDefinition> = new Map();
     private registryEntries: Map<string, AudioRegistryEntry> = new Map();
-    private registryCategoryIndex: Map<string, string[]> = new Map();
     private registryBasePath: string = '';
     private failedKeys: Set<SoundKey> = new Set();
 
@@ -191,17 +190,6 @@ class AudioManagerClass {
         };
     }
 
-    resolveCategoryKey(category: AudioCategory): SoundKey | null {
-        const groupKey = `group:${category.group}`;
-        const groupSubKey = category.sub ? `group:${category.group}|sub:${category.sub}` : '';
-        if (groupSubKey) {
-            const exact = this.registryCategoryIndex.get(groupSubKey);
-            if (exact && exact.length > 0) return exact[0];
-        }
-        const fallback = this.registryCategoryIndex.get(groupKey);
-        if (fallback && fallback.length > 0) return fallback[0];
-        return null;
-    }
 
     /**
      * 注册通用 registry 条目（仅缓存索引）
@@ -209,22 +197,6 @@ class AudioManagerClass {
     registerRegistryEntries(entries: AudioRegistryEntry[], basePath: string): void {
         this.registryEntries = new Map(entries.map(entry => [entry.key, entry]));
         this.registryBasePath = normalizeBasePath(basePath);
-        this.registryCategoryIndex = new Map();
-        for (const entry of entries) {
-            if (!entry.category) continue;
-            const groupKey = `group:${entry.category.group}`;
-            const groupSubKey = entry.category.sub
-                ? `group:${entry.category.group}|sub:${entry.category.sub}`
-                : null;
-            const groupBucket = this.registryCategoryIndex.get(groupKey) ?? [];
-            groupBucket.push(entry.key);
-            this.registryCategoryIndex.set(groupKey, groupBucket);
-            if (groupSubKey) {
-                const subBucket = this.registryCategoryIndex.get(groupSubKey) ?? [];
-                subBucket.push(entry.key);
-                this.registryCategoryIndex.set(groupSubKey, subBucket);
-            }
-        }
     }
 
     /**

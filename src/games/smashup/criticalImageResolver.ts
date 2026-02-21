@@ -150,9 +150,20 @@ export const smashUpCriticalImageResolver: CriticalImageResolver = (gameState): 
     const phase = state?.sys?.phase;
     const isTutorial = state?.sys?.tutorial?.active === true;
 
-    // 派系选择阶段：需要全部卡牌图集（展示所有派系），基地暖加载
+    // 派系选择阶段
     const isFactionSelect = phase === 'factionSelect';
     if (isFactionSelect) {
+        // 教程模式：factionSelect 阶段会被 aiActions 快速推进到 playCards，
+        // 不需要展示派系选择 UI，返回空资源让 CriticalImageGate 快速通过，
+        // 等 playing 阶段再加载真正需要的图集
+        if (isTutorial) {
+            return {
+                critical: [],
+                warm: [],
+                phaseKey: 'tutorial-factionSelect',
+            };
+        }
+        // 正常模式：需要全部卡牌图集（展示所有派系），基地暖加载
         return {
             critical: [...ALL_CARD_ATLAS],
             warm: [...ALL_BASE_ATLAS],

@@ -186,7 +186,8 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
    - **SummonerWars**：按阵营独立打包，只加载已选阵营图集
    - **SmashUp**：多派系共享图集，通过 `FACTION_CARD_ATLAS` / `FACTION_BASE_ATLAS` 映射表只加载包含已选派系的图集（如教程恐龙+米斯卡塔尼克 vs 机器人+巫师 → 只需 cards1/cards2/cards4 + base1/base4，跳过 cards3/base2/base3）
 9. **音频预加载等待关键图片彻底完成（强制）**：`AudioManager.preloadKeys` 在每批加载前调用 `waitForCriticalImages()`（`AssetLoader` 导出的全局信号），等关键图片预加载完成后再通过 `requestIdleCallback` + 小批量（每批 2 个）空闲调度发起音频 XHR。信号由 `preloadCriticalImages` 完成时 resolve，`CriticalImageGate` 快速路径（缓存命中）和 `enabled=false` 时也会 resolve。`resetCriticalImagesSignal` 不 resolve 旧 Promise（避免音频提前开始），`preloadKeys` 每批重新获取最新信号。15s 保底超时防止异常阻塞。
-10. **精灵图初始化（统一模式）**：
+10. **warm 预加载取消恢复机制（框架层保证）**：`cancelWarmPreload()` 取消当前 warm 队列时，未完成的路径会被暂存到 `_pendingWarmPaths`。下一次 `preloadWarmImages()` 调用时自动合并暂存路径（已加载的由 `preloadOptimizedImage` 内部跳过）。保证 warm 资源"延迟但不丢失"——任何游戏的 phaseKey 变化触发二次预加载时，第一轮被取消的 warm 资源会在第二轮 critical 完成后自动恢复加载。
+11. **精灵图初始化（统一模式）**：
    - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从 `CriticalImageGate` 预加载缓存中的 `HTMLImageElement.naturalWidth/Height` 自动解析，零配置文件、零额外网络请求。SmashUp 和 SummonerWars 均使用此模式。
    - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，config 从静态 JSON 文件 import（构建时内联）。DiceThrone 使用此模式（`ability-cards-common.atlas.json`）。
    - **注册时机**：所有游戏在模块顶层同步注册（`initXxxAtlases()`），确保首帧渲染时 atlas 已可用。禁止在 `useEffect` 中异步注册。

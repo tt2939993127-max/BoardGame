@@ -10,31 +10,12 @@ export interface SoundSprite {
     [key: string]: [number, number]; // [offset, duration] in ms
 }
 
-export type AudioCategoryGroup =
-    | 'dice'
-    | 'card'
-    | 'combat'
-    | 'status'
-    | 'token'
-    | 'ui'
-    | 'system'
-    | 'stinger'
-    | 'bgm'
-    | 'misc'
-    | (string & {});
-
-export interface AudioCategory {
-    group: AudioCategoryGroup;
-    sub?: string;
-}
-
 // 单个音效定义
 export interface SoundDefinition {
     src: string | string[];
     volume?: number;
     loop?: boolean;
     sprite?: SoundSprite;
-    category?: AudioCategory;
 }
 
 // BGM 定义
@@ -43,7 +24,6 @@ export interface BgmDefinition {
     name: string;
     src: string | string[];
     volume?: number;
-    category?: AudioCategory;
 }
 
 export type BgmGroupId = 'normal' | 'battle' | (string & {});
@@ -72,8 +52,6 @@ export interface AudioEvent {
     type: string;
     /** 事件级音效 key（优先级最高） */
     audioKey?: SoundKey;
-    /** 事件级音效分类（用于统一映射） */
-    audioCategory?: AudioCategory;
     sfxKey?: SoundKey;
     /** 音频事件元数据（框架层自动过滤） */
     audioMetadata?: AudioEventMetadata;

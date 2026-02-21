@@ -119,14 +119,16 @@ describe('smashUpCriticalImageResolver', () => {
         expect(result.phaseKey).toBe('playing');
     });
 
-    it('教程模式 setup 阶段（派系未选）：最小化加载', () => {
+    it('教程模式 factionSelect 阶段：返回空资源快速通过（aiActions 会自动推进）', () => {
         const state = {
             sys: { phase: 'factionSelect', tutorial: { active: true } },
             core: { players: {} },
         };
-        // factionSelect 阶段不受教程影响，仍然全量加载卡牌图集
         const result = smashUpCriticalImageResolver(state);
-        expect(result.critical).toEqual(ALL_CARD_ATLAS);
+        // 教程 factionSelect 阶段不需要展示派系选择 UI，返回空资源
+        expect(result.critical).toEqual([]);
+        expect(result.warm).toEqual([]);
+        expect(result.phaseKey).toBe('tutorial-factionSelect');
     });
 
     it('教程模式 playing 阶段：不同派系组合只加载对应图集', () => {

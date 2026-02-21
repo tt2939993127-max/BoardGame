@@ -322,7 +322,7 @@ export const MatchRoom = () => {
         const resolved = resolveCriticalImages(gameId, undefined, i18n.language);
         const allPaths = [...new Set([...resolved.critical, ...resolved.warm])];
         if (allPaths.length > 0) {
-            preloadWarmImages(allPaths, i18n.language);
+            preloadWarmImages(allPaths, i18n.language, gameId);
         }
     }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
 

@@ -33,22 +33,8 @@ describe('audioRouting', () => {
     it('audioKey 优先级最高', () => {
         const event: AudioEvent = { type: 'X', audioKey: 'force' };
         const config: GameAudioConfig = { feedbackResolver: () => 'fallback' };
-        const result = resolveFeedback(event, buildContext(), config, () => 'category');
+        const result = resolveFeedback(event, buildContext(), config);
         expect(result).toBe('force');
-    });
-
-    it('audioCategory 命中时返回分类 key', () => {
-        const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui', sub: 'click' } };
-        const config: GameAudioConfig = { feedbackResolver: () => 'fallback' };
-        const result = resolveFeedback(event, buildContext(), config, () => 'category');
-        expect(result).toBe('category');
-    });
-
-    it('audioCategory 未命中时回退到 feedbackResolver', () => {
-        const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui' } };
-        const config: GameAudioConfig = { feedbackResolver: () => 'resolved' };
-        const result = resolveFeedback(event, buildContext(), config, () => null);
-        expect(result).toBe('resolved');
     });
 
     it('resolveBgmKey 优先匹配规则，否则 fallback', () => {

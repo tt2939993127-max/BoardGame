@@ -371,7 +371,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 event,
                 runtimeContextRef.current,
                 config,
-                (category) => AudioManager.resolveCategoryKey(category)
             );
             if (!key) continue;
             if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
