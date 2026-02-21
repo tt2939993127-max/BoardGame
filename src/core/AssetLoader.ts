@@ -197,20 +197,34 @@ const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
  * 音频预加载必须等待此信号 resolve 后才能发起 XHR，
  * 避免音频请求与图片请求竞争 HTTP 连接池（同域 6 并发上限）。
  *
- * - preloadCriticalImages 完成时 resolve
+ * 设计要点：
+ * - _criticalImagesReady 是当前轮次的 Promise，reset 时替换
+ * - waitForCriticalImages 直接返回当前 Promise（调用方不应缓存）
+ * - AudioManager.preloadKeys 在每批加载前重新调用 waitForCriticalImages，
+ *   确保始终等待最新轮次的图片完成
  * - 15s 保底超时，防止图片预加载异常时音频永远阻塞
- * - 无关键图片时（criticalPaths 为空）立即 resolve
  */
 let _criticalImagesReadyResolve: (() => void) | null = null;
 let _criticalImagesReady: Promise<void> = new Promise<void>((resolve) => {
     _criticalImagesReadyResolve = resolve;
 });
+let _criticalImagesEpoch = 0;
 // 15s 保底：图片预加载异常时不阻塞音频
-setTimeout(() => _criticalImagesReadyResolve?.(), 15_000);
+{
+    const initEpoch = _criticalImagesEpoch;
+    setTimeout(() => {
+        if (_criticalImagesEpoch === initEpoch) {
+            _criticalImagesReadyResolve?.();
+            _criticalImagesReadyResolve = null;
+        }
+    }, 15_000);
+}
 
 /**
  * 等待关键图片就绪（供 AudioManager 调用）
- * 已就绪时立即 resolve，未就绪时等待信号。
+ *
+ * 返回当前轮次的 Promise。调用方应在每次需要等待时重新调用，
+ * 不要缓存返回值（reset 后旧 Promise 不会 resolve）。
  */
 export function waitForCriticalImages(): Promise<void> {
     return _criticalImagesReady;
@@ -222,15 +236,28 @@ export function waitForCriticalImages(): Promise<void> {
  */
 export function signalCriticalImagesReady(): void {
     _criticalImagesReadyResolve?.();
+    _criticalImagesReadyResolve = null;
 }
 
-/** 重置信号（每次新的 preloadCriticalImages 调用时重置，用于阶段切换） */
+/**
+ * 重置信号（每次新的 preloadCriticalImages 调用时重置，用于阶段切换）
+ *
+ * 不 resolve 旧 Promise。AudioManager.preloadKeys 在每批加载前
+ * 重新调用 waitForCriticalImages() 获取最新 Promise，不会悬空。
+ */
 function resetCriticalImagesSignal(): void {
+    _criticalImagesEpoch++;
+    const epoch = _criticalImagesEpoch;
     _criticalImagesReady = new Promise<void>((resolve) => {
         _criticalImagesReadyResolve = resolve;
     });
-    // 重置后重新设置 15s 保底
-    setTimeout(() => _criticalImagesReadyResolve?.(), 15_000);
+    // 15s 保底
+    setTimeout(() => {
+        if (_criticalImagesEpoch === epoch) {
+            _criticalImagesReadyResolve?.();
+            _criticalImagesReadyResolve = null;
+        }
+    }, 15_000);
 }
 
 /**
@@ -268,6 +295,7 @@ export async function preloadCriticalImages(
 
     if (criticalPaths.length === 0) {
         _criticalImagesReadyResolve?.();
+        _criticalImagesReadyResolve = null;
         return warmPaths;
     }
 
@@ -303,6 +331,7 @@ export async function preloadCriticalImages(
 
     // 关键图片就绪，解除音频预加载阻塞
     _criticalImagesReadyResolve?.();
+    _criticalImagesReadyResolve = null;
 
     return warmPaths;
 }

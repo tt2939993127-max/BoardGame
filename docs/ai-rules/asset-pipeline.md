@@ -181,8 +181,12 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
 6. **phaseKey 必须稳定**：`CriticalImageGate` 依据 `phaseKey` 判断是否重新预加载，未变化时不会重复触发。
 7. **教程模式 setup 阶段跳过全量选角资源（强制）**：教程会自动执行 aiActions（SELECT_CHARACTER/SELECT_FACTION + HOST_START_GAME），用户看不到选角界面。resolver 必须检查 `state.sys?.tutorial?.active === true`，在教程 setup 阶段只返回通用资源（背景/地图等），不预加载全部角色/阵营的选角资源。等 aiActions 执行完进入 playing 阶段后，再按实际选角结果预加载。
-8. **音频预加载不得阻塞图片加载（强制）**：`AudioManager.preloadKeys` 内部使用 `requestIdleCallback` + 小批量（每批 2 个）空闲调度，确保音频 XHR 不会与图片请求竞争浏览器的 6 个并发连接。无需在调用侧做额外延迟处理。
-7. **精灵图初始化（统一模式）**：
+8. **教程模式 playing 阶段只加载已选阵营/角色/派系的资源（强制）**：教程阵营/角色/派系固定，未选的永远不会出现。resolver 在教程 playing 阶段必须只加载已选项对应的图集，`warm` 为空数组，避免浪费连接和带宽。各游戏实现方式：
+   - **DiceThrone**：按角色独立打包，只加载已选角色图集
+   - **SummonerWars**：按阵营独立打包，只加载已选阵营图集
+   - **SmashUp**：多派系共享图集，通过 `FACTION_CARD_ATLAS` / `FACTION_BASE_ATLAS` 映射表只加载包含已选派系的图集（如教程恐龙+米斯卡塔尼克 vs 机器人+巫师 → 只需 cards1/cards2/cards4 + base1/base4，跳过 cards3/base2/base3）
+9. **音频预加载等待关键图片彻底完成（强制）**：`AudioManager.preloadKeys` 在每批加载前调用 `waitForCriticalImages()`（`AssetLoader` 导出的全局信号），等关键图片预加载完成后再通过 `requestIdleCallback` + 小批量（每批 2 个）空闲调度发起音频 XHR。信号由 `preloadCriticalImages` 完成时 resolve，`CriticalImageGate` 快速路径（缓存命中）和 `enabled=false` 时也会 resolve。`resetCriticalImagesSignal` 不 resolve 旧 Promise（避免音频提前开始），`preloadKeys` 每批重新获取最新信号。15s 保底超时防止异常阻塞。
+10. **精灵图初始化（统一模式）**：
    - **均匀网格**：使用 `registerLazyCardAtlasSource(id, { image, grid: { rows, cols } })`，尺寸从 `CriticalImageGate` 预加载缓存中的 `HTMLImageElement.naturalWidth/Height` 自动解析，零配置文件、零额外网络请求。SmashUp 和 SummonerWars 均使用此模式。
    - **不规则网格**：使用 `registerCardAtlasSource(id, { image, config })`，config 从静态 JSON 文件 import（构建时内联）。DiceThrone 使用此模式（`ability-cards-common.atlas.json`）。
    - **注册时机**：所有游戏在模块顶层同步注册（`initXxxAtlases()`），确保首帧渲染时 atlas 已可用。禁止在 `useEffect` 中异步注册。
@@ -230,7 +234,7 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 |------|-------------------|-------------------|
 | DiceThrone | 背景图、卡背、头像图集、所有角色 player-board + tip | 背景图、卡背、头像图集、已选角色 player-board + tip + ability-cards + dice + status-icons-atlas |
 | SummonerWars | 地图、卡背、所有阵营 hero 图集 | 地图、卡背、传送门、骰子、已选阵营 hero + cards 图集 |
-| SmashUp | 所有基地图集 | 所有基地图集 + 已选派系卡牌图集 |
+| SmashUp | 所有卡牌图集（4个） | 已选派系卡牌图集 + 已选派系基地图集（教程）；全部卡牌+基地图集（正常） |
 
 ### 新增角色/派系检查清单
 
