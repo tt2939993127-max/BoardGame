@@ -3,12 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;900&family=Press+Start+2P&display=swap"
-    rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+  <!-- 字体已自托管到 public/fonts/，通过 src/fonts.css 加载，无外部依赖 -->
   <link rel="icon" type="image/svg+xml" href="/logos/logo_1_grid.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -55,14 +50,23 @@
         </footer>
       </div>
     </noscript>
-    <!-- 用户可见的加载占位：与正式首页风格一致的极简加载态 -->
-    <div id="initial-loader" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f0e8;font-family:serif">
-      <div style="text-align:center">
-        <img src="/logos/logo_1_grid.svg" alt="易桌游" width="48" height="48" style="opacity:0.7;margin:0 auto 16px;display:block" />
-        <div style="font-size:1.5rem;color:#2c2216;letter-spacing:0.1em;font-weight:bold">易桌游</div>
-        <div style="font-size:0.75rem;color:#8b7355;letter-spacing:0.2em;margin-top:8px">加载中…</div>
-      </div>
-    </div>
+    <!-- 路由感知的加载占位：首页用羊皮纸风格，游戏页用黑底光点 -->
+    <div id="initial-loader"></div>
+    <script>
+      (function(){
+        var el = document.getElementById('initial-loader');
+        var p = location.pathname;
+        var isGame = p.indexOf('/play/') === 0 || p.indexOf('/dev/') === 0;
+        if (isGame) {
+          el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#000;display:flex;align-items:center;justify-content:center';
+          el.innerHTML = '<div style="width:16px;height:16px;background:#d97706;border-radius:50%;filter:blur(2px);box-shadow:0 0 20px #f59e0b,0 0 60px rgba(245,158,11,0.3);animation:il-breath 2s ease-in-out infinite"></div>';
+        } else {
+          el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-family:serif';
+          el.innerHTML = '<div style="text-align:center"><img src="/logos/logo_1_grid.svg" alt="" width="48" height="48" style="opacity:0.7;margin:0 auto 16px;display:block"/><div style="font-size:1.5rem;color:#2c2216;letter-spacing:0.1em;font-weight:bold">易桌游</div><div style="font-size:0.75rem;color:#8b7355;letter-spacing:0.2em;margin-top:8px">加载中…</div></div>';
+        }
+      })();
+    </script>
+    <style>@keyframes il-breath{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}</style>
   </div>
   <div id="modal-root"></div>
   <script type="module" src="/src/main.tsx"></script>

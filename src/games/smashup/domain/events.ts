@@ -74,7 +74,6 @@ export const SU_EVENTS = defineEvents({
   
   'su:reveal_hand': { audio: 'immediate', sound: CARD_SCROLL_KEY },
   'su:reveal_deck_top': { audio: 'immediate', sound: CARD_SCROLL_KEY },
-  'su:reveal_dismissed': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
   
   'su:breakpoint_modified': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
   'su:limit_modified': { audio: 'immediate', sound: POSITIVE_SIGNAL_KEY },
@@ -126,7 +125,6 @@ export const SU_EVENT_TYPES = {
   BASE_DECK_REORDERED: SU_EVENTS['su:base_deck_reordered'].type,
   REVEAL_HAND: SU_EVENTS['su:reveal_hand'].type,
   REVEAL_DECK_TOP: SU_EVENTS['su:reveal_deck_top'].type,
-  REVEAL_DISMISSED: SU_EVENTS['su:reveal_dismissed'].type,
   TEMP_POWER_ADDED: SU_EVENTS['su:temp_power_added'].type,
   BREAKPOINT_MODIFIED: SU_EVENTS['su:breakpoint_modified'].type,
   BASE_DECK_SHUFFLED: SU_EVENTS['su:base_deck_shuffled'].type,

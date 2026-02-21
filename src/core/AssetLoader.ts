@@ -187,6 +187,79 @@ const CRITICAL_PRELOAD_TIMEOUT_MS = 10_000;
 /** 单张图片预加载超时（ms），CDN 有缓存时通常 <1s，超时说明网络异常 */
 const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
 
+// ============================================================================
+// 关键图片就绪信号（供音频预加载等待）
+// ============================================================================
+
+/**
+ * 关键图片就绪信号。
+ *
+ * 音频预加载必须等待此信号 resolve 后才能发起 XHR，
+ * 避免音频请求与图片请求竞争 HTTP 连接池（同域 6 并发上限）。
+ *
+ * 设计要点：
+ * - _criticalImagesReady 是当前轮次的 Promise，reset 时替换
+ * - waitForCriticalImages 直接返回当前 Promise（调用方不应缓存）
+ * - AudioManager.preloadKeys 在每批加载前重新调用 waitForCriticalImages，
+ *   确保始终等待最新轮次的图片完成
+ * - 15s 保底超时，防止图片预加载异常时音频永远阻塞
+ */
+let _criticalImagesReadyResolve: (() => void) | null = null;
+let _criticalImagesReady: Promise<void> = new Promise<void>((resolve) => {
+    _criticalImagesReadyResolve = resolve;
+});
+let _criticalImagesEpoch = 0;
+// 15s 保底：图片预加载异常时不阻塞音频
+{
+    const initEpoch = _criticalImagesEpoch;
+    setTimeout(() => {
+        if (_criticalImagesEpoch === initEpoch) {
+            _criticalImagesReadyResolve?.();
+            _criticalImagesReadyResolve = null;
+        }
+    }, 15_000);
+}
+
+/**
+ * 等待关键图片就绪（供 AudioManager 调用）
+ *
+ * 返回当前轮次的 Promise。调用方应在每次需要等待时重新调用，
+ * 不要缓存返回值（reset 后旧 Promise 不会 resolve）。
+ */
+export function waitForCriticalImages(): Promise<void> {
+    return _criticalImagesReady;
+}
+
+/**
+ * 手动触发关键图片就绪信号（供 CriticalImageGate 快速路径调用）
+ * 当所有图片已在缓存中、跳过 preloadCriticalImages 时使用。
+ */
+export function signalCriticalImagesReady(): void {
+    _criticalImagesReadyResolve?.();
+    _criticalImagesReadyResolve = null;
+}
+
+/**
+ * 重置信号（每次新的 preloadCriticalImages 调用时重置，用于阶段切换）
+ *
+ * 不 resolve 旧 Promise。AudioManager.preloadKeys 在每批加载前
+ * 重新调用 waitForCriticalImages() 获取最新 Promise，不会悬空。
+ */
+function resetCriticalImagesSignal(): void {
+    _criticalImagesEpoch++;
+    const epoch = _criticalImagesEpoch;
+    _criticalImagesReady = new Promise<void>((resolve) => {
+        _criticalImagesReadyResolve = resolve;
+    });
+    // 15s 保底
+    setTimeout(() => {
+        if (_criticalImagesEpoch === epoch) {
+            _criticalImagesReadyResolve?.();
+            _criticalImagesReadyResolve = null;
+        }
+    }, 15_000);
+}
+
 /**
  * 预加载关键图片（第一阶段：阻塞门禁）
  *
@@ -204,6 +277,8 @@ export async function preloadCriticalImages(
 ): Promise<string[]> {
     // 取消旧的 warm 预加载队列，释放连接池给 critical 请求
     cancelWarmPreload();
+    // 重置就绪信号，阻塞音频预加载直到本轮关键图片完成
+    resetCriticalImagesSignal();
 
     const assets = gameAssetsRegistry.get(gameId);
     const staticCritical = assets?.criticalImages ?? [];
@@ -219,21 +294,33 @@ export async function preloadCriticalImages(
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
     if (criticalPaths.length === 0) {
+        _criticalImagesReadyResolve?.();
+        _criticalImagesReadyResolve = null;
         return warmPaths;
     }
 
     const effectiveLocale = locale || 'zh-CN';
     const startTime = performance.now();
-    const promises = criticalPaths
-        .filter(Boolean)
-        .map((p) => {
-            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
-            return preloadOptimizedImage(localizedPath);
-        });
 
-    // Promise.allSettled + 10s 超时竞争
+    // 限制并发数为 6（HTTP/1.1 同域连接上限），避免全量并发把连接池占满
+    // 导致音频 XHR 反而先完成，图片全部排队"待处理"
+    const CRITICAL_CONCURRENCY = 6;
+    const filtered = criticalPaths.filter(Boolean);
+    let cursor = 0;
+    const runWorker = async (): Promise<void> => {
+        while (cursor < filtered.length) {
+            const p = filtered[cursor++];
+            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+            await preloadOptimizedImage(localizedPath);
+        }
+    };
+    const allDone = Promise.all(
+        Array.from({ length: Math.min(CRITICAL_CONCURRENCY, filtered.length) }, () => runWorker()),
+    );
+
+    // 有限并发 + 10s 超时竞争
     await Promise.race([
-        Promise.allSettled(promises),
+        allDone,
         new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
     ]);
 
@@ -241,6 +328,10 @@ export async function preloadCriticalImages(
     if (elapsed > 500) {
         console.warn(`[AssetLoader] ${gameId} 关键图片预加载耗时 ${elapsed.toFixed(0)}ms（${criticalPaths.length} 张）`);
     }
+
+    // 关键图片就绪，解除音频预加载阻塞
+    _criticalImagesReadyResolve?.();
+    _criticalImagesReadyResolve = null;
 
     return warmPaths;
 }
@@ -290,12 +381,39 @@ export function areAllCriticalImagesCached(
 let warmAbortToken = 0;
 
 /**
+ * 被取消的 warm 路径暂存区。
+ * cancelWarmPreload 时把当前队列中未完成的路径存入，
+ * 下一次 preloadWarmImages 调用时自动合并（已加载的会被 preloadOptimizedImage 跳过）。
+ * 保证 warm 资源"延迟但不丢失"。
+ * scope 限定为同一 gameId，跨游戏/跨路由的 pending 不恢复。
+ */
+let _pendingWarmPaths: Set<string> = new Set();
+let _pendingWarmLocale: string | undefined;
+let _pendingWarmGameId: string | undefined;
+
+/** 当前 warm 队列的路径和进度，供取消时回收未完成的部分 */
+let _currentWarmPaths: string[] = [];
+let _currentWarmCursor = 0;
+let _currentWarmGameId: string | undefined;
+
+/**
  * 取消当前正在进行的暖加载队列。
  * 由 preloadCriticalImages 在启动新一轮关键图片预加载时调用，
  * 释放浏览器连接池给 critical 请求。
+ * 未完成的 warm 路径会被暂存，下一轮 preloadWarmImages 时自动恢复（同 gameId 内）。
  */
 export function cancelWarmPreload(): void {
+    // 把当前队列中尚未开始加载的路径存入暂存区（仅限同 gameId）
+    for (let i = _currentWarmCursor; i < _currentWarmPaths.length; i++) {
+        const p = _currentWarmPaths[i];
+        if (p) _pendingWarmPaths.add(p);
+    }
+    _pendingWarmGameId = _currentWarmGameId;
+    // 令牌自增，使旧队列的 worker 退出
     warmAbortToken++;
+    _currentWarmPaths = [];
+    _currentWarmCursor = 0;
+    _currentWarmGameId = undefined;
 }
 
 /**
@@ -303,30 +421,54 @@ export function cancelWarmPreload(): void {
  *
  * 在空闲时执行，有限并发（3 路），不阻塞主线程。
  * 支持取消：新的 critical 预加载启动时会调用 cancelWarmPreload()，
- * 队列中尚未开始的 warm 请求将被跳过。
+ * 队列中尚未开始的 warm 请求将被跳过，但会在下一轮自动恢复（同 gameId 内）。
  */
 const WARM_CONCURRENCY = 3;
 
-export function preloadWarmImages(paths: string[], locale?: string): void {
-    if (paths.length === 0) return;
+export function preloadWarmImages(paths: string[], locale?: string, gameId?: string): void {
+    const effectiveLocale = locale || 'zh-CN';
+
+    // 合并上一轮被取消的 warm 路径（仅限同 gameId，跨游戏的 pending 丢弃）
+    const merged = new Set(paths.filter(Boolean));
+    if (_pendingWarmPaths.size > 0
+        && (_pendingWarmGameId === gameId || (!_pendingWarmGameId && !gameId))
+        && (_pendingWarmLocale === effectiveLocale || !_pendingWarmLocale)) {
+        for (const p of _pendingWarmPaths) merged.add(p);
+    }
+    _pendingWarmPaths = new Set();
+    _pendingWarmLocale = undefined;
+    _pendingWarmGameId = undefined;
+
+    const allPaths = [...merged];
+    if (allPaths.length === 0) return;
+
+    // 记录当前队列，供 cancelWarmPreload 回收
+    _currentWarmPaths = allPaths;
+    _currentWarmCursor = 0;
+    _currentWarmGameId = gameId;
+    _pendingWarmLocale = effectiveLocale;
 
     // 生成新令牌，自动使旧的 warm 队列失效
     const token = ++warmAbortToken;
-    const effectiveLocale = locale || 'zh-CN';
 
     const doPreload = async () => {
-        let cursor = 0;
         const run = async (): Promise<void> => {
-            while (cursor < paths.length) {
+            while (_currentWarmCursor < allPaths.length) {
                 if (warmAbortToken !== token) return; // 已取消
-                const p = paths[cursor++];
+                const p = allPaths[_currentWarmCursor++];
                 if (!p) continue;
                 const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
                 await preloadOptimizedImage(localizedPath);
             }
         };
         // 启动 N 路并发 worker
-        await Promise.all(Array.from({ length: Math.min(WARM_CONCURRENCY, paths.length) }, () => run()));
+        await Promise.all(Array.from({ length: Math.min(WARM_CONCURRENCY, allPaths.length) }, () => run()));
+        // 正常完成，清空当前队列记录
+        if (warmAbortToken === token) {
+            _currentWarmPaths = [];
+            _currentWarmCursor = 0;
+            _currentWarmGameId = undefined;
+        }
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -494,6 +636,12 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
         const timer = timeoutMs != null
             ? setTimeout(() => {
                 console.debug(`[AssetLoader] 图片加载超时（${timeoutMs}ms），跳过: ${src}`);
+                // 超时 ≠ 失败：浏览器的 Image 请求仍在后台继续。
+                // 注册后台回调，加载完成后自动更新缓存，下次访问直接命中。
+                img.onload = () => {
+                    preloadedImages.set(src, img);
+                    removePreloadLink(src);
+                };
                 finish(false);
             }, timeoutMs)
             : null;
@@ -530,12 +678,18 @@ async function preloadOptimizedImage(src: string): Promise<void> {
     const promise = (async () => {
         const ok = await preloadImageWithResult(webp, SINGLE_IMAGE_TIMEOUT_MS);
         if (!ok) {
-            // 超时/失败：记录失败次数，超过阈值后标记为已处理（空 Image 占位）。
-            // 避免持续 404 的图片导致每次阶段切换都重新等待 10s 超时。
+            // 超时/失败：记录失败次数。
+            // 只有真正失败（onerror，如 404）才累计；超时的图片仍在后台加载，
+            // preloadImageWithResult 的超时回调会在加载完成后自动更新 preloadedImages。
+            // 超过阈值后标记为已处理（空 Image 占位），避免持续 404 的图片
+            // 导致每次阶段切换都重新等待超时。
             const count = (preloadFailCount.get(webp) ?? 0) + 1;
             preloadFailCount.set(webp, count);
             if (count >= MAX_PRELOAD_RETRIES) {
-                preloadedImages.set(webp, new Image());
+                // 只有缓存中没有任何引用时才放空占位（避免覆盖超时回调写入的有效 Image）
+                if (!preloadedImages.has(webp)) {
+                    preloadedImages.set(webp, new Image());
+                }
             }
         }
     })();

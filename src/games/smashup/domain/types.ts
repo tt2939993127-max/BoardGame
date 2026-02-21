@@ -303,24 +303,6 @@ export interface SmashUpCore {
      * 用于"每个基地每回合只能使用一次 X 能力"类规则
      */
     specialLimitUsed?: Record<string, number[]>;
-    /**
-     * 待展示的卡牌信息（外星人/密大查看手牌/牌库顶能力，UI 层读取后展示，玩家确认后清除）
-     *
-     * 规则依赖：DISMISS_REVEAL 命令验证依赖此字段判断查看者身份，故保留在 core 中。
-     */
-    pendingReveal?: {
-        type: 'hand' | 'deck_top';
-        /** 被展示手牌的玩家（单人或多人） */
-        targetPlayerId: string | string[];
-        /** 查看者玩家 ID，'all' 表示所有玩家可见 */
-        viewerPlayerId: string | 'all';
-        cards: { uid: string; defId: string }[];
-        /** 触发展示的玩家（viewerPlayerId='all' 时由此玩家关闭展示） */
-        sourcePlayerId?: string;
-        reason: string;
-        /** viewerPlayerId='all' 时，已确认的玩家 ID 列表（排除被展示者） */
-        confirmedPlayerIds?: string[];
-    };
 }
 
 export interface FactionSelectionState {
@@ -362,7 +344,6 @@ export const SU_COMMANDS = {
     // === 新增 ===
     SELECT_FACTION: 'su:select_faction',
     USE_TALENT: 'su:use_talent',
-    DISMISS_REVEAL: 'su:dismiss_reveal',
 } as const;
 
 /** 打出随从 */
@@ -409,18 +390,12 @@ export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT>
     };
 }
 
-/** 关闭卡牌展示 */
-export interface DismissRevealCommand extends Command<typeof SU_COMMANDS.DISMISS_REVEAL> {
-    payload: Record<string, never>;
-}
-
 export type SmashUpCommand =
     | PlayMinionCommand
     | PlayActionCommand
     | DiscardToLimitCommand
     | SelectFactionCommand
-    | UseTalentCommand
-    | DismissRevealCommand;
+    | UseTalentCommand;
 
 // ============================================================================
 // 事件类型
@@ -604,7 +579,6 @@ export type SmashUpEvent =
     | BaseDeckReorderedEvent
     | RevealHandEvent
     | RevealDeckTopEvent
-    | RevealDismissedEvent
     | TempPowerAddedEvent
     | BreakpointModifiedEvent
     | BaseDeckShuffledEvent
@@ -833,13 +807,6 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
 }
 
 /** 关闭卡牌展示事件（单人模式直接关闭，all 模式记录确认者） */
-export interface RevealDismissedEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DISMISSED> {
-    payload: {
-        /** 确认的玩家 ID（viewerPlayerId='all' 时使用） */
-        confirmPlayerId?: string;
-    };
-}
-
 /** 临时力量修正事件（回合结束自动清零） */
 export interface TempPowerAddedEvent extends GameEvent<typeof SU_EVENTS.TEMP_POWER_ADDED> {
     payload: {

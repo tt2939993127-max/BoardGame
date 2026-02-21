@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { GAME_IMPLEMENTATIONS } from '../games/registry';
+import { loadGameImplementation, getGameImplementation } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
@@ -29,6 +29,20 @@ export const LocalMatchRoom = () => {
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
 
+    // 异步加载游戏实现
+    const [gameImplReady, setGameImplReady] = useState(false);
+    useEffect(() => {
+        if (!gameId) return;
+        let cancelled = false;
+        setGameImplReady(false);
+        loadGameImplementation(gameId).then(() => {
+            if (!cancelled) setGameImplReady(true);
+        }).catch(() => {
+            if (!cancelled) setGameImplReady(true);
+        });
+        return () => { cancelled = true; };
+    }, [gameId]);
+
     // 从地址参数获取种子，如果没有则生成新的
     const seedFromUrl = searchParams.get('seed');
     const gameSeed = seedFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -43,14 +57,16 @@ export const LocalMatchRoom = () => {
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
-        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
-        return GAME_IMPLEMENTATIONS[gameId].engineConfig;
-    }, [gameId]);
+        if (!gameId || !gameImplReady) return null;
+        return getGameImplementation(gameId)?.engineConfig ?? null;
+    }, [gameId, gameImplReady]);
 
     // 包装 Board 组件，注入 CriticalImageGate
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
-        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
-        const Board = GAME_IMPLEMENTATIONS[gameId].board as unknown as ComponentType<GameBoardProps>;
+        if (!gameId || !gameImplReady) return null;
+        const impl = getGameImplementation(gameId);
+        if (!impl) return null;
+        const Board = impl.board as unknown as ComponentType<GameBoardProps>;
         const Wrapped: ComponentType<GameBoardProps> = (props) => (
             <CriticalImageGate
                 gameId={gameId}
@@ -64,7 +80,7 @@ export const LocalMatchRoom = () => {
         );
         Wrapped.displayName = 'WrappedLocalBoard';
         return Wrapped;
-    }, [gameId, i18n.language, t]);
+    }, [gameId, i18n.language, t, gameImplReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
@@ -85,7 +101,13 @@ export const LocalMatchRoom = () => {
     return (
         <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
             <GameHUD mode="local" />
-            <div className="w-full h-full">
+            <div
+                className="w-full h-full"
+                style={{
+                    '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                    '--font-game-body': gameConfig?.fontFamily?.body ? `'${gameConfig.fontFamily.body}', serif` : undefined,
+                } as React.CSSProperties}
+            >
                 <GameModeProvider mode="local">
                     <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
                     {engineConfig && WrappedBoard ? (

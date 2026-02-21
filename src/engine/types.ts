@@ -40,8 +40,6 @@ export interface GameEvent<TType extends string = string, TPayload = unknown> {
     sfxKey?: string;
     /** 事件级音效 key（优先级最高） */
     audioKey?: string;
-    /** 事件级音效分类（用于统一映射） */
-    audioCategory?: { group: string; sub?: string };
 }
 
 /**

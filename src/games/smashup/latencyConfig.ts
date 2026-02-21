@@ -21,8 +21,6 @@ import { SU_COMMANDS } from './domain/types';
 const DETERMINISTIC_COMMANDS = [
     // 弃牌至手牌上限（纯移除操作）
     SU_COMMANDS.DISCARD_TO_LIMIT,
-    // 关闭卡牌展示（纯 UI 确认）
-    SU_COMMANDS.DISMISS_REVEAL,
 ] as const;
 
 /**
@@ -66,8 +64,6 @@ export const smashUpLatencyConfig: LatencyOptimizationConfig = {
         animationMode: {
             // 弃牌至手牌上限 → 立即反馈
             [SU_COMMANDS.DISCARD_TO_LIMIT]: 'optimistic',
-            // 关闭卡牌展示 → 立即反馈
-            [SU_COMMANDS.DISMISS_REVEAL]: 'optimistic',
             // 种子同步后，随机命令也可以乐观预测并立即播放动画
             [SU_COMMANDS.PLAY_MINION]: 'optimistic',
             [SU_COMMANDS.PLAY_ACTION]: 'optimistic',

@@ -456,15 +456,6 @@ function executeCommand(
             return { events };
         }
 
-        case SU_COMMANDS.DISMISS_REVEAL: {
-            return { events: [{
-                type: SU_EVENTS.REVEAL_DISMISSED,
-                payload: { confirmPlayerId: command.playerId },
-                sourceCommandType: command.type,
-                timestamp: now,
-            }] };
-        }
-
         default:
             // RESPONSE_PASS 由引擎 ResponseWindowSystem.beforeCommand 处理，领域层不生成事件
             return { events: [] };

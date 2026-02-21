@@ -43,6 +43,12 @@ export const LoadingScreen = ({
         // 挂载时：增加计数
         globalLoadingScreenCount++;
         
+        // LoadingScreen 挂载时移除 index.html 的静态占位，避免两个 loading 同时出现
+        const initialLoader = document.getElementById('initial-loader');
+        if (initialLoader) {
+            initialLoader.remove();
+        }
+
         // 判断是否需要播放动画：
         // 1. 如果之前没有 LoadingScreen 存活（计数为1，即当前是唯一一个）
         // 2. 且本次会话还没播放过入场动画

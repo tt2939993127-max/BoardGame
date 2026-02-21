@@ -61,6 +61,7 @@ import type { PlayConstraint } from './domain/types';
 import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game/framework';
 import type { SpotlightItem } from '../../components/game/framework';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
+import { RevealOverlay } from './ui/RevealOverlay';
 
 type Props = GameBoardProps<SmashUpCore>;
 
@@ -1546,6 +1547,12 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                     renderCard={renderSpotlightCard}
                 />
 
+                {/* 卡牌展示浮层（非阻塞，点击关闭） */}
+                <RevealOverlay
+                    entries={getEventStreamEntries(G)}
+                    currentPlayerId={myPid}
+                />
+
                 {/* PREVIEW OVERLAY */}
                 <CardMagnifyOverlay target={viewingCard} onClose={() => setViewingCard(null)} />
 
@@ -1555,8 +1562,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                         interaction={G.sys.interaction?.current}
                         dispatch={dispatch}
                         playerID={playerID}
-                        pendingReveal={core.pendingReveal}
-                        onDismissReveal={() => dispatch(SU_COMMANDS.DISMISS_REVEAL, {})}
                     />
                 )}
 

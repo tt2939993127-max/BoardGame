@@ -9,9 +9,9 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Check } from 'lucide-react';
 import { AudioManager } from '../../lib/audio/AudioManager';
 import {
-  loadCommonAudioRegistry,
   COMMON_AUDIO_BASE_PATH,
   type AudioRegistryEntry,
+  type AudioRegistryPayload,
 } from '../../lib/audio/commonRegistry';
 // 直接 import src/ 下的 JSON
 import phraseMappingsData from '../../assets/audio/phrase-mappings.zh-CN.json';
@@ -378,8 +378,10 @@ const AudioBrowser: React.FC = () => {
 
   useEffect(() => {
     setLoadError(null);
-    loadCommonAudioRegistry()
-      .then((payload) => {
+    // AudioBrowser 需要全量注册表（10000+ 条），动态加载避免影响主 bundle
+    import('../../assets/audio/registry.json')
+      .then(({ default: data }) => {
+        const payload = data as AudioRegistryPayload;
         setEntries(payload.entries);
         if (!initialized) {
           AudioManager.registerRegistryEntries(payload.entries, COMMON_AUDIO_BASE_PATH);

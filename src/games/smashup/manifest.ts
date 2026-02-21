@@ -16,6 +16,7 @@ const entry: GameManifestEntry = {
     tags: ['card_driven', 'casual'],
     allowLocalMode: false,
     cursorTheme: 'smashup-popart',
+    fontFamily: { display: 'Bangers' },
 };
 
 export const SMASH_UP_MANIFEST: GameManifestEntry = entry;

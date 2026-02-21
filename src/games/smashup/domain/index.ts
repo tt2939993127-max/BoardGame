@@ -617,12 +617,7 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
             };
         }
     }
-    // 过滤 pendingReveal：非查看者隐藏卡牌内容（'all' 模式下所有玩家可见）
-    let filteredReveal = state.pendingReveal;
-    if (filteredReveal && filteredReveal.viewerPlayerId !== 'all' && filteredReveal.viewerPlayerId !== playerId) {
-        filteredReveal = { ...filteredReveal, cards: [] };
-    }
-    return { players: filtered, pendingReveal: filteredReveal };
+    return { players: filtered };
 }
 
 

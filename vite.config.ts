@@ -12,6 +12,21 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), localeHashPlugin()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // 重型第三方库拆分为独立 chunk，支持并行加载和长期缓存
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-motion': ['framer-motion'],
+            'vendor-socket': ['socket.io-client'],
+            'vendor-i18n': ['i18next', 'react-i18next', 'i18next-http-backend', 'i18next-browser-languagedetector'],
+            'vendor-query': ['@tanstack/react-query'],
+            'vendor-howler': ['howler'],
+          },
+        },
+      },
+    },
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {

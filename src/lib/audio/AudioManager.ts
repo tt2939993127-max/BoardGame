@@ -3,9 +3,9 @@
  * 提供全局音效播放、静音、音量控制
  */
 import { Howl, Howler } from 'howler';
-import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition, AudioCategory } from './types';
+import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import { assetsPath, getOptimizedAudioUrl } from '../../core/AssetLoader';
+import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages } from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -48,7 +48,6 @@ class AudioManagerClass {
     private bgms: Map<string, Howl> = new Map();
     private bgmDefinitions: Map<string, BgmDefinition> = new Map();
     private registryEntries: Map<string, AudioRegistryEntry> = new Map();
-    private registryCategoryIndex: Map<string, string[]> = new Map();
     private registryBasePath: string = '';
     private failedKeys: Set<SoundKey> = new Set();
 
@@ -191,17 +190,6 @@ class AudioManagerClass {
         };
     }
 
-    resolveCategoryKey(category: AudioCategory): SoundKey | null {
-        const groupKey = `group:${category.group}`;
-        const groupSubKey = category.sub ? `group:${category.group}|sub:${category.sub}` : '';
-        if (groupSubKey) {
-            const exact = this.registryCategoryIndex.get(groupSubKey);
-            if (exact && exact.length > 0) return exact[0];
-        }
-        const fallback = this.registryCategoryIndex.get(groupKey);
-        if (fallback && fallback.length > 0) return fallback[0];
-        return null;
-    }
 
     /**
      * 注册通用 registry 条目（仅缓存索引）
@@ -209,22 +197,6 @@ class AudioManagerClass {
     registerRegistryEntries(entries: AudioRegistryEntry[], basePath: string): void {
         this.registryEntries = new Map(entries.map(entry => [entry.key, entry]));
         this.registryBasePath = normalizeBasePath(basePath);
-        this.registryCategoryIndex = new Map();
-        for (const entry of entries) {
-            if (!entry.category) continue;
-            const groupKey = `group:${entry.category.group}`;
-            const groupSubKey = entry.category.sub
-                ? `group:${entry.category.group}|sub:${entry.category.sub}`
-                : null;
-            const groupBucket = this.registryCategoryIndex.get(groupKey) ?? [];
-            groupBucket.push(entry.key);
-            this.registryCategoryIndex.set(groupKey, groupBucket);
-            if (groupSubKey) {
-                const subBucket = this.registryCategoryIndex.get(groupSubKey) ?? [];
-                subBucket.push(entry.key);
-                this.registryCategoryIndex.set(groupSubKey, subBucket);
-            }
-        }
     }
 
     /**
@@ -546,8 +518,9 @@ class AudioManagerClass {
      * 音频预加载是"锦上添花"——晚几百毫秒用户感知不到，
      * 但如果抢占了图片的 HTTP 连接，卡牌图集会 pending 导致白屏。
      *
-     * 策略：每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback
-     * 在浏览器空闲时加载下一批，确保图片请求始终优先。
+     * 策略：
+     * 1. 每批加载前等待关键图片就绪信号（waitForCriticalImages），确保图片彻底完成
+     * 2. 每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback 空闲调度
      * 已加载或已失败的 key 会被跳过。
      */
     preloadKeys(keys: SoundKey[]): void {
@@ -582,22 +555,27 @@ class AudioManagerClass {
                 });
                 this.sounds.set(key, howl);
             }
-            // 还有剩余 → 空闲时继续
+            // 还有剩余 → 等图片就绪后空闲时继续
             if (index < pending.length) {
-                if (typeof requestIdleCallback === 'function') {
-                    requestIdleCallback(() => loadBatch(), { timeout: 3000 });
-                } else {
-                    setTimeout(loadBatch, 200);
-                }
+                scheduleAfterImages(() => loadBatch());
             }
         };
 
-        // 首批也走空闲调度，不立即发起 XHR
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(() => loadBatch(), { timeout: 3000 });
-        } else {
-            setTimeout(loadBatch, 200);
-        }
+        /** 等关键图片就绪后在空闲时执行回调 */
+        const scheduleAfterImages = (fn: () => void) => {
+            // 每次重新调用 waitForCriticalImages() 获取最新 Promise，
+            // 确保阶段切换（reset）后仍然等待新一轮图片完成
+            waitForCriticalImages().then(() => {
+                if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(() => fn(), { timeout: 3000 });
+                } else {
+                    setTimeout(fn, 200);
+                }
+            });
+        };
+
+        // 首批也等图片就绪
+        scheduleAfterImages(() => loadBatch());
     }
 
 
