@@ -184,8 +184,38 @@ export async function preloadGameAssets(gameId: string): Promise<void> {
 
 /** 关键图片超时（ms） */
 const CRITICAL_PRELOAD_TIMEOUT_MS = 10_000;
-/** 单张图片预加载超时（ms），CDN 有缓存时通常 <1s，超时说明网络异常 */
-const SINGLE_IMAGE_TIMEOUT_MS = 5_000;
+/** 单张图片预加载超时（ms），精灵图较大（1-3MB），CDN 冷启动可能 >5s */
+const SINGLE_IMAGE_TIMEOUT_MS = 8_000;
+
+// ============================================================================
+// 图片就绪通知（后台加载完成 → 通知 UI 组件重渲染）
+// ============================================================================
+
+/**
+ * 图片后台加载完成通知机制。
+ *
+ * 场景：preloadCriticalImages 超时放行后，图片仍在后台加载。
+ * 加载完成时通过此机制通知订阅的 UI 组件（CardPreview/AtlasCard）触发重渲染，
+ * 消除 shimmer 占位。
+ *
+ * 设计：简单的 Set<callback> 发布/订阅，按 URL 精确匹配。
+ * 不用 EventTarget 是因为需要在 SSR 环境安全运行。
+ */
+type ImageReadyCallback = (url: string) => void;
+const _imageReadyListeners = new Set<ImageReadyCallback>();
+
+/** 订阅图片后台加载完成事件，返回取消订阅函数 */
+export function onImageReady(callback: ImageReadyCallback): () => void {
+    _imageReadyListeners.add(callback);
+    return () => { _imageReadyListeners.delete(callback); };
+}
+
+/** 内部：触发图片就绪通知 */
+function _emitImageReady(url: string): void {
+    for (const cb of _imageReadyListeners) {
+        try { cb(url); } catch { /* 订阅者异常不影响其他订阅者 */ }
+    }
+}
 
 // ============================================================================
 // 关键图片就绪信号（供音频预加载等待）
@@ -637,10 +667,12 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
             ? setTimeout(() => {
                 console.debug(`[AssetLoader] 图片加载超时（${timeoutMs}ms），跳过: ${src}`);
                 // 超时 ≠ 失败：浏览器的 Image 请求仍在后台继续。
-                // 注册后台回调，加载完成后自动更新缓存，下次访问直接命中。
+                // 注册后台回调，加载完成后自动更新缓存并通知 UI 组件。
                 img.onload = () => {
                     preloadedImages.set(src, img);
                     removePreloadLink(src);
+                    // 通知订阅者：超时的图片已在后台加载完成
+                    _emitImageReady(src);
                 };
                 finish(false);
             }, timeoutMs)

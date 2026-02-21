@@ -23,6 +23,7 @@ export {
     markImageLoaded,
     waitForCriticalImages,
     signalCriticalImagesReady,
+    onImageReady,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,
