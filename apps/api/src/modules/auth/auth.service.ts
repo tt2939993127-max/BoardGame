@@ -181,6 +181,14 @@ export class AuthService {
         );
     }
 
+    async updateUsername(userId: string, username: string): Promise<UserDocument | null> {
+        return this.userModel.findByIdAndUpdate(
+            userId,
+            { username },
+            { new: true }
+        );
+    }
+
     async updateAvatar(userId: string, avatar: string): Promise<UserDocument | null> {
         return this.userModel.findByIdAndUpdate(
             userId,

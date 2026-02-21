@@ -7,7 +7,6 @@ import { GameList } from '../components/lobby/GameList';
 import { getGamesByCategory, getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
-import { EmailBindModal } from '../components/auth/EmailBindModal';
 import { useNavigate } from 'react-router-dom';
 import {
     claimSeat,
@@ -71,7 +70,6 @@ export const Home = () => {
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
-    const emailBindModalIdRef = useRef<string | null>(null);
 
     const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
         paramKey: 'game',
@@ -155,30 +153,6 @@ export const Home = () => {
                         close();
                     }}
                     initialMode={mode}
-                    closeOnBackdrop={closeOnBackdrop}
-                />
-            ),
-        });
-    };
-
-    const openEmailBind = () => {
-        if (emailBindModalIdRef.current) {
-            closeModal(emailBindModalIdRef.current);
-            emailBindModalIdRef.current = null;
-        }
-        emailBindModalIdRef.current = openModal({
-            closeOnBackdrop: true,
-            closeOnEsc: true,
-            lockScroll: true,
-            onClose: () => {
-                emailBindModalIdRef.current = null;
-            },
-            render: ({ close, closeOnBackdrop }) => (
-                <EmailBindModal
-                    isOpen
-                    onClose={() => {
-                        close();
-                    }}
                     closeOnBackdrop={closeOnBackdrop}
                 />
             ),
@@ -538,7 +512,7 @@ export const Home = () => {
                 {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
                 <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">
                     {user ? (
-                        <UserMenu onLogout={handleLogout} onBindEmail={openEmailBind} />
+                        <UserMenu onLogout={handleLogout} />
                     ) : (
                         <div className="flex items-center gap-6">
                             <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">

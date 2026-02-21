@@ -174,6 +174,93 @@ describe('AuthModule (e2e)', () => {
         expect(attempts[4].success).toBe(false);
     });
 
+    it('修改昵称流程', async () => {
+        const email = 'nickname-user@example.com';
+        const code = '123456';
+        await authService.storeEmailCode(email, code);
+
+        const registerRes = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'old-name', email, code, password: 'pass1234' })
+            .expect(201);
+
+        const token = registerRes.body.token;
+        expect(registerRes.body.user.username).toBe('old-name');
+
+        // 正常修改昵称
+        const updateRes = await request(app.getHttpServer())
+            .post('/auth/update-username')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ username: '新昵称' })
+            .expect(201);
+
+        expect(updateRes.body.user.username).toBe('新昵称');
+
+        // 验证 /me 也返回新昵称
+        const meRes = await request(app.getHttpServer())
+            .get('/auth/me')
+            .set('Authorization', `Bearer ${token}`)
+            .expect(200);
+
+        expect(meRes.body.user.username).toBe('新昵称');
+
+        // 昵称太短应报错
+        await request(app.getHttpServer())
+            .post('/auth/update-username')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ username: 'a' })
+            .expect(400);
+
+        // 昵称太长应报错
+        await request(app.getHttpServer())
+            .post('/auth/update-username')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ username: 'a'.repeat(21) })
+            .expect(400);
+
+        // 未登录应报错
+        await request(app.getHttpServer())
+            .post('/auth/update-username')
+            .send({ username: 'test' })
+            .expect(401);
+    });
+
+    it('修改密码流程', async () => {
+        const email = 'password-user@example.com';
+        const code = '123456';
+        await authService.storeEmailCode(email, code);
+
+        const registerRes = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'pwd-user', email, code, password: 'pass1234' })
+            .expect(201);
+
+        const token = registerRes.body.token;
+
+        // 正常修改密码
+        await request(app.getHttpServer())
+            .post('/auth/change-password')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ currentPassword: 'pass1234', newPassword: 'newpass5678' })
+            .expect(201);
+
+        // 用新密码登录
+        const loginRes = await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({ account: email, password: 'newpass5678' })
+            .expect(200);
+
+        expect(loginRes.body.success).toBe(true);
+
+        // 用旧密码登录应失败
+        const failRes = await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({ account: email, password: 'pass1234' })
+            .expect(200);
+
+        expect(failRes.body.success).toBe(false);
+    });
+
     it('更新头像流程', async () => {
         const email = 'avatar-user@example.com';
         const code = '123456';

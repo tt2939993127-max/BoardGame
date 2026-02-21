@@ -33,6 +33,7 @@
       "resetCodeMismatch": "Verification code is incorrect",
       "resetLocked": "Too many reset attempts. Try again in {{seconds}} seconds",
       "avatarMissingFile": "Please select an image file",
+      "missingPasswordFields": "Please enter current and new password",
       "avatarInvalidType": "Only JPG, PNG, WebP, GIF formats are supported",
       "avatarUploadFailed": "Failed to upload avatar"
     },
@@ -44,7 +45,9 @@
       "refreshToken": "Token refreshed successfully",
       "resetCodeSent": "Verification code sent",
       "passwordReset": "Password reset successfully",
-      "avatarUpdated": "Avatar updated successfully"
+      "avatarUpdated": "Avatar updated successfully",
+      "usernameUpdated": "Nickname updated successfully",
+      "passwordUpdated": "Password updated successfully"
     }
   },
   "friend": {

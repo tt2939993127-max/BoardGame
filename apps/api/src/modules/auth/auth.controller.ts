@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { generateCode, sendPasswordResetEmailWithCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, SendResetCodeDto, ResetPasswordDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
+import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, SendResetCodeDto, ResetPasswordDto, VerifyEmailDto, UpdateAvatarDto, UpdateUsernameDto } from './dtos/auth.dto';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/auth';
@@ -376,6 +376,43 @@ export class AuthController {
             user: {
                 id: user._id.toString(),
                 username: user.username,
+                email: user.email,
+                emailVerified: user.emailVerified,
+                role: user.role,
+                banned: user.banned,
+            },
+        });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('update-username')
+    async updateUsername(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Body() body: UpdateUsernameDto,
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        if (!currentUser?.userId) {
+            return this.sendError(res, 401, t('auth.error.loginRequired'));
+        }
+
+        const username = body.username?.trim();
+        if (!username || username.length < 2 || username.length > 20) {
+            return this.sendError(res, 400, t('auth.error.usernameLength'));
+        }
+
+        const user = await this.authService.updateUsername(currentUser.userId, username);
+        if (!user) {
+            return this.sendError(res, 404, t('auth.error.userNotFound'));
+        }
+
+        return res.json({
+            message: t('auth.success.usernameUpdated'),
+            user: {
+                id: user._id.toString(),
+                username: user.username,
+                avatar: user.avatar,
                 email: user.email,
                 emailVerified: user.emailVerified,
                 role: user.role,

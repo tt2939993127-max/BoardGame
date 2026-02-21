@@ -26,6 +26,7 @@ interface AuthContextType {
     sendEmailCode: (email: string) => Promise<void>;
     verifyEmail: (email: string, code: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+    updateUsername: (username: string) => Promise<User>;
     updateAvatar: (avatar: string) => Promise<User>;
     uploadAvatar: (file: File, cropData?: { x: number; y: number; width: number; height: number }) => Promise<User>;
     isLoading: boolean;
@@ -44,6 +45,7 @@ const defaultAuthContext: AuthContextType = {
     sendEmailCode: async () => { throw new Error('AuthProvider 未初始化'); },
     verifyEmail: async () => { throw new Error('AuthProvider 未初始化'); },
     changePassword: async () => { throw new Error('AuthProvider 未初始化'); },
+    updateUsername: async () => { throw new Error('AuthProvider 未初始化'); },
     updateAvatar: async () => { throw new Error('AuthProvider 未初始化'); },
     uploadAvatar: async () => { throw new Error('AuthProvider 未初始化'); },
     isLoading: true,
@@ -297,6 +299,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [token]);
 
+    const updateUsername = useCallback(async (username: string) => {
+        if (!token) throw new Error('请先登录');
+        const trimmed = username.trim();
+        if (!trimmed || trimmed.length < 2 || trimmed.length > 20) {
+            throw new Error('昵称长度应在 2-20 个字符之间');
+        }
+
+        const response = await fetch(`${AUTH_API_URL}/update-username`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept-Language': i18n.language,
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ username: trimmed }),
+        });
+
+        if (!response.ok) {
+            const message = await parseErrorMessage(response, '昵称修改失败');
+            throw new Error(message);
+        }
+
+        const data = await response.json();
+        const updatedUser = { ...user, ...data.user } as User;
+        setUser(updatedUser);
+        localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+        return updatedUser;
+    }, [token, user]);
+
     const updateAvatar = useCallback(async (avatar: string) => {
         if (!token) throw new Error('请先登录');
         const normalizedAvatar = avatar.trim();
@@ -369,6 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendEmailCode,
         verifyEmail,
         changePassword,
+        updateUsername,
         updateAvatar,
         uploadAvatar,
         isLoading,
@@ -384,6 +416,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendEmailCode,
         verifyEmail,
         changePassword,
+        updateUsername,
         updateAvatar,
         uploadAvatar,
         isLoading,

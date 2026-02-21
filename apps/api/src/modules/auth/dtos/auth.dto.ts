@@ -85,3 +85,16 @@ export class UpdateAvatarDto {
     @IsNotEmpty()
     avatar!: string;
 }
+
+export class UpdateUsernameDto {
+    @IsString()
+    @IsNotEmpty()
+    username!: string;
+}
+
+export class UpdateUsernameDto {
+    @IsString()
+    @IsNotEmpty()
+    username!: string;
+}
+

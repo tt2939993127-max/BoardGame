@@ -2,10 +2,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Mail, History, Image, MessageSquare, Bell, MousePointer2 } from 'lucide-react';
+import { LogOut, History, MessageSquare, Bell, MousePointer2, Settings } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
 import { FriendsChatModal, SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
-import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
+import { AccountSettingsModal } from '../auth/AccountSettingsModal';
 import { CursorSettingsModal } from '../settings/CursorSettingsModal';
 import { NOTIFICATION_API_URL } from '../../config/server';
 import { useSocial } from '../../contexts/SocialContext';
@@ -14,10 +14,9 @@ const NOTIFICATION_SEEN_KEY = 'notification_last_seen';
 
 interface UserMenuProps {
     onLogout: () => void;
-    onBindEmail: () => void;
 }
 
-export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
+export const UserMenu = ({ onLogout }: UserMenuProps) => {
     const { user } = useAuth();
     const { openModal, closeModal } = useModalStack();
     const { requests, unreadTotal } = useSocial();
@@ -25,7 +24,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [hasNewNotification, setHasNewNotification] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const avatarModalIdRef = useRef<string | null>(null);
+    const accountModalIdRef = useRef<string | null>(null);
     const cursorModalIdRef = useRef<string | null>(null);
 
     // 铃铛红点 = 系统通知 OR 好友请求 OR 未读消息
@@ -103,25 +102,19 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
         });
     };
 
-    const handleOpenAvatar = () => {
+    const handleOpenAccount = () => {
         setIsOpen(false);
-        if (avatarModalIdRef.current) {
-            closeModal(avatarModalIdRef.current);
-            avatarModalIdRef.current = null;
+        if (accountModalIdRef.current) {
+            closeModal(accountModalIdRef.current);
+            accountModalIdRef.current = null;
         }
-        avatarModalIdRef.current = openModal({
+        accountModalIdRef.current = openModal({
             closeOnBackdrop: true,
             closeOnEsc: true,
             lockScroll: true,
-            onClose: () => {
-                avatarModalIdRef.current = null;
-            },
+            onClose: () => { accountModalIdRef.current = null; },
             render: ({ close, closeOnBackdrop }) => (
-                <AvatarUpdateModal
-                    isOpen
-                    onClose={close}
-                    closeOnBackdrop={closeOnBackdrop}
-                />
+                <AccountSettingsModal isOpen onClose={close} closeOnBackdrop={closeOnBackdrop} />
             ),
         });
     };
@@ -136,15 +129,9 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
             closeOnBackdrop: true,
             closeOnEsc: true,
             lockScroll: true,
-            onClose: () => {
-                cursorModalIdRef.current = null;
-            },
+            onClose: () => { cursorModalIdRef.current = null; },
             render: ({ close, closeOnBackdrop }) => (
-                <CursorSettingsModal
-                    isOpen
-                    onClose={close}
-                    closeOnBackdrop={closeOnBackdrop}
-                />
+                <CursorSettingsModal isOpen onClose={close} closeOnBackdrop={closeOnBackdrop} />
             ),
         });
     };
@@ -205,13 +192,13 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
 
                     <div className="h-px bg-parchment-card-border/30 my-1 mx-2 opacity-50" />
 
-                    {/* 设置头像 */}
+                    {/* 账户设置 */}
                     <button
-                        onClick={handleOpenAvatar}
+                        onClick={handleOpenAccount}
                         className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
-                        <Image size={16} />
-                        {t('auth:menu.setAvatar')}
+                        <Settings size={16} />
+                        {t('auth:menu.accountSettings')}
                     </button>
 
                     {/* 光标设置 */}
@@ -221,15 +208,6 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                     >
                         <MousePointer2 size={16} />
                         {t('auth:menu.setCursor')}
-                    </button>
-
-                    {/* 绑定邮箱 */}
-                    <button
-                        onClick={() => { setIsOpen(false); onBindEmail(); }}
-                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
-                    >
-                        <Mail size={16} />
-                        {user.emailVerified ? t('auth:menu.emailBound') : t('auth:menu.bindEmail')}
                     </button>
 
                     {/* 退出登录 */}
