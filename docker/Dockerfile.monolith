@@ -23,7 +23,7 @@ FROM node:20-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # ---- 阶段 3：最终生产镜像 ----
 FROM node:20-slim
