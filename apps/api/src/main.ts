@@ -22,9 +22,27 @@ if (process.env.SENTRY_DSN) {
 }
 
 async function bootstrap() {
+    // 从环境变量构建 CORS 白名单，与 game-server 保持一致
+    const webOrigins = process.env.WEB_ORIGINS
+        ? process.env.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+    const isDev = !process.env.WEB_ORIGINS;
+
     const app = await NestFactory.create(AppModule, {
         cors: {
-            origin: '*',
+            origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+                // 无 origin（同源请求、curl 等）→ 放行
+                if (!origin) return callback(null, true);
+                // 开发环境：放行 localhost
+                if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+                    return callback(null, true);
+                }
+                // 生产环境：白名单匹配
+                if (webOrigins.includes(origin)) {
+                    return callback(null, true);
+                }
+                callback(new Error(`CORS: origin ${origin} not allowed`));
+            },
             credentials: true,
         },
         rawBody: false,
