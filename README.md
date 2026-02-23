@@ -216,6 +216,8 @@ npm run check:arch          # 架构检查
 # 音频注册表 & 资源上传（新增/修改音频文件后必须执行）
 node scripts/audio/generate_common_audio_registry.js  # 重新生成音频注册表
 npm run assets:upload    # 上传压缩资源到 R2（需配置 R2_* 环境变量）
+
+git push --no-verify
 ```
 
 > **注意**：新增或修改音频文件后，需要依次执行 `compress:audio` → `generate_common_audio_registry.js` → `assets:upload`，否则远程 `registry.json` 缺少新 key 会导致音频无法播放。
