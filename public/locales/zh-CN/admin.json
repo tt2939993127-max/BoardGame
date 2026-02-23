@@ -62,6 +62,9 @@
       "empty": "（无内容）",
       "screenshotAlt": "截图"
     },
+    "actionLog": {
+      "title": "📋 操作日志"
+    },
     "time": {
       "justNow": "刚刚",
       "minutesAgo": "{{count}} 分钟前",

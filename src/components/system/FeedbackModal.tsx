@@ -11,6 +11,8 @@ import { UI_Z_INDEX } from '../../core';
 
 interface FeedbackModalProps {
     onClose: () => void;
+    /** 游戏内操作日志（纯文本，由 GameHUD 传入） */
+    actionLogText?: string;
 }
 
 const FeedbackType = {
@@ -43,7 +45,7 @@ const FEEDBACK_SEVERITY_LABEL_KEYS: Record<FeedbackSeverity, string> = {
     [FeedbackSeverity.CRITICAL]: 'hud.feedback.severity.critical',
 };
 
-export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
+export const FeedbackModal = ({ onClose, actionLogText }: FeedbackModalProps) => {
     const { t } = useTranslation(['game', 'common']);
     const { token } = useAuth();
     const { success, error } = useToast();
@@ -57,6 +59,7 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
     const [contactInfo, setContactInfo] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [pastedImage, setPastedImage] = useState<string | null>(null);
+    const [attachLog, setAttachLog] = useState(!!actionLogText);
 
     useEffect(() => {
         const path = location.pathname;
@@ -119,7 +122,8 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                     type,
                     severity,
                     gameName: gameName || undefined,
-                    contactInfo: contactInfo || undefined
+                    contactInfo: contactInfo || undefined,
+                    actionLog: (attachLog && actionLogText) ? actionLogText : undefined,
                 })
             });
 
@@ -276,6 +280,28 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* 附带操作日志 */}
+                    {actionLogText && (
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={attachLog}
+                                    onChange={(e) => setAttachLog(e.target.checked)}
+                                    className="rounded border-parchment-brown/30 text-parchment-brown focus:ring-parchment-gold"
+                                />
+                                <span className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">
+                                    {t('hud.feedback.attachLog')}
+                                </span>
+                            </label>
+                            {attachLog && (
+                                <div className="max-h-32 overflow-y-auto rounded-lg border border-parchment-brown/20 bg-parchment-card-bg p-2 text-[11px] text-parchment-light-text font-mono whitespace-pre-wrap scrollbar-thin">
+                                    {actionLogText}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Contact Info */}
                     <div className="space-y-2">

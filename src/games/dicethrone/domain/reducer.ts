@@ -208,9 +208,11 @@ const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABI
 
     // 防御技能选择后，根据技能定义设置 rollDiceCount
     // 规则 §3.6 步骤 2：先选择防御技能，再掷骰
+    // 注意：只有投掷前（rollCount === 0）切换防御技能时才重置骰子
+    // 投掷后选择技能是确认激活，不应重置已投掷的骰子结果
     const defenderId = playerId ?? state.pendingAttack.defenderId;
     const defender = state.players[defenderId];
-    if (defender) {
+    if (defender && state.rollCount === 0) {
         const ability = defender.abilities.find(a => {
             if (a.id === abilityId) return true;
             return a.variants?.some(v => v.id === abilityId);

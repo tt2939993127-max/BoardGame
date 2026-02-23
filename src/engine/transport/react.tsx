@@ -316,6 +316,12 @@ export function GameProvider({
                     lastConfirmedStateIDRef.current = null;
                 }
             },
+            onPlayerConnectionChange: (playerID, connected) => {
+                // 实时更新 matchPlayers 中的连接状态，避免依赖 HTTP 轮询
+                setMatchPlayers(prev => prev.map(p =>
+                    String(p.id) === playerID ? { ...p, isConnected: connected } : p
+                ));
+            },
             onError: (error) => {
                 onErrorRef.current?.(error);
             },

@@ -189,7 +189,7 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
     } as InteractionRequestedEvent];
 }
 
-/** 肾击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) 【已迁移到新伤害计算管线】 */
+/** 破隐一击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) 【已迁移到新伤害计算管线】 */
 function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;

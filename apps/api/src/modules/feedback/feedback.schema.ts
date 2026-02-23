@@ -45,6 +45,9 @@ export class Feedback {
 
     @Prop({ type: String })
     contactInfo?: string; // Optional contact info if user wants to provide
+
+    @Prop({ type: String })
+    actionLog?: string; // 游戏内操作日志快照（提交反馈时自动附带）
 }
 
 export const FeedbackSchema = SchemaFactory.createForClass(Feedback);

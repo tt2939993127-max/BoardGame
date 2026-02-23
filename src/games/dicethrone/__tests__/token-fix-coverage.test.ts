@@ -269,9 +269,10 @@ describe('Fire Mastery 维持阶段冷却', () => {
 describe('Sneak（潜行）被动免伤 — 已移至攻击流程', () => {
     it('潜行逻辑已移至 flowHooks.ts offensiveRoll 退出阶段', () => {
         // 潜行现在在攻击流程中处理（offensiveRoll 阶段退出时）
-        // 若防御方有潜行，跳过防御掷骰、免除伤害、消耗潜行
-        // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑
-        // 集成测试见 shadow_thief-behavior.test.ts 或 E2E 测试
+        // 若防御方有潜行，跳过防御掷骰、免除伤害，但不消耗潜行标记
+        // 潜行标记只在"经过一个完整的自己回合后，回合末弃除"
+        // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑 + discard 阶段退出逻辑
+        // 集成测试见 shadow-thief-abilities.test.ts
         expect(true).toBe(true);
     });
 });

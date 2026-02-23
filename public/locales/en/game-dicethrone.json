@@ -296,6 +296,7 @@
     "cpSpentPlain": "Spent {{amount}} CP",
     "cardDrawn": "Drew {{count}} card(s) ({{source}})",
     "cardDrawnPlain": "Drew {{count}} card(s)",
+    "cardDiscarded": "Discarded",
     "usePurify": "Purified {{statusLabel}}",
     "payToRemoveKnockdown": "Paid 2CP to remove Knockdown",
     "usePassiveAbility": "Used passive: {{abilityName}}",
@@ -771,7 +772,8 @@
     "lotus-palm-2-4": {
       "effects": {
         "damage6": "Deal 6 undefendable damage",
-        "taijiCapMax": "Gain 6 Taiji tokens"
+        "taijiCapMax": "Gain 6 Taiji tokens",
+        "taijiCapUp": "Increase Chi cap by 1 and gain 6 Taiji tokens"
       }
     },
     "lotus-palm-2-5": {
@@ -789,7 +791,8 @@
         "bonusFist": "If this roll contains Fist: +2 damage",
         "bonusPalm": "If this roll contains Palm: +3 damage",
         "gainTaiji2": "If this roll contains Taiji: gain 2 Taiji tokens",
-        "gainChoice": "If this roll contains Lotus: gain Evasive or Purify (your choice)"
+        "gainChoice": "If this roll contains Lotus: gain Evasive or Purify (your choice)",
+        "rollDie": "Roll dice"
       }
     },
     "thunder-strike": {
@@ -814,6 +817,22 @@
       "description": "A meditative stance while defending",
       "effects": {
         "taijiByResult": "Gain Taiji tokens equal to Taiji faces rolled",
+        "damageByFist": "Deal damage equal to Fist faces rolled"
+      }
+    },
+    "meditation-2": {
+      "name": "Meditation II",
+      "description": "Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces.",
+      "effects": {
+        "taijiByResult": "Gain Chi equal to Taiji faces rolled",
+        "damageByFist": "Deal damage equal to Fist faces rolled"
+      }
+    },
+    "meditation-3": {
+      "name": "Meditation III",
+      "description": "Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces. If Taiji + Lotus present, gain Evasive -or- Purify.",
+      "effects": {
+        "taijiByResult": "Gain Chi equal to Taiji faces rolled (Taiji + Lotus: gain Evasive or Purify)",
         "damageByFist": "Deal damage equal to Fist faces rolled"
       }
     },
@@ -1066,7 +1085,8 @@
       "effects": {
         "damage8": "Deal 8 damage",
         "gainCrit": "Gain 1 Crit token",
-        "gain2CP": "Gain 2 CP"
+        "gain2CP": "Gain 2 CP",
+        "gain20CP": "Gain 20 CP"
       }
     },
     "righteous-prayer-2": {
@@ -1471,7 +1491,11 @@
     },
     "calm-water-2-way-of-monk": {
       "name": "Way of the Monk",
-      "description": "All 4 symbols present: gain 2 Evasive, deal 3 unblockable damage"
+      "description": "All 4 symbols present: gain 2 Evasive, deal 3 unblockable damage",
+      "effects": {
+        "gainEvasive2": "Gain 2 Evasive tokens",
+        "damage3": "Deal 3 unblockable damage"
+      }
     },
     "slap": {
       "name": "Slap",
@@ -1775,6 +1799,33 @@
       "description": "Defense: 1x Fire deals 2 undefendable damage, 1x Fire Soul gains 1 Fire Mastery.",
       "effects": {
         "main": "Defensive ability (5 dice): each Fire rolled gains 1 Fire Mastery and deals 1 damage. Each Fire Soul rolled gains 1 Fire Mastery and deals 1 damage. If you have Fire + Fire Soul, inflict Burn."
+      }
+    },
+    "card-turning-up-the-heat": {
+      "effects": {
+        "gainFM1": "Gain 1 Fire Mastery",
+        "spendCP": "Spend any amount of CP; gain 1 Fire Mastery per CP spent"
+      }
+    },
+    "card-infernal-embrace": {
+      "effects": {
+        "roll": "Roll 1 die: Meteor = gain Fire Mastery to cap, otherwise = draw 1 card"
+      }
+    },
+    "card-fan-the-flames": {
+      "effects": {
+        "increaseLimit": "Fire Mastery stack limit +1",
+        "gainFM2": "Gain 2 Fire Mastery"
+      }
+    },
+    "card-red-hot": {
+      "effects": {
+        "dmgPerFM": "This turn, +1 damage per Fire Mastery"
+      }
+    },
+    "card-get-fired-up": {
+      "effects": {
+        "roll": "Roll 1 die: Fire = +3 damage, Lava = inflict Burn, Fire Soul = gain 2 Fire Mastery, Meteor = inflict Knockdown"
       }
     }
   },

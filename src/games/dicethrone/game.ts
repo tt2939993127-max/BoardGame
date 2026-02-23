@@ -37,6 +37,7 @@ import type {
     TokenUsedEvent,
     CpChangedEvent,
     CardDrawnEvent,
+    CardDiscardedEvent,
     BonusDieRolledEvent,
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
@@ -622,6 +623,36 @@ function formatDiceThroneActionEntry({
                     i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
                 ],
             });
+        }
+
+        if (event.type === 'CARD_DISCARDED') {
+            const discardEvent = event as CardDiscardedEvent;
+            const { playerId, cardId } = discardEvent.payload;
+            const card = findDiceThroneCard(core, cardId, playerId);
+            const segments: ActionLogSegment[] = [
+                i18nSeg('actionLog.cardDiscarded'),
+            ];
+            if (card?.previewRef) {
+                const isI18nKey = card.name?.includes('.');
+                segments.push({
+                    type: 'card',
+                    cardId: card.id,
+                    previewText: card.name ?? cardId,
+                    previewRef: card.previewRef,
+                    ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+                });
+            } else {
+                const displayName = card?.name ?? cardId;
+                segments.push({ type: 'text', text: displayName });
+            }
+            entries.push({
+                id: `CARD_DISCARDED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'CARD_DISCARDED',
+                segments,
+            });
+            return;
         }
 
         if (event.type === 'CARD_DRAWN') {

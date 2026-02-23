@@ -213,7 +213,7 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
         });
     });
 
-    describe('shadow_thief-damage-full-cp (肾击：全部CP伤害)', () => {
+    describe('shadow_thief-damage-full-cp (破隐一击：全部CP伤害)', () => {
         it('CP=8时造成8点伤害', () => {
             const state = createState({ attackerCP: 8 });
             const handler = getCustomActionHandler('shadow_thief-damage-full-cp')!;

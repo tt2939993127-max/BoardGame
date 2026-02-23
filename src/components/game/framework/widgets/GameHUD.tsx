@@ -194,6 +194,22 @@ export const GameHUD = ({
         if (!isOnline || !matchId) return;
 
         matchSocket.joinChat(matchId);
+
+        // 订阅历史消息（加入房间时服务端回推）
+        const unsubHistory = matchSocket.subscribeChatHistory((history) => {
+            setChatMessages((prev) => {
+                // 用 id 去重，合并历史和已有消息
+                const existingIds = new Set(prev.map((m) => m.id));
+                const newMessages = history.filter((m) => !existingIds.has(m.id));
+                if (newMessages.length === 0) return prev;
+                const merged = [...newMessages, ...prev];
+                // 按时间排序
+                merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+                return trimChatMessages(merged);
+            });
+            setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+        });
+
         const unsubscribe = matchSocket.subscribeChat((message) => {
             if (message.matchId !== matchId) return;
             setChatMessages((prev) => {
@@ -214,6 +230,7 @@ export const GameHUD = ({
 
         return () => {
             unsubscribe();
+            unsubHistory();
             matchSocket.leaveChat();
         };
     }, [isOnline, matchId, isSelfMessage]);
@@ -458,7 +475,7 @@ export const GameHUD = ({
                                 placeholder={isChatReadonly ? t('hud.chat.readonlyPlaceholder') : t('hud.chat.placeholder')}
                                 maxLength={MAX_CHAT_LENGTH}
                                 disabled={isChatReadonly}
-                                className="w-full bg-white/15 border border-white/35 rounded px-2 py-1.5 pr-16 text-xs text-white placeholder-white/60 focus:outline-none focus:border-neon-blue/70 focus:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="w-full bg-white/15 border border-white/35 rounded px-2 py-1.5 text-xs text-white placeholder-white/60 focus:outline-none focus:border-neon-blue/70 focus:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
                             />
                             {chatInput.length >= MAX_CHAT_LENGTH && (
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-amber-300">
@@ -796,7 +813,15 @@ export const GameHUD = ({
             />
 
             {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
-            {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
+            {showFeedback && (
+                <FeedbackModal
+                    onClose={() => setShowFeedback(false)}
+                    actionLogText={actionLogRows.length > 0
+                        ? actionLogRows.map(r => `[${r.timeLabel}] ${r.playerLabel}: ${r.text}`).join('\n')
+                        : undefined
+                    }
+                />
+            )}
         </>
     );
 };

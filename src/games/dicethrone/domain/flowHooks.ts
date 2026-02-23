@@ -348,22 +348,13 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // ========== 潜行判定：防御方有潜行时跳过防御掷骰、免除伤害 ==========
+                // 规则：潜行触发时只免伤+跳过防御掷骰，不消耗标记
+                // 标记的移除只在"经过一个完整的自己回合后，回合末弃除"（见 discard 阶段退出逻辑）
                 // 终极技能不可被任何方式回避（规则 §4.4）
                 const defender = core.players[core.pendingAttack.defenderId];
                 const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
                 if (sneakStacks > 0 && !core.pendingAttack.isUltimate) {
-                    // 消耗潜行标记
-                    events.push({
-                        type: 'TOKEN_CONSUMED',
-                        payload: {
-                            playerId: core.pendingAttack.defenderId,
-                            tokenId: TOKEN_IDS.SNEAK,
-                            amount: 1,
-                            newTotal: sneakStacks - 1,
-                        },
-                        sourceCommandType: command.type,
-                        timestamp,
-                    } as TokenConsumedEvent);
+                    // 不消耗潜行标记——潜行在回合末自动弃除，触发免伤时不移除
 
                     // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
                     const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
@@ -375,9 +366,21 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     }
 
                     // 攻击仍视为"成功"——postDamage 效果（如 grantToken）仍需执行
-                    const coreForPostDamage = preDefenseEventsSneak.length > 0
+                    // 潜行免伤但攻击成功：onHit 条件需要 damageDealt >= 1 才触发
+                    // 将 resolvedDamage 设为基础伤害值，让 onHit 正确判定为"命中"
+                    const coreAfterPreDefenseSneak = preDefenseEventsSneak.length > 0
                         ? applyEvents(core, [...events] as DiceThroneEvent[], reduce)
                         : core;
+                    const sneakBaseDamage = core.pendingAttack.sourceAbilityId
+                        ? getPlayerAbilityBaseDamage(coreAfterPreDefenseSneak, core.pendingAttack.attackerId, core.pendingAttack.sourceAbilityId) + (core.pendingAttack.bonusDamage ?? 0)
+                        : 1; // 无技能时 fallback：攻击仍视为成功
+                    const coreForPostDamage = {
+                        ...coreAfterPreDefenseSneak,
+                        pendingAttack: {
+                            ...coreAfterPreDefenseSneak.pendingAttack!,
+                            resolvedDamage: sneakBaseDamage,
+                        },
+                    };
                     const postDamageEventsSneak = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
                     events.push(...postDamageEventsSneak);
 

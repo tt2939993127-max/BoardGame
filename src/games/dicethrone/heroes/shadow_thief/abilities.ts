@@ -68,7 +68,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
             { id: 'steal-4', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 4 } }, effects: [{ description: '获得4CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-4' } }], priority: 3 }
         ]
     },
-    // 肾击 (Kidney Shot) I
+    // 破隐一击 (Kidney Shot) I
     {
         id: 'kidney-shot',
         name: abilityText('kidney-shot', 'name'),

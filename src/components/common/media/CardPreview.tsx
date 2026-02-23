@@ -131,6 +131,15 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     // 传入 locale 以支持懒解析模式（从预加载缓存读取图片尺寸）
     const [resolvedSource, setResolvedSource] = useState(() => getCardAtlasSource(atlasId, effectiveLocale));
+
+    // atlasId 变化时重置 resolvedSource（如切换视角导致不同英雄的图集切换）
+    const [prevAtlasId, setPrevAtlasId] = useState(atlasId);
+    if (atlasId !== prevAtlasId) {
+        setPrevAtlasId(atlasId);
+        const newSource = getCardAtlasSource(atlasId, effectiveLocale);
+        setResolvedSource(newSource ?? null);
+    }
+
     const source = resolvedSource ?? getCardAtlasSource(atlasId, effectiveLocale);
 
     // 使用统一的 isImagePreloaded 检查（与 CriticalImageGate 共享缓存）

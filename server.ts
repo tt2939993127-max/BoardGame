@@ -17,6 +17,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { nanoid } from 'nanoid';
 import { connectDB } from './src/server/db';
 import { MAX_CHAT_LENGTH, sanitizeChatText } from './src/server/chatUtils';
+import { MAX_CHAT_HISTORY } from './src/shared/chat';
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
@@ -59,6 +60,7 @@ const MATCH_CHAT_EVENTS = {
     LEAVE: 'matchChat:leave',
     SEND: 'matchChat:send',
     MESSAGE: 'matchChat:message',
+    HISTORY: 'matchChat:history',
 } as const;
 
 // ============================================================================
@@ -72,6 +74,17 @@ interface RematchVoteState {
 }
 const rematchStateByMatch = new Map<string, RematchVoteState>();
 const matchSubscribers = new Map<string, Set<string>>();
+
+// 对局聊天历史缓存（内存，对局结束后自动清理）
+interface ChatHistoryMessage {
+    id: string;
+    matchId: string;
+    senderId?: string;
+    senderName: string;
+    text: string;
+    createdAt: string;
+}
+const chatHistoryByMatch = new Map<string, ChatHistoryMessage[]>();
 
 const LOBBY_ROOM = 'lobby:subscribers';
 const LOBBY_ALL = 'all';
@@ -407,6 +420,7 @@ const cleanupMissingOwnerRoom = async (
 
     matchSubscribers.delete(matchID);
     rematchStateByMatch.delete(matchID);
+    chatHistoryByMatch.delete(matchID);
     logger.warn(`[RoomCleanup] reason=missing_owner context=${context ?? 'unknown'} matchID=${matchID}`);
     return true;
 };
@@ -671,6 +685,7 @@ router.post('/games/:name/:matchID/destroy', async (ctx) => {
     }
     matchSubscribers.delete(matchID);
     rematchStateByMatch.delete(matchID);
+    chatHistoryByMatch.delete(matchID);
 
     ctx.body = {};
 });
@@ -1325,6 +1340,7 @@ lobbySocketIO.on('connection', (socket) => {
             if (matchSubscribers.get(matchId)?.size === 0) {
                 matchSubscribers.delete(matchId);
                 rematchStateByMatch.delete(matchId);
+                chatHistoryByMatch.delete(matchId);
             }
         }
         socket.data.rematchMatchId = undefined;
@@ -1385,6 +1401,12 @@ lobbySocketIO.on('connection', (socket) => {
         socket.data.chatMatchId = matchId;
         socket.join(`matchchat:${matchId}`);
         logger.info(`[MatchChat] ${socket.id} 加入对局聊天 ${matchId}`);
+
+        // 回推历史消息
+        const history = chatHistoryByMatch.get(matchId);
+        if (history && history.length > 0) {
+            socket.emit(MATCH_CHAT_EVENTS.HISTORY, history);
+        }
     });
 
     socket.on(MATCH_CHAT_EVENTS.LEAVE, () => {
@@ -1405,14 +1427,28 @@ lobbySocketIO.on('connection', (socket) => {
         const senderName = String(payload?.senderName ?? '玩家');
         const senderId = payload?.senderId ? String(payload.senderId) : undefined;
 
-        lobbySocketIO.to(`matchchat:${matchId}`).emit(MATCH_CHAT_EVENTS.MESSAGE, {
+        const message: ChatHistoryMessage = {
             id: nanoid(),
             matchId,
             senderId,
             senderName,
             text,
             createdAt: new Date().toISOString(),
-        });
+        };
+
+        // 缓存到历史记录
+        let history = chatHistoryByMatch.get(matchId);
+        if (!history) {
+            history = [];
+            chatHistoryByMatch.set(matchId, history);
+        }
+        history.push(message);
+        // 超过上限时裁剪旧消息
+        if (history.length > MAX_CHAT_HISTORY) {
+            chatHistoryByMatch.set(matchId, history.slice(-MAX_CHAT_HISTORY));
+        }
+
+        lobbySocketIO.to(`matchchat:${matchId}`).emit(MATCH_CHAT_EVENTS.MESSAGE, message);
     });
 });
 

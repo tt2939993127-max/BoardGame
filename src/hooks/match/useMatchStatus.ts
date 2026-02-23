@@ -557,14 +557,16 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
         }
     }, []); // 依赖为空，引用永远稳定
 
-    // 定期轮询房间状态
+    // 低频轮询房间状态（兜底）
+    // 房间销毁检测主要靠 useLobbyMatchPresence（WebSocket 实时推送），
+    // 玩家连接状态由 GameProvider 的 onPlayerConnectionChange 实时更新。
+    // 此轮询仅作为兜底：首次加载获取初始数据 + 低频刷新防止状态漂移。
     useEffect(() => {
         if (!matchID || error) return;
 
         fetchMatchStatus();
 
-        // 每 3 秒轮询一次（可以后续改为 WebSocket）
-        const interval = setInterval(fetchMatchStatus, 3000);
+        const interval = setInterval(fetchMatchStatus, 30000);
 
         return () => clearInterval(interval);
     }, [matchID, error, fetchMatchStatus]);

@@ -295,6 +295,7 @@
     "cpSpentPlain": "消耗 {{amount}} CP",
     "cardDrawn": "抽了 {{count}} 张牌（{{source}}）",
     "cardDrawnPlain": "抽了 {{count}} 张牌",
+    "cardDiscarded": "弃置了",
     "usePurify": "使用净化移除 {{statusLabel}}",
     "payToRemoveKnockdown": "花费 2CP 移除击倒",
     "usePassiveAbility": "使用被动能力：{{abilityName}}",
@@ -691,12 +692,12 @@
     "combo": "太极连环掌",
     "lightning": "雷霆万钧",
     "calm": "心如止水",
-    "meditate": "冒想",
+    "meditate": "清修",
     "ultimate": "超越！",
     "dagger": "匕首打击",
     "pickpocket": "抢夺",
     "steal": "偷窃",
-    "kidney": "肾击",
+    "kidney": "破隐一击",
     "shadowDance": "暗影之舞",
     "cornucopia": "聚宝盆",
     "shadowShank": "暗影穿刺",
@@ -922,7 +923,8 @@
     "lotus-palm-2-4": {
       "effects": {
         "damage6": "造成6点不可防御伤害",
-        "taijiCapMax": "获得6个太极标记"
+        "taijiCapMax": "获得6个太极标记",
+        "taijiCapUp": "太极标记堆叠上限+1，并获得6个太极标记"
       }
     },
     "lotus-palm-2-5": {
@@ -940,7 +942,8 @@
         "bonusFist": "若本次掷骰含拳：伤害+2",
         "bonusPalm": "若本次掷骰含掌：伤害+3",
         "gainTaiji2": "若本次掷骰含太极：获得2个太极标记",
-        "gainChoice": "若本次掷骰含莲花：获得闪避或净化（你选择）"
+        "gainChoice": "若本次掷骰含莲花：获得闪避或净化（你选择）",
+        "rollDie": "投掷骰子"
       }
     },
     "taiji-combo-2": {
@@ -992,13 +995,33 @@
     },
     "calm-water-2-way-of-monk": {
       "name": "武僧之路",
-      "description": "拳掌太极莲花各1触发：获得2闪避，造成3不可防御伤害"
+      "description": "拳掌太极莲花各1触发：获得2闪避，造成3不可防御伤害",
+      "effects": {
+        "gainEvasive2": "获得2个闪避标记",
+        "damage3": "造成3点不可防御伤害"
+      }
     },
     "meditation": {
-      "name": "冒想",
-      "description": "防御时的冒想状态",
+      "name": "清修",
+      "description": "防御时的清修状态",
       "effects": {
         "taijiByResult": "获得太极标记=结果中太极面的数量",
+        "damageByFist": "造成伤害=结果中拳面的数量"
+      }
+    },
+    "meditation-2": {
+      "name": "清修 II",
+      "description": "防御投掷5骰。获得1×太极数值的气，造成1×拳伤害。",
+      "effects": {
+        "taijiByResult": "获得气=结果中太极面的数量",
+        "damageByFist": "造成伤害=结果中拳面的数量"
+      }
+    },
+    "meditation-3": {
+      "name": "清修 III",
+      "description": "防御投掷5骰。获得1×太极数量的气，造成1×拳数量的伤害。如果投出太极+莲花，获得闪避或净化。",
+      "effects": {
+        "taijiByResult": "获得气=结果中太极面的数量（太极+莲花时获得闪避或净化）",
         "damageByFist": "造成伤害=结果中拳面的数量"
       }
     },
@@ -1342,7 +1365,7 @@
       "description": "根据背包面数量获得CP，若有暗影面则从对手偷取"
     },
     "kidney-shot": {
-      "name": "肾击",
+      "name": "破隐一击",
       "description": "大顺子触发：获得4CP，造成等同CP的伤害",
       "effects": {
         "gainCp4": "获得4CP"
@@ -1384,7 +1407,7 @@
       }
     },
     "kidney-shot-2": {
-      "name": "肾击 II",
+      "name": "破隐一击 II",
       "description": "大顺子触发：获得4CP，造成等同CP的伤害",
       "effects": {
         "gainCp4": "获得4CP"
@@ -1559,7 +1582,8 @@
       "effects": {
         "damage8": "造成8点伤害",
         "gainCrit": "获得1个暴击标记",
-        "gain2CP": "获得2CP"
+        "gain2CP": "获得2CP",
+        "gain20CP": "获得20CP"
       }
     },
     "righteous-prayer-2": {
@@ -1796,6 +1820,33 @@
       "description": "防御阶段（5骰）：若足面≥2，防止一半伤害（向上取整）；造成1×弓面数伤害",
       "effects": {
         "resolveDefense": "防御结算"
+      }
+    },
+    "card-turning-up-the-heat": {
+      "effects": {
+        "gainFM1": "获得1层火焰精通",
+        "spendCP": "花费任意数量CP，每花费1CP获得1火焰精通"
+      }
+    },
+    "card-infernal-embrace": {
+      "effects": {
+        "roll": "投掷1骰：陨石=获得火焰精通至上限，否则=抽取1张牌"
+      }
+    },
+    "card-fan-the-flames": {
+      "effects": {
+        "increaseLimit": "火焰精通堆叠上限+1",
+        "gainFM2": "获得2层火焰精通"
+      }
+    },
+    "card-red-hot": {
+      "effects": {
+        "dmgPerFM": "本回合中，每拥有1个火焰精通，伤害+1"
+      }
+    },
+    "card-get-fired-up": {
+      "effects": {
+        "roll": "投掷1骰：火=+3伤害，熔岩=施加燃烧，火魂=获得2火焰精通，陨石=施加击倒"
       }
     }
   },

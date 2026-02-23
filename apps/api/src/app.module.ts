@@ -43,14 +43,25 @@ import { NotificationModule } from './modules/notification/notification.module';
                 const host = redisHost || 'localhost';
                 const port = Number(redisPort || 6379);
 
-                return {
-                    store: await redisStore({
-                        socket: {
-                            host,
-                            port,
-                        },
-                    }),
-                } as never;
+                const store = await redisStore({
+                    socket: {
+                        host,
+                        port,
+                    },
+                });
+
+                // cache-manager v5 的 set(key, value, ttl) 传数字 TTL，
+                // 但 cache-manager-redis-store v3 期望 set(key, value, { ttl })。
+                // 包装 store.set 做格式适配，确保 TTL 正确传递给 Redis SETEX。
+                const originalSet = store.set.bind(store);
+                store.set = (key: string, value: unknown, options: unknown, cb?: unknown) => {
+                    if (typeof options === 'number') {
+                        return originalSet(key, value, { ttl: options }, cb);
+                    }
+                    return originalSet(key, value, options, cb);
+                };
+
+                return { store } as never;
             },
         }),
         AuthModule,

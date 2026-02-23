@@ -696,11 +696,11 @@ describe('缠绕 (Entangle) 掷骰限制', () => {
 // ============================================================================
 
 describe('潜行 (Sneak) 伤害免除', () => {
-    it('防御方有潜行时：跳过防御掷骰、免除伤害、消耗潜行', () => {
+    it('防御方有潜行时：跳过防御掷骰、免除伤害、潜行不被消耗', () => {
         const baseSetup = createNoResponseSetupWithEmptyHand();
         const runner = createRunner(fixedRandom);
         const result = runner.run({
-            name: '潜行免除伤害',
+            name: '潜行免除伤害但不消耗',
             commands: [
                 cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 潜行判定 -> main2
             ],
@@ -727,8 +727,8 @@ describe('潜行 (Sneak) 伤害免除', () => {
             },
         });
         const core = result.finalState.core;
-        // 潜行被消耗
-        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(0);
+        // 潜行不被消耗——只在回合末自动弃除
+        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(1);
         // 跳过防御掷骰，直接进入 main2
         expect(result.finalState.sys.phase).toBe('main2');
         // 防御方 HP 不变（伤害被免除）
@@ -774,6 +774,51 @@ describe('潜行 (Sneak) 伤害免除', () => {
     it('shadow_thief-sneak-prevent handler 已废弃（潜行改为在攻击流程中处理）', () => {
         const handler = getCustomActionHandler('shadow_thief-sneak-prevent');
         expect(handler).toBeUndefined();
+    });
+
+    it('潜行免伤时攻击仍视为成功：onHit postDamage 效果正常触发（如天人合一获得太极）', () => {
+        // 场景：僧侣（player 0）用 harmony（天人合一）攻击有潜行的 player 1
+        // 预期：伤害被免除，但 onHit 的 grantToken(TAIJI, 2) 仍然触发
+        const baseSetup = createNoResponseSetupWithEmptyHand();
+        const runner = createRunner(fixedRandom);
+        const result = runner.run({
+            name: '潜行免伤但 onHit 效果仍触发',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 潜行判定 -> main2
+            ],
+            setup: (playerIds, random) => {
+                const state = baseSetup(playerIds, random);
+                state.core.activePlayerId = '0';
+                (state.sys as any).phase = 'offensiveRoll';
+                state.core.players['1'].tokens[TOKEN_IDS.SNEAK] = 1;
+                // 记录攻击方初始太极数量
+                const initialTaiji = state.core.players['0'].tokens[TOKEN_IDS.TAIJI] ?? 0;
+                state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = initialTaiji;
+                state.core.pendingAttack = {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'harmony',
+                    isUltimate: false,
+                    bonusDamage: 0,
+                    preDefenseResolved: false,
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    attackDiceFaceCounts: {},
+                } as any;
+                state.core.rollConfirmed = true;
+                return state;
+            },
+        });
+        const core = result.finalState.core;
+        // 潜行不被消耗
+        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(1);
+        // 跳过防御掷骰，直接进入 main2
+        expect(result.finalState.sys.phase).toBe('main2');
+        // 防御方 HP 不变（伤害被免除）
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH);
+        // 关键断言：攻击方获得太极 Token（onHit postDamage 效果触发）
+        expect(core.players['0'].tokens[TOKEN_IDS.TAIJI]).toBeGreaterThanOrEqual(2);
     });
 });
 

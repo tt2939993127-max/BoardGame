@@ -1,5 +1,5 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Cache } from 'cache-manager';
 import { Types, type Model } from 'mongoose';
@@ -19,7 +19,7 @@ import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from './schemas/room-ma
 
 const ADMIN_STATS_CACHE_KEY = 'admin:stats';
 const ADMIN_STATS_TREND_CACHE_PREFIX = 'admin:stats:trend:';
-const ADMIN_STATS_TTL_SECONDS = 300;
+const ADMIN_STATS_TTL_SECONDS = 300; // cache-manager-redis-store 使用 Redis SETEX，单位为秒
 const RECENT_MATCH_LIMIT = 10;
 const DEFAULT_TREND_DAYS = 7;
 const ONLINE_KEY_PREFIX = 'social:online:';
@@ -155,6 +155,29 @@ type BulkDeleteResult = {
     skipped: Array<{ id: string; reason: 'invalidId' | 'notFound' | 'cannotDeleteAdmin' }>;
 };
 
+type RetentionItem = {
+    label: string;
+    rate: number;
+    total: number;
+    retained: number;
+};
+
+type RetentionData = {
+    items: RetentionItem[];
+};
+
+type ActivityTier = {
+    label: string;
+    count: number;
+    color: string;
+    description: string;
+};
+
+type ActivityTierData = {
+    tiers: ActivityTier[];
+    totalUsers: number;
+};
+
 type MatchListItem = {
     matchID: string;
     gameName: string;
@@ -260,7 +283,7 @@ const isValidTrend = (value: unknown, days: number): value is AdminStatsTrend =>
 };
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
         @InjectModel(Friend.name) private readonly friendModel: Model<FriendDocument>,
@@ -272,6 +295,11 @@ export class AdminService {
         @InjectModel(UgcAsset.name) private readonly ugcAssetModel: Model<UgcAssetDocument>,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) { }
+
+    /** 启动时清除 admin stats 缓存，防止 Redis 中残留永不过期的旧数据 */
+    async onModuleInit() {
+        await this.invalidateAdminStatsCache();
+    }
 
     async getStats(): Promise<AdminStats> {
         const cached = await this.cacheManager.get<AdminStatsBase>(ADMIN_STATS_CACHE_KEY);
@@ -1072,8 +1100,6 @@ export class AdminService {
             {
                 $project: {
                     gameName: 1,
-                    // Use $toLong if available, otherwise just subtract dates
-                    // MongoDB dates subtract to milliseconds
                     duration: { $subtract: ["$endedAt", "$createdAt"] }
                 }
             },
@@ -1183,6 +1209,106 @@ export class AdminService {
 
     private async invalidateAdminStatsCache() {
         await this.cacheManager.del(ADMIN_STATS_CACHE_KEY);
+        await this.cacheManager.del('admin:retention');
+        await this.cacheManager.del('admin:activity-tiers');
         await this.removeCacheByPattern(`${ADMIN_STATS_TREND_CACHE_PREFIX}*`);
+    }
+
+    // ─── 留存分析 ───────────────────────────────────────────────
+    async getRetention(): Promise<RetentionData> {
+        const cacheKey = 'admin:retention';
+        const cached = await this.cacheManager.get<RetentionData>(cacheKey);
+        if (cached) return cached;
+
+        const now = new Date();
+        const periods = [
+            { label: '次日留存', offsetDays: 1 },
+            { label: '3日留存', offsetDays: 3 },
+            { label: '7日留存', offsetDays: 7 },
+            { label: '14日留存', offsetDays: 14 },
+            { label: '30日留存', offsetDays: 30 },
+        ];
+
+        // 计算每个留存周期：取注册日期在 [offsetDays+7, offsetDays] 天前的用户（一周窗口，样本更稳定）
+        const items: RetentionItem[] = await Promise.all(
+            periods.map(async ({ label, offsetDays }) => {
+                const windowEnd = new Date(now);
+                windowEnd.setDate(windowEnd.getDate() - offsetDays);
+                windowEnd.setHours(23, 59, 59, 999);
+                const windowStart = new Date(windowEnd);
+                windowStart.setDate(windowStart.getDate() - 7);
+                windowStart.setHours(0, 0, 0, 0);
+
+                const cohortUsers = await this.userModel.find(
+                    { createdAt: { $gte: windowStart, $lte: windowEnd } },
+                    { _id: 1, createdAt: 1, lastOnline: 1 },
+                ).lean<Array<{ _id: unknown; createdAt: Date; lastOnline?: Date | null }>>();
+
+                const total = cohortUsers.length;
+                if (total === 0) return { label, rate: 0, total: 0, retained: 0 };
+
+                const retained = cohortUsers.filter(u => {
+                    if (!u.lastOnline) return false;
+                    const threshold = new Date(u.createdAt);
+                    threshold.setDate(threshold.getDate() + offsetDays);
+                    return u.lastOnline >= threshold;
+                }).length;
+
+                return { label, rate: total > 0 ? retained / total : 0, total, retained };
+            }),
+        );
+
+        const result: RetentionData = { items };
+        await this.cacheManager.set(cacheKey, result, ADMIN_STATS_TTL_SECONDS);
+        return result;
+    }
+
+    // ─── 用户活跃度分层 ─────────────────────────────────────────
+    async getUserActivityTiers(): Promise<ActivityTierData> {
+        const cacheKey = 'admin:activity-tiers';
+        const cached = await this.cacheManager.get<ActivityTierData>(cacheKey);
+        if (cached) return cached;
+
+        const now = new Date();
+        const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const onlineUserIds = await this.getOnlineUserIds();
+        const onlineObjectIds = onlineUserIds
+            .filter(id => Types.ObjectId.isValid(id))
+            .map(id => new Types.ObjectId(id));
+
+        const [totalUsers, bannedUsers, activeCount, silentCount] = await Promise.all([
+            this.userModel.countDocuments(),
+            this.userModel.countDocuments({ banned: true }),
+            // 活跃：7 天内有 lastOnline 或当前在线
+            this.userModel.countDocuments({
+                banned: { $ne: true },
+                $or: [
+                    { lastOnline: { $gte: d7 } },
+                    ...(onlineObjectIds.length > 0 ? [{ _id: { $in: onlineObjectIds } }] : []),
+                ],
+            }),
+            // 沉默：lastOnline 在 7-30 天之间
+            this.userModel.countDocuments({
+                banned: { $ne: true },
+                lastOnline: { $gte: d30, $lt: d7 },
+                ...(onlineObjectIds.length > 0 ? { _id: { $nin: onlineObjectIds } } : {}),
+            }),
+        ]);
+
+        // 流失 = 总数 - 活跃 - 沉默 - 封禁
+        const churned = Math.max(0, totalUsers - activeCount - silentCount - bannedUsers);
+
+        const tiers: ActivityTier[] = [
+            { label: '活跃', count: activeCount, color: '#10b981', description: '7 天内活跃' },
+            { label: '沉默', count: silentCount, color: '#f59e0b', description: '7-30 天未活跃' },
+            { label: '流失', count: churned, color: '#94a3b8', description: '30 天以上未活跃' },
+            { label: '封禁', count: bannedUsers, color: '#f43f5e', description: '已封禁' },
+        ];
+
+        const result: ActivityTierData = { tiers, totalUsers };
+        await this.cacheManager.set(cacheKey, result, ADMIN_STATS_TTL_SECONDS);
+        return result;
     }
 }

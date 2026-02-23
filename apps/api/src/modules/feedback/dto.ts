@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { FeedbackSeverity, FeedbackStatus, FeedbackType } from './feedback.schema';
 
 export class CreateFeedbackDto {
@@ -21,6 +21,11 @@ export class CreateFeedbackDto {
     @IsString()
     @IsOptional()
     contactInfo?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(50000)
+    actionLog?: string;
 }
 
 export class UpdateFeedbackStatusDto {

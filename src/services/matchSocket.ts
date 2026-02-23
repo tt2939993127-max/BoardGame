@@ -27,6 +27,8 @@ export const MATCH_CHAT_EVENTS = {
     LEAVE: 'matchChat:leave',
     SEND: 'matchChat:send',
     MESSAGE: 'matchChat:message',
+    /** 加入房间时服务端回推的历史消息 */
+    HISTORY: 'matchChat:history',
 } as const;
 
 // 重赛投票状态
@@ -53,6 +55,7 @@ export type RematchStateCallback = (state: RematchVoteState) => void;
 export type RematchResetCallback = () => void;
 export type NewRoomCallback = (url: string) => void;
 export type MatchChatCallback = (message: MatchChatMessage) => void;
+export type MatchChatHistoryCallback = (messages: MatchChatMessage[]) => void;
 
 class MatchSocketService {
     private socket: Socket | null = null;
@@ -64,6 +67,7 @@ class MatchSocketService {
     private resetCallbacks: Set<RematchResetCallback> = new Set();
     private newRoomCallbacks: Set<NewRoomCallback> = new Set();
     private chatCallbacks: Set<MatchChatCallback> = new Set();
+    private chatHistoryCallbacks: Set<MatchChatHistoryCallback> = new Set();
     private currentState: RematchVoteState = { votes: {}, ready: false, revision: 0 };
     private lastAcceptedRevision = 0;
     private currentChatMatchId: string | null = null;
@@ -90,6 +94,7 @@ class MatchSocketService {
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000, // 限制最大重连间隔，避免指数退避过大
             timeout: 10000,
         });
 
@@ -162,6 +167,14 @@ class MatchSocketService {
         // 接收聊天消息
         this.socket.on(MATCH_CHAT_EVENTS.MESSAGE, (payload: MatchChatMessage) => {
             this.notifyChatCallbacks(payload);
+        });
+
+        // 接收历史聊天消息（加入房间时服务端回推）
+        this.socket.on(MATCH_CHAT_EVENTS.HISTORY, (messages: MatchChatMessage[]) => {
+            if (!Array.isArray(messages)) return;
+            this.chatHistoryCallbacks.forEach((cb) => {
+                try { cb(messages); } catch (e) { console.error('[MatchSocket] 历史消息回调错误:', e); }
+            });
         });
     }
 
@@ -363,6 +376,16 @@ class MatchSocketService {
     }
 
     /**
+     * 订阅历史聊天消息（加入房间时回推）
+     */
+    subscribeChatHistory(callback: MatchChatHistoryCallback): () => void {
+        this.chatHistoryCallbacks.add(callback);
+        return () => {
+            this.chatHistoryCallbacks.delete(callback);
+        };
+    }
+
+    /**
      * 获取当前状态
      */
     getState(): RematchVoteState {
@@ -401,14 +424,34 @@ class MatchSocketService {
     }
 
     /**
-     * 页面恢复可见时主动重连
+     * 页面恢复可见时主动重连/重新同步
      *
      * 后台标签页冻结期间 socket.io 心跳可能超时导致静默断线。
-     * 恢复可见时检查连接状态，断线则强制重连（connect 事件中会自动 rejoin）。
+     * 即使连接仍然存活，也可能错过了重赛投票状态更新或聊天消息。
+     * 恢复可见时：
+     * - 已断线：强制重连（connect 事件中会自动 rejoin）
+     * - 仍连接：重新请求当前重赛状态（可能错过了增量更新）
      */
     private resync(): void {
         if (!this.socket) return;
-        if (this.socket.connected) return; // 连接正常，无需操作
+        if (this.socket.connected) {
+            // 连接正常但可能错过了增量更新，重新请求当前状态
+            if (this.currentMatchId && this.currentPlayerId) {
+                console.log('[MatchSocket] 页面恢复可见，重新同步重赛状态');
+                // 重置 revision 门控：后台期间服务端可能重启导致 revision 回退，
+                // 必须接受服务端返回的最新状态
+                this.lastAcceptedRevision = 0;
+                this.socket.emit(REMATCH_EVENTS.JOIN_MATCH, {
+                    matchId: this.currentMatchId,
+                    playerId: this.currentPlayerId,
+                });
+            }
+            // 重新请求聊天历史（可能错过了消息）
+            if (this.currentChatMatchId) {
+                this.socket.emit(MATCH_CHAT_EVENTS.JOIN, { matchId: this.currentChatMatchId });
+            }
+            return;
+        }
         console.log('[MatchSocket] 页面恢复可见，重新连接');
         this.socket.connect();
     }

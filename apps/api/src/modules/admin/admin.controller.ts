@@ -32,6 +32,18 @@ export class AdminController {
         return res.json(trend);
     }
 
+    @Get('stats/retention')
+    async getRetention(@Res() res: Response) {
+        const data = await this.adminService.getRetention();
+        return res.json(data);
+    }
+
+    @Get('stats/activity-tiers')
+    async getActivityTiers(@Res() res: Response) {
+        const data = await this.adminService.getUserActivityTiers();
+        return res.json(data);
+    }
+
     @Get('users')
     async getUsers(@Query() query: QueryUsersDto, @Res() res: Response) {
         const result = await this.adminService.getUsers(query);

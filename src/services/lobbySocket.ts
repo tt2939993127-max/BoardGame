@@ -173,6 +173,7 @@ class LobbySocketService {
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000, // 限制最大重连间隔，避免指数退避过大
             timeout: 10000,
         });
 
@@ -192,6 +193,11 @@ class LobbySocketService {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.notifyStatusSubscribers({ connected: true });
+
+            // 重连后重置版本号，确保接受服务端返回的快照（服务端可能重启导致版本回退）
+            this.lobbyStateByGame.forEach((state) => {
+                state.version = -1;
+            });
 
             // 自动订阅大厅更新（支持多 gameId）
             this.lobbyStateByGame.forEach((state, gameId) => {

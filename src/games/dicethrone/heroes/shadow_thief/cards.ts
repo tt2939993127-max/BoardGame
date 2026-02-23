@@ -19,7 +19,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 0 },
         effects: [{ description: '升级迅捷突袭至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'pickpocket', newAbilityDef: PICKPOCKET_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // === 图集索引 1: 破隐一击 II (原名: 肾击 II) ===
+    // === 图集索引 1: 破隐一击 II ===
     {
         id: 'upgrade-kidney-shot-2',
         name: cardText('upgrade-kidney-shot-2', 'name'),

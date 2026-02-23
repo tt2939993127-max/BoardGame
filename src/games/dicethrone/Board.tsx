@@ -364,12 +364,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     }, [G, pendingDamage]);
 
     const isActivePlayer = G.activePlayerId === rootPid;
-    const { rollerId, shouldAutoObserve, viewMode, isSelfView } = computeViewModeState({
+    const { rollerId, shouldAutoObserve, isResponseAutoSwitch, viewMode, isSelfView } = computeViewModeState({
         currentPhase,
         pendingAttack: G.pendingAttack,
         activePlayerId: G.activePlayerId,
         rootPlayerId: rootPid,
         manualViewMode,
+        responseWindow: access.responseWindow,
     });
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
@@ -762,6 +763,31 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         if (currentPhase === 'offensiveRoll' && isActivePlayer) setViewMode('self');
     }, [currentPhase, isActivePlayer, rollerId, rootPid, setViewMode]);
 
+    // 响应窗口视角自动切换：
+    // - 打开时：当前响应者是对手 → 切到对手视角看对方技能
+    // - 响应者切换到自己 → 切回自己视角
+    // - 关闭时：自动切回自己视角，但下一阶段是防御阶段时不切（防御阶段有自己的强制切换）
+    const prevResponseWindowRef = React.useRef<boolean>(false);
+    React.useEffect(() => {
+        const wasOpen = prevResponseWindowRef.current;
+        const isOpen = isResponseWindowOpen;
+        prevResponseWindowRef.current = isOpen;
+
+        if (isOpen && isResponseAutoSwitch) {
+            // 响应窗口打开且当前响应者是对手 → 切到对手视角
+            setViewMode('opponent');
+        } else if (isOpen && !isResponseAutoSwitch) {
+            // 响应窗口仍打开但响应者切到了自己 → 切回自己视角
+            setViewMode('self');
+        } else if (wasOpen && !isOpen) {
+            // 响应窗口刚关闭 → 切回自己视角
+            // 但如果当前阶段是防御阶段，不切（防御阶段由 shouldAutoObserve 控制）
+            if (currentPhase !== 'defensiveRoll') {
+                setViewMode('self');
+            }
+        }
+    }, [isResponseWindowOpen, isResponseAutoSwitch, currentPhase, setViewMode]);
+
     React.useEffect(() => {
         const sourceAbilityId = G.activatingAbilityId ?? G.pendingAttack?.sourceAbilityId;
         if (!sourceAbilityId) return;
@@ -985,6 +1011,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                                 });
                                             }
                                             if (options.length >= 2) {
+                                                // 按变体在 AbilityDef.variants 数组中的定义顺序排列
+                                                // 定义顺序与卡牌上的视觉布局一致（第一个变体在上方）
+                                                options.sort((a, b) => {
+                                                    const ma = findPlayerAbility(G, rollerId, a.abilityId);
+                                                    const mb = findPlayerAbility(G, rollerId, b.abilityId);
+                                                    if (!ma?.variant || !mb?.variant) return 0;
+                                                    const variants = ma.ability.variants ?? [];
+                                                    const ia = variants.indexOf(ma.variant);
+                                                    const ib = variants.indexOf(mb.variant);
+                                                    return ia - ib;
+                                                });
                                                 setAbilityChoiceOptions(options);
                                                 openModal('abilityChoice');
                                                 advanceTutorialIfNeeded('ability-slots');

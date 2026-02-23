@@ -28,6 +28,7 @@ interface FeedbackItem {
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
     gameName?: string;
     contactInfo?: string;
+    actionLog?: string;
     createdAt: string;
 }
 
@@ -576,6 +577,16 @@ function FeedbackRow({
                             >
                                 <div className="px-10 py-4 bg-zinc-50/50 border-b border-zinc-100">
                                     <FeedbackContent content={item.content} onImageClick={onImageClick} t={t} />
+                                    {item.actionLog && (
+                                        <details className="mt-3">
+                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium">
+                                                {t('feedback.actionLog.title')}
+                                            </summary>
+                                            <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 border border-zinc-200 p-3 text-[11px] text-zinc-600 font-mono whitespace-pre-wrap leading-relaxed">
+                                                {item.actionLog}
+                                            </pre>
+                                        </details>
+                                    )}
                                     <div className="flex items-center gap-4 text-xs text-zinc-400 mt-3">
                                         {item.gameName && (
                                             <span className="inline-flex items-center gap-1">
