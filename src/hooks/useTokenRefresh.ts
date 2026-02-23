@@ -10,6 +10,8 @@ import { AUTH_API_URL } from '../config/server';
 
 // 提前刷新时间（提前1天刷新）
 const REFRESH_BEFORE_MS = 24 * 60 * 60 * 1000;
+// setTimeout 最大安全延迟（2^31 - 1 ms ≈ 24.8 天），超过会溢出为 0 导致立即执行
+const MAX_TIMEOUT_MS = 2147483647;
 
 interface TokenPayload {
     userId: string;
@@ -98,6 +100,15 @@ export function useTokenRefresh() {
             
             console.log(`[TokenRefresh] 将在 ${Math.round(refreshIn / 1000 / 60)} 分钟后刷新 token`);
 
+            // setTimeout 延迟超过 2^31-1 ms 会溢出为 0，需要分段等待
+            if (refreshIn > MAX_TIMEOUT_MS) {
+                console.log('[TokenRefresh] 延迟超过 setTimeout 上限，分段等待');
+                timerRef.current = window.setTimeout(() => {
+                    scheduleRefresh(); // 重新计算剩余时间
+                }, MAX_TIMEOUT_MS);
+                return;
+            }
+
             timerRef.current = window.setTimeout(async () => {
                 console.log('[TokenRefresh] 开始刷新 token');
                 const newToken = await refreshToken();
@@ -108,8 +119,16 @@ export function useTokenRefresh() {
                     // 触发 storage 事件通知其他标签页
                     window.dispatchEvent(new Event('storage'));
                 } else {
-                    console.warn('[TokenRefresh] Token 刷新失败，退出登录');
-                    logout();
+                    // 刷新失败但 token 未过期，不退出登录，等过期前再试
+                    const remaining = getTimeUntilExpiry(token);
+                    if (remaining !== null && remaining > 0) {
+                        console.warn('[TokenRefresh] Token 刷新失败，但 token 未过期，稍后重试');
+                        // 5 分钟后重试
+                        timerRef.current = window.setTimeout(() => scheduleRefresh(), 5 * 60 * 1000);
+                    } else {
+                        console.warn('[TokenRefresh] Token 刷新失败且已过期，退出登录');
+                        logout();
+                    }
                 }
             }, refreshIn);
         };

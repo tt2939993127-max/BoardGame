@@ -38,8 +38,8 @@ bash deploy-image.sh
 
 脚本会自动完成：下载 compose 文件 → 引导生成 .env → 配置 Docker 镜像加速 → 安装/配置 Nginx → 拉取镜像 → 启动服务。
 
-> **架构**：Nginx (80) → Docker web 容器 (3000) → 内部 game-server (18000)
-> Nginx 由脚本自动安装和配置，管理 `/etc/nginx/conf.d/boardgame.conf`。
+> **架构**：Cloudflare (HTTPS + CDN) → 服务器 80 端口 → Docker web 容器 (NestJS monolith) → 内部 game-server
+> 无 Nginx，NestJS 直接监听 80 端口。Cloudflare 代理提供 SSL 和 CDN。
 
 ### 更新部署
 
@@ -200,6 +200,12 @@ SMTP_PASS=xxx
 
 > **说明**：灵活模式下，Cloudflare 会用 HTTP 连接你的源服务器，而浏览器到 Cloudflare 仍然是 HTTPS。如果需要端到端加密，可以在服务器配置 Let's Encrypt 证书并切换为「完全」模式。
 
+## 部署后注意事项
+
+> **生产环境更新必须使用部署脚本**：`bash scripts/deploy/deploy-image.sh update`
+>
+> 禁止在生产服务器上直接运行 `docker compose up -d`，因为默认使用 `docker-compose.yml` 而非 `docker-compose.prod.yml`，两者的端口映射和环境变量配置不同。
+
 ## 同域策略
 
 - **开发（Vite 代理）**：
@@ -209,9 +215,10 @@ SMTP_PASS=xxx
 
 - **生产/容器（NestJS 单体）**：
   - 入口：`apps/api/src/main.ts`（静态托管 + 反向代理）
-  - 镜像部署：`docker-compose.prod.yml`（服务器不需要源码）
-  - Git 部署：`docker-compose.yml`（需要源码本地构建）
+  - 镜像部署：`docker-compose.prod.yml`（服务器不需要源码，推荐生产环境）
+  - 本地开发：`docker-compose.yml`（同样使用 ghcr 预构建镜像）
   - 对外仅暴露 `web`（单体），`game-server` 仅容器网络内通信
+  - **注意**：两个 compose 文件都使用 `image:` 拉取 ghcr 镜像，不再本地 build。生产环境必须使用 `deploy-image.sh update`（基于 `docker-compose.prod.yml`），禁止直接 `docker compose up -d`（会使用默认的 `docker-compose.yml`，配置可能不同）
 
 ## 资源 /assets 与对象存储映射（官方）
 
