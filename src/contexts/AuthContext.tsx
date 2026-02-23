@@ -23,6 +23,8 @@ interface AuthContextType {
     sendResetCode: (email: string) => Promise<void>;
     resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
     logout: () => void;
+    /** 直接更新 token state（供 useTokenRefresh 刷新后同步 React 状态） */
+    setTokenDirect: (token: string) => void;
     sendEmailCode: (email: string) => Promise<void>;
     verifyEmail: (email: string, code: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -42,6 +44,7 @@ const defaultAuthContext: AuthContextType = {
     sendResetCode: async () => { throw new Error('AuthProvider 未初始化'); },
     resetPassword: async () => { throw new Error('AuthProvider 未初始化'); },
     logout: () => { throw new Error('AuthProvider 未初始化'); },
+    setTokenDirect: () => { throw new Error('AuthProvider 未初始化'); },
     sendEmailCode: async () => { throw new Error('AuthProvider 未初始化'); },
     verifyEmail: async () => { throw new Error('AuthProvider 未初始化'); },
     changePassword: async () => { throw new Error('AuthProvider 未初始化'); },
@@ -237,6 +240,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('auth_user');
     }, [token]);
 
+    // 直接更新 token state（供 useTokenRefresh 刷新后同步 React 状态）
+    const setTokenDirect = useCallback((newToken: string) => {
+        setToken(newToken);
+    }, []);
+
     const sendEmailCode = useCallback(async (email: string) => {
         if (!token) throw new Error('请先登录');
 
@@ -423,6 +431,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendResetCode,
         resetPassword,
         logout,
+        setTokenDirect,
         sendEmailCode,
         verifyEmail,
         changePassword,
@@ -439,6 +448,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendResetCode,
         resetPassword,
         logout,
+        setTokenDirect,
         sendEmailCode,
         verifyEmail,
         changePassword,

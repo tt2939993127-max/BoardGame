@@ -4,7 +4,7 @@
  * 在 token 即将过期前自动刷新，避免用户挂机后需要重新登录
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AUTH_API_URL } from '../config/server';
 
@@ -12,6 +12,8 @@ import { AUTH_API_URL } from '../config/server';
 const REFRESH_BEFORE_MS = 24 * 60 * 60 * 1000;
 // setTimeout 最大安全延迟（2^31 - 1 ms ≈ 24.8 天），超过会溢出为 0 导致立即执行
 const MAX_TIMEOUT_MS = 2147483647;
+// 刷新失败重试间隔（5 分钟）
+const RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
 interface TokenPayload {
     userId: string;
@@ -45,6 +47,13 @@ function getTimeUntilExpiry(token: string): number | null {
 }
 
 /**
+ * 获取当前最新的 token（优先 localStorage，避免闭包捕获旧值）
+ */
+function getCurrentToken(): string | null {
+    return localStorage.getItem('auth_token');
+}
+
+/**
  * 刷新 token
  * 使用后端的 /auth/refresh 接口（基于 refresh_token cookie）
  */
@@ -67,28 +76,45 @@ async function refreshToken(): Promise<string | null> {
 }
 
 export function useTokenRefresh() {
-    const { token, logout } = useAuth();
+    const { token, setTokenDirect, logout } = useAuth();
     const timerRef = useRef<number | null>(null);
+
+    const clearTimer = useCallback(() => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+    }, []);
+
+    /**
+     * 处理刷新成功：更新 localStorage + React state
+     */
+    const handleRefreshSuccess = useCallback((newToken: string) => {
+        console.log('[TokenRefresh] Token 刷新成功');
+        localStorage.setItem('auth_token', newToken);
+        // 同步更新 React state，触发 effect 重新调度
+        setTokenDirect(newToken);
+    }, [setTokenDirect]);
 
     useEffect(() => {
         if (!token) {
-            // 清理定时器
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-                timerRef.current = null;
-            }
+            clearTimer();
             return;
         }
 
         const scheduleRefresh = () => {
-            const timeUntilExpiry = getTimeUntilExpiry(token);
+            // 每次调度时读最新 token，避免闭包捕获旧值
+            const currentToken = getCurrentToken();
+            if (!currentToken) return;
+
+            const timeUntilExpiry = getTimeUntilExpiry(currentToken);
             
             if (timeUntilExpiry === null) {
                 console.warn('[TokenRefresh] 无法解析 token 过期时间');
                 return;
             }
 
-            // 已过期，立即退出登录
+            // 已过期，退出登录
             if (timeUntilExpiry <= 0) {
                 console.log('[TokenRefresh] Token 已过期，退出登录');
                 logout();
@@ -114,17 +140,15 @@ export function useTokenRefresh() {
                 const newToken = await refreshToken();
                 
                 if (newToken) {
-                    console.log('[TokenRefresh] Token 刷新成功');
-                    localStorage.setItem('auth_token', newToken);
-                    // 触发 storage 事件通知其他标签页
-                    window.dispatchEvent(new Event('storage'));
+                    handleRefreshSuccess(newToken);
+                    // handleRefreshSuccess 更新了 token state，effect 会重新触发 scheduleRefresh
                 } else {
-                    // 刷新失败但 token 未过期，不退出登录，等过期前再试
-                    const remaining = getTimeUntilExpiry(token);
+                    // 刷新失败：检查 token 是否仍然有效
+                    const latestToken = getCurrentToken();
+                    const remaining = latestToken ? getTimeUntilExpiry(latestToken) : null;
                     if (remaining !== null && remaining > 0) {
                         console.warn('[TokenRefresh] Token 刷新失败，但 token 未过期，稍后重试');
-                        // 5 分钟后重试
-                        timerRef.current = window.setTimeout(() => scheduleRefresh(), 5 * 60 * 1000);
+                        timerRef.current = window.setTimeout(() => scheduleRefresh(), RETRY_INTERVAL_MS);
                     } else {
                         console.warn('[TokenRefresh] Token 刷新失败且已过期，退出登录');
                         logout();
@@ -137,29 +161,49 @@ export function useTokenRefresh() {
 
         // 监听 visibilitychange，页面恢复可见时检查 token 是否需要刷新
         const handleVisibilityChange = () => {
-            if (!document.hidden) {
-                const timeUntilExpiry = getTimeUntilExpiry(token);
-                if (timeUntilExpiry !== null && timeUntilExpiry < REFRESH_BEFORE_MS) {
-                    console.log('[TokenRefresh] 页面恢复可见，token 即将过期，立即刷新');
-                    void refreshToken().then(newToken => {
-                        if (newToken) {
-                            localStorage.setItem('auth_token', newToken);
-                            window.dispatchEvent(new Event('storage'));
-                        } else {
+            if (document.hidden) return;
+            
+            // 读最新 token，避免闭包捕获旧值
+            const currentToken = getCurrentToken();
+            if (!currentToken) return;
+
+            const timeUntilExpiry = getTimeUntilExpiry(currentToken);
+            if (timeUntilExpiry === null) return;
+
+            // 已过期
+            if (timeUntilExpiry <= 0) {
+                console.log('[TokenRefresh] 页面恢复可见，token 已过期，退出登录');
+                logout();
+                return;
+            }
+
+            // 即将过期，立即刷新
+            if (timeUntilExpiry < REFRESH_BEFORE_MS) {
+                console.log('[TokenRefresh] 页面恢复可见，token 即将过期，立即刷新');
+                void refreshToken().then(newToken => {
+                    if (newToken) {
+                        handleRefreshSuccess(newToken);
+                    } else {
+                        // 刷新失败但未过期，不 logout，等定时器重试
+                        const remaining = getCurrentToken() ? getTimeUntilExpiry(getCurrentToken()!) : null;
+                        if (!remaining || remaining <= 0) {
                             logout();
                         }
-                    });
-                }
+                        // 未过期则静默，scheduleRefresh 的重试机制会兜底
+                    }
+                });
+            } else {
+                // token 还很新，但可能定时器因为浏览器后台被冻结了，重新调度
+                clearTimer();
+                scheduleRefresh();
             }
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-            }
+            clearTimer();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [token, logout]);
+    }, [token, logout, clearTimer, handleRefreshSuccess]);
 }
