@@ -108,7 +108,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **改游戏规则/机制前先读规则文档（强制）**：修改会影响玩法/回合/结算/效果等"规则或机制"时，必须先读 `src/games/<gameId>/rule/` 下的规则文档。
 - **Git 分支创建规范（强制）**：所有新分支必须从主分支（main/master）创建，禁止从其他功能分支分出。用户说"新建分支"时，默认指从主分支创建。
 - **Git 变更回退与暂存规范（强制）**：涉及 `git restore`/`reset --hard`/`stash` 等操作时，**必须先说明原因并获得许可**。PowerShell 恢复文件禁止用管道/Out-File，必须用 `cmd /c "git show <ref>:<file> > <file>"`。
-- **禁止使用 --no-verify（强制）**：`git commit --no-verify` 和 `git push --no-verify` 会跳过 lint-staged 和 pre-push 钩子，可能导致不合规代码入库。任何情况下都禁止使用。
+- **--no-verify 使用规范（强制）**：`git commit --no-verify` 和 `git push --no-verify` 会跳过 lint-staged 和 pre-push 钩子。**仅允许在不涉及业务逻辑变更时使用**（如纯配置/部署/文档/样式修改）。涉及业务逻辑、引擎代码、领域层代码的提交禁止使用。
 - **文件移动/复制规范（强制）**：
   - **禁止使用 `robocopy /MOVE`**：移动操作会删除源文件，中途失败会导致数据丢失。
   - **推荐做法**：

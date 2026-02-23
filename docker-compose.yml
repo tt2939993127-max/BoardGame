@@ -24,9 +24,7 @@ services:
       - redis_data:/data
 
   game-server:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.game
+    image: ghcr.io/zhuanggenhua/boardgame-game:latest
     container_name: boardgame-game-server
     restart: unless-stopped
     depends_on:
@@ -44,9 +42,7 @@ services:
       - "18000:18000"
 
   web:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.monolith
+    image: ghcr.io/zhuanggenhua/boardgame-web:latest
     container_name: boardgame-web
     restart: unless-stopped
     depends_on:
