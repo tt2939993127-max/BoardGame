@@ -43,6 +43,7 @@
       "playerUnknown": "Player",
       "opponent": "Opponent",
       "offline": "Offline",
+      "empty": "Empty",
       "searching": "Searching",
       "localTitle": "Local Match",
       "localDescription": "Take turns on this device.",

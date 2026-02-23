@@ -525,7 +525,6 @@
     "wrongPhaseForMain": "Can only use this card in main phase",
     "wrongPhaseForRoll": "Can only use this card in roll phase",
     "upgradeCardCannotPlay": "Upgrade cards must be dragged to an ability slot",
-    "upgradeCardSkipLevel": "Cannot skip ability levels with upgrade cards",
     "upgradeCardMaxLevel": "This ability is already at max level",
     "upgradeCardTargetMismatch": "Upgrade card does not match target ability",
     "unknownCardTiming": "This card cannot be used at current timing",

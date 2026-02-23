@@ -8,9 +8,8 @@ import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
 import { getCardDef, getMinionDef } from '../data/cards';
 import { isOperationRestricted } from './ongoingEffects';
 import {
-    getEffectiveBreakpoint,
+    getScoringEligibleBaseIndices,
     getPlayerEffectivePowerOnBase,
-    getTotalEffectivePowerOnBase,
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
@@ -153,10 +152,9 @@ export function validate(
                         return { valid: false, error: '无效的基地索引' };
                     }
 
-                    const base = core.bases[targetBaseIndex];
-                    const totalPower = getTotalEffectivePowerOnBase(core, base, targetBaseIndex);
-                    const breakpoint = getEffectiveBreakpoint(core, targetBaseIndex);
-                    if (totalPower < breakpoint) {
+                    // 使用统一查询函数（优先锁定列表，回退实时计算）
+                    const eligibleIndices = getScoringEligibleBaseIndices(core);
+                    if (!eligibleIndices.includes(targetBaseIndex)) {
                         return { valid: false, error: '只能选择达到临界点的基地' };
                     }
 

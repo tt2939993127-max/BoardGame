@@ -523,7 +523,8 @@ const MinionCard: React.FC<{
                     title={(() => {
                         const bd = getEffectivePowerBreakdown(core, minion, baseIndex);
                         const parts = [`基础: ${bd.basePower}`];
-                        if (bd.permanentModifier !== 0) parts.push(`指示物: ${bd.permanentModifier > 0 ? '+' : ''}${bd.permanentModifier}`);
+                        if (bd.powerCounters !== 0) parts.push(`力量指示物: ${bd.powerCounters > 0 ? '+' : ''}${bd.powerCounters}`);
+                        if (bd.permanentModifier !== 0) parts.push(`永久修正: ${bd.permanentModifier > 0 ? '+' : ''}${bd.permanentModifier}`);
                         if (bd.tempModifier !== 0) parts.push(`临时: ${bd.tempModifier > 0 ? '+' : ''}${bd.tempModifier}`);
                         if (bd.ongoingDetails.length > 0) {
                             for (const d of bd.ongoingDetails) parts.push(`${d.sourceName}: ${d.value > 0 ? '+' : ''}${d.value}`);
@@ -539,7 +540,7 @@ const MinionCard: React.FC<{
             )}
 
             {/* +1力量指示物徽章（左侧，力量增幅下方） */}
-            {minion.powerModifier > 0 && (
+            {(minion.powerCounters ?? 0) > 0 && (
                 <motion.div
                     className={`absolute -left-[0.4vw] min-w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.55vw] font-black text-amber-900 bg-gradient-to-br from-amber-300 to-amber-500 shadow-md border-[0.1vw] border-white px-[0.1vw] z-30 ${
                         (effectivePower !== minion.basePower) || !def?.previewRef ? 'top-[1vw]' : '-top-[0.4vw]'
@@ -547,9 +548,9 @@ const MinionCard: React.FC<{
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 15 }}
-                    title={`+1力量指示物 ×${minion.powerModifier}`}
+                    title={`+1力量指示物 ×${minion.powerCounters}`}
                 >
-                    +{minion.powerModifier}
+                    +{minion.powerCounters}
                 </motion.div>
             )}
 

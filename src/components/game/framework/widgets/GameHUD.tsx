@@ -409,10 +409,30 @@ export const GameHUD = ({
                                 <span className="uppercase font-bold text-white/40">{t('hud.actions.room')}</span>
                                 <span className="font-mono tracking-widest">{matchId ?? '-'}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="uppercase font-bold text-white/40">{t('hud.status.self')}</span>
-                                <span className="text-white/80">{myDisplayName}</span>
-                            </div>
+                            {/* 成员列表：显示所有座位的玩家名和在线状态 */}
+                            {players && players.length > 0 && (
+                                <div className="flex flex-col gap-0.5">
+                                    {players.map((p) => {
+                                        const isSelf = String(p.id) === String(myPlayerId);
+                                        const isEmpty = !p.name;
+                                        return (
+                                            <div key={p.id} className="flex items-center gap-1.5">
+                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                                    isEmpty ? 'bg-white/20' : p.isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+                                                }`} />
+                                                <span className={`truncate ${isSelf ? 'text-white/80' : 'text-white/60'}`}>
+                                                    {isEmpty
+                                                        ? t('hud.status.empty')
+                                                        : p.name}
+                                                </span>
+                                                {isSelf && (
+                                                    <span className="text-white/30">({t('hud.status.self')})</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
                     <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar text-xs">

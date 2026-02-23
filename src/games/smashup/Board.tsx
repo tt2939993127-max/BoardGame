@@ -16,11 +16,10 @@ import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
 import type { SmashUpCore, CardInstance, ActionCardDef, MinionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
-import { getScores } from './domain/index';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { getCardDef, getBaseDef, getMinionDef, resolveCardName, resolveCardText } from './data/cards';
-import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getPlayerEffectivePowerOnBase } from './domain/ongoingModifiers';
+import { getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
 import { useGameAudio, playDeniedSound, playSound } from '../../lib/audio/useGameAudio';
 import { CardPreview } from '../../components/common/media/CardPreview';
@@ -118,9 +117,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
     }, [phase, isMyTurn, myPlayer]);
 
     const discardCount = needDiscard && myPlayer ? myPlayer.hand.length - HAND_LIMIT : 0;
-
-    // 含疯狂卡惩罚的最终分数（统一查询入口）
-    const finalScores = useMemo(() => getScores(core), [core]);
 
     // 弃牌堆可打出卡牌选项（仅在出牌阶段且是自己回合时计算）
     // 随从额度已满时，过滤掉消耗正常额度的选项（不消耗额度的额外打出仍然可用）
@@ -485,19 +481,10 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
     }, [isMeFirstResponse, myPlayer]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
+    // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）
     const meFirstEligibleBaseIndices = useMemo<Set<number>>(() => {
         if (!meFirstPendingCard) return new Set();
-        const indices = new Set<number>();
-        for (let i = 0; i < core.bases.length; i++) {
-            const base = core.bases[i];
-            const baseDef = getBaseDef(base.defId);
-            if (!baseDef) continue;
-            const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-            if (totalPower >= getEffectiveBreakpoint(core, i)) {
-                indices.add(i);
-            }
-        }
-        return indices;
+        return new Set(getScoringEligibleBaseIndices(core));
     }, [meFirstPendingCard, core]);
 
     // 手牌选中卡牌的有效部署基地集合（排除被 ongoing 限制的基地）
@@ -1121,13 +1108,13 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                                             {isMe ? t('ui.you_short') : t('ui.player_short', { id: pid })}
                                         </span>
                                         <motion.div
-                                            key={`vp-${pid}-${finalScores[pid]}`}
+                                            key={`vp-${pid}-${core.players[pid]?.vp ?? 0}`}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-md border-2 border-white ${conf.bg}`}
                                             initial={{ scale: 1 }}
                                             animate={{ scale: [1, 1.3, 1] }}
                                             transition={{ duration: 0.4, ease: 'easeOut' }}
                                         >
-                                            {finalScores[pid]}
+                                            {core.players[pid]?.vp ?? 0}
                                         </motion.div>
                                         {/* 派系图标 */}
                                         <div className="flex gap-0.5 mt-1">

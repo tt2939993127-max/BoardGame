@@ -146,7 +146,7 @@
     "baseScoredRanking": "{{playerId}} +{{vp}}VP",
     "baseScoredRankingWithBreakdown": "{{playerId}} +{{vp}}VP 力量：",
     "powerModifier": {
-      "permanent": "力量指示物",
+      "permanent": "永久力量修正",
       "temp": "临时力量修正"
     },
     "damageSource": {

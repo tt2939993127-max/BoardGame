@@ -182,12 +182,16 @@ export interface MinionOnBase {
     owner: PlayerId;
     /** 印刷力量（冗余，避免频繁查表） */
     basePower: number;
-    /** 力量修正（+1 指示物等，永久） */
+    /** +1 力量指示物数量（独立可追踪实体，可放置/移除/转移，仅指示物派系使用） */
+    powerCounters: number;
+    /** 永久力量修正（非指示物的永久加力量，如密斯卡托尼克"最好不知道的事"） */
     powerModifier: number;
     /** 临时力量修正（回合结束自动清零，用于嚎叫/增强等"直到回合结束"效果） */
     tempPowerModifier: number;
     /** 本回合是否已使用天赋 */
     talentUsed: boolean;
+    /** 本回合是否为刚打出的随从（回合结束清零） */
+    playedThisTurn?: boolean;
     /** 附着的行动卡列表（带 owner 追踪） */
     attachedActions: AttachedActionOnMinion[];
 }
@@ -329,6 +333,13 @@ export interface SmashUpCore {
     standingStonesDoubleTalentMinionUid?: string;
     /** 计分后触发的 special 延迟记录（回合开始自动清空） */
     pendingAfterScoringSpecials?: PendingAfterScoringSpecial[];
+    /**
+     * 进入 scoreBases 阶段时锁定的 eligible 基地索引列表。
+     * 规则：一旦基地在进入计分阶段时达到 breakpoint，即使 Me First! 响应窗口中
+     * 力量被降低到 breakpoint 以下，该基地仍然必定计分。
+     * @see https://smashup.fandom.com/wiki/Rules — Phase 3 Step 4
+     */
+    scoringEligibleBaseIndices?: number[];
 }
 
 export interface FactionSelectionState {
@@ -352,11 +363,11 @@ export function getCurrentPlayerId(state: SmashUpCore): PlayerId {
 export function getPlayerPowerOnBase(base: BaseInPlay, playerId: PlayerId): number {
     return base.minions
         .filter(m => m.controller === playerId)
-        .reduce((sum, m) => sum + m.basePower + m.powerModifier, 0);
+        .reduce((sum, m) => sum + m.basePower + m.powerCounters + m.powerModifier, 0);
 }
 
 export function getTotalPowerOnBase(base: BaseInPlay): number {
-    return base.minions.reduce((sum, m) => sum + m.basePower + m.powerModifier, 0);
+    return base.minions.reduce((sum, m) => sum + m.basePower + m.powerCounters + m.powerModifier, 0);
 }
 
 // ============================================================================
@@ -613,6 +624,7 @@ export type SmashUpEvent =
     | RevealHandEvent
     | RevealDeckTopEvent
     | TempPowerAddedEvent
+    | PermanentPowerAddedEvent
     | BreakpointModifiedEvent
     | BaseDeckShuffledEvent
     | SpecialLimitUsedEvent
@@ -855,6 +867,16 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
 
 /** 临时力量修正事件（回合结束自动清零） */
 export interface TempPowerAddedEvent extends GameEvent<typeof SU_EVENTS.TEMP_POWER_ADDED> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+        amount: number;
+        reason: string;
+    };
+}
+
+/** 永久力量修正事件（非指示物，不可移动/转移） */
+export interface PermanentPowerAddedEvent extends GameEvent<typeof SU_EVENTS.PERMANENT_POWER_ADDED> {
     payload: {
         minionUid: string;
         baseIndex: number;

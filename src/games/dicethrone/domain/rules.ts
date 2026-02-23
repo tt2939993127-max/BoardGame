@@ -350,7 +350,6 @@ export type CardPlayCheckResult =
 export type CardPlayFailReason =
     | 'playerNotFound'
     | 'upgradeCardCannotPlay'      // 升级卡缺少目标技能
-    | 'upgradeCardSkipLevel'       // 升级卡不能跳级（如 1→3）
     | 'upgradeCardMaxLevel'        // 技能已达到最高级
     | 'wrongPhaseForUpgrade'       // 升级卡只能在主要阶段
     | 'wrongPhaseForMain'          // 主要阶段卡只能在主要阶段
@@ -407,21 +406,21 @@ export const checkPlayCard = (
             return { ok: false, reason: 'upgradeCardCannotPlay' };
         }
         
-        // 检查技能等级（必须逐级升级）
+        // 检查技能等级（允许跳级，如 L1→L3，但不允许降级或同级）
         const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
         const replaceAction = card.effects?.find(e => e.action?.type === 'replaceAbility')?.action;
         const desiredLevel = (replaceAction?.type === 'replaceAbility' ? replaceAction.newAbilityLevel : undefined) ?? (currentLevel + 1);
         if (currentLevel >= 3) {
             return { ok: false, reason: 'upgradeCardMaxLevel' };
         }
-        if (desiredLevel !== currentLevel + 1) {
-            return { ok: false, reason: 'upgradeCardSkipLevel' };
+        if (desiredLevel <= currentLevel) {
+            return { ok: false, reason: 'upgradeCardMaxLevel' };
         }
         
-        // 计算实际 CP 消耗
+        // 计算实际 CP 消耗：有前置升级卡时只付差价，否则付全额
         const previousUpgradeCost = player.upgradeCardByAbilityId?.[targetAbilityId]?.cpCost;
         let actualCost = card.cpCost;
-        if (previousUpgradeCost !== undefined && currentLevel > 1) {
+        if (previousUpgradeCost !== undefined) {
             actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
         }
         
@@ -548,7 +547,6 @@ export type UpgradeCardPlayFailReason =
     | 'upgradeCardCannotPlay'     // 升级卡缺少 replaceAbility 效果
     | 'upgradeCardTargetMismatch' // 目标技能不匹配
     | 'upgradeCardMaxLevel'
-    | 'upgradeCardSkipLevel'
     | 'notEnoughCp';
 
 /** 升级卡打出检查结果 */
@@ -588,20 +586,20 @@ export const checkPlayUpgradeCard = (
         return { ok: false, reason: 'upgradeCardTargetMismatch' };
     }
 
-    // 检查技能等级（必须逐级升级，不允许跳级）
+    // 检查技能等级（允许跳级，如 L1→L3，但不允许降级或同级）
     const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
     const desiredLevel = replaceAction.newAbilityLevel ?? Math.min(3, currentLevel + 1);
     if (currentLevel >= 3) {
         return { ok: false, reason: 'upgradeCardMaxLevel' };
     }
-    if (desiredLevel !== currentLevel + 1) {
-        return { ok: false, reason: 'upgradeCardSkipLevel' };
+    if (desiredLevel <= currentLevel) {
+        return { ok: false, reason: 'upgradeCardMaxLevel' };
     }
 
-    // 计算实际 CP 消耗
+    // 计算实际 CP 消耗：有前置升级卡时只付差价，否则付全额
     const previousUpgradeCost = player.upgradeCardByAbilityId?.[targetAbilityId]?.cpCost;
     let actualCost = card.cpCost;
-    if (previousUpgradeCost !== undefined && currentLevel > 1) {
+    if (previousUpgradeCost !== undefined) {
         actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
     }
     

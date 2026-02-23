@@ -32,7 +32,7 @@ import {
     VP_TO_WIN,
     getCurrentPlayerId,
 } from './types';
-import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getOngoingCardPowerContribution } from './ongoingModifiers';
+import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getOngoingCardPowerContribution, getScoringEligibleBaseIndices } from './ongoingModifiers';
 import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
@@ -382,17 +382,16 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // Me First! 响应完成后，执行实际基地记分
             const events: GameEvent[] = [];
 
-            // 找出所有达到临界点的基地
+            // 使用统一查询函数（优先锁定列表，回退实时计算）
+            // Wiki Phase 3 Step 4：一旦基地在进入计分阶段时达到 breakpoint，必定计分
+            const lockedIndices = getScoringEligibleBaseIndices(core);
+            // 构建 eligible 基地信息（用于多基地选择 UI）
             const eligibleBases: { baseIndex: number; defId: string; totalPower: number }[] = [];
-            for (let i = 0; i < core.bases.length; i++) {
+            for (const i of lockedIndices) {
                 const base = core.bases[i];
-                const baseDef = getBaseDef(base.defId);
-                if (!baseDef) continue;
+                if (!base) continue;
                 const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                const bp = getEffectiveBreakpoint(core, i);
-                if (totalPower >= bp) {
-                    eligibleBases.push({ baseIndex: i, defId: base.defId, totalPower });
-                }
+                eligibleBases.push({ baseIndex: i, defId: base.defId, totalPower });
             }
 
             // 无基地达标 → 正常推进
@@ -424,25 +423,15 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
 
             // 1 个基地达标（或 Prompt 已解决后的后续循环）→ 直接记分
-            // Property 15: 循环检查所有达到临界点的基地
-            let remainingBaseIndices = core.bases.map((_, index) => index);
+            // 使用统一查询函数获取的 eligible 列表，按顺序逐个计分
+            let remainingBaseIndices = [...lockedIndices];
             let currentBaseDeck = core.baseDeck;
             let currentMatchState: MatchState<SmashUpCore> = state;
 
             const maxIterations = remainingBaseIndices.length;
             for (let iter = 0; iter < maxIterations; iter++) {
-                let foundIndex: number | null = null;
-                for (const baseIndex of remainingBaseIndices) {
-                    const base = core.bases[baseIndex];
-                    const baseDef = getBaseDef(base.defId);
-                    if (!baseDef) continue;
-                    const totalPower = getTotalEffectivePowerOnBase(core, base, baseIndex);
-                    if (totalPower >= getEffectiveBreakpoint(core, baseIndex)) {
-                        foundIndex = baseIndex;
-                        break;
-                    }
-                }
-                if (foundIndex === null) break;
+                if (remainingBaseIndices.length === 0) break;
+                const foundIndex = remainingBaseIndices[0];
 
                 const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
                 events.push(...result.events);
@@ -530,21 +519,18 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         }
 
         if (to === 'scoreBases') {
-            // 先检查是否有基地达到临界点，没有则跳过 Me First! 响应窗口
-            // 规则：Me First! 只在有基地需要记分时触发
-            let hasEligibleBase = false;
-            for (let i = 0; i < core.bases.length; i++) {
-                const base = core.bases[i];
-                const baseDef = getBaseDef(base.defId);
-                if (!baseDef) continue;
-                const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                if (totalPower >= getEffectiveBreakpoint(core, i)) {
-                    hasEligibleBase = true;
-                    break;
-                }
-            }
+            // 检查是否有基地达到临界点，没有则跳过 Me First! 响应窗口
+            const eligibleIndices = getScoringEligibleBaseIndices(core);
 
-            if (hasEligibleBase) {
+            if (eligibleIndices.length > 0) {
+                // 锁定 eligible 基地列表到 core 状态
+                // 规则：一旦基地在进入计分阶段时达到 breakpoint，即使 Me First! 响应窗口中
+                // 力量被降低到 breakpoint 以下，该基地仍然必定计分（Wiki Phase 3 Step 4）
+                events.push({
+                    type: SU_EVENTS.SCORING_ELIGIBLE_BASES_LOCKED,
+                    payload: { baseIndices: eligibleIndices },
+                    timestamp: now,
+                } as GameEvent);
                 // 打开 Me First! 响应窗口，等待所有玩家响应
                 // 实际记分在 onPhaseExit('scoreBases') 中执行
                 const meFirstEvt = openMeFirstWindow('scoreBases', pid, core.turnOrder, now);
@@ -634,24 +620,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 };
 
 // ============================================================================
-// playerView：隐藏其他玩家手牌与牌库
+// playerView：不再隐藏手牌/牌库，直接发送完整数据（不需要防作弊）
 // ============================================================================
 
-function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore> {
-    const filtered: Record<PlayerId, PlayerState> = {};
-    for (const [pid, player] of Object.entries(state.players)) {
-        if (pid === playerId) {
-            filtered[pid] = player;
-        } else {
-            // 隐藏手牌内容和牌库内容，只保留数量
-            filtered[pid] = {
-                ...player,
-                hand: player.hand.map(c => ({ ...c, defId: 'hidden', type: c.type })),
-                deck: player.deck.map(c => ({ ...c, defId: 'hidden', type: c.type })),
-            };
-        }
-    }
-    return { players: filtered };
+function playerView(_state: SmashUpCore, _playerId: PlayerId): Partial<SmashUpCore> {
+    return {};
 }
 
 

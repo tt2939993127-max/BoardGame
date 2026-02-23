@@ -94,14 +94,6 @@ function getContinuationContext<T>(
     return interactionData.continuationContext as T | undefined;
 }
 
-function getTotalMinionsPlayedAtBaseThisTurn(state: SmashUpCore, baseIndex: number): number {
-    let total = 0;
-    for (const player of Object.values(state.players)) {
-        total += player.minionsPlayedPerBase?.[baseIndex] ?? 0;
-    }
-    return total;
-}
-
 // ============================================================================
 // 注册表
 // ============================================================================
@@ -662,10 +654,12 @@ export function registerBaseAbilities(): void {
     registerBaseAbility('base_laboratorium', 'onMinionPlayed', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base || !ctx.minionUid) return { events: [] };
-        // 检查是否为本回合该基地“全局第一个”被打出的随从（跨玩家）
-        const totalPlayedCount = getTotalMinionsPlayedAtBaseThisTurn(ctx.state, ctx.baseIndex);
-        // reduce 已执行，首个随从打出后总数应为 1
-        if (totalPlayedCount !== 1) return { events: [] };
+        // 检查当前玩家本回合是否为首次打出随从到该基地
+        // “每回合”指每个玩家的回合，每个玩家各自追踪首次打出
+        // reduce 已执行，minionsPlayedPerBase 包含刚打出的随从，首次打出时值为 1
+        const player = ctx.state.players[ctx.playerId];
+        const playedAtBase = player?.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
+        if (playedAtBase !== 1) return { events: [] };
         return {
             events: [addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'base_laboratorium', ctx.now)],
         };
@@ -692,8 +686,10 @@ export function registerBaseAbilities(): void {
     registerBaseAbility('base_moot_site', 'onMinionPlayed', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base || !ctx.minionUid) return { events: [] };
-        const totalPlayedCount = getTotalMinionsPlayedAtBaseThisTurn(ctx.state, ctx.baseIndex);
-        if (totalPlayedCount !== 1) return { events: [] };
+        // 检查当前玩家本回合是否为首次打出随从到该基地
+        const player = ctx.state.players[ctx.playerId];
+        const playedAtBase = player?.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
+        if (playedAtBase !== 1) return { events: [] };
         const minion = base.minions.find(m => m.uid === ctx.minionUid);
         if (!minion) return { events: [] };
         return {

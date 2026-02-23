@@ -24,6 +24,7 @@ import type {
     BaseDeckReorderedEvent,
     BaseReplacedEvent,
     TempPowerAddedEvent,
+    PermanentPowerAddedEvent,
     BreakpointModifiedEvent,
     BaseDeckShuffledEvent,
     SpecialLimitUsedEvent,
@@ -127,9 +128,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 controller: playerId,
                 owner: playerId,
                 basePower: power,
+                powerCounters: 0,
                 powerModifier: 0,
                 tempPowerModifier: 0,
                 talentUsed: false,
+                playedThisTurn: true,
                 attachedActions: [],
             };
             const newBases = state.bases.map((base, i) => {
@@ -329,7 +332,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             }
 
             const newBases = state.bases.filter((_, i) => i !== baseIndex);
-            return { ...state, players: newPlayers, bases: newBases };
+            // 从锁定的 eligible 列表中移除已计分的基地索引，并调整后续索引（因 bases 数组收缩）
+            const prevEligible = state.scoringEligibleBaseIndices;
+            const newEligible = prevEligible
+                ? prevEligible
+                    .filter(i => i !== baseIndex)
+                    .map(i => i > baseIndex ? i - 1 : i)
+                : undefined;
+            return {
+                ...state,
+                players: newPlayers,
+                bases: newBases,
+                scoringEligibleBaseIndices: newEligible?.length ? newEligible : undefined,
+            };
         }
 
         case SU_EVENTS.VP_AWARDED: {
@@ -400,8 +415,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...base,
                 minions: base.minions.map(m => ({
                     ...m,
-                    powerModifier: m.powerModifier,  // 显式保留 +1力量指示物
+                    powerCounters: m.powerCounters,  // 显式保留力量指示物（独立实体）
+                    powerModifier: m.powerModifier,  // 显式保留永久力量修正
                     talentUsed: m.controller === playerId ? false : m.talentUsed,
+                    playedThisTurn: m.controller === playerId ? undefined : m.playedThisTurn,
                     tempPowerModifier: 0,
                     attachedActions: m.attachedActions.map(a => ({
                         ...a,
@@ -436,6 +453,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 standingStonesDoubleTalentMinionUid: undefined,
                 // 清空计分后延迟 special 记录
                 pendingAfterScoringSpecials: undefined,
+                // 清空计分阶段锁定的 eligible 基地列表
+                scoringEligibleBaseIndices: undefined,
                 sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
                 players: {
                     ...state.players,
@@ -482,7 +501,17 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
             const newBases = [...state.bases];
             newBases.splice(baseIndex, 0, newBase);
-            return { ...state, bases: newBases, baseDeck: newBaseDeck };
+            // 插入基地后，eligible 列表中 >= baseIndex 的索引需要 +1（数组扩张）
+            const prevEligible = state.scoringEligibleBaseIndices;
+            const adjustedEligible = prevEligible
+                ? prevEligible.map(i => i >= baseIndex ? i + 1 : i)
+                : undefined;
+            return {
+                ...state,
+                bases: newBases,
+                baseDeck: newBaseDeck,
+                ...(adjustedEligible ? { scoringEligibleBaseIndices: adjustedEligible } : {}),
+            };
         }
 
         case SU_EVENTS.DECK_RESHUFFLED: {
@@ -696,6 +725,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                             owner: card.owner,
                             controller: card.owner,
                             basePower: minionDef?.power ?? 0,
+                            powerCounters: 0,
                             powerModifier: 0,
                             tempPowerModifier: 0,
                             talentUsed: false,
@@ -744,12 +774,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.POWER_COUNTER_ADDED: {
             const { minionUid, amount } = (event as PowerCounterAddedEvent).payload;
-            // 使用 minionUid 查找，不依赖 baseIndex（避免基地删除后索引错位）
+            // 力量指示物：操作 powerCounters 字段（独立可追踪实体）
             const newBases = state.bases.map(base => ({
                 ...base,
                 minions: base.minions.map(m => 
                     m.uid === minionUid 
-                        ? { ...m, powerModifier: m.powerModifier + amount }
+                        ? { ...m, powerCounters: (m.powerCounters ?? 0) + amount }
                         : m
                 ),
             }));
@@ -758,12 +788,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.POWER_COUNTER_REMOVED: {
             const { minionUid, amount } = (event as PowerCounterRemovedEvent).payload;
-            // 使用 minionUid 查找，不依赖 baseIndex（避免基地删除后索引错位）
+            // 力量指示物：操作 powerCounters 字段
             const newBases = state.bases.map(base => ({
                 ...base,
                 minions: base.minions.map(m => 
                     m.uid === minionUid 
-                        ? { ...m, powerModifier: Math.max(0, m.powerModifier - amount) }
+                        ? { ...m, powerCounters: Math.max(0, (m.powerCounters ?? 0) - amount) }
                         : m
                 ),
             }));
@@ -1145,6 +1175,20 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return { ...state, bases: newBases };
         }
 
+        // 永久力量修正（非指示物，不可移动/转移）
+        case SU_EVENTS.PERMANENT_POWER_ADDED: {
+            const { minionUid, amount } = (event as PermanentPowerAddedEvent).payload;
+            const newBases = state.bases.map(base => ({
+                ...base,
+                minions: base.minions.map(m => 
+                    m.uid === minionUid 
+                        ? { ...m, powerModifier: m.powerModifier + amount }
+                        : m
+                ),
+            }));
+            return { ...state, bases: newBases };
+        }
+
         // 临界点临时修正（回合结束自动清零）
         case SU_EVENTS.BREAKPOINT_MODIFIED: {
             const { baseIndex, delta } = (event as BreakpointModifiedEvent).payload;
@@ -1215,6 +1259,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 pendingAfterScoringSpecials: next.length > 0 ? next : undefined,
+            };
+        }
+
+        case SU_EVENTS.SCORING_ELIGIBLE_BASES_LOCKED: {
+            const { baseIndices } = event.payload as { baseIndices: number[] };
+            return {
+                ...state,
+                scoringEligibleBaseIndices: baseIndices,
             };
         }
 

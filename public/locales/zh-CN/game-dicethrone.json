@@ -539,7 +539,6 @@
     "wrongPhaseForMain": "只能在主要阶段使用此卡",
     "wrongPhaseForRoll": "只能在投掷阶段使用此卡",
     "upgradeCardCannotPlay": "升级卡需要拖到技能槽上使用",
-    "upgradeCardSkipLevel": "升级卡不能跳级使用",
     "upgradeCardMaxLevel": "该技能已达最高等级",
     "upgradeCardTargetMismatch": "升级卡与目标技能不匹配",
     "unknownCardTiming": "该卡牌无法在当前时机使用",

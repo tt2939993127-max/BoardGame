@@ -146,7 +146,7 @@
     "baseScoredRanking": "{{playerId}} +{{vp}}VP",
     "baseScoredRankingWithBreakdown": "{{playerId}} +{{vp}}VP Power:",
     "powerModifier": {
-      "permanent": "Power Counters",
+      "permanent": "Permanent Power",
       "temp": "Temp Power Modifier"
     },
     "damageSource": {

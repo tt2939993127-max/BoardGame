@@ -43,6 +43,7 @@
       "playerUnknown": "玩家",
       "opponent": "对手",
       "offline": "离线",
+      "empty": "空位",
       "searching": "搜索中",
       "localTitle": "同屏对战",
       "localDescription": "在本机轮流操作或同屏竞技。",

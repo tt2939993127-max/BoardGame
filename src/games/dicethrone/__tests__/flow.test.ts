@@ -1366,19 +1366,37 @@ describe('王权骰铸流程测试', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
-        it('升级卡跳级使用 - upgradeCardSkipLevel', () => {
+        it('升级卡跳级使用（L1→L3）- CP 不足时被拒绝', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
-                name: '升级卡跳级使用',
+                name: '升级卡跳级 CP 不足',
                 setup: createSetupWithHand(['card-meditation-3']),
                 commands: [
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'upgradeCardSkipLevel' },
+                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'notEnoughCp' },
                     turnPhase: 'main1',
                     players: {
                         '0': { abilityLevels: { meditation: 1 } },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('升级卡跳级使用（L1→L3）- CP 足够时成功', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: '升级卡跳级成功',
+                setup: createSetupWithHand(['card-meditation-3'], { cp: 10 }),
+                commands: [
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                    players: {
+                        '0': { abilityLevels: { meditation: 3 } },
                     },
                 },
             });

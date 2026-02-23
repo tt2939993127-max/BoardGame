@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addPowerCounter, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -128,7 +128,7 @@ function pirateCannon(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 虚张声势 onPlay：你的每个随从1力量直到回合结束 */
+/** 虚张声势 onPlay：你的每个随从+1力量直到回合结束 */
 function pirateSwashbuckling(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
@@ -136,7 +136,7 @@ function pirateSwashbuckling(ctx: AbilityContext): AbilityResult {
         const base = ctx.state.bases[i];
         for (const m of base.minions) {
             if (m.controller === ctx.playerId) {
-                events.push(addPowerCounter(m.uid, i, 1, 'pirate_swashbuckling', ctx.now));
+                events.push(addTempPower(m.uid, i, 1, 'pirate_swashbuckling', ctx.now));
             }
         }
     }

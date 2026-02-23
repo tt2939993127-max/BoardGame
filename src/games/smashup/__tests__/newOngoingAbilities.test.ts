@@ -42,7 +42,7 @@ import type { RandomFn } from '../../../engine/types';
 function makeMinion(uid: string, defId: string, controller: string, power: number, overrides: Partial<MinionOnBase> = {}): MinionOnBase {
     return {
         uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, talentUsed: false, attachedActions: [],
         ...overrides,
     };
 }
