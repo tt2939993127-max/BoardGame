@@ -671,10 +671,14 @@ export class AuthController {
 
     private getRefreshCookieBaseOptions(): CookieOptions {
         const isProd = process.env.NODE_ENV === 'production';
-        const sameSite: CookieOptions['sameSite'] = isProd ? 'none' : 'lax';
+        // 如果 WEB_ORIGINS 包含 http:// 地址（如 IP 直连），cookie 降级为非 secure
+        // 这样 HTTP 访问时浏览器也能正常发送 cookie
+        const allowHttp = (process.env.WEB_ORIGINS || '').split(',').some(o => o.trim().startsWith('http://'));
+        const secure = isProd && !allowHttp;
+        const sameSite: CookieOptions['sameSite'] = secure ? 'none' : 'lax';
         return {
             httpOnly: true,
-            secure: isProd,
+            secure,
             sameSite,
             path: REFRESH_COOKIE_PATH,
         };

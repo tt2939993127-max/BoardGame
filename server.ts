@@ -263,6 +263,13 @@ const io = new IOServer(httpServer, {
     // 给后台标签页更多缓冲时间（Chrome 节流 timer 到 1 次/分钟）
     pingInterval: 30000,
     pingTimeout: 60000,
+    // WebSocket 帧压缩：在 msgpack 基础上再压缩 60-70%（重复字段名/结构）
+    // 限制窗口大小以控制内存开销（每连接约 15KB 而非默认 32KB）
+    perMessageDeflate: {
+        threshold: 1024,       // 超过 1KB 才压缩，避免小消息反而变大
+        zlibDeflateOptions: { windowBits: 13 },  // 8KB 窗口（默认 15 = 32KB）
+        zlibInflateOptions: { windowBits: 13 },
+    },
 });
 
 // 创建游戏传输服务器
@@ -1200,6 +1207,11 @@ const lobbySocketIO = new IOServer(httpServer, {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
         credentials: true,
+    },
+    perMessageDeflate: {
+        threshold: 1024,
+        zlibDeflateOptions: { windowBits: 13 },
+        zlibInflateOptions: { windowBits: 13 },
     },
 });
 lobbyIO = lobbySocketIO;
