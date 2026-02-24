@@ -22,7 +22,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { loadStatusAtlases, type StatusAtlases } from './ui/statusEffects';
-import { getAbilitySlotId, ABILITY_SLOT_MAP } from './ui/AbilityOverlays';
+import { getAbilitySlotId, ABILITY_SLOT_MAP, buildVariantToBaseIdMap } from './ui/AbilityOverlays';
 import type { AbilityOverlaysHandle } from './ui/AbilityOverlays';
 import { AbilityChoiceModal, type AbilityChoiceOption } from './ui/AbilityChoiceModal';
 import { findPlayerAbility } from './domain/abilityLookup';
@@ -272,6 +272,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         selectedCharacters: G.selectedCharacters,
         abilityLevels: attackerAbilityLevels,
         pendingAttack: G.pendingAttack ?? null,
+        attackerAbilities: G.pendingAttack?.attackerId
+            ? G.players[G.pendingAttack.attackerId]?.abilities
+            : undefined,
     });
 
     // 使用 FX 引擎
@@ -371,6 +374,14 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     }, [G, pendingDamage]);
 
     const isActivePlayer = G.activePlayerId === rootPid;
+
+    // 响应窗口状态（提前声明，computeViewModeState 需要用到）
+    const responseWindow = access.responseWindow;
+    const isResponseWindowOpen = !!responseWindow;
+    // 当前响应者 ID（从队列中获取）
+    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
+    const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
+
     const { rollerId, shouldAutoObserve, isResponseAutoSwitch, viewMode, isSelfView } = computeViewModeState({
         currentPhase,
         pendingAttack: G.pendingAttack,
@@ -378,9 +389,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         rootPlayerId: rootPid,
         manualViewMode,
         responseWindow: access.responseWindow,
+        isLocalPlayerResponder: isResponder,
     });
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
+
+    // 构建 variantId → baseAbilityId 反向查找表（用于 getAbilitySlotId 精确匹配）
+    const variantToBaseMap = React.useMemo(
+        () => buildVariantToBaseIdMap(viewPlayer.abilities),
+        [viewPlayer.abilities]
+    );
+
     const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
     const isViewRolling = viewPid === rollerId;
     const rollConfirmed = G.rollConfirmed;
@@ -410,13 +429,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 同一 slot 多 variant 选择：玩家点击 slot 时，如果该 slot 有多个 variant 同时满足，弹窗让玩家选
     const [abilityChoiceOptions, setAbilityChoiceOptions] = React.useState<AbilityChoiceOption[]>([]);
-
-    // 响应窗口状态（必须在引用它的 effect 之前声明）
-    const responseWindow = access.responseWindow;
-    const isResponseWindowOpen = !!responseWindow;
-    // 当前响应者 ID（从队列中获取）
-    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
-    const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
 
     // （variant 选择弹窗由 onSelectAbility 回调触发，不需要自动弹出）
 
@@ -668,13 +680,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
         if (!abilityId) return getElementCenter(opponentHeaderRef.current);
-        const slotId = getAbilitySlotId(abilityId);
+        const slotId = getAbilitySlotId(abilityId, variantToBaseMap);
         if (!slotId) return getElementCenter(opponentHeaderRef.current);
         const element = document.querySelector(`[data-ability-slot="${slotId}"]`) as HTMLElement | null;
         // 技能槽在 DOM 中存在 → 从技能槽飞出（自己的技能）
         // 技能槽不存在 → 说明是对手的技能，从对手悬浮窗飞出
         return element ? getElementCenter(element) : getElementCenter(opponentHeaderRef.current);
-    }, [opponentHeaderRef]);
+    }, [opponentHeaderRef, variantToBaseMap]);
 
     // 获取效果动画的起点位置（优先从技能槽位置获取）
     const getEffectStartPos = React.useCallback(
@@ -989,7 +1001,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             if (shouldBlockTutorialAction('ability-slots')) return;
                             // 进攻阶段确认骰面后，检查该 slot 是否有多个 variant 同时满足
                             if (currentPhase === 'offensiveRoll' && G.rollConfirmed) {
-                                const slotId = getAbilitySlotId(abilityId);
+                                const slotId = getAbilitySlotId(abilityId, variantToBaseMap);
                                 if (slotId) {
                                     const mapping = ABILITY_SLOT_MAP[slotId];
                                     if (mapping) {
@@ -1055,6 +1067,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         onMagnifyImage={(image) => setMagnifiedImage(image)}
                         abilityOverlaysRef={abilityOverlaysRef}
                         playerTokens={viewPlayer.tokens}
+                        playerAbilities={viewPlayer.abilities}
                     />
 
                     <RightSidebar

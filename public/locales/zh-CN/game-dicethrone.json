@@ -1473,6 +1473,22 @@
         "roll3": "投掷3骰：剑+2伤害，盔+1伤害，心治疗2，祈祷+1CP"
       }
     },
+    "righteous-combat-2-tenacity": {
+      "name": "执着 II",
+      "description": "2剑+1盔触发：恢复2血，造成2不可防御伤害"
+    },
+    "righteous-combat-2-main": {
+      "name": "正义战法 II",
+      "description": "3剑+2盔触发：造成5伤害，投掷3骰获得额外效果"
+    },
+    "righteous-combat-3-tenacity": {
+      "name": "执着 III",
+      "description": "2剑+1盔触发：恢复2血，造成2不可防御伤害"
+    },
+    "righteous-combat-3-main": {
+      "name": "正义战法 III",
+      "description": "3剑+2盔触发：造成6伤害，投掷3骰获得额外效果"
+    },
     "blessing-of-might": {
       "name": "力量祝福",
       "description": "3剑+1祈祷触发：造成3不可防御伤害，获得暴击和精准各1",
@@ -1492,6 +1508,14 @@
         "gainCrit": "获得1个暴击标记",
         "gainAccuracy": "获得1个精准标记"
       }
+    },
+    "blessing-of-might-2-stance": {
+      "name": "进攻姿态",
+      "description": "2剑+1祈祷触发：造成2不可防御伤害，选择获得暴击或精准"
+    },
+    "blessing-of-might-2-main": {
+      "name": "神力信徒 II",
+      "description": "3剑+1祈祷触发：造成4不可防御伤害，获得暴击和精准各1"
     },
     "holy-strike": {
       "name": "神圣攻击",
@@ -1595,6 +1619,14 @@
         "gain2CP": "获得2CP"
       }
     },
+    "righteous-prayer-2-prosperity": {
+      "name": "繁盛",
+      "description": "3祈祷触发：获得4CP"
+    },
+    "righteous-prayer-2-main": {
+      "name": "正义祷告 II",
+      "description": "4祈祷触发：造成8不可防御伤害，获得暴击，获得2CP"
+    },
     "holy-defense": {
       "name": "神圣防御",
       "description": "防御阶段（3骰）：剑→反伤，盔→防1，心→防2，祈祷→1CP",
@@ -1677,6 +1709,10 @@
         "inflictTargeted": "施加1个锁定标记",
         "damage6": "造成6点伤害"
       }
+    },
+    "deadeye-shot-2": {
+      "name": "赐死射击 II",
+      "description": "3弓+2月触发：施加锁定，造成6伤害"
     },
     "focus": {
       "name": "专注",

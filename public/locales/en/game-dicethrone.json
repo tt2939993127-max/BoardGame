@@ -976,6 +976,22 @@
         "roll3": "Roll 3 dice: Sword +2 dmg, Helm +1 dmg, Heart heal 2, Pray +1 CP"
       }
     },
+    "righteous-combat-2-tenacity": {
+      "name": "Tenacity II",
+      "description": "2 Sword + 1 Helm: heal 2, deal 2 undefendable damage"
+    },
+    "righteous-combat-2-main": {
+      "name": "Righteous Combat II",
+      "description": "3 Sword + 2 Helm: deal 5 damage, roll 3 dice for bonus effects"
+    },
+    "righteous-combat-3-tenacity": {
+      "name": "Tenacity III",
+      "description": "2 Sword + 1 Helm: heal 2, deal 2 undefendable damage"
+    },
+    "righteous-combat-3-main": {
+      "name": "Righteous Combat III",
+      "description": "3 Sword + 2 Helm: deal 6 damage, roll 3 dice for bonus effects"
+    },
     "blessing-of-might": {
       "name": "Blessing of Might",
       "description": "3 Sword + 1 Pray: deal 3 undefendable damage, gain 1 Crit and 1 Accuracy",
@@ -995,6 +1011,14 @@
         "gainCrit": "Gain 1 Crit token",
         "gainAccuracy": "Gain 1 Accuracy token"
       }
+    },
+    "blessing-of-might-2-stance": {
+      "name": "Offensive Stance",
+      "description": "2 Sword + 1 Pray: deal 2 undefendable damage, choose Crit or Accuracy"
+    },
+    "blessing-of-might-2-main": {
+      "name": "Might Disciple II",
+      "description": "3 Sword + 1 Pray: deal 4 undefendable damage, gain 1 Crit and 1 Accuracy"
     },
     "holy-strike": {
       "name": "Holy Strike",
@@ -1098,6 +1122,14 @@
         "gain2CP": "Gain 2 CP"
       }
     },
+    "righteous-prayer-2-prosperity": {
+      "name": "Prosperity",
+      "description": "3 Pray: gain 4 CP"
+    },
+    "righteous-prayer-2-main": {
+      "name": "Righteous Prayer II",
+      "description": "4 Pray: deal 8 undefendable damage, gain Crit, gain 2 CP"
+    },
     "holy-defense": {
       "name": "Holy Defense",
       "description": "Defense (3 dice): Sword→1 dmg, Helm→prevent 1, Heart→prevent 2, Pray→1 CP",
@@ -1180,6 +1212,10 @@
         "inflictTargeted": "Inflict 1 Targeted token",
         "damage6": "Deal 6 damage"
       }
+    },
+    "deadeye-shot-2": {
+      "name": "Deadeye Shot II",
+      "description": "3 Bow + 2 Moon: inflict Targeted, deal 6 damage"
     },
     "focus": {
       "name": "Focus",

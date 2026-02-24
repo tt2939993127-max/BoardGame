@@ -16,6 +16,8 @@ export interface ViewModeParams {
     manualViewMode: ViewMode;
     /** 响应窗口状态（可选，用于自动切换视角） */
     responseWindow?: ResponseWindowState['current'];
+    /** 当前本地玩家是否是响应者（只有响应者才需要自动切到对手视角） */
+    isLocalPlayerResponder?: boolean;
 }
 
 export interface ViewModeResult {
@@ -29,7 +31,7 @@ export interface ViewModeResult {
 }
 
 export const computeViewModeState = (params: ViewModeParams): ViewModeResult => {
-    const { currentPhase, pendingAttack, activePlayerId, rootPlayerId, manualViewMode, responseWindow } = params;
+    const { currentPhase, pendingAttack, activePlayerId, rootPlayerId, manualViewMode, responseWindow, isLocalPlayerResponder } = params;
     const rollerId = currentPhase === 'defensiveRoll'
         ? (pendingAttack?.defenderId ?? activePlayerId)
         : activePlayerId;
@@ -37,10 +39,9 @@ export const computeViewModeState = (params: ViewModeParams): ViewModeResult => 
     // 防御阶段：强制切到防守方视角（不可手动切回）
     const shouldAutoObserve = currentPhase === 'defensiveRoll' && Boolean(pendingAttack) && rootPlayerId !== rollerId;
 
-    // 响应窗口：当前响应者是对手时，自动切到对手视角看对方技能
-    // 这是非强制的——通过 manualViewMode 已被 effect 设置为 'opponent'
-    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
-    const isResponseAutoSwitch = Boolean(responseWindow) && currentResponderId !== rootPlayerId;
+    // 响应窗口：只有当自己是响应者时，才自动切到对手视角看对方打出了什么技能
+    // 被响应者（攻击方）不需要切换，应保持自己视角操作骰子和技能
+    const isResponseAutoSwitch = Boolean(responseWindow) && Boolean(isLocalPlayerResponder);
 
     const viewMode = shouldAutoObserve ? 'opponent' : manualViewMode;
     const isSelfView = viewMode === 'self';

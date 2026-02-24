@@ -73,6 +73,8 @@ const UNDO_ALLOWLIST = [
     'SELL_CARD',
     'SELECT_ABILITY',
     'ADVANCE_PHASE',
+    // 确认骰面前创建快照，允许撤回到重新选择锁骰/重掷
+    'CONFIRM_ROLL',
 ] as const;
 
 const DT_NS = 'game-dicethrone';
@@ -736,7 +738,7 @@ const systems = [
         formatEntry: formatDiceThroneActionEntry,
     }),
     createUndoSystem({
-        maxSnapshots: 3,
+        maxSnapshots: 5,
         // 只对白名单命令做撤回快照，避免 UI/系统行为导致“一进局就可撤回”。
         snapshotCommandAllowlist: UNDO_ALLOWLIST,
     }),
