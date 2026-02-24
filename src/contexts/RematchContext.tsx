@@ -104,6 +104,7 @@ export function RematchProvider({
                             playerID: currentPlayerId,
                             credentials,
                             guestId,
+                            token: token || undefined,
                         });
                         const fallbackPlayerName = playerName || user?.username || `玩家${currentPlayerId}`;
                         const claimResult = user?.id && token

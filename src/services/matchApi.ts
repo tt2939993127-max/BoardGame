@@ -190,20 +190,22 @@ export async function claimSeat(
 export async function playAgain(
     gameName: string,
     matchID: string,
-    options: { playerID: string; credentials: string; guestId?: string },
+    options: { playerID: string; credentials: string; guestId?: string; token?: string },
 ): Promise<{ nextMatchID: string }> {
     // 先获取当前对局信息以复用 numPlayers 和 setupData
     const matchInfo = await getMatch(gameName, matchID);
     const numPlayers = matchInfo.players.length || 2;
 
-    // 提取 setupData 中需要保留的字段（ownerKey/ownerType）
-    const prevSetupData = (matchInfo.setupData ?? {}) as Record<string, unknown>;
+    // 服务端 /create 会从 token 或 guestId 重新生成 ownerKey/ownerType，无需从旧房间复制
     const setupData: Record<string, unknown> = {};
-    if (prevSetupData.ownerKey) setupData.ownerKey = prevSetupData.ownerKey;
-    if (prevSetupData.ownerType) setupData.ownerType = prevSetupData.ownerType;
     // 匿名用户需要传递 guestId 以通过服务端 owner 验证
     if (options.guestId) setupData.guestId = options.guestId;
 
-    const { matchID: nextMatchID } = await createMatch(gameName, { numPlayers, setupData });
+    // 已登录用户需要传递 JWT token 以通过服务端 owner 验证
+    const init = options.token
+        ? { headers: { Authorization: `Bearer ${options.token}` } }
+        : undefined;
+
+    const { matchID: nextMatchID } = await createMatch(gameName, { numPlayers, setupData }, init);
     return { nextMatchID };
 }
