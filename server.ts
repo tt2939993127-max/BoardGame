@@ -1564,8 +1564,13 @@ process.on('uncaughtException', (err) => {
         error: err.message,
         stack: err.stack,
     });
-    // 不退出进程，记录日志后继续运行
-    // 注意：如果是严重的系统级错误（如内存耗尽），仍可能需要重启
+    // 系统级致命错误（内存耗尽、文件描述符耗尽）无法恢复，必须退出让 Docker 重启
+    const fatalCodes = ['ENOMEM', 'EMFILE', 'ENFILE'];
+    if (fatalCodes.includes((err as NodeJS.ErrnoException).code ?? '')) {
+        logger.error('💥 [uncaughtException] 致命系统错误，强制退出:', (err as NodeJS.ErrnoException).code);
+        process.exit(1);
+    }
+    // 业务级错误（ReferenceError/TypeError 等）：记录日志后继续运行
 });
 
 process.on('unhandledRejection', (reason, promise) => {

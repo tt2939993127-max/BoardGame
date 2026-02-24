@@ -7,13 +7,13 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * 生成唯一 ID，兼容非 Secure Context（HTTP 环境）。
- * crypto.randomUUID() 仅在 HTTPS 或 localhost 下可用，HTTP 生产环境会抛错。
+ * crypto.randomUUID() 仅在 HTTPS/localhost 下可用，HTTP 下用 Math.random 降级。
  */
 export function generateId(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
     }
-    // 降级：RFC 4122 v4 UUID 格式
+    // 降级：Math.random UUID v4（HTTP 环境，用于 Toast/消息 ID，不需要密码学安全）
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = (Math.random() * 16) | 0;
         const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -40,9 +40,10 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     try {
         const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+        textarea.setAttribute('readonly', '');
+        textarea.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none';
         document.body.appendChild(textarea);
-        textarea.focus();
+        textarea.focus({ preventScroll: true });
         textarea.select();
         const ok = document.execCommand('copy');
         document.body.removeChild(textarea);
