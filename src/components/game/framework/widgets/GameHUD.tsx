@@ -34,6 +34,7 @@ import { useSocial } from '../../../../contexts/SocialContext';
 import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
 import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
+import { generateId } from '../../../../lib/utils';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -261,7 +262,7 @@ export const GameHUD = ({
             }
         } else {
             const localMessage: MatchChatMessage = {
-                id: crypto.randomUUID(),
+                id: generateId(),
                 matchId: matchId ?? 'local',
                 senderId: myPlayerId ?? undefined,
                 senderName: myDisplayName,

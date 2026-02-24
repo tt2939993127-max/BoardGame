@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { generateId } from '@/lib/utils';
 
 export type ToastTone = 'success' | 'info' | 'warning' | 'error';
 
@@ -62,7 +63,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
         }
 
-        const id = crypto.randomUUID();
+        const id = generateId();
         const createdAt = Date.now();
         const ttlMs = toastInput.ttlMs ?? DEFAULT_TTL[tone];
 

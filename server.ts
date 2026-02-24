@@ -1555,6 +1555,29 @@ startServer().catch((err) => {
     process.exit(1);
 });
 
+// ============================================================================
+// 全局未捕获异常保护（防止单个请求/事件的 bug 导致整个进程崩溃）
+// ============================================================================
+
+process.on('uncaughtException', (err) => {
+    logger.error('💥 [uncaughtException] 未捕获异常，进程继续运行:', {
+        error: err.message,
+        stack: err.stack,
+    });
+    // 不退出进程，记录日志后继续运行
+    // 注意：如果是严重的系统级错误（如内存耗尽），仍可能需要重启
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error('💥 [unhandledRejection] 未处理的 Promise 拒绝，进程继续运行:', {
+        error: err.message,
+        stack: err.stack,
+        promise: String(promise),
+    });
+    // 不退出进程
+});
+
 // Graceful shutdown — nodemon 重启时先关闭 socket 连接，避免 Vite WS proxy ECONNABORTED
 function gracefulShutdown(signal: string) {
     logger.info(`\n🛑 收到 ${signal}，正在关闭服务器...`);
