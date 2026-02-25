@@ -195,6 +195,11 @@ bash deploy.sh
 
 # 后续更新
 bash deploy.sh update
+
+# 拉取慢时，先单独拉镜像再 update（避免 compose pull 并发抢带宽）
+docker pull ghcr.io/zhuanggenhua/boardgame-game:latest
+docker pull ghcr.io/zhuanggenhua/boardgame-web:latest
+bash deploy.sh update
 ```
 
 > 前置要求：服务器已安装 Docker 和 Docker Compose（`docker compose` 命令可用）。

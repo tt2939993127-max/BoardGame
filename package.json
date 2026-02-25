@@ -115,6 +115,7 @@
     "lucide-react": "^0.562.0",
     "mime-types": "^2.1.35",
     "mongoose": "^8.21.1",
+    "nanoid": "^3.3.11",
     "nodemailer": "^7.0.12",
     "oh-my-live2d": "^0.19.3",
     "pdf-parse": "^1.1.1",
