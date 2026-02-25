@@ -55,6 +55,7 @@ export const COMMAND_CATEGORIES: Record<string, CommandCategory> = {
     'SELECT_CHARACTER': CommandCategory.STRATEGIC,
     'HOST_START_GAME': CommandCategory.STRATEGIC,
     'PLAYER_READY': CommandCategory.STRATEGIC,
+    'PLAYER_UNREADY': CommandCategory.STRATEGIC,
     
     // ============================================================================
     // 战术响应（TACTICAL）

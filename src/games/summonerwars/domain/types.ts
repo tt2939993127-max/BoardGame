@@ -229,6 +229,7 @@ export const SW_COMMANDS = {
   SELECT_FACTION: 'sw:select_faction',
   SELECT_CUSTOM_DECK: 'sw:select_custom_deck',
   PLAYER_READY: 'sw:player_ready',
+  PLAYER_UNREADY: 'sw:player_unready',
   HOST_START_GAME: 'sw:host_start_game',
   // 召唤阶段
   SUMMON_UNIT: 'sw:summon_unit',
@@ -369,6 +370,7 @@ export const SW_EVENTS = {
   // 阵营选择事件
   FACTION_SELECTED: 'sw:faction_selected',
   PLAYER_READY: 'sw:player_ready',
+  PLAYER_UNREADY: 'sw:player_unready',
   HOST_STARTED: 'sw:host_started',
   GAME_INITIALIZED: 'sw:game_initialized',
   // 单位事件
@@ -501,6 +503,7 @@ export interface SerializedCustomDeck {
 export const SW_SELECTION_EVENTS = {
   FACTION_SELECTED: 'sw:faction_selected',
   PLAYER_READY: 'sw:player_ready',
+  PLAYER_UNREADY: 'sw:player_unready',
   HOST_STARTED: 'sw:host_started',
   SELECTION_COMPLETE: 'sw:selection_complete',
 } as const;

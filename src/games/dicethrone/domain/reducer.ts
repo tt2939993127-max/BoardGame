@@ -143,6 +143,17 @@ const handlePlayerReady: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_R
 });
 
 /**
+ * 处理取消准备事件
+ */
+const handlePlayerUnready: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_UNREADY' }>> = (
+    state,
+    event
+) => ({
+    ...state,
+    readyPlayers: { ...state.readyPlayers, [event.payload.playerId]: false },
+});
+
+/**
  * 处理奖励骰结算事件
  * 清除 pendingBonusDiceSettlement。
  * 非 displayOnly 时标记 pendingAttack.bonusDiceResolved，
@@ -325,6 +336,17 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
         sneakGainedTurn = { ...(sneakGainedTurn || {}), [targetId]: state.turnNumber };
     }
 
+    // 太极获得时累加本回合获得数量（用于"本回合获得的太极不可用于本回合增强伤害"规则）
+    let taijiGainedThisTurn = state.taijiGainedThisTurn;
+    if (tokenId === TOKEN_IDS.TAIJI) {
+        const oldAmount = target.tokens[TOKEN_IDS.TAIJI] ?? 0;
+        const actualGained = newTotal - oldAmount;
+        if (actualGained > 0) {
+            const prev = taijiGainedThisTurn?.[targetId] ?? 0;
+            taijiGainedThisTurn = { ...(taijiGainedThisTurn || {}), [targetId]: prev + actualGained };
+        }
+    }
+
     return {
         ...state,
         players: {
@@ -335,6 +357,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
             : state.lastEffectSourceByPlayerId,
         sneakGainedTurn,
+        taijiGainedThisTurn,
     };
 };
 
@@ -466,7 +489,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
     event
 ) => {
     const { nextPlayerId, turnNumber } = event.payload;
-    return { ...state, activePlayerId: nextPlayerId, turnNumber, lastResolvedAttackDamage: undefined };
+    return { ...state, activePlayerId: nextPlayerId, turnNumber, lastResolvedAttackDamage: undefined, taijiGainedThisTurn: undefined };
 };
 
 /**
@@ -827,6 +850,8 @@ export const reduce = (
             return handleHostStarted(state, event);
         case 'PLAYER_READY':
             return handlePlayerReady(state, event);
+        case 'PLAYER_UNREADY':
+            return handlePlayerUnready(state, event);
         default: {
             // 处理系统层事件：SYS_PHASE_CHANGED 同步副作用到 core（阶段本身由 sys.phase 管理）
             if ((event as { type: string }).type === FLOW_EVENTS.PHASE_CHANGED) {

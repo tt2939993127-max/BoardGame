@@ -84,6 +84,8 @@ export interface DamageModifier {
  */
 export interface AbilityVariantDef {
     id: string;
+    /** 变体独立显示名称（分歧型变体使用，i18n key） */
+    name?: string;
     /** 触发条件 */
     trigger: TriggerCondition;
     /** 效果列表 */

@@ -373,6 +373,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return getUsableTokensForTiming(G, pendingDamage.responderId, pendingDamage.responseType);
     }, [G, pendingDamage]);
 
+    // 太极本回合限制：攻击方加伤时，可用数量 = 持有量 - 本回合获得量
+    const tokenUsableOverrides = React.useMemo(() => {
+        if (!pendingDamage || pendingDamage.responseType !== 'beforeDamageDealt') return undefined;
+        const pid = pendingDamage.responderId;
+        const gainedThisTurn = G.taijiGainedThisTurn?.[pid] ?? 0;
+        if (gainedThisTurn <= 0) return undefined;
+        const total = G.players[pid]?.tokens[TOKEN_IDS.TAIJI] ?? 0;
+        const usable = Math.max(0, total - gainedThisTurn);
+        return usable < total ? { [TOKEN_IDS.TAIJI]: usable } : undefined;
+    }, [G, pendingDamage]);
+
     const isActivePlayer = G.activePlayerId === rootPid;
 
     // 响应窗口状态（提前声明，computeViewModeState 需要用到）
@@ -479,7 +490,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }, 100);
         return () => clearTimeout(timer);
     }, [gameMode?.mode, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
-    const showAdvancePhaseButton = isSelfView && !isSpectator;
+    // 切换到对方视角时也显示下一阶段按钮（禁用状态），保持 UI 一致性
+    const showAdvancePhaseButton = !isSpectator;
     const handleCancelInteraction = React.useCallback(() => {
         if (pendingInteraction?.sourceCardId) {
             setLastUndoCardId(pendingInteraction.sourceCardId);
@@ -499,7 +511,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 等待对方思考（isFocusPlayer 已在上方定义）
     const isWaitingOpponent = !isFocusPlayer;
-    const thinkingOffsetClass = 'bottom-[12vw]';
+    const thinkingOffsetClass = 'bottom-[16vw]';
 
     // 可被净化移除的负面状态：由定义驱动（支持扩展）
     const purifiableStatusIds = (G.tokenDefinitions ?? [])
@@ -553,9 +565,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 被动重掷：骰子选择回调
     const handlePassiveRerollDieSelect = React.useCallback((dieId: number) => {
         if (!rerollSelectingAction) return;
-        // 不能重掷被锁定的骰子
+        // 锁定不影响被动技能重掷
         const die = G.dice.find(d => d.id === dieId);
-        if (!die || die.isKept) return;
+        if (!die) return;
         engineMoves.usePassiveAbility(
             rerollSelectingAction.passiveId,
             rerollSelectingAction.actionIndex,
@@ -867,6 +879,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             playerNames={playerNames}
                             onSelect={engineMoves.selectCharacter}
                             onReady={engineMoves.playerReady}
+                            onUnready={engineMoves.playerUnready}
                             onStart={engineMoves.hostStartGame}
                             locale={locale}
                         />
@@ -1136,7 +1149,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 mustDiscardCount={mustDiscardCount}
                                 isDiceInteraction={!!isDiceInteraction}
                                 isInteractionOwner={isInteractionOwner}
-                                pendingInteraction={pendingInteraction}
+                                pendingInteraction={pendingInteraction ?? (isDiceInteraction && diceMultistepInteraction
+                                    ? { titleKey: (diceMultistepInteraction.data as any)?.title ?? 'modifyDie', selectCount: (diceMultistepInteraction.data as any)?.meta?.selectCount ?? 1 } as any
+                                    : undefined)}
                                 isWaitingOpponent={isWaitingOpponent}
                                 opponentName={opponentName}
                                 isResponder={isResponder}
@@ -1271,6 +1286,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     tokenResponsePhase={tokenResponsePhase}
                     isTokenResponder={!!isTokenResponder}
                     usableTokens={usableTokens}
+                    tokenUsableOverrides={tokenUsableOverrides}
                     onUseToken={(tokenId, amount) => engineMoves.useToken(tokenId, amount)}
                     onSkipTokenResponse={() => engineMoves.skipTokenResponse()}
 

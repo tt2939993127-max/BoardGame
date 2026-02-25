@@ -239,6 +239,7 @@ export const BURNING_SOUL_2: AbilityDef = {
         {
             // 2火魂：基本效果（2×火魂数FM + 1×火魂数伤害）
             id: 'soul-burn-2',
+            name: abilityText('soul-burn-2', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
             effects: [
                 {
@@ -255,6 +256,7 @@ export const BURNING_SOUL_2: AbilityDef = {
         {
             // 3火魂：基本效果 + 施加灼烧
             id: 'soul-burn-3',
+            name: abilityText('soul-burn-3', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 3 } },
             effects: [
                 {
@@ -272,6 +274,7 @@ export const BURNING_SOUL_2: AbilityDef = {
         {
             // 炙热之魂：2岩浆+2火魂，FM上限+1，获得5FM，施加倒地
             id: 'blazing-soul',
+            name: abilityText('blazing-soul', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.MAGMA]: 2, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
             effects: [
                 {
@@ -295,6 +298,7 @@ export const HOT_STREAK_2: AbilityDef = {
     variants: [
         {
             id: 'fiery-combo-2',
+            name: abilityText('fiery-combo-2', 'name'),
             trigger: { type: 'smallStraight' },
             effects: [
                 grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('fiery-combo-2', 'gainFM2')),
@@ -308,6 +312,7 @@ export const HOT_STREAK_2: AbilityDef = {
         },
         {
             id: 'incinerate',
+            name: abilityText('incinerate', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 2, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
             effects: [
                 grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('incinerate', 'gainFM2')),
@@ -328,6 +333,7 @@ export const METEOR_2: AbilityDef = {
     variants: [
         {
             id: 'meteor-shower',
+            name: abilityText('meteor-shower', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.METEOR]: 3 } },
             effects: [
                 inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('meteor-shower', 'inflictKnockdown')),
@@ -338,6 +344,7 @@ export const METEOR_2: AbilityDef = {
         },
         {
             id: 'meteor-2',
+            name: abilityText('meteor-2', 'name'),
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.METEOR]: 4 } },
             effects: [
                 // FM 获得由 meteor-resolve 内部处理（先获得FM再基于FM算伤害）

@@ -439,6 +439,13 @@ export interface DiceThroneCore {
      * TOKEN_GRANTED 时写入，TOKEN_CONSUMED/潜行自动弃除时清除
      */
     sneakGainedTurn?: Record<PlayerId, number>;
+    /**
+     * 本回合获得的太极数量追踪
+     * key: playerId, value: 本回合累计获得的太极数量
+     * 规则：本回合获得的太极不可用于本回合增强伤害（beforeDamageDealt）
+     * TOKEN_GRANTED(taiji) 时累加，TURN_CHANGED 时清零
+     */
+    taijiGainedThisTurn?: Record<PlayerId, number>;
 }
 
 // ============================================================================

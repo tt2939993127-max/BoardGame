@@ -8,7 +8,7 @@
  */
 
 import type { Server as IOServer, Socket as IOSocket } from 'socket.io';
-import type { Command, DomainCore, GameEvent, MatchState, PlayerId, RandomFn } from '../types';
+import type { Command, DomainCore, GameEvent, MatchState, PlayerId, RandomFn, UndoState } from '../types';
 import type { EngineSystem, GameSystemsConfig } from '../systems/types';
 import type {
     MatchStorage,
@@ -873,28 +873,30 @@ export class GameTransportServer {
         // 记录最后执行命令的玩家，供 broadcastState 携带到 meta
         match.lastCommandPlayerId = playerID;
 
-        // 撤回恢复：检测 UndoSystem 是否请求重置随机数游标
-        const restoredCursor = (result.state.sys?.undo as { restoredRandomCursor?: number } | undefined)?.restoredRandomCursor;
+        // ====================================================================
+        // 撤回后处理：恢复随机数游标 + 强制全量同步
+        // ====================================================================
+        const undoState = result.state.sys.undo as UndoState & { restoredRandomCursor?: number };
+        const restoredCursor = undoState.restoredRandomCursor;
         if (typeof restoredCursor === 'number' && restoredCursor >= 0) {
-            // 重建 trackedRandom，从快照记录的游标位置恢复随机序列
-            const rebuilt = createTrackedRandom(match.randomSeed, restoredCursor);
-            match.random = rebuilt.random;
-            match.getRandomCursor = rebuilt.getCursor;
-            logger.info('[UndoServer] random-cursor-restored', {
+            // 重建随机数生成器，使游标回到快照创建时的位置
+            const trackedRandom = createTrackedRandom(match.randomSeed, restoredCursor);
+            match.random = trackedRandom.random;
+            match.getRandomCursor = trackedRandom.getCursor;
+
+            // 清除 restoredRandomCursor 标记（已消费）
+            delete undoState.restoredRandomCursor;
+
+            // 撤回导致大规模状态变更，增量 patch 极易产生无效路径。
+            // 清空广播缓存，强制下次 broadcastState 对所有客户端发送全量状态，
+            // 避免客户端 patch 应用失败后触发 resync 的额外延迟。
+            match.lastBroadcastedViews.clear();
+
+            logger.info('[UndoRestore] random cursor restored, forcing full sync', {
                 matchID: match.matchID,
                 restoredCursor,
+                commandType,
             });
-            // 清除信号，避免持久化到存储层
-            match.state = {
-                ...match.state,
-                sys: {
-                    ...match.state.sys,
-                    undo: {
-                        ...match.state.sys.undo,
-                        restoredRandomCursor: undefined,
-                    },
-                },
-            };
         }
 
         // 持久化

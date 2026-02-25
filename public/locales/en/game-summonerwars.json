@@ -12,6 +12,7 @@
     "notSelected": "Not Selected",
     "ready": "Ready",
     "waiting": "Waiting for others...",
+    "cancelReady": "Cancel Ready",
     "start": "Start Game",
     "waitAll": "Waiting for all players",
     "customDeck": "Custom Deck",

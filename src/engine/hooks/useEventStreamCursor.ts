@@ -19,10 +19,17 @@
  *   （如 wait-confirm 模式剥离 EventStream），这不是 Undo 回退。
  * - 只有当 entries 的最大 ID 真正回退（小于游标值）时才判定为 Undo 回退。
  * - entries 暂时为空时保持游标不变，等待下次有内容时正常消费。
+ * 
+ * 乐观回滚兼容：
+ * - 乐观引擎回滚时，EventStream 事件 ID 空间可能与乐观预测重叠。
+ * - 通过 EventStreamRollbackContext 自动接收回滚水位线信号，
+ *   重置游标到基线位置，确保对手的新事件能被正常消费。
+ * - 消费者无需任何修改，回滚信号由 GameProvider 自动注入。
  */
 
 import { useCallback, useRef } from 'react';
 import type { EventStreamEntry } from '../types';
+import { useEventStreamRollback } from './EventStreamRollbackContext';
 
 export interface UseEventStreamCursorConfig {
     /** eventStream 的 entries 数组 */
@@ -66,6 +73,9 @@ export interface UseEventStreamCursorReturn {
 /**
  * 管理 EventStream 消费游标。
  * 
+ * 自动从 EventStreamRollbackContext 读取乐观回滚信号，
+ * 消费者无需手动传递回滚水位线。
+ * 
  * 使用方式（简单场景）：
  * ```ts
  * const { consumeNew } = useEventStreamCursor({ entries });
@@ -90,9 +100,13 @@ export interface UseEventStreamCursorReturn {
 export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEventStreamCursorReturn {
     const { entries, reconnectToken } = config;
 
+    // 从 Context 自动读取乐观回滚信号（GameProvider 注入）
+    const rollback = useEventStreamRollback();
+
     const lastSeenIdRef = useRef<number>(-1);
     const isFirstCallRef = useRef(true);
     const lastReconnectTokenRef = useRef(reconnectToken ?? 0);
+    const lastRollbackSeqRef = useRef(rollback.seq);
 
     const consumeNew = useCallback((): ConsumeResult => {
         const curLen = entries.length;
@@ -101,11 +115,27 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
         const currentToken = reconnectToken ?? 0;
         if (currentToken !== lastReconnectTokenRef.current) {
             lastReconnectTokenRef.current = currentToken;
-            // 重置游标到当前 entries 最新位置，跳过所有已有事件
             if (curLen > 0) {
                 lastSeenIdRef.current = entries[curLen - 1].id;
             }
             return { entries: [], didReset: false };
+        }
+
+        // ── 乐观回滚检测：seq 变化时重置游标到水位线 ──
+        // 乐观引擎回滚后，entries 已被 filterPlayedEvents 过滤到 id > watermark。
+        // 游标可能停留在乐观事件的高 ID 位置，需要回退到水位线，
+        // 使得对手命令产生的新事件（id > watermark）能被正常消费。
+        if (rollback.seq !== lastRollbackSeqRef.current) {
+            lastRollbackSeqRef.current = rollback.seq;
+            if (rollback.watermark !== null) {
+                lastSeenIdRef.current = rollback.watermark;
+                // 立即消费 watermark 之后的新事件
+                const newEntries = entries.filter(e => e.id > rollback.watermark!);
+                if (newEntries.length > 0) {
+                    lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
+                }
+                return { entries: newEntries, didReset: false };
+            }
         }
 
         // ── 首次调用：跳过历史事件 ──
@@ -137,7 +167,7 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
             lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
         }
         return { entries: newEntries, didReset: false };
-    }, [entries, reconnectToken]);
+    }, [entries, reconnectToken, rollback.seq, rollback.watermark]);
 
     const getCursor = useCallback(() => lastSeenIdRef.current, []);
 
@@ -146,7 +176,6 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
         if (curLen > 0) {
             lastSeenIdRef.current = entries[curLen - 1].id;
         }
-        // entries 为空时保持游标不变（重连后 state:sync 的 entries 被 strip 了）
     }, [entries]);
 
     return { consumeNew, getCursor, resetToLatest };

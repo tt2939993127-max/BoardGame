@@ -177,6 +177,18 @@ export function execute(
             break;
         }
 
+        case 'PLAYER_UNREADY': {
+            events.push({
+                type: 'PLAYER_UNREADY',
+                payload: {
+                    playerId: command.playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            } as DiceThroneEvent);
+            break;
+        }
+
         case 'TOGGLE_DIE_LOCK': {
             const payload = command.payload as { dieId: number };
             const die = state.dice.find(d => d.id === payload.dieId);

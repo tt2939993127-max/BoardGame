@@ -445,6 +445,8 @@ function resolveEffectAction(
                 if (baseDamage <= 0) continue;
 
                 // 统一使用 createDamageCalculation 引擎原语计算伤害
+                // 终极技能（Ultimate）伤害不可被护盾抵消（规则 FAQ）
+                const isUltimate = state.pendingAttack?.isUltimate ?? false;
                 const calc = createDamageCalculation({
                     baseDamage,
                     source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -452,7 +454,7 @@ function resolveEffectAction(
                     state,
                     autoCollectTokens: true,
                     autoCollectStatus: true,
-                    autoCollectShields: true,
+                    autoCollectShields: !isUltimate,
                     passiveTriggerHandler: createDTPassiveTriggerHandler(ctx, random),
                     timestamp,
                 });

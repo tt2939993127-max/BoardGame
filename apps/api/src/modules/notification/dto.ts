@@ -14,6 +14,10 @@ export class CreateNotificationDto {
     @IsOptional()
     @IsBoolean()
     published?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    pinned?: boolean;
 }
 
 export class UpdateNotificationDto {
@@ -32,4 +36,8 @@ export class UpdateNotificationDto {
     @IsOptional()
     @IsBoolean()
     published?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    pinned?: boolean;
 }

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NOTIFICATION_API_URL } from '../../config/server';
 import { useTranslation } from 'react-i18next';
-import { Bell } from 'lucide-react';
+import { Bell, Pin } from 'lucide-react';
 
 interface SystemNotification {
     _id: string;
     title: string;
     content: string;
+    pinned?: boolean;
     createdAt: string;
 }
 
@@ -44,8 +45,11 @@ export const SystemNotificationView = () => {
                 ) : (
                     <div className="p-3 space-y-3">
                         {notifications.map(n => (
-                            <div key={n._id} className="bg-white border border-parchment-card-border/20 rounded-lg p-4 shadow-sm">
-                                <h4 className="font-bold text-sm text-parchment-base-text">{n.title}</h4>
+                            <div key={n._id} className={`bg-white border rounded-lg p-4 shadow-sm ${n.pinned ? 'border-amber-300/50 ring-1 ring-amber-200/30' : 'border-parchment-card-border/20'}`}>
+                                <div className="flex items-center gap-1.5">
+                                    {n.pinned && <Pin size={12} className="text-amber-500 flex-shrink-0" />}
+                                    <h4 className="font-bold text-sm text-parchment-base-text">{n.title}</h4>
+                                </div>
                                 <p className="text-xs text-parchment-light-text mt-1.5 whitespace-pre-wrap">{n.content}</p>
                                 <p className="text-[10px] text-parchment-light-text/50 mt-2">
                                     {new Date(n.createdAt).toLocaleString('zh-CN')}

@@ -52,6 +52,7 @@ const BARBARIAN_DATA: CharacterData = {
         'steadfast': 1,
         'suppress': 1,
         'reckless-strike': 1,
+        'rage': 1,
         'thick-skin': 1,
     },
     statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,

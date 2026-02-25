@@ -61,6 +61,7 @@ export const SW_EVENTS = defineEvents({
   // ========== UI 交互（本地播放）==========
   FACTION_SELECTED: { audio: 'ui', sound: FACTION_SELECT_KEY },
   PLAYER_READY: { audio: 'ui', sound: PLAYER_READY_KEY },
+  PLAYER_UNREADY: { audio: 'ui', sound: PLAYER_READY_KEY },
   HOST_STARTED: { audio: 'ui', sound: HOST_START_KEY },
 
   // ========== 即时反馈（EventStream）==========

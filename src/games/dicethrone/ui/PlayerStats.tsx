@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import type { HeroState } from '../types';
+import { MAX_HEALTH } from '../domain/core-types';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 import { RESOURCE_IDS } from '../domain/resources';
@@ -77,7 +78,7 @@ export const PlayerStats = ({
     // 使用预设创建资源条渲染函数
     const renderResource = useMemo(() => createResourceBarRender({
         resources: {
-            health: { max: 50, gradient: 'from-red-900 to-red-600', labelColor: 'text-red-200/80', label: t('hud.health') },
+            health: { max: MAX_HEALTH, gradient: 'from-red-900 to-red-600', labelColor: 'text-red-200/80', label: t('hud.health') },
             cp: { max: 15, gradient: 'from-amber-800 to-amber-500', labelColor: 'text-amber-200/80', label: 'CP' },
         },
     }), [t]);

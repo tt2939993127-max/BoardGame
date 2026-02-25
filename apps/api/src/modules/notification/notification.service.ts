@@ -26,12 +26,12 @@ export class NotificationService {
         return !!result;
     }
 
-    /** 管理端：获取所有通知（含草稿），按创建时间倒序 */
+    /** 管理端：获取所有通知（含草稿），置顶优先，再按创建时间倒序 */
     async findAll(): Promise<SystemNotificationDocument[]> {
-        return this.notificationModel.find().sort({ createdAt: -1 }).lean();
+        return this.notificationModel.find().sort({ pinned: -1, createdAt: -1 }).lean();
     }
 
-    /** 用户端：获取当前有效的已发布通知 */
+    /** 用户端：获取当前有效的已发布通知，置顶优先 */
     async findActive(): Promise<SystemNotificationDocument[]> {
         const now = new Date();
         return this.notificationModel.find({
@@ -41,6 +41,6 @@ export class NotificationService {
                 { expiresAt: null },
                 { expiresAt: { $gt: now } },
             ],
-        }).sort({ createdAt: -1 }).lean();
+        }).sort({ pinned: -1, createdAt: -1 }).lean();
     }
 }

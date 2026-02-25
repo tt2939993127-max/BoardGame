@@ -824,13 +824,38 @@ export const GameHUD = ({
                         const logLines = actionLogRows.length > 0
                             ? actionLogRows.map(r => `[${r.timeLabel}] ${r.playerLabel}: ${r.text}`).join('\n')
                             : '';
-                        // 撤回栈快照（可注入调试面板逐步复现）
+                        // 精简 core 状态：去掉静态定义，只保留动态数据
+                        const summarizeCore = (core: unknown): unknown => {
+                            if (!core || typeof core !== 'object') return core;
+                            const obj = core as Record<string, unknown>;
+                            const result: Record<string, unknown> = {};
+                            for (const [key, val] of Object.entries(obj)) {
+                                // 跳过大型静态定义数组（token 定义、技能定义、被动定义）
+                                // 只保留 id 列表作为摘要
+                                if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+                                    const first = val[0] as Record<string, unknown>;
+                                    const isStaticDef = 'description' in first || 'effects' in first || 'i18n' in first || 'colorTheme' in first;
+                                    if (isStaticDef) {
+                                        result[key] = val.map((item: Record<string, unknown>) => item.id ?? item.name ?? '?');
+                                        continue;
+                                    }
+                                }
+                                // 递归处理 players 等嵌套对象
+                                if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                    result[key] = summarizeCore(val);
+                                } else {
+                                    result[key] = val;
+                                }
+                            }
+                            return result;
+                        };
+                        // 撤回栈快照（精简版）
                         const snapshots = (G.sys.undo.snapshots ?? []) as Array<{ sys: { turnNumber: number; phase: string }; core: unknown }>;
                         const snapshotEntries = snapshots.map((snap, i) => {
-                            return `[${i}] turn=${snap.sys.turnNumber} phase=${snap.sys.phase}\n${JSON.stringify(snap.core)}`;
+                            return `[${i}] turn=${snap.sys.turnNumber} phase=${snap.sys.phase}\n${JSON.stringify(summarizeCore(snap.core))}`;
                         });
-                        // 当前状态
-                        const current = `[current] turn=${G.sys.turnNumber} phase=${G.sys.phase}\n${JSON.stringify(G.core)}`;
+                        // 当前状态（精简版）
+                        const current = `[current] turn=${G.sys.turnNumber} phase=${G.sys.phase}\n${JSON.stringify(summarizeCore(G.core))}`;
                         return [
                             `--- Action Log ---`,
                             logLines,

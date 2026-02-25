@@ -177,6 +177,7 @@ export const PICKPOCKET_2: AbilityDef = {
         {
             // 迅捷突袭 II：小顺子触发
             id: 'pickpocket-2',
+            name: abilityText('pickpocket-2', 'name'),
             trigger: { type: 'smallStraight' },
             effects: [
                 gainCp(4, abilityEffectText('pickpocket-2', 'gainCp4')),
@@ -187,6 +188,7 @@ export const PICKPOCKET_2: AbilityDef = {
         {
             // 暗影突袭：2匕首+2暗影触发
             id: 'shadow-assault',
+            name: abilityText('shadow-assault', 'name'),
             trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 2, [FACE.SHADOW]: 2 } },
             effects: [
                 { description: '造成1/2 CP伤害 (向上取整)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-half-cp' } },
@@ -207,6 +209,7 @@ export const KIDNEY_SHOT_2: AbilityDef = {
         {
             // 破隐一击 II：大顺子触发
             id: 'kidney-shot-2',
+            name: abilityText('kidney-shot-2', 'name'),
             trigger: { type: 'largeStraight' },
             effects: [
                 gainCp(4, abilityEffectText('kidney-shot-2', 'gainCp4')),
@@ -217,6 +220,7 @@ export const KIDNEY_SHOT_2: AbilityDef = {
         {
             // 穿刺攻击：匕首+钱袋+卡牌+暗影各1个触发
             id: 'piercing-attack',
+            name: abilityText('piercing-attack', 'name'),
             trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 1, [FACE.BAG]: 1, [FACE.CARD]: 1, [FACE.SHADOW]: 1 } },
             effects: [
                 gainCp(1, 'Gain 1 CP'),

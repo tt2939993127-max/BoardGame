@@ -54,12 +54,13 @@
     "steps": {
       "setup": "正在准备教程...",
       "intro": "欢迎来到《王权骰铸》双人教程。你的目标是把对手体力降到 0，同时保证自己不先归零。",
-      "stats": "左侧是你的资源面板：体力(起始50)、CP(起始2，上限15)。多数治疗最高不超过起始体力+10。",
+      "stats": "左侧是你的资源面板：体力(起始50，上限60)、CP(起始2，上限15)。",
       "phases": "回合顺序在这里：维持→收入→主要1→进攻掷骰→防御掷骰→主要2→弃牌。先手首回合跳过收入。",
       "playerBoard": "这是你的玩家面板：技能槽与技能等级都在这里，满足骰面条件后可选择发动技能。",
       "tipBoard": "右侧是提示板，展示本英雄的技能说明与骰面需求，可展开/收起查看。",
       "dice": "右侧是骰子托盘：每回合最多掷 3 次，想保留的骰子可以锁定。",
       "rollButton": "点击“投掷”开始掷骰；当没有掷骰次数或你想停下时进入确认。",
+      "diceLock": "掷骰后，**点击骰子**可以锁定它。锁定的骰子在下次掷骰时不会被重掷，方便你保留想要的点数。试试点击一颗骰子锁定它吧！",
       "confirmButton": "确认骰面后才能选择技能。若想再改骰面，就不要点确认。",
       "abilities": "技能区会高亮你当前可发动的技能。选择一个进攻技能即可进入伤害与防御结算。",
       "hand": "下方是手牌：主要阶段可打出行动卡或升级卡，也能出售换 CP。",
@@ -303,7 +304,9 @@
     "confirmRollWithAbility": "确认投掷（{{abilityName}}）：",
     "confirmRollDefense": "确认防御投掷：",
     "confirmRollDefenseWithAbility": "确认防御投掷（{{abilityName}}）：",
-    "cardRollResult": "投掷结果："
+    "cardRollResult": "投掷结果：",
+    "damagePrevented": "以【{{source}}】抵挡了 {{amount}} 点伤害",
+    "damagePreventedPlain": "抵挡了 {{amount}} 点伤害"
   },
   "purify": {
     "title": "使用净化",
@@ -353,6 +356,7 @@
     "pressStart": "开始游戏",
     "ready": "准备",
     "readyWaiting": "等待其他玩家...",
+    "cancelReady": "取消准备",
     "readyProgress": "准备进度",
     "you": "你"
   },
@@ -1101,6 +1105,14 @@
         "selfDamage4": "对自己造成4点伤害（仅在成功造成伤害时生效）"
       }
     },
+    "rage": {
+      "name": "狂怒！",
+      "description": "终极招式！5个力量面触发：造成眩晕并造成15点终极伤害",
+      "effects": {
+        "inflictDaze": "对对手施加眩晕",
+        "damage15": "造成15点终极伤害"
+      }
+    },
     "thick-skin": {
       "name": "厚皮",
       "description": "防御阶段触发：恢复 2 × 心面数量 的生命值",
@@ -1247,7 +1259,7 @@
     },
     "soul-burn-2": {
       "name": "燃烧之灵 II",
-      "description": "2火魂: 获得2×[火魂数]FM，造成[火魂数]伤害。3火魂额外施加灼烧。炙热之魂(2岩浆+2火魂): FM上限+1，获得5FM，施加倒地。",
+      "description": "2火魂触发：获得2×[火魂数]FM，造成[火魂数]伤害",
       "effects": {
         "fm": "获得2×火魂骰面数量的火焰精通",
         "damage": "对所有对手造成等同于火魂骰面数量的伤害"
@@ -1272,7 +1284,7 @@
     },
     "fiery-combo-2": {
       "name": "炽热波纹 II",
-      "description": "小顺子: 获得2精通，造成6+X伤害。2火+2火魂: 获得2精通，施加燃烧，造成6伤害。",
+      "description": "小顺子触发：获得2精通，造成6+X伤害",
       "effects": {
         "gainFM2": "获得2层火焰精通",
         "main": "造成6点基础伤害。若拥有火焰精通，每层火焰精通额外造成1点伤害。"
@@ -1289,7 +1301,7 @@
     },
     "meteor-2": {
       "name": "流星火雨 II",
-      "description": "3x[陨石]: 击倒，燃烧，眩晕。4x[陨石]: 获得2精通，眩晕，X不可防御伤害，3附带伤害。",
+      "description": "4陨石触发：获得2精通，施加眩晕，造成X不可防御伤害，3附带伤害",
       "effects": {
         "gainFM2": "获得2火焰精通",
         "inflictStun": "施加1个眩晕标记",
@@ -1740,7 +1752,7 @@
     },
     "covering-fire-2": {
       "name": "隐蔽射击 II",
-      "description": "包含掩护射击与消音追踪两个变体",
+      "description": "2弓+3足触发：获得闪避，造成9伤害",
       "effects": {
         "gainEvasive": "获得1个闪避标记",
         "damage9": "造成9点伤害"
@@ -1796,7 +1808,7 @@
     },
     "eclipse-2": {
       "name": "星蚀 II",
-      "description": "包含月蚀与暗月两个变体",
+      "description": "4月触发：施加致盲、缠绕、锁定，造成9伤害",
       "effects": {
         "inflictBlinded": "施加1个致盲标记",
         "inflictEntangle": "施加1个缠绕标记",
@@ -1825,7 +1837,7 @@
     },
     "blinding-shot-2": {
       "name": "致盲射击 II",
-      "description": "包含致盲射击与月之祝福两个变体",
+      "description": "大顺子触发：施加致盲，获得闪避，造成10伤害",
       "effects": {
         "inflictBlinded": "施加1个致盲标记",
         "gainEvasive": "获得1个闪避标记",
@@ -1853,7 +1865,7 @@
     },
     "elusive-step": {
       "name": "打不到我",
-      "description": "防御阶段（5骰）：若足面≥2，抵挡一半伤害（向上取整）；每有足面，造成1伤害",
+      "description": "防御阶段（5骰）：若足面≥2，抵挡一半伤害（向上取整）；每2个弓面造成1伤害",
       "effects": {
         "resolveDefense": "防御结算"
       }

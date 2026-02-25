@@ -9,3 +9,6 @@ export type { SpectatorMovesOptions } from './useSpectatorMoves';
 
 export { useEventStreamCursor } from './useEventStreamCursor';
 export type { UseEventStreamCursorConfig, UseEventStreamCursorReturn, ConsumeResult } from './useEventStreamCursor';
+
+export { EventStreamRollbackContext, useEventStreamRollback } from './EventStreamRollbackContext';
+export type { EventStreamRollbackValue } from './EventStreamRollbackContext';

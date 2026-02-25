@@ -49,6 +49,7 @@ export const RIGHTEOUS_COMBAT_2: AbilityDef = {
         // 执着 (Tenacity) - 2 Sword + 1 Helm
         {
             id: 'righteous-combat-2-tenacity',
+            name: abilityText('righteous-combat-2-tenacity', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.HELM]: 1 } },
             tags: ['unblockable'],
             effects: [
@@ -60,6 +61,7 @@ export const RIGHTEOUS_COMBAT_2: AbilityDef = {
         // 主技能: 3 Sword + 2 Helm (5 Dice)
         {
             id: 'righteous-combat-2-main',
+            name: abilityText('righteous-combat-2-main', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.HELM]: 2 } },
             effects: [
                 damage(5, abilityEffectText('righteous-combat-2', 'damage5')),
@@ -94,6 +96,7 @@ export const RIGHTEOUS_COMBAT_3: AbilityDef = {
         // 执着
         {
             id: 'righteous-combat-3-tenacity',
+            name: abilityText('righteous-combat-3-tenacity', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.HELM]: 1 } },
             tags: ['unblockable'],
             effects: [
@@ -105,6 +108,7 @@ export const RIGHTEOUS_COMBAT_3: AbilityDef = {
         // 主技能: 6 Damage
         {
             id: 'righteous-combat-3-main',
+            name: abilityText('righteous-combat-3-main', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.HELM]: 2 } },
             effects: [
                 damage(6, abilityEffectText('righteous-combat-3', 'damage6')),
@@ -139,6 +143,7 @@ export const BLESSING_OF_MIGHT_2: AbilityDef = {
         // 进攻姿态 (Offensive Stance): 2 Sword + 1 Pray
         {
             id: 'blessing-of-might-2-stance',
+            name: abilityText('blessing-of-might-2-stance', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.PRAY]: 1 } },
             tags: ['unblockable'],
             effects: [
@@ -162,6 +167,7 @@ export const BLESSING_OF_MIGHT_2: AbilityDef = {
         // 神力信徒 II (Might Disciple II): 3 Sword + 1 Pray
         {
             id: 'blessing-of-might-2-main',
+            name: abilityText('blessing-of-might-2-main', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.PRAY]: 1 } },
             tags: ['unblockable'],
             effects: [
@@ -216,6 +222,7 @@ export const VENGEANCE_2: AbilityDef = {
         // It's defined as a DiceSet of 1 of each face.
         {
             id: 'vengeance-2-mix',
+            name: abilityText('vengeance-2-mix', 'name'),
             trigger: { type: 'allSymbolsPresent', symbols: [FACES.SWORD, FACES.HELM, FACES.HEART, FACES.PRAY] },
             tags: ['unblockable'],
             effects: [
@@ -229,6 +236,7 @@ export const VENGEANCE_2: AbilityDef = {
         // 卡牌描述："给任意玩家（包括自己）1层反击"
         {
             id: 'vengeance-2-main',
+            name: abilityText('vengeance-2-main', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.HELM]: 3, [FACES.PRAY]: 1 } },
             effects: [
                 {
@@ -253,6 +261,7 @@ export const RIGHTEOUS_PRAYER_2: AbilityDef = {
         // 繁盛 (Prosperity): 3 Pray
         {
             id: 'righteous-prayer-2-prosperity',
+            name: abilityText('righteous-prayer-2-prosperity', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.PRAY]: 3 } },
             effects: [cpGain(4, abilityEffectText('righteous-prayer-2', 'gain4CP'))],
             priority: 0
@@ -260,6 +269,7 @@ export const RIGHTEOUS_PRAYER_2: AbilityDef = {
         // 正义祷告 II: 4 Pray
         {
             id: 'righteous-prayer-2-main',
+            name: abilityText('righteous-prayer-2-main', 'name'),
             trigger: { type: 'diceSet', faces: { [FACES.PRAY]: 4 } },
             tags: ['unblockable'],
             effects: [
@@ -281,12 +291,14 @@ export const HOLY_STRIKE_2: AbilityDef = {
     variants: [
         {
             id: 'holy-strike-2-small',
+            name: abilityText('holy-strike-2-small', 'name'),
             trigger: { type: 'smallStraight' },
             effects: [heal(1, abilityEffectText('holy-strike-2', 'heal1')), damage(7, abilityEffectText('holy-strike-2', 'damage7'))],
             priority: 0
         },
         {
             id: 'holy-strike-2-large',
+            name: abilityText('holy-strike-2-large', 'name'),
             trigger: { type: 'largeStraight' },
             effects: [heal(2, abilityEffectText('holy-strike-2', 'heal2')), damage(9, abilityEffectText('holy-strike-2', 'damage9'))],
             priority: 1
@@ -381,8 +393,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         description: abilityText('holy-strike', 'description'),
         sfxKey: PALADIN_SFX_HEAVY,
         variants: [
-            { id: 'holy-strike-small', trigger: { type: 'smallStraight' }, effects: [heal(1, abilityEffectText('holy-strike', 'heal1')), damage(5, abilityEffectText('holy-strike', 'damage5'))], priority: 0 },
-            { id: 'holy-strike-large', trigger: { type: 'largeStraight' }, effects: [heal(2, abilityEffectText('holy-strike-large', 'heal2')), damage(8, abilityEffectText('holy-strike-large', 'damage8'))], priority: 1 }
+            { id: 'holy-strike-small', name: abilityText('holy-strike-small', 'name'), trigger: { type: 'smallStraight' }, effects: [heal(1, abilityEffectText('holy-strike', 'heal1')), damage(5, abilityEffectText('holy-strike', 'damage5'))], priority: 0 },
+            { id: 'holy-strike-large', name: abilityText('holy-strike-large', 'name'), trigger: { type: 'largeStraight' }, effects: [heal(2, abilityEffectText('holy-strike-large', 'heal2')), damage(8, abilityEffectText('holy-strike-large', 'damage8'))], priority: 1 }
         ]
     },
 

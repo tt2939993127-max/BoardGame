@@ -9,9 +9,39 @@ import type {
     DiceThroneEvent,
     AttackResolvedEvent,
     AttackPreDefenseResolvedEvent,
+    TokenGrantedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
-import { getPlayerAbilityEffects } from './abilityLookup';
+import { getPlayerAbilityEffects, findPlayerAbility } from './abilityLookup';
+
+/**
+ * 将技能专属音效（AbilityDef.sfxKey）注入到首个 DAMAGE_DEALT 事件。
+ * 
+ * 音效播放时机：攻击效果结算时（防御阶段之后），而非攻击发起时。
+ * 注入到 event.sfxKey 后，audioRouting.resolveFeedback 会自动播放
+ * （event.sfxKey 优先级高于 feedbackResolver）。
+ * 
+ * 只注入首个 DAMAGE_DEALT，避免多段伤害重复播放同一音效。
+ */
+function injectAbilitySfxKey(
+    events: DiceThroneEvent[],
+    state: DiceThroneCore,
+    playerId: string,
+    abilityId: string | undefined,
+): void {
+    if (!abilityId) return;
+    const match = findPlayerAbility(state, playerId, abilityId);
+    const sfxKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
+    if (!sfxKey) return;
+
+    // 只注入首个没有 sfxKey 的 DAMAGE_DEALT 事件
+    for (const event of events) {
+        if (event.type === 'DAMAGE_DEALT' && !event.sfxKey) {
+            event.sfxKey = sfxKey;
+            return;
+        }
+    }
+}
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
@@ -63,7 +93,7 @@ export const resolveAttack = (
     state: DiceThroneCore,
     random: RandomFn,
     options?: { includePreDefense?: boolean; skipTokenResponse?: boolean },
-    timestamp: number = 0
+    timestamp: number = 0,
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending) {
@@ -100,8 +130,35 @@ export const resolveAttack = (
 
         defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
         defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
+
+        // 防御技能专属音效注入（如防御反击伤害）
+        injectAbilitySfxKey(defenseEvents, state, defenderId, defenseAbilityId);
     }
     events.push(...defenseEvents);
+
+    // 防御技能效果可能产生 TOKEN_GRANTED 事件（如冥想获得太极），
+    // 攻击方伤害结算时需要检查防御方是否有可用 Token（shouldOpenTokenResponse），
+    // 因此只提取 TOKEN_GRANTED 事件更新 token 数量，避免 apply 全部防御事件的副作用
+    // （如 PREVENT_DAMAGE 创建 damageShield 导致 createDamageCalculation 双重扣减）。
+    let stateAfterDefense = state;
+    const tokenGrantedEvents = defenseEvents.filter((e): e is TokenGrantedEvent => e.type === 'TOKEN_GRANTED');
+    if (tokenGrantedEvents.length > 0) {
+        let players = { ...state.players };
+        for (const evt of tokenGrantedEvents) {
+            const { targetId, tokenId, newTotal } = evt.payload;
+            const player = players[targetId];
+            if (player) {
+                players = {
+                    ...players,
+                    [targetId]: {
+                        ...player,
+                        tokens: { ...player.tokens, [tokenId]: newTotal },
+                    },
+                };
+            }
+        }
+        stateAfterDefense = { ...state, players };
+    }
 
     // 收集攻击方事件
     const attackEvents: DiceThroneEvent[] = [];
@@ -112,7 +169,7 @@ export const resolveAttack = (
             attackerId,
             defenderId,
             sourceAbilityId,
-            state,
+            state: stateAfterDefense,
             damageDealt: 0,
             timestamp,
         };
@@ -145,6 +202,9 @@ export const resolveAttack = (
         attackEvents.push(...withDamageEvents);
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
+
+        // 将技能专属音效注入到首个 DAMAGE_DEALT（防御结束后播放，而非攻击发起时）
+        injectAbilitySfxKey(attackEvents, stateAfterDefense, attackerId, sourceAbilityId);
     }
     events.push(...attackEvents);
 

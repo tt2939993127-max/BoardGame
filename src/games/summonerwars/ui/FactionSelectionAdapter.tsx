@@ -50,6 +50,7 @@ export interface FactionSelectionProps {
   customDeckData?: Partial<Record<PlayerId, SerializedCustomDeck>>;
   onSelect: (factionId: FactionId) => void;
   onReady: () => void;
+  onUnready: () => void;
   onStart: () => void;
   /** 选择自定义牌组的回调（传递序列化牌组数据） */
   onSelectCustomDeck?: (deck: SerializedCustomDeck) => void;
@@ -73,6 +74,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   customDeckData,
   onSelect,
   onReady,
+  onUnready,
   onStart,
   onSelectCustomDeck,
 }) => {
@@ -546,6 +548,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                   isReady={!!readyPlayers[currentPlayerId]}
                   everyoneReady={everyoneReady}
                   onReady={onReady}
+                  onUnready={onUnready}
                   onStart={onStart}
                   t={t}
                 />
@@ -844,12 +847,13 @@ interface ActionButtonProps {
   isReady: boolean;
   everyoneReady: boolean;
   onReady: () => void;
+  onUnready: () => void;
   onStart: () => void;
   t: TFunction;
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({
-  isHost, hasSelected, isReady, everyoneReady, onReady, onStart, t,
+  isHost, hasSelected, isReady, everyoneReady, onReady, onUnready, onStart, t,
 }) => {
   if (isHost && hasSelected) {
     return (
@@ -888,9 +892,14 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 
   if (!isHost && isReady) {
     return (
-      <div className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30">
-        {t('factionSelection.waiting')}
-      </div>
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        onClick={onUnready}
+        className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer transition-all duration-200"
+      >
+        {t('factionSelection.cancelReady')}
+      </motion.button>
     );
   }
 

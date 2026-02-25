@@ -7,7 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import {
     CheckCircle, Circle, AlertTriangle, Lightbulb, HelpCircle,
     Gamepad2, Trash2, ChevronDown, ChevronRight, RefreshCw, Contact,
-    Image as ImageIcon
+    Image as ImageIcon, ScrollText, Copy, Check
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -601,6 +601,7 @@ function FeedbackRow({
                                             </span>
                                         )}
                                         <span>{t('feedback.table.id', { id: item._id })}</span>
+                                        <CopyFeedbackButton item={item} t={t} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -609,6 +610,48 @@ function FeedbackRow({
                 )}
             </AnimatePresence>
         </>
+    );
+}
+
+// ── 一键复制按钮 ──
+
+function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const textContent = extractText(item.content, t);
+        const parts = [
+            `【${t(`feedback.type.${item.type}`)}】${t(`feedback.severity.${item.severity}`)}`,
+            item.gameName ? `游戏: ${item.gameName}` : '',
+            `提交者: ${item.userId.username}`,
+            `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
+            '',
+            '--- 反馈内容 ---',
+            textContent,
+            item.actionLog ? `\n--- 操作日志 ---\n${item.actionLog}` : '',
+        ].filter(Boolean).join('\n');
+
+        navigator.clipboard.writeText(parts).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            className={cn(
+                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
+                copied
+                    ? 'text-emerald-600 bg-emerald-50'
+                    : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+            )}
+            title={t('feedback.actions.copyAll')}
+        >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? t('feedback.actions.copied') : t('feedback.actions.copyAll')}
+        </button>
     );
 }
 

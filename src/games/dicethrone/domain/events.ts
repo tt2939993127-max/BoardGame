@@ -63,6 +63,7 @@ export const DT_EVENTS = defineEvents({
   // ========== UI 交互（本地播放）==========
   CHARACTER_SELECTED: 'ui',      // 选择角色（UI 层播放）
   PLAYER_READY: 'ui',            // 玩家准备（UI 层播放）
+  PLAYER_UNREADY: 'ui',          // 取消准备（UI 层播放）
   HOST_STARTED: 'ui',            // 房主开始（UI 层播放）
 
   // ========== 即时反馈（EventStream）==========
@@ -123,7 +124,7 @@ export const DT_EVENTS = defineEvents({
 
   // ========== 静默事件 ==========
   HERO_INITIALIZED: 'silent',    // 英雄初始化（内部状态）
-  RESPONSE_WINDOW_RESPONDER_CHANGED: 'silent', // 响应者变更（内部状态）
+  RESPONSE_WINDOW_RESPONDER_CHANGED: { audio: 'immediate', sound: RESPONSE_WINDOW_OPEN_KEY }, // 响应者切换提示音
 });
 
 // ============================================================================
@@ -197,6 +198,13 @@ export interface HostStartedEvent extends GameEvent<'HOST_STARTED'> {
 
 /** 玩家准备事件 */
 export interface PlayerReadyEvent extends GameEvent<'PLAYER_READY'> {
+    payload: {
+        playerId: PlayerId;
+    };
+}
+
+/** 取消准备事件 */
+export interface PlayerUnreadyEvent extends GameEvent<'PLAYER_UNREADY'> {
     payload: {
         playerId: PlayerId;
     };
@@ -774,6 +782,7 @@ export type DiceThroneEvent =
     | HeroInitializedEvent
     | HostStartedEvent
     | PlayerReadyEvent
+    | PlayerUnreadyEvent
     | AbilityActivatedEvent
     | DamageDealtEvent
     | HealAppliedEvent

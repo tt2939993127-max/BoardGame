@@ -93,7 +93,9 @@ function handleDamageHalfCp({ attackerId, targetId, sourceAbilityId, state, time
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
     const bonusCp = (params?.bonusCp as number) || 0;
-    const totalCp = currentCp + bonusCp;
+    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，但 effects 之间不更新 state，
+    // 所以需要手动加上。必须 clamp 到 CP_MAX，否则超出上限的 CP 也会被计入伤害。
+    const totalCp = Math.min(currentCp + bonusCp, CP_MAX);
 
     if (totalCp <= 0) return [];
 
@@ -194,7 +196,8 @@ function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, time
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
     const bonusCp = (params?.bonusCp as number) || 0;
-    const totalCp = currentCp + bonusCp;
+    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，必须 clamp 到 CP_MAX
+    const totalCp = Math.min(currentCp + bonusCp, CP_MAX);
 
     if (totalCp <= 0) return [];
 
@@ -302,7 +305,9 @@ function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state,
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
     const bonusCp = (params?.bonusCp as number) || 0;
-    const damageAmt = currentCp + bonusCp + 5;
+    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，必须 clamp 到 CP_MAX
+    const effectiveCp = Math.min(currentCp + bonusCp, CP_MAX);
+    const damageAmt = effectiveCp + 5;
 
     const damageCalc = createDamageCalculation({
         source: { playerId: attackerId, abilityId: sourceAbilityId },

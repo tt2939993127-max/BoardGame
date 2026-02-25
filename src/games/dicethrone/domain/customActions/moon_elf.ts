@@ -9,20 +9,20 @@
  */
 
 import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
-import { STATUS_IDS, TOKEN_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
+import { STATUS_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
 import { RESOURCE_IDS } from '../resources';
 import type {
     DiceThroneEvent,
     DamageDealtEvent,
     StatusAppliedEvent,
     StatusRemovedEvent,
-    TokenGrantedEvent,
     BonusDieRolledEvent,
     RollLimitChangedEvent,
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
+import { getPendingAttackExpectedDamage } from '../utils';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
@@ -343,27 +343,29 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
 // ============================================================================
 
 /**
- * 迷影步 I：防御掷骰，统计足(FOOT)数量
+ * 迷影步 I：防御掷骰，统计足(FOOT)和弓(BOW)数量
  * 图片规则：
  * - 若足面≥2，抵挡一半伤害（向上取整）
- * - 每有足面，造成1伤害
+ * - 每有2个弓面，造成1伤害
  */
 function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, ctx } = context;
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
     const footCount = faceCounts[FACE.FOOT] ?? 0;
+    const bowCount = faceCounts[FACE.BOW] ?? 0;
     // 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者
     const opponentId = ctx.defenderId;
 
-    // 每个足面造成1伤害
-    if (footCount > 0) {
-        events.push(dealDamage(context, opponentId, footCount, sourceAbilityId, timestamp));
+    // 每2个弓面造成1伤害（向下取整）
+    const bowDamage = Math.floor(bowCount / 2);
+    if (bowDamage > 0) {
+        events.push(dealDamage(context, opponentId, bowDamage, sourceAbilityId, timestamp));
     }
 
     // 足面≥2时，抵挡一半伤害（向上取整）
     if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
+        const originalDamage = getPendingAttackExpectedDamage(state, state.pendingAttack);
         const reducedDamage = Math.ceil(originalDamage / 2);
         const reduction = originalDamage - reducedDamage;
         
@@ -381,11 +383,10 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
 }
 
 /**
- * 迷影步 II：防御掷骰，统计足(FOOT)数量
- * 图片规则（推测升级版）：
+ * 迷影步 II：防御掷骰，统计足(FOOT)和弓(BOW)数量
+ * 图片规则：
  * - 若足面≥2，抵挡一半伤害（向上取整）
- * - 每有足面，造成1伤害
- * - 额外：足面≥3时获得1闪避
+ * - 造成1×弓面数伤害
  */
 function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, ctx } = context;
@@ -403,7 +404,7 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
 
     // 足面≥2时，防止一半伤害（向上取整）
     if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
+        const originalDamage = getPendingAttackExpectedDamage(state, state.pendingAttack);
         const reducedDamage = Math.ceil(originalDamage / 2);
         const reduction = originalDamage - reducedDamage;
         

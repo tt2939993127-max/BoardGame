@@ -1218,6 +1218,8 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'), // 防御方结束防御阶段
+                    // 冥想获得2太极后，防御方可用太极减伤 → Token 响应窗口弹出
+                    cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',

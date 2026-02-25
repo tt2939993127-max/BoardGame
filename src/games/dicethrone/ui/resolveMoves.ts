@@ -41,6 +41,7 @@ export type DiceThroneMoveMap = {
     selectCharacter: (characterId: string) => void;
     hostStartGame: () => void;
     playerReady: () => void;
+    playerUnready: () => void;
 };
 
 /**
@@ -82,4 +83,5 @@ export const resolveMoves = (
     selectCharacter: (characterId) => dispatch('SELECT_CHARACTER', { characterId }),
     hostStartGame: () => dispatch('HOST_START_GAME', {}),
     playerReady: () => dispatch('PLAYER_READY', {}),
+    playerUnready: () => dispatch('PLAYER_UNREADY', {}),
 });

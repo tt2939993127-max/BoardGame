@@ -118,10 +118,23 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('reckless-strike', 'name'),
         type: 'offensive',
         description: abilityText('reckless-strike', 'description'),
-        tags: ['ultimate'],
-        sfxKey: BARBARIAN_SFX_ULTIMATE,
+        tags: [],
+        sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'largeStraight' },
         effects: [damage(15, abilityEffectText('reckless-strike', 'damage15')), { description: abilityEffectText('reckless-strike', 'selfDamage4'), action: { type: 'damage', target: 'self', value: 4 }, timing: 'postDamage', condition: { type: 'onHit' } }],
+    },
+    {
+        id: 'rage',
+        name: abilityText('rage', 'name'),
+        type: 'offensive',
+        description: abilityText('rage', 'description'),
+        tags: ['ultimate'],
+        sfxKey: BARBARIAN_SFX_ULTIMATE,
+        trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 5 } },
+        effects: [
+            inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('rage', 'inflictDaze')),
+            damage(15, abilityEffectText('rage', 'damage15')),
+        ],
     },
     {
         id: 'thick-skin',
@@ -230,6 +243,7 @@ export const SUPPRESS_2: AbilityDef = {
     variants: [
         {
             id: 'suppress-2-battle-cry',
+            name: abilityText('suppress-2-battle-cry', 'name'),
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.HEART]: 2 } },
             effects: [heal(2, abilityEffectText('suppress-2-battle-cry', 'heal2')), damage(2, abilityEffectText('suppress-2-battle-cry', 'damage2Unblockable'))],
             tags: ['unblockable'],
@@ -237,6 +251,7 @@ export const SUPPRESS_2: AbilityDef = {
         },
         {
             id: 'suppress-2-mighty',
+            name: abilityText('suppress-2-mighty', 'name'),
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
             effects: [
                 {
@@ -255,8 +270,8 @@ export const RECKLESS_STRIKE_2: AbilityDef = {
     name: abilityText('reckless-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('reckless-strike-2', 'description'),
-    tags: ['ultimate'],
-    sfxKey: BARBARIAN_SFX_ULTIMATE,
+    tags: [],
+    sfxKey: BARBARIAN_SFX_HEAVY,
     trigger: { type: 'largeStraight' },
     effects: [damage(20, abilityEffectText('reckless-strike-2', 'damage20')), { description: abilityEffectText('reckless-strike-2', 'selfDamage5'), action: { type: 'damage', target: 'self', value: 5 }, timing: 'postDamage', condition: { type: 'onHit' } }],
 };

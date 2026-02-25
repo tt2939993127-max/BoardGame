@@ -39,6 +39,7 @@ import type {
     CardDrawnEvent,
     CardDiscardedEvent,
     BonusDieRolledEvent,
+    PreventDamageEvent,
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
@@ -108,8 +109,11 @@ function resolveAbilitySourceLabel(
     // 从双方玩家技能表中查找（支持变体 ID）
     for (const pid of Object.keys(core.players)) {
         const found = findPlayerAbility(core, pid, sourceAbilityId);
-        if (found?.ability.name) {
-            return { label: found.ability.name, isI18n: found.ability.name.includes('.'), ns: DT_NS };
+        if (found) {
+            const label = found.variant?.name ?? found.ability.name;
+            if (label) {
+                return { label, isI18n: label.includes('.'), ns: DT_NS };
+            }
         }
     }
     // 卡牌 ID 解析
@@ -244,14 +248,16 @@ function formatDiceThroneActionEntry({
             ?? (command.payload as { abilityId?: string }).abilityId;
         const playerId = abilityEvent?.payload.playerId ?? command.playerId;
         if (abilityId && playerId) {
-            const rawAbilityName = findPlayerAbility(core, playerId, abilityId)?.ability.name ?? abilityId;
+            const match = findPlayerAbility(core, playerId, abilityId);
+            // 分歧型变体有独立名称时优先使用（如"战吼"而非父级"力大无穷 II"）
+            const rawAbilityName = match?.variant?.name ?? match?.ability.name ?? abilityId;
             const abilityNameKey = getAbilityI18nKey(rawAbilityName) || abilityId;
             const isI18nKey = abilityNameKey.includes('.');
             const actionKey = abilityEvent?.payload.isDefense
                 ? 'actionLog.abilityActivatedDefense'
                 : 'actionLog.abilityActivated';
             entries.push({
-                id: `${command.type}-${playerId}-${timestamp}`,
+                id: `${command.type}-${playerId}-${abilityId}-${timestamp}`,
                 timestamp,
                 actorId: playerId,
                 kind: command.type,
@@ -344,7 +350,8 @@ function formatDiceThroneActionEntry({
                 : core.activatingAbilityId;
             const segments: ActionLogSegment[] = [];
             if (abilityId) {
-                const rawName = findPlayerAbility(core, rollerId, abilityId)?.ability.name ?? abilityId;
+                const match = findPlayerAbility(core, rollerId, abilityId);
+                const rawName = match?.variant?.name ?? match?.ability.name ?? abilityId;
                 const abilityNameKey = getAbilityI18nKey(rawName) || abilityId;
                 const isI18nKey = abilityNameKey.includes('.');
                 const actionKey = isDefense ? 'actionLog.confirmRollDefenseWithAbility' : 'actionLog.confirmRollWithAbility';
@@ -449,6 +456,32 @@ function formatDiceThroneActionEntry({
                 actorId,
                 kind: 'DAMAGE_DEALT',
                 segments,
+            });
+            return;
+        }
+
+        if (event.type === 'PREVENT_DAMAGE') {
+            const preventEvent = event as PreventDamageEvent;
+            const { targetId, amount, sourceAbilityId } = preventEvent.payload;
+            if (amount <= 0) return;
+
+            const source = resolveAbilitySourceLabel(sourceAbilityId, core, command.playerId);
+            const key = source ? 'actionLog.damagePrevented' : 'actionLog.damagePreventedPlain';
+            const params: Record<string, string | number> = { amount };
+            const paramI18nKeys: string[] = [];
+            if (source) {
+                params.source = source.label;
+                if (source.isI18n) paramI18nKeys.push('source');
+            }
+
+            entries.push({
+                id: `PREVENT_DAMAGE-${targetId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: targetId,
+                kind: 'PREVENT_DAMAGE',
+                segments: [
+                    i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
+                ],
             });
             return;
         }
@@ -807,6 +840,7 @@ const COMMAND_TYPES = [
     'SELECT_CHARACTER',
     'HOST_START_GAME',
     'PLAYER_READY',
+    'PLAYER_UNREADY',
     // Token 响应系统
     'USE_TOKEN',
     'SKIP_TOKEN_RESPONSE',

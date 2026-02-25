@@ -60,6 +60,7 @@
       "tipBoard": "This tip board shows your hero reference and ability requirements; you can expand or collapse it anytime.",
       "dice": "Your dice tray. You may roll up to 3 times each turn and lock dice you want to keep.",
       "rollButton": "Use “Roll” to start rolling. When you’re satisfied or out of rolls, move to confirm.",
+      "diceLock": "After rolling, **click a die** to lock it. Locked dice won't be re-rolled, letting you keep the results you want. Try clicking a die to lock it!",
       "confirmButton": "Confirm locks the result so you can pick a skill. If you want another roll, don’t confirm yet.",
       "abilities": "Highlighted abilities are available to use. Pick one to begin attack resolution.",
       "hand": "Your hand lives here. In Main phases you can play action cards or upgrades, or sell cards for CP.",
@@ -304,7 +305,9 @@
     "confirmRollWithAbility": "Confirmed roll ({{abilityName}}):",
     "confirmRollDefense": "Confirmed defense roll:",
     "confirmRollDefenseWithAbility": "Confirmed defense roll ({{abilityName}}):",
-    "cardRollResult": "Roll result:"
+    "cardRollResult": "Roll result:",
+    "damagePrevented": "Prevented {{amount}} damage with [{{source}}]",
+    "damagePreventedPlain": "Prevented {{amount}} damage"
   },
   "purify": {
     "title": "Use Purify",
@@ -1243,7 +1246,7 @@
     },
     "covering-fire-2": {
       "name": "Covering Fire II",
-      "description": "Two variants: Covering Fire and Silencing Trace",
+      "description": "2 Bow + 3 Foot: gain Evasive, deal 9 damage",
       "effects": {
         "gainEvasive": "Gain 1 Evasive token",
         "damage9": "Deal 9 damage"
@@ -1299,7 +1302,7 @@
     },
     "eclipse-2": {
       "name": "Eclipse II",
-      "description": "Two variants: Eclipse and Dark Moon",
+      "description": "4 Moon: inflict Blinded, Entangle, Targeted, deal 9 damage",
       "effects": {
         "inflictBlinded": "Inflict 1 Blinded token",
         "inflictEntangle": "Inflict 1 Entangle token",
@@ -1328,7 +1331,7 @@
     },
     "blinding-shot-2": {
       "name": "Blinding Shot II",
-      "description": "Two variants: Blinding Shot and Moon's Blessing",
+      "description": "Large Straight: inflict Blinded, gain Evasive, deal 10 damage",
       "effects": {
         "inflictBlinded": "Inflict 1 Blinded token",
         "gainEvasive": "Gain 1 Evasive token",
@@ -1356,7 +1359,7 @@
     },
     "elusive-step": {
       "name": "Elusive Step",
-      "description": "Defensive phase (5 dice): if ≥2 Foot, block half damage (round up); for each Foot, deal 1 damage",
+      "description": "Defensive phase (5 dice): if ≥2 Foot, block half damage (round up); for each pair of Bows, deal 1 damage",
       "effects": {
         "resolveDefense": "Resolve defense"
       }
@@ -1597,6 +1600,14 @@
         "selfDamage4": "Take 4 self-damage (only if damage was dealt)"
       }
     },
+    "rage": {
+      "name": "Rage!",
+      "description": "Ultimate Ability! 5 Strength faces: inflict Daze and deal 15 Ultimate damage.",
+      "effects": {
+        "inflictDaze": "Inflict Daze on opponent",
+        "damage15": "Deal 15 Ultimate damage"
+      }
+    },
     "thick-skin": {
       "name": "Thick Skin",
       "description": "Defense: heal 2 × Heart faces.",
@@ -1740,7 +1751,7 @@
     },
     "soul-burn-2": {
       "name": "Soul Burn II",
-      "description": "2 Fire Soul: Gain 2×[souls] FM, deal [souls] damage. 3 Fire Soul: also inflict Burn. Blazing Soul (2 Magma + 2 Fire Soul): FM cap +1, gain 5 FM, inflict Knockdown.",
+      "description": "2 Fire Soul: gain 2×[souls] Fire Mastery, deal [souls] damage",
       "effects": {
         "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
         "damage": "Deal damage equal to Fire Soul face count to all opponents"
@@ -1764,7 +1775,7 @@
     },
     "fiery-combo-2": {
       "name": "Fiery Combo II",
-      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Fiery Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
+      "description": "Small Straight: gain 2 Fire Mastery, deal 6+X damage (X = Fire Mastery count)",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "main": "Deal 6 base damage. If you have Fire Mastery, deal +1 damage per Fire Mastery."
@@ -1781,7 +1792,7 @@
     },
     "meteor-2": {
       "name": "Meteor II",
-      "description": "3x Meteor: Knockdown, Burn, Stun. 4x Meteor: gain 2 Fire Mastery, Stun, X undefendable damage, 3 collateral damage.",
+      "description": "4 Meteor: gain 2 Fire Mastery, inflict Stun, deal X undefendable damage, 3 collateral damage",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "inflictStun": "Inflict 1 Stun token",
@@ -2370,6 +2381,7 @@
     "pressStart": "Start Game",
     "ready": "Ready",
     "readyWaiting": "Waiting for other players...",
+    "cancelReady": "Cancel Ready",
     "readyProgress": "Ready Progress",
     "you": "You"
   }

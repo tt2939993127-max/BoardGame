@@ -28,6 +28,7 @@ export interface HeroSelectionOverlayProps {
     playerNames: Record<PlayerId, string>;
     onSelect: (characterId: SelectableCharacterId) => void;
     onReady: () => void;
+    onUnready: () => void;
     onStart: () => void;
     locale: string;
 }
@@ -56,6 +57,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
     playerNames,
     onSelect,
     onReady,
+    onUnready,
     onStart,
     locale,
 }) => {
@@ -316,16 +318,18 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                         </motion.button>
                     )}
 
-                    {/* 已准备状态：非房主玩家准备后等待 */}
+                    {/* 已准备状态：非房主玩家准备后可取消 */}
                     {!isHost && readyPlayers[currentPlayerId] && (
-                        <div className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] border-2 bg-white/5 text-emerald-400 border-emerald-400/50">
+                        <motion.button
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            onClick={onUnready}
+                            className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-white/5 text-emerald-400 border-emerald-400/50 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer"
+                        >
                             <span className="inline-flex items-center gap-[0.8vw]">
-                                <span>{t('selection.readyWaiting', '等待其他玩家...')}</span>
-                                <span className="flex items-center gap-[0.35vw]">
-                                    {readyProgressDots}
-                                </span>
+                                <span>{t('selection.cancelReady', '取消准备')}</span>
                             </span>
-                        </div>
+                        </motion.button>
                     )}
 
                     {/* 开始游戏按钮：只有房主可见，选好角色后立即显示 */}

@@ -97,9 +97,13 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
     let remainingDamage = actualDamage;
     let newDamageShields = target.damageShields;
 
+    // 终极技能（Ultimate）伤害不可被护盾抵消（规则 FAQ：Not This Time 不能防御 Ultimate）
+    const isUltimateDamage = state.pendingAttack?.isUltimate ?? false;
+
     // 消耗护盾抵消伤害（忽略 preventStatus 护盾）
     // bypassShields: HP 重置类效果（如神圣祝福）跳过护盾消耗
-    if (!bypassShields && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
+    // isUltimateDamage: 终极技能伤害跳过护盾
+    if (!bypassShields && !isUltimateDamage && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
         const statusShields = target.damageShields.filter(shield => shield.preventStatus);
         const damageShields = target.damageShields.filter(shield => !shield.preventStatus);
         if (damageShields.length > 0) {

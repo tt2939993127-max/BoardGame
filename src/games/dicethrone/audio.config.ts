@@ -218,15 +218,11 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             return null;
         }
 
-        // ATTACK_INITIATED：检查技能自带音效
+        // ATTACK_INITIATED：使用通用挥剑音（技能专属音效在 DAMAGE_DEALT 时播放）
+        // 技能 sfxKey 由 attack.ts 注入到首个 DAMAGE_DEALT 事件的 sfxKey 字段，
+        // 通过 audioRouting.resolveFeedback 的 event.sfxKey 优先级自动播放。
         if (type === 'ATTACK_INITIATED') {
-            const payload = (event as AudioEvent & { payload?: { attackerId?: string; sourceAbilityId?: string } }).payload;
-            if (payload?.attackerId && payload?.sourceAbilityId) {
-                const match = findPlayerAbility(G, payload.attackerId, payload.sourceAbilityId);
-                const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-                if (explicitKey) return null;
-            }
-            // 回退到框架默认
+            // 回退到框架默认（通用挥剑音）
         }
 
         // ========== 使用框架自动生成的默认音效 ==========

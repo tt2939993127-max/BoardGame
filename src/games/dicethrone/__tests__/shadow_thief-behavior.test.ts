@@ -211,6 +211,15 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-damage-half-cp'));
             expect(events).toHaveLength(0);
         });
+
+        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=14, bonusCp=3 → 有效CP=15, 伤害=8）', () => {
+            const state = createState({ attackerCP: 14 });
+            const handler = getCustomActionHandler('shadow_thief-damage-half-cp')!;
+            const events = handler(buildCtx(state, 'shadow_thief-damage-half-cp', { params: { bonusCp: 3 } }));
+
+            // 有效CP = min(14+3, 15) = 15, 伤害 = ceil(15/2) = 8（而非 ceil(17/2)=9）
+            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(8);
+        });
     });
 
     describe('shadow_thief-damage-full-cp (破隐一击：全部CP伤害)', () => {
@@ -220,6 +229,15 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-damage-full-cp'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(8);
+        });
+
+        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=13, bonusCp=4 → 有效CP=15, 伤害=15）', () => {
+            const state = createState({ attackerCP: 13 });
+            const handler = getCustomActionHandler('shadow_thief-damage-full-cp')!;
+            const events = handler(buildCtx(state, 'shadow_thief-damage-full-cp', { params: { bonusCp: 4 } }));
+
+            // 有效CP = min(13+4, 15) = 15（而非 17）
+            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(15);
         });
     });
 
@@ -501,6 +519,16 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-shadow-shank-damage'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(5);
+        });
+
+        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=14, bonusCp=3 → 有效CP=15, 伤害=20）', () => {
+            const state = createState({ attackerCP: 14 });
+            const handler = getCustomActionHandler('shadow_thief-shadow-shank-damage')!;
+            // 模拟实际技能定义中的 params: { bonusCp: 3 }
+            const events = handler(buildCtx(state, 'shadow_thief-shadow-shank-damage', { params: { bonusCp: 3 } }));
+
+            // 有效CP = min(14+3, 15) = 15, 伤害 = 15+5 = 20（而非 14+3+5=22）
+            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(20);
         });
     });
 

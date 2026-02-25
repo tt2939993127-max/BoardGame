@@ -166,13 +166,13 @@ export const DiceTray = ({
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
                     const isModified = isModifyMode && d.id in (modifyResult?.modifications ?? {});
-                    // adjust 模式：对所有未锁定骰子显示 +/- 按钮（不依赖 selected，因为 adjust 模式下骰子无需先"选中"）
-                    const showAdjustButtons = isInteractionMode && isAdjustMode && !d.isKept;
-                    const showAnyModeButtons = isInteractionMode && isAnyMode && !d.isKept &&
+                    // adjust 模式：对所有骰子显示 +/- 按钮（锁定不影响改骰子）
+                    const showAdjustButtons = isInteractionMode && isAdjustMode;
+                    const showAnyModeButtons = isInteractionMode && isAnyMode &&
                         (isModified || currentSelectCount < maxSelectCount);
-                    const isInactiveDie = isInteractionMode && d.isKept;
+                    // 交互模式下锁定不影响骰子可操作性
                     const clickable = isInteractionMode
-                        ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
+                        ? (isAnyMode ? false : (canSelectMore || selected))
                         : canInteract;
                     // any/adjust 模式下使用本地预览值
                     const displayValue = (isAnyMode || isAdjustMode)

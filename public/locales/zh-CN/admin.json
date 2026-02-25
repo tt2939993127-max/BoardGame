@@ -55,7 +55,9 @@
     "actions": {
       "reopen": "重新打开",
       "resolve": "标记已解决",
-      "delete": "删除"
+      "delete": "删除",
+      "copyAll": "一键复制",
+      "copied": "已复制"
     },
     "content": {
       "onlyImage": "（仅图片）",

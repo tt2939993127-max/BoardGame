@@ -107,6 +107,8 @@ export interface BoardOverlaysProps {
     isTokenResponder: boolean;
     /** 当前阶段可用的 Token 列表（由领域层过滤） */
     usableTokens: TokenDef[];
+    /** Token 可用数量覆盖（太极本回合限制等） */
+    tokenUsableOverrides?: Record<string, number>;
     onUseToken: (tokenId: string, amount: number) => void;
     onSkipTokenResponse: () => void;// 净化相关
     viewPlayer: HeroState;
@@ -264,6 +266,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         responsePhase={props.tokenResponsePhase}
                         responderState={props.players[props.pendingDamage.responderId]}
                         usableTokens={props.usableTokens}
+                        tokenUsableOverrides={props.tokenUsableOverrides}
                         onUseToken={props.onUseToken}
                         onSkip={props.onSkipTokenResponse}
                         locale={props.locale}

@@ -49,6 +49,7 @@ import type { LatencyOptimizationConfig } from './latency/types';
 import { createOptimisticEngine, filterPlayedEvents, type OptimisticEngine as OptimisticEngineType } from './latency/optimisticEngine';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
+import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
 
 // re-export 供外部使用（测试等场景）
 export { filterPlayedEvents };
@@ -173,6 +174,10 @@ export function GameProvider({
     const [isConnected, setIsConnected] = useState(false);
     const clientRef = useRef<GameTransportClient | null>(null);
 
+    // 乐观回滚信号：通过 Context 传递给 useEventStreamCursor
+    const [rollbackSignal, setRollbackSignal] = useState<EventStreamRollbackValue>({ watermark: null, seq: 0 });
+    const rollbackSeqRef = useRef(0);
+
     // 延迟优化组件 refs
     const optimisticEngineRef = useRef<OptimisticEngineType | null>(null);
     const batcherRef = useRef<CommandBatcher | null>(null);
@@ -277,8 +282,13 @@ export function GameProvider({
                     }
                     const result = engine.reconcile(newState as MatchState<unknown>, meta);
                     if (result.didRollback && result.optimisticEventWatermark !== null) {
-                        // 回滚：过滤已通过乐观动画播放的事件，防止重复播放
-                        finalState = filterPlayedEvents(result.stateToRender, result.optimisticEventWatermark);
+                        // 回滚：使用 preOptimisticWatermark 过滤客户端已消费的事件
+                        // 只过滤基线以下的事件，保留对手命令产生的新事件
+                        const filteredState = filterPlayedEvents(result.stateToRender, result.optimisticEventWatermark);
+                        finalState = filteredState;
+                        // 通知 useEventStreamCursor 重置游标到基线位置
+                        const newSeq = ++rollbackSeqRef.current;
+                        setRollbackSignal({ watermark: result.optimisticEventWatermark, seq: newSeq });
                     } else {
                         finalState = result.stateToRender;
                     }
@@ -429,9 +439,11 @@ export function GameProvider({
     }), [state, dispatch, playerId, matchPlayers, isConnected]);
 
     return (
-        <GameClientContext.Provider value={value}>
-            {children}
-        </GameClientContext.Provider>
+        <EventStreamRollbackContext.Provider value={rollbackSignal}>
+            <GameClientContext.Provider value={value}>
+                {children}
+            </GameClientContext.Provider>
+        </EventStreamRollbackContext.Provider>
     );
 }
 

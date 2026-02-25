@@ -72,14 +72,9 @@ export interface UndoState {
     };
     /**
      * 每个快照对应的随机数游标，与 snapshots 一一对应。
-     * 撤回恢复时用于重建随机序列，确保撤回后重新操作得到相同的随机结果。
+     * 保留用于未来可能的随机序列调试/审计需求。
      */
     snapshotCursors?: number[];
-    /**
-     * 撤回恢复后需要重置的随机数游标。
-     * 由 UndoSystem 在恢复快照时写入，服务端读取后重建 trackedRandom 并清除此字段。
-     */
-    restoredRandomCursor?: number;
 }
 
 /**

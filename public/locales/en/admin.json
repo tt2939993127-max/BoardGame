@@ -55,7 +55,9 @@
     "actions": {
       "reopen": "Reopen",
       "resolve": "Mark resolved",
-      "delete": "Delete"
+      "delete": "Delete",
+      "copyAll": "Copy all",
+      "copied": "Copied"
     },
     "content": {
       "onlyImage": "(Image only)",

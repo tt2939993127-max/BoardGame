@@ -20,9 +20,13 @@ export class SystemNotification {
     /** 是否已发布（草稿 vs 已发布） */
     @Prop({ type: Boolean, default: true })
     published!: boolean;
+
+    /** 是否置顶 */
+    @Prop({ type: Boolean, default: false })
+    pinned!: boolean;
 }
 
 export const SystemNotificationSchema = SchemaFactory.createForClass(SystemNotification);
 
 SystemNotificationSchema.index({ published: 1, expiresAt: 1 });
-SystemNotificationSchema.index({ createdAt: -1 });
+SystemNotificationSchema.index({ pinned: -1, createdAt: -1 });
