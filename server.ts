@@ -477,6 +477,43 @@ router.post('/games/:name/create', async (ctx) => {
     const seed = nanoid(16);
     const playerIds = Array.from({ length: numPlayers }, (_, i) => String(i));
 
+    // 清理客户端不应直接控制的先手字段（只允许通过 prevMatchID 间接设置）
+    delete setupData.firstPlayerId;
+    delete setupData.turnOrder;
+
+    // 重赛先手轮换：从上一局状态中提取先手信息
+    if (typeof setupData.prevMatchID === 'string') {
+        try {
+            const prevMatch = await storage.fetch(setupData.prevMatchID, { state: true });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 跨游戏通用提取，state 结构不固定
+            const prevCore = (prevMatch.state as any)?.G?.core;
+            if (prevCore) {
+                // 双人：轮换先手；多人：随机打乱顺序
+                if (numPlayers === 2) {
+                    // 通用提取：activePlayerId / currentPlayer / turnOrder[0]
+                    const prev = prevCore.startingPlayerId ?? prevCore.activePlayerId ?? prevCore.currentPlayer
+                        ?? (Array.isArray(prevCore.turnOrder) ? prevCore.turnOrder[0] : undefined);
+                    if (typeof prev === 'string') {
+                        // 下一局先手 = 上一局非先手玩家
+                        const next = playerIds.find(id => id !== prev) ?? playerIds[0];
+                        setupData.firstPlayerId = next;
+                    }
+                } else {
+                    // 多人：随机打乱 playerIds 顺序作为 turnOrder 提示
+                    const shuffled = [...playerIds];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    setupData.turnOrder = shuffled;
+                }
+            }
+        } catch {
+            // 上一局不存在或已过期，忽略
+        }
+        delete setupData.prevMatchID;
+    }
+
     // 初始化游戏状态
     const setupResult = await gameTransport.setupMatch(matchID, gameName, playerIds, seed, setupData);
     if (!setupResult) {

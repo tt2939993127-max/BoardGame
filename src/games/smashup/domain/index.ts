@@ -274,7 +274,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
 // Setup
 // ============================================================================
 
-function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
+function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<string, unknown>): SmashUpCore {
     const nextUid = 1;
 
     const players: Record<PlayerId, PlayerState> = {};
@@ -313,9 +313,21 @@ function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
     }
     const baseDeck = shuffledBaseIds;
 
+    // 重赛先手轮换：双人用 firstPlayerId 轮换，多人用 turnOrder 随机
+    let initialTurnOrder = [...playerIds];
+    if (Array.isArray(setupData?.turnOrder) && setupData.turnOrder.length === playerIds.length
+        && setupData.turnOrder.every((id: unknown) => typeof id === 'string' && playerIds.includes(id as PlayerId))) {
+        // 多人：使用服务端随机打乱的顺序
+        initialTurnOrder = setupData.turnOrder as PlayerId[];
+    } else if (typeof setupData?.firstPlayerId === 'string' && playerIds.includes(setupData.firstPlayerId)) {
+        // 双人：先手玩家排第一
+        const first = setupData.firstPlayerId;
+        initialTurnOrder = [first, ...playerIds.filter(id => id !== first)];
+    }
+
     return {
         players,
-        turnOrder: [...playerIds],
+        turnOrder: initialTurnOrder,
         currentPlayerIndex: 0,
         bases: activeBases,
         baseDeck,

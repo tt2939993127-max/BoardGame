@@ -309,13 +309,17 @@ export class GameTransportServer {
         gameId: string,
         playerIds: PlayerId[],
         seed: string,
-        _setupData?: unknown,
+        setupData?: unknown,
     ): Promise<{ state: MatchState<unknown>; randomCursor: number } | null> {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return null;
 
         const trackedRandom = createTrackedRandom(seed, 0);
-        const core = engineConfig.domain.setup(playerIds, trackedRandom.random);
+        const core = engineConfig.domain.setup(
+            playerIds,
+            trackedRandom.random,
+            setupData && typeof setupData === 'object' ? setupData as Record<string, unknown> : undefined,
+        );
         const sys = createInitialSystemState(
             playerIds,
             engineConfig.systems as EngineSystem[],

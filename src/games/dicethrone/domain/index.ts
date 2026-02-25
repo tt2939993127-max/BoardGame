@@ -50,7 +50,7 @@ paladinResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def)
 export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, DiceThroneEvent> = {
     gameId: 'dicethrone',
 
-    setup: (playerIds: PlayerId[], _random: RandomFn): DiceThroneCore => {
+    setup: (playerIds: PlayerId[], _random: RandomFn, setupData?: Record<string, unknown>): DiceThroneCore => {
         const players: Record<PlayerId, HeroState> = {};
         const selectedCharacters: Record<PlayerId, CharacterId> = {};
 
@@ -79,6 +79,11 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             readyPlayers[pid] = false;
         }
 
+        // 重赛先手轮换：优先使用 setupData 中的 firstPlayerId
+        const firstPlayer = (typeof setupData?.firstPlayerId === 'string' && playerIds.includes(setupData.firstPlayerId))
+            ? setupData.firstPlayerId
+            : playerIds[0];
+
         return {
             players,
             selectedCharacters,
@@ -90,8 +95,8 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             rollLimit: 3,
             rollDiceCount: 5,
             rollConfirmed: false,
-            activePlayerId: playerIds[0],
-            startingPlayerId: playerIds[0],
+            activePlayerId: firstPlayer,
+            startingPlayerId: firstPlayer,
             turnNumber: 1,
             pendingAttack: null,
             tokenDefinitions: ALL_TOKEN_DEFINITIONS,

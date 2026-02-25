@@ -976,7 +976,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     onConfirm={handleCreateRoom}
                     gameManifest={gameManifest}
                     isLoading={isLoading}
-                    isLoggedIn={!!user?.id}
                 />
             )}
         </>

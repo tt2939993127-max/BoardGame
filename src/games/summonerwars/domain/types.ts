@@ -194,6 +194,8 @@ export interface SummonerWarsCore {
   phase: GamePhase;
   /** 当前回合玩家 */
   currentPlayer: PlayerId;
+  /** 先手玩家（重赛轮换用，整局不变） */
+  startingPlayerId: PlayerId;
   /** 回合数 */
   turnNumber: number;
   /** 选中的单位（用于移动/攻击） */

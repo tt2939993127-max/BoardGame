@@ -198,6 +198,8 @@ export async function playAgain(
 
     // 服务端 /create 会从 token 或 guestId 重新生成 ownerKey/ownerType，无需从旧房间复制
     const setupData: Record<string, unknown> = {};
+    // 传递上一局 matchID，服务端据此轮换先手
+    setupData.prevMatchID = matchID;
     // 匿名用户需要传递 guestId 以通过服务端 owner 验证
     if (options.guestId) setupData.guestId = options.guestId;
 
