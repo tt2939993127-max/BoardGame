@@ -280,7 +280,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 使用 FX 引擎
     const fxBus = useFxBus(diceThroneFxRegistry, {
         playSound: (key) => {
-            // 音效由 FeedbackPack 自动触发，这里只是注入播放函数
             playSoundFn(key);
         },
         triggerShake: (_intensity, _type) => {

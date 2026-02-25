@@ -585,6 +585,65 @@ describe('Feature: incremental-state-sync', () => {
   });
 
   // ========================================================================
+  // 回归测试：undefined key 导致 replace vs add 不一致
+  // ========================================================================
+
+  /**
+   * 回归测试：服务端缓存含 undefined key 时，JSON Patch 生成 replace 而非 add，
+   * 导致客户端 patch 应用失败（OPERATION_PATH_UNRESOLVABLE）。
+   *
+   * 根因：JS 对象 { key: undefined } 经 JSON 序列化后 key 被剥离，
+   * 但 fast-json-patch 的 compare 会将 { key: undefined } → { key: value } 视为 replace，
+   * 而客户端（经 socket.io JSON 传输）的状态中不存在该 key，导致 replace 路径不可达。
+   *
+   * 修复：服务端缓存写入时使用 JSON.parse(JSON.stringify()) 消除 undefined key。
+   */
+  describe('Regression: undefined key causes replace vs add mismatch', () => {
+    it('computeDiff generates "add" (not "replace") when old state has undefined key stripped by JSON round-trip', () => {
+      // 模拟 reducer 返回 { ...state, taijiGainedThisTurn: undefined }
+      const serverOldState = { core: { hp: 100, taijiGainedThisTurn: undefined as unknown } };
+      // 经 JSON round-trip 后 undefined key 被剥离（模拟服务端缓存修复后的行为）
+      const cachedOldState = JSON.parse(JSON.stringify(serverOldState));
+      expect(cachedOldState).toEqual({ core: { hp: 100 } }); // undefined key 已消除
+
+      // 新状态中该 key 有值
+      const newState = { core: { hp: 100, taijiGainedThisTurn: 3 } };
+
+      // 修复后：diff 应生成 "add" 而非 "replace"
+      const diff = computeDiff(cachedOldState, newState, Infinity);
+      expect(diff.type).toBe('patch');
+      expect(diff.patches).toBeDefined();
+      const taijiPatch = diff.patches!.find(p => p.path === '/core/taijiGainedThisTurn');
+      expect(taijiPatch).toBeDefined();
+      expect(taijiPatch!.op).toBe('add'); // 关键断言：必须是 add，不是 replace
+
+      // 客户端应用 patch 应成功
+      const clientState = { core: { hp: 100 } }; // 客户端也没有该 key
+      const result = applyPatches(clientState, diff.patches!);
+      expect(result.success).toBe(true);
+      expect(result.state).toEqual(newState);
+    });
+
+    it('without JSON round-trip fix, compare generates "replace" that fails on client', () => {
+      // 演示未修复时的问题：直接用含 undefined key 的对象做 diff
+      const oldWithUndefined = { core: { hp: 100, taijiGainedThisTurn: undefined as unknown } };
+      const newState = { core: { hp: 100, taijiGainedThisTurn: 3 } };
+
+      const diff = computeDiff(oldWithUndefined, newState, Infinity);
+      expect(diff.type).toBe('patch');
+      const taijiPatch = diff.patches!.find(p => p.path === '/core/taijiGainedThisTurn');
+      expect(taijiPatch).toBeDefined();
+      // 未修复时 compare 生成 replace（因为 key 存在于 old 中）
+      expect(taijiPatch!.op).toBe('replace');
+
+      // 客户端没有该 key → replace 失败
+      const clientState = { core: { hp: 100 } };
+      const result = applyPatches(clientState, diff.patches!);
+      expect(result.success).toBe(false); // 证明问题存在
+    });
+  });
+
+  // ========================================================================
   // Property 10: 回滚后缓存基准修正 (Task 7.2)
   // ========================================================================
 

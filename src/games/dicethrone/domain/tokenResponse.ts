@@ -26,7 +26,6 @@ import type {
 } from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
-import { findPlayerAbility } from './abilityLookup';
 
 // ============================================================================
 // Token 可用性检查
@@ -459,15 +458,6 @@ export function finalizeTokenResponse(
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         };
-
-        // 注入技能专属音效（Token 响应后的伤害结算也需要播放技能音效）
-        if (pendingDamage.sourcePlayerId && pendingDamage.sourceAbilityId) {
-            const match = findPlayerAbility(state, pendingDamage.sourcePlayerId, pendingDamage.sourceAbilityId);
-            const sfxKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-            if (sfxKey) {
-                damageEvent.sfxKey = sfxKey;
-            }
-        }
 
         events.push(damageEvent);
     }

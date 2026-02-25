@@ -23,7 +23,7 @@
  * 若未来需要精确支持，需在 reducer 中计算 netDamage 并写回事件或侧信道。
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import type { DamageDealtEvent, HealAppliedEvent, HeroState } from '../domain/types';
 import type { CpChangedEvent } from '../domain/events';
@@ -40,6 +40,7 @@ import {
     resolveTokenImpactKey,
     resolveCpImpactKey,
 } from '../ui/fxSetup';
+import type { AbilityDef } from '../domain/combat';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import { RESOURCE_IDS } from '../domain/resources';
@@ -134,9 +135,30 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     const fxImpactMapRef = useRef(new Map<string, { bufferKey: string; damage: number }>());
 
     /**
-     * 构建单个伤害事件的 FX 参数
-     * 返回 null 表示该事件不需要动画（无效目标等）
+     * 从玩家技能列表中查找技能的 sfxKey（支持变体 ID）
+     * 用于在伤害动画 onImpact 时播放技能专属音效，替代通用打击音
      */
+    const findAbilitySfxKey = useCallback((abilityId: string | undefined): string | undefined => {
+        if (!abilityId) return undefined;
+        const allAbilities: AbilityDef[] = [
+            ...(player?.abilities ?? []),
+            ...(opponent?.abilities ?? []),
+        ];
+        for (const ability of allAbilities) {
+            // 先检查变体 ID
+            if (ability.variants?.length) {
+                const variant = ability.variants.find(v => v.id === abilityId);
+                if (variant) {
+                    return variant.sfxKey ?? ability.sfxKey;
+                }
+            }
+            if (ability.id === abilityId) {
+                return ability.sfxKey;
+            }
+        }
+        return undefined;
+    }, [player?.abilities, opponent?.abilities]);
+
     /**
      * 构建单个伤害事件的 FX 参数
      * 返回 null 表示该事件不需要动画（无效目标/护盾完全抵消等）
@@ -157,7 +179,10 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const sourceId = dmgEvent.payload.sourceAbilityId ?? '';
         const isDot = sourceId.startsWith('upkeep-');
         const cue = isDot ? DT_FX.DOT_DAMAGE : DT_FX.DAMAGE;
-        const soundKey = isDot ? undefined : resolveDamageImpactKey(damage, targetId, currentPlayerId);
+        // 技能专属音效优先（如和尚拳术/雷霆万钧各有独立音效），
+        // 找不到时回退到通用打击音（按伤害量区分轻/重击）
+        const abilitySfx = isDot ? undefined : findAbilitySfxKey(sourceId || undefined);
+        const soundKey = abilitySfx ?? (isDot ? undefined : resolveDamageImpactKey(damage, targetId, currentPlayerId));
         const targetPlayer = targetId === opponentId ? opponent : player;
         const bufferKey = `hp-${targetId}`;
 
@@ -185,7 +210,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             frozenHp,
             damage,
         };
-    }, [currentPlayerId, opponentId, opponent, player, getAbilityStartPos, refs.opponentHeader, refs.opponentHp, refs.selfHp]);
+    }, [currentPlayerId, opponentId, opponent, player, getAbilityStartPos, findAbilitySfxKey, refs.opponentHeader, refs.opponentHp, refs.selfHp]);
 
     /**
      * 构建单个治疗事件的 FX 参数
@@ -277,20 +302,18 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     }, [opponentId, currentPlayerId, getEffectStartPos, refs.opponentCp, refs.selfCp]);
 
     /**
-     * 统一消费事件流：伤害 + 治疗
+     * 统一消费事件流：伤害 + 治疗 + CP 变化
      * 
-     * 分两阶段执行：
-     * 1. render 阶段（同步）：消费事件 + freezeSync 写 ref → 同一帧 get() 即可读到冻结值
-     * 2. effect 阶段（异步）：commitSync 同步 state + push FX 动画（需要 DOM 位置）
+     * 在 useLayoutEffect 中一次性完成：消费事件 → freezeSync → commitSync → push FX。
+     * useLayoutEffect 在 DOM 更新后、浏览器绘制前同步执行，保证 HP 冻结无间隙帧。
      * 
-     * 这样消除了"core HP 已变但 freeze 还没生效"的间隙帧。
+     * 注意：不能在 render 阶段调用 consumeNew()，因为 React 18 StrictMode 会双重调用
+     * render 函数，导致游标被提前推进、FX 系统完全不触发。详见下方 useLayoutEffect 注释。
      */
     // 待播放步骤队列（FIFO）
     const pendingStepsRef = useRef<AnimStep[]>([]);
     // 当前正在播放的 fxId（用于 advanceQueue 匹配）
     const activeFxIdRef = useRef<string | null>(null);
-    // render 阶段计算出的待推送步骤（effect 中消费）
-    const pendingPushRef = useRef<AnimStep[] | null>(null);
 
     /** 推入队列中的下一步，返回是否成功 */
     const pushNextStep = useCallback(() => {
@@ -319,11 +342,23 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
     }, [pushNextStep]);
 
-    // ── 阶段 1：render 阶段同步消费事件 + freezeSync ──
-    // consumeNew() 是幂等的（内部游标 ref 保证同一批 entries 只消费一次），
-    // 在 render 中调用安全（无 setState，仅写 ref）。
-    const { entries: newEntries } = consumeNew();
-    if (newEntries.length > 0) {
+    // ── 统一在 useLayoutEffect 中消费事件 + freezeSync + push FX ──
+    // 
+    // 【根因修复】之前 consumeNew() 在 render 阶段直接调用，但 React 18 StrictMode
+    // 会在开发模式下双重调用 render 函数。consumeNew() 内部通过 ref（lastSeenIdRef）
+    // 推进游标，ref 的修改不会被 React 回滚，导致：
+    //   1. 第一次 render（StrictMode 额外调用）：consumeNew() 消费了新事件，推进游标
+    //   2. React 丢弃第一次 render 的结果（包括 pendingPushRef 的赋值）
+    //   3. 第二次 render（真正的 render）：游标已推进，consumeNew() 返回空数组
+    //   4. FX 系统完全不触发 → 无伤害飞行动画、无受击音效、无技能音效
+    //
+    // 修复：将 consumeNew() 移到 useLayoutEffect 中。useLayoutEffect 在 commit 阶段
+    // 同步执行（DOM 更新后、浏览器绘制前），StrictMode 不会双重调用 effect。
+    // freezeSync 也在此处执行，保证在绘制前完成 HP 冻结，消除间隙帧。
+    useLayoutEffect(() => {
+        const { entries: newEntries } = consumeNew();
+        if (newEntries.length === 0) return;
+
         const damageSteps: AnimStep[] = [];
         const healSteps: AnimStep[] = [];
         const cpSteps: AnimStep[] = [];
@@ -365,31 +400,21 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
 
         const allSteps = [...damageSteps, ...healSteps, ...cpSteps];
-        if (allSteps.length > 0) {
-            // 同步冻结 HP（仅写 ref，render 阶段安全）— 跳过 CP 步骤（无需冻结）
-            for (const step of allSteps) {
-                if (!step.bufferKey) continue;
-                const currentFrozen = damageBuffer.get(step.bufferKey, -1);
-                if (currentFrozen === -1) {
-                    damageBuffer.freezeSync(step.bufferKey, step.frozenHp);
-                }
+        if (allSteps.length === 0) return;
+
+        // 同步冻结 HP（useLayoutEffect 在绘制前执行，无间隙帧）— 跳过 CP 步骤（无需冻结）
+        for (const step of allSteps) {
+            if (!step.bufferKey) continue;
+            const currentFrozen = damageBuffer.get(step.bufferKey, -1);
+            if (currentFrozen === -1) {
+                damageBuffer.freezeSync(step.bufferKey, step.frozenHp);
             }
-            // 缓存待推送步骤，effect 中消费
-            pendingPushRef.current = allSteps;
         }
-    }
-
-    // ── 阶段 2：effect 中 commitSync + push FX ──
-    useEffect(() => {
-        const steps = pendingPushRef.current;
-        if (!steps) return;
-        pendingPushRef.current = null;
-
         // 将 freezeSync 写入的 ref 同步到 React state
         damageBuffer.commitSync();
 
         // 第一步立即 push，剩余入队
-        const [first, ...rest] = steps;
+        const [first, ...rest] = allSteps;
         pendingStepsRef.current.push(...rest);
 
         const fxId = fxBus.push(first.cue, {}, first.params);
@@ -401,9 +426,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
     }, [
         eventStreamEntries,
+        consumeNew,
         fxBus,
         pushNextStep,
         damageBuffer,
+        buildDamageStep,
+        buildHealStep,
+        buildCpStep,
     ]);
 
     // ========================================================================

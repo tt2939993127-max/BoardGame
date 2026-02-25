@@ -12,36 +12,7 @@ import type {
     TokenGrantedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
-import { getPlayerAbilityEffects, findPlayerAbility } from './abilityLookup';
-
-/**
- * 将技能专属音效（AbilityDef.sfxKey）注入到首个 DAMAGE_DEALT 事件。
- * 
- * 音效播放时机：攻击效果结算时（防御阶段之后），而非攻击发起时。
- * 注入到 event.sfxKey 后，audioRouting.resolveFeedback 会自动播放
- * （event.sfxKey 优先级高于 feedbackResolver）。
- * 
- * 只注入首个 DAMAGE_DEALT，避免多段伤害重复播放同一音效。
- */
-function injectAbilitySfxKey(
-    events: DiceThroneEvent[],
-    state: DiceThroneCore,
-    playerId: string,
-    abilityId: string | undefined,
-): void {
-    if (!abilityId) return;
-    const match = findPlayerAbility(state, playerId, abilityId);
-    const sfxKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-    if (!sfxKey) return;
-
-    // 只注入首个没有 sfxKey 的 DAMAGE_DEALT 事件
-    for (const event of events) {
-        if (event.type === 'DAMAGE_DEALT' && !event.sfxKey) {
-            event.sfxKey = sfxKey;
-            return;
-        }
-    }
-}
+import { getPlayerAbilityEffects } from './abilityLookup';
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
@@ -131,8 +102,6 @@ export const resolveAttack = (
         defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
         defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
 
-        // 防御技能专属音效注入（如防御反击伤害）
-        injectAbilitySfxKey(defenseEvents, state, defenderId, defenseAbilityId);
     }
     events.push(...defenseEvents);
 
@@ -203,8 +172,8 @@ export const resolveAttack = (
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
 
-        // 将技能专属音效注入到首个 DAMAGE_DEALT（防御结束后播放，而非攻击发起时）
-        injectAbilitySfxKey(attackEvents, stateAfterDefense, attackerId, sourceAbilityId);
+        // 技能专属音效由 FX 系统在伤害动画 onImpact 时播放（useAnimationEffects.findAbilitySfxKey），
+        // 不再注入到 event.sfxKey（会被 useGameAudio 的 resolveFeedback 优先级链捕获导致双重播放）
     }
     events.push(...attackEvents);
 

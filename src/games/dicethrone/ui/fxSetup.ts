@@ -114,6 +114,7 @@ const DamageRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
   const endPos = event.params?.endPos as { x: number; y: number } | undefined;
 
   if (!damage || !startPos || !endPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -147,6 +148,7 @@ const HealRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }
 
   // amount 可以为 0（barbarian thick-skin 无心面时），仍需播放动画
   if (amount === undefined || !startPos || !endPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -188,6 +190,7 @@ const CpChangeRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpa
   const endPos = event.params?.endPos as { x: number; y: number } | undefined;
 
   if (delta === undefined || delta === 0 || !startPos || !endPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -241,7 +244,7 @@ const DissipateEffect: React.FC<{
         left: position.x,
         top: position.y,
         transform: 'translate(-50%, -50%)',
-        zIndex: UI_Z_INDEX.effect,
+        zIndex: UI_Z_INDEX.overlayRaised + 1,
         pointerEvents: 'none' as const,
         filter: 'brightness(1.5)',
       },
@@ -273,6 +276,7 @@ const StatusRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
   const isRemove = event.params?.isRemove as boolean | undefined;
 
   if (!content || !startPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -289,6 +293,7 @@ const StatusRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
 
   // 获得：飞行动画
   if (!endPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -325,6 +330,7 @@ const TokenRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact 
   const isRemove = event.params?.isRemove as boolean | undefined;
 
   if (!content || !startPos) {
+    onImpact();
     stableComplete();
     return null;
   }
@@ -341,6 +347,7 @@ const TokenRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact 
 
   // 获得：飞行动画
   if (!endPos) {
+    onImpact();
     stableComplete();
     return null;
   }

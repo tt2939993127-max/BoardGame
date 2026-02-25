@@ -555,7 +555,8 @@ export class GameTransportServer {
         });
 
         // 写入缓存，确保后续增量 diff 基准正确
-        match.lastBroadcastedViews.set(playerID ?? 'spectator', viewState);
+        // JSON round-trip 消除 undefined key（与 emitStateToSockets 中的缓存写入保持一致）
+        match.lastBroadcastedViews.set(playerID ?? 'spectator', JSON.parse(JSON.stringify(viewState)));
 
         // 通知其他玩家（旁观者不触发玩家连接事件）
         if (playerID !== null) {
@@ -1095,7 +1096,10 @@ export class GameTransportServer {
         }
 
         // 始终更新缓存
-        match.lastBroadcastedViews.set(cacheKey, viewState);
+        // JSON round-trip 消除 undefined 值的 key，确保缓存结构与客户端（经 socket.io JSON 序列化）一致。
+        // 否则 fast-json-patch 的 compare 会对 { key: undefined } → { key: value } 生成 replace 而非 add，
+        // 导致客户端 patch 应用失败（路径不存在）。
+        match.lastBroadcastedViews.set(cacheKey, JSON.parse(JSON.stringify(viewState)));
     }
 
     private applyPlayerView(match: ActiveMatch, playerID: string | null): unknown {
