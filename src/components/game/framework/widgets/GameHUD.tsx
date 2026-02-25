@@ -809,8 +809,8 @@ export const GameHUD = ({
 
     return (
         <>
-            {/* 对手离线倒计时提示（仅联机模式） */}
-            {isOnline && opponentConnected !== undefined && (
+            {/* 对手状态提示（仅联机模式，加载完成后） */}
+            {isOnline && !isSpectator && opponentConnected !== undefined && (
                 <OpponentOfflineBanner
                     connected={opponentConnected}
                     name={opponentName}

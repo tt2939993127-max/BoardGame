@@ -53,6 +53,7 @@
     },
     "offlineBanner": {
       "message": "{{name}} has been offline for {{time}}",
+      "waitingOpponent": "Waiting for opponent...",
       "seconds": "{{count}}s",
       "minutes": "{{count}}min"
     },

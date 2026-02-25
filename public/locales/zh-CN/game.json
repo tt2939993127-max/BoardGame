@@ -53,6 +53,7 @@
     },
     "offlineBanner": {
       "message": "{{name}} 已离线 {{time}}",
+      "waitingOpponent": "等待对手加入...",
       "seconds": "{{count}}秒",
       "minutes": "{{count}}分钟"
     },

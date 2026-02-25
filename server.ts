@@ -986,6 +986,9 @@ const ensureGameState = (gameName: SupportedGame) => {
     }
     if (!lobbyCacheByGame.has(gameName)) {
         lobbyCacheByGame.set(gameName, new Map());
+        // 新初始化的缓存必须标记为 dirty，确保首次请求从 MongoDB 拉取
+        // 否则重启后前端收到空 snapshot，误判房间已销毁
+        lobbyCacheDirty.set(gameName, true);
     }
 };
 
