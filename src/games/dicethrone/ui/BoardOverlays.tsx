@@ -19,6 +19,8 @@ import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
 import { InteractionOverlay } from './InteractionOverlay';
 import { EndgameOverlay } from '../../../components/game/framework/widgets/EndgameOverlay';
+import { RematchActions } from '../../../components/game/framework/widgets/RematchActions';
+import { DiceThroneEndgameContent, renderDiceThroneButton } from './DiceThroneEndgame';
 import type { StatusAtlases } from './statusEffects';
 import type { AbilityCard, DieFace, HeroState, InteractionDescriptor, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -360,7 +362,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 )}
             </AnimatePresence>
 
-            {/* 游戏结束覆盖层 - 独立管理其 Portal */}
+            {/* 游戏结束覆盖层 - 注入王权骰铸专属结算内容和街机风格按钮 */}
             <EndgameOverlay
                 isGameOver={props.isGameOver}
                 result={props.gameoverResult}
@@ -370,6 +372,21 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 totalPlayers={Object.keys(props.players).length}
                 rematchState={props.rematchState}
                 onVote={props.onRematchVote}
+                renderContent={(contentProps) => (
+                    <DiceThroneEndgameContent
+                        {...contentProps}
+                        players={props.players}
+                        myPlayerId={props.playerID ?? null}
+                        locale={props.locale}
+                    />
+                )}
+                renderActions={(actionsProps) => (
+                    <RematchActions
+                        {...actionsProps}
+                        className="mt-4"
+                        renderButton={renderDiceThroneButton}
+                    />
+                )}
             />
         </>
     );

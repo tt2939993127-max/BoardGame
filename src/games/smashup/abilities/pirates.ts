@@ -524,7 +524,7 @@ function buildMoveToBaseInteraction(
 /** 注册海盗派系的交互解决处理函数 */
 export function registerPirateInteractionHandlers(): void {
     // 粗鲁少妇：选择目标后消灭（支持跳过）
-    registerInteractionHandler('pirate_saucy_wench', (state, _playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('pirate_saucy_wench', (state, playerId, value, _iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
         if (selected.skip) return { state, events: [] };
         const { minionUid, baseIndex } = selected;
@@ -537,7 +537,7 @@ export function registerPirateInteractionHandlers(): void {
     });
 
     // 侧翼开炮：选择基地+对手后执行
-    registerInteractionHandler('pirate_broadside', (state, _playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('pirate_broadside', (state, playerId, value, _iData, _random, timestamp) => {
         const { baseIndex, opponentId } = value as { baseIndex: number; opponentId: string };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;

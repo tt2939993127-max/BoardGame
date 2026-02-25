@@ -34,6 +34,8 @@ interface CreateRoomModalProps {
     onConfirm: (config: RoomConfig) => void;
     gameManifest: GameManifestEntry;
     isLoading?: boolean;
+    /** 已登录用户默认保存 1 天 */
+    isLoggedIn?: boolean;
 }
 
 export const CreateRoomModal = ({
@@ -42,6 +44,7 @@ export const CreateRoomModal = ({
     onConfirm,
     gameManifest,
     isLoading = false,
+    isLoggedIn = false,
 }: CreateRoomModalProps) => {
     const { t } = useTranslation('lobby');
 
@@ -52,7 +55,7 @@ export const CreateRoomModal = ({
     // 状态
     const [roomName, setRoomName] = useState('');
     const [numPlayers, setNumPlayers] = useState(playerOptions[0]);
-    const [ttlSeconds, setTtlSeconds] = useState(0);
+    const [ttlSeconds, setTtlSeconds] = useState(isLoggedIn ? 86400 : 0);
     const [password, setPassword] = useState('');
 
     const handleConfirm = () => {

@@ -2384,5 +2384,9 @@
     "cancelReady": "Cancel Ready",
     "readyProgress": "Ready Progress",
     "you": "You"
+  },
+  "endgame": {
+    "ariaPanel": "Game Over - {{result}}",
+    "ariaHero": "Player {{heroName}} - HP {{hp}} CP {{cp}}"
   }
 }

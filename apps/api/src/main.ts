@@ -85,11 +85,27 @@ async function bootstrap() {
         expressApp.use('/assets', express.static(uploadsPath));
     }
     if (existsSync(distPath)) {
-        expressApp.use(express.static(distPath));
+        // Vite 构建产物（/assets/ 下带 content hash 的 JS/CSS）→ 永久缓存
+        expressApp.use('/assets', express.static(join(distPath, 'assets'), {
+            maxAge: '1y',
+            immutable: true,
+        }));
+        // 其余静态文件（index.html 等）→ 不缓存，确保部署后立即生效
+        expressApp.use(express.static(distPath, {
+            etag: true,
+            lastModified: true,
+            setHeaders: (res, filePath) => {
+                if (filePath.endsWith('.html')) {
+                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                }
+            },
+        }));
 
         const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors|notifications)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (spaExclude.test(req.path)) return next();
+            // SPA fallback 也必须禁止缓存
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
             return res.sendFile(join(distPath, 'index.html'));
         });
     }

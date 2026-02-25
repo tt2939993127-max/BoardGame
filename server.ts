@@ -282,7 +282,7 @@ const gameTransport = new GameTransportServer({
     io,
     storage,
     games: SERVER_ENGINES,
-    offlineGraceMs: 15000,
+    offlineGraceMs: 300000, // 5 分钟：给断线玩家充足的重连时间
     authenticate: async (matchID, playerID, credentials, metadata) => {
         if (!credentials) return false;
         const playerMeta = metadata.players[playerID];

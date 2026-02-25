@@ -6,7 +6,8 @@
     "invalid_character": "Invalid character",
     "character_not_selected": "No character selected",
     "character_selection_not_initialized": "Character selection not initialized",
-    "command_failed": "Command failed"
+    "command_failed": "Command failed",
+    "internal_error": "Server error, action auto-recovered"
   },
   "controls": {
     "undo": {
@@ -49,6 +50,11 @@
       "localDescription": "Take turns on this device.",
       "tutorialTitle": "Tutorial Mode",
       "tutorialDescription": "Follow the guidance to learn the rules."
+    },
+    "offlineBanner": {
+      "message": "{{name}} has been offline for {{time}}",
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}min"
     },
     "labels": {
       "turn": "Turn:",

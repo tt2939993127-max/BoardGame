@@ -2390,5 +2390,9 @@
   "cardSpotlight": {
     "playerPlayed": "{{player}} 打出了卡牌",
     "confirm": "确认"
+  },
+  "endgame": {
+    "ariaPanel": "游戏结束 - {{result}}",
+    "ariaHero": "玩家 {{heroName}} - HP {{hp}} CP {{cp}}"
   }
 }

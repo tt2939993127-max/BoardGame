@@ -35,6 +35,7 @@ import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
 import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
 import { generateId, copyToClipboard } from '../../../../lib/utils';
+import { OpponentOfflineBanner } from './OpponentOfflineBanner';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -95,6 +96,8 @@ export const GameHUD = ({
     isHost,
     credentials,
     myPlayerId,
+    opponentName,
+    opponentConnected,
     players,
     onLeave,
     onDestroy,
@@ -806,6 +809,13 @@ export const GameHUD = ({
 
     return (
         <>
+            {/* 对手离线倒计时提示（仅联机模式） */}
+            {isOnline && opponentConnected !== undefined && (
+                <OpponentOfflineBanner
+                    connected={opponentConnected}
+                    name={opponentName}
+                />
+            )}
             <FabMenu
                 isDark={true}
                 items={items}

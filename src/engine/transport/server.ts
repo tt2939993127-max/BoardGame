@@ -195,7 +195,7 @@ export interface GameTransportServerConfig {
     storage: MatchStorage;
     /** 注册的游戏引擎 */
     games: GameEngineConfig[];
-    /** 离线裁决宽限期（毫秒），默认 30000 */
+    /** 离线裁决宽限期（毫秒），默认 300000（5 分钟） */
     offlineGraceMs?: number;
     /** 认证回调（可选） */
     authenticate?: (
@@ -224,7 +224,7 @@ export class GameTransportServer {
         this.gameIndex = new Map(config.games.map((g) => [g.gameId, g]));
         this.activeMatches = new Map();
         this.socketIndex = new Map();
-        this.offlineGraceMs = config.offlineGraceMs ?? 30000;
+        this.offlineGraceMs = config.offlineGraceMs ?? 300000;
         this.authenticate = config.authenticate;
         this.onGameOver = config.onGameOver;
     }
@@ -594,11 +594,25 @@ export class GameTransportServer {
                 const next = match.commandQueue.shift()!;
                 if ('_batch' in next) {
                     // batch 任务：执行完整的 batch 逻辑
-                    await next.execute();
+                    try {
+                        await next.execute();
+                    } catch (batchErr) {
+                        logger.error('[handleCommand] 队列中 batch 任务执行异常', {
+                            matchID, error: batchErr instanceof Error ? batchErr.message : String(batchErr),
+                        });
+                    }
                     next.resolve(true);
                 } else {
-                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                    next.resolve(queuedSuccess);
+                    try {
+                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                        next.resolve(queuedSuccess);
+                    } catch (queueErr) {
+                        logger.error('[handleCommand] 队列中命令执行异常', {
+                            matchID, commandType: next.commandType, playerID: next.playerID,
+                            error: queueErr instanceof Error ? queueErr.message : String(queueErr),
+                        });
+                        next.resolve(false);
+                    }
                 }
             }
 
@@ -677,11 +691,25 @@ export class GameTransportServer {
             while (match.commandQueue.length > 0) {
                 const next = match.commandQueue.shift()!;
                 if ('_batch' in next) {
-                    await next.execute();
+                    try {
+                        await next.execute();
+                    } catch (batchErr) {
+                        logger.error('[handleBatch] 队列中 batch 任务执行异常', {
+                            matchID, error: batchErr instanceof Error ? batchErr.message : String(batchErr),
+                        });
+                    }
                     next.resolve(true);
                 } else {
-                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                    next.resolve(queuedSuccess);
+                    try {
+                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                        next.resolve(queuedSuccess);
+                    } catch (queueErr) {
+                        logger.error('[handleBatch] 队列中命令执行异常', {
+                            matchID, commandType: next.commandType, playerID: next.playerID,
+                            error: queueErr instanceof Error ? queueErr.message : String(queueErr),
+                        });
+                        next.resolve(false);
+                    }
                 }
             }
             match.executing = false;
@@ -842,7 +870,36 @@ export class GameTransportServer {
             systemsConfig: engineConfig.systemsConfig,
         };
 
-        const result = executePipeline(pipelineConfig, state, command, random, playerIds);
+        let result: ReturnType<typeof executePipeline>;
+        try {
+            result = executePipeline(pipelineConfig, state, command, random, playerIds);
+        } catch (err) {
+            // 管线内部运行时异常（ReferenceError/TypeError 等），不能让它静默丢失
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            const errorStack = err instanceof Error ? err.stack : undefined;
+
+            gameLogger.commandFailed(
+                match.matchID,
+                commandType,
+                playerID,
+                err instanceof Error ? err : new Error(errorMsg),
+            );
+            logger.error('[Pipeline] 命令执行时发生运行时异常', {
+                matchID: match.matchID,
+                commandType,
+                playerID,
+                error: errorMsg,
+                stack: errorStack,
+            });
+
+            // 通知发送者
+            this.notifyPlayerError(match, playerID, 'internal_error');
+
+            // 如果当前有 pending interaction 属于该玩家，自动取消，防止游戏卡死
+            await this.cancelInteractionOnError(match, playerID);
+
+            return false;
+        }
 
         const duration = Date.now() - startTime;
 
@@ -855,13 +912,7 @@ export class GameTransportServer {
             );
 
             // 通知发送者
-            const nsp = this.io.of('/game');
-            const sockets = match.connections.get(playerID);
-            if (sockets) {
-                for (const sid of sockets) {
-                    nsp.to(sid).emit('error', match.matchID, result.error ?? 'command_failed');
-                }
-            }
+            this.notifyPlayerError(match, playerID, result.error ?? 'command_failed');
             return false;
         }
 
@@ -923,6 +974,47 @@ export class GameTransportServer {
         }
 
         return true;
+    }
+
+    // ========================================================================
+    // 错误处理辅助方法
+    // ========================================================================
+
+    /** 向指定玩家的所有连接发送错误通知 */
+    private notifyPlayerError(match: ActiveMatch, playerID: string, error: string): void {
+        const nsp = this.io.of('/game');
+        const sockets = match.connections.get(playerID);
+        if (sockets) {
+            for (const sid of sockets) {
+                nsp.to(sid).emit('error', match.matchID, error);
+            }
+        }
+    }
+
+    /**
+     * 命令执行异常后，自动取消当前玩家的 pending interaction，防止游戏卡死。
+     * 通过正常管线执行 CANCEL_INTERACTION 命令，确保状态一致性。
+     */
+    private async cancelInteractionOnError(match: ActiveMatch, playerID: string): Promise<void> {
+        const interaction = match.state.sys.interaction?.current;
+        if (!interaction || interaction.playerId !== playerID) return;
+
+        logger.warn('[ErrorRecovery] 自动取消因异常卡住的交互', {
+            matchID: match.matchID,
+            playerID,
+            interactionId: interaction.id,
+        });
+
+        try {
+            await this.executeCommandInternal(match, playerID, INTERACTION_COMMANDS.CANCEL, {});
+        } catch (cancelErr) {
+            // 取消也失败了，记录但不再递归
+            logger.error('[ErrorRecovery] 自动取消交互也失败', {
+                matchID: match.matchID,
+                playerID,
+                error: cancelErr instanceof Error ? cancelErr.message : String(cancelErr),
+            });
+        }
     }
 
     private handleDisconnect(socket: IOSocket): void {

@@ -6,7 +6,8 @@
     "invalid_character": "无效的角色",
     "character_not_selected": "尚未选择角色",
     "character_selection_not_initialized": "角色选择未初始化",
-    "command_failed": "命令执行失败"
+    "command_failed": "命令执行失败",
+    "internal_error": "服务器内部错误，操作已自动恢复"
   },
   "controls": {
     "undo": {
@@ -49,6 +50,11 @@
       "localDescription": "在本机轮流操作或同屏竞技。",
       "tutorialTitle": "学习模式",
       "tutorialDescription": "按照指示学习游戏规则。"
+    },
+    "offlineBanner": {
+      "message": "{{name}} 已离线 {{time}}",
+      "seconds": "{{count}}秒",
+      "minutes": "{{count}}分钟"
     },
     "labels": {
       "turn": "回合：",

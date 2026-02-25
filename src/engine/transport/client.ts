@@ -106,7 +106,7 @@ export class GameTransportClient {
             `${this.config.server}/game`,
             {
                 parser: msgpackParser,
-                transports: ['websocket'],
+                transports: ['websocket', 'polling'],
                 reconnection: true,
                 reconnectionAttempts: Infinity,
                 reconnectionDelay: 1000,

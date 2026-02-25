@@ -34,8 +34,8 @@ const resolveKey = (event: AudioEvent, ctx: unknown = { G: {}, ctx: {}, meta: {}
 };
 
 const ABILITY_SFX_KEYS = {
-    transcendence: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
-    thunderStrike: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
+    transcendence: 'magic.general.modern_magic_sound_fx_pack_vol.offensive_spells.offensive_spells_thunderstrike_crash_001',
+    thunderStrike: 'magic.general.simple_magic_sound_fx_pack_vol.shock.thunderbolt_strike_cast_a',
     taijiCombo: 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_kick_swoosh_1',
 } as const;
 
