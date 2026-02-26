@@ -70,7 +70,7 @@ function extractContextPreview(prompt: any): CardPreviewRef | undefined {
 }
 
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
-function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
+export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
     return text.replace(/cards\.[\w-]+\.\w+/gi, key => {
         const resolved = t(key.toLowerCase(), { defaultValue: '' });
         return resolved || key;

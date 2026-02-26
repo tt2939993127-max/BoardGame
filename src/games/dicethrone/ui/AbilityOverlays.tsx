@@ -362,7 +362,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                         <CardPreview
                                             previewRef={passiveCard.previewRef}
                                             locale={locale}
-                                            className="h-full aspect-[0.61] rounded-lg"
+                                            className="h-full aspect-[0.611] rounded-lg"
                                         />
                                     </div>
                                 )}
@@ -432,7 +432,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                     <CardPreview
                                         previewRef={upgradePreviewRef}
                                         locale={locale}
-                                        className="h-full aspect-[0.61] rounded-lg"
+                                        className="h-full aspect-[0.611] rounded-lg"
                                     />
                                 </div>
                             )}

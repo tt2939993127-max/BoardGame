@@ -135,6 +135,8 @@ npm run dev:lite
 
 使用支持 Skill 的 AI 编辑器（或者直接扔文档），调用 `.windsurf/skills/create-new-game` 技能即可开始，AI 会引导你完成全部流程……大概。
 
+数据录入使用的截图工具推荐pixpin
+
 可以开新分支提pr，我会用ai审核
 
 <details>

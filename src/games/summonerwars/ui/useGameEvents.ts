@@ -333,30 +333,6 @@ export function useGameEvents({
 
     const { entries: newEntries, didReset, didOptimisticRollback } = consumeNew();
 
-    // ── 生产诊断日志：追踪连续射击不触发问题 ──
-    // TODO: 问题定位后删除
-    if (newEntries.length > 0 || didReset || didOptimisticRollback) {
-      const hasRapidFire = newEntries.some(e =>
-        e.event.type === SW_EVENTS.ABILITY_TRIGGERED &&
-        ((e.event.payload as Record<string, unknown>).actionId === 'rapid_fire_extra_attack' ||
-         (e.event.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack')
-      );
-      const hasUnitAttacked = newEntries.some(e => e.event.type === SW_EVENTS.UNIT_ATTACKED);
-      if (hasRapidFire || hasUnitAttacked || didReset || didOptimisticRollback) {
-        console.log('[SW-DIAG:consumeNew]', {
-          newCount: newEntries.length,
-          didReset,
-          didOptimisticRollback,
-          hasRapidFire,
-          hasUnitAttacked,
-          isVisualBusy: gate.isVisualBusy,
-          eventIds: newEntries.map(e => e.id),
-          eventTypes: newEntries.map(e => e.event.type),
-          ts: Date.now(),
-        });
-      }
-    }
-
     if (didReset) {
       pendingAttackRef.current = null;
       pendingDestroyRef.current = [];
@@ -433,19 +409,6 @@ export function useGameEvents({
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
         const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
-
-        // ── 生产诊断日志 ──
-        // TODO: 问题定位后删除
-        console.log('[SW-DIAG:unit_attacked]', {
-          entryId: entry.id,
-          attacker: p.attacker,
-          target: p.target,
-          hits: p.hits,
-          attackType: p.attackType,
-          hasPendingAttack: !!pendingAttackRef.current,
-          isVisualBusy: gate.isVisualBusy,
-          ts: Date.now(),
-        });
 
         // 乐观回滚/重放防护：如果已有未完成的攻击序列（乐观预测产生），
         // 先重置门控，防止 beginSequence 计数器重复递增导致 endSequence 无法归零、
@@ -650,28 +613,12 @@ export function useGameEvents({
         // 连续射击：攻击后可选消耗充能进行额外攻击
         if (matchId === 'rapid_fire_extra_attack') {
           const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
-          // ── 生产诊断日志 ──
-          // TODO: 问题定位后删除
-          console.log('[SW-DIAG:rapid_fire]', {
-            matchId,
-            sourcePos: p.sourcePosition,
-            unitExists: !!unit,
-            unitOwner: unit?.owner,
-            myPlayerId,
-            boosts: unit?.boosts ?? 0,
-            ownerMatch: unit?.owner === myPlayerId,
-            boostsOk: (unit?.boosts ?? 0) >= 1,
-            isVisualBusy: gate.isVisualBusy,
-            entryId: entry.id,
-            ts: Date.now(),
-          });
           if (unit && unit.owner === myPlayerId && (unit.boosts ?? 0) >= 1) {
             const captured = {
               sourceUnitId: p.sourceUnitId,
               sourcePosition: p.sourcePosition,
             };
             gateRef.current.scheduleInteraction(() => {
-              console.log('[SW-DIAG:rapid_fire:scheduled]', { ts: Date.now() });
               setRapidFireMode(captured);
             });
           }
@@ -904,13 +851,6 @@ export function useGameEvents({
 
   // 播放延迟的摧毁特效（含音效）+ 结束视觉序列门控
   const flushPendingDestroys = useCallback(() => {
-    // ── 生产诊断日志 ──
-    // TODO: 问题定位后删除
-    console.log('[SW-DIAG:flushDestroys]', {
-      pendingCount: pendingDestroyRef.current.length,
-      isVisualBusy: gate.isVisualBusy,
-      ts: Date.now(),
-    });
     if (pendingDestroyRef.current.length > 0) {
       for (const effect of pendingDestroyRef.current) {
         pushDestroyEffectRef.current({

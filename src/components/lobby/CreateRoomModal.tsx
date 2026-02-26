@@ -52,7 +52,7 @@ export const CreateRoomModal = ({
     // 状态
     const [roomName, setRoomName] = useState('');
     const [numPlayers, setNumPlayers] = useState(playerOptions[0]);
-    const [ttlSeconds, setTtlSeconds] = useState(0);
+    const [ttlSeconds, setTtlSeconds] = useState(86400);
     const [password, setPassword] = useState('');
 
     const handleConfirm = () => {

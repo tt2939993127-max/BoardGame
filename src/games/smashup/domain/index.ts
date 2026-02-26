@@ -209,9 +209,19 @@ function scoreOneBase(
     events.push(...afterResult.events);
     if (afterResult.matchState) ms = afterResult.matchState;
 
+    // 将 afterScoring 基地能力产生的事件 reduce 到 core，
+    // 确保 ongoing afterScoring 触发器使用最新状态。
+    // 修复时序问题：寺庙 afterScoring 把随从放牌库底后，
+    // 大副 afterScoring 不应再看到该随从在场上。
+    let afterScoringCore = updatedCore;
+    for (const evt of afterResult.events) {
+        afterScoringCore = reduce(afterScoringCore, evt as SmashUpEvent);
+    }
+
     // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
-    const afterScoringEvents = fireTriggers(updatedCore, 'afterScoring', {
-        state: updatedCore,
+    // 使用 reduce 后的 core，包含基地能力的效果（如随从已被放入牌库底）
+    const afterScoringEvents = fireTriggers(afterScoringCore, 'afterScoring', {
+        state: afterScoringCore,
         playerId: pid,
         baseIndex,
         rankings,

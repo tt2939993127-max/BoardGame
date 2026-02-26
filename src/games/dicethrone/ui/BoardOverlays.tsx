@@ -164,7 +164,7 @@ const MagnifyUpgradeOverlay: React.FC<{
                             <CardPreview
                                 previewRef={previewRef}
                                 locale={locale}
-                                className="h-full aspect-[0.61] rounded-lg"
+                                className="h-full aspect-[0.611] rounded-lg"
                             />
                         </div>
                     </div>
@@ -183,7 +183,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const magnifyContainerClassName = `
         group/modal
         ${isPlayerBoardPreview ? 'aspect-[2048/1673] h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
-        ${props.magnifiedCard ? 'aspect-[0.61] h-auto w-auto max-h-[90vh] max-w-[60vw]' : ''}
+        ${props.magnifiedCard ? 'aspect-[0.611] h-auto w-auto max-h-[90vh] max-w-[60vw]' : ''}
         ${isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
         ${!isPlayerBoardPreview && !props.magnifiedCard && !isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
     `;
@@ -205,7 +205,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 {props.magnifiedCards.map((card) => (
                                     <CardPreview
                                         key={card.id}
-                                        className="w-[28vw] aspect-[0.61] max-w-[350px] max-h-[574px] rounded-xl shadow-2xl border border-white/20 flex-shrink-0"
+                                        className="w-[28vw] aspect-[0.611] max-w-[350px] max-h-[574px] rounded-xl shadow-2xl border border-white/20 flex-shrink-0"
                                         style={{ backgroundColor: '#0f172a' }}
                                         previewRef={card.previewRef}
                                         locale={props.locale}

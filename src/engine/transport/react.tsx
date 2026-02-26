@@ -73,6 +73,13 @@ interface GameClientContextValue {
     isMultiplayer: boolean;
     /** 重置游戏（本地模式用） */
     reset?: () => void;
+    /**
+     * 乐观引擎是否有未确认的命令（等待服务端确认）。
+     * reconcile 回滚期间的临时中间状态可能导致 hasAvailableActions=false，
+     * 此标志用于抑制 useAutoSkipPhase 在此期间误触发。
+     * 本地模式始终为 false。
+     */
+    hasPendingOptimisticCommands: boolean;
 }
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
@@ -102,6 +109,7 @@ export function useGameClient<
         isConnected: boolean;
         isMultiplayer: boolean;
         reset?: () => void;
+        hasPendingOptimisticCommands: boolean;
     };
 }
 
@@ -120,7 +128,7 @@ export function useBoardProps<TCore = unknown>(): GameBoardProps<TCore> | null {
 
     if (!ctx || !ctx.state) return null;
 
-    const { state, dispatch, playerId, matchPlayers, isConnected, isMultiplayer, reset } = ctx;
+    const { state, dispatch, playerId, matchPlayers, isConnected, isMultiplayer, reset, hasPendingOptimisticCommands } = ctx;
 
     return {
         G: state as MatchState<TCore>,
@@ -130,6 +138,7 @@ export function useBoardProps<TCore = unknown>(): GameBoardProps<TCore> | null {
         isConnected,
         isMultiplayer,
         reset,
+        hasPendingOptimisticCommands,
     };
 }
 
@@ -289,24 +298,6 @@ export function GameProvider({
                     const hasPendingBefore = engine.hasPendingCommands();
                     const result = engine.reconcile(newState as MatchState<unknown>, meta);
 
-                    // ── 生产诊断日志：追踪 reconcile 结果 ──
-                    // TODO: 问题定位后删除
-                    if (result.didRollback || meta?.stateID !== undefined) {
-                        const serverES = (newState as MatchState<unknown>).sys?.eventStream;
-                        const renderES = result.stateToRender.sys?.eventStream;
-                        console.log('[GP-DIAG:reconcile]', {
-                            stateID: meta?.stateID ?? '-',
-                            lastCmdPlayer: meta?.lastCommandPlayerId ?? '-',
-                            didRollback: result.didRollback,
-                            watermark: result.optimisticEventWatermark,
-                            serverEntryCount: serverES?.entries?.length ?? 0,
-                            renderEntryCount: renderES?.entries?.length ?? 0,
-                            serverMaxId: serverES?.entries?.length ? (serverES.entries as Array<{id: number}>)[serverES.entries.length - 1]?.id : null,
-                            renderMaxId: renderES?.entries?.length ? (renderES.entries as Array<{id: number}>)[renderES.entries.length - 1]?.id : null,
-                            ts: Date.now(),
-                        });
-                    }
-
                     if (result.didRollback && result.optimisticEventWatermark !== null) {
                         // 回滚：使用 preOptimisticWatermark 过滤客户端已消费的事件
                         // 只过滤基线以下的事件，保留对手命令产生的新事件
@@ -337,18 +328,6 @@ export function GameProvider({
 
                 // 实时刷新交互选项（如果策略是 realtime）
                 const refreshedState = refreshInteractionOptions(finalState);
-
-                // ── 增量诊断日志：交互状态变更 ──
-                const interactionCurrent = (refreshedState as MatchState<unknown>).sys?.interaction?.current;
-                if (interactionCurrent || meta?.stateID !== undefined) {
-                    console.log('[GameProvider:onStateUpdate]', {
-                        stateID: meta?.stateID ?? '-',
-                        interactionId: interactionCurrent?.id ?? 'none',
-                        interactionPlayer: interactionCurrent?.playerId ?? '-',
-                        sourceId: interactionCurrent?.sourceId ?? '-',
-                        ts: Date.now(),
-                    });
-                }
                 
                 setState(refreshedState);
                 setMatchPlayers(players);
@@ -421,40 +400,12 @@ export function GameProvider({
     }, []);
 
     const dispatch = useCallback((type: string, payload: unknown) => {
-        // ── 增量诊断日志：交互/响应窗口命令 ──
-        const isInteractionCmd = type.startsWith('SYS_INTERACTION_') || type === 'RESPONSE_PASS';
-        if (isInteractionCmd) {
-            const pl = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-            console.log('[GameProvider:dispatch]', {
-                type,
-                optionId: pl.optionId ?? pl.optionIds ?? '-',
-                playerId,
-                stateID: lastConfirmedStateIDRef.current,
-                ts: Date.now(),
-            });
-        }
-
         // 内部：走 optimistic engine + batcher/sendCommand 路径
         const dispatchToNetwork = (cmdType: string, cmdPayload: unknown) => {
             // 1. 乐观更新
             const engine = optimisticEngineRef.current;
             if (engine) {
                 const result = engine.processCommand(cmdType, cmdPayload, playerId ?? '0');
-                // ── 生产诊断日志：追踪 DECLARE_ATTACK 乐观预测 ──
-                // TODO: 问题定位后删除
-                if (cmdType === 'DECLARE_ATTACK') {
-                    const es = result.stateToRender?.sys?.eventStream;
-                    const esEntries = es?.entries as Array<{id: number; event: {type: string}}> | undefined;
-                    console.log('[GP-DIAG:processCmd]', {
-                        cmd: cmdType,
-                        hasState: !!result.stateToRender,
-                        animMode: result.animationMode,
-                        entryCount: esEntries?.length ?? 0,
-                        maxId: esEntries?.length ? esEntries[esEntries.length - 1]?.id : null,
-                        eventTypes: esEntries?.slice(-10).map(e => e.event.type) ?? [],
-                        ts: Date.now(),
-                    });
-                }
                 if (result.stateToRender) {
                     const refreshed = refreshInteractionOptions(result.stateToRender);
                     setState(refreshed);
@@ -499,6 +450,7 @@ export function GameProvider({
         matchPlayers,
         isConnected,
         isMultiplayer: true,
+        hasPendingOptimisticCommands: optimisticEngineRef.current?.hasPendingCommands() ?? false,
     }), [state, dispatch, playerId, matchPlayers, isConnected]);
 
     return (
@@ -670,6 +622,7 @@ export function LocalGameProvider({
         isConnected: true,
         isMultiplayer: false,
         reset,
+        hasPendingOptimisticCommands: false, // 本地模式无乐观更新
     }), [state, dispatch, matchPlayers, reset, localPlayerId, config.domain]);
 
     // 注册测试工具访问器（仅在测试环境生效）

@@ -125,4 +125,10 @@ export interface GameBoardProps<
 
     /** 重置游戏回调（用于重赛） */
     reset?: () => void;
+
+    /**
+     * 乐观引擎是否有未确认的命令（等待服务端确认）。
+     * 本地模式始终为 false。
+     */
+    hasPendingOptimisticCommands?: boolean;
 }

@@ -78,7 +78,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 | # | 维度 | 核心问题 |
 |---|------|---------|
-| D1 | 语义保真 | 实现是否忠实于权威描述？（多做/少做/做错）。**特别注意**：伤害/debuff 的作用目标是否与描述一致？custom action handler 中 targetId 来源是否正确？ |
+| D1 | 语义保真 | 实现是否忠实于权威描述？（多做/少做/做错）。**特别注意**：伤害/debuff 的作用目标是否与描述一致？custom action handler 中 targetId 来源是否正确？**实体筛选/收集操作的范围是否与描述一致？**（"本基地" vs "其他基地" vs "所有基地"等） |
 | D2 | 边界完整 | 所有限定条件是否全程约束？ |
 | D3 | 数据流闭环 | 定义→注册→执行→状态→验证→UI→i18n→测试 是否闭环？**写入→读取 ID 一致性**、**引擎 API 调用契约** |
 | D4 | 查询一致性 | 可被 buff/光环动态修改的属性是否走统一入口？ |
@@ -136,6 +136,40 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 > - ❌ 恢复 `MINION_DESTROYED` 后未做 reason 门禁，导致同拦截器再次触发并循环
 
 > **示例（SummonerWars）**："建筑"有 `cell.structure`（地图格子上的固定建筑）和拥有 `mobile_structure` 能力的 `cell.unit`（可移动建筑单位）两种载体
+
+**D1 子项：实体筛选范围语义审计（强制）**（新增/修改任何包含实体筛选（filter/collect/遍历）的能力实现时触发）：代码中每个 `.filter()`/`.find()`/`for...of` 等实体收集操作的范围，必须与描述中的范围完全一致。**核心原则：筛选范围是语义保真的基础维度——"哪些实体"比"对实体做什么"更容易出错且更难发现，因为范围错误不会报类型错误、不会抛异常，只会静默返回错误的候选集。** 审查方法：
+1. **提取描述中的范围限定词**：逐字阅读能力描述，标注所有范围限定词并归类：
+   - **位置范围**："本基地"/"此基地" vs "其他基地"/"另一个基地" vs "所有基地" vs "相邻基地"
+   - **归属范围**："己方"/"你的" vs "对方"/"对手的" vs "所有玩家的" vs "任意"
+   - **实体类型**："随从" vs "行动卡" vs "所有卡牌" vs "ongoing 行动卡"
+   - **来源范围**："手牌" vs "弃牌堆" vs "牌库" vs "场上" vs "牌库顶 N 张"
+   - **排除条件**："非本基地" = 所有基地 - 本基地；"另一个基地上的" = 排除当前基地
+2. **逐个追踪代码中的筛选操作**：找到实现中所有 `.filter()`/`.find()`/`.flatMap()`/`for...of` 循环，对每个操作：
+   - 标注其筛选的数据源（遍历的是哪个集合？`base.minions`/`state.bases`/`player.hand`？）
+   - 标注其过滤条件（`m.controller === playerId`/`b.index !== currentBaseIndex`？）
+   - 与描述中的范围限定词逐一比对
+3. **判定标准**：
+   - 描述说"其他基地上的随从" → 代码必须遍历 `state.bases.filter(b => b.index !== thisBaseIndex)` 的随从 ❌ 只遍历 `thisBase.minions`
+   - 描述说"你的随从" → 代码必须过滤 `m.controller === playerId` ❌ 遍历所有随从不过滤归属
+   - 描述说"手牌中的随从" → 代码必须从 `player.hand.filter(c => c.type === 'minion')` ❌ 从 `base.minions` 取
+   - 描述无范围限定（"一个随从"）→ 代码应遍历所有合法目标 ❌ 只遍历部分
+4. **交叉验证**：如果能力有多个筛选步骤（如"选择其他基地上你的一个随从，移动到此基地"），每个步骤的范围都必须独立验证
+5. **输出格式**：
+   ```
+   描述范围：「其他基地上你的一个随从」
+   代码筛选：base.minions.filter(m => m.controller === runnerUpId)  // ← 只筛选本基地
+   判定：❌ 范围不匹配（描述=其他基地，代码=本基地）
+   ```
+
+**常见范围错误模式**：
+- ❌ "其他基地"写成"本基地"（最常见：遍历 `thisBase.minions` 而非 `otherBases.flatMap(b => b.minions)`）
+- ❌ "所有基地"写成"本基地"（遗漏其他基地的实体）
+- ❌ "对手的随从"写成"己方随从"（`controller` 过滤条件取反）
+- ❌ "手牌中的"写成"场上的"（数据源选错）
+- ❌ "牌库顶 N 张"写成"整个牌库"（范围过大）
+- ❌ 无排除条件（描述说"另一个"但代码包含了当前实体自身）
+
+> **典型案例（SmashUp base_tortuga）**：描述（勘误版）"亚军可以将**另一个基地上**自己的一个随从移动到替换基地"。代码 `base.minions.filter(m => m.controller === runnerUpId)` 只筛选本基地（Tortuga）上的随从，而非其他基地上的随从。范围完全反转，但不报错、不抛异常，只是候选列表为空（因为 Tortuga 已结算，随从已分散）导致功能静默失效。修复：改为 `state.bases.filter(b => b.index !== baseIndex).flatMap(b => b.minions).filter(m => m.controller === runnerUpId)`
 
 **D2 子项：打出约束审计（强制）**（新增/修改 ongoing 行动卡、或修"卡牌打出到不合法基地"时触发）：描述中含条件性打出目标的 ongoing 行动卡，必须在数据定义中声明 `playConstraint`，并在验证层和 UI 层同步检查。**核心原则：卡牌描述中的打出前置条件必须在三层（数据定义 → 验证层 → UI 层）全部体现，缺任何一层都会导致非法打出或 UI 误导。** 审查方法：
 1. **识别条件性打出描述**：grep 所有 ongoing 行动卡的 i18n effectText，匹配 `打出到一个.*的基地上` 等模式（如"打出到一个你至少拥有一个随从的基地上"）
@@ -808,6 +842,8 @@ expect(state.sys.responseWindow?.current?.pendingInteractionId).toBeDefined();
 | 新增事件产生路径 | D31,D8,D3 | D17,D6 |
 | 新增/修改绕过正常流程的替代路径 | D32,D8,D17 | D31,D3 |
 | 修"替代路径下交互/动画不触发" | D32,D8,D5 | D17,D3 |
+| 新增/修改包含实体筛选的能力 | D1,D2,D3 | D5,D8,D12 |
+| 修"筛选结果为空/候选列表缺失" | D1,D2,D5 | D3,D12,D24 |
 
 ### 输出格式
 
@@ -971,6 +1007,7 @@ ID 只出现在定义+注册 = 消费层缺失。
 | 野生保护区（wildlife_preserve）`registerProtection('action')` 注册了保护，但 `filterProtected*Events` 只在 `execute()` 后处理中调用。行动卡效果通过交互解决路径（`afterEvents` → handler）产生事件，完全绕过保护过滤，保护机制在交互解决路径下完全失效 | 效果拦截路径不完整：过滤函数只在直接命令执行路径调用，交互解决路径产生的事件绕过过滤。"注册+过滤"机制必须覆盖所有事件产生路径 | D31 | smashup |
 | 影舞者（ninja_shinobi）Me First! 窗口中 validate 允许 PLAY_MINION 打出 beforeScoringPlayable 随从，GameTestRunner 测试全绿。但 UI 层 `handleCardClick` 在 `isMeFirstResponse` 分支中 `card.type !== 'action'` 硬编码拒绝随从，`meFirstDisabledUids` 把所有非 action 卡标记为 disabled。引擎层合法路径被 UI 层独立门控完全阻断，用户点击无反应 | UI 交互门控与 validate 不对齐：validate 新增合法路径后未同步检查 UI 层的独立前置过滤（点击回调门控 + 禁用集合 + 可选目标集合），引擎测试绕过 UI 无法发现 | D15 | smashup |
 | 潜行（Shadows）免伤分支调用 `resolvePostDamageEffects` 后直接 `return { events, overrideNextPhase: 'main2' }`，遗漏了 5 个后处理检查（BONUS_DICE_REROLL halt、CHOICE halt、TOKEN_RESPONSE halt、checkDazeExtraAttack、checkAfterAttackResponseWindow）。高温爆破 II/III 级的额外骰子交互在潜行免伤时完全不触发 | 替代路径后处理遗漏：快捷路径调用了核心函数但跳过了规范路径中积累的所有后处理检查，事件被正确产生但 halt 信号被忽略 | D32 | dicethrone |
+| base_tortuga（托尔图加）描述（勘误版）"亚军可以将**另一个基地上**自己的一个随从移动到替换基地"，代码 `base.minions.filter(m => m.controller === runnerUpId)` 只筛选本基地上的随从而非其他基地。范围完全反转但不报错，候选列表为空导致功能静默失效 | 实体筛选范围语义错误：filter 的数据源（本基地 vs 其他基地）与描述范围限定词完全相反，属于 D1 语义保真的基础维度缺失 | D1 | smashup |
 
 
 ---
@@ -1426,3 +1463,58 @@ const PREVENT_DESTROY_SOURCE_IDS = [
 - D5（交互完整）：同类能力的交互模式也应跨实体一致（参见 D5 子项：同类型卡牌交互一致性）
 - D10（元数据一致）：注册模式不一致可能导致元数据（categories 等）不一致
 - D22（伤害计算管线配置）：伤害类能力是否统一走伤害管线
+
+
+---
+
+## 五、审计 Spec 规划检查清单（强制）
+
+> **触发条件**：规划任何审计类 spec（requirements/design/tasks）时必须执行此清单。
+> **教训**：SmashUp 全派系审计 spec 只规划了静态注册检查（描述→实现文本一致性），完全遗漏 D8（计分管线时序）和 D19（基地能力×ongoing 触发器组合场景），导致 Temple of Goju afterScoring 时序 bug 未被发现。
+
+### 规划前强制步骤
+
+1. **阅读本文档 D1-D33 维度表**：逐条评估哪些维度适用于目标游戏/模块
+2. **识别目标游戏的关键管线**：列出所有涉及多步骤状态传播的管线（如计分管线、攻击管线、回合流转管线），每个管线的中间 reduce 时机都是 D8 审计点
+3. **识别组合场景**：列出所有可能在同一时序点触发的机制组合（如基地能力 + ongoing 触发器、多个 afterEvents 系统），每个组合都是 D19 审计点
+
+### Spec Requirements 必须覆盖的维度分类
+
+| 分类 | 维度 | 测试手段 | 说明 |
+|------|------|---------|------|
+| **静态注册** | D3（数据流闭环）、D10（元数据一致） | Property 测试 | 注册表覆盖、ID 一致性、categories 声明 |
+| **描述一致性** | D1（语义保真）、D2（边界完整）、D5（交互完整） | Property 测试 + 人工审查 | 关键词→注册表映射、约束条件覆盖 |
+| **运行时时序** | D8（时序正确）、D17（隐式依赖） | GameTestRunner 行为测试 | 管线中间状态传播、阶段边界交互、reduce 时机 |
+| **组合场景** | D19（组合场景）、D6（副作用传播） | GameTestRunner 行为测试 | 同时序多触发器、跨系统协作、连锁效果 |
+| **资源守恒** | D7（资源守恒）、D11（Reducer 消耗路径）、D12（写入-消耗对称） | GameTestRunner 行为测试 | 代价扣除、额度消耗、状态清理 |
+| **回合生命周期** | D14（回合清理完整）、D8 子项（写入-消费窗口对齐） | GameTestRunner 行为测试 | 临时状态清理、跨阶段状态泄漏 |
+| **UI 同步** | D15（UI 状态同步）、D20（状态可观测性） | E2E 测试 | UI 读取字段与 reducer 写入字段一致 |
+
+### 禁止的规划模式
+
+- ❌ **只有静态注册检查**：只规划 Property 测试验证注册表覆盖，不规划运行时行为测试
+- ❌ **只有描述→实现文本比对**：只比对 i18n 文本和代码实现，不验证管线时序和组合场景
+- ❌ **遗漏关键管线**：目标游戏有计分管线/攻击管线/回合流转管线，但 spec 中没有对应的时序测试任务
+- ❌ **遗漏组合场景**：目标游戏有多种同时序触发机制（如 afterScoring 基地能力 + afterScoring ongoing），但 spec 中没有组合测试任务
+
+### 正确的规划模式
+
+```
+需求 N：运行时管线时序审计
+  验收标准：
+  1. 计分管线：beforeScoring 基地能力事件 reduce 后再触发 ongoing beforeScoring
+  2. 计分管线：afterScoring 基地能力事件 reduce 后再触发 ongoing afterScoring
+  3. 攻击管线：伤害事件 reduce 后再触发 afterAttack 触发器
+  ...
+
+需求 M：组合场景审计
+  验收标准：
+  1. 同基地同时序：基地 afterScoring 能力 + ongoing afterScoring 触发器同时存在
+  2. 跨系统协作：响应窗口 + 交互系统 + 事件系统的 priority 竞争
+  ...
+
+任务 X：运行时行为测试
+  X.1 用 GameTestRunner 构造"基地有 afterScoring 能力 + 场上有 afterScoring ongoing 卡"的场景
+  X.2 断言 ongoing 触发器看到的是 reduce 后的状态（被基地能力移除的随从不在场上）
+  ...
+```

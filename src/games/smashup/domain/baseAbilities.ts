@@ -963,31 +963,44 @@ export function registerBaseAbilities(): void {
     });
 
     // base_tortuga: 托尔图加
-    // "冠军计分后，亚军可以移动他的一个随从到替换本基地的基地上"
-    // 注意：continuation 运行时基地已被替换，替换基地在同一 baseIndex 位置
+    // 勘误版："在这个基地计分并被替换后，亚军可以移动他在其他基地上的一个随从到替换基地。"
+    // 注意：被移动的随从不能来自托尔图加本身（官方澄清）
+    // continuation 运行时基地已被替换，替换基地在同一 baseIndex 位置
     registerBaseAbility('base_tortuga', 'afterScoring', (ctx) => {
         if (!ctx.rankings || ctx.rankings.length < 2) return { events: [] };
         const runnerUpId = ctx.rankings[1].playerId;
-        const base = ctx.state.bases[ctx.baseIndex];
-        if (!base) return { events: [] };
-        const runnerUpMinions = base.minions.filter(m => m.controller === runnerUpId);
-        if (runnerUpMinions.length === 0) return { events: [] };
-        const minionOptions = runnerUpMinions.map((m, i) => {
-            const def = getCardDef(m.defId);
-            return {
-                id: `minion-${i}`,
-                label: `${def?.name ?? m.defId} (力量${getEffectivePower(ctx.state, m, ctx.baseIndex)})`,
-                value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner },
-            };
-        });
-        const options: PromptOption<{ skip: true } | { minionUid: string; minionDefId: string; owner: string }>[] = [
+        // 收集亚军在其他基地上的随从（不包括托尔图加本身）
+        const otherMinions: { uid: string; defId: string; owner: string; baseIndex: number; label: string }[] = [];
+        for (let i = 0; i < ctx.state.bases.length; i++) {
+            if (i === ctx.baseIndex) continue; // 排除托尔图加本身
+            const base = ctx.state.bases[i];
+            const baseDef = getBaseDef(base.defId);
+            for (const m of base.minions) {
+                if (m.controller !== runnerUpId) continue;
+                const def = getCardDef(m.defId);
+                otherMinions.push({
+                    uid: m.uid,
+                    defId: m.defId,
+                    owner: m.owner,
+                    baseIndex: i,
+                    label: `${def?.name ?? m.defId} (${baseDef?.name ?? '基地'}, 力量${getEffectivePower(ctx.state, m, i)})`,
+                });
+            }
+        }
+        if (otherMinions.length === 0) return { events: [] };
+        const minionOptions = otherMinions.map((m, i) => ({
+            id: `minion-${i}`,
+            label: m.label,
+            value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner, fromBaseIndex: m.baseIndex },
+        }));
+        const options = [
             { id: 'skip', label: '跳过', value: { skip: true } },
             ...minionOptions,
-        ];
+        ] as PromptOption<{ skip: true } | { minionUid: string; minionDefId: string; owner: string; fromBaseIndex: number }>[];
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_tortuga_${ctx.now}`, runnerUpId,
-            '托尔图加：选择移动一个随从到替换基地', options,
+            '托尔图加：选择移动一个其他基地上的随从到替换基地', options,
             { sourceId: 'base_tortuga', targetType: 'minion' },
         );
         return {
@@ -1212,16 +1225,16 @@ export function registerBaseInteractionHandlers(): void {
         )] };
     });
 
-    // 托尔图加：将随从移动到替换基地
+    // 托尔图加：将其他基地上的随从移动到替换基地
     registerInteractionHandler('base_tortuga', (state, _playerId, value, iData, _random, timestamp) => {
-        const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string };
+        const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string; fromBaseIndex?: number };
         if (selected.skip) return { state, events: [] };
         const ctx = getContinuationContext<{ baseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
         return { state, events: [moveMinion(
             selected.minionUid!,
             selected.minionDefId!,
-            -1,
+            selected.fromBaseIndex ?? -1,
             ctx.baseIndex,
             '托尔图加：亚军移动随从到替换基地',
             timestamp,

@@ -89,7 +89,7 @@ describe('HybridStorage 行为（统一 MongoDB）', () => {
     });
 
     it('临时房间断线超时后被清理', async () => {
-        const disconnectedSince = Date.now() - 6 * 60 * 1000;
+        const disconnectedSince = Date.now() - 31 * 60 * 1000;
         const setupData = buildSetupData();
         const baseMetadata = {
             ...buildMetadata(setupData),

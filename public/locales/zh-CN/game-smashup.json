@@ -981,7 +981,7 @@
     },
     "wizard_sacrifice": {
       "name": "献祭",
-      "effectText": "选择你的一个随从。抽等同于它力量的卡牌数。消灭那个仆从。"
+      "effectText": "选择你的一个随从。抽等同于它力量的卡牌数。消灭那个随从。"
     },
     "wizard_scry": {
       "name": "占卜",
@@ -1092,7 +1092,7 @@
     },
     "base_tortuga": {
       "name": "托尔图加",
-      "abilityText": "冠军计分后，亚军可以移动他的一个随从到替换本基地的基地上。"
+      "abilityText": "在这个基地计分并被替换后，亚军可以移动他在其他基地上的一个随从到替换基地。"
     },
     "base_great_library": {
       "name": "大图书馆",

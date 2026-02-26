@@ -707,7 +707,7 @@ export const BASE_CARDS_CORE_WIKI: WikiBaseSnapshot[] = [
     wikiName: 'Tortuga',
     wikiBreakpoint: 21,
     wikiVpAwards: [4, 3, 2],
-    wikiAbilityText: 'After each time a minion is destroyed here, its owner may play an extra minion.',
+    wikiAbilityText: 'After this base scores and is replaced, the runner-up may move one of their minions on another base to the replacement base.',
   },
   // 巫师基地
   {

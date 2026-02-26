@@ -36,7 +36,7 @@ import { useGameEvents } from './ui/useGameEvents';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { smashUpFxRegistry } from './ui/fxSetup';
 import { FactionSelection } from './ui/FactionSelection';
-import { PromptOverlay } from './ui/PromptOverlay';
+import { PromptOverlay, resolveI18nKeys } from './ui/PromptOverlay';
 import { getFactionMeta } from './ui/factionMeta';
 import { PLAYER_CONFIG } from './ui/playerConfig';
 import { BaseZone } from './ui/BaseZone';
@@ -373,12 +373,13 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
 
     // 交互驱动的选择提示标题（基地/随从/手牌/行动卡选择统一）
     const interactionSelectTitle = useMemo(() => {
-        if (isBaseSelectPrompt && currentPrompt) return currentPrompt.title;
-        if (isMinionSelectPrompt && currentPrompt) return currentPrompt.title;
-        if (isHandDiscardPrompt && currentPrompt) return currentPrompt.title;
-        if (isOngoingSelectPrompt && currentPrompt) return currentPrompt.title;
-        return '';
-    }, [isBaseSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, isOngoingSelectPrompt, currentPrompt]);
+        let raw = '';
+        if (isBaseSelectPrompt && currentPrompt) raw = currentPrompt.title;
+        else if (isMinionSelectPrompt && currentPrompt) raw = currentPrompt.title;
+        else if (isHandDiscardPrompt && currentPrompt) raw = currentPrompt.title;
+        else if (isOngoingSelectPrompt && currentPrompt) raw = currentPrompt.title;
+        return raw ? resolveI18nKeys(raw, t) : '';
+    }, [isBaseSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, isOngoingSelectPrompt, currentPrompt, t]);
 
     // 弃牌堆随从选择交互检测（僵尸领主等）：targetType === 'discard_minion'
     const isDiscardMinionPrompt = useMemo(() => {
