@@ -79,10 +79,9 @@ describe('破隐一击伤害计算 Bug 复现', () => {
         expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 7);
     });
 
-    it('暴击 Token 不会被提供给 kidney-shot（expectedDamage=0 < 5 门控）', () => {
-        // kidney-shot 的伤害来自 custom action（damage-full-cp），不是显式 damage action
-        // getPlayerAbilityBaseDamage 只计算显式 damage action → 返回 0
-        // expectedDamage = 0 < 5 → 暴击 Token 被过滤，选择不会被创建
+    it('暴击 Token 不会被提供给 kidney-shot（CP=0 + gainCp(4) = 4 < 5 门控）', () => {
+        // kidney-shot preDefense: gainCp(4)，CP 从 0 变为 4
+        // estimateDamage 在 preDefense 后评估：CP=4 < 5 → 暴击 Token 被过滤
         // 因此有暴击 Token 也不会被询问，直接进入防御阶段
         const queuedRandom = createQueuedRandom([
             1, 2, 3, 4, 5,  // 进攻掷骰
@@ -95,7 +94,7 @@ describe('破隐一击伤害计算 Bug 复现', () => {
             playerIds: ['0', '1'],
             random: queuedRandom,
             setup: createHeroMatchup('shadow_thief', 'pyromancer', (core) => {
-                core.players['0'].resources[RESOURCE_IDS.CP] = 3;
+                core.players['0'].resources[RESOURCE_IDS.CP] = 0;
                 core.players['0'].tokens[TOKEN_IDS.CRIT] = 1;
                 core.players['0'].tokens[TOKEN_IDS.SNEAK] = 0;
                 core.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK] = 0;
@@ -108,14 +107,14 @@ describe('破隐一击伤害计算 Bug 复现', () => {
         });
 
         const result = runner.run({
-            name: '破隐一击 + 暴击 Token（不会被提供）',
+            name: '破隐一击 + 暴击 Token（CP 不足，不会被提供）',
             commands: [
                 ...advanceTo('offensiveRoll'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'kidney-shot' }),
                 cmd('ADVANCE_PHASE', '0'),
-                // 暴击 Token 不会被提供（expectedDamage=0 < 5），直接进入防御阶段
+                // 暴击 Token 不会被提供（CP=0+4=4 < 5），直接进入防御阶段
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
                 cmd('ADVANCE_PHASE', '1'),
@@ -125,11 +124,11 @@ describe('破隐一击伤害计算 Bug 复现', () => {
 
         expect(result.assertionErrors).toEqual([]);
         const core = result.finalState.core;
-        // CP=3 + gainCp(4) = 7, damage = 7
-        expect(core.players['0'].resources[RESOURCE_IDS.CP]).toBe(7);
+        // CP=0 + gainCp(4) = 4, damage = 4
+        expect(core.players['0'].resources[RESOURCE_IDS.CP]).toBe(4);
         // 暴击 Token 未被消耗（选择从未创建）
         expect(core.players['0'].tokens[TOKEN_IDS.CRIT]).toBe(1);
-        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 7);
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 4);
     });
 
     it('完整链路复现：卖2牌→遁入阴影→暗影币→大顺子→破隐一击→防御→结算', () => {

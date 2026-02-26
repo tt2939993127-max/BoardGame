@@ -726,6 +726,29 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
 }
 
 // ============================================================================
+// 伤害预估回调（用于 Token 门控等需要在执行前估算伤害的场景）
+// ============================================================================
+
+/** CP 系伤害预估：当前 CP 的一半（向上取整） */
+const estimateHalfCpDamage = (state: Record<string, unknown>, playerId: string): number => {
+    const players = state.players as Record<string, { resources: Record<string, number> }>;
+    const cp = Math.min(players[playerId]?.resources[RESOURCE_IDS.CP] ?? 0, CP_MAX);
+    return Math.ceil(cp / 2);
+};
+
+/** CP 系伤害预估：等同当前 CP */
+const estimateFullCpDamage = (state: Record<string, unknown>, playerId: string): number => {
+    const players = state.players as Record<string, { resources: Record<string, number> }>;
+    return Math.min(players[playerId]?.resources[RESOURCE_IDS.CP] ?? 0, CP_MAX);
+};
+
+/** CP 系伤害预估：当前 CP + 5 */
+const estimateCpPlus5Damage = (state: Record<string, unknown>, playerId: string): number => {
+    const players = state.players as Record<string, { resources: Record<string, number> }>;
+    return Math.min(players[playerId]?.resources[RESOURCE_IDS.CP] ?? 0, CP_MAX) + 5;
+};
+
+// ============================================================================
 // 注册
 // ============================================================================
 
@@ -733,7 +756,10 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-dagger-strike-cp', handleDaggerStrikeCp, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-poison', handleDaggerStrikePoison, { categories: ['status'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-draw', handleDaggerStrikeDraw, { categories: ['resource'] });
-    registerCustomActionHandler('shadow_thief-damage-half-cp', handleDamageHalfCp, { categories: ['damage', 'resource'] });
+    registerCustomActionHandler('shadow_thief-damage-half-cp', handleDamageHalfCp, {
+        categories: ['damage', 'resource'],
+        estimateDamage: estimateHalfCpDamage,
+    });
 
     registerCustomActionHandler('shadow_thief-steal-cp', handleStealCp, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-steal-cp-2', handleStealCp2, { categories: ['resource'] });
@@ -742,13 +768,19 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-steal-cp-5', handleStealCp5, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-steal-cp-6', handleStealCp6, { categories: ['resource'] });
 
-    registerCustomActionHandler('shadow_thief-damage-full-cp', handleDamageFullCp, { categories: ['damage'] });
+    registerCustomActionHandler('shadow_thief-damage-full-cp', handleDamageFullCp, {
+        categories: ['damage'],
+        estimateDamage: estimateFullCpDamage,
+    });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice', 'damage'] });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'damage', 'resource', 'card'] });
     registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, { categories: ['card', 'other'] });
     registerCustomActionHandler('shadow_thief-cornucopia-discard', handleCornucopiaDiscard, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, { categories: ['card', 'resource', 'other'] });
-    registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, { categories: ['damage'] });
+    registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, {
+        categories: ['damage'],
+        estimateDamage: estimateCpPlus5Damage,
+    });
 
     registerCustomActionHandler('shadow_thief-defense-resolve', handleDefenseResolve, { categories: ['status', 'defense', 'token'] });
     registerCustomActionHandler('shadow_thief-defense-resolve-2', handleShadowDefense2, { categories: ['status', 'defense', 'token'] });

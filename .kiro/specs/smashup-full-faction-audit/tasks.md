@@ -110,14 +110,14 @@
     - 输出审计矩阵，累积差异记录
     - _Requirements: 1.5_
 
-  - [-] 4.6 审计巫师（Wizards）派系
+  - [x] 4.6 审计巫师（Wizards）派系
     - 逐张检查 `data/factions/wizards.ts` 中所有卡牌
     - 对照 `abilities/wizards.ts` 中的能力执行器实现
     - 对照 i18n 描述文本和 Wiki 快照
     - 输出审计矩阵，累积差异记录
     - _Requirements: 1.6_
 
-  - [~] 4.7 审计丧尸（Zombies）派系
+  - [-] 4.7 审计丧尸（Zombies）派系
     - 逐张检查 `data/factions/zombies.ts` 中所有卡牌
     - 对照 `abilities/zombies.ts` 中的能力执行器实现
     - 对照 i18n 描述文本和 Wiki 快照

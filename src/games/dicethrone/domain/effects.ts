@@ -121,6 +121,16 @@ export interface CustomActionMeta {
     requiresInteraction?: boolean;
     /** 可用阶段（不指定则不限制） */
     phases?: string[];
+    /**
+     * 预估伤害回调（可选）
+     * 
+     * 用于 Token 门控等需要在 custom action 执行前估算伤害的场景。
+     * 返回该 custom action 在当前状态下的预期伤害值。
+     * 
+     * 未提供时，getPlayerAbilityBaseDamage 对该 custom action 返回 0。
+     * 即使 categories 包含 'damage'，也不会自动假设伤害值。
+     */
+    estimateDamage?: (state: Record<string, unknown>, playerId: string) => number;
 }
 
 /**

@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
+    resolve: {
+        alias: {
+            '@locales': path.resolve(__dirname, './public/locales'),
+        },
+    },
     esbuild: {
         // Vitest 默认的 esbuild JSX 转换会走 classic runtime（React.createElement），
         // 在未显式 import React 的 TSX 测试里会触发 “React is not defined”。
