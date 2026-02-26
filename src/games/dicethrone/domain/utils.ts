@@ -4,7 +4,7 @@
  */
 
 import type { DiceThroneCore, PendingAttack } from './types';
-import { getPlayerAbilityBaseDamage } from './abilityLookup';
+import { getPlayerAbilityBaseDamage, playerAbilityHasDamage } from './abilityLookup';
 
 // ============================================================================
 // 状态更新辅助
@@ -36,6 +36,9 @@ export function applyEvents<TState, TEvent>(
  * 统一查询入口，解决 pendingAttack.damage 经常为 undefined 的问题：
  * - 优先使用 pendingAttack.damage（如果 reducer 已通过 pendingDamageBonus 设置）
  * - 否则从技能定义获取基础伤害（getPlayerAbilityBaseDamage）
+ * - 若显式伤害为 0 但技能含 custom action 伤害（如 CP 系伤害），
+ *   则回退到 playerAbilityHasDamage 判定——有伤害潜力时返回门控阈值（5），
+ *   确保暴击等 Token 门控不会误拦截 custom action 伤害技能
  * - 最后加上 bonusDamage（行动卡/攻击修正）
  *
  * @param fallbackWhenNoAbility 无技能时的默认值（默认 0，某些场景需要 1 表示"攻击仍视为成功"）
@@ -53,6 +56,13 @@ export function getPendingAttackExpectedDamage(
         baseDamage = pendingAttack.damage;
     } else if (sourceAbilityId) {
         baseDamage = getPlayerAbilityBaseDamage(state, attackerId, sourceAbilityId);
+        // 显式 damage action 为 0，但技能含 custom action 伤害（如 CP 系伤害）
+        // 此时 custom action 的实际伤害在 resolveAttack 时才计算，
+        // 这里用 playerAbilityHasDamage 判定是否有伤害潜力，
+        // 有则返回门控最低阈值（5），避免暴击等 Token 被误拦截
+        if (baseDamage === 0 && playerAbilityHasDamage(state, attackerId, sourceAbilityId)) {
+            baseDamage = 5;
+        }
     } else {
         baseDamage = fallbackWhenNoAbility;
     }

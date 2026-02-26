@@ -2057,6 +2057,28 @@ describe('王权骰铸流程测试', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
+        it('不愧是我：同一颗骰子重掷 2 次', () => {
+            // 骰子初始 [1,2,3,4,5]，第一次重掷 dieId=0 → 6，第二次重掷 dieId=0 → 6（第7个随机数）
+            const runner = createRunner(createQueuedRandom([1, 2, 3, 4, 5, 6, 6]));
+            const result = runner.run({
+                name: '不愧是我 同一颗骰子重掷2次',
+                setup: createSetupWithHand(['card-worthy-of-me'], { cp: 10 }),
+                commands: [
+                    ...advanceTo('offensiveRoll'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('PLAY_CARD', '0', { cardId: 'card-worthy-of-me' }),
+                    cmd('REROLL_DIE', '0', { dieId: 0 }),
+                    cmd('REROLL_DIE', '0', { dieId: 0 }),
+                ],
+                expect: {
+                    diceValues: [6, 2, 3, 4, 5],
+                    pendingInteraction: null,
+                    players: { '0': { discardSize: 1 } },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
         it('我又行了：重掷至多 5 颗骰子', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1, 2, 3, 4, 5, 6]));
             const interactionId = `card-i-can-again-3`;

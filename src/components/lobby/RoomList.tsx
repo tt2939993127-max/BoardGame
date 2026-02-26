@@ -88,7 +88,7 @@ export const RoomList = ({
             </div>
 
             {/* 房间列表 */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                 {roomItems.length === 0 ? (
                     <div className="text-center text-parchment-light-text py-10 italic text-sm border border-dashed border-parchment-card-border/30 rounded-[4px]">
                         {t('rooms.empty')}
@@ -99,9 +99,11 @@ export const RoomList = ({
                             key={room.matchID}
                             className={clsx(
                                 "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
-                                room.isMyRoom
-                                    ? "border-parchment-card-border bg-parchment-base-bg/50"
-                                    : "border-parchment-card-border/30 bg-parchment-card-bg hover:bg-parchment-base-bg/30"
+                                room.gameover
+                                    ? "border-parchment-card-border/20 bg-parchment-base-bg/30 opacity-75"
+                                    : room.isMyRoom
+                                        ? "border-parchment-card-border bg-parchment-base-bg/50"
+                                        : "border-parchment-card-border/30 bg-parchment-card-bg hover:bg-parchment-base-bg/30"
                             )}
                         >
                             <div>
@@ -126,6 +128,11 @@ export const RoomList = ({
                                                     <svg className="w-3.5 h-3.5 text-parchment-light-text opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                     </svg>
+                                                )}
+                                                {room.gameover && (
+                                                    <span className="text-[8px] bg-parchment-light-text/20 text-parchment-light-text px-1.5 py-0.5 rounded uppercase font-bold">
+                                                        {t('rooms.gameover')}
+                                                    </span>
                                                 )}
                                                 {room.isMyRoom && (
                                                     <span className="text-[8px] bg-parchment-card-border text-parchment-card-bg px-1.5 py-0.5 rounded uppercase font-bold">
@@ -171,8 +178,8 @@ export const RoomList = ({
                                     </button>
                                 )}
 
-                                {/* 满员房间：显示观战按钮（眼睛图标） */}
-                                {room.isFull && !room.canReconnect && (
+                                {/* 满员或已结束房间：显示观战按钮（眼睛图标） */}
+                                {(room.isFull || room.gameover) && !room.canReconnect && (
                                     <button
                                         type="button"
                                         onClick={(e) => {
@@ -191,21 +198,23 @@ export const RoomList = ({
 
                                 <button
                                     onClick={() => onJoinRequest(room.matchID, room.gameName)}
-                                    disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom)}
+                                    disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom) || (!!room.gameover && !room.canReconnect)}
                                     className={clsx(
                                         "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider",
                                         room.canReconnect
                                             ? "bg-[#c0a080] text-white hover:bg-[#a08060]"
-                                            : (room.isFull || (room.isEmptyRoom && !room.isOwnerRoom))
+                                            : (room.isFull || (room.isEmptyRoom && !room.isOwnerRoom) || room.gameover)
                                                 ? "bg-[#e5e0d0] text-[#8c7b64] cursor-not-allowed"
                                                 : "bg-[#433422] text-[#fcfbf9] hover:bg-[#2b2114]"
                                     )}
                                 >
                                     {room.canReconnect
                                         ? t('actions.reconnect')
-                                        : room.isFull
-                                            ? t('rooms.full')
-                                            : t('actions.join')}
+                                        : room.gameover
+                                            ? t('rooms.gameover')
+                                            : room.isFull
+                                                ? t('rooms.full')
+                                                : t('actions.join')}
                                 </button>
                             </div>
                         </div>

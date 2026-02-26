@@ -91,9 +91,14 @@ export const DiceTray = ({
     const canAdjustUp = isAdjustMode && totalAdjustment < adjustRange.max;
 
     const isSelected = (dieId: number): boolean => {
-        if (isSelectMode) return selectResult?.selectedDiceIds.includes(dieId) ?? false;
+        if (isSelectMode) return (selectResult?.selectedDiceIds.filter(id => id === dieId).length ?? 0) > 0;
         if (isModifyMode) return dieId in (modifyResult?.modifications ?? {});
         return false;
+    };
+
+    const selectedCount = (dieId: number): number => {
+        if (isSelectMode) return selectResult?.selectedDiceIds.filter(id => id === dieId).length ?? 0;
+        return 0;
     };
 
     const maxSelectCount = dtMeta?.selectCount ?? 1;
@@ -106,9 +111,16 @@ export const DiceTray = ({
         if (isRolling) return;
 
         if (isInteractionMode && !isAnyMode && multistepInteraction) {
-            // set / copy / selectDie 模式：点击骰子 = step(select/toggle)
+            // set / copy / selectDie 模式：点击骰子
             if (isSelectMode) {
-                multistepInteraction.step({ action: 'toggle', dieId } as DiceSelectStep);
+                const alreadySelected = isSelected(dieId);
+                if (alreadySelected && !canSelectMore) {
+                    // 已选满且该骰子已选中 → 移除（允许换选）
+                    multistepInteraction.step({ action: 'remove', dieId } as DiceSelectStep);
+                } else if (canSelectMore) {
+                    // 还能选 → 直接添加（允许同一颗骰子多次选择）
+                    multistepInteraction.step({ action: 'add', dieId } as DiceSelectStep);
+                }
             } else if (isModifyMode) {
                 const die = dice.find(d => d.id === dieId);
                 if (!die) return;
@@ -224,7 +236,10 @@ export const DiceTray = ({
                                     )}
                                     {selected && !showAdjustButtons && !showAnyModeButtons && (
                                         <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1vw] h-[1vw] bg-amber-500 rounded-full flex items-center justify-center z-30">
-                                            <Check size={12} className="text-white" strokeWidth={3} />
+                                            {selectedCount(d.id) > 1
+                                                ? <span className="text-white font-bold text-[0.55vw]">{selectedCount(d.id)}</span>
+                                                : <Check size={12} className="text-white" strokeWidth={3} />
+                                            }
                                         </div>
                                     )}
                                 </div>

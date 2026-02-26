@@ -21,6 +21,7 @@ import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/Inter
 import { getCardDef, getBaseDef, getMinionDef, resolveCardName, resolveCardText } from './data/cards';
 import { getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
+import { isSpecialLimitBlocked } from './domain/abilityHelpers';
 import { useGameAudio, playDeniedSound, playSound } from '../../lib/audio/useGameAudio';
 import { CardPreview } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -463,11 +464,19 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
         return playerID === currentResponderId;
     }, [responseWindow, playerID]);
 
-    // Me First! 期间非 special 卡的禁用集合（置灰）
+    // Me First! 期间非 special 卡和非 beforeScoringPlayable 随从的禁用集合（置灰）
     const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
         if (!isMeFirstResponse || !myPlayer) return undefined;
         const disabled = new Set<string>();
         for (const card of myPlayer.hand) {
+            if (card.type === 'minion') {
+                // beforeScoringPlayable 随从不禁用（影舞者等）
+                const mDef = getMinionDef(card.defId);
+                if (!mDef?.beforeScoringPlayable) {
+                    disabled.add(card.uid);
+                }
+                continue;
+            }
             if (card.type !== 'action') {
                 disabled.add(card.uid);
                 continue;
@@ -494,6 +503,20 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
         const indices = new Set<number>();
         const card = myPlayer?.hand.find(c => c.uid === selectedCardUid);
         if (!card) return { deployableBaseIndices: indices, deployBlockReason: null };
+
+        // Me First! 窗口中 beforeScoringPlayable 随从：只允许即将计分的基地
+        if (isMeFirstResponse && card.type === 'minion') {
+            const mDef = getMinionDef(card.defId);
+            if (mDef?.beforeScoringPlayable) {
+                const eligible = getScoringEligibleBaseIndices(core);
+                for (const idx of eligible) {
+                    if (!isSpecialLimitBlocked(core, card.defId, idx)) {
+                        indices.add(idx);
+                    }
+                }
+                return { deployableBaseIndices: indices, deployBlockReason: null };
+            }
+        }
 
         // 全局力量限制检查（如家园额外出牌：力量≤2）
         const player = core.players[playerID];
@@ -574,7 +597,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
             }
         }
         return { deployableBaseIndices: indices, deployBlockReason: null };
-    }, [selectedCardUid, selectedCardMode, playerID, myPlayer?.hand, core, t]);
+    }, [selectedCardUid, selectedCardMode, playerID, myPlayer?.hand, core, t, isMeFirstResponse]);
 
     // ongoing-minion 模式下的有效随从 UID 集合（只包含未被限制基地上的随从）
     const ongoingMinionTargetUids = useMemo<Set<string>>(() => {
@@ -713,7 +736,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
             prevCurrentPidRef.current = currentPid;
             if (currentPid === playerID) {
                 setShowTurnNotice(true);
-                const timer = setTimeout(() => setShowTurnNotice(false), 1500);
+                const timer = setTimeout(() => setShowTurnNotice(false), 3000);
                 return () => clearTimeout(timer);
             }
         }
@@ -879,8 +902,25 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
         }
 
         // Validation for play phase / turn
-        // Me First! 响应期间：允许点击手牌中的 special 卡直接打出
+        // Me First! 响应期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
         if (isMeFirstResponse) {
+            // beforeScoringPlayable 随从（影舞者等）：进入基地选择模式
+            if (card.type === 'minion') {
+                const mDef = getMinionDef(card.defId);
+                if (!mDef?.beforeScoringPlayable) {
+                    playDeniedSound();
+                    return;
+                }
+                // toggle 选中状态，进入基地选择模式
+                if (selectedCardUid === card.uid) {
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                } else {
+                    setSelectedCardUid(card.uid);
+                    setSelectedCardMode('minion');
+                }
+                return;
+            }
             if (card.type !== 'action') {
                 playDeniedSound();
                 return;
@@ -1139,7 +1179,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                 {/* --- FINISH TURN BUTTON: Fixed Position (Right Edge) --- */}
                 <div className="fixed right-[8vw] bottom-[28vh] z-50 flex pointer-events-none w-24 h-24" data-tutorial-id="su-end-turn-btn">
                     <AnimatePresence>
-                        {isMyTurn && phase === 'playCards' && (
+                        {isMyTurn && (phase === 'playCards' || (phase === 'scoreBases' && !G.sys.responseWindow?.current && !G.sys.interaction?.current)) && (
                             <motion.div
                                 initial={{ y: 100, opacity: 0, scale: 0.5 }}
                                 animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -1509,6 +1549,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, res
                                 onViewAction={handleViewAction}
                                 onViewBase={(defId) => setViewingCard({ defId, type: 'base' })}
                                 isTutorialTargetAllowed={isTutorialTargetAllowed}
+                                phase={phase as string}
                                 tokenRef={(el) => {
                                     if (el) baseRefsMap.current.set(idx, el);
                                     else baseRefsMap.current.delete(idx);

@@ -11,7 +11,22 @@ export default defineConfig(({ mode }) => {
   const apiServerPort = Number(env.API_SERVER_PORT) || 18001
 
   return {
-    plugins: [react(), localeHashPlugin()],
+    plugins: [
+      // 屏蔽 public/ 目录 import 警告（@locales alias 内联打包 i18n JSON 的已知副作用）
+      {
+        name: 'suppress-public-dir-warning',
+        enforce: 'pre' as const,
+        configResolved(config) {
+          const originalWarn = config.logger.warn;
+          config.logger.warn = (msg, options) => {
+            if (typeof msg === 'string' && msg.includes('Assets in public directory cannot be imported')) return;
+            originalWarn(msg, options);
+          };
+        },
+      },
+      react(),
+      localeHashPlugin(),
+    ],
     build: {
       rollupOptions: {
         output: {
@@ -31,6 +46,9 @@ export default defineConfig(({ mode }) => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, './src'),
+        // 允许 src/ 下的代码 import public/locales/ 中的 JSON（i18n 内联打包）
+        // Vite 默认禁止 import public/ 文件，alias 绕过此限制且不产生文件重复
+        '@locales': path.resolve(__dirname, './public/locales'),
       },
     },
     optimizeDeps: {

@@ -297,6 +297,8 @@
     "cpSpentPlain": "Spent {{amount}} CP",
     "cardDrawn": "Drew {{count}} card(s) ({{source}})",
     "cardDrawnPlain": "Drew {{count}} card(s)",
+    "sellCard": "Sold card",
+    "sellCardCp": "(+1 CP)",
     "cardDiscarded": "Discarded",
     "usePurify": "Purified {{statusLabel}}",
     "payToRemoveKnockdown": "Paid 2CP to remove Knockdown",
@@ -307,7 +309,9 @@
     "confirmRollDefenseWithAbility": "Confirmed defense roll ({{abilityName}}):",
     "cardRollResult": "Roll result:",
     "damagePrevented": "Prevented {{amount}} damage with [{{source}}]",
-    "damagePreventedPlain": "Prevented {{amount}} damage"
+    "damagePreventedPlain": "Prevented {{amount}} damage",
+    "damageShieldPercent": "Gained {{percent}}% damage reduction shield with [{{source}}]",
+    "damageShieldPercentPlain": "Gained {{percent}}% damage reduction shield"
   },
   "purify": {
     "title": "Use Purify",
@@ -1764,6 +1768,15 @@
         "damage": "Deal damage equal to Fire Soul face count to all opponents"
       }
     },
+    "soul-burn-5": {
+      "name": "Soul Burn (5 Fire Soul)",
+      "effects": {
+        "increaseLimit": "Increase Fire Mastery stack cap by 1",
+        "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
+        "inflictBurn": "Inflict 1 Burn token",
+        "damage": "Deal damage equal to Fire Soul face count to all opponents"
+      }
+    },
     "blazing-soul": {
       "name": "Blazing Soul",
       "description": "2 Magma + 2 Fire Soul: FM cap +1, gain 5 Fire Mastery, inflict Knockdown",
@@ -1827,9 +1840,9 @@
     },
     "burn-down-2": {
       "name": "Burn Down II",
-      "description": "Gain 1 Fire Mastery. Activate Burn Down: each removed Fire Mastery deals 4 undefendable damage.",
+      "description": "Gain 1 Fire Mastery. Activate Burn Down: remove up to 4 Fire Mastery; each removed deals 4 undefendable damage.",
       "effects": {
-        "main": "Activate Burn Down: remove any number of Fire Mastery. Each removed deals 4 undefendable damage"
+        "main": "Activate Burn Down: remove up to 4 Fire Mastery. Each removed deals 4 undefendable damage"
       }
     },
     "ignite-2": {
@@ -1845,7 +1858,7 @@
       "name": "Magma Armor II",
       "description": "Defense: 1x Fire deals 1 undefendable damage, 1x Fire Soul gains 1 Fire Mastery.",
       "effects": {
-        "main": "Defensive ability (5 dice): for each Fire rolled, gain 1 Fire Mastery and deal 1 damage. If you have Fire + Fire Soul, inflict Burn."
+        "main": "Defensive ability (5 dice): for each Fire Soul rolled, gain 1 Fire Mastery. If Fire + Magma present, inflict Burn. For each Fire rolled, deal 1 damage."
       }
     },
     "magma-armor-3": {

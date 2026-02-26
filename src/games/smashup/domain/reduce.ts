@@ -143,8 +143,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newUsedAbilities = fromDiscard && discardPlaySourceId
                 ? [...(player.usedDiscardPlayAbilities ?? []), discardPlaySourceId]
                 : player.usedDiscardPlayAbilities;
-            // 弃牌堆额外出牌（consumesNormalLimit=false）不消耗正常额度
-            const shouldIncrementPlayed = !fromDiscard || consumesNormalLimit !== false;
+            // consumesNormalLimit=false 时不消耗正常额度（忍者 special 额外打出、弃牌堆额外出牌等）
+            const shouldIncrementPlayed = consumesNormalLimit !== false;
 
             // 同名额度消耗：全局额度已用完且有同名额度剩余时，优先消耗同名额度
             const sameNameRemaining = player.sameNameMinionRemaining ?? 0;

@@ -10,6 +10,8 @@ import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
 import { getTotalEffectivePowerOnBase, getEffectivePower, getEffectivePowerBreakdown, getEffectiveBreakpoint, getOngoingCardPowerContribution } from '../domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
+import { isSpecialLimitBlocked } from '../domain/abilityHelpers';
+import { getScoringEligibleBaseIndices } from '../domain/ongoingModifiers';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
@@ -46,7 +48,9 @@ export const BaseZone: React.FC<{
     onViewBase: (defId: string) => void;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
+    /** 当前游戏阶段（用于限制 scoreBases 阶段的 special 高亮范围） */
+    phase?: string;
+}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
     
     const baseDef = getBaseDef(base.defId);
@@ -314,6 +318,7 @@ export const BaseZone: React.FC<{
                                             selectableOngoingUids={selectableOngoingUids}
                                             onOngoingSelect={onOngoingSelect}
                                             isTutorialTargetAllowed={isTutorialTargetAllowed}
+                                            phase={phase}
                                         />
                                     ))}
                                 </div>
@@ -395,7 +400,9 @@ const MinionCard: React.FC<{
     selectableOngoingUids?: Set<string>;
     onOngoingSelect?: (ongoingUid: string) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed }) => {
+    /** 当前游戏阶段 */
+    phase?: string;
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -416,6 +423,21 @@ const MinionCard: React.FC<{
         && tutorialAllowed
         && (!minion.talentUsed || canUseSecondTalentOnStandingStones);
 
+    // 场上随从 special 能力判定（如忍者侍从）
+    const hasSpecial = def?.abilityTags?.includes('special') ?? false;
+    const canActivateSpecial = hasSpecial
+        && isMyTurn
+        && minion.controller === myPlayerId
+        && tutorialAllowed
+        && !isSpecialLimitBlocked(core, minion.defId, baseIndex)
+        // scoreBases 阶段：仅在达标基地上高亮
+        && (phase !== 'scoreBases' || getScoringEligibleBaseIndices(core).includes(baseIndex))
+        // 忍者侍从额外条件：本回合未打出随从
+        && (minion.defId !== 'ninja_acolyte' || (myPlayerId != null && core.players[myPlayerId]?.minionsPlayed === 0));
+
+    // 合并：天赋或 special 都可以激活
+    const canActivate = canUseTalent || canActivateSpecial;
+
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
 
@@ -434,10 +456,12 @@ const MinionCard: React.FC<{
         }
         if (canUseTalent) {
             dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
+        } else if (canActivateSpecial) {
+            dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { minionUid: minion.uid, baseIndex });
         } else {
             onView();
         }
-    }, [isMinionSelectMode, onMinionSelect, canUseTalent, dispatch, minion.uid, baseIndex, onView]);
+    }, [isMinionSelectMode, onMinionSelect, canUseTalent, canActivateSpecial, dispatch, minion.uid, baseIndex, onView]);
 
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
@@ -455,7 +479,7 @@ const MinionCard: React.FC<{
                     ? 'cursor-pointer border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
                     : isSelectableMinion
                     ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
-                    : canUseTalent
+                    : canActivate
                     ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
                     : `cursor-zoom-in ${conf.border} ${conf.shadow}`}
             `}
@@ -463,7 +487,7 @@ const MinionCard: React.FC<{
             initial={{ scale: 0.3, y: -60, opacity: 0, rotate: -15 }}
             animate={isSelectableMinion
                 ? { scale: 1, y: 0, opacity: 1, rotate: [rotation - 1, rotation + 1, rotation - 1], transition: { rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } } }
-                : canUseTalent
+                : canActivate
                 ? { scale: 1, y: 0, opacity: 1, rotate: [rotation - 2, rotation + 2, rotation - 2], transition: { rotate: { repeat: Infinity, duration: 1.5, ease: 'easeInOut' } } }
                 : { scale: 1, y: 0, opacity: 1, rotate: rotation }
             }
@@ -491,8 +515,8 @@ const MinionCard: React.FC<{
                     </div>
                 )}
 
-                {/* 天赋可用时的发光叠层 */}
-                {canUseTalent && (
+                {/* 天赋/特殊能力可用时的发光叠层 */}
+                {canActivate && (
                     <motion.div
                         className="absolute inset-0 pointer-events-none z-20 rounded-[0.1vw]"
                         animate={{ opacity: [0.15, 0.35, 0.15] }}

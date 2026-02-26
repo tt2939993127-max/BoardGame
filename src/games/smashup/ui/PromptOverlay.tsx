@@ -250,7 +250,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                             {displayCards.title}
                         </h2>
                         {/* py-3 给 ring 描边留出空间，避免被 overflow-x-auto 裁切 */}
-                        <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-3 smashup-h-scrollbar justify-center">
+                        {/* 注意：不能用 justify-center，flex + justify-center + overflow 会导致左侧内容不可达 */}
+                        <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-3 smashup-h-scrollbar [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                             {displayCards.cards.map((card, idx) => {
                                 const def = getCardDef(card.defId);
                                 const name = def ? resolveCardName(def, t) : card.defId;

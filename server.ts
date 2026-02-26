@@ -296,10 +296,10 @@ const gameTransport = new GameTransportServer({
         
         // 归档对局结果
         void archiveMatchResult({ matchID, gameName, gameover: gameover as { winner?: string | number } });
-        // 通知大厅更新（房间仍存在但标记为 gameover，大厅列表会过滤掉）
+        // 通知大厅更新（房间仍存在，标记为 gameover，大厅列表显示为已结束）
         const game = normalizeGameName(gameName);
         if (game && isSupportedGame(game)) {
-            emitMatchEnded(game, matchID);
+            scheduleLobbySnapshot(game, `gameover: ${matchID}`);
         }
     },
 });
@@ -752,7 +752,7 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
 
 // GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
-    const gameName = ctx.params.name;
+    const gameName = normalizeGameName(ctx.params.name);
     try {
         const records = await MatchRecord.find({ gameName });
         const stats: Record<string, { name: string; wins: number; matches: number }> = {};
@@ -918,6 +918,7 @@ const buildLobbyMatch = (
         ownerKey: setupData?.ownerKey,
         ownerType: setupData?.ownerType,
         isLocked: !!setupData?.password,
+        gameover: !!metadata.gameover,
     };
 };
 
@@ -925,8 +926,6 @@ const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
     try {
         const result = await storage.fetch(matchID, { metadata: true });
         if (!result.metadata) return null;
-        // 已结束的对局不应出现在大厅列表
-        if (result.metadata.gameover) return null;
         const match = buildLobbyMatch(matchID, result.metadata);
         const game = normalizeGameName(result.metadata.gameName);
         if (game && isSupportedGame(game)) {
@@ -947,7 +946,6 @@ const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]
         for (const matchID of matchIds) {
             const result = await storage.fetch(matchID, { metadata: true });
             if (!result.metadata) continue;
-            if (result.metadata.gameover) continue;
             // 过滤无人占座的空房间（等待 cleanupEphemeralMatches 回收）
             const players = result.metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }> | undefined;
             if (!hasOccupiedPlayers(players)) continue;

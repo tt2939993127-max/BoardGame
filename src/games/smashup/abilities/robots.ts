@@ -212,7 +212,7 @@ export function registerRobotInteractionHandlers(): void {
     });
 
     // 微型机守护者：选择目标后消灭
-    registerInteractionHandler('robot_microbot_guard', (state, _playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('robot_microbot_guard', (state, playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;

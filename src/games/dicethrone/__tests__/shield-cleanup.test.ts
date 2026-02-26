@@ -360,3 +360,77 @@ describe('终极技能（Ultimate）护盾免疫', () => {
         expect(newCore.players['1'].damageShields).toEqual([]);
     });
 });
+
+describe('百分比减免护盾（reductionPercent）', () => {
+    it('50% 减免护盾：10 点伤害减免 5 点', () => {
+        const core = createCoreState();
+        core.players['1'].damageShields = [
+            { value: 0, sourceId: 'elusive-step', preventStatus: false, reductionPercent: 50 },
+        ];
+
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: { targetId: '1', amount: 10, actualDamage: 10 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+
+        const newCore = reduce(core, event);
+        // 10 * 50% = 5 减免，实际扣血 5
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(45);
+        expect(newCore.players['1'].damageShields).toEqual([]);
+    });
+
+    it('50% 减免护盾：奇数伤害向上取整（9 → 减免 5）', () => {
+        const core = createCoreState();
+        core.players['1'].damageShields = [
+            { value: 0, sourceId: 'elusive-step', preventStatus: false, reductionPercent: 50 },
+        ];
+
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: { targetId: '1', amount: 9, actualDamage: 9 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+
+        const newCore = reduce(core, event);
+        // Math.ceil(9 * 50 / 100) = Math.ceil(4.5) = 5 减免，实际扣血 4
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(46);
+    });
+
+    it('50% 减免护盾：1 点伤害减免 1 点（向上取整）', () => {
+        const core = createCoreState();
+        core.players['1'].damageShields = [
+            { value: 0, sourceId: 'elusive-step', preventStatus: false, reductionPercent: 50 },
+        ];
+
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: { targetId: '1', amount: 1, actualDamage: 1 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+
+        const newCore = reduce(core, event);
+        // Math.ceil(1 * 50 / 100) = Math.ceil(0.5) = 1 减免，实际扣血 0
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+    });
+
+    it('0 点伤害时百分比护盾不产生负数减免', () => {
+        const core = createCoreState();
+        core.players['1'].damageShields = [
+            { value: 0, sourceId: 'elusive-step', preventStatus: false, reductionPercent: 50 },
+        ];
+
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: { targetId: '1', amount: 0, actualDamage: 0 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+
+        const newCore = reduce(core, event);
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(50);
+    });
+});

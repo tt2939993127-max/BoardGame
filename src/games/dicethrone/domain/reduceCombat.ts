@@ -108,7 +108,11 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
         const damageShields = target.damageShields.filter(shield => !shield.preventStatus);
         if (damageShields.length > 0) {
             const shield = damageShields[0];
-            const preventedAmount = Math.min(shield.value, remainingDamage);
+            // 百分比减免护盾：按实际伤害的百分比计算减免量（向上取整）
+            const preventedAmount = shield.reductionPercent != null
+                ? Math.ceil(remainingDamage * shield.reductionPercent / 100)
+                : Math.min(shield.value, remainingDamage);
+
             remainingDamage -= preventedAmount;
             newDamageShields = statusShields;
         }
@@ -308,9 +312,11 @@ export const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { 
     state,
     event
 ) => {
-    const { targetId, value, sourceId, preventStatus } = event.payload;
+    const { targetId, value, sourceId, preventStatus, reductionPercent } = event.payload;
     const target = state.players[targetId];
     if (!target) return state;
+
+
 
     return {
         ...state,
@@ -318,7 +324,7 @@ export const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { 
             ...state.players,
             [targetId]: {
                 ...target,
-                damageShields: [...(target.damageShields || []), { value, sourceId, preventStatus }],
+                damageShields: [...(target.damageShields || []), { value, sourceId, preventStatus, reductionPercent }],
             },
         },
     };

@@ -40,6 +40,7 @@ import type {
     CardDiscardedEvent,
     BonusDieRolledEvent,
     PreventDamageEvent,
+    DamageShieldGrantedEvent,
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
@@ -222,6 +223,37 @@ function formatDiceThroneActionEntry({
         }
     }
 
+    if (command.type === 'SELL_CARD') {
+        const cardId = (command.payload as { cardId: string }).cardId;
+        const card = findDiceThroneCard(core, cardId, command.playerId);
+
+        const segments: ActionLogSegment[] = [
+            i18nSeg('actionLog.sellCard'),
+        ];
+        if (card?.previewRef) {
+            const isI18nKey = card.name?.includes('.');
+            segments.push({
+                type: 'card',
+                cardId: card.id,
+                previewText: card.name ?? cardId,
+                previewRef: card.previewRef,
+                ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+            });
+        } else {
+            const displayName = card?.name ?? cardId;
+            segments.push({ type: 'text', text: displayName });
+        }
+        segments.push(i18nSeg('actionLog.sellCardCp'));
+
+        entries.push({
+            id: `SELL_CARD-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: 'SELL_CARD',
+            segments,
+        });
+    }
+
     if (command.type === 'ADVANCE_PHASE') {
         const phaseChanged = [...events]
             .reverse()
@@ -238,6 +270,31 @@ function formatDiceThroneActionEntry({
             kind: command.type,
             segments: [i18nSeg('actionLog.advancePhase', { phase: phaseI18nKey }, ['phase'])],
         });
+
+        // 自动选择的防御技能（唯一防御技能时在 onPhaseEnter 自动激活）
+        // 此时 ABILITY_ACTIVATED 事件在 ADVANCE_PHASE 命令中，需要额外记录
+        const autoDefenseEvent = events.find(
+            (e): e is AbilityActivatedEvent =>
+                e.type === 'ABILITY_ACTIVATED' && (e as AbilityActivatedEvent).payload.isDefense === true
+        );
+        if (autoDefenseEvent) {
+            const { abilityId, playerId } = autoDefenseEvent.payload;
+            const match = findPlayerAbility(core, playerId, abilityId);
+            const rawAbilityName = match?.variant?.name ?? match?.ability.name ?? abilityId;
+            const abilityNameKey = getAbilityI18nKey(rawAbilityName) || abilityId;
+            const isI18nKey = abilityNameKey.includes('.');
+            entries.push({
+                id: `AUTO_DEFENSE-${playerId}-${abilityId}-${timestamp}`,
+                timestamp: timestamp + 0.5,
+                actorId: playerId,
+                kind: 'SELECT_ABILITY',
+                segments: [i18nSeg(
+                    'actionLog.abilityActivatedDefense',
+                    { abilityName: abilityNameKey },
+                    isI18nKey ? ['abilityName'] : undefined,
+                )],
+            });
+        }
     }
 
     if (command.type === 'SELECT_ABILITY') {
@@ -402,8 +459,19 @@ function formatDiceThroneActionEntry({
                 // Token 响应窗口关闭后产生的伤害：用 sourcePlayerId 推断攻击方
                 actorId = sourcePlayerId;
             }
-            const dealt = actualDamage ?? amount ?? 0;
+            const rawDealt = actualDamage ?? amount ?? 0;
             const isSelfDamage = actorId === targetId;
+
+            // 查找同批次中针对同一目标的百分比护盾，计算实际伤害
+            const shieldEvent = events.find(
+                (e): e is DamageShieldGrantedEvent =>
+                    e.type === 'DAMAGE_SHIELD_GRANTED' &&
+                    (e as DamageShieldGrantedEvent).payload.targetId === targetId &&
+                    (e as DamageShieldGrantedEvent).payload.reductionPercent != null
+            );
+            const shieldPercent = shieldEvent?.payload.reductionPercent ?? 0;
+            const shieldAbsorbed = shieldPercent > 0 ? Math.ceil(rawDealt * shieldPercent / 100) : 0;
+            const dealt = rawDealt - shieldAbsorbed;
 
             // 解析来源技能名
             const effectiveSourceId = sourceAbilityId ?? attackResolved?.payload.sourceAbilityId;
@@ -422,6 +490,22 @@ function formatDiceThroneActionEntry({
                 },
                 DT_NS,
             );
+
+            // 如果有百分比护盾减免，在 breakdown tooltip 中追加护盾行
+            if (shieldAbsorbed > 0 && breakdownSeg.type === 'breakdown') {
+                const shieldSource = shieldEvent?.payload.sourceId
+                    ? resolveAbilitySourceLabel(shieldEvent.payload.sourceId, core, targetId)
+                    : null;
+                breakdownSeg.lines.push({
+                    label: shieldSource?.label ?? 'actionLog.damageSource.shield',
+                    labelIsI18n: shieldSource?.isI18n ?? true,
+                    labelNs: shieldSource?.isI18n ? shieldSource.ns : DT_NS,
+                    value: -shieldAbsorbed,
+                    color: 'negative',
+                });
+                // 更新显示数值为实际伤害
+                breakdownSeg.displayText = String(dealt);
+            }
 
             // 统一用 before + breakdown + after 模式
             let segments: ActionLogSegment[];
@@ -479,6 +563,33 @@ function formatDiceThroneActionEntry({
                 timestamp: entryTimestamp,
                 actorId: targetId,
                 kind: 'PREVENT_DAMAGE',
+                segments: [
+                    i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
+                ],
+            });
+            return;
+        }
+
+        if (event.type === 'DAMAGE_SHIELD_GRANTED') {
+            const shieldEvent = event as DamageShieldGrantedEvent;
+            const { targetId, sourceId, reductionPercent } = shieldEvent.payload;
+            // 只为百分比减免护盾生成日志（固定值护盾由 PREVENT_DAMAGE 处理）
+            if (reductionPercent == null) return;
+
+            const source = resolveAbilitySourceLabel(sourceId, core, command.playerId);
+            const key = source ? 'actionLog.damageShieldPercent' : 'actionLog.damageShieldPercentPlain';
+            const params: Record<string, string | number> = { percent: reductionPercent };
+            const paramI18nKeys: string[] = [];
+            if (source) {
+                params.source = source.label;
+                if (source.isI18n) paramI18nKeys.push('source');
+            }
+
+            entries.push({
+                id: `DAMAGE_SHIELD-${targetId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: targetId,
+                kind: 'DAMAGE_SHIELD_GRANTED',
                 segments: [
                     i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
                 ],
@@ -613,7 +724,19 @@ function formatDiceThroneActionEntry({
                 i18nSeg('actionLog.tokenUsed', { tokenLabel: tokenKey, effectLabel: effectLabelKey }, paramI18nKeys),
             ];
             if (typeof damageModifier === 'number') {
-                segments.push(i18nSeg('actionLog.tokenModifier', { amount: damageModifier }));
+                // 掷骰加伤型 Token（如伏击）：damageModifier=0 但同批有 BONUS_DIE_ROLLED，
+                // 用掷骰值替代显示，避免误导性的"调整 0"
+                let displayModifier = damageModifier;
+                if (damageModifier === 0) {
+                    const bonusDie = events.find(
+                        (e): e is BonusDieRolledEvent =>
+                            e.type === 'BONUS_DIE_ROLLED' && !!(e as BonusDieRolledEvent).payload.pendingDamageBonus
+                    );
+                    if (bonusDie) {
+                        displayModifier = bonusDie.payload.pendingDamageBonus!;
+                    }
+                }
+                segments.push(i18nSeg('actionLog.tokenModifier', { amount: displayModifier }));
             }
             if (evasionRoll) {
                 const resultKey = evasionRoll.success ? 'actionLog.tokenEvasionSuccess' : 'actionLog.tokenEvasionFail';
@@ -771,7 +894,6 @@ const systems = [
         formatEntry: formatDiceThroneActionEntry,
     }),
     createUndoSystem({
-        maxSnapshots: 5,
         // 只对白名单命令做撤回快照，避免 UI/系统行为导致“一进局就可撤回”。
         snapshotCommandAllowlist: UNDO_ALLOWLIST,
     }),

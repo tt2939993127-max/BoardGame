@@ -78,6 +78,11 @@ export interface MinionCardDef {
      */
     specialLimitGroup?: string;
     /**
+     * 是否可在 Me First! 窗口中从手牌打出到即将计分的基地。
+     * 如影舞者：基地计分前可从手牌打出到该基地。
+     */
+    beforeScoringPlayable?: boolean;
+    /**
      * 打出时的音效 key（可选）。
      * 如果指定，优先使用此音效；否则 fallback 到派系默认音效池。
      */
@@ -381,6 +386,8 @@ export const SU_COMMANDS = {
     // === 新增 ===
     SELECT_FACTION: 'su:select_faction',
     USE_TALENT: 'su:use_talent',
+    /** 激活场上随从的 special 能力（如忍者侍从回手+额外随从） */
+    ACTIVATE_SPECIAL: 'su:activate_special',
 } as const;
 
 /** 打出随从 */
@@ -427,12 +434,21 @@ export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT>
     };
 }
 
+/** 激活场上随从的 special 能力（如忍者侍从回手+额外随从） */
+export interface ActivateSpecialCommand extends Command<typeof SU_COMMANDS.ACTIVATE_SPECIAL> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+    };
+}
+
 export type SmashUpCommand =
     | PlayMinionCommand
     | PlayActionCommand
     | DiscardToLimitCommand
     | SelectFactionCommand
-    | UseTalentCommand;
+    | UseTalentCommand
+    | ActivateSpecialCommand;
 
 // ============================================================================
 // 事件类型

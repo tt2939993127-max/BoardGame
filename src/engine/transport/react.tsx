@@ -178,8 +178,9 @@ export function GameProvider({
     const clientRef = useRef<GameTransportClient | null>(null);
 
     // 乐观回滚信号：通过 Context 传递给 useEventStreamCursor
-    const [rollbackSignal, setRollbackSignal] = useState<EventStreamRollbackValue>({ watermark: null, seq: 0 });
+    const [rollbackSignal, setRollbackSignal] = useState<EventStreamRollbackValue>({ watermark: null, seq: 0, reconcileSeq: 0 });
     const rollbackSeqRef = useRef(0);
+    const reconcileSeqRef = useRef(0);
 
     // 延迟优化组件 refs
     const optimisticEngineRef = useRef<OptimisticEngineType | null>(null);
@@ -285,7 +286,27 @@ export function GameProvider({
                     if (randomMeta) {
                         engine.syncRandom(randomMeta.seed, randomMeta.cursor);
                     }
+                    const hasPendingBefore = engine.hasPendingCommands();
                     const result = engine.reconcile(newState as MatchState<unknown>, meta);
+
+                    // ── 生产诊断日志：追踪 reconcile 结果 ──
+                    // TODO: 问题定位后删除
+                    if (result.didRollback || meta?.stateID !== undefined) {
+                        const serverES = (newState as MatchState<unknown>).sys?.eventStream;
+                        const renderES = result.stateToRender.sys?.eventStream;
+                        console.log('[GP-DIAG:reconcile]', {
+                            stateID: meta?.stateID ?? '-',
+                            lastCmdPlayer: meta?.lastCommandPlayerId ?? '-',
+                            didRollback: result.didRollback,
+                            watermark: result.optimisticEventWatermark,
+                            serverEntryCount: serverES?.entries?.length ?? 0,
+                            renderEntryCount: renderES?.entries?.length ?? 0,
+                            serverMaxId: serverES?.entries?.length ? (serverES.entries as Array<{id: number}>)[serverES.entries.length - 1]?.id : null,
+                            renderMaxId: renderES?.entries?.length ? (renderES.entries as Array<{id: number}>)[renderES.entries.length - 1]?.id : null,
+                            ts: Date.now(),
+                        });
+                    }
+
                     if (result.didRollback && result.optimisticEventWatermark !== null) {
                         // 回滚：使用 preOptimisticWatermark 过滤客户端已消费的事件
                         // 只过滤基线以下的事件，保留对手命令产生的新事件
@@ -293,7 +314,16 @@ export function GameProvider({
                         finalState = filteredState;
                         // 通知 useEventStreamCursor 重置游标到基线位置
                         const newSeq = ++rollbackSeqRef.current;
-                        setRollbackSignal({ watermark: result.optimisticEventWatermark, seq: newSeq });
+                        setRollbackSignal({ watermark: result.optimisticEventWatermark, seq: newSeq, reconcileSeq: reconcileSeqRef.current });
+                    } else if (!result.didRollback && hasPendingBefore && !engine.hasPendingCommands()) {
+                        // reconcile 成功确认：之前有 pending 命令，现在全部确认完毕。
+                        // stateToRender 从乐观状态切换为服务端状态，EventStream 的 maxId
+                        // 可能与乐观预测不同（PRNG 微小漂移）。
+                        // 发送 reconcileSeq 信号，让 cursor 静默调整到新的 maxId，
+                        // 防止 Undo 检测误触发（maxId 回退 ≠ Undo 回退）。
+                        finalState = result.stateToRender;
+                        const newReconcileSeq = ++reconcileSeqRef.current;
+                        setRollbackSignal(prev => ({ ...prev, reconcileSeq: newReconcileSeq }));
                     } else {
                         finalState = result.stateToRender;
                     }
@@ -329,6 +359,9 @@ export function GameProvider({
                 // 断线重连时重置乐观引擎和状态版本号追踪
                 if (connected && optimisticEngineRef.current) {
                     optimisticEngineRef.current.reset();
+                    // 通知 useEventStreamCursor 重置游标（与 visibilitychange 同理）
+                    const newSeq = ++rollbackSeqRef.current;
+                    setRollbackSignal({ watermark: null, seq: newSeq, reconcileSeq: reconcileSeqRef.current });
                 }
                 if (!connected) {
                     // 断线时重置状态版本号追踪，重连后从服务端同步最新状态
@@ -371,6 +404,14 @@ export function GameProvider({
             if (optimisticEngineRef.current) {
                 optimisticEngineRef.current.reset();
             }
+            // 通知 useEventStreamCursor 重置游标：
+            // engine.reset() 清空了所有 pending 命令，乐观预测产生的 EventStream 事件
+            // 可能已被 UI 消费（如 beginSequence/scheduleInteraction），但 state:sync
+            // 返回的状态 EventStream 被 strip（entries 为空），不会触发 didReset 或
+            // didOptimisticRollback，导致 gate 深度卡住、交互队列永远不排空。
+            // 发送 watermark=null 的 rollback signal，让游标重置到最新位置并通知消费者清理。
+            const newSeq = ++rollbackSeqRef.current;
+            setRollbackSignal({ watermark: null, seq: newSeq, reconcileSeq: reconcileSeqRef.current });
             client.resync();
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -399,6 +440,21 @@ export function GameProvider({
             const engine = optimisticEngineRef.current;
             if (engine) {
                 const result = engine.processCommand(cmdType, cmdPayload, playerId ?? '0');
+                // ── 生产诊断日志：追踪 DECLARE_ATTACK 乐观预测 ──
+                // TODO: 问题定位后删除
+                if (cmdType === 'DECLARE_ATTACK') {
+                    const es = result.stateToRender?.sys?.eventStream;
+                    const esEntries = es?.entries as Array<{id: number; event: {type: string}}> | undefined;
+                    console.log('[GP-DIAG:processCmd]', {
+                        cmd: cmdType,
+                        hasState: !!result.stateToRender,
+                        animMode: result.animationMode,
+                        entryCount: esEntries?.length ?? 0,
+                        maxId: esEntries?.length ? esEntries[esEntries.length - 1]?.id : null,
+                        eventTypes: esEntries?.slice(-10).map(e => e.event.type) ?? [],
+                        ts: Date.now(),
+                    });
+                }
                 if (result.stateToRender) {
                     const refreshed = refreshInteractionOptions(result.stateToRender);
                     setState(refreshed);

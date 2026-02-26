@@ -456,7 +456,8 @@ export function registerBaseAbilities(): void {
             });
             const interaction = createSimpleChoice(
                 `base_temple_of_goju_tiebreak_${ctx.now}`, first.playerId,
-                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), 'base_temple_of_goju_tiebreak',
+                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+                { sourceId: 'base_temple_of_goju_tiebreak', targetType: 'minion' },
             );
             const remainingData = remaining.map(tb => ({
                 playerId: tb.playerId,
@@ -809,7 +810,8 @@ export function registerBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_rlyeh_${ctx.now}`, ctx.playerId,
-            '拉莱耶：消灭一个随从获得1VP', options, 'base_rlyeh',
+            '拉莱耶：消灭一个随从获得1VP', options,
+            { sourceId: 'base_rlyeh', targetType: 'minion' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -863,7 +865,8 @@ export function registerBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_the_mothership_${ctx.now}`, winnerId,
-            '母舰：选择收回的随从', options, 'base_the_mothership',
+            '母舰：选择收回的随从', options,
+            { sourceId: 'base_the_mothership', targetType: 'minion' },
         );
         return {
             events: [],
@@ -905,7 +908,8 @@ export function registerBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_ninja_dojo_${ctx.now}`, winnerId,
-            '忍者道场：选择消灭的随从', options, 'base_ninja_dojo',
+            '忍者道场：选择消灭的随从', options,
+            { sourceId: 'base_ninja_dojo', targetType: 'minion' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -946,7 +950,8 @@ export function registerBaseAbilities(): void {
             if (ctx.matchState) {
                 const interaction = createSimpleChoice(
                     `base_pirate_cove_${pid}_${ctx.now}`, pid,
-                    '海盗湾：选择移动一个随从到其他基地', options, 'base_pirate_cove',
+                    '海盗湾：选择移动一个随从到其他基地', options,
+                    { sourceId: 'base_pirate_cove', targetType: 'minion' },
                 );
                 ctx.matchState = queueInteraction(ctx.matchState, {
                     ...interaction,
@@ -982,7 +987,8 @@ export function registerBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_tortuga_${ctx.now}`, runnerUpId,
-            '托尔图加：选择移动一个随从到替换基地', options, 'base_tortuga',
+            '托尔图加：选择移动一个随从到替换基地', options,
+            { sourceId: 'base_tortuga', targetType: 'minion' },
         );
         return {
             events: [],
@@ -1060,7 +1066,8 @@ export function registerBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_mushroom_kingdom_${ctx.now}`, ctx.playerId,
-            '蘑菇王国：选择一个对手随从移动到蘑菇王国', options, 'base_mushroom_kingdom',
+            '蘑菇王国：选择一个对手随从移动到蘑菇王国', options,
+            { sourceId: 'base_mushroom_kingdom', targetType: 'minion' },
         );
         return {
             events: [],
@@ -1175,7 +1182,8 @@ export function registerBaseInteractionHandlers(): void {
         const options = buildBaseTargetOptions(baseCandidates, state.core);
         const interaction = createSimpleChoice(
             `base_pirate_cove_choose_base_${timestamp}`, playerId,
-            '海盗湾：选择移动到的基地', options, 'base_pirate_cove_choose_base',
+            '海盗湾：选择移动到的基地', options,
+            { sourceId: 'base_pirate_cove_choose_base', targetType: 'base' },
         );
         return {
             state: queueInteraction(state, {
@@ -1285,7 +1293,8 @@ export function registerBaseInteractionHandlers(): void {
             });
             const interaction = createSimpleChoice(
                 `base_temple_of_goju_tiebreak_${timestamp}`, next.playerId,
-                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId }), 'base_temple_of_goju_tiebreak',
+                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId }),
+                { sourceId: 'base_temple_of_goju_tiebreak', targetType: 'minion' },
             );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { baseIndex: ctx!.baseIndex, remainingPlayers: rest } } }), events };
         }

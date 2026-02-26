@@ -473,7 +473,7 @@
     },
     "dino_rampage": {
       "name": "Rampage",
-      "effectText": "Reduce a base's breakpoint by the total power of your minions there until the end of the turn."
+      "effectText": "Reduce a base's breakpoint by the power of one of your minions there until the end of the turn."
     },
     "dino_survival_of_the_fittest": {
       "name": "Survival of the Fittest",
@@ -773,7 +773,7 @@
     },
     "pirate_first_mate": {
       "name": "First Mate",
-      "abilityText": "Special: After this base scores, you may move up to two of your minions to other bases instead of the discard pile."
+      "abilityText": "Special: After this base scores, you may move this minion to another base instead of the discard pile."
     },
     "pirate_dinghy": {
       "name": "Dinghy",

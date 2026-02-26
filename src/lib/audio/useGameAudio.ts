@@ -337,7 +337,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         // 批量事件过多时限制同时播放的音效数量，避免同时触发大量音频加载
         // 策略：先解析所有事件的音效 key，过滤出有音效的，再取最后 N 个播放
         // 旧策略（取最后 N 个事件再解析）会丢掉前面的关键音效（如大招、响应窗口）
-        const MAX_BATCH_SOUNDS = 5;
+        // 注：大杀四方计分阶段可能同时产生 6-8 个有音效事件（基地替换+随从摧毁+抽牌+回合切换等）
+        const MAX_BATCH_SOUNDS = 8;
 
         // 解析所有新事件，收集有音效的 (entry, event, key) 三元组
         const resolvedAudio: Array<{ entry: unknown; event: { type: string; [k: string]: unknown }; key: SoundKey }> = [];

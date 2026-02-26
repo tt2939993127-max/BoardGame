@@ -26,9 +26,18 @@ export interface EventStreamRollbackValue {
      * 每次回滚递增，useEventStreamCursor 通过比较序号检测新回滚。
      */
     seq: number;
+    /**
+     * reconcile 确认序号（单调递增）
+     *
+     * 乐观引擎 reconcile 成功确认（didRollback=false）且 stateToRender 切换为
+     * 服务端状态时递增。此时 EventStream 的 maxId 可能与乐观预测不同
+     * （PRNG 微小漂移或事件数量差异），但这不是 Undo 回退。
+     * cursor 应静默调整到新的 maxId，不触发 didReset。
+     */
+    reconcileSeq: number;
 }
 
-const DEFAULT_VALUE: EventStreamRollbackValue = { watermark: null, seq: 0 };
+const DEFAULT_VALUE: EventStreamRollbackValue = { watermark: null, seq: 0, reconcileSeq: 0 };
 
 export const EventStreamRollbackContext = createContext<EventStreamRollbackValue>(DEFAULT_VALUE);
 

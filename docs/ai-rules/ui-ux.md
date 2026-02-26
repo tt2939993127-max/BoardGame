@@ -42,6 +42,9 @@
   - **高频交互**（快速点击/连续操作）：仅用颜色/透明度变化，禁止复杂动画
 - **布局稳定性 (Layout)**：动态内容通过 `absolute` 或预留空间实现。**辅助按钮严禁占据核心业务流空间，必须以悬浮 (Overlay) 方式贴边/贴底显示。**
 - **临时/瞬态 UI 不得挤压已有布局（强制）**：攻击修正徽章、buff 提示、倒计时标签等"出现/消失"的临时 UI 元素，必须使用 `absolute`/`fixed` 定位，禁止插入 flex/grid 正常流导致其他元素位移。若需占位，必须在初始布局中预留固定空间（如 `invisible` 占位符）。
+- **Flex 容器可滚动子元素必须加 `min-h-0`（强制）**：在 `flex-col` 容器中，使用 `flex-1 overflow-y-auto` 的子元素**必须同时加 `min-h-0`**。原因：flex 子元素默认 `min-height: auto`（内容撑开），导致 `overflow-y-auto` 不生效，内容被父级 `overflow-hidden` 裁剪而非滚动。同理，`flex-row` 容器中横向滚动的子元素需加 `min-w-0`。
+  - ✅ `<div className="flex-1 min-h-0 overflow-y-auto">` — 正确，可滚动
+  - ❌ `<div className="flex-1 overflow-y-auto">` — 错误，内容溢出时被裁剪而非滚动
 - **数据/逻辑/UI 分离（强制）**：UI 只负责展示与交互，业务逻辑放在引擎/系统/领域层，数据定义与配置（manifest、常量表、资源清单、文案 key）用纯数据文件维护。
 
 ### 1.1 游戏内 UI 组件单一来源（强制）

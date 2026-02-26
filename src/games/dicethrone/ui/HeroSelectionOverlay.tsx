@@ -145,7 +145,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                         {t('selection.title', '选择你的英雄')}
                     </h2>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-[1vw] pt-[1vw] grid grid-cols-2 gap-[0.8vw] content-start">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-[1vw] pt-[1vw] grid grid-cols-2 gap-[0.8vw] content-start">
                     {availableCharacters.map((char, index) => {
                         const isSelectedByMe = selectedCharacters[currentPlayerId] === char.id;
 

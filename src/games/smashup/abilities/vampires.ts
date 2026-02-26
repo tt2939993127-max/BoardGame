@@ -149,13 +149,12 @@ function vampireNightstalker(ctx: AbilityContext): AbilityResult {
             sourceBaseIndex: found.baseIndex,
         };
     }
-    nsOptions.push({ id: 'skip', label: '跳过（不消灭）', value: { skip: true }, displayMode: 'button' as const });
+    // 强制效果（描述无"你可以"），不提供 skip 选项
     return resolveOrPrompt(ctx, nsOptions, {
         id: 'vampire_nightstalker', title: '选择要消灭的力量≤2随从（本随从+1指示物）',
         sourceId: 'vampire_nightstalker', targetType: 'minion' as const,
     }, (rawVal) => {
         const val = rawVal as any;
-        if (val.skip) return { events: [] };
         return {
             events: [
                 destroyMinion(val.minionUid, val.defId, val.baseIndex, ctx.state.bases[val.baseIndex]?.minions.find((m: any) => m.uid === val.minionUid)?.owner ?? ctx.playerId, ctx.playerId, 'vampire_nightstalker', ctx.now),
@@ -454,12 +453,10 @@ const handleNightstalkerChoice: IH = (state, playerId, value, _data, _random, no
         minionUid?: string;
         defId?: string;
         baseIndex?: number;
-        skip?: boolean;
         sourceMinionUid?: string;
         sourceBaseIndex?: number;
     };
 
-    if (v.skip) return { state, events: [] };
     if (!v.minionUid || !v.defId || v.baseIndex === undefined) return undefined;
     const target = state.core.bases[v.baseIndex]?.minions.find(m => m.uid === v.minionUid);
     if (!target) return undefined;

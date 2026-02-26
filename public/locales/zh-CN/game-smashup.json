@@ -469,7 +469,7 @@
     },
     "dino_rampage": {
       "name": "狂暴",
-      "effectText": "将一个基地的爆破点降低等同于你在这个基地的随从的力量数直到回合结束。"
+      "effectText": "将一个基地的爆破点降低等同于你在这个基地的一个随从的力量数直到回合结束。"
     },
     "dino_augmentation": {
       "name": "增强",
@@ -773,7 +773,7 @@
     },
     "pirate_first_mate": {
       "name": "大副",
-      "abilityText": "特殊：在本基地计分后，你可以移动你的两个随从到其他基地而不是弃牌堆。"
+      "abilityText": "特殊：在本基地计分后，你可以移动本随从到其他基地而不是弃牌堆。"
     },
     "pirate_dinghy": {
       "name": "小船",

@@ -331,7 +331,31 @@ export function useGameEvents({
       console.warn(`[SW-EVENT] event=stream_backlog size=${entries.length} max=${EVENT_STREAM_WARN}`);
     }
 
-    const { entries: newEntries, didReset } = consumeNew();
+    const { entries: newEntries, didReset, didOptimisticRollback } = consumeNew();
+
+    // ── 生产诊断日志：追踪连续射击不触发问题 ──
+    // TODO: 问题定位后删除
+    if (newEntries.length > 0 || didReset || didOptimisticRollback) {
+      const hasRapidFire = newEntries.some(e =>
+        e.event.type === SW_EVENTS.ABILITY_TRIGGERED &&
+        ((e.event.payload as Record<string, unknown>).actionId === 'rapid_fire_extra_attack' ||
+         (e.event.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack')
+      );
+      const hasUnitAttacked = newEntries.some(e => e.event.type === SW_EVENTS.UNIT_ATTACKED);
+      if (hasRapidFire || hasUnitAttacked || didReset || didOptimisticRollback) {
+        console.log('[SW-DIAG:consumeNew]', {
+          newCount: newEntries.length,
+          didReset,
+          didOptimisticRollback,
+          hasRapidFire,
+          hasUnitAttacked,
+          isVisualBusy: gate.isVisualBusy,
+          eventIds: newEntries.map(e => e.id),
+          eventTypes: newEntries.map(e => e.event.type),
+          ts: Date.now(),
+        });
+      }
+    }
 
     if (didReset) {
       pendingAttackRef.current = null;
@@ -341,6 +365,27 @@ export function useGameEvents({
       damageBuffer.clear();
       // 撤回导致 EventStream 回退时，清理所有 UI 交互状态
       // 防止撤回后残留的技能按钮仍可点击（如锻造师 frost_axe 充能）
+      setAbilityMode(null);
+      setSoulTransferMode(null);
+      setMindCaptureMode(null);
+      setAfterAttackAbilityMode(null);
+      setRapidFireMode(null);
+      setWithdrawTrigger(null);
+      setGrabFollowMode(null);
+      gateRef.current.reset();
+    }
+
+    // 乐观回滚 / visibilitychange resync：之前乐观预测产生的事件已被消费（beginSequence 等），
+    // 回滚后这些事件会被重新消费，需要重置门控和攻击状态防止计数器重复递增。
+    // visibilitychange 场景：engine.reset() + state:sync 后 entries 为空，
+    // gate 深度卡住、交互队列永远不排空，需要完全清理所有 UI 交互状态。
+    // 注意：didOptimisticRollback 时 newEntries 包含回滚后的新事件，需要继续处理。
+    if (didOptimisticRollback) {
+      pendingAttackRef.current = null;
+      pendingDestroyRef.current = [];
+      setDiceResult(null);
+      setDyingEntities([]);
+      damageBuffer.clear();
       setAbilityMode(null);
       setSoulTransferMode(null);
       setMindCaptureMode(null);
@@ -388,6 +433,28 @@ export function useGameEvents({
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
         const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
+
+        // ── 生产诊断日志 ──
+        // TODO: 问题定位后删除
+        console.log('[SW-DIAG:unit_attacked]', {
+          entryId: entry.id,
+          attacker: p.attacker,
+          target: p.target,
+          hits: p.hits,
+          attackType: p.attackType,
+          hasPendingAttack: !!pendingAttackRef.current,
+          isVisualBusy: gate.isVisualBusy,
+          ts: Date.now(),
+        });
+
+        // 乐观回滚/重放防护：如果已有未完成的攻击序列（乐观预测产生），
+        // 先重置门控，防止 beginSequence 计数器重复递增导致 endSequence 无法归零、
+        // 交互队列（连续射击/感染/念力等）永远不被排空。
+        // 场景：对手命令插入导致 replayPending 重新执行 DECLARE_ATTACK，
+        // EventStream nextId 偏移使事件 ID 变化，游标视为"新事件"再次消费。
+        if (pendingAttackRef.current) {
+          gateRef.current.reset();
+        }
 
         gateRef.current.beginSequence();
         pendingAttackRef.current = {
@@ -583,12 +650,28 @@ export function useGameEvents({
         // 连续射击：攻击后可选消耗充能进行额外攻击
         if (matchId === 'rapid_fire_extra_attack') {
           const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
+          // ── 生产诊断日志 ──
+          // TODO: 问题定位后删除
+          console.log('[SW-DIAG:rapid_fire]', {
+            matchId,
+            sourcePos: p.sourcePosition,
+            unitExists: !!unit,
+            unitOwner: unit?.owner,
+            myPlayerId,
+            boosts: unit?.boosts ?? 0,
+            ownerMatch: unit?.owner === myPlayerId,
+            boostsOk: (unit?.boosts ?? 0) >= 1,
+            isVisualBusy: gate.isVisualBusy,
+            entryId: entry.id,
+            ts: Date.now(),
+          });
           if (unit && unit.owner === myPlayerId && (unit.boosts ?? 0) >= 1) {
             const captured = {
               sourceUnitId: p.sourceUnitId,
               sourcePosition: p.sourcePosition,
             };
             gateRef.current.scheduleInteraction(() => {
+              console.log('[SW-DIAG:rapid_fire:scheduled]', { ts: Date.now() });
               setRapidFireMode(captured);
             });
           }
@@ -821,6 +904,13 @@ export function useGameEvents({
 
   // 播放延迟的摧毁特效（含音效）+ 结束视觉序列门控
   const flushPendingDestroys = useCallback(() => {
+    // ── 生产诊断日志 ──
+    // TODO: 问题定位后删除
+    console.log('[SW-DIAG:flushDestroys]', {
+      pendingCount: pendingDestroyRef.current.length,
+      isVisualBusy: gate.isVisualBusy,
+      ts: Date.now(),
+    });
     if (pendingDestroyRef.current.length > 0) {
       for (const effect of pendingDestroyRef.current) {
         pushDestroyEffectRef.current({

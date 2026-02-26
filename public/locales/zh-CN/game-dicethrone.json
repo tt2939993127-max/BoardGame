@@ -296,6 +296,8 @@
     "cpSpentPlain": "消耗 {{amount}} CP",
     "cardDrawn": "抽了 {{count}} 张牌（{{source}}）",
     "cardDrawnPlain": "抽了 {{count}} 张牌",
+    "sellCard": "卖出卡牌",
+    "sellCardCp": "（+1 CP）",
     "cardDiscarded": "弃置了",
     "usePurify": "使用净化移除 {{statusLabel}}",
     "payToRemoveKnockdown": "花费 2CP 移除击倒",
@@ -306,7 +308,9 @@
     "confirmRollDefenseWithAbility": "确认防御投掷（{{abilityName}}）：",
     "cardRollResult": "投掷结果：",
     "damagePrevented": "以【{{source}}】抵挡了 {{amount}} 点伤害",
-    "damagePreventedPlain": "抵挡了 {{amount}} 点伤害"
+    "damagePreventedPlain": "抵挡了 {{amount}} 点伤害",
+    "damageShieldPercent": "以【{{source}}】获得 {{percent}}% 伤害减免护盾",
+    "damageShieldPercentPlain": "获得 {{percent}}% 伤害减免护盾"
   },
   "purify": {
     "title": "使用净化",
@@ -1273,6 +1277,15 @@
         "damage": "对所有对手造成等同于火魂骰面数量的伤害"
       }
     },
+    "soul-burn-5": {
+      "name": "燃烧之灵 (5火魂)",
+      "effects": {
+        "increaseLimit": "火焰专精堆叠上限提升1",
+        "fm": "获得2×火魂骰面数量的火焰专精",
+        "inflictBurn": "施加1个燃烧标记",
+        "damage": "对所有对手造成1×火魂数量的附属伤害"
+      }
+    },
     "blazing-soul": {
       "name": "炙热之魂",
       "description": "2岩浆+2火魂触发：精通上限+1，获得5精通，施加倒地",
@@ -1336,9 +1349,9 @@
     },
     "burn-down-2": {
       "name": "燃烧殆尽 II",
-      "description": "获得1精通。激活烧毁：移除任意数量精通，每移除1精通造成4不可防御伤害。",
+      "description": "获得1火焰专精。激活烧毁：移除至多4火焰专精，每移除1个造成4不可防御伤害。",
       "effects": {
-        "main": "激活烧毁：移除任意数量火焰精通。每移除1个造成4点不可防御伤害"
+        "main": "激活烧毁：移除至多4火焰专精。每移除1个造成4点不可防御伤害"
       }
     },
     "ignite-2": {
@@ -1354,7 +1367,7 @@
       "name": "熔火铠甲 II",
       "description": "防御：1x[火]造成1不可防御伤害，1x[火魂]获得1精通",
       "effects": {
-        "main": "防御技能 (5骰)：每掷出1个“火”，获得1火焰精通并造成1伤害。如果有火+火魂，施加燃烧。"
+        "main": "防御技能 (5骰)：每掷出1个“火魂”获得1火焰精通。如果同时有火+熔岩，施加灼烧。每掷出1个“火”造成1伤害。"
       }
     },
     "magma-armor-3": {

@@ -141,6 +141,7 @@ export const resolveAttack = (
             state: stateAfterDefense,
             damageDealt: 0,
             timestamp,
+            damagePhase: 'offensiveRoll', // 攻击掷骰阶段伤害，用于 passiveTrigger 条件过滤（如锁定）
         };
 
         // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
@@ -227,6 +228,7 @@ export const resolvePostDamageEffects = (
             state,
             damageDealt, // 使用实际造成的伤害值
             timestamp,
+            damagePhase: 'offensiveRoll', // 攻击掷骰阶段伤害
         };
 
         // 重新执行 withDamage 效果，但跳过 damage 类型（伤害已通过 Token 响应结算）

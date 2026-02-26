@@ -212,12 +212,14 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             expect(events).toHaveLength(0);
         });
 
-        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=14, bonusCp=3 → 有效CP=15, 伤害=8）', () => {
-            const state = createState({ attackerCP: 14 });
+        it('CP接近上限时伤害基于当前CP（gainCp已在preDefense阶段reduce进state）', () => {
+            // 实际管线中 gainCp(3) 在 preDefense 阶段已 reduce 进 core，
+            // 所以 handler 运行时 currentCp 已经是 min(14+3, 15) = 15
+            const state = createState({ attackerCP: 15 });
             const handler = getCustomActionHandler('shadow_thief-damage-half-cp')!;
-            const events = handler(buildCtx(state, 'shadow_thief-damage-half-cp', { params: { bonusCp: 3 } }));
+            const events = handler(buildCtx(state, 'shadow_thief-damage-half-cp'));
 
-            // 有效CP = min(14+3, 15) = 15, 伤害 = ceil(15/2) = 8（而非 ceil(17/2)=9）
+            // 有效CP = 15, 伤害 = ceil(15/2) = 8
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(8);
         });
     });
@@ -231,12 +233,14 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(8);
         });
 
-        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=13, bonusCp=4 → 有效CP=15, 伤害=15）', () => {
-            const state = createState({ attackerCP: 13 });
+        it('CP接近上限时伤害基于当前CP（gainCp已在preDefense阶段reduce进state）', () => {
+            // 实际管线中 gainCp(4) 在 preDefense 阶段已 reduce 进 core，
+            // 所以 handler 运行时 currentCp 已经是 min(13+4, 15) = 15
+            const state = createState({ attackerCP: 15 });
             const handler = getCustomActionHandler('shadow_thief-damage-full-cp')!;
-            const events = handler(buildCtx(state, 'shadow_thief-damage-full-cp', { params: { bonusCp: 4 } }));
+            const events = handler(buildCtx(state, 'shadow_thief-damage-full-cp'));
 
-            // 有效CP = min(13+4, 15) = 15（而非 17）
+            // 有效CP = 15, 伤害 = 15
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(15);
         });
     });
@@ -521,13 +525,14 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(5);
         });
 
-        it('CP接近上限时 bonusCp 不会超过 CP_MAX（CP=14, bonusCp=3 → 有效CP=15, 伤害=20）', () => {
-            const state = createState({ attackerCP: 14 });
+        it('CP接近上限时伤害基于当前CP（gainCp已在preDefense阶段reduce进state）', () => {
+            // 实际管线中 gainCp(3) 在 preDefense 阶段已 reduce 进 core，
+            // 所以 handler 运行时 currentCp 已经是 min(14+3, 15) = 15
+            const state = createState({ attackerCP: 15 });
             const handler = getCustomActionHandler('shadow_thief-shadow-shank-damage')!;
-            // 模拟实际技能定义中的 params: { bonusCp: 3 }
-            const events = handler(buildCtx(state, 'shadow_thief-shadow-shank-damage', { params: { bonusCp: 3 } }));
+            const events = handler(buildCtx(state, 'shadow_thief-shadow-shank-damage'));
 
-            // 有效CP = min(14+3, 15) = 15, 伤害 = 15+5 = 20（而非 14+3+5=22）
+            // 有效CP = 15, 伤害 = 15+5 = 20
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(20);
         });
     });

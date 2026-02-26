@@ -55,6 +55,8 @@ export interface EffectContext {
     timestamp?: number;
     /** 是否为防御技能上下文（防御反击伤害不触发 Token 响应窗口） */
     isDefensiveContext?: boolean;
+    /** 伤害发生的阶段（传递给 DamageSource.phase，用于 passiveTrigger 条件过滤） */
+    damagePhase?: string;
 }
 
 // ============================================================================
@@ -74,6 +76,8 @@ export interface CustomActionContext {
     random?: RandomFn;
     /** 触发此 Custom Action 的原始 EffectAction 配置（包含 params 等额外参数） */
     action: EffectAction;
+    /** 伤害发生的阶段（透传自 EffectContext.damagePhase，用于 DamageSource.phase） */
+    damagePhase?: string;
 }
 
 /**
@@ -392,6 +396,7 @@ export function createDTPassiveTriggerHandler(
                 timestamp: context.timestamp,
                 random: context.random ?? random,
                 action: actionWithParams,
+                damagePhase: ctx.damagePhase,
             };
 
             const handledEvents = handler(handlerCtx);
@@ -445,16 +450,15 @@ function resolveEffectAction(
                 if (baseDamage <= 0) continue;
 
                 // 统一使用 createDamageCalculation 引擎原语计算伤害
-                // 终极技能（Ultimate）伤害不可被护盾抵消（规则 FAQ）
-                const isUltimate = state.pendingAttack?.isUltimate ?? false;
+                // 护盾由 reducer handleDamageDealt 统一消耗（含 Ultimate 免疫护盾逻辑）
                 const calc = createDamageCalculation({
                     baseDamage,
-                    source: { playerId: attackerId, abilityId: sourceAbilityId },
+                    source: { playerId: attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
                     target: { playerId: dmgTargetId },
                     state,
                     autoCollectTokens: true,
                     autoCollectStatus: true,
-                    autoCollectShields: !isUltimate,
+                    // autoCollectShields 默认 false：护盾由 reducer handleDamageDealt 统一消耗
                     passiveTriggerHandler: createDTPassiveTriggerHandler(ctx, random),
                     timestamp,
                 });
@@ -707,6 +711,7 @@ function resolveEffectAction(
                     timestamp,
                     random,
                     action,
+                    damagePhase: ctx.damagePhase,
                 };
                 const handledEvents = handler(handlerCtx);
                 if (sfxKey) {

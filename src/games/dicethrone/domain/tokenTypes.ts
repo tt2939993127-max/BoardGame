@@ -252,6 +252,16 @@ export interface PassiveTriggerConfig {
     removable: boolean;
     /** 移除此效果需要的代价（如 CP） */
     removalCost?: { resource: string; amount: number };
+    /**
+     * 伤害来源条件（仅 onDamageReceived 时机有效）
+     * 用于限制 token 只在特定来源的伤害中触发。
+     * 例：锁定只在攻击掷骰阶段（phase: 'offensiveRoll'）的伤害中生效。
+     * 未声明时，对所有伤害来源生效（向后兼容）。
+     */
+    sourceCondition?: {
+        /** 伤害必须来自指定阶段才触发 */
+        phase?: string;
+    };
 }
 
 // ============================================================================

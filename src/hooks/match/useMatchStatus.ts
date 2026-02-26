@@ -501,6 +501,8 @@ export interface MatchStatus {
     opponentName: string | null;
     opponentConnected: boolean;
     isHost: boolean; // 是否是房主（playerID === '0'）
+    /** 手动触发立即刷新 */
+    refetch: () => Promise<void>;
 }
 
 /**
@@ -595,6 +597,8 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
         opponentName: opponent?.name || null,
         opponentConnected: opponent?.isConnected || false,
         isHost: myPlayerID === '0',
+        /** 手动触发立即刷新（对手加入时调用，避免等 30 秒轮询） */
+        refetch: fetchMatchStatus,
     };
 }
 

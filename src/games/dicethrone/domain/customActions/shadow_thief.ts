@@ -91,18 +91,16 @@ function handleDaggerStrikePoison({ targetId, sourceAbilityId, state, timestamp 
 /** 抢夺/暗影突袭：造成一半CP的伤害 【已迁移到新伤害计算管线】 */
 function handleDamageHalfCp({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0;
-    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，但 effects 之间不更新 state，
-    // 所以需要手动加上。必须 clamp 到 CP_MAX，否则超出上限的 CP 也会被计入伤害。
-    const totalCp = Math.min(currentCp + bonusCp, CP_MAX);
+    // gainCp 效果被分类为 preDefense 时机，在 resolveAttack 之前已 reduce 进 core，
+    // 因此 currentCp 已包含 gainCp 的增量，不需要再加 bonusCp。
+    const totalCp = Math.min(currentCp, CP_MAX);
 
     if (totalCp <= 0) return [];
 
     const damageAmt = Math.ceil(totalCp / 2);
 
     const damageCalc = createDamageCalculation({
-        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        source: { playerId: attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: targetId },
         baseDamage: damageAmt,
         state,
@@ -194,15 +192,15 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
 /** 破隐一击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) 【已迁移到新伤害计算管线】 */
 function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0;
-    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，必须 clamp 到 CP_MAX
-    const totalCp = Math.min(currentCp + bonusCp, CP_MAX);
+    // gainCp 效果被分类为 preDefense 时机，在 resolveAttack 之前已 reduce 进 core，
+    // 因此 currentCp 已包含 gainCp 的增量，不需要再加 bonusCp。
+    // bonusCp 参数保留向后兼容但不再使用。
+    const totalCp = Math.min(currentCp, CP_MAX);
 
     if (totalCp <= 0) return [];
 
     const damageCalc = createDamageCalculation({
-        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        source: { playerId: attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: targetId },
         baseDamage: totalCp,
         state,
@@ -231,7 +229,7 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     const damageAmt = Math.ceil(dieValue / 2);
     if (damageAmt > 0) {
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: targetId },
             baseDamage: damageAmt,
             state,
@@ -303,14 +301,13 @@ function handleCornucopiaDiscard({ ctx, state, timestamp, random }: CustomAction
 /** 终极：Shadow Shank Damage (Deal CP + 5) 【已迁移到新伤害计算管线】 */
 function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0;
-    // bonusCp 是同一技能中先执行的 gainCp 效果的增量，必须 clamp 到 CP_MAX
-    const effectiveCp = Math.min(currentCp + bonusCp, CP_MAX);
+    // gainCp 效果被分类为 preDefense 时机，在 resolveAttack 之前已 reduce 进 core，
+    // 因此 currentCp 已包含 gainCp 的增量，不需要再加 bonusCp。
+    const effectiveCp = Math.min(currentCp, CP_MAX);
     const damageAmt = effectiveCp + 5;
 
     const damageCalc = createDamageCalculation({
-        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        source: { playerId: attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: targetId },
         baseDamage: damageAmt,
         state,
@@ -483,7 +480,7 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
     const damageAmt = Math.ceil(dieValue / 2);
     if (damageAmt > 0) {
         const damageCalc = createDamageCalculation({
-            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            source: { playerId: attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: targetId },
             baseDamage: damageAmt,
             state,
@@ -575,7 +572,7 @@ function handleFearlessRiposte({ sourceAbilityId, state, timestamp, ctx }: Custo
     const daggers = faces[FACE.DAGGER] || 0;
     if (daggers > 0) {
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: daggers,
             state,
@@ -612,7 +609,7 @@ function handleFearlessRiposte2({ sourceAbilityId, state, timestamp, ctx }: Cust
     if (daggers > 0) {
         const damage = daggers * 2;
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: damage,
             state,

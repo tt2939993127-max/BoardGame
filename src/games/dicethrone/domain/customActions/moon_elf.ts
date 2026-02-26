@@ -18,11 +18,11 @@ import type {
     StatusRemovedEvent,
     BonusDieRolledEvent,
     RollLimitChangedEvent,
+    DamageShieldGrantedEvent,
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
-import { getPendingAttackExpectedDamage } from '../utils';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
@@ -65,7 +65,7 @@ function dealDamage(
 ): DamageDealtEvent {
     // 使用新伤害计算管线
     const damageCalc = createDamageCalculation({
-        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: targetId },
         baseDamage: amount,
         state: ctx.state,
@@ -364,19 +364,15 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
     }
 
     // 足面≥2时，抵挡一半伤害（向上取整）
-    if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = getPendingAttackExpectedDamage(state, state.pendingAttack);
-        const reducedDamage = Math.ceil(originalDamage / 2);
-        const reduction = originalDamage - reducedDamage;
-        
-        if (reduction > 0) {
-            events.push({
-                type: 'PREVENT_DAMAGE',
-                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as any);
-        }
+    // 使用百分比减免护盾，在 DAMAGE_DEALT 时按实际伤害的 50% 计算减免量
+    // 解决 custom-action 伤害（如 shadow_thief-damage-half-cp）无法预估的问题
+    if (footCount >= 2) {
+        events.push({
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId: attackerId, value: 0, sourceId: sourceAbilityId, preventStatus: false, reductionPercent: 50 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageShieldGrantedEvent);
     }
 
     return events;
@@ -402,20 +398,16 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
         events.push(dealDamage(context, opponentId, bowCount, sourceAbilityId, timestamp));
     }
 
-    // 足面≥2时，防止一半伤害（向上取整）
-    if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = getPendingAttackExpectedDamage(state, state.pendingAttack);
-        const reducedDamage = Math.ceil(originalDamage / 2);
-        const reduction = originalDamage - reducedDamage;
-        
-        if (reduction > 0) {
-            events.push({
-                type: 'PREVENT_DAMAGE',
-                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as any);
-        }
+    // 足面≥2时，抵挡一半伤害（向上取整）
+    // 使用百分比减免护盾，在 DAMAGE_DEALT 时按实际伤害的 50% 计算减免量
+    // 解决 custom-action 伤害（如 shadow_thief-damage-half-cp）无法预估的问题
+    if (footCount >= 2) {
+        events.push({
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId: attackerId, value: 0, sourceId: sourceAbilityId, preventStatus: false, reductionPercent: 50 },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageShieldGrantedEvent);
     }
 
     return events;
@@ -636,9 +628,10 @@ function handleEntangleEffect(context: CustomActionContext): DiceThroneEvent[] {
     return events;
 }
 
-// 锁定 (Targeted) 是持续效果，受伤时 +2 伤害，不会自动移除。
-// 伤害修正通过 TokenDef.passiveTrigger.actions[modifyStat]，由 createDamageCalculation 的 collectStatusModifiers 自动处理。
-// 移除只能通过净化等主动手段。
+// 锁定 (Targeted) 是持续效果，因敌人攻击掷骰阶段受到伤害时 +2。
+// 伤害修正通过 TokenDef.passiveTrigger.actions[modifyStat] + sourceCondition.phase='offensiveRoll'，
+// 由 createDamageCalculation 的 collectStatusModifiers 自动处理。
+// 防御反击、灼烧/中毒等非攻击阶段伤害不触发。移除只能通过净化等主动手段。
 
 // ============================================================================
 // 注册

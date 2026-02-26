@@ -423,6 +423,37 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     // 规则：Shadows 免除进攻阶段的所有伤害，但非伤害效果（grantToken/heal 等）仍生效
                     events.push(...postDamageEventsSneak.filter(e => e.type !== 'DAMAGE_DEALT'));
 
+                    // === 与非潜行路径对齐的 halt 检查 ===
+                    // postDamage 效果可能产生需要用户交互的事件，必须逐一检查：
+                    // 1. 奖励骰重掷（如高温爆破 II/III 级的多骰展示/重掷交互）
+                    // 2. 选择请求（postDamage 时机的 choice 效果）
+                    // 3. Token 响应（custom action 产生的伤害触发 Token 响应窗口）
+                    // halt 后重入时，ATTACK_RESOLVED 已被 reduce（pendingAttack=null），
+                    // 不会再进入 if(core.pendingAttack) 分支，直接推进到 main2
+                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    const hasPostDamageChoiceSneak = postDamageEventsSneak.some(e => e.type === 'CHOICE_REQUESTED');
+                    const hasTokenResponseSneak = postDamageEventsSneak.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+                    if (hasBonusDiceRerollSneak || hasPostDamageChoiceSneak || hasTokenResponseSneak) {
+                        return { events, halt: true };
+                    }
+
+                    // 检查晕眩（daze）额外攻击：攻击方有晕眩时，攻击结算后对手获得额外攻击
+                    // 潜行免伤但攻击仍"成功"（ATTACK_RESOLVED 已生成），daze 应正常触发
+                    const { dazeEvents: dazeEventsSneak, triggered: dazeTriggeredSneak } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (dazeTriggeredSneak) {
+                        events.push(...dazeEventsSneak);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                    const afterAttackWindowSneak = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindowSneak) {
+                        events.push(afterAttackWindowSneak);
+                        return { events, halt: true };
+                    }
+
                     return { events, overrideNextPhase: 'main2' };
                 }
 

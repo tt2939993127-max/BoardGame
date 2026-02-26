@@ -252,7 +252,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const dmg = eventsOfType(events, 'DAMAGE_DEALT');
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(1); // 2弓 ÷ 2 = 1伤害
-            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(0); // 不足2个足面，无减伤
+            expect(eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')).toHaveLength(0); // 不足2个足面，无减伤
         });
 
         it('2个弓面2个足面：造成1伤害，抵挡一半伤害（向上取整）', () => {
@@ -263,9 +263,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-1'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(1); // 2弓 ÷ 2 = 1伤害
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(5); // 10伤害 → 抵挡5 → 剩余5（向上取整）
+            // 足≥2 → 百分比减免护盾（50%）
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
         });
 
         it('3个弓面2个足面：造成1伤害（3÷2向下取整=1），抵挡一半伤害', () => {
@@ -276,9 +277,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-1'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(1); // 3弓 ÷ 2 = 1.5 → 向下取整1
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(5); // 10伤害 → 抵挡5 → 剩余5
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
         });
 
         it('0个弓面5个足面：无伤害，有减伤', () => {
@@ -289,9 +290,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-1'));
 
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0); // 0弓→无伤害
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(5); // 10伤害 → 抵挡5 → 剩余5
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
         });
 
         it('1个弓面：不足2个弓面，无伤害', () => {
@@ -302,8 +303,8 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-1'));
 
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0); // 1弓 ÷ 2 = 0，无伤害
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1); // 足≥2→减伤
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1); // 足≥2→减伤
         });
 
         it('0个弓面0个足面（全月）：无事件', () => {
@@ -314,15 +315,17 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect(events).toHaveLength(0);
         });
 
-        it('奇数伤害向上取整：9伤害→抵挡4→剩余5', () => {
+        it('奇数伤害向上取整：百分比护盾在 reducer 层按实际伤害计算', () => {
             const dice = [4, 5, 1, 1, 6].map(v => createMoonElfDie(v)); // 2弓, 2足, 1月
             const state = createState({ dice });
             state.pendingAttack = { attackerId: '1', defenderId: '0', isDefendable: true, damage: 9, bonusDamage: 0 } as any;
             const handler = getCustomActionHandler('moon_elf-elusive-step-resolve-1')!;
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-1'));
 
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect((prevent[0] as any).payload.amount).toBe(4); // 9 / 2 = 4.5 → 向上取整5 → 抵挡4
+            // 足≥2 → 百分比减免护盾（50%），实际减免在 reducer 层计算
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
         });
     });
 
@@ -336,7 +339,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-2'));
 
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0); // 0弓→无伤害
-            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(1); // 足≥2→减伤
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1); // 足≥2→减伤
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
         });
 
         it('2弓2足：造成2伤害（弓面数），抵挡一半伤害', () => {
@@ -348,7 +353,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-2'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(2); // 2弓→2伤害
-            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(1); // 足≥2→减伤
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1); // 足≥2→减伤
+            expect((shield[0] as any).payload.reductionPercent).toBe(50);
             expect(eventsOfType(events, 'TOKEN_GRANTED')).toHaveLength(0); // 无闪避效果
         });
 
@@ -361,7 +368,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-2'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(3); // 3弓→3伤害
-            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(0); // 足<2→无减伤
+            expect(eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')).toHaveLength(0); // 足<2→无减伤
         });
 
         it('5弓0足：造成5伤害，无减伤', () => {
@@ -373,7 +380,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'moon_elf-elusive-step-resolve-2'));
 
             expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(5); // 5弓→5伤害
-            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(0); // 0足→无减伤
+            expect(eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')).toHaveLength(0); // 0足→无减伤
         });
     });
 

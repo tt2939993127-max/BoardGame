@@ -136,7 +136,6 @@ const systems = [
         formatEntry: formatSummonerWarsActionEntry,
     }),
     createUndoSystem({
-        maxSnapshots: 3,
         snapshotCommandAllowlist: UNDO_ALLOWLIST,
         // 回合切换时固定创建快照，确保玩家至少能回滚到回合开始
         snapshotOnNewTurn: true,

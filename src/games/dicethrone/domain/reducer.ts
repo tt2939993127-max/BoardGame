@@ -868,6 +868,7 @@ export const reduce = (
                         rollDiceCount: 5,
                         rollConfirmed: false,
                         pendingAttack: null,
+                        activatingAbilityId: undefined,
                         dice: resetDiceArray(playerDice ?? state.dice, 5),
                     };
                 }
@@ -881,6 +882,7 @@ export const reduce = (
                         rollCount: 0,
                         rollLimit: 1,
                         rollConfirmed: false,
+                        activatingAbilityId: undefined,
                         rollDiceCount: 0,
                         dice: resetDiceArray(playerDice ?? state.dice, 0),
                     };

@@ -64,7 +64,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         trigger: { type: 'smallStraight' },
         effects: [
             gainCp(3, abilityEffectText('pickpocket', 'gainCp3')),
-            { description: '造成一半CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-half-cp', params: { bonusCp: 3 } } }
+            { description: '造成一半CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-half-cp' } }
         ]
     },
     // 偷窃 (Steal) I
@@ -90,7 +90,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         trigger: { type: 'largeStraight' },
         effects: [
             gainCp(4, abilityEffectText('kidney-shot', 'gainCp4')),
-            { description: '造成等同CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-full-cp', params: { bonusCp: 4 } } }
+            { description: '造成等同CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-full-cp' } }
         ]
     },
     // 暗影之舞 (Shadow Dance) I
@@ -131,7 +131,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         trigger: { type: 'diceSet', faces: { [FACE.SHADOW]: 5 } },
         effects: [
             gainCp(3, abilityEffectText('shadow-shank', 'gainCp3')),
-            { description: '造成CP+5伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-shank-damage', params: { bonusCp: 3 } } },
+            { description: '造成CP+5伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-shank-damage' } },
             // Replaced removeStatus with custom action
             { description: '移除负面效果', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-remove-all-debuffs' } },
             grantToken(TOKEN_IDS.SNEAK, 1, abilityEffectText('shadow-shank', 'gainSneak'))
@@ -193,7 +193,7 @@ export const PICKPOCKET_2: AbilityDef = {
             trigger: { type: 'smallStraight' },
             effects: [
                 gainCp(4, abilityEffectText('pickpocket-2', 'gainCp4')),
-                { description: '造成一半CP的伤害 (向上取整)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-half-cp', params: { bonusCp: 4 } } }
+                { description: '造成一半CP的伤害 (向上取整)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-half-cp' } }
             ],
             priority: 1
         },
@@ -225,7 +225,7 @@ export const KIDNEY_SHOT_2: AbilityDef = {
             trigger: { type: 'largeStraight' },
             effects: [
                 gainCp(4, abilityEffectText('kidney-shot-2', 'gainCp4')),
-                { description: '造成等同CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-full-cp', params: { bonusCp: 4 } } }
+                { description: '造成等同CP的伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-damage-full-cp' } }
             ],
             priority: 1
         },

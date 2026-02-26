@@ -385,7 +385,8 @@ const UnitCell: React.FC<{
   currentGrid: GridConfig;
   props: BoardGridProps;
 }> = ({ row, col, unit, pos, viewCoord, core, myPlayerId, toViewCoord, currentGrid, props }) => {
-  const isNew = props.newUnitIds?.has(unit.instanceId) ?? false;
+  // 召唤动画：仅在首次挂载时判断是否为新单位，后续渲染始终 animate 到完全不透明
+  const isNewOnMount = useRef(props.newUnitIds?.has(unit.instanceId) ?? false).current;
   const { t } = useTranslation('game-summonerwars');
   const spriteConfig = getUnitSpriteConfig(unit);
   const isMyUnit = unit.owner === myPlayerId;
@@ -479,9 +480,9 @@ const UnitCell: React.FC<{
         zIndex: isAttacker ? BOARD_GRID_Z.attacker : undefined,
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
-      initial={isNew ? { opacity: 0, scale: 1.1 } : false}
-      animate={isNew ? { opacity: 1, scale: 1 } : undefined}
-      transition={isNew ? {
+      initial={isNewOnMount ? { opacity: 0, scale: 1.1 } : false}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={isNewOnMount ? {
         type: 'spring', stiffness: 80, damping: 15, mass: 1.2,
       } : {
         layout: { type: 'spring', stiffness: 300, damping: 30 },

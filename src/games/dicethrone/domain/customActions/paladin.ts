@@ -45,7 +45,7 @@ function handleHolyDefenseRoll({ targetId, attackerId: _attackerId, sourceAbilit
     // 1. 造成伤害 (Sword) → 反伤给原攻击者 【已迁移到新伤害计算管线】
     if (swordCount > 0 && originalAttackerId) {
         const damageCalc = createDamageCalculation({
-            source: { playerId: targetId, abilityId: sourceAbilityId },
+            source: { playerId: targetId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: originalAttackerId },
             baseDamage: swordCount,
             state,

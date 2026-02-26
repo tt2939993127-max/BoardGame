@@ -239,12 +239,14 @@ export type PendingInteraction = InteractionDescriptor;
  * 可抵消即将受到的伤害，下次受伤后清空
  */
 export interface DamageShield {
-    /** 护盾值 */
+    /** 护盾值（固定减免量） */
     value: number;
     /** 来源（卡牌/技能 ID，用于 UI/日志） */
     sourceId?: string;
     /** 是否用于防止本次攻击的状态效果 */
     preventStatus?: boolean;
+    /** 百分比减免（0-100）。设置后 value 字段被忽略，按实际伤害的百分比计算减免量（向上取整） */
+    reductionPercent?: number;
 }
 
 // ============================================================================

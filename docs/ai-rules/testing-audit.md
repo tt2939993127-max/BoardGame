@@ -74,7 +74,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 ## 四、教训附录
 
-> 所有审查/审计/新增功能验证时按维度检查。D1-D10 为原有维度（已扩展），D11-D27 为新增维度。
+> 所有审查/审计/新增功能验证时按维度检查。D1-D10 为原有维度（已扩展），D11-D33 为新增维度。
 
 | # | 维度 | 核心问题 |
 |---|------|---------|
@@ -92,7 +92,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D12 | **写入-消耗对称** | 能力/事件写入的字段，在所有消费点（reducer/validate/UI）是否被正确读取和消耗？写入路径和消耗路径的条件分支是否对称？**Reducer 操作范围是否与 payload 声明的范围一致（禁止全量清空 payload 未涉及的数据）？** |
 | D13 | **多来源竞争** | 同一资源/额度/状态有多个写入来源时，消耗逻辑是否正确区分来源？不同来源的优先级/互斥/叠加规则是否正确？ |
 | D14 | **回合清理完整** | 回合/阶段结束时临时状态（额度/buff/标记/计数器）是否全部正确清理？清理遗漏会导致下回合状态泄漏 |
-| D15 | **UI 状态同步** | UI 展示的数值/状态是否与 core 状态一致？UI 读取的字段是否是 reducer 实际写入的字段？UI 是否遗漏了某些状态来源？**UI 计算参考点是否与描述语义一致？** |
+| D15 | **UI 状态同步** | UI 展示的数值/状态是否与 core 状态一致？UI 读取的字段是否是 reducer 实际写入的字段？UI 是否遗漏了某些状态来源？**UI 计算参考点是否与描述语义一致？UI 交互门控是否与 validate 合法路径对齐？** |
 | D16 | **条件优先级** | reducer/validate 中多个条件分支（if/else if/else）的优先级是否正确？先命中的分支是否应该先命中？ |
 | D17 | **隐式依赖** | 功能是否依赖特定的调用顺序/状态前置条件但未显式检查？事件处理顺序变化是否会破坏功能？ |
 | D18 | **否定路径** | "不应该发生"的场景是否被测试覆盖？（如：额外额度不应消耗正常额度、基地限定额度不应影响其他基地） |
@@ -108,6 +108,9 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D28 | **白名单/黑名单完整性** | 白名单/黑名单是否覆盖所有已知场景？新增功能时是否更新了白名单？白名单逻辑是否有文档说明加入条件？白名单是否是"显式声明"而非"隐式推断"？ |
 | D29 | **PPSE 事件替换完整性** | `postProcessSystemEvents` 可能过滤/替换/追加事件（如压制 `MINION_DESTROYED`），调用方（`runAfterEventsRounds`）是否用 PPSE 返回的完整事件列表替换原 `roundEvents` 中的领域事件？仅追加新增部分 = ❌ 被压制的事件仍会被 reduce |
 | D30 | **消灭流程时序与防止消灭白名单** | `processDestroyTriggers` 中：① onDestroy 必须在防止消灭触发器（基地能力/ongoing）之后执行，仅在确认消灭时触发；② pendingSave 判定使用 `PREVENT_DESTROY_SOURCE_IDS` 白名单，新增防止消灭能力时必须将其 sourceId 加入白名单，否则消灭不会被暂缓；③ 交互选项值必须快照所有 handler 需要的字段（如 `counterAmount`），因为来源实体可能在交互解决前离场 |
+| D31 | **效果拦截路径完整性** | 使用"注册+过滤"两步实现的拦截机制（如 `registerProtection` + `filterProtected*Events`），过滤函数是否在**所有事件产生路径**上被调用？① 直接命令执行（`execute()`/`reducer.ts` 后处理）② 交互解决（`afterEvents` in `systems.ts`）③ FlowHooks 后处理（`postProcess` in `index.ts`）④ 触发链递归（`processDestroyTriggers`/`processMoveTriggers` 内部产生的事件）。任一路径遗漏 = 保护机制在该路径下完全失效但不报错 |
+| D32 | **替代路径后处理对齐** | 代码中存在多条路径调用同一核心函数（如 `resolvePostDamageEffects`/`resolveAttack`）时，所有路径是否实现了相同的后处理检查集？替代/快捷路径（如潜行免伤、闪避、先手击杀）是否遗漏了规范路径中的 halt 检查、响应窗口、额外攻击等后处理逻辑？ |
+| D33 | **跨实体同类能力实现路径一致性** | 不同实体（英雄/派系/卡组/单位类型）中语义相同的能力（伤害/治疗/抽牌/移动/状态修正/额外行动/回收/限制等）是否使用一致的事件类型、注册模式和副作用处理？合理差异（语义本身不同导致的实现差异）需标注原因，不合理差异需修复 |
 
 ### 需要展开的关键维度
 
@@ -548,6 +551,24 @@ expect(state.sys.responseWindow?.current?.pendingInteractionId).toBeDefined();
 
 > **示例（SummonerWars 抓附跟随）**：描述"将本单位放置到**该单位相邻的区格**"（该单位=移动的单位），但 UI 用 `getAdjacentCells(grabberPosition)` 计算有效位置，应为 `getAdjacentCells(movedTo)`。Event payload 包含两个正确字段，但选择了语义不匹配的输入
 
+**D15 子项：UI 交互门控与 validate 对齐（强制）**（在 validate 层新增/修改合法路径后强制触发，或修"引擎测试通过但实际操作无效"时触发）：UI 层的交互前置过滤（可点击判断、禁用集合、模式切换条件、可选目标集合）是否与 validate 层的合法路径完全对齐。**核心原则：UI 层和 validate 层是两套独立维护的门控，改了 validate 不等于 UI 也放行。引擎层测试（GameTestRunner / executePipeline）直接 dispatch 命令绕过 UI，测试全绿不代表用户能操作。** 审查方法：
+1. **识别 validate 变更**：本次修改在 validate 中新增/放宽了哪些合法路径？（如新增了"Me First! 窗口中允许 PLAY_MINION"）
+2. **追踪 UI 入口**：用户要触达该路径，需要经过哪些 UI 交互步骤？（如点击手牌 → 选择基地 → dispatch 命令）
+3. **逐层检查 UI 门控**：沿用户操作链路，检查每一步是否有独立的前置过滤阻止用户触达新路径：
+   - **点击回调门控**：`handleCardClick`/`handleBaseClick` 等回调中是否有 `card.type`/`phase`/模式判断提前 return？
+   - **禁用集合**：`disabledUids`/`meFirstDisabledUids` 等集合是否把新增的合法卡牌/目标标记为禁用（置灰）？
+   - **可选目标集合**：`deployableBaseIndices`/`selectableBaseIndices` 等集合的计算逻辑是否覆盖了新增的合法场景？
+   - **模式切换条件**：进入部署模式/选择模式的条件是否排除了新增的合法操作？
+4. **构造端到端操作链**：模拟用户从"看到 UI" → "点击" → "选择目标" → "命令 dispatch"的完整链路，确认每一步都不被 UI 门控拦截
+
+**典型缺陷模式**：
+- ❌ validate 新增"响应窗口中允许打出随从"，但 UI 点击回调用 `card.type !== 'action'` 硬编码拒绝随从
+- ❌ validate 新增"特殊阶段允许某命令"，但 UI 用 `phase !== 'playCards'` 提前 return
+- ❌ validate 放宽了目标范围，但 UI 的可选集合计算逻辑未更新，合法目标被置灰
+- ❌ validate 允许新类型的卡牌参与交互，但 UI 的禁用集合把该类型全部标记为 disabled
+
+> **示例（SmashUp 影舞者 Me First! 打出）**：validate 新增了"Me First! 窗口中允许 PLAY_MINION + beforeScoringPlayable 随从"的合法路径，GameTestRunner 测试全绿。但 UI 层 `handleCardClick` 在 `isMeFirstResponse` 分支中 `card.type !== 'action'` 直接拒绝随从，`meFirstDisabledUids` 把所有非 action 卡标记为 disabled。用户看到影舞者置灰且点击无反应，引擎层合法路径被 UI 层独立门控完全阻断
+
 **D20 状态可观测性（推荐）**（新增资源/额度来源、或修"玩家不知道还能不能操作"时触发）：玩家能否从 UI 上区分不同来源的资源/额度。**核心原则：如果两种额度的消耗规则不同（如基地限定 vs 全局），UI 应该让玩家能区分它们，否则玩家无法做出正确决策。** 审查方法：
 1. **列出所有额度/资源来源**：每种来源的限制条件是什么？（如花园额度只能用于花园，力量≤2）
 2. **UI 是否区分展示**：UI 是否只显示一个总数，还是分别显示不同来源？
@@ -744,7 +765,7 @@ expect(state.sys.responseWindow?.current?.pendingInteractionId).toBeDefined();
 | 修"写入了但没生效" | D8,D12,D14,D3 | D4,D11,D23 |
 | 修"没效果" | D4,D3,D1,D22 | D8,D10,D12,D21,D23 |
 | 修"触发了状态没变" | D8,D3,D9 | D1,D7,D11,D21 |
-| 修"点了没反应" | D5,D3,D10 | D8,D21,D23 |
+| 修"点了没反应" | D5,D3,D10,D15 | D8,D21,D23 |
 | 修"激活了但没效果" | D7,D2,D3 | D1,D10,D11,D23 |
 | 修"确认后验证失败" | D8,D7,D3 | D2,D5,D23 |
 | 修"技能可以无限重复使用" | D21,D7,D8 | D1,D2 |
@@ -779,7 +800,14 @@ expect(state.sys.responseWindow?.current?.pendingInteractionId).toBeDefined();
 | 修"操作影响了不该影响的数据" | D12,D11,D3 | D16,D18 |
 | 新增/修改 handler 共返 events+interaction | D24,D8,D12 | D3,D17 |
 | 修"弹窗不该出现"/"基地全灰"/"操作被交互阻断" | D5,D1,D3 | D8,D15 |
+| validate 新增/放宽合法路径 | D15,D5,D2 | D3,D23 |
+| 修"引擎测试通过但实际操作无效" | D15,D5,D3 | D8,D23 |
 | 新增额外出牌/额度授予能力 | D5,D7,D11,D12 | D2,D13,D18 |
+| 新增/修改"注册+过滤"拦截机制 | D31,D3,D8 | D17,D6 |
+| 修"保护在某些场景下不生效" | D31,D3,D1 | D8,D17 |
+| 新增事件产生路径 | D31,D8,D3 | D17,D6 |
+| 新增/修改绕过正常流程的替代路径 | D32,D8,D17 | D31,D3 |
+| 修"替代路径下交互/动画不触发" | D32,D8,D5 | D17,D3 |
 
 ### 输出格式
 
@@ -940,6 +968,9 @@ ID 只出现在定义+注册 = 消费层缺失。
 | `targetOpponentDice` 在所有骰子修改 handler 中硬编码为 `false`，导致响应窗口中打出的骰子修改卡（target=select/opponent）无法作用于对手骰子 | 元数据硬编码：handler 未根据 `action.target` 动态解析目标，所有骰子修改交互都默认操作自己的骰子 | D10+D1 | dicethrone |
 | Zapbot（高速机器人）描述"你可以打出一张力量为2或更低的额外随从"，实现用 `createSimpleChoice` 弹窗让玩家选手牌随从再选基地。弹窗触发 `currentPrompt` → `useEffect` 清除 `selectedCardUid` → 基地渲染切换到 `selectableBaseIndices`（空集）→ 所有基地变灰，无法操作 | 实现模式与描述语义不匹配：描述语义是"授予额度"（被动增益），实现用了"交互弹窗"（主动选择）。交互弹窗劫持正常操作流程，导致 UI 状态冲突 | D5 | smashup |
 | 愤怒的民众（frankenstein）手牌选择用 `targetType: 'generic'`，剔除弱者（vampire）同模式交互用 `targetType: 'hand'`。`'generic'` 走 PromptOverlay 弹窗而非手牌区直选，两张同类型卡（选随从→逐张选手牌→每张+1指示物）交互体验不一致 | 同类型卡牌交互不一致：跨派系实现同一交互模式时 `targetType`/停止按钮 value key/`displayMode` 声明方式不统一 | D5 | smashup |
+| 野生保护区（wildlife_preserve）`registerProtection('action')` 注册了保护，但 `filterProtected*Events` 只在 `execute()` 后处理中调用。行动卡效果通过交互解决路径（`afterEvents` → handler）产生事件，完全绕过保护过滤，保护机制在交互解决路径下完全失效 | 效果拦截路径不完整：过滤函数只在直接命令执行路径调用，交互解决路径产生的事件绕过过滤。"注册+过滤"机制必须覆盖所有事件产生路径 | D31 | smashup |
+| 影舞者（ninja_shinobi）Me First! 窗口中 validate 允许 PLAY_MINION 打出 beforeScoringPlayable 随从，GameTestRunner 测试全绿。但 UI 层 `handleCardClick` 在 `isMeFirstResponse` 分支中 `card.type !== 'action'` 硬编码拒绝随从，`meFirstDisabledUids` 把所有非 action 卡标记为 disabled。引擎层合法路径被 UI 层独立门控完全阻断，用户点击无反应 | UI 交互门控与 validate 不对齐：validate 新增合法路径后未同步检查 UI 层的独立前置过滤（点击回调门控 + 禁用集合 + 可选目标集合），引擎测试绕过 UI 无法发现 | D15 | smashup |
+| 潜行（Shadows）免伤分支调用 `resolvePostDamageEffects` 后直接 `return { events, overrideNextPhase: 'main2' }`，遗漏了 5 个后处理检查（BONUS_DICE_REROLL halt、CHOICE halt、TOKEN_RESPONSE halt、checkDazeExtraAttack、checkAfterAttackResponseWindow）。高温爆破 II/III 级的额外骰子交互在潜行免伤时完全不触发 | 替代路径后处理遗漏：快捷路径调用了核心函数但跳过了规范路径中积累的所有后处理检查，事件被正确产生但 halt 信号被忽略 | D32 | dicethrone |
 
 
 ---
@@ -1217,3 +1248,181 @@ const PREVENT_DESTROY_SOURCE_IDS = [
 - 新增功能时必须检查是否需要更新白名单
 - 白名单应该是"显式声明"而非"隐式推断"
 - Code Review 时重点检查白名单逻辑
+
+---
+
+**D31 效果拦截路径完整性（强制）**（新增/修改"注册+过滤"两步拦截机制、新增事件产生路径、或修"保护在某些场景下不生效"时触发）：使用"注册+过滤"两步实现的拦截机制，过滤函数是否在**所有事件产生路径**上被调用？**核心问题：过滤函数只在部分路径上调用，其他路径产生的事件绕过过滤，拦截机制在这些路径下完全失效但不报错。**
+
+**适用机制**：
+- `registerProtection` + `filterProtectedDestroyEvents`/`filterProtectedMoveEvents`/`filterProtectedReturnEvents`/`filterProtectedDeckBottomEvents`
+- `registerInterceptor` + `interceptEvent`（引擎管线层，通常自动覆盖所有路径）
+- 任何"注册回调 + 在事件后处理中调用回调"的模式
+
+**事件产生路径清单（SmashUp）**：
+
+| # | 路径 | 入口 | 保护过滤调用点 |
+|---|------|------|---------------|
+| ① | 直接命令执行 | `execute()` → `reducer.ts` 后处理 | `processDestroyTriggers` → `processMoveTriggers` → `filterProtectedReturnEvents` → `filterProtectedDeckBottomEvents` → `processAffectTriggers` |
+| ② | 交互解决 | `SmashUpEventSystem.afterEvents` → handler → 产生事件 | 同 ①（已修复） |
+| ③ | FlowHooks 后处理 | `postProcess` in `index.ts` → 触发链 | `processDestroyTriggers` → `processMoveTriggers` → `processAffectTriggers`（**注意：需确认 return/deckBottom 过滤是否覆盖**） |
+| ④ | 触发链递归 | `processDestroyTriggers` 内部 `fireTriggers`/`triggerExtendedBaseAbility` → 产生新事件 | 内部已调用 `filterProtectedDestroyEvents`（递归保护） |
+
+**审查方法**：
+
+1. **列出所有过滤函数**：grep `filterProtected` 和 `process*Triggers` 的定义
+2. **列出所有事件产生路径**：grep 所有调用 `handler()`/`fireTriggers()`/`triggerExtendedBaseAbility()` 并产生领域事件的位置
+3. **逐路径检查**：每条路径产生的事件是否经过完整的过滤链？
+   - ✅ 完整链：`processDestroyTriggers` → `processMoveTriggers` → `filterProtectedReturnEvents` → `filterProtectedDeckBottomEvents` → `processAffectTriggers`
+   - ❌ 缺失任一环节 = 该路径下对应保护类型失效
+4. **新增路径时必查**：新增任何产生领域事件的路径（如新的 afterEvents 系统、新的 FlowHooks 钩子），必须确认该路径调用了完整的保护过滤链
+
+**典型缺陷模式**：
+- ❌ `afterEvents` 中 handler 产生的事件直接 push 到 nextEvents，未经过任何保护过滤 → 所有保护在交互解决路径下失效
+- ❌ `postProcess` 中只调用了 `processDestroyTriggers`/`processMoveTriggers`/`processAffectTriggers`，遗漏了 `filterProtectedReturnEvents`/`filterProtectedDeckBottomEvents` → return/deckBottom 保护在 FlowHooks 路径下失效
+- ❌ 新增 afterEvents 系统产生领域事件但未调用保护过滤链 → 新路径下所有保护失效
+
+**排查信号**：
+- "保护在直接打出行动卡时生效，但在交互选择后不生效" = 高度怀疑交互解决路径（②）遗漏过滤
+- "保护在玩家操作时生效，但在回合开始/结束自动触发时不生效" = 高度怀疑 FlowHooks 路径（③）遗漏过滤
+- "保护对直接消灭生效，但对连锁消灭不生效" = 高度怀疑触发链递归路径（④）遗漏过滤
+
+> **示例（SmashUp 野生保护区 wildlife_preserve）**：`registerProtection('dino_wildlife_preserve', 'action', checker)` 注册了保护，`filterProtectedDestroyEvents`/`filterProtectedMoveEvents` 在 `execute()` 后处理中调用（路径 ①）。但大多数行动卡效果通过交互解决路径（②）产生事件：打出行动卡 → 创建交互 → 玩家选择目标 → `SYS_INTERACTION_RESOLVED` → `afterEvents` → handler 产生 `MINION_DESTROYED`/`MINION_MOVED` 事件。这些事件直接 push 到 nextEvents，完全绕过保护过滤。修复：在 `afterEvents` 中对 handler 产生的事件应用完整保护过滤链。
+
+**关联维度**：
+- D3（数据流闭环）：注册→过滤的数据流是否在所有路径上闭环？
+- D8（时序正确）：过滤函数的调用时机是否在事件被 reduce 之前？
+- D17（隐式依赖）：过滤函数是否隐式依赖"只有 execute() 会产生事件"的假设？
+
+---
+
+**D32 替代路径后处理对齐（强制）**（新增/修改绕过正常流程的替代代码路径、或修"替代路径下交互/动画/响应窗口不触发"时触发）：代码中存在多条路径调用同一核心解析函数时，所有路径是否实现了相同的后处理检查集？**核心问题：规范路径（canonical path）经过长期迭代积累了 N 个后处理检查（halt for bonus dice、daze extra attack、response window、choice 等），替代/快捷路径（shortcut path）调用了同一核心函数但跳过了部分或全部后处理检查。缺陷完全静默——核心函数正确产生了事件，但替代路径忽略了这些事件中需要 halt/交互的信号，直接返回最终结果。**
+
+**适用场景**：
+- 攻击流程中的免伤/闪避/潜行分支（跳过防御阶段，直接调用 `resolvePostDamageEffects`）
+- 先手击杀分支（攻击方 preDefense 效果直接击杀，跳过正常伤害结算）
+- 简化结算路径（如 AI 对局、教学模式中的快速结算）
+- 任何 `if (specialCondition) { /* 快捷路径 */ } else { /* 正常路径 */ }` 模式
+
+**审查方法**：
+
+1. **识别核心解析函数**：找到被多条路径调用的核心函数（如 `resolvePostDamageEffects`、`resolveAttack`、`resolveEffectsToEvents`）
+   ```bash
+   rg "resolvePostDamageEffects|resolveAttack|resolveEffectsToEvents" src/games/*/domain/
+   ```
+
+2. **列出所有调用路径**：对每个核心函数，列出所有调用它的代码路径，标注哪条是规范路径、哪条是替代路径
+   - 规范路径：正常攻击流程（offensiveRoll → defensiveRoll → damageResolved）
+   - 替代路径：潜行免伤分支、闪避分支、先手击杀分支等
+
+3. **提取规范路径的后处理检查集**：在规范路径中，核心函数调用之后有哪些后处理逻辑？逐一列出：
+   - `BONUS_DICE_REROLL_REQUESTED` halt 检查（奖励骰重掷交互）
+   - `CHOICE_REQUESTED` halt 检查（postDamage 选择效果）
+   - `TOKEN_RESPONSE_REQUESTED` halt 检查（Token 响应窗口）
+   - `checkDazeExtraAttack`（晕眩额外攻击）
+   - `checkAfterAttackResponseWindow`（攻击后响应窗口）
+   - 其他游戏特定的后处理逻辑
+
+4. **逐条比对替代路径**：替代路径在核心函数调用之后，是否实现了规范路径中的每一个后处理检查？
+   - ✅ 替代路径包含该检查
+   - ❌ 替代路径遗漏该检查 → 该交互/动画/响应在替代路径下静默失效
+
+5. **构造对齐矩阵**：
+
+| 后处理检查 | 规范路径 A | 规范路径 B | 替代路径 C | 替代路径 D |
+|-----------|-----------|-----------|-----------|-----------|
+| BONUS_DICE_REROLL halt | ✅ | ✅ | ❌ | ✅ |
+| CHOICE_REQUESTED halt | ✅ | ✅ | ❌ | ✅ |
+| checkDazeExtraAttack | ✅ | ✅ | ❌ | ✅ |
+| checkAfterAttackResponseWindow | ✅ | ✅ | ❌ | ✅ |
+
+**典型缺陷模式**：
+- ❌ 潜行分支调用 `resolvePostDamageEffects` 后直接 `return { events, overrideNextPhase: 'main2' }`，忽略了 `BONUS_DICE_REROLL_REQUESTED` 事件 → 高温爆破的额外骰子在潜行免伤时不触发
+- ❌ 闪避分支跳过 `checkDazeExtraAttack` → 攻击方有晕眩时闪避后不触发额外攻击
+- ❌ 先手击杀分支跳过 `checkAfterAttackResponseWindow` → 攻击后响应窗口（如 card-dizzy）不触发
+- ❌ 替代路径在核心函数调用后只检查了部分事件类型（如只检查 `BONUS_DICE_REROLL_REQUESTED`），遗漏了其他需要 halt 的事件类型
+
+**排查信号**：
+- "正常攻击时 X 效果正常触发，但潜行/闪避/先手击杀时不触发" = 高度怀疑替代路径遗漏后处理
+- "核心函数返回了正确的事件，但 UI 没有响应" = 替代路径忽略了 halt 信号
+- 替代路径的代码比规范路径短很多 = 可能遗漏了后处理逻辑
+
+**修复策略**：
+1. **逐条补齐（推荐）**：将规范路径中的每个后处理检查复制到替代路径中，保持完全对齐
+2. **提取公共函数（长期）**：将后处理检查集提取为 `applyPostResolutionChecks(core, events, command, timestamp, from)` 公共函数，所有路径统一调用
+3. **添加对齐测试**：为每个替代路径编写测试，验证核心函数产生的每种需要 halt 的事件都被正确处理
+
+**预防措施**：
+- 新增后处理检查时，必须 grep 所有调用核心函数的路径，逐一添加
+- 新增替代路径时，必须参照规范路径的后处理检查集，逐条实现
+- Code Review 时重点检查替代路径与规范路径的后处理对齐度
+- 考虑将后处理检查集提取为公共函数，从架构上消除遗漏风险
+
+> **示例（DiceThrone 潜行 vs 高温爆破）**：规范路径（`damageResolved` 分支）在 `resolvePostDamageEffects` 后有 5 个后处理检查：`BONUS_DICE_REROLL_REQUESTED` halt、`CHOICE_REQUESTED` halt、`TOKEN_RESPONSE_REQUESTED` halt、`checkDazeExtraAttack`、`checkAfterAttackResponseWindow`。潜行分支（`sneakStacks > 0`）调用了同一个 `resolvePostDamageEffects`，但之后直接 `return { events, overrideNextPhase: 'main2' }`，5 个后处理检查全部遗漏。高温爆破 II/III 级的 `BONUS_DICE_REROLL_REQUESTED` 事件被正确产生但被忽略，额外骰子交互不触发。修复：在潜行分支中逐条补齐所有 5 个后处理检查，与规范路径完全对齐。
+
+**关联维度**：
+- D8（时序正确）：替代路径中 halt 信号被忽略导致时序错乱（事件产生但 UI 不响应）
+- D17（隐式依赖）：替代路径隐式依赖"核心函数不会产生需要 halt 的事件"的假设
+- D31（效果拦截路径完整性）：类似模式——多条路径中部分路径遗漏处理逻辑
+
+---
+
+**D33 跨实体同类能力实现路径一致性（强制）**（全量审计、新增与已有能力语义相同的能力、或修"同类效果在不同实体上表现不同"时触发）：不同实体（英雄/派系/卡组/单位类型/角色）中语义相同的能力是否使用一致的事件类型、注册模式和副作用处理？**核心问题：同一语义的能力（如"造成 N 点伤害""抽 N 张牌""移除一个单位"）在不同实体中由不同开发者/不同时期实现，可能使用不同的事件类型、注册入口或副作用处理方式，导致规则行为不一致（如一个触发死亡回调另一个不触发、一个走伤害管线另一个直接扣血）。**
+
+**适用范围**：所有游戏。SmashUp 的"派系"、DiceThrone 的"英雄"、SummonerWars 的"阵营/单位类型"等，只要存在多个独立实现的同类能力，都需要交叉验证。
+
+**审查触发条件**：
+- 全量审计时（如全派系/全英雄/全阵营审计）
+- 新增能力与已有能力语义相同时（如新增"造成伤害"类能力）
+- 修复"同类效果在不同实体上表现不同"类 bug 时
+
+**审查方法**：
+1. **按语义类别分组**：将所有能力按效果语义分组。通用类别包括但不限于：
+   - 伤害类（直接伤害/区域伤害/持续伤害）
+   - 治疗/恢复类
+   - 抽牌/检索类
+   - 移除单位类（消灭/放逐/返回手牌/弃置）
+   - 移动单位类（自愿移动/强制移动）
+   - 状态修正类（属性加成/减益/持续效果）
+   - 额外行动类（额外攻击/额外出牌/额外移动）
+   - 资源回收类（从弃牌堆/墓地回收）
+   - 限制类（禁止行动/禁止打出/禁止移动）
+2. **提取实现路径**：对每组中的每个能力，提取：
+   - 使用的事件类型（如 `DAMAGE_DEALT` vs 自定义伤害事件）
+   - 注册入口（能力注册表 / 持续效果注册表 / 修正器注册表 / 基地能力注册表等）
+   - 副作用处理（是否触发死亡回调、是否保留持续效果、目标区域等）
+   - 交互模式（无交互 / 单步选择 / 多步交互）
+   - 是否走通用管线（如伤害计算管线、修正器栈等）
+3. **比对一致性**：
+   - 完全一致 → ✅ 跨实体一致
+   - 差异在合理白名单内 → ✅ 合理差异（标注原因）
+   - 差异不在白名单内 → ⚠️ 交叉不一致（累积待确认）
+
+**合理差异判定原则**（以下差异是语义决定的，不算不一致）：
+- 效果语义本身不同（如"返回手牌"vs"消灭"→ 不同事件类型是正确的）
+- 交互复杂度不同（如"查看 N 张选 1"vs"直接抽 1"→ 实现路径不同是合理的）
+- 生命周期不同（如永久修正 vs 回合结束修正 → 不同注册方式是合理的）
+- 玩家决策权不同（如自愿移动 vs 强制移动 → 交互差异是合理的）
+- 目的地不同（如回收到手牌 vs 回收到场上 → 不同事件是合理的）
+
+**不合理差异示例**（以下差异需要修复或确认）：
+- ❌ 两个"造成 N 点伤害"能力，一个走伤害计算管线（`createDamageCalculation`），另一个直接构建 `DAMAGE_DEALT` 事件 → 修正器/护盾被绕过
+- ❌ 两个"抽 2 张牌"能力，一个发 1 个 `CARDS_DRAWN(count:2)` 事件，另一个发 2 个 `CARDS_DRAWN(count:1)` 事件 → 可能导致触发器行为不同
+- ❌ 两个"持续 +1 属性"能力，一个用修正器注册表，另一个用直接字段修改 → 消费路径不同，buff/debuff 系统无法统一管理
+- ❌ 两个"额外行动"能力，一个用额度模式（修改计数器），另一个用交互模式（弹窗选择）→ 参见 D5 实现模式语义匹配
+- ❌ 两个"移除单位"能力语义相同（都是"消灭"），但一个触发死亡回调另一个不触发 → 规则行为不一致
+
+**输出格式**：
+```
+能力类型: [语义类别]
+| 实体 | 能力名 | 事件类型 | 注册入口 | 副作用 | 管线 | 一致性 |
+|------|--------|---------|---------|--------|------|--------|
+| A | 能力1 | EVENT_X | registry::tag | 触发回调 | 走管线 | ✅ |
+| B | 能力2 | EVENT_Y | registry::tag | 不触发 | 不走管线 | ⚠️ 待确认 |
+判定: ⚠️ 语义相同但实现路径不同，需确认是否为 bug
+```
+
+**关联维度**：
+- D1（语义保真）：跨实体不一致可能意味着某个实体的实现偏离了描述语义
+- D5（交互完整）：同类能力的交互模式也应跨实体一致（参见 D5 子项：同类型卡牌交互一致性）
+- D10（元数据一致）：注册模式不一致可能导致元数据（categories 等）不一致
+- D22（伤害计算管线配置）：伤害类能力是否统一走伤害管线

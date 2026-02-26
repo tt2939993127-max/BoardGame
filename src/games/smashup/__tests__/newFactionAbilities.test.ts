@@ -1569,22 +1569,15 @@ describe('吸血鬼派系能力', () => {
             ],
         });
 
+        // 强制效果 + 单目标 → 自动执行，不创建交互
         const playResult = runCommand(
             makeMatchState(core),
             { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
             defaultTestRandom,
         );
 
-        const prompt = getInteractionsFromMS(playResult.finalState)[0];
-        const option = prompt.data.options.find((o: any) => o?.value?.minionUid === 'e1');
-
-        const resolveResult = runCommand(
-            playResult.finalState,
-            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
-            defaultTestRandom,
-        );
-
-        const counterEvt = resolveResult.events.find(
+        // 单目标自动消灭，直接检查事件
+        const counterEvt = playResult.events.find(
             e => e.type === SU_EVENTS.POWER_COUNTER_ADDED && (e as any).payload.reason === 'vampire_nightstalker',
         );
         expect(counterEvt).toBeDefined();

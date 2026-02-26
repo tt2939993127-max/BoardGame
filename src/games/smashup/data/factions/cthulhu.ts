@@ -20,7 +20,6 @@ export const CTHULHU_MINIONS: MinionCardDef[] = [
         nameEn: 'Cthulhu’s Chosen',
         faction: 'minions_of_cthulhu',
         power: 3,
-        abilityTags: ['special'],
         count: 3,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS2, index: 12 },
     },

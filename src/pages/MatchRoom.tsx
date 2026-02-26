@@ -562,8 +562,12 @@ export const MatchRoom = () => {
         const opponentIndex = myIndex === 0 ? '1' : '0';
         if (playerID === opponentIndex) {
             setRealtimeOpponentConnected(connected);
+            // 对手连接时立即刷新房间状态，获取对手名字（避免等 30 秒轮询）
+            if (connected) {
+                matchStatus.refetch();
+            }
         }
-    }, [statusPlayerID]);
+    }, [statusPlayerID, matchStatus.refetch]);
     // 实时数据优先，无实时数据时降级到 HTTP 轮询
     const effectiveOpponentConnected = realtimeOpponentConnected ?? matchStatus.opponentConnected;
     useEffect(() => {

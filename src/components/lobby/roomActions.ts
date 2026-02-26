@@ -24,6 +24,7 @@ export interface Room {
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
     isLocked?: boolean;
+    gameover?: boolean;
 }
 
 /** 带有计算属性的房间项（房间列表渲染用） */

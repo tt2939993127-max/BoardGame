@@ -432,7 +432,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const canInteractDice = canOperateView && isViewRolling && !isAttackShowcaseVisible;
 
     // 防御阶段进入时就应高亮可用的防御技能，不需要等投骰
-    const canHighlightAbility = canOperateView && isViewRolling && isRollPhase
+    // 对手视角也高亮可选技能（公开信息），方便观察对手可能的选择
+    const canHighlightAbility = !isSpectator && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' || hasRolled) && !isAttackShowcaseVisible;
     const canSelectAbility = canOperateView && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed) && !isAttackShowcaseVisible;
