@@ -45,7 +45,8 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
                         return;
                     }
                     const lastSeen = localStorage.getItem(NOTIFICATION_SEEN_KEY) || '';
-                    const latestTime = list[0].createdAt;
+                    // 取所有通知中最新的 createdAt（排序是 pinned 优先，list[0] 不一定最新）
+                    const latestTime = list.reduce((max, n) => n.createdAt > max ? n.createdAt : max, list[0].createdAt);
                     setHasNewNotification(latestTime > lastSeen);
                 })
                 .catch(() => {});

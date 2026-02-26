@@ -121,68 +121,68 @@
 - [x] 6. Checkpoint - 前两个角色审计完成
   - 确保所有测试通过，ask the user if questions arise.
 
-- [-] 7. 审计角色 3：火法师（Pyromancer）
-  - [-] 7.1 审计火法师全等级能力（L1/L2/L3）
+- [x] 7. 审计角色 3：火法师（Pyromancer）
+  - [x] 7.1 审计火法师全等级能力（L1/L2/L3）
     - 逐一比对 `heroes/pyromancer/abilities.ts` 中每个 AbilityDef 与 Wiki 快照
     - 输出能力审计矩阵到 `.tmp/dicethrone-audit-pyromancer.md`
     - _Requirements: 2.1, 2.2, 2.3, 2.6_
 
-  - [~] 7.2 审计火法师 Token
+  - [x] 7.2 审计火法师 Token
     - 逐一比对 `heroes/pyromancer/tokens.ts` 中每个 TokenDef 与 Wiki 快照
     - 输出 Token 审计矩阵追加到 `.tmp/dicethrone-audit-pyromancer.md`
     - _Requirements: 3.1, 3.2, 3.3_
 
-  - [~] 7.3 审计火法师专属卡
+  - [x] 7.3 审计火法师专属卡
     - 逐一比对 `heroes/pyromancer/cards.ts` 中每个 Hero_Specific_Card 与 Wiki 快照
     - 输出专属卡审计矩阵追加到 `.tmp/dicethrone-audit-pyromancer.md`
     - _Requirements: 6A.1, 6A.2, 6A.3, 6A.6, 6A.7_
 
-  - [~] 7.4 审计火法师 i18n 描述一致性
+  - [x] 7.4 审计火法师 i18n 描述一致性
     - 检查 en 和 zh-CN 两个 locale 中该角色所有能力、Token、专属卡的 i18n 覆盖和描述一致性
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-pyromancer.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 8. 审计角色 4：月精灵（Moon Elf）
-  - [~] 8.1 审计月精灵全等级能力（L1/L2/L3）
+- [x] 8. 审计角色 4：月精灵（Moon Elf）
+  - [x] 8.1 审计月精灵全等级能力（L1/L2/L3）
     - 逐一比对 `heroes/moon_elf/abilities.ts` 中每个 AbilityDef 与 Wiki 快照
     - 输出能力审计矩阵到 `.tmp/dicethrone-audit-moon_elf.md`
     - _Requirements: 2.1, 2.2, 2.3, 2.6_
 
-  - [~] 8.2 审计月精灵 Token
+  - [x] 8.2 审计月精灵 Token
     - 逐一比对 `heroes/moon_elf/tokens.ts` 中每个 TokenDef 与 Wiki 快照
     - 输出 Token 审计矩阵追加到 `.tmp/dicethrone-audit-moon_elf.md`
     - _Requirements: 3.1, 3.2, 3.3_
 
-  - [~] 8.3 审计月精灵专属卡
+  - [x] 8.3 审计月精灵专属卡
     - 逐一比对 `heroes/moon_elf/cards.ts` 中每个 Hero_Specific_Card 与 Wiki 快照
     - 输出专属卡审计矩阵追加到 `.tmp/dicethrone-audit-moon_elf.md`
     - _Requirements: 6A.1, 6A.2, 6A.3, 6A.6, 6A.7_
 
-  - [~] 8.4 审计月精灵 i18n 描述一致性
+  - [x] 8.4 审计月精灵 i18n 描述一致性
     - 检查 en 和 zh-CN 两个 locale 中该角色所有能力、Token、专属卡的 i18n 覆盖和描述一致性
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-moon_elf.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 9. Checkpoint - 4 个角色审计完成
+- [x] 9. Checkpoint - 4 个角色审计完成
   - 确保所有测试通过，ask the user if questions arise.
 
-- [ ] 10. 审计角色 5：暗影刺客（Shadow Thief）
-  - [~] 10.1 审计暗影刺客全等级能力（L1/L2/L3）
+- [x] 10. 审计角色 5：暗影刺客（Shadow Thief）
+  - [x] 10.1 审计暗影刺客全等级能力（L1/L2/L3）
     - 逐一比对 `heroes/shadow_thief/abilities.ts` 中每个 AbilityDef 与 Wiki 快照
     - 输出能力审计矩阵到 `.tmp/dicethrone-audit-shadow_thief.md`
     - _Requirements: 2.1, 2.2, 2.3, 2.6_
 
-  - [~] 10.2 审计暗影刺客 Token
+  - [x] 10.2 审计暗影刺客 Token
     - 逐一比对 `heroes/shadow_thief/tokens.ts` 中每个 TokenDef 与 Wiki 快照
     - 输出 Token 审计矩阵追加到 `.tmp/dicethrone-audit-shadow_thief.md`
     - _Requirements: 3.1, 3.2, 3.3_
 
-  - [~] 10.3 审计暗影刺客专属卡
+  - [x] 10.3 审计暗影刺客专属卡
     - 逐一比对 `heroes/shadow_thief/cards.ts` 中每个 Hero_Specific_Card 与 Wiki 快照
     - 输出专属卡审计矩阵追加到 `.tmp/dicethrone-audit-shadow_thief.md`
     - _Requirements: 6A.1, 6A.2, 6A.3, 6A.6, 6A.7_
 
-  - [~] 10.4 审计暗影刺客 i18n 描述一致性
+  - [x] 10.4 审计暗影刺客 i18n 描述一致性
     - 检查 en 和 zh-CN 两个 locale 中该角色所有能力、Token、专属卡的 i18n 覆盖和描述一致性
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-shadow_thief.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
