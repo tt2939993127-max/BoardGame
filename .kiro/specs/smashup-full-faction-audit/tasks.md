@@ -49,8 +49,8 @@
 
 ### 任务组 5：D1 子项 — 实体筛选范围语义审计
 
-- [-] 5.1 grep 所有 `abilities/*.ts` 中的 `.filter(`/`.find(`/`for...of` 实体收集操作，建立筛选操作清单
-- [~] 5.2 对每个筛选操作，提取对应卡牌描述中的范围限定词（位置/归属/类型/来源/排除），逐个比对
+- [x] 5.1 grep 所有 `abilities/*.ts` 中的 `.filter(`/`.find(`/`for...of` 实体收集操作，建立筛选操作清单
+- [-] 5.2 对每个筛选操作，提取对应卡牌描述中的范围限定词（位置/归属/类型/来源/排除），逐个比对
 - [~] 5.3 重点审查高风险卡牌：`base_tortuga`（亚军移动范围）、`alien_crop_circles`（全基地 vs 单基地）、`pirate_full_sail`（移动目标范围）、`zombie_they_keep_coming`（弃牌堆来源范围）
 - [~] 5.4 输出筛选范围审计矩阵到 `docs/audit/smashup/phase2-filter-scope.md`
 - _Requirements: 3_

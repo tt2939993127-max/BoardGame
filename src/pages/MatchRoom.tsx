@@ -49,6 +49,7 @@ import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useWaitingRoomNotification, requestNotificationPermission } from '../hooks/match/useWaitingRoomNotification';
+import { MatchRoomExitProvider } from '../contexts/MatchRoomExitContext';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -878,6 +879,40 @@ export const MatchRoom = () => {
         navigateBackToLobby();
     };
 
+    // 对局结束后返回大厅：房主销毁房间，非房主离开房间
+    // 仅由 EndgameOverlay → RematchActions 的"返回大厅"按钮触发
+    const exitToLobby = useCallback(async () => {
+        if (!matchId) {
+            navigateBackToLobby();
+            return;
+        }
+
+        // 观战 / 未绑定身份：直接返回
+        if (!statusPlayerID || !credentials) {
+            clearMatchLocalState();
+            navigateBackToLobby();
+            return;
+        }
+
+        setIsLeaving(true);
+
+        if (matchStatus.isHost) {
+            // 房主：销毁房间
+            const result = await destroyMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
+            if (!result.success) {
+                toast.error({ kind: 'i18n', key: 'matchRoom.destroy.failed', ns: 'lobby' });
+                setIsLeaving(false);
+                return;
+            }
+            clearMatchLocalState();
+        }
+
+        // 非房主：不调用 leaveMatch，保留座位以便重新加入
+        setIsLeaving(false);
+        navigateBackToLobby();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matchId, statusPlayerID, credentials, matchStatus.isHost, gameId]);
+
     // 真正销毁房间（仅房主可用）
     const handleDestroyRoom = async () => {
         if (!matchId || !statusPlayerID || !credentials || !matchStatus.isHost) {
@@ -1040,6 +1075,7 @@ export const MatchRoom = () => {
                 } as React.CSSProperties}
             >
                 <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
+                <MatchRoomExitProvider value={{ exitToLobby }}>
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
                         {!gameImplReady ? (
@@ -1118,6 +1154,7 @@ export const MatchRoom = () => {
                         </div>
                     )
                 )}
+                </MatchRoomExitProvider>
                 </GameCursorProvider>
             </div>
 

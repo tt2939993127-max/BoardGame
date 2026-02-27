@@ -195,3 +195,62 @@
 ---
 
 ## 九、基地能力 — `domain/baseAbilities.ts`（高风险卡牌）
+
+| 行号 | 卡牌/能力 | 操作 | 实体 | 筛选条件 | 范围 | 归属 |
+|------|-----------|------|------|----------|------|------|
+| 975-985 | **base_tortuga** ⚠️ | for(let)+for...of | minion | `i === ctx.baseIndex → continue` + `m.controller !== runnerUpId → continue` | **其他基地** | **亚军（特定玩家）** |
+
+---
+
+## 十、辅助函数 — `domain/abilityHelpers.ts`
+
+| 行号 | 函数 | 操作 | 实体 | 筛选条件 | 范围 | 归属 |
+|------|------|------|------|----------|------|------|
+| 558-562 | findMinionOnBases | for(let)+.find() | minion | `m.uid === minionUid` | 所有基地 | 所有 |
+| 570-575 | findMinionByAttachedCard | for(let)+for...of | minion | `m.attachedActions.some(a => a.uid === attachedCardUid)` | 所有基地 | 所有 |
+| 588 | getPlayerMinionsOnBase | .filter() | minion | `m.controller === playerId` | 本基地 | 己方 |
+| 599 | getOpponentMinionsOnBase | .filter() | minion | `m.controller !== playerId` | 本基地 | 对手 |
+| 854-858 | buildMinionTargetOptions | .filter()+.find() | minion | 保护检查（`isMinionProtected`） | 候选列表 | 所有 |
+
+---
+
+## 统计摘要
+
+### 按派系统计
+
+| 派系 | filter 操作数 | find 操作数 | for 循环数 | 总计 |
+|------|-------------|------------|-----------|------|
+| 外星人 | 5 | 1 | 8 | 14 |
+| 恐龙 | 5 | 3 | 8 | 16 |
+| 忍者 | 10 | 2 | 10 | 22 |
+| 海盗 | 5 | 0 | 12 | 17 |
+| 机器人 | 7 | 1 | 2 | 10 |
+| 巫师 | 8 | 2 | 5 | 15 |
+| 捣蛋鬼 | 4 | 6 | 5 | 15 |
+| 丧尸 | 18 | 1 | 8 | 27 |
+| 基地能力 | 0 | 0 | 1 | 1 |
+| 辅助函数 | 3 | 1 | 2 | 6 |
+| **总计** | **65** | **17** | **61** | **143** |
+
+### 按范围分类
+
+| 范围类型 | 操作数 | 高风险说明 |
+|----------|--------|-----------|
+| 本基地 | ~45 | 需确认描述是否说"本基地" |
+| 所有基地 | ~50 | 需确认描述是否说"任意基地"/"所有基地" |
+| 其他基地 | ~5 | ⚠️ 需确认排除条件正确 |
+| 弃牌堆 | ~20 | 需确认来源范围 |
+| 手牌 | ~10 | 需确认归属正确 |
+| 牌库 | ~8 | 需确认归属正确 |
+
+### 高风险卡牌标记
+
+| 卡牌 | 风险点 | 需审查内容 |
+|------|--------|-----------|
+| **base_tortuga** | 亚军移动范围 | ✅ 代码正确排除了托尔图加本身（`i === ctx.baseIndex → continue`），只收集亚军在其他基地的随从 |
+| **alien_crop_circles** | 全基地 vs 单基地 | 代码选择一个基地后返回该基地所有随从 — 需与描述比对 |
+| **pirate_full_sail** | 移动目标范围 | 代码收集所有基地上的己方随从 — 需与描述比对 |
+| **zombie_they_keep_coming** | 弃牌堆来源范围 | 代码从己方弃牌堆筛选 `c.type === 'minion'` — 需与描述比对 |
+| **zombie_lord** | 空基地+力量≤2 | 代码筛选无己方随从的基地 + 弃牌堆力量≤2随从 — 需与描述比对 |
+| **pirate_broadside** | 对手+己方基地+力量≤2 | 代码要求基地有己方随从 + 对手力量≤2 — 需与描述比对 |
+| **dino_natural_selection** | 同基地+力量低于参照 | 代码限定同基地 + 力量严格小于 — 需与描述比对 |
