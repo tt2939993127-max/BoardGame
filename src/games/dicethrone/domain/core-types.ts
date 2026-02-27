@@ -60,6 +60,8 @@ export const IMPLEMENTED_DICETHRONE_CHARACTER_IDS = [
     'shadow_thief',
     'moon_elf',
     'paladin',
+    'gunslinger',
+    'samurai',
 ] as const;
 
 export type SelectableCharacterId = (typeof IMPLEMENTED_DICETHRONE_CHARACTER_IDS)[number];

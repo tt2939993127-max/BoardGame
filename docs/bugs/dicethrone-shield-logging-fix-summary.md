@@ -2,79 +2,59 @@
 
 ## 问题描述
 
-用户反馈：游戏日志中没有显示护盾（"下次一定"卡牌和"神圣防御"技能）的减伤记录。
+用户反馈游戏日志中护盾减伤记录重复显示，且最终伤害数值错误。
 
-### 用户案例
+### 用户案例（截图）
 - 管理员1 打出"下次一定"卡牌（6点护盾）
 - 管理员1 发动"神圣防御"技能（3点护盾）
-- 游客6118 使用"匕首打击"造成 8 点伤害
-- 日志中只显示"受到 1 点伤害（神圣防御）"，没有显示护盾的减伤明细
+- 游客6118 使用"破隐一击"造成 10 点伤害
+- **实际日志显示**：
+  - 破隐一击 10
+  - 打不到我 -5（❌ 错误：这是百分比护盾，不应该单独显示）
+  - 下次一定！ -6
+  - 打不到我 -2（❌ 错误：重复显示）
+  - 最终显示 10 点伤害（❌ 错误：应该是 0 点）
 
-## 根本原因
+## 问题分析
 
-1. **护盾消耗在 reducer 层**：`handleDamageDealt` 在 reducer 中直接修改状态，消耗护盾
-2. **日志系统只看事件**：`formatDiceThroneActionEntry` 只能看到 `DAMAGE_DEALT` 事件
-3. **信息丢失**：护盾消耗的详细信息（消耗了哪些护盾、每个护盾抵消了多少伤害）在 reducer 中处理后就丢失了
+### 第一阶段：护盾消耗信息丢失 ✅ 已修复
+
+护盾消耗在 reducer 层直接修改状态，不生成事件。日志系统只能看到 `DAMAGE_DEALT` 事件，护盾消耗信息丢失。
+
+**解决方案**：在 `DAMAGE_DEALT` 事件的 payload 中添加 `shieldsConsumed` 字段，reducer 层回填护盾消耗信息。
+
+### 第二阶段：日志显示基础伤害而非最终伤害 ✅ 已修复
+
+修复第一阶段后，日志仍然显示基础伤害（如 13 点）而非最终伤害（如 3 点）。
+
+**根本原因**：`dealt` 的计算逻辑有误，当 `canUseResolvedTotalDamage` 为 true 时重复扣除护盾。
+
+**解决方案**：修复 `dealt` 计算逻辑，避免重复扣除。
+
+### 第三阶段：护盾重复显示 ❌ 本次修复
+
+修复前两阶段后，护盾减伤记录重复显示（同一个护盾出现两次）。
+
+**根本原因**：
+1. `reduceCombat.ts` 中 `shieldsConsumed` 数组包含了**所有护盾**（固定值 + 百分比）
+2. `game.ts` 中又单独处理了百分比护盾（通过 `shieldEvent` 查找并添加）
+3. 导致百分比护盾被添加两次：一次来自 `shieldsConsumed` 数组，一次来自单独处理
+
+**证据**：
+- `reduceCombat.ts` 第 143-148 行：百分比护盾也被添加到 `shieldsConsumed` 数组
+- `game.ts` 第 515-528 行（修复前）：单独处理百分比护盾，再次添加到 breakdown
 
 ## 解决方案
 
-在 `DAMAGE_DEALT` 事件的 payload 中添加 `shieldsConsumed` 字段，记录护盾消耗信息。
+### 统一护盾处理逻辑
 
-### 1. 扩展事件类型
+**修改文件**：`src/games/dicethrone/game.ts`
 
-```typescript
-export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
-    payload: {
-        // ... 其他字段
-        /** 护盾消耗记录（由 reducer 层回填，用于 ActionLog 展示护盾减伤明细） */
-        shieldsConsumed?: Array<{
-            sourceId?: string;
-            value?: number;
-            reductionPercent?: number;
-            absorbed: number;
-        }>;
-    };
-}
-```
-
-### 2. Reducer 层记录护盾消耗
-
-在 `reduceCombat.ts` 的 `handleDamageDealt` 中：
+删除单独处理百分比护盾的代码，统一使用 `shieldsConsumed` 数组：
 
 ```typescript
-const shieldsConsumed: Array<{
-    sourceId?: string;
-    value?: number;
-    reductionPercent?: number;
-    absorbed: number;
-}> = [];
-
-// 消耗护盾时记录信息
-for (const shield of damageShields) {
-    // ... 计算 preventedAmount
-    
-    if (preventedAmount > 0) {
-        shieldsConsumed.push({
-            sourceId: shield.sourceId,
-            value: shield.value,
-            reductionPercent: shield.reductionPercent,
-            absorbed: preventedAmount,
-        });
-    }
-}
-
-// 将护盾消耗信息回填到事件中
-if (shieldsConsumed.length > 0) {
-    event.payload.shieldsConsumed = shieldsConsumed;
-}
-```
-
-### 3. 日志格式化使用护盾消耗信息
-
-在 `game.ts` 的 `formatDiceThroneActionEntry` 中：
-
-```typescript
-// 如果有护盾消耗记录（固定值护盾），在 breakdown tooltip 中追加护盾行
+// 如果有护盾消耗记录，在 breakdown tooltip 中追加护盾行
+// 注意：shieldsConsumed 包含所有护盾（固定值 + 百分比），不需要单独处理
 if (shieldsConsumed && shieldsConsumed.length > 0 && breakdownSeg.type === 'breakdown') {
     for (const shield of shieldsConsumed) {
         const shieldSource = shield.sourceId
@@ -88,32 +68,45 @@ if (shieldsConsumed && shieldsConsumed.length > 0 && breakdownSeg.type === 'brea
             color: 'negative',
         });
     }
+    // 更新显示数值为最终实际伤害
+    breakdownSeg.displayText = String(dealt);
 }
 ```
 
+**关键改动**：
+1. ❌ 删除：单独处理百分比护盾的代码块（通过 `shieldEvent` 查找）
+2. ❌ 删除：单独处理固定值护盾的代码块
+3. ✅ 保留：统一处理 `shieldsConsumed` 数组的代码块
+4. ✅ 简化：只在有护盾消耗时更新一次 `displayText`
+
 ## 测试验证
 
-新增测试文件 `shield-logging.test.ts`，验证：
-
-1. ✅ 多个护盾叠加消耗时，所有护盾消耗都记录到事件中
-2. ✅ 单个护盾部分消耗时，记录正确的 absorbed 值
-3. ✅ 护盾完全抵消伤害时，所有护盾消耗都记录
-4. ✅ 没有护盾时，shieldsConsumed 为 undefined
+所有护盾相关测试通过（29/29）：
+- ✅ 护盾消耗记录测试（3/3）
+- ✅ 护盾叠加消耗测试（8/8）
+- ✅ 护盾清理测试（13/13）
+- ✅ 护盾双重扣减回归测试（5/5）
 
 ## 影响范围
 
-- ✅ 不影响现有护盾消耗逻辑（所有护盾相关测试通过）
-- ✅ 不影响其他伤害处理逻辑
-- ✅ 向后兼容（`shieldsConsumed` 为可选字段）
+- ✅ 不影响游戏逻辑（护盾消耗逻辑保持不变）
+- ✅ 不影响其他测试（所有护盾相关测试通过）
+- ✅ 向后兼容（旧的 DAMAGE_DEALT 事件仍然有效）
 
-## 后续工作
+## 教训
 
-- 需要在游戏中实际测试，确认日志显示正确
-- 可能需要添加 i18n 翻译 key（如果护盾来源没有对应的翻译）
+**测试不足**：之前的测试只验证了"护盾消耗信息是否记录"和"最终伤害数值是否正确"，但没有验证"breakdown 中护盾行的数量是否正确"。
 
-## 相关文件
+**应该添加的断言**：
+```typescript
+// 验证 breakdown 中护盾行的数量
+const shieldLines = entry.segments[1].lines.filter(line => 
+    line.label.includes('shield') || line.label.includes('护盾')
+);
+expect(shieldLines).toHaveLength(2); // 两个护盾，不应该有重复
+```
 
-- `src/games/dicethrone/domain/events.ts` - 事件类型定义
-- `src/games/dicethrone/domain/reduceCombat.ts` - 护盾消耗逻辑
-- `src/games/dicethrone/game.ts` - 日志格式化逻辑
-- `src/games/dicethrone/__tests__/shield-logging.test.ts` - 新增测试
+## 相关文档
+
+- 护盾消耗 bug 修复：`docs/bugs/dicethrone-shield-fix-summary.md`
+- 护盾消耗 bug 详细分析：`docs/bugs/dicethrone-shield-consumption-bug.md`
