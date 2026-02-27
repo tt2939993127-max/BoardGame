@@ -181,3 +181,160 @@
 | ninja_disguise handler | 己方随从（本基地）+ 手牌随从 | `m.controller === playerId` + `c.type === 'minion'` | ✅ |
 
 **忍者小结**：22 个筛选操作全部 ✅
+
+## 五、海盗（Pirates）— 逐卡比对
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| pirate_saucy_wench | "a minion of power 2 or less at this base"（本基地，≤2） | 本基地，`power <= 2`，排除自身 | ✅ |
+| pirate_broadside | "all of one player's minions of power 2 or less at a base where you have a minion" | 有己方随从的基地→对手→`power <= 2` | ✅ |
+| pirate_cannon | "up to two minions of power 2 or less"（任意基地，≤2） | 所有基地，`power <= 2` | ✅ |
+| pirate_swashbuckling | "Each of your minions"（所有基地，己方） | 所有基地，`m.controller === ctx.playerId` | ✅ |
+| pirate_full_sail | "any number of your minions"（所有基地，己方） | 所有基地，`m.controller === playerId` | ✅ |
+| pirate_buccaneer onDestroyed | "another base"（其他基地） | `i !== baseIndex`（排除当前基地） | ✅ |
+| pirate_king beforeScoring | "this minion"（其他基地上的 pirate_king） | `m.defId === 'pirate_king'`，其他基地 | ✅ |
+| pirate_first_mate afterScoring | "this minion...to another base"（计分基地→其他基地） | 计分基地上的 first_mate → 其他基地 | ✅ |
+| pirate_dinghy | "up to two of your minions"（所有基地，己方） | 所有基地，`m.controller === ctx.playerId` | ✅ |
+| pirate_shanghai | "another player's minion"（所有基地，对手） | 所有基地，`m.controller === ctx.playerId → continue` | ✅ |
+| pirate_sea_dogs | "all of other players' minions of that faction from one base"（对手，指定派系） | 对手随从的派系收集 | ✅ |
+| pirate_powderkeg | "one of your minions"（所有基地，己方） | 所有基地，`m.controller !== ctx.playerId → continue` | ✅ |
+| pirate_broadside handler | 选定基地+对手的 `power <= 2` | `m.controller === opponentId && power <= 2` | ✅ |
+| pirate_cannon handler | 排除已选的，`power <= 2` | `m.uid !== minionUid && power <= 2` 所有基地 | ✅ |
+
+**海盗小结**：17 个筛选操作全部 ✅
+
+## 六、机器人（Robots）— 逐卡比对
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| robot_microbot_guard | "a minion here with power less than the number of minions you have here"（本基地，力量<己方随从数） | 本基地，`power < myMinionCount`（含 +1 调整） | ⚠️ 见下方分析 |
+| robot_microbot_reclaimer | "microbots from your discard pile"（己方弃牌堆，微型机） | `isDiscardMicrobot(ctx.state, c, ctx.playerId)` 己方弃牌堆 | ✅ |
+| robot_tech_center | "a base...each minion you have on that base"（选基地→己方随从计数） | 有己方随从的基地→`m.controller === ctx.playerId` 计数 | ✅ |
+| robot_nukebot onDestroy | "all other players' minions on this base"（本基地，对手） | `m.uid !== ctx.cardUid && m.controller !== ctx.playerId` 本基地 | ✅ |
+| robot_microbot_reclaimer handler | 选中的弃牌堆卡 | `selectedUidSet.has(c.uid)` 弃牌堆 | ✅ |
+| robot_tech_center handler | 己方随从计数 | `m.controller === playerId` 本基地 | ✅ |
+| robot_microbot_archive trigger | 微型机存储者（所有基地） | `m.defId === 'robot_microbot_archive'` 所有基地 | ✅ |
+
+**⚠️→✅ robot_microbot_guard 的 +1 分析**：
+- 描述："Destroy a minion here with power less than the number of minions you have here."
+- 代码：`myMinionCount = base.minions.filter(m => m.controller === ctx.playerId).length + 1`
+- 分析：经追踪 `postProcessSystemEvents` 代码（`domain/index.ts` L884-888），`fireMinionPlayedTriggers` 接收的 `tempCore` 是**不包含 MINION_PLAYED reduce 的临时状态**（注释："不 reduce MINION_PLAYED 本身"）。因此 onPlay 执行时，guard 随从**尚未在基地上**，`base.minions` 不包含自身。`+1` 正确补偿了自身。
+- `trickster_gnome` 使用完全相同的 `+1` 模式，同理正确。
+- **判定**：✅ 正确（onPlay 在 pre-reduce 状态下执行，+1 补偿自身）
+
+**机器人小结**：10 个筛选操作全部 ✅
+
+## 七、巫师（Wizards）— 逐卡比对
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| wizard_neophyte | "each other player"（对手） | `pid === ctx.playerId → continue` | ✅ |
+| wizard_chronomage | "top five cards of your deck"（己方牌库顶5张） | `c.type === 'minion'` / `c.type !== 'minion'` 牌库顶5张 | ✅ |
+| wizard_chronomage optionsGen | 牌库顶随从 | `c.type === 'minion'` 牌库顶 | ✅ |
+| wizard_scry | "an action" from "your deck"（己方牌库，行动卡） | `c.type === 'action'` 己方牌库 | ✅ |
+| wizard_scry | 手牌排除 | `c.uid !== ctx.cardUid` 手牌 | ✅ |
+| wizard_enchantress | "Each of your minions"（所有基地，己方）— 注：实际描述是 "Draw a card"，enchantress 的 filter 在 `for(let)+for...of` 中 | 所有基地，`m.controller !== ctx.playerId → continue` | ✅ |
+| wizard_archmage trigger | 大法师（所有基地） | `m.defId === 'wizard_archmage'` 所有基地 | ✅ |
+| wizard_chronomage handler | 牌库操作 | 各种 uid 过滤 | ✅ |
+
+**巫师小结**：15 个筛选操作全部 ✅
+
+## 八、捣蛋鬼（Tricksters）— 逐卡比对
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| trickster_gnome | "a minion here with power less than the number of minions you have here"（本基地，力量<己方随从数） | 本基地，`power < myMinionCount`（含 +1，正确：onPlay pre-reduce） | ✅ |
+| trickster_take_the_shinies | "Each other player"（对手） | `pid === ctx.playerId → continue` | ✅ |
+| trickster_disenchant | "an action played on a minion or a base"（所有基地，所有行动卡） | 所有基地 ongoing + 附着卡，无归属过滤 | ✅ |
+| trickster_block_the_path | 收集场上派系 | 所有基地+手牌，`def?.faction` | ✅ |
+| trickster_mark_of_sleep | "Choose a player"（对手） | `pid !== ctx.playerId` | ✅ |
+| trickster_leprechaun trigger | 矮妖（所有基地） | `m.defId === 'trickster_leprechaun'` 所有基地 | ✅ |
+| trickster_leprechaun trigger | 触发随从 | `m.uid === trigCtx.triggerMinionUid` 本基地 | ✅ |
+| trickster_enshrouding_mist trigger | 迷雾（所有基地） | `o.defId === 'trickster_enshrouding_mist'` 所有基地 | ✅ |
+| trickster_flame_trap trigger | 火焰陷阱（所有基地） | `o.defId === 'trickster_flame_trap'` 所有基地 | ✅ |
+| trickster_block_the_path restriction | 通路禁止（本基地） | `o.defId === 'trickster_block_the_path'` 本基地 | ✅ |
+| trickster_pay_the_piper trigger | 留下买路钱（所有基地） | `o.defId === 'trickster_pay_the_piper'` 所有基地 | ✅ |
+
+**捣蛋鬼小结**：15 个筛选操作全部 ✅
+
+## 九、丧尸（Zombies）— 逐卡比对
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| zombie_tenacious_z discardPlay | "this card from your discard pile"（己方弃牌堆，同名） | `c.defId === 'zombie_tenacious_z'` 己方弃牌堆 | ✅ |
+| zombie_theyre_coming discardPlay | 有己方 ongoing 的基地 + 弃牌堆随从 | `o.defId === '...' && o.ownerId === playerId` + `c.type === 'minion'` | ✅ |
+| zombie_grave_digger | "a minion from your discard pile"（己方弃牌堆，随从） | `c.type === 'minion'` 己方弃牌堆 | ✅ |
+| zombie_grave_digger optionsGen | 同上 | `c.type === 'minion'` 己方弃牌堆 | ✅ |
+| zombie_not_enough_bullets | "any number of minions of the same name from your discard pile"（己方弃牌堆，同名随从） | `c.type === 'minion'` 按 defId 分组 | ✅ |
+| zombie_lord | "each base where you have no minions"（无己方随从的基地）+ "power 2 or less from your discard pile" | `!base.minions.some(m => m.controller === playerId)` + `def.power <= 2` | ✅ |
+| zombie_lord optionsGen | 同上 | `c.type === 'minion' && def.power <= 2 && !usedCardUids` | ✅ |
+| zombie_lend_a_hand | "any number of cards from your discard pile"（己方弃牌堆，任意卡） | `player.discard.map(...)` 己方弃牌堆，无类型限制 | ✅ |
+| zombie_mall_crawl | "any number of cards of the same name" from "your deck"（己方牌库，同名） | 按 defId 分组，己方牌库 | ✅ |
+| zombie_they_keep_coming | "an extra minion from your discard pile"（己方弃牌堆，随从） | `c.type === 'minion'` 己方弃牌堆 | ✅ |
+| zombie_they_keep_coming optionsGen | 同上 | `c.type === 'minion'` 己方弃牌堆 | ✅ |
+| zombie_overrun selfDestruct | 泛滥横行（所有基地） | `o.defId === 'zombie_overrun'` 所有基地 | ✅ |
+| zombie_lend_a_hand handler | 选中的弃牌堆卡 | `selectedUids.has(c.uid)` 弃牌堆 | ✅ |
+| zombie_not_enough_bullets handler | 同名随从 | `c.type === 'minion' && c.defId === defId` 弃牌堆 | ✅ |
+| zombie_mall_crawl handler | 同名卡 / 非同名卡 | `c.defId === defId` / `c.defId !== defId` 牌库 | ✅ |
+| zombie_lend_a_hand handler | 手牌随从 | `c.type === 'minion'` 手牌 | ✅ |
+| zombie_lord handler | 空基地 + 弃牌堆随从 | `!filledBases.includes(b.baseIndex)` + `power <= 2` | ✅ |
+
+**丧尸小结**：27 个筛选操作全部 ✅
+
+**注**：清单中 line 246 的 `zombie_lend_a_hand .filter() card c.type === 'minion' && c.uid !== ctx.cardUid 手牌` 实际属于 `zombie_outbreak` 函数（检查手牌中是否有随从可打出），非 lend_a_hand 的主效果。`zombie_lend_a_hand` 的 onPlay 正确从 `player.discard` 选取任意卡牌。
+
+## 十、基地能力 — `domain/baseAbilities.ts`
+
+仅 `base_tortuga` 有实体筛选操作（已在高风险卡牌部分详细审查）。
+
+| 卡牌 | 描述范围限定词 | 代码筛选 | 判定 |
+|------|--------------|---------|------|
+| base_tortuga | "their minions on another base"（亚军，其他基地） | `i === ctx.baseIndex → continue` + `m.controller !== runnerUpId → continue` | ✅ |
+
+**基地能力小结**：1 个筛选操作 ✅
+
+## 十一、辅助函数 — `domain/abilityHelpers.ts`
+
+| 函数 | 用途 | 筛选条件 | 判定 |
+|------|------|---------|------|
+| findMinionOnBases | 按 uid 查找随从（所有基地） | `m.uid === minionUid` | ✅ 通用查找 |
+| findMinionByAttachedCard | 按附着卡 uid 查找随从（所有基地） | `m.attachedActions.some(a => a.uid === attachedCardUid)` | ✅ 通用查找 |
+| getPlayerMinionsOnBase | 获取玩家在某基地的随从 | `m.controller === playerId` 本基地 | ✅ |
+| getOpponentMinionsOnBase | 获取对手在某基地的随从 | `m.controller !== playerId` 本基地 | ✅ |
+| buildMinionTargetOptions | 构建随从目标选项（含保护检查） | `isMinionProtected` 过滤 | ✅ |
+
+**辅助函数小结**：6 个筛选操作全部 ✅
+
+---
+
+## 审计汇总
+
+### 按派系统计
+
+| 派系 | 筛选操作数 | ✅ | ❌ | ⚠️ |
+|------|-----------|---|---|---|
+| 外星人 | 13 | 13 | 0 | 0 |
+| 恐龙 | 16 | 16 | 0 | 0 |
+| 忍者 | 22 | 22 | 0 | 0 |
+| 海盗 | 17 | 17 | 0 | 0 |
+| 机器人 | 10 | 10 | 0 | 0 |
+| 巫师 | 15 | 15 | 0 | 0 |
+| 捣蛋鬼 | 15 | 15 | 0 | 0 |
+| 丧尸 | 27 | 27 | 0 | 0 |
+| 基地能力 | 1 | 1 | 0 | 0 |
+| 辅助函数 | 6 | 6 | 0 | 0 |
+| **总计** | **142** | **142** | **0** | **0** |
+
+> 注：清单原始统计为 143 个操作，其中 1 个（line 246）经核实属于 `zombie_outbreak` 而非 `zombie_lend_a_hand`，实际有效比对 142 个。
+
+### 总结
+
+**所有 142 个实体筛选操作的范围限定词与代码筛选条件完全一致，未发现任何 ❌ 不匹配项。**
+
+关键发现：
+1. `robot_microbot_guard` 和 `trickster_gnome` 的 `+1` 计数经追踪 `postProcessSystemEvents` 确认正确（onPlay 在 pre-reduce 状态下执行，随从尚未在基地上）
+2. 清单中 `zombie_lend_a_hand` line 246 的筛选操作实际属于 `zombie_outbreak`（清单标注有误）
+3. 所有高风险卡牌（base_tortuga、alien_crop_circles、pirate_full_sail、pirate_broadside、zombie_lord、dino_natural_selection）的筛选范围均与描述完全一致
+4. 归属过滤（己方/对手/所有）在所有卡牌中均正确实现
+5. 位置范围（本基地/所有基地/其他基地）在所有卡牌中均正确实现
+6. 力量限定（≤2/≤3/严格小于）在所有卡牌中均正确实现

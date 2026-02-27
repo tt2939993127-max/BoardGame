@@ -449,6 +449,24 @@ export class MongoStorage implements MatchStorage {
     }
 
     /**
+     * 兜底清理已过期的 TTL 房间（ttlSeconds > 0 且 expiresAt 已过期）
+     * MongoDB TTL 索引理论上会自动删除，但索引可能未创建或延迟，此方法作为应用层兜底
+     */
+    async cleanupExpiredTtlMatches(): Promise<number> {
+        const Match = getMatchModel();
+        const now = new Date();
+        const result = await Match.deleteMany({
+            ttlSeconds: { $gt: 0 },
+            expiresAt: { $ne: null, $lte: now },
+        });
+        const count = result.deletedCount ?? 0;
+        if (count > 0) {
+            logger.info(`[MongoStorage] 兜底清理过期 TTL 房间: ${count} 个`);
+        }
+        return count;
+    }
+
+    /**
      * 清理同 ownerKey 的重复房间，仅保留最近更新的一条
      */
     async cleanupDuplicateOwnerMatches(): Promise<number> {

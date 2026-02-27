@@ -1593,7 +1593,7 @@ async function startServer() {
             logger.error('[MongoStorage] 启动清理临时房间失败:', err);
         }
 
-        // 定时清理断线超时的临时房间
+        // 定时清理断线超时的临时房间 + 过期 TTL 房间
         setInterval(async () => {
             try {
                 const cleaned = await hybridStorage.cleanupEphemeralMatches();
@@ -1605,7 +1605,28 @@ async function startServer() {
             } catch (err) {
                 logger.error('[HybridStorage] 定时清理临时房间失败:', err);
             }
+            try {
+                const cleanedTtl = await mongoStorage.cleanupExpiredTtlMatches();
+                if (cleanedTtl > 0) {
+                    for (const gameName of SUPPORTED_GAMES) {
+                        void broadcastLobbySnapshot(gameName, 'cleanupExpiredTtlMatches:timer');
+                    }
+                }
+            } catch (err) {
+                logger.error('[MongoStorage] 定时清理过期 TTL 房间失败:', err);
+            }
         }, 60 * 1000);
+
+        try {
+            const cleanedExpiredTtl = await mongoStorage.cleanupExpiredTtlMatches();
+            if (cleanedExpiredTtl > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, 'cleanupExpiredTtlMatches:boot');
+                }
+            }
+        } catch (err) {
+            logger.error('[MongoStorage] 启动清理过期 TTL 房间失败:', err);
+        }
 
         try {
             const cleanedLegacy = await mongoStorage.cleanupLegacyMatches(0);

@@ -512,10 +512,29 @@ describe('机器人 ongoing 能力', () => {
 
             const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state,
-                playerId: '1',
+                playerId: '0',
                 baseIndex: 0,
                 triggerMinionUid: 'big-1',
                 triggerMinionDefId: 'robot_hoverbot',
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(0);
+        });
+
+        test('对手的微型机被消灭时不触发（"你的"限定）', () => {
+            const archive = makeMinion({ defId: 'robot_microbot_archive', uid: 'ma-1', controller: '0' });
+            const base = makeBase({ minions: [archive] });
+            const state = makeState([base]);
+
+            // playerId='1' 表示被消灭随从属于对手
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
+                state,
+                playerId: '1',
+                baseIndex: 0,
+                triggerMinionUid: 'mg-opp',
+                triggerMinionDefId: 'robot_microbot_guard',
                 random: dummyRandom,
                 now: 1000,
             });

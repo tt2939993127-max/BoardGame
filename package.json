@@ -58,6 +58,7 @@
     "check:arch": "node scripts/infra/check-architecture.cjs",
     "check:prod-deps": "bash scripts/deploy/verify-prod-deps.sh",
     "typecheck": "tsc --noEmit",
+    "assets:download": "node scripts/assets/download-from-r2.js",
     "assets:upload": "node scripts/assets/upload-to-r2.js",
     "assets:upload:force": "cross-env FORCE_UPLOAD=1 node scripts/assets/upload-to-r2.js",
     "assets:check": "node scripts/assets/upload-to-r2.js --check",

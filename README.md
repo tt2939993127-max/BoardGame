@@ -198,6 +198,7 @@ npm run check:arch          # 架构检查
 
 # 音频注册表 & 资源上传（新增/修改音频文件后必须执行）
 node scripts/audio/generate_common_audio_registry.js  # 重新生成音频注册表
+npm run assets:download  # 从 R2 下载资源到本地（合作者 clone 后首次运行）
 npm run assets:upload    # 上传压缩资源到 R2（需配置 R2_* 环境变量）
 
 git push --no-verify
