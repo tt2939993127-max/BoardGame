@@ -75,9 +75,9 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         description: abilityText('steal', 'description'),
         sfxKey: SHADOW_THIEF_SFX_STEAL,
         variants: [
-            { id: 'steal-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 2 } }, effects: [{ description: '获得2CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-2' } }], priority: 1 },
-            { id: 'steal-3', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 3 } }, effects: [{ description: '获得3CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-3' } }], priority: 2 },
-            { id: 'steal-4', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 4 } }, effects: [{ description: '获得4CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-4' } }], priority: 3 }
+            { id: 'steal-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 2 } }, effects: [{ description: '获得2CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-2', stealLimit: 1 } }], priority: 1 },
+            { id: 'steal-3', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 3 } }, effects: [{ description: '获得3CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-3', stealLimit: 1 } }], priority: 2 },
+            { id: 'steal-4', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 4 } }, effects: [{ description: '获得4CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-4', stealLimit: 1 } }], priority: 3 }
         ]
     },
     // 破隐一击 (Kidney Shot) I
@@ -267,10 +267,10 @@ export const STEAL_2: AbilityDef = {
     description: abilityText('steal-2', 'description'),
     sfxKey: SHADOW_THIEF_SFX_STEAL,
     variants: [
-        { id: 'steal-2-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 2 } }, effects: [{ description: '获得3CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-3' } }], priority: 1 },
-        { id: 'steal-3-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 3 } }, effects: [{ description: '获得4CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-4' } }], priority: 2 },
-        { id: 'steal-4-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 4 } }, effects: [{ description: '获得5CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-5' } }], priority: 3 },
-        { id: 'steal-5-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 5 } }, effects: [{ description: '获得6CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-6' } }], priority: 4 }
+        { id: 'steal-2-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 2 } }, effects: [{ description: '获得3CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-3', stealLimit: 2 } }], priority: 1 },
+        { id: 'steal-3-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 3 } }, effects: [{ description: '获得4CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-4', stealLimit: 2 } }], priority: 2 },
+        { id: 'steal-4-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 4 } }, effects: [{ description: '获得5CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-5', stealLimit: 2 } }], priority: 3 },
+        { id: 'steal-5-2', trigger: { type: 'diceSet', faces: { [FACE.BAG]: 5 } }, effects: [{ description: '获得6CP (若有Shadow则偷取)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-steal-cp-6', stealLimit: 2 } }], priority: 4 }
     ]
 };
 

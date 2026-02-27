@@ -158,7 +158,7 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
                 traceSelectionAudio('skip', null, 'local_player_ready');
                 return null;
             }
-            const key = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+            const key = 'system.general.casual_mobile_sound_fx_pack_vol.alerts.misc_alerts.ready_up_big_metallic';
             traceSelectionAudio('play', key, 'other_player_ready');
             return key;
         }

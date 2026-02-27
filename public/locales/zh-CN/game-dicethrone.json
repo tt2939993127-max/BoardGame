@@ -138,7 +138,7 @@
     "targeted": {
       "name": "锁定",
       "description": [
-        "受到的伤害+2。持续效果"
+        "受到的伤害+2。触发后移除"
       ]
     }
   },
@@ -1395,7 +1395,7 @@
     },
     "steal": {
       "name": "偷窃",
-      "description": "根据背包面数量获得CP，若有暗影面则从对手偷取"
+      "description": "根据背包面数量获得CP，若投出暗影面则获得的CP中至多1CP来自对手"
     },
     "kidney-shot": {
       "name": "破隐一击",
@@ -1460,7 +1460,7 @@
     },
     "steal-2": {
       "name": "偷窃 II",
-      "description": "升级偷窃：获得更多CP，若有暗影面则从对手偷取"
+      "description": "升级偷窃：获得更多CP，若投出暗影面则获得的CP中至多2CP来自对手"
     },
     "cornucopia-2": {
       "name": "聚宝盆 II",
@@ -1480,7 +1480,7 @@
     },
     "righteous-combat": {
       "name": "正义战法",
-      "description": "3剑+1盔触发：造成5伤害，投掷2骰获得额外效果",
+      "description": "3剑+2盔触发：造成5伤害，投掷2骰获得额外效果",
       "effects": {
         "damage5": "造成5点伤害",
         "roll2": "投掷2骰：剑+2伤害，盔+1伤害，心治疗2，祈祷+1CP"
@@ -1898,7 +1898,7 @@
     },
     "card-infernal-embrace": {
       "effects": {
-        "roll": "投掷1骰：陨石=获得火焰精通至上限，否则=抽取1张牌"
+        "roll": "投掷1骰：火焰=获得2火焰精通，否则=抽取1张牌"
       }
     },
     "card-fan-the-flames": {
@@ -2135,7 +2135,7 @@
     },
     "card-infernal-embrace": {
       "name": "炼狱拥怀！",
-      "description": "投掷1骰：\n陨石: 获得火焰精通至上限\n否则: 抽取1张牌"
+      "description": "投掷1骰：\n火焰: 获得2火焰精通\n否则: 抽取1张牌"
     },
     "card-fan-the-flames": {
       "name": "火焰张天！",
@@ -2207,7 +2207,7 @@
     },
     "action-into-the-shadows": {
       "name": "遁入阴影！",
-      "description": "获得1个暗影标记。"
+      "description": "获得1个潜行标记。"
     },
     "action-one-with-shadows": {
       "name": "与影共生！",
@@ -2323,7 +2323,7 @@
     },
     "card-consecrate": {
       "name": "神圣祝圣！",
-      "description": "获得守护、神罚、暴击和精准各1个。"
+      "description": "选择一名玩家获得守护、神罚、暴击和精准各1个。"
     },
     "card-divine-favor": {
       "name": "神恩！",
@@ -2331,7 +2331,7 @@
     },
     "card-absolution": {
       "name": "赦免！",
-      "description": "投掷1骰防御：剑→对攻击者造成1不可防御伤害；头盔→防止1伤害；心→防止2伤害；祈祷→获得1CP。"
+      "description": "投掷1骰防御：剑→对攻击者造成3不可防御伤害；头盔→防止3伤害；心→防止5伤害；祈祷→防止2伤害+获得2CP。"
     },
     "card-gods-grace": {
       "name": "神佑！",

@@ -139,7 +139,7 @@
     "targeted": {
       "name": "Targeted",
       "description": [
-        "Incoming damage +2. Persistent."
+        "Incoming damage +2. Removed after triggering."
       ]
     }
   },
@@ -965,7 +965,7 @@
     },
     "righteous-combat": {
       "name": "Righteous Combat",
-      "description": "3 Sword + 1 Helm: deal 5 damage, roll 2 dice for bonus effects",
+      "description": "3 Sword + 2 Helm: deal 5 damage, roll 2 dice for bonus effects",
       "effects": {
         "damage5": "Deal 5 damage",
         "roll2": "Roll 2 dice: Sword +2 dmg, Helm +1 dmg, Heart heal 2, Pray +1 CP"
@@ -1876,7 +1876,7 @@
     },
     "card-infernal-embrace": {
       "effects": {
-        "roll": "Roll 1 die: Meteor = gain Fire Mastery to cap, otherwise = draw 1 card"
+        "roll": "Roll 1 die: Fire = gain 2 Fire Mastery, otherwise = draw 1 card"
       }
     },
     "card-fan-the-flames": {
@@ -1911,11 +1911,11 @@
     },
     "card-buddha-light": {
       "name": "Buddha Light!",
-      "description": "Gain 1 Chi, Evasive and Purify; inflict Stun on 1 opponent."
+      "description": "Gain 1 Chi, Evasive and Purify; inflict Knockdown on 1 opponent."
     },
     "card-palm-strike": {
       "name": "Palm Strike!",
-      "description": "Inflict Stun on 1 opponent."
+      "description": "Inflict Knockdown on 1 opponent."
     },
     "card-meditation-3": {
       "name": "Meditation III",
@@ -2099,7 +2099,7 @@
     },
     "card-infernal-embrace": {
       "name": "Infernal Embrace!",
-      "description": "Roll 1 die:\nMeteor: gain Fire Mastery to the cap\nOtherwise: draw 1 card"
+      "description": "Roll 1 die:\nFire: gain 2 Fire Mastery\nOtherwise: draw 1 card"
     },
     "card-fan-the-flames": {
       "name": "Fan the Flames!",
@@ -2185,7 +2185,7 @@
     },
     "action-into-the-shadows": {
       "name": "Into the Shadows!",
-      "description": "Gain 1 Shadow token."
+      "description": "Gain 1 Sneak token."
     },
     "action-one-with-shadows": {
       "name": "One with Shadows!",
@@ -2301,7 +2301,7 @@
     },
     "card-consecrate": {
       "name": "Consecrate!",
-      "description": "Gain Protect, Retribution, Crit, and Accuracy (1 each)."
+      "description": "Choose a player to gain Protect, Retribution, Crit, and Accuracy (1 each)."
     },
     "card-divine-favor": {
       "name": "Divine Favor!",
@@ -2309,7 +2309,7 @@
     },
     "card-absolution": {
       "name": "Absolution!",
-      "description": "Roll 1 die: Sword → Deal 1 undefendable damage; Helm → Prevent 1 damage; Heart → Prevent 2 damage; Pray → Gain 1 CP."
+      "description": "Roll 1 die: Sword → Deal 3 undefendable damage; Helm → Prevent 3 damage; Heart → Prevent 5 damage; Pray → Prevent 2 damage + Gain 2 CP."
     },
     "card-gods-grace": {
       "name": "God's Grace!",

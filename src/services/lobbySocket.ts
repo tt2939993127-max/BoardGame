@@ -59,6 +59,8 @@ export interface LobbyMatch {
     ownerType?: 'user' | 'guest';
     isLocked?: boolean;
     gameover?: boolean;
+    /** 房间状态（waiting/playing/finished/abandoned） */
+    status?: 'waiting' | 'playing' | 'finished' | 'abandoned';
 }
 
 type LobbyGameId = string;

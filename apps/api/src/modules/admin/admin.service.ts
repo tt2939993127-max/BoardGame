@@ -548,17 +548,23 @@ export class AdminService implements OnModuleInit {
 
         const deletableIds = deletableUsers.map(user => user._id.toString());
         const usernames = deletableUsers.map(user => user.username).filter(Boolean);
+        const ownerKeys = deletableIds.map(id => `user:${id}`);
 
         await Promise.all([
             this.friendModel.deleteMany({ $or: [{ user: { $in: deletableIds } }, { friend: { $in: deletableIds } }] }),
             this.messageModel.deleteMany({ $or: [{ from: { $in: deletableIds } }, { to: { $in: deletableIds } }] }),
             this.reviewModel.deleteMany({ user: { $in: deletableIds } }),
             this.userModel.deleteMany({ _id: { $in: deletableIds } }),
-            usernames.length
+            // 脱敏：同时匹配 ownerKey 和 name，覆盖新旧数据
+            (usernames.length || ownerKeys.length)
                 ? this.matchRecordModel.updateMany(
-                    { 'players.name': { $in: usernames } },
-                    { $set: { 'players.$[player].name': DELETED_USER_PLACEHOLDER } },
-                    { arrayFilters: [{ 'player.name': { $in: usernames } }] }
+                    { $or: [{ 'players.ownerKey': { $in: ownerKeys } }, { 'players.name': { $in: usernames } }] },
+                    {
+                        $set: {
+                            'players.$[player].name': DELETED_USER_PLACEHOLDER,
+                        },
+                    },
+                    { arrayFilters: [{ $or: [{ 'player.ownerKey': { $in: ownerKeys } }, { 'player.name': { $in: usernames } }] }] }
                 )
                 : Promise.resolve(),
         ]);
@@ -628,8 +634,8 @@ export class AdminService implements OnModuleInit {
             this.userModel.countDocuments(filter),
         ]);
 
-        const usernames = users.map(user => user.username).filter(Boolean);
-        const matchCountMap = await this.buildMatchCountMap(usernames);
+        const userEntries = users.map(user => ({ userId: user._id.toString(), username: user.username }));
+        const matchCountMap = await this.buildMatchCountMap(userEntries);
 
         const items: UserListItem[] = users.map(user => ({
             id: user._id.toString(),
@@ -638,7 +644,7 @@ export class AdminService implements OnModuleInit {
             emailVerified: user.emailVerified,
             role: user.role,
             banned: user.banned,
-            matchCount: matchCountMap.get(user.username) ?? 0,
+            matchCount: matchCountMap.get(user._id.toString()) ?? 0,
             createdAt: user.createdAt,
             lastOnline: user.lastOnline ?? null,
         }));
@@ -659,8 +665,8 @@ export class AdminService implements OnModuleInit {
         }
 
         const [stats, recentMatches] = await Promise.all([
-            this.getUserStatsByName(user.username),
-            this.getRecentMatchesByName(user.username),
+            this.getUserStats(user._id.toString(), user.username),
+            this.getRecentMatches(user._id.toString(), user.username),
         ]);
 
         return {
@@ -694,15 +700,22 @@ export class AdminService implements OnModuleInit {
         }
 
         const username = user.username;
+        const ownerKey = `user:${userId}`;
         await Promise.all([
             this.friendModel.deleteMany({ $or: [{ user: userId }, { friend: userId }] }),
             this.messageModel.deleteMany({ $or: [{ from: userId }, { to: userId }] }),
             this.reviewModel.deleteMany({ user: userId }),
             this.userModel.deleteOne({ _id: userId }),
+            // 脱敏：同时匹配 ownerKey 和 name，覆盖新旧数据
             this.matchRecordModel.updateMany(
-                { 'players.name': username },
-                { $set: { 'players.$[player].name': DELETED_USER_PLACEHOLDER } },
-                { arrayFilters: [{ 'player.name': username }] }
+                { $or: [{ 'players.ownerKey': ownerKey }, { 'players.name': username }] },
+                {
+                    $set: {
+                        'players.$[player].name': DELETED_USER_PLACEHOLDER,
+                        'players.$[player].ownerKey': `deleted:${userId}`,
+                    },
+                },
+                { arrayFilters: [{ $or: [{ 'player.ownerKey': ownerKey }, { 'player.name': username }] }] }
             ),
         ]);
 
@@ -867,21 +880,80 @@ export class AdminService implements OnModuleInit {
         };
     }
 
-    private async buildMatchCountMap(usernames: string[]) {
-        if (!usernames.length) return new Map<string, number>();
+    /**
+     * 构建用户对局数映射。
+     * 优先用 ownerKey 查询（新数据），兼容旧数据 fallback 到 name。
+     * @param users - { userId, username } 列表
+     */
+    private async buildMatchCountMap(users: Array<{ userId: string; username: string }>) {
+        if (!users.length) return new Map<string, number>();
 
+        const ownerKeys = users.map(u => `user:${u.userId}`);
+        const usernames = users.map(u => u.username).filter(Boolean);
+
+        // 用 ownerKey 查（新数据）+ name 查（旧数据），合并去重
         const results = await this.matchRecordModel.aggregate<AggregateCount>([
-            { $match: { 'players.name': { $in: usernames }, endedAt: { $exists: true, $ne: null } } },
+            {
+                $match: {
+                    endedAt: { $exists: true, $ne: null },
+                    $or: [
+                        { 'players.ownerKey': { $in: ownerKeys } },
+                        { 'players.name': { $in: usernames } },
+                    ],
+                },
+            },
             { $unwind: '$players' },
-            { $match: { 'players.name': { $in: usernames } } },
-            { $group: { _id: '$players.name', count: { $sum: 1 } } },
+            {
+                $match: {
+                    $or: [
+                        { 'players.ownerKey': { $in: ownerKeys } },
+                        { 'players.name': { $in: usernames } },
+                    ],
+                },
+            },
+            {
+                $group: {
+                    _id: {
+                        $ifNull: ['$players.ownerKey', '$players.name'],
+                    },
+                    count: { $sum: 1 },
+                },
+            },
         ]);
 
-        return new Map(results.map(item => [String(item._id), Number(item.count || 0)]));
+        // 建立 ownerKey/name → userId 的反向映射
+        const keyToUserId = new Map<string, string>();
+        for (const u of users) {
+            keyToUserId.set(`user:${u.userId}`, u.userId);
+            if (u.username) keyToUserId.set(u.username, u.userId);
+        }
+
+        // 按 userId 聚合
+        const countMap = new Map<string, number>();
+        for (const item of results) {
+            const uid = keyToUserId.get(String(item._id));
+            if (!uid) continue;
+            countMap.set(uid, (countMap.get(uid) ?? 0) + Number(item.count || 0));
+        }
+        return countMap;
     }
 
-    private async getUserStatsByName(username: string) {
-        const totalMatches = await this.matchRecordModel.countDocuments({ 'players.name': username, endedAt: { $exists: true, $ne: null } });
+    /**
+     * 获取用户战绩统计。优先 ownerKey，兼容旧数据 fallback 到 name。
+     */
+    private async getUserStats(userId: string, username: string) {
+        const ownerKey = `user:${userId}`;
+        const playerFilter = {
+            $or: [
+                { 'players.ownerKey': ownerKey },
+                { 'players.name': username },
+            ],
+        };
+
+        const totalMatches = await this.matchRecordModel.countDocuments({
+            ...playerFilter,
+            endedAt: { $exists: true, $ne: null },
+        });
         if (!totalMatches) {
             return {
                 totalMatches: 0,
@@ -893,9 +965,16 @@ export class AdminService implements OnModuleInit {
         }
 
         const results = await this.matchRecordModel.aggregate<AggregateCount>([
-            { $match: { 'players.name': username, endedAt: { $exists: true, $ne: null } } },
+            { $match: { ...playerFilter, endedAt: { $exists: true, $ne: null } } },
             { $unwind: '$players' },
-            { $match: { 'players.name': username } },
+            {
+                $match: {
+                    $or: [
+                        { 'players.ownerKey': ownerKey },
+                        { 'players.name': username },
+                    ],
+                },
+            },
             { $group: { _id: '$players.result', count: { $sum: 1 } } },
         ]);
 
@@ -913,21 +992,33 @@ export class AdminService implements OnModuleInit {
         };
     }
 
-    private async getRecentMatchesByName(username: string) {
+    /**
+     * 获取用户最近对局。优先 ownerKey，兼容旧数据 fallback 到 name。
+     */
+    private async getRecentMatches(userId: string, username: string) {
+        const ownerKey = `user:${userId}`;
         const records = await this.matchRecordModel
-            .find({ 'players.name': username, endedAt: { $exists: true, $ne: null } })
+            .find({
+                $or: [
+                    { 'players.ownerKey': ownerKey },
+                    { 'players.name': username },
+                ],
+                endedAt: { $exists: true, $ne: null },
+            })
             .sort({ endedAt: -1 })
             .limit(RECENT_MATCH_LIMIT)
             .lean<LeanMatchRecord[]>();
 
         return records.map(record => {
-            const current = record.players.find(player => player.name === username);
-            const opponent = record.players.find(player => player.name && player.name !== username)?.name ?? '未知';
+            // 用 ownerKey 或 name 匹配当前用户
+            const current = record.players.find(p => p.ownerKey === ownerKey)
+                ?? record.players.find(p => p.name === username);
+            const opponent = record.players.find(p => p !== current);
             return {
                 matchID: record.matchID,
                 gameName: record.gameName,
                 result: current?.result ?? 'draw',
-                opponent,
+                opponent: opponent?.name ?? '未知',
                 endedAt: record.endedAt,
             };
         });

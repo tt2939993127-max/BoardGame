@@ -17,7 +17,7 @@ const DICE_ROLL_MULTI_KEYS = [
     'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_003',
     'dice.decks_and_cards_sound_fx_pack.few_dice_roll_005',
 ];
-const READY_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+const READY_SIGNAL_KEY = 'system.general.casual_mobile_sound_fx_pack_vol.alerts.misc_alerts.ready_up_big_metallic';
 const HOST_STARTED_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
 const PHASE_CHANGED_KEY = 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
 

@@ -29,6 +29,7 @@ import { buildUgcServerGames } from './src/server/ugcRegistration';
 import { GameTransportServer } from './src/engine/transport/server';
 import type { GameEngineConfig } from './src/engine/transport/server';
 import type { MatchMetadata, MatchStorage } from './src/engine/transport/storage';
+import { resolveMatchStatus } from './src/engine/transport/storage';
 import logger, { gameLogger } from './server/logger';
 import { requestLogger, errorHandler } from './server/middleware/logging';
 
@@ -165,17 +166,24 @@ const archiveMatchResult = async ({
         if (existing) return;
 
         const { metadata, state: storedState } = await storage.fetch(matchID, { metadata: true, state: true });
-        const winnerID = gameover?.winner !== undefined ? String(gameover.winner) : undefined;
-        const resultType = winnerID ? 'win' : 'draw';
+        const winnerSeatID = gameover?.winner !== undefined ? String(gameover.winner) : undefined;
+        const resultType = winnerSeatID ? 'win' : 'draw';
 
-        const players: Array<{ id: string; name: string; result: string }> = [];
+        const players: Array<{ id: string; name: string; result: string; ownerKey?: string }> = [];
+        let winnerOwnerKey: string | undefined;
         if (metadata?.players) {
-            for (const [pid, pdata] of Object.entries(metadata.players)) {
-                const name = pdata?.name || `Player ${pid}`;
+            for (const [seatId, pdata] of Object.entries(metadata.players)) {
+                const name = pdata?.name || `Player ${seatId}`;
+                const ownerKey = pdata?.ownerKey;
+                // 用 ownerKey 作为真实 ID，fallback 到 name
+                const playerId = ownerKey || name;
+                const isWinner = seatId === winnerSeatID;
+                if (isWinner) winnerOwnerKey = playerId;
                 players.push({
-                    id: pid,
+                    id: playerId,
                     name,
-                    result: pid === winnerID ? 'win' : resultType === 'draw' ? 'draw' : 'loss',
+                    result: isWinner ? 'win' : resultType === 'draw' ? 'draw' : 'loss',
+                    ownerKey,
                 });
             }
         }
@@ -188,7 +196,7 @@ const archiveMatchResult = async ({
             matchID,
             gameName,
             players,
-            winnerID,
+            winnerID: winnerOwnerKey,
             actionLog,
             createdAt: new Date(metadata?.createdAt || Date.now()),
             endedAt: new Date(),
@@ -534,6 +542,7 @@ router.post('/games/:name/create', async (ctx) => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         setupData,
+        status: 'waiting',
     };
 
     try {
@@ -626,12 +635,33 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
         return;
     }
 
+    // 解析真实用户标识
+    const authHeader = ctx.get('authorization');
+    const rawToken = claimSeatUtils.parseBearerToken(authHeader);
+    const jwtPayload = rawToken ? claimSeatUtils.verifyGameToken(rawToken, JWT_SECRET) : null;
+    let playerOwnerKey: string | undefined;
+    if (jwtPayload?.userId) {
+        playerOwnerKey = `user:${jwtPayload.userId}`;
+    } else if (guestId) {
+        playerOwnerKey = `guest:${guestId}`;
+    }
+
     metadata.players[playerID] = {
         ...metadata.players[playerID],
         name: playerName,
         credentials,
+        ...(playerOwnerKey ? { ownerKey: playerOwnerKey } : {}),
     };
     metadata.updatedAt = Date.now();
+
+    // 状态机：所有座位都有玩家时，从 waiting → playing
+    if (metadata.status === 'waiting' || !metadata.status) {
+        const allSeated = Object.values(metadata.players).every(p => p.name || p.credentials);
+        if (allSeated) {
+            metadata.status = 'playing';
+        }
+    }
+
     await storage.setMetadata(matchID, metadata);
     gameTransport.updateMatchMetadata(matchID, metadata);
 
@@ -682,6 +712,14 @@ router.post('/games/:name/:matchID/leave', async (ctx) => {
     delete playerMeta.credentials;
     playerMeta.isConnected = false;
     metadata.updatedAt = Date.now();
+
+    // 状态机：玩家离座后，如果游戏未结束则回退到 waiting
+    if (metadata.status === 'playing' || metadata.status === 'waiting' || !metadata.status) {
+        if (!metadata.gameover) {
+            metadata.status = 'waiting';
+        }
+    }
+
     await storage.setMetadata(matchID, metadata);
     gameTransport.updateMatchMetadata(matchID, metadata);
     // 离座后立即撤销该 seat 的实时连接权限，避免旧连接继续接收私有视图。
@@ -755,20 +793,31 @@ router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
     try {
         const records = await MatchRecord.find({ gameName });
+        // 用 ownerKey 聚合（新数据），旧数据 fallback 到 name
         const stats: Record<string, { name: string; wins: number; matches: number }> = {};
 
         records.forEach((record) => {
+            record.players.forEach((p: { id: string; name: string; ownerKey?: string }) => {
+                // 聚合 key：优先 ownerKey，fallback 到 id（新数据 id 已是 ownerKey/name），再 fallback 到 name
+                const key = p.ownerKey || (p.id !== '0' && p.id !== '1' ? p.id : null) || p.name;
+                if (!key) return;
+                if (!stats[key]) stats[key] = { name: p.name || key, wins: 0, matches: 0 };
+                // 用最新的名字覆盖（用户可能改名）
+                if (p.name) stats[key].name = p.name;
+                stats[key].matches++;
+            });
+            // 统计胜场
             if (record.winnerID) {
                 const winner = record.players.find((p: { id: string }) => p.id === record.winnerID);
                 if (winner) {
-                    if (!stats[winner.id]) stats[winner.id] = { name: winner.name, wins: 0, matches: 0 };
-                    stats[winner.id].wins++;
+                    const key = (winner as { ownerKey?: string }).ownerKey
+                        || (winner.id !== '0' && winner.id !== '1' ? winner.id : null)
+                        || winner.name;
+                    if (key && stats[key]) {
+                        stats[key].wins++;
+                    }
                 }
             }
-            record.players.forEach((p: { id: string; name: string }) => {
-                if (!stats[p.id]) stats[p.id] = { name: p.name, wins: 0, matches: 0 };
-                stats[p.id].matches++;
-            });
         });
 
         ctx.body = {
@@ -811,6 +860,7 @@ router.get('/games/:name/:matchID', async (ctx) => {
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
         gameover: metadata.gameover,
+        status: resolveMatchStatus(metadata),
     };
 });
 
@@ -847,6 +897,9 @@ interface LobbyMatch {
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
     isLocked?: boolean;
+    gameover?: boolean;
+    /** 房间状态（waiting/playing/finished/abandoned） */
+    status?: string;
 }
 
 interface LobbySnapshotPayload {
@@ -919,6 +972,7 @@ const buildLobbyMatch = (
         ownerType: setupData?.ownerType,
         isLocked: !!setupData?.password,
         gameover: !!metadata.gameover,
+        status: resolveMatchStatus(metadata),
     };
 };
 

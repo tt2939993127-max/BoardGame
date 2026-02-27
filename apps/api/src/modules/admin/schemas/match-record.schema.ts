@@ -8,6 +8,8 @@ export type MatchRecordPlayer = {
     id: string;
     name?: string;
     result?: string;
+    /** 真实用户标识（user:<userId> 或 guest:<guestId>） */
+    ownerKey?: string;
 };
 
 @Schema({ timestamps: true })
@@ -24,6 +26,7 @@ export class MatchRecord {
                 id: { type: String, required: true },
                 name: { type: String },
                 result: { type: String },
+                ownerKey: { type: String },
             },
         ],
         default: [],

@@ -1,184 +1,176 @@
-# 需求文档：大杀四方（SmashUp）全派系全基地审计
+# 需求文档：大杀四方（SmashUp）全维度审计（D1-D33）
 
 ## 简介
 
-对大杀四方（SmashUp, gameId: `smashup`）进行系统性的全派系、全基地"描述→实现"一致性审计。审计范围覆盖全部 21 个派系（含疯狂牌库）和全部 40+ 张基地卡。审计方式为逐派系、逐基地进行，遵循 `docs/ai-rules/testing-audit.md` 中的"描述→实现全链路审查规范"。
+对大杀四方（SmashUp, gameId: `smashup`）进行基于 `docs/ai-rules/testing-audit.md` D1-D33 全维度框架的系统性审计。
 
-审计目标：确保每张卡牌（随从/行动/基地）的规则描述文本与代码实现完全一致，发现并记录所有偏差（缺失实现、错误实现、多余实现）。
+**第一阶段（已完成）**：D1 描述→实现文本一致性 + D3 注册覆盖的静态审计，覆盖基础版 8 派系。发现 3 个 i18n 文本错误（已修复）和 2 个逻辑 bug（待修复）。已有静态属性测试（Property 1-3, 6, 9）和逐派系文本审计报告（`docs/audit/smashup/phase1-*.md`）。
+
+**第二阶段（本 spec）**：补全第一阶段完全缺失的运行时行为维度审计。审计范围为基础版 8 派系 + 全部基地卡。
 
 ## 审计数据源与冲突处理规范
 
-- **主要对照源**：SmashUp Wiki（https://smashup.fandom.com/wiki/）上的卡牌描述文本
-- **代码侧数据源**：i18n JSON 描述 + 能力注册表实现代码
-- **冲突处理原则**：当代码实现与 Wiki 描述存在差异时，**不自动以 Wiki 为准修改**，而是将差异累积记录，统一向用户确认后再决定以哪方为准
-- **差异记录格式**：每条差异需记录：卡牌名称、defId、Wiki 描述摘要、代码实现摘要、差异点说明
-- **确认批次**：每完成一个派系或一组基地的审计后，将该批次的差异汇总提交用户确认
+- **主要对照源**：SmashUp Wiki + 卡牌图片（图片优先）
+- **代码侧数据源**：i18n JSON 描述 + 能力注册表 + reducer + validate + UI 组件
+- **冲突处理原则**：差异累积记录，统一向用户确认后再决定以哪方为准
+- **确认批次**：每完成一个审计维度组后，将差异汇总提交用户确认
 
 ## 术语表
 
-- **Audit_System**: 审计系统，执行描述→实现全链路审查的流程
-- **Faction**: 派系，大杀四方中的阵营单位，每个派系包含随从卡和行动卡
-- **Base**: 基地卡，场上的争夺目标，达到临界点后记分
-- **Ability**: 能力，卡牌上的效果描述，包括 onPlay（打出时）、talent（天赋）、ongoing（持续）、special（特殊）、onDestroy（被摧毁时）等标签
-- **Base_Ability**: 基地能力，基地卡上的特殊效果，在特定时机触发
-- **Description**: 描述文本，卡牌上的规则文字（来源：i18n JSON 或卡牌数据定义）
-- **Implementation**: 实现代码，能力注册表中注册的执行函数
-- **Deviation**: 偏差，描述与实现之间的不一致
-- **Breakpoint**: 临界点，基地卡上的力量阈值
-- **VP_Awards**: 胜利点奖励，基地记分时按排名分配的分数
+- **GameTestRunner**: 引擎层行为测试工具，通过命令序列+状态断言验证运行时行为
+- **afterScoring**: 基地计分后触发的 ongoing trigger 时机
+- **ctx.playerId**: trigger 回调中的当前回合玩家 ID（非卡牌 owner）
+- **post-reduce**: reducer 执行后的状态（计数器已递增）
+- **grantExtraMinion**: 授予额外随从出牌额度的引擎 API
+- **createSimpleChoice**: 创建玩家交互选择的引擎 API
+- **baseLimitedMinionQuota**: 基地限定的额外随从额度字段
+- **filterProtectedEvents**: 过滤受保护实体事件的函数
 
-## 需求
+---
 
-### 需求 1：基础版 8 派系审计
+## 需求（第一阶段 — 已完成，保留引用）
 
-**用户故事：** 作为开发者，我希望审计基础版 8 个派系的所有卡牌，以确保描述与实现一致。
+### 需求 1：基础版 8 派系 D1 文本审计（已完成）
 
-#### 验收标准
+已完成逐卡文本比对，报告见 `docs/audit/smashup/phase1-*.md`。
 
-1. WHEN 审计外星人（Aliens）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/aliens.ts` 中的实现是否一致
-2. WHEN 审计恐龙（Dinosaurs）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/dinosaurs.ts` 中的实现是否一致
-3. WHEN 审计忍者（Ninjas）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/ninjas.ts` 中的实现是否一致
-4. WHEN 审计海盗（Pirates）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/pirates.ts` 中的实现是否一致
-5. WHEN 审计机器人（Robots）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/robots.ts` 中的实现是否一致
-6. WHEN 审计巫师（Wizards）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/wizards.ts` 中的实现是否一致
-7. WHEN 审计丧尸（Zombies）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/zombies.ts` 中的实现是否一致
-8. WHEN 审计捣蛋鬼（Tricksters）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/tricksters.ts` 中的实现是否一致
+### 需求 2：静态注册覆盖属性测试（已完成）
 
+已完成 Property 1-3, 6, 9 属性测试。
 
-### 需求 2：Awesome Level 9000 扩展派系审计
+---
 
-**用户故事：** 作为开发者，我希望审计 Awesome Level 9000 扩展的 4 个派系的所有卡牌，以确保描述与实现一致。
+## 需求（第二阶段 — 缺失维度补全）
+
+### 需求 3：D1 子项 — 实体筛选范围语义审计
+
+**用户故事：** 作为开发者，我希望审计所有能力实现中 `.filter()`/`.find()`/`for...of` 等实体收集操作的范围，确保与描述中的范围限定词（"本基地"/"其他基地"/"所有基地"/"己方"/"对手"等）完全一致。
 
 #### 验收标准
 
-1. WHEN 审计幽灵（Ghosts）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/ghosts.ts` 中的实现是否一致
-2. WHEN 审计熊骑兵（Bear Cavalry）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/bear_cavalry.ts` 中的实现是否一致
-3. WHEN 审计蒸汽朋克（Steampunks）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/steampunks.ts` 中的实现是否一致
-4. WHEN 审计食人花（Killer Plants）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/killer_plants.ts` 中的实现是否一致
+1. THE Audit_System SHALL 对每个能力执行器中的实体筛选操作，提取描述中的范围限定词（位置范围、归属范围、实体类型、来源范围、排除条件），逐个与代码中的筛选条件比对
+2. WHEN 描述说"其他基地"时，代码 SHALL 遍历 `state.bases.filter(b => b.index !== thisBaseIndex)` 而非 `thisBase.minions`
+3. WHEN 描述说"你的随从"时，代码 SHALL 过滤 `m.controller === playerId`，不得遍历所有随从不过滤归属
+4. THE Audit_System SHALL 输出筛选范围审计矩阵：描述范围 | 代码筛选 | 判定（✅/❌）
+5. THE Audit_System SHALL 重点覆盖已知高风险卡牌：`base_tortuga`（亚军移动随从范围）、`alien_crop_circles`（全基地 vs 单基地）、`pirate_full_sail`（移动目标范围）
 
-### 需求 3：克苏鲁扩展派系审计
+### 需求 4：D5 — 交互语义完整性审计
 
-**用户故事：** 作为开发者，我希望审计克苏鲁扩展的 4 个派系（含疯狂牌库）的所有卡牌，以确保描述与实现一致。
-
-#### 验收标准
-
-1. WHEN 审计克苏鲁仆从（Minions of Cthulhu）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/cthulhu.ts` 中的实现是否一致
-2. WHEN 审计远古物种（Elder Things）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/elder_things.ts` 中的实现是否一致
-3. WHEN 审计印斯茅斯（Innsmouth）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/innsmouth.ts` 中的实现是否一致
-4. WHEN 审计米斯卡塔尼克（Miskatonic University）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/miskatonic.ts` 中的实现是否一致
-5. WHEN 审计疯狂（Madness）牌库时，THE Audit_System SHALL 检查疯狂牌的能力描述与实现是否一致，包括终局惩罚机制（每 2 张疯狂牌扣 1 VP）
-
-### 需求 4：Monster Smash 扩展派系审计
-
-**用户故事：** 作为开发者，我希望审计 Monster Smash 扩展的 4 个派系的所有卡牌，以确保描述与实现一致。
+**用户故事：** 作为开发者，我希望审计所有 `createSimpleChoice` 调用的 `multi` 配置、`targetType` 声明、以及实现模式（额度 vs 交互）是否与描述语义匹配。
 
 #### 验收标准
 
-1. WHEN 审计科学怪人（Frankenstein）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/frankenstein.ts` 中的实现是否一致
-2. WHEN 审计狼人（Werewolves）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/werewolves.ts` 中的实现是否一致
-3. WHEN 审计吸血鬼（Vampires）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/vampires.ts` 中的实现是否一致
-4. WHEN 审计巨蚁（Giant Ants）派系时，THE Audit_System SHALL 逐张检查所有随从卡和行动卡的能力描述与 `abilities/giant_ants.ts` 中的实现是否一致
+1. THE Audit_System SHALL 检查每个 `createSimpleChoice` 调用的 `multi` 配置是否与描述语义匹配：描述"任意数量"→ `multi: { min: 0, max: N }`；描述"选择一个"→ 无 `multi`（单选）；描述"最多 N 个"→ `multi: { min: 0, max: N }`
+2. THE Audit_System SHALL 检查描述语义为"授予额度"的能力（如"你可以打出一张额外随从"）是否使用 `grantExtraMinion`/`grantExtraAction` 而非 `createSimpleChoice` 弹窗
+3. THE Audit_System SHALL 检查所有 `grantExtraMinion` 调用是否正确传递了描述中的约束条件（`sameNameOnly`/`restrictToBase`/`powerMax`）到 payload
+4. WHEN 能力使用 `targetType` 声明走棋盘直选模式时，THE Audit_System SHALL 检查非目标选项（done/skip/cancel）是否有替代 UI 可达路径
+5. THE Audit_System SHALL 检查同类型卡牌（如"选随从→逐张选手牌"模式）的 `targetType`、停止按钮 value key、`displayMode` 是否跨派系一致
 
-### 需求 5：基础版基地卡审计
+### 需求 5：D8 — 时序正确性审计
 
-**用户故事：** 作为开发者，我希望审计基础版 16 张基地卡的能力和数值，以确保描述与实现一致。
-
-#### 验收标准
-
-1. THE Audit_System SHALL 检查每张基础版基地卡的临界点（breakpoint）数值与规则描述是否一致
-2. THE Audit_System SHALL 检查每张基础版基地卡的 VP 奖励（vpAwards）数值与规则描述是否一致
-3. WHEN 基地卡具有特殊能力时，THE Audit_System SHALL 检查能力描述与 `domain/baseAbilities.ts` 中的实现是否一致
-4. WHEN 基地卡具有限制条件（restrictions）时，THE Audit_System SHALL 检查限制条件的实现与描述是否一致
-5. WHEN 基地卡具有随从力量加成（minionPowerBonus）时，THE Audit_System SHALL 检查加成数值与描述是否一致
-6. THE Audit_System SHALL 覆盖以下基础版基地：家园、母舰（外星人）；中央大脑、436-1337工厂（机器人）；绿洲丛林、焦油坑（恐龙）；刚柔流寺庙、忍者道场（忍者）；闪光洞穴、蘑菇王国（捣蛋鬼）；伊万斯堡城镇公墓、罗德百货商场（丧尸）；灰色猫眼石/海盗湾、托尔图加（海盗）；大图书馆、巫师学院（巫师）
-
-### 需求 6：Awesome Level 9000 扩展基地卡审计
-
-**用户故事：** 作为开发者，我希望审计 AL9000 扩展的 8 张基地卡的能力和数值，以确保描述与实现一致。
+**用户故事：** 作为开发者，我希望审计所有 ongoing trigger 的 `ctx.playerId` 语义、post-reduce 计数器阈值、以及 ongoing 触发顺序的正确性。
 
 #### 验收标准
 
-1. THE Audit_System SHALL 检查每张 AL9000 扩展基地卡的临界点和 VP 奖励数值与规则描述是否一致
-2. WHEN 基地卡具有特殊能力时，THE Audit_System SHALL 检查能力描述与 `domain/baseAbilities.ts` 或 `domain/baseAbilities_expansion.ts` 中的实现是否一致
-3. WHEN 基地卡具有限制条件时，THE Audit_System SHALL 检查限制条件的实现与描述是否一致
-4. THE Audit_System SHALL 覆盖以下 AL9000 基地：恐怖眺望台、鬼屋（幽灵）；荣誉之地、沙皇宫殿（熊骑兵）；发明家沙龙、工坊（蒸汽朋克）；温室、神秘花园（食人花）
+1. THE Audit_System SHALL 检查所有 `afterScoring`/`beforeScoring` trigger 回调中是否误用 `ctx.playerId` 作为卡牌 owner（应遍历所有同名 ongoing 实例的 `ownerId` 独立判断）
+2. THE Audit_System SHALL 检查所有 `onMinionPlayed`/`onCardPlayed` 回调中的计数器检查是否使用 post-reduce 阈值（首次 = `=== 1` 而非 `=== 0`）
+3. THE Audit_System SHALL 检查所有 `onMinionPlayed` 回调中是否使用权威计数器（`minionsPlayedPerBase`）而非派生状态（`base.minions.length`）判定"首次"
+4. WHEN 多个 ongoing trigger 在同一时机触发时，THE Audit_System SHALL 验证触发顺序是否影响最终结果（如两个 afterScoring trigger 的执行顺序是否导致不同的 VP 分配）
+5. THE Audit_System SHALL 使用 GameTestRunner 构造行为测试，覆盖：非当前回合玩家拥有的 afterScoring trigger 是否正确触发、首次打出随从的 onMinionPlayed 是否正确判定
 
-### 需求 7：克苏鲁扩展基地卡审计
+### 需求 6：D8 子项 — 写入-消费窗口对齐审计
 
-**用户故事：** 作为开发者，我希望审计克苏鲁扩展的 8 张基地卡的能力和数值，以确保描述与实现一致。
-
-#### 验收标准
-
-1. THE Audit_System SHALL 检查每张克苏鲁扩展基地卡的临界点和 VP 奖励数值与规则描述是否一致
-2. WHEN 基地卡具有特殊能力时，THE Audit_System SHALL 检查能力描述与 `domain/baseAbilities_expansion.ts` 中的实现是否一致
-3. THE Audit_System SHALL 覆盖以下克苏鲁基地：仪式场所、庇护所、疯狂山脉（远古物种）；拉莱耶（克苏鲁仆从）；印斯茅斯、伦格高原（印斯茅斯）；米斯卡塔尼克大学（米斯卡塔尼克）
-
-### 需求 8：Monster Smash 扩展基地卡审计
-
-**用户故事：** 作为开发者，我希望审计 Monster Smash 扩展的 8 张基地卡的能力和数值，以确保描述与实现一致。
+**用户故事：** 作为开发者，我希望审计所有在非常规阶段写入临时状态的机制，确保写入时机在消费窗口内。
 
 #### 验收标准
 
-1. THE Audit_System SHALL 检查每张 Monster Smash 扩展基地卡的临界点和 VP 奖励数值与规则描述是否一致
-2. WHEN 基地卡具有特殊能力时，THE Audit_System SHALL 检查能力描述与 `domain/baseAbilities_expansion.ts` 中的实现是否一致
-3. THE Audit_System SHALL 覆盖以下 Monster Smash 基地：实验工坊、魔像城堡（科学怪人）；集会场、巨石阵（狼人）；卵室、蚁丘（巨蚁）；血堡、地窖（吸血鬼）
+1. THE Audit_System SHALL 画出 SmashUp 的完整阶段时间线（playCards → scoring → draw → TURN_CHANGED），标注每个临时状态的写入时机、消费窗口、清理时机
+2. THE Audit_System SHALL 检查所有 `grantExtraMinion`/`grantExtraAction` 的写入时机是否在对应消费窗口（playCards 阶段）之前或之内
+3. WHEN 写入发生在消费窗口之后时，THE Audit_System SHALL 标记为 ❌ 并记录：写入阶段、消费阶段、清理阶段、修复建议
+4. THE Audit_System SHALL 重点检查基地能力（如 `base_homeworld`、`base_secret_grove`）的额度授予时机是否在 playCards 阶段可消费
 
+### 需求 7：D11/D12/D13 — 额度写入-消耗对称性审计
 
-### 需求 9：Pretty Pretty / Set4 扩展基地卡审计
-
-**用户故事：** 作为开发者，我希望审计 Pretty Pretty 和 Set4 扩展中非派系专属基地卡的能力和数值，以确保描述与实现一致。
-
-#### 验收标准
-
-1. THE Audit_System SHALL 检查 Pretty Pretty 扩展基地卡的临界点和 VP 奖励数值与规则描述是否一致
-2. THE Audit_System SHALL 覆盖以下 Pretty Pretty 基地：诡猫巷、九命之家（猫咪）；迷人峡谷、仙灵圈（仙灵）；美丽城堡、冰之城堡（公主）；平衡之地、小马乐园（神话马）
-3. THE Audit_System SHALL 覆盖以下 Set4 基地：北极基地（电子猿）；牧场、绵羊神社（绵羊）
-4. WHEN 基地卡具有限制条件或特殊能力时，THE Audit_System SHALL 检查实现与描述是否一致
-
-### 需求 10：审计流程与输出规范
-
-**用户故事：** 作为开发者，我希望审计流程遵循统一规范，输出结构化的审计报告，以便追踪和修复偏差。
+**用户故事：** 作为开发者，我希望审计所有额度/资源的写入路径与消耗路径是否对称，多来源额度的消耗优先级是否正确。
 
 #### 验收标准
 
-1. THE Audit_System SHALL 对每张卡牌执行以下审计步骤：读取描述文本（i18n JSON 或卡牌数据）→ 读取实现代码（能力注册表/基地能力注册表）→ 逐条比对 → 记录偏差
-2. THE Audit_System SHALL 将审计结果分为三类：✅ 一致（描述与实现匹配）、⚠️ 偏差（描述与实现不一致）、❌ 缺失（有描述无实现或有实现无描述）
-3. WHEN 发现偏差时，THE Audit_System SHALL 记录偏差类型（缺失实现/错误实现/多余实现/数值错误）、涉及的卡牌 defId、描述文本摘要、实现代码位置
-4. THE Audit_System SHALL 为每个派系和每组基地输出独立的审计矩阵，格式为：卡牌名称 | defId | 能力标签 | 描述摘要 | 实现状态 | 偏差说明
-5. THE Audit_System SHALL 在全部审计完成后输出汇总报告，包含：总卡牌数、已审计数、一致数、偏差数、缺失数
+1. THE Audit_System SHALL 追踪每个 `LIMIT_MODIFIED` 事件从 payload → reducer case → 写入字段的完整链路，验证字段名和数据结构一致
+2. THE Audit_System SHALL 追踪 `PLAY_MINION`/`PLAY_ACTION` 在 reducer 中的消耗分支，验证消耗条件与写入条件对称
+3. WHEN `baseLimitedMinionQuota` 和 `minionLimit` 同时存在时，THE Audit_System SHALL 验证消耗优先级：打到限定基地的随从应优先消耗 `baseLimitedMinionQuota`，而非 `minionLimit`
+4. THE Audit_System SHALL 使用 GameTestRunner 构造测试：① 只有基地限定额度时消耗正确 ② 基地限定额度与全局额度并存时消耗优先级正确 ③ 基地限定额度消耗后不影响全局额度剩余量
+5. THE Audit_System SHALL 检查 reducer 中 `HAND_SHUFFLED_INTO_DECK` 等复用事件类型的操作范围是否与所有调用方的 payload 语义对齐（全量操作 vs 部分操作）
 
-### 需求 11：持续效果与力量修正审计
+### 需求 8：D14 — 回合清理完整性审计
 
-**用户故事：** 作为开发者，我希望审计所有持续效果（ongoing）和力量修正（power modifier）的实现，以确保与描述一致。
-
-#### 验收标准
-
-1. THE Audit_System SHALL 检查 `domain/ongoingEffects.ts` 中注册的所有持续效果与对应卡牌描述是否一致
-2. THE Audit_System SHALL 检查 `domain/ongoingModifiers.ts` 中注册的所有力量修正与对应卡牌描述是否一致
-3. THE Audit_System SHALL 检查 `abilities/ongoing_modifiers.ts` 中注册的所有持续力量修正与对应卡牌描述是否一致
-4. WHEN 持续效果具有过期条件（回合结束/基地记分）时，THE Audit_System SHALL 检查过期逻辑的实现是否正确
-
-### 需求 12：跨派系交叉验证（同类型一致性）
-
-**用户故事：** 作为开发者，我希望对同类型的能力效果进行跨派系交叉验证，以确保相同语义的效果在不同派系中实现方式一致。
+**用户故事：** 作为开发者，我希望审计回合/阶段结束时所有临时状态是否全部正确清理。
 
 #### 验收标准
 
-1. THE Audit_System SHALL 识别所有"消灭随从"类能力（如忍者暗杀、外星人绑架返回手牌等），检查消灭/移除的实现路径是否一致（事件类型、目标区域、触发 onDestroy 与否）
-2. THE Audit_System SHALL 识别所有"抽牌"类能力，检查抽牌实现是否统一使用相同的事件/命令路径
-3. THE Audit_System SHALL 识别所有"移动随从"类能力（如海盗移动到其他基地、忍者潜行等），检查移动实现是否一致处理 ongoing 效果的保留/失效
-4. THE Audit_System SHALL 识别所有"力量修正"类能力（ongoing +N/-N power），检查修正的注册方式、过期时机、叠加规则是否跨派系一致
-5. THE Audit_System SHALL 识别所有"打出额外随从/行动"类能力，检查额外打出的实现是否统一（计数器递增、阶段检查、限制条件）
-6. THE Audit_System SHALL 识别所有"从弃牌堆回收"类能力，检查回收目标筛选（本方/任意方、随从/行动/任意）和回收目的地（手牌/场上/牌库顶）的实现是否与描述一致
-7. WHEN 发现同类型能力在不同派系中实现方式不一致时，THE Audit_System SHALL 标记为 ⚠️ 交叉不一致，记录涉及的派系、卡牌、差异点，并累积提交用户确认
+1. THE Audit_System SHALL 列出所有在回合中被写入的临时字段（`minionsPlayed`/`actionsPlayed`/`baseLimitedMinionQuota`/`extraMinionPowerMax`/`sameNameMinionRemaining` 等），验证每个字段在 `TURN_STARTED` 或 `TURN_ENDED` 中有对应的清理/重置
+2. WHEN 发现临时字段无清理逻辑时，THE Audit_System SHALL 标记为 ❌ 回合清理遗漏
+3. THE Audit_System SHALL 使用 GameTestRunner 构造跨回合测试：回合 1 授予额外额度 → 回合 2 验证额度已清零
 
-### 需求 13：交互链完整性审计
+### 需求 9：D15 — UI 状态同步审计
 
-**用户故事：** 作为开发者，我希望审计所有需要玩家交互的能力的交互链完整性，以确保交互流程不中断。
+**用户故事：** 作为开发者，我希望审计 UI 展示的数值/状态是否与 core 状态一致。
 
 #### 验收标准
 
-1. THE Audit_System SHALL 检查每个创建交互（Interaction）的能力是否在 `domain/abilityInteractionHandlers.ts` 中注册了对应的交互处理函数
-2. WHEN 能力需要多步交互时，THE Audit_System SHALL 检查交互链的每一步是否都有对应的处理函数
-3. IF 发现有能力创建了交互但未注册处理函数，THEN THE Audit_System SHALL 将其标记为 ❌ 交互链断裂
-4. THE Audit_System SHALL 检查基地能力的交互处理函数是否在 `domain/baseAbilities.ts` 或 `domain/baseAbilities_expansion.ts` 中正确注册
+1. THE Audit_System SHALL 检查 Board.tsx 中"剩余随从次数"的计算是否聚合了所有额度来源（`minionLimit - minionsPlayed + baseLimitedMinionQuota`）
+2. THE Audit_System SHALL 检查 `deployableBaseIndices` 的计算是否根据 `playConstraint`/`restrictToBase` 等约束正确过滤不可选基地
+3. WHEN 能力有力量指示物（`powerModifier`）时，THE Audit_System SHALL 验证 UI 渲染条件是否直接读取 reducer 写入的字段
+
+### 需求 10：D18/D19 — 否定路径与组合场景审计
+
+**用户故事：** 作为开发者，我希望审计额度隔离（否定路径）和多机制组合场景的正确性。
+
+#### 验收标准
+
+1. THE Audit_System SHALL 使用 GameTestRunner 构造否定路径测试：① 基地限定额度消耗后 `minionsPlayed` 不变 ② 正常额度消耗后 `baseLimitedMinionQuota` 不变 ③ 在非限定基地打随从不消耗基地限定额度
+2. THE Audit_System SHALL 使用 GameTestRunner 构造组合场景测试：母星（全局 minionLimit+1, 力量≤2）+ 神秘花园（baseLimitedMinionQuota+1）同时生效时，两种额度互不干扰
+3. THE Audit_System SHALL 构造跨派系能力组合测试：两个不同派系的 ongoing trigger 在同一时机触发时结果正确
+
+### 需求 11：D31 — 效果拦截路径完整性审计
+
+**用户故事：** 作为开发者，我希望审计 `registerProtection` + `filterProtectedEvents` 机制在所有事件产生路径上是否被调用。
+
+#### 验收标准
+
+1. THE Audit_System SHALL 列出所有调用 `filterProtectedMinionDestroyEvents`/`filterProtectedMinionMoveEvents` 等过滤函数的位置
+2. THE Audit_System SHALL 列出所有产生 `MINION_DESTROYED`/`MINION_MOVED` 等可被拦截事件的路径：① 直接命令执行 ② 交互解决（afterEvents）③ FlowHooks 后处理 ④ 触发链递归（processDestroyTriggers）
+3. WHEN 某条事件产生路径未调用对应的过滤函数时，THE Audit_System SHALL 标记为 ❌ 拦截路径遗漏
+4. THE Audit_System SHALL 使用 GameTestRunner 验证：受保护随从（如 `trickster_hideout` 保护的随从）在所有消灭路径下均不被消灭
+
+### 需求 12：D33 — 跨派系同类能力实现路径一致性审计
+
+**用户故事：** 作为开发者，我希望审计不同派系中语义相同的能力是否使用一致的事件类型、注册模式和副作用处理。
+
+#### 验收标准
+
+1. THE Audit_System SHALL 按能力类型分组（消灭随从/抽牌/移动随从/力量修正/额外出牌/弃牌堆回收/返回手牌/打出限制），对每组内所有卡牌的实现路径进行比对
+2. THE Audit_System SHALL 对每组输出：事件类型 | 注册模式 | 副作用处理 | 一致性判定
+3. WHEN 差异在合理范围内（语义本身不同导致的实现差异）时，THE Audit_System SHALL 标注原因
+4. WHEN 差异不合理时，THE Audit_System SHALL 标记为 ⚠️ 待修复
+
+### 需求 13：D24 — Handler 共返状态一致性审计
+
+**用户故事：** 作为开发者，我希望审计交互 handler 同时返回 events 和新 interaction 时，新 interaction 的选项是否基于 events 已生效后的状态计算。
+
+#### 验收标准
+
+1. THE Audit_System SHALL grep 所有 handler 中同时包含非空 `events` 数组和 `queueInteraction` 的 return 语句
+2. THE Audit_System SHALL 追踪返回的 events 会改变 `state.core` 的哪些字段，以及新 interaction 的选项从哪个字段构建
+3. WHEN 选项数据来源字段被 events 影响且选项构建未考虑 events 效果时，THE Audit_System SHALL 标记为 ❌ 共返状态不一致
+4. THE Audit_System SHALL 重点检查涉及"弃牌后从弃牌堆选"模式的 handler（如丧尸派系的回收能力）
+
+### 需求 14：D2 子项 — 打出约束与额度授予约束审计
+
+**用户故事：** 作为开发者，我希望审计 ongoing 行动卡的 `playConstraint` 声明和额度授予的约束条件在数据定义→验证层→UI 层三层是否完整体现。
+
+#### 验收标准
+
+1. THE Audit_System SHALL grep 所有 ongoing 行动卡的 i18n effectText，匹配条件性打出描述（如"打出到一个你至少拥有一个随从的基地上"），检查对应 `ActionCardDef` 是否有 `playConstraint` 字段
+2. THE Audit_System SHALL 检查 `commands.ts` 中 ongoing 行动卡验证逻辑是否检查 `def.playConstraint`
+3. THE Audit_System SHALL 检查 `Board.tsx` 的 `deployableBaseIndices` 计算是否根据 `playConstraint` 过滤不可选基地
+4. THE Audit_System SHALL 检查所有 `grantExtraMinion` 调用点，交叉对比卡牌描述中的约束条件（"同名"/"到这里"/"力量≤N"），验证 payload 完整性

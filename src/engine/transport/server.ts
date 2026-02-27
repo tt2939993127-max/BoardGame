@@ -973,6 +973,7 @@ export class GameTransportServer {
         const gameOver = result.state.sys.gameover;
         if (gameOver && !match.metadata.gameover) {
             match.metadata.gameover = gameOver;
+            match.metadata.status = 'finished';
             await this.storage.setMetadata(match.matchID, match.metadata);
             this.onGameOver?.(match.matchID, engineConfig.gameId, gameOver);
         }

@@ -129,11 +129,6 @@ export const RoomList = ({
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                     </svg>
                                                 )}
-                                                {room.gameover && (
-                                                    <span className="text-[8px] bg-parchment-light-text/20 text-parchment-light-text px-1.5 py-0.5 rounded uppercase font-bold">
-                                                        {t('rooms.gameover')}
-                                                    </span>
-                                                )}
                                                 {room.isMyRoom && (
                                                     <span className="text-[8px] bg-parchment-card-border text-parchment-card-bg px-1.5 py-0.5 rounded uppercase font-bold">
                                                         {t('rooms.mine')}
@@ -198,12 +193,12 @@ export const RoomList = ({
 
                                 <button
                                     onClick={() => onJoinRequest(room.matchID, room.gameName)}
-                                    disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom) || (!!room.gameover && !room.canReconnect)}
+                                    disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom) || (!!room.gameover && !room.canReconnect && !room.isMyRoom)}
                                     className={clsx(
                                         "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider",
                                         room.canReconnect
                                             ? "bg-[#c0a080] text-white hover:bg-[#a08060]"
-                                            : (room.isFull || (room.isEmptyRoom && !room.isOwnerRoom) || room.gameover)
+                                            : (room.isFull || (room.isEmptyRoom && !room.isOwnerRoom) || (room.gameover && !room.isMyRoom))
                                                 ? "bg-[#e5e0d0] text-[#8c7b64] cursor-not-allowed"
                                                 : "bg-[#433422] text-[#fcfbf9] hover:bg-[#2b2114]"
                                     )}
@@ -211,7 +206,7 @@ export const RoomList = ({
                                     {room.canReconnect
                                         ? t('actions.reconnect')
                                         : room.gameover
-                                            ? t('rooms.gameover')
+                                            ? (room.isMyRoom ? t('actions.reconnect') : t('rooms.gameover'))
                                             : room.isFull
                                                 ? t('rooms.full')
                                                 : t('actions.join')}

@@ -48,6 +48,7 @@ import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
+import { useWaitingRoomNotification, requestNotificationPermission } from '../hooks/match/useWaitingRoomNotification';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -557,17 +558,30 @@ export const MatchRoom = () => {
     // useMatchStatus 依赖 30 秒 HTTP 轮询，首次加载时对手可能还没建立 WebSocket 连接，
     // 导致 isConnected=false → 离线横幅误触发。这里用 GameProvider 的实时回调修正。
     const [realtimeOpponentConnected, setRealtimeOpponentConnected] = useState<boolean | null>(null);
+
+    // 玩家加入通知（对标 BGA：提示音 + 标题变更 + 浏览器推送）
+    const { notifyPlayerJoined, resetNotification } = useWaitingRoomNotification({
+        enabled: !isTutorialRoute && !isSpectatorRoute,
+    });
+    const opponentNameRef = useRef(matchStatus.opponentName);
+    opponentNameRef.current = matchStatus.opponentName;
+
     const handlePlayerConnectionChange = useCallback((playerID: string, connected: boolean) => {
         const myIndex = statusPlayerID ? parseInt(statusPlayerID) : -1;
         const opponentIndex = myIndex === 0 ? '1' : '0';
         if (playerID === opponentIndex) {
             setRealtimeOpponentConnected(connected);
-            // 对手连接时立即刷新房间状态，获取对手名字（避免等 30 秒轮询）
             if (connected) {
+                // 对手连接时立即刷新房间状态，获取对手名字（避免等 30 秒轮询）
                 matchStatus.refetch();
+                // 通知玩家：提示音 + 标题变更 + 浏览器推送
+                notifyPlayerJoined(opponentNameRef.current ?? undefined);
+            } else {
+                // 对手断开时重置通知状态，下次加入可再次触发
+                resetNotification();
             }
         }
-    }, [statusPlayerID, matchStatus.refetch]);
+    }, [statusPlayerID, matchStatus.refetch, notifyPlayerJoined, resetNotification]);
     // 实时数据优先，无实时数据时降级到 HTTP 轮询
     const effectiveOpponentConnected = realtimeOpponentConnected ?? matchStatus.opponentConnected;
     useEffect(() => {
@@ -752,6 +766,13 @@ export const MatchRoom = () => {
         // 旧房间可能从未出现在当前大厅快照中，仍需判定为缺失。
         requireSeen: false,
     });
+
+    // 等待对手阶段请求浏览器通知权限（仅在用户未做过选择时弹出）
+    useEffect(() => {
+        if (isTutorialRoute || isSpectatorRoute) return;
+        if (!matchId || !effectivePlayerID) return;
+        requestNotificationPermission();
+    }, [isTutorialRoute, isSpectatorRoute, matchId, effectivePlayerID]);
 
     useEffect(() => {
         if (isTutorialRoute || !matchId || !lobbyPresence.isMissing) return;

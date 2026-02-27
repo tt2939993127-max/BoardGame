@@ -246,6 +246,11 @@
     },
     "retentionHint": "Reconnect within retention period; auto-cleanup after expiry"
   },
+  "notification": {
+    "playerJoinedTitle": "A player joined the room",
+    "playerJoinedBody": "{{name}} joined your room",
+    "playerJoinedBodyAnonymous": "Your opponent has joined, get ready"
+  },
   "socket": {
     "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",
     "alreadyConnected": "Already connected, skipping duplicate connection",

@@ -187,58 +187,58 @@
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-shadow_thief.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 11. 审计角色 6：圣骑士（Paladin）
-  - [~] 11.1 审计圣骑士全等级能力（L1/L2/L3）
+- [x] 11. 审计角色 6：圣骑士（Paladin）
+  - [x] 11.1 审计圣骑士全等级能力（L1/L2/L3）
     - 逐一比对 `heroes/paladin/abilities.ts` 中每个 AbilityDef 与 Wiki 快照
     - 输出能力审计矩阵到 `.tmp/dicethrone-audit-paladin.md`
     - _Requirements: 2.1, 2.2, 2.3, 2.6_
 
-  - [~] 11.2 审计圣骑士 Token
+  - [x] 11.2 审计圣骑士 Token
     - 逐一比对 `heroes/paladin/tokens.ts` 中每个 TokenDef 与 Wiki 快照
     - 输出 Token 审计矩阵追加到 `.tmp/dicethrone-audit-paladin.md`
     - _Requirements: 3.1, 3.2, 3.3_
 
-  - [~] 11.3 审计圣骑士专属卡
+  - [x] 11.3 审计圣骑士专属卡
     - 逐一比对 `heroes/paladin/cards.ts` 中每个 Hero_Specific_Card 与 Wiki 快照
     - 输出专属卡审计矩阵追加到 `.tmp/dicethrone-audit-paladin.md`
     - _Requirements: 6A.1, 6A.2, 6A.3, 6A.6, 6A.7_
 
-  - [~] 11.4 审计圣骑士 i18n 描述一致性
+  - [x] 11.4 审计圣骑士 i18n 描述一致性
     - 检查 en 和 zh-CN 两个 locale 中该角色所有能力、Token、专属卡的 i18n 覆盖和描述一致性
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-paladin.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 12. Checkpoint - 全部 6 个角色审计完成
+- [x] 12. Checkpoint - 全部 6 个角色审计完成
   - 确保所有测试通过，ask the user if questions arise.
 
-- [ ] 13. 通用卡审计
-  - [~] 13.1 审计 18 张通用卡定义
+- [x] 13. 通用卡审计
+  - [x] 13.1 审计 18 张通用卡定义
     - 逐一比对 `src/games/dicethrone/domain/commonCards.ts` 中 COMMON_CARDS 的每张卡牌的 cpCost、timing、effects、type、description 与 Wiki 快照
     - 检查通用卡列表与 Wiki 的完整性（缺失/多余）
     - 输出通用卡审计矩阵到 `.tmp/dicethrone-audit-common-cards.md`
     - _Requirements: 6B.1, 6B.2, 6B.3, 6B.4, 6B.5, 6B.6_
 
-  - [~] 13.2 审计通用卡 i18n 描述一致性
+  - [x] 13.2 审计通用卡 i18n 描述一致性
     - 检查 en 和 zh-CN 两个 locale 中 18 张通用卡的 name/description key 是否存在
     - 比对 en locale 描述与 Wiki 英文描述、zh-CN locale 描述与 Wiki 语义
     - 将 i18n 差异追加到 `.tmp/dicethrone-audit-common-cards.md`
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 14. 汇总报告生成
-  - [~] 14.1 生成全局审计汇总报告
+- [x] 14. 汇总报告生成
+  - [x] 14.1 生成全局审计汇总报告
     - 汇总 6 个角色审计报告和通用卡审计报告的所有差异
     - 按角色统计差异项数量（能力差异、Token 差异、专属卡差异）
     - 按严重程度分类统计（高/中）
     - 输出汇总报告到 `.tmp/dicethrone-audit-summary.md`
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-  - [~] 14.2 提交全部差异汇总给用户确认
+  - [x] 14.2 提交全部差异汇总给用户确认
     - 汇总所有角色和通用卡发现的差异
     - 按差异类型分类（数值错误/效果缺失/描述不一致/i18n 缺失）
     - 提交用户确认处理方式（以 Wiki 为准/以代码为准/需进一步调查）
     - _Requirements: 4.1, 4.4_
 
-- [ ] 15. Final checkpoint - 全部审计完成
+- [x] 15. Final checkpoint - 全部审计完成
   - 确保所有测试通过，ask the user if questions arise.
 
 ## Notes

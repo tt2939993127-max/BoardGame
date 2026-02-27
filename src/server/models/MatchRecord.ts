@@ -7,6 +7,8 @@ export interface IMatchRecord extends Document {
         id: string;
         name: string;
         result?: string; // 'win', 'loss', 'draw'
+        /** 真实用户标识（user:<userId> 或 guest:<guestId>） */
+        ownerKey?: string;
     }[];
     winnerID?: string; // ID of the winner, or null if draw
     /** 游戏结束时的操作日志快照 */
@@ -23,7 +25,8 @@ const MatchRecordSchema = new Schema<IMatchRecord>(
             {
                 id: { type: String, required: true },
                 name: { type: String },
-                result: { type: String }
+                result: { type: String },
+                ownerKey: { type: String },
             }
         ],
         winnerID: { type: String },

@@ -123,7 +123,7 @@ function handleStealCp3(context: CustomActionContext) { return handleStealCpWith
 function handleStealCp4(context: CustomActionContext) { return handleStealCpWithAmount(context, 4); }
 // handleStealCp5 and 6 are defined later
 
-function handleStealCpWithAmount({ targetId, attackerId, sourceAbilityId, state, timestamp }: CustomActionContext, amount: number): DiceThroneEvent[] {
+function handleStealCpWithAmount({ targetId, attackerId, sourceAbilityId, state, timestamp, action }: CustomActionContext, amount: number): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
     const events: DiceThroneEvent[] = [];
@@ -131,9 +131,9 @@ function handleStealCpWithAmount({ targetId, attackerId, sourceAbilityId, state,
     let gained = amount;
 
     if (hasShadow) {
-        // Steal from opponent (Up to 2 CP)
+        // 从 action 读取偷取上限：基础版 1CP，升级版 2CP
         const targetCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
-        const stealLimit = 2; // Fixed steal limit for Shadow Thief
+        const stealLimit = (action?.stealLimit as number) ?? 2;
         const stolenAmount = Math.min(targetCp, stealLimit);
 
         if (stolenAmount > 0) {
@@ -460,7 +460,7 @@ function handleCardTrick({ targetId, attackerId, sourceAbilityId, state, timesta
     return events;
 }
 
-/** 暗影之舞 II：投掷1骰造成一半伤害(真实伤害)，获得SNEAK+SNEAK_ATTACK，抽1卡 【已迁移到新伤害计算管线】 */
+/** 暗影之舞 II：投掷1骰造成一半伤害(真实伤害)，获得潜行+伏击，抽1牌 【已迁移到新伤害计算管线】 */
 function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, random, ctx, attackerId }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
@@ -490,20 +490,20 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
         events.push(...damageCalc.toEvents());
     }
 
-    // Gain Tokens
+    // 获得潜行 + 伏击（卡图确认：然后获得暗影和隐匿攻击）
     [TOKEN_IDS.SNEAK, TOKEN_IDS.SNEAK_ATTACK].forEach(tokenId => {
         const currentAmount = state.players[attackerId]?.tokens[tokenId] ?? 0;
         const limit = getTokenStackLimit(state, attackerId, tokenId);
         const newTotal = Math.min(currentAmount + 1, limit);
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId, amount: 1, newTotal, sourceAbilityId }, // target is SELF
+            payload: { targetId: attackerId, tokenId, amount: 1, newTotal, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 2,
         } as TokenGrantedEvent);
     });
 
-    // Draw 1 Card
+    // 抽 1 牌（卡图确认：抽取1）
     events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 3, sourceAbilityId));
 
     return events;
