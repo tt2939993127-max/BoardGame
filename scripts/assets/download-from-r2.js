@@ -2,10 +2,11 @@
  * 从 Cloudflare R2 下载资源到本地 public/assets
  * 
  * 使用方式：
- *   npm run assets:download             — 增量下载（仅下载本地缺失或变更的文件）
- *   npm run assets:download -- --force  — 强制下载所有文件（覆盖本地）
- *   npm run assets:download -- --check  — 只检查差异，不下载
- *   npm run assets:download -- --clean  — 下载前清理本地多余文件（R2 上不存在的）
+ *   npm run assets:download                        — 增量下载图片素材（跳过音频）
+ *   npm run assets:download -- --include-audio     — 下载全部资源（含音频）
+ *   npm run assets:download -- --force             — 强制下载所有文件（覆盖本地）
+ *   npm run assets:download -- --check             — 只检查差异，不下载
+ *   npm run assets:download -- --clean             — 下载前清理本地多余文件（R2 上不存在的）
  * 
  * 环境变量（优先读 .env，fallback 到 .env.example）：
  * - R2_ACCOUNT_ID: Cloudflare 账户 ID
@@ -44,13 +45,26 @@ const forceDownload = process.argv.includes('--force');
 const checkOnly = process.argv.includes('--check');
 const cleanLocal = process.argv.includes('--clean');
 
+/** 音频文件扩展名 */
+const AUDIO_EXTS = new Set(['.ogg', '.mp3', '.wav', '.flac', '.m4a']);
+
 /** 
- * 跳过 compressed/ 目录下的 JSON 文件（R2 残留，本地不需要）
- * 图集 JSON 配置统一放在 atlas-configs/ 或各游戏目录下，不在 compressed/ 中
+ * 过滤不需要下载的文件：
+ * - 跳过 compressed/ 目录下的 JSON（R2 残留）
+ * - 跳过音频文件（合作者通常只需要图片素材）
+ * 如需下载音频，使用 --include-audio 参数
  */
+const includeAudio = process.argv.includes('--include-audio');
+
 function shouldDownload(remoteKey) {
   const rel = remoteKey.slice(REMOTE_PREFIX.length);
   if (rel.includes('compressed/') && rel.endsWith('.json')) return false;
+  if (!includeAudio) {
+    const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase();
+    if (AUDIO_EXTS.has(ext)) return false;
+    // 跳过音频目录下的所有文件（包括 registry.json 等）
+    if (rel.includes('/sfx/') || rel.includes('/bgm/') || rel.startsWith('common/audio/')) return false;
+  }
   return true;
 }
 
