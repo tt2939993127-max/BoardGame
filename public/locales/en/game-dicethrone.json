@@ -332,10 +332,10 @@
     "healthLabel": "Health: {{value}}",
     "energyLabel": "Energy: {{value}}",
     "shieldLabel": "Shield: {{value}}",
-    "autoResponse": "Auto Response",
-    "manualResponse": "Manual Response",
-    "autoResponseEnabled": "Auto response enabled - Response windows will be skipped automatically",
-    "autoResponseDisabled": "Manual response - Response windows require manual confirmation"
+    "autoResponse": "Show Response",
+    "manualResponse": "Auto Skip",
+    "autoResponseEnabled": "Show response enabled - Response windows require manual confirmation",
+    "autoResponseDisabled": "Auto skip - Response windows will be skipped automatically"
   },
   "hero": {
     "monk": "Monk",
@@ -1763,6 +1763,7 @@
       }
     },
     "soul-burn-3": {
+      "name": "Soul Burn (3 Fire Soul)",
       "effects": {
         "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
         "inflictBurn": "Inflict 1 Burn token",

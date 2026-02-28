@@ -62,6 +62,8 @@ export interface DamageAnimationContext {
     shieldedTargets: Set<string>;
     percentShields: Map<string, number>;
     resolvedDamageByTarget: Map<string, number>;
+    /** 固定值护盾消耗信息（targetId → 总吸收量） */
+    fixedShieldsByTarget: Map<string, number>;
 }
 
 /**
@@ -71,6 +73,7 @@ export function collectDamageAnimationContext(newEntries: EventStreamEntry[]): D
     const shieldedTargets = new Set<string>();
     const percentShields = new Map<string, number>();
     const resolvedDamageByTarget = new Map<string, number>();
+    const fixedShieldsByTarget = new Map<string, number>();
 
     for (const entry of newEntries) {
         const event = entry.event as { type: string; payload?: Record<string, unknown> };
@@ -89,6 +92,26 @@ export function collectDamageAnimationContext(newEntries: EventStreamEntry[]): D
         }
         if (reductionPercent != null && reductionPercent > 0) {
             percentShields.set(targetId, reductionPercent);
+        }
+    }
+
+    // 收集固定值护盾消耗信息（从 DAMAGE_DEALT 事件的 shieldsConsumed 字段）
+    for (const entry of newEntries) {
+        const event = entry.event as DamageDealtEvent;
+        if (event.type !== 'DAMAGE_DEALT') continue;
+
+        const targetId = event.payload.targetId;
+        const shieldsConsumed = event.payload.shieldsConsumed;
+        if (!shieldsConsumed || shieldsConsumed.length === 0) continue;
+
+        // 统计固定值护盾的总吸收量（过滤掉百分比护盾）
+        const fixedShieldAbsorbed = shieldsConsumed.reduce((sum, shield) => {
+            return shield.value != null ? sum + shield.absorbed : sum;
+        }, 0);
+
+        if (fixedShieldAbsorbed > 0) {
+            const current = fixedShieldsByTarget.get(targetId) ?? 0;
+            fixedShieldsByTarget.set(targetId, current + fixedShieldAbsorbed);
         }
     }
 
@@ -114,28 +137,40 @@ export function collectDamageAnimationContext(newEntries: EventStreamEntry[]): D
         }
     }
 
-    return { shieldedTargets, percentShields, resolvedDamageByTarget };
+    return { shieldedTargets, percentShields, resolvedDamageByTarget, fixedShieldsByTarget };
 }
 
 /**
  * 计算伤害动画应展示的净伤害。
+ * 
+ * 计算顺序（与日志层保持一致）：
+ * 1. 扣除百分比护盾（如打不到我 50%）
+ * 2. 扣除固定值护盾（如下次一定 6 点、神圣防御 3 点）
+ * 3. 如果有 ATTACK_RESOLVED.totalDamage，使用它作为最终值
  */
 export function resolveAnimationDamage(
     rawDamage: number,
     targetId: string,
     percentShields?: Map<string, number>,
     resolvedDamageByTarget?: Map<string, number>,
+    fixedShieldsByTarget?: Map<string, number>,
 ): number {
+    // 1. 扣除百分比护盾
     const reductionPercent = percentShields?.get(targetId);
     const shieldAbsorbed = reductionPercent != null
         ? Math.ceil(rawDamage * reductionPercent / 100)
         : 0;
     const dealtFromSameBatchShield = rawDamage - shieldAbsorbed;
-    const resolvedDamage = resolvedDamageByTarget?.get(targetId);
 
+    // 2. 扣除固定值护盾
+    const fixedShieldAbsorbed = fixedShieldsByTarget?.get(targetId) ?? 0;
+    const dealtAfterAllShields = Math.max(0, dealtFromSameBatchShield - fixedShieldAbsorbed);
+
+    // 3. 如果有 ATTACK_RESOLVED.totalDamage，使用它（权威值）
+    const resolvedDamage = resolvedDamageByTarget?.get(targetId);
     return resolvedDamage != null
         ? Math.max(0, resolvedDamage)
-        : dealtFromSameBatchShield;
+        : dealtAfterAllShields;
 }
 
 /**
@@ -248,12 +283,15 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
      * @param dmgEvent 伤害事件
      * @param shieldedTargets 本批次中被大额护盾完全保护的目标集合（护盾值 >= FULL_IMMUNITY_SHIELD_THRESHOLD）
      * @param percentShields 本批次中百分比护盾信息（targetId → reductionPercent）
+     * @param resolvedDamageByTarget 本批次中 ATTACK_RESOLVED 的权威净伤害（targetId → totalDamage）
+     * @param fixedShieldsByTarget 本批次中固定值护盾的总吸收量（targetId → 总吸收量）
      */
     const buildDamageStep = useCallback((
         dmgEvent: DamageDealtEvent,
         shieldedTargets?: Set<string>,
         percentShields?: Map<string, number>,
         resolvedDamageByTarget?: Map<string, number>,
+        fixedShieldsByTarget?: Map<string, number>,
     ): AnimStep | null => {
         const rawDamage = dmgEvent.payload.actualDamage ?? 0;
         if (rawDamage <= 0) return null;
@@ -264,7 +302,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         // 这避免了"先播放伤害动画，HP 数字跳变，然后又恢复"的视觉问题。
         if (shieldedTargets?.has(targetId)) return null;
 
-        const damage = resolveAnimationDamage(rawDamage, targetId, percentShields, resolvedDamageByTarget);
+        const damage = resolveAnimationDamage(rawDamage, targetId, percentShields, resolvedDamageByTarget, fixedShieldsByTarget);
         if (damage <= 0) return null;
 
         const sourceId = dmgEvent.payload.sourceAbilityId ?? '';
@@ -468,6 +506,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     shieldedTargets,
                     percentShields,
                     resolvedDamageByTarget,
+                    fixedShieldsByTarget,
                 );
                 if (step) damageSteps.push(step);
             } else if (event.type === 'HEAL_APPLIED') {

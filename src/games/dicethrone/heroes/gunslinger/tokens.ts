@@ -116,11 +116,11 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
         name: tokenText(TOKEN_IDS.LOADED, 'name'),
         colorTheme: 'from-amber-500 to-orange-500',
         description: tokenText(TOKEN_IDS.LOADED, 'description') as unknown as string[],
-        sfxKey: 'ui.general.ui_menu_sound_fx_pack_vol.buttons.button_click_a', // TODO: 替换为装填音效
+        sfxKey: 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a',
         stackLimit: 2,
         category: 'consumable',
         activeUse: {
-            timing: ['offensive'], // 攻击阶段结束后
+            timing: ['onOffensiveRollEnd'], // 攻击掷骰阶段结束后
             consumeAmount: 1,
             effect: {
                 type: 'rollForDamageBonus',
@@ -162,14 +162,10 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
         category: 'debuff',
         // 持续性效果：当受到此效果的玩家遭到对手攻击时
         // 攻击者会增加 1 攻击伤害力且获得 1CP
-        // 具体实现在 customActions 中（类似 Paladin 的 Retribution）
+        // TODO(gunslinger): 赏金的攻击者加伤+得CP效果接入被动触发执行链
         passiveTrigger: {
             timing: 'onDamageReceived',
-            effect: {
-                type: 'grantAttackerBonus',
-                damageBonus: 1,
-                cpGain: 1,
-            },
+            removable: false,
         },
         frameId: TOKEN_IDS.BOUNTY,
         atlasId: 'dicethrone:gunslinger-status',

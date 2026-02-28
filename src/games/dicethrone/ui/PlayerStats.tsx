@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import type { HeroState } from '../types';
-import { MAX_HEALTH } from '../domain/core-types';
+import { INITIAL_HEALTH } from '../domain/core-types';
 import { RESOURCE_IDS } from '../domain/resources';
 import {
     HitStopContainer,
@@ -43,7 +43,7 @@ const ResourceBar = ({
     
     return (
         <div ref={innerRef} className="flex items-center gap-[0.5vw]">
-            <div className="flex-1 relative h-[1.8vw] rounded-full overflow-hidden bg-slate-950/80 border border-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
+            <div className="flex-1 relative h-[1.8vw] rounded-full overflow-hidden bg-slate-950/90 border border-white/20 shadow-[inset_0_2px_4px_rgba(0,0,0,0.6),0_2px_8px_rgba(0,0,0,0.4)]">
                 {/* 进度条 */}
                 <div
                     className={`absolute inset-0 bg-gradient-to-r ${gradient} transition-all duration-300`}
@@ -51,12 +51,12 @@ const ResourceBar = ({
                 />
                 {/* 3D 高光 */}
                 <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+                    <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/15 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/30 to-transparent" />
                 </div>
                 {/* 数值文本 */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[0.9vw] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    <span className="text-[0.9vw] font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)]">
                         {value} / {max}
                     </span>
                 </div>
@@ -102,12 +102,13 @@ export const PlayerStats = ({
                 {...(hitStopConfig ?? {})}
                 className="w-full"
             >
-                <div className="relative overflow-visible">
-                    <div className="bg-slate-950/95 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.4)] rounded-[1.2vw] p-[0.8vw] space-y-[0.5vw] hover:bg-slate-900/90 transition-all duration-300">
+                <div className="relative">
+                    {/* 透明父容器 - 只提供宽度，无背景 */}
+                    <div className="w-full space-y-[0.5vw]">
                         {/* HP 条 */}
                         <ResourceBar
                             value={health}
-                            max={MAX_HEALTH}
+                            max={INITIAL_HEALTH}
                             gradient="from-red-900 to-red-600"
                             icon={shield > 0 ? <ShieldIcon value={shield} /> : undefined}
                             innerRef={hpRef}

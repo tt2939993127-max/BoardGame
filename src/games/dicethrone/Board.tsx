@@ -254,9 +254,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
     const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
 
-    // 自动响应逻辑：当响应窗口打开且自己是响应者时，自动跳过
+    // 自动跳过逻辑：当响应窗口打开且自己是响应者时，如果是自动跳过模式（!autoResponseEnabled），自动跳过
     React.useEffect(() => {
-        if (!autoResponseEnabled || !isResponseWindowOpen || !isResponder) return;
+        // 灰色"自动跳过" = 自动跳过，不拦截
+        // 绿色"显示响应" = 显示响应窗口，等待手动选择
+        if (autoResponseEnabled || !isResponseWindowOpen || !isResponder) return;
         // 延迟一小段时间确保 UI 状态同步
         const timer = setTimeout(() => {
             engineMoves.responsePass();
@@ -1028,6 +1030,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         selfDamageFlashActive={selfImpact.flash.isActive}
                         selfDamageFlashDamage={selfImpact.flash.damage}
                         overrideHp={damageBuffer.get(`hp-${rootPid}`, player.resources[RESOURCE_IDS.HP] ?? 0)}
+                        onAutoResponseToggle={setAutoResponseEnabled}
                     />
 
                     <CenterBoard
@@ -1162,7 +1165,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
                         passiveAbilityProps={passiveAbilityProps}
-                        onAutoResponseToggle={setAutoResponseEnabled}
                     />
                 </div>
 

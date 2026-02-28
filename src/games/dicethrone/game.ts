@@ -498,10 +498,19 @@ function formatDiceThroneActionEntry({
              * 
              * 公式：最终伤害 = 基础伤害 - 百分比护盾吸收 - 固定值护盾吸收
              * 
-             * 注意：不使用 attackResolved.payload.totalDamage（撤回后可能是旧值）
-             * 始终基于当前事件的数据计算，确保撤回后显示正确
+             * 当同批次仅有 1 条 "defender 侧 DAMAGE_DEALT" 且存在 ATTACK_RESOLVED 时，
+             * totalDamage 是该次攻击对防御方的权威净伤害（含跨命令护盾结算）。
+             * 其余场景回退到事件内护盾明细计算。
              */
-            const dealt = Math.max(0, dealtFromSameBatchShield - fixedShieldAbsorbed);
+            const dealtFromEvents = Math.max(0, dealtFromSameBatchShield - fixedShieldAbsorbed);
+            const resolvedDamage =
+                attackResolved
+                && targetId === attackResolved.payload.defenderId
+                && defenderDamageEventCount === 1
+                && Number.isFinite(attackResolved.payload.totalDamage)
+                    ? Math.max(0, attackResolved.payload.totalDamage)
+                    : undefined;
+            const dealt = resolvedDamage ?? dealtFromEvents;
             
             const normalizedModifiers = modifiers?.map(mod => ({
                 ...mod,
@@ -1027,7 +1036,8 @@ const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 4,
+    // TODO(dice-throne-2v2): 2v2完整联调后恢复为 4
+    maxPlayers: 2,
     commandTypes: COMMAND_TYPES,
 };
 

@@ -18,7 +18,6 @@ import { UI_Z_INDEX } from '../../../core';
 import { ActiveModifierBadge } from './ActiveModifierBadge';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
-import { AutoResponseToggle } from './AutoResponseToggle';
 
 export const RightSidebar = ({
     dice,
@@ -50,7 +49,6 @@ export const RightSidebar = ({
     dispatch,
     activeModifiers,
     passiveAbilityProps,
-    onAutoResponseToggle,
 }: {
     dice: Die[];
     rollCount: number;
@@ -85,8 +83,6 @@ export const RightSidebar = ({
     activeModifiers?: ActiveModifier[];
     /** 被动能力面板 props */
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
-    /** 自动响应开关回调 */
-    onAutoResponseToggle?: (enabled: boolean) => void;
 }) => {
     // 骰子多步交互状态（统一管理，替代旧的 4 个 useState + useEffect）
     const isDiceMultistep = interaction?.kind === 'multistep-choice' &&
@@ -187,10 +183,6 @@ export const RightSidebar = ({
             className="absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
             style={{ zIndex: UI_Z_INDEX.hud }}
         >
-            {/* 自动响应开关 - 顶部 */}
-            <div className="w-full pt-[1.125rem] px-[1vw] flex justify-center">
-                <AutoResponseToggle onToggle={onAutoResponseToggle} />
-            </div>
             <div className="flex-grow" />
             <div className="relative w-full flex flex-col items-center gap-[0.75vw]">
                 {/* 攻击修正徽章：absolute 定位，不挤压骰子区域布局 */}

@@ -57,7 +57,8 @@ export type TokenUseEffectType =
     | 'modifyDamageDealt'     // 修改造成的伤害
     | 'modifyDamageReceived'  // 修改受到的伤害
     | 'rollToNegate'          // 掷骰尝试免伤（闪避）
-    | 'removeDebuff';         // 移除负面状态（净化）
+    | 'removeDebuff'          // 移除负面状态（净化）
+    | 'rollForDamageBonus';   // 掷骰获取额外伤害（枪手 Loaded）
 
 /**
  * Token 使用效果
@@ -66,6 +67,10 @@ export interface TokenUseEffect {
     type: TokenUseEffectType;
     /** 数值（伤害修改量等） */
     value?: number;
+    /** 额外伤害倍率（用于 rollForDamageBonus） */
+    multiplier?: number;
+    /** 是否向上取整（用于 rollForDamageBonus） */
+    roundUp?: boolean;
     /** 掷骰成功条件（用于 rollToNegate） */
     rollSuccess?: {
         /** 成功的骰面范围 [min, max] */

@@ -365,7 +365,7 @@ node scripts/infra/port-allocator.js 1  # Worker 1
 
 ## 💖 赞助
 
-如果喜欢这个项目，可以支持一点维护服务器的钱。我会在关于中展示您的昵称信息（不需要也可以备注）。
+如果喜欢这个项目，可以请作者喝杯咖啡。如需要，可以备注加入到赞助列表。
 
 <p align="center">
   <img src="public/logos/weixin.jpg" alt="微信赞助二维码" width="250" />

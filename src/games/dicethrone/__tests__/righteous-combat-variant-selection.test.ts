@@ -21,6 +21,12 @@ describe('正义战法 III 变体选择', () => {
         registerDiceThroneConditions();
     });
 
+    const getVariantById = (variantId: string) => {
+        const variant = RIGHTEOUS_COMBAT_3.variants?.find((v) => v.id === variantId);
+        expect(variant).toBeDefined();
+        return variant!;
+    };
+
     it('投出 3剑+2盔 时，两个变体都应该满足条件', () => {
         // 模拟投出 3剑+2盔 的骰面
         const context: AbilityContext = {
@@ -35,8 +41,7 @@ describe('正义战法 III 变体选择', () => {
         };
 
         // 检查执着 III (2剑+1盔)
-        const tenacityVariant = RIGHTEOUS_COMBAT_3.variants![0];
-        expect(tenacityVariant.id).toBe('righteous-combat-3-tenacity');
+        const tenacityVariant = getVariantById('righteous-combat-3-tenacity');
         const tenacityResult = evaluateTriggerCondition(
             tenacityVariant.trigger,
             context
@@ -44,8 +49,7 @@ describe('正义战法 III 变体选择', () => {
         expect(tenacityResult).toBe(true);
 
         // 检查正义战法 III (3剑+2盔)
-        const mainVariant = RIGHTEOUS_COMBAT_3.variants![1];
-        expect(mainVariant.id).toBe('righteous-combat-3-main');
+        const mainVariant = getVariantById('righteous-combat-3-main');
         const mainResult = evaluateTriggerCondition(
             mainVariant.trigger,
             context
@@ -66,7 +70,7 @@ describe('正义战法 III 变体选择', () => {
         };
 
         // 检查执着 III (2剑+1盔)
-        const tenacityVariant = RIGHTEOUS_COMBAT_3.variants![0];
+        const tenacityVariant = getVariantById('righteous-combat-3-tenacity');
         const tenacityResult = evaluateTriggerCondition(
             tenacityVariant.trigger,
             context
@@ -74,7 +78,7 @@ describe('正义战法 III 变体选择', () => {
         expect(tenacityResult).toBe(true);
 
         // 检查正义战法 III (3剑+2盔)
-        const mainVariant = RIGHTEOUS_COMBAT_3.variants![1];
+        const mainVariant = getVariantById('righteous-combat-3-main');
         const mainResult = evaluateTriggerCondition(
             mainVariant.trigger,
             context
@@ -83,8 +87,8 @@ describe('正义战法 III 变体选择', () => {
     });
 
     it('两个变体的骰面 key 集合相同但数量不同', () => {
-        const tenacityTrigger = RIGHTEOUS_COMBAT_3.variants![0].trigger;
-        const mainTrigger = RIGHTEOUS_COMBAT_3.variants![1].trigger;
+        const tenacityTrigger = getVariantById('righteous-combat-3-tenacity').trigger;
+        const mainTrigger = getVariantById('righteous-combat-3-main').trigger;
 
         expect(tenacityTrigger.type).toBe('diceSet');
         expect(mainTrigger.type).toBe('diceSet');

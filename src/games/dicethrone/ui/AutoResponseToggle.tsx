@@ -5,9 +5,11 @@ import { useTranslation } from 'react-i18next';
 const AUTO_RESPONSE_KEY = 'dicethrone:autoResponse';
 
 /**
- * 自动响应开关组件
+ * 响应窗口显示开关组件
  * - 持久化到 localStorage
- * - 显示在右侧边栏顶部
+ * - 显示在左侧边栏血量下方
+ * - 绿色（开启）= 显示响应窗口，需要手动确认
+ * - 灰色（关闭）= 自动跳过响应窗口，不拦截游戏流程
  */
 export const AutoResponseToggle = ({
     onToggle,
@@ -17,16 +19,19 @@ export const AutoResponseToggle = ({
     const { t } = useTranslation('game-dicethrone');
     const [enabled, setEnabled] = useState(() => {
         const stored = localStorage.getItem(AUTO_RESPONSE_KEY);
-        return stored === 'true';
+        // 默认开启（显示响应窗口）
+        return stored === null ? true : stored === 'true';
     });
 
     useEffect(() => {
         localStorage.setItem(AUTO_RESPONSE_KEY, String(enabled));
-        onToggle?.(enabled);
+        if (onToggle) {
+            onToggle(enabled);
+        }
     }, [enabled, onToggle]);
 
     const handleToggle = () => {
-        setEnabled(prev => !prev);
+        setEnabled(!enabled);
     };
 
     return (
@@ -62,8 +67,9 @@ export const AutoResponseToggle = ({
     );
 };
 
-/** 获取当前自动响应设置 */
+/** 获取当前响应窗口显示设置 */
 export const getAutoResponseEnabled = (): boolean => {
     const stored = localStorage.getItem(AUTO_RESPONSE_KEY);
-    return stored === 'true';
+    // 默认开启（显示响应窗口）
+    return stored === null ? true : stored === 'true';
 };

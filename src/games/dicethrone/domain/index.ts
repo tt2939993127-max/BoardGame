@@ -11,6 +11,7 @@ import { validateCommand } from './commandValidation';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
+import { getTeamHp, getTeamIdByPlayerIdMap, isTeamMode } from './rules';
 import { registerDiceThroneConditions } from '../conditions';
 import { ALL_TOKEN_DEFINITIONS } from './characters';
 import { monkDiceDefinition } from '../heroes/monk/diceConfig';
@@ -57,6 +58,15 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     setup: (playerIds: PlayerId[], _random: RandomFn, setupData?: Record<string, unknown>): DiceThroneCore => {
         const players: Record<PlayerId, HeroState> = {};
         const selectedCharacters: Record<PlayerId, CharacterId> = {};
+        const is2v2 = playerIds.length === 4;
+        const seatingOrder = [...playerIds];
+
+        const teamIdByPlayerId = is2v2
+            ? playerIds.reduce((acc, pid, seatIndex) => {
+                acc[pid] = seatIndex % 2 === 0 ? 'A' : 'B';
+                return acc;
+            }, {} as Record<PlayerId, 'A' | 'B'>)
+            : undefined;
 
         for (const pid of playerIds) {
             // 初始占位，等待选角后再按需初始化具体资源/技能/牌库
@@ -90,6 +100,10 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 
         return {
             players,
+            seatingOrder,
+            teamIdByPlayerId,
+            teamHealth: is2v2 ? { A: 50, B: 50 } : undefined,
+            teamHealthMax: is2v2 ? 60 : undefined,
             selectedCharacters,
             readyPlayers,
             hostPlayerId: playerIds[0],
@@ -140,6 +154,27 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         // 在 setup 阶段不进行胜负判定，避免血量未初始化导致误判
         if (!state.hostStarted) return undefined;
+
+        if (isTeamMode(state)) {
+            const teamAHp = getTeamHp(state, 'A');
+            const teamBHp = getTeamHp(state, 'B');
+            const teamMap = getTeamIdByPlayerIdMap(state);
+            const playerIds = Object.keys(state.players);
+            const teamAPlayers = playerIds.filter((pid) => teamMap[pid] === 'A');
+            const teamBPlayers = playerIds.filter((pid) => teamMap[pid] === 'B');
+
+            if (teamAHp <= 0 && teamBHp <= 0) {
+                return { draw: true };
+            }
+            if (teamAHp <= 0 && teamBHp > 0) {
+                return { winner: teamBPlayers[0], winners: teamBPlayers };
+            }
+            if (teamBHp <= 0 && teamAHp > 0) {
+                return { winner: teamAPlayers[0], winners: teamAPlayers };
+            }
+
+            return undefined;
+        }
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);
