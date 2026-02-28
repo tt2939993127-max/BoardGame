@@ -479,30 +479,29 @@ function formatDiceThroneActionEntry({
             const shieldAbsorbed = shieldPercent > 0 ? Math.ceil(rawDealt * shieldPercent / 100) : 0;
             const dealtFromSameBatchShield = rawDealt - shieldAbsorbed;
             
-            // 计算固定值护盾的总消耗量
-            const fixedShieldAbsorbed = shieldsConsumed?.reduce((sum, shield) => sum + shield.absorbed, 0) ?? 0;
+            /**
+             * 计算固定值护盾的总消耗量
+             * 
+             * 注意：shieldsConsumed 包含所有护盾（百分比 + 固定值），需要过滤
+             * - 百分比护盾：有 reductionPercent 字段，无 value 字段
+             * - 固定值护盾：有 value 字段，无 reductionPercent 字段
+             * 
+             * 百分比护盾的吸收量已在 shieldAbsorbed 中计算，这里只统计固定值护盾
+             */
+            const fixedShieldAbsorbed = shieldsConsumed?.reduce((sum, shield) => {
+                // 只统计固定值护盾（有 value 字段的）
+                return shield.value != null ? sum + shield.absorbed : sum;
+            }, 0) ?? 0;
             
-            const canUseResolvedTotalDamage = !!attackResolved
-                && targetId === attackResolved.payload.defenderId
-                && defenderDamageEventCount === 1
-                && Number.isFinite(attackResolved.payload.totalDamage);
-            // 注意：attackResolved.payload.totalDamage 已经是最终伤害（扣除所有护盾后），不需要再扣除
-            const dealt = canUseResolvedTotalDamage
-                ? Math.max(0, attackResolved!.payload.totalDamage)
-                : Math.max(0, dealtFromSameBatchShield - fixedShieldAbsorbed);
-            
-            // 调试日志
-            console.log('[ActionLog Debug]', {
-                rawDealt,
-                shieldPercent,
-                shieldAbsorbed,
-                dealtFromSameBatchShield,
-                fixedShieldAbsorbed,
-                canUseResolvedTotalDamage,
-                resolvedTotalDamage: attackResolved?.payload.totalDamage,
-                dealt,
-                shieldsConsumedCount: shieldsConsumed?.length ?? 0,
-            });
+            /**
+             * 计算最终伤害
+             * 
+             * 公式：最终伤害 = 基础伤害 - 百分比护盾吸收 - 固定值护盾吸收
+             * 
+             * 注意：不使用 attackResolved.payload.totalDamage（撤回后可能是旧值）
+             * 始终基于当前事件的数据计算，确保撤回后显示正确
+             */
+            const dealt = Math.max(0, dealtFromSameBatchShield - fixedShieldAbsorbed);
             
             const normalizedModifiers = modifiers?.map(mod => ({
                 ...mod,
@@ -513,39 +512,35 @@ function formatDiceThroneActionEntry({
             const effectiveSourceId = sourceAbilityId ?? attackResolved?.payload.sourceAbilityId;
             const source = resolveAbilitySourceLabel(effectiveSourceId, core, actorId);
 
-            // 使用引擎层通用工具构建 breakdown segment
-            // 注意：传入 rawDealt（基础伤害）用于计算 breakdown，而不是 dealt（最终伤害）
+            // 使用引擎层通用工具构建 breakdown segment（带护盾自动处理）
             const breakdownSeg = buildDamageBreakdownSegment(
-                rawDealt,
+                dealt,  // 传入最终伤害（扣除护盾后）
                 {
                     sourceAbilityId: effectiveSourceId,
                     breakdown,
                     modifiers: normalizedModifiers,
+                    shieldsConsumed,  // 新增：传入护盾消耗信息
                 },
                 {
                     resolve: (sid) => resolveAbilitySourceLabel(sid, core, actorId),
                 },
                 DT_NS,
+                {
+                    // 自定义护盾渲染：解析护盾来源名称
+                    renderShields: (shields) => shields.map(shield => {
+                        const shieldSource = shield.sourceId
+                            ? resolveAbilitySourceLabel(shield.sourceId, core, targetId)
+                            : null;
+                        return {
+                            label: shieldSource?.label ?? 'actionLog.damageSource.shield',
+                            labelIsI18n: shieldSource?.isI18n ?? true,
+                            labelNs: shieldSource?.isI18n ? shieldSource.ns : DT_NS,
+                            value: -shield.absorbed,
+                            color: 'negative' as const,
+                        };
+                    }),
+                },
             );
-
-            // 如果有护盾消耗记录，在 breakdown tooltip 中追加护盾行
-            // 注意：shieldsConsumed 包含所有护盾（固定值 + 百分比），不需要单独处理
-            if (shieldsConsumed && shieldsConsumed.length > 0 && breakdownSeg.type === 'breakdown') {
-                for (const shield of shieldsConsumed) {
-                    const shieldSource = shield.sourceId
-                        ? resolveAbilitySourceLabel(shield.sourceId, core, targetId)
-                        : null;
-                    breakdownSeg.lines.push({
-                        label: shieldSource?.label ?? 'actionLog.damageSource.shield',
-                        labelIsI18n: shieldSource?.isI18n ?? true,
-                        labelNs: shieldSource?.isI18n ? shieldSource.ns : DT_NS,
-                        value: -shield.absorbed,
-                        color: 'negative',
-                    });
-                }
-                // 更新显示数值为最终实际伤害（扣除护盾后）
-                breakdownSeg.displayText = String(dealt);
-            }
 
             // 统一用 before + breakdown + after 模式
             let segments: ActionLogSegment[];
@@ -1032,7 +1027,7 @@ const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 2,
+    maxPlayers: 4,
     commandTypes: COMMAND_TYPES,
 };
 

@@ -11,9 +11,9 @@ const entry: GameManifestEntry = {
     icon: '🎲',
     thumbnailPath: 'dicethrone/thumbnails/fengm',
     allowLocalMode: false,
-    playerOptions: [2],
+    playerOptions: [2, 4],
     tags: ['dice_driven', 'combat'],
-    bestPlayers: [2],
+    bestPlayers: [2, 4],
     cursorTheme: 'dicethrone-critical',
     fontFamily: { display: 'Cinzel' },
 };

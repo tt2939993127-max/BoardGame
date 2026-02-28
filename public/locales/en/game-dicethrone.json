@@ -331,7 +331,11 @@
     "opponent": "Opponent",
     "healthLabel": "Health: {{value}}",
     "energyLabel": "Energy: {{value}}",
-    "shieldLabel": "Shield: {{value}}"
+    "shieldLabel": "Shield: {{value}}",
+    "autoResponse": "Auto Response",
+    "manualResponse": "Manual Response",
+    "autoResponseEnabled": "Auto response enabled - Response windows will be skipped automatically",
+    "autoResponseDisabled": "Manual response - Response windows require manual confirmation"
   },
   "hero": {
     "monk": "Monk",

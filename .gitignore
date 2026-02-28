@@ -10,6 +10,12 @@ lerna-debug.log*
 # 依赖目录
 node_modules
 
+# Python 虚拟环境
+.venv-*
+venv/
+env/
+ENV/
+
 # 构建输出
 dist
 dist-ssr
@@ -116,3 +122,7 @@ e2e/screenshots/
 
 # 用户上传文件
 uploads/
+
+# 临时文件和开发中间产物
+temp/
+*.tmp

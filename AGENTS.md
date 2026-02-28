@@ -391,6 +391,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **数值修改管线必须使用 `engine/primitives/modifier.ts`**：禁止自行实现 DamageModifier / PowerModifierFn，使用 `createModifierStack()` + `addModifier/applyModifiers/tickModifiers`。
 - **伤害计算管线必须使用 `engine/primitives/damageCalculation.ts`（新游戏强制）**：基于 `modifier.ts` 的专用包装器，提供自动收集修正 + 完整 breakdown。使用 `createDamageCalculation()` 生成 DAMAGE_DEALT 事件，禁止手动构建。**历史遗留**：DiceThrone 已迁移（26/27，96%），SummonerWars/SmashUp 保持现有实现。详见 `docs/ai-rules/engine-systems.md`「伤害计算管线」节和 `docs/damage-calculation-pipeline-migration-guide.md`。
 - **ActionLog 伤害来源标注必须使用 `engine/primitives/actionLogHelpers.ts`（强制）**：禁止在游戏层手写 breakdown 构建逻辑。每个游戏实现一次 `DamageSourceResolver`（约 15 行），调用 `buildDamageBreakdownSegment`（有修改器明细）或 `buildDamageSourceAnnotation`（轻量来源标注）。详见 `docs/ai-rules/engine-systems.md`「ActionLogSystem 使用规范 → 伤害来源标注」节。
+  - **Options Pattern 扩展（强制）**：引擎层扩展必须使用 Options Pattern（默认行为 + 可选覆盖），确保向后兼容。`buildDamageBreakdownSegment` 的 `options` 参数可选，老游戏代码不需要修改。新功能（如护盾自动渲染）通过 `options.renderShields` 覆盖默认行为。详见 `docs/bugs/engine-options-pattern-summary.md`。
 - **可被 buff 修改的属性必须使用 `engine/primitives/attribute.ts`**：使用 `createAttributeSet()` + `addAttributeModifier/getCurrent`。与 `resources.ts` 互补。
 - **面向百游戏设计（强制）**
   - **禁止在 core 中存放交互状态**：`pendingXxx` 等“等待玩家输入”状态必须用 `sys.interaction`（InteractionSystem），不得放在 core 上。
@@ -505,10 +506,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **所有图片必须压缩后使用**：用 `OptimizedImage` / `getOptimizedImageUrls`，路径不含 `compressed/`（自动补全）。
 - **图片压缩规范（强制）**：
   - **运行时使用**：所有图片必须通过 `OptimizedImage` / `getOptimizedImageUrls` 使用，路径不含 `compressed/`（自动补全）
-  - **AI 读取/分析**：任何需要读取/分析图片内容的场景（OCR、数据录入、视觉验证），优先读取 `public/assets/i18n/zh-CN/<gameId>/images/compressed/*.webp`
-    - 未压缩则先运行 `npm run assets:compress` 生成 WebP 压缩版本
-    - 禁止直接读取原始大图（体积大、加载慢），除非压缩流程失败需要回退
-    - 压缩命令：`npm run assets:compress` 会自动扫描所有游戏资源目录，生成 WebP 格式并保存到 `compressed/` 子目录
+  - 未压缩则先运行 `npm run assets:compress` 生成 WebP 压缩版本
+  - 压缩命令：`npm run assets:compress` 会自动扫描所有游戏资源目录，生成 WebP 格式并保存到 `compressed/` 子目录
 - **国际化资源架构（强制）**：
   - **当前状态**：所有游戏图片资源已迁移到 `public/assets/i18n/zh-CN/<gameId>/` 目录。
   - **代码行为**：`OptimizedImage` 和 `CardPreview` 会自动从 `i18next` 获取当前语言（`i18n.language`），无需手动传递 `locale` prop。路径自动转换：`dicethrone/images/foo.png` → `i18n/zh-CN/dicethrone/images/foo.png`。

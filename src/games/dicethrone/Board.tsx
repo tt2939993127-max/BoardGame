@@ -62,6 +62,7 @@ import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
 import { useAttackShowcase } from './hooks/useAttackShowcase';
 import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
+import { getAutoResponseEnabled } from './ui/AutoResponseToggle';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
@@ -243,6 +244,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             setDismissedBonusDiceId(null);
         }
     }, [currentSettlementId, dismissedBonusDiceId]);
+
+    // 自动响应状态
+    const [autoResponseEnabled, setAutoResponseEnabled] = React.useState(() => getAutoResponseEnabled());
+
+    // 自动响应逻辑：当响应窗口打开且自己是响应者时，自动跳过
+    React.useEffect(() => {
+        if (!autoResponseEnabled || !isResponseWindowOpen || !isResponder) return;
+        // 延迟一小段时间确保 UI 状态同步
+        const timer = setTimeout(() => {
+            engineMoves.responsePass();
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [autoResponseEnabled, isResponseWindowOpen, isResponder, engineMoves]);
 
     // Atlas 配置（状态图标仍需异步加载）
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
@@ -1147,6 +1161,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
                         passiveAbilityProps={passiveAbilityProps}
+                        onAutoResponseToggle={setAutoResponseEnabled}
                     />
                 </div>
 

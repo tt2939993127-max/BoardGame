@@ -117,42 +117,69 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
         const statusShields = target.damageShields.filter(shield => shield.preventStatus);
         const damageShields = target.damageShields.filter(shield => !shield.preventStatus);
         
+        // 分离百分比护盾和固定值护盾
+        const percentShields = damageShields.filter(shield => shield.reductionPercent != null);
+        const valueShields = damageShields.filter(shield => shield.reductionPercent == null);
+        
         const newDamageShieldsArray: typeof damageShields = [];
         let currentDamage = remainingDamage;
         
-        // 按顺序消耗护盾（先进先出）
-        for (const shield of damageShields) {
+        /**
+         * 护盾处理顺序设计（百分比护盾 → 固定值护盾）
+         * 
+         * 原因：
+         * 1. 百分比护盾基于当前伤害计算（如 50% 减伤），应该先处理以确定剩余伤害
+         * 2. 固定值护盾处理剩余伤害，逻辑更清晰
+         * 
+         * 示例：10 点伤害 vs [50% 护盾, 6 点护盾]
+         * - 百分比护盾先处理：10 * 50% = 5，剩余 5
+         * - 固定值护盾后处理：5 - 5 = 0，消耗 5 点（剩余 1 点护盾）
+         * - 最终伤害：0
+         * 
+         * 注意：同类型护盾之间按添加顺序（FIFO）处理
+         */
+        
+        // 先处理百分比护盾（按顺序）
+        for (const shield of percentShields) {
+            if (currentDamage <= 0) break;
+            
+            const preventedAmount = Math.ceil(currentDamage * shield.reductionPercent! / 100);
+            currentDamage -= preventedAmount;
+            
+            if (preventedAmount > 0) {
+                shieldsConsumed.push({
+                    sourceId: shield.sourceId,
+                    reductionPercent: shield.reductionPercent,
+                    absorbed: preventedAmount,
+                });
+            }
+            // 百分比护盾每次都完全消耗（不保留）
+        }
+        
+        // 再处理固定值护盾（按顺序）
+        for (const shield of valueShields) {
             if (currentDamage <= 0) {
                 // 伤害已完全抵消，保留剩余护盾
                 newDamageShieldsArray.push(shield);
                 continue;
             }
             
-            // 计算本次护盾抵消的伤害
-            const preventedAmount = shield.reductionPercent != null
-                ? Math.ceil(currentDamage * shield.reductionPercent / 100)
-                : Math.min(shield.value, currentDamage);
-            
+            const preventedAmount = Math.min(shield.value, currentDamage);
             currentDamage -= preventedAmount;
             
-            // 记录护盾消耗信息（用于日志展示）
             if (preventedAmount > 0) {
                 shieldsConsumed.push({
                     sourceId: shield.sourceId,
                     value: shield.value,
-                    reductionPercent: shield.reductionPercent,
                     absorbed: preventedAmount,
                 });
             }
             
-            // 如果是固定值护盾且未完全消耗，保留剩余值
-            if (shield.reductionPercent == null) {
-                const remainingShieldValue = shield.value - preventedAmount;
-                if (remainingShieldValue > 0) {
-                    newDamageShieldsArray.push({ ...shield, value: remainingShieldValue });
-                }
+            // 如果固定值护盾未完全消耗，保留剩余值
+            const remainingShieldValue = shield.value - preventedAmount;
+            if (remainingShieldValue > 0) {
+                newDamageShieldsArray.push({ ...shield, value: remainingShieldValue });
             }
-            // 百分比护盾每次都完全消耗（不保留）
         }
         
         remainingDamage = Math.max(0, currentDamage); // 防御性检查：确保不为负数

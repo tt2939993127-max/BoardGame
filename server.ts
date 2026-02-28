@@ -468,9 +468,13 @@ router.post('/games/:name/create', async (ctx) => {
         ctx.throw(404, `Game ${ctx.params.name} not found`);
     }
 
+    const gameEngine = SERVER_ENGINES.find((engine) => normalizeGameName(engine.gameId) === gameName);
+
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
-    if (isNaN(numPlayers) || numPlayers < 1) {
+    const minPlayers = gameEngine?.minPlayers ?? 2;
+    const maxPlayers = gameEngine?.maxPlayers ?? 2;
+    if (isNaN(numPlayers) || numPlayers < minPlayers || numPlayers > maxPlayers) {
         ctx.throw(400, 'Invalid numPlayers');
     }
 

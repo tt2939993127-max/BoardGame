@@ -330,7 +330,11 @@
     "opponent": "对手",
     "healthLabel": "血量: {{value}}",
     "energyLabel": "能量: {{value}}",
-    "shieldLabel": "护盾: {{value}}"
+    "shieldLabel": "护盾: {{value}}",
+    "autoResponse": "自动响应",
+    "manualResponse": "手动响应",
+    "autoResponseEnabled": "自动响应已开启 - 响应窗口将自动跳过",
+    "autoResponseDisabled": "手动响应 - 响应窗口需要手动确认"
   },
   "hero": {
     "monk": "僧侣",
