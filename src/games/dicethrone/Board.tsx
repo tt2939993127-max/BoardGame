@@ -248,6 +248,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 自动响应状态
     const [autoResponseEnabled, setAutoResponseEnabled] = React.useState(() => getAutoResponseEnabled());
 
+    // 响应窗口状态（需要在 useEffect 之前声明）
+    const responseWindow = access.responseWindow;
+    const isResponseWindowOpen = !!responseWindow;
+    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
+    const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
+
     // 自动响应逻辑：当响应窗口打开且自己是响应者时，自动跳过
     React.useEffect(() => {
         if (!autoResponseEnabled || !isResponseWindowOpen || !isResponder) return;
@@ -413,12 +419,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     const isActivePlayer = G.activePlayerId === rootPid;
 
-    // 响应窗口状态（提前声明，computeViewModeState 需要用到）
-    const responseWindow = access.responseWindow;
-    const isResponseWindowOpen = !!responseWindow;
-    // 当前响应者 ID（从队列中获取）
-    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
-    const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
+    // 响应窗口状态已在上方声明（避免 TDZ 错误）
 
     const { rollerId, shouldAutoObserve, isResponseAutoSwitch, viewMode, isSelfView } = computeViewModeState({
         currentPhase,
