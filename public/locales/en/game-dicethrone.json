@@ -323,7 +323,11 @@
     "opponent": "Opponent",
     "healthLabel": "Health: {{value}}",
     "energyLabel": "Energy: {{value}}",
-    "shieldLabel": "Shield: {{value}}"
+    "shieldLabel": "Shield: {{value}}",
+    "autoResponseEnabled": "Auto Response Enabled",
+    "autoResponseDisabled": "Auto Response Disabled",
+    "autoResponse": "Auto Response",
+    "manualResponse": "Manual Response"
   },
   "hero": {
     "monk": "Monk",
@@ -2285,5 +2289,9 @@
     "readyWaiting": "Waiting for other players...",
     "readyProgress": "Ready Progress",
     "you": "You"
+  },
+  "endgame": {
+    "ariaHero": "Hero: {{hero}}",
+    "ariaPanel": "Game Over Panel"
   }
 }

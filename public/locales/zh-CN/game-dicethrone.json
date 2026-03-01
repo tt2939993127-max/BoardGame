@@ -322,7 +322,11 @@
     "opponent": "对手",
     "healthLabel": "血量: {{value}}",
     "energyLabel": "能量: {{value}}",
-    "shieldLabel": "护盾: {{value}}"
+    "shieldLabel": "护盾: {{value}}",
+    "autoResponseEnabled": "自动响应已启用",
+    "autoResponseDisabled": "自动响应已禁用",
+    "autoResponse": "自动响应",
+    "manualResponse": "手动响应"
   },
   "hero": {
     "monk": "僧侣",
@@ -2291,5 +2295,9 @@
   "cardSpotlight": {
     "playerPlayed": "{{player}} 打出了卡牌",
     "confirm": "确认"
+  },
+  "endgame": {
+    "ariaHero": "英雄：{{hero}}",
+    "ariaPanel": "游戏结束面板"
   }
 }

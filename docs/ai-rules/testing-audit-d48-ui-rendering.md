@@ -192,36 +192,39 @@ test('操作按钮应显示为按钮', async ({ page }) => {
 - **DiceThrone**：`[data-testid="unit-card"]` 或 `.hero-portrait`
 - **SummonerWars**：`[data-testid="unit-preview"]` 或 `.board-cell`
 
-### 典型缺陷模式
+### 典型缺陷模式（通用）
 
-#### 模式 1：卡牌选择缺少 displayMode
+#### 模式 1：缺少 UI 渲染元数据
 
+**SmashUp 示例**：
 ```typescript
-// ❌ 错误
-const options = actionCards.map(c => ({
-    id: `card-${i}`,
-    label: name,
-    value: { cardUid: c.uid, defId: c.defId }
-    // 缺少 displayMode: 'card'
+// ❌ 错误：缺少 displayMode
+const options = actionCards.map((c, i) => ({ 
+    id: `card-${i}`, 
+    label: c.label, 
+    value: { cardUid: c.uid, defId: c.defId } 
 }));
 
 // 症状：UI 可能显示按钮而非卡牌预览（取决于自动推断逻辑）
 ```
 
-#### 模式 2：按钮选择缺少 displayMode
-
+**DiceThrone 示例**：
 ```typescript
-// ❌ 错误
-const options = [
-    { id: 'skip', label: '跳过', value: { skip: true } }
-    // 缺少 displayMode: 'button'
-];
+// ❌ 错误：缺少 targetType
+const interaction = createInteraction({
+    id: 'select_target',
+    playerId,
+    title: '选择目标',
+    options: targets.map(t => ({ id: t.uid, label: t.name, value: t }))
+    // 缺少 targetType
+});
 
-// 症状：UI 可能显示为其他形式（取决于自动推断逻辑）
+// 症状：UI 可能显示为通用按钮而非单位卡牌
 ```
 
-#### 模式 3：displayMode 与业务语义不符
+#### 模式 2：元数据与业务语义不符
 
+**SmashUp 示例**：
 ```typescript
 // ❌ 错误：传送门选择随从应该显示卡牌预览，不是按钮
 const options = minions.map(c => ({
@@ -234,8 +237,23 @@ const options = minions.map(c => ({
 // 症状：UI 显示按钮而非卡牌预览
 ```
 
-#### 模式 4：类型定义中缺少 displayMode
+**DiceThrone 示例**：
+```typescript
+// ❌ 错误：选择对手单位应该用 'opponent'，不是 'generic'
+const interaction = createInteraction({
+    id: 'select_target',
+    playerId,
+    title: '选择目标',
+    targetType: 'generic',  // 错误！应该是 'opponent'
+    options: opponentUnits.map(u => ({ id: u.uid, label: u.name, value: u }))
+});
 
+// 症状：UI 可能不高亮对手单位，或显示为通用按钮
+```
+
+#### 模式 3：类型定义中缺少元数据字段
+
+**SmashUp 示例**：
 ```typescript
 // ❌ 错误：类型定义中没有 displayMode 字段
 const options: Array<{
@@ -252,17 +270,50 @@ const options: Array<{
 const options: Array<{
     id: string;
     label: string;
-    value: { skip: true } | { cardUid: string; defId: string };
+    value: { skip: true } | { cardUid: string; defId: c.defId };
     displayMode: 'button' | 'card';  // 添加这一行
 }> = [
     { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }
 ];
 ```
 
-### 修复策略
+#### 模式 4：跨游戏不一致
 
-#### 策略 1：全面扫描修复（推荐）
+**问题**：
+```typescript
+// SmashUp 中使用 displayMode
+const smashupOptions = cards.map(c => ({
+    id: c.uid,
+    label: c.name,
+    value: { cardUid: c.uid },
+    displayMode: 'card' as const
+}));
 
+// DiceThrone 中使用 targetType
+const diceOptions = units.map(u => ({
+    id: u.uid,
+    label: u.name,
+    value: { unitId: u.uid }
+    // 缺少 targetType
+}));
+
+// 症状：相同的"选择实体"交互在不同游戏中表现不一致
+```
+
+**修复**：每个游戏必须有自己的元数据字段规范，并在该游戏的所有交互中一致使用。
+
+### 修复策略（通用）
+
+#### 策略 1：创建游戏特定的扫描工具（推荐）
+
+**步骤**：
+1. 识别游戏的交互创建模式和元数据字段
+2. 创建游戏特定的扫描脚本
+3. 运行扫描并生成报告
+4. 创建自动修复脚本（可选）
+5. 验证修复完整性
+
+**SmashUp 示例**：
 ```bash
 # 1. 运行检查脚本
 node scripts/check-displaymode.mjs
@@ -277,23 +328,96 @@ node scripts/fix-inline-skip-options.mjs
 node scripts/check-displaymode.mjs
 ```
 
-#### 策略 2：逐个文件修复
-
+**DiceThrone/SummonerWars 示例**：
 ```bash
-# 1. 查看具体文件的问题
-git diff src/games/smashup/abilities/wizards.ts
+# 1. 创建检查脚本
+node scripts/check-targettype.mjs dicethrone
 
-# 2. 手动修复
-# 添加 displayMode: 'card' as const 或 displayMode: 'button' as const
+# 2. 手动修复（根据报告）
+# 添加 targetType: 'opponent' 或 targetType: 'self'
 
 # 3. 验证
-npx eslint src/games/smashup/abilities/wizards.ts
+npx eslint src/games/dicethrone/**/*.ts
 ```
 
-### 审计输出格式
+#### 策略 2：逐个文件手动修复
+
+**步骤**：
+1. 查看具体文件的问题
+2. 根据业务语义添加正确的元数据
+3. 验证语法和类型正确性
+4. 运行 E2E 测试验证 UI 渲染
+
+**示例**：
+```bash
+# 1. 查看具体文件的问题
+git diff src/games/<gameId>/abilities/xxx.ts
+
+# 2. 手动修复
+# 添加正确的元数据字段
+
+# 3. 验证
+npx eslint src/games/<gameId>/abilities/xxx.ts
+
+# 4. E2E 测试
+npm run test:e2e -- xxx.e2e.ts
+```
+
+#### 策略 3：添加 CI 门禁（长期）
+
+**目的**：防止未来再次引入同样问题
+
+**实现**：
+```yaml
+# .github/workflows/ci.yml
+- name: Check interaction metadata completeness
+  run: |
+    node scripts/check-displaymode.mjs  # SmashUp
+    node scripts/check-targettype.mjs dicethrone  # DiceThrone
+    node scripts/check-targettype.mjs summonerwars  # SummonerWars
+  # 如果发现缺失，CI 失败
+```
+
+### 审计输出格式（通用模板）
 
 ```markdown
 ## D48 审计报告：UI 交互渲染模式完整性
+
+### 游戏信息
+- 游戏：<gameId>
+- 交互创建方式：<createSimpleChoice | createInteraction | 自定义>
+- 元数据字段：<displayMode | targetType | renderHint | ...>
+
+### 扫描范围
+- 文件数：<N>
+- 交互选项总数：<M>
+
+### 发现问题
+- 缺少元数据：<X> 处
+  - 实体选择选项：<Y> 处
+  - 操作按钮选项：<Z> 处
+- 元数据错误：<W> 处
+  - 具体错误列表...
+
+### 修复建议
+1. 批量修复：运行 `node scripts/check-<metadata>.mjs`
+2. 手动修复：<具体修复项>
+3. 验证：运行 E2E 测试确认 UI 渲染正确
+
+### 影响评估
+- 安全性：✅ 只添加 UI 元数据，不改变业务逻辑
+- 兼容性：✅ 向后兼容
+- 效果：✅ 所有交互正确显示预期的 UI 渲染方式
+```
+
+**SmashUp 实际示例**：
+```markdown
+## D48 审计报告：UI 交互渲染模式完整性
+
+### 游戏信息
+- 游戏：smashup
+- 交互创建方式：createSimpleChoice
+- 元数据字段：displayMode
 
 ### 扫描范围
 - 文件数：14
@@ -404,18 +528,24 @@ npx eslint src/games/smashup/abilities/wizards.ts
 
 ## 总结
 
-**问题根源**：
+**问题根源（通用）**：
 1. D34 维度不够具体（只关注误判，未关注完整性）
 2. 缺少自动化工具（手动检查容易遗漏）
 3. E2E 测试未覆盖 UI 渲染（只验证功能）
 
-**解决方案**：
+**解决方案（通用）**：
 1. 补充 D48 维度（UI 渲染模式完整性）
-2. 创建自动化扫描工具（`check-displaymode.mjs`）
+2. 为每个游戏创建自动化扫描工具
 3. 补充 E2E UI 渲染测试
 4. 添加 CI 门禁
 
-**教训**：
+**教训（通用）**：
 - **审计维度要具体**：不只是"检查是否有"，还要"检查是否全有"
 - **自动化优先**：能自动化的检查不要手动做
 - **测试要全面**：不只验证功能，还要验证 UI
+- **跨游戏一致性**：相同类型的交互在不同游戏中应该有一致的元数据声明方式
+
+**适用范围**：
+- ✅ 所有游戏（SmashUp、DiceThrone、SummonerWars、未来新游戏）
+- ✅ 所有交互创建方式（`createSimpleChoice`、`createInteraction`、自定义交互）
+- ✅ 所有 UI 渲染元数据（`displayMode`、`targetType`、`renderHint` 等）

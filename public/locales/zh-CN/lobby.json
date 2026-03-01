@@ -265,5 +265,10 @@
     "subscriberError": "订阅者回调错误: {{message}}",
     "subscribeMissingGameId": "subscribe 失败：缺少 gameId",
     "noSubscribers": "无订阅者，取消大厅订阅"
+  },
+  "notification": {
+    "playerJoinedTitle": "玩家加入",
+    "playerJoinedBody": "{{username}} 加入了房间",
+    "playerJoinedBodyAnonymous": "一位玩家加入了房间"
   }
 }
