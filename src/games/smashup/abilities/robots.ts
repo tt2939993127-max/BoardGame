@@ -12,7 +12,7 @@ import type { SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { drawCards, isDiscardMicrobot, MICROBOT_DEF_IDS } from '../domain/utils';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
@@ -83,16 +83,16 @@ function robotMicrobotReclaimer(ctx: AbilityContext): AbilityResult {
     );
     if (microbotsInDiscard.length === 0) return { events };
 
-    const options = microbotsInDiscard.map((c, i) => {
+    const options: PromptOption<{ cardUid: string; defId: string } | { skip: true }>[] = microbotsInDiscard.map((c, i) => {
         return { 
             id: `microbot-${i}`, 
             label: `cards.${c.defId}.name`, 
-            value: { cardUid: c.uid, defId: c.defId },
+            value: { cardUid: c.uid, defId: c.defId , displayMode: 'card' as const },
             displayMode: 'card' as const,
         };
     });
-    const skipOption = { id: 'skip', label: '跳过（不洗回）', value: { skip: true } };
-    const interaction = createSimpleChoice(
+    const skipOption: PromptOption<{ cardUid: string; defId: string } | { skip: true }> = { id: 'skip', label: '跳过（不洗回）', value: { skip: true } , displayMode: 'button' as const };
+    const interaction = createSimpleChoice<{ cardUid: string; defId: string } | { skip: true }>(
         `robot_microbot_reclaimer_${ctx.now}`, ctx.playerId,
         '选择要洗回牌库的微型机（任意数量，可跳过）', [...options, skipOption],
         { sourceId: 'robot_microbot_reclaimer', multi: { min: 0, max: microbotsInDiscard.length } },
@@ -110,79 +110,40 @@ export function resetRobotHoverbotCounter(): void {
 
 /** 盘旋机器人 onPlay：展示牌库顶，如果是随从"你可以"将其作为额外随从打出 */
 function robotHoverbot(ctx: AbilityContext): AbilityResult {
-    console.error('╔═══════════════════════════════════════════════════════════════╗');
-    console.error('║ [robotHoverbot] FUNCTION ENTRY - SERVER SIDE CODE             ║');
-    console.error('╚═══════════════════════════════════════════════════════════════╝');
-    console.error('[robotHoverbot] Context:', {
-        playerId: ctx.playerId,
-        cardUid: ctx.cardUid,
-        defId: ctx.defId,
-        baseIndex: ctx.baseIndex,
-        deckLength: ctx.state.players[ctx.playerId]?.deck?.length,
-        deckTopUid: ctx.state.players[ctx.playerId]?.deck?.[0]?.uid,
-        deckTopDefId: ctx.state.players[ctx.playerId]?.deck?.[0]?.defId,
-    });
-    
     const peek = peekDeckTop(
         ctx.state.players[ctx.playerId], ctx.playerId,
         'all', 'robot_hoverbot', ctx.now,
     );
     
-    console.error('[robotHoverbot] After peekDeckTop:', {
-        hasPeek: !!peek,
-        peekCardUid: peek?.card.uid,
-        peekCardDefId: peek?.card.defId,
-        peekCardType: peek?.card.type,
-        deckLength: ctx.state.players[ctx.playerId]?.deck?.length,
-        deckTopUid: ctx.state.players[ctx.playerId]?.deck?.[0]?.uid,
-    });
-    
     if (!peek) {
-        console.error('[robotHoverbot] No peek, deck empty');
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.deck_empty', ctx.now)] };
     }
     const events: SmashUpEvent[] = [peek.revealEvent];
     
     if (peek.card.type === 'minion') {
-        console.error('[robotHoverbot] Peek card is minion, creating interaction');
         const def = getCardDef(peek.card.defId) as MinionCardDef | undefined;
         const power = def?.power ?? 0;
-        
-        console.error('[robotHoverbot] Creating interaction:', {
-            cardUid: peek.card.uid,
-            defId: peek.card.defId,
-            power,
-            counter: robotHoverbotCounter,
-        });
         
         // "你可以" → 创建交互让玩家选择是否打出该特定随从
         // 使用静态计数器而非时间戳，确保交互 ID 稳定（防止重复处理时 ID 变化）
         // 标题和选项 label 使用 i18n key，由 UI 层的 resolveI18nKeys 翻译
-        const initialOptions = [
+        const initialOptions: PromptOption<{ cardUid: string; defId: string; power: number } | { skip: true }>[] = [
             { 
                 id: 'play', 
                 label: `打出 cards.${peek.card.defId}.name`, 
-                value: { cardUid: peek.card.uid, defId: peek.card.defId, power },
+                value: { cardUid: peek.card.uid, defId: peek.card.defId, power , displayMode: 'card' as const },
                 displayMode: 'card' as const,
                 _source: 'static' as const,  // ✅ 关键修复：显式声明为静态选项，防止框架层自动刷新时误判为手牌选项
             },
-            { id: 'skip', label: '放回牌库顶', value: { skip: true } },
+            { id: 'skip', label: '放回牌库顶', value: { skip: true } , displayMode: 'button' as const },
         ];
         
-        console.error('[robotHoverbot] Creating interaction with initial options:', JSON.stringify(initialOptions, null, 2));
-        
-        const interaction = createSimpleChoice(
+        const interaction = createSimpleChoice<{ cardUid: string; defId: string; power: number } | { skip: true }>(
             `robot_hoverbot_${robotHoverbotCounter++}`, ctx.playerId,
             `牌库顶是 cards.${peek.card.defId}.name（力量 ${power}），是否作为额外随从打出？`,
             initialOptions,
             'robot_hoverbot',
         );
-        
-        console.error('[robotHoverbot] Interaction created:', {
-            interactionId: interaction.id,
-            optionsCount: (interaction.data as any).options?.length,
-            options: JSON.stringify((interaction.data as any).options, null, 2),
-        });
         
         // ⚠️ 关键：必须先设置 continuationContext，再设置 optionsGenerator
         // 因为 optionsGenerator 可能在交互创建时立即被调用（如果没有 current 交互）
@@ -193,49 +154,32 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
             power,
         };
         
-        console.error('[robotHoverbot] Set continuationContext:', interactionData.continuationContext);
-        
         // 手动提供 optionsGenerator：从 continuationContext 读取卡牌信息，而不是从牌库顶读取
         // 这样即使牌库顶变化了，交互选项仍然显示原来看到的那张卡
-        interactionData.optionsGenerator = (state: any, iData: any) => {
+        interactionData.optionsGenerator = (_state: any, iData: any) => {
             const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
             
-            console.error('[robotHoverbot optionsGenerator] CALLED:', {
-                hasContext: !!ctx,
-                hasiData: !!iData,
-                iDataKeys: iData ? Object.keys(iData) : [],
-                contextCardUid: ctx?.cardUid,
-                contextDefId: ctx?.defId,
-                contextPower: ctx?.power,
-            });
-            
             if (!ctx) {
-                console.error('[robotHoverbot optionsGenerator] No continuationContext found! iData:', iData);
-                return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+                return [{ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }];
             }
             
             // 从 continuationContext 读取卡牌信息（不依赖牌库顶状态）
-            const result = [
+            return [
                 { 
                     id: 'play', 
                     label: `打出 cards.${ctx.defId}.name`, 
-                    value: { cardUid: ctx.cardUid, defId: ctx.defId, power: ctx.power },
+                    value: { cardUid: ctx.cardUid, defId: ctx.defId, power: ctx.power , displayMode: 'card' as const },
                     displayMode: 'card' as const,
                     _source: 'static' as const,
                 },
-                { id: 'skip', label: '放回牌库顶', value: { skip: true } },
+                { id: 'skip', label: '放回牌库顶', value: { skip: true } , displayMode: 'button' as const },
             ];
-            
-            console.error('[robotHoverbot optionsGenerator] Returning options:', JSON.stringify(result, null, 2));
-            return result;
         };
         
-        console.error('[robotHoverbot] Returning with interaction');
         return { events, matchState: queueInteraction(ctx.matchState, interaction) };
     }
     
     // 非随从→放回牌库顶（peek 不移除卡，无需操作）
-    console.error('[robotHoverbot] Not a minion, skipping');
     return { events };
 }
 
@@ -307,13 +251,13 @@ export function registerRobotInteractionHandlers(): void {
     });
 
     // 微型机守护者：选择目标后消灭
-    registerInteractionHandler('robot_microbot_guard', (state, _playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('robot_microbot_guard', (state, sourcePlayerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
         if (!target) return undefined;
-        return { state, events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, playerId, 'robot_microbot_guard', timestamp)] };
+        return { state, events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, sourcePlayerId, 'robot_microbot_guard', timestamp)] };
     });
 
     // 技术中心：选择基地后按随从数抽牌

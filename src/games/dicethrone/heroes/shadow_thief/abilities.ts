@@ -119,7 +119,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         trigger: { type: 'diceSet', faces: { [FACE.SHADOW]: 5 } },
         effects: [
             gainCp(3, abilityEffectText('shadow-shank', 'gainCp3')),
-            { description: '造成CP+5伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-shank-damage', params: { bonusCp: 3 } } },
+            { description: '造成CP+5伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-shank-damage' } },
             // Replaced removeStatus with custom action
             { description: '移除负面效果', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-remove-all-debuffs' } },
             grantToken(TOKEN_IDS.SNEAK, 1, abilityEffectText('shadow-shank', 'gainSneak'))

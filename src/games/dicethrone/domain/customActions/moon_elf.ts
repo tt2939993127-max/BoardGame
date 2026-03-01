@@ -361,20 +361,20 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
         events.push(dealDamage(context, opponentId, footCount, sourceAbilityId, timestamp));
     }
 
-    // 足面≥2时，抵挡一半伤害（向上取整）
-    if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
-        const reducedDamage = Math.ceil(originalDamage / 2);
-        const reduction = originalDamage - reducedDamage;
-        
-        if (reduction > 0) {
-            events.push({
-                type: 'PREVENT_DAMAGE',
-                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as any);
-        }
+    // 足面≥2时，授予 50% 减伤护盾
+    if (footCount >= 2) {
+        events.push({
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: {
+                targetId: attackerId,
+                value: 0,  // 百分比护盾不使用 value
+                reductionPercent: 50,  // 50% 减伤
+                sourceId: sourceAbilityId,
+                preventStatus: false,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as any);
     }
 
     return events;
@@ -401,22 +401,20 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
         events.push(dealDamage(context, opponentId, bowCount, sourceAbilityId, timestamp));
     }
 
-    // 足面≥2时，防止一半伤害（向上取整）
-    if (footCount >= 2 && state.pendingAttack) {
-        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
-        const reducedDamage = Math.ceil(originalDamage / 2);
-        const reduction = originalDamage - reducedDamage;
-        
-        console.log('[handleElusiveStepResolve2] 产生 PREVENT_DAMAGE 事件', { footCount, originalDamage, reduction, attackerId });
-        
-        if (reduction > 0) {
-            events.push({
-                type: 'PREVENT_DAMAGE',
-                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as any);
-        }
+    // 足面≥2时，授予 50% 减伤护盾
+    if (footCount >= 2) {
+        events.push({
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: {
+                targetId: attackerId,
+                value: 0,  // 百分比护盾不使用 value
+                reductionPercent: 50,  // 50% 减伤
+                sourceId: sourceAbilityId,
+                preventStatus: false,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as any);
     }
 
     return events;

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { makeState, makeMinion, triggerBaseAbilityWithMS, getInteractionsFromResult } from './helpers';
+import { makeState, makeMinion, triggerBaseAbilityWithMS, getInteractionsFromResult } from './helpers/auditUtils';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';

@@ -9,10 +9,11 @@
  * 风格遵循 smashup 设计系统：深色物理感，禁止毛玻璃，使用 GameButton
  */
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
+import { logger } from '@/lib/logger';
 import { GameButton } from './GameButton';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -22,6 +23,7 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { getCardDef, getBaseDef, resolveCardName } from '../data/cards';
 import type { CardPreviewRef } from '../../../core';
 import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
+import { useToast } from '../../../contexts/ToastContext';
 
 interface Props {
     interaction: InteractionDescriptor | undefined;
@@ -54,28 +56,18 @@ function extractDefId(value: unknown): string | undefined {
 
 /** 判断选项是否为卡牌类型：根据 value 中是否包含 defId/minionDefId 自动推断 */
 function isCardOption(option: { value: unknown; displayMode?: 'card' | 'button' }): boolean {
-    console.log('[isCardOption] Checking:', { 
-        optionId: (option as any).id,
-        displayMode: option.displayMode,
-        valueType: typeof option.value,
-        value: option.value 
-    });
-    
     // 显式声明 card 时强制卡牌模式
     if (option.displayMode === 'card') {
-        console.log('[isCardOption] → true (explicit card mode)');
         return true;
     }
     
     // 显式声明 button 时强制按钮模式（用于 skip/confirm 等非卡牌选项）
     if (option.displayMode === 'button') {
-        console.log('[isCardOption] → false (explicit button mode)');
         return false;
     }
     
     // 自动推断：value 中包含 defId/minionDefId 即为卡牌选项
     const defId = extractDefId(option.value);
-    console.log('[isCardOption] → defId:', defId, 'result:', !!defId);
     return !!defId;
 }
 
@@ -147,27 +139,48 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const prompt = asSimpleChoice(interaction);
     const { t } = useTranslation('game-smashup');
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
+
+    // 监听 interaction 变化，输出详细日志（仅首次）
+    const hasLoggedInteraction = useRef(false);
+    useEffect(() => {
+        if (!hasLoggedInteraction.current && interaction) {
+            hasLoggedInteraction.current = true;
+            console.log('[PromptOverlay] Interaction changed:', {
+                hasInteraction: !!interaction,
+                interactionId: interaction?.id,
+                promptId: prompt?.id,
+                promptTitle: prompt?.title,
+                optionsCount: prompt?.options?.length,
+                timestamp: Date.now(),
+            });
+        }
+    }, [interaction, prompt]);
     const { ref: revealScrollRef } = useHorizontalDragScroll();
     const { ref: cardScrollRef } = useHorizontalDragScroll();
+    const toast = useToast();
 
-    // 🔍 调试日志：追踪 props 变化
+    // 🔍 调试日志：追踪 props 变化（仅首次）
+    const hasLoggedProps = useRef(false);
     useEffect(() => {
-        console.log('[PromptOverlay] Props changed:', {
-            hasInteraction: !!interaction,
-            interactionId: interaction?.id,
-            interactionKind: interaction?.kind,
-            interactionData: interaction?.data,
-            hasPrompt: !!prompt,
-            promptId: prompt?.id,
-            promptPlayerId: prompt?.playerId,
-            myPlayerId: playerID,
-            isMyPrompt: !!prompt && prompt.playerId === playerID,
-            promptTitle: prompt?.title,
-            hasDisplayCards: !!displayCards,
-            optionsCount: prompt?.options?.length,
-            options: prompt?.options,
-            rawInteraction: interaction, // 完整的原始对象
-        });
+        if (!hasLoggedProps.current && interaction) {
+            hasLoggedProps.current = true;
+            console.log('[PromptOverlay] Props changed:', {
+                hasInteraction: !!interaction,
+                interactionId: interaction?.id,
+                interactionKind: interaction?.kind,
+                interactionData: interaction?.data,
+                hasPrompt: !!prompt,
+                promptId: prompt?.id,
+                promptPlayerId: prompt?.playerId,
+                myPlayerId: playerID,
+                isMyPrompt: !!prompt && prompt.playerId === playerID,
+                promptTitle: prompt?.title,
+                hasDisplayCards: !!displayCards,
+                optionsCount: prompt?.options?.length,
+                options: prompt?.options,
+                rawInteraction: interaction, // 完整的原始对象
+            });
+        }
     }, [interaction, prompt, displayCards, playerID]);
 
     // 所有 hooks 必须在条件返回之前调用（React hooks 规则）
@@ -178,6 +191,42 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const hasOptions = (prompt?.options?.length ?? 0) > 0;
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+    // ⚠️ 错误检测：选项为空时输出详细日志并 toast 提示（仅首次）
+    const hasShownEmptyError = useRef(false);
+    useEffect(() => {
+        if (isMyPrompt && !hasOptions && prompt && !hasShownEmptyError.current) {
+            hasShownEmptyError.current = true;
+            
+            logger.error(
+                `交互选项为空 (${prompt.sourceId})`,
+                {
+                    交互ID: prompt.id,
+                    玩家ID: prompt.playerId,
+                    标题: prompt.title,
+                    来源: prompt.sourceId,
+                    选项数量: prompt.options?.length ?? 0,
+                },
+                [
+                    '动态刷新机制错误地过滤掉了所有选项',
+                    '能力实现中没有正确生成选项',
+                    '选项的 _source 声明不正确，导致被误判为手牌/场上选项',
+                    'optionsGenerator 函数返回了空数组',
+                    `检查能力源码: ${prompt.sourceId}`,
+                    '是否需要添加 optionsGenerator 函数',
+                    '是否需要声明 _source: "static"',
+                ]
+            );
+
+            logger.debug('原始数据', prompt, interaction);
+            
+            // Toast 提示用户
+            toast.error({
+                kind: 'text',
+                text: `交互选项为空（${prompt.sourceId}），请提交反馈`,
+            });
+        }
+    }, [isMyPrompt, hasOptions, prompt, interaction, toast]);
+
     // ── 交互提交锁：防止同一交互重复提交命令 ──
     // 点击后锁定，直到 interaction.id 变化（服务端确认/交互切换）才解锁
     const [submittingInteractionId, setSubmittingInteractionId] = useState<string | null>(null);
@@ -187,11 +236,6 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     // 使用 interaction 对象引用而不是 interaction.id，因为可能出现 ID 相同但内容不同的情况
     // （如海盗王移动后，基地能力创建新交互时使用了相同的 timestamp）
     useEffect(() => {
-        console.log('[PromptOverlay] Unlocking due to interaction change:', {
-            oldSubmittingId: submittingInteractionId,
-            newInteractionId: interaction?.id,
-            hasInteraction: !!interaction,
-        });
         setSubmittingInteractionId(null);
         setSelectedIds([]);
     }, [interaction]);  // ← 监听 interaction 对象引用，而不是 interaction?.id
@@ -204,24 +248,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     // 检测卡牌展示模式：只要有卡牌选项就使用卡牌模式
     const cardOptionCount = useMemo(() => {
         if (!prompt || !hasOptions) return 0;
-        const count = prompt.options.filter(opt => {
-            const isCard = isCardOption(opt);
-            console.log('[PromptOverlay] Option card check:', { 
-                optionId: opt.id, 
-                label: opt.label, 
-                displayMode: (opt as any).displayMode,
-                hasDefId: !!(opt.value && typeof opt.value === 'object' && 'defId' in opt.value),
-                value: opt.value,
-                isCard 
-            });
-            return isCard;
-        }).length;
-        console.log('[PromptOverlay] Card mode decision:', { 
-            cardOptionCount: count, 
-            useCardMode: count > 0,
-            allOptions: prompt.options,
-        });
-        return count;
+        return prompt.options.filter(opt => isCardOption(opt)).length;
     }, [prompt, hasOptions]);
     const useCardMode = cardOptionCount > 0;
 
@@ -230,15 +257,6 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
     // 少量选项 + 非卡牌模式 → 内联面板
     const useInlineMode = !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
-    
-    console.log('[PromptOverlay] Render mode decision:', {
-        hasOptions,
-        optionsCount: prompt?.options?.length,
-        cardOptionCount,
-        useCardMode,
-        useInlineMode,
-        hasContextPreview: !!contextPreviewRef,
-    });
 
     // 解析标题中的 i18n key（使用 useMemo 确保响应式更新）
     const title = useMemo(() => {
@@ -399,6 +417,11 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
 
     if (!prompt) return null;
+    
+    // 【错误处理】如果是我的交互但选项为空，不显示 UI，只 toast 提示（已在 useEffect 中处理）
+    if (isMyPrompt && !hasOptions) {
+        return null;
+    }
 
     if (sliderConfig) {
         const confirmLabel = formatSliderText(
@@ -520,26 +543,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     }
 
     const handleSelect = (optionId: string) => {
-        console.log('[PromptOverlay] handleSelect called:', {
-            optionId,
-            isMyPrompt,
-            isSubmitLocked,
-            promptId: prompt?.id,
-            submittingInteractionId,
-        });
-        
-        if (!isMyPrompt || isSubmitLocked) {
-            console.log('[PromptOverlay] handleSelect: blocked', { isMyPrompt, isSubmitLocked });
-            return;
-        }
+        if (!isMyPrompt || isSubmitLocked) return;
         
         // 锁定当前交互，防止重复提交
         if (prompt) {
-            console.log('[PromptOverlay] handleSelect: locking interaction', { promptId: prompt.id });
             setSubmittingInteractionId(prompt.id);
         }
         
-        console.log('[PromptOverlay] handleSelect: dispatching RESPOND', { optionId });
         dispatch(INTERACTION_COMMANDS.RESPOND, { optionId });
     };
 
@@ -553,15 +563,6 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     };
 
     const handleAction = (optionId: string, disabled?: boolean) => {
-        console.log('[PromptOverlay] handleAction called:', {
-            optionId,
-            disabled,
-            isMulti,
-            isMyPrompt,
-            isSubmitLocked,
-            promptId: prompt?.id,
-        });
-        
         if (isMulti) handleToggle(optionId, disabled);
         else handleSelect(optionId);
     };
@@ -636,14 +637,6 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     if (useCardMode) {
         const cardOptions = nonSkipOptions.filter(opt => isCardOption(opt));
         const textOptions = nonSkipOptions.filter(opt => !isCardOption(opt));
-        
-        console.log('[PromptOverlay] Card mode rendering:', {
-            nonSkipOptionsCount: nonSkipOptions.length,
-            cardOptionsCount: cardOptions.length,
-            textOptionsCount: textOptions.length,
-            nonSkipOptions,
-            cardOptions,
-        });
         
         // 提取基地上下文信息（用于高亮和标题显示）
         const contextBaseIndex = (prompt as any)?.continuationContext?.baseIndex;

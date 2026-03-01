@@ -242,7 +242,7 @@ describe('集成: base_land_of_balance 平衡之地 (onMinionPlayed)', () => {
         const core = makeState({
             bases: [
                 makeBase('base_land_of_balance'),
-                makeBase('test_base_2', [makeMinion('m-other', 'test_minion', '0', 3)]),
+                makeBase('test_base_2', [makeMinion('m-other', 'test_minion', '0', 3, { powerModifier: 0 })]),
             ],
             players: {
                 '0': makePlayer('0', { hand: [
@@ -268,7 +268,7 @@ describe('集成: base_rlyeh 拉莱耶 (onTurnStart)', () => {
     it('基地有即将行动玩家的随从 → Interaction 消灭随从获1VP', () => {
         const core = makeState({
             currentPlayerIndex: 1,
-            bases: [makeBase('base_rlyeh', [makeMinion('m1', 'test_minion', '0', 3)])],
+            bases: [makeBase('base_rlyeh', [makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 })])],
             players: { '0': makePlayer('0'), '1': makePlayer('1') },
         });
         const ms = makeStartTurnMS(core);
@@ -279,7 +279,7 @@ describe('集成: base_rlyeh 拉莱耶 (onTurnStart)', () => {
     it('基地无即将行动玩家的随从 → 无 Interaction', () => {
         const core = makeState({
             currentPlayerIndex: 1,
-            bases: [makeBase('base_rlyeh', [makeMinion('m1', 'test_minion', '1', 3)])],
+            bases: [makeBase('base_rlyeh', [makeMinion('m1', 'test_minion', '1', 3, { powerModifier: 0 })])],
             players: { '0': makePlayer('0'), '1': makePlayer('1') },
         });
         const ms = makeStartTurnMS(core);
@@ -294,7 +294,7 @@ describe('集成: base_mushroom_kingdom 蘑菇王国 (onTurnStart)', () => {
             currentPlayerIndex: 1,
             bases: [
                 makeBase('base_mushroom_kingdom'),
-                makeBase('test_base_2', [makeMinion('m1', 'test_minion', '1', 3)]),
+                makeBase('test_base_2', [makeMinion('m1', 'test_minion', '1', 3, { powerModifier: 0 })]),
             ],
             players: { '0': makePlayer('0'), '1': makePlayer('1') },
         });
@@ -308,7 +308,7 @@ describe('集成: base_mushroom_kingdom 蘑菇王国 (onTurnStart)', () => {
             currentPlayerIndex: 1,
             bases: [
                 makeBase('base_mushroom_kingdom'),
-                makeBase('test_base_2', [makeMinion('m1', 'test_minion', '0', 3)]),
+                makeBase('test_base_2', [makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 })]),
             ],
             players: { '0': makePlayer('0'), '1': makePlayer('1') },
         });
@@ -322,7 +322,7 @@ describe('集成: base_cat_fanciers_alley 诡猫巷 (onTurnStart)', () => {
     it('基地有即将行动玩家的随从 → Interaction 消灭己方随从抽牌', () => {
         const core = makeState({
             currentPlayerIndex: 1,
-            bases: [makeBase('base_cat_fanciers_alley', [makeMinion('m1', 'test_minion', '0', 3)])],
+            bases: [makeBase('base_cat_fanciers_alley', [makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 })])],
             players: {
                 '0': makePlayer('0', { deck: [
                     { uid: 'deck-1', defId: 'test_card', type: 'action', owner: '0' },

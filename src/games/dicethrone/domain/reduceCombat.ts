@@ -23,7 +23,6 @@ export const handlePreventDamage: EventHandler<Extract<DiceThroneEvent, { type: 
     event
 ) => {
     const { targetId, amount, sourceAbilityId, applyImmediately } = event.payload;
-    console.log('[handlePreventDamage]', { targetId, amount, sourceAbilityId, applyImmediately, hasPendingDamage: !!state.pendingDamage });
     if (amount <= 0) return state;
 
     let pendingDamage = state.pendingDamage;
@@ -103,53 +102,54 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
 
     // 消耗护盾抵消伤害（忽略 preventStatus 护盾）
     // bypassShields: HP 重置类效果（如神圣祝福）跳过护盾消耗
+    // 优先级：百分比护盾 > 固定值护盾（百分比护盾先消耗）
     if (!bypassShields && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
         const updatedShields: typeof target.damageShields = [];
         
-        for (const shield of target.damageShields) {
-            // preventStatus 护盾不参与伤害抵消，直接保留
-            if (shield.preventStatus) {
-                updatedShields.push(shield);
-                continue;
-            }
-            
-            // 如果还有剩余伤害，用当前护盾抵消
+        // 分离护盾类型
+        const percentShields = target.damageShields.filter(s => !s.preventStatus && s.reductionPercent !== undefined);
+        const fixedShields = target.damageShields.filter(s => !s.preventStatus && s.reductionPercent === undefined);
+        const statusShields = target.damageShields.filter(s => s.preventStatus);
+        
+        // 先消耗百分比护盾
+        for (const shield of percentShields) {
             if (remainingDamage > 0) {
-                if (shield.reductionPercent !== undefined) {
-                    // 百分比护盾：减少伤害的百分比，消耗后不保留
-                    const reductionAmount = Math.floor(remainingDamage * (shield.reductionPercent / 100));
-                    remainingDamage -= reductionAmount;
-                    // 记录消耗信息
-                    shieldsConsumed.push({
-                        sourceId: shield.sourceId,
-                        reductionPercent: shield.reductionPercent,
-                        absorbed: reductionAmount,
-                    });
-                    // 百分比护盾消耗后不保留（一次性使用）
-                } else {
-                    // 固定值护盾：按 value 抵消伤害
-                    const preventedAmount = Math.min(shield.value, remainingDamage);
-                    remainingDamage -= preventedAmount;
-                    
-                    // 记录消耗信息
-                    shieldsConsumed.push({
-                        sourceId: shield.sourceId,
-                        value: shield.value,
-                        absorbed: preventedAmount,
-                    });
-                    
-                    // 如果护盾还有剩余值，保留护盾
-                    const remainingShieldValue = shield.value - preventedAmount;
-                    if (remainingShieldValue > 0) {
-                        updatedShields.push({ ...shield, value: remainingShieldValue });
-                    }
-                    // 否则护盾被完全消耗，不保留
+                const reductionAmount = Math.ceil(remainingDamage * (shield.reductionPercent! / 100));
+                remainingDamage -= reductionAmount;
+                shieldsConsumed.push({
+                    sourceId: shield.sourceId,
+                    reductionPercent: shield.reductionPercent,
+                    absorbed: reductionAmount,
+                });
+                // 百分比护盾消耗后不保留（一次性使用）
+            }
+        }
+        
+        // 再消耗固定值护盾
+        for (const shield of fixedShields) {
+            if (remainingDamage > 0) {
+                const preventedAmount = Math.min(shield.value, remainingDamage);
+                remainingDamage -= preventedAmount;
+                
+                shieldsConsumed.push({
+                    sourceId: shield.sourceId,
+                    value: shield.value,
+                    absorbed: preventedAmount,
+                });
+                
+                // 如果护盾还有剩余值，保留护盾
+                const remainingShieldValue = shield.value - preventedAmount;
+                if (remainingShieldValue > 0) {
+                    updatedShields.push({ ...shield, value: remainingShieldValue });
                 }
             } else {
                 // 没有剩余伤害了，后续护盾全部保留
                 updatedShields.push(shield);
             }
         }
+        
+        // preventStatus 护盾始终保留
+        updatedShields.push(...statusShields);
         
         newDamageShields = updatedShields;
     }
@@ -339,9 +339,13 @@ export const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { 
     state,
     event
 ) => {
-    const { targetId, value, sourceId, preventStatus } = event.payload;
+    const { targetId, value, sourceId, preventStatus, reductionPercent } = event.payload;
     const target = state.players[targetId];
     if (!target) return state;
+
+    const shield = reductionPercent !== undefined
+        ? { value: 0, sourceId, preventStatus, reductionPercent }
+        : { value, sourceId, preventStatus };
 
     return {
         ...state,
@@ -349,7 +353,7 @@ export const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { 
             ...state.players,
             [targetId]: {
                 ...target,
-                damageShields: [...(target.damageShields || []), { value, sourceId, preventStatus }],
+                damageShields: [...(target.damageShields || []), shield],
             },
         },
     };

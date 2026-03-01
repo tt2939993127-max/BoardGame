@@ -145,22 +145,10 @@ describe('月精灵百分比护盾集成测试', () => {
 
         expect(result.assertionErrors).toEqual([]);
 
-        // 打印 Token 状态
-        console.log('\n=== Token 状态 ===');
-        console.log('暗影盗贼 tokens:', result.finalState.core.players['0'].tokens);
-        console.log('月精灵 tokens:', result.finalState.core.players['1'].tokens);
-
-        // 核心断言：月精灵 HP 应减少 2 点（5 伤害 - ceil(5/2)=3 减免 = 2 实际伤害）
-        // 注意：迷影步 II 使用 PREVENT_DAMAGE 事件，计算方式为 ceil(damage/2)
+        // 核心断言：月精灵 HP 应减少 2 点（5 伤害 - ceil(5*0.5)=3 减免 = 2 实际伤害）
         const core = result.finalState.core;
         const moonElfHp = core.players['1'].resources[RESOURCE_IDS.HP];
         const expectedHp = INITIAL_HEALTH - 2;
-        
-        // 打印护盾状态
-        console.log('\n=== 最终状态 ===');
-        console.log('月精灵 HP:', moonElfHp, '(期望:', expectedHp, ')');
-        console.log('月精灵护盾:', core.players['1'].damageShields);
-        
         expect(moonElfHp).toBe(expectedHp);
 
         // 暗影盗贼应受到 3 点反击伤害（迷影步 II: 1×弓面数=3）

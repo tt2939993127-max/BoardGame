@@ -70,7 +70,7 @@ describe('ongoing-minion 目标选择', () => {
             bases: [
                 {
                     defId: 'base_test_1',
-                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2)],
+                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
                 {
@@ -124,7 +124,7 @@ describe('ongoing-minion 目标选择', () => {
             bases: [
                 {
                     defId: 'base_test_1',
-                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2)],
+                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
             ],
@@ -162,7 +162,7 @@ describe('ongoing-minion 目标选择', () => {
             bases: [
                 {
                     defId: 'base_test_1',
-                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2)],
+                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
             ],
@@ -198,7 +198,7 @@ describe('ongoing-minion 目标选择', () => {
             bases: [
                 {
                     defId: 'base_test_1',
-                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2)],
+                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
             ],
@@ -235,7 +235,7 @@ describe('ongoing-minion 目标选择', () => {
             bases: [
                 {
                     defId: 'base_dread_lookout', // 恐怖眺望台：禁止打出行动卡
-                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2)],
+                    minions: [makeMinion('m1', 'werewolf_howler', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
             ],

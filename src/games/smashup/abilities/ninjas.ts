@@ -50,7 +50,7 @@ function ninjaMaster(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
     const interaction = createSimpleChoice(
         `ninja_master_${ctx.now}`, ctx.playerId,
         '选择要消灭的随从（可跳过）',
@@ -74,7 +74,7 @@ function ninjaTigerAssassin(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
     const interaction = createSimpleChoice(
         `ninja_tiger_assassin_${ctx.now}`, ctx.playerId, '选择要消灭的力量≤3的随从（可跳过）', [...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), skipOption] as any[], { sourceId: 'ninja_tiger_assassin', targetType: 'minion' }
     );
@@ -175,7 +175,7 @@ function ninjaInfiltrateOnPlay(ctx: AbilityContext): AbilityResult {
     const options = targets.map((t, i) => ({
         id: `tactic-${i}`,
         label: t.label,
-        value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
+        value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId , displayMode: 'card' as const },
         _source: 'ongoing' as const,
     }));
     const interaction = createSimpleChoice(
@@ -275,43 +275,32 @@ function ninjaDisguiseSelectMinions(ctx: AbilityContext, baseIndex: number): Abi
  * 限制：每个基地只能使用一次便衣忍者（通过 specialLimitGroup: 'ninja_hidden_ninja' 数据驱动）
  */
 function ninjaHiddenNinja(ctx: AbilityContext): AbilityResult {
-    console.log('[DEBUG] ninjaHiddenNinja called:', {
-        playerId: ctx.playerId,
-        baseIndex: ctx.baseIndex,
-        cardUid: ctx.cardUid,
-        handSize: ctx.state.players[ctx.playerId].hand.length,
-        handCards: ctx.state.players[ctx.playerId].hand.map(c => ({ uid: c.uid, defId: c.defId, type: c.type })),
-    });
 
     // 限制组检查
     if (isSpecialLimitBlocked(ctx.state, 'ninja_hidden_ninja', ctx.baseIndex)) {
-        console.log('[DEBUG] ninjaHiddenNinja: blocked by specialLimit');
         return { events: [] };
     }
 
     const player = ctx.state.players[ctx.playerId];
     const minionCards = player.hand.filter(c => c.type === 'minion');
-    console.log('[DEBUG] ninjaHiddenNinja: minionCards in hand:', minionCards.length, minionCards.map(c => c.defId));
     
     if (minionCards.length === 0) {
-        console.log('[DEBUG] ninjaHiddenNinja: no minions in hand, returning early');
         return { events: [] };
     }
 
     // 记录限制组使用
     const limitEvt = emitSpecialLimitUsed(ctx.playerId, 'ninja_hidden_ninja', ctx.baseIndex, ctx.now);
     const events: SmashUpEvent[] = limitEvt ? [limitEvt] : [];
-    console.log('[DEBUG] ninjaHiddenNinja: emitted specialLimitUsed event');
 
     const options = minionCards.map((c, i) => {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+        return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
     });
     
     // 添加"跳过"选项（允许玩家选择不打出随从）
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
     
     const interaction = createSimpleChoice(
         `ninja_hidden_ninja_${ctx.now}`, ctx.playerId,
@@ -320,22 +309,8 @@ function ninjaHiddenNinja(ctx: AbilityContext): AbilityResult {
         { sourceId: 'ninja_hidden_ninja', targetType: 'hand' },
     );
     
-    console.log('[DEBUG] ninjaHiddenNinja: interaction details:', {
-        interactionId: interaction.id,
-        interactionPlayerId: interaction.playerId,
-        ctxPlayerId: ctx.playerId,
-        optionsCount: options.length + 1, // +1 for skip option
-    });
     
     const resultMatchState = queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } } });
-    console.log('[DEBUG] ninjaHiddenNinja: created interaction:', {
-        interactionId: interaction.id,
-        optionsCount: options.length + 1,
-        hasCurrentInteraction: !!resultMatchState.sys.interaction?.current,
-        queueLength: resultMatchState.sys.interaction?.queue?.length ?? 0,
-        hasResponseWindow: !!resultMatchState.sys.responseWindow?.current,
-        responseWindowId: resultMatchState.sys.responseWindow?.current?.id,
-    });
     
     return { events, matchState: resultMatchState };
 }
@@ -374,16 +349,16 @@ function ninjaAcolyteSpecial(ctx: AbilityContext): AbilityResult {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
         }),
         // 忍者侍从自身（刚返回手牌）
-        { id: `hand-self`, label: `${acolyteDef?.name ?? '忍者侍从'} (力量 ${acolyteDef?.power ?? 2})`, value: { cardUid: ctx.cardUid, defId: 'ninja_acolyte', power: acolyteDef?.power ?? 2 } },
+        { id: `hand-self`, label: `${acolyteDef?.name ?? '忍者侍从'} (力量 ${acolyteDef?.power ?? 2})`, value: { cardUid: ctx.cardUid, defId: 'ninja_acolyte', power: acolyteDef?.power ?? 2 } , displayMode: 'card' as const },
     ];
 
     if (allOptions.length === 0) return { events };
 
     // 添加"跳过"选项（允许玩家选择不打出随从）
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
 
     const interaction = createSimpleChoice(
         `ninja_acolyte_play_${ctx.now}`, ctx.playerId,
@@ -627,7 +602,7 @@ export function registerNinjaInteractionHandlers(): void {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power }, _source: 'hand' as const };
+            return { id: `hand-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power }, _source: 'hand' as const , displayMode: 'card' as const };
         });
         const next = createSimpleChoice(
             `ninja_disguise_play1_${timestamp}`, playerId,
@@ -659,7 +634,7 @@ export function registerNinjaInteractionHandlers(): void {
                     const def = getCardDef(c.defId) as MinionCardDef | undefined;
                     const name = def?.name ?? c.defId;
                     const pw = def?.power ?? 0;
-                    return { id: `hand-${i}`, label: `${name} (力量 ${pw})`, value: { cardUid: c.uid, defId: c.defId, power: pw }, _source: 'hand' as const };
+                    return { id: `hand-${i}`, label: `${name} (力量 ${pw})`, value: { cardUid: c.uid, defId: c.defId, power: pw }, _source: 'hand' as const , displayMode: 'card' as const };
                 });
                 const next = createSimpleChoice(
                     `ninja_disguise_play2_${timestamp}`, playerId,

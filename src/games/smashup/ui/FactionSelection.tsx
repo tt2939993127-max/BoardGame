@@ -297,6 +297,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                         variant="primary"
                                                         size="lg"
                                                         fullWidth
+                                                        data-testid="faction-confirm-button"
                                                     >
                                                         {isMyTurn
                                                             ? (mySelections.length >= 2 ? t('ui.faction_full') : t('ui.confirm_selection'))

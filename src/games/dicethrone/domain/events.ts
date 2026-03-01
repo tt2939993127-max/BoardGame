@@ -349,6 +349,8 @@ export interface DamageShieldGrantedEvent extends GameEvent<'DAMAGE_SHIELD_GRANT
         sourceId?: string;
         /** 是否用于防止本次攻击的状态效果 */
         preventStatus?: boolean;
+        /** 百分比减伤（0-100），与 value 互斥 */
+        reductionPercent?: number;
     };
 }
 

@@ -30,9 +30,7 @@ function makeMinion(overrides: Partial<MinionOnBase> = {}): MinionOnBase {
         defId: 'test_minion',
         controller: '0',
         owner: '0',
-        basePower: 3,
-        powerModifier: 0,
-        talentUsed: false,
+        basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
         attachedActions: [],
         ...overrides,
     };

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { makeState, makePlayer, makeCard, makeMatchState } from './helpers';
+import { makeState, makePlayer, makeCard, makeMatchState } from './helpers/auditUtils';
 import { runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';

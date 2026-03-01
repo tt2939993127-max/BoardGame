@@ -46,8 +46,7 @@ function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
 function makeMinion(uid: string, controller: string, power: number, defId = 'd1'): MinionOnBase {
     return {
         uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0,
-        talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -217,7 +216,7 @@ describe('base_crypt: 消灭者放指示物', () => {
                 bases: [{
                     defId: 'base_crypt',
                     minions: [
-                        { uid: 'm_destroyer', defId: 'd1', controller: '1', owner: '1', basePower: 4, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'm_destroyer', defId: 'd1', controller: '1', owner: '1', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                     ],
                     ongoingActions: [],
                 }],

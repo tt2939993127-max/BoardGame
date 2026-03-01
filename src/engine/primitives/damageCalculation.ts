@@ -69,7 +69,7 @@ export interface PassiveTriggerHandler {
       targetId: string;
       attackerId: string;
       sourceAbilityId?: string;
-      state: any;
+      state: Record<string, unknown>;
       timestamp: number;
       random?: any;
       damageAmount: number;
@@ -95,7 +95,7 @@ export interface DamageCalculationConfig extends DamageContext {
   /** 是否自动收集状态修正（默认 true） */
   autoCollectStatus?: boolean;
   
-  /** 是否自动收集护盾减免（默认 true） */
+  /** 是否自动收集护盾减免（默认 false，护盾由 reducer 统一消耗） */
   autoCollectShields?: boolean;
   
   /** PassiveTrigger handler（游戏层注入） */
@@ -213,7 +213,8 @@ export class DamageCalculation {
     if (this.config.autoCollectStatus !== false) {
       this.collectStatusModifiers();
     }
-    if (this.config.autoCollectShields !== false) {
+    // 护盾默认不收集（由 reducer 统一消耗，避免双重扣减）
+    if (this.config.autoCollectShields === true) {
       this.collectShieldModifiers();
     }
     

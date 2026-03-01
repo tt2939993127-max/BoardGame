@@ -78,10 +78,7 @@ describe('睡眠孢子力量修正 E2E', () => {
             defId: 'killer_plant_water_lily',
             controller: '0',
             owner: '0',
-            basePower: 3,
-            powerModifier: 0,
-            tempPowerModifier: 0,
-            talentUsed: false,
+            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
             attachedActions: [],
         };
 
@@ -90,10 +87,7 @@ describe('睡眠孢子力量修正 E2E', () => {
             defId: 'elder_thing_mi_go',
             controller: '1',
             owner: '1',
-            basePower: 3,
-            powerModifier: 0,
-            tempPowerModifier: 0,
-            talentUsed: false,
+            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
             attachedActions: [],
         };
 
@@ -145,10 +139,7 @@ describe('睡眠孢子力量修正 E2E', () => {
             defId: 'killer_plant_water_lily',
             controller: '0',
             owner: '0',
-            basePower: 3,
-            powerModifier: 0,
-            tempPowerModifier: 0,
-            talentUsed: false,
+            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
             attachedActions: [],
         };
 
@@ -157,10 +148,7 @@ describe('睡眠孢子力量修正 E2E', () => {
             defId: 'elder_thing_mi_go',
             controller: '1',
             owner: '1',
-            basePower: 3,
-            powerModifier: 0,
-            tempPowerModifier: 0,
-            talentUsed: false,
+            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
             attachedActions: [],
         };
 

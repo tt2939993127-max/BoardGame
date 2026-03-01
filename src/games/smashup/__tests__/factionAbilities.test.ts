@@ -36,7 +36,7 @@ beforeAll(() => {
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -111,7 +111,7 @@ describe('海盗派系能力', () => {
             bases: [{
                 defId: 'base_test', minions: [
                     makeMinion('m0', 'test', '0', 5),
-                    makeMinion('m1', 'test', '1', 2),
+                    makeMinion('m1', 'test', '1', 2, { powerModifier: 0 }),
                     makeMinion('m2', 'test', '1', 1),
                     makeMinion('m3', 'test', '1', 4),
                 ], ongoingActions: [],
@@ -134,8 +134,8 @@ describe('海盗派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 1)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m2', 'test', '1', 2), makeMinion('m3', 'test', '1', 5)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 1, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m2', 'test', '1', 2), makeMinion('m3', 'test', '1', 5, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -155,8 +155,8 @@ describe('海盗派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 1)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m3', 'test', '1', 5)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 1, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m3', 'test', '1', 5, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -175,8 +175,8 @@ describe('海盗派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3), makeMinion('m1', 'test', '1', 2)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m2', 'test', '0', 4)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 }), makeMinion('m1', 'test', '1', 2, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m2', 'test', '0', 4, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -204,8 +204,8 @@ describe('忍者派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 5)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m2', 'test', '1', 3)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 5, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m2', 'test', '1', 3, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -231,7 +231,7 @@ describe('恐龙派系能力', () => {
             },
             bases: [
                 { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m1', 'test', '0', 2)], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m1', 'test', '0', 2, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -250,7 +250,7 @@ describe('恐龙派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3), makeMinion('m1', 'test', '0', 5)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3), makeMinion('m1', 'test', '0', 5, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -270,7 +270,7 @@ describe('恐龙派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '0', 5)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '0', 5, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 

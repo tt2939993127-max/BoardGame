@@ -58,7 +58,7 @@ describe('黑熊骑兵派系能力', () => {
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [makeMinion('m1', 'test', '1', 4)], ongoingActions: [] },
+                    { defId: 'base_a', minions: [makeMinion('m1', 'test', '1', 4, { powerModifier: 0 })], ongoingActions: [] },
                     { defId: 'base_b', minions: [], ongoingActions: [] },
                 ],
             });
@@ -103,7 +103,7 @@ describe('黑熊骑兵派系能力', () => {
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [makeMinion('m0', 'test', '0', 3), makeMinion('m1', 'test', '1', 5)], ongoingActions: [] },
+                    { defId: 'base_a', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 }), makeMinion('m1', 'test', '1', 5, { powerModifier: 0 })], ongoingActions: [] },
                     { defId: 'base_b', minions: [], ongoingActions: [] },
                 ],
             });
@@ -125,7 +125,7 @@ describe('黑熊骑兵派系能力', () => {
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [makeMinion('m1', 'test', '1', 5)], ongoingActions: [] },
+                    { defId: 'base_a', minions: [makeMinion('m1', 'test', '1', 5, { powerModifier: 0 })], ongoingActions: [] },
                     { defId: 'base_b', minions: [], ongoingActions: [] },
                 ],
             });
@@ -148,7 +148,7 @@ describe('黑熊骑兵派系能力', () => {
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [makeMinion('m0', 'test', '0', 5)], ongoingActions: [] },
+                    { defId: 'base_a', minions: [makeMinion('m0', 'test', '0', 5, { powerModifier: 0 })], ongoingActions: [] },
                     { defId: 'base_b', minions: [], ongoingActions: [] },
                 ],
             });
@@ -194,9 +194,9 @@ describe('黑熊骑兵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m0', 'test', '0', 3),
-                        makeMinion('m1', 'test', '1', 4),
-                        makeMinion('m2', 'test', '1', 2),
+                        makeMinion('m0', 'test', '0', 3, { powerModifier: 0 }),
+                        makeMinion('m1', 'test', '1', 4, { powerModifier: 0 }),
+                        makeMinion('m2', 'test', '1', 2, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                     { defId: 'base_b', minions: [], ongoingActions: [] },
                 ],
@@ -222,8 +222,8 @@ describe('黑熊骑兵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'test', '1', 3),
-                        makeMinion('m2', 'test', '1', 5),
+                        makeMinion('m1', 'test', '1', 3, { powerModifier: 0 }),
+                        makeMinion('m2', 'test', '1', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -248,7 +248,7 @@ describe('黑熊骑兵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'test', '1', 5),
+                        makeMinion('m1', 'test', '1', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -438,7 +438,7 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_the_jungle',
                     minions: [
                         makeMinion('m1', 'giant_ant_worker', '0', 3, { powerModifier: 3 }), // 计分基地上的随从（来源）
-                        makeMinion('filler1', 'test_other', '1', 10),
+                        makeMinion('filler1', 'test_other', '1', 10, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -712,7 +712,7 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -757,7 +757,7 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -880,7 +880,7 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -969,8 +969,8 @@ describe('巨蚁派系能力', () => {
             bases: [{
                 defId: 'base_the_jungle',
                 minions: [
-                    makeMinion('m1', 'cthulhu_servitor', '0', 5),
-                    makeMinion('m2', 'cthulhu_minion', '0', 4),
+                    makeMinion('m1', 'cthulhu_servitor', '0', 5, { powerModifier: 0 }),
+                    makeMinion('m2', 'cthulhu_minion', '0', 4, { powerModifier: 0 }),
                     makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
                 ],
                 ongoingActions: [],
@@ -1010,8 +1010,8 @@ describe('巨蚁派系能力', () => {
             bases: [{
                 defId: 'base_a',
                 minions: [
-                    makeMinion('m1', 'cthulhu_servitor', '0', 2),
-                    makeMinion('m2', 'cthulhu_minion', '0', 1),
+                    makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
+                    makeMinion('m2', 'cthulhu_minion', '0', 1, { powerModifier: 0 }),
                     makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
                 ],
                 ongoingActions: [],
@@ -1075,8 +1075,8 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 2 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
-                        makeMinion('vc', 'vampire_the_count', '1', 5),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
+                        makeMinion('vc', 'vampire_the_count', '1', 5, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1118,9 +1118,9 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 2 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                         {
-                            ...makeMinion('opp1', 'cthulhu_minion', '1', 3),
+                            ...makeMinion('opp1', 'cthulhu_minion', '1', 3, { powerModifier: 0 }),
                             attachedActions: [{ uid: 'opp-act', defId: 'vampire_opportunist', ownerId: '1' }],
                         } as any,
                     ],
@@ -1156,8 +1156,8 @@ describe('巨蚁派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 2 }),
-                        makeMinion('m1', 'cthulhu_servitor', '0', 2),
-                        makeMinion('vc', 'vampire_the_count', '1', 5),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
+                        makeMinion('vc', 'vampire_the_count', '1', 5, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1192,8 +1192,8 @@ describe('巨蚁派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('q1', 'giant_ant_killer_queen', '0', 4),
-                        makeMinion('m2', 'test_other', '0', 2),
+                        makeMinion('q1', 'giant_ant_killer_queen', '0', 4, { powerModifier: 0 }),
+                        makeMinion('m2', 'test_other', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1322,8 +1322,8 @@ describe('吸血鬼派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('v1', 'vampire_nightstalker', '0', 4),
-                        makeMinion('v2', 'vampire_fledgling_vampire', '0', 2),
+                        makeMinion('v1', 'vampire_nightstalker', '0', 4, { powerModifier: 0 }),
+                        makeMinion('v2', 'vampire_fledgling_vampire', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1405,7 +1405,7 @@ describe('吸血鬼派系能力', () => {
                         makeMinion('m0', 'test_host', '0', 5, {
                             attachedActions: [{ uid: 'oa1', defId: 'vampire_opportunist', ownerId: '0' }],
                         }),
-                        makeMinion('e1', 'enemy_low', '1', 2),
+                        makeMinion('e1', 'enemy_low', '1', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1441,7 +1441,7 @@ describe('吸血鬼派系能力', () => {
                         makeMinion('m0', 'test_host', '0', 4, {
                             attachedActions: [{ uid: 'oa1', defId: 'vampire_opportunist', ownerId: '0' }],
                         }),
-                        makeMinion('f1', 'test_fodder', '0', 2),
+                        makeMinion('f1', 'test_fodder', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1474,7 +1474,7 @@ describe('吸血鬼派系能力', () => {
                     defId: 'base_a',
                     minions: [
                         makeMinion('c1', 'vampire_the_count', '0', 5, { powerModifier: 1 }),
-                        makeMinion('f1', 'test_fodder', '0', 2),
+                        makeMinion('f1', 'test_fodder', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1505,16 +1505,16 @@ describe('吸血鬼派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('hd_old', 'vampire_heavy_drinker', '0', 3),
-                        makeMinion('fod1', 'test_fodder', '0', 2),
+                        makeMinion('hd_old', 'vampire_heavy_drinker', '0', 3, { powerModifier: 0 }),
+                        makeMinion('fod1', 'test_fodder', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
                 {
                     defId: 'base_b',
                     minions: [
-                        makeMinion('hd_new', 'vampire_heavy_drinker', '0', 3),
-                        makeMinion('fod2', 'test_fodder', '0', 2),
+                        makeMinion('hd_new', 'vampire_heavy_drinker', '0', 3, { powerModifier: 0 }),
+                        makeMinion('fod2', 'test_fodder', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1555,14 +1555,14 @@ describe('吸血鬼派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('e1', 'enemy_low', '1', 1),
+                        makeMinion('e1', 'enemy_low', '1', 1, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
                 {
                     defId: 'base_b',
                     minions: [
-                        makeMinion('ns_old', 'vampire_nightstalker', '0', 4),
+                        makeMinion('ns_old', 'vampire_nightstalker', '0', 4, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1609,9 +1609,9 @@ describe('狼人派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('w1', 'werewolf_howler', '0', 4),
-                        makeMinion('e1', 'enemy_a', '1', 1),
-                        makeMinion('e2', 'enemy_b', '1', 3),
+                        makeMinion('w1', 'werewolf_howler', '0', 4, { powerModifier: 0 }),
+                        makeMinion('e1', 'enemy_a', '1', 1, { powerModifier: 0 }),
+                        makeMinion('e2', 'enemy_b', '1', 3, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1660,9 +1660,9 @@ describe('狼人派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('w1', 'werewolf_howler', '0', 4),
-                        makeMinion('e1', 'enemy_a', '1', 2),
-                        makeMinion('e2', 'enemy_b', '1', 3),
+                        makeMinion('w1', 'werewolf_howler', '0', 4, { powerModifier: 0 }),
+                        makeMinion('e1', 'enemy_a', '1', 2, { powerModifier: 0 }),
+                        makeMinion('e2', 'enemy_b', '1', 3, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
                 },
@@ -1709,7 +1709,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('lib1', 'miskatonic_librarian', '0', 4),
+                        makeMinion('lib1', 'miskatonic_librarian', '0', 4, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -1736,7 +1736,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('lib1', 'miskatonic_librarian', '0', 4),
+                        makeMinion('lib1', 'miskatonic_librarian', '0', 4, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -1762,7 +1762,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('prof1', 'miskatonic_professor', '0', 5),
+                        makeMinion('prof1', 'miskatonic_professor', '0', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -1789,7 +1789,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('prof1', 'miskatonic_professor', '0', 5),
+                        makeMinion('prof1', 'miskatonic_professor', '0', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -1948,8 +1948,8 @@ describe('幽灵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'enemy_weak', '1', 2),
-                        makeMinion('m2', 'enemy_strong', '1', 5),
+                        makeMinion('m1', 'enemy_weak', '1', 2, { powerModifier: 0 }),
+                        makeMinion('m2', 'enemy_strong', '1', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -1980,8 +1980,8 @@ describe('幽灵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'enemy_a', '1', 2),
-                        makeMinion('m2', 'enemy_b', '1', 4),
+                        makeMinion('m1', 'enemy_a', '1', 2, { powerModifier: 0 }),
+                        makeMinion('m2', 'enemy_b', '1', 4, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -2009,7 +2009,7 @@ describe('幽灵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'enemy', '1', 5),
+                        makeMinion('m1', 'enemy', '1', 5, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });
@@ -2037,7 +2037,7 @@ describe('幽灵派系能力', () => {
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m0', 'own', '0', 3),
+                        makeMinion('m0', 'own', '0', 3, { powerModifier: 0 }),
                     ], ongoingActions: [] },
                 ],
             });

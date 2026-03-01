@@ -127,8 +127,9 @@ describe('scoreBases 阶段自动推进', () => {
         expect(result?.autoContinue).toBe(true);
     });
     
-    it('有 eligible 基地但未开始计分时不应该自动推进', () => {
-        // 创建一个基地达到临界点的状态
+    it('有 eligible 基地且响应窗口仍打开时不应该自动推进', () => {
+        // 创建一个基地达到临界点且响应窗口仍打开的状态
+        // 这是真实场景：onPhaseEnter 打开了响应窗口，等待玩家响应
         const core = makeMinimalCore({
             bases: [makeBase('base_pirate_cove', [
                 makeMinion('0', 'robot_hoverbot', 5), // 力量 5
@@ -140,8 +141,17 @@ describe('scoreBases 阶段自动推进', () => {
             core,
             sys: {
                 phase: 'scoreBases',
-                flowHalted: false, // 未开始计分
+                flowHalted: false,
                 interaction: { current: null, queue: [] },
+                responseWindow: {
+                    current: {
+                        windowId: 'meFirst_scoreBases_1',
+                        responderQueue: ['0', '1'],
+                        windowType: 'meFirst',
+                        sourceId: 'scoreBases',
+                    },
+                    history: [],
+                },
             } as any,
         };
         
@@ -152,12 +162,12 @@ describe('scoreBases 阶段自动推进', () => {
             random: { next: () => 0.5 },
         });
         
-        // 应该返回 undefined（不自动推进）
+        // 应该返回 undefined（不自动推进，因为响应窗口仍打开）
         expect(result).toBeUndefined();
     });
     
     it('有交互时不应该自动推进', () => {
-        // 创建一个有交互的状态
+        // 创建一个有交互的状态（如海盗王 beforeScoring 移动确认）
         const core = makeMinimalCore({
             bases: [makeBase('base_pirate_cove', [
                 makeMinion('0', 'robot_hoverbot', 5),
@@ -190,5 +200,38 @@ describe('scoreBases 阶段自动推进', () => {
         
         // 应该返回 undefined（不自动推进，因为有交互）
         expect(result).toBeUndefined();
+    });
+    
+    it('响应窗口关闭后应该自动推进触发计分', () => {
+        // 创建一个响应窗口已关闭的状态（所有玩家都 PASS 了）
+        // 这是真实场景：onPhaseEnter 打开了响应窗口，所有玩家 PASS 后窗口关闭
+        const core = makeMinimalCore({
+            bases: [makeBase('base_pirate_cove', [
+                makeMinion('0', 'robot_hoverbot', 5), // 力量 5
+            ])],
+            scoringEligibleBaseIndices: [0], // 锁定的 eligible 基地列表
+        });
+        
+        const state: MatchState<SmashUpCore> = {
+            core,
+            sys: {
+                phase: 'scoreBases',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] }, // 窗口已关闭
+            } as any,
+        };
+        
+        // 调用 onAutoContinueCheck
+        const result = smashUpFlowHooks.onAutoContinueCheck!({
+            state,
+            events: [],
+            random: { next: () => 0.5 },
+        });
+        
+        // 应该返回 autoContinue=true（响应窗口关闭，触发计分）
+        expect(result).toBeDefined();
+        expect(result?.autoContinue).toBe(true);
+        expect(result?.playerId).toBe('0');
     });
 });

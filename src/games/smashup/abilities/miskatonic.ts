@@ -236,7 +236,7 @@ function miskatonicPsychologistOnPlay(ctx: AbilityContext): AbilityResult {
     options.push({
         id: 'skip',
         label: '跳过',
-        value: { skip: true },
+        value: { skip: true , displayMode: 'button' as const },
         displayMode: 'button' as const,
     });
     
@@ -261,7 +261,7 @@ function miskatonicResearcherOnPlay(ctx: AbilityContext): AbilityResult {
         '是否抽取一张疯狂卡？',
         [
             { id: 'draw', label: '抽取疯狂卡', value: { draw: true } },
-            { id: 'skip', label: '跳过', value: { skip: true } },
+            { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const },
         ],
         'miskatonic_researcher',
     );
@@ -418,12 +418,12 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
     const options = handCards.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'hand' as const };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'hand' as const , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
         '选择要放到牌库底的卡牌（每放一张抽一张）',
-        [...options, { id: 'skip', label: '跳过', value: { skip: true } }] as any[],
+        [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
         'miskatonic_field_trip',
         undefined, { min: 0, max: handCards.length },
     );
@@ -488,7 +488,7 @@ function meddlingKidsShowNextAction(
     }
     if (actionCards.length === 0) return { state, events: [] };
     const options = [
-        { id: 'skip', label: '跳过（不再消灭）', value: { skip: true } },
+        { id: 'skip', label: '跳过（不再消灭）', value: { skip: true } , displayMode: 'button' as const },
         ...actionCards.map((c, i) => ({
             id: `action-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, ownerId: c.ownerId }, _source: 'ongoing' as const,
         })),

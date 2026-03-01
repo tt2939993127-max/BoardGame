@@ -39,7 +39,7 @@ describe('基地记分与力量计算', () => {
         it('powerModifier 不能为负', () => {
             const minion: MinionOnBase = {
                 uid: 'test', defId: 'test', controller: '0', owner: '0',
-                basePower: 3, powerModifier: 0, talentUsed: false, attachedActions: [],
+                basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
             };
             const newModifier = Math.max(0, minion.powerModifier - 5);
             expect(newModifier).toBe(0);
@@ -49,8 +49,8 @@ describe('基地记分与力量计算', () => {
             const base: BaseInPlay = {
                 defId: 'test_base',
                 minions: [
-                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 3, powerModifier: 2, talentUsed: false, attachedActions: [] },
-                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 3, powerCounters: 0, powerModifier: 2, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                 ],
                 ongoingActions: [],
             };
@@ -61,9 +61,9 @@ describe('基地记分与力量计算', () => {
             const base: BaseInPlay = {
                 defId: 'test_base',
                 minions: [
-                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 3, powerModifier: 1, talentUsed: false, attachedActions: [] },
-                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
-                    { uid: 'c', defId: 'd3', controller: '0', owner: '0', basePower: 2, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 3, powerCounters: 0, powerModifier: 1, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'c', defId: 'd3', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                 ],
                 ongoingActions: [],
             };
@@ -86,8 +86,8 @@ describe('基地记分与力量计算', () => {
                 bases: [{
                     defId: 'test_base',
                     minions: [
-                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 3, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                     ],
                     ongoingActions: [],
                 }],
@@ -123,7 +123,7 @@ describe('基地记分与力量计算', () => {
                 bases: [{
                     defId: 'test_base',
                     minions: [
-                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                     ],
                     ongoingActions: [],
                 }],
@@ -164,7 +164,7 @@ describe('基地记分与力量计算', () => {
                 bases: [{
                     defId: 'test_base',
                     minions: [
-                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                     ],
                     ongoingActions: [ongoing1, ongoing2],
                 }],
@@ -204,7 +204,7 @@ describe('基地记分与力量计算', () => {
                 bases: [{
                     defId: 'test_base',
                     minions: [
-                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                     ],
                     ongoingActions: [],
                 }],
@@ -246,7 +246,7 @@ describe('基地记分与力量计算', () => {
                     defId: 'test_base',
                     minions: [{
                         uid: 'm1', defId: 'd1', controller: '0', owner: '0',
-                        basePower: 5, powerModifier: 0, talentUsed: false,
+                        basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
                         attachedActions: [attached1, attached2],
                     }],
                     ongoingActions: [],
@@ -293,7 +293,7 @@ describe('基地记分与力量计算', () => {
                     defId: 'test_base',
                     minions: [{
                         uid: 'm1', defId: 'd1', controller: '0', owner: '0',
-                        basePower: 3, powerModifier: 0, talentUsed: false,
+                        basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
                         attachedActions: [attached],
                     }],
                     ongoingActions: [],
@@ -327,8 +327,8 @@ describe('基地记分与力量计算', () => {
             const base: BaseInPlay = {
                 defId: 'test_base',
                 minions: [
-                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
-                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'a', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'b', defId: 'd2', controller: '1', owner: '1', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
                 ],
                 ongoingActions: [],
             };

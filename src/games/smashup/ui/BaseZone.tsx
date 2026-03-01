@@ -123,17 +123,12 @@ export const BaseZone: React.FC<{
                             >
                                 <div className="w-full h-full overflow-hidden rounded-[0.1vw]">
                                     <CardPreview
-                                        previewRef={actionDef?.previewRef}
+                                        previewRef={actionDef?.previewRef
+                                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: oa.defId } }
+                                            : undefined}
                                         className="w-full h-full object-cover"
                                         title={actionTitle}
                                     />
-                                    {!actionDef?.previewRef && (
-                                        <div className="absolute inset-0 flex items-center justify-center p-[0.15vw] bg-gradient-to-br from-purple-100 to-purple-50">
-                                            <span className="text-[0.5vw] font-bold text-center text-slate-700 leading-tight line-clamp-2">
-                                                {actionName}
-                                            </span>
-                                        </div>
-                                    )}
                                 </div>
                                 {/* 天赋可用发光叠层 */}
                                 {canUseOngoingTalent && (
@@ -194,36 +189,12 @@ export const BaseZone: React.FC<{
                         transition={{ duration: 0.4, ease: 'easeInOut' }}
                     >
                     <CardPreview
-                        previewRef={baseDef?.previewRef}
+                        previewRef={baseDef?.previewRef
+                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }
+                            : undefined}
                         className="w-full h-full object-cover"
                         title={baseName}
                     />
-
-                    {/* Fallback Text (no card art) */}
-                    {!baseDef?.previewRef && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-between p-[0.6vw] bg-gradient-to-br from-slate-100 via-slate-50 to-amber-50">
-                            {/* 基地名称 */}
-                            <h3 className="font-black text-[1vw] text-slate-800 uppercase tracking-tight leading-tight text-center border-b border-slate-300 pb-[0.2vw] w-full">
-                                {baseName}
-                            </h3>
-                            {/* 能力文本 */}
-                            <div className="flex-1 flex items-center px-[0.2vw]">
-                                <p className="text-[0.55vw] text-slate-600 leading-snug text-center">
-                                    {baseText}
-                                </p>
-                            </div>
-                            {/* VP 奖励 */}
-                            {baseDef?.vpAwards && (
-                                <div className="flex items-center gap-[0.3vw] border-t border-slate-300 pt-[0.2vw] w-full justify-center">
-                                    {baseDef.vpAwards.map((vp, i) => (
-                                        <span key={i} className={`font-black text-[0.7vw] ${i === 0 ? 'text-amber-600' : i === 1 ? 'text-slate-500' : 'text-amber-800/50'}`}>
-                                            {vp}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
                     </motion.div>
                 </AnimatePresence>
 
@@ -531,16 +502,12 @@ const MinionCard: React.FC<{
         >
             <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                 <CardPreview
-                    previewRef={def?.previewRef}
+                    previewRef={def?.previewRef
+                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId } }
+                        : undefined}
                     className="w-full h-full object-cover"
                     title={minionTitle}
                 />
-
-                {!def?.previewRef && (
-                    <div className="absolute inset-0 p-[0.2vw] flex items-center justify-center text-center bg-slate-50">
-                        <p className="text-[0.6vw] font-bold leading-none text-slate-800 line-clamp-4">{resolvedName}</p>
-                    </div>
-                )}
 
                 {/* 多选已选中勾选标记 */}
                 {isMultiSelected && (
@@ -573,7 +540,7 @@ const MinionCard: React.FC<{
             </button>
 
             {/* 力量增幅徽章 - 增益绿色/减益红色（左上角），仅有变化时显示 */}
-            {((effectivePower !== minion.basePower) || !def?.previewRef) && (
+            {(effectivePower !== minion.basePower) && (
                 <div
                     className={`absolute -top-[0.4vw] -left-[0.4vw] min-w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] font-black text-white shadow-sm border border-white px-[0.15vw] z-30 ${
                         effectivePower > minion.basePower ? 'bg-green-600' :
@@ -603,7 +570,7 @@ const MinionCard: React.FC<{
             {(minion.powerCounters ?? 0) > 0 && (
                 <motion.div
                     className={`absolute -left-[0.4vw] min-w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.55vw] font-black text-amber-900 bg-gradient-to-br from-amber-300 to-amber-500 shadow-md border-[0.1vw] border-white px-[0.1vw] z-30 ${
-                        (effectivePower !== minion.basePower) || !def?.previewRef ? 'top-[1vw]' : '-top-[0.4vw]'
+                        (effectivePower !== minion.basePower) ? 'top-[1vw]' : '-top-[0.4vw]'
                     }`}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -672,17 +639,12 @@ const MinionCard: React.FC<{
                                 >
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
                                         <CardPreview
-                                            previewRef={actionDef?.previewRef}
+                                            previewRef={actionDef?.previewRef
+                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId } }
+                                                : undefined}
                                             className="w-full h-full object-cover"
                                             title={actionName}
                                         />
-                                        {!actionDef?.previewRef && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-purple-50 p-[0.05vw]">
-                                                <span className="text-[0.3vw] font-bold text-purple-800 leading-tight text-center line-clamp-2">
-                                                    {actionName}
-                                                </span>
-                                            </div>
-                                        )}
                                     </div>
                                 </motion.div>
                             );

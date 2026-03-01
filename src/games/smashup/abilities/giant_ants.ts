@@ -604,13 +604,13 @@ function buildWhoWantsToLiveForeverOptions(
             id: 'confirm',
             label: removedTotal > 0 ? `确认并抽 ${removedTotal} 张牌` : '确认（不抽牌）',
             displayMode: 'button' as const,
-            value: { skip: true, confirm: true },
+            value: { skip: true, confirm: true , displayMode: 'button' as const },
         },
         {
             id: 'cancel',
             label: '取消并撤回此牌',
             displayMode: 'button' as const,
-            value: { skip: true, cancel: true },
+            value: { skip: true, cancel: true , displayMode: 'button' as const },
         },
     ];
 }
@@ -628,7 +628,7 @@ function buildAKindOfMagicOptions(core: SmashUpCore, playerId: PlayerId): any[] 
             id: 'cancel',
             label: '取消并撤回此牌',
             displayMode: 'button' as const,
-            value: { skip: true, cancel: true },
+            value: { skip: true, cancel: true , displayMode: 'button' as const },
         },
     ];
 }
@@ -1254,7 +1254,7 @@ function giantAntDronePreventTrigger(ctx: TriggerContext): SmashUpEvent[] | { ev
     if (!ctx.matchState) return [];
 
     const options = [
-        { id: 'skip', label: '不防止消灭', value: { skip: true }, _source: 'static' as const },
+        { id: 'skip', label: '不防止消灭', value: { skip: true }, _source: 'static' as const , displayMode: 'button' as const },
         ...drones.map((d, i) => ({
             id: `drone-${i}`,
             label: `移除雄蜂的1个指示物（基地 ${d.baseIndex + 1}）来防止消灭`,

@@ -137,7 +137,15 @@ describe('base_fairy_ring D8 & D19 审计', () => {
         });
 
         it('第二次打出随从不触发额度授予', () => {
-            const runner = new GameTestRunner(createSmashUpGame());
+            const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems: [
+            createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+            ...createBaseSystems<SmashUpCore>(),
+        ],
+        playerIds: PLAYER_IDS,
+        silent: true,
+    });
             
             // 初始化：玩家0已经打出过1个随从（minionsPlayedPerBase[0] = 1）
             const initialState = runner.getInitialState({
@@ -192,7 +200,15 @@ describe('base_fairy_ring D8 & D19 审计', () => {
         });
 
         it('额度授予后在回合结束时正确清理', () => {
-            const runner = new GameTestRunner(createSmashUpGame());
+            const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems: [
+            createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+            ...createBaseSystems<SmashUpCore>(),
+        ],
+        playerIds: PLAYER_IDS,
+        silent: true,
+    });
             
             // 初始化：玩家0刚触发仙灵圈能力
             const initialState = runner.getInitialState({
@@ -245,7 +261,15 @@ describe('base_fairy_ring D8 & D19 审计', () => {
 
     describe('D19：组合场景审计', () => {
         it('仙灵圈（基地限定额度）与全局额度独立计算', () => {
-            const runner = new GameTestRunner(createSmashUpGame());
+            const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems: [
+            createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+            ...createBaseSystems<SmashUpCore>(),
+        ],
+        playerIds: PLAYER_IDS,
+        silent: true,
+    });
             
             // 初始化：玩家0有3张随从手牌，minionLimit=2（全局额度）
             const initialState = runner.getInitialState({
@@ -332,7 +356,15 @@ describe('base_fairy_ring D8 & D19 审计', () => {
         });
 
         it('仙灵圈（基地0限定）不影响其他基地的打出', () => {
-            const runner = new GameTestRunner(createSmashUpGame());
+            const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems: [
+            createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+            ...createBaseSystems<SmashUpCore>(),
+        ],
+        playerIds: PLAYER_IDS,
+        silent: true,
+    });
             
             // 初始化：玩家0有2张随从手牌，2个基地
             const initialState = runner.getInitialState({
@@ -403,7 +435,15 @@ describe('base_fairy_ring D8 & D19 审计', () => {
         });
 
         it('仙灵圈额度与同名额度独立计算', () => {
-            const runner = new GameTestRunner(createSmashUpGame());
+            const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems: [
+            createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
+            ...createBaseSystems<SmashUpCore>(),
+        ],
+        playerIds: PLAYER_IDS,
+        silent: true,
+    });
             
             // 初始化：玩家0有同名额度（sameNameMinionRemaining=1）和仙灵圈额度
             const initialState = runner.getInitialState({

@@ -1777,6 +1777,12 @@
       "effects": {
         "main": "Defensive ability (5 dice): each Fire rolled gains 1 Fire Mastery and deals 1 damage. Each Fire Soul rolled gains 1 Fire Mastery and deals 1 damage. If you have Fire + Fire Soul, inflict Burn."
       }
+    },
+    "meditation-3": {
+      "name": "Meditation III",
+      "description": "During Defensive Roll Phase, roll 5 dice. Gain Taiji tokens based on results, and may gain Evasive or Purify tokens. Deal 3 damage for each [Fist].",
+      "taijiByResult": "Gain Taiji tokens based on results",
+      "damageByFist": "Deal 3 damage for each [Fist]"
     }
   },
   "cards": {

@@ -28,6 +28,42 @@ export function applyEvents<TState, TEvent>(
 }
 
 // ============================================================================
+// 伤害计算辅助
+// ============================================================================
+
+import type { DiceThroneCore, PendingAttack } from './types';
+import { getPlayerAbilityBaseDamage } from './abilityLookup';
+
+/**
+ * 获取 pendingAttack 的预期总伤害（baseDamage + bonusDamage）
+ * 统一查询入口，解决 pendingAttack.damage 经常为 undefined 的问题：
+ * - 优先使用 pendingAttack.damage（如果 reducer 已通过 pendingDamageBonus 设置）
+ * - 否则从技能定义获取基础伤害（getPlayerAbilityBaseDamage）
+ * - 最后加上 bonusDamage（被动卡/攻击修正）
+ *
+ * @param fallbackWhenNoAbility 无技能时的默认值（默认 0，某些场景需要 1 表示"攻击仍被视为成功"）
+ */
+export function getPendingAttackExpectedDamage(
+    state: DiceThroneCore,
+    pendingAttack: PendingAttack,
+    fallbackWhenNoAbility: number = 0
+): number {
+    const { sourceAbilityId, attackerId, bonusDamage } = pendingAttack;
+
+    // 基础伤害：优先 reducer 已设置的值，否则从技能定义查询
+    let baseDamage: number;
+    if (pendingAttack.damage != null) {
+        baseDamage = pendingAttack.damage;
+    } else if (sourceAbilityId) {
+        baseDamage = getPlayerAbilityBaseDamage(state, attackerId, sourceAbilityId);
+    } else {
+        baseDamage = fallbackWhenNoAbility;
+    }
+
+    return baseDamage + (bonusDamage ?? 0);
+}
+
+// ============================================================================
 // 游戏模式
 // ============================================================================
 

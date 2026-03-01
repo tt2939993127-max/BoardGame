@@ -40,7 +40,7 @@ beforeAll(() => {
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -281,7 +281,7 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
                 },
                 bases: [{
                     defId: 'b1', minions: [
-                        makeMinion('m1', 'test', '0', 3), // 己方
+                        makeMinion('m1', 'test', '0', 3, { powerModifier: 0 }), // 己方
                     ], ongoingActions: [],
                 }],
             });
@@ -395,7 +395,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 },
                 bases: [{
                     defId: 'base_test', ongoingActions: [],
-                    minions: [makeMinion('enemy1', 'test', '1', 5)],
+                    minions: [makeMinion('enemy1', 'test', '1', 5, { powerModifier: 0 })],
                 }],
             });
 
@@ -419,7 +419,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 },
                 bases: [{
                     defId: 'base_test', ongoingActions: [],
-                    minions: [makeMinion('mine1', 'test', '0', 3)],
+                    minions: [makeMinion('mine1', 'test', '0', 3, { powerModifier: 0 })],
                 }],
             });
 
@@ -459,7 +459,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 bases: [{
                     defId: 'base_test', ongoingActions: [],
                     minions: [
-                        makeMinion('m1', 'test_a', '0', 3),
+                        makeMinion('m1', 'test_a', '0', 3, { powerModifier: 0 }),
                         makeMinion('m2', 'test_b', '1', 5),
                     ],
                 }],
@@ -483,7 +483,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 },
                 bases: [{
                     defId: 'base_test', ongoingActions: [],
-                    minions: [makeMinion('m1', 'test_a', '0', 3)],
+                    minions: [makeMinion('m1', 'test_a', '0', 3, { powerModifier: 0 })],
                 }],
             });
 
@@ -504,7 +504,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 },
                 bases: [{
                     defId: 'base_test', ongoingActions: [],
-                    minions: [makeMinion('m1', 'test_a', '0', 3)],
+                    minions: [makeMinion('m1', 'test_a', '0', 3, { powerModifier: 0 })],
                 }],
             });
 
@@ -526,7 +526,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
         it('选择跳过时不产生事件', () => {
             const state = makeStateWithMadness({
                 players: { '0': makePlayer('0'), '1': makePlayer('1') },
-                bases: [{ defId: 'base_test', ongoingActions: [], minions: [makeMinion('m1', 'test_a', '0', 3)] }],
+                bases: [{ defId: 'base_test', ongoingActions: [], minions: [makeMinion('m1', 'test_a', '0', 3, { powerModifier: 0 })] }],
             });
 
             const handler = getInteractionHandler('miskatonic_mandatory_reading_draw');
@@ -539,7 +539,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
         it('状态正确（reduce 验证）- 抽3张疯狂卡后随从+6力量', () => {
             const state = makeStateWithMadness({
                 players: { '0': makePlayer('0'), '1': makePlayer('1') },
-                bases: [{ defId: 'base_test', ongoingActions: [], minions: [makeMinion('m1', 'test_a', '0', 3)] }],
+                bases: [{ defId: 'base_test', ongoingActions: [], minions: [makeMinion('m1', 'test_a', '0', 3, { powerModifier: 0 })] }],
             });
 
             const handler = getInteractionHandler('miskatonic_mandatory_reading_draw');

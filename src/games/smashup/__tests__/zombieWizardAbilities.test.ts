@@ -38,7 +38,7 @@ beforeAll(() => {
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -391,8 +391,8 @@ describe('僵尸派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m1', 'test', '1', 2)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m1', 'test', '1', 2, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -421,7 +421,7 @@ describe('僵尸派系能力', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 })], ongoingActions: [] },
             ],
         });
 
@@ -614,7 +614,7 @@ describe('巫师派系能力（新增）', () => {
                 '1': makePlayer('1'),
             },
             bases: [{
-                defId: 'b1', minions: [makeMinion('m1', 'test', '1', 3)], ongoingActions: [],
+                defId: 'b1', minions: [makeMinion('m1', 'test', '1', 3, { powerModifier: 0 })], ongoingActions: [],
             }],
         });
 

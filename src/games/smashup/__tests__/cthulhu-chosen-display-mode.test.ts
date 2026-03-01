@@ -77,7 +77,7 @@ const dummyRandom = {
 
 describe('神选者交互 displayMode 修复', () => {
     it('选项应该有 displayMode: "button"', () => {
-        const chosen = makeMinion('ch1', 'cthulhu_chosen', '1', 3);
+        const chosen = makeMinion('ch1', 'cthulhu_chosen', '1', 3, { powerModifier: 0 });
         const scoringBase = makeBase({ minions: [chosen] });
         const state = makeState({
             bases: [scoringBase],
@@ -113,7 +113,7 @@ describe('神选者交互 displayMode 修复', () => {
     });
 
     it('选项 value 不应该包含 baseDefId', () => {
-        const chosen = makeMinion('ch1', 'cthulhu_chosen', '1', 3);
+        const chosen = makeMinion('ch1', 'cthulhu_chosen', '1', 3, { powerModifier: 0 });
         const scoringBase = makeBase({ 
             defId: 'base_haunted_house',
             minions: [chosen] 
@@ -148,8 +148,8 @@ describe('神选者交互 displayMode 修复', () => {
     });
 
     it('链式交互的第二个神选者也应该有 displayMode', () => {
-        const ch1 = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
-        const ch2 = makeMinion('ch2', 'cthulhu_chosen', '1', 3);
+        const ch1 = makeMinion('ch1', 'cthulhu_chosen', '0', 3, { powerModifier: 0 });
+        const ch2 = makeMinion('ch2', 'cthulhu_chosen', '1', 3, { powerModifier: 0 });
         const scoringBase = makeBase({ minions: [ch1, ch2] });
         const state = makeState({
             bases: [scoringBase],

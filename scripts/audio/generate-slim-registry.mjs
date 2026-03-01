@@ -97,13 +97,25 @@ if (isCacheValid(srcFiles, registryMtime)) {
 
 // 优化：一次性提取所有音效 key（使用 Set 去重）
 const usedKeys = new Set();
-const keyPattern = /['"`]((?:ui|game|bgm|fx)\.[a-zA-Z0-9_.]+)['"`]/g;
+
+// 模式 1: 字符串字面量中的音效 key（用于 AudioManager.play() 等）
+const keyPattern1 = /['"`]((?:ui|game|bgm|fx)\.[a-zA-Z0-9_.]+)['"`]/g;
+
+// 模式 2: i18n key（t('ui.xxx')）— 这些不是音效 key，需要排除
+// 但我们需要保留真正的音效 key，所以只匹配 sound/audio 相关的上下文
 
 for (const file of srcFiles) {
   const content = readFileSync(file, 'utf-8');
+  
+  // 提取字符串字面量中的音效 key
   let match;
-  while ((match = keyPattern.exec(content)) !== null) {
-    usedKeys.add(match[1]);
+  while ((match = keyPattern1.exec(content)) !== null) {
+    const key = match[1];
+    // 排除 i18n key（通过上下文判断：t('ui.xxx') 或 t("ui.xxx")）
+    const beforeMatch = content.substring(Math.max(0, match.index - 10), match.index);
+    if (!beforeMatch.includes('t(') && !beforeMatch.includes('t (')) {
+      usedKeys.add(key);
+    }
   }
 }
 

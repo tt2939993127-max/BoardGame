@@ -22,16 +22,30 @@
 ```bash
 # 正常生成（自动使用缓存）
 node scripts/audio/generate-slim-registry.mjs
+# 或
+npm run audio:slim
 
 # 强制重新生成（忽略缓存）
 node scripts/audio/generate-slim-registry.mjs --force
+
+# 验证生成结果的正确性
+node scripts/audio/verify-slim-registry.mjs
+# 或
+npm run audio:verify
 ```
 
 ### 触发时机
 
+- `npm run dev` 前（predev hook）— **已添加**
 - `npm run build` 前（prebuild hook）
 - `git push` 前（pre-push hook）
 - 手动运行 `npm run audio:slim`
+
+### 性能影响
+
+- **首次生成**：~0.3 秒（可忽略）
+- **缓存命中**：~0.1 秒（几乎无感知）
+- **对开发流程的影响**：微乎其微，不会拖慢 `npm run dev` 启动速度
 
 ### 缓存位置
 

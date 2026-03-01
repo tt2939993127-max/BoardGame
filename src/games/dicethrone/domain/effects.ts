@@ -117,6 +117,17 @@ export interface CustomActionMeta {
     requiresInteraction?: boolean;
     /** 可用阶段（不指定则不限制） */
     phases?: string[];
+    /**
+     * 预估伤害回调（可选）
+     * 
+     * 用于 Token 门控等需要在 custom action 执行前估算伤害的场景。
+     * 例如：暴击 Token 需要判断技能伤害是否 ≥5，但 CP 系伤害在执行前无法确定。
+     * 
+     * @param state - 当前游戏状态（类型为 Record 以避免循环依赖）
+     * @param playerId - 使用技能的玩家 ID
+     * @returns 预估的伤害值
+     */
+    estimateDamage?: (state: Record<string, unknown>, playerId: string) => number;
 }
 
 /**

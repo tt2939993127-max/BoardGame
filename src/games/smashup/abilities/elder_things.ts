@@ -248,7 +248,7 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const options = minionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `elder_thing_begin_the_summoning_${ctx.now}`, ctx.playerId,

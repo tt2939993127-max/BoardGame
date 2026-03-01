@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { CardInstance } from '../domain/types';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { User, Swords } from 'lucide-react';
 import { getCardDef as lookupCardDef, getMinionDef as lookupMinionDef, resolveCardName, resolveCardText } from '../data/cards';
 import { UI_Z_INDEX } from '../../../core';
 
@@ -46,14 +45,12 @@ type HandCardProps = {
 const HandCard: React.FC<HandCardProps> = ({
     card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, isDisabled, onSelect, onViewDetail
 }) => {
-    const { t, i18n } = useTranslation('game-smashup');
+    const { t } = useTranslation('game-smashup');
     const [isHovered, setIsHovered] = useState(false);
     const [isShaking, setIsShaking] = useState(false);
 
     // Lookup Data
     const def = lookupCardDef(card.defId);
-    const isMinion = card.type === 'minion';
-    const minionDef = isMinion ? lookupMinionDef(card.defId) : null;
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
     const resolvedText = resolveCardText(def, t);
     const previewTitle = resolvedText ? `${resolvedName}\n${resolvedText}` : resolvedName;
@@ -130,7 +127,7 @@ const HandCard: React.FC<HandCardProps> = ({
                     </svg>
                 </button>
 
-                {/* 1. Real Asset Preview */}
+                {/* Card Asset Preview */}
                 <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">
                     <CardPreview
                         previewRef={def?.previewRef
@@ -139,35 +136,6 @@ const HandCard: React.FC<HandCardProps> = ({
                         className="w-full h-full object-cover"
                         title={previewTitle}
                     />
-
-                    {/* 2. Fallback UI - ONLY shown if NO previewRef (Strict check) */}
-                    {!def?.previewRef && (
-                        <div className="absolute inset-0 p-[0.4vw] flex flex-col pointer-events-none z-20">
-                            {/* Header */}
-                            <div className="flex justify-between items-start mb-1 h-[20%]">
-                                <div className={`px-1 py-0.5 rounded-sm text-[0.5vw] font-black uppercase tracking-wider shadow-sm border border-black/10 transform -rotate-1 
-                                    ${isMinion ? 'bg-blue-100/90 text-blue-900' : 'bg-red-100/90 text-red-900'}`}>
-                                    {isMinion ? t('ui.minion') : t('ui.action')}
-                                </div>
-                                {isMinion && (
-                                    <div className="w-[1.4vw] h-[1.4vw] rounded-full bg-yellow-400 text-black font-black flex items-center justify-center text-[0.8vw] shadow-md border border-white transform rotate-3">
-                                        {minionDef?.power}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Center Icon */}
-                            <div className="flex-1 flex items-center justify-center opacity-10 rotate-12">
-                                {isMinion ? <User size={'3vw'} color="#333" strokeWidth={3} /> : <Swords size={'3vw'} color="#333" strokeWidth={3} />}
-                            </div>
-
-                            {/* Footer Text */}
-                            <div className="mt-auto bg-white/95 rounded p-[0.4vw] border border-slate-300 shadow-sm rotate-1 relative">
-                                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-yellow-200/50 -rotate-2"></div>
-                                <div className="text-[0.55vw] font-black text-slate-800 truncate uppercase tracking-tight">{resolvedName}</div>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
             </div>

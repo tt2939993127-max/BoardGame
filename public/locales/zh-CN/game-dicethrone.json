@@ -1798,6 +1798,12 @@
       "effects": {
         "resolveDefense": "防御结算"
       }
+    },
+    "meditation-3": {
+      "name": "清修 III",
+      "description": "防御掷骰阶段，投掷5颗骰子。根据结果获得太极标记，并可能获得闪避或净化标记。每有[拳]造成3点伤害。",
+      "taijiByResult": "根据结果获得太极标记",
+      "damageByFist": "每有[拳]造成3点伤害"
     }
   },
   "cards": {

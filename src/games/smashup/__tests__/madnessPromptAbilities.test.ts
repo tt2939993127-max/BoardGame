@@ -43,7 +43,7 @@ beforeAll(() => {
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -376,7 +376,7 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（它可能�
             },
             bases: [{
                 defId: 'base_test', ongoingActions: [],
-                minions: [makeMinion('mine1', 'test', '0', 3)],
+                minions: [makeMinion('mine1', 'test', '0', 3, { powerModifier: 0 })],
             }],
         });
 
@@ -400,7 +400,7 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（它可能�
             },
             bases: [{
                 defId: 'base_test', ongoingActions: [],
-                minions: [makeMinion('enemy1', 'test', '1', 5)],
+                minions: [makeMinion('enemy1', 'test', '1', 5, { powerModifier: 0 })],
             }],
         });
 
@@ -425,8 +425,8 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（它可能�
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'base_a', ongoingActions: [], minions: [makeMinion('mine1', 'test', '0', 2)] },
-                { defId: 'base_b', ongoingActions: [], minions: [makeMinion('mine2', 'test', '0', 4), makeMinion('enemy1', 'test', '1', 3)] },
+                { defId: 'base_a', ongoingActions: [], minions: [makeMinion('mine1', 'test', '0', 2, { powerModifier: 0 })] },
+                { defId: 'base_b', ongoingActions: [], minions: [makeMinion('mine2', 'test', '0', 4), makeMinion('enemy1', 'test', '1', 3, { powerModifier: 0 })] },
             ],
         });
 
@@ -451,7 +451,7 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（它可能�
             },
             bases: [{
                 defId: 'base_test', ongoingActions: [],
-                minions: [makeMinion('mine1', 'test', '0', 3)],
+                minions: [makeMinion('mine1', 'test', '0', 3, { powerModifier: 0 })],
             }],
         });
 

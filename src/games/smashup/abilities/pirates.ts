@@ -61,7 +61,7 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
     });
     // "你可以"：添加跳过选项
     const allOptions = [
-        { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true } },
+        { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true } , displayMode: 'button' as const },
         ...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
     ] as any[];
     const interaction = createSimpleChoice(
@@ -190,7 +190,7 @@ function buildFullSailChooseMinionInteraction(
     if (myMinions.length === 0) return null;
     const options = [
         ...buildMinionTargetOptions(myMinions, { state: state, sourcePlayerId: playerId }),
-        { id: 'done', label: '完成移动', value: { done: true } },
+        { id: 'done', label: '完成移动', value: { done: true } , displayMode: 'button' as const },
     ];
     const interaction = createSimpleChoice(
         `pirate_full_sail_minion_${now}`, playerId,
@@ -289,10 +289,6 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
     const scoringBaseIndex = ctx.baseIndex;
     if (scoringBaseIndex === undefined) return [];
 
-    console.log('[pirateKingBeforeScoring] Called:', {
-        scoringBaseIndex,
-        timestamp: ctx.now,
-    });
 
     // 收集不在计分基地上的所有 pirate_king（不限当前回合玩家）
     const kings: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] = [];
@@ -305,7 +301,6 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
         }
     }
     
-    console.log('[pirateKingBeforeScoring] Found kings:', kings.length, kings.map(k => k.uid));
     
     if (kings.length === 0) return [];
 
@@ -321,12 +316,6 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
     const baseName = baseDef?.name ?? `基地 ${scoringBaseIndex + 1}`;
     // ✅ 使用 first.uid 确保每个海盗王的交互 ID 唯一（防止同一时间戳创建重复 ID）
     const interactionId = `pirate_king_move_${first.uid}_${ctx.now}`;
-    console.log('[pirateKingBeforeScoring] Creating interaction:', {
-        interactionId,
-        kingUid: first.uid,
-        controller: first.controller,
-        timestamp: ctx.now,
-    });
     const interaction = createSimpleChoice(
         interactionId, first.controller,
         `海盗王：是否移动到即将计分的「${baseName}」？`,
@@ -392,7 +381,7 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
             return { id: `base-${b.index}`, label: baseName, value: { baseIndex: b.index }, _source: 'base' as const };
         });
         const allOptions = [
-            { id: 'skip', label: '跳过（不移动大副）', value: { skip: true } },
+            { id: 'skip', label: '跳过（不移动大副）', value: { skip: true } , displayMode: 'button' as const },
             ...baseOptions,
         ] as any[];
         const interaction = createSimpleChoice(
@@ -614,7 +603,7 @@ export function registerPirateInteractionHandlers(): void {
             `pirate_cannon_second_${timestamp}`, playerId,
             '加农炮：点击第二个要消灭的力量≤2的随从（可选）',
             [
-                { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } },
+                { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } , displayMode: 'button' as const },
                 ...buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }),
             ] as any[],
             { sourceId: 'pirate_cannon_choose_second', targetType: 'minion' }
@@ -768,7 +757,7 @@ export function registerPirateInteractionHandlers(): void {
         const next = createSimpleChoice(
             `pirate_dinghy_second_${timestamp}`, playerId, '选择第二个要移动的随从（可选）',
             [
-                { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
+                { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } , displayMode: 'button' as const },
                 ...buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId }),
             ] as any[],
             { sourceId: 'pirate_dinghy_choose_second', targetType: 'minion' }
@@ -866,28 +855,17 @@ export function registerPirateInteractionHandlers(): void {
 
     // 海盗王：确认是否移动到计分基地（链式处理多个海盗王）
     registerInteractionHandler('pirate_king_move', (state, _playerId, value, iData, _random, timestamp) => {
-        console.log('[pirate_king_move handler] Called:', {
-            value,
-            timestamp,
-            hasContext: !!iData?.continuationContext,
-        });
         const selected = value as { move: boolean; uid?: string; defId?: string; fromBaseIndex?: number };
         const ctx = iData?.continuationContext as { scoringBaseIndex: number; remaining: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] } | undefined;
         if (!ctx) return undefined;
         const events: SmashUpEvent[] = [];
 
         if (selected.move && selected.uid && selected.defId !== undefined && selected.fromBaseIndex !== undefined) {
-            console.log('[pirate_king_move handler] Moving king:', {
-                uid: selected.uid,
-                from: selected.fromBaseIndex,
-                to: ctx.scoringBaseIndex,
-            });
             events.push(moveMinion(selected.uid, selected.defId, selected.fromBaseIndex, ctx.scoringBaseIndex, 'pirate_king', timestamp));
         }
 
         // 处理剩余海盗王
         const remaining = ctx.remaining ?? [];
-        console.log('[pirate_king_move handler] Remaining kings:', remaining.length);
         if (remaining.length > 0) {
             const next = remaining[0];
             const rest = remaining.slice(1);
@@ -895,11 +873,6 @@ export function registerPirateInteractionHandlers(): void {
             const baseName = baseDef?.name ?? `基地 ${ctx.scoringBaseIndex + 1}`;
             // ✅ 使用 next.uid 确保每个海盗王的交互 ID 唯一（防止同一时间戳创建重复 ID）
             const interactionId = `pirate_king_move_${next.uid}_${timestamp}`;
-            console.log('[pirate_king_move handler] Creating next interaction:', {
-                interactionId,
-                kingUid: next.uid,
-                controller: next.controller,
-            });
             const interaction = createSimpleChoice(
                 interactionId, next.controller,
                 `海盗王：是否移动到即将计分的「${baseName}」？`,
@@ -912,7 +885,6 @@ export function registerPirateInteractionHandlers(): void {
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, remaining: rest } } }), events };
         }
 
-        console.log('[pirate_king_move handler] No more kings, returning events');
         return { state, events };
     });
 

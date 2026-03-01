@@ -82,11 +82,11 @@ function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `minion-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, minionDefId: c.defId }, _source: 'discard' as const };
+        return { id: `minion-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, minionDefId: c.defId }, _source: 'discard' as const , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `cthulhu_recruit_by_force_${ctx.now}`, ctx.playerId,
-        '选择要放到牌库顶的随从（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true } }] as any[],
+        '选择要放到牌库顶的随从（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
         { sourceId: 'cthulhu_recruit_by_force', multi: { min: 0, max: eligibleMinions.length } },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -102,11 +102,11 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
+        return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `cthulhu_it_begins_again_${ctx.now}`, ctx.playerId,
-        '选择要洗回牌库的战术（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true } }],
+        '选择要洗回牌库的战术（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }],
         { sourceId: 'cthulhu_it_begins_again', multi: { min: 0, max: actionsInDiscard.length } },
     );
     // 手动提供 optionsGenerator：从弃牌堆过滤行动卡（保留 skip 选项）
@@ -116,9 +116,9 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
         const opts = actions.map((c: any, i: number) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
-        return [...opts, { id: 'skip', label: '跳过', value: { skip: true } }];
+        return [...opts, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }];
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -210,11 +210,11 @@ function cthulhuMadnessUnleashed(ctx: AbilityContext): AbilityResult {
     const options = madnessInHand.map((c, i) => ({
         id: `madness-${i}`,
         label: `疑狂卡?${i + 1}`,
-        value: { cardUid: c.uid, defId: c.defId },
+        value: { cardUid: c.uid, defId: c.defId , displayMode: 'card' as const },
     }));
     const interaction = createSimpleChoice(
         `cthulhu_madness_unleashed_${ctx.now}`, ctx.playerId,
-        '选择要弃掉的疑狂卡（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true } }] as any[],
+        '选择要弃掉的疑狂卡（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
         { sourceId: 'cthulhu_madness_unleashed', multi: { min: 0, max: madnessInHand.length } },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -484,7 +484,7 @@ function cthulhuServitor(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
+        return { id: `action-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `cthulhu_servitor_${ctx.now}`, ctx.playerId,

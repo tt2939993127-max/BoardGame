@@ -137,7 +137,7 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     }
     if (actionCandidates.length === 0) return { events };
     // 交互选择
-    const options = actionCandidates.map((c, i) => ({ id: `card-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, pid: c.pid } }));
+    const options = actionCandidates.map((c, i) => ({ id: `card-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, pid: c.pid }, displayMode: 'card' as const }));
     const interaction = createSimpleChoice(
         `wizard_mass_enchantment_${ctx.now}`, ctx.playerId,
         '选择一张行动卡作为额外行动打出', options, 'wizard_mass_enchantment',
@@ -195,25 +195,17 @@ function wizardPortal(ctx: AbilityContext): AbilityResult {
     const options = minions.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `minion-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `minion-${i}`, label: name, value: { index: i, cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const };
     });
+    
     const interaction = createSimpleChoice(
         `wizard_portal_pick_${ctx.now}`, ctx.playerId,
-        '传送：选择要放入手牌的随从（可以不选）', options, 'wizard_portal_pick',
-        undefined, { min: 0, max: minions.length },
+        '传送：选择要放入手牌的随从（可以不选）', options,
+        { sourceId: 'wizard_portal_pick', targetType: 'hand', multi: { min: 0, max: minions.length } },
     );
-    // 手动提供 optionsGenerator：从牌库顶过滤随从
-    (interaction.data as any).optionsGenerator = (state: any) => {
-        const p = state.core.players[ctx.playerId];
-        const top5 = p.deck.slice(0, 5);
-        const minionCards = top5.filter((c: any) => c.type === 'minion');
-        return minionCards.map((c: any, i: number) => {
-            const def = getCardDef(c.defId);
-            const name = def?.name ?? c.defId;
-            return { id: `minion-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
-        });
-    };
+    
     const allTopCards = topCards.map(c => ({ uid: c.uid, defId: c.defId, type: c.type }));
+    
     return {
         events: [revealEvt],
         matchState: queueInteraction(ctx.matchState, {
@@ -246,7 +238,7 @@ function wizardPortalOrderRemaining(
     const options = remaining.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `wizard_portal_order_${ctx.now}`, ctx.playerId,
@@ -260,7 +252,7 @@ function wizardPortalOrderRemaining(
         return ctx.remaining.map((c: any, i: number) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
     };
     return {
@@ -290,11 +282,12 @@ function wizardScry(ctx: AbilityContext): AbilityResult {
     const options = actionCards.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `wizard_scry_${ctx.now}`, ctx.playerId,
-        '占卜：选择一张行动卡放入手牌', options, 'wizard_scry',
+        '占卜：选择一张行动卡放入手牌', options,
+        { sourceId: 'wizard_scry', autoRefresh: 'deck' }, // 显式声明从牌库刷新
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -593,7 +586,7 @@ export function registerWizardInteractionHandlers(): void {
         const options = remaining.map((c, i) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
         const next = createSimpleChoice(
             `wizard_portal_order_${timestamp}`, playerId,
@@ -606,7 +599,7 @@ export function registerWizardInteractionHandlers(): void {
             return ctx.remaining.map((c: any, i: number) => {
                 const def = getCardDef(c.defId);
                 const name = def?.name ?? c.defId;
-                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
             });
         };
         return {
@@ -640,7 +633,7 @@ export function registerWizardInteractionHandlers(): void {
         const options = remaining.map((c, i) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
         const next = createSimpleChoice(
             `wizard_portal_order_${timestamp}`, playerId,
@@ -653,7 +646,7 @@ export function registerWizardInteractionHandlers(): void {
             return ctx.remaining.map((c: any, i: number) => {
                 const def = getCardDef(c.defId);
                 const name = def?.name ?? c.defId;
-                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
             });
         };
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered } } }), events: [] };

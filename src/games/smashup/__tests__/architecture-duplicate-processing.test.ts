@@ -57,9 +57,11 @@ describe('架构测试：防止重复处理', () => {
         const interaction1 = result1.finalState.sys.interaction.current;
         expect(interaction1).toBeDefined();
 
-        // 步骤2：选择消灭 Igor
+        // 步骤2：选择消灭 Igor（科学小怪蛋）
         const options = (interaction1?.data as any)?.options;
-        const igorOption = options.find((o: any) => o.label.includes('igor'));
+        const igorOption = options.find((o: any) => 
+            o.label.includes('科学小怪蛋') || o.value?.defId === 'frankenstein_igor'
+        );
         expect(igorOption).toBeDefined();
 
         const result2 = runCommand(result1.finalState, {
@@ -124,7 +126,9 @@ describe('架构测试：防止重复处理', () => {
         expect(interaction1).toBeDefined();
 
         const options = (interaction1?.data as any)?.options;
-        const igorOption = options.find((o: any) => o.label.includes('igor'));
+        const igorOption = options.find((o: any) => 
+            o.label.includes('科学小怪蛋') || o.value?.defId === 'frankenstein_igor'
+        );
 
         const result2 = runCommand(result1.finalState, {
             type: INTERACTION_COMMANDS.RESPOND,
@@ -180,9 +184,11 @@ describe('架构测试：防止重复处理', () => {
         const interaction1 = result1.finalState.sys.interaction.current;
         expect(interaction1).toBeDefined();
 
-        // 步骤2：选择消灭 Igor
+        // 步骤2：选择消灭 Igor（科学小怪蛋）
         const options = (interaction1?.data as any)?.options;
-        const igorOption = options.find((o: any) => o.label.includes('igor'));
+        const igorOption = options.find((o: any) => 
+            o.label.includes('科学小怪蛋') || o.value?.defId === 'frankenstein_igor'
+        );
         expect(igorOption).toBeDefined();
 
         const result2 = runCommand(result1.finalState, {

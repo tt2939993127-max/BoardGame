@@ -96,35 +96,42 @@ export async function waitForFactionDraft(page: Page, timeout = 60000) {
     }
 }
 
-/** 通过 UI 选择派系（按索引） */
+/** 通过 UI 选择派系（按索引） - 增强版，带重试 */
 export async function selectFaction(page: Page, factionIndex: number) {
     console.log(`[SmashUp] 选择派系索引: ${factionIndex}`);
     
-    // 1. 点击派系卡牌打开详情弹窗
-    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') }); // 排除已被选择的
-    const count = await factionCards.count();
-    console.log(`[SmashUp] 找到 ${count} 个可选派系卡牌`);
+    // 1. 点击派系卡牌
+    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') });
+    await factionCards.nth(factionIndex).click();
+    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}`);
     
-    if (count === 0) {
-        console.error('[SmashUp] ❌ 没有找到可选派系卡牌！');
-        await page.screenshot({ path: `test-results/no-faction-cards-${Date.now()}.png`, fullPage: true });
-        throw new Error('没有找到可选派系卡牌');
+    // 2. 等待并点击确认按钮（带重试）
+    const confirmButton = page.getByTestId('faction-confirm-button');
+    
+    // 等待按钮出现并可点击
+    await confirmButton.waitFor({ state: 'visible', timeout: 10000 });
+    await page.waitForTimeout(500); // 等待动画稳定
+    
+    // 尝试点击，如果失败则重试
+    let clicked = false;
+    for (let i = 0; i < 3; i++) {
+        try {
+            await confirmButton.click({ timeout: 3000 });
+            clicked = true;
+            console.log(`[SmashUp] ✅ 已确认选择派系 ${factionIndex}`);
+            break;
+        } catch (e) {
+            console.log(`[SmashUp] ⚠️  点击失败，重试 ${i + 1}/3`);
+            await page.waitForTimeout(500);
+        }
     }
     
-    await factionCards.nth(factionIndex).click();
-    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}，等待详情弹窗...`);
+    if (!clicked) {
+        throw new Error(`无法点击确认按钮（派系 ${factionIndex}）`);
+    }
     
-    // 2. 等待详情弹窗出现
-    await page.waitForSelector('button:has-text("Confirm"), button:has-text("确认")', { timeout: 5000 });
-    console.log('[SmashUp] ✅ 详情弹窗已打开');
-    
-    // 3. 点击弹窗中的确认按钮
-    const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("确认")').first();
-    await confirmButton.click();
-    console.log(`[SmashUp] ✅ 已确认选择派系 ${factionIndex}`);
-    
-    // 4. 等待弹窗关闭
-    await page.waitForTimeout(500);
+    // 3. 等待弹窗关闭
+    await page.waitForTimeout(1000);
 }
 
 /** 确认派系选择（已废弃 - 现在在 selectFaction 中完成） */
@@ -134,7 +141,8 @@ export async function confirmFactionSelection(page: Page) {
 }
 
 /**
- * 完成派系选择流程（双人对局）
+ * 完成派系选择流程（双人对局）- 蛇形选秀
+ * 顺序：Host 选第1个 → Guest 选第1个 → Guest 选第2个 → Host 选第2个
  * @param hostPage Host 页面
  * @param guestPage Guest 页面
  * @param hostFactions Host 选择的派系索引数组（默认 [0, 1]）
@@ -146,7 +154,7 @@ export async function completeFactionSelection(
     hostFactions: [number, number] = [0, 1],
     guestFactions: [number, number] = [2, 3],
 ) {
-    console.log('[SmashUp] 开始派系选择流程...');
+    console.log('[SmashUp] 开始派系选择流程（蛇形选秀）...');
     console.log('[SmashUp] Host 派系:', hostFactions);
     console.log('[SmashUp] Guest 派系:', guestFactions);
     
@@ -157,19 +165,18 @@ export async function completeFactionSelection(
     console.log('[SmashUp] 等待 Guest 派系选择界面...');
     await waitForFactionDraft(guestPage);
 
-    // Host 选择两个派系
-    console.log('[SmashUp] Host 开始选择派系...');
+    // 蛇形选秀：P0 → P1 → P1 → P0
+    console.log('[SmashUp] 第1轮：Host 选择第1个派系...');
     await selectFaction(hostPage, hostFactions[0]);
-    await selectFaction(hostPage, hostFactions[1]);
-    await confirmFactionSelection(hostPage);
-    console.log('[SmashUp] Host 派系选择完成');
-
-    // Guest 选择两个派系
-    console.log('[SmashUp] Guest 开始选择派系...');
+    
+    console.log('[SmashUp] 第2轮：Guest 选择第1个派系...');
     await selectFaction(guestPage, guestFactions[0]);
+    
+    console.log('[SmashUp] 第3轮：Guest 选择第2个派系...');
     await selectFaction(guestPage, guestFactions[1]);
-    await confirmFactionSelection(guestPage);
-    console.log('[SmashUp] Guest 派系选择完成');
+    
+    console.log('[SmashUp] 第4轮：Host 选择第2个派系...');
+    await selectFaction(hostPage, hostFactions[1]);
     
     console.log('[SmashUp] ✅ 派系选择流程完成');
 }

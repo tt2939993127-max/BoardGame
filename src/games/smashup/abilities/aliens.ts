@@ -74,7 +74,7 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
     );
     if (minionOptions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = [
-        { id: 'skip', label: '跳过（不返回随从）', value: { skip: true } },
+        { id: 'skip', label: '跳过（不返回随从）', value: { skip: true } , displayMode: 'button' as const },
         ...minionOptions,
     ] as any[];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
@@ -106,7 +106,7 @@ function alienCollector(ctx: AbilityContext): AbilityResult {
     );
     if (minionOptions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = [
-        { id: 'skip', label: '跳过（不收回随从）', value: { skip: true } },
+        { id: 'skip', label: '跳过（不收回随从）', value: { skip: true } , displayMode: 'button' as const },
         ...minionOptions,
     ] as any[];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
@@ -269,7 +269,7 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
             return {
                 id: card.uid,
                 label: def?.name ?? card.defId,
-                value: { cardUid: card.uid, defId: card.defId, targetPlayerId: targetPid },
+                value: { cardUid: card.uid, defId: card.defId, targetPlayerId: targetPid , displayMode: 'card' as const },
                 _source: 'hand' as const,
             };
         });
@@ -290,7 +290,7 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
                 return {
                     id: card.uid,
                     label: def?.name ?? card.defId,
-                    value: { cardUid: card.uid, defId: card.defId, targetPlayerId: targetPid },
+                    value: { cardUid: card.uid, defId: card.defId, targetPlayerId: targetPid , displayMode: 'card' as const },
                     _source: 'hand' as const,
                 };
             });
@@ -494,7 +494,7 @@ export function registerAlienInteractionHandlers(): void {
             return {
                 id: card.uid,
                 label: def?.name ?? card.defId,
-                value: { cardUid: card.uid, defId: card.defId, targetPlayerId },
+                value: { cardUid: card.uid, defId: card.defId, targetPlayerId , displayMode: 'card' as const },
                 _source: 'hand' as const,
             };
         });
@@ -515,7 +515,7 @@ export function registerAlienInteractionHandlers(): void {
                 return {
                     id: card.uid,
                     label: def?.name ?? card.defId,
-                    value: { cardUid: card.uid, defId: card.defId, targetPlayerId },
+                    value: { cardUid: card.uid, defId: card.defId, targetPlayerId , displayMode: 'card' as const },
                     _source: 'hand' as const,
                 };
             });
@@ -643,8 +643,9 @@ export function registerAlienInteractionHandlers(): void {
             id: string;
             label: string;
             value: { skip: true } | { cardUid: string; defId: string };
+            displayMode: 'button' | 'card';
         }> = [
-            { id: 'skip', label: '跳过额外随从', value: { skip: true } },
+            { id: 'skip', label: '跳过额外随从', value: { skip: true }, displayMode: 'button' as const },
             ...minionCards.map((card, index) => {
                 const def = getCardDef(card.defId) as MinionCardDef | undefined;
                 const power = def?.power ?? 0;
@@ -652,6 +653,7 @@ export function registerAlienInteractionHandlers(): void {
                     id: `hand-minion-${index}`,
                     label: `${def?.name ?? card.defId} (力量 ${power})`,
                     value: { cardUid: card.uid, defId: card.defId },
+                    displayMode: 'card' as const,
                 };
             }),
         ];

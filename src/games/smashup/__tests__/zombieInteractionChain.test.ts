@@ -51,7 +51,7 @@ function makeMinion(
 ): MinionOnBase {
     return {
         uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
         ...overrides,
     };
 }
@@ -557,7 +557,7 @@ describe('zombie_lord（僵尸领主）循环链', () => {
             bases: [
                 makeBase('test_base_1'), // 空基地（P0无随从）
                 makeBase('test_base_2'), // 空基地
-                makeBase('test_base_3', [makeMinion('opp-m1', 'pirate_first_mate', '1', 2)]),
+                makeBase('test_base_3', [makeMinion('opp-m1', 'pirate_first_mate', '1', 2, { powerModifier: 0 })]),
             ],
         });
         const state = makeFullMatchState(core);
@@ -600,7 +600,7 @@ describe('zombie_lord（僵尸领主）循环链', () => {
             },
             bases: [
                 makeBase('test_base_1'),
-                makeBase('test_base_2', [makeMinion('opp-m1', 'pirate_first_mate', '1', 2)]),
+                makeBase('test_base_2', [makeMinion('opp-m1', 'pirate_first_mate', '1', 2, { powerModifier: 0 })]),
             ],
         });
         const state = makeFullMatchState(core);

@@ -582,8 +582,21 @@ function formatDiceThroneActionEntry({
             const segments = [
                 i18nSeg('actionLog.tokenUsed', { tokenLabel: tokenKey, effectLabel: effectLabelKey }, paramI18nKeys),
             ];
-            if (typeof damageModifier === 'number') {
-                segments.push(i18nSeg('actionLog.tokenModifier', { amount: damageModifier }));
+            
+            // 伏击 Token：damageModifier 在 reducer 层为 0，真正的伤害值在 BONUS_DIE_ROLLED 的 pendingDamageBonus
+            // 优先使用 BONUS_DIE_ROLLED 的值（如果存在）
+            let actualDamageModifier = damageModifier;
+            if (tokenId === 'sneak_attack' && typeof damageModifier === 'number') {
+                const bonusDieEvent = events.find(
+                    (e): e is BonusDieRolledEvent => e.type === 'BONUS_DIE_ROLLED'
+                ) as BonusDieRolledEvent | undefined;
+                if (bonusDieEvent?.payload.pendingDamageBonus !== undefined) {
+                    actualDamageModifier = bonusDieEvent.payload.pendingDamageBonus;
+                }
+            }
+            
+            if (typeof actualDamageModifier === 'number') {
+                segments.push(i18nSeg('actionLog.tokenModifier', { amount: actualDamageModifier }));
             }
             if (evasionRoll) {
                 const resultKey = evasionRoll.success ? 'actionLog.tokenEvasionSuccess' : 'actionLog.tokenEvasionFail';

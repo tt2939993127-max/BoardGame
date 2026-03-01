@@ -140,9 +140,9 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 // 多候选：创建交互让玩家选择
                 const options = eligible.map((c, idx) => {
                     const def = getMinionDef(c.defId);
-                    return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } };
+                    return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
                 });
-                options.push({ id: 'skip', label: '跳过', value: { skip: true } } as any);
+                options.push({ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const } as any);
                 const interaction = createSimpleChoice(
                     `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
                     '嫩芽：选择一个力量≤3的随从打出（可跳过）', options as any[], 'killer_plant_sprout_search',
@@ -235,7 +235,7 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
     // 多个候选，Prompt 选择
     const options = eligible.map((c, idx) => {
         const def = getMinionDef(c.defId);
-        return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `killer_plant_venus_man_trap_search_${ctx.now}`, ctx.playerId,

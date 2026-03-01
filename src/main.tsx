@@ -8,6 +8,11 @@ import { i18nInitPromise } from './lib/i18n';
 import App from './App.tsx';
 import { SENTRY_DSN } from './config/server';
 
+// 限制堆栈深度，减少控制台噪音（开发环境）
+if (import.meta.env.DEV) {
+  Error.stackTraceLimit = 10;
+}
+
 // 异步初始化 Sentry（不阻塞首屏渲染，85KB gzip 延迟加载）
 if (SENTRY_DSN) {
   void import('@sentry/react').then((Sentry) => {

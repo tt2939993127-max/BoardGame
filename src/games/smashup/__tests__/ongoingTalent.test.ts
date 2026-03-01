@@ -253,12 +253,12 @@ describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 交互选择）'
             bases: [
                 {
                     defId: 'base_a',
-                    minions: [makeMinion('m1', 'pirate_first_mate', '0', 3)],
+                    minions: [makeMinion('m1', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
                     ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
                 },
                 {
                     defId: 'base_b',
-                    minions: [makeMinion('m2', 'pirate_saucy_wench', '0', 2)],
+                    minions: [makeMinion('m2', 'pirate_saucy_wench', '0', 2, { powerModifier: 0 })],
                     ongoingActions: [],
                 },
             ],
@@ -317,7 +317,7 @@ describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 交互选择）'
             bases: [
                 {
                     defId: 'base_a',
-                    minions: [makeMinion('m1', 'pirate_first_mate', '0', 3)],
+                    minions: [makeMinion('m1', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
                     ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
                 },
                 {
@@ -355,7 +355,7 @@ describe('innsmouth_sacred_circle（宗教圆环 ongoing talent）', () => {
             },
             bases: [{
                 defId: 'base_a',
-                minions: [makeMinion('m1', 'innsmouth_deep_one', '0', 2)],
+                minions: [makeMinion('m1', 'innsmouth_deep_one', '0', 2, { powerModifier: 0 })],
                 ongoingActions: [makeOngoing('oa1', 'innsmouth_sacred_circle', '0')],
             }],
         });
@@ -387,7 +387,7 @@ describe('innsmouth_sacred_circle（宗教圆环 ongoing talent）', () => {
             },
             bases: [{
                 defId: 'base_a',
-                minions: [makeMinion('m1', 'innsmouth_deep_one', '0', 2)],
+                minions: [makeMinion('m1', 'innsmouth_deep_one', '0', 2, { powerModifier: 0 })],
                 ongoingActions: [makeOngoing('oa1', 'innsmouth_sacred_circle', '0')],
             }],
         });
@@ -420,7 +420,7 @@ describe('随从天赋回归测试', () => {
             },
             bases: [{
                 defId: 'base_a',
-                minions: [makeMinion('m1', 'miskatonic_professor', '0', 5)],
+                minions: [makeMinion('m1', 'miskatonic_professor', '0', 5, { powerModifier: 0 })],
                 ongoingActions: [],
             }],
         });
@@ -451,7 +451,7 @@ describe('随从天赋回归测试', () => {
             },
             bases: [{
                 defId: 'base_a',
-                minions: [makeMinion('m1', 'miskatonic_professor', '0', 5)],
+                minions: [makeMinion('m1', 'miskatonic_professor', '0', 5, { powerModifier: 0 })],
                 ongoingActions: [],
             }],
         });

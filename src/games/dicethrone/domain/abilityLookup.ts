@@ -135,9 +135,16 @@ export function getPlayerAbilityBaseDamage(
     
     for (const effect of effects) {
         if (!effect.action) continue;
-        // 只计算显式 damage action
+        // 显式 damage action
         if (effect.action.type === 'damage' && typeof effect.action.value === 'number') {
             totalDamage += effect.action.value;
+        }
+        // custom action：通过 estimateDamage 回调估算
+        if (effect.action.type === 'custom' && effect.action.customActionId) {
+            const meta = getCustomActionMeta(effect.action.customActionId);
+            if (meta?.estimateDamage) {
+                totalDamage += meta.estimateDamage(state, playerId);
+            }
         }
     }
     

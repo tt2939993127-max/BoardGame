@@ -138,9 +138,9 @@ function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
     const options = minionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
     const interaction = createSimpleChoice(
         `zombie_grave_digger_${ctx.now}`, ctx.playerId,
         '选择要从弃牌堆取回的随从（可跳过）', [...options, skipOption] as any[], 'zombie_grave_digger',
@@ -152,9 +152,9 @@ function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
         const opts = minions.map((c: any, i: number) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
-        return [...opts, { id: 'skip', label: '跳过', value: { skip: true } }];
+        return [...opts, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }];
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -190,7 +190,7 @@ function zombieGraveRobbing(ctx: AbilityContext): AbilityResult {
     const options = player.discard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: `${name} (${c.type === 'minion' ? '随从' : '行动'})`, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: `${name} (${c.type === 'minion' ? '随从' : '行动'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `zombie_grave_robbing_${ctx.now}`, ctx.playerId,
@@ -202,7 +202,7 @@ function zombieGraveRobbing(ctx: AbilityContext): AbilityResult {
         return p.discard.map((c: any, i: number) => {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: `${name} (${c.type === 'minion' ? '随从' : '行动'})`, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: `${name} (${c.type === 'minion' ? '随从' : '行动'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -242,7 +242,7 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
         const typeLabel = c.type === 'minion' ? '随从' : '行动';
-        return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `zombie_lend_a_hand_${ctx.now}`, ctx.playerId,
@@ -256,7 +256,7 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
             const def = getCardDef(c.defId);
             const name = def?.name ?? c.defId;
             const typeLabel = c.type === 'minion' ? '随从' : '行动';
-            return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid, defId: c.defId } };
+            return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
         });
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -329,9 +329,9 @@ function zombieLordBuildInteraction(
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
         });
-    options.push({ id: 'done', label: '完成', value: { done: true } } as any);
+    options.push({ id: 'done', label: '完成', value: { done: true }, displayMode: 'button' as const } as any);
     const allowedBaseIndices = emptyBases.filter(b => !filledBases.includes(b.baseIndex)).map(b => b.baseIndex);
     const interaction = createSimpleChoice(
         `zombie_lord_${timestamp}`, playerId,
@@ -349,9 +349,9 @@ function zombieLordBuildInteraction(
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
         });
-        opts.push({ id: 'done', label: '完成', value: { done: true } } as any);
+        opts.push({ id: 'done', label: '完成', value: { done: true }, displayMode: 'button' as const } as any);
         return opts;
     };
     return {
@@ -409,7 +409,7 @@ function zombieTheyKeepComing(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+        return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `zombie_they_keep_coming_${ctx.now}`, ctx.playerId,
@@ -423,7 +423,7 @@ function zombieTheyKeepComing(ctx: AbilityContext): AbilityResult {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
         });
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -571,7 +571,7 @@ export function registerZombieInteractionHandlers(): void {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             const name = def?.name ?? c.defId;
             const power = def?.power ?? 0;
-            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } , displayMode: 'card' as const };
         });
         const next = createSimpleChoice(
             `zombie_outbreak_minion_${timestamp}`, playerId,

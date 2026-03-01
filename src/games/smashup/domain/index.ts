@@ -835,14 +835,16 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         // 【修复逻辑】
         // 1. 如果 flowHalted=true 且交互已解决 → 自动推进（清理 halt 状态）
         // 2. 如果没有 eligible 基地 → 自动推进（无需计分）
-        // 3. 其他情况 → 不自动推进（等待用户点击"结束回合"触发计分）
+        // 3. 如果有 eligible 基地且响应窗口已关闭 → 自动推进（触发计分）
+        // 4. 其他情况（响应窗口仍打开）→ 不自动推进（等待响应）
         // 
-        // 这样可以避免无限循环，同时在交互解决后自动推进，不需要点击两次。
+        // 这样可以避免无限循环，同时在响应窗口关闭后自动推进触发计分。
         if (phase === 'scoreBases') {
             console.log('[onAutoContinueCheck] scoreBases 阶段检查:', {
                 flowHalted: state.sys.flowHalted,
                 hasInteraction: !!state.sys.interaction.current,
                 interactionId: state.sys.interaction.current?.id,
+                hasResponseWindow: !!state.sys.responseWindow?.current,
             });
             
             // 情况1：flowHalted=true 且交互已解决 → 自动推进
@@ -859,8 +861,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return { autoContinue: true, playerId: pid };
             }
             
-            // 情况3：有 eligible 基地但未开始计分 → 不自动推进
-            console.log('[onAutoContinueCheck] scoreBases: 有 eligible 基地，等待用户点击"结束回合"');
+            // 情况3：有 eligible 基地且响应窗口已关闭 → 自动推进（触发计分）
+            if (!state.sys.responseWindow?.current) {
+                console.log('[onAutoContinueCheck] scoreBases: 响应窗口已关闭，自动推进触发计分');
+                return { autoContinue: true, playerId: pid };
+            }
+            
+            // 情况4：响应窗口仍打开 → 不自动推进（等待响应）
+            console.log('[onAutoContinueCheck] scoreBases: 响应窗口仍打开，等待响应');
             return undefined;
         }
 
@@ -999,18 +1007,19 @@ function postProcessSystemEvents(
     
     // 初始化已处理事件集合（如果不存在）
     // 使用 any 类型断言绕过 SystemState 类型限制（这是游戏特定的临时状态）
+    // 【D45 修复】统一处理 MINION_PLAYED 和 ACTION_PLAYED 的去重
     const sysAny = ms.sys as any;
-    if (!sysAny._processedMinionPlayed) {
-        sysAny._processedMinionPlayed = new Set<string>();
+    if (!sysAny._processedPlayedEvents) {
+        sysAny._processedPlayedEvents = new Set<string>();
     }
-    const processedSet = sysAny._processedMinionPlayed as Set<string>;
+    const processedSet = sysAny._processedPlayedEvents as Set<string>;
     
     for (const event of afterAffect.events) {
         if (event.type === SU_EVENTS.MINION_PLAYED) {
             const playedEvt = event as MinionPlayedEvent;
             
-            // 去重检查：构造事件唯一标识（cardUid + baseIndex）
-            const eventKey = `${playedEvt.payload.cardUid}@${playedEvt.payload.baseIndex}`;
+            // 去重检查：构造事件唯一标识（MINION: + cardUid + baseIndex）
+            const eventKey = `MINION:${playedEvt.payload.cardUid}@${playedEvt.payload.baseIndex}`;
             
             // 如果已处理过，跳过（防止步骤 4.5 和步骤 5 重复处理）
             if (processedSet.has(eventKey)) {
@@ -1041,6 +1050,26 @@ function postProcessSystemEvents(
             });
             derivedEvents.push(...triggers.events);
             if (triggers.matchState) ms = triggers.matchState;
+        } else if (event.type === SU_EVENTS.ACTION_PLAYED) {
+            // 【D45 修复】ACTION_PLAYED 事件也需要去重，防止行动卡 onPlay 能力被触发两次
+            // 典型场景：传送门创建交互，交互解决后 pipeline 重新进入 postProcessSystemEvents
+            const playedEvt = event as { type: string; payload: { playerId: string; cardUid: string; defId: string }; timestamp: number };
+            
+            // 去重检查：构造事件唯一标识（ACTION: + cardUid + playerId）
+            const eventKey = `ACTION:${playedEvt.payload.cardUid}@${playedEvt.payload.playerId}`;
+            
+            // 如果已处理过，跳过（防止步骤 4.5 和步骤 5 重复处理）
+            if (processedSet.has(eventKey)) {
+                prePlayEvents.push(event);
+                continue;
+            }
+            
+            // 标记为已处理
+            processedSet.add(eventKey);
+            
+            // ACTION_PLAYED 的 onPlay 触发已在 execute() 中处理，这里只需要标记去重
+            // 不需要额外触发逻辑（与 MINION_PLAYED 不同）
+            prePlayEvents.push(event);
         } else {
             prePlayEvents.push(event);
         }

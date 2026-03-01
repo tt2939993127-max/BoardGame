@@ -237,7 +237,7 @@ function vampireBigGulp(ctx: AbilityContext): AbilityResult {
     if (options.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.all_protected', ctx.now)] };
     
     // 添加"跳过"选项
-    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } , displayMode: 'button' as const };
     
     return resolveOrPrompt(ctx, [...options, skipOption], {
         id: 'vampire_big_gulp', title: '选择要消灭的力量≤4随从（可跳过）',
@@ -248,7 +248,6 @@ function vampireBigGulp(ctx: AbilityContext): AbilityResult {
         
         const minion = ctx.state.bases[val.baseIndex]?.minions.find(m => m.uid === val.minionUid);
         if (!minion) {
-            console.error(`[vampire_big_gulp] minion ${val.minionUid} not found at base ${val.baseIndex}`);
             return { events: [] };
         }
         return {
@@ -314,7 +313,7 @@ function vampireCrackOfDusk(ctx: AbilityContext): AbilityResult {
     if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = candidates.map((c, i) => {
         const def = getCardDef(c.defId);
-        return { id: `card-${i}`, label: `${def?.name ?? c.defId}`, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: `${def?.name ?? c.defId}`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     return resolveOrPrompt(ctx, options, {
         id: 'vampire_crack_of_dusk', title: '从弃牌堆选择力量≤2的随从打出（+1指示物）',
@@ -368,7 +367,7 @@ function buildCullTheWeakCardOptions(core: SmashUpCore, playerId: string) {
             return {
                 id: `card-${i}`,
                 label: `${def?.name ?? c.defId}`,
-                value: { cardUid: c.uid, defId: c.defId },
+                value: { cardUid: c.uid, defId: c.defId , displayMode: 'card' as const },
             };
         });
     return [
@@ -521,7 +520,6 @@ const handleDinnerDateChooseTarget: IH = (state, playerId, value, _data, _random
     const v = value as { minionUid: string; defId: string; baseIndex: number };
     const target = state.core.bases[v.baseIndex]?.minions.find(m => m.uid === v.minionUid);
     if (!target) {
-        console.error(`[handleDinnerDateChooseTarget] minion ${v.minionUid} not found at base ${v.baseIndex}`);
         return { state, events: [] };
     }
     return {
@@ -534,7 +532,6 @@ const handleBigGulpChoice: IH = (state, playerId, value, _data, _random, now) =>
     const v = value as { minionUid: string; defId: string; baseIndex: number };
     const target = state.core.bases[v.baseIndex]?.minions.find(m => m.uid === v.minionUid);
     if (!target) {
-        console.error(`[handleBigGulpChoice] minion ${v.minionUid} not found at base ${v.baseIndex}`);
         return { state, events: [] };
     }
     return {

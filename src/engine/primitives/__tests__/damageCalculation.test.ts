@@ -374,6 +374,7 @@ describe('DamageCalculation', () => {
         target: { playerId: '1' },
         baseDamage: 5,
         state,
+        autoCollectShields: true, // 启用护盾自动收集
       });
       
       const result = calc.resolve();

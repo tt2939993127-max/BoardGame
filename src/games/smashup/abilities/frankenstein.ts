@@ -243,7 +243,7 @@ function buildAngryMobCardOptions(core: SmashUpCore, playerId: string) {
     if (!player) return [];
     const cardOptions = player.hand.map((c, i) => {
         const def = getCardDef(c.defId);
-        return { id: `card-${i}`, label: `${def?.name ?? c.defId}`, value: { cardUid: c.uid, defId: c.defId } };
+        return { id: `card-${i}`, label: `${def?.name ?? c.defId}`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
     });
     return [
         ...cardOptions,
@@ -400,7 +400,7 @@ function buildBlitzedRemoveOptions(core: SmashUpCore, playerId: string, removedT
             id: 'done',
             label: removedTotal > 0 ? `完成移除（已移除 ${removedTotal} 个，消灭力量≤${removedTotal} 的随从）` : '跳过（不移除）',
             displayMode: 'button' as const,
-            value: { done: true },
+            value: { done: true , displayMode: 'button' as const },
         },
     ];
 }
