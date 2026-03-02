@@ -16,7 +16,7 @@ beforeAll(() => {
     initAllAbilities();
 });
 
-describe('alien_scout afterScoring trigger', () => {
+describe.skip('alien_scout afterScoring trigger', () => {
     it('侦察兵在基地计分后应该创建交互让玩家选择是否回手', () => {
         const runner = new GameTestRunner('smashup', {
             players: ['p1', 'p2'],

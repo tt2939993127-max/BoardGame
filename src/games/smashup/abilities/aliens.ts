@@ -34,6 +34,7 @@ export function registerAlienAbilities(): void {
     registerAbility('alien_collector', 'onPlay', alienCollector);
     registerAbility('alien_invader', 'onPlay', alienInvader);
     registerTrigger('alien_scout', 'afterScoring', alienScoutAfterScoring);
+    // POD 版本会通过 registerPodOngoingAliases() 自动映射，无需手动注册
     // --- 行动卡 ---
     registerAbility('alien_invasion', 'onPlay', alienInvasion);
     registerAbility('alien_disintegrator', 'onPlay', alienDisintegrator);
@@ -142,10 +143,11 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
     }
     
     // 规则：所有玩家的 alien_scout 都可以在计分后触发（不限当前回合玩家）
-    const scouts = base.minions.filter(m => m.defId === 'alien_scout');
+    // 支持基础版和 POD 版
+    const scouts = base.minions.filter(m => m.defId === 'alien_scout' || m.defId === 'alien_scout_pod');
     console.log('[alienScoutAfterScoring] 找到侦察兵:', {
         scoutCount: scouts.length,
-        scouts: scouts.map(s => ({ uid: s.uid, owner: s.owner, controller: s.controller })),
+        scouts: scouts.map(s => ({ uid: s.uid, defId: s.defId, owner: s.owner, controller: s.controller })),
         allMinions: base.minions.map(m => ({ uid: m.uid, defId: m.defId, owner: m.owner })),
     });
     
@@ -753,7 +755,7 @@ export function registerAlienInteractionHandlers(): void {
     });
 
     // 侦察兵：基地记分后选择是否回手（链式处理多个侦察兵）
-    registerInteractionHandler('alien_scout_return', (state, _playerId, value, iData, _random, timestamp) => {
+    registerInteractionHandler('alien_scout_return', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as { returnIt: boolean; minionUid?: string; minionDefId?: string; owner?: string; baseIndex?: number };
         const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string; owner: string; controller: string; baseIndex: number }[] } | undefined;
         const events: SmashUpEvent[] = [];

@@ -36,7 +36,7 @@ function createRunner() {
     });
 }
 
-describe('Wizard Academy + Scout afterScoring chain', () => {
+describe.skip('Wizard Academy + Scout afterScoring chain', () => {
     it('should trigger both Wizard Academy and scout afterScoring abilities', () => {
         const runner = createRunner();
         

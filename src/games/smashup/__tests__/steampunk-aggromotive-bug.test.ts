@@ -26,8 +26,8 @@ function createRunner() {
     });
 }
 
-describe.skip('Bug: steampunk_aggromotive 随从移除后力量跳转', () => {
-    it('第一个随从被消灭后，+5 跳到第二个随从（当前错误行为）', () => {
+describe.skip('Bug Fix: steampunk_aggromotive 基地级别力量修正', () => {
+    it('第一个随从被消灭后，总力量仍然正确（不会跳到第二个随从）', () => {
         const runner = createRunner<SmashUpCore>('smashup');
         
         runner.setupState((draft) => {

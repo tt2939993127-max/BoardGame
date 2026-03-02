@@ -232,6 +232,105 @@ export function clearOngoingEffectRegistry(): void {
     baseAbilitySuppressionRegistry.length = 0;
 }
 
+/**
+ * 为所有 POD 版本的卡牌批量注册 trigger/restriction/protection 别名
+ * 
+ * POD 版 defId 格式为"原版defId + _pod"（如 alien_scout_pod）。
+ * 此函数遍历已注册表，将符合原始形式的 defId 的所有 trigger/restriction/protection 复制给对应的 _pod 版本。
+ * 这样无需为每个 POD 卡单独编写 trigger 代码，就能让其自动继承基础版的全套游戏逻辑。
+ * 
+ * 必须在所有派系注册完毕后调用此函数。
+ */
+export function registerPodOngoingAliases(): void {
+    let mappedCount = 0;
+    
+    // 1. 映射 Trigger
+    const triggersToAdd: TriggerEntry[] = [];
+    for (const entry of triggerRegistry) {
+        const { sourceDefId, timing, callback } = entry;
+        
+        // 跳过已经是 _pod 的
+        if (sourceDefId.endsWith('_pod')) continue;
+        
+        const podDefId = `${sourceDefId}_pod`;
+        
+        // 如果 POD 版本已经注册，跳过（不覆盖显式注册）
+        const alreadyRegistered = triggerRegistry.some(
+            e => e.sourceDefId === podDefId && e.timing === timing
+        );
+        if (alreadyRegistered) continue;
+        
+        // 添加到待注册列表
+        triggersToAdd.push({ sourceDefId: podDefId, timing, callback });
+        mappedCount++;
+    }
+    
+    // 批量添加（避免在遍历时修改数组）
+    triggerRegistry.push(...triggersToAdd);
+    
+    // 2. 映射 Restriction
+    const restrictionsToAdd: RestrictionEntry[] = [];
+    for (const entry of restrictionRegistry) {
+        const { sourceDefId, restrictionType, checker } = entry;
+        
+        if (sourceDefId.endsWith('_pod')) continue;
+        
+        const podDefId = `${sourceDefId}_pod`;
+        
+        const alreadyRegistered = restrictionRegistry.some(
+            e => e.sourceDefId === podDefId && e.restrictionType === restrictionType
+        );
+        if (alreadyRegistered) continue;
+        
+        restrictionsToAdd.push({ sourceDefId: podDefId, restrictionType, checker });
+        mappedCount++;
+    }
+    
+    restrictionRegistry.push(...restrictionsToAdd);
+    
+    // 3. 映射 Protection
+    const protectionsToAdd: ProtectionEntry[] = [];
+    for (const entry of protectionRegistry) {
+        const { sourceDefId, protectionType, checker } = entry;
+        
+        if (sourceDefId.endsWith('_pod')) continue;
+        
+        const podDefId = `${sourceDefId}_pod`;
+        
+        const alreadyRegistered = protectionRegistry.some(
+            e => e.sourceDefId === podDefId && e.protectionType === protectionType
+        );
+        if (alreadyRegistered) continue;
+        
+        protectionsToAdd.push({ sourceDefId: podDefId, protectionType, checker });
+        mappedCount++;
+    }
+    
+    protectionRegistry.push(...protectionsToAdd);
+    
+    // 4. 映射 BaseAbilitySuppression
+    const suppressionsToAdd: { sourceDefId: string; checker: BaseAbilitySuppressionChecker }[] = [];
+    for (const entry of baseAbilitySuppressionRegistry) {
+        const { sourceDefId, checker } = entry;
+        
+        if (sourceDefId.endsWith('_pod')) continue;
+        
+        const podDefId = `${sourceDefId}_pod`;
+        
+        const alreadyRegistered = baseAbilitySuppressionRegistry.some(
+            e => e.sourceDefId === podDefId
+        );
+        if (alreadyRegistered) continue;
+        
+        suppressionsToAdd.push({ sourceDefId: podDefId, checker });
+        mappedCount++;
+    }
+    
+    baseAbilitySuppressionRegistry.push(...suppressionsToAdd);
+    
+    console.log(`[POD Ongoing Aliases] 自动映射 ${mappedCount} 个 POD 版本的 trigger/restriction/protection`);
+}
+
 /** 获取注册表大小（调试用） */
 export function getOngoingEffectRegistrySize(): {
     protection: number;

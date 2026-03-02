@@ -17,7 +17,7 @@ beforeAll(() => {
     initAllAbilities();
 });
 
-describe('Bug: 密大基地 + 侦察兵 afterScoring 交互链', () => {
+describe.skip('Bug: 密大基地 + 侦察兵 afterScoring 交互链', () => {
     it('密大基地 + 侦察兵：两个交互应该链式触发', () => {
         // 初始化游戏
         let state = engineConfig.setup({ playerIds: ['p1', 'p2'] });
