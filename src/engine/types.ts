@@ -383,6 +383,10 @@ export interface SystemState {
     flowHalted?: boolean;
     /** 游戏结束结果（由管线在每次命令执行后自动检测并写入） */
     gameover?: GameOverResult;
+    /** SmashUp: 记分阶段已记分的基地索引（防止 halt 后重复记分） */
+    scoredBaseIndices?: number[];
+    /** SmashUp: postProcessSystemEvents 去重标记（防止 MINION_PLAYED/ACTION_PLAYED 被处理两次） */
+    _processedPlayedEvents?: Set<string>;
 }
 
 // ============================================================================

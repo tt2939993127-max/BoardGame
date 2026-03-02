@@ -40,12 +40,11 @@ import { registerGiantAntAbilities, registerGiantAntInteractionHandlers } from '
 import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
-import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
+import { clearPowerModifierRegistry, registerPodPowerModifierAliases } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain/ongoingEffects';
 import { clearDiscardPlayProviders } from '../domain/discardPlayability';
 import { clearRegistry, registerPodAbilityAliases } from '../domain/abilityRegistry';
 import { clearInteractionHandlers, registerPodInteractionAliases } from '../domain/abilityInteractionHandlers';
-import { initPodStubRegistrations } from './podStubs';
 
 let initialized = false;
 
@@ -125,9 +124,8 @@ export function initAllAbilities(): void {
     // 不需为每张 POD 卡单独写一行能力代码就能让其自动接继基础版的全套逻辑
     registerPodAbilityAliases();
     registerPodInteractionAliases();
-    registerPodOngoingAliases(); // 新增：自动映射 trigger/restriction/protection
-    // POD 派系占位符注册
-    initPodStubRegistrations();
+    registerPodOngoingAliases(); // 自动映射 trigger/restriction/protection
+    registerPodPowerModifierAliases(); // 自动映射力量修正
 }
 
 /** 重置初始化状态（测试用） */

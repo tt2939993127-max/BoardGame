@@ -19,7 +19,7 @@ import {
 import { createGameEngine } from '../../engine/adapter';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
 import type { ActionCardDef } from './domain/types';
-import { getCardDef } from './data/cards';
+import { getCardDef, getMinionDef } from './data/cards';
 import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
@@ -65,7 +65,9 @@ const systems: EngineSystem<SmashUpCore>[] = [
             const core = state as SmashUpCore;
             const player = core.players[playerId];
             if (!player) return false;
-            return player.hand.some(c => {
+            
+            // 检查 special 行动卡
+            const hasSpecialAction = player.hand.some(c => {
                 if (c.type !== 'action') return false;
                 const def = getCardDef(c.defId) as ActionCardDef | undefined;
                 if (def?.subtype !== 'special') return false;
@@ -78,6 +80,15 @@ const systems: EngineSystem<SmashUpCore>[] = [
                 // 其他 special 卡默认可用
                 return true;
             });
+            
+            // 检查 beforeScoringPlayable 随从（如影舞者）
+            const hasBeforeScoringMinion = player.hand.some(c => {
+                if (c.type !== 'minion') return false;
+                const def = getMinionDef(c.defId);
+                return def?.beforeScoringPlayable === true;
+            });
+            
+            return hasSpecialAction || hasBeforeScoringMinion;
         },
     }),
     createTutorialSystem(),

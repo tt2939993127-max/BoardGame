@@ -599,7 +599,7 @@ export function fireTriggers(
     timing: TriggerTiming,
     ctx: Omit<TriggerContext, 'timing'>
 ): TriggerResult {
-    console.log('[fireTriggers] 开始触发:', {
+    console.log('🔥🔥🔥 [fireTriggers] 开始触发 🔥🔥🔥:', {
         timing,
         baseIndex: ctx.baseIndex,
         playerId: ctx.playerId,

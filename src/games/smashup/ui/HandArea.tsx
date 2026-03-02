@@ -91,8 +91,8 @@ const HandCard: React.FC<HandCardProps> = ({
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
                 zIndex: baseZIndex
             }}
-            // 对手视角时不播放进入动画，直接显示
-            initial={isOpponentView ? false : { y: 200, opacity: 0, scale: 0.8 }}
+            // 对手视角时完全不使用动画
+            initial={isOpponentView ? { opacity: 1, y: 0, scale: 1, rotate: rotationSeed } : { y: 200, opacity: 0, scale: 0.8 }}
             animate={{
                 // 弃牌选中时小幅上移（2vw），普通选中时大幅上移（5vw）
                 y: isSelected && !isDiscardSelected ? `-${SELECTED_Y_LIFT_VW}vw` : isDiscardSelected ? '-2vw' : '0',
@@ -100,8 +100,8 @@ const HandCard: React.FC<HandCardProps> = ({
                 rotate: isShaking ? [0, -6, 6, -4, 4, 0] : ((isSelected && !isDiscardSelected) ? 0 : rotationSeed),
                 opacity: 1
             }}
-            exit={isOpponentView ? false : { y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            exit={isOpponentView ? undefined : { y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+            transition={isOpponentView ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 28 }}
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
             onClick={() => {
@@ -181,24 +181,44 @@ export const HandArea: React.FC<Props> = ({
             data-testid="su-hand-area"
         >
             <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]" data-tutorial-id="su-hand-area">
-                <AnimatePresence>
-                    {hand.map((card, i) => (
+                {/* 对手视角：不使用 AnimatePresence，直接渲染静态卡牌 */}
+                {isOpponentView ? (
+                    hand.map((card, i) => (
                         <HandCard
                             key={card.uid}
                             card={card}
                             index={i}
                             total={hand.length}
-                            isSelected={selectedCardUid === card.uid}
-                            isDiscardSelected={!!discardSelection?.has(card.uid)}
-                            isDiscardMode={isDiscardMode}
-                            disableInteraction={disableInteraction}
-                            isDisabled={!!disabledCardUids?.has(card.uid)}
-                            isOpponentView={isOpponentView}
-                            onSelect={() => onCardSelect(card)}
-                            onViewDetail={() => onCardView?.(card)}
+                            isSelected={false}
+                            isDiscardSelected={false}
+                            isDiscardMode={false}
+                            disableInteraction={true}
+                            isDisabled={false}
+                            isOpponentView={true}
+                            onSelect={() => {}}
+                            onViewDetail={() => {}}
                         />
-                    ))}
-                </AnimatePresence>
+                    ))
+                ) : (
+                    <AnimatePresence>
+                        {hand.map((card, i) => (
+                            <HandCard
+                                key={card.uid}
+                                card={card}
+                                index={i}
+                                total={hand.length}
+                                isSelected={selectedCardUid === card.uid}
+                                isDiscardSelected={!!discardSelection?.has(card.uid)}
+                                isDiscardMode={isDiscardMode}
+                                disableInteraction={disableInteraction}
+                                isDisabled={!!disabledCardUids?.has(card.uid)}
+                                isOpponentView={false}
+                                onSelect={() => onCardSelect(card)}
+                                onViewDetail={() => onCardView?.(card)}
+                            />
+                        ))}
+                    </AnimatePresence>
+                )}
             </div>
         </div>
     );

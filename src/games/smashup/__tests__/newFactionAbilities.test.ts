@@ -1200,8 +1200,9 @@ describe('巨蚁派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('q1', 'giant_ant_killer_queen', '0', 4, { powerModifier: 0 }),
-                        makeMinion('m2', 'test_other', '0', 2, { powerModifier: 0 }),
+                        makeMinion('q1', 'giant_ant_killer_queen', '0', 4, { powerModifier: 0, playedThisTurn: true }),
+                        makeMinion('m2', 'test_other', '0', 2, { powerModifier: 0, playedThisTurn: true }),
+                        makeMinion('m3', 'test_other', '0', 3, { powerModifier: 0, playedThisTurn: true }),
                     ],
                     ongoingActions: [],
                 },
@@ -1215,7 +1216,9 @@ describe('巨蚁派系能力', () => {
         );
 
         const prompt = getInteractionsFromMS(talentResult.finalState)[0];
+        expect(prompt).toBeDefined(); // 应该创建交互（有多个候选）
         const option = prompt.data.options.find((o: any) => o?.value?.minionUid === 'm2');
+        expect(option).toBeDefined(); // m2 应该在候选列表中（本回合打出的）
         const resolveResult = runCommand(
             talentResult.finalState,
             { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,

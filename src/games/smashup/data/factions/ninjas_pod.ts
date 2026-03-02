@@ -56,10 +56,11 @@ export const NINJA_POD_MINIONS: MinionCardDef[] = [
         nameEn: 'Ninja Acolyte',
         faction: 'ninjas_pod',
         power: 2,
-        // [POD版新效果] Talent: During your turn, if you have not played a minion,
-        // you may return this card to your hand to play an extra minion on this base.
-        // 旧版只有 special，新版改为 talent（主动激活型）
-        abilityTags: ['talent'],
+        // Talent: If you have not played a minion on this turn, you may return this minion
+        // to your hand and play an extra minion here immediately.
+        // 注意：虽然描述是 Talent，但实际机制是 special（需要点击激活），与基础版一致
+        abilityTags: ['special'],
+        specialLimitGroup: 'ninja_acolyte',
         count: 4,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 15 },
     },

@@ -36,7 +36,60 @@
 - `minimum-scale=0.5, maximum-scale=3.0`：缩放范围 0.5x - 3x
 - `viewport-fit=cover`：支持刘海屏等异形屏幕
 
-### 3. 触摸优化
+### 3. 自动缩放 CSS
+
+**文件**：`src/index.css`
+
+```css
+@media (max-width: 1023px) and (orientation: landscape) {
+    /* 移动设备横屏时，游戏页面基于设计宽度 1280px 进行缩放 */
+    /* 召唤师战争有自己的 MapContainer 缩放系统，不使用 CSS 自动缩放 */
+    body:has([data-game-page]):not(:has([data-game-id="summonerwars"])) #root {
+        transform-origin: top left;
+        transform: scale(calc(100vw / 1280));
+        width: 1280px;
+        height: calc(100vh / (100vw / 1280));
+        overflow: hidden;
+    }
+}
+```
+
+**重要**：召唤师战争（Summoner Wars）有自己的 `MapContainer` 缩放系统（支持鼠标滚轮缩放和拖拽），不使用 CSS 自动缩放，避免双重缩放冲突。
+
+### 4. 游戏页面标记
+
+**文件**：`src/pages/MatchRoom.tsx`、`src/pages/LocalMatchRoom.tsx`
+
+在根容器添加 `data-game-page` 属性：
+
+```tsx
+<div className="..." data-game-page>
+```
+
+**文件**：`src/games/summonerwars/Board.tsx`
+
+召唤师战争额外添加 `data-game-id="summonerwars"` 属性，排除 CSS 自动缩放：
+
+```tsx
+<div className="..." data-game-page data-game-id="summonerwars">
+```
+
+### 5. 悬浮球缩小
+
+**文件**：`src/components/system/FabMenu.tsx`
+
+移动端按钮从 48px 缩小到 36px，间距和边距也相应缩小：
+
+```tsx
+const isMobile = window.innerWidth < 1024;
+const buttonSize = isMobile ? 36 : 48;
+const gap = isMobile ? 8 : 12;
+const margin = isMobile ? 16 : 32;
+```
+
+响应式尺寸，窗口变化时自动更新。
+
+### 6. 触摸优化
 
 **文件**：`src/index.css`
 

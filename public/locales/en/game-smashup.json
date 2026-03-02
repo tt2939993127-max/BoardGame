@@ -103,7 +103,8 @@
     "select_all": "Select All",
     "waiting_opponent": "Waiting for opponent",
     "power_counter": "Power Counter",
-    "skip": "Skip"
+    "skip": "Skip",
+    "wait_for_your_turn": "Wait for your response turn"
   },
   "feedback": {
     "deck_search_no_match": "No matching card found in deck. Deck reshuffled.",

@@ -1,12 +1,18 @@
 # POD 版本能力自动映射重构
 
+## 概述
+
+POD (Print-on-Demand) 版本是大杀四方的最新英文版卡牌。本文档说明**能力层**的自动映射系统。
+
+**重要**：自动映射只适用于**能力注册**（trigger/restriction/protection/ability/interaction），**不适用于数据定义**（卡牌的 power/abilityTags 等字段）。数据定义必须完整定义，不自动继承。详见 `docs/refactor/pod-system-architecture.md`。
+
 ## 问题背景
 
 ### 原始问题
 用户报告"侦察兵在普通基地触发不了"，实际上是 **POD 版本（`alien_scout_pod`）没有注册 afterScoring 触发器**。
 
 ### 根本原因
-POD 版本的卡牌与基础版本完全相同（除了 `id` 和 `faction` 字段），但是能力注册需要手动为每个 POD 版本调用一次注册函数：
+POD 版本的卡牌与基础版本能力相同，但是能力注册需要手动为每个 POD 版本调用一次注册函数：
 
 ```typescript
 // ❌ 旧方式：需要手动注册每个 POD 版本

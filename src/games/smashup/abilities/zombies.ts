@@ -526,8 +526,8 @@ export function registerZombieInteractionHandlers(): void {
     });
 
     // 进发商场：选择卡名后搜索同名卡放入弃牌堆，之后重洗牌库
-    // 事件顺序：先 DECK_RESHUFFLED（重建牌库，同名卡放在牌库顶部以便后续弃牌），
-    // 再 CARDS_DISCARDED（从牌库中将同名卡移入弃牌堆）。
+    // Wiki 规则："Search your deck for any number of cards with the same name and place them into your discard pile. Shuffle your deck."
+    // 注意：只洗牌库，不合并弃牌堆！
     registerInteractionHandler('zombie_mall_crawl', (state, playerId, value, _iData, random, timestamp) => {
         const { defId } = value as { defId: string };
         const player = state.core.players[playerId];
@@ -535,7 +535,7 @@ export function registerZombieInteractionHandlers(): void {
         if (sameNameCards.length === 0) {
             // 牌库中未找到同名卡（极端边缘情况），规则仍要求重洗牌库
             const shuffled = random.shuffle([...player.deck]);
-            const deckUids = [...shuffled.map(c => c.uid), ...player.discard.map(c => c.uid)];
+            const deckUids = shuffled.map(c => c.uid); // 只洗牌库，不包含弃牌堆
             return {
                 state, events: [
                     { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
@@ -547,13 +547,12 @@ export function registerZombieInteractionHandlers(): void {
         // 剩余牌库洗牌，同名卡放在最前面（它们会被后续 CARDS_DISCARDED 移走）
         const remainingDeck = player.deck.filter(c => c.defId !== defId);
         const shuffledRemaining = random.shuffle([...remainingDeck]);
-        // deckUids = 同名卡 + 洗牌后的剩余牌库 + 当前弃牌堆（DECK_RESHUFFLED 会合并 deck+discard）
-        const deckUids = [...uids, ...shuffledRemaining.map(c => c.uid), ...player.discard.map(c => c.uid)];
+        // deckUids = 同名卡 + 洗牌后的剩余牌库（不包含弃牌堆）
+        const deckUids = [...uids, ...shuffledRemaining.map(c => c.uid)];
         return {
             state,
             events: [
-                // 1. 重建牌库：合并 deck+discard，按 deckUids 排序，discard 清空
-                //    同名卡在 deckUids 中所以会保留在新 deck 里，原 discard 的卡也合并进 deck
+                // 1. 重建牌库：只洗牌库，不合并弃牌堆（DECK_RESHUFFLED 会检查 deckUids 是否包含弃牌堆的卡）
                 { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
                 // 2. 弃牌：同名卡从 deck 移入 discard
                 { type: SU_EVENTS.CARDS_DISCARDED, payload: { playerId, cardUids: uids }, timestamp } as CardsDiscardedEvent,

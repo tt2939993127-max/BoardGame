@@ -103,8 +103,9 @@ function giantAntKillerQueenTalent(ctx: AbilityContext): AbilityResult {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
     }
 
+    // 只选择本回合打出的己方随从（不包括杀手女皇自己）
     const candidates = ctx.state.bases[ctx.baseIndex]?.minions
-        .filter(m => m.controller === ctx.playerId)
+        .filter(m => m.controller === ctx.playerId && m.playedThisTurn && m.uid !== ctx.cardUid)
         .map(m => {
             const def = getCardDef(m.defId);
             return { uid: m.uid, defId: m.defId, baseIndex: ctx.baseIndex, label: def?.name ?? m.defId };

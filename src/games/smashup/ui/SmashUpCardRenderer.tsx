@@ -28,6 +28,7 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
     // 渲染器必须拿到具体的 defId 才能读取中文字典和做图集覆写
     // 由于只有 renderer 类型的 previewRef 能任意传参，我们假设这里的 payload 透传了 defId
     const defId = previewRef.type === 'renderer' ? (previewRef.payload?.defId as string | undefined) : undefined;
+    const disableHoverOverlay = previewRef.type === 'renderer' ? (previewRef.payload?.disableHoverOverlay as boolean | undefined) ?? false : false;
 
     // 默认回退为原始数据的图集坐标，如果没有配置过的话
     const { originalAtlasId, originalIndex } = useMemo(() => {
@@ -47,40 +48,54 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
     let finalIndex = originalIndex;
 
     // 基础牌默认使用高清英文图集（由于缺少低清中文资源），POD 版本也全都是高清英文图集
-    const isBase = !!getBaseDef(defId);
+    const isBase = defId ? !!getBaseDef(defId) : false;
     // 判断是否为 POD 版本：
     // 1. 卡牌 ID 以 _pod 结尾（POD 派系的卡牌）
     // 2. 基地卡：只有当玩家选择了该基地对应派系的 POD 版本时，才使用 POD 图集
     //    例如：base_wizard_academy (faction: 'wizards') 只有在玩家选择了 'wizards_pod' 时才用 POD 图集
     //    如果玩家选择的是基础版 'wizards' + 其他 POD 派系，巫师基地仍然用中文图集
-    const isPodVersion = defId.endsWith('_pod') || (isBase && (() => {
+    const isPodVersion = defId ? (defId.endsWith('_pod') || (isBase && (() => {
         const baseDef = getBaseDef(defId);
         if (!baseDef?.faction) return false;
         // 检查玩家是否选择了该派系的 POD 版本（而不是基础版）
         const podFactionId = `${baseDef.faction}_pod`;
         return selectedFactions.has(podFactionId);
-    })());
+    })())) : false;
+    
+    // 判断基地卡是否应该使用英文图集：
+    // 1. 玩家选择了该派系的 POD 版本 → 使用英文 POD 图集
+    // 2. 玩家选择了该派系的基础版本 → 使用英文基础图集（如果有映射）
+    const shouldUseEnglishAtlas = defId && isBase && (() => {
+        const baseDef = getBaseDef(defId);
+        if (!baseDef?.faction) return false;
+        // 检查玩家是否选择了该派系（基础版或 POD 版）
+        return selectedFactions.has(baseDef.faction) || selectedFactions.has(`${baseDef.faction}_pod`);
+    })();
 
-    // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者本身是基地，才去查 TTS 高清英文图集。
+    // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
     // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
     // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集
     const isEnglishVariant = effectiveLocale === 'en' || effectiveLocale === 'en-US';
-    if (isEnglishVariant || isPodVersion || isBase || !originalAtlasId) {
+    
+    // 标记是否使用了英文图集映射
+    let usedEnglishAtlas = false;
+    
+    if (isEnglishVariant || isPodVersion || shouldUseEnglishAtlas || !originalAtlasId) {
         // 对于基地卡，根据是否为 POD 版本选择不同的映射 key
-        let lookupKey = defId;
-        if (isBase && isPodVersion) {
+        let lookupKey = defId || '';
+        if (isBase && isPodVersion && defId) {
             // POD 版本基地：使用 base_xxx_pod 映射
             lookupKey = `${defId}_pod`;
         }
         // 否则使用原始 defId（基础版基地用 base_xxx，POD 卡牌用 xxx_pod）
         
-        const mapped = TTS_MAP[lookupKey];
-        if (mapped) {
-            // 优先使用映射的图集，但如果映射的图集未注册（如 tts_atlas_8），
-            // 则回退到原始图集（smashup:cards4 等）
-            // 注意：不能简单检查 startsWith('smashup:')，因为有些 TTS 图集已经注册了
-            finalAtlasId = mapped.atlasId;
-            finalIndex = mapped.index;
+        if (lookupKey) {
+            const mapped = TTS_MAP[lookupKey];
+            if (mapped) {
+                finalAtlasId = mapped.atlasId;
+                finalIndex = mapped.index;
+                usedEnglishAtlas = true;
+            }
         }
     }
 
@@ -114,9 +129,9 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
     // 用户在英文环境下可以关闭覆盖层
     const shouldShowOverlay = needsOverlay && overlayEnabled;
     
-    // POD/base 卡牌强制使用英文图片，普通卡牌使用 UI 语言
-    // 注意：必须显式传递 locale='en'，确保 CardPreview 内部的 AtlasCard 使用正确的语言加载图集
-    const imageLocale = (isPodVersion || isBase) ? 'en' : effectiveLocale;
+    // 图片语言选择：只有实际使用了英文图集映射时才用英文 locale
+    // 避免强制使用英文导致无英文版本的卡牌加载失败
+    const imageLocale = (isPodVersion || usedEnglishAtlas) ? 'en' : effectiveLocale;
 
     // 直接返回完整的卡牌（图片 + 覆盖层）
     return (
@@ -126,9 +141,11 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
                 locale={imageLocale}
                 className="w-full h-full"
             />
-            {/* 覆盖层：仅在需要时显示 */}
+            {/* 覆盖层：仅在需要时显示，且未禁用 hover 时才响应 hover */}
             {shouldShowOverlay && (
-                <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-[4%] opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
+                <div className={`absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-[4%] transition-opacity duration-200 bg-black/20
+                    ${disableHoverOverlay ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
+                >
                     {/* 标题 */}
                     <div className={`w-fit max-w-full bg-black/80 backdrop-blur-sm text-white font-bold rounded px-2 shadow 
                         ${isBase ? 'text-[1vw] max-w-[50%]' : 'text-[1.2vw]'}`}

@@ -240,11 +240,11 @@ describe('miskatonic_lost_knowledge（通往超凡的门 ongoing talent）', () 
 });
 
 // ============================================================================
-// 齐柏林飞艇（steampunk_zeppelin）：移动随从（含交互选择流程）
+// 齐柏林飞艇（steampunk_zeppelin）：移动随从（分两步交互）
 // ============================================================================
 
-describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 交互选择）', () => {
-    it('触发天赋后创建交互让玩家选择移动随从', () => {
+describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 分两步交互）', () => {
+    it('触发天赋后创建第一步交互：选择要移动的随从', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0'),
@@ -275,12 +275,13 @@ describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 交互选择）'
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
 
-        // 应创建交互（queueInteraction）
+        // 应创建第一步交互（选择随从）
         const interactions = getInteractionsFromMS(ms);
         expect(interactions.length).toBeGreaterThan(0);
 
-        // 交互应包含移动选项
         const interaction = interactions[0];
+        expect(interaction.data?.sourceId).toBe('steampunk_zeppelin_choose_minion');
+        expect(interaction.data?.targetType).toBe('minion');
         expect(interaction.data?.options?.length).toBeGreaterThan(0);
     });
 

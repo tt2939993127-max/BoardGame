@@ -103,7 +103,8 @@
     "select_all": "全选",
     "waiting_opponent": "等待对方操作",
     "power_counter": "力量指示物",
-    "skip": "跳过"
+    "skip": "跳过",
+    "wait_for_your_turn": "等待你的响应回合"
   },
   "feedback": {
     "deck_search_no_match": "牌库中未找到符合条件的卡牌，已重洗牌库",

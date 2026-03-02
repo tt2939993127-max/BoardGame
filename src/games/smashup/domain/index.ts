@@ -316,6 +316,7 @@ function scoreOneBase(
         hasMatchState: !!ms,
     });
     
+    console.log('🔥🔥🔥 [scoreBase] 即将调用 fireTriggers afterScoring 🔥🔥🔥');
     const afterScoringEvents = fireTriggers(afterScoringCore, 'afterScoring', {
         state: afterScoringCore,
         playerId: pid,
@@ -327,6 +328,14 @@ function scoreOneBase(
     });
     events.push(...afterScoringEvents.events);
     if (afterScoringEvents.matchState) ms = afterScoringEvents.matchState;
+
+    console.log('🔥 [scoreBase] afterScoring 完成:', {
+        hasMatchState: !!ms,
+        hasCurrent: !!ms?.sys?.interaction?.current,
+        currentId: ms?.sys?.interaction?.current?.id,
+        currentPlayerId: ms?.sys?.interaction?.current?.playerId,
+        queueLength: ms?.sys?.interaction?.queue?.length ?? 0,
+    });
 
     // 判断 afterScoring 是否新增了交互
     const interactionAfter = ms?.sys?.interaction?.current?.id ?? null;
@@ -377,6 +386,14 @@ function scoreOneBase(
     // 关键：仅当 afterScoring 新增了交互时（如刚柔流寺庙平局选择、忍者道场消灭随从等），
     // 才延迟发出 BASE_CLEARED/BASE_REPLACED，确保 targetType: 'minion' 的场上点选交互能看到随从。
     // 不影响 beforeScoring/onBaseRevealed 等其他来源的交互。
+    console.log('🔥 [scoreBase] 检查是否延迟 postScoringEvents:', {
+        afterScoringCreatedInteraction,
+        interactionBefore: interactionBeforeAfterScoring,
+        interactionAfter,
+        queueLenBefore: queueLenBeforeAfterScoring,
+        queueLenAfter,
+    });
+    
     if (afterScoringCreatedInteraction) {
         // 把 postScoringEvents 序列化存到交互的 continuationContext 中
         // 【修复】如果有多个 afterScoring 交互（如母舰 + 侦察兵），必须存到第一个交互中
@@ -663,18 +680,54 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     console.log('[FlowSystem] 仍有交互，继续 halt');
                     return { events: [], halt: true } as PhaseExitResult;
                 }
-                // 交互已解决，清除 flowHalted 标志
+                // 交互已解决，清除 flowHalted 标志（不可变更新）
                 console.log('[FlowSystem] 交互已解决，清除 flowHalted 标志');
-                state.sys.flowHalted = false;
+                state = {
+                    ...state,
+                    sys: { ...state.sys, flowHalted: false },
+                };
+            }
+
+            // 【关键修复】使用 sys 状态跟踪已记分的基地，防止 halt 后重复记分
+            // 初始化或获取已记分基地列表（不可变更新）
+            if (!state.sys.scoredBaseIndices) {
+                state = {
+                    ...state,
+                    sys: { ...state.sys, scoredBaseIndices: [] },
+                };
+            }
+            // 过滤掉已记分的基地
+            const remainingIndices = lockedIndices.filter(i => !state.sys.scoredBaseIndices!.includes(i));
+            console.log('[onPhaseExit] scoreBases 基地过滤:', {
+                lockedIndices,
+                scoredBaseIndices: state.sys.scoredBaseIndices,
+                scoredBaseIndicesRef: state.sys.scoredBaseIndices ? `[${state.sys.scoredBaseIndices.join(',')}]` : 'null',
+                remainingIndices,
+                flowHalted: state.sys.flowHalted,
+                hasInteraction: !!state.sys.interaction.current,
+            });
+
+            // 所有基地都已记分 → 清理状态并正常推进（不可变更新）
+            if (remainingIndices.length === 0) {
+                console.log('[onPhaseExit] 所有基地已记分，清理状态');
+                // 创建新 state 清理 scoredBaseIndices
+                const cleanedState: MatchState<SmashUpCore> = {
+                    ...state,
+                    sys: { ...state.sys, scoredBaseIndices: [] },
+                };
+                // 返回清理后的 state（通过 updatedState 传播）
+                return { events, updatedState: cleanedState } as PhaseExitResult;
             }
 
             // Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
-            if (eligibleBases.length >= 2 && !state.sys.interaction.current) {
-                const candidates = eligibleBases.map(eb => {
-                    const baseDef = getBaseDef(eb.defId);
+            if (remainingIndices.length >= 2 && !state.sys.interaction.current) {
+                const candidates = remainingIndices.map(i => {
+                    const base = core.bases[i];
+                    const totalPower = getTotalEffectivePowerOnBase(core, base, i);
+                    const baseDef = getBaseDef(base.defId);
                     return {
-                        baseIndex: eb.baseIndex,
-                        label: `${baseDef?.name ?? `基地 ${eb.baseIndex + 1}`} (力量 ${eb.totalPower}/${baseDef?.breakpoint ?? '?'})`,
+                        baseIndex: i,
+                        label: `${baseDef?.name ?? `基地 ${i + 1}`} (力量 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
                     };
                 });
 
@@ -690,15 +743,20 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
 
             // 1 个基地达标 → 直接记分
-            // 使用统一查询函数获取的 eligible 列表，按顺序逐个计分
-            let remainingBaseIndices = [...lockedIndices];
+            // 使用 remainingIndices（已过滤已记分基地），按顺序逐个计分
             let currentBaseDeck = core.baseDeck;
             let currentMatchState: MatchState<SmashUpCore> = state;
 
-            const maxIterations = remainingBaseIndices.length;
+            const maxIterations = remainingIndices.length;
             for (let iter = 0; iter < maxIterations; iter++) {
-                if (remainingBaseIndices.length === 0) break;
-                const foundIndex = remainingBaseIndices[0];
+                if (iter >= remainingIndices.length) break;
+                const foundIndex = remainingIndices[iter];
+
+                console.log('[onPhaseExit] 记分基地:', {
+                    iter,
+                    foundIndex,
+                    baseDefId: core.bases[foundIndex]?.defId,
+                });
 
                 const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
                 events.push(...result.events);
@@ -707,18 +765,48 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 if (result.matchState) {
                     currentMatchState = result.matchState;
                 }
+
+                // 标记该基地已记分（不可变更新）
+                if (!currentMatchState.sys.scoredBaseIndices) {
+                    currentMatchState = {
+                        ...currentMatchState,
+                        sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
+                    };
+                }
+                // 【关键】不可变更新：创建新数组而不是直接 push
+                currentMatchState = {
+                    ...currentMatchState,
+                    sys: {
+                        ...currentMatchState.sys,
+                        scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || []), foundIndex],
+                    },
+                };
+                console.log('[onPhaseExit] 基地已记分，更新 scoredBaseIndices:', {
+                    foundIndex,
+                    scoredBaseIndices: currentMatchState.sys.scoredBaseIndices,
+                    scoredBaseIndicesRef: `[${currentMatchState.sys.scoredBaseIndices.join(',')}]`,
+                });
+
                 // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
                 if (currentMatchState.sys.interaction?.current) {
+                    console.log('[onPhaseExit] beforeScoring 创建交互，halt');
                     return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
                 }
-                remainingBaseIndices = remainingBaseIndices.filter((index) => index !== foundIndex);
             }
 
             // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），
             // 需要 halt 等待玩家响应，不能直接推进到下一阶段
             if (currentMatchState.sys.interaction?.current) {
+                console.log('[onPhaseExit] afterScoring 创建交互，halt');
                 return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
             }
+
+            // 所有基地记分完成，清理状态（不可变更新）
+            currentMatchState = {
+                ...currentMatchState,
+                sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
+            };
+            console.log('[onPhaseExit] 所有基地记分完成，清理 scoredBaseIndices');
 
             // 清空 beforeScoring 和 afterScoring 触发标记（计分阶段结束）
             events.push({
@@ -731,6 +819,9 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 payload: {},
                 timestamp: now,
             } as unknown as SmashUpEvent);
+
+            // 返回更新后的 matchState（包含清理后的 scoredBaseIndices）
+            return { events, updatedState: currentMatchState } as PhaseExitResult;
 
             return events;
         }
@@ -1047,11 +1138,10 @@ function postProcessSystemEvents(
     // 初始化已处理事件集合（如果不存在）
     // 使用 any 类型断言绕过 SystemState 类型限制（这是游戏特定的临时状态）
     // 【D45 修复】统一处理 MINION_PLAYED 和 ACTION_PLAYED 的去重
-    const sysAny = ms.sys as any;
-    if (!sysAny._processedPlayedEvents) {
-        sysAny._processedPlayedEvents = new Set<string>();
+    if (!ms.sys._processedPlayedEvents) {
+        ms.sys._processedPlayedEvents = new Set<string>();
     }
-    const processedSet = sysAny._processedPlayedEvents as Set<string>;
+    const processedSet = ms.sys._processedPlayedEvents;
     
     // 【修复】清理返回手牌的随从的去重标记
     // 当随从返回手牌后再次打出时，应该重新触发 onPlay 能力

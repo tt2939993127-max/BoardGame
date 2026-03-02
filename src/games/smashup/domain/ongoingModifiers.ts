@@ -39,6 +39,8 @@ interface ModifierEntry {
     sourceDefId: string;
     /** 修正函数 */
     modifier: PowerModifierFn;
+    /** 是否已在函数内部处理 POD 版本（如果是，则不需要创建 POD 别名） */
+    handlesPodInternally?: boolean;
 }
 
 /** 临界点修正上下文 */
@@ -97,14 +99,17 @@ const basePowerModifiers: Map<string, BasePowerModifierFn> = new Map();
  * 
  * @param sourceDefId 提供修正的随从 defId（如 'robot_microbot_alpha'）
  * @param modifier 修正函数
+ * @param options 可选配置
+ * @param options.handlesPodInternally 修正函数是否已在内部处理 POD 版本（通过 baseId = defId.replace(/_pod$/, '')）。如果是，则不会为其创建 POD 别名。
  */
 export function registerPowerModifier(
     sourceDefId: string,
-    modifier: PowerModifierFn
+    modifier: PowerModifierFn,
+    options?: { handlesPodInternally?: boolean }
 ): void {
     // 去重保护：同一 sourceDefId 只注册一次（防止 HMR 重复注册）
     if (modifierRegistry.some(e => e.sourceDefId === sourceDefId)) return;
-    modifierRegistry.push({ sourceDefId, modifier });
+    modifierRegistry.push({ sourceDefId, modifier, handlesPodInternally: options?.handlesPodInternally });
 }
 
 /**
@@ -179,16 +184,25 @@ export function registerOngoingPowerModifier(
     condition?: (ctx: PowerModifierContext) => boolean,
 ): void {
     registerPowerModifier(defId, (ctx: PowerModifierContext) => {
+        // 处理 POD 版本：检查基础 defId
+        const baseDefId = defId.replace(/_pod$/, '');
+        
         if (location === 'minion') {
             // 附着在随从上：只对被附着的随从生效
-            const count = ctx.minion.attachedActions.filter(a => a.defId === defId).length;
+            // 检查基础版和 POD 版
+            const count = ctx.minion.attachedActions.filter(a => 
+                a.defId === baseDefId || a.defId === baseDefId + '_pod'
+            ).length;
             if (count === 0) return 0;
             if (condition && !condition(ctx)) return 0;
             return count * delta;
         }
 
         // 附着在基地上
-        const cards = ctx.base.ongoingActions.filter(a => a.defId === defId);
+        // 检查基础版和 POD 版
+        const cards = ctx.base.ongoingActions.filter(a => 
+            a.defId === baseDefId || a.defId === baseDefId + '_pod'
+        );
         if (cards.length === 0) return 0;
 
         switch (target) {
@@ -223,7 +237,7 @@ export function registerOngoingPowerModifier(
             default:
                 return 0; // 'self' 对基地 ongoing 无意义
         }
-    });
+    }, { handlesPodInternally: true }); // 标记已处理 POD
 }
 
 /**
@@ -245,6 +259,67 @@ export function registerBreakpointModifier(
 export function clearPowerModifierRegistry(): void {
     modifierRegistry.length = 0;
     breakpointModifierRegistry.length = 0;
+    basePowerModifiers.clear();
+}
+
+/**
+ * 自动为所有基础版力量修正创建 POD 版本映射
+ * 
+ * 必须在所有力量修正注册完毕后调用此函数。
+ * 跳过那些已在函数内部处理 POD 版本的修正（handlesPodInternally: true）。
+ */
+export function registerPodPowerModifierAliases(): void {
+    let mappedCount = 0;
+    let skippedCount = 0;
+    
+    // 1. 随从力量修正（modifierRegistry）
+    const powerModsToAdd: ModifierEntry[] = [];
+    for (const entry of modifierRegistry) {
+        if (!entry.sourceDefId.endsWith('_pod')) {
+            const podId = entry.sourceDefId + '_pod';
+            // 检查是否已经手动注册了 POD 版本
+            if (!modifierRegistry.some(e => e.sourceDefId === podId)) {
+                // 跳过已在函数内部处理 POD 版本的修正
+                if (entry.handlesPodInternally) {
+                    skippedCount++;
+                    continue;
+                }
+                powerModsToAdd.push({ sourceDefId: podId, modifier: entry.modifier });
+                mappedCount++;
+            }
+        }
+    }
+    modifierRegistry.push(...powerModsToAdd);
+    
+    // 2. 临界点修正（breakpointModifierRegistry）
+    const breakpointModsToAdd: BreakpointModifierEntry[] = [];
+    for (const entry of breakpointModifierRegistry) {
+        if (!entry.sourceDefId.endsWith('_pod')) {
+            const podId = entry.sourceDefId + '_pod';
+            if (!breakpointModifierRegistry.some(e => e.sourceDefId === podId)) {
+                breakpointModsToAdd.push({ sourceDefId: podId, modifier: entry.modifier });
+                mappedCount++;
+            }
+        }
+    }
+    breakpointModifierRegistry.push(...breakpointModsToAdd);
+    
+    // 3. 基地级别力量修正（basePowerModifiers）
+    const basePowerModsToAdd: Array<[string, BasePowerModifierFn]> = [];
+    for (const [defId, modifier] of basePowerModifiers.entries()) {
+        if (!defId.endsWith('_pod')) {
+            const podId = defId + '_pod';
+            if (!basePowerModifiers.has(podId)) {
+                basePowerModsToAdd.push([podId, modifier]);
+                mappedCount++;
+            }
+        }
+    }
+    for (const [podId, modifier] of basePowerModsToAdd) {
+        basePowerModifiers.set(podId, modifier);
+    }
+    
+    console.log(`[POD Power Modifier Aliases] 自动映射 ${mappedCount} 个 POD 版本的力量修正，跳过 ${skippedCount} 个已内置 POD 支持的修正`);
 }
 
 /** 获取所有已注册的 sourceDefId（用于能力行为审计） */
@@ -413,7 +488,7 @@ export function getPlayerEffectivePowerOnBase(
 }
 
 /**
- * 获取基地上的总有效力量（含持续修正 + ongoing 卡力量贡献）
+ * 获取基地上的总有效力量（含持续修正 + ongoing 卡力量贡献 + 基地级别力量修正）
  */
 export function getTotalEffectivePowerOnBase(
     state: SmashUpCore,
@@ -425,10 +500,12 @@ export function getTotalEffectivePowerOnBase(
     // 累加所有玩家的 ongoing 卡力量贡献（不限于有随从的玩家）
     // 修复 Bug：只有 ongoing 卡但没有随从的玩家，其力量贡献也应该计入总力量
     let ongoingBonus = 0;
+    let basePowerBonus = 0;
     for (const pid of Object.keys(state.players)) {
         ongoingBonus += getOngoingCardPowerContribution(base, pid);
+        basePowerBonus += getBasePowerModifiers(state, baseIndex, pid);
     }
-    return minionPower + ongoingBonus;
+    return minionPower + ongoingBonus + basePowerBonus;
 }
 
 /**

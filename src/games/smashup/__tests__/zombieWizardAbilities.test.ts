@@ -487,12 +487,12 @@ describe('僵尸派系能力', () => {
         expect(discardUids).toContain('d1');
         expect(discardUids).toContain('d3');
 
-        // 验证：a1, x1（原弃牌堆的卡）应在牌库中（被 DECK_RESHUFFLED 合并进牌库）
-        const deckUids = finalState.players['0'].deck.map(c => c.uid);
-        expect(deckUids).toContain('a1');
-        expect(deckUids).toContain('x1');
+        // 验证：a1, x1（原弃牌堆的卡）应保持在弃牌堆中（Wiki 规则：只洗牌库，不合并弃牌堆）
+        expect(discardUids).toContain('a1');
+        expect(discardUids).toContain('x1');
 
         // 验证：d2, d4 应在牌库中（非同名卡留在牌库）
+        const deckUids = finalState.players['0'].deck.map(c => c.uid);
         expect(deckUids).toContain('d2');
         expect(deckUids).toContain('d4');
 

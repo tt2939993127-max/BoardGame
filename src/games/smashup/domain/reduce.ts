@@ -525,11 +525,17 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const reshuffledDeck = deckUids
                 .map(uid => cardMap.get(uid))
                 .filter((card): card is CardInstance => card !== undefined);
+            
+            // 检查 deckUids 是否包含弃牌堆的卡：如果包含，说明是合并洗牌，清空弃牌堆；否则保持弃牌堆不变
+            const deckUidSet = new Set(deckUids);
+            const discardMerged = player.discard.some(c => deckUidSet.has(c.uid));
+            const newDiscard = discardMerged ? [] : player.discard;
+            
             return {
                 ...state,
                 players: {
                     ...state.players,
-                    [playerId]: { ...player, deck: reshuffledDeck, discard: [] },
+                    [playerId]: { ...player, deck: reshuffledDeck, discard: newDiscard },
                 },
             };
         }

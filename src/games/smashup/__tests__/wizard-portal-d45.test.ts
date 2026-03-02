@@ -63,9 +63,9 @@ describe('传送门交互 D45 问题', () => {
         const result1 = postProcessSystemEvents(core, [actionPlayedEvent as any], fixedRandom, matchState);
         
         // 验证：第一次调用标记了事件
-        const processedSet1 = (result1.matchState?.sys as any)?._processedPlayedEvents as Set<string>;
+        const processedSet1 = result1.matchState?.sys._processedPlayedEvents;
         expect(processedSet1).toBeDefined();
-        expect(processedSet1.has(`ACTION:${portalUid}@p1`)).toBe(true);
+        expect(processedSet1!.has(`ACTION:${portalUid}@p1`)).toBe(true);
 
         // 6. 第二次调用 postProcessSystemEvents（模拟 pipeline 步骤 5）
         // 使用第一次调用返回的 matchState（包含已标记的事件）
@@ -76,9 +76,9 @@ describe('传送门交互 D45 问题', () => {
         expect(result2.events.length).toBe(result1.events.length);
         
         // 验证：processedSet 仍然只有一个条目
-        const processedSet2 = (result2.matchState?.sys as any)?._processedPlayedEvents as Set<string>;
-        expect(processedSet2.size).toBe(1);
-        expect(processedSet2.has(`ACTION:${portalUid}@p1`)).toBe(true);
+        const processedSet2 = result2.matchState?.sys._processedPlayedEvents;
+        expect(processedSet2!.size).toBe(1);
+        expect(processedSet2!.has(`ACTION:${portalUid}@p1`)).toBe(true);
     });
 
     it('postProcessSystemEvents 对 MINION_PLAYED 事件去重', () => {
@@ -110,9 +110,9 @@ describe('传送门交互 D45 问题', () => {
         const result1 = postProcessSystemEvents(core, [minionPlayedEvent as any], fixedRandom, matchState);
         
         // 验证：第一次调用标记了事件
-        const processedSet1 = (result1.matchState?.sys as any)?._processedPlayedEvents as Set<string>;
+        const processedSet1 = result1.matchState?.sys._processedPlayedEvents;
         expect(processedSet1).toBeDefined();
-        expect(processedSet1.has(`MINION:${minionUid}@0`)).toBe(true);
+        expect(processedSet1!.has(`MINION:${minionUid}@0`)).toBe(true);
         
         // 验证：第一次调用产生了 derived events（onPlay 能力等）
         // MINION_PLAYED 本身 + derived events（至少包含原事件）
@@ -127,8 +127,8 @@ describe('传送门交互 D45 问题', () => {
         expect(result2.events[0].type).toBe(SU_EVENTS.MINION_PLAYED);
         
         // 验证：processedSet 仍然只有一个条目
-        const processedSet2 = (result2.matchState?.sys as any)?._processedPlayedEvents as Set<string>;
-        expect(processedSet2.size).toBe(1);
-        expect(processedSet2.has(`MINION:${minionUid}@0`)).toBe(true);
+        const processedSet2 = result2.matchState?.sys._processedPlayedEvents;
+        expect(processedSet2!.size).toBe(1);
+        expect(processedSet2!.has(`MINION:${minionUid}@0`)).toBe(true);
     });
 });

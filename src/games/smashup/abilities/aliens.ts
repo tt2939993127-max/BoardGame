@@ -177,7 +177,7 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
             { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: first.uid, minionDefId: first.defId, owner: first.owner, baseIndex: first.baseIndex, baseDefId: base.defId } },
             { id: 'no', label: '留在基地', value: { returnIt: false } },
         ],
-        { sourceId: 'alien_scout_return', targetType: 'minion' },
+        { sourceId: 'alien_scout_return', targetType: 'generic' },  // 显式声明为 generic，避免被误判为随从选择
     );
     const ms = queueInteraction(ctx.matchState, {
         ...interaction,
@@ -779,7 +779,7 @@ export function registerAlienInteractionHandlers(): void {
                     { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: next.uid, minionDefId: next.defId, owner: next.owner, baseIndex: next.baseIndex, baseDefId: base.defId } },
                     { id: 'no', label: '留在基地', value: { returnIt: false } },
                 ],
-                { sourceId: 'alien_scout_return', targetType: 'minion' }
+                { sourceId: 'alien_scout_return', targetType: 'generic' }  // 显式声明为 generic，避免被误判为随从选择
             );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remaining: rest } } }), events };
         }

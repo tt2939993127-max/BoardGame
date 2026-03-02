@@ -247,6 +247,12 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
     if (shouldHalt) {
         logDev(`[FlowSystem][${logLabel}] halt=true, not advancing`);
         const haltedState = updatedState ?? state;
+        console.log('🔥🔥🔥 [FlowSystem] halt 返回 updatedState:', {
+            hasUpdatedState: !!updatedState,
+            hasCurrent: !!haltedState.sys.interaction?.current,
+            currentId: haltedState.sys.interaction?.current?.id,
+            currentPlayerId: haltedState.sys.interaction?.current?.playerId,
+        });
         return {
             halt: haltOnExit ? true : undefined,
             state: {

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
+import { getPlayerEffectivePowerOnBase, getTotalEffectivePowerOnBase, getEffectivePower } from '../domain/ongoingModifiers';
 import { makeMinion, makeState } from './helpers';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 
@@ -102,5 +102,70 @@ describe('Bug Fix: steampunk_aggromotive 基地级别力量修正', () => {
         expect(getPlayerEffectivePowerOnBase(state, state.bases[0], 0, '0')).toBe(7);
         // 玩家 1 总力量 = 3 + 5 = 8
         expect(getPlayerEffectivePowerOnBase(state, state.bases[0], 0, '1')).toBe(8);
+    });
+    
+    it('getTotalEffectivePowerOnBase 包含基地级别修正', () => {
+        const m0 = makeMinion('m0', 'test_a', '0', 2, { powerModifier: 0, powerCounters: 0 });
+        const m1 = makeMinion('m1', 'test_b', '1', 3, { powerModifier: 0, powerCounters: 0 });
+        const base = {
+            defId: 'base_a',
+            minions: [m0, m1],
+            ongoingActions: [
+                { uid: 'ag0', defId: 'steampunk_aggromotive', ownerId: '0' },
+                { uid: 'ag1', defId: 'steampunk_aggromotive', ownerId: '1' },
+            ],
+        };
+        const state = makeState({ bases: [base] });
+        
+        // 基地总力量 = 玩家0(2+5) + 玩家1(3+5) = 15
+        expect(getTotalEffectivePowerOnBase(state, state.bases[0], 0)).toBe(15);
+    });
+    
+    it('POD 版本蒸汽机车也能正常工作', () => {
+        const m0 = makeMinion('m0', 'test_a', '0', 3, { powerModifier: 0, powerCounters: 0 });
+        const base = {
+            defId: 'base_a',
+            minions: [m0],
+            ongoingActions: [
+                { uid: 'ag0', defId: 'steampunk_aggromotive_pod', ownerId: '0' },
+            ],
+        };
+        const state = makeState({ bases: [base] });
+        
+        // 玩家 0 总力量 = 3 + 5 = 8
+        expect(getPlayerEffectivePowerOnBase(state, state.bases[0], 0, '0')).toBe(8);
+        // 基地总力量也应该是 8
+        expect(getTotalEffectivePowerOnBase(state, state.bases[0], 0)).toBe(8);
+    });
+});
+
+describe('Bug Fix: steampunk_steam_man POD 版本不应该翻倍', () => {
+    it('steampunk_steam_man_pod 应该只给 +1 力量，不是 +2', () => {
+        const m0 = makeMinion('m0', 'steampunk_steam_man_pod', '0', 3, { powerModifier: 0, powerCounters: 0 });
+        const base = {
+            defId: 'base_a',
+            minions: [m0],
+            ongoingActions: [
+                { uid: 'action1', defId: 'test_action', ownerId: '0' },
+            ],
+        };
+        const state = makeState({ bases: [base] });
+        
+        // 蒸汽人 POD 版本应该只给 +1 力量（不是 +2）
+        expect(getEffectivePower(state, m0, 0)).toBe(4); // 3 (base) + 1 (action bonus)
+    });
+    
+    it('steampunk_steam_man 基础版本也应该只给 +1 力量', () => {
+        const m0 = makeMinion('m0', 'steampunk_steam_man', '0', 3, { powerModifier: 0, powerCounters: 0 });
+        const base = {
+            defId: 'base_a',
+            minions: [m0],
+            ongoingActions: [
+                { uid: 'action1', defId: 'test_action', ownerId: '0' },
+            ],
+        };
+        const state = makeState({ bases: [base] });
+        
+        expect(getEffectivePower(state, m0, 0)).toBe(4); // 3 (base) + 1 (action bonus)
     });
 });

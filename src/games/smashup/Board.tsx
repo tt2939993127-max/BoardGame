@@ -937,6 +937,25 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 toast(t('ui.select_minion_hint', { defaultValue: '请选择一个随从' }));
                 return;
             }
+            
+            // Me First! 响应窗口期间打出 beforeScoringPlayable 随从：检查响应窗口状态
+            if (responseWindow && responseWindow.windowType === 'meFirst') {
+                const card = myPlayer?.hand.find(c => c.uid === selectedCardUid);
+                if (card?.type === 'minion') {
+                    const mDef = getMinionDef(card.defId);
+                    if (mDef?.beforeScoringPlayable) {
+                        // 检查是否还是当前响应者
+                        const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
+                        if (playerID !== currentResponderId) {
+                            toast(t('ui.wait_for_your_turn', { defaultValue: '等待你的响应回合' }));
+                            setSelectedCardUid(null);
+                            setSelectedCardMode(null);
+                            return;
+                        }
+                    }
+                }
+            }
+            
             // 被限制的基地不可部署
             if (!deployableBaseIndices.has(index)) {
                 toast(deployBlockReason || t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
@@ -950,7 +969,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         } else {
             setViewingCard({ defId: base.defId, type: 'base' });
         }
-    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices]);
+    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         console.log('[DEBUG] handleCardClick:', {

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
-import { getTotalEffectivePowerOnBase, getEffectivePower, getEffectivePowerBreakdown, getEffectiveBreakpoint, getOngoingCardPowerContribution } from '../domain/ongoingModifiers';
+import { getTotalEffectivePowerOnBase, getEffectivePower, getEffectivePowerBreakdown, getEffectiveBreakpoint, getOngoingCardPowerContribution, getBasePowerModifiers } from '../domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { isSpecialLimitBlocked } from '../domain/abilityHelpers';
 import { getScoringEligibleBaseIndices } from '../domain/ongoingModifiers';
@@ -189,9 +189,7 @@ export const BaseZone: React.FC<{
                         transition={{ duration: 0.4, ease: 'easeInOut' }}
                     >
                     <CardPreview
-                        previewRef={baseDef?.previewRef
-                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }
-                            : undefined}
+                        previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }}
                         className="w-full h-full"
                         title={baseName}
                     />
@@ -289,10 +287,11 @@ export const BaseZone: React.FC<{
                 {turnOrder.map(pid => {
                     const minions = minionsByController[pid] || [];
 
-                    // Calc Power（使用 getEffectivePower 包含 ongoing 修正和临时修正 + ongoing 卡力量贡献）
+                    // Calc Power（使用 getEffectivePower 包含 ongoing 修正和临时修正 + ongoing 卡力量贡献 + 基地级力量修正）
                     const minionTotal = minions.reduce((sum, m) => sum + getEffectivePower(core, m, baseIndex), 0);
                     const ongoingBonus = getOngoingCardPowerContribution(base, pid);
-                    const total = minionTotal + ongoingBonus;
+                    const basePowerBonus = getBasePowerModifiers(core, baseIndex, pid);
+                    const total = minionTotal + ongoingBonus + basePowerBonus;
                     const basePowerTotal = minions.reduce((sum, m) => sum + m.basePower, 0);
                     const modifierDelta = total - basePowerTotal;
 
@@ -640,7 +639,7 @@ const MinionCard: React.FC<{
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
                                         <CardPreview
                                             previewRef={actionDef?.previewRef
-                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId } }
+                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId, disableHoverOverlay: true } }
                                                 : undefined}
                                             className="w-full h-full"
                                             title={actionName}

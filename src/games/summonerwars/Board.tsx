@@ -671,7 +671,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
           </>
         </TutorialSelectionGate>
       ) : (
-        <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col">
+        <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col" data-game-page data-game-id="summonerwars">
           {isEditingLayout ? (
             <div className="flex-1 overflow-auto p-4">
               <div className="mb-2 flex items-center gap-2">
