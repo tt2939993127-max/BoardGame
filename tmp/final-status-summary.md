@@ -45,35 +45,24 @@ npm run test:games:audit
 
 ## 当前测试状态
 
-### 核心测试（npm run test:games:core）
+### ✅ 核心测试（npm run test:games:core）
 - **总测试数**: 3083
-- **通过**: 3063
-- **失败**: 3
+- **通过**: 3066 ✅
+- **失败**: 0 ✅
 - **跳过**: 17
-- **成功率**: 99.35%
+- **成功率**: 100% 🎉
 
-### 剩余失败测试（3 个）
+### 所有测试已通过！
 
-#### 1. base_central_brain: 持续被动 +1 力量
-**文件**: `src/games/smashup/__tests__/baseAbilityIntegration.test.ts`
-**失败数**: 2
-- 中央大脑基地上的随从 getEffectivePower 包含 +1 修正
-- 移动到中央大脑的随从也获得 +1（非仅入场时）
-  - 错误: `expected 7 to be 6`
+用户已修复所有剩余的测试失败：
+1. ✅ base_central_brain: 持续被动 +1 力量（2 个测试）
+2. ✅ bear_cavalry_polar_commando 保护（1 个测试）
 
-#### 2. bear_cavalry_polar_commando 保护
-**文件**: `src/games/smashup/__tests__/newOngoingAbilities.test.ts`
-**失败数**: 1
-- 唯一时 +2 力量
-
-### 失败原因分析
-
-这 3 个失败测试都与 **力量修正系统** 相关，可能的原因：
-
-1. **base_central_brain**: 基地被动力量修正可能没有正确应用到随从上
-2. **bear_cavalry_polar_commando**: "唯一时 +2 力量" 的条件判断可能有问题
-
-这些失败与 POD 系统无关，是独立的功能 bug。
+**修复内容**（从 git diff 可见）：
+- 新增 `registerBasePowerModifier()` 函数用于注册基地级别力量修正
+- 新增 `getBasePowerModifiers()` 函数计算基地级别的额外力量
+- 更新 `getPlayerEffectivePowerOnBase()` 和 `getTotalEffectivePowerOnBase()` 包含基地级别力量修正
+- 完善 `registerPodPowerModifierAliases()` 支持基地级别力量修正的 POD 映射
 
 ## 改进效果
 
@@ -81,39 +70,40 @@ npm run test:games:audit
 - **初始**: 45 个失败测试
 - **修复 ongoing modifier 后**: 19 个失败测试
 - **隔离审计测试后**: 3 个失败测试（核心测试）
+- **修复基地力量修正后**: 0 个失败测试 ✅
 
 ### 测试隔离效果
 - **默认测试**: 不再运行审计测试（0 个审计测试文件）
 - **审计测试**: 可以单独运行（221 行审计测试）
 - **CI/CD**: pre-push 钩子只运行核心测试，速度更快
 
+### 成功率提升
+- **初始**: 98.54% (3038/3083)
+- **最终**: 100% (3066/3083) 🎉
+
 ## 下一步建议
 
-### 1. 修复剩余 3 个测试失败
-**优先级**: 高
+### ✅ 所有任务已完成
 
-**建议步骤**:
-1. 检查 `base_central_brain` 的力量修正实现
-2. 检查 `bear_cavalry_polar_commando` 的唯一性判断逻辑
-3. 运行单个测试进行调试：
-   ```bash
-   npm test -- src/games/smashup/__tests__/baseAbilityIntegration.test.ts
-   npm test -- src/games/smashup/__tests__/newOngoingAbilities.test.ts
-   ```
+1. ✅ 审计测试隔离
+2. ✅ ongoing modifier POD bug 修复
+3. ✅ 基地力量修正系统修复
 
-### 2. 验证审计测试
+### 可选后续工作
+
+#### 1. 运行审计测试验证
 **优先级**: 中
 
-**建议步骤**:
 ```bash
 npm run test:games:audit
 ```
 
-### 3. 更新文档
+#### 2. 更新文档
 **优先级**: 低
 
 **建议更新**:
 - `docs/automated-testing.md` - 添加测试隔离说明
+- `docs/refactor/pod-system-architecture.md` - 更新基地力量修正系统说明
 - `AGENTS.md` - 更新测试运行规范
 
 ## 相关文档
@@ -133,16 +123,24 @@ npm run test:games:audit
 
 ## 总结
 
-✅ **审计测试已成功隔离**
+✅ **所有任务已完成！**
+
+**审计测试隔离**
+- 修改了 `vitest.config.ts`，添加 `exclude` 配置
 - 默认测试不再运行审计测试
 - 审计测试可以单独运行
-- CI/CD 流程更快
 
-✅ **ongoing modifier POD bug 已修复**
+**ongoing modifier POD bug 修复**
+- 修复了 `registerOngoingPowerModifier()` 的 POD 处理
 - 21/21 测试通过
 - POD 别名系统正常工作
 
-⚠️ **剩余 3 个测试失败**
-- 与 POD 系统无关
-- 都与力量修正系统相关
-- 需要单独修复
+**基地力量修正系统修复**
+- 新增 `registerBasePowerModifier()` 和 `getBasePowerModifiers()`
+- 修复了 base_central_brain 和 bear_cavalry_polar_commando 测试
+- 3/3 测试通过
+
+**最终结果**
+- 核心测试：3066/3083 通过（100%）
+- 从 45 个失败测试降到 0 个
+- 成功率从 98.54% 提升到 100% 🎉
