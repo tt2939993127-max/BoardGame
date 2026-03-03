@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 炎术士 (Pyromancer) GTR 技能运行时覆盖测试
  *
  * 通过 GameTestRunner 走完整管线验证技能效果：

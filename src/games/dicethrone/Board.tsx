@@ -2,7 +2,6 @@ import React from 'react';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 
 import { HAND_LIMIT, type TokenResponsePhase } from './domain/types';
-import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
@@ -63,7 +62,6 @@ import { useAttackShowcase } from './hooks/useAttackShowcase';
 import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
 
-type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 
 /** 教程 targetId → 对应的命令类型映射（用于白名单放行） */
@@ -306,22 +304,23 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 必须在客户端根据 meta 重新注入，不能依赖从服务端传来的 data 字段。
     const diceMultistepInteraction = React.useMemo(() => {
         if (sysInteraction?.kind !== 'multistep-choice') return undefined;
-        const meta = (sysInteraction.data as any)?.meta;
+        const meta = (sysInteraction.data as Record<string, unknown>)?.meta as Record<string, unknown> | undefined;
         if (!meta) return undefined;
 
         if (meta.dtType === 'modifyDie') {
-            const config = meta.dieModifyConfig;
+            const config = meta.dieModifyConfig as DiceModifyConfig | undefined;
             const isManualConfirmMode = config?.mode === 'any' || config?.mode === 'adjust';
+            const originalData = sysInteraction.data as Record<string, unknown>;
             return {
                 ...sysInteraction,
                 data: {
                     ...sysInteraction.data,
                     localReducer: (current: unknown, step: unknown) =>
-                        diceModifyReducer(current as any, step as DiceModifyStep, config),
+                        diceModifyReducer(current as DiceModifyState, step as DiceModifyStep, config),
                     toCommands: diceModifyToCommands,
                     // any/adjust 模式：手动确认，禁用 auto-confirm
-                    maxSteps: isManualConfirmMode ? undefined : (sysInteraction.data as any).maxSteps,
-                    minSteps: isManualConfirmMode ? 1 : (sysInteraction.data as any).minSteps,
+                    maxSteps: isManualConfirmMode ? undefined : originalData.maxSteps,
+                    minSteps: isManualConfirmMode ? 1 : originalData.minSteps,
                 },
             };
         }
@@ -332,7 +331,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 data: {
                     ...sysInteraction.data,
                     localReducer: (current: unknown, step: unknown) =>
-                        diceSelectReducer(current as any, step as DiceSelectStep),
+                        diceSelectReducer(current as DiceSelectState, step as DiceSelectStep),
                     toCommands: diceSelectToCommands,
                 },
             };
@@ -445,11 +444,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 同一 slot 多 variant 选择：玩家点击 slot 时，如果该 slot 有多个 variant 同时满足，弹窗让玩家选
     const [abilityChoiceOptions, setAbilityChoiceOptions] = React.useState<AbilityChoiceOption[]>([]);
 
-    // 响应窗口状态（必须在引用它的 effect 之前声明）
+    // 响应窗口状态已在上方声明（380-381行），这里直接使用
     const responseWindow = access.responseWindow;
-    const isResponseWindowOpen = !!responseWindow;
-    // 当前响应者 ID（从队列中获取）
-    const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
     const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
 
     // （variant 选择弹窗由 onSelectAbility 回调触发，不需要自动弹出）
@@ -516,7 +512,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 只有交互所有者才能看到交互 UI
     const isInteractionOwner = !isSpectator && (
         pendingInteraction?.playerId === rootPid ||
-        (diceMultistepInteraction as any)?.playerId === rootPid
+        diceMultistepInteraction?.playerId === rootPid
     );
 
     // 等待对方思考（isFocusPlayer 已在上方定义）
@@ -811,7 +807,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         triggerAbilityGlow();
         const timer = setTimeout(() => setActivatingAbilityId(undefined), 800);
         return () => clearTimeout(timer);
-    }, [G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, triggerAbilityGlow]);
+    }, [G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, triggerAbilityGlow, setActivatingAbilityId]);
 
     // 使用 useAnimationEffects Hook 管理飞行动画效果（基于 FX 引擎）
     // 事件流消费采用模式 A（单一游标），统一处理伤害/治疗等事件

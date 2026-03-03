@@ -11,22 +11,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
-import { DiceThroneDomain } from '../game';
+import { DiceThroneDomain } from '../domain';
 import { createQueuedRandom, createHeroMatchup, testSystems } from './test-utils';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 
 const INITIAL_CP = 1;
 const INITIAL_HP = 50;
-
-const createPaladinSetup = (mutate?: (core: any) => void) => 
-    createHeroMatchup('paladin', 'barbarian', (core) => {
-        core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
-        core.players['0'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
-        core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
-        core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
-        mutate?.(core);
-    });
 
 const cmd = (type: string, playerId: string, payload?: any) => ({ type, playerId, payload });
 
@@ -38,7 +29,12 @@ describe('圣骑士复仇技能 CP 获取测试', () => {
             systems: testSystems,
             playerIds: ['0', '1'],
             random,
-            setup: createPaladinSetup(), // createPaladinSetup 返回的就是 setup 函数
+            setup: createHeroMatchup('paladin', 'barbarian', (core) => {
+                core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['0'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+                core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+            }),
             silent: true,
         });
 
@@ -71,7 +67,12 @@ describe('圣骑士复仇技能 CP 获取测试', () => {
             systems: testSystems,
             playerIds: ['0', '1'],
             random,
-            setup: createPaladinSetup(),
+            setup: createHeroMatchup('paladin', 'barbarian', (core) => {
+                core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['0'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+                core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+            }),
             silent: true,
         });
 
@@ -107,7 +108,12 @@ describe('圣骑士复仇技能 CP 获取测试', () => {
             systems: testSystems,
             playerIds: ['0', '1'],
             random,
-            setup: createPaladinSetup(),
+            setup: createHeroMatchup('paladin', 'barbarian', (core) => {
+                core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['0'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+                core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+            }),
             silent: true,
         });
 

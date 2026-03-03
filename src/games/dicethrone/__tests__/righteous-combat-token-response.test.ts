@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 正义冲击 (Righteous Combat) Token 响应后 rollDie 执行测试
  *
  * 验证场景：当 damage(5) 触发 TOKEN_RESPONSE_REQUESTED 时，
