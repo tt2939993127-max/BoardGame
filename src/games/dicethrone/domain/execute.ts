@@ -39,6 +39,7 @@ import { executeTokenCommand } from './executeTokens';
 import { getPlayerPassiveAbilities } from './passiveAbility';
 import { buildDrawEvents } from './deckEvents';
 import { RESOURCE_IDS } from './resources';
+import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 // ============================================================================
 // 辅助函数
@@ -214,7 +215,7 @@ export function execute(
             const playerIds = Object.keys(state.players);
             const opponentId = playerIds.find(pid => pid !== rollerId) || rollerId;
             const responderQueue = getResponderQueue(stateAfterConfirm, 'afterRollConfirmed', opponentId, undefined, rollerId, phase);
-            if (responderQueue.length > 0) {
+            if (responderQueue.length > 0 && getAutoResponseEnabled()) {
                 const windowId = `afterRollConfirmed-${timestamp}`;
                 const responseWindowEvent: ResponseWindowOpenedEvent = {
                     type: 'RESPONSE_WINDOW_OPENED',

@@ -45,7 +45,7 @@ import { useCurrentChoice, useDiceThroneState } from './hooks/useDiceThroneState
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { diceModifyReducer, diceModifyToCommands, diceSelectReducer, diceSelectToCommands, type DiceModifyStep, type DiceSelectStep } from './domain/systems';
 // 引擎层 Hooks
-import { useSpectatorMoves } from '../../engine';
+import { useSpectatorMoves, useEventStreamCursor } from '../../engine';
 // 游戏特定 Hooks
 import { useInteractionState } from './hooks/useInteractionState';
 import { useAnimationEffects } from './hooks/useAnimationEffects';
@@ -76,14 +76,12 @@ const TUTORIAL_TARGET_COMMAND_MAP: Record<string, string[]> = {
 
 /**
  * 判断同 slot 的多个满足变体是否为"分歧型"（需要玩家选择）
- * - 增量型（如火球 3火/4火/5火）：所有 trigger 都是 diceSet 且骰面 key 集合相同，只是数量递增 → 自动选最高优先级
- * - 分歧型（如燃烧之灵 2火魂 vs 炙热之魂 2岩浆+2火魂）：trigger 类型不同或骰面 key 集合不同 → 弹窗选择
+ * - 增量型（如火球 3火/4火/5火）：所有 trigger 都是 diceSet 且骰面 key 集合相同，且 effect 类型集合相同，只是数量递增 → 自动选最高优先级
+ * - 分歧型（如燃烧之灵 2火魂 vs 炙热之魂 2岩浆+2火魂；赐死射击 vs 专注）：trigger 类型不同、骰面 key 集合不同、或 effect 类型集合不同 → 弹窗选择
  */
 function hasDivergentVariants(state: DiceThroneCore, playerId: string, variantIds: string[]): boolean {
-    const triggers = variantIds.map(vid => {
-        const match = findPlayerAbility(state, playerId, vid);
-        return match?.variant?.trigger ?? match?.ability.trigger ?? null;
-    });
+    const matches = variantIds.map(vid => findPlayerAbility(state, playerId, vid));
+    const triggers = matches.map(m => m?.variant?.trigger ?? m?.ability.trigger ?? null);
 
     // 任何 trigger 查不到，保守弹窗
     if (triggers.some(t => !t)) return true;
@@ -97,7 +95,16 @@ function hasDivergentVariants(state: DiceThroneCore, playerId: string, variantId
         return Object.keys(faces).sort().join(',');
     });
     const firstKeySet = faceKeySets[0];
-    return !faceKeySets.every(ks => ks === firstKeySet);
+    if (!faceKeySets.every(ks => ks === firstKeySet)) return true;
+
+    // 骰面 key 集合相同时，还需比较 effect 类型集合是否一致
+    // 若 effect 类型不同（如一个造伤害、一个施加状态），则为分歧型，需要玩家选择
+    const effectTypeSets = matches.map(m => {
+        const effects = m?.variant?.effects ?? m?.ability.effects ?? [];
+        return effects.map(e => e?.action?.type ?? 'unknown').sort().join(',');
+    });
+    const firstEffectTypeSet = effectTypeSets[0];
+    return !effectTypeSets.every(es => es === firstEffectTypeSet);
 }
 
 // --- Main Layout ---
@@ -237,6 +244,30 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         isSpectator,
         selectedCharacters: G.selectedCharacters,
     });
+
+    // 监听 DIE_REROLLED 事件触发骰子重投动画
+    const { consumeNew: consumeDieRerolled } = useEventStreamCursor({ 
+        entries: rawG.sys.eventStream?.entries ?? [] 
+    });
+    
+    React.useEffect(() => {
+        const { entries: newEntries } = consumeDieRerolled();
+        if (newEntries.length === 0) return;
+
+        // 收集所有重投的骰子 ID
+        const rerolledDiceIds: number[] = [];
+        for (const entry of newEntries) {
+            const event = entry.event as { type: string; payload?: { dieId?: number } };
+            if (event.type === 'DIE_REROLLED' && typeof event.payload?.dieId === 'number') {
+                rerolledDiceIds.push(event.payload.dieId);
+            }
+        }
+
+        if (rerolledDiceIds.length > 0) {
+            setRerollingDiceIds(rerolledDiceIds);
+            setTimeout(() => setRerollingDiceIds([]), 600);
+        }
+    }, [rawG.sys.eventStream?.entries, consumeDieRerolled, setRerollingDiceIds]);
 
     // 追踪已激活的攻击修正卡
     const { activeModifiers } = useActiveModifiers({
@@ -1084,7 +1115,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         onHighlightedAbilityClick={() => {
                             if (currentPhase === 'offensiveRoll' && !G.rollConfirmed) {
                                 playDeniedSound();
-                                toast.warning(t('error.confirmRoll'));
+                                toast.warning(t('error.confirmRoll'), undefined, { dedupeKey: 'dicethrone.confirmRoll' });
                             }
                         }}
                         selectedAbilityId={selectedAbilityId}
@@ -1184,7 +1215,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                     engineMoves.sellCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');
                                 }}
-                                onError={(msg) => { playDeniedSound(); toast.warning(msg); }}
+                                onError={(msg) => { playDeniedSound(); toast.warning(msg, undefined, { dedupeKey: 'dicethrone.handArea.error' }); }}
                                 canInteract={isResponder || isSelfView}
                                 canPlayCards={isActivePlayer || isResponder}
                                 drawDeckRef={drawDeckRef}

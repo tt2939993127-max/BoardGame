@@ -301,15 +301,15 @@ describe('狂战士 GTR 技能覆盖', () => {
     // 此处仅验证技能触发和选择，完整结算流程由 barbarian-behavior.test.ts 覆盖
     // ========================================================================
     describe('压制 (suppress)', () => {
-        it('2 剑 + 2 力量可触发压制（与全力一击共享触发条件）', () => {
-            // 进攻骰: [1,1,6,6,4] → 2 sword + 2 strength + 1 heart
-            const random = createQueuedRandom([1, 1, 6, 6, 4]);
+        it('3 剑 + 2 力量可触发压制', () => {
+            // 进攻骰: [1,1,1,6,6] → 3 sword + 2 strength
+            const random = createQueuedRandom([1, 1, 1, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
                 playerIds: ['0', '1'], random,
                 setup: createBarbarianSetup(), assertFn: assertState, silent: true,
             });
-            // 验证 suppress 可被选择（与 all-out-strike 共享触发条件）
+            // 验证 suppress 可被选择
             const result = runner.run({
                 name: '压制可触发',
                 commands: [

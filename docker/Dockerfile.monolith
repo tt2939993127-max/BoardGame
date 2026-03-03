@@ -5,7 +5,13 @@ WORKDIR /app
 
 # 先复制依赖清单，利用 Docker 层缓存（依赖不变时跳过 npm ci）
 COPY package.json package-lock.json ./
-RUN npm ci
+
+# 使用 npm 镜像源加速下载（可选，国内环境推荐）
+# RUN npm config set registry https://registry.npmmirror.com
+
+# 安装依赖（利用 BuildKit 缓存挂载加速）
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # 复制源码并构建前端
 COPY . .
@@ -23,7 +29,14 @@ FROM node:20-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+# 使用 npm 镜像源加速下载（可选，国内环境推荐）
+# RUN npm config set registry https://registry.npmmirror.com
+
+# 安装生产依赖（利用 BuildKit 缓存挂载加速）
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts && \
+    npm cache clean --force
 
 # ---- 阶段 3：最终生产镜像 ----
 FROM node:20-slim

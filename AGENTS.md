@@ -137,7 +137,27 @@ Keep this managed block so 'openspec update' can refresh the instructions.
     - ✅ 合并后运行 `npx tsc --noEmit` 和核心测试验证
     - ❌ 禁止基于部分信息下结论，必须用 `git ls-files`/`git show`/`git diff` 验证
   - **详细流程见**：`docs/git-merge-checklist.md`（包含完整的检查清单、命令示例、预警阈值、验证步骤）
-- **--no-verify 使用规范（强制）**：`git commit --no-verify` 和 `git push --no-verify` 会跳过 lint-staged 和 pre-push 钩子。**仅允许在不涉及业务逻辑变更时使用**（如纯配置/部署/文档/样式修改）。涉及业务逻辑、引擎代码、领域层代码的提交禁止使用。**当 pre-push 钩子中的测试失败时，严禁使用 `--no-verify` 跳过测试**，必须先修复所有失败的测试。
+- **--no-verify 使用规范（强制）**：
+  - **什么是 --no-verify**：`git commit --no-verify` 和 `git push --no-verify` 会跳过 Git hooks（lint-staged、ESLint、pre-push 测试等）。
+  - **严格禁止场景**：
+    - ❌ **绝对禁止**：当 ESLint 报告 **errors**（错误）时，禁止使用 `--no-verify` 提交
+    - ❌ **绝对禁止**：当 pre-push 钩子中的测试失败时，禁止使用 `--no-verify` 推送
+    - ❌ **绝对禁止**：涉及业务逻辑、引擎代码、领域层代码的提交
+    - ❌ **绝对禁止**：修复 bug 或新增功能的提交
+  - **允许使用场景**（必须同时满足以下所有条件）：
+    - ✅ 仅修改文档（`.md`）、配置文件（`.json`、`.yml`）、样式（`.css`）
+    - ✅ ESLint 仅有 **warnings**（警告），无 **errors**（错误）
+    - ✅ 不涉及任何代码逻辑变更
+    - ✅ 已确认修改不会影响运行时行为
+  - **违规后果**：使用 `--no-verify` 跳过错误会导致：
+    - 代码质量下降，引入潜在 bug
+    - CI/CD 流水线失败
+    - 生产环境崩溃风险
+    - 团队代码审查负担增加
+  - **正确做法**：
+    - ESLint errors → 必须修复所有错误后再提交
+    - 测试失败 → 必须修复测试或修复代码后再推送
+    - 无法立即修复 → 使用 `git stash` 暂存，或创建单独的修复提交
 - **文件移动/复制规范（强制）**：
   - **禁止使用 `robocopy /MOVE`**：移动操作会删除源文件，中途失败会导致数据丢失。
   - **推荐做法**：

@@ -117,7 +117,7 @@ export const DT_EVENTS = defineEvents({
   CP_CHANGED: 'fx',              // CP 变化（飞行动画 onImpact）
   PREVENT_DAMAGE: 'fx',          // 伤害减免（飞行动画 onImpact）
   
-  ABILITY_ACTIVATED: 'fx',       // 技能激活（技能自带音效）
+  ABILITY_ACTIVATED: 'immediate', // 技能激活（技能自带音效，立即播放）
   ATTACK_RESOLVED: 'fx',         // 攻击结算（技能自带音效）
   ABILITY_REPLACED: 'fx',        // 技能替换（升级卡音效）
 

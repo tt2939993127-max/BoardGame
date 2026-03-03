@@ -111,7 +111,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('suppress', 'description'),
         sfxKey: BARBARIAN_SFX_LIGHT,
-        trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
+        trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
         effects: [
             {
                 description: abilityEffectText('suppress', 'roll3Damage'),

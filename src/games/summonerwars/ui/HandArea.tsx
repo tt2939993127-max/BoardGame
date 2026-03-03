@@ -237,7 +237,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
         onCardSelect?.(cardId);
       } else {
         playDeniedSound();
-        showToast.warning(t('handArea.bloodSummonOnlyLowCost', { maxCost: 2 }));
+        showToast.warning(t('handArea.bloodSummonOnlyLowCost', { maxCost: 2 }), undefined, { dedupeKey: 'summonerwars.bloodSummon' });
       }
       return;
     }
@@ -261,7 +261,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     // 非魔力阶段：检查是否可以支付费用（用于正常召唤/建造/事件卡）
     if (!canAfford) {
       playDeniedSound();
-      showToast.warning(t('handArea.insufficientMagic', { cost, current: currentMagic }));
+      showToast.warning(t('handArea.insufficientMagic', { cost, current: currentMagic }), undefined, { dedupeKey: 'summonerwars.insufficientMagic' });
       return;
     }
 
@@ -270,7 +270,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
       // 有交互模式激活时（技能选择/事件卡多步骤），阻止打出新事件卡
       if (interactionBusy) {
         playDeniedSound();
-        showToast.warning(t('handArea.interactionBusy', '请先完成当前操作'));
+        showToast.warning(t('handArea.interactionBusy', '请先完成当前操作'), undefined, { dedupeKey: 'summonerwars.interactionBusy' });
         return;
       }
       const event = card as EventCard;
@@ -280,7 +280,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
       } else {
         const phaseLabel = t(`phase.${event.playPhase}`);
         playDeniedSound();
-        showToast.warning(t('handArea.eventPhaseOnly', { phase: phaseLabel }));
+        showToast.warning(t('handArea.eventPhaseOnly', { phase: phaseLabel }), undefined, { dedupeKey: 'summonerwars.eventPhase' });
         return;
       }
     }
@@ -300,10 +300,10 @@ export const HandArea: React.FC<HandAreaProps> = ({
         // 提示为什么不能打出
         if (phase === 'summon' && card.cardType !== 'unit') {
           playDeniedSound();
-          showToast.warning(t('handArea.onlyUnitInSummon'));
+          showToast.warning(t('handArea.onlyUnitInSummon'), undefined, { dedupeKey: 'summonerwars.onlyUnit' });
         } else if (phase === 'build' && card.cardType !== 'structure') {
           playDeniedSound();
-          showToast.warning(t('handArea.onlyStructureInBuild'));
+          showToast.warning(t('handArea.onlyStructureInBuild'), undefined, { dedupeKey: 'summonerwars.onlyStructure' });
         }
       }
       return;
@@ -311,12 +311,12 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
     if (!isMyTurn) {
       playDeniedSound();
-      showToast.warning(t('hint.waitingOpponent'));
+      showToast.warning(t('hint.waitingOpponent'), undefined, { dedupeKey: 'summonerwars.notYourTurn' });
       return;
     }
 
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast]);
+  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast, t]);
 
   if (cards.length === 0) {
     return null;

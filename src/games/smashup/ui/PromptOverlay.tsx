@@ -385,10 +385,10 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                             </div>
                                         </div>
                                         <button
-                                            className={`absolute -top-[0.5vw] -right-[0.5vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border-2 border-white/30 z-40 cursor-zoom-in`}
+                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                             onClick={(e) => { e.stopPropagation(); setMagnifyTarget({ defId: card.defId, type: def?.type ?? 'action' }); }}
                                         >
-                                            <svg className={`w-[1.1vw] h-[1.1vw] fill-current`} viewBox="0 0 20 20">
+                                            <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M8 4a4 4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                             </svg>
                                         </button>
@@ -733,14 +733,14 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         {/* 放大镜按钮 - 右上角突出显示，多选模式下勾选在左上角 */}
                                         {defId && (
                                             <button
-                                                className={`absolute -top-[0.5vw] -right-[0.5vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border-2 border-white/30 z-40 cursor-zoom-in`}
+                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     const cardType = getBaseDef(defId) ? 'base' as const : (def && 'type' in def ? def.type : 'action' as const);
                                                     setMagnifyTarget({ defId, type: cardType });
                                                 }}
                                             >
-                                                <svg className={`w-[1.1vw] h-[1.1vw] fill-current`} viewBox="0 0 20 20">
+                                                <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
                                                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                                 </svg>
                                             </button>

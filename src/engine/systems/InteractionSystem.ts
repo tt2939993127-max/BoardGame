@@ -624,7 +624,7 @@ function refreshOptionsGeneric<T>(
 
         // 跳过/完成/取消等操作选项：一律保留
         if (!val || typeof val !== 'object') return true;
-        if (val.skip || val.done || val.cancel || val.__cancel__) return true;
+        if (val.skip || val.done || val.cancel || val.__cancel__ || val.__emergency_skip__) return true;
 
         switch (autoRefresh) {
             case 'hand': {

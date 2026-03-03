@@ -303,7 +303,11 @@
     "confirmRollWithAbility": "Confirmed roll ({{abilityName}}):",
     "confirmRollDefense": "Confirmed defense roll:",
     "confirmRollDefenseWithAbility": "Confirmed defense roll ({{abilityName}}):",
-    "cardRollResult": "Roll result:"
+    "cardRollResult": "Roll result:",
+    "dieModified": "Modified die #{{dieId}}: {{oldValue}} → {{newValue}}",
+    "dieModifiedSource": "({{source}})",
+    "dieRerolled": "Rerolled die #{{dieId}}: {{oldValue}} → {{newValue}}",
+    "dieRerolledSource": "({{source}})"
   },
   "purify": {
     "title": "Use Purify",
@@ -581,7 +585,8 @@
     "no_pending_bonus_dice": "No pending bonus dice settlement",
     "bonus_reroll_limit_reached": "Bonus die reroll limit reached",
     "not_enough_token": "Not enough tokens to pay the cost",
-    "invalid_die_index": "Invalid die index"
+    "invalid_die_index": "Invalid die index",
+    "player_is_dazed": "Player is dazed and cannot perform any actions"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",
@@ -678,7 +683,9 @@
     "hint_done": "Done",
     "hint_set": "Select die to set to {{value}}",
     "hint_adjust": "Select die to adjust",
-    "hint_any": "Select die to modify"
+    "hint_any": "Select die to modify",
+    "hint_select": "Select die ({{current}}/{{max}})",
+    "hint_select_opponent": "Select opponent's die ({{current}}/{{max}})"
   },
   "abilitySlots": {
     "fist": "Fist Technique",

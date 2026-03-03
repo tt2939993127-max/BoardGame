@@ -208,6 +208,15 @@ export class GameTransportClient {
     /** 发送命令 */
     sendCommand(commandType: string, payload: unknown): void {
         if (!this.socket || this._destroyed) return;
+        // 检查连接状态：只有在完成 sync 握手后才能发送命令
+        if (this._connectionState !== 'connected') {
+            console.warn('[GameTransportClient] 连接未就绪，命令被忽略', {
+                commandType,
+                connectionState: this._connectionState,
+                matchID: this.config.matchID,
+            });
+            return;
+        }
         this.socket.emit(
             'command',
             this.config.matchID,
@@ -232,6 +241,17 @@ export class GameTransportClient {
         onRejected?: (reason: string) => void,
     ): void {
         if (!this.socket || this._destroyed) return;
+        // 检查连接状态：只有在完成 sync 握手后才能发送命令
+        if (this._connectionState !== 'connected') {
+            console.warn('[GameTransportClient] 连接未就绪，批量命令被拒绝', {
+                batchId,
+                commandCount: commands.length,
+                connectionState: this._connectionState,
+                matchID: this.config.matchID,
+            });
+            onRejected?.('not_connected');
+            return;
+        }
 
         // 注册一次性监听器
         const confirmHandler = (matchID: string, receivedBatchId: string, state: unknown) => {

@@ -33,6 +33,7 @@ import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
 import { getPlayerAbilityBaseDamage } from './abilityLookup';
 import { getPendingAttackExpectedDamage } from './utils';
+import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 /**
  * 闪避后的 postDamage 状态修正
@@ -94,12 +95,12 @@ function checkDazeExtraAttack(
         timestamp,
     } as StatusRemovedEvent);
 
-    // 触发额外攻击：对手（defenderId）获得一次进攻机会
+    // 触发额外攻击：有眩晕的攻击方再次攻击同一目标
     dazeEvents.push({
         type: 'EXTRA_ATTACK_TRIGGERED',
         payload: {
-            attackerId: defenderId,
-            targetId: attackerId,
+            attackerId: attackerId,  // 有眩晕的人继续攻击
+            targetId: defenderId,    // 继续攻击同一目标
             sourceStatusId: STATUS_IDS.DAZE,
         },
         sourceCommandType: commandType,
@@ -133,7 +134,7 @@ function checkAfterAttackResponseWindow(
     // 只允许进攻方响应（card-dizzy："如果你对对手造成至少8伤害"，只有进攻方才能触发）
     // excludeId = defenderId，防止防御方也进入响应队列
     const responderQueue = getResponderQueue(stateAfterAttack, 'afterAttackResolved', attackerId, undefined, defenderId, phase);
-    if (responderQueue.length === 0) return null;
+    if (responderQueue.length === 0 || !getAutoResponseEnabled()) return null;
 
     return {
         type: 'RESPONSE_WINDOW_OPENED',
@@ -752,7 +753,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const hasActiveInteraction = state.sys.interaction?.current !== undefined;
             const hasActiveResponseWindow = state.sys.responseWindow?.current !== undefined;
             // Token 响应窗口通过 pendingDamage 管理，需要等待玩家 USE_TOKEN 或 SKIP_TOKEN_RESPONSE
-            const hasPendingDamage = core.pendingDamage !== null && core.pendingDamage !== undefined;
+            // 特殊处理：TOKEN_RESPONSE_CLOSED 事件会清理 pendingDamage，但事件尚未 reduce 时
+            // core.pendingDamage 仍为旧值。检测到该事件时应忽略 pendingDamage 检查。
+            const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
+            const hasPendingDamage = !hasTokenResponseClosed && (core.pendingDamage !== null && core.pendingDamage !== undefined);
             
             // 检查是否需要等待 offensiveRollEnd Token 选择的 CHOICE_RESOLVED 被 reduce 进 core。
             //

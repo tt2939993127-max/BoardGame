@@ -30,6 +30,7 @@ import { initSmashUpAtlases } from './ui/cardAtlas';
 // 同步注册所有图集（cards1-4 + base1-4，懒解析模式），确保首次渲染时 atlas 注册已就绪
 initSmashUpAtlases();
 import { SMASH_UP_MANIFEST } from './manifest';
+import { getLayoutConfig } from './ui/layoutConfig';
 import './cursor';
 import { HandArea } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
@@ -113,6 +114,10 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const isGameOver = G.sys.gameover;
     const rootPid = playerID || '0';
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
+    
+    // 响应式布局配置
+    const playerCount = core.turnOrder.length;
+    const layout = getLayoutConfig(playerCount);
     
     // 更新选择的派系到 Context（游戏开始后）
     useEffect(() => {
@@ -1736,8 +1741,15 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
                 {/* --- MAIN BOARD --- */}
                 {/* Scrollable table area */}
-                <div className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" data-tutorial-id="su-base-area">
-                    <div className="flex items-start gap-12 px-20 min-w-max">
+                <div 
+                    className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" 
+                    data-tutorial-id="su-base-area"
+                    style={{ paddingBottom: `${layout.handAreaHeight}px` }}
+                >
+                    <div 
+                        className="flex items-start px-20 min-w-max"
+                        style={{ gap: `${layout.baseGap}vw` }}
+                    >
                         {core.bases.map((base, idx) => (
                             <BaseZone
                                 key={`${base.defId}-${idx}`}
@@ -1801,7 +1813,10 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 {/* 手牌区：z-60，在弃牌遮罩之上 */}
                 {
                     myPlayer && (
-                        <div className="absolute bottom-0 inset-x-0 h-[220px] z-60 pointer-events-none">
+                        <div 
+                            className="absolute bottom-0 inset-x-0 z-60 pointer-events-none"
+                            style={{ height: `${layout.handAreaHeight}px` }}
+                        >
 
                             <HandArea
                                 hand={viewMode === 'opponent' ? opponentPlayer.hand : myPlayer.hand}

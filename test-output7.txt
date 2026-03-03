@@ -1,0 +1,118 @@
+﻿
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/gongzuo/web/BordGame[39m
+
+[90mstdout[2m | src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts
+[22m[39m[dotenv@17.3.1] injecting env (4) from .env.test.local -- tip: 馃攼 prevent committing .env to code: https://dotenvx.com/precommit
+
+node.exe : [90mstderr[2m | src/games/dicet
+hrone/__tests__/pyromancer-hot-streak-2-bug.
+test.ts
+所在位置 C:\Program Files\nodejs\npx.ps1:29 字符: 
+3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: 
+    ([90mstderr[2m...k-2-bug.test.ts:Str  
+  ing) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommand 
+   Error
+ 
+[22m[39m[CommandCategories] 浠ヤ笅鍛戒护鏈垎绫伙紝璇峰
+湪 commandCategories.ts 涓坊鍔犲垎绫伙細 [ [32m'GRA
+NT_TOKENS'[39m, [32m'PLAYER_UNREADY'[39m 
+]
+
+[90mstdout[2m | src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts[2m > [22m[2m鐏硶灏忛『瀛愪簩绾ф妧鑳?- 鐒氱伃瑙﹀彂[2m > [22m[2m搴旇鍦ㄦ弧瓒冲皬椤哄瓙鏉′欢鏃惰Е鍙?fiery-combo-2
+[22m[39m[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=setup, playerId=0
+[FlowSystem][afterEvents] autoContinue from=setup playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=setup playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=upkeep
+[FlowSystem][afterEvents] phase updated from=setup to=upkeep
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=upkeep, playerId=0
+[FlowSystem][afterEvents] autoContinue from=upkeep playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=upkeep playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=main1
+[FlowSystem][afterEvents] phase updated from=upkeep to=main1
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=main1, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=setup, playerId=0
+[FlowSystem][afterEvents] autoContinue from=setup playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=setup playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=upkeep
+[FlowSystem][afterEvents] phase updated from=setup to=upkeep
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=upkeep, playerId=0
+[FlowSystem][afterEvents] autoContinue from=upkeep playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=upkeep playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=main1
+[FlowSystem][afterEvents] phase updated from=upkeep to=main1
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=main1, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][beforeCommand] ADVANCE_PHASE from=main1 playerId=0
+[FlowSystem][beforeCommand] getNextPhase returned to=offensiveRoll
+[FlowSystem][beforeCommand] phase updated from=main1 to=offensiveRoll
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=offensiveRoll, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=offensiveRoll, 涓嶈嚜鍔ㄦ帹杩?娴嬭瘯缁撴灉: {
+  name: [32m'鐏硶灏忛『瀛愯Е鍙?[39m,
+  passed: [33mtrue[39m,
+  steps: [
+    {
+      step: [33m1[39m,
+      command: [32m'ADVANCE_PHASE({})'[39m,
+      commandType: [32m'ADVANCE_PHASE'[39m,
+      playerId: [32m'0'[39m,
+      success: [33mtrue[39m,
+      error: [90mundefined[39m,
+      events: [36m[Array][39m
+    },
+    {
+      step: [33m2[39m,
+      command: [32m'ROLL_DICE({})'[39m,
+      commandType: [32m'ROLL_DICE'[39m,
+      playerId: [32m'0'[39m,
+      success: [33mtrue[39m,
+      error: [90mundefined[39m,
+      events: [36m[Array][39m
+    }
+  ],
+  finalState: {
+    sys: {
+      schemaVersion: [33m1[39m,
+      matchId: [90mundefined[39m,
+      undo: [36m[Object][39m,
+      interaction: [36m[Object][39m,
+      log: [36m[Object][39m,
+      eventStream: [36m[Object][39m,
+      actionLog: [36m[Object][39m,
+      rematch: [36m[Object][39m,
+      responseWindow: [36m[Object][39m,
+      tutorial: [36m[Object][39m,
+      turnNumber: [33m0[39m,
+      phase: [32m'offensiveRoll'[39m,
+      flowHalted: [33mfalse[39m
+    },
+    core: {
+      players: [36m[Object][39m,
+      selectedCharacters: [36m[Object][39m,
+      readyPlayers: [36m[Object][39m,
+      hostPlayerId: [32m'0'[39m,
+      hostStarted: [33mtrue[39m,
+      dice: [36m[Array][39m,
+      rollCount: [33m1[39m,
+      rollLimit: [33m3[39m,
+      rollDiceCount: [33m5[39m,
+      rollConfirmed: [33mfalse[39m,
+      activePlayerId: [32m'0'[39m,
+      startingPlayerId: [32m'0'[39m,
+      turnNumber: [33m1[39m,
+      pendingAttack: [1mnull[22m,
+      tokenDefinitions: [36m[Array][39m,
+      lastEffectSourceByPlayerId: {}
+    }
+  },
+  assertionErrors: [],
+  expectedErrors: [],
+  actualErrors: []
+}
+
+ [32m鉁?[39m src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 22[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 21:51:45
+[2m   Duration [22m 4.38s[2m (transform 2.23s, setup 270ms, import 2.49s, tests 22ms, environment 1.28s)[22m
+

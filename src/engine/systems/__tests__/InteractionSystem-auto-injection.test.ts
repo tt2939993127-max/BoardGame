@@ -377,4 +377,62 @@ describe('InteractionSystem - 通用刷新', () => {
         const options = (currentInteraction?.data as any).options || [];
         expect(options).toHaveLength(3); // 保持原始的 3 个选项
     });
+
+    it('紧急跳过选项应该在刷新时被保留', () => {
+        // 测试场景：当 createSimpleChoice 创建了空选项交互时，会自动添加紧急跳过选项
+        // 刷新时应该保留这个选项（类似 __cancel__）
+        
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        // 创建一个包含紧急跳过选项的交互
+        const interaction = createSimpleChoice(
+            'test-emergency',
+            'p1',
+            '测试紧急跳过',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1' } },
+                { id: '__emergency_skip__', label: '跳过（无可用选项）', value: { __emergency_skip__: true } },
+            ],
+            { sourceId: 'test', autoRefresh: 'hand' }
+        );
+
+        state = queueInteraction(state, interaction);
+
+        // 模拟状态变更：卡牌被弃掉
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [], // 手牌清空
+                    },
+                },
+            },
+        };
+
+        // 刷新选项
+        state = refreshInteractionOptions(state);
+
+        // 验证：紧急跳过选项应该被保留
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+
+        expect(options).toHaveLength(1); // 只剩紧急跳过选项
+        expect(options[0].id).toBe('__emergency_skip__');
+        expect(options[0].value.__emergency_skip__).toBe(true);
+    });
 });

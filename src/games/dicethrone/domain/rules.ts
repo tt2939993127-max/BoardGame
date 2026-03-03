@@ -521,6 +521,7 @@ export const checkPlayCard = (
         
         const targetAbilityId = getUpgradeTargetAbilityId(card);
         if (!targetAbilityId) {
+            logger.warn('[checkPlayCard] 升级卡无法提取目标技能ID', { cardId: card.id });
             return { ok: false, reason: 'upgradeCardCannotPlay' };
         }
         
@@ -528,12 +529,26 @@ export const checkPlayCard = (
         const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
         const replaceAction = card.effects?.find(e => e.action?.type === 'replaceAbility')?.action;
         const desiredLevel = (replaceAction?.type === 'replaceAbility' ? replaceAction.newAbilityLevel : undefined) ?? (currentLevel + 1);
+        
+        logger.debug('[checkPlayCard] 升级卡验证', {
+            cardId: card.id,
+            targetAbilityId,
+            currentLevel,
+            desiredLevel,
+            playerCp,
+            cardCpCost: card.cpCost
+        });
+        
         if (currentLevel >= 3) {
+            logger.warn('[checkPlayCard] 技能已达最高等级', { targetAbilityId, currentLevel });
             return { ok: false, reason: 'upgradeCardMaxLevel' };
         }
-        if (desiredLevel !== currentLevel + 1) {
-            return { ok: false, reason: 'upgradeCardSkipLevel' };
-        }
+        
+        // 移除跳级检查 - 王权骰铸允许跳级升级（例如直接从1级升到3级）
+        // if (desiredLevel !== currentLevel + 1) {
+        //     logger.warn('[checkPlayCard] 不能跳级升级', { targetAbilityId, currentLevel, desiredLevel });
+        //     return { ok: false, reason: 'upgradeCardSkipLevel' };
+        // }
         
         // 计算实际 CP 消耗
         const previousUpgradeCost = player.upgradeCardByAbilityId?.[targetAbilityId]?.cpCost;
@@ -542,7 +557,10 @@ export const checkPlayCard = (
             actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
         }
         
+        logger.debug('[checkPlayCard] CP检查', { actualCost, playerCp, previousUpgradeCost });
+        
         if (actualCost > 0 && playerCp < actualCost) {
+            logger.warn('[checkPlayCard] CP不足', { actualCost, playerCp });
             return { ok: false, reason: 'notEnoughCp' };
         }
         

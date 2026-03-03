@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, type ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { generateUUID } from '../lib/uuid';
 import { socialSocket, SOCIAL_EVENTS, type FriendStatusPayload, type FriendRequestPayload, type NewMessagePayload } from '../services/socialSocket';
 import { AUTH_API_URL } from '../config/server';
 import type { FriendUser, FriendRequest, Conversation, Message, SearchUserResult } from '../services/social.types';
@@ -236,7 +237,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         // 服务端返回 { message: "成功提示", messageData: { id, toUser } }
         // 构造本地 Message 对象
         const msg: Message = {
-            id: data.messageData?.id ?? crypto.randomUUID(),
+            id: data.messageData?.id ?? generateUUID(),
             from: user?.id ?? '',
             to: toUserId,
             content,

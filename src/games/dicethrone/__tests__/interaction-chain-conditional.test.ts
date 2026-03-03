@@ -315,7 +315,7 @@ describe('Token 响应链', () => {
 
 describe('压制奖励骰链', () => {
     it('suppress  投掷3奖励骰  造成总和伤害', () => {
-        const values = [1, 1, 6, 6, 4, 1, 1, 1, 3, 4, 5];
+        const values = [1, 1, 1, 6, 6, 1, 1, 1, 3, 4, 5];
         const runner = createRunner(createQueuedRandom(values));
         const result = runner.run({
             name: 'suppress bonus dice',
@@ -339,7 +339,7 @@ describe('压制奖励骰链', () => {
     });
 
     it('suppress 奖励骰总和>14  额外施加脑震荡', () => {
-        const values = [1, 1, 6, 6, 4, 1, 1, 1, 5, 5, 6];
+        const values = [1, 1, 1, 6, 6, 1, 1, 1, 5, 5, 6];
         const runner = createRunner(createQueuedRandom(values));
         const result = runner.run({
             name: 'suppress concussion',

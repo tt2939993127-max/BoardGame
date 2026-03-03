@@ -302,7 +302,11 @@
     "confirmRollWithAbility": "确认投掷（{{abilityName}}）：",
     "confirmRollDefense": "确认防御投掷：",
     "confirmRollDefenseWithAbility": "确认防御投掷（{{abilityName}}）：",
-    "cardRollResult": "投掷结果："
+    "cardRollResult": "投掷结果：",
+    "dieModified": "修改骰子 #{{dieId}}：{{oldValue}} → {{newValue}}",
+    "dieModifiedSource": "（{{source}}）",
+    "dieRerolled": "重投骰子 #{{dieId}}：{{oldValue}} → {{newValue}}",
+    "dieRerolledSource": "（{{source}}）"
   },
   "purify": {
     "title": "使用净化",
@@ -596,7 +600,8 @@
     "no_pending_bonus_dice": "当前没有待结算的奖励骰",
     "bonus_reroll_limit_reached": "已达到奖励骰重掷次数上限",
     "not_enough_token": "Token 数量不足以支付费用",
-    "invalid_die_index": "无效的骰子索引"
+    "invalid_die_index": "无效的骰子索引",
+    "player_is_dazed": "玩家处于晕眩状态，无法进行任何行动"
   },
   "actions": {
     "resolveAttack": "结算攻击",
@@ -693,7 +698,9 @@
     "hint_done": "完成",
     "hint_set": "选择要设为{{value}}的骰子",
     "hint_adjust": "选择要调整的骰子",
-    "hint_any": "选择要修改的骰子"
+    "hint_any": "选择要修改的骰子",
+    "hint_select": "选择骰子 ({{current}}/{{max}})",
+    "hint_select_opponent": "选择对手的骰子 ({{current}}/{{max}})"
   },
   "abilitySlots": {
     "fist": "拳术",

@@ -66,6 +66,18 @@
     "assets:upload:force": "cross-env FORCE_UPLOAD=1 node scripts/assets/upload-to-r2.js",
     "assets:check": "node scripts/assets/upload-to-r2.js --check",
     "assets:sync": "node scripts/assets/upload-to-r2.js --sync",
+    "monitor:kiro": "node scripts/kiro-auto-resume.mjs",
+    "monitor:kiro:debug": "node scripts/kiro-auto-resume.mjs --debug",
+    "monitor:kiro:auto": "node scripts/kiro-auto-resume.mjs --auto-approve",
+    "monitor:kiro:full": "node scripts/kiro-auto-resume.mjs --debug --auto-approve",
+    "monitor:kiro:retry3": "node scripts/kiro-auto-resume.mjs --auto-approve --max-retries=3",
+    "monitor:kiro:retry5": "node scripts/kiro-auto-resume.mjs --auto-approve --max-retries=5",
+    "monitor:kiro:retry20": "node scripts/kiro-auto-resume.mjs --auto-approve --max-retries=20",
+    "monitor:kiro:manual": "node scripts/kiro-session-monitor.mjs --max-retries=20",
+    "monitor:kiro:process": "node scripts/kiro-process-monitor.mjs --max-retries=20",
+    "monitor:kiro:night": "node scripts/kiro-process-monitor.mjs --max-retries=20 --interval=60 --timeout=180",
+    "monitor:kiro:ps": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-continue.ps1 -MaxRetries 20",
+    "dev:with-monitor": "concurrently \"npm:dev\" \"npm:monitor:kiro\"",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {

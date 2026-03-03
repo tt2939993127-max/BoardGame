@@ -706,8 +706,8 @@ function resolveEffectAction(
                 }
             }
 
-            // 多骰展示
-            if (diceCount > 1) {
+            // 骰子特写展示（单骰或多骰都显示）
+            if (diceCount >= 1) {
                 events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, rollDice, timestamp));
             }
             break;

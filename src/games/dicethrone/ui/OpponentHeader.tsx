@@ -118,6 +118,13 @@ export const OpponentHeader = ({
                                             <div className="w-[0.5vw] h-[0.5vw] bg-amber-500 rounded-full shadow-[0_0_6px_rgba(245,158,11,0.4)]"></div>
                                             <span className="text-amber-500 font-bold text-[0.75vw]">{opponent.resources[RESOURCE_IDS.CP] ?? 0}</span>
                                         </div>
+                                        {/* 手牌数量 */}
+                                        <div className="flex items-center gap-[0.2vw]">
+                                            <svg className="w-[0.8vw] h-[0.8vw] text-blue-400 drop-shadow-sm" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M21.47 4.35l-1.34-.56v9.03l2.43-5.86c.41-1.02-.06-2.19-1.09-2.61zm-19.5 3.7L6.93 20a2.01 2.01 0 0 0 1.81 1.26c.26 0 .53-.05.79-.16l7.37-3.05c.75-.31 1.21-1.05 1.23-1.79.01-.26-.04-.55-.13-.81L13 3.5a1.954 1.954 0 0 0-1.81-1.25c-.26 0-.52.06-.77.15L3.06 5.45a1.994 1.994 0 0 0-1.09 2.6z" />
+                                            </svg>
+                                            <span className="text-blue-400 font-bold text-[0.75vw]">{opponent.hand?.length ?? 0}</span>
+                                        </div>
                                         {opponent.damageShields && opponent.damageShields.length > 0 && (
                                             <div className="relative w-[1.1vw] h-[1.1vw] flex items-center justify-center">
                                                 <svg className="w-full h-full text-cyan-500 drop-shadow-md" viewBox="0 1 24 25" fill="currentColor">

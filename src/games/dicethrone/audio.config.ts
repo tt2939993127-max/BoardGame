@@ -211,11 +211,17 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             return key;
         }
 
-        // ABILITY_ACTIVATED：技能激活事件返回 null（UI 层已在点击时播放本地音效）
+        // ABILITY_ACTIVATED：检查技能自带音效
         if (type === 'ABILITY_ACTIVATED') {
-            // UI 层（AbilityOverlays.tsx）已在点击时播放 dialog_choice 音效
-            // 事件层不再重复播放，避免音效叠加
-            return null;
+            const payload = (event as AudioEvent & { payload?: { playerId?: string; abilityId?: string } }).payload;
+            if (payload?.playerId && payload?.abilityId) {
+                const match = findPlayerAbility(G, payload.playerId, payload.abilityId);
+                const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
+                // 如果技能有自带音效，返回该音效 key
+                if (explicitKey) return explicitKey;
+            }
+            // 没有自带音效时，使用框架默认音效（从 DT_EVENTS 配置中获取）
+            // 不再返回 null，而是让框架处理
         }
 
         // ATTACK_INITIATED：检查技能自带音效

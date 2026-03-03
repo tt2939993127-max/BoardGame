@@ -159,12 +159,12 @@ describe('DiceThrone 音效配置', () => {
             expect(taijiCombo?.sfxKey).toBe(ABILITY_SFX_KEYS.taijiCombo);
         });
 
-        it('防御技能不播放事件音效（UI 层已播放本地音效）', () => {
+        it('防御技能应播放默认技能音效（没有专属 sfxKey）', () => {
             const meditation = MONK_ABILITIES.find(a => a.id === 'meditation');
             expect(meditation).toBeDefined();
             expect(meditation?.sfxKey).toBeUndefined();
 
-            // ABILITY_ACTIVATED 事件在 feedbackResolver 中返回 null（UI 层已播放本地音效）
+            // ABILITY_ACTIVATED 事件应返回默认技能音效
             const event: AudioEvent = {
                 type: 'ABILITY_ACTIVATED',
                 payload: { playerId: 'player1', abilityId: 'meditation', isDefense: true },
@@ -178,8 +178,9 @@ describe('DiceThrone 音效配置', () => {
                 ctx: {},
                 meta: {},
             };
-            // UI 层已在点击时播放音效，事件层不重复播放
-            expect(resolveKey(event, mockContext)).toBeNull();
+            // 没有专属 sfxKey 的技能应返回默认技能音效
+            const result = resolveKey(event, mockContext);
+            expect(result).toBe('ui.general.modern_ui_sound_fx_pack_vol.menu_navigation.menu_navigation_select_001');
         });
     });
 

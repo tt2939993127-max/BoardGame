@@ -98,9 +98,13 @@ describe('狂战士技能定义', () => {
             expect(ability!.variants![2].effects[0].action.value).toBe(6);
         });
 
-        it('压制 - 2 Sword + 2 Strength，自定义投骰', () => {
+        it('压制 - 3 Sword + 2 Strength，自定义投骰', () => {
             const ability = BARBARIAN_ABILITIES.find(a => a.id === 'suppress');
             expect(ability).toBeDefined();
+            expect(ability!.trigger).toEqual({
+                type: 'diceSet',
+                faces: { [FACES.SWORD]: 3, [FACES.STRENGTH]: 2 }
+            });
             expect(ability!.effects![0].action.type).toBe('custom');
             expect(ability!.effects![0].action.customActionId).toBe('barbarian-suppress-roll');
         });

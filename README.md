@@ -188,6 +188,11 @@ bash deploy.sh update
 
 ```bash
 npm run dev              # 启动完整开发环境
+npm run dev:with-monitor # 启动开发环境 + Kiro 自动恢复监控
+npm run monitor:kiro     # 启动 Kiro 自动恢复监控（独立运行）
+npm run monitor:kiro:auto # 启动监控 + 自动同意命令（无人值守）
+npm run monitor:kiro:retry3 # 启动监控 + 自动同意 + 最多重试 3 次
+npm run monitor:kiro:retry20 # 启动监控 + 自动同意 + 最多重试 20 次
 npm run build            # 构建前端
 npm run generate:manifests  # 重新生成游戏清单
 npm run generate:locales    # 生成卡牌多语言文件
@@ -344,6 +349,7 @@ node scripts/infra/port-allocator.js 1  # Worker 1
 - [API 文档](docs/api/README.md) — 认证、社交、管理等接口说明
 - [原型构建器](docs/ugc-builder.md) — 简易游戏原型工具
 - [自动化测试](docs/automated-testing.md) — 测试策略与实践
+- [**Kiro 自动恢复系统**](docs/kiro-auto-resume.md) — 监控 Kiro 执行状态，自动恢复中断任务（支持多窗口）
 
 
 ## 🤝 贡献

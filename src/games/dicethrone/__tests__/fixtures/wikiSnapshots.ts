@@ -79,7 +79,7 @@ export const BARBARIAN_ABILITY_SNAPSHOTS: WikiAbilitySnapshot[] = [
   { heroId: 'barbarian', abilityId: 'steadfast', level: 2, wikiName: 'Steadfast II', wikiDescription: '3 Hearts: Heal 5, remove a status effect. 4 Hearts: Heal 6, remove a status effect. 5 Hearts: Heal 7, remove a status effect.', wikiHeal: 5, wikiTrigger: '3/4/5 Hearts' },
 
   // --- Suppress ---
-  { heroId: 'barbarian', abilityId: 'suppress', level: 1, wikiName: 'Suppress', wikiDescription: 'Roll 3 dice. Deal damage equal to the number of Swords rolled x2.', wikiTrigger: '2 Swords + 2 Strength' },
+  { heroId: 'barbarian', abilityId: 'suppress', level: 1, wikiName: 'Suppress', wikiDescription: 'Roll 3 dice. Deal damage equal to the number of Swords rolled x2.', wikiTrigger: '3 Swords + 2 Strength' },
   { heroId: 'barbarian', abilityId: 'suppress', level: 2, wikiName: 'Suppress II', wikiDescription: 'Battle Cry: 2 Swords + 2 Hearts: Heal 2, deal 2 unblockable damage. Mighty Suppress: 3 Swords + 2 Strength: Roll 3 dice, deal Swords x2 damage.', wikiTrigger: '2 Swords + 2 Hearts / 3 Swords + 2 Strength', wikiTags: ['unblockable'] },
 
   // --- Reckless Strike ---

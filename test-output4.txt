@@ -1,0 +1,105 @@
+﻿
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/gongzuo/web/BordGame[39m
+
+[90mstdout[2m | src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts
+[22m[39m[dotenv@17.3.1] injecting env (4) from .env.test.local -- tip: 鈿欙笍  enable debug logging with { debug: true }
+
+node.exe : [90mstderr[2m | src/games/dicet
+hrone/__tests__/pyromancer-hot-streak-2-bug.
+test.ts
+所在位置 C:\Program Files\nodejs\npx.ps1:29 字符: 
+3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: 
+    ([90mstderr[2m...k-2-bug.test.ts:Str  
+  ing) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommand 
+   Error
+ 
+[22m[39m[CommandCategories] 浠ヤ笅鍛戒护鏈垎绫伙紝璇峰
+湪 commandCategories.ts 涓坊鍔犲垎绫伙細 [ [32m'GRA
+NT_TOKENS'[39m, [32m'PLAYER_UNREADY'[39m 
+]
+
+[90mstdout[2m | src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts[2m > [22m[2m鐏硶灏忛『瀛愪簩绾ф妧鑳?- 鐒氱伃瑙﹀彂[2m > [22m[2m搴旇鍦ㄦ弧瓒冲皬椤哄瓙鏉′欢鏃惰Е鍙?fiery-combo-2
+[22m[39m[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=setup, playerId=0
+[FlowSystem][afterEvents] autoContinue from=setup playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=setup playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=upkeep
+[FlowSystem][afterEvents] phase updated from=setup to=upkeep
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=upkeep, playerId=0
+[FlowSystem][afterEvents] autoContinue from=upkeep playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=upkeep playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=main1
+[FlowSystem][afterEvents] phase updated from=upkeep to=main1
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=main1, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=setup, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=setup, playerId=0
+[FlowSystem][afterEvents] autoContinue from=setup playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=setup playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=upkeep
+[FlowSystem][afterEvents] phase updated from=setup to=upkeep
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 autoContinue=true, phase=upkeep, playerId=0
+[FlowSystem][afterEvents] autoContinue from=upkeep playerId=0
+[FlowSystem][afterEvents] ADVANCE_PHASE from=upkeep playerId=0
+[FlowSystem][afterEvents] getNextPhase returned to=main1
+[FlowSystem][afterEvents] phase updated from=upkeep to=main1
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=main1, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][beforeCommand] ADVANCE_PHASE from=main1 playerId=0
+[FlowSystem][beforeCommand] getNextPhase returned to=offensiveRoll
+[FlowSystem][beforeCommand] phase updated from=main1 to=offensiveRoll
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=offensiveRoll, 涓嶈嚜鍔ㄦ帹杩?[FlowSystem][beforeCommand] ADVANCE_PHASE from=offensiveRoll playerId=0
+[FlowSystem][beforeCommand] getNextPhase returned to=main2
+[FlowSystem][beforeCommand] overrideNextPhase to=main2
+[FlowSystem][beforeCommand] phase updated from=offensiveRoll to=main2
+[90mstderr[2m | src/games/dicethrone/__tes
+ts__/pyromancer-hot-streak-2-bug.test.ts[2m
+ > [22m[2m鐏硶灏忛『瀛愪簩绾ф妧鑳?- 鐒氱伃瑙﹀彂[2m > [2
+2m[2m搴旇鍦ㄦ弧瓒冲皬椤哄瓙鏉′欢鏃惰Е鍙?fiery-combo-2
+[22m[39m[Pipeline] 鍛戒护楠岃瘉澶辫触: {
+  commandType: [32m'ROLL_DICE'[39m,
+  playerId: [32m'0'[39m,
+  error: [32m'invalid_phase'[39m,
+  payload: {}
+}
+[FlowSystem][afterEvents] onAutoContinueCheck 杩斿洖 undefined 鎴?autoContinue=false, phase=main2, 涓嶈嚜鍔ㄦ帹杩?
+
+ [31m鉂?[39m src/games/dicethrone/__tests__/pyromancer-hot-streak-2-bug.test.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 33[2mms[22m[39m
+[31m     [31m脳[31m 搴旇鍦ㄦ弧瓒冲皬椤哄瓙鏉′欢鏃惰Е鍙?fiery-combo-2[39m[32m 32[2mms[22m[39m
+
+[31m鈳幆鈳幆鈳幆鈳?[39m[1m[41m Failed Tests 1
+ [49m[22m[31m鈳幆鈳幆鈳幆鈳?[39m
+
+[41m[1m FAIL [22m[49m src/games/dicethro
+ne/__tests__/pyromancer-hot-streak-2-bug.tes
+t.ts[2m > [22m鐏硶灏忛『瀛愪簩绾ф妧鑳?- 鐒氱伃瑙﹀彂[2m >
+ [22m搴旇鍦ㄦ弧瓒冲皬椤哄瓙鏉′欢鏃惰Е鍙?fiery-combo-2
+[31m[1mAssertionError[22m: expected undef
+ined to be true // Object.is equality[39m
+
+[32m- Expected:[39m 
+true
+
+[31m+ Received:[39m 
+undefined
+
+[36m [2m鉂?[22m src/games/dicethrone/__test
+s__/pyromancer-hot-streak-2-bug.test.ts:[2m
+62:32[22m[39m
+    [90m 60| [39m        })[33m;[39m
+    [90m 61| [39m
+    [90m 62| [39m        [34mexpect[39m(
+result[33m.[39msuccess)[33m.[39m[34mtoB
+e[39m([35mtrue[39m)[33m;[39m
+    [90m   | [39m                         
+      [31m^[39m
+    [90m 63| [39m    })[33m;[39m
+    [90m 64| [39m})[33m;[39m
+
+[31m[2m鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳幆鈳
+幆[1/1]鈳?[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 21:48:59
+[2m   Duration [22m 3.51s[2m (transform 1.84s, setup 235ms, import 2.05s, tests 33ms, environment 971ms)[22m
+

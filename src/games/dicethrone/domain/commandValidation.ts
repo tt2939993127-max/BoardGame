@@ -93,6 +93,13 @@ const validateRollDice = (
         return fail('defense_ability_not_selected');
     }
 
+    // 晕眩额外攻击检查：如果当前是晕眩触发的额外攻击，防御方（原攻击方）不能防御掷骰
+    // 注意：根据 Wiki 规则，Daze 只是"攻击方再次攻击"，不影响防御能力
+    // 额外攻击中防御方可以正常防御
+    if (phase === 'defensiveRoll' && state.extraAttackInProgress && state.pendingAttack) {
+        // 已移除：额外攻击中防御方可以正常防御
+    }
+
     return ok();
 }
 
@@ -240,14 +247,20 @@ const validateSelectAbility = (
             return fail('player_mismatch');
         }
 
+        // 晕眩状态检查：拥有晕眩标记的玩家不可进行防御掷骰
+        const defender = state.players[state.pendingAttack.defenderId];
+        if (!defender) return fail('player_not_found');
+        const dazeStacks = defender.statusEffects[STATUS_IDS.DAZE] ?? 0;
+        if (dazeStacks > 0) {
+            return fail('player_is_dazed');
+        }
+
         // 防御阶段分两步：
         // 1. 掷骰前选择/切换防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
         //    暗影刺客等拥有多个防御技能的英雄，在投掷前可以自由切换选择
         // 2. 掷骰后确认骰面后的技能激活：用 getAvailableAbilityIds 检查骰面
         if (state.rollCount === 0) {
             // 掷骰前选择/切换：验证玩家拥有该防御技能（不检查骰面）
-            const defender = state.players[state.pendingAttack.defenderId];
-            if (!defender) return fail('player_not_found');
             const hasAbility = defender.abilities.some(a => {
                 if (a.type !== 'defensive') return false;
                 if (a.id === abilityId) return true;
@@ -274,6 +287,12 @@ const validateSelectAbility = (
     if (!isMoveAllowed(playerId, state.activePlayerId)) {
         return fail('player_mismatch');
     }
+    
+    // 晕眩状态不阻止进攻技能：攻击方有晕眩时仍可攻击，晕眩在攻击结算后触发额外攻击
+    // 晕眩只阻止防御行为（见上方 defensiveRoll 分支）
+    
+    const player = state.players[state.activePlayerId];
+    if (!player) return fail('player_not_found');
     
     if (!state.rollConfirmed) {
         return fail('roll_not_confirmed');
@@ -452,6 +471,16 @@ const validatePlayCard = (
     if (!player) {
         console.warn('[validatePlayCard] 验证失败 - 玩家不存在:', { playerId: actingPlayerId });
         return fail('player_not_found');
+    }
+    
+    // 晕眩状态检查：拥有晕眩标记的玩家不可进行任何行动
+    const dazeStacks = player.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    if (dazeStacks > 0) {
+        console.warn('[validatePlayCard] 验证失败 - 玩家处于晕眩状态:', {
+            playerId: actingPlayerId,
+            dazeStacks,
+        });
+        return fail('player_is_dazed');
     }
     
     const card = player.hand.find(c => c.id === cmd.payload.cardId);
@@ -735,12 +764,19 @@ const validateUseToken = (
         return fail('player_mismatch');
     }
 
+    // 晕眩状态检查：拥有晕眩标记的玩家不可使用状态标记
+    const p = state.players[playerId];
+    if (!p) return fail('player_not_found');
+    const dazeStacks = p.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    if (dazeStacks > 0) {
+        return fail('player_is_dazed');
+    }
+
     const tokenDef = state.tokenDefinitions.find(t => t.id === cmd.payload.tokenId);
     if (!tokenDef) {
         return fail('unknown_token');
     }
 
-    const p = state.players[playerId];
     const currentAmount = p?.tokens[cmd.payload.tokenId] ?? 0;
     if (currentAmount <= 0) {
         return fail('no_token');
@@ -782,6 +818,13 @@ const validateUsePurify = (
     if (!p) {
         return fail('player_not_found');
     }
+    
+    // 晕眩状态检查：拥有晕眩标记的玩家不可使用状态标记
+    const dazeStacks = p.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    if (dazeStacks > 0) {
+        return fail('player_is_dazed');
+    }
+    
     const amount = p.tokens[TOKEN_IDS.PURIFY] ?? 0;
     if (amount <= 0) {
         return fail('no_token');
@@ -895,6 +938,12 @@ const validateUsePassiveAbility = (
 ): ValidationResult => {
     const player = state.players[playerId];
     if (!player) return fail('player_not_found');
+
+    // 晕眩状态检查：拥有晕眩标记的玩家不可使用被动能力
+    const dazeStacks = player.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    if (dazeStacks > 0) {
+        return fail('player_is_dazed');
+    }
 
     const passives = player.passiveAbilities ?? [];
     const passive = passives.find(p => p.id === cmd.payload.passiveId);
