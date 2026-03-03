@@ -155,6 +155,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **日志存储**：`logs/` 目录，按日期自动轮转，普通日志保留 30 天，错误日志保留 90 天
   - **临时调试日志**：允许临时日志用于排障，不得引入额外 debug 开关，问题解决后必须清理
 - **新增功能必须补充测试（强制）**：新增功能/技能/API 必须同步补充测试，覆盖正常+异常场景。详见 `docs/automated-testing.md` 和 `docs/testing-best-practices.md`（测试编写常见陷阱和最佳实践）。
+- **E2E 测试必须使用 GameTestContext API（强制）**：所有新的 E2E 测试必须使用 `GameTestContext` API（`e2e/framework/GameTestContext.ts`），禁止使用旧的 helper 函数（`setupSmashUpOnlineMatch`、`readCoreState`、`applyCoreState` 等）。E2E 测试用于验证 UI 交互，不得用 GameTestRunner 单元测试替代。详见 `docs/automated-testing.md`「测试框架 API（强制使用）」节。
 - **E2E 测试必须使用 TestHarness（强制）**：E2E 测试中涉及随机性或需要快速构造测试场景时，必须使用 `TestHarness` 测试工具集。详见下文「验证测试 → E2E 测试环境依赖」章节和 `docs/automated-testing.md`。
 - **单文件行数限制（强制）**：单个源码文件不得超过 1000 行，超过必须拆分。
 - **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。**图片文字辨识零猜测原则（强制）**：任何文字（名称、描述、数值、关键词）只要有一点看不清或不确定，必须立即停止当前数据录入工作，向用户说明哪些位置无法辨认，并索要更清晰的图片。禁止根据上下文、常识或英文原版"猜测"看不清的中文文字。已猜测录入的数据视为缺陷，必须重新核对。

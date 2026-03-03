@@ -153,6 +153,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
     canAdvance: ({ state }) => {
         const phase = state.sys.phase as TurnPhase;
         const ok = canAdvancePhase(state.core, phase);
+        
         return ok ? { ok: true } : { ok: false, error: 'cannot_advance_phase' };
     },
 
@@ -306,7 +307,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...filteredPostDamageEvents);
 
                     // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
-                    const hasBonusDiceRerollOffDR = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    // displayOnly settlement 不需要 halt（伤害已在同批事件中处理）
+                    const hasBonusDiceRerollOffDR = postDamageEvents.some(e => 
+                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                        !(e as any).payload?.settlement?.displayOnly
+                    );
                     if (hasBonusDiceRerollOffDR) {
                         return { events, halt: true };
                     }
@@ -399,7 +404,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some((event) => event.type === 'CHOICE_REQUESTED');
-                    const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some((event) => 
+                        event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                        !(event as any).payload?.settlement?.displayOnly
+                    );
                     if (hasSneakChoice || hasBonusDiceRerollPreDefenseSneak) {
                         return { events, halt: true };
                     }
@@ -423,7 +431,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...postDamageEventsSneak.filter(e => e.type !== 'DAMAGE_DEALT'));
 
                     // === 与非潜行路径对齐的 halt 检查 ===
-                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e => 
+                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                        !(e as any).payload?.settlement?.displayOnly
+                    );
                     const hasPostDamageChoiceSneak = postDamageEventsSneak.some(e => e.type === 'CHOICE_REQUESTED');
                     const hasTokenResponseSneak = postDamageEventsSneak.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
                     if (hasBonusDiceRerollSneak || hasPostDamageChoiceSneak || hasTokenResponseSneak) {
@@ -454,7 +465,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some((event) => event.type === 'CHOICE_REQUESTED');
-                const hasBonusDiceRerollPreDefense = preDefenseEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                // 只有非 displayOnly 的 bonus dice reroll 才需要 halt（displayOnly 不需要用户交互）
+                const hasBonusDiceRerollPreDefense = preDefenseEvents.some((event) => 
+                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                    !(event as any).payload?.settlement?.displayOnly
+                );
                 if (hasChoice || hasBonusDiceRerollPreDefense) {
                     // 需要用户做选择或处理奖励骰重掷，阻止阶段切换
                     return { events, halt: true };
@@ -516,7 +531,10 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
                 const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                const hasBonusDiceRerollOff = attackEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                const hasBonusDiceRerollOff = attackEvents.some((event) => 
+                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                    !(event as any).payload?.settlement?.displayOnly
+                );
                 if (hasAttackChoice || hasTokenResponse || hasBonusDiceRerollOff) {
                     return { events, halt: true };
                 }
@@ -561,7 +579,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     events.push(...filteredPostDamageEvents);
 
                     // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
-                    const hasBonusDiceRerollPost = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    // displayOnly settlement 不需要 halt（伤害已在同批事件中处理）
+                    const hasBonusDiceRerollPost = postDamageEvents.some(e => 
+                        e.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                        !(e as any).payload?.settlement?.displayOnly
+                    );
                     if (hasBonusDiceRerollPost) {
                         return { events, halt: true };
                     }
@@ -582,7 +604,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         return { events, halt: true };
                     }
 
-                    return { events, overrideNextPhase: 'main2', halt: true };
+                    return { events, halt: true };
                 }
 
                 // 奖励骰已通过 BONUS_DICE_SETTLED 结算（autoContinue 重入），
@@ -612,7 +634,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         return { events, halt: true };
                     }
 
-                    return { events, overrideNextPhase: 'main2', halt: true };
+                    return { events, overrideNextPhase: 'main2' };
                 }
                 
                 // 直接结算攻击
@@ -621,7 +643,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
                 const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                const hasBonusDiceReroll = attackEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                const hasBonusDiceReroll = attackEvents.some((event) => 
+                    event.type === 'BONUS_DICE_REROLL_REQUESTED' && 
+                    !(event as any).payload?.settlement?.displayOnly
+                );
+                
                 if (hasAttackChoice || hasTokenResponse || hasBonusDiceReroll) {
                     return { events, halt: true };
                 }

@@ -130,7 +130,7 @@ export class GameTestContext {
                     'disintegrate', 'augmentation', 'upgrade', 'power_up',
                     'terraform', 'crop_circles', 'abduction', 'probe',
                     'shamble', 'not_dead_yet', 'grave_digger',
-                    'first_mate', 'king', 'swashbuckling',
+                    'king', 'swashbuckling',  // 移除 'first_mate'（海盗大副是随从）
                     'ninjutsu', 'disguise', 'smoke_bomb',
                 ];
                 

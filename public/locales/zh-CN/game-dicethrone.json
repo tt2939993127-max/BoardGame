@@ -355,6 +355,7 @@
     "notSelected": "未选择",
     "pressStart": "开始游戏",
     "ready": "准备",
+    "cancelReady": "取消准备",
     "readyWaiting": "等待其他玩家...",
     "readyProgress": "准备进度",
     "you": "你"
@@ -686,7 +687,13 @@
     "selectPlayerToRemoveAllStatus": "选择要移除所有状态的玩家",
     "selectPlayerForRetribution": "选择获得神罚的玩家",
     "selectPlayerForConsecrate": "选择获得祝圣的玩家",
-    "selectStatusToTransfer": "选择要转移的状态效果"
+    "selectStatusToTransfer": "选择要转移的状态效果",
+    "hint_copy_step1": "选择要复制的源骰子",
+    "hint_copy_step2": "选择要设为{{value}}的目标骰子",
+    "hint_done": "完成",
+    "hint_set": "选择要设为{{value}}的骰子",
+    "hint_adjust": "选择要调整的骰子",
+    "hint_any": "选择要修改的骰子"
   },
   "abilitySlots": {
     "fist": "拳术",

@@ -860,6 +860,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             playerNames={playerNames}
                             onSelect={engineMoves.selectCharacter}
                             onReady={engineMoves.playerReady}
+                            onUnready={engineMoves.playerUnready}
                             onStart={engineMoves.hostStartGame}
                             locale={locale}
                         />

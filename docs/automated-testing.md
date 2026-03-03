@@ -320,7 +320,9 @@ if (!result.success) {
 - 服务器启动耗时应 < 20 秒
 - 总耗时应 < 40 秒
 
-#### 4. 测试框架 API
+#### 4. 测试框架 API（强制使用）
+
+> **⚠️ 强制规定**：所有新的 E2E 测试必须使用 GameTestContext API。禁止使用旧的 helper 函数（`setupSmashUpOnlineMatch`、`readCoreState`、`applyCoreState` 等）。旧测试可以保留，但新测试必须用新框架。
 
 **GameTestContext**（`e2e/framework/GameTestContext.ts`）：
 
@@ -370,6 +372,27 @@ test('测试名称', async ({ page, game }, testInfo) => {
 - `screenshot(name, testInfo)` - 截图
 
 **详细文档**：`docs/e2e-testing-guide.md`
+
+**为什么必须使用新框架**：
+- ✅ 自动处理状态注入和等待（避免超时问题）
+- ✅ 统一的 API，减少样板代码（60-70% 代码量）
+- ✅ 更好的错误信息和调试支持
+- ✅ 自动截图和测试报告
+- ✅ 类型安全，编译期检查
+- ❌ 旧的 helper 函数容易出现超时和环境问题
+- ❌ 旧的方式需要手动管理状态、等待、清理
+
+**禁止使用旧方式**：
+```typescript
+// ❌ 禁止：使用旧的 helper 函数
+import { setupSmashUpOnlineMatch, readCoreState, applyCoreState } from './helpers/smashup';
+
+// ✅ 正确：使用新的 GameTestContext API
+import { test } from './framework';
+test('test', async ({ page, game }) => {
+  await game.setupScene({ ... });
+});
+```
 
 ### 使用 Fixture 简化测试（推荐）
 

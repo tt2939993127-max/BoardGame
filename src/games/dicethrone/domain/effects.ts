@@ -489,7 +489,8 @@ function resolveEffectAction(
                         state,
                         attackerId,
                         dmgTargetId,
-                        result.finalDamage
+                        result.finalDamage,
+                        ctx.isDefensiveContext
                     );
 
                     if (tokenResponseType) {
@@ -746,7 +747,8 @@ function resolveEffectAction(
                                 state,
                                 attackerId,
                                 dmgTargetId,
-                                dmgAmount
+                                dmgAmount,
+                                ctx.isDefensiveContext
                             );
 
                             if (tokenResponseType) {

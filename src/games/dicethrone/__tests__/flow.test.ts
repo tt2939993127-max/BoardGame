@@ -1218,12 +1218,16 @@ describe('王权骰铸流程测试', () => {
                     ...advanceTo('offensiveRoll'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'skip' }), // 跳过进攻方的骰子修改交互
                     cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }), // 选择清修防御技能
+                    cmd('SYS_INTERACTION_RESPOND', '1', { optionId: 'skip' }), // 跳过骰子修改交互
                     cmd('ADVANCE_PHASE', '1'), // 防御方结束防御阶段
+                    cmd('SKIP_TOKEN_RESPONSE', '1'), // 跳过防御方的 Token 响应（使用太极减免进攻方伤害）
+                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过攻击方的 Token 响应
                 ],
                 expect: {
                     turnPhase: 'main2',

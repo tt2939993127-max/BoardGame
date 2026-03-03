@@ -1065,7 +1065,7 @@ describe('潜行 Token - 完整流程测试', () => {
                 players: {
                     '1': {
                         tokens: {
-                            [TOKEN_IDS.SNEAK]: 0, // 潜行被消耗
+                            [TOKEN_IDS.SNEAK]: 1, // 潜行不消耗——在回合末自动弃除
                         },
                         resources: {
                             [RESOURCE_IDS.HP]: 50, // HP 不变（伤害被免除）

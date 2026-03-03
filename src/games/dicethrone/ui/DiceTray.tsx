@@ -33,7 +33,7 @@ interface DtDiceSelectMeta {
 type DtDiceMeta = DtDiceModifyMeta | DtDiceSelectMeta;
 
 /** 从 multistep-choice interaction 中提取 DiceThrone 元数据 */
-function getDtMeta(interaction?: InteractionDescriptor): DtDiceMeta | undefined {
+export function getDtMeta(interaction?: InteractionDescriptor): DtDiceMeta | undefined {
     if (!interaction || interaction.kind !== 'multistep-choice') return undefined;
     const meta = (interaction.data as any)?.meta as DtDiceMeta | undefined;
     if (!meta?.dtType) return undefined;

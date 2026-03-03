@@ -727,8 +727,8 @@ describe('潜行 (Sneak) 伤害免除', () => {
             },
         });
         const core = result.finalState.core;
-        // 潜行被消耗
-        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(0);
+        // 潜行不消耗——在回合末自动弃除
+        expect(core.players['1'].tokens[TOKEN_IDS.SNEAK] ?? 0).toBe(1);
         // 跳过防御掷骰，直接进入 main2
         expect(result.finalState.sys.phase).toBe('main2');
         // 防御方 HP 不变（伤害被免除）

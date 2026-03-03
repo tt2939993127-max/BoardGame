@@ -672,7 +672,13 @@
     "selectPlayerToRemoveAllStatus": "Select a player to remove all status",
     "selectPlayerForRetribution": "Select a player to gain Retribution",
     "selectPlayerForConsecrate": "Select a player to consecrate",
-    "selectStatusToTransfer": "Select a status effect to transfer"
+    "selectStatusToTransfer": "Select a status effect to transfer",
+    "hint_copy_step1": "Select source die to copy",
+    "hint_copy_step2": "Select target die to set to {{value}}",
+    "hint_done": "Done",
+    "hint_set": "Select die to set to {{value}}",
+    "hint_adjust": "Select die to adjust",
+    "hint_any": "Select die to modify"
   },
   "abilitySlots": {
     "fist": "Fist Technique",
@@ -2286,6 +2292,7 @@
     "notSelected": "Not Selected",
     "pressStart": "Start Game",
     "ready": "Ready",
+    "cancelReady": "Cancel Ready",
     "readyWaiting": "Waiting for other players...",
     "readyProgress": "Ready Progress",
     "you": "You"

@@ -16,6 +16,7 @@ import {
     createResponseWindowSystem,
     createTutorialSystem,
     createUndoSystem,
+    CharacterSelectionSystem,
     type CheatResourceModifier,
 } from '../../engine';
 import { createGameEngine } from '../../engine/adapter';
@@ -129,6 +130,7 @@ const summonerWarsCheatModifier: CheatResourceModifier<SummonerWarsCore> = {
 
 // 创建系统集合（包含 FlowSystem）
 const systems = [
+    new CharacterSelectionSystem({ setupPhaseName: 'setup' }),
     createFlowSystem<SummonerWarsCore>({ hooks: summonerWarsFlowHooks }),
     createEventStreamSystem(),
     createActionLogSystem({

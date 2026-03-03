@@ -11,6 +11,7 @@
     "previewAlt": "Faction preview",
     "notSelected": "Not Selected",
     "ready": "Ready",
+    "cancelReady": "Cancel Ready",
     "waiting": "Waiting for others...",
     "start": "Start Game",
     "waitAll": "Waiting for all players",

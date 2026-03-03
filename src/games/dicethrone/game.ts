@@ -17,6 +17,7 @@ import {
     createResponseWindowSystem,
     createTutorialSystem,
     createUndoSystem,
+    CharacterSelectionSystem,
 } from '../../engine';
 import { createGameEngine } from '../../engine/adapter';
 import { buildDamageBreakdownSegment, type DamageSourceResolver } from '../../engine/primitives/actionLogHelpers';
@@ -819,6 +820,7 @@ function findDiceThroneCard(
 // FlowSystem 配置由 FlowHooks 提供，符合设计规范
 // 注意：撤销快照保留 1 个 + 极度缩减日志（maxEntries: 20）以避免 MongoDB 16MB 限制
 const systems = [
+    new CharacterSelectionSystem({ setupPhaseName: 'setup' }),
     createFlowSystem<DiceThroneCore>({ hooks: diceThroneFlowHooks }),
     createEventStreamSystem(),
     createActionLogSystem({
@@ -895,6 +897,7 @@ const COMMAND_TYPES = [
     'SELECT_CHARACTER',
     'HOST_START_GAME',
     'PLAYER_READY',
+    'PLAYER_UNREADY',
     // Token 响应系统
     'USE_TOKEN',
     'SKIP_TOKEN_RESPONSE',

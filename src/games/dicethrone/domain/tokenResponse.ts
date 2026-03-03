@@ -471,17 +471,23 @@ export function finalizeTokenResponse(
 /**
  * 检查伤害是否需要打开 Token 响应窗口
  * 返回需要打开的窗口类型，或 null 表示直接应用伤害
+ * 
+ * @param isDefensiveContext 是否为防御技能上下文（防御反击伤害不触发 Token 响应窗口）
  */
 export function shouldOpenTokenResponse(
     state: DiceThroneCore,
     attackerId: PlayerId,
     defenderId: PlayerId,
-    damage: number
+    damage: number,
+    isDefensiveContext?: boolean
 ): 'attackerBoost' | 'defenderMitigation' | null {
     if (damage <= 0) return null;
     
     // 检查是否已有待处理伤害（避免重复打开）
     if (state.pendingDamage) return null;
+
+    // 防御技能的反击伤害不是"攻击"（规则 §7.2），不触发 Token 响应窗口
+    if (isDefensiveContext) return null;
 
     // 终极技能（规则 §4.4）：伤害可被攻击方强化，但不可被防御方降低/忽略/回避
     const isUltimate = state.pendingAttack?.isUltimate ?? false;
