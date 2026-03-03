@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Monk 技能完整覆盖测试
  * 补充 flow.test.ts 中缺失的测试用例
  */
@@ -184,6 +184,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -225,6 +226,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -268,6 +270,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -309,6 +312,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),  // offensiveRoll -> defensiveRoll (攻击可防御)
                     cmd('ROLL_DICE', '1'),      // 防御方掷骰
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
                 ],
@@ -356,6 +360,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),  // offensiveRoll -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
                 ],
@@ -532,6 +537,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -570,6 +576,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -608,6 +615,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -647,6 +655,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: {
@@ -748,6 +757,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认 displayOnly 奖励骰结果 → main2
                 ],

@@ -32,6 +32,36 @@ import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
 import { getPlayerAbilityBaseDamage } from './abilityLookup';
+import { getPendingAttackExpectedDamage } from './utils';
+
+/**
+ * 闪避后的 postDamage 状态修正
+ * 
+ * 闪避（evasive）完全免除伤害时，resolvedDamage 为 0（因为没有 DAMAGE_DEALT 事件）。
+ * 但攻击仍然"命中"了——伤害只是被闪避免除，非伤害效果（grantToken/inflictStatus 等）
+ * 仍应执行。与潜行（sneak）语义一致：攻击成功但伤害被免除。
+ * 
+ * 将 resolvedDamage 设为基础伤害值，让 onHit 条件正确判定为"命中"。
+ * 调用方需要过滤掉 DAMAGE_DEALT 事件（伤害已被闪避免除）。
+ */
+function getCoreForPostDamageAfterEvasion(core: DiceThroneCore): DiceThroneCore {
+    const pending = core.pendingAttack;
+    if (!pending) return core;
+
+    // 只在完全闪避（resolvedDamage 为 0 且 damageResolved 为 true）时修正
+    // 非闪避场景（如正常减伤后 resolvedDamage > 0）不需要修正
+    if ((pending.resolvedDamage ?? 0) > 0) return core;
+
+    const baseDamage = getPendingAttackExpectedDamage(core, pending, 1);
+
+    return {
+        ...core,
+        pendingAttack: {
+            ...pending,
+            resolvedDamage: baseDamage,
+        },
+    };
+}
 
 /**
  * 检查攻击方是否有晕眩（daze）
@@ -264,8 +294,16 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             if (core.pendingAttack) {
                 // 伤害已通过 Token 响应结算（autoContinue 重入），只执行 postDamage 效果
                 if (core.pendingAttack.damageResolved) {
-                    const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
-                    events.push(...postDamageEvents);
+                    // 闪避修正：完全闪避时 resolvedDamage 为 0，但攻击仍视为命中
+                    // 将 resolvedDamage 设为基础伤害让 onHit 效果正确触发
+                    const coreForPostDamage = getCoreForPostDamageAfterEvasion(core);
+                    const isFullyEvaded = coreForPostDamage !== core;
+                    const postDamageEvents = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
+                    // 闪避免伤：过滤掉 DAMAGE_DEALT 事件（伤害已被闪避免除，非伤害效果仍生效）
+                    const filteredPostDamageEvents = isFullyEvaded
+                        ? postDamageEvents.filter(e => e.type !== 'DAMAGE_DEALT')
+                        : postDamageEvents;
+                    events.push(...filteredPostDamageEvents);
 
                     // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
                     const hasBonusDiceRerollOffDR = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
@@ -349,37 +387,64 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 // ========== 潜行判定：防御方有潜行时跳过防御掷骰、免除伤害 ==========
                 // 终极技能不可被任何方式回避（规则 §4.4）
+                // 规则：潜行触发时只免伤（跳过防御掷骰），不消耗标记
+                // 标记的移除只在"经过一个完整的自己回合后，回合末清除"（见 discard 阶段退出逻辑）
                 const defender = core.players[core.pendingAttack.defenderId];
                 const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
                 if (sneakStacks > 0 && !core.pendingAttack.isUltimate) {
-                    // 消耗潜行标记
-                    events.push({
-                        type: 'TOKEN_CONSUMED',
-                        payload: {
-                            playerId: core.pendingAttack.defenderId,
-                            tokenId: TOKEN_IDS.SNEAK,
-                            amount: 1,
-                            newTotal: sneakStacks - 1,
-                        },
-                        sourceCommandType: command.type,
-                        timestamp,
-                    } as TokenConsumedEvent);
+                    // 不消耗潜行标记——潜行在回合末自动弃除，触发免伤时不移除
 
                     // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
                     const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some((event) => event.type === 'CHOICE_REQUESTED');
-                    if (hasSneakChoice) {
+                    const hasBonusDiceRerollPreDefenseSneak = preDefenseEventsSneak.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    if (hasSneakChoice || hasBonusDiceRerollPreDefenseSneak) {
                         return { events, halt: true };
                     }
 
-                    // 攻击仍视为"成功"——postDamage 效果（如 grantToken）仍需执行
-                    const coreForPostDamage = preDefenseEventsSneak.length > 0
+                    const coreAfterPreDefenseSneak = preDefenseEventsSneak.length > 0
                         ? applyEvents(core, [...events] as DiceThroneEvent[], reduce)
                         : core;
+
+                    // 潜行免伤但攻击成功：onHit 条件需要 damageDealt >= 1 才触发
+                    // 将 resolvedDamage 设为基础伤害值，让 onHit 正确判定为"命中"
+                    const sneakBaseDamage = getPendingAttackExpectedDamage(coreAfterPreDefenseSneak, core.pendingAttack, 1);
+                    const coreForPostDamage = {
+                        ...coreAfterPreDefenseSneak,
+                        pendingAttack: {
+                            ...coreAfterPreDefenseSneak.pendingAttack!,
+                            resolvedDamage: sneakBaseDamage,
+                        },
+                    };
                     const postDamageEventsSneak = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
-                    events.push(...postDamageEventsSneak);
+                    // 潜行免伤：过滤掉所有 DAMAGE_DEALT 事件（包括 rollDie 的 bonusDamage 独立伤害）
+                    events.push(...postDamageEventsSneak.filter(e => e.type !== 'DAMAGE_DEALT'));
+
+                    // === 与非潜行路径对齐的 halt 检查 ===
+                    const hasBonusDiceRerollSneak = postDamageEventsSneak.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
+                    const hasPostDamageChoiceSneak = postDamageEventsSneak.some(e => e.type === 'CHOICE_REQUESTED');
+                    const hasTokenResponseSneak = postDamageEventsSneak.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+                    if (hasBonusDiceRerollSneak || hasPostDamageChoiceSneak || hasTokenResponseSneak) {
+                        return { events, halt: true };
+                    }
+
+                    // 检查晕眩（daze）额外攻击
+                    const { dazeEvents: dazeEventsSneak, triggered: dazeTriggeredSneak } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (dazeTriggeredSneak) {
+                        events.push(...dazeEventsSneak);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                    const afterAttackWindowSneak = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindowSneak) {
+                        events.push(afterAttackWindowSneak);
+                        return { events, halt: true };
+                    }
 
                     return { events, overrideNextPhase: 'main2' };
                 }
@@ -484,9 +549,16 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             if (core.pendingAttack) {
                 // 如果伤害已通过 Token 响应结算，只执行 postDamage 效果
                 if (core.pendingAttack.damageResolved) {
-                    // 执行 withDamage 剩余效果（跳过 damage）+ postDamage + ATTACK_RESOLVED
-                    const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
-                    events.push(...postDamageEvents);
+                    // 闪避修正：完全闪避时 resolvedDamage 为 0，但攻击仍视为命中
+                    // 将 resolvedDamage 设为基础伤害让 onHit 效果正确触发
+                    const coreForPostDamage = getCoreForPostDamageAfterEvasion(core);
+                    const isFullyEvaded = coreForPostDamage !== core;
+                    const postDamageEvents = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
+                    // 闪避免伤：过滤掉 DAMAGE_DEALT 事件（伤害已被闪避免除，非伤害效果仍生效）
+                    const filteredPostDamageEvents = isFullyEvaded
+                        ? postDamageEvents.filter(e => e.type !== 'DAMAGE_DEALT')
+                        : postDamageEvents;
+                    events.push(...filteredPostDamageEvents);
 
                     // rollDie 等效果可能产生 BONUS_DICE_REROLL_REQUESTED，需要暂停让 UI 展示
                     const hasBonusDiceRerollPost = postDamageEvents.some(e => e.type === 'BONUS_DICE_REROLL_REQUESTED');
@@ -510,7 +582,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         return { events, halt: true };
                     }
 
-                    return { events, overrideNextPhase: 'main2' };
+                    return { events, overrideNextPhase: 'main2', halt: true };
                 }
 
                 // 奖励骰已通过 BONUS_DICE_SETTLED 结算（autoContinue 重入），
@@ -540,7 +612,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         return { events, halt: true };
                     }
 
-                    return { events, overrideNextPhase: 'main2' };
+                    return { events, overrideNextPhase: 'main2', halt: true };
                 }
                 
                 // 直接结算攻击

@@ -312,19 +312,22 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
 /**
  * 熔岩盔甲 (Magma Armor) 结算: 根据 base-ability.png 校准
  * 造成 dmgPerFire × [火] 伤害。
- * 获得 1x [灵魂] 烈焰精通。
+ * 获得 1x [火魂] 烈焰精通。
+ * II级额外：如果同时有 fire + magma，施加灼烧。
  */
 /**
  * 熔岩护甲：基于防御投掷的骰面结果计算效果
- * - 每个🔥火面造成 dmgPerFire 点伤害（对原攻击者）
  * - 每个🔥火魂面获得 1 个火焰精通
+ * - （II级）如果同时有🔥fire + 🌋magma，施加灼烧
+ * - 每个🔥火面造成 dmgPerFire 点伤害（对原攻击者）
  * 注意：不是额外投骰子，而是读取防御阶段已投的 5 颗骰子结果
  * 注意：防御上下文中 ctx.attackerId=防御者, ctx.defenderId=原攻击者
  *       伤害目标必须用 ctx.defenderId（原攻击者），不能用 ctx.targetId（target='self' 指向防御者自身）
  * 
  * 【已迁移到新伤害计算管线】
  */
-const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerFire: number = 1): DiceThroneEvent[] => {
+const resolveMagmaArmor = (ctx: CustomActionContext, opts: { dmgPerFire?: number; checkBurn?: boolean } = {}): DiceThroneEvent[] => {
+    const { dmgPerFire = 1, checkBurn = false } = opts;
     const events: DiceThroneEvent[] = [];
 
     // 读取防御投掷的骰面计数（防御阶段结束时 state.dice 就是防御方的骰子）
@@ -333,25 +336,43 @@ const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerF
 
     const fireCount = faceCounts[PYROMANCER_DICE_FACE_IDS.FIRE] ?? 0;
     const fierySoulCount = faceCounts[PYROMANCER_DICE_FACE_IDS.FIERY_SOUL] ?? 0;
+    const magmaCount = faceCounts[PYROMANCER_DICE_FACE_IDS.MAGMA] ?? 0;
 
     // 火魂面：获得火焰精通（给自己 = ctx.attackerId = 防御者）
     if (fierySoulCount > 0) {
         const currentFM = getFireMasteryCount(ctx);
         const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+        const newTotal = Math.min(currentFM + fierySoulCount, limit);
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: fierySoulCount, newTotal: Math.min(currentFM + fierySoulCount, limit), sourceAbilityId: ctx.sourceAbilityId },
+            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: fierySoulCount, newTotal, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: ctx.timestamp
         } as TokenGrantedEvent);
     }
 
+    // 条件灼烧（II级）：同时有 fire 和 magma 面时施加灼烧
+    if (checkBurn && fireCount > 0 && magmaCount > 0) {
+        const opponentId = ctx.ctx.defenderId;
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: {
+                targetId: opponentId,
+                statusId: STATUS_IDS.BURN,
+                stacks: 1,
+                newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1,
+                sourceAbilityId: ctx.sourceAbilityId
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: ctx.timestamp + 0.05
+        } as StatusAppliedEvent);
+    }
+
     // 火面：对原攻击者造成伤害（ctx.defenderId = 原攻击者，不是 ctx.targetId）
     if (fireCount > 0) {
         const totalDamage = fireCount * dmgPerFire;
-        // 防御上下文：ctx.defenderId 是原攻击者（被防御技能影响的人）
         const opponentId = ctx.ctx.defenderId;
-        
+
         // 使用新伤害计算管线（自动收集所有修正）
         const damageCalc = createDamageCalculation({
             source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
@@ -360,6 +381,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerF
             state: ctx.state,
             timestamp: ctx.timestamp + 0.1,
         });
+
         events.push(...damageCalc.toEvents());
     }
 
@@ -640,8 +662,8 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('ignite-resolve', (ctx) => resolveIgnite(ctx, 4, 2), { categories: ['damage', 'resource'] });
     registerCustomActionHandler('ignite-2-resolve', (ctx) => resolveIgnite(ctx, 5, 2), { categories: ['damage', 'resource'] });
 
-    registerCustomActionHandler('magma-armor-resolve', (ctx) => resolveMagmaArmor(ctx, 1), { categories: ['damage', 'resource', 'defense'] });
-    registerCustomActionHandler('magma-armor-2-resolve', (ctx) => resolveMagmaArmor(ctx, 2), { categories: ['damage', 'resource', 'defense'] });
+    registerCustomActionHandler('magma-armor-resolve', (ctx) => resolveMagmaArmor(ctx), { categories: ['damage', 'resource', 'defense'] });
+    registerCustomActionHandler('magma-armor-2-resolve', (ctx) => resolveMagmaArmor(ctx, { checkBurn: true }), { categories: ['damage', 'resource', 'defense', 'status'] });
     registerCustomActionHandler('magma-armor-3-resolve', resolveMagmaArmor3, { categories: ['damage', 'resource', 'defense', 'status'] });
 
     registerCustomActionHandler('increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });

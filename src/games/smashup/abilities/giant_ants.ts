@@ -835,7 +835,7 @@ const handleUnderPressureChooseSource: IH = (state, playerId, value, interaction
         sourceMinionUid: selected.minionUid,
         sourceDefId: selected.defId ?? source.defId,
         sourceBaseIndex: selected.baseIndex,
-        sourceCounterAmount: source.powerModifier,
+        sourceCounterAmount: source.powerCounters,
         reason: 'giant_ant_under_pressure',
     };
 

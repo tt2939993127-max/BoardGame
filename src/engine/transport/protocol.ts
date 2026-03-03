@@ -60,6 +60,15 @@ export interface ServerToClientEvents {
         meta?: { stateID?: number; lastCommandPlayerId?: string; randomCursor?: number },
     ) => void;
 
+    /** 增量状态 patch（命令执行后，状态变化较小时） */
+    'state:patch': (
+        matchID: string,
+        patches: import('fast-json-patch').Operation[],
+        matchPlayers: MatchPlayerInfo[],
+        /** 元数据，用于乐观更新校验 */
+        meta: { stateID: number; lastCommandPlayerId?: string; randomCursor: number },
+    ) => void;
+
     /** 命令执行错误 */
     'error': (matchID: string, error: string) => void;
 

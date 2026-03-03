@@ -1,4 +1,4 @@
-﻿﻿/**
+/**
  * DiceThrone 效果解析器
  * 将 AbilityEffect 转换为 DiceThroneEvent（事件驱动）
  */
@@ -717,7 +717,7 @@ function resolveEffectAction(
                     random,
                     action,
                 };
-                const handledEvents = handler(handlerCtx);
+                const handledEvents = handler(handlerCtx).filter(e => e !== undefined);
                 if (sfxKey) {
                     handledEvents.forEach(handledEvent => {
                         if (!handledEvent.sfxKey) {
@@ -1175,7 +1175,7 @@ export function resolveEffectsToEvents(
             totalBonus += ctx.accumulatedBonusDamage;
         }
 
-        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey);
+        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey).filter(e => e !== undefined);
         events.push(...effectEvents);
 
         // TOKEN_RESPONSE_REQUESTED 意味着伤害被挂起等待玩家响应，

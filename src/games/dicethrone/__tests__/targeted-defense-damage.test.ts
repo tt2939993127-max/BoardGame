@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 测试锁定 buff 在防御投掷造成伤害时是否生效
  */
 
@@ -44,7 +44,8 @@ describe('锁定 buff 在防御投掷造成伤害时生效', () => {
         cmd('ADVANCE_PHASE', '0'), // offensiveRoll → defensiveRoll
         cmd('ROLL_DICE', '1'),
         cmd('CONFIRM_ROLL', '1'),
-        cmd('ADVANCE_PHASE', '1'), // defensiveRoll → main2（触发迷影步）
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-step' }),
+                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll → main2（触发迷影步）
       ],
       expect: {
         turnPhase: 'main2',

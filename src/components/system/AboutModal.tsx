@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { X, Github, Heart, MessageCircle, Coffee } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,7 @@ import { createParticle, parseColorToRgb, type Particle } from '../common/animat
 import { useToast } from '../../contexts/ToastContext';
 import { SPONSOR_API_URL } from '../../config/server';
 import { UI_Z_INDEX } from '../../core';
+import { OptimizedImage } from '../common/media/OptimizedImage';
 
 interface AboutModalProps {
     onClose: () => void;
@@ -418,22 +419,23 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                                 {
                                     label: t('hud.about.wechatLabel'),
                                     color: 'text-green-600',
-                                    src: '/logos/weixin.jpg',
+                                    src: 'common/logos/weixin.jpg',
                                     alt: '微信支付二维码'
                                 },
                                 {
                                     label: t('hud.about.alipayLabel'),
                                     color: 'text-blue-600',
-                                    src: '/logos/zhifubao.jpg',
+                                    src: 'common/logos/zhifubao.jpg',
                                     alt: '支付宝支付二维码'
                                 }
                             ].map((qr, idx) => (
                                 <div key={idx} className="flex flex-col items-center gap-1.5 pt-1">
                                     <div className="w-24 h-24 bg-zinc-100 flex items-center justify-center text-zinc-300 text-[10px] rounded-lg border border-parchment-brown/5 shadow-inner overflow-hidden">
-                                        <img
+                                        <OptimizedImage
                                             src={qr.src}
                                             alt={qr.alt}
                                             className="w-full h-full object-cover"
+                                            placeholder={false}
                                         />
                                     </div>
                                     <span className={`text-[10px] font-bold ${qr.color} opacity-80`}>{qr.label}</span>

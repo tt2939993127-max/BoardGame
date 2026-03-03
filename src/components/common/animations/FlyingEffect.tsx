@@ -446,6 +446,9 @@ const FlyingEffectItem: React.FC<{
     const intensity = effect.intensity ?? 1;
     const flightDuration = calcFlightDuration(deltaX, deltaY);
 
+    // 零距离标记：framer-motion 在 initial === animate 时不触发 onAnimationComplete
+    const isZeroDistance = dist < 1;
+
     const motionX = useMotionValue(0);
     const motionY = useMotionValue(0);
 
@@ -484,6 +487,14 @@ const FlyingEffectItem: React.FC<{
             onComplete(effect.id);
         }
     }, [effect.id, onComplete]);
+
+    // 零距离时 framer-motion 不触发 onAnimationComplete，手动立即触发
+    React.useEffect(() => {
+        if (isZeroDistance) {
+            const timer = window.setTimeout(() => handleArrive(), 50);
+            return () => window.clearTimeout(timer);
+        }
+    }, [isZeroDistance, handleArrive]);
 
     // 兜底清理
     React.useEffect(() => {

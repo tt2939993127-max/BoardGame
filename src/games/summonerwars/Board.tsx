@@ -112,6 +112,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handlePlayerReady = useCallback(() => {
     dispatch(SW_COMMANDS.PLAYER_READY, {});
   }, [dispatch]);
+  const handlePlayerUnready = useCallback(() => {
+    dispatch(SW_COMMANDS.PLAYER_UNREADY, {});
+  }, [dispatch]);
   const handleHostStart = useCallback(() => {
     dispatch(SW_COMMANDS.HOST_START_GAME, {});
   }, [dispatch]);
@@ -665,6 +668,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               onSelect={handleSelectFaction}
               onSelectCustomDeck={handleSelectCustomDeck}
               onReady={handlePlayerReady}
+              onUnready={handlePlayerUnready}
               onStart={handleHostStart}
             />
             {debugPanel}

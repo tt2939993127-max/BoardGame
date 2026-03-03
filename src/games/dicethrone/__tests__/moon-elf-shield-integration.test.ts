@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 月精灵百分比护盾集成测试
  *
  * 验证迷影步 II 的 50% 伤害减免护盾在完整 pipeline 中是否生效。
@@ -134,7 +134,8 @@ describe('月精灵百分比护盾集成测试', () => {
                 // 月精灵防御阶段（迷影步自动选择）
                 cmd('ROLL_DICE', '1'),                                  // 5 × d(6) → [4,4,1,1,1]
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'),                              // defensiveRoll exit → resolveAttack
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-step' }),
+                    cmd('ADVANCE_PHASE', '1'),                              // defensiveRoll exit → resolveAttack
                 // 暗影盗贼有伏击 Token 定义（即使数量为 0）→ TOKEN_RESPONSE_REQUESTED → halt
                 cmd('SKIP_TOKEN_RESPONSE', '0'),                        // 跳过伏击加伤 → 伤害结算 → main2
             ],
@@ -212,7 +213,8 @@ describe('月精灵百分比护盾集成测试', () => {
                 cmd('ADVANCE_PHASE', '0'),                              // offensiveRoll → defensiveRoll
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'),                              // defensiveRoll exit → resolveAttack
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-step' }),
+                    cmd('ADVANCE_PHASE', '1'),                              // defensiveRoll exit → resolveAttack
                 // 暗影盗贼有太极 → TOKEN_RESPONSE_REQUESTED → halt
                 cmd('SKIP_TOKEN_RESPONSE', '0'),                        // 跳过太极加伤 → 伤害结算
             ],

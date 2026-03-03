@@ -295,3 +295,120 @@ export function buildDamageSourceAnnotation(
 
     return segments;
 }
+
+// ============================================================================
+// 累计值计算辅助函数（防止撤回后状态污染）
+// ============================================================================
+
+/**
+ * 从事件流计算累计伤害（替代读取累计状态）
+ *
+ * **用途**：当需要显示"本次攻击总伤害"时，从事件流计算而非读取 state。
+ *
+ * **为什么需要这个函数**：
+ * - 撤回后累计状态（如 `attackResolved.payload.totalDamage`）可能保留旧值
+ * - 日志格式化层依赖累计状态会导致撤回后显示错误
+ * - 从事件流计算是唯一可靠的方式
+ *
+ * **最佳实践**：
+ * - ❌ 错误：`const totalDamage = attackResolved.payload.totalDamage;`
+ * - ✅ 正确：`const totalDamage = calculateTotalDamageFromEvents(events, defenderId);`
+ *
+ * @param events 事件列表（通常是 formatEntry 的 events 参数）
+ * @param targetId 目标玩家 ID
+ * @param filter 可选过滤器（如只统计特定来源的伤害）
+ * @returns 累计伤害值
+ *
+ * @example
+ * ```ts
+ * // 在 formatEntry 中使用
+ * function formatDamageEntry({ events, ... }) {
+ *   const attackResolved = events.find(e => e.type === 'ATTACK_RESOLVED');
+ *   if (!attackResolved) return null;
+ *
+ *   // ❌ 错误：依赖累计状态
+ *   // const totalDamage = attackResolved.payload.totalDamage;
+ *
+ *   // ✅ 正确：从事件流计算
+ *   const totalDamage = calculateTotalDamageFromEvents(
+ *     events,
+ *     attackResolved.payload.defenderId
+ *   );
+ * }
+ * ```
+ */
+export function calculateTotalDamageFromEvents(
+    events: Array<{ type: string; payload?: any }>,
+    targetId: string,
+    filter?: (event: { type: string; payload?: any }) => boolean,
+): number {
+    return events
+        .filter(
+            (e): e is { type: 'DAMAGE_DEALT'; payload: { targetId: string; actualDamage?: number; amount?: number } } =>
+                e.type === 'DAMAGE_DEALT' &&
+                e.payload?.targetId === targetId &&
+                (!filter || filter(e)),
+        )
+        .reduce((sum, e) => sum + (e.payload.actualDamage ?? e.payload.amount ?? 0), 0);
+}
+
+/**
+ * 从事件流计算累计治疗
+ *
+ * 用法同 `calculateTotalDamageFromEvents`，用于统计治疗量。
+ *
+ * @param events 事件列表
+ * @param targetId 目标玩家 ID
+ * @param filter 可选过滤器
+ * @returns 累计治疗值
+ */
+export function calculateTotalHealingFromEvents(
+    events: Array<{ type: string; payload?: any }>,
+    targetId: string,
+    filter?: (event: { type: string; payload?: any }) => boolean,
+): number {
+    return events
+        .filter(
+            (e): e is { type: 'HEAL_APPLIED'; payload: { targetId: string; amount: number } } =>
+                e.type === 'HEAL_APPLIED' &&
+                e.payload?.targetId === targetId &&
+                (!filter || filter(e)),
+        )
+        .reduce((sum, e) => sum + e.payload.amount, 0);
+}
+
+/**
+ * 从事件流计算累计资源变化
+ *
+ * 通用版本，可用于统计任何资源的变化（CP、魔力、能量等）。
+ *
+ * @param events 事件列表
+ * @param eventType 资源变化事件类型（如 'CP_CHANGED'、'MANA_CHANGED'）
+ * @param playerId 玩家 ID
+ * @param deltaField payload 中表示变化量的字段名（默认 'delta'）
+ * @returns 累计变化值
+ *
+ * @example
+ * ```ts
+ * // 统计本回合获得的 CP
+ * const totalCpGained = calculateTotalResourceChangeFromEvents(
+ *   events,
+ *   'CP_CHANGED',
+ *   playerId,
+ *   'delta'
+ * );
+ * ```
+ */
+export function calculateTotalResourceChangeFromEvents(
+    events: Array<{ type: string; payload?: any }>,
+    eventType: string,
+    playerId: string,
+    deltaField = 'delta',
+): number {
+    return events
+        .filter(
+            (e): e is { type: string; payload: { playerId: string; [key: string]: any } } =>
+                e.type === eventType && e.payload?.playerId === playerId,
+        )
+        .reduce((sum, e) => sum + (e.payload[deltaField] ?? 0), 0);
+}

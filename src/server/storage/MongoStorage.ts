@@ -107,18 +107,8 @@ export class MongoStorage implements MatchStorage {
         const ownerKey = setupData.ownerKey;
         const ownerType = setupData.ownerType;
 
-        // 全局单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
-        if (ownerKey) {
-            const existingMatches = await Match.find({
-                'metadata.setupData.ownerKey': ownerKey,
-            }).select('matchID').lean();
-
-            if (existingMatches.length > 0) {
-                const matchIds = existingMatches.map(doc => doc.matchID);
-                await Match.deleteMany({ matchID: { $in: matchIds } });
-                logger.info(`[MongoStorage] 覆盖旧房间 ownerKey=${ownerKey} ownerType=${ownerType ?? 'unknown'} count=${matchIds.length}`);
-            }
-        }
+        // ❌ 移除：单房间限制逻辑已移至 server.ts 的 /create 路由
+        // 存储层应保持纯粹，只负责数据持久化
         
         const expiresAt = calculateExpiresAt(ttlSeconds);
 
@@ -424,6 +414,24 @@ export class MongoStorage implements MatchStorage {
         }
 
         return toDelete.length;
+    }
+
+    /**
+     * 兜底清理已过期的 TTL 房间（ttlSeconds > 0 且 expiresAt 已过期）
+     * MongoDB TTL 索引理论上会自动删除，但索引可能未创建或延迟，此方法作为应用层兜底
+     */
+    async cleanupExpiredTtlMatches(): Promise<number> {
+        const Match = getMatchModel();
+        const now = new Date();
+        const result = await Match.deleteMany({
+            ttlSeconds: { $gt: 0 },
+            expiresAt: { $ne: null, $lte: now },
+        });
+        const count = result.deletedCount ?? 0;
+        if (count > 0) {
+            logger.info(`[MongoStorage] 兜底清理过期 TTL 房间: ${count} 个`);
+        }
+        return count;
     }
 
     /**

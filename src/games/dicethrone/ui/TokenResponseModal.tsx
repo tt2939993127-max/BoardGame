@@ -27,6 +27,8 @@ interface TokenResponseModalProps {
     lastEvasionRoll?: { value: number; success: boolean };
     /** 状态图标图集 */
     statusIconAtlas?: StatusAtlases | null;
+    /** Token 可用数量覆盖（用于太极回合限制等特殊规则） */
+    tokenUsableOverrides?: Record<string, number>;
 }
 
 /**
@@ -165,6 +167,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     locale,
     lastEvasionRoll,
     statusIconAtlas,
+    tokenUsableOverrides,
 }) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -214,8 +217,9 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
 
     // 渲染单个 Token 卡片（传入 responsePhase 以正确计算效果预览和分类）
     const renderTokenCard = (tokenDef: TokenDef, borderColor: string) => {
-        const tokenCount = responderState.tokens[tokenDef.id] ?? 0;
-        if (tokenCount <= 0) return null;
+        // 使用 tokenUsableOverrides 覆盖可用数量（如太极回合限制）
+        const actualTokenCount = tokenUsableOverrides?.[tokenDef.id] ?? (responderState.tokens[tokenDef.id] ?? 0);
+        if (actualTokenCount <= 0) return null;
 
         const preview = getTokenEffectPreview(tokenDef, pendingDamage.currentDamage, 1, responsePhase);
         const category = getTokenCategory(tokenDef, responsePhase);
@@ -239,7 +243,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                             {t(`tokens.${tokenDef.id}.name`)}
                         </span>
                         <span className="text-xs text-slate-400">
-                            ({tokenCount} {t('tokenResponse.available')})
+                            ({actualTokenCount} {t('tokenResponse.available')})
                         </span>
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 圣骑士 (Paladin) GTR 技能运行时覆盖测试
  *
  * 通过 GameTestRunner 走完整管线验证技能效果：
@@ -141,6 +141,7 @@ describe('圣骑士 GTR 技能覆盖', () => {
                     cmd('ADVANCE_PHASE', '0'),       // → defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'divine-shield' }),
                     cmd('ADVANCE_PHASE', '1'),       // defensiveRoll exit → halt (BONUS_DICE_REROLL)
                     cmd('SKIP_BONUS_DICE_REROLL', '1'), // 防御方跳过 → auto-continue → main2
                 ],

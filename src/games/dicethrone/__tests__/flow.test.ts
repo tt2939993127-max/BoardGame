@@ -722,6 +722,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
                 ],
                 expect: {
@@ -758,6 +759,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
                 ],
                 expect: {
@@ -794,6 +796,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
                 ],
                 expect: {
@@ -1108,6 +1111,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> main2
                 ],
                 expect: {
@@ -1154,6 +1158,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> main2
                 ],
                 expect: {
@@ -1217,6 +1222,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }), // 选择清修防御技能
                     cmd('ADVANCE_PHASE', '1'), // 防御方结束防御阶段
                 ],
                 expect: {
@@ -1251,6 +1257,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
                 ],
                 expect: {
@@ -1437,6 +1444,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算
                 ],
                 expect: {
@@ -1475,6 +1483,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
@@ -1514,6 +1523,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
                     cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
@@ -1551,6 +1561,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
                     cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果
                     cmd('SKIP_TOKEN_RESPONSE', '0'), // 攻击方跳过太极加伤 → main2
@@ -1590,6 +1601,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
@@ -1628,6 +1640,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 1 }),
@@ -1680,6 +1693,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算
                 ],
                 expect: {
@@ -1723,6 +1737,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
@@ -1777,6 +1792,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
                     cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
@@ -1829,6 +1845,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，displayOnly 奖励骰展示暂停
                     cmd('SKIP_BONUS_DICE_REROLL', '0'), // 确认骰子结果 → main2
                 ],
@@ -1873,6 +1890,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
                     cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 1 }),

@@ -26,6 +26,7 @@ import {
     type PipelineConfig,
 } from '../pipeline';
 import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
+import { computeDiff } from './patch';
 
 // 离线裁决：按交互 kind 选择最小语义正确的兜底命令
 // - simple-choice: 走通用系统取消
@@ -98,6 +99,8 @@ interface ActiveMatch {
     spectatorSockets: Set<string>;
     /** 离线裁决定时器：playerID → timer */
     offlineTimers: Map<string, ReturnType<typeof setTimeout>>;
+    /** 每个玩家/旁观者上次广播的 ViewState 缓存，用于 diff 计算 */
+    lastBroadcastedViews: Map<string, unknown>;
     /** 最后执行命令的玩家 ID（供 broadcastState 携带到 meta，乐观引擎用于区分自己/对手的命令） */
     lastCommandPlayerId: string | null;
     /** 命令执行锁（串行执行） */
@@ -392,6 +395,9 @@ export class GameTransportServer {
         };
         await this.storage.setState(matchID, storedState);
 
+        // 清空增量同步缓存，确保注入后首次广播为全量
+        match.lastBroadcastedViews.clear();
+
         // 广播到所有客户端
         this.broadcastState(match);
 
@@ -582,13 +588,21 @@ export class GameTransportServer {
             // 处理队列中的后续命令（包括 batch 任务）
             while (match.commandQueue.length > 0) {
                 const next = match.commandQueue.shift()!;
-                if ('_batch' in next) {
-                    // batch 任务：执行完整的 batch 逻辑
-                    await next.execute();
-                    next.resolve(true);
-                } else {
-                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                    next.resolve(queuedSuccess);
+                try {
+                    if ('_batch' in next) {
+                        // batch 任务：执行完整的 batch 逻辑
+                        await next.execute();
+                        next.resolve(true);
+                    } else {
+                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                        next.resolve(queuedSuccess);
+                    }
+                } catch (error) {
+                    logger.error('[handleCommand] 队列中命令执行异常', {
+                        matchID: match.matchID,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                    next.resolve(false);
                 }
             }
 
@@ -666,12 +680,20 @@ export class GameTransportServer {
             // 消费 batch 执行期间排队的普通命令和 batch 任务（与 handleCommand 保持一致）
             while (match.commandQueue.length > 0) {
                 const next = match.commandQueue.shift()!;
-                if ('_batch' in next) {
-                    await next.execute();
-                    next.resolve(true);
-                } else {
-                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                    next.resolve(queuedSuccess);
+                try {
+                    if ('_batch' in next) {
+                        await next.execute();
+                        next.resolve(true);
+                    } else {
+                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                        next.resolve(queuedSuccess);
+                    }
+                } catch (error) {
+                    logger.error('[handleBatch] 队列中命令执行异常', {
+                        matchID: match.matchID,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                    next.resolve(false);
                 }
             }
             match.executing = false;
@@ -832,7 +854,32 @@ export class GameTransportServer {
             systemsConfig: engineConfig.systemsConfig,
         };
 
-        const result = executePipeline(pipelineConfig, state, command, random, playerIds);
+        let result;
+        try {
+            result = executePipeline(pipelineConfig, state, command, random, playerIds);
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            gameLogger.commandFailed(
+                match.matchID,
+                commandType,
+                playerID,
+                error instanceof Error ? error : new Error(String(error))
+            );
+
+            // 通知发送者
+            const nsp = this.io.of('/game');
+            const sockets = match.connections.get(playerID);
+            if (sockets) {
+                for (const sid of sockets) {
+                    nsp.to(sid).emit('error', match.matchID, 'pipeline_error');
+                }
+            }
+
+            // 自动取消 pending interaction（防止游戏卡死）
+            await this.cancelInteractionOnError(match, playerID);
+
+            return false;
+        }
 
         const duration = Date.now() - startTime;
 
@@ -907,6 +954,12 @@ export class GameTransportServer {
                 matchID: match.matchID,
                 restoredCursor,
             });
+
+            // 撤回导致大规模状态变更，增量 patch 极易产生无效路径。
+            // 清空广播缓存，强制下次 broadcastState 对所有客户端只发送全量状态，
+            // 避免客户端 patch 应用失败后触发 resync 的额外延迟。
+            match.lastBroadcastedViews.clear();
+
             // 清除信号，避免持久化到存储层
             match.state = {
                 ...match.state,
@@ -945,6 +998,31 @@ export class GameTransportServer {
         return true;
     }
 
+    /**
+     * 命令执行异常后，自动取消当前玩家的 pending interaction，防止游戏卡死
+     */
+    private async cancelInteractionOnError(match: ActiveMatch, playerID: string): Promise<void> {
+        const interaction = (match.state.sys as {
+            interaction?: {
+                current?: { kind?: string; playerId?: string };
+            };
+        })?.interaction?.current;
+
+        if (!interaction || interaction.playerId !== playerID) return;
+
+        const commandType = INTERACTION_COMMANDS.CANCEL;
+
+        // 递归调用 executeCommandInternal 执行取消命令
+        // 注意：这里不会无限递归，因为 CANCEL 命令不会抛出异常
+        await this.executeCommandInternal(match, playerID, commandType, {});
+
+        logger.warn('[GameTransport] Auto-cancelled interaction after command error', {
+            matchID: match.matchID,
+            playerID,
+            interactionKind: interaction.kind,
+        });
+    }
+
     private handleDisconnect(socket: IOSocket): void {
         const info = this.socketIndex.get(socket.id);
         if (!info) return;
@@ -962,6 +1040,10 @@ export class GameTransportServer {
 
         if (info.playerID === null) {
             match.spectatorSockets.delete(socketId);
+            // 最后一个旁观者断开时清理缓存
+            if (match.spectatorSockets.size === 0) {
+                match.lastBroadcastedViews.delete('spectator');
+            }
             return;
         }
 
@@ -979,6 +1061,9 @@ export class GameTransportServer {
         match: ActiveMatch,
         playerID: string,
     ): void {
+        // 清理增量同步缓存
+        match.lastBroadcastedViews.delete(playerID);
+
         // 更新 metadata
         if (match.metadata.players[playerID]) {
             match.metadata.players[playerID].isConnected = false;
@@ -1041,8 +1126,54 @@ export class GameTransportServer {
     // 状态广播
     // ========================================================================
 
-    private broadcastState(match: ActiveMatch): void {
+    /**
+     * 对单个玩家/旁观者执行增量 diff 并推送状态
+     * 
+     * - 首次广播 → 全量（state:update）
+     * - 后续广播 → 增量（state:patch）或全量（fallback）
+     * - 状态无变化 → 不发送
+     */
+    private emitStateToSockets(
+        match: ActiveMatch,
+        viewState: unknown,
+        cacheKey: string,
+        sockets: Set<string>,
+        matchPlayers: MatchPlayerInfo[],
+        meta: { stateID: number; lastCommandPlayerId?: string; randomCursor: number },
+    ): void {
         const nsp = this.io.of('/game');
+        const cached = match.lastBroadcastedViews.get(cacheKey);
+
+        if (cached === undefined) {
+            // 首次广播 → 全量
+            for (const socketId of sockets) {
+                nsp.to(socketId).emit('state:update', match.matchID, viewState, matchPlayers, meta);
+            }
+        } else {
+            const diff = computeDiff(cached, viewState);
+
+            if (diff.type === 'full') {
+                // Fallback 到全量
+                for (const socketId of sockets) {
+                    nsp.to(socketId).emit('state:update', match.matchID, viewState, matchPlayers, meta);
+                }
+            } else if (diff.patches && diff.patches.length > 0) {
+                // 增量 patch
+                for (const socketId of sockets) {
+                    nsp.to(socketId).emit('state:patch', match.matchID, diff.patches, matchPlayers, meta);
+                }
+            }
+            // else: 状态无变化，不发送
+        }
+
+        // 始终更新缓存
+        // JSON round-trip 消除 undefined 值的 key，确保缓存结构与客户端（经 socket.io JSON 序列化）一致。
+        // 否则 fast-json-patch 的 compare 会对 { key: undefined } → { key: value } 生成 replace 而非 add，
+        // 导致客户端 patch 应用失败（路径不存在）。
+        match.lastBroadcastedViews.set(cacheKey, JSON.parse(JSON.stringify(viewState)));
+    }
+
+    private broadcastState(match: ActiveMatch): void {
         const matchPlayers = this.buildMatchPlayers(match);
 
         // 附带 stateID + lastCommandPlayerId + randomCursor 元数据，供乐观引擎精确匹配和随机数同步
@@ -1054,20 +1185,16 @@ export class GameTransportServer {
             meta.lastCommandPlayerId = match.lastCommandPlayerId;
         }
 
-        // 对每个已连接的玩家发送经 playerView 过滤 + 传输裁剪的状态
+        // 对每个已连接的玩家发送经 playerView 过滤 + 传输裁剪的状态（增量 diff）
         for (const [playerID, sockets] of match.connections) {
             const viewState = this.stripStateForTransport(this.applyPlayerView(match, playerID));
-            for (const sid of sockets) {
-                nsp.to(sid).emit('state:update', match.matchID, viewState, matchPlayers, meta);
-            }
+            this.emitStateToSockets(match, viewState, playerID, sockets, matchPlayers, meta);
         }
 
         // 旁观者使用 spectator 视图（当前默认完整视图）
         if (match.spectatorSockets.size > 0) {
             const spectatorView = this.stripStateForTransport(this.applyPlayerView(match, null));
-            for (const sid of match.spectatorSockets) {
-                nsp.to(sid).emit('state:update', match.matchID, spectatorView, matchPlayers, meta);
-            }
+            this.emitStateToSockets(match, spectatorView, 'spectator', match.spectatorSockets, matchPlayers, meta);
         }
     }
 
@@ -1134,6 +1261,7 @@ export class GameTransportServer {
             connections: new Map(),
             spectatorSockets: new Set(),
             offlineTimers: new Map(),
+            lastBroadcastedViews: new Map(),
             executing: false,
             commandQueue: [],
         };

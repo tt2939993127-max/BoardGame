@@ -99,7 +99,7 @@ describe('潜行 vs 高温爆破 — 额外投掷触发', () => {
                 players: {
                     '1': {
                         tokens: {
-                            [TOKEN_IDS.SNEAK]: 0, // 潜行已被消耗
+                            [TOKEN_IDS.SNEAK]: 1, // 潜行不立即消耗，回合末清除
                         },
                         resources: {
                             [RESOURCE_IDS.HP]: 50, // 伤害被免除
@@ -182,7 +182,7 @@ describe('潜行 vs 高温爆破 — 额外投掷触发', () => {
                 turnPhase: 'main2',
                 players: {
                     '1': {
-                        tokens: { [TOKEN_IDS.SNEAK]: 0 }, // 潜行已被消耗
+                        tokens: { [TOKEN_IDS.SNEAK]: 1 }, // 潜行不立即消耗，回合末清除
                         resources: { [RESOURCE_IDS.HP]: 50 }, // 伤害被免除
                     },
                 },

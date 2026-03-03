@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shadow Thief (暗影刺客) 技能与状态效果覆盖测试
  *
  * 覆盖范围：
@@ -780,7 +780,8 @@ describe('暗影守护 I - 完整防御结算流程', () => {
                 // 防御阶段（暗影守护 I 自动选择，diceCount=4）
                 cmd('ROLL_DICE', '1'),     // 4 × d(6) → [6,6,1,3] = 2 shadow + 1 dagger + 1 bag
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
             ],
             expect: {
                 turnPhase: 'main2',
@@ -830,7 +831,8 @@ describe('暗影守护 I - 完整防御结算流程', () => {
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'),
             ],
             expect: {
                 turnPhase: 'main2',
@@ -880,7 +882,8 @@ describe('暗影守护 I - 完整防御结算流程', () => {
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'),
             ],
             expect: {
                 turnPhase: 'main2',
@@ -944,7 +947,8 @@ describe('暗影守护 II - 完整防御结算流程', () => {
                 // 防御阶段（暗影守护 II 自动选择，diceCount=5）
                 cmd('ROLL_DICE', '1'),     // 5 × d(6) → [6,6,1,3,5] = 2 shadow + 1 dagger + 1 bag + 1 card
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
             ],
             expect: {
                 turnPhase: 'main2',
@@ -1001,7 +1005,8 @@ describe('暗影守护 II - 完整防御结算流程', () => {
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'),
             ],
             expect: {
                 turnPhase: 'main2',
@@ -1155,7 +1160,8 @@ describe('伏击 Token - 完整流程测试', () => {
                 // 防御阶段
                 cmd('ROLL_DICE', '1'),     // 4 × d(6) → [1,1,1,1] 全 dagger（无防御效果）
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → Token 响应窗口
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → Token 响应窗口
                 // Token 响应窗口：攻击者有伏击 Token
                 cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }), // 掷骰 → 5
                 cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过攻击方后续响应 → 伤害结算 → main2
@@ -1339,7 +1345,8 @@ describe('暗影刺客 - 恐惧反击毒液施加', () => {
                 cmd('SELECT_ABILITY', '1', { abilityId: 'fearless-riposte' }),
                 cmd('ROLL_DICE', '1'),     // 5 × d(6) → [1,2,6,3,4] = 2 dagger + 1 shadow + 2 bag
                 cmd('CONFIRM_ROLL', '1'),
-                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-guard' }),
+                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
             ],
             expect: {
                 turnPhase: 'main2',

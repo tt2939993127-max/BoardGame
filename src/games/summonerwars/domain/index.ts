@@ -61,18 +61,25 @@ export const SummonerWarsDomain: DomainCore<SummonerWarsCore> = {
    * 初始化游戏状态
    * 初始阶段为选角，棋盘为空，等待双方选择阵营后再初始化牌组
    */
-  setup: (_playerIds, _random) => {
+  setup: (_playerIds, _random, setupData?) => {
     const board = createEmptyBoard();
+
+    // 重赛先手轮换：优先使用 setupData 中的 firstPlayerId
+    const firstPlayer = (typeof setupData?.firstPlayerId === 'string' && ['0', '1'].includes(setupData.firstPlayerId))
+        ? setupData.firstPlayerId as PlayerId
+        : '0' as PlayerId;
+
     const players: Record<PlayerId, PlayerState> = {
-      '0': createPlayerState('0', true),
-      '1': createPlayerState('1', false),
+      '0': createPlayerState('0', firstPlayer === '0'),
+      '1': createPlayerState('1', firstPlayer === '1'),
     };
 
     return {
       board,
       players,
       phase: 'summon' as GamePhase,
-      currentPlayer: '0',
+      currentPlayer: firstPlayer,
+      startingPlayerId: firstPlayer,
       turnNumber: 1,
       selectedFactions: { '0': 'unselected', '1': 'unselected' } as Record<PlayerId, FactionId | 'unselected'>,
       readyPlayers: { '0': false, '1': false } as Record<PlayerId, boolean>,

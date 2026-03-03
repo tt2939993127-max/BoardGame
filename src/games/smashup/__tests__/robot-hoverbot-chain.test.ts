@@ -8,135 +8,323 @@
  * 4. 验证不会出现"无限循环打出同一张卡"的问题
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import { initAllAbilities } from '../abilities';
-import { runCommand } from './testRunner';
-import { makeState, makePlayer, makeCard, makeMatchState } from './helpers';
+import { describe, it, expect } from 'vitest';
+import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
+import { SmashUpDomain } from '../domain';
+import { smashUpSystemsForTest } from '../game';
+import { createInitialSystemState } from '../../../engine/pipeline';
+import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
-import type { SmashUpCore } from '../domain/types';
-import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
-import { resetRobotHoverbotCounter } from '../abilities/robots';
+
+const PLAYER_IDS = ['0', '1'] as const;
+const systems = smashUpSystemsForTest;
+
+function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
+    return {
+        players: {
+            '0': { 
+                id: '0', 
+                vp: 0, 
+                hand: [], 
+                deck: [], 
+                discard: [], 
+                minionsPlayed: 0, 
+                minionLimit: 1, 
+                actionsPlayed: 0, 
+                actionLimit: 1, 
+                factions: ['robots', 'wizards'] as [string, string], 
+                minionsPlayedPerBase: {}, 
+                sameNameMinionDefId: null 
+            },
+            '1': { 
+                id: '1', 
+                vp: 0, 
+                hand: [], 
+                deck: [], 
+                discard: [], 
+                minionsPlayed: 0, 
+                minionLimit: 1, 
+                actionsPlayed: 0, 
+                actionLimit: 1, 
+                factions: ['pirates', 'ninjas'] as [string, string], 
+                minionsPlayedPerBase: {}, 
+                sameNameMinionDefId: null 
+            },
+        },
+        turnOrder: ['0', '1'],
+        currentPlayerIndex: 0,
+        bases: [
+            { defId: 'base_great_library', minions: [], ongoingActions: [] },
+        ],
+        baseDeck: [],
+        turnNumber: 1,
+        nextUid: 100,
+        turnDestroyedMinions: [],
+        ...overrides,
+    };
+}
 
 describe('盘旋机器人链式打出', () => {
-    beforeAll(() => {
-        clearInteractionHandlers();
-        initAllAbilities();
-    });
-    
     it('应该正确处理连续打出两个盘旋机器人', () => {
         // 设置初始状态：P0 手牌有第一个盘旋机器人，牌库顶是第二个盘旋机器人，第三张是普通随从
-        resetRobotHoverbotCounter();
-        
-        const p0 = makePlayer('0', {
-            hand: [
-                makeCard('hoverbot-1', 'robot_hoverbot', 'minion', '0'),
-            ],
-            deck: [
-                makeCard('hoverbot-2', 'robot_hoverbot', 'minion', '0'),
-                makeCard('zapbot-1', 'robot_zapbot', 'minion', '0'),
-            ],
-            minionsPlayed: 0,
+        const core = makeState({
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [
+                        { uid: 'hoverbot-1', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                    ],
+                    deck: [
+                        { uid: 'hoverbot-2', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                        { uid: 'zapbot-1', defId: 'robot_zapbot', type: 'minion', owner: '0' },
+                    ],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['robots', 'wizards'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+                '1': {
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['pirates', 'ninjas'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+            },
         });
+
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: () => ({ core, sys: { ...createInitialSystemState(PLAYER_IDS, systems), phase: 'playCards' } }),
+        });
+
+        const result = runner.run({
+            name: '连续打出两个盘旋机器人',
+            commands: [
+                // 1. 打出第一个盘旋机器人
+                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'hoverbot-1', baseIndex: 0 } },
+                // 2. 响应交互：选择打出第二个盘旋机器人
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
+                // 3. 响应交互：选择打出 zapbot（新的牌库顶）
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
+            ] as any[],
+        });
+
+        // 验证所有命令都成功
+        expect(result.steps[0]?.success).toBe(true);
+        expect(result.steps[1]?.success).toBe(true);
+        expect(result.steps[2]?.success).toBe(true);
+
+        // 验证最终状态：三个随从都在场上
+        const finalCore = result.finalState.core;
+        const base = finalCore.bases[0];
         
-        const state = makeState({ players: { '0': p0, '1': makePlayer('1') } });
-        let ms = makeMatchState(state);
-        
-        // 1. 打出第一个盘旋机器人
-        ms = runCommand(ms, { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'hoverbot-1', baseIndex: 0 } }).finalState;
-        
-        // 验证：应该创建交互，选项引用第二个盘旋机器人
-        const interaction1 = ms.sys.interaction?.current;
-        expect(interaction1).toBeDefined();
-        expect(interaction1?.playerId).toBe('0');
-        
-        const options1 = (interaction1?.data as any)?.options;
-        expect(options1).toBeDefined();
-        expect(options1.length).toBe(2);
-        
-        const playOption1 = options1.find((opt: any) => opt.id === 'play');
-        expect(playOption1).toBeDefined();
-        expect(playOption1.value.cardUid).toBe('hoverbot-2');
-        expect(playOption1.value.defId).toBe('robot_hoverbot');
-        
-        // 2. 选择打出第二个盘旋机器人
-        ms = runCommand(ms, { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } }).finalState;
-        
-        // 验证：第二个盘旋机器人应该在场上
-        const core = ms.core as SmashUpCore;
-        const base = core.bases[0];
-        const hoverbot2 = base.minions.find(m => m.uid === 'hoverbot-2');
-        expect(hoverbot2).toBeDefined();
-        expect(hoverbot2?.defId).toBe('robot_hoverbot');
-        
-        // 验证：应该创建新的交互，选项引用 zapbot（新的牌库顶）
-        const interaction2 = ms.sys.interaction?.current;
-        expect(interaction2).toBeDefined();
-        expect(interaction2?.playerId).toBe('0');
-        
-        const options2 = (interaction2?.data as any)?.options;
-        expect(options2).toBeDefined();
-        expect(options2.length).toBe(2);
-        
-        const playOption2 = options2.find((opt: any) => opt.id === 'play');
-        expect(playOption2).toBeDefined();
-        expect(playOption2.value.cardUid).toBe('zapbot-1');
-        expect(playOption2.value.defId).toBe('robot_zapbot');
-        
-        // 验证：牌库顶确实是 zapbot
-        const p0Final = core.players['0'];
-        expect(p0Final.deck[0]?.uid).toBe('zapbot-1');
-        expect(p0Final.deck[0]?.defId).toBe('robot_zapbot');
+        expect(base.minions.length).toBe(3);
+        expect(base.minions.find(m => m.uid === 'hoverbot-1')).toBeDefined();
+        expect(base.minions.find(m => m.uid === 'hoverbot-2')).toBeDefined();
+        expect(base.minions.find(m => m.uid === 'zapbot-1')).toBeDefined();
+
+        // 验证牌库已空
+        expect(finalCore.players['0'].deck.length).toBe(0);
+
+        // 验证事件序列
+        expect(result.steps[0]?.events).toContain('su:minion_played'); // 第一个盘旋
+        expect(result.steps[1]?.events).toContain('su:minion_played'); // 第二个盘旋
+        expect(result.steps[2]?.events).toContain('su:minion_played'); // zapbot
     });
-    
-    it('应该阻止打出已经不在牌库顶的卡', () => {
-        // 设置初始状态：P0 手牌有盘旋机器人，牌库顶是随从 A
-        resetRobotHoverbotCounter();
-        
-        const p0 = makePlayer('0', {
-            hand: [
-                makeCard('hoverbot-1', 'robot_hoverbot', 'minion', '0'),
-            ],
-            deck: [
-                makeCard('minion-a', 'robot_zapbot', 'minion', '0'),
-                makeCard('minion-b', 'robot_zapbot', 'minion', '0'),
-            ],
-            minionsPlayed: 0,
+
+    it('第二个盘旋机器人应该看到新的牌库顶（不是自己）', () => {
+        // 设置初始状态：P0 手牌有第一个盘旋机器人，牌库顶是第二个盘旋机器人，第三张是 zapbot
+        const core = makeState({
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [
+                        { uid: 'hoverbot-1', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                    ],
+                    deck: [
+                        { uid: 'hoverbot-2', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                        { uid: 'zapbot-1', defId: 'robot_zapbot', type: 'minion', owner: '0' },
+                    ],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['robots', 'wizards'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+                '1': {
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['pirates', 'ninjas'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+            },
         });
-        
-        const state = makeState({ players: { '0': p0, '1': makePlayer('1') } });
-        let ms = makeMatchState(state);
-        
-        // 1. 打出盘旋机器人
-        ms = runCommand(ms, { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'hoverbot-1', baseIndex: 0 } }).finalState;
-        
-        // 验证：交互选项引用 minion-a
-        const interaction = ms.sys.interaction?.current;
+
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: () => ({ core, sys: { ...createInitialSystemState(PLAYER_IDS, systems), phase: 'playCards' } }),
+        });
+
+        const result = runner.run({
+            name: '第二个盘旋看到新牌库顶',
+            commands: [
+                // 1. 打出第一个盘旋机器人
+                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'hoverbot-1', baseIndex: 0 } },
+                // 2. 响应交互：选择打出第二个盘旋机器人
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
+            ] as any[],
+        });
+
+        // 验证命令成功
+        expect(result.steps[0]?.success).toBe(true);
+        expect(result.steps[1]?.success).toBe(true);
+
+        // 验证第二个盘旋机器人在场上
+        const finalCore = result.finalState.core;
+        const base = finalCore.bases[0];
+        expect(base.minions.find(m => m.uid === 'hoverbot-2')).toBeDefined();
+
+        // 验证牌库顶是 zapbot（不是第二个盘旋机器人）
+        expect(finalCore.players['0'].deck[0]?.uid).toBe('zapbot-1');
+        expect(finalCore.players['0'].deck[0]?.defId).toBe('robot_zapbot');
+
+        // 验证第二个盘旋机器人触发后创建的交互，选项应该引用 zapbot
+        const interaction = result.finalState.sys.interaction?.current;
         expect(interaction).toBeDefined();
-        
+        expect(interaction?.playerId).toBe('0');
+
+        // 检查交互选项（通过 optionsGenerator 生成）
         const options = (interaction?.data as any)?.options;
+        expect(options).toBeDefined();
+        expect(options.length).toBe(2);
+
         const playOption = options.find((opt: any) => opt.id === 'play');
-        expect(playOption.value.cardUid).toBe('minion-a');
-        
-        // 2. 手动修改状态：模拟 minion-a 被其他方式移除（如被消灭）
-        const core = ms.core as SmashUpCore;
-        core.players['0'].deck.shift(); // 移除牌库顶的卡，现在牌库顶是 minion-b
-        
-        // 3. 尝试响应交互（打出 minion-a）
-        // 期望：命令应该失败（因为 minion-a 已经不在牌库顶）
-        let commandFailed = false;
+        expect(playOption).toBeDefined();
+        expect(playOption.value.cardUid).toBe('zapbot-1');
+        expect(playOption.value.defId).toBe('robot_zapbot');
+    });
+
+    it('应该阻止打出已经不在牌库顶的卡', () => {
+        // 这个测试验证交互解决器的校验逻辑
+        // 场景：第一个盘旋看到 hoverbot-2，但在响应交互前 hoverbot-2 被移除
+        // 预期：交互解决器应该拒绝打出（抛出错误）
+
+        const core = makeState({
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [
+                        { uid: 'hoverbot-1', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                    ],
+                    deck: [
+                        { uid: 'hoverbot-2', defId: 'robot_hoverbot', type: 'minion', owner: '0' },
+                        { uid: 'zapbot-1', defId: 'robot_zapbot', type: 'minion', owner: '0' },
+                    ],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['robots', 'wizards'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+                '1': {
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: ['pirates', 'ninjas'] as [string, string],
+                    minionsPlayedPerBase: {},
+                    sameNameMinionDefId: null,
+                },
+            },
+        });
+
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: () => ({ core, sys: { ...createInitialSystemState(PLAYER_IDS, systems), phase: 'playCards' } }),
+        });
+
+        // 第一步：打出第一个盘旋机器人
+        const step1 = runner.run({
+            name: '打出第一个盘旋',
+            commands: [
+                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'hoverbot-1', baseIndex: 0 } },
+            ] as any[],
+        });
+
+        expect(step1.steps[0]?.success).toBe(true);
+
+        // 手动修改状态：移除牌库顶的卡（模拟被其他效果移除）
+        const modifiedCore = { ...step1.finalState.core };
+        modifiedCore.players = { ...modifiedCore.players };
+        modifiedCore.players['0'] = { ...modifiedCore.players['0'] };
+        modifiedCore.players['0'].deck = modifiedCore.players['0'].deck.slice(1); // 移除 hoverbot-2
+
+        // 第二步：尝试响应交互（打出已经不在牌库顶的 hoverbot-2）
+        const runner2 = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: () => ({ core: modifiedCore, sys: step1.finalState.sys }),
+        });
+
+        // 使用 try-catch 捕获预期的错误
+        let caughtError: Error | undefined;
         try {
-            runCommand(ms, { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } });
+            runner2.run({
+                name: '尝试打出不在牌库顶的卡',
+                commands: [
+                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
+                ] as any[],
+            });
         } catch (error) {
-            // 交互处理器抛出异常表示验证失败
-            commandFailed = true;
-            expect((error as Error).message).toContain('不在牌库顶');
+            caughtError = error as Error;
         }
-        
-        // 验证：命令应该失败
-        expect(commandFailed).toBe(true);
-        
-        // 验证：牌库顶仍然是 minion-b（没有被错误地打出）
-        const coreFinal = ms.core as SmashUpCore;
-        expect(coreFinal.players['0'].deck[0]?.uid).toBe('minion-b');
+
+        // 验证确实抛出了错误
+        expect(caughtError).toBeDefined();
+        expect(caughtError?.message).toContain('不在牌库顶');
+
+        // 验证牌库顶仍然是 zapbot（没有被错误地打出）
+        expect(modifiedCore.players['0'].deck[0]?.uid).toBe('zapbot-1');
     });
 });

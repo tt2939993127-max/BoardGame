@@ -152,7 +152,7 @@ function buildCtx(
 
 /** 从事件数组中提取指定类型的事件 */
 function eventsOfType<T extends DiceThroneEvent>(events: DiceThroneEvent[], type: string): T[] {
-    return events.filter(e => e.type === type) as T[];
+    return events.filter(e => e && e.type === type) as T[];
 }
 
 /** 计算事件中某类型的总量 */

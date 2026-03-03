@@ -412,6 +412,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
             const player = state.players[playerId];
+            
+            // 检查是否是新的游戏回合（turnNumber 增加）
+            const isNewGameTurn = turnNumber > state.turnNumber;
+            
             // 重置天赋使用状态 + 清零临时力量修正（随从 + ongoing 行动卡）
             const newBases = state.bases.map(base => ({
                 ...base,
@@ -439,6 +443,62 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newSleepMarked = isSleepMarked
                 ? (state.sleepMarkedPlayers?.filter(p => p !== playerId) ?? [])
                 : state.sleepMarkedPlayers;
+            
+            // 如果是新的游戏回合，清空所有玩家的 minionsPlayedPerBase
+            // 否则只清空当前玩家的其他回合状态
+            let newPlayers: Record<PlayerId, SmashUpPlayer>;
+            if (isNewGameTurn) {
+                // 新游戏回合：清空所有玩家的 minionsPlayedPerBase
+                newPlayers = {};
+                for (const pid of Object.keys(state.players)) {
+                    const p = state.players[pid];
+                    if (pid === playerId) {
+                        // 当前玩家：清空所有回合状态
+                        newPlayers[pid] = {
+                            ...p,
+                            minionsPlayed: 0,
+                            minionLimit: 1,
+                            actionsPlayed: 0,
+                            actionLimit: newActionLimit,
+                            minionsPlayedPerBase: undefined,
+                            usedDiscardPlayAbilities: undefined,
+                            baseLimitedMinionQuota: undefined,
+                            baseLimitedSameNameRequired: undefined,
+                            extraMinionPowerMax: undefined,
+                            sameNameMinionRemaining: undefined,
+                            sameNameMinionDefId: null,
+                            pendingMinionPlayEffects: undefined,
+                        };
+                    } else {
+                        // 其他玩家：只清空 minionsPlayedPerBase
+                        newPlayers[pid] = {
+                            ...p,
+                            minionsPlayedPerBase: undefined,
+                        };
+                    }
+                }
+            } else {
+                // 同一游戏回合内的玩家回合：只清空当前玩家的回合状态，保留 minionsPlayedPerBase
+                newPlayers = {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        minionsPlayed: 0,
+                        minionLimit: 1,
+                        actionsPlayed: 0,
+                        actionLimit: newActionLimit,
+                        // minionsPlayedPerBase 保留，不清空
+                        usedDiscardPlayAbilities: undefined,
+                        baseLimitedMinionQuota: undefined,
+                        baseLimitedSameNameRequired: undefined,
+                        extraMinionPowerMax: undefined,
+                        sameNameMinionRemaining: undefined,
+                        sameNameMinionDefId: null,
+                        pendingMinionPlayEffects: undefined,
+                    },
+                };
+            }
+            
             return {
                 ...state,
                 turnNumber,
@@ -458,24 +518,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 // 清空计分阶段锁定的 eligible 基地列表
                 scoringEligibleBaseIndices: undefined,
                 sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
-                players: {
-                    ...state.players,
-                    [playerId]: {
-                        ...player,
-                        minionsPlayed: 0,
-                        minionLimit: 1,
-                        actionsPlayed: 0,
-                        actionLimit: newActionLimit,
-                        minionsPlayedPerBase: undefined,
-                        usedDiscardPlayAbilities: undefined,
-                        baseLimitedMinionQuota: undefined,
-                        baseLimitedSameNameRequired: undefined,
-                        extraMinionPowerMax: undefined,
-                        sameNameMinionRemaining: undefined,
-                        sameNameMinionDefId: null,
-                        pendingMinionPlayEffects: undefined,
-                    },
-                },
+                players: newPlayers,
             };
         }
 

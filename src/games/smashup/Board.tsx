@@ -97,6 +97,12 @@ const SmashUpBoard: React.FC<Props> = (props) => {
 const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, matchData, isMultiplayer }) => {
     const { t } = useTranslation('game-smashup');
     const { setSelectedFactions } = useSmashUpOverlay();
+    
+    // 等待状态就绪
+    if (!G || !G.core) {
+        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
+    }
+    
     const core = G.core;
     const phase = G.sys.phase;
     const currentPid = getCurrentPlayerId(core);

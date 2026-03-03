@@ -1075,6 +1075,22 @@
         "selfDamage4": "对自己造成4点伤害（仅在成功造成伤害时生效）"
       }
     },
+    "rage": {
+      "name": "狂怒",
+      "description": "终极技能：5个力量面触发，施加眩晕并造成15点伤害",
+      "effects": {
+        "inflictDaze": "施加眩晕",
+        "damage15": "造成15点伤害"
+      }
+    },
+    "rage-2": {
+      "name": "狂怒 II",
+      "description": "升级版终极技能：5个力量面触发，施加眩晕并造成20点伤害",
+      "effects": {
+        "inflictDaze": "施加眩晕",
+        "damage20": "造成20点伤害"
+      }
+    },
     "thick-skin": {
       "name": "厚皮",
       "description": "防御阶段触发：恢复 2 × 心面数量 的生命值",

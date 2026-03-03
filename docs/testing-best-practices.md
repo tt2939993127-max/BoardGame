@@ -621,3 +621,54 @@ test: {
    - 开发时使用 `test:games:core` 而不是 `test:games`
 
 ---
+
+
+---
+
+## E2E 测试框架最佳实践
+
+> **完整规范见 AGENTS.md**。本节仅列出关键要点和代码示例。
+
+### 核心要求（强制）
+
+1. **使用 GameTestContext API**：禁止直接操作 `window.__BG_TEST_HARNESS__`
+2. **轮询间隔优化**：`waitForFunction` 必须使用 `{ polling: 200 }`
+3. **同步等待优先**：UI 操作后先 `waitForTimeout(300)`，再按需异步等待
+4. **服务器就绪检查**：Playwright 配置使用 `/__ready` 端点
+5. **文件编码检查**：测试命令前运行 `check-file-encoding.mjs`
+
+### 代码示例
+
+```typescript
+import { test, expect } from './fixtures';
+import { GameTestContext } from './framework/GameTestContext';
+
+test('wizard portal', async ({ page }) => {
+  const game = new GameTestContext(page);
+  
+  await game.setupScene({
+    gameId: 'smashup',
+    player0: { hand: ['wizard_portal'], discard: ['alien_invader'] },
+    currentPlayer: '0',
+    phase: 'playCards'
+  });
+  
+  await game.playCard('wizard_portal');
+  await game.waitForInteraction('wizard_portal_pick');
+  await game.selectOption('minion-0');
+  await game.confirm();
+  await game.expectCardInHand('alien_invader');
+});
+```
+
+### 性能基准
+
+- 单个测试：< 15 秒
+- 服务器启动：< 20 秒
+- 总耗时：< 35 秒
+
+### 相关文档
+
+- `docs/automated-testing.md` - 测试框架总览
+- `e2e/framework/GameTestContext.ts` - API 源码
+- `AGENTS.md` - 完整 E2E 测试规范

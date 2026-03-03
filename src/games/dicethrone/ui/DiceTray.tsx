@@ -167,10 +167,12 @@ export const DiceTray = ({
                     const selected = isSelected(d.id);
                     const isModified = isModifyMode && d.id in (modifyResult?.modifications ?? {});
                     // adjust 模式：对所有未锁定骰子显示 +/- 按钮（不依赖 selected，因为 adjust 模式下骰子无需先"选中"）
-                    const showAdjustButtons = isInteractionMode && isAdjustMode && !d.isKept;
-                    const showAnyModeButtons = isInteractionMode && isAnyMode && !d.isKept &&
+                    // targetOpponentDice=true 时，忽略锁定状态（对手的锁定不影响我方修改）
+                    const canModifyDie = dtMeta?.targetOpponentDice ? true : !d.isKept;
+                    const showAdjustButtons = isInteractionMode && isAdjustMode && canModifyDie;
+                    const showAnyModeButtons = isInteractionMode && isAnyMode && canModifyDie &&
                         (isModified || currentSelectCount < maxSelectCount);
-                    const isInactiveDie = isInteractionMode && d.isKept;
+                    const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
                         : canInteract;

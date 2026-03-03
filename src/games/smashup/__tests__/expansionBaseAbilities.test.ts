@@ -328,6 +328,34 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
 
         expect(events).toHaveLength(0);
     });
+
+    it('跨玩家回合：每个玩家首次打出时都应触发', () => {
+        // 模拟用户反馈的场景：玩家 1 在自己回合打出本地人，应该触发基地能力
+        // 即使此时已经不是玩家 1 的回合（currentPlayerIndex 指向其他玩家）
+        const result = triggerBaseAbilityWithMS('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_plateau_of_leng')],
+                currentPlayerIndex: 2, // 当前是玩家 2 的回合
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1', {
+                        hand: [makeCard('h1', 'innsmouth_the_locals', 'minion')], // 同名随从
+                        minionsPlayedPerBase: { 0: 1 }, // 玩家 1 首次打出到该基地
+                    }),
+                    '2': makePlayer('2'),
+                },
+            }),
+            baseDefId: 'base_plateau_of_leng',
+            playerId: '1', // 玩家 1 打出随从
+            minionUid: 'm1',
+            minionDefId: 'innsmouth_the_locals',
+        }));
+
+        // 应该生成交互，因为这是玩家 1 在该基地的首次打出
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_plateau_of_leng');
+    });
 });
 
 // ============================================================================

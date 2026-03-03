@@ -593,7 +593,7 @@ export function processDestroyTriggers(
     const destroyEvents = destroyEventsRaw.filter(e => {
         const uid = e.payload.minionUid;
         if (seenUids.has(uid)) {
-            console.log('[processDestroyTriggers] Skipping duplicate destroy event for:', uid);
+            // 跳过重复的消灭事件
             return false;
         }
         seenUids.add(uid);

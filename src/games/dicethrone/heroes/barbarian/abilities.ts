@@ -33,6 +33,13 @@ const inflictStatus = (statusId: string, value: number, description: string, opt
     condition: opts?.condition,
 });
 
+const grantStatusSelf = (statusId: string, value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
+    description,
+    action: { type: 'grantStatus', target: 'self', statusId, value },
+    timing: opts?.timing,
+    condition: opts?.condition,
+});
+
 const removeStatus = (description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
     action: { type: 'custom', target: 'self', customActionId: 'remove-status-self' },
@@ -83,7 +90,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         description: abilityText('violent-assault', 'description'),
         sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-        effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault', 'inflictDaze')), damage(5, abilityEffectText('violent-assault', 'damage5Unblockable'))],
+        effects: [grantStatusSelf(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault', 'inflictDaze')), damage(5, abilityEffectText('violent-assault', 'damage5Unblockable'))],
         tags: ['unblockable'],
     },
     {
@@ -118,10 +125,23 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('reckless-strike', 'name'),
         type: 'offensive',
         description: abilityText('reckless-strike', 'description'),
-        tags: ['ultimate'],
-        sfxKey: BARBARIAN_SFX_ULTIMATE,
+        tags: [],
+        sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'largeStraight' },
         effects: [damage(15, abilityEffectText('reckless-strike', 'damage15')), { description: abilityEffectText('reckless-strike', 'selfDamage4'), action: { type: 'damage', target: 'self', value: 4 }, timing: 'postDamage', condition: { type: 'onHit' } }],
+    },
+    {
+        id: 'rage',
+        name: abilityText('rage', 'name'),
+        type: 'offensive',
+        description: abilityText('rage', 'description'),
+        tags: ['ultimate'],
+        sfxKey: BARBARIAN_SFX_ULTIMATE,
+        trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 5 } },
+        effects: [
+            inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('rage', 'inflictDaze')),
+            damage(15, abilityEffectText('rage', 'damage15')),
+        ],
     },
     {
         id: 'thick-skin',
@@ -201,7 +221,7 @@ export const VIOLENT_ASSAULT_2: AbilityDef = {
         {
             id: 'violent-assault-2-shake',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-            effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault-2-shake', 'inflictDaze')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Unblockable'))],
+            effects: [grantStatusSelf(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault-2-shake', 'inflictDaze')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Unblockable'))],
             tags: ['unblockable'],
             priority: 2,
         },
@@ -255,10 +275,24 @@ export const RECKLESS_STRIKE_2: AbilityDef = {
     name: abilityText('reckless-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('reckless-strike-2', 'description'),
-    tags: ['ultimate'],
-    sfxKey: BARBARIAN_SFX_ULTIMATE,
+    tags: [],
+    sfxKey: BARBARIAN_SFX_HEAVY,
     trigger: { type: 'largeStraight' },
     effects: [damage(20, abilityEffectText('reckless-strike-2', 'damage20')), { description: abilityEffectText('reckless-strike-2', 'selfDamage5'), action: { type: 'damage', target: 'self', value: 5 }, timing: 'postDamage', condition: { type: 'onHit' } }],
+};
+
+export const RAGE_2: AbilityDef = {
+    id: 'rage',
+    name: abilityText('rage-2', 'name'),
+    type: 'offensive',
+    description: abilityText('rage-2', 'description'),
+    tags: ['ultimate'],
+    sfxKey: BARBARIAN_SFX_ULTIMATE,
+    trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 5 } },
+    effects: [
+        inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('rage-2', 'inflictDaze')),
+        damage(20, abilityEffectText('rage-2', 'damage20')),
+    ],
 };
 
 export const THICK_SKIN_2: AbilityDef = {

@@ -46,7 +46,16 @@ export function getUsableTokensForTiming(
     return (state.tokenDefinitions ?? []).filter(def => {
         if (def.category !== 'consumable') return false;
         if (!def.activeUse?.timing?.includes(timing)) return false;
-        return (player.tokens[def.id] ?? 0) > 0;
+        const amount = player.tokens[def.id] ?? 0;
+        if (amount <= 0) return false;
+
+        // 规则：本回合获得的太极不可用于本回合增强伤害（beforeDamageDealt）
+        if (def.id === TOKEN_IDS.TAIJI && timing === 'beforeDamageDealt') {
+            const gainedThisTurn = state.taijiGainedThisTurn?.[playerId] ?? 0;
+            if (amount - gainedThisTurn <= 0) return false;
+        }
+
+        return true;
     });
 }
 

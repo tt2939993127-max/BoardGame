@@ -179,7 +179,7 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
         selectCount,
         selected: [],
         dieModifyConfig: { mode: 'any' },
-        targetOpponentDice: resolveTargetOpponentDice(action),
+        targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{
         type: 'INTERACTION_REQUESTED',

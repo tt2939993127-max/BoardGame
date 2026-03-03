@@ -38,6 +38,7 @@ import type {
     CpChangedEvent,
     CardDrawnEvent,
     BonusDieRolledEvent,
+    DamageShieldGrantedEvent,
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
@@ -105,8 +106,11 @@ function resolveAbilitySourceLabel(
     // 从双方玩家技能表中查找（支持变体 ID）
     for (const pid of Object.keys(core.players)) {
         const found = findPlayerAbility(core, pid, sourceAbilityId);
-        if (found?.ability.name) {
-            return { label: found.ability.name, isI18n: found.ability.name.includes('.'), ns: DT_NS };
+        if (found) {
+            const label = found.variant?.name ?? found.ability.name;
+            if (label) {
+                return { label, isI18n: label.includes('.'), ns: DT_NS };
+            }
         }
     }
     // 卡牌 ID 解析
@@ -215,6 +219,37 @@ function formatDiceThroneActionEntry({
         }
     }
 
+    if (command.type === 'SELL_CARD') {
+        const cardId = (command.payload as { cardId: string }).cardId;
+        const card = findDiceThroneCard(core, cardId, command.playerId);
+
+        const segments: ActionLogSegment[] = [
+            i18nSeg('actionLog.sellCard'),
+        ];
+        if (card?.previewRef) {
+            const isI18nKey = card.name?.includes('.');
+            segments.push({
+                type: 'card',
+                cardId: card.id,
+                previewText: card.name ?? cardId,
+                previewRef: card.previewRef,
+                ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+            });
+        } else {
+            const displayName = card?.name ?? cardId;
+            segments.push({ type: 'text', text: displayName });
+        }
+        segments.push(i18nSeg('actionLog.sellCardCp'));
+
+        entries.push({
+            id: `SELL_CARD-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: 'SELL_CARD',
+            segments,
+        });
+    }
+
     if (command.type === 'ADVANCE_PHASE') {
         const phaseChanged = [...events]
             .reverse()
@@ -231,6 +266,31 @@ function formatDiceThroneActionEntry({
             kind: command.type,
             segments: [i18nSeg('actionLog.advancePhase', { phase: phaseI18nKey }, ['phase'])],
         });
+
+        // 检查是否有自动防御技能触发（onPhaseEnter 触发的防御技能）
+        // 这些 ABILITY_ACTIVATED 事件在 ADVANCE_PHASE 命令后产生，需要单独记录
+        const autoDefenseEvent = events.find(
+            (e): e is AbilityActivatedEvent =>
+                e.type === 'ABILITY_ACTIVATED' && (e as AbilityActivatedEvent).payload.isDefense === true
+        );
+        if (autoDefenseEvent) {
+            const { abilityId, playerId } = autoDefenseEvent.payload;
+            const match = findPlayerAbility(core, playerId, abilityId);
+            const rawAbilityName = match?.variant?.name ?? match?.ability.name ?? abilityId;
+            const abilityNameKey = getAbilityI18nKey(rawAbilityName) || abilityId;
+            const isI18nKey = abilityNameKey.includes('.');
+            entries.push({
+                id: `AUTO_DEFENSE-${playerId}-${abilityId}-${timestamp}`,
+                timestamp: timestamp + 0.5,
+                actorId: playerId,
+                kind: 'SELECT_ABILITY',
+                segments: [i18nSeg(
+                    'actionLog.abilityActivatedDefense',
+                    { abilityName: abilityNameKey },
+                    isI18nKey ? ['abilityName'] : undefined,
+                )],
+            });
+        }
     }
 
     if (command.type === 'SELECT_ABILITY') {
@@ -241,7 +301,9 @@ function formatDiceThroneActionEntry({
             ?? (command.payload as { abilityId?: string }).abilityId;
         const playerId = abilityEvent?.payload.playerId ?? command.playerId;
         if (abilityId && playerId) {
-            const rawAbilityName = findPlayerAbility(core, playerId, abilityId)?.ability.name ?? abilityId;
+            const match = findPlayerAbility(core, playerId, abilityId);
+            // 分层型变体有独立名称时优先使用（如战斗"而非父级"力大无穷 II"）
+            const rawAbilityName = match?.variant?.name ?? match?.ability.name ?? abilityId;
             const abilityNameKey = getAbilityI18nKey(rawAbilityName) || abilityId;
             const isI18nKey = abilityNameKey.includes('.');
             const actionKey = abilityEvent?.payload.isDefense
@@ -341,7 +403,8 @@ function formatDiceThroneActionEntry({
                 : core.activatingAbilityId;
             const segments: ActionLogSegment[] = [];
             if (abilityId) {
-                const rawName = findPlayerAbility(core, rollerId, abilityId)?.ability.name ?? abilityId;
+                const match = findPlayerAbility(core, rollerId, abilityId);
+                const rawName = match?.variant?.name ?? match?.ability.name ?? abilityId;
                 const abilityNameKey = getAbilityI18nKey(rawName) || abilityId;
                 const isI18nKey = abilityNameKey.includes('.');
                 const actionKey = isDefense ? 'actionLog.confirmRollDefenseWithAbility' : 'actionLog.confirmRollWithAbility';
@@ -415,6 +478,19 @@ function formatDiceThroneActionEntry({
                 },
                 {
                     resolve: (sid) => resolveAbilitySourceLabel(sid, core, actorId),
+                    // 自定义护盾渲染：解析护盾来源名称
+                    renderShields: (shields) => shields.map(shield => {
+                        const shieldSource = shield.sourceId
+                            ? resolveAbilitySourceLabel(shield.sourceId, core, targetId)
+                            : null;
+                        return {
+                            label: shieldSource?.label ?? 'actionLog.damageSource.shield',
+                            labelIsI18n: shieldSource?.isI18n ?? true,
+                            labelNs: shieldSource?.isI18n ? shieldSource.ns : DT_NS,
+                            value: -shield.absorbed,
+                            color: 'negative' as const,
+                        };
+                    }),
                 },
                 DT_NS,
             );
@@ -637,6 +713,32 @@ function formatDiceThroneActionEntry({
                 timestamp: entryTimestamp,
                 actorId: playerId,
                 kind: 'CP_CHANGED',
+                segments: [
+                    i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
+                ],
+            });
+        }
+
+        if (event.type === 'DAMAGE_SHIELD_GRANTED') {
+            const shieldEvent = event as DamageShieldGrantedEvent;
+            const { targetId, sourceId, reductionPercent } = shieldEvent.payload;
+            // 只为百分比减免护盾生成日志（固定值护盾由 PREVENT_DAMAGE 处理）
+            if (reductionPercent == null) return;
+
+            const source = resolveAbilitySourceLabel(sourceId, core, command.playerId);
+            const key = source ? 'actionLog.damageShieldPercent' : 'actionLog.damageShieldPercentPlain';
+            const params: Record<string, string | number> = { percent: reductionPercent };
+            const paramI18nKeys: string[] = [];
+            if (source) {
+                params.source = source.label;
+                if (source.isI18n) paramI18nKeys.push('source');
+            }
+
+            entries.push({
+                id: `DAMAGE_SHIELD-${targetId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: targetId,
+                kind: 'DAMAGE_SHIELD_GRANTED',
                 segments: [
                     i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
                 ],

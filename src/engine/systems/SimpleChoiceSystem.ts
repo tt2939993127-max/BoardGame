@@ -16,6 +16,7 @@ import {
     INTERACTION_COMMANDS,
     INTERACTION_EVENTS,
     resolveInteraction,
+    stripNonSerializableFromData,
     type SimpleChoiceData,
     type PromptOption,
 } from './InteractionSystem';
@@ -162,7 +163,7 @@ function handleSimpleChoiceRespond<TCore>(
             optionIds: isMulti ? selectedOptionIds : undefined,
             value: resolvedValue,
             sourceId: data.sourceId,
-            interactionData: current.data,
+            interactionData: stripNonSerializableFromData(current.data),
         },
         timestamp,
     };

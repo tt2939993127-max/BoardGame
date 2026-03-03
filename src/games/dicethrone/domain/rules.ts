@@ -12,6 +12,7 @@ import type {
     DiceThroneCore,
     Die,
     DieFace,
+    TeamId,
     TurnPhase,
     AbilityCard,
     SelectableCharacterId,
@@ -115,6 +116,122 @@ export const getTokenStackLimit = (state: DiceThroneCore, playerId: PlayerId, to
     const base = def?.stackLimit;
     if (base === 0) return Infinity;
     return base ?? 99;
+};
+
+// ============================================================================
+// 团队模式规则（2v2）
+// ============================================================================
+
+const TEAM_MODE_PLAYER_COUNT = 4;
+const DEFAULT_TEAM_HEALTH_MAX = 60;
+
+export const isTeamMode = (state: DiceThroneCore): boolean => {
+    return Object.keys(state.players).length === TEAM_MODE_PLAYER_COUNT;
+};
+
+export const getSeatingOrder = (state: DiceThroneCore): PlayerId[] => {
+    const fallbackOrder = Object.keys(state.players) as PlayerId[];
+    const seatingOrder = state.seatingOrder?.filter((pid) => !!state.players[pid]) ?? [];
+    return seatingOrder.length === fallbackOrder.length ? seatingOrder : fallbackOrder;
+};
+
+const deriveTeamIdFromSeatIndex = (seatIndex: number): TeamId => {
+    return seatIndex % 2 === 0 ? 'A' : 'B';
+};
+
+export const getTeamIdByPlayerIdMap = (state: DiceThroneCore): Record<PlayerId, TeamId> => {
+    const playerIds = Object.keys(state.players) as PlayerId[];
+    const explicitMap = state.teamIdByPlayerId;
+    if (explicitMap && playerIds.every((pid) => explicitMap[pid])) {
+        return explicitMap as Record<PlayerId, TeamId>;
+    }
+
+    const seatingOrder = getSeatingOrder(state);
+    const derivedMap = {} as Record<PlayerId, TeamId>;
+    seatingOrder.forEach((pid, seatIndex) => {
+        derivedMap[pid] = deriveTeamIdFromSeatIndex(seatIndex);
+    });
+
+    // 防御性兜底：任何缺失映射的玩家默认归 A（不会影响 1v1）
+    for (const pid of playerIds) {
+        if (!derivedMap[pid]) {
+            derivedMap[pid] = 'A';
+        }
+    }
+
+    return derivedMap;
+};
+
+export const getTeamId = (state: DiceThroneCore, playerId: PlayerId): TeamId | undefined => {
+    if (!state.players[playerId]) return undefined;
+    if (!isTeamMode(state)) return 'A';
+    return getTeamIdByPlayerIdMap(state)[playerId];
+};
+
+export const areTeammates = (state: DiceThroneCore, playerA: PlayerId, playerB: PlayerId): boolean => {
+    if (!state.players[playerA] || !state.players[playerB]) return false;
+    if (!isTeamMode(state)) return playerA === playerB;
+    const teamA = getTeamId(state, playerA);
+    const teamB = getTeamId(state, playerB);
+    return !!teamA && teamA === teamB;
+};
+
+export const getTeammateId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
+    if (!isTeamMode(state)) return undefined;
+    const teamId = getTeamId(state, playerId);
+    if (!teamId) return undefined;
+    const playerIds = Object.keys(state.players) as PlayerId[];
+    return playerIds.find((pid) => pid !== playerId && getTeamId(state, pid) === teamId);
+};
+
+export const getOpponents = (state: DiceThroneCore, playerId: PlayerId): PlayerId[] => {
+    const playerIds = Object.keys(state.players) as PlayerId[];
+    if (!state.players[playerId]) return [];
+    if (!isTeamMode(state)) {
+        return playerIds.filter((pid) => pid !== playerId);
+    }
+
+    const teamId = getTeamId(state, playerId);
+    if (!teamId) return [];
+    return playerIds.filter((pid) => pid !== playerId && getTeamId(state, pid) !== teamId);
+};
+
+export const getDefaultOpponentId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
+    if (!state.players[playerId]) return undefined;
+    if (!isTeamMode(state)) {
+        return (Object.keys(state.players) as PlayerId[]).find((pid) => pid !== playerId);
+    }
+
+    return getLeftOpponentId(state, playerId)
+        ?? getRightOpponentId(state, playerId)
+        ?? getOpponents(state, playerId)[0];
+};
+
+const findOpponentByDirection = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    direction: 1 | -1
+): PlayerId | undefined => {
+    const seatingOrder = getSeatingOrder(state);
+    const seatIndex = seatingOrder.indexOf(playerId);
+    if (seatIndex === -1) return getOpponents(state, playerId)[0];
+
+    for (let step = 1; step < seatingOrder.length; step++) {
+        const nextIndex = (seatIndex + direction * step + seatingOrder.length) % seatingOrder.length;
+        const candidate = seatingOrder[nextIndex];
+        if (candidate && !areTeammates(state, playerId, candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+};
+
+export const getLeftOpponentId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
+    return findOpponentByDirection(state, playerId, -1);
+};
+
+export const getRightOpponentId = (state: DiceThroneCore, playerId: PlayerId): PlayerId | undefined => {
+    return findOpponentByDirection(state, playerId, 1);
 };
 
 // ============================================================================

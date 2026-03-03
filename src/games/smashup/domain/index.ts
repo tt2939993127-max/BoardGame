@@ -288,8 +288,6 @@ function scoreOneBase(
 
         // 立即 reduce 到本地 core 副本，确保后续调用 scoreOneBase 时能看到"已触发"标记
         updatedCore = reduce(updatedCore, markEvent as unknown as SmashUpEvent);
-    } else {
-        console.log('[scoreBase] afterScoring already triggered for this base, skipping');
     }
 
     // 将 afterScoring 基地能力产生的事件 reduce 到 core，
@@ -672,16 +670,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 
             // 修复：只有标志存在且交互仍在进行时才 halt，交互完成后自动清除标志
             if (state.sys.flowHalted) {
-                console.log('[FlowSystem] flowHalted=true, 检查交互状态:', {
-                    hasInteraction: !!state.sys.interaction.current,
-                    interactionId: state.sys.interaction.current?.id,
-                });
                 if (state.sys.interaction.current) {
-                    console.log('[FlowSystem] 仍有交互，继续 halt');
                     return { events: [], halt: true } as PhaseExitResult;
                 }
                 // 交互已解决，清除 flowHalted 标志（不可变更新）
-                console.log('[FlowSystem] 交互已解决，清除 flowHalted 标志');
                 state = {
                     ...state,
                     sys: { ...state.sys, flowHalted: false },
@@ -709,7 +701,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
             // 所有基地都已记分 → 清理状态并正常推进（不可变更新）
             if (remainingIndices.length === 0) {
-                console.log('[onPhaseExit] 所有基地已记分，清理状态');
                 // 创建新 state 清理 scoredBaseIndices
                 const cleanedState: MatchState<SmashUpCore> = {
                     ...state,
@@ -789,7 +780,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
                 // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
                 if (currentMatchState.sys.interaction?.current) {
-                    console.log('[onPhaseExit] beforeScoring 创建交互，halt');
                     return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
                 }
             }
@@ -797,7 +787,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），
             // 需要 halt 等待玩家响应，不能直接推进到下一阶段
             if (currentMatchState.sys.interaction?.current) {
-                console.log('[onPhaseExit] afterScoring 创建交互，halt');
                 return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
             }
 
@@ -806,7 +795,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 ...currentMatchState,
                 sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
             };
-            console.log('[onPhaseExit] 所有基地记分完成，清理 scoredBaseIndices');
 
             // 清空 beforeScoring 和 afterScoring 触发标记（计分阶段结束）
             events.push({

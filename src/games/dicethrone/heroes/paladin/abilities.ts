@@ -236,7 +236,11 @@ export const VENGEANCE_2: AbilityDef = {
                     action: { type: 'custom', target: 'self', customActionId: 'paladin-vengeance-select-player' },
                     timing: 'preDefense'
                 },
-                cpGain(4, abilityEffectText('vengeance-2', 'gain4CP'))
+                {
+                    description: abilityEffectText('vengeance-2', 'gain4CP'),
+                    action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 4 } },
+                    timing: 'postDamage' // ← 修复：改为 postDamage，在技能完整执行后获得 CP
+                }
             ],
             priority: 1
         }

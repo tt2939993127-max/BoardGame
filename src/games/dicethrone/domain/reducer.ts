@@ -313,7 +313,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
     state,
     event
 ) => {
-    const { targetId, tokenId, newTotal, sourceAbilityId } = event.payload;
+    const { targetId, tokenId, newTotal, amount, sourceAbilityId } = event.payload;
     const target = state.players[targetId];
     if (!target) return state;
 
@@ -321,6 +321,13 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
     let sneakGainedTurn = state.sneakGainedTurn;
     if (tokenId === TOKEN_IDS.SNEAK && newTotal > 0) {
         sneakGainedTurn = { ...(sneakGainedTurn || {}), [targetId]: state.turnNumber };
+    }
+
+    // 太极获得时累加本回合获得量（用于攻击方加伤限制）
+    let taijiGainedThisTurn = state.taijiGainedThisTurn;
+    if (tokenId === TOKEN_IDS.TAIJI && amount > 0) {
+        const currentGained = taijiGainedThisTurn?.[targetId] ?? 0;
+        taijiGainedThisTurn = { ...(taijiGainedThisTurn || {}), [targetId]: currentGained + amount };
     }
 
     return {
@@ -333,6 +340,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
             : state.lastEffectSourceByPlayerId,
         sneakGainedTurn,
+        taijiGainedThisTurn,
     };
 };
 
@@ -464,7 +472,13 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
     event
 ) => {
     const { nextPlayerId, turnNumber } = event.payload;
-    return { ...state, activePlayerId: nextPlayerId, turnNumber, lastResolvedAttackDamage: undefined };
+    return {
+        ...state,
+        activePlayerId: nextPlayerId,
+        turnNumber,
+        lastResolvedAttackDamage: undefined,
+        taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
+    };
 };
 
 /**

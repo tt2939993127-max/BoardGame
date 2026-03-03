@@ -319,7 +319,7 @@ export function registerPodPowerModifierAliases(): void {
         basePowerModifiers.set(podId, modifier);
     }
     
-    console.log(`[POD Power Modifier Aliases] 自动映射 ${mappedCount} 个 POD 版本的力量修正，跳过 ${skippedCount} 个已内置 POD 支持的修正`);
+    // 映射完成（已自动映射 POD 版本的力量修正）
 }
 
 /** 获取所有已注册的 sourceDefId（用于能力行为审计） */

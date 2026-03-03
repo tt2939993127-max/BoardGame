@@ -31,6 +31,7 @@ import { MaintenancePage } from './pages/Maintenance';
 const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const MatchRoom = React.lazy(() => import('./pages/MatchRoom').then(m => ({ default: m.MatchRoom })));
 const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoom').then(m => ({ default: m.LocalMatchRoom })));
+const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoom').then(m => ({ default: m.TestMatchRoom })));
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ const AppContent = () => {
                     <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
                     <Route path="/play/:gameId/match/:matchId" element={<React.Suspense fallback={<LoadingScreen />}><MatchRoom /></React.Suspense>} />
                     <Route path="/play/:gameId/local" element={<React.Suspense fallback={<LoadingScreen />}><LocalMatchRoom /></React.Suspense>} />
+                    <Route path="/play/:gameId/test" element={<React.Suspense fallback={<LoadingScreen />}><TestMatchRoom /></React.Suspense>} />
                     <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
                     <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                     <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
