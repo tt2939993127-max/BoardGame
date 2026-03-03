@@ -111,6 +111,11 @@ function giantAntKillerQueenTalent(ctx: AbilityContext): AbilityResult {
             return { uid: m.uid, defId: m.defId, baseIndex: ctx.baseIndex, label: def?.name ?? m.defId };
         }) ?? [];
 
+    // 没有候选目标时，条件满足但无效果
+    if (candidates.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+
     if (candidates.length === 1) {
         const target = candidates[0];
         return {

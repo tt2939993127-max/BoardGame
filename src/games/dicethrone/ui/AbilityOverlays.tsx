@@ -53,7 +53,7 @@ export const ABILITY_SLOT_MAP: Record<string, { labelKey: string; ids: string[] 
     lightning: { labelKey: 'abilitySlots.lightning', ids: ['thunder-strike', 'burn-down', 'suppress', 'blessing-of-might', 'exploding-arrow', 'kidney-shot'] },
     calm: { labelKey: 'abilitySlots.calm', ids: ['calm-water', 'ignite', 'reckless-strike', 'holy-light', 'blinding-shot', 'cornucopia'] },
     meditate: { labelKey: 'abilitySlots.meditate', ids: ['meditation', 'magma-armor', 'thick-skin', 'holy-defense', 'elusive-step', 'fearless-riposte'] },
-    ultimate: { labelKey: 'abilitySlots.ultimate', ids: ['transcendence', 'ultimate-inferno', 'unyielding-faith', 'lunar-eclipse', 'shadow-shank'] },
+    ultimate: { labelKey: 'abilitySlots.ultimate', ids: ['transcendence', 'ultimate-inferno', 'rage', 'unyielding-faith', 'lunar-eclipse', 'shadow-shank'] },
 };
 
 export const getAbilitySlotId = (abilityId: string) => {
@@ -99,7 +99,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         lightning: 'suppress',
         calm: 'reckless-strike',
         meditate: 'thick-skin',
-        // 野蛮人无终极技能（abilities 中未定义 ultimate）
+        ultimate: 'rage',  // 狂怒（终极技能，5个力量面触发）
     },
     paladin: {
         // 顶部左侧为被动“教皇税”，不映射为可选技能

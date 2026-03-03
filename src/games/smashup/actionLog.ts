@@ -552,13 +552,13 @@ export function formatSmashUpActionEntry({
                 // 添加展示的卡牌列表（最多显示5张，避免日志过长）
                 if (payload.cards && payload.cards.length > 0) {
                     const displayCards = payload.cards.slice(0, 5);
-                    segments.push(textSeg('：'));
+                    segments.push(textSegment('：'));
                     displayCards.forEach((card, idx) => {
-                        if (idx > 0) segments.push(textSeg('、'));
+                        if (idx > 0) segments.push(textSegment('、'));
                         segments.push(buildCardSegment(card.defId));
                     });
                     if (payload.cards.length > 5) {
-                        segments.push(textSeg(`...（共${payload.cards.length}张）`));
+                        segments.push(textSegment(`...（共${payload.cards.length}张）`));
                     }
                 }
                 

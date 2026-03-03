@@ -729,6 +729,18 @@ async function preloadOptimizedImage(src: string): Promise<void> {
     // 已成功加载过的跳过（naturalWidth > 0 表示真正加载成功）
     const cached = preloadedImages.get(webp);
     if (cached && cached.naturalWidth > 0) return;
+    
+    // 同步检查浏览器磁盘缓存：创建临时 Image 对象，如果浏览器缓存命中，
+    // complete 和 naturalWidth 会立即可用（无需等待网络请求）。
+    // 这避免了"资源已缓存但 preloadedImages Map 为空"时仍然等待 30s 超时的问题。
+    const testImg = new Image();
+    testImg.src = webp;
+    if (testImg.complete && testImg.naturalWidth > 0) {
+        // 浏览器缓存命中，直接标记为已加载，跳过异步加载流程
+        preloadedImages.set(webp, testImg);
+        return;
+    }
+    
     // 同一 URL 正在加载中 → 复用已有 Promise，不发新请求
     const inFlight = inFlightPreloads.get(webp);
     if (inFlight) return inFlight;

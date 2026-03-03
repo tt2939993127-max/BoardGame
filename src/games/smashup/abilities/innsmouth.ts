@@ -156,8 +156,6 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
  * 本地人 onPlay：展示牌库顶3张，将其中的"本地人"（同 defId）放入手牌，其余放牌库底
  */
 function innsmouthTheLocals(ctx: AbilityContext): AbilityResult {
-    console.log('[innsmouthTheLocals] 触发，玩家:', ctx.playerId, '牌库长度:', ctx.state.players[ctx.playerId].deck.length);
-    
     const { events } = revealAndPickFromDeck({
         player: ctx.state.players[ctx.playerId],
         playerId: ctx.playerId,
@@ -167,14 +165,6 @@ function innsmouthTheLocals(ctx: AbilityContext): AbilityResult {
         revealTo: 'all', // 展示牌库顶给所有人看
         reason: 'innsmouth_the_locals',
         now: ctx.now,
-    });
-    
-    console.log('[innsmouthTheLocals] 生成事件数:', events.length);
-    events.forEach((evt, idx) => {
-        console.log(`[innsmouthTheLocals] 事件 ${idx}:`, {
-            type: evt.type,
-            payload: evt.payload,
-        });
     });
     
     return { events };

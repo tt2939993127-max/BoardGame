@@ -597,6 +597,7 @@ export const BASE_CARDS_MONSTER_SMASH: BaseCardDef[] = [
         breakpoint: 17,
         vpAwards: [3, 1, 1],
         faction: SMASHUP_FACTION_IDS.GIANT_ANTS,
+        // 使用文字兜底渲染（无 previewRef）
     },
     {
         id: 'base_the_hill',
@@ -605,6 +606,7 @@ export const BASE_CARDS_MONSTER_SMASH: BaseCardDef[] = [
         breakpoint: 23,
         vpAwards: [4, 2, 1],
         faction: SMASHUP_FACTION_IDS.GIANT_ANTS,
+        // 使用文字兜底渲染（无 previewRef）
     },
 ];
 registerBases(BASE_CARDS_MONSTER_SMASH);

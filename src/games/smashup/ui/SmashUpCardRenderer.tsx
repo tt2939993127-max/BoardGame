@@ -75,7 +75,7 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
 
     // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
     // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
-    // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集
+    // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集（兜底逻辑）
     const isEnglishVariant = effectiveLocale === 'en' || effectiveLocale === 'en-US';
     
     if (isEnglishVariant || isPodVersion || shouldUseEnglishAtlas || !originalAtlasId) {
@@ -121,37 +121,24 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
         );
     }
 
+    // 检查是否使用了 TTS 英文图集（图集 ID 以 tts_atlas_ 开头）
+    const usesTtsAtlas = finalAtlasId.startsWith('tts_atlas_');
+
     // 悬浮窗显示逻辑：只有使用了英文图集的卡牌才需要悬浮窗
     // 1. POD 派系卡牌 → 需要悬浮窗（图片是英文的）
     // 2. 基地卡且玩家选择了 POD 版派系 → 需要悬浮窗（图片是英文的）
-    // 3. 基础派系的基地卡 → 不需要悬浮窗（图片本身包含中文）
-    const needsOverlay = (isPodVersion || shouldUseEnglishAtlas) && !isEnglishVariant;
+    // 3. 使用了 TTS 英文图集 → 需要悬浮窗（图片是英文的）
+    // 4. 基础派系的基地卡 → 不需要悬浮窗（图片本身包含中文）
+    const needsOverlay = (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas) && !isEnglishVariant;
     // 用户在英文环境下可以关闭覆盖层
     const shouldShowOverlay = needsOverlay && overlayEnabled;
     
     // 图片语言选择：
     // 1. POD 派系卡牌 → 使用英文 locale（图片在 en/smashup/pod-assets/）
     // 2. 基地卡且玩家选择了 POD 版派系 → 使用英文 locale（图片在 en/smashup/pod-assets/）
-    // 3. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
-    const imageLocale = (isPodVersion || shouldUseEnglishAtlas) ? 'en' : effectiveLocale;
-
-    // 调试日志
-    if (defId) {
-        console.log('[SmashUpCardRenderer]', {
-            defId,
-            isBase,
-            isPodVersion,
-            isEnglishVariant,
-            effectiveLocale,
-            imageLocale,
-            needsOverlay,
-            shouldShowOverlay,
-            finalAtlasId,
-            finalIndex,
-            originalAtlasId,
-            originalIndex,
-        });
-    }
+    // 3. 使用了 TTS 英文图集（图集 ID 以 tts_atlas_ 开头）→ 使用英文 locale
+    // 4. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
+    const imageLocale = (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas) ? 'en' : effectiveLocale;
 
     // 直接返回完整的卡牌（图片 + 覆盖层）
     return (

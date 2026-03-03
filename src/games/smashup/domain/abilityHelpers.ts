@@ -23,6 +23,7 @@ import type {
     CardRecoveredFromDiscardEvent,
     HandShuffledIntoDeckEvent,
     TempPowerAddedEvent,
+    PermanentPowerAddedEvent,
     BreakpointModifiedEvent,
     BaseDeckShuffledEvent,
     RevealHandEvent,
@@ -321,17 +322,7 @@ export function revealAndPickFromDeck(params: {
     const missTarget = params.missTarget ?? 'deck_bottom';
     const revealTo = params.revealTo ?? 'none';
 
-    console.log('[revealAndPickFromDeck] 开始:', {
-        playerId,
-        deckLength: player.deck.length,
-        count: params.count,
-        maxPick,
-        revealTo,
-        reason,
-    });
-
     if (player.deck.length === 0) {
-        console.log('[revealAndPickFromDeck] 牌库为空，返回空结果');
         return { events: [], picked: [], missed: [] };
     }
 
@@ -341,11 +332,8 @@ export function revealAndPickFromDeck(params: {
     if (params.count !== undefined) {
         // 固定数量模式：翻 count 张
         const topCards = player.deck.slice(0, params.count);
-        console.log('[revealAndPickFromDeck] 固定数量模式，翻', params.count, '张，实际:', topCards.length);
         for (const card of topCards) {
-            const match = predicate(card);
-            console.log('[revealAndPickFromDeck] 检查卡牌:', card.defId, '匹配:', match);
-            if (match && picked.length < maxPick) {
+            if (predicate(card) && picked.length < maxPick) {
                 picked.push(card);
             } else {
                 missed.push(card);
@@ -363,15 +351,7 @@ export function revealAndPickFromDeck(params: {
         }
     }
 
-    console.log('[revealAndPickFromDeck] 结果:', {
-        pickedCount: picked.length,
-        missedCount: missed.length,
-        picked: picked.map(c => c.defId),
-        missed: missed.map(c => c.defId),
-    });
-
     if (picked.length === 0 && missed.length === 0) {
-        console.log('[revealAndPickFromDeck] 无卡牌处理，返回空结果');
         return { events: [], picked: [], missed: [] };
     }
 
@@ -385,16 +365,7 @@ export function revealAndPickFromDeck(params: {
             allRevealed.map(c => ({ uid: c.uid, defId: c.defId })),
             allRevealed.length, reason, now,
         );
-        console.log('[revealAndPickFromDeck] 生成 REVEAL_DECK_TOP 事件:', {
-            type: revealEvent.type,
-            targetPlayerId: revealEvent.payload.targetPlayerId,
-            viewerPlayerId: revealEvent.payload.viewerPlayerId,
-            cardsCount: revealEvent.payload.cards.length,
-            cards: revealEvent.payload.cards,
-        });
         events.push(revealEvent);
-    } else {
-        console.log('[revealAndPickFromDeck] revealTo=none，不生成展示事件');
     }
 
     // 2. 命中的卡放入手牌
@@ -404,7 +375,6 @@ export function revealAndPickFromDeck(params: {
             payload: { playerId, count: picked.length, cardUids: picked.map(c => c.uid) },
             timestamp: now,
         } as CardsDrawnEvent);
-        console.log('[revealAndPickFromDeck] 生成 CARDS_DRAWN 事件，抽', picked.length, '张');
     }
 
     // 3. 未命中的卡放牌库底/顶 → 重排牌库
@@ -420,10 +390,8 @@ export function revealAndPickFromDeck(params: {
             payload: { playerId, deckUids: newDeckUids },
             timestamp: now,
         } as DeckReorderedEvent);
-        console.log('[revealAndPickFromDeck] 生成 DECK_REORDERED 事件');
     }
 
-    console.log('[revealAndPickFromDeck] 完成，总共生成', events.length, '个事件');
     return { events, picked, missed };
 }
 
