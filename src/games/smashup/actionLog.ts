@@ -548,6 +548,20 @@ export function formatSmashUpActionEntry({
                     playerId: targetPid,
                     count: payload.count,
                 })];
+                
+                // 添加展示的卡牌列表（最多显示5张，避免日志过长）
+                if (payload.cards && payload.cards.length > 0) {
+                    const displayCards = payload.cards.slice(0, 5);
+                    segments.push(textSeg('：'));
+                    displayCards.forEach((card, idx) => {
+                        if (idx > 0) segments.push(textSeg('、'));
+                        segments.push(buildCardSegment(card.defId));
+                    });
+                    if (payload.cards.length > 5) {
+                        segments.push(textSeg(`...（共${payload.cards.length}张）`));
+                    }
+                }
+                
                 if (payload.reason) {
                     segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }

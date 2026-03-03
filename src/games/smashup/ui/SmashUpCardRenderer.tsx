@@ -63,22 +63,20 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
     })())) : false;
     
     // 判断基地卡是否应该使用英文图集：
-    // 1. 玩家选择了该派系的 POD 版本 → 使用英文 POD 图集
-    // 2. 玩家选择了该派系的基础版本 → 使用英文基础图集（如果有映射）
+    // 只有当玩家选择了该派系的 POD 版本时，才使用英文 POD 图集
+    // 基础版派系的基地卡继续使用中文图集（smashup:base1 等）
     const shouldUseEnglishAtlas = defId && isBase && (() => {
         const baseDef = getBaseDef(defId);
         if (!baseDef?.faction) return false;
-        // 检查玩家是否选择了该派系（基础版或 POD 版）
-        return selectedFactions.has(baseDef.faction) || selectedFactions.has(`${baseDef.faction}_pod`);
+        // 只检查 POD 版本
+        const podFactionId = `${baseDef.faction}_pod`;
+        return selectedFactions.has(podFactionId);
     })();
 
     // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
     // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
     // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集
     const isEnglishVariant = effectiveLocale === 'en' || effectiveLocale === 'en-US';
-    
-    // 标记是否使用了英文图集映射
-    let usedEnglishAtlas = false;
     
     if (isEnglishVariant || isPodVersion || shouldUseEnglishAtlas || !originalAtlasId) {
         // 对于基地卡，根据是否为 POD 版本选择不同的映射 key
@@ -94,7 +92,6 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
             if (mapped) {
                 finalAtlasId = mapped.atlasId;
                 finalIndex = mapped.index;
-                usedEnglishAtlas = true;
             }
         }
     }
@@ -124,14 +121,37 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
         );
     }
 
-    // 硬编码逻辑：POD/base 卡牌只有英文资源，中文 UI 时需要显示覆盖层
-    const needsOverlay = (isPodVersion || isBase) && !isEnglishVariant;
+    // 悬浮窗显示逻辑：只有使用了英文图集的卡牌才需要悬浮窗
+    // 1. POD 派系卡牌 → 需要悬浮窗（图片是英文的）
+    // 2. 基地卡且玩家选择了 POD 版派系 → 需要悬浮窗（图片是英文的）
+    // 3. 基础派系的基地卡 → 不需要悬浮窗（图片本身包含中文）
+    const needsOverlay = (isPodVersion || shouldUseEnglishAtlas) && !isEnglishVariant;
     // 用户在英文环境下可以关闭覆盖层
     const shouldShowOverlay = needsOverlay && overlayEnabled;
     
-    // 图片语言选择：只有实际使用了英文图集映射时才用英文 locale
-    // 避免强制使用英文导致无英文版本的卡牌加载失败
-    const imageLocale = (isPodVersion || usedEnglishAtlas) ? 'en' : effectiveLocale;
+    // 图片语言选择：
+    // 1. POD 派系卡牌 → 使用英文 locale（图片在 en/smashup/pod-assets/）
+    // 2. 基地卡且玩家选择了 POD 版派系 → 使用英文 locale（图片在 en/smashup/pod-assets/）
+    // 3. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
+    const imageLocale = (isPodVersion || shouldUseEnglishAtlas) ? 'en' : effectiveLocale;
+
+    // 调试日志
+    if (defId) {
+        console.log('[SmashUpCardRenderer]', {
+            defId,
+            isBase,
+            isPodVersion,
+            isEnglishVariant,
+            effectiveLocale,
+            imageLocale,
+            needsOverlay,
+            shouldShowOverlay,
+            finalAtlasId,
+            finalIndex,
+            originalAtlasId,
+            originalIndex,
+        });
+    }
 
     // 直接返回完整的卡牌（图片 + 覆盖层）
     return (

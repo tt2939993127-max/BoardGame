@@ -195,22 +195,56 @@ export function registerExpansionBaseAbilities(): void {
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
     // "每回合玩家第一次打出一个随从到这里后，可以额外打出一张与其同名的随从到这里"
     registerBaseAbility('base_plateau_of_leng', 'onMinionPlayed', (ctx) => {
-        if (!ctx.minionDefId) return { events: [] };
+        console.log('[base_plateau_of_leng] 触发检查:', {
+            playerId: ctx.playerId,
+            baseIndex: ctx.baseIndex,
+            minionDefId: ctx.minionDefId,
+            minionUid: ctx.minionUid,
+        });
+        
+        if (!ctx.minionDefId) {
+            console.log('[base_plateau_of_leng] 跳过：无 minionDefId');
+            return { events: [] };
+        }
+        
         const player = ctx.state.players[ctx.playerId];
-        if (!player) return { events: [] };
+        if (!player) {
+            console.log('[base_plateau_of_leng] 跳过：找不到玩家');
+            return { events: [] };
+        }
 
         // 每回合只有第一次打出随从到此基地才触发
         // reduce 已执行，minionsPlayedPerBase 包含刚打出的随从，首次打出时值为 1
         const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
-        if (playedAtBase !== 1) return { events: [] };
+        console.log('[base_plateau_of_leng] 检查首次打出:', {
+            playedAtBase,
+            minionsPlayedPerBase: player.minionsPlayedPerBase,
+            baseIndex: ctx.baseIndex,
+        });
+        
+        if (playedAtBase !== 1) {
+            console.log('[base_plateau_of_leng] 跳过：不是首次打出（playedAtBase =', playedAtBase, '）');
+            return { events: [] };
+        }
 
-        // 检查手牌中是否有同名随从（相同 defId?
+        // 检查手牌中是否有同名随从（相同 defId）
         const sameNameMinions = player.hand.filter(
             c => c.defId === ctx.minionDefId && c.type === 'minion'
         );
+        
+        console.log('[base_plateau_of_leng] 检查手牌同名随从:', {
+            minionDefId: ctx.minionDefId,
+            handCount: player.hand.length,
+            hand: player.hand.map(c => ({ uid: c.uid, defId: c.defId, type: c.type })),
+            sameNameCount: sameNameMinions.length,
+            sameNameMinions: sameNameMinions.map(m => ({ uid: m.uid, defId: m.defId })),
+        });
 
-        // 无同名随从?不生成 Prompt
-        if (sameNameMinions.length === 0) return { events: [] };
+        // 无同名随从，不生成 Prompt
+        if (sameNameMinions.length === 0) {
+            console.log('[base_plateau_of_leng] 跳过：手牌无同名随从');
+            return { events: [] };
+        }
 
         const def = getCardDef(ctx.minionDefId);
         const minionName = def?.name ?? ctx.minionDefId;
@@ -224,12 +258,24 @@ export function registerExpansionBaseAbilities(): void {
             })),
         ];
 
-        if (!ctx.matchState) return { events: [] };
+        if (!ctx.matchState) {
+            console.log('[base_plateau_of_leng] 跳过：无 matchState');
+            return { events: [] };
+        }
+        
         const interaction = createSimpleChoice(
             `base_plateau_of_leng_${ctx.now}`, ctx.playerId,
             `冷原高地：是否打出同名随从${minionName}？`, options as any[], 'base_plateau_of_leng',
         );
         (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+        
+        console.log('[base_plateau_of_leng] 创建交互:', {
+            interactionId: interaction.id,
+            playerId: interaction.playerId,
+            optionsCount: options.length,
+            baseIndex: ctx.baseIndex,
+        });
+        
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
@@ -691,12 +737,34 @@ export function registerExpansionBaseInteractionHandlers(): void {
     });
 
     registerInteractionHandler('base_plateau_of_leng', (state, playerId, value, iData, _random, timestamp) => {
+        console.log('[base_plateau_of_leng handler] 处理交互:', {
+            playerId,
+            value,
+            iData,
+        });
+        
         const selected = value as { skip?: boolean; cardUid?: string; defId?: string };
-        if (selected.skip) return { state, events: [] };
+        if (selected.skip) {
+            console.log('[base_plateau_of_leng handler] 玩家选择跳过');
+            return { state, events: [] };
+        }
+        
         const ctx = (iData as any)?.continuationContext as { baseIndex: number };
-        if (!ctx) return { state, events: [] };
+        if (!ctx) {
+            console.log('[base_plateau_of_leng handler] 错误：无 continuationContext');
+            return { state, events: [] };
+        }
+        
         const mDef = getMinionDef(selected.defId!);
         const power = mDef?.power ?? 0;
+        
+        console.log('[base_plateau_of_leng handler] 生成 MINION_PLAYED 事件:', {
+            cardUid: selected.cardUid,
+            defId: selected.defId,
+            baseIndex: ctx.baseIndex,
+            power,
+        });
+        
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
             payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, baseDefId: state.core.bases[ctx.baseIndex].defId, power },

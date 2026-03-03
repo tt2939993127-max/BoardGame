@@ -66,9 +66,18 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
     useEffect(() => {
         const { entries: newEntries, didReset } = consumeNew();
         
+        console.log('[RevealOverlay] consumeNew:', {
+            newEntriesCount: newEntries.length,
+            didReset,
+            isFirstMount: isFirstMount.current,
+            currentPlayerId,
+            totalEntries: entries.length,
+        });
+        
         // 首次挂载时跳过所有历史事件
         if (isFirstMount.current) {
             isFirstMount.current = false;
+            console.log('[RevealOverlay] 首次挂载，跳过历史事件');
             return;
         }
         
@@ -80,6 +89,13 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
 
         const newItems: RevealItem[] = [];
         for (const entry of newEntries) {
+            console.log('[RevealOverlay] 处理事件:', {
+                entryId: entry.id,
+                eventType: entry.event.type,
+                isTriggerEvent: TRIGGER_EVENTS.has(entry.event.type),
+                payload: entry.event.payload,
+            });
+            
             if (!TRIGGER_EVENTS.has(entry.event.type)) continue;
             const p = entry.event.payload as {
                 targetPlayerId: string | string[];
@@ -87,21 +103,47 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                 cards: { uid: string; defId: string }[];
                 reason: string;
             };
-            if (!p?.cards?.length) continue;
+            
+            console.log('[RevealOverlay] REVEAL 事件详情:', {
+                targetPlayerId: p.targetPlayerId,
+                viewerPlayerId: p.viewerPlayerId,
+                cardsCount: p?.cards?.length,
+                cards: p?.cards,
+                reason: p.reason,
+            });
+            
+            if (!p?.cards?.length) {
+                console.log('[RevealOverlay] 跳过：无卡牌数据');
+                continue;
+            }
 
             // 权限过滤：单人模式下只有指定查看者能看
             const isAllMode = p.viewerPlayerId === 'all';
             const targetIds = Array.isArray(p.targetPlayerId) ? p.targetPlayerId : [p.targetPlayerId];
             const isTarget = targetIds.includes(currentPlayerId);
             
+            console.log('[RevealOverlay] 权限检查:', {
+                isAllMode,
+                targetIds,
+                currentPlayerId,
+                isTarget,
+                viewerPlayerId: p.viewerPlayerId,
+            });
+            
             // 权限过滤：
             // - all 模式：所有人都能看（包括被展示者）
             // - 单人模式：只有指定查看者能看，被展示者不能看
-            if (!isAllMode && p.viewerPlayerId !== currentPlayerId) continue;
-            if (isTarget && !isAllMode) continue;
+            if (!isAllMode && p.viewerPlayerId !== currentPlayerId) {
+                console.log('[RevealOverlay] 跳过：非 all 模式且不是指定查看者');
+                continue;
+            }
+            if (isTarget && !isAllMode) {
+                console.log('[RevealOverlay] 跳过：是被展示者且非 all 模式');
+                continue;
+            }
 
             const revealType = entry.event.type === SU_EVENTS.REVEAL_HAND ? 'hand' : 'deck_top';
-            newItems.push({
+            const item = {
                 id: `reveal-${entry.id}`,
                 type: revealType,
                 targetPlayerIds: targetIds,
@@ -109,11 +151,16 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                 cards: p.cards, // all 模式下所有人都能看，单人模式下被展示者已被过滤
                 reason: p.reason,
                 timestamp: Date.now(),
-            });
+            };
+            console.log('[RevealOverlay] 添加到队列:', item);
+            newItems.push(item);
         }
 
         if (newItems.length > 0) {
+            console.log('[RevealOverlay] 更新队列，新增项:', newItems.length);
             setQueue(prev => [...prev, ...newItems].slice(-5));
+        } else {
+            console.log('[RevealOverlay] 无新项添加到队列');
         }
     }, [entries, consumeNew, currentPlayerId, TRIGGER_EVENTS]);
 

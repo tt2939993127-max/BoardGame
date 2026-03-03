@@ -208,9 +208,11 @@ describe('盘旋机器人链式打出', () => {
         expect(result.steps[0]?.success).toBe(true);
         expect(result.steps[1]?.success).toBe(true);
 
-        // 验证第二个盘旋机器人在场上
+        // 验证两个盘旋机器人都在场上
         const finalCore = result.finalState.core;
         const base = finalCore.bases[0];
+        expect(base.minions.length).toBe(2);
+        expect(base.minions.find(m => m.uid === 'hoverbot-1')).toBeDefined();
         expect(base.minions.find(m => m.uid === 'hoverbot-2')).toBeDefined();
 
         // 验证牌库顶是 zapbot（不是第二个盘旋机器人）
