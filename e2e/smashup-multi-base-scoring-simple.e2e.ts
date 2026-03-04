@@ -15,9 +15,10 @@
 import { test, expect } from './fixtures';
 
 test.describe('多基地计分简单测试', () => {
+    // 增加超时时间到 3 分钟（包含派系选择）
+    test.setTimeout(180000);
+    
     test('3个基地依次计分', async ({ smashupMatch }, testInfo) => {
-        test.setTimeout(180000); // 增加超时时间到 3 分钟（包含派系选择）
-        
         const { host } = smashupMatch;
 
         // 等待游戏开始（等待基地区域渲染）

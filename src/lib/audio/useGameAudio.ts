@@ -27,19 +27,29 @@ const failedSounds = new Set<string>();
 const lastPlayedTime = new Map<string, number>();
 const SFX_THROTTLE_MS = 80;
 
-const DT_TRACE_SOUND_KEYS = new Set<string>([
-    'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none',
-    'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
-    'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003',
-    'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002',
-]);
+// 音效优先级配置
+const SOUND_PRIORITY = {
+    high: ['weapon_swoosh', 'melee_swoosh', 'damage', 'heal', 'hit', 'impact', 'punch'],
+    medium: ['dice_roll', 'card_play', 'card_draw', 'token'],
+    low: ['drums_of_fate', 'phase_change', 'turn_change', 'chime', 'update'],
+};
 
-const DT_TRACE_EVENT_TYPES = new Set<string>([
-    'CHARACTER_SELECTED',
-    'PLAYER_READY',
-    'HOST_STARTED',
-    'SYS_PHASE_CHANGED',
-]);
+// 记录上次高优先级音效播放时间
+let lastHighPrioritySoundTime: number = 0;
+const HIGH_PRIORITY_DELAY_MS = 250; // 高优先级音效播放后 250ms 内延迟低优先级音效
+
+/**
+ * 判断音效优先级
+ */
+function getSoundPriority(key: string): 'high' | 'medium' | 'low' {
+    if (SOUND_PRIORITY.high.some(pattern => key.includes(pattern))) {
+        return 'high';
+    }
+    if (SOUND_PRIORITY.low.some(pattern => key.includes(pattern))) {
+        return 'low';
+    }
+    return 'medium';
+}
 
 function getLogEntrySignature(entry: unknown): string | null {
     if (!entry || typeof entry !== 'object') return null;
@@ -80,26 +90,37 @@ function findLastLogEntryIndex(entries: unknown[], signature: string): number {
  * @param key 音效键名
  */
 export function playSound(key: SoundKey): void {
-    // 临时调试：记录攻击音效播放
-    const isAttackSound = key.includes('weapon_swoosh') || key.includes('melee_swoosh');
-    if (isAttackSound) {
-        console.log('[Audio Debug] playSound called:', {
-            key,
-            timestamp: Date.now(),
-        });
+    const now = Date.now();
+    const priority = getSoundPriority(key);
+    
+    // 高优先级音效：立即播放，更新时间戳
+    if (priority === 'high') {
+        lastHighPrioritySoundTime = now;
     }
     
+    // 低优先级音效：如果高优先级音效刚播放过，延迟播放
+    if (priority === 'low') {
+        const timeSinceHighPriority = now - lastHighPrioritySoundTime;
+        if (timeSinceHighPriority < HIGH_PRIORITY_DELAY_MS) {
+            const delayMs = HIGH_PRIORITY_DELAY_MS - timeSinceHighPriority;
+            setTimeout(() => {
+                playSoundInternal(key);
+            }, delayMs);
+            return;
+        }
+    }
+    
+    playSoundInternal(key);
+}
+
+/**
+ * 内部音效播放函数（不处理优先级）
+ */
+function playSoundInternal(key: SoundKey): void {
     // 节流：同一音效在 SFX_THROTTLE_MS 内只播放一次
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
     if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
-        if (isAttackSound) {
-            console.log('[Audio Debug] playSound throttled:', {
-                key,
-                timeSinceLastPlay: now - lastPlayed,
-                throttleMs: SFX_THROTTLE_MS,
-            });
-        }
         return;
     }
     lastPlayedTime.set(key, now);
@@ -111,32 +132,10 @@ export function playSound(key: SoundKey): void {
         if (isSynthKey) {
             playSynthSound(key);
         }
-        if (isAttackSound) {
-            console.log('[Audio Debug] playSound failed (known failure):', { key });
-        }
         return;
     }
 
     const result = AudioManager.play(key);
-    
-    if (isAttackSound) {
-        console.log('[Audio Debug] AudioManager.play result:', {
-            key,
-            result,
-            isFailed: AudioManager.isFailed(key),
-        });
-        
-        // 检查音频是否真的在播放
-        if (result !== null) {
-            setTimeout(() => {
-                console.log('[Audio Debug] Attack sound status after 100ms:', {
-                    key,
-                    soundId: result,
-                    // 注意：这里无法直接访问 Howl 实例，需要通过 AudioManager
-                });
-            }, 100);
-        }
-    }
     
     // 仅在音效确实加载失败时标记为永久失败并回退到合成音
     // （因并发加载限制被跳过的不算失败）
@@ -399,20 +398,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             }
             
             // 框架层自动过滤 UI 本地交互事件（音效已由 UI 组件本地播放）
-            // 音频追踪日志已移除
-            
             if (event.audioMetadata?.isLocalUIEvent) {
                 continue;
-            }
-            
-            // 临时调试：记录 ATTACK_INITIATED 事件的过滤情况
-            if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
-                console.log('[Audio Debug] ATTACK_INITIATED event processing:', {
-                    eventType: event.type,
-                    payload: event.payload,
-                    audioMetadata: event.audioMetadata,
-                    isFiltered: !!event.audioMetadata?.isLocalUIEvent,
-                });
             }
             
             const key = resolveFeedback(
@@ -436,39 +423,11 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 });
             }
             
-            // 临时调试：记录 POWER_COUNTER_ADDED 事件的音效解析
-            if (gameId === 'smashup' && event.type === 'su:power_counter_added') {
-                console.log('[Audio Debug] POWER_COUNTER_ADDED event:', {
-                    eventType: event.type,
-                    resolvedKey: key,
-                    payload: event.payload,
-                });
-            }
-            
             if (!key) continue;
-            if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
-                const eventId = (entry as { id?: number }).id;
-            }
             // 立即播放（去重）
             if (!playedKeys.has(key)) {
                 playedKeys.add(key);
-                
-                // 临时调试：记录 ATTACK_INITIATED 音效播放
-                if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
-                    console.log('[Audio Debug] Playing ATTACK_INITIATED sound:', {
-                        key,
-                        eventType: event.type,
-                        willPlay: true,
-                    });
-                }
-                
                 playSound(key);
-            } else if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
-                // 临时调试：记录重复的 ATTACK_INITIATED 音效被跳过
-                console.log('[Audio Debug] ATTACK_INITIATED sound skipped (duplicate):', {
-                    key,
-                    eventType: event.type,
-                });
             }
         }
     }, [registryLoaded, eventEntriesVersion, config]);

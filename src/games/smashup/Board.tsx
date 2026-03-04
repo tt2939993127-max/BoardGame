@@ -540,7 +540,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     }, [discardStripSelectedUid, isDiscardMinionPrompt, discardMinionAllowedBases, discardPlayOptions, core.bases]);
 
 
-    // Me First! 响应状态判断
+    // 响应窗口状态判断（meFirst 或 afterScoring）
     const responseWindow = G.sys.responseWindow?.current;
     const isMeFirstResponse = useMemo(() => {
         if (!responseWindow || responseWindow.windowType !== 'meFirst') return false;
@@ -548,19 +548,34 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         return playerID === currentResponderId;
     }, [responseWindow, playerID]);
 
-    // Me First! 期间非 special 卡和非 beforeScoringPlayable 随从的禁用集合（置灰）
+    const isAfterScoringResponse = useMemo(() => {
+        if (!responseWindow || responseWindow.windowType !== 'afterScoring') return false;
+        const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
+        return playerID === currentResponderId;
+    }, [responseWindow, playerID]);
+
+    // 响应窗口期间禁用不匹配的卡牌（置灰）
     // 但当有手牌选择交互时（isHandDiscardPrompt），不禁用手牌（交互会自己处理可选项）
     const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
-        if (!isMeFirstResponse || !myPlayer) return undefined;
-        // 有手牌选择交互时，不应用 Me First! 禁用规则（交互自己控制可选项）
+        // 只在响应窗口期间且轮到我时生效
+        const isMyResponseTurn = isMeFirstResponse || isAfterScoringResponse;
+        if (!isMyResponseTurn || !myPlayer) return undefined;
+        // 有手牌选择交互时，不应用响应窗口禁用规则（交互自己控制可选项）
         if (isHandDiscardPrompt) return undefined;
         
         const disabled = new Set<string>();
+        const windowType = responseWindow?.windowType;
+        
         for (const card of myPlayer.hand) {
             if (card.type === 'minion') {
-                // beforeScoringPlayable 随从不禁用（影舞者等）
-                const mDef = getMinionDef(card.defId);
-                if (!mDef?.beforeScoringPlayable) {
+                // beforeScoringPlayable 随从只在 meFirst 窗口可用
+                if (windowType === 'meFirst') {
+                    const mDef = getMinionDef(card.defId);
+                    if (!mDef?.beforeScoringPlayable) {
+                        disabled.add(card.uid);
+                    }
+                } else {
+                    // afterScoring 窗口禁用所有随从
                     disabled.add(card.uid);
                 }
                 continue;
@@ -571,11 +586,23 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             }
             const def = getCardDef(card.defId) as ActionCardDef | undefined;
             if (def?.subtype !== 'special') {
+                // 非 special 卡全部禁用
+                disabled.add(card.uid);
+                continue;
+            }
+            
+            // Special 卡：检查 specialTiming 是否匹配窗口类型
+            const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+            if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
+                // meFirst 窗口：禁用非 beforeScoring 卡
+                disabled.add(card.uid);
+            } else if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') {
+                // afterScoring 窗口：禁用非 afterScoring 卡
                 disabled.add(card.uid);
             }
         }
         return disabled.size > 0 ? disabled : undefined;
-    }, [isMeFirstResponse, myPlayer, isHandDiscardPrompt]);
+    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isHandDiscardPrompt, responseWindow?.windowType]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
     // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）

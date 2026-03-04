@@ -136,60 +136,40 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         // CHARACTER_SELECTED / PLAYER_READY / HOST_STARTED：UI 层已播放，跳过 EventStream
         const eventPlayerId = (event as AudioEvent & { payload?: { playerId?: string } }).payload?.playerId;
         const currentPlayerId = runtime.meta?.currentPlayerId;
-        const shouldTraceSelectionAudio =
-            type === 'CHARACTER_SELECTED'
-            || type === 'PLAYER_READY'
-            || type === 'HOST_STARTED'
-            || type === 'SYS_PHASE_CHANGED';
-
-        const traceSelectionAudio = (action: string, key: string | null, reason: string) => {
-            // 音频追踪日志已移除
-        };
 
         if (type === 'CHARACTER_SELECTED') {
             // 角色选择音效：本地玩家由 UI 层播放（即时反馈），远程玩家不播放（选角是本地操作）
             if (!currentPlayerId) {
-                traceSelectionAudio('skip', null, 'current_player_unknown');
                 return null;
             }
             if (eventPlayerId && currentPlayerId && eventPlayerId === currentPlayerId) {
-                traceSelectionAudio('skip', null, 'local_player_selected_character');
                 return null;
             }
             // 其他玩家选角时也不播放音效（选角是本地操作，不需要提示其他玩家）
-            traceSelectionAudio('skip', null, 'other_player_selected_character');
             return null;
         }
 
         if (type === 'PLAYER_READY') {
             // 自己点击 Ready 时已在本地按钮播放点击音，事件音仅用于提示"其他玩家已准备"
             if (!currentPlayerId) {
-                traceSelectionAudio('skip', null, 'current_player_unready');
                 return null;
             }
             if (eventPlayerId && currentPlayerId && eventPlayerId === currentPlayerId) {
-                traceSelectionAudio('skip', null, 'local_player_ready');
                 return null;
             }
-            const key = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
-            traceSelectionAudio('play', key, 'other_player_ready');
-            return key;
+            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
         }
 
         if (type === 'HOST_STARTED') {
             // Host 自己点击开始时已在本地按钮播放点击音，事件音仅用于提示"他人已开始"
             if (!currentPlayerId) {
-                traceSelectionAudio('skip', null, 'current_player_unready');
                 return null;
             }
             if (eventPlayerId && currentPlayerId && eventPlayerId === currentPlayerId) {
-                traceSelectionAudio('skip', null, 'local_player_started');
                 return null;
             }
             // 开始游戏使用回合开始音效（开始游戏本质也是开始回合）
-            const key = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
-            traceSelectionAudio('play', key, 'other_player_started');
-            return key;
+            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
         }
 
         // SYS_PHASE_CHANGED：特殊处理开局阶段切换
@@ -199,16 +179,12 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
 
             // 开局从 setup 自动连推到主阶段时，避免与"开始对局"提示音叠加造成一次点击多次响
             if (phaseFrom === 'setup') {
-                traceSelectionAudio('skip', null, 'startup_phase_from_setup');
                 return null;
             }
             if (G.turnNumber === 1 && (phaseFrom === 'upkeep' || phaseFrom === 'income')) {
-                traceSelectionAudio('skip', null, 'startup_phase_autocontinue');
                 return null;
             }
-            const key = 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
-            traceSelectionAudio('play', key, 'phase_changed_default');
-            return key;
+            return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
         }
 
         // ABILITY_ACTIVATED：技能激活时不播放音效
@@ -220,18 +196,6 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         // ATTACK_INITIATED：总是播放攻击发起音效（挥剑音效）
         // 技能专属音效在伤害动画 onImpact 时播放，不在这里播放
         // 不需要特殊处理，直接回退到框架默认音效
-        if (type === 'ATTACK_INITIATED') {
-            const payload = (event as AudioEvent & { payload?: { attackerId?: string; defenderId?: string } }).payload;
-            const attackerId = payload?.attackerId;
-            const defenderId = payload?.defenderId;
-            console.log('[DT Audio Debug] ATTACK_INITIATED:', {
-                attackerId,
-                defenderId,
-                currentPlayerId,
-                eventPayload: payload,
-            });
-            // 回退到框架默认音效
-        }
 
         // RESPONSE_WINDOW_OPENED / RESPONSE_WINDOW_CLOSED：只有响应者才播放音效
         // 避免暴露对方有响应牌的信息（信息隐藏原则）

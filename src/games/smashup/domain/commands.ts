@@ -34,9 +34,9 @@ export function validate(
 
     switch (command.type) {
         case SU_COMMANDS.PLAY_MINION: {
-            // Me First! 响应窗口期间：允许从手牌打出 beforeScoringPlayable 随从到即将计分的基地
+            // beforeScoring 响应窗口期间：允许从手牌打出 beforeScoringPlayable 随从到即将计分的基地
             const minionResponseWindow = state.sys.responseWindow?.current;
-            if (minionResponseWindow && minionResponseWindow.windowType === 'meFirst') {
+            if (minionResponseWindow && minionResponseWindow.windowType === 'beforeScoring') {
                 const responderQueue = minionResponseWindow.responderQueue;
                 const currentResponderId = responderQueue[minionResponseWindow.currentResponderIndex];
                 if (command.playerId !== currentResponderId) {
@@ -169,9 +169,9 @@ export function validate(
                 windowType: state.sys.responseWindow?.current?.windowType,
             });
             
-            // Me First! 响应窗口期间：允许当前响应者打出特殊行动卡
+            // 响应窗口期间：允许当前响应者打出特殊行动卡
             const responseWindow = state.sys.responseWindow?.current;
-            if (responseWindow && responseWindow.windowType === 'meFirst') {
+            if (responseWindow && (responseWindow.windowType === 'beforeScoring' || responseWindow.windowType === 'afterScoring')) {
                 const responderQueue = responseWindow.responderQueue;
                 const currentResponderId = responderQueue[responseWindow.currentResponderIndex];
                 
@@ -208,7 +208,24 @@ export function validate(
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - not special card', {
                         subtype: rDef.subtype,
                     });
-                    return { valid: false, error: 'Me First! 响应只能打出特殊行动卡' };
+                    return { valid: false, error: '响应窗口只能打出特殊行动卡' };
+                }
+                
+                // 检查 specialTiming 是否匹配窗口类型
+                const cardTiming = rDef.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+                if (responseWindow.windowType === 'beforeScoring' && cardTiming !== 'beforeScoring') {
+                    console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for beforeScoring window', {
+                        cardTiming,
+                        windowType: responseWindow.windowType,
+                    });
+                    return { valid: false, error: '该卡牌只能在计分后打出' };
+                }
+                if (responseWindow.windowType === 'afterScoring' && cardTiming !== 'afterScoring') {
+                    console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for afterScoring window', {
+                        cardTiming,
+                        windowType: responseWindow.windowType,
+                    });
+                    return { valid: false, error: '该卡牌只能在计分前打出' };
                 }
 
                 const targetBase = command.payload.targetBaseIndex;
@@ -278,9 +295,14 @@ export function validate(
             if (card.type !== 'action') return { valid: false, error: '该卡牌不是行动卡' };
             const def = getCardDef(card.defId) as ActionCardDef | undefined;
             if (!def) return { valid: false, error: '卡牌定义不存在' };
-            // 特殊行动卡只能在 Me First! 响应窗口中打出，不能在正常出牌阶段使用
+            // 特殊行动卡只能在响应窗口中打出，不能在正常出牌阶段使用
             if (def.subtype === 'special') {
-                return { valid: false, error: '特殊行动卡只能在基地计分前的 Me First! 窗口中打出' };
+                const cardTiming = def.specialTiming ?? 'beforeScoring';
+                if (cardTiming === 'beforeScoring') {
+                    return { valid: false, error: '该特殊行动卡只能在基地计分前的响应窗口中打出' };
+                } else {
+                    return { valid: false, error: '该特殊行动卡只能在基地计分后的响应窗口中打出' };
+                }
             }
 
             // 持续行动卡：必须显式选择附着目标

@@ -7,7 +7,7 @@ import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import type { InteractionDescriptor } from './domain/types';
 import { getUsableTokensForTiming } from './domain/tokenResponse';
-import { isCardPlayableInResponseWindow } from './domain/rules';
+import { isCardPlayableInResponseWindow, getAvailableAbilityIds } from './domain/rules';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
@@ -305,6 +305,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         selectedCharacters: G.selectedCharacters,
         abilityLevels: attackerAbilityLevels,
         pendingAttack: G.pendingAttack ?? null,
+        state: G,
     });
 
     // 使用 FX 引擎
@@ -478,12 +479,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             wasOpen,
             isOpen,
             isResponseAutoSwitch,
+            autoResponseEnabled,
             currentResponderId,
             rootPid,
             logic: isResponseAutoSwitch ? 'Self is responder → switch to opponent view' : 'Opponent is responder → stay on self view',
             currentPhase,
             currentViewMode: viewMode,
         });
+
+        // 只在显示响应窗口时才切换视角（自动跳过模式不切换）
+        if (!autoResponseEnabled) {
+            console.log('[Board] Auto-skip enabled, not switching view');
+            return;
+        }
 
         // 自己响应时切换到对手视角（看对手的骰子/状态）
         if (isOpen && isResponseAutoSwitch) {
@@ -493,15 +501,33 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         // 注意：
         // 1. 对手响应时（isOpen && !isResponseAutoSwitch）不做任何操作，保持当前视角（通常是自己视角）
         // 2. 响应窗口关闭时也不做任何操作，避免干扰正常的视角切换
-    }, [isResponseWindowOpen, isResponseAutoSwitch, currentResponderId, rootPid, currentPhase, setViewMode, viewMode]);
+    }, [isResponseWindowOpen, isResponseAutoSwitch, autoResponseEnabled, currentResponderId, rootPid, currentPhase, setViewMode, viewMode]);
 
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
     const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
     const isViewRolling = viewPid === rollerId;
     const rollConfirmed = G.rollConfirmed;
-    // availableAbilityIds 现在是派生状态，从 useDiceThroneState hook 中获取
-    const availableAbilityIds = isViewRolling ? access.availableAbilityIds : [];
+    
+    // availableAbilityIds 计算：
+    // 1. 响应窗口打开时，显示响应者的可用技能（不限于掷骰阶段）
+    // 2. 掷骰阶段，显示掷骰者的可用技能
+    // 3. 其他情况，不显示技能
+    const availableAbilityIds = React.useMemo(() => {
+        // 响应窗口打开时，显示当前响应者的可用技能
+        if (isResponseWindowOpen && currentResponderId) {
+            // 如果当前视角是响应者，显示响应者的可用技能
+            if (viewPid === currentResponderId) {
+                // 响应窗口期间，使用 getAvailableAbilityIds 计算可用技能
+                // 注意：这里需要传入响应者的 ID 和当前阶段
+                return getAvailableAbilityIds(G, currentResponderId, currentPhase);
+            }
+            return [];
+        }
+        // 掷骰阶段，显示掷骰者的可用技能
+        return isViewRolling ? access.availableAbilityIds : [];
+    }, [isResponseWindowOpen, currentResponderId, viewPid, isViewRolling, access.availableAbilityIds, G, currentPhase]);
+    
     const availableAbilityIdsForRoller = access.availableAbilityIds;
     const selectedAbilityId = currentPhase === 'defensiveRoll'
         ? (isViewRolling ? G.pendingAttack?.defenseAbilityId : undefined)
@@ -585,7 +611,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }, 100);
         return () => clearTimeout(timer);
     }, [gameMode?.mode, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
-    const showAdvancePhaseButton = isSelfView && !isSpectator;
+    // 切换到对手视角时也显示下一阶段按钮（禁用状态），保持 UI 一致性
+    const showAdvancePhaseButton = !isSpectator;
     const handleCancelInteraction = React.useCallback(() => {
         if (pendingInteraction?.sourceCardId) {
             setLastUndoCardId(pendingInteraction.sourceCardId);

@@ -1726,7 +1726,7 @@
     },
     "fiery-combo-2": {
       "name": "Fiery Combo II",
-      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Fiery Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
+      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Magma: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "main": "Deal 6 base damage. If you have Fire Mastery, deal +1 damage per Fire Mastery."
@@ -1734,7 +1734,7 @@
     },
     "incinerate": {
       "name": "Incinerate",
-      "description": "2 Fire + 2 Fire Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage",
+      "description": "2 Fire + 2 Magma: gain 2 Fire Mastery, inflict Burn, deal 6 damage",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "inflictBurn": "Inflict 1 Burn token",

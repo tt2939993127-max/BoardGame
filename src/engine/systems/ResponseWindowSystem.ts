@@ -199,20 +199,57 @@ export function advanceToNextResponder(
     const newPassedPlayers = [...window.passedPlayers, currentPlayerId];
     const nextIndex = window.currentResponderIndex + 1;
     
+    console.log('[advanceToNextResponder] 开始:', {
+        currentPlayerId,
+        currentIndex: window.currentResponderIndex,
+        nextIndex,
+        queueLength: window.responderQueue.length,
+        actionTakenThisRound: window.actionTakenThisRound,
+        consecutivePassRounds: window.consecutivePassRounds,
+        loopUntilAllPass,
+    });
+    
     // 所有人都已响应
     if (nextIndex >= window.responderQueue.length) {
-        if (loopUntilAllPass && window.actionTakenThisRound) {
-            // 本轮有人执行了动作，重新开始新一轮
-            return {
-                ...window,
-                currentResponderIndex: 0,
-                passedPlayers: [],
-                actionTakenThisRound: false,
-            };
+        console.log('[advanceToNextResponder] 到达队列末尾');
+        if (loopUntilAllPass) {
+            if (window.actionTakenThisRound) {
+                console.log('[advanceToNextResponder] 本轮有动作，重新开始（重置 consecutivePassRounds）');
+                // 本轮有人执行了动作，重新开始新一轮，重置 consecutivePassRounds
+                return {
+                    ...window,
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                    actionTakenThisRound: false,
+                    consecutivePassRounds: 0,
+                };
+            } else {
+                // 本轮所有人都 pass，增加 consecutivePassRounds 计数
+                const consecutivePassRounds = (window.consecutivePassRounds ?? 0) + 1;
+                console.log('[advanceToNextResponder] 本轮无动作，consecutivePassRounds:', consecutivePassRounds);
+                
+                // 连续两轮所有人都 pass，关闭窗口
+                if (consecutivePassRounds >= 2) {
+                    console.log('[advanceToNextResponder] consecutivePassRounds >= 2，关闭窗口');
+                    return undefined;
+                }
+                
+                console.log('[advanceToNextResponder] 继续下一轮');
+                // 继续下一轮
+                return {
+                    ...window,
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                    actionTakenThisRound: false,
+                    consecutivePassRounds,
+                };
+            }
         }
+        console.log('[advanceToNextResponder] loopUntilAllPass=false，关闭窗口');
         return undefined;
     }
     
+    console.log('[advanceToNextResponder] 推进到下一个响应者:', nextIndex);
     return {
         ...window,
         currentResponderIndex: nextIndex,
@@ -256,6 +293,14 @@ function skipToNextRespondableResponder<TCore>(
 
     type CurrentWindow = NonNullable<ResponseWindowState['current']>;
 
+    console.log('[skipToNextRespondableResponder] 开始:', {
+        currentIndex: window.currentResponderIndex,
+        queueLength: window.responderQueue.length,
+        actionTakenThisRound: window.actionTakenThisRound,
+        consecutivePassRounds: window.consecutivePassRounds,
+        loopUntilAllPass,
+    });
+
     const findNextRespondable = (
         scanWindow: CurrentWindow
     ): ResponseWindowState['current'] | undefined => {
@@ -265,10 +310,20 @@ function skipToNextRespondableResponder<TCore>(
 
         while (index < scanWindow.responderQueue.length) {
             const playerId = scanWindow.responderQueue[index];
-            if (hasRespondableContent(state.core as unknown, playerId, scanWindow.windowType, scanWindow.sourceId)) {
+            const hasContent = hasRespondableContent(state.core as unknown, playerId, scanWindow.windowType, scanWindow.sourceId);
+            
+            console.log('[skipToNextRespondableResponder] 检查玩家:', {
+                index,
+                playerId,
+                hasContent,
+            });
+            
+            if (hasContent) {
                 if (index === originalIndex && passedPlayers === scanWindow.passedPlayers) {
+                    console.log('[skipToNextRespondableResponder] 返回原窗口');
                     return scanWindow;
                 }
+                console.log('[skipToNextRespondableResponder] 返回更新后的窗口');
                 return {
                     ...scanWindow,
                     currentResponderIndex: index,
@@ -279,24 +334,56 @@ function skipToNextRespondableResponder<TCore>(
             index += 1;
         }
 
+        console.log('[skipToNextRespondableResponder] 没有找到可响应玩家');
         return undefined;
     };
 
     const nextWindow = findNextRespondable(window);
-    if (nextWindow) return nextWindow;
+    if (nextWindow) {
+        console.log('[skipToNextRespondableResponder] 找到下一个窗口，返回');
+        return nextWindow;
+    }
 
     // loopUntilAllPass：若本轮有人出过牌，即使尾部玩家都被自动 skip，
     // 也需要重开新一轮，从队首继续检查可响应者。
-    if (loopUntilAllPass && window.actionTakenThisRound) {
-        const restartedWindow: CurrentWindow = {
-            ...window,
-            currentResponderIndex: 0,
-            passedPlayers: [],
-            actionTakenThisRound: false,
-        };
-        return findNextRespondable(restartedWindow);
+    // 注意：重新开始一轮时，不跳过没有可响应内容的玩家，让所有玩家都有机会 pass
+    if (loopUntilAllPass) {
+        if (window.actionTakenThisRound) {
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮有动作，重新开始（不跳过）');
+            const restartedWindow: CurrentWindow = {
+                ...window,
+                currentResponderIndex: 0,
+                passedPlayers: [],
+                actionTakenThisRound: false,
+                consecutivePassRounds: 0, // 重置计数器
+            };
+            // 直接返回重启的窗口，不调用 findNextRespondable（不跳过玩家）
+            return restartedWindow;
+        } else {
+            // 本轮所有人都 pass，增加 consecutivePassRounds 计数
+            const consecutivePassRounds = (window.consecutivePassRounds ?? 0) + 1;
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮无动作，consecutivePassRounds:', consecutivePassRounds);
+            
+            // 连续两轮所有人都 pass，关闭窗口
+            if (consecutivePassRounds >= 2) {
+                console.log('[skipToNextRespondableResponder] consecutivePassRounds >= 2，关闭窗口');
+                return undefined;
+            }
+            
+            console.log('[skipToNextRespondableResponder] 继续下一轮');
+            // 继续下一轮
+            const restartedWindow: CurrentWindow = {
+                ...window,
+                currentResponderIndex: 0,
+                passedPlayers: [],
+                actionTakenThisRound: false,
+                consecutivePassRounds,
+            };
+            return restartedWindow;
+        }
     }
 
+    console.log('[skipToNextRespondableResponder] 返回 undefined（窗口应关闭）');
     return undefined;
 }
 
@@ -664,7 +751,7 @@ export function createResponseWindowSystem<TCore>(
                     if (newState.sys.interaction?.current) {
                         const interactionId = newState.sys.interaction.current.id;
                         const markedForLock = loopUntilAllPass
-                            ? { ...currentWindow, pendingInteractionId: interactionId, actionTakenThisRound: true }
+                            ? { ...currentWindow, pendingInteractionId: interactionId, actionTakenThisRound: true, consecutivePassRounds: 0 }
                             : { ...currentWindow, pendingInteractionId: interactionId };
                         newState = {
                             ...newState,
@@ -676,9 +763,9 @@ export function createResponseWindowSystem<TCore>(
                         break;
                     }
                     
-                    // 标记本轮有人执行了动作（用于 loopUntilAllPass 循环判定）
+                    // 标记本轮有人执行了动作（用于 loopUntilAllPass 循环判定），并重置 consecutivePassRounds
                     const markedWindow = loopUntilAllPass
-                        ? { ...currentWindow, actionTakenThisRound: true }
+                        ? { ...currentWindow, actionTakenThisRound: true, consecutivePassRounds: 0 }
                         : currentWindow;
                     
                     const _advAdvance = advanceToNextResponder(markedWindow, currentResponderId, loopUntilAllPass);

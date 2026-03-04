@@ -830,6 +830,41 @@ export function openMeFirstWindow(
     };
 }
 
+/**
+ * 打开计分后响应窗口（After Scoring）
+ * 
+ * 用于基地计分后，允许玩家打出 specialTiming: 'afterScoring' 的特殊行动卡
+ * 
+ * @param triggerContext 触发上下文（如 'scoreBases'）
+ * @param currentPlayerId 当前玩家 ID
+ * @param turnOrder 玩家回合顺序
+ * @param now 时间戳
+ */
+export function openAfterScoringWindow(
+    triggerContext: string,
+    currentPlayerId: PlayerId,
+    turnOrder: PlayerId[],
+    now: number
+): GameEvent {
+    // 构建响应者队列：从当前玩家开始顺时针
+    const startIdx = turnOrder.indexOf(currentPlayerId);
+    const responderQueue: PlayerId[] = [];
+    for (let i = 0; i < turnOrder.length; i++) {
+        responderQueue.push(turnOrder[(startIdx + i) % turnOrder.length]);
+    }
+
+    return {
+        type: RESPONSE_WINDOW_EVENTS.OPENED,
+        payload: {
+            windowId: `afterScoring_${triggerContext}_${now}`,
+            responderQueue,
+            windowType: 'afterScoring' as const,
+            sourceId: triggerContext,
+        },
+        timestamp: now,
+    };
+}
+
 
 // ============================================================================
 // 交互辅助函数（目标选择）

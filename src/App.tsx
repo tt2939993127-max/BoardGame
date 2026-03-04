@@ -67,6 +67,7 @@ const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
+const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest'));
 
 const AppContent = () => {
   const { t } = useTranslation('lobby');
@@ -103,6 +104,8 @@ const AppContent = () => {
                     <Route path="/dev/ugc" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcBuilder')} />}><UnifiedBuilder /></React.Suspense>} />
                     <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
                     <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
+                    {/* 临时测试路由：大杀四方四人局布局预览 */}
+                    <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={<LoadingScreen title="四人局布局测试" />}><SmashUp4PLayoutTest /></React.Suspense>} />
                     {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
                         强制 React 在在线↔教程路由切换时完全卸载/重建，防止状态泄漏 */}
                     <Route path="/play/:gameId/tutorial" element={<React.Suspense fallback={<LoadingScreen />}><TutorialMatchRoom /></React.Suspense>} />
