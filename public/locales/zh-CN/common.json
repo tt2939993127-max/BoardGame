@@ -1,0 +1,97 @@
+{
+  "button": {
+    "confirm": "确定",
+    "cancel": "取消",
+    "close": "关闭"
+  },
+  "category": {
+    "all": "全部游戏",
+    "card": "卡牌",
+    "dice": "骰子",
+    "abstract": "抽象",
+    "wargame": "战棋",
+    "casual": "休闲",
+    "tools": "工具"
+  },
+  "game_tags": {
+    "dice_driven": "骰驱",
+    "combat": "对战",
+    "ugc": "UGC",
+    "tactical": "战棋",
+    "card_driven": "卡牌",
+    "casual": "休闲"
+  },
+  "game_details": {
+    "best_players": "最佳人数",
+    "people": "人",
+    "player_count": "支持人数",
+    "best_recommendation": "推荐最佳人数",
+    "best_players_hint": "* 高亮为最佳人数",
+    "recommended_players": "推荐人数"
+  },
+  "language": {
+    "zhCN": "中文",
+    "en": "英文"
+  },
+  "toast": {
+    "close": "关闭"
+  },
+  "rematch": {
+    "playAgain": "再来一局",
+    "votePlayAgain": "再来一局",
+    "cancelVote": "取消投票",
+    "waitingForOpponent": "等待对手确认…",
+    "restarting": "双方已确认，重开中…",
+    "backToLobby": "返回大厅"
+  },
+  "endgame": {
+    "draw": "平局",
+    "drawSubtitle": "势均力敌！",
+    "victory": "胜利",
+    "victorySubtitle": "恭喜你赢得了比赛！",
+    "defeat": "失败",
+    "defeatSubtitle": "再接再厉！",
+    "gameOver": "游戏结束"
+  },
+  "accept": "接受",
+  "reject": "拒绝",
+  "back": "返回",
+  "loading": "加载中",
+  "unknownUser": "未知用户",
+  "notFound": {
+    "seoTitle": "404 - 页面未找到",
+    "seoDescription": "你访问的页面不存在。",
+    "headline": "迷失在地图之外",
+    "headlineSub": "Lost off the edge of the map",
+    "description": "您所寻找的页面似乎已被移除，或者从未存在于这个版图之上。",
+    "descriptionSub": "The hex you are looking for has been removed or never existed.",
+    "backHome": "返回大厅",
+    "footer": "BordGame System"
+  },
+  "maintenance": {
+    "seoTitle": "系统维护",
+    "seoDescription": "我们正在升级系统，请稍后再来。",
+    "title": "系统维护",
+    "subtitle": "工匠正在修缮大厅",
+    "description": "我们正在进行必要的维护升级，以确保更稳定的魔法连接。请稍事休息，再战不迟。",
+    "note": "我们的抄写员正在重写卷轴，请稍后再来。",
+    "backHome": "尝试返回大厅",
+    "status": "状态: 503 服务不可用"
+  },
+  "game_names": {
+    "tictactoe": "井字棋",
+    "dicethrone": "王权骰铸",
+    "summonerwars": "召唤师战争"
+  },
+  "matchRoom": {
+    "tutorialTitle": "{{game}} - 教学模式",
+    "matchTitle": "{{game}} - 对战"
+  },
+  "games": {
+    "summonerwars": {
+      "title": "召唤师战争",
+      "description": "召唤师战争是一款快速紧凑的2人游戏。玩家扮演召唤者，通过控制神秘召唤石力量来领导他们的种族征服Itharia这个饱受战争创伤的星球。",
+      "players": "2人"
+    }
+  }
+}

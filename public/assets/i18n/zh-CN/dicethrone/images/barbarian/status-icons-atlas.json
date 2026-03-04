@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "image": "status-icons-atlas.png",
+    "size": {
+      "w": 514,
+      "h": 256
+    }
+  },
+  "frames": {
+    "stun": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      }
+    },
+    "vulnerable": {
+      "frame": {
+        "x": 258,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      }
+    }
+  }
+}

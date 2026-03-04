@@ -1,0 +1,825 @@
+{
+  "title": "Summoner Wars",
+  "subtitle": "Conquer the Battlefields of Itharia",
+  "description": "Summoner Wars is a fast-paced, tactical 2-player game. Players take on the role of Summoners, leading their faction to conquer the war-torn world of Itharia through the power of mysterious Summoning Stones.",
+  "players": "2 Players",
+  "factionSelection": {
+    "title": "Choose Your Faction",
+    "subtitle": "Each summoner commands a unique army and tactics",
+    "hoverToPreview": "Hover a faction to preview",
+    "tipAlt": "{{name}} faction tip",
+    "previewAlt": "Faction preview",
+    "notSelected": "Not Selected",
+    "ready": "Ready",
+    "cancelReady": "Cancel Ready",
+    "waiting": "Waiting for others...",
+    "start": "Start Game",
+    "waitAll": "Waiting for all players",
+    "customDeck": "Custom Deck",
+    "clickToBuild": "Click to Build",
+    "moreDeck": "More Decks",
+    "totalDecks": "{{count}} total",
+    "customDeckLabel": "Custom Deck",
+    "customDeckSummoner": "Summoner: {{name}}",
+    "editDeck": "Edit Deck",
+    "newDeck": "New Deck",
+    "loadingDecks": "Loading decks...",
+    "loadDeckFailed": "Failed to load deck, please try again"
+  },
+  "factions": {
+    "necromancer": "Fallen Kingdom",
+    "trickster": "Trickster Clan",
+    "paladin": "Vanguard",
+    "goblin": "Cave Goblins",
+    "frost": "Frost Dwarves",
+    "barbaric": "Barbarian Horde"
+  },
+  "actions": {
+    "closePreview": "Close Preview",
+    "close": "Close",
+    "cancel": "Cancel",
+    "magnify": "Magnify",
+    "confirm": "Confirm",
+    "confirmDiscard": "Confirm Discard",
+    "confirmSelection": "Confirm Selection",
+    "confirmMove": "Confirm Move",
+    "withdrawCharge": "Spend Charge",
+    "withdrawMagic": "Spend 1 Magic",
+    "confirmControl": "Control",
+    "continue": "Continue",
+    "finish": "Finish",
+    "skip": "Skip",
+    "skipPush": "Skip Push",
+    "push": "Push",
+    "pull": "Pull",
+    "control": "Control",
+    "damage": "Damage",
+    "bloodRuneDamage": "Take 1 Damage",
+    "bloodRuneCharge": "Spend 1 Magic to Charge",
+    "feedBeastSelfDestroy": "Self-destruct",
+    "chargeSelf": "Charge Self",
+    "playEvent": "Play",
+    "discardForMagic": "Discard",
+    "attachToSoldier": "Attach to Soldier"
+  },
+  "player": {
+    "default1": "Player 1",
+    "default2": "Player 2",
+    "self": "Player",
+    "opponent": "Opponent",
+    "short": "P{{id}}",
+    "youTag": "(You)"
+  },
+  "layoutEditor": {
+    "backToGame": "← Back to Game",
+    "saveLayout": "Save Layout",
+    "editLayout": "Edit Layout",
+    "exitEdit": "Exit Editing"
+  },
+  "ui": {
+    "mapAlt": "Battlefield Map",
+    "opponentActiveEvents": "Opponent Active Effects",
+    "activeEvents": "Active Effects",
+    "attached": "Attached",
+    "click_to_magnify": "Click to Magnify"
+  },
+  "phaseTracker": {
+    "turn": "Turn {{count}}"
+  },
+  "phaseDesc": {
+    "summon": [
+      "Summon units from hand",
+      "Place adjacent to your gate"
+    ],
+    "move": [
+      "Move up to 3 units",
+      "Each unit moves up to 2 spaces",
+      "No diagonal movement"
+    ],
+    "build": [
+      "Build gates or structures",
+      "Place in back 3 rows or adjacent to your summoner"
+    ],
+    "attack": [
+      "Attack with up to 3 units",
+      "Melee: adjacent targets",
+      "Ranged: up to 3 spaces in a straight line"
+    ],
+    "magic": [
+      "Discard cards to gain magic",
+      "+1 magic per card"
+    ],
+    "draw": [
+      "Draw up to 5 cards",
+      "No draw if deck is empty"
+    ]
+  },
+  "error": {
+    "tutorial_manifest_invalid": "Tutorial configuration is invalid",
+    "tutorial_command_blocked": "This action is blocked in the tutorial",
+    "tutorial_step_locked": "The current step cannot be skipped"
+  },
+  "tutorial": {
+    "title": "Summoner Wars Tutorial",
+    "welcome": "Welcome to Summoner Wars! In this game, you will play as a powerful Summoner, commanding your army to conquer the battlefield.",
+    "steps": {
+      "setup": "Preparing the tutorial match...",
+      "welcome": "Welcome to Summoner Wars!\n\nThis is the battlefield, an 8\u00d76 grid. Your units are at the bottom, your opponent at the top.\n\nDefeat the enemy Summoner to win!",
+      "mapControls": "🖱️ Map Controls:\n\nDrag: Hold left mouse button to pan\nZoom: Scroll mouse wheel to zoom in/out\n\nCurrent zoom level is shown in the top-left corner.",
+      "summonerIntro": "This is your Summoner \"Ret-Talus\".\n\nHe has 12 Life, 2 Strength, and is a ranged attacker (range 3).\n\nHe's your most important unit — lose him and you lose the game!",
+      "enemySummoner": "This is the enemy Summoner.\n\nDestroy them to win the game!",
+      "gateIntro": "This is your Gate.\n\nGates are where you summon new units — you can only place units on empty spaces adjacent to your gates.\n\nProtect your gates, and build new portals to expand your summoning range.",
+      "handIntro": "This is your hand.\n\nIt contains unit cards, structure cards, and event cards that you can play during the appropriate phases.\n\nYou draw up to 5 cards at the end of each turn.",
+      "cardAnatomy": "Look at this card's attributes:\n\n💎 Cost: Magic required to summon\n❤️ Life: Destroyed when damage equals life\n⚔️ Strength: Number of dice rolled when attacking\n\nHigher strength means more dice when attacking!",
+      "magicIntro": "This is your Magic bar.\n\nMagic is used to summon units and cast cards.\n\nWe've set your Magic to 5 for this tutorial.",
+      "phaseIntro": "Each turn has 6 phases:\n\nSummon → Move → Build → Attack → Magic → Draw\n\nYou're currently in the Summon phase. Let's begin!",
+      "summonExplain": "It's the Summon phase.\n\nSelect a unit card from your hand, pay its magic cost, and place it on an empty space adjacent to your gate.",
+      "summonAction": "Try summoning a unit!\n\nClick a unit card in your hand to select it, then click a highlighted space next to your gate.",
+      "abilityExplain": "Your Summoner has the \"Revive Undead\" ability:\n\nDeal 2 damage to himself to revive an undead unit from your discard pile to an adjacent space.\n\nThere's an Undead Warrior in your discard pile — click your Summoner to try it!",
+      "abilityAction": "Click your Summoner to activate \"Revive Undead\", then select the Undead Warrior from your discard pile and place it on an adjacent space.",
+      "endSummon": "Click \"End Phase\" to enter the Move phase.",
+      "moveExplain": "Move phase: Move up to 3 units, each up to 2 spaces.\n\nOnly horizontal or vertical — no moving through other cards.",
+      "moveAction": "Click a unit to select it, then click a highlighted space to move.\n\nTry pushing toward the enemy!",
+      "endMove": "You can move more units, or click \"End Phase\".",
+      "buildExplain": "The Build phase lets you build gates and cast event cards.\n\nGates are summoning points — more gates means more places to summon units.\n\nEvent cards are powerful one-time effects that activate immediately when cast during their designated phase.",
+      "eventCardExplain": "You have a \"Hellfire Blade\" event card in your hand.\n\nEvent cards have phase restrictions — this one can only be cast during the Build phase.\n\nOnce cast, it attaches to a friendly common unit, granting +2 Strength, but the unit takes backlash damage after attacking.",
+      "eventCardAction": "Click the \"Hellfire Blade\" event card in your hand, then select a friendly common unit on the board to attach it to.",
+      "buildAction": "Event card played! Click \"End Phase\" to enter the Attack phase.",
+      "attackExplain": "Attack phase! Attack with up to 3 units.\n\nStrength = number of dice. Ranged units need \ud83c\udff9 hits, melee units need \u2694\ufe0f hits.\n\n\u26a0\ufe0f If you don't attack, your Summoner takes 1 penalty damage!",
+      "meleeExplain": "⚔️ Melee units can only attack adjacent targets (up/down/left/right).\n\nMelee dice face ⚔️ = 1 damage.",
+      "rangedExplain": "🏹 Your Archer is a ranged unit.\n\nRanged units can attack targets up to 3 spaces away in a straight line, dealing damage from a safe distance!\n\n⚠️ Note: If any card (unit or structure) blocks the path between attacker and target, the attack is blocked. Exception: friendly Parapets allow your ranged attacks to pass through.",
+      "attackAction": "Click your unit to select it, then click an enemy target within range to attack!\n\nTry using the Archer to ranged attack an enemy unit.",
+      "attackResult": "Dice results determine hits. ✦ Special faces deal no damage by default (unless an ability says otherwise).\n\nWhen damage equals Life, the unit is destroyed. Destroying an enemy grants 1 Magic!",
+      "endAttack": "You can attack with more units, or click \"End Phase\".",
+      "magicExplain": "Magic phase: Discard cards to gain magic.\n\n1 discarded card = 1 Magic. Convert unneeded cards into resources!",
+      "magicAction": "Click cards to select them for discard, or \"End Phase\" to skip.",
+      "drawExplain": "Draw phase: Automatically draw up to 5 cards.\n\nNote: If your deck is empty, you can't draw!",
+      "endDraw": "Click \"End Phase\" to end your turn.",
+      "opponentTurn": "Opponent's turn — watch their moves...",
+      "inactionPenalty": "The opponent didn't attack any of your units, so their Summoner took 1 penalty damage.\n\nThis is the \"Inaction Penalty\" — it encourages aggressive play!",
+      "victoryCondition": "Remember: Protect your Summoner while finding ways to destroy theirs!\n\nThat's the key to victory.",
+      "finish": "Congratulations on completing the tutorial!\n\nYou've learned the 6 turn phases, basic summoning/moving/attacking, event card casting, and how to use Summoner abilities.\n\nNow go challenge a real opponent!"
+    }
+  },
+  "phase": {
+    "summon": "Summon",
+    "move": "Move",
+    "build": "Build",
+    "attack": "Attack",
+    "magic": "Magic",
+    "draw": "Draw"
+  },
+  "actionLog": {
+    "playerLabel": "Player {{playerId}}",
+    "positionUnknown": "Unknown",
+    "position": "{{row}},{{col}}",
+    "summonUnit": "Summon unit:",
+    "moveUnit": "Move:",
+    "attackDeclared": "Declare attack",
+    "attackHits": "Hits {{hits}}",
+    "attackUnit": "Attack:",
+    "healAttackUnit": "Heal:",
+    "attackHealing": "Heal {{amount}}",
+    "buildStructure": "Build structure:",
+    "endPhase": "End phase{{phase}}",
+    "advancePhase": "Advance phase: {{phase}}",
+    "discardForMagic": "Discard for magic:",
+    "none": "None",
+    "cardSeparator": ", ",
+    "playEvent": "Play event:",
+    "bloodSummon": "Blood summon:",
+    "funeralPyreSkip": "Funeral Pyre: skip heal",
+    "funeralPyreHeal": "Funeral Pyre heal:",
+    "activateAbility": "Activate ability: {{abilityName}}",
+    "activateAbilitySource": " Source:",
+    "activateAbilityTarget": " Target:",
+    "activateAbilityTargetPosition": " Target position: {{position}}",
+    "unitSummoned": "Unit summoned:",
+    "unitSummonedFromDiscard": "(from discard)",
+    "unitMoved": "Unit moved:",
+    "unitDamaged": "Took {{amount}} damage:",
+    "unitHealed": "Healed {{amount}}:",
+    "unitDestroyed": "Unit destroyed:",
+    "unitCharged": "Charge {{amount}}:",
+    "unitChargeTotal": "(total {{total}})",
+    "sourceAbility": "(source: {{abilityName}})",
+    "damageFrom": " from:",
+    "damageFromAbility": "(source: {{abilityName}})",
+    "damageSource": {
+      "original": "Base Strength"
+    },
+    "damageReason": {
+      "curse": "(curse recoil)",
+      "entangle": "(entangle)",
+      "trample": "(trample)",
+      "ice_shards": "(ice shards)",
+      "ice_ram": "(ice ram)",
+      "blood_rune": "(blood rune)",
+      "blood_summon": "(blood summon)",
+      "revive_undead": "(revive undead cost)",
+      "inaction": "(inaction penalty)",
+      "stun": "(stun)",
+      "stun_passthrough": "(stun passthrough)",
+      "holy_protection": "(holy protection)"
+    },
+    "attackDamage": "→ dealt {{damage}} damage",
+    "attackBonus": "(power {{base}}→{{total}})",
+    "attackStrength": "Strength: ",
+    "structureBuilt": "Structure built:",
+    "structureHealed": "Structure healed {{amount}}:",
+    "structureDestroyed": "Structure destroyed:",
+    "magicChanged": "Player {{playerId}} magic {{delta}}",
+    "cardDrawn": "Player {{playerId}} draws {{count}}",
+    "cardDiscarded": "Player {{playerId}} discards:",
+    "abilityTriggered": "Ability triggered: {{abilityName}}",
+    "strengthModified": "Strength multiplier ×{{multiplier}}:",
+    "damageReduced": "Damage reduced {{amount}}:",
+    "unitPushed": "Push:",
+    "unitPulled": "Pull:",
+    "unitsSwapped": "Swap positions:",
+    "controlTransferred": "Control transferred to Player {{playerId}}:",
+    "controlTransferredTemporary": "(temporary)",
+    "eventAttached": "Event attached:",
+    "funeralPyreCharged": "Funeral Pyre charge {{amount}}:",
+    "funeralPyreChargeSet": "Funeral Pyre charge set to {{total}}:",
+    "abilitiesCopied": "Abilities copied:",
+    "unitAttached": "Unit attached:",
+    "healingModeSet": "Healing mode:",
+    "hypnoticLureMarked": "Hypnotic lure marked:"
+  },
+  "hint": {
+    "factionSelect": "Choose a faction and get ready",
+    "summon": "Summon units from hand adjacent to gates",
+    "move": "Move up to 3 units, each up to 2 spaces",
+    "build": "Build gates or structures in your back rows",
+    "attack": "Attack with up to 3 units",
+    "magic": "Discard cards to gain magic",
+    "draw": "Draw up to 5 cards",
+    "waitingOpponent": "Waiting for opponent..."
+  },
+  "action": {
+    "summon": "Summon",
+    "move": "Move",
+    "attack": "Attack",
+    "castSpell": "Cast Spell",
+    "endPhase": "End Phase",
+    "confirmEndPhase": "{{count}} unit(s) can still act. End?",
+    "confirmEndMove": "{{count}} move(s) remaining. End?",
+    "confirmEndAttack": "{{count}} attack(s) remaining. End?",
+    "endTurn": "End Turn",
+    "discardSelected": "Discard +{{count}}"
+  },
+  "deckBuilder": {
+    "title": "Custom Deck Builder",
+    "factions": "Factions",
+    "cardPool": "Card Pool",
+    "myDeck": "My Deck",
+    "count": "Total",
+    "selectFactionFirst": "Select a faction to view cards",
+    "summoners": "Summoners",
+    "champions": "Champions",
+    "commons": "Commons",
+    "units": "Units",
+    "events": "Events",
+    "structures": "Structures",
+    "emptyState": "Start picking cards to build your legendary deck",
+    "save": "Save Deck",
+    "saving": "Saving...",
+    "load": "Load",
+    "loading": "Loading...",
+    "delete": "Delete",
+    "close": "Close",
+    "placeholderName": "Deck Name...",
+    "invalidDeck": "Invalid Deck",
+    "savedDecks": "Saved Decks",
+    "noSavedDecks": "No saved decks yet",
+    "startingCards": "Starting Cards",
+    "buildCards": "Build Cards",
+    "beta": "BETA",
+    "useDeck": "Use This Deck",
+    "use": "Use",
+    "showingFirst": "Showing first 5 decks",
+    "confirmDeck": "Confirm",
+    "resetDeck": "Reset Deck",
+    "saveSuccess": "Deck saved successfully",
+    "deleteSuccess": "Deck deleted",
+    "saveFailed": "Save failed, please try again",
+    "loadFailed": "Load failed, please try again",
+    "deleteFailed": "Delete failed, please try again",
+    "loginRequired": "Please log in to use the custom deck feature",
+    "deckLimitReached": "Deck limit reached ({{max}}). Please delete an old deck first",
+    "selectSummonerFirst": "Please select a summoner first",
+    "symbolMismatch": "Card symbols do not match the summoner",
+    "validation": {
+      "needSummoner": "Need 1 Summoner",
+      "needGate10hp": "Need 1 ten-life Gate",
+      "needGate5hp": "Need 3 five-life Gates",
+      "needStartingUnits": "Need 2 Starting Units",
+      "needEpicEvents": "Need 2 Epic Events",
+      "needStandardEvents": "Need 6 Standard Events",
+      "needChampions": "Need 3 Champions",
+      "needCommons": "Need 16 Commons",
+      "symbolMismatch": "Card \"{{name}}\" does not match summoner symbols",
+      "maxStandardEvents": "Max 2 copies of the same Standard Event",
+      "maxChampions": "Max 1 copy of the same Champion",
+      "maxCommons": "Max 4 copies of the same Common"
+    },
+    "freeMode": "Free Build",
+    "freeModeOn": "ON",
+    "free": "Free",
+    "magnifyPreview": "Magnify Preview"
+  },
+  "cardSelector": {
+    "reviveUndead": "Revive Undead: Select an undead unit from the discard pile",
+    "infection": "Infection: Select a plague zombie from the discard pile",
+    "fortressPower": "Fortress Power: Select a fortress unit from the discard pile",
+    "default": "Select a card",
+    "empty": "No eligible cards"
+  },
+  "discardPile": {
+    "title": "Discard Pile",
+    "empty": "Discard pile is empty",
+    "titleWithCount": "Discard Pile ({{count}})",
+    "latest": "Latest"
+  },
+  "deckPile": {
+    "draw": "Deck",
+    "discard": "Discard",
+    "cardBackAlt": "Card back",
+    "view": "View"
+  },
+  "diceResult": {
+    "meleeAttack": "Melee Attack",
+    "rangedAttack": "Ranged Attack",
+    "damage": "{{count}} Damage!",
+    "miss": "Miss",
+    "evasionReduced": "Evasion -{{count}}"
+  },
+  "handArea": {
+    "bloodSummonOnlyLowCost": "Blood Summon only allows unit cards with cost ≤ {{maxCost}}",
+    "insufficientMagic": "Not enough magic! Need {{cost}}, you have {{current}}",
+    "eventPhaseOnly": "This event can only be played during {{phase}}",
+    "onlyUnitInSummon": "Only unit cards can be played in the Summon phase",
+    "onlyStructureInBuild": "Only structure cards can be played in the Build phase",
+    "holyArrowUnitOnly": "Holy Arrow only allows discarding unit cards",
+    "noSameNameDiscard": "Cannot discard units with the same name",
+    "noDuplicateNameDiscard": "Cannot discard multiple units with the same name",
+    "holyArrowAtLeastOne": "Holy Arrow requires discarding at least one unit card",
+    "healingNeedsDiscard": "Healing requires discarding a card",
+    "interactionBusy": "Please complete the current action first"
+  },
+  "eventCard": {
+    "noSummoner": "Your summoner is not on the board",
+    "noValidTarget": "No valid targets available",
+    "entanglementNeedTwoCommons": "Chant of Entanglement requires at least 2 friendly commons within 3 spaces of your summoner"
+  },
+  "destroyEffect": {
+    "destroyed": "{{name}} destroyed!"
+  },
+  "statusBanners": {
+    "insufficientMagic": "Insufficient magic",
+    "insufficientCharge": "Requires at least 1 charge",
+    "magicEventChoice": {
+      "message": "Choose: Play event card or discard for magic"
+    },
+    "stun": {
+      "selectTarget": "Stun: Select an enemy unit within 3 straight spaces of your summoner",
+      "selectDestination": "Stun: Select push/pull destination",
+      "direction": "Stun direction:",
+      "distance": "Distance:"
+    },
+    "ability": {
+      "reviveUndead": {
+        "selectCard": "Revive Undead: Select an undead unit from the discard pile",
+        "selectPosition": "Revive Undead: Choose an adjacent empty space"
+      },
+      "fireSacrificeSummon": "Fire Sacrifice: Select a friendly unit to destroy",
+      "lifeDrain": "Life Drain: Select a friendly unit within 2 spaces to destroy",
+      "infection": {
+        "selectCard": "Infection: Select a plague zombie from the discard pile",
+        "selectPosition": "Infection: Confirm placement"
+      },
+      "holyArrow": {
+        "selectCards": "Holy Arrow: Select any number of non-duplicate unit cards to discard"
+      },
+      "healing": {
+        "selectCards": "Healing: Select cards to discard"
+      },
+      "illusion": "Illusion: Select a common unit within 3 spaces to copy abilities",
+      "bloodRune": "Blood Rune: Take 1 damage or spend 1 magic to charge",
+      "iceShards": "Ice Shards: Spend 1 charge to deal 1 damage to enemies adjacent to buildings?",
+      "feedBeast": "Feed the Beast: Remove an adjacent ally, or self-destruct",
+      "spiritBond": "Spirit Bond: Select target within 3 to transfer charge, or charge self",
+      "spiritBondChargeOnly": "Spirit Bond: No charges, can only charge self",
+      "ancestralBond": "Ancestral Bond: Select friendly unit within 3 to transfer charge",
+      "structureShift": "Structure Shift: Select friendly building within 3",
+      "frostAxe": "Frost Axe: Charge self, or spend charges to attach to friendly soldier",
+      "frostAxeChargeOnly": "Frost Axe: No charges, can only charge self",
+      "frostAxeSelectTarget": "Frost Axe: Select a friendly soldier within 3 spaces",
+      "iceRamSelectTarget": "Ice Ram: Select a unit adjacent to a building",
+      "iceRamSelectPush": "Ice Ram: Choose push/pull direction (or skip)",
+      "vanish": "Vanish: Select a 0-cost friendly unit to swap positions"
+    },
+    "beforeAttack": {
+      "lifeDrain": "Pre-attack: Life Drain ready, select an attack target",
+      "holyArrow": "Pre-attack: Holy Arrow ready, select an attack target",
+      "healing": "Pre-attack: Healing ready, select a friendly target"
+    },
+    "bloodSummon": {
+      "selectTarget": "Blood Summon: Select a friendly unit (takes 2 damage)",
+      "selectCard": "Blood Summon: Select a unit card with cost ≤ 2",
+      "selectPosition": "Blood Summon: Select an adjacent empty space",
+      "confirm": "Blood Summon completed {{count}} time(s). Continue?"
+    },
+    "annihilate": {
+      "selectTargets": "Annihilate: Select friendly units to sacrifice (selected {{count}})",
+      "selectDamageTarget": "Annihilate: Select an adjacent unit to deal 2 damage for target {{index}}"
+    },
+    "soulTransfer": {
+      "message": "Soul Transfer: Move the archer to the destroyed unit's space?"
+    },
+    "funeralPyre": {
+      "message": "Funeral Pyre: Heal a damaged unit for {{charges}} (click a unit)"
+    },
+    "mindControl": {
+      "message": "Mind Control: Select enemy units within 2 spaces (selected {{count}})"
+    },
+    "entanglement": {
+      "message": "Chant of Entanglement: Select 2 friendly commons within 3 spaces (selected {{count}})"
+    },
+    "sneak": {
+      "selectUnit": "Sneak: Select a 0-cost friendly unit to push/pull (recorded {{count}})",
+      "selectDirection": "Sneak: Select move direction"
+    },
+    "glacialShift": {
+      "selectBuilding": "Glacial Shift: Select a friendly building within 3 spaces (recorded {{count}}/3)",
+      "selectDestination": "Glacial Shift: Select destination (1-2 empty spaces)"
+    },
+    "withdraw": {
+      "selectCost": "Withdraw: Choose cost type",
+      "selectPosition": "Withdraw: Select move destination (1-2 empty spaces)"
+    },
+    "hypnoticLure": {
+      "message": "Hypnotic Lure: Select an enemy unit"
+    },
+    "mindCapture": {
+      "message": "Mind Capture: Control the target or deal {{hits}} damage?"
+    },
+    "telekinesis": {
+      "message": "{{ability}}: Choose push or pull direction",
+      "selectDestination": "{{ability}}: Select destination for target"
+    },
+    "afterAttack": {
+      "message": "{{ability}}: Select a target"
+    },
+    "rapidFire": {
+      "message": "Rapid Fire: Spend 1 charge for an extra attack?",
+      "confirm": "Fire"
+    },
+    "abilityNames": {
+      "telekinesis": "Telekinesis",
+      "high_telekinesis": "High Telekinesis",
+      "mind_transmission": "Mind Transmission"
+    }
+  },
+  "abilityButtons": {
+    "reviveUndead": "🗡️ Revive Undead (Take 2 damage)",
+    "fireSacrificeSummon": "🔥 Fire Sacrifice Summon (Destroy ally and move)",
+    "lifeDrain": "💀 Life Drain (Destroy ally, double strength)",
+    "holyArrow": "✨ Holy Arrow (Discard for magic and strength)",
+    "healing": "✨ Healing (Discard to convert attack to healing)",
+    "prepare": "⚡ Prepare (Charge instead of moving)",
+    "fortressPower": "🏰 Fortress Power (Take fortress unit from discard)",
+    "structureShift": "🛠️ Structure Shift (Move friendly building within 3)",
+    "ancestralBond": "🔗 Ancestral Bond (Charge friendly unit within 3)",
+    "spiritBondSelf": "✨ Spirit Bond (Charge self)",
+    "spiritBondTransfer": "➡️ Spirit Bond (Transfer charge)",
+    "withdraw": "🏃 Withdraw (Spend charge/magic to move)",
+    "vanish": "👻 Vanish (Swap with 0-cost ally)",
+    "frostAxe": "❄️ Frost Axe (Charge or spend charges to attach)",
+    "iceShards": "❄️ Ice Shards (Spend charge to damage enemies near buildings)",
+    "highTelekinesis": "🌀 High Telekinesis (Push/pull soldier or hero within 3)",
+    "highTelekinesisInstead": "🌀 High Telekinesis (Instead of attack)",
+    "mindTransmission": "🧠 Mind Transmission (Ally soldier extra attack)",
+    "telekinesis": "🌀 Telekinesis (Push/pull soldier or hero within 2)",
+    "telekinesisInstead": "🌀 Telekinesis (Instead of attack)",
+    "illusion": "🎭 Illusion (Copy abilities of soldier within 3)",
+    "guidance": "📖 Guidance (Draw two cards)",
+    "bloodRune": "🩸 Blood Rune (Self-damage or spend magic to charge)",
+    "feedBeast": "🍖 Feed Beast (Remove adjacent ally or self-destroy)",
+    "inspire": "✨ Inspire (Charge adjacent allies)"
+  },
+  "status": {
+    "yourTurn": "Your Turn",
+    "opponentTurn": "Opponent's Turn",
+    "waiting": "Waiting..."
+  },
+  "log": {
+    "unit_moved": "Unit moved",
+    "unit_attacked": "Attack hit {{hits}} times",
+    "phase_ended": "Phase ended"
+  },
+  "result": {
+    "victory": "Victory!",
+    "defeat": "Defeat",
+    "summonerDefeated": "Summoner Defeated"
+  },
+  "interaction": {
+    "fireSacrifice": {
+      "mustSelectAlly": "Please select an ally unit to sacrifice"
+    },
+    "cannotAttackThere": "Cannot attack that target",
+    "outOfRange": "Target is out of attack range",
+    "notInLine": "Ranged attacks must be in a straight line",
+    "cannotMoveThere": "Cannot move there",
+    "cannotSummonThere": "Cannot summon there",
+    "cannotBuildThere": "Cannot build there"
+  },
+  "abilities": {
+    "revive_undead": {
+      "name": "Revive Undead",
+      "description": "Once per turn, during your Summon phase, you may deal 2 damage to this unit to take an Undead unit from your discard pile and place it adjacent to this unit."
+    },
+    "fire_sacrifice_passive": {
+      "name": "Fire Sacrifice (Passive)",
+      "description": "When you pay the cost to summon this unit, you must also destroy a friendly unit and replace it with this unit."
+    },
+    "life_drain": {
+      "name": "Life Drain",
+      "description": "Before this unit attacks, you may destroy a friendly unit within 2 spaces. If you do, special marks (🪓) also count as melee hits (⚔️) for this attack."
+    },
+    "rage": {
+      "name": "Rage",
+      "description": "This unit gains +1 strength for each point of damage on it."
+    },
+    "blood_rage": {
+      "name": "Blood Rage",
+      "description": "Whenever a unit is destroyed during your turn, charge this unit. At the end of your turn, remove 2 charges from this unit."
+    },
+    "power_boost": {
+      "name": "Power Boost",
+      "description": "This unit gains +1 strength for each charge on it, up to +5."
+    },
+    "blood_rage_decay": {
+      "name": "Blood Rage Decay",
+      "description": "At the end of your turn, remove 2 charges from this unit."
+    },
+    "sacrifice": {
+      "name": "Sacrifice",
+      "description": "After this unit is destroyed, deal 1 damage to each adjacent enemy unit."
+    },
+    "soulless": {
+      "name": "Soulless",
+      "description": "When this unit destroys an enemy unit, you do not gain magic."
+    },
+    "infection": {
+      "name": "Infection",
+      "description": "After this unit destroys a unit, you may replace the destroyed unit with a Plague Zombie from your discard pile."
+    },
+    "soul_transfer": {
+      "name": "Soul Transfer",
+      "description": "After this unit destroys a unit within 3 spaces, you may replace the destroyed unit with this unit."
+    },
+    "fire_sacrifice_summon": {
+      "name": "Fire Sacrifice",
+      "description": "When you pay the cost to summon this unit, you must also destroy a friendly unit and place this unit in the destroyed unit's space."
+    },
+    "mind_capture": {
+      "name": "Mind Capture",
+      "description": "When this unit attacks an enemy unit, if the damage dealt is enough to destroy the target, you may ignore the damage and take control of the target instead."
+    },
+    "mind_capture_resolve": {
+      "name": "Mind Capture Decision",
+      "description": "Choose to take control of the target unit or deal damage."
+    },
+    "flying": {
+      "name": "Flying",
+      "description": "When this unit moves, it may move 1 extra space and pass through other cards."
+    },
+    "aerial_strike": {
+      "name": "Aerial Strike",
+      "description": "Friendly soldiers that start moving within 2 spaces of this unit gain Flying during that move."
+    },
+    "high_telekinesis": {
+      "name": "High Telekinesis",
+      "description": "After this unit attacks, or instead of attacking, you may target a soldier or champion within 3 spaces and push or pull it 1 space."
+    },
+    "high_telekinesis_instead": {
+      "name": "High Telekinesis (Instead)",
+      "description": "Instead of attacking, you may target a soldier or champion within 3 spaces and push or pull it 1 space."
+    },
+    "stable": {
+      "name": "Stable",
+      "description": "This unit cannot be pushed or pulled."
+    },
+    "mind_transmission": {
+      "name": "Mind Transmission",
+      "description": "After this unit attacks an enemy card, you may target a friendly soldier within 3 spaces. That soldier makes an extra attack."
+    },
+    "swift": {
+      "name": "Swift",
+      "description": "When this unit moves, it may move 1 extra space."
+    },
+    "ranged": {
+      "name": "Ranged",
+      "description": "This unit may attack targets up to 4 straight-line spaces away."
+    },
+    "telekinesis": {
+      "name": "Telekinesis",
+      "description": "After this unit attacks, or instead of attacking, you may target a soldier or champion within 2 spaces and push or pull it 1 space."
+    },
+    "telekinesis_instead": {
+      "name": "Telekinesis (Instead)",
+      "description": "Instead of attacking, you may target a soldier or champion within 2 spaces and push or pull it 1 space."
+    },
+    "illusion": {
+      "name": "Illusion",
+      "description": "At the start of your Move phase, you may target a soldier within 3 spaces. This unit gains all of the target's abilities until end of turn."
+    },
+    "evasion": {
+      "name": "Evasion",
+      "description": "When an adjacent enemy unit attacks, if it rolls one or more ✦, the damage from this attack is reduced by 1."
+    },
+    "rebound": {
+      "name": "Rebound",
+      "description": "Whenever an adjacent enemy unit moves or is pushed/pulled away from this unit, deal 1 damage to that unit."
+    },
+    "fortress_power": {
+      "name": "Fortress Power",
+      "description": "After this unit attacks an enemy unit, if there is one or more friendly Fortress units on the battlefield, you may take a Fortress unit from your discard pile into your hand."
+    },
+    "guidance": {
+      "name": "Guidance",
+      "description": "At the start of your Summon phase, draw two cards."
+    },
+    "fortress_elite": {
+      "name": "Fortress Elite",
+      "description": "This unit gains +1 strength for each friendly Fortress unit within 2 spaces."
+    },
+    "radiant_shot": {
+      "name": "Radiant Shot",
+      "description": "This unit gains +1 strength for every 2 magic you have."
+    },
+    "divine_shield": {
+      "name": "Divine Shield",
+      "description": "Whenever a friendly Fortress unit within 3 spaces is targeted by an attack, roll 2 dice. For each ❤️ rolled, the attacking unit gets -1 strength for this attack (minimum 1)."
+    },
+    "healing": {
+      "name": "Healing",
+      "description": "Before this unit attacks a friendly soldier or champion, you may discard a card from your hand. If you do, each ⚔️ or ❤️ rolled removes 1 damage from the target instead of dealing damage."
+    },
+    "judgment": {
+      "name": "Judgment",
+      "description": "After this unit attacks an enemy unit, draw cards equal to the number of ❤️ rolled."
+    },
+    "entangle": {
+      "name": "Entangle",
+      "description": "Whenever an adjacent enemy unit moves or is pushed/pulled away from this unit, deal 1 damage to that unit."
+    },
+    "guardian": {
+      "name": "Guardian",
+      "description": "When an adjacent enemy unit attacks, it must target a unit with Guardian."
+    },
+    "holy_arrow": {
+      "name": "Holy Arrow",
+      "description": "Before this unit attacks, reveal and discard any number of non-same-name units from your hand. For each card discarded, gain 1 magic and this unit gets +1 strength for this attack."
+    },
+    "vanish": {
+      "name": "Vanish",
+      "description": "Once per turn, during your Attack phase, this unit may swap positions with a friendly unit that costs 0."
+    },
+    "blood_rune": {
+      "name": "Blood Rune",
+      "description": "At the start of your Attack phase, deal 1 damage to this unit, or spend 1 magic to charge this unit."
+    },
+    "magic_addiction": {
+      "name": "Magic Addiction",
+      "description": "At the end of your turn, spend 1 magic, or discard this unit."
+    },
+    "ferocity": {
+      "name": "Ferocity",
+      "description": "During your Attack phase, you may choose this unit as an additional attacker."
+    },
+    "feed_beast": {
+      "name": "Feed the Beast",
+      "description": "At the end of your Attack phase, if this unit did not destroy any units this turn, remove an adjacent friendly unit, or discard this unit."
+    },
+    "climb": {
+      "name": "Climb",
+      "description": "When this unit moves, it may move 1 extra space and pass through structures."
+    },
+    "charge": {
+      "name": "Charge",
+      "description": "This unit may move 1 to 4 straight-line spaces with line of sight instead of normal movement. If it moved at least 3 spaces, it gains +1 strength until end of turn."
+    },
+    "immobile": {
+      "name": "Immobile",
+      "description": "This unit cannot move."
+    },
+    "grab": {
+      "name": "Grab",
+      "description": "When a friendly unit starts moving from a space adjacent to this unit, you may place this unit adjacent to that unit after it finishes moving."
+    },
+    "structure_shift": {
+      "name": "Structure Shift",
+      "description": "After this unit moves, you may target a friendly structure within 3 spaces. Push or pull the target 1 space."
+    },
+    "cold_snap": {
+      "name": "Cold Snap",
+      "description": "Friendly structures within 3 spaces of this unit gain +1 life."
+    },
+    "imposing": {
+      "name": "Imposing",
+      "description": "Once per turn, after this unit attacks an enemy unit, charge this unit."
+    },
+    "ice_shards": {
+      "name": "Ice Shards",
+      "description": "At the end of your Build phase, you may spend 1 charge to deal 1 damage to each enemy unit adjacent to a structure you control."
+    },
+    "greater_frost_bolt": {
+      "name": "Greater Frost Bolt",
+      "description": "This unit gains +1 strength for each friendly structure within 2 spaces."
+    },
+    "frost_bolt": {
+      "name": "Frost Bolt",
+      "description": "This unit gains +1 strength for each adjacent friendly structure."
+    },
+    "trample": {
+      "name": "Trample",
+      "description": "When this unit moves, it may pass through soldiers. After moving, deal 1 damage to each soldier it passed through."
+    },
+    "frost_axe": {
+      "name": "Frost Axe",
+      "description": "After this unit moves, you may charge it, or spend all its charges (at least 1) to place it under a friendly soldier within 3 spaces. When that soldier attacks, ⚔️=‼️."
+    },
+    "living_gate": {
+      "name": "Living Gate",
+      "description": "This card counts as a gate."
+    },
+    "mobile_structure": {
+      "name": "Mobile Structure",
+      "description": "This card counts as a structure but can move."
+    },
+    "slow": {
+      "name": "Slow",
+      "description": "This unit must move 1 fewer space."
+    },
+    "ice_ram": {
+      "name": "Ice Ram",
+      "description": "Ongoing: After a friendly structure moves or is pushed/pulled, you may target a unit adjacent to it. Deal 1 damage to the target. You may push or pull the target 1 space."
+    },
+    "ancestral_bond": {
+      "name": "Ancestral Bond",
+      "description": "After this unit moves, you may target a friendly unit within 3 spaces. Charge the target and move all charges from this unit to the target."
+    },
+    "power_up": {
+      "name": "Power Up",
+      "description": "This unit gains +1 strength for each charge on it, up to +5."
+    },
+    "prepare": {
+      "name": "Prepare",
+      "description": "You may charge this unit instead of moving it."
+    },
+    "rapid_fire": {
+      "name": "Rapid Fire",
+      "description": "Once per turn, after this unit attacks, you may spend 1 charge to make an extra attack."
+    },
+    "inspire": {
+      "name": "Inspire",
+      "description": "After this unit moves, charge all adjacent friendly units."
+    },
+    "withdraw": {
+      "name": "Withdraw",
+      "description": "After this unit attacks, you may spend 1 charge or magic. If you do, push or pull this unit 1 to 2 spaces."
+    },
+    "intimidate": {
+      "name": "Intimidate",
+      "description": "Once per turn, after this unit attacks an enemy unit, charge this unit."
+    },
+    "life_up": {
+      "name": "Life Up",
+      "description": "This unit gains +1 life for each charge on it, up to +5."
+    },
+    "speed_up": {
+      "name": "Speed Up",
+      "description": "This unit gains +1 movement for each charge on it when moving, up to +5 extra spaces."
+    },
+    "gather_power": {
+      "name": "Gather Power",
+      "description": "After this unit is summoned, charge it."
+    },
+    "spirit_bond": {
+      "name": "Spirit Bond",
+      "description": "After this unit moves, charge it, or spend 1 charge to charge a friendly unit within 3 spaces."
+    }
+  },
+  "buffs": {
+    "panelTitle": "Current Status",
+    "healing": "Healing Mode",
+    "extraAbilities": "Extra Abilities",
+    "attachedUnit": "Attached Unit",
+    "hypnoticLure": "Hypnotic Lure (Summoner +1 ATK)",
+    "hellfireBlade": "Hellfire Blade (+2⚔️)",
+    "chantWeaving": "Chant of Weaving (Temp Summon Point)"
+  }
+}

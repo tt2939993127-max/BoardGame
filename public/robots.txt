@@ -1,0 +1,12 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# 不索引的目录
+Disallow: /admin/
+Disallow: /dev/
+Disallow: /devtools/
+Disallow: /play/*/local
+
+Host: https://easyboardgame.top
+Sitemap: https://easyboardgame.top/sitemap.xml

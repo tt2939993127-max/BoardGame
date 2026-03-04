@@ -1,0 +1,151 @@
+{
+  "auth": {
+    "error": {
+      "missingCredentials": "邮箱和密码不能为空",
+      "usernameLength": "用户名长度应在 2-20 个字符之间",
+      "passwordLength": "密码长度至少为 4 个字符",
+      "usernameTaken": "用户名已被占用",
+      "serverError": "服务器错误，请稍后重试",
+      "invalidCredentials": "邮箱或密码错误",
+      "invalidPassword": "密码错误",
+      "emailNotRegisteredLogin": "该邮箱未注册，请先注册",
+      "emailAlreadyRegistered": "该邮箱已注册，是否直接登录？",
+      "missingToken": "未提供认证令牌",
+      "userNotFound": "用户不存在",
+      "invalidToken": "无效的认证令牌",
+      "loginRequired": "请先登录",
+      "missingEmail": "请输入邮箱地址",
+      "invalidEmail": "请输入有效的邮箱地址",
+      "emailAlreadyBound": "该邮箱已被其他账户绑定",
+      "missingEmailCode": "请输入邮箱和验证码",
+      "emailCodeExpired": "验证码已过期，请重新获取",
+      "emailCodeMismatch": "验证码不正确",
+      "missingRegisterFields": "请填写完整的注册信息",
+      "emailAlreadyUsed": "该邮箱已被注册",
+      "loginLocked": "登录失败次数过多，请 {{minutes}} 分钟后再试",
+      "registerCodeSendTooFrequent": "发送太频繁，请 {{seconds}} 秒后再试",
+      "registerCodeSendLimited": "发送次数已达上限，请 {{minutes}} 分钟后再试",
+      "missingResetFields": "请填写完整的重置信息",
+      "resetSendTooFrequent": "发送过于频繁，请在 {{seconds}} 秒后再试",
+      "emailNotRegistered": "该邮箱未注册",
+      "invalidResetCode": "验证码错误或已过期",
+      "resetCodeExpired": "验证码已过期，请重新获取",
+      "resetCodeMismatch": "验证码不正确",
+      "resetLocked": "重置失败次数过多，请在 {{seconds}} 秒后再试",
+      "avatarMissingFile": "请选择图片文件",
+      "missingPasswordFields": "请输入当前密码和新密码",
+      "avatarInvalidType": "仅支持 JPG、PNG、WebP、GIF 格式",
+      "avatarUploadFailed": "头像上传失败"
+    },
+    "success": {
+      "register": "注册成功",
+      "login": "登录成功",
+      "emailBound": "邮箱绑定成功",
+      "logout": "退出登录成功",
+      "refreshToken": "令牌刷新成功",
+      "resetCodeSent": "验证码已发送",
+      "passwordReset": "密码重置成功",
+      "avatarUpdated": "头像更新成功",
+      "usernameUpdated": "昵称修改成功",
+      "passwordUpdated": "密码修改成功"
+    }
+  },
+  "friend": {
+    "error": {
+      "missingQuery": "请输入搜索关键词",
+      "missingTargetUser": "请选择要添加的用户",
+      "cannotAddSelf": "不能添加自己为好友",
+      "userNotFound": "用户不存在",
+      "alreadyFriends": "你们已经是好友",
+      "requestExists": "好友请求已发送",
+      "incomingRequest": "对方已向你发送请求",
+      "requestNotFound": "好友请求不存在",
+      "friendNotFound": "好友关系不存在"
+    },
+    "success": {
+      "requestSent": "好友请求已发送",
+      "requestAccepted": "已接受好友请求",
+      "requestRejected": "已拒绝好友请求",
+      "friendDeleted": "好友已删除"
+    }
+  },
+  "message": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "notFriend": "只能向好友发送消息",
+      "invalidTarget": "无效的消息对象"
+    },
+    "success": {
+      "sent": "消息已发送",
+      "read": "已标记为已读"
+    }
+  },
+  "invite": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "notFriend": "只能邀请好友",
+      "invalidTarget": "无效的邀请对象"
+    },
+    "success": {
+      "sent": "邀请已发送"
+    }
+  },
+  "review": {
+    "error": {
+      "missingGameId": "缺少游戏标识",
+      "contentTooLong": "评论内容不能超过 500 字",
+      "contentBlocked": "内容包含违规词汇",
+      "notFound": "评论不存在"
+    },
+    "success": {
+      "saved": "评论已保存",
+      "deleted": "评论已删除"
+    }
+  },
+  "admin": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "matchNotFound": "对局不存在",
+      "roomNotFound": "房间不存在",
+      "ugcPackageNotFound": "UGC 包不存在",
+      "missingBanReason": "请输入封禁原因",
+      "cannotBanAdmin": "不能封禁管理员账号",
+      "cannotDeleteAdmin": "不能删除管理员账号"
+    },
+    "success": {
+      "userBanned": "用户已封禁",
+      "userUnbanned": "用户已解封",
+      "roomDestroyed": "房间已销毁",
+      "userDeleted": "用户已删除",
+      "matchDeleted": "对局已删除"
+    }
+  },
+  "email": {
+    "error": {
+      "missingConfig": "邮件服务未配置"
+    },
+    "subject": "邮箱验证码 - 易桌游",
+    "reset": {
+      "subject": "重置密码验证码 - 易桌游",
+      "template": {
+        "title": "易桌游重置密码",
+        "intro": "您正在请求重置易桌游账户密码。请使用以下验证码完成验证：",
+        "note": "验证码有效期为 {{minutes}} 分钟。如果您没有请求此验证码，请忽略此邮件。",
+        "footer": "易桌游"
+      }
+    },
+    "template": {
+      "senderName": "易桌游",
+      "title": "易桌游邮箱验证",
+      "intro": "您正在绑定邮箱到易桌游账户。请使用以下验证码完成验证：",
+      "note": "验证码有效期为 {{minutes}} 分钟。如果您没有请求此验证码，请忽略此邮件。",
+      "footer": "易桌游"
+    },
+    "success": {
+      "sent": "验证码已发送"
+    },
+    "info": {
+      "devFallback": "开发模式：验证码已打印到服务器终端"
+    }
+  }
+}

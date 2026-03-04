@@ -1,0 +1,239 @@
+@import "tailwindcss";
+@import "./fonts.css";
+
+@theme {
+    /* Fonts（字体文件自托管在 public/fonts/，@font-face 在 fonts.css） */
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-serif: 'Crimson Text', serif;
+    --font-heading: 'Inter', sans-serif;
+
+    /* Parchment Theme (Classic Retro) */
+    --color-parchment-yellow: #EBC944;
+    --color-parchment-cream: #F4ECD8;
+    --color-parchment-brown: #4A3B2A;
+    --color-parchment-gold: #D4AF37;
+    --color-parchment-green: #556B2F;
+    --color-parchment-wax: #8B0000;
+
+    /* Semantic Parchment Mappings */
+    --color-parchment-base-bg: #F4ECD8;
+    --color-parchment-base-text: #433422;
+    --color-parchment-light-text: #8c7b64;
+
+    /* Neon Theme (Legacy/Alternative) */
+    --color-neon-blue: #00F3FF;
+    --color-neon-pink: #BC13FE;
+    --color-neon-magenta: #FF00FF;
+    --color-neon-void: #0F172A;
+    --color-neon-grid: #1E293B;
+
+    /* Custom Shadows */
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    --shadow-glass-sm: 0 4px 16px 0 rgba(31, 38, 135, 0.1);
+    --shadow-neon-blue: 0 0 10px rgba(0, 243, 255, 0.5), 0 0 20px rgba(0, 243, 255, 0.3);
+
+    /* Component Semantics */
+    --color-parchment-card-bg: #fcfbf9;
+    --color-parchment-card-border: #C8B69E;
+    --shadow-parchment-card: 0 2px 8px rgba(67, 52, 34, 0.04);
+    --shadow-parchment-card-hover: 0 4px 16px rgba(67, 52, 34, 0.1);
+}
+
+/* Global Styles */
+@layer base {
+
+    /* Responsive Root Font Size System */
+    html {
+        font-size: 16px;
+        /* Default */
+    }
+
+    /* Large Screens (2K/4K) */
+    @media (min-width: 1921px) {
+        html {
+            font-size: 18px;
+        }
+    }
+
+    @media (min-width: 2561px) {
+        html {
+            font-size: 20px;
+        }
+    }
+
+    @media (min-width: 3841px) {
+        html {
+            font-size: 24px;
+        }
+    }
+
+    body {
+        @apply bg-parchment-base-bg text-parchment-base-text;
+        font-family: 'Crimson Text', serif;
+        /* Default to Serif for that retro book feel */
+        margin: 0;
+    }
+
+    button:not(:disabled) {
+        cursor: pointer;
+    }
+}
+
+/* 游戏专属字体：manifest.fontFamily 通过 MatchRoom/LocalMatchRoom 注入为 CSS 变量，
+   自动应用到游戏容器内的标题元素，首页等非游戏页面不受影响 */
+[style*="--font-game-display:"] :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--font-game-display);
+}
+
+/* Scrollbars */
+@layer utilities {
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        @apply bg-parchment-light-text;
+        border-radius: 2px;
+    }
+
+    /* 窄滚动条变体 */
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        @apply bg-parchment-card-border/40;
+        border-radius: 2px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        @apply bg-parchment-card-border/60;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    /* 横向细滚动条（卡牌展示区） */
+    .smashup-h-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    }
+    .smashup-h-scrollbar::-webkit-scrollbar {
+        height: 6px;
+    }
+    .smashup-h-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .smashup-h-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 3px;
+    }
+    .smashup-h-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.4);
+    }
+
+    .underline-center {
+        @apply absolute bottom-0 left-1/2 w-0 h-[1.5px] bg-current transition-all duration-300 group-hover:w-full group-hover:left-0 pointer-events-none;
+    }
+
+    .ugc-preview-container {
+        @apply w-full h-full;
+    }
+}
+
+/* 扫光动画 */
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%) skewX(-20deg);
+    }
+
+    50% {
+        transform: translateX(100%) skewX(-20deg);
+    }
+
+    100% {
+        transform: translateX(100%) skewX(-20deg);
+    }
+}
+
+/* 图片占位 shimmer（水平扫光，用于 OptimizedImage / CardPreview） */
+@keyframes img-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Atlas 精灵图占位 shimmer（伪元素覆盖层，不影响 sprite backgroundImage） */
+.atlas-shimmer {
+    position: relative;
+}
+
+.atlas-shimmer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    background-image: linear-gradient(100deg, rgba(255, 255, 255, 0.08) 40%, rgba(255, 255, 255, 0.22) 50%, rgba(255, 255, 255, 0.08) 60%);
+    background-size: 200% 100%;
+    animation: img-shimmer 1.5s linear infinite;
+    z-index: 1;
+}
+
+/* 钝帧冻结：暂停所有子元素的 CSS 动画和过渡 */
+.hitstop-frozen,
+.hitstop-frozen * {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+
+/* 首次发现提示气泡上下浮动动画 */
+@keyframes discovery-bob {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-3px); }
+}
+
+/* 移动端响应式缩放（仅游戏页面，排除召唤师战争） */
+@media (max-width: 1023px) and (orientation: landscape) {
+    /* 移动设备横屏时，游戏页面基于设计宽度 1280px 进行缩放 */
+    /* 召唤师战争有自己的 MapContainer 缩放系统，不使用 CSS 自动缩放 */
+    body:has([data-game-page]):not(:has([data-game-id="summonerwars"])) #root {
+        transform-origin: top left;
+        transform: scale(calc(100vw / 1280));
+        width: 1280px;
+        height: calc(100vh / (100vw / 1280));
+        overflow: hidden;
+    }
+}
+
+/* 移动端触摸优化 */
+@media (max-width: 1023px) {
+    /* 允许输入框选择文本 */
+    input, textarea {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+    
+    /* 增大按钮点击区域 */
+    button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}

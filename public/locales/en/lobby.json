@@ -1,0 +1,274 @@
+{
+  "home": {
+    "title": "Yi Board Game",
+    "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
+    "logoAlt": "Board Game Platform Logo",
+    "audio": {
+      "mute": "Mute",
+      "unmute": "Unmute"
+    },
+    "activeMatch": {
+      "status": "In Progress",
+      "room": "Room #{{id}}",
+      "players": "{{count}} seated"
+    }
+  },
+  "password": {
+    "modalTitle": "Private Room",
+    "modalDesc": "This room requires a password.",
+    "placeholder": "Enter password..."
+  },
+  "confirm": {
+    "destroy": {
+      "title": "Destroy Room",
+      "description": "Are you sure you want to destroy this room?"
+    },
+    "leave": {
+      "title": "Leave Room",
+      "description": "Are you sure you want to leave this room?"
+    },
+    "exitActiveMatch": {
+      "title": "Leave Current Match",
+      "description": "You are in a match. Leave it and join the new room?"
+    }
+  },
+  "actions": {
+    "spectate": "Spectate",
+    "destroy": "Destroy",
+    "leave": "Leave",
+    "forceExit": "Force Clear",
+    "forceExitHint": "Clear local data (room may still exist on server)",
+    "reconnect": "Reconnect",
+    "reconnectEnter": "Rejoin",
+    "join": "Join",
+    "localPlay": "👥 Local",
+    "tutorial": "🎓 Tutorial",
+    "createRoom": "Create Room",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "action": {
+    "rejoinRoom": "Rejoin Room"
+  },
+  "button": {
+    "processing": "Processing..."
+  },
+  "activeMatch": {
+    "notice": "You are currently in a match",
+    "return": "Return to match (#{{id}})"
+  },
+  "rooms": {
+    "empty": "No active rooms",
+    "matchTitle": "Match #{{id}}",
+    "mine": "Mine",
+    "emptySlot": "Empty",
+    "ownerMustReconnect": "This is your room. Please reconnect.",
+    "ownerRejoinOnly": "Only the room owner can rejoin an empty room (guests must use the original browser/device; clearing storage requires creating a new room)",
+    "inAnotherMatch": "You are already in another match",
+    "inProgress": "In match",
+    "full": "Full"
+  },
+  "tabs": {
+    "lobby": "Lobby",
+    "reviews": "Reviews",
+    "leaderboard": "Leaderboard"
+  },
+  "leaderboard": {
+    "loading": "Loading...",
+    "title": "Top Wins",
+    "empty": "No data",
+    "record": "{{wins}} W / {{matches}} G",
+    "error": "Failed to load leaderboard"
+  },
+  "player": {
+    "guest": "Guest{{id}}"
+  },
+  "gameDetails": {
+    "description": "Classic strategy play. Connect three symbols to win."
+  },
+  "games": {
+    "tictactoe": {
+      "title": "Tic-Tac-Toe",
+      "description": "Classic X and O game. Challenge the AI or face a friend.",
+      "players": "2 Players"
+    },
+    "dicethrone": {
+      "title": "Dice Throne",
+      "description": "A fast-paced, easy-to-learn game where you choose the most extraordinary hero from many. Roll your hero's unique 5 dice to attack opponents and activate abilities. Accumulate combat points to purchase powerful cards—upgrade your hero, cast spells, or directly manipulate dice (yours, your teammates', or your opponents').",
+      "players": "2 Players"
+    },
+    "smashup": {
+      "title": "Smash Up",
+      "description": "Smash Up is a 2-4 player card battle game! Combine two different factions to compete for base control and victory points; the first to 15 points wins. The base game includes 8 distinct factions, enabling many strategic pairings and playstyles. (Year: 2012; Type: Competitive/Card; Rating: 7.2)",
+      "players": "2-4 Players"
+    },
+    "assetslicer": {
+      "title": "Asset Slicer",
+      "description": "A toolkit for board game assets. Supports circular/square cuts and sprite exports.",
+      "players": "Solo Tool"
+    },
+    "fxpreview": {
+      "title": "Effect Preview",
+      "description": "Preview all common animation effects (flying particles, shake, hit-stop, slash, burst).",
+      "players": "Solo Tool"
+    },
+    "audiobrowser": {
+      "title": "Audio Browser",
+      "description": "Browse and preview all common audio assets by category, with keyword search and filtering.",
+      "players": "Solo Tool"
+    },
+    "ugcbuilder": {
+      "title": "UGC Prototype Builder",
+      "description": "Quickly create board game prototypes. Supports card design, rule config, and AI-assisted generation.",
+      "players": "Solo Tool"
+    },
+    "archview": {
+      "title": "Architecture View",
+      "description": "Interactive node-edge diagram showing the platform's layered architecture and module dependencies.",
+      "players": "Solo Tool"
+    },
+    "summonerwars": {
+      "title": "Summoner Wars",
+      "description": "A tactical card game where you command a faction of warriors on a battlefield grid. Summon units, cast spells, and destroy the enemy Summoner to win.",
+      "players": "2 Players"
+    },
+    "ugc": {
+      "players": "2 Players"
+    }
+  },
+  "matchRoom": {
+    "leaveFailed": "Failed to leave the room. Please try again.",
+    "destroy": {
+      "title": "Destroy Room",
+      "description": "Destroy this room? The match will end and cannot be restored.",
+      "missingCredentials": "Cannot destroy room: missing credentials. Please refresh or rejoin.",
+      "notAllowed": "Cannot destroy room: permission or credential error.",
+      "failed": "Failed to destroy the room: backend did not respond or the request failed. Please try again.",
+      "forceExitTitle": "Unable to destroy room",
+      "forceExitDescription": "Destroy failed and may keep you stuck here. You can clear local data and return to the lobby (the room may still exist on the server).",
+      "forceExitConfirm": "Force Clear"
+    },
+    "autoExit": {
+      "message": "Host left, the room is closed. Returning to lobby…",
+      "title": "Auto Exit Notice",
+      "confirm": "Return Now"
+    },
+    "redirecting": "Returning to lobby...",
+    "returnHome": "Return to Home",
+    "noTutorial": "Tutorial not available for this game",
+    "noClient": "Game client not found",
+    "noGame": "Game not found",
+    "tutorialTitle": "Learning {{game}}",
+    "matchTitle": "Playing {{game}}",
+    "loadingResources": "Loading match resources...",
+    "joiningRoom": "Joining room...",
+    "title": {
+      "joining": "Joining",
+      "connecting": "Connecting",
+      "tutorial": "Tutorial",
+      "local": "Local Match",
+      "sandbox": "Sandbox"
+    },
+    "error": {
+      "matchMissing": "Room not found or already deleted"
+    },
+    "connectionTimeout": {
+      "title": "Connection Timeout",
+      "description": "Unable to connect to the game server. Please check your network or server status.",
+      "retry": "Retry",
+      "backToLobby": "Back to Lobby"
+    },
+    "ugc": {
+      "loading": "Loading UGC runtime…",
+      "loadFailed": "UGC runtime load failed: {{error}}",
+      "loadFailedShort": "UGC runtime load failed"
+    },
+    "sandbox": {
+      "initializing": "Initializing game sandbox..."
+    },
+    "devTools": {
+      "assetSlicer": "Asset Slicer",
+      "effectPreview": "Effect Preview",
+      "audioBrowser": "Audio Browser",
+      "ugcBuilder": "UGC Builder",
+      "runtimeView": "Runtime View",
+      "ugcSandbox": "UGC Sandbox"
+    },
+    "admin": {
+      "dashboard": "Admin Dashboard"
+    }
+  },
+  "error": {
+    "createRoomFailed": "Failed to create room",
+    "createRoomNetwork": "Unable to connect to the game service. Make sure it is running and check CORS/proxy settings.",
+    "createRoomCors": "The browser blocked the cross-origin request. Please use a local proxy or check CORS settings.",
+    "createRoomInvalidToken": "Your login session is invalid or expired. Please sign in again.",
+    "createRoomGuestId": "Guest identity error. Please refresh the page and try again.",
+    "createRoomForbidden": "You do not have permission to create a room.",
+    "createRoomNotFound": "Game service could not find the game. Please refresh and try again.",
+    "createRoomRequestSize": "Request payload error. Please refresh and try again.",
+    "activeMatchStale": "Your previous room no longer exists. It has been cleared so you can create a new one.",
+    "destroyForbidden": "Unable to destroy the room: invalid or expired credentials. Please re-enter the match and try again.",
+    "destroyNetwork": "Failed to destroy the room due to network or service issues. Please try again later.",
+    "destroyFailedLocalCleaned": "Destroy request failed. Local state has been cleared so you can continue.",
+    "localStateCleared": "Local state cleared. You can create or join a room again.",
+    "roomDestroyed": "Room was destroyed. Local state has been cleared.",
+    "activeMatchExists": "You already have an active room. Please return to it or destroy it before creating a new one.",
+    "leaveForbidden": "Unable to leave the room: invalid or expired credentials. Please re-enter the match and try again.",
+    "leaveNetwork": "Failed to leave the room due to network or service issues. Please try again later.",
+    "roomFull": "Room is full",
+    "ownerClaimFailed": "Unable to reconnect: guest identity may be lost or credentials expired after server restart. Please retry with the original browser or create a new room.",
+    "roomCreatedButClaimFailed": "Room was created but failed to claim seat. Please go back to the lobby and try again.",
+    "joinRoomFailed": "Failed to join room",
+    "actionFailed": "Action failed, please try again later.",
+    "serviceUnavailable": {
+      "title": "Service Unavailable",
+      "desc": "Unable to connect to backend services. Please check your connection and ensure the backend containers (MongoDB/Server) are running."
+    }
+  },
+  "createRoom": {
+    "title": "Create Room",
+    "roomName": "Room Name",
+    "roomNamePlaceholder": "Enter room name (optional)",
+    "roomNameHint": "Leave blank for auto-generated name",
+    "password": "Room Password",
+    "passwordPlaceholder": "Enter password (optional)",
+    "passwordHint": "For private rooms",
+    "playerCount": "Players",
+    "playerCountUnit": "{{count}} players",
+    "retention": "Room Retention",
+    "retentionOptions": {
+      "none": "No retention (destroy when empty)",
+      "1day": "1 day",
+      "3days": "3 days",
+      "7days": "7 days"
+    },
+    "retentionHint": "Reconnect within retention period; auto-cleanup after expiry"
+  },
+  "socket": {
+    "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",
+    "alreadyConnected": "Already connected, skipping duplicate connection",
+    "connecting": "Connecting to lobby server...",
+    "connected": "✅ Connected",
+    "disconnected": "❌ Disconnected: {{reason}}",
+    "connectError": "Connection error: {{message}}",
+    "ignoreSnapshot": "Ignoring outdated lobby snapshot: {{version}}",
+    "snapshotReceived": "Lobby update received: {{count}} rooms, version {{version}}",
+    "ignoreMatchCreated": "Ignoring outdated match creation event: {{version}} {{matchId}}",
+    "matchCreated": "Match created: {{matchId}}, version {{version}}",
+    "ignoreMatchUpdated": "Ignoring outdated match update event: {{version}} {{matchId}}",
+    "matchUpdated": "Match updated: {{matchId}}, version {{version}}",
+    "ignoreMatchEnded": "Ignoring outdated match end event: {{version}} {{matchId}}",
+    "matchEnded": "Match ended: {{matchId}}, version {{version}}",
+    "heartbeatStale": "Heartbeat indicates stale version, refreshing lobby: {{version}} current {{current}}",
+    "heartbeatOk": "Heartbeat ok, version {{version}}",
+    "subscriberError": "Subscriber callback error: {{message}}",
+    "subscribeMissingGameId": "Subscribe failed: missing gameId",
+    "noSubscribers": "No subscribers, unsubscribing from lobby"
+  },
+  "notification": {
+    "playerJoinedTitle": "Player Joined",
+    "playerJoinedBody": "{{username}} joined the room",
+    "playerJoinedBodyAnonymous": "A player joined the room"
+  }
+}

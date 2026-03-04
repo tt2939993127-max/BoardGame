@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "image": "status-icons-atlas.png",
+    "size": {
+      "w": 800,
+      "h": 400
+    },
+    "comment": "Gunslinger 状态图标图集 - 闪避和击倒复用 Monk 的图标"
+  },
+  "frames": {
+    "loaded": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      },
+      "comment": "装填弹药 - 需要新图标（子弹/弹药相关）"
+    },
+    "bounty": {
+      "frame": {
+        "x": 402,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      },
+      "comment": "赏金 - 需要新图标（金币/赏金相关）"
+    }
+  },
+  "note": "闪避（evasive）和击倒（knockdown）直接使用 Monk 图集中的图标，无需在此定义"
+}

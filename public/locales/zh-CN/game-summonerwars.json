@@ -1,0 +1,825 @@
+{
+  "title": "召唤师战争",
+  "subtitle": "征服 Itharia 的战场",
+  "description": "召唤师战争是一款快速紧凑的2人游戏。玩家扮演召唤者，通过控制神秘召唤石力量来领导他们的种族征服Itharia这个饱受战争创伤的星球。",
+  "players": "2人",
+  "factionSelection": {
+    "title": "选择你的阵营",
+    "subtitle": "每位召唤师拥有独特的军队与战术",
+    "hoverToPreview": "悬停阵营查看详情",
+    "tipAlt": "{{name}} 阵营提示",
+    "previewAlt": "阵营预览",
+    "notSelected": "未选择",
+    "ready": "准备",
+    "cancelReady": "取消准备",
+    "waiting": "等待其他玩家...",
+    "start": "开始游戏",
+    "waitAll": "等待全员就绪",
+    "customDeck": "自定义牌组",
+    "clickToBuild": "点击进入构建",
+    "moreDeck": "更多牌组",
+    "totalDecks": "共 {{count}} 个",
+    "customDeckLabel": "自定义牌组",
+    "customDeckSummoner": "召唤师: {{name}}",
+    "editDeck": "编辑牌组",
+    "newDeck": "新建牌组",
+    "loadingDecks": "加载牌组中...",
+    "loadDeckFailed": "加载牌组失败，请重试"
+  },
+  "factions": {
+    "necromancer": "堕落王国",
+    "trickster": "欺心巫族",
+    "paladin": "先锋卫队",
+    "goblin": "洞穴地精",
+    "frost": "极地矮人",
+    "barbaric": "野蛮部落"
+  },
+  "actions": {
+    "closePreview": "关闭预览",
+    "close": "关闭",
+    "cancel": "取消",
+    "magnify": "放大查看",
+    "confirm": "确认",
+    "confirmDiscard": "确认弃牌",
+    "confirmSelection": "确认选择",
+    "confirmMove": "确认移动",
+    "withdrawCharge": "消耗充能",
+    "withdrawMagic": "消耗1魔力",
+    "confirmControl": "控制",
+    "continue": "继续",
+    "finish": "完成",
+    "skip": "跳过",
+    "skipPush": "跳过推拉",
+    "push": "推开",
+    "pull": "拉近",
+    "control": "控制",
+    "damage": "伤害",
+    "bloodRuneDamage": "自伤1点",
+    "bloodRuneCharge": "花1魔力充能",
+    "feedBeastSelfDestroy": "自毁",
+    "chargeSelf": "充能自身",
+    "playEvent": "打出",
+    "discardForMagic": "弃牌",
+    "attachToSoldier": "附加到士兵"
+  },
+  "player": {
+    "default1": "玩家1",
+    "default2": "玩家2",
+    "self": "玩家",
+    "opponent": "对手",
+    "short": "P{{id}}",
+    "youTag": "（你）"
+  },
+  "layoutEditor": {
+    "backToGame": "← 返回游戏",
+    "saveLayout": "保存布局",
+    "editLayout": "编辑布局",
+    "exitEdit": "退出编辑"
+  },
+  "ui": {
+    "mapAlt": "战场地图",
+    "opponentActiveEvents": "对方持续效果",
+    "activeEvents": "持续效果",
+    "attached": "附加",
+    "click_to_magnify": "点击放大"
+  },
+  "phaseTracker": {
+    "turn": "回合 {{count}}"
+  },
+  "phaseDesc": {
+    "summon": [
+      "从手牌召唤单位",
+      "放置在城门相邻的空格"
+    ],
+    "move": [
+      "移动最多3个单位",
+      "每个单位最多移动2格",
+      "不能对角线移动"
+    ],
+    "build": [
+      "建造城门或建筑",
+      "放置在后方3行或召唤师相邻"
+    ],
+    "attack": [
+      "用最多3个单位攻击",
+      "近战：相邻目标",
+      "远程：最多3格直线"
+    ],
+    "magic": [
+      "弃置手牌获取魔力",
+      "每张牌+1魔力"
+    ],
+    "draw": [
+      "抽牌至5张",
+      "牌堆空时无法抽牌"
+    ]
+  },
+  "error": {
+    "tutorial_manifest_invalid": "教程配置无效",
+    "tutorial_command_blocked": "教程中禁止该操作",
+    "tutorial_step_locked": "当前步骤不能跳过"
+  },
+  "tutorial": {
+    "title": "召唤师战争教学",
+    "welcome": "欢迎来到召唤师战争！在这个游戏中，你将扮演一位强大的召唤师，指挥你的军队征服战场。",
+    "steps": {
+      "setup": "正在为你准备教学对局...",
+      "welcome": "欢迎来到召唤师战争！\n\n这是战场，一个 8×6 的网格。你的单位在下方，对手在上方。\n\n击败对方召唤师即可获胜！",
+      "mapControls": "🖱️ 地图操作提示：\n\n拖拽：按住鼠标左键拖动地图\n缩放：滚动鼠标滚轮调整缩放\n\n左上角显示当前缩放比例。",
+      "summonerIntro": "这是你的召唤师「瑞特-塔鲁斯」。\n\n他拥有 12 点生命、2 点战力，是远程攻击单位（射程3格）。\n\n他是你最重要的单位——被摧毁就输了！",
+      "enemySummoner": "这是对方的召唤师。\n\n摧毁他就能赢得胜利！",
+      "gateIntro": "这是你的城门。\n\n城门是召唤单位的入口——你只能在城门旁的空格上召唤新单位。\n\n保护好城门，也可以建造新的传送门来扩展召唤范围。",
+      "handIntro": "这是你的手牌区。\n\n手牌中有单位卡、建筑卡和事件卡，可以在对应阶段打出。\n\n每回合结束时会补到 5 张。",
+      "cardAnatomy": "看看这张卡牌的属性：\n\n💎 费用：召唤需要消耗的魔力\n❤️ 生命：伤害达到生命值时被摧毁\n⚔️ 力量：攻击时投掷的骰子数量\n\n力量越高，攻击时掷的骰子越多！",
+      "magicIntro": "这是你的魔力条。\n\n魔力用于召唤单位和施放卡牌。\n\n教学中已为你设置了 5 点魔力。",
+      "phaseIntro": "每回合有 6 个阶段：\n\n召唤 → 移动 → 建造 → 攻击 → 魔力 → 抽牌\n\n当前是「召唤阶段」，让我们开始吧！",
+      "summonExplain": "现在是召唤阶段。\n\n从手牌中选择单位卡，支付魔力费用，放置到城门旁的空格上。",
+      "summonAction": "试试召唤一个单位！\n\n点击手牌中的单位卡选中，再点击城门旁高亮的空格放置。",
+      "abilityExplain": "你的召唤师有「复活死灵」技能：\n\n对自己造成 2 点伤害，从弃牌堆中复活一个亡灵单位到相邻空格。\n\n弃牌堆中已有一张「亡灵战士」，点击召唤师试试！",
+      "abilityAction": "点击召唤师激活「复活死灵」技能，然后从弃牌堆选择亡灵战士，放置到召唤师相邻的空格上。",
+      "endSummon": "点击「结束阶段」进入移动阶段。",
+      "moveExplain": "移动阶段：最多移动 3 个单位，每个最多 2 格。\n\n只能水平或垂直移动，不能穿过其他卡牌。",
+      "moveAction": "点击你的单位选中，再点击高亮格子移动。\n\n试着向敌方方向推进！",
+      "endMove": "可以继续移动其他单位，或点击「结束阶段」。",
+      "buildExplain": "建造阶段可以建造城门和施放事件卡。\n\n城门是召唤单位的入口，建造更多城门能扩展你的召唤范围。\n\n事件卡是强大的一次性效果，在指定阶段施放后立即生效。",
+      "eventCardExplain": "你的手牌中有一张「狱火铸剑」事件卡。\n\n事件卡有施放阶段限制——这张卡只能在建造阶段施放。\n\n施放后它会附着在一个友方士兵身上，给予 +2 战力，但攻击后会受到反噬伤害。",
+      "eventCardAction": "点击手牌中的「狱火铸剑」事件卡，然后选择棋盘上的一个友方士兵来附着。",
+      "buildAction": "事件卡已施放！点击「结束阶段」进入攻击阶段。",
+      "attackExplain": "攻击阶段！最多用 3 个单位攻击。\n\n力量值 = 骰子数量。远程单位需要 🏹 命中，近战单位需要 ⚔️ 命中。\n\n⚠️ 不攻击的话，召唤师会受 1 点惩罚伤害！",
+      "meleeExplain": "⚔️ 近战单位只能攻击上下左右相邻的目标。\n\n近战骰面 ⚔️ 命中 = 1 点伤害。",
+      "rangedExplain": "🏹 你的弓箭手是远程单位。\n\n远程单位可以攻击 3 格直线距离内的目标，在安全距离外输出伤害！\n\n⚠️ 注意：如果攻击路径上有其他卡牌（单位或建筑）挡住，就无法攻击该目标。友方护城墙例外——友方远程攻击可以穿过它。",
+      "attackAction": "点击你的单位选中，再点击射程内的敌方目标发动攻击！\n\n试试用弓箭手远程攻击敌方单位。",
+      "attackResult": "骰子结果决定命中次数。特殊标记默认不造成伤害（除非技能另有说明）。\n\n伤害达到生命值时单位被摧毁，摧毁敌方单位还能获得 1 点魔力！",
+      "endAttack": "可以继续攻击，或点击「结束阶段」。",
+      "magicExplain": "魔力阶段：弃置手牌来获取魔力。\n\n每弃 1 张牌 = 1 点魔力。不需要的牌可以换成资源！",
+      "magicAction": "点击手牌选择要弃置的卡牌，或直接「结束阶段」跳过。",
+      "drawExplain": "抽牌阶段：手牌不足 5 张时自动补满。\n\n注意：牌堆空了就无法抽牌！",
+      "endDraw": "点击「结束阶段」结束你的回合。",
+      "opponentTurn": "对手的回合，观察他的操作...",
+      "inactionPenalty": "对手没有攻击你的单位，所以他的召唤师受到了 1 点惩罚伤害。\n\n这就是「不活动惩罚」——鼓励积极进攻！",
+      "victoryCondition": "记住：保护好你的召唤师，同时想办法摧毁对方的！\n\n这就是胜利的关键。",
+      "finish": "恭喜完成教学！\n\n你已掌握了 6 个回合阶段、召唤/移动/攻击的基本操作、事件卡施放、以及召唤师技能的使用。\n\n去挑战真正的对手吧！"
+    }
+  },
+  "phase": {
+    "summon": "召唤",
+    "move": "移动",
+    "build": "建造",
+    "attack": "攻击",
+    "magic": "魔力",
+    "draw": "抽牌"
+  },
+  "actionLog": {
+    "playerLabel": "玩家{{playerId}}",
+    "positionUnknown": "未知",
+    "position": "{{row}},{{col}}",
+    "summonUnit": "召唤单位：",
+    "moveUnit": "移动：",
+    "attackDeclared": "发动攻击",
+    "attackHits": "命中 {{hits}}",
+    "attackUnit": "攻击：",
+    "healAttackUnit": "治疗：",
+    "attackHealing": "治疗 {{amount}}",
+    "buildStructure": "建造建筑：",
+    "endPhase": "结束阶段{{phase}}",
+    "advancePhase": "推进阶段：{{phase}}",
+    "discardForMagic": "弃牌换魔力：",
+    "none": "无",
+    "cardSeparator": "、",
+    "playEvent": "打出事件：",
+    "bloodSummon": "血契召唤：",
+    "funeralPyreSkip": "殉葬火堆：跳过治疗",
+    "funeralPyreHeal": "殉葬火堆治疗：",
+    "activateAbility": "发动技能：{{abilityName}}",
+    "activateAbilitySource": " 来源：",
+    "activateAbilityTarget": " 目标：",
+    "activateAbilityTargetPosition": " 目标位置：{{position}}",
+    "unitSummoned": "召唤单位：",
+    "unitSummonedFromDiscard": "（来自弃牌堆）",
+    "unitMoved": "移动单位：",
+    "unitDamaged": "受到 {{amount}} 点伤害：",
+    "unitHealed": "回复 {{amount}} 点生命：",
+    "unitDestroyed": "单位被摧毁：",
+    "unitCharged": "充能 {{amount}}：",
+    "unitChargeTotal": "（当前 {{total}}）",
+    "sourceAbility": "（来源技能：{{abilityName}}）",
+    "damageFrom": " 来自：",
+    "damageFromAbility": "（来源：{{abilityName}}）",
+    "damageSource": {
+      "original": "基础战力"
+    },
+    "damageReason": {
+      "curse": "（诅咒反伤）",
+      "entangle": "（交缠）",
+      "trample": "（践踏）",
+      "ice_shards": "（冰霜碎片）",
+      "ice_ram": "（冰霜冲撞）",
+      "blood_rune": "（血符文）",
+      "blood_summon": "（血契召唤）",
+      "revive_undead": "（亡灵复生代价）",
+      "inaction": "（怠惰惩罚）",
+      "stun": "（眩晕）",
+      "stun_passthrough": "（眩晕穿透）",
+      "holy_protection": "（圣灵庇护）"
+    },
+    "attackDamage": "→ 造成 {{damage}} 点伤害",
+    "attackBonus": "（战力 {{base}}→{{total}}）",
+    "attackStrength": "战力：",
+    "structureBuilt": "建造建筑：",
+    "structureHealed": "建筑回复 {{amount}} 点生命：",
+    "structureDestroyed": "建筑被摧毁：",
+    "magicChanged": "玩家{{playerId}} 魔力 {{delta}}",
+    "cardDrawn": "玩家{{playerId}} 抽{{count}}张牌",
+    "cardDiscarded": "玩家{{playerId}} 弃牌：",
+    "abilityTriggered": "触发技能：{{abilityName}}",
+    "strengthModified": "战力倍率×{{multiplier}}：",
+    "damageReduced": "减伤 {{amount}}：",
+    "unitPushed": "推开：",
+    "unitPulled": "拉近：",
+    "unitsSwapped": "交换位置：",
+    "controlTransferred": "控制权转移给玩家{{playerId}}：",
+    "controlTransferredTemporary": "（临时）",
+    "eventAttached": "附加事件：",
+    "funeralPyreCharged": "殉葬火堆充能 {{amount}}：",
+    "funeralPyreChargeSet": "殉葬火堆充能设为 {{total}}：",
+    "abilitiesCopied": "技能复制：",
+    "unitAttached": "单位附加：",
+    "healingModeSet": "进入治疗模式：",
+    "hypnoticLureMarked": "催眠引诱标记："
+  },
+  "hint": {
+    "factionSelect": "选择阵营并准备开始",
+    "summon": "从手牌召唤单位到城门旁",
+    "move": "移动最多3个单位，每个最多2格",
+    "build": "在后方区域建造城门或建筑",
+    "attack": "用最多3个单位进行攻击",
+    "magic": "弃牌获取魔力",
+    "draw": "抽牌至5张",
+    "waitingOpponent": "等待对手行动..."
+  },
+  "action": {
+    "summon": "召唤",
+    "move": "移动",
+    "attack": "攻击",
+    "castSpell": "施放法术",
+    "endPhase": "结束阶段",
+    "confirmEndPhase": "还有{{count}}个单位可操作，确认结束？",
+    "confirmEndMove": "还剩{{count}}次移动机会，确认结束？",
+    "confirmEndAttack": "还剩{{count}}次攻击机会，确认结束？",
+    "endTurn": "结束回合",
+    "discardSelected": "弃牌 +{{count}}"
+  },
+  "deckBuilder": {
+    "title": "自定义牌组构建",
+    "factions": "阵营列表",
+    "cardPool": "卡牌池",
+    "myDeck": "我的牌组",
+    "count": "总计",
+    "selectFactionFirst": "请先选择一个阵营以查看卡牌",
+    "summoners": "召唤师",
+    "champions": "冠军单位",
+    "commons": "普通单位",
+    "units": "单位",
+    "events": "事件卡",
+    "structures": "建筑卡",
+    "emptyState": "开始选择卡牌来构建你的传奇牌组",
+    "save": "保存牌组",
+    "saving": "保存中...",
+    "load": "加载",
+    "loading": "加载中...",
+    "delete": "删除",
+    "close": "关闭",
+    "placeholderName": "牌组名称...",
+    "invalidDeck": "无效牌组",
+    "savedDecks": "已保存的牌组",
+    "noSavedDecks": "暂无已保存的牌组",
+    "startingCards": "起始卡牌",
+    "buildCards": "选入卡牌",
+    "beta": "公测版",
+    "useDeck": "使用此牌组",
+    "use": "使用",
+    "showingFirst": "显示前 5 个牌组",
+    "confirmDeck": "确认使用",
+    "resetDeck": "重置牌组",
+    "saveSuccess": "牌组保存成功",
+    "deleteSuccess": "牌组已删除",
+    "saveFailed": "保存失败，请重试",
+    "loadFailed": "加载失败，请重试",
+    "deleteFailed": "删除失败，请重试",
+    "loginRequired": "请先登录以使用自定义牌组功能",
+    "deckLimitReached": "已达到牌组数量上限（{{max}}个），请删除旧牌组后再创建",
+    "selectSummonerFirst": "请先选择一个召唤师",
+    "symbolMismatch": "卡牌符号与召唤师不匹配",
+    "validation": {
+      "needSummoner": "需要选择1个召唤师",
+      "needGate10hp": "需要1个十生命城门",
+      "needGate5hp": "需要3个五生命城门",
+      "needStartingUnits": "需要2个起始单位",
+      "needEpicEvents": "需要2个史诗事件",
+      "needStandardEvents": "需要6张标准事件",
+      "needChampions": "需要3个冠军单位",
+      "needCommons": "需要16个普通单位",
+      "symbolMismatch": "卡牌「{{name}}」的符号与召唤师不匹配",
+      "maxStandardEvents": "同名标准事件最多2张",
+      "maxChampions": "同名冠军单位最多1个",
+      "maxCommons": "同名普通单位最多4个"
+    },
+    "freeMode": "自由组卡",
+    "freeModeOn": "已开启",
+    "free": "自由",
+    "magnifyPreview": "放大预览"
+  },
+  "cardSelector": {
+    "reviveUndead": "复活死灵：选择弃牌堆中的亡灵单位",
+    "infection": "感染：选择弃牌堆中的疫病体",
+    "fortressPower": "城塞之力：选择弃牌堆中的城塞单位",
+    "default": "选择卡牌",
+    "empty": "没有符合条件的卡牌"
+  },
+  "discardPile": {
+    "title": "弃牌堆",
+    "empty": "弃牌堆为空",
+    "titleWithCount": "弃牌堆 ({{count}})",
+    "latest": "最新"
+  },
+  "deckPile": {
+    "draw": "牌库",
+    "discard": "弃牌",
+    "cardBackAlt": "卡背",
+    "view": "查看"
+  },
+  "diceResult": {
+    "meleeAttack": "近战攻击",
+    "rangedAttack": "远程攻击",
+    "damage": "{{count}} 点伤害！",
+    "miss": "未命中",
+    "evasionReduced": "迷魂减伤 -{{count}}"
+  },
+  "handArea": {
+    "bloodSummonOnlyLowCost": "血契召唤只能选择费用≤{{maxCost}}的单位卡",
+    "insufficientMagic": "魔力不足！需要 {{cost}} 魔力，当前只有 {{current}} 魔力",
+    "eventPhaseOnly": "该事件只能在{{phase}}施放",
+    "onlyUnitInSummon": "召唤阶段只能打出单位卡",
+    "onlyStructureInBuild": "建造阶段只能打出建筑卡",
+    "holyArrowUnitOnly": "圣光箭只能弃除单位卡",
+    "noSameNameDiscard": "不能弃除同名单位",
+    "noDuplicateNameDiscard": "不能弃除多张同名单位",
+    "holyArrowAtLeastOne": "圣光箭至少弃除一张单位卡",
+    "healingNeedsDiscard": "治疗需要弃除一张手牌",
+    "interactionBusy": "请先完成当前操作"
+  },
+  "eventCard": {
+    "noSummoner": "召唤师不在场上",
+    "noValidTarget": "没有符合条件的目标",
+    "entanglementNeedTwoCommons": "交缠颂歌需要召唤师3格内至少2个友方士兵"
+  },
+  "interaction": {
+    "fireSacrifice": {
+      "mustSelectAlly": "请选择一个友方单位作为牺牲品"
+    },
+    "cannotAttackThere": "无法攻击该目标",
+    "outOfRange": "目标超出攻击范围",
+    "notInLine": "远程攻击必须在直线上",
+    "cannotMoveThere": "无法移动到该位置",
+    "cannotSummonThere": "无法在该位置召唤",
+    "cannotBuildThere": "无法在该位置建造"
+  },
+  "destroyEffect": {
+    "destroyed": "{{name}} 被摧毁！"
+  },
+  "statusBanners": {
+    "insufficientMagic": "魔力不足",
+    "insufficientCharge": "需要至少1点充能",
+    "magicEventChoice": {
+      "message": "选择：打出事件卡或弃牌换魔力"
+    },
+    "stun": {
+      "selectTarget": "震慑：选择召唤师直线3格内的敌方单位",
+      "selectDestination": "震慑：选择推拉终点",
+      "direction": "震慑方向：",
+      "distance": "距离："
+    },
+    "ability": {
+      "reviveUndead": {
+        "selectCard": "复活死灵：从弃牌堆选择亡灵单位",
+        "selectPosition": "复活死灵：选择召唤师相邻的空格放置"
+      },
+      "fireSacrificeSummon": "火祀召唤：选择要消灭的友方单位",
+      "lifeDrain": "吸取生命：选择2格内的友方单位消灭",
+      "infection": {
+        "selectCard": "感染：从弃牌堆选择疫病体",
+        "selectPosition": "感染：确认放置位置"
+      },
+      "holyArrow": {
+        "selectCards": "圣光箭：选择任意数量非同名单位卡弃除"
+      },
+      "healing": {
+        "selectCards": "治疗：选择要弃除的手牌"
+      },
+      "illusion": "幻化：选择3格内的一个士兵复制其技能",
+      "bloodRune": "鲜血符文：选择自伤1点或消耗1魔力充能",
+      "iceShards": "寒冰碎屑：消耗1充能，对建筑相邻敌方造成1伤？",
+      "feedBeast": "喂养巨食兽：选择相邻友方单位移除，或自毁",
+      "spiritBond": "祖灵交流：选择3格内目标转移充能，或充能自身",
+      "spiritBondChargeOnly": "祖灵交流：充能不足，只能充能自身",
+      "ancestralBond": "祖灵羁绊：选择3格内友方单位转移充能",
+      "structureShift": "结构变换：选择3格内友方建筑",
+      "frostAxe": "冰霜战斧：充能自身，或消耗充能附加友方士兵",
+      "frostAxeChargeOnly": "冰霜战斧：充能不足，只能充能自身",
+      "frostAxeSelectTarget": "冰霜战斧：选择3格内友方士兵",
+      "iceRamSelectTarget": "寒冰冲撞：选择建筑相邻的一个单位",
+      "iceRamSelectPush": "寒冰冲撞：选择推拉方向（或跳过）",
+      "vanish": "神出鬼没：选择一个0费友方单位交换位置"
+    },
+    "beforeAttack": {
+      "lifeDrain": "攻击前技能：吸取生命已就绪，选择攻击目标",
+      "holyArrow": "攻击前技能：圣光箭已就绪，选择攻击目标",
+      "healing": "攻击前技能：治疗已就绪，选择友方目标"
+    },
+    "bloodSummon": {
+      "selectTarget": "血契召唤：选择一个友方单位（将承受2点伤害）",
+      "selectCard": "血契召唤：从手牌选择费用≤2的单位卡",
+      "selectPosition": "血契召唤：选择目标相邻的空格放置单位",
+      "confirm": "血契召唤完成 {{count}} 次，是否继续？"
+    },
+    "annihilate": {
+      "selectTargets": "除灭：选择要牺牲的友方单位（已选 {{count}} 个）",
+      "selectDamageTarget": "除灭：为第 {{index}} 个目标选择相邻单位造成2点伤害"
+    },
+    "soulTransfer": {
+      "message": "灵魂转移：是否将弓箭手移动到被消灭单位的位置？"
+    },
+    "funeralPyre": {
+      "message": "殉葬火堆弃除：选择一个受伤单位治疗 {{charges}} 点（点击棋盘上的单位）"
+    },
+    "mindControl": {
+      "message": "心灵操控：选择召唤师2格内的敌方单位（已选 {{count}} 个）"
+    },
+    "entanglement": {
+      "message": "交缠颂歌：选择召唤师3格内的两个友方士兵（已选 {{count}} 个）"
+    },
+    "sneak": {
+      "selectUnit": "潜行：选择0费友方单位推拉1格（已录 {{count}} 个）",
+      "selectDirection": "潜行：选择移动方向"
+    },
+    "glacialShift": {
+      "selectBuilding": "冰川位移：选择召唤师3格内友方建筑（已录 {{count}}/3）",
+      "selectDestination": "冰川位移：选择目标位置（1-2格空格）"
+    },
+    "withdraw": {
+      "selectCost": "撤退：选择消耗类型",
+      "selectPosition": "撤退：选择移动目标位置（1-2格空格）"
+    },
+    "hypnoticLure": {
+      "message": "催眠引诱：选择一个敌方单位"
+    },
+    "mindCapture": {
+      "message": "心灵捕获：控制目标还是造成 {{hits}} 点伤害？"
+    },
+    "telekinesis": {
+      "message": "{{ability}}：选择推拉方向",
+      "selectDestination": "{{ability}}：选择目标移动到的位置"
+    },
+    "afterAttack": {
+      "message": "{{ability}}：选择目标"
+    },
+    "rapidFire": {
+      "message": "连续射击：消耗1充能进行额外攻击？",
+      "confirm": "确认射击"
+    },
+    "abilityNames": {
+      "telekinesis": "念力",
+      "high_telekinesis": "高阶念力",
+      "mind_transmission": "读心传念"
+    }
+  },
+  "abilityButtons": {
+    "reviveUndead": "🗡️ 复活死灵（受到2点伤害）",
+    "fireSacrificeSummon": "🔥 火祀召唤（消灭友方单位并移动）",
+    "lifeDrain": "💀 吸取生命（消灭友方，战力翻倍）",
+    "holyArrow": "✨ 圣光箭（弃牌换魔力与战力）",
+    "healing": "✨ 治疗（弃牌转换为治疗攻击）",
+    "prepare": "⚡ 预备（充能代替移动）",
+    "fortressPower": "🏰 城塞之力（从弃牌堆拿取城塞单位）",
+    "structureShift": "🛠️ 结构变换（移动3格内友方建筑）",
+    "ancestralBond": "🔗 祖灵羁绊（充能3格内友方单位）",
+    "spiritBondSelf": "✨ 祖灵交流（充能自身）",
+    "spiritBondTransfer": "➡️ 祖灵交流（转移充能）",
+    "withdraw": "🏃 撤退（消耗充能/魔力移动）",
+    "vanish": "👻 神出鬼没（与0费友方交换位置）",
+    "frostAxe": "❄️ 冰霜战斧（充能/消耗充能附加士兵）",
+    "iceShards": "❄️ 寒冰碎屑（消耗充能对建筑旁敌方造成伤害）",
+    "highTelekinesis": "🌀 高阶念力（推拉3格内士兵或英雄）",
+    "highTelekinesisInstead": "🌀 高阶念力（代替攻击推拉）",
+    "mindTransmission": "🧠 读心传念（友方士兵额外攻击）",
+    "telekinesis": "🌀 念力（推拉2格内士兵或英雄）",
+    "telekinesisInstead": "🌀 念力（代替攻击推拉）",
+    "illusion": "🎭 幻化（复制3格内士兵技能）",
+    "guidance": "📖 指引（抽取两张卡牌）",
+    "bloodRune": "🩸 鲜血符文（自伤或消耗魔力充能）",
+    "feedBeast": "🍖 喂养巨食兽（移除相邻友方或自毁）",
+    "inspire": "✨ 启悟（充能相邻友方单位）"
+  },
+  "status": {
+    "yourTurn": "你的回合",
+    "opponentTurn": "对手回合",
+    "waiting": "等待中..."
+  },
+  "log": {
+    "unit_moved": "单位移动",
+    "unit_attacked": "攻击命中 {{hits}} 次",
+    "phase_ended": "阶段结束"
+  },
+  "result": {
+    "victory": "胜利！",
+    "defeat": "失败",
+    "summonerDefeated": "召唤师被击败"
+  },
+  "abilities": {
+    "revive_undead": {
+      "name": "复活死灵",
+      "description": "每回合一次，在你的召唤阶段，你可以对本单位造成2点伤害，以从你的弃牌堆中拿取一张亡灵单位并且放置到本单位相邻的区格。"
+    },
+    "fire_sacrifice_passive": {
+      "name": "火祀召唤（被动）",
+      "description": "当你为召唤本单位支付费用时，还必须消灭一个友方单位，并且使用本单位替换被消灭的单位。"
+    },
+    "life_drain": {
+      "name": "吸取生命",
+      "description": "在本单位攻击之前，可以消灭其2个区格以内的一个友方单位。如果你这样做，则本次攻击的特殊标记（🪓）也算作近战命中（⚔️）。"
+    },
+    "rage": {
+      "name": "暴怒",
+      "description": "本单位每有1点伤害，则获得战力+1。"
+    },
+    "blood_rage": {
+      "name": "血腥狂怒",
+      "description": "每当一个单位在你的回合中被消灭时，将本单位充能。在你的回合结束时，从本单位上移除2点充能。"
+    },
+    "power_boost": {
+      "name": "力量强化",
+      "description": "本单位每有1点充能，则获得战力+1，至多为+5。"
+    },
+    "blood_rage_decay": {
+      "name": "血腥狂怒衰减",
+      "description": "在你的回合结束时，从本单位上移除2点充能。"
+    },
+    "sacrifice": {
+      "name": "献祭",
+      "description": "在本单位被消灭之后，对其相邻的每个敌方单位造成1点伤害。"
+    },
+    "soulless": {
+      "name": "无魂",
+      "description": "当本单位消灭敌方单位时，你不会获得魔力。"
+    },
+    "infection": {
+      "name": "感染",
+      "description": "在本单位消灭一个单位之后，你可以使用你的弃牌堆中一个疫病体单位替换被消灭的单位。"
+    },
+    "soul_transfer": {
+      "name": "灵魂转移",
+      "description": "当本单位消灭3个区格以内的一个单位后，你可使用本单位替换被消灭的单位。"
+    },
+    "fire_sacrifice_summon": {
+      "name": "火祀召唤",
+      "description": "当你为召唤本单位支付费用时，还必须消灭一个友方单位，并且使用本单位替换被消灭的单位。"
+    },
+    "mind_capture": {
+      "name": "心灵捕获",
+      "description": "当本单位攻击一个敌方单位时，如果造成的伤害足够消灭目标，则你可以忽略本次伤害并且获得目标的控制权，以代替造成伤害。"
+    },
+    "mind_capture_resolve": {
+      "name": "心灵捕获决策",
+      "description": "选择控制目标单位或造成伤害。"
+    },
+    "flying": {
+      "name": "飞行",
+      "description": "当本单位移动时，可以额外移动1个区格，并且可以穿过其它卡牌。"
+    },
+    "aerial_strike": {
+      "name": "浮空术",
+      "description": "本单位2个区格以内开始移动的友方士兵，在本次移动时获得飞行技能。"
+    },
+    "high_telekinesis": {
+      "name": "高阶念力",
+      "description": "在本单位攻击之后，或代替本单位的攻击，可以指定其最多3个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。"
+    },
+    "high_telekinesis_instead": {
+      "name": "高阶念力（代替攻击）",
+      "description": "代替本单位的攻击，可以指定其最多3个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。"
+    },
+    "stable": {
+      "name": "稳固",
+      "description": "本单位不能被推拉。"
+    },
+    "mind_transmission": {
+      "name": "读心传念",
+      "description": "在本单位攻击一张敌方卡牌之后，可以指定本单位3个区格以内的一个友方士兵为目标，目标进行一次额外的攻击。"
+    },
+    "swift": {
+      "name": "迅捷",
+      "description": "当本单位移动时，可以额外移动1个区格。"
+    },
+    "ranged": {
+      "name": "远射",
+      "description": "本单位可以攻击至多4个直线区格的目标。"
+    },
+    "telekinesis": {
+      "name": "念力",
+      "description": "在本单位攻击之后，或代替本单位的攻击，可以指定其2个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。"
+    },
+    "telekinesis_instead": {
+      "name": "念力（代替攻击）",
+      "description": "代替本单位的攻击，可以指定其2个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。"
+    },
+    "illusion": {
+      "name": "幻化",
+      "description": "在你的移动阶段开始时，可以指定本单位3个区格以内的一个士兵为目标。本单位获得目标的所有技能，直到回合结束。"
+    },
+    "evasion": {
+      "name": "迷魂",
+      "description": "当一个相邻敌方单位攻击时，如果掷出一个或更多特殊标记，则本次攻击造成的伤害减少1点。"
+    },
+    "rebound": {
+      "name": "缠斗",
+      "description": "每当一个相邻敌方单位因为移动或被推拉而远离本单位时，立刻对该单位造成1点伤害。"
+    },
+    "fortress_power": {
+      "name": "城塞之力",
+      "description": "在本单位攻击一个敌方单位之后，如果战场上有一个或更多友方城塞单位，则你可以从你的弃牌堆中拿取一张城塞单位，展示并且加入你的手牌。"
+    },
+    "guidance": {
+      "name": "指引",
+      "description": "在你的召唤阶段开始时，抓取两张卡牌。"
+    },
+    "fortress_elite": {
+      "name": "城塞精锐",
+      "description": "本单位2个区格以内每有一个友方城塞单位，则获得战力+1。"
+    },
+    "radiant_shot": {
+      "name": "辉光射击",
+      "description": "你每拥有2点魔力，则本单位获得战力+1。"
+    },
+    "divine_shield": {
+      "name": "神圣护盾",
+      "description": "每当本单位3个区格以内的一个友方城塞单位成为攻击的目标时，投掷2个骰子。每掷出一个特殊标记，则攻击单位在本次攻击的战力-1，战力最少为1点。"
+    },
+    "healing": {
+      "name": "治疗",
+      "description": "在本单位攻击一个友方士兵或英雄之前，你可以从你的手牌弃除一张卡牌。如果你这样做，则本次攻击掷出的每个近战标记或特殊标记会从目标上移除1点伤害，以代替造成伤害。"
+    },
+    "judgment": {
+      "name": "裁决",
+      "description": "在本单位攻击一个敌方单位之后，抓取数量等于所掷出特殊标记数量的卡牌。"
+    },
+    "entangle": {
+      "name": "缠斗",
+      "description": "每当一个相邻敌方单位因为移动或被推拉而远离本单位时，立刻对该单位造成1点伤害。"
+    },
+    "guardian": {
+      "name": "守卫",
+      "description": "当一个相邻敌方单位攻击时，必须指定一个具有守卫技能的单位为目标。"
+    },
+    "holy_arrow": {
+      "name": "圣光箭",
+      "description": "在本单位攻击之前，从你的手牌展示并弃除任意数量的非同名单位。每以此法弃除一张卡牌，则获得1点魔力并且本单位在本次攻击获得战力+1。"
+    },
+    "vanish": {
+      "name": "神出鬼没",
+      "description": "每回合一次，在你的攻击阶段，本单位可以和一个费用为0点的友方单位交换位置。"
+    },
+    "blood_rune": {
+      "name": "鲜血符文",
+      "description": "在你的攻击阶段开始时，对本单位造成1点伤害，或者消耗1点魔力以将本单位充能。"
+    },
+    "magic_addiction": {
+      "name": "魔力成瘾",
+      "description": "在你的回合结束时，消耗1点魔力，或者弃除本单位。"
+    },
+    "ferocity": {
+      "name": "凶残",
+      "description": "在你的攻击阶段，你可以选择本单位作为额外的攻击单位。"
+    },
+    "feed_beast": {
+      "name": "喂养巨食兽",
+      "description": "在你的攻击阶段结束时，如果本单位在本回合没有消灭任何单位，则移除一个相邻友方单位，或者弃除本单位。"
+    },
+    "climb": {
+      "name": "攀爬",
+      "description": "当本单位移动时，可以额外移动1个区格，并且可以穿过建筑。"
+    },
+    "charge": {
+      "name": "冲锋",
+      "description": "本单位可以移动1至4个直线视野区格，以代替正常移动。如果本单位移动了至少3个直线区格，则获得战力+1，直到回合结束。"
+    },
+    "immobile": {
+      "name": "禁足",
+      "description": "本单位不能移动。"
+    },
+    "grab": {
+      "name": "抓附",
+      "description": "当一个友方单位从本单位相邻的区格开始移动时，你可以在本次移动结束之后，将本单位放置到该单位相邻的区格。"
+    },
+    "structure_shift": {
+      "name": "结构变换",
+      "description": "在本单位移动之后，可以指定其3个区格以内一个友方建筑为目标。将目标推拉1个区格。"
+    },
+    "cold_snap": {
+      "name": "寒流",
+      "description": "本单位3个区格以内的友方建筑获得生命+1。"
+    },
+    "imposing": {
+      "name": "威势",
+      "description": "每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。"
+    },
+    "ice_shards": {
+      "name": "寒冰碎屑",
+      "description": "在你的建造阶段结束时，你可以消耗1点充能，以对每个和你所控制建筑相邻的敌方单位造成1点伤害。"
+    },
+    "greater_frost_bolt": {
+      "name": "高阶冰霜飞弹",
+      "description": "本单位2个区格以内每有一个友方建筑，则获得战力+1。"
+    },
+    "frost_bolt": {
+      "name": "冰霜飞弹",
+      "description": "本单位相邻每有一个友方建筑，则获得战力+1。"
+    },
+    "trample": {
+      "name": "践踏",
+      "description": "当本单位移动时，可以穿过士兵。在本单位移动之后，对每个被穿过的士兵造成1点伤害。"
+    },
+    "frost_axe": {
+      "name": "冰霜战斧",
+      "description": "在本单位移动之后，你可以将其充能，或者消耗其所有充能（至少1点）以将其放置到3个区格以内一个友方士兵的底层。当该士兵攻击时，每个特殊标记视为2个近战命中。"
+    },
+    "living_gate": {
+      "name": "活体传送门",
+      "description": "本卡牌视为传送门。"
+    },
+    "mobile_structure": {
+      "name": "活体结构",
+      "description": "本卡牌视为建筑，但可以移动。"
+    },
+    "slow": {
+      "name": "缓慢",
+      "description": "本单位必须减少移动1个区格。"
+    },
+    "ice_ram": {
+      "name": "寒冰冲撞",
+      "description": "持续：在一个友方建筑移动或被推拉之后，你可以指定其相邻的一个单位为目标。对目标造成1点伤害。你可以将目标推拉1个区格。"
+    },
+    "ancestral_bond": {
+      "name": "祖灵羁绊",
+      "description": "在本单位移动之后，可以指定其3个区格以内的一个友方单位为目标。将目标充能并且将本单位的所有充能移动到目标上。"
+    },
+    "power_up": {
+      "name": "力量强化",
+      "description": "本单位每有1点充能，则获得战力+1，至多为+5。"
+    },
+    "prepare": {
+      "name": "预备",
+      "description": "你可以将本单位充能，以代替本单位的移动。"
+    },
+    "rapid_fire": {
+      "name": "连续射击",
+      "description": "每回合一次，在本单位攻击之后，你可以消耗1点充能以使其进行一次额外的攻击。"
+    },
+    "inspire": {
+      "name": "启悟",
+      "description": "在本单位移动之后，将其相邻的所有友方单位充能。"
+    },
+    "withdraw": {
+      "name": "撤退",
+      "description": "在本单位攻击之后，你可以消耗1点充能或魔力。如果你这样做，则将本单位推拉1至2个区格。"
+    },
+    "intimidate": {
+      "name": "威势",
+      "description": "每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。"
+    },
+    "life_up": {
+      "name": "生命强化",
+      "description": "本单位每有1点充能，则获得生命+1，至多+5。"
+    },
+    "speed_up": {
+      "name": "速度强化",
+      "description": "本单位每有1点充能，则当本单位移动时，可以额外移动1个区格，至多额外移动5个区格。"
+    },
+    "gather_power": {
+      "name": "聚能",
+      "description": "在召唤本单位之后，将其充能。"
+    },
+    "spirit_bond": {
+      "name": "祖灵交流",
+      "description": "在本单位移动之后，将其充能，或者消耗1点充能以将其3个区格以内的一个友方单位充能。"
+    }
+  },
+  "buffs": {
+    "panelTitle": "当前状态",
+    "healing": "治疗模式",
+    "extraAbilities": "额外技能",
+    "attachedUnit": "附加单位",
+    "hypnoticLure": "催眠引诱（召唤师攻击+1）",
+    "hellfireBlade": "狱火铸剑 (+2战力)",
+    "chantWeaving": "编织颂歌（临时召唤点）"
+  }
+}

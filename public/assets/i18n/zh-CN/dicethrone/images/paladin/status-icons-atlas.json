@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "image": "status-icons-atlas.png",
+    "size": {
+      "w": 2010,
+      "h": 400
+    }
+  },
+  "frames": {
+    "holy-strike": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "shield-break": {
+      "frame": {
+        "x": 402,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "divine-shield": {
+      "frame": {
+        "x": 804,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "rallying-cry": {
+      "frame": {
+        "x": 1206,
+        "y": 0,
+        "w": 400,
+        "h": 400
+      }
+    },
+    "guardian-angel": {
+      "frame": {
+        "x": 1608,
+        "y": 0,
+        "w": 402,
+        "h": 370
+      }
+    }
+  }
+}

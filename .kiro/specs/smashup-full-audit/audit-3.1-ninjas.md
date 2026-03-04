@@ -1,0 +1,215 @@
+# 审查 3.1：忍者（Ninjas）派系多步骤能力
+
+> 审查日期：2026-02-14
+> 权威描述来源：`public/locales/zh-CN/game-smashup.json`
+
+## 审查汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总交互链数 | 12 |
+| ✅ 通过 | 3 |
+| ⚠️ 语义偏差 | 4 |
+| ❌ 缺失实现 | 3 |
+| 📝 测试缺失 | 10 |
+| 通过率 | 25.0% |
+
+## 严重问题清单
+
+| 优先级 | 交互链 | 问题 | 反模式 |
+|--------|--------|------|--------|
+| P0 | ninja_shinobi | ✅ 已修复 — specialLimitGroup 数据驱动机制 | — |
+| P0 | ninja_acolyte | "如果你还未打出随从卡"条件完全未检查 | — |
+| P0 | ninja_poison | "消灭在它身上的任意数量的战术"即时效果未实现 | — |
+| P0 | ninja_infiltrate | "消灭一个已经被打出到这的战术"即时效果未实现 + 保护作用范围语义不一致 | — |
+| P1 | ninja_shinobi | "你可以"自动执行无确认 | #1 |
+| P1 | ninja_acolyte | "你可以"自动执行无确认 | #1 |
+| P1 | ninja_master | "你可以"无跳过选项 | #1 |
+| P1 | ninja_tiger_assassin | "你可以"无跳过选项 | #1 |
+| P2 | ninja_seeing_stars | 实现添加了描述中不存在的 `controller !== playerId` 过滤 | #16 |
+| P3 | 全部 | 几乎所有能力缺少行为测试 | #4 |
+
+---
+
+## 审查矩阵
+
+### 交互链 1：ninja_master — 消灭本基地随从（可选）
+
+**权威描述**：「你可以消灭一个本基地的随从。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['onPlay']` |
+| 注册层 | ✅ | `abilities/ninjas.ts:23` — `registerAbility('ninja_master', 'onPlay', ninjaMaster)` |
+| 执行层 | ⚠️ | 描述"你可以"（可选），但有目标时直接创建 Prompt 无跳过选项（反模式 #1） |
+| 状态层 | ✅ | `destroyMinion` → `MINION_DESTROYED` 事件，reduce 正确处理 |
+| 验证层 | N/A | |
+| UI 层 | ✅ | `createSimpleChoice` 创建交互 Prompt |
+| i18n 层 | ✅ | zh-CN/en 均有条目 |
+| 测试层 | 📝 | 仅注册覆盖审计，无行为测试 |
+
+
+### 交互链 2：ninja_tiger_assassin — 消灭本基地力量≤3随从（可选）
+
+**权威描述**：「你可以消灭本基地一个力量为3或以下的随从。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['onPlay']` |
+| 注册层 | ✅ | `abilities/ninjas.ts:25` — `registerAbility('ninja_tiger_assassin', 'onPlay', ninjaTigerAssassin)` |
+| 执行层 | ⚠️ | 力量≤3 过滤正确（`getMinionPower(...) <= 3`）。"你可以"无跳过选项（反模式 #1） |
+| 状态层 | ✅ | `destroyMinion` → `MINION_DESTROYED` |
+| 验证层 | N/A | |
+| UI 层 | ✅ | `createSimpleChoice` |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 仅注册覆盖审计，无行为测试 |
+
+### 交互链 3：ninja_shinobi — 基地计分前打出（special）
+
+**权威描述**：「特殊：在一个基地计分前，你可以打出本随从到那里。每个基地只能使用一次忍者的能力。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['special']` |
+| 注册层 | ✅ | `abilities/ninjas.ts:33` — `registerAbility('ninja_shinobi', 'special', ninjaShinobi)` |
+| 执行层 | ✅ | specialLimitGroup 数据驱动限制已实现（isSpecialLimitBlocked + emitSpecialLimitUsed），三张忍者 special 卡共享 'ninja_special' 组 |
+| 状态层 | ✅ | `MINION_PLAYED` 事件被 reduce 处理 |
+| 验证层 | ❌ | "每基地一次"限制未在验证层体现 |
+| UI 层 | ❌ | 无确认/跳过 UI |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 4：ninja_acolyte — 未打出随从时回手并额外打出（special）
+
+**权威描述**：「特殊：在你的回合中，如果你还未打出随从卡，则你可以将本卡放回手中并额外打出一个随从到这个基地。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['special']` |
+| 注册层 | ✅ | `abilities/ninjas.ts:35` — `registerAbility('ninja_acolyte', 'special', ninjaAcolyte)` |
+| 执行层 | ❌ | ① **"如果你还未打出随从卡"条件完全未检查**（无 `player.minionsPlayed === 0` 判断）；② "你可以"自动执行无确认（反模式 #1）；③ 描述"在你的回合中"但注册为 `special`（Me First 窗口触发），时机语义不一致 |
+| 状态层 | ✅ | `MINION_RETURNED` + `LIMIT_MODIFIED` 事件被 reduce 处理 |
+| 验证层 | ❌ | "未打出随从"前置条件未在验证层体现 |
+| UI 层 | ❌ | 无确认/跳过 UI |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 5：ninja_hidden_ninja — 基地计分前打出随从（special action）
+
+**权威描述**：「特殊：在一个基地计分前，打出一个随从到这。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `subtype: 'special'`, `specialNeedsBase: true` |
+| 注册层 | ✅ | `abilities/ninjas.ts:37` — `registerAbility('ninja_hidden_ninja', 'special', ninjaHiddenNinja)` |
+| 执行层 | ✅ | 列出手牌随从供选择，handler 发射 `MINION_PLAYED` 到指定基地 |
+| 状态层 | ✅ | `MINION_PLAYED` 被 reduce 处理 |
+| 验证层 | ✅ | Me First 窗口机制限制只能在计分前打出 |
+| UI 层 | ✅ | `createSimpleChoice` 提供随从选择 |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 仅注册覆盖审计，无行为测试 |
+
+### 交互链 6：ninja_disguise — 多步替换流程
+
+**权威描述**：「选择一个基地里的你的一个或两个随从。打出等数量的随从到那里，并将选择的随从拿回手上。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `subtype: 'standard'` |
+| 注册层 | ✅ | `abilities/ninjas.ts:31` — `registerAbility('ninja_disguise', 'onPlay', ninjaDisguise)` |
+| 执行层 | ✅ | 完整多步链：选基地→多选1-2随从→逐个选手牌随从打出→收回旧随从。`maxSelect = Math.min(2, myMinions.length, handMinions.length)` 正确 |
+| 状态层 | ✅ | `MINION_PLAYED` + `MINION_RETURNED` 被 reduce 处理 |
+| 验证层 | N/A | |
+| UI 层 | ✅ | 多步 `createSimpleChoice` |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | `interactionCompletenessAudit` 覆盖链式注册，无行为测试 |
+
+### 交互链 7：ninja_poison — 三步效果（附着+消灭战术+持续-4力量）
+
+**权威描述**：「打出到一个随从上。消灭在它身上的任意数量的战术。持续：这个随从-4力量（随从的力量最低减到0）。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['ongoing']` |
+| 注册层 | ✅（部分） | `ongoing_modifiers.ts:118` — -4 力量修正已注册。**但无 onPlay 注册** |
+| 执行层 | ❌ | **"消灭在它身上的任意数量的战术"步骤完全未实现** — 无 `registerAbility('ninja_poison', 'onPlay', ...)` |
+| 状态层 | ✅（部分） | -4 力量通过 `getEffectivePower` 正确计算，`Math.max(0, ...)` 保证最低0。消灭战术的状态变更缺失 |
+| 验证层 | N/A | |
+| UI 层 | N/A | |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 8：ninja_infiltrate — 两步效果（消灭战术+持续无视基地能力）
+
+**权威描述**：「打出到一个基地上。消灭一个已经被打出到这的战术。持续：你可以无视这个基地的能力直到你下个回合开始的时候。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['ongoing']` |
+| 注册层 | ✅（部分） | `registerProtection('ninja_infiltrate', 'affect', ...)` + `registerTrigger('ninja_infiltrate', 'onTurnStart', ...)` 已注册。**但无 onPlay 注册** |
+| 执行层 | ❌ | **"消灭一个已经被打出到这的战术"步骤完全未实现**。保护逻辑检查 `ctx.targetMinion.attachedActions` 而非基地 ongoing — 描述说"打出到一个基地上"，保护作用范围语义不一致 |
+| 状态层 | ⚠️ | 自毁触发正确（`onTurnStart` → `ONGOING_DETACHED`），保护效果作用范围可能不正确 |
+| 验证层 | N/A | |
+| UI 层 | ❌ | 消灭战术步骤缺失，应有选择交互 |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 9：ninja_smoke_bomb — 附着保护+回合开始自毁
+
+**权威描述**：「打出到你的一个随从上。持续：该随从不会受到其他玩家战术的影响。在你回合开始的时候消灭本卡。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['ongoing']` |
+| 注册层 | ✅ | `registerProtection('ninja_smoke_bomb', 'action', ...)` + `registerTrigger('ninja_smoke_bomb', 'onTurnStart', ...)` |
+| 执行层 | ✅ | 保护：检查烟雾弹所在基地、只保护拥有者随从、只拦截对手来源。自毁：拥有者回合开始时 `ONGOING_DETACHED` |
+| 状态层 | ✅ | `ONGOING_DETACHED` 被 reduce 处理 |
+| 验证层 | N/A | |
+| UI 层 | N/A | |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 10：ninja_assassination — 附着+回合结束消灭
+
+**权威描述**：「打出到一个随从上。持续：在回合结束时消灭该随从。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['ongoing']` |
+| 注册层 | ✅ | `registerTrigger('ninja_assassination', 'onTurnEnd', ...)` |
+| 执行层 | ✅ | 遍历所有基地随从，检查 `attachedActions` 含 `ninja_assassination`，发射 `MINION_DESTROYED` |
+| 状态层 | ✅ | `MINION_DESTROYED` 被 reduce 处理 |
+| 验证层 | N/A | |
+| UI 层 | N/A | |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 无行为测试 |
+
+### 交互链 11：ninja_seeing_stars — 消灭力量≤3随从（任意基地）
+
+**权威描述**：「消灭一个力量为3或以下的随从。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | 标准行动卡 |
+| 注册层 | ✅ | `abilities/ninjas.ts:27` — `registerAbility('ninja_seeing_stars', 'onPlay', ninjaSeeingStars)` |
+| 执行层 | ⚠️ | 遍历所有基地过滤 `getMinionPower(...) <= 3`。**但额外添加了 `m.controller !== ctx.playerId`**（只能消灭对手随从），描述无敌我限定（反模式 #16）。需确认规则原文 |
+| 状态层 | ✅ | `destroyMinion` → `MINION_DESTROYED` |
+| 验证层 | N/A | |
+| UI 层 | ✅ | `createSimpleChoice` |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | ✅ | `factionAbilities.test.ts` 有基本测试 |
+
+### 交互链 12：ninja_way_of_deception — 移动己方随从
+
+**权威描述**：「移动一个你的随从到另一个基地。」
+
+| 层 | 状态 | 证据 |
+|----|------|------|
+| 定义层 | ✅ | 标准行动卡 |
+| 注册层 | ✅ | `abilities/ninjas.ts:29` — `registerAbility('ninja_way_of_deception', 'onPlay', ninjaWayOfDeception)` |
+| 执行层 | ✅ | 两步链：选己方随从→选目标基地→`moveMinion`。过滤 `controller === playerId` 与描述"你的随从"一致 |
+| 状态层 | ✅ | `MINION_MOVED` 被 reduce 处理 |
+| 验证层 | N/A | |
+| UI 层 | ✅ | 两步 `createSimpleChoice` |
+| i18n 层 | ✅ | 双语条目存在 |
+| 测试层 | 📝 | 仅注册覆盖审计 |

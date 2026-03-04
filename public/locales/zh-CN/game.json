@@ -1,0 +1,347 @@
+{
+  "error": {
+    "not_active_player": "不是你的回合",
+    "player_mismatch": "不是你的回合",
+    "invalid_phase": "当前阶段不允许此操作",
+    "invalid_character": "无效的角色",
+    "character_not_selected": "尚未选择角色",
+    "character_selection_not_initialized": "角色选择未初始化",
+    "command_failed": "命令执行失败",
+    "internal_error": "服务器内部错误，操作已自动恢复",
+    "pipeline_error": "命令执行异常，请稍后重试"
+  },
+  "controls": {
+    "undo": {
+      "expand": "展开撤回",
+      "collapse": "收起撤回",
+      "title": "撤回操作",
+      "waiting": "等待对方批准...",
+      "cancel": "取消申请",
+      "opponentRequest": "对方请求撤回",
+      "reviewHint": "对方想要撤回上一步操作，是否同意？",
+      "approve": "同意",
+      "reject": "拒绝",
+      "requestHint": "可以请求撤回上一步操作",
+      "historyCount": "可撤回 {{count}} 步",
+      "request": "申请撤回",
+      "loading": "撤回状态加载中…",
+      "none": "暂无可撤回操作。"
+    }
+  },
+  "hud": {
+    "mode": {
+      "local": "本地同屏",
+      "tutorial": "教学模式",
+      "online": "联机房间"
+    },
+    "copyRoomId": "复制房间 ID",
+    "roomId": "ID: {{id}}",
+    "status": {
+      "self": "本人",
+      "connected": "已连接",
+      "waiting": "等待中...",
+      "player": "玩家{{id}}",
+      "playerShort": "P{{id}}",
+      "playerUnknown": "玩家",
+      "opponent": "对手",
+      "offline": "离线",
+      "empty": "空位",
+      "searching": "搜索中",
+      "localTitle": "同屏对战",
+      "localDescription": "在本机轮流操作或同屏竞技。",
+      "tutorialTitle": "学习模式",
+      "tutorialDescription": "按照指示学习游戏规则。"
+    },
+    "offlineBanner": {
+      "message": "{{name}} 已离线 {{time}}",
+      "waitingOpponent": "等待对手加入...",
+      "seconds": "{{count}}秒",
+      "minutes": "{{count}}分钟"
+    },
+    "labels": {
+      "turn": "回合：",
+      "roomId": "房间 ID",
+      "players": "玩家"
+    },
+    "actions": {
+      "destroy": "结束游戏",
+      "destroyHint": "关闭房间，所有人退出",
+      "leaveRoom": "离开房间",
+      "leaveRoomHint": "彻底离开房间",
+      "leaveKeep": "离开房间",
+      "tempLeave": "暂时离开",
+      "tempLeaveHint": "断开连接但保留位置",
+      "forceExit": "强制清理",
+      "forceExitHint": "清除本地记录（不影响服务器房间）",
+      "backToLobby": "返回大厅",
+      "backToLobbyHint": "彻底离开房间",
+      "social": "好友",
+      "feedback": "反馈",
+      "about": "关于",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏",
+      "settings": "设置",
+      "audio": "音频",
+      "chat": "聊天",
+      "actionLog": "行为日志",
+      "info": "信息",
+      "room": "房间",
+      "exit": "离开",
+      "close": "关闭"
+    },
+    "about": {
+      "title": "易桌游",
+      "githubTitle": "GitHub",
+      "githubSubtitle": "查看源码并参与贡献",
+      "qqTitle": "QQ群",
+      "qqSubtitle": "加入社区：",
+      "supportTitle": "如果喜欢这个项目，可以请作者喝杯咖啡。",
+      "supportSubtitle": "如需要，可以备注加入到赞助列表。",
+      "qrPlaceholder": "二维码",
+      "wechatLabel": "微信",
+      "alipayLabel": "支付宝",
+      "sponsorLoading": "赞助名单加载中...",
+      "sponsorError": "赞助名单加载失败",
+      "sponsorEmpty": "暂无赞助记录",
+      "qqCopied": "QQ群号已复制",
+      "copyFailed": "复制失败，请手动复制",
+      "loadMore": "加载更多..."
+    },
+    "feedback": {
+      "title": "反馈",
+      "subtitle": "帮助我们改进体验",
+      "gameLabel": "关联游戏（可选）",
+      "gameAll": "-- 通用反馈 --",
+      "typeLabel": "类型",
+      "severityLabel": "优先级",
+      "contentLabel": "描述",
+      "contentPlaceholder": "请描述问题或建议...\n支持粘贴截图 (Ctrl+V)",
+      "pasteHint": "支持截图粘贴",
+      "imageAlt": "反馈截图",
+      "deleteImage": "删除图片",
+      "imageAdded": "已添加截图",
+      "contactLabel": "联系方式（可选）",
+      "contactPlaceholder": "邮箱或 QQ（便于跟进）",
+      "attachLog": "附带操作日志",
+      "attachState": "附带状态快照（用于精确复现）",
+      "submit": "提交反馈",
+      "success": "反馈已提交，感谢支持！",
+      "errors": {
+        "loginRequired": "登录后可获得更好的反馈跟进体验",
+        "submitFailed": "提交失败，请稍后再试"
+      },
+      "type": {
+        "bug": "Bug",
+        "suggestion": "建议",
+        "other": "其他"
+      },
+      "severity": {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "critical": "严重"
+      }
+    },
+    "actionLog": {
+      "empty": "暂无行为日志"
+    },
+    "chat": {
+      "placeholder": "输入消息...",
+      "readonlyPlaceholder": "观战模式不可发言",
+      "empty": "暂无消息...",
+      "unknownPlayer": "未知玩家",
+      "preview": "{{name}}：{{message}}",
+      "maxLength": "最多{{count}}字",
+      "tooLong": "消息过长，最多 {{count}} 字。",
+      "readonlyWarning": "观战模式不可发言。",
+      "notConnected": "聊天服务未连接，请稍后重试。",
+      "connecting": "聊天连接中，请稍后重试。"
+    },
+    "fullscreen": {
+      "enterFailed": "全屏失败，请检查浏览器权限或系统全屏占用。",
+      "exitFailed": "退出全屏失败，请检查浏览器权限或系统状态。"
+    },
+    "toggle": {
+      "collapse": "收起菜单",
+      "expand": "展开菜单"
+    }
+  },
+  "audio": {
+    "bgmVolume": "音乐音量",
+    "sfxVolume": "音效音量",
+    "nowPlaying": "正在播放",
+    "nonePlaying": "未在播放",
+    "unmute": "取消静音",
+    "mute": "静音",
+    "switchTrack": "切换曲目",
+    "prevTrack": "上一首",
+    "trackList": "曲目列表（{{count}}首）",
+    "tracks": {
+      "main_theme": "经典对弈",
+      "chill_piano": "轻柔钢琴",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main": "龙之舞",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_intensity_2": "龙之舞（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main": "盾与矛",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_intensity_2": "盾与矛（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_main": "绞刑架",
+      "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_intensity_2": "绞刑架（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_main": "吾之王国",
+      "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_intensity_2": "吾之王国（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_main": "风暴之子",
+      "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_intensity_2": "风暴之子（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_main": "食人魔",
+      "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_intensity_2": "食人魔（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_main": "搭箭！",
+      "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_intensity_2": "搭箭！（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_main": "焰生",
+      "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_intensity_2": "焰生（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main": "海盗之歌",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2": "海盗之歌（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main": "孤独诗人",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_intensity_2": "孤独诗人（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_main": "进军城墙",
+      "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_2": "进军城墙（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main": "长老觉醒",
+      "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_2": "长老觉醒（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main": "妖精之歌",
+      "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_2": "妖精之歌（激昂）",
+      "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_main": "石之咏唱",
+      "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_2": "石之咏唱（激昂）",
+      "bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_main": "微光",
+      "bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_intensity_2": "微光（激昂）",
+      "bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main": "风铃",
+      "bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_intensity_2": "风铃（激昂）",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main": "热带派对",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2": "热带派对（激昂）",
+      "bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_main": "泡泡糖",
+      "bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_intensity_2": "泡泡糖（激昂）",
+      "bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_main": "郊游日",
+      "bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_intensity_2": "郊游日（激昂）",
+      "bgm.general.casual_music_pack_vol.lizards_rt_1.casual_lizards_main": "蜥蜴乐园",
+      "bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_main": "日落",
+      "bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_intensity_2": "日落（激昂）",
+      "bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_main": "动起来",
+      "bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_intensity_2": "动起来（激昂）",
+      "bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_main": "晴天",
+      "bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_intensity_2": "晴天（激昂）",
+      "bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_main": "大人物",
+      "bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_intensity_2": "大人物（激昂）",
+      "bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_1": "无人知晓",
+      "bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_2": "无人知晓（激昂）"
+    }
+  },
+  "layoutEditor": {
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "savedWithPath": "已保存：{{path}}",
+    "saveFailed": "保存失败",
+    "exportFileName": "layout.config.json",
+    "import": "导入",
+    "export": "导出",
+    "finishTrack": "完成轨道（{{count}}点）",
+    "delete": "删除",
+    "backgroundAlt": "背景",
+    "tools": {
+      "select": "选择",
+      "grid": "网格",
+      "zone": "区域",
+      "track": "轨道",
+      "stackPoint": "堆叠点"
+    },
+    "grid": {
+      "rows": "行数",
+      "cols": "列数",
+      "gapX": "X间距",
+      "gapY": "Y间距",
+      "offsetX": "X偏移",
+      "offsetY": "Y偏移",
+      "width": "宽度",
+      "height": "高度",
+      "create": "创建网格"
+    },
+    "status": {
+      "grid": "网格：{{value}}",
+      "unset": "未设置",
+      "zone": "区域：{{count}}",
+      "track": "轨道：{{count}}",
+      "stackPoint": "堆叠点：{{count}}",
+      "selected": "选中：{{id}}"
+    }
+  },
+  "debug": {
+    "toggleTitle": "开发调试",
+    "panelTitle": "🛠️ 调试控制台",
+    "moves": {
+      "ROLL_DICE": "掷骰子",
+      "ROLL_BONUS_DIE": "掷额外骰",
+      "TOGGLE_DIE_LOCK": "锁定骰子",
+      "CONFIRM_ROLL": "确认掷骰",
+      "SELECT_ABILITY": "选择技能",
+      "DRAW_CARD": "抽牌",
+      "DISCARD_CARD": "弃牌",
+      "SELL_CARD": "售卖卡牌",
+      "UNDO_SELL_CARD": "撤回售卖",
+      "REORDER_CARD_TO_END": "卡牌置底",
+      "PLAY_CARD": "打出卡牌",
+      "PLAY_UPGRADE_CARD": "升级卡牌",
+      "RESOLVE_CHOICE": "确认选择",
+      "ADVANCE_PHASE": "推进阶段",
+      "RESPONSE_PASS": "跳过响应",
+      "SYS_CHEAT_SET_RESOURCE": "设置资源",
+      "SYS_CHEAT_ADD_RESOURCE": "增加资源",
+      "SYS_CHEAT_SET_PHASE": "设置阶段",
+      "SYS_CHEAT_SET_DICE": "设置骰子"
+    },
+    "viewLabel": "视角:",
+    "spectator": "旁观",
+    "tabs": {
+      "actions": "🎮 指令",
+      "state": "📊 数据",
+      "controls": "⚙️ 系统"
+    },
+    "sections": {
+      "moves": "指令",
+      "events": "事件"
+    },
+    "actions": {
+      "execute": "执行",
+      "empty": "暂无可用动作"
+    },
+    "placeholders": {
+      "moveArgs": "参数 (JSON/String)...",
+      "commandName": "命令名称"
+    },
+    "events": {
+      "endTurn": "🛑 结束回合",
+      "endPhase": "⏭️ 结束阶段"
+    },
+    "state": {
+      "phase": "阶段",
+      "turn": "回合",
+      "activePlayer": "当前玩家",
+      "gameState": "游戏状态 (G)",
+      "copy": "复制",
+      "copied": "已复制",
+      "assign": "赋值",
+      "cancelAssign": "取消",
+      "pastePlaceholder": "粘贴游戏状态 JSON...",
+      "pasteFromClipboard": "从剪贴板粘贴",
+      "apply": "应用状态",
+      "errorUnsupported": "此游戏不支持状态赋值",
+      "errorInvalidJson": "JSON 格式错误"
+    },
+    "reset": {
+      "button": "🔄 重置游戏",
+      "newRoom": "🆕 创建新房间",
+      "creating": "创建中...",
+      "linkCopied": "新房间链接已复制到剪贴板，请发送给对手！",
+      "shareLinkManually": "请复制以下链接发送给对手：",
+      "hintTitle": "💡 提示",
+      "hintDescription": "本地模式：重置将开始新局游戏。联机模式：创建新房间并复制链接。"
+    },
+    "tools": {
+      "gameSpecific": "游戏专用工具"
+    }
+  }
+}

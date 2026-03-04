@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "内存监控",
+  "description": "Agent 执行完毕后检查 Node 进程内存使用情况，报告 heapUsed/heapTotal/rss，帮助发现内存异常增长",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "node -e \"const os=require('os');const total=os.totalmem();const free=os.freemem();const used=total-free;console.log(`[内存监控] 系统内存: 总计=${(total/1024/1024/1024).toFixed(2)}GB 已用=${(used/1024/1024/1024).toFixed(2)}GB 空闲=${(free/1024/1024/1024).toFixed(2)}GB 使用率=${(used/total*100).toFixed(1)}%`)\""
+  }
+}

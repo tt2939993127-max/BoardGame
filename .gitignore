@@ -1,0 +1,170 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 依赖目录
+node_modules
+
+# Python 虚拟环境
+.venv-*
+venv/
+env/
+ENV/
+
+# 构建输出
+dist
+dist-ssr
+*.local
+
+# 编辑器目录和文件
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 环境变量文件
+.env
+.env.server
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 操作系统文件
+Thumbs.db
+Desktop.ini
+
+# 测试覆盖率
+coverage
+*.lcov
+.nyc_output
+
+# TypeScript 缓存
+*.tsbuildinfo
+
+# 临时文件
+.tmp
+.tmp-*
+.temp
+*.tmp
+nul
+
+# 浏览器测试录制（可选，根据需要调整）
+.agent/recordings/
+
+# 资源与美术/音效（避免远程仓库体积膨胀；资源走对象存储/CDN）
+# - public/assets/ 默认忽略全部资源
+# - 仅允许提交 assets-manifest.json 与 public/assets/demo/ 下的少量示例资源
+# - public/assets/i18n/zh-CN/* 为符号链接（本地构建产物），不提交
+public/assets/**
+**/*.png
+public/**/*.jpg
+public/**/*.jpeg
+public/**/*.gif
+public/**/*.webp
+public/**/*.avif
+public/**/*.tiff
+public/**/*.bmp
+public/**/*.ico
+public/**/*.wav
+public/**/*.ogg
+public/**/*.mp3
+public/**/*.flac
+public/**/*.m4a
+public/**/*.mp4
+public/**/*.webm
+
+# 资源清单与 demo 例外
+!public/assets/
+!public/assets/**/
+!public/assets/**/assets-manifest.json
+!public/assets/**/*.json
+!public/assets/demo/
+!public/assets/demo/**
+!public/assets/dicethrone/thumbnails/
+
+# 赞助二维码等小图（允许提交）
+!public/logos/
+!public/logos/**
+
+# 可能的 3D/模型/动画/纹理素材
+public/**/*.glb
+public/**/*.gltf
+public/**/*.fbx
+public/**/*.obj
+public/**/*.mtl
+public/**/*.blend
+public/**/*.dae
+public/**/*.stl
+public/**/*.usdz
+public/**/*.ktx
+public/**/*.ktx2
+public/**/*.hdr
+
+# 本地资源缓存（不入仓）
+BordGameAsset 
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+e2e/screenshots/
+
+# 用户上传文件
+uploads/
+
+# 临时文件和开发中间产物
+temp/
+tmp/
+*.tmp
+.worktrees/
+
+# Kiro 临时文件
+.kiro/temp/
+.kiro-*.json
+
+# 临时分析文档（应移到 docs/bugs/ 或 evidence/）
+BUG-*.md
+DEBUG-*.md
+fix-*.md
+test-*.md
+*-summary.md
+*-analysis.md
+*-report.md
+*-status.md
+
+# 临时脚本（应移到 scripts/temp/）
+_*.cjs
+_*.mjs
+check-*.mjs
+test-*.mjs
+
+# 临时数据文件（应移到 temp/）
+wiki-*.json
+wiki-*.txt
+wiki-*.html
+*-report.json
+*-results.json
+*-diff.txt
+temp_*.txt
+tmp_*.txt
+
+# 临时日志文件（应移到 test-results/）
+_vitest_*.log
+*-failures.txt
+*-output.txt
+
+# 其他临时文件
+threshold
+edge_check.txt
+scan_results.txt

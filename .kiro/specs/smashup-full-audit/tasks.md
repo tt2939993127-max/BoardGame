@@ -1,0 +1,201 @@
+# 实施计划：大杀四方全面语义与实现完整性审查
+
+## 概述
+
+按批次对 SmashUp 所有 16 个派系和全部基地的多步骤/复杂能力执行八层全链路审查。每批次产出审查矩阵，最终汇总所有发现。
+
+## 任务
+
+- [x] 1. 批次 1：外星人 + 恐龙 + 海盗派系审查
+  - [x] 1.1 审查外星人（Aliens）派系多步骤能力
+    - 读取 `abilities/aliens.ts`、`data/factions/aliens.ts`、i18n `alien_*` 条目
+    - 对照 effectText/abilityText 拆分独立交互链
+    - 逐链追踪八层：定义→注册→执行→状态→验证→UI→i18n→测试
+    - 重点关注：alien_crop_circles 多选返回、alien_terraform 四步流程、alien_probe 两步查看、alien_scout special 时机
+    - 输出审查矩阵
+    - _Requirements: 1.1-1.10_
+
+  - [x] 1.2 审查恐龙（Dinosaurs）派系多步骤能力
+    - 读取 `abilities/dinosaurs.ts`、`data/factions/dinosaurs.ts`、i18n `dino_*` 条目
+    - 重点关注：dino_armor_stego 回合条件修正、dino_war_raptor 同名计数、dino_survival_of_the_fittest 全局扫描+平局交互、dino_tooth_and_claw 一次性拦截
+    - 输出审查矩阵
+    - _Requirements: 2.1-2.10_
+
+  - [x] 1.3 审查海盗（Pirates）派系多步骤能力
+    - 读取 `abilities/pirates.ts`、`data/factions/pirates.ts`、i18n `pirate_*` 条目
+    - 重点关注：pirate_full_sail 多步移动+special 时机、pirate_buccaneer 消灭拦截、pirate_powderkeg 连锁消灭、pirate_sea_dogs 派系指定移动
+    - 输出审查矩阵
+    - _Requirements: 3.1-3.11_
+
+- [x] 2. 批次 1 检查点
+  - 确认批次 1 三个派系的审查矩阵完整
+  - 确认所有 ❌/⚠️ 标注附带具体证据
+  - 确认审计反模式清单已逐条检查
+  - 询问用户是否有问题
+
+- [x] 3. 批次 2：忍者 + 机器人 + 巫师派系审查
+  - [x] 3.1 审查忍者（Ninjas）派系多步骤能力
+    - 读取 `abilities/ninjas.ts`、`data/factions/ninjas.ts`、i18n `ninja_*` 条目
+    - 重点关注：ninja_shinobi "每基地一次忍者能力"限制、ninja_acolyte 条件 special、ninja_disguise 多步替换、ninja_poison 三步效果
+    - 输出审查矩阵
+    - _Requirements: 4.1-4.11_
+
+  - [x] 3.2 审查机器人（Robots）派系多步骤能力
+    - 读取 `abilities/robots.ts`、`data/factions/robots.ts`、i18n `robot_*` 条目
+    - 重点关注：robot_microbot_alpha 双持续效果+"视为微型机"联动、robot_microbot_fixer 条件+持续、robot_hoverbot 条件分支
+    - 输出审查矩阵
+    - _Requirements: 5.1-5.10_
+
+  - [x] 3.3 审查巫师（Wizards）派系多步骤能力
+    - 读取 `abilities/wizards.ts`、`data/factions/wizards.ts`、i18n `wizard_*` 条目
+    - 重点关注：wizard_portal 五张展示+多选+排序、wizard_scry 四步搜寻、wizard_sacrifice 力量联动、wizard_mass_enchantment 多对手牌库操作
+    - 输出审查矩阵
+    - _Requirements: 6.1-6.9_
+
+- [x] 4. 批次 2 检查点
+  - 确认批次 2 三个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 5. 批次 3：僵尸 + 捣蛋鬼派系审查
+  - [x] 5.1 审查僵尸（Zombies）派系多步骤能力
+    - 读取 `abilities/zombies.ts`、`data/factions/zombies.ts`、i18n `zombie_*` 条目
+    - 重点关注：zombie_lord 多基地遍历+限定条件全程约束、zombie_outbreak 限定条件执行时约束（审计反模式 #9）、zombie_theyre_coming_to_get_you 替代打出逻辑
+    - 输出审查矩阵
+    - _Requirements: 7.1-7.11_
+
+  - [x] 5.2 审查捣蛋鬼（Tricksters）派系多步骤能力
+    - 读取 `abilities/tricksters.ts`、`data/factions/tricksters.ts`、i18n `trickster_*` 条目
+    - 重点关注：trickster_leprechaun 力量比较触发、trickster_brownie "影响"判定、trickster_flame_trap 双消灭时序、trickster_block_the_path 派系选择限制
+    - 输出审查矩阵
+    - _Requirements: 8.1-8.11_
+
+- [x] 6. 批次 3 检查点
+  - 确认批次 3 两个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 7. 批次 4：幽灵 + 熊骑兵派系审查
+  - [x] 7.1 审查幽灵（Ghosts）派系多步骤能力
+    - 读取 `abilities/ghosts.ts`、`data/factions/ghosts.ts`、i18n `ghost_*` 条目
+    - 重点关注：ghost_spectre 弃牌堆替代打出、ghost_haunting 条件双效果、ghost_spirit 弃牌消灭交互、ghost_make_contact 控制权转移
+    - 输出审查矩阵
+    - _Requirements: 9.1-9.11_
+
+  - [x] 7.2 审查熊骑兵（Bear Cavalry）派系多步骤能力
+    - 读取 `abilities/bear_cavalry.ts`、`data/factions/bear_cavalry.ts`、i18n `bear_cavalry_*` 条目
+    - 重点关注：bear_cavalry_general_ivan 全局保护范围、bear_cavalry_polar_commando 条件双效果、bear_cavalry_bear_hug 全局扫描+平局交互、bear_cavalry_superiority 多重保护
+    - 输出审查矩阵
+    - _Requirements: 10.1-10.11_
+
+- [x] 8. 批次 4 检查点
+  - 确认批次 4 两个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+
+- [x] 9. 批次 5：蒸汽朋克 + 食人花派系审查
+  - [x] 9.1 审查蒸汽朋克（Steampunks）派系多步骤能力
+    - 读取 `abilities/steampunks.ts`、`data/factions/steampunks.ts`、i18n `steampunk_*` 条目
+    - 重点关注：steampunk_mechanic 弃牌堆战术回收打出、steampunk_zeppelin 双向移动天赋、steampunk_change_of_venue 回收再打出、steampunk_escape_hatch 消灭拦截
+    - 输出审查矩阵
+    - _Requirements: 11.1-11.12_
+
+  - [x] 9.2 审查食人花（Killer Plants）派系多步骤能力
+    - 读取 `abilities/killer_plants.ts`、`data/factions/killer_plants.ts`、i18n `killer_plant_*` 条目
+    - 重点关注：killer_plant_venus_man_trap 搜牌+额外打出+重洗、killer_plant_sprout 四步流程、killer_plant_entangled 全局限制+自毁、killer_plant_blossom 同名多打
+    - 输出审查矩阵
+    - _Requirements: 12.1-12.12_
+
+- [x] 10. 批次 5 检查点
+  - 确认批次 5 两个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 11. 批次 6：克苏鲁仆从 + 远古物种派系审查
+  - [x] 11.1 审查克苏鲁仆从（Cthulhu）派系多步骤能力
+    - 读取 `abilities/cthulhu.ts`、`data/factions/cthulhu.ts`、i18n `cthulhu_*` 条目
+    - 重点关注：cthulhu_complete_the_ritual 复杂回合开始触发、cthulhu_furthering_the_cause 回合结束条件VP、cthulhu_madness_unleashed 弃疯狂卡联动额度、cthulhu_fhtagn 牌库搜索
+    - 输出审查矩阵
+    - _Requirements: 13.1-13.13_
+
+  - [x] 11.2 审查远古物种（Elder Things）派系多步骤能力
+    - 读取 `abilities/elder_things.ts`、`data/factions/elder_things.ts`、i18n `elder_thing_*` 条目
+    - 重点关注：elder_thing_elder_thing 二选一+保护、elder_thing_shoggoth 三重效果+前置验证、elder_thing_mi_go 二选一交互、elder_thing_the_price_of_power special 计分前计算
+    - 输出审查矩阵
+    - _Requirements: 14.1-14.11_
+
+- [x] 12. 批次 6 检查点
+  - 确认批次 6 两个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 13. 批次 7：印斯茅斯 + 米斯卡塔尼克派系审查
+  - [x] 13.1 审查印斯茅斯（Innsmouth）派系多步骤能力
+    - 读取 `abilities/innsmouth.ts`、`data/factions/innsmouth.ts`、i18n `innsmouth_*` 条目
+    - 重点关注：innsmouth_the_locals 牌库顶搜索同名、innsmouth_sacred_circle 天赋同名限定、innsmouth_return_to_the_sea special 计分后同名拦截、innsmouth_recruitment 疯狂卡联动额度
+    - 输出审查矩阵
+    - _Requirements: 15.1-15.9_
+
+  - [x] 13.2 审查米斯卡塔尼克（Miskatonic）派系多步骤能力
+    - 读取 `abilities/miskatonic.ts`、`data/factions/miskatonic.ts`、i18n `miskatonic_*` 条目
+    - 重点关注：miskatonic_professor 天赋条件双额度、miskatonic_lost_knowledge 条件展示+双额度、miskatonic_field_trip 多步手牌→牌库底→抽牌、miskatonic_it_might_just_work 前置条件消灭
+    - 输出审查矩阵
+    - _Requirements: 16.1-16.11_
+
+- [x] 14. 批次 7 检查点
+  - 确认批次 7 两个派系的审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 15. 批次 8：基础版基地 + 克苏鲁扩展基地审查
+  - [x] 15.1 审查基础版基地复杂能力
+    - 读取 `domain/baseAbilities.ts`、i18n `base_*` 条目
+    - 重点关注：base_the_homeworld 力量限定全程约束、base_mushroom_kingdom 回合开始交互、base_pirate_cove 非冠军移动、base_wizard_academy 多步排序、base_temple_of_goju 全局扫描
+    - 输出审查矩阵
+    - _Requirements: 17.1-17.27_
+
+  - [x] 15.2 审查克苏鲁扩展基地复杂能力
+    - 读取 `domain/baseAbilities_expansion.ts`、i18n `base_*` 克苏鲁相关条目
+    - 重点关注：base_the_asylum 疯狂卡返回交互、base_plateau_of_leng 同名首次限制、base_miskatonic_university_base 多选疯狂卡返回
+    - 输出审查矩阵
+    - _Requirements: 18.1-18.5_
+
+- [x] 16. 批次 8 检查点
+  - 确认批次 8 基地审查矩阵完整
+  - 询问用户是否有问题
+
+- [x] 17. 批次 9：PP/AL9000 扩展基地 + 交叉影响审查
+  - [x] 17.1 审查 Pretty Pretty / AL9000 扩展基地复杂能力（已合并到 Batch 8）
+    - 读取 `domain/baseAbilities_expansion.ts` 中 PP/AL9000 部分
+    - 重点关注：base_house_of_nine_lives 消灭拦截、base_beautiful_castle 力量条件保护、base_pony_paradise 数量条件保护、base_fairy_ring 首次+二选一
+    - 输出审查矩阵
+    - _Requirements: 19.1-19.13_
+
+  - [x] 17.2 执行跨能力交叉影响审查
+    - 检查保护效果叠加（多个"不能被消灭"同时存在）
+    - 检查限制效果叠加（多个"不能打出"同时存在）
+    - 检查触发链执行顺序
+    - 检查 robot_microbot_alpha "视为微型机"对其他派系的影响
+    - 检查疯狂卡机制与非克苏鲁派系的交互
+    - 输出交叉影响审查报告
+    - _Requirements: 20.1-20.6_
+
+- [x] 18. 批次 9 检查点
+  - 确认批次 9 审查完整
+  - 询问用户是否有问题
+
+- [x] 19. 批次 10：汇总报告
+  - [x] 19.1 生成全局汇总报告
+    - 汇总所有批次的审查矩阵
+    - 按严重程度分类统计：❌缺失实现 / ⚠️语义偏差 / 📝测试缺失
+    - 计算每个派系的审查通过率
+    - 按修复优先级排序
+    - 标注审计反模式违规项
+    - _Requirements: 21.1-21.5_
+
+- [x] 20. 最终检查点
+  - 确认汇总报告完整且统计数据与各批次矩阵一致
+  - 确认所有 ❌/⚠️ 标注附带具体证据和修复建议
+  - 询问用户是否需要对特定问题创建修复 spec
+
+## 备注
+
+- 每个批次的审查矩阵直接输出在对话中，不创建额外文件
+- 审查过程中发现的问题如需修复，将在汇总报告中标注并建议创建独立的修复 spec
+- 已有 880 个通过测试作为基线，审查中会验证测试是否覆盖了正确的语义
+- 审查重点关注审计反模式清单中的高频问题（限定条件仅入口检查、可选效果自动执行、测试只断言事件不验证状态）

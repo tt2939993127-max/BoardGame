@@ -1,0 +1,36 @@
+{
+  "title": {
+    "primary": "Tic",
+    "secondary": "Tac Toe"
+  },
+  "player": {
+    "self": "Me",
+    "guest": "Guest {{number}}"
+  },
+  "status": {
+    "win": "{{player}} wins!",
+    "draw": "Draw!",
+    "turnSuffix": "'s turn",
+    "thinking": "Thinking..."
+  },
+  "error": {
+    "notYourTurn": "Not your turn",
+    "invalidCell": "Invalid cell position",
+    "cellOccupied": "Cell already occupied",
+    "unknownCommand": "Unknown command",
+    "tutorial_manifest_invalid": "Tutorial configuration is invalid",
+    "tutorial_command_blocked": "This action is blocked in the tutorial",
+    "tutorial_step_locked": "The current step cannot be skipped"
+  },
+  "actionLog": {
+    "cellClicked": "Placed: {{row}},{{col}}"
+  },
+  "tutorial": {
+    "steps": {
+      "intro": "Welcome to Tic-Tac-Toe! 👋 This classic strategy game challenges you to connect three marks in a row.",
+      "centerStrategy": "💡 Strategy tip: Take the center! Click the middle cell (X).",
+      "blockStrategy": "Watch the opponent's pattern. If they have two in a row, block it.",
+      "finish": "Good luck—go win the game! 🎉"
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "auth": {
+    "error": {
+      "missingCredentials": "Email and password are required",
+      "usernameLength": "Username length must be between 2 and 20 characters",
+      "passwordLength": "Password must be at least 4 characters",
+      "usernameTaken": "Username is already taken",
+      "serverError": "Server error, please try again later",
+      "invalidCredentials": "Invalid email or password",
+      "invalidPassword": "Invalid password",
+      "emailNotRegisteredLogin": "This email is not registered. Please sign up first",
+      "emailAlreadyRegistered": "This email is already registered. Would you like to log in?",
+      "missingToken": "Missing authentication token",
+      "userNotFound": "User not found",
+      "invalidToken": "Invalid authentication token",
+      "loginRequired": "Please log in first",
+      "missingEmail": "Please enter an email address",
+      "invalidEmail": "Please enter a valid email address",
+      "emailAlreadyBound": "This email is already bound to another account",
+      "missingEmailCode": "Please enter email and verification code",
+      "emailCodeExpired": "Verification code expired, please request a new one",
+      "emailCodeMismatch": "Verification code is incorrect",
+      "missingRegisterFields": "Please fill in all required registration fields",
+      "emailAlreadyUsed": "This email is already registered",
+      "loginLocked": "Too many failed attempts. Try again in {{minutes}} minutes",
+      "registerCodeSendTooFrequent": "Too frequent. Try again in {{seconds}} seconds",
+      "registerCodeSendLimited": "Too many requests. Try again in {{minutes}} minutes",
+      "missingResetFields": "Please fill in all required reset fields",
+      "resetSendTooFrequent": "Too many requests. Try again in {{seconds}} seconds",
+      "emailNotRegistered": "This email is not registered",
+      "invalidResetCode": "Invalid or expired verification code",
+      "resetCodeExpired": "Verification code expired, please request a new one",
+      "resetCodeMismatch": "Verification code is incorrect",
+      "resetLocked": "Too many reset attempts. Try again in {{seconds}} seconds",
+      "avatarMissingFile": "Please select an image file",
+      "missingPasswordFields": "Please enter current and new password",
+      "avatarInvalidType": "Only JPG, PNG, WebP, GIF formats are supported",
+      "avatarUploadFailed": "Failed to upload avatar"
+    },
+    "success": {
+      "register": "Registration successful",
+      "login": "Login successful",
+      "emailBound": "Email bound successfully",
+      "logout": "Logged out successfully",
+      "refreshToken": "Token refreshed successfully",
+      "resetCodeSent": "Verification code sent",
+      "passwordReset": "Password reset successfully",
+      "avatarUpdated": "Avatar updated successfully",
+      "usernameUpdated": "Nickname updated successfully",
+      "passwordUpdated": "Password updated successfully"
+    }
+  },
+  "friend": {
+    "error": {
+      "missingQuery": "Please enter a search keyword",
+      "missingTargetUser": "Please select a user to add",
+      "cannotAddSelf": "You cannot add yourself",
+      "userNotFound": "User not found",
+      "alreadyFriends": "You are already friends",
+      "requestExists": "Friend request already sent",
+      "incomingRequest": "This user has already sent you a request",
+      "requestNotFound": "Friend request not found",
+      "friendNotFound": "Friend relation not found"
+    },
+    "success": {
+      "requestSent": "Friend request sent",
+      "requestAccepted": "Friend request accepted",
+      "requestRejected": "Friend request rejected",
+      "friendDeleted": "Friend deleted"
+    }
+  },
+  "message": {
+    "error": {
+      "userNotFound": "User not found",
+      "notFriend": "You can only message friends",
+      "invalidTarget": "Invalid message target"
+    },
+    "success": {
+      "sent": "Message sent",
+      "read": "Marked as read"
+    }
+  },
+  "invite": {
+    "error": {
+      "userNotFound": "User not found",
+      "notFriend": "You can only invite friends",
+      "invalidTarget": "Invalid invite target"
+    },
+    "success": {
+      "sent": "Invite sent"
+    }
+  },
+  "review": {
+    "error": {
+      "missingGameId": "Missing game ID",
+      "contentTooLong": "Review content must be within 500 characters",
+      "contentBlocked": "Content contains restricted words",
+      "notFound": "Review not found"
+    },
+    "success": {
+      "saved": "Review saved",
+      "deleted": "Review deleted"
+    }
+  },
+  "admin": {
+    "error": {
+      "userNotFound": "User not found",
+      "matchNotFound": "Match not found",
+      "roomNotFound": "Room not found",
+      "ugcPackageNotFound": "UGC package not found",
+      "missingBanReason": "Please provide a ban reason",
+      "cannotBanAdmin": "Cannot ban admin account",
+      "cannotDeleteAdmin": "Cannot delete admin account"
+    },
+    "success": {
+      "userBanned": "User banned",
+      "userUnbanned": "User unbanned",
+      "roomDestroyed": "Room destroyed",
+      "userDeleted": "User deleted",
+      "matchDeleted": "Match deleted"
+    }
+  },
+  "email": {
+    "error": {
+      "missingConfig": "Email service is not configured"
+    },
+    "subject": "Email Verification Code - Yizhuo Board Game",
+    "reset": {
+      "subject": "Password Reset Code - Yizhuo Board Game",
+      "template": {
+        "title": "Yizhuo Board Game Password Reset",
+        "intro": "You requested a password reset for your Yizhuo Board Game account. Use the code below to verify:",
+        "note": "The code is valid for {{minutes}} minutes. If you didn't request it, please ignore this email.",
+        "footer": "Yizhuo Board Game"
+      }
+    },
+    "template": {
+      "senderName": "Yizhuo Board Game",
+      "title": "Yizhuo Board Game Email Verification",
+      "intro": "You are binding this email to your Yizhuo Board Game account. Use the code below to verify:",
+      "note": "The code is valid for {{minutes}} minutes. If you didn't request it, please ignore this email.",
+      "footer": "Yizhuo Board Game"
+    },
+    "success": {
+      "sent": "Verification code sent"
+    },
+    "info": {
+      "devFallback": "Dev mode: verification code printed to server console"
+    }
+  }
+}

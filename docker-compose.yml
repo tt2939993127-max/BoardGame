@@ -1,0 +1,69 @@
+services:
+  mongodb:
+    image: mongo:6
+    container_name: boardgame-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: boardgame
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/boardgame --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: boardgame-redis
+    restart: unless-stopped
+    # expose: ["6379"]  # Internal only, no host port mapping
+    volumes:
+      - redis_data:/data
+
+  game-server:
+    image: ghcr.io/zhuanggenhua/boardgame-game:latest
+    container_name: boardgame-game-server
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      GAME_SERVER_PORT: 18000
+      # Docker 网络内使用容器名（覆盖 .env 中的 localhost）
+      MONGO_URI: mongodb://mongodb:27017/boardgame
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "18000:18000"
+
+  web:
+    image: ghcr.io/zhuanggenhua/boardgame-web:latest
+    container_name: boardgame-web
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      game-server:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      API_SERVER_PORT: 80
+      GAME_SERVER_PROXY_TARGET: http://game-server:18000
+      # Docker 网络内使用容器名（覆盖 .env 中的 localhost）
+      MONGO_URI: mongodb://mongodb:27017/boardgame
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3000:80"  # Nginx 统一管理 80 端口，Docker 使用内部端口
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local

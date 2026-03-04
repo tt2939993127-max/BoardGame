@@ -1,0 +1,347 @@
+{
+  "error": {
+    "not_active_player": "Not your turn",
+    "player_mismatch": "Not your turn",
+    "invalid_phase": "This action is not allowed in the current phase",
+    "invalid_character": "Invalid character",
+    "character_not_selected": "No character selected",
+    "character_selection_not_initialized": "Character selection not initialized",
+    "command_failed": "Command failed",
+    "internal_error": "Server error, action auto-recovered",
+    "pipeline_error": "Command execution error, please try again"
+  },
+  "controls": {
+    "undo": {
+      "expand": "Expand Undo",
+      "collapse": "Collapse Undo",
+      "title": "Undo Control",
+      "waiting": "Waiting for opponent approval...",
+      "cancel": "Cancel Request",
+      "opponentRequest": "Opponent requested undo",
+      "reviewHint": "Your opponent wants to undo their last move. Agree?",
+      "approve": "Approve",
+      "reject": "Reject",
+      "requestHint": "You can request to undo your last move",
+      "historyCount": "{{count}} move(s) available",
+      "request": "Request Undo",
+      "loading": "Loading undo status...",
+      "none": "No undo actions available."
+    }
+  },
+  "hud": {
+    "mode": {
+      "local": "Local",
+      "tutorial": "Tutorial",
+      "online": "Online Room"
+    },
+    "copyRoomId": "Copy Room ID",
+    "roomId": "ID: {{id}}",
+    "status": {
+      "self": "You",
+      "connected": "Connected",
+      "waiting": "Waiting...",
+      "player": "Player {{id}}",
+      "playerShort": "P{{id}}",
+      "playerUnknown": "Player",
+      "opponent": "Opponent",
+      "offline": "Offline",
+      "empty": "Empty",
+      "searching": "Searching",
+      "localTitle": "Local Match",
+      "localDescription": "Take turns on this device.",
+      "tutorialTitle": "Tutorial Mode",
+      "tutorialDescription": "Follow the guidance to learn the rules."
+    },
+    "offlineBanner": {
+      "message": "{{name}} has been offline for {{time}}",
+      "waitingOpponent": "Waiting for opponent...",
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}min"
+    },
+    "labels": {
+      "turn": "Turn:",
+      "roomId": "Room ID",
+      "players": "Players"
+    },
+    "actions": {
+      "destroy": "End game and destroy room",
+      "destroyHint": "Close room for everyone",
+      "leaveRoom": "Leave Room",
+      "leaveRoomHint": "Leave the room completely",
+      "leaveKeep": "Leave room (keep open)",
+      "tempLeave": "Disconnect",
+      "tempLeaveHint": "Disconnect but keep seat",
+      "forceExit": "Force Clear",
+      "forceExitHint": "Clear local data (room may still exist on server)",
+      "backToLobby": "Back to Lobby",
+      "backToLobbyHint": "Leave room completely",
+      "social": "Friends",
+      "feedback": "Feedback",
+      "about": "About",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen",
+      "settings": "Settings",
+      "audio": "Audio",
+      "chat": "Chat",
+      "actionLog": "Action Log",
+      "info": "Info",
+      "room": "Room",
+      "exit": "Exit",
+      "close": "Close"
+    },
+    "about": {
+      "title": "Board Game",
+      "githubTitle": "GitHub",
+      "githubSubtitle": "View the source code and contribute",
+      "qqTitle": "QQ Group",
+      "qqSubtitle": "Join the community: ",
+      "supportTitle": "If you like this project, you can buy the author a coffee.",
+      "supportSubtitle": "You can leave a note to be added to the sponsor list if needed.",
+      "qrPlaceholder": "QR",
+      "wechatLabel": "WeChat",
+      "alipayLabel": "Alipay",
+      "sponsorLoading": "Loading sponsors...",
+      "sponsorError": "Failed to load sponsors",
+      "sponsorEmpty": "No sponsors yet",
+      "qqCopied": "QQ group number copied",
+      "copyFailed": "Copy failed, please copy manually",
+      "loadMore": "Loading more..."
+    },
+    "feedback": {
+      "title": "Feedback",
+      "subtitle": "Help us improve the experience",
+      "gameLabel": "Related game (optional)",
+      "gameAll": "-- General feedback --",
+      "typeLabel": "Type",
+      "severityLabel": "Priority",
+      "contentLabel": "Description",
+      "contentPlaceholder": "Describe the issue or suggestion...\nPaste screenshots (Ctrl+V)",
+      "pasteHint": "Screenshot paste supported",
+      "imageAlt": "Feedback screenshot",
+      "deleteImage": "Delete image",
+      "imageAdded": "Screenshot added",
+      "contactLabel": "Contact (optional)",
+      "contactPlaceholder": "Email or QQ (for follow-up)",
+      "attachLog": "Attach action log",
+      "attachState": "Attach state snapshot (for precise reproduction)",
+      "submit": "Submit Feedback",
+      "success": "Feedback submitted. Thanks for the support!",
+      "errors": {
+        "loginRequired": "Login for better feedback tracking experience",
+        "submitFailed": "Submission failed. Please try again later."
+      },
+      "type": {
+        "bug": "Bug",
+        "suggestion": "Suggestion",
+        "other": "Other"
+      },
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      }
+    },
+    "actionLog": {
+      "empty": "No action log yet"
+    },
+    "chat": {
+      "placeholder": "Type a message...",
+      "readonlyPlaceholder": "Spectators cannot chat",
+      "empty": "No messages yet...",
+      "unknownPlayer": "Unknown Player",
+      "preview": "{{name}}: {{message}}",
+      "maxLength": "Max {{count}} chars",
+      "tooLong": "Message too long. Max {{count}} chars.",
+      "readonlyWarning": "Spectators cannot chat.",
+      "notConnected": "Chat service disconnected. Please try again.",
+      "connecting": "Connecting to chat. Please try again."
+    },
+    "fullscreen": {
+      "enterFailed": "Failed to enter fullscreen. Check browser permissions.",
+      "exitFailed": "Failed to exit fullscreen. Check browser status."
+    },
+    "toggle": {
+      "collapse": "Collapse menu",
+      "expand": "Expand menu - draggable"
+    }
+  },
+  "audio": {
+    "bgmVolume": "Music Volume",
+    "sfxVolume": "SFX Volume",
+    "nowPlaying": "Now Playing",
+    "nonePlaying": "Not Playing",
+    "unmute": "Unmute",
+    "mute": "Mute",
+    "switchTrack": "Switch Track",
+    "prevTrack": "Previous Track",
+    "trackList": "Track List ({{count}})",
+    "tracks": {
+      "main_theme": "Classic Duel",
+      "chill_piano": "Chill Piano",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main": "Dragon Dance",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_intensity_2": "Dragon Dance (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main": "Shields and Spears",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_intensity_2": "Shields and Spears (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_main": "Hang Them",
+      "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_intensity_2": "Hang Them (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_main": "My Kingdom",
+      "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_intensity_2": "My Kingdom (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_main": "Stormborn Destiny",
+      "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_intensity_2": "Stormborn Destiny (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_main": "Ogres",
+      "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_intensity_2": "Ogres (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_main": "Nock!",
+      "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_intensity_2": "Nock! (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_main": "Fireborn",
+      "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_intensity_2": "Fireborn (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main": "Corsair",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2": "Corsair (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main": "Lonely Bard",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_intensity_2": "Lonely Bard (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_main": "To The Wall",
+      "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_2": "To The Wall (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main": "Elder Awakening",
+      "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_2": "Elder Awakening (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main": "Feysong Fields",
+      "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_2": "Feysong Fields (Intense)",
+      "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_main": "Stone Chant",
+      "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_2": "Stone Chant (Intense)",
+      "bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_main": "Luminesce",
+      "bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_intensity_2": "Luminesce (Intense)",
+      "bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main": "Wind Chime",
+      "bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_intensity_2": "Wind Chime (Intense)",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main": "Tiki Party",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2": "Tiki Party (Intense)",
+      "bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_main": "Bubblegum",
+      "bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_intensity_2": "Bubblegum (Intense)",
+      "bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_main": "Field Day",
+      "bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_intensity_2": "Field Day (Intense)",
+      "bgm.general.casual_music_pack_vol.lizards_rt_1.casual_lizards_main": "Lizards",
+      "bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_main": "Sunset",
+      "bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_intensity_2": "Sunset (Intense)",
+      "bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_main": "Move Your Feet",
+      "bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_intensity_2": "Move Your Feet (Intense)",
+      "bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_main": "Sunny Days",
+      "bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_intensity_2": "Sunny Days (Intense)",
+      "bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_main": "Big Shot",
+      "bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_intensity_2": "Big Shot (Intense)",
+      "bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_1": "Nobody Knows",
+      "bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_2": "Nobody Knows (Intense)"
+    }
+  },
+  "layoutEditor": {
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "savedWithPath": "Saved: {{path}}",
+    "saveFailed": "Save failed",
+    "exportFileName": "layout.config.json",
+    "import": "Import",
+    "export": "Export",
+    "finishTrack": "Finish track ({{count}} points)",
+    "delete": "Delete",
+    "backgroundAlt": "Background",
+    "tools": {
+      "select": "Select",
+      "grid": "Grid",
+      "zone": "Zone",
+      "track": "Track",
+      "stackPoint": "Stack Point"
+    },
+    "grid": {
+      "rows": "Rows",
+      "cols": "Columns",
+      "gapX": "X Gap",
+      "gapY": "Y Gap",
+      "offsetX": "X Offset",
+      "offsetY": "Y Offset",
+      "width": "Width",
+      "height": "Height",
+      "create": "Create Grid"
+    },
+    "status": {
+      "grid": "Grid: {{value}}",
+      "unset": "Unset",
+      "zone": "Zones: {{count}}",
+      "track": "Tracks: {{count}}",
+      "stackPoint": "Stack Points: {{count}}",
+      "selected": "Selected: {{id}}"
+    }
+  },
+  "debug": {
+    "toggleTitle": "Dev Debug",
+    "panelTitle": "🛠️ Debug Console",
+    "moves": {
+      "ROLL_DICE": "Roll Dice",
+      "ROLL_BONUS_DIE": "Roll Bonus Die",
+      "TOGGLE_DIE_LOCK": "Toggle Die Lock",
+      "CONFIRM_ROLL": "Confirm Roll",
+      "SELECT_ABILITY": "Select Ability",
+      "DRAW_CARD": "Draw Card",
+      "DISCARD_CARD": "Discard Card",
+      "SELL_CARD": "Sell Card",
+      "UNDO_SELL_CARD": "Undo Sell",
+      "REORDER_CARD_TO_END": "Reorder to End",
+      "PLAY_CARD": "Play Card",
+      "PLAY_UPGRADE_CARD": "Play Upgrade",
+      "RESOLVE_CHOICE": "Resolve Choice",
+      "ADVANCE_PHASE": "Advance Phase",
+      "RESPONSE_PASS": "Pass Response",
+      "SYS_CHEAT_SET_RESOURCE": "Set Resource",
+      "SYS_CHEAT_ADD_RESOURCE": "Add Resource",
+      "SYS_CHEAT_SET_PHASE": "Set Phase",
+      "SYS_CHEAT_SET_DICE": "Set Dice"
+    },
+    "viewLabel": "View:",
+    "spectator": "Spectator",
+    "tabs": {
+      "actions": "🎮 Actions",
+      "state": "📊 State",
+      "controls": "⚙️ System"
+    },
+    "sections": {
+      "moves": "Moves",
+      "events": "Events"
+    },
+    "actions": {
+      "execute": "Run",
+      "empty": "No actions available"
+    },
+    "placeholders": {
+      "moveArgs": "Args (JSON/String)...",
+      "commandName": "Command name"
+    },
+    "events": {
+      "endTurn": "🛑 End Turn",
+      "endPhase": "⏭️ End Phase"
+    },
+    "state": {
+      "phase": "Phase",
+      "turn": "Turn",
+      "activePlayer": "Active Player",
+      "gameState": "Game State (G)",
+      "copy": "Copy",
+      "copied": "Copied",
+      "assign": "Assign",
+      "cancelAssign": "Cancel",
+      "pastePlaceholder": "Paste game state JSON...",
+      "pasteFromClipboard": "Paste from clipboard",
+      "apply": "Apply state",
+      "errorUnsupported": "This game does not support state assignment",
+      "errorInvalidJson": "Invalid JSON format"
+    },
+    "reset": {
+      "button": "🔄 Reset Game",
+      "newRoom": "🆕 New Room",
+      "creating": "Creating...",
+      "linkCopied": "New room link copied! Please share with your opponent.",
+      "shareLinkManually": "Please copy and share this link with your opponent:",
+      "hintTitle": "💡 Tip",
+      "hintDescription": "Local mode: Reset starts a new game. Online mode: Create new room and copy link."
+    },
+    "tools": {
+      "gameSpecific": "Game Specific Tools"
+    }
+  }
+}
