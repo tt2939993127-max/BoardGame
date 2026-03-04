@@ -235,6 +235,17 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             // 回退到框架默认
         }
 
+        // RESPONSE_WINDOW_OPENED / RESPONSE_WINDOW_CLOSED：只有响应者才播放音效
+        // 避免暴露对方有响应牌的信息（信息隐藏原则）
+        if (type === 'RESPONSE_WINDOW_OPENED' || type === 'RESPONSE_WINDOW_CLOSED') {
+            const payload = (event as AudioEvent & { payload?: { responderQueue?: string[] } }).payload;
+            const responderQueue = payload?.responderQueue ?? [];
+            const isResponder = currentPlayerId && responderQueue.includes(currentPlayerId);
+            // 只有自己在响应者队列中时才播放音效
+            if (!isResponder) return null;
+            // 回退到框架默认音效
+        }
+
         // ========== 使用框架自动生成的默认音效 ==========
         return baseDtFeedbackResolver(event);
     },

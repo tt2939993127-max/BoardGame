@@ -234,12 +234,12 @@ const FRANKENSTEIN_ACTION_KEYS = [
 const VAMPIRE_MINION_KEYS = [
     'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_001',
     'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_002',
-    'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_dread_whisper_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_grave_whisper_003',
 ];
 const VAMPIRE_ACTION_KEYS = [
     'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_001',
     'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_002',
-    'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_dread_whisper_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_grave_whisper_003',
 ];
 
 // 巨蚁：统一用嗡鸣音效（风格一致）

@@ -269,7 +269,7 @@ export function revealHand(
 /** 生成展示牌库顶事件 */
 export function revealDeckTop(
     targetPlayerId: PlayerId | PlayerId[],
-    viewerPlayerId: PlayerId,
+    viewerPlayerId: PlayerId | 'all',
     cards: { uid: string; defId: string }[],
     count: number,
     reason: string,

@@ -5,13 +5,15 @@
  * "After your attack ends, remove this token and the attacker attacks again."
  * 
  * 晕眩机制（正确理解）：
- * 1. ✅ 有晕眩的玩家可以正常攻击（晕眩不阻止进攻行为）
- * 2. ❌ 有晕眩的玩家不能防御（被攻击时无法投防御骰）
- * 3. ✅ 攻击结束后，移除晕眩，有晕眩的攻击方再次攻击同一目标（额外攻击奖励）
+ * 1. ✅ 攻击施加眩晕后，立即触发额外攻击
+ * 2. ✅ 攻击方获得额外攻击机会，再次攻击被眩晕的目标
+ * 3. ✅ 眩晕在攻击结算后立即移除，不会在 buff 区显示
  * 4. ❌ 晕眩状态下无法打牌、使用 Token、使用净化、使用被动能力
  * 
- * 注意：晕眩不是"完全无法行动"，而是"无法防御和使用非攻击行动"。
- * 攻击行为本身不受晕眩影响，这是晕眩的核心机制（攻击后触发额外攻击）。
+ * 注意：
+ * - 眩晕是在攻击结算后立即触发的
+ * - 不需要等到有眩晕的玩家自己攻击
+ * - 眩晕立即移除，所以不会在 UI 中显示
  * 
  * 测试覆盖：
  * 1. 晕眩状态下无法打牌（PLAY_CARD）
@@ -100,68 +102,40 @@ describe('晕眩（Daze）状态行动阻止', () => {
         expect(result.passed).toBe(true);
     });
 
-    it('晕眩状态下无法选择进攻技能', () => {
-        const runner = createRunner();
-        const result = runner.run({
-            name: '晕眩玩家尝试选择技能',
-            setup: (_playerIds: string[], random: RandomFn) => {
-                const state = createDazedPlayerSetup('0')(_playerIds, random);
-                // 推进到 offensiveRoll 阶段并掷骰
-                const runner2 = createRunner(random, state);
-                const result2 = runner2.run({
-                    name: '推进到 offensiveRoll',
-                    commands: [
-                        cmd('ADVANCE_PHASE', '0'), // upkeep → income
-                        cmd('ADVANCE_PHASE', '0'), // income → main1
-                        cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll（晕眩会被移除）
-                    ],
-                });
-                // 重新添加晕眩状态（模拟在 offensiveRoll 阶段被施加晕眩）
-                result2.finalState.core.players['0'].statusEffects[STATUS_IDS.DAZE] = 1;
-                // 掷骰并确认
-                const runner3 = createRunner(random, result2.finalState);
-                const result3 = runner3.run({
-                    name: '掷骰并确认',
-                    commands: [
-                        cmd('ROLL_DICE', '0'),
-                        cmd('CONFIRM_ROLL', '0'),
-                    ],
-                });
-                return result3.finalState;
-            },
-            commands: [
-                cmd('SELECT_ABILITY', '0', { abilityId: 'palm-strike' }),
-            ],
-            expect: {
-                expectError: { command: 'SELECT_ABILITY', error: 'player_is_dazed' },
-            },
-        });
-
-        expect(result.passed).toBe(true);
-    });
+    // 注意：根据游戏规则，晕眩不阻止进攻行为，只阻止防御行为
+    // 因此不测试"晕眩状态下无法选择进攻技能"，因为这与规则矛盾
+    // 晕眩的攻击方可以正常攻击，攻击结束后会触发额外攻击
 
     it('晕眩状态下无法选择防御技能', () => {
         const runner = createRunner();
-        const result = runner.run({
+        // 先运行到游戏开始后的状态
+        const setupResult = runner.run({
+            name: '初始化游戏',
+            commands: [
+                cmd('SELECT_CHARACTER', '0', { characterId: 'monk' }),
+                cmd('SELECT_CHARACTER', '1', { characterId: 'barbarian' }),
+                cmd('PLAYER_READY', '1'),
+                cmd('HOST_START_GAME', '0'),
+            ],
+        });
+        
+        // 手动添加晕眩状态到玩家 1 和 pendingAttack
+        setupResult.finalState.core.players['1'].statusEffects[STATUS_IDS.DAZE] = 1;
+        // 手动设置 pendingAttack 模拟防御阶段
+        setupResult.finalState.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'palm-strike',
+            isUltimate: false,
+        } as any;
+        // 设置阶段为 defensiveRoll（phase 存储在 sys.phase，不是 core.phase）
+        setupResult.finalState.sys.phase = 'defensiveRoll';
+        
+        // 使用修改后的状态继续测试
+        const runner2 = createRunner(fixedRandom, setupResult.finalState);
+        const result = runner2.run({
             name: '晕眩玩家尝试防御',
-            setup: (_playerIds: string[], random: RandomFn) => {
-                const state = createDazedPlayerSetup('1')(_playerIds, random);
-                // 推进到 offensiveRoll 并创建 pendingAttack
-                const runner2 = createRunner(random, state);
-                const result2 = runner2.run({
-                    name: '推进到 defensiveRoll',
-                    commands: [
-                        cmd('ADVANCE_PHASE', '0'), // upkeep → income
-                        cmd('ADVANCE_PHASE', '0'), // income → main1
-                        cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll
-                        cmd('ROLL_DICE', '0'),
-                        cmd('CONFIRM_ROLL', '0'),
-                        cmd('SELECT_ABILITY', '0', { abilityId: 'palm-strike' }),
-                        cmd('ADVANCE_PHASE', '0'), // offensiveRoll → defensiveRoll
-                    ],
-                });
-                return result2.finalState;
-            },
             commands: [
                 cmd('SELECT_ABILITY', '1', { abilityId: 'deflect' }),
             ],
@@ -175,28 +149,36 @@ describe('晕眩（Daze）状态行动阻止', () => {
 
     it('晕眩状态下无法使用 Token', () => {
         const runner = createRunner();
-        const result = runner.run({
+        // 先运行到游戏开始后的状态
+        const setupResult = runner.run({
+            name: '初始化游戏',
+            commands: [
+                cmd('SELECT_CHARACTER', '0', { characterId: 'monk' }),
+                cmd('SELECT_CHARACTER', '1', { characterId: 'barbarian' }),
+                cmd('PLAYER_READY', '1'),
+                cmd('HOST_START_GAME', '0'),
+            ],
+        });
+        
+        // 手动添加晕眩状态到玩家 1、闪避 Token 和 pendingDamage
+        setupResult.finalState.core.players['1'].statusEffects[STATUS_IDS.DAZE] = 1;
+        setupResult.finalState.core.players['1'].tokens[TOKEN_IDS.EVASIVE] = 1;
+        // 手动设置 pendingDamage 模拟伤害响应窗口
+        setupResult.finalState.core.pendingDamage = {
+            id: 'pd-test',
+            sourcePlayerId: '0',
+            targetPlayerId: '1',
+            originalDamage: 5,
+            currentDamage: 5,
+            sourceAbilityId: 'palm-strike',
+            responseType: 'beforeDamageReceived',
+            responderId: '1',
+        } as any;
+        
+        // 使用修改后的状态继续测试
+        const runner2 = createRunner(fixedRandom, setupResult.finalState);
+        const result = runner2.run({
             name: '晕眩玩家尝试使用 Token',
-            setup: (_playerIds: string[], random: RandomFn) => {
-                const state = createDazedPlayerSetup('1')(_playerIds, random);
-                // 创建 pendingDamage 场景
-                const runner2 = createRunner(random, state);
-                const result2 = runner2.run({
-                    name: '创建 pendingDamage',
-                    commands: [
-                        cmd('ADVANCE_PHASE', '0'), // upkeep → income
-                        cmd('ADVANCE_PHASE', '0'), // income → main1
-                        cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll
-                        cmd('ROLL_DICE', '0'),
-                        cmd('CONFIRM_ROLL', '0'),
-                        cmd('SELECT_ABILITY', '0', { abilityId: 'palm-strike' }),
-                        cmd('ADVANCE_PHASE', '0'), // offensiveRoll → defensiveRoll
-                    ],
-                });
-                // 添加闪避 Token 用于测试
-                result2.finalState.core.players['1'].tokens[TOKEN_IDS.EVASIVE] = 1;
-                return result2.finalState;
-            },
             commands: [
                 cmd('USE_TOKEN', '1', { tokenId: TOKEN_IDS.EVASIVE, amount: 1 }),
             ],

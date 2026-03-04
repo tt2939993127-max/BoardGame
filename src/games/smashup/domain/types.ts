@@ -93,6 +93,9 @@ export interface MinionCardDef {
     soundKey?: string;
 }
 
+/** Special 技能触发时机 */
+export type SpecialTiming = 'beforeScoring' | 'afterScoring';
+
 /** 行动卡定义 */
 export interface ActionCardDef {
     id: string;
@@ -119,6 +122,12 @@ export interface ActionCardDef {
      * 仅对 subtype='special' 的行动卡有效。
      */
     specialLimitGroup?: string;
+    /**
+     * special 技能的触发时机（仅对 subtype='special' 有效）：
+     * - 'beforeScoring': 在 Me First! 窗口打出时立即执行（默认）
+     * - 'afterScoring': 生成 ARMED 事件，延迟到基地计分后执行
+     */
+    specialTiming?: SpecialTiming;
     /**
      * 打出时的音效 key（可选）。
      * 如果指定，优先使用此音效；否则 fallback 到派系默认音效池。
@@ -260,6 +269,8 @@ export interface PlayerState {
     baseLimitedMinionQuota?: Record<number, number>;
     /** 基地限定额度是否要求同名（baseIndex → true），与 baseLimitedMinionQuota 配合 */
     baseLimitedSameNameRequired?: Record<number, boolean>;
+    /** 基地限定额度的同名 defId（baseIndex → defId），与 baseLimitedSameNameRequired 配合 */
+    baseLimitedSameNameDefId?: Record<number, string>;
     /** 额外出牌的力量上限（如家园给的额外出牌只能打力量≤2的随从），回合结束清零 */
     extraMinionPowerMax?: number;
     /** 同名额外随从约束：剩余额度数 */
@@ -300,6 +311,8 @@ export interface PendingAfterScoringSpecial {
     sourceDefId: string;
     playerId: PlayerId;
     baseIndex: number;
+    /** 卡牌 UID（用于后续执行时的上下文） */
+    cardUid: string;
     // 随从快照（可选）：用于计分后随从已离场的场景（如 giant_ant_we_are_the_champions）
     minionSnapshots?: Array<{
         uid: string;
@@ -922,8 +935,8 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
     payload: {
         /** 牌库所有者（单人或多人） */
         targetPlayerId: string | string[];
-        /** 查看者 */
-        viewerPlayerId: string;
+        /** 查看者（'all' = 所有人，PlayerId = 指定玩家） */
+        viewerPlayerId: string | 'all';
         /** 牌库顶卡牌 */
         cards: { uid: string; defId: string }[];
         /** 展示数量 */
@@ -991,6 +1004,8 @@ export interface SpecialAfterScoringArmedEvent extends GameEvent<typeof SU_EVENT
         sourceDefId: string;
         playerId: PlayerId;
         baseIndex: number;
+        /** 卡牌 UID（用于后续执行时的上下文） */
+        cardUid: string;
         // 随从快照（可选）：用于计分后随从已离场的场景（如 giant_ant_we_are_the_champions）
         minionSnapshots?: Array<{
             uid: string;

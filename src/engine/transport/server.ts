@@ -554,6 +554,12 @@ export class GameTransportServer {
             cursor: match.getRandomCursor(),
         });
 
+        // 写入缓存，确保后续走 diff 基准正确
+        // JSON round-trip 消除 undefined 值的 key，确保缓存结构与客户端（经 socket.io JSON 序列化）一致。
+        // 否则 fast-json-patch 的 compare 会对 { key: undefined } → { key: value } 生成 replace 而非 add，
+        // 导致客户端 patch 应用失败（路径不存在）。
+        match.lastBroadcastedViews.set(playerID ?? 'spectator', JSON.parse(JSON.stringify(viewState)));
+
         // 通知其他玩家（旁观者不触发玩家连接事件）
         if (playerID !== null) {
             socket.to(`game:${matchID}`).emit('player:connected', matchID, playerID);

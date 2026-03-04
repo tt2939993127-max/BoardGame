@@ -104,6 +104,7 @@ export const BaseZone: React.FC<{
                         return (
                             <motion.div
                                 key={oa.uid}
+                                data-ongoing-uid={oa.uid}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (isSelectableOngoing && onOngoingSelect) {
@@ -173,6 +174,7 @@ export const BaseZone: React.FC<{
             <div
                 onClick={onClick}
                 ref={tokenRef}
+                data-base-index={baseIndex}
                 className={`
                     relative aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
                     ${isDimmed

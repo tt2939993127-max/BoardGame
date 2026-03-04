@@ -510,6 +510,7 @@ function giantAntWeAreTheChampions(ctx: AbilityContext): AbilityResult {
                 sourceDefId: 'giant_ant_we_are_the_champions',
                 playerId: ctx.playerId,
                 baseIndex: ctx.baseIndex,
+                cardUid: ctx.cardUid,
                 // 保存随从快照，供 afterScoring 使用（计分后随从已离场）
                 minionSnapshots: sources,
             },
@@ -823,7 +824,12 @@ const handleUnderPressureChooseSource: IH = (state, playerId, value, interaction
     const targets = collectOwnMinions(state.core, playerId).filter(m => 
         m.uid !== selected.minionUid && m.baseIndex !== scoringBaseIndex
     );
-    if (targets.length === 0) return { state, events: [] };
+    if (targets.length === 0) {
+        return { 
+            state, 
+            events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)]
+        };
+    }
 
     const interaction = createSimpleChoice(
         `giant_ant_under_pressure_choose_target_${timestamp}`,
@@ -951,7 +957,12 @@ const handleWeAreTheChampionsChooseSource: IH = (state, playerId, value, _intera
     const targets = collectOwnMinions(state.core, playerId).filter(
         m => m.uid !== selected.minionUid,
     );
-    if (targets.length === 0) return { state, events: [] };
+    if (targets.length === 0) {
+        return { 
+            state, 
+            events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)]
+        };
+    }
 
     const interaction = createSimpleChoice(
         `giant_ant_we_are_the_champions_choose_target_${timestamp}`,

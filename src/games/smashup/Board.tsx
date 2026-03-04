@@ -99,7 +99,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const { t } = useTranslation('game-smashup');
     const { setSelectedFactions } = useSmashUpOverlay();
     
-    // 等待状态就绪
+    // 等待状态就绪（在所有其他 Hooks 之前检查）
     if (!G || !G.core) {
         return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
     }
@@ -182,6 +182,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         const sameNameRemaining = myPlayer?.sameNameMinionRemaining ?? 0;
         const sameNameDefId = myPlayer?.sameNameMinionDefId;
         const baseQuota = myPlayer?.baseLimitedMinionQuota ?? {};
+        const baseSameNameRequired = myPlayer?.baseLimitedSameNameRequired ?? {};
         const hasBaseQuota = Object.values(baseQuota).some(v => v > 0);
 
         return all.filter(opt => {
@@ -198,10 +199,27 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             if (!hasBaseQuota) return false;
             if (opt.allowedBaseIndices === 'all') {
                 // 可以打到任意基地，检查是否有任何基地有额度
-                return Object.keys(baseQuota).some(baseIdx => baseQuota[Number(baseIdx)] > 0);
+                return Object.keys(baseQuota).some(baseIdx => {
+                    const idx = Number(baseIdx);
+                    if (baseQuota[idx] <= 0) return false;
+                    // 检查同名约束
+                    if (baseSameNameRequired[idx]) {
+                        // 必须与该基地上已有随从同名（运行时检查）
+                        return true;
+                    }
+                    return true;
+                });
             }
             // 只能打到特定基地，检查这些基地是否有额度
-            return opt.allowedBaseIndices.some(baseIdx => (baseQuota[baseIdx] ?? 0) > 0);
+            return opt.allowedBaseIndices.some(baseIdx => {
+                if ((baseQuota[baseIdx] ?? 0) <= 0) return false;
+                // 检查同名约束
+                if (baseSameNameRequired[baseIdx]) {
+                    // 必须与该基地上已有随从同名（运行时检查）
+                    return true;
+                }
+                return true;
+            });
         });
     }, [core, isMyTurn, phase, playerID, myPlayer]);
 
@@ -1760,7 +1778,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 isDeployMode={
                                     (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
                                 }
-                                isMinionSelectMode={(selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0)}
+                                isMinionSelectMode={!isOngoingSelectPrompt && ((selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
                                 selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
                                 multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
                                 isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}

@@ -219,8 +219,8 @@ describe('集成: base_innsmouth_base 印斯茅斯 (onMinionPlayed)', () => {
     });
 });
 
-describe('集成: base_plateau_of_leng 伦格高原 (onMinionPlayed)', () => {
-    it('手牌有同名随从 → Interaction 额外打出', () => {
+describe('集成: base_plateau_of_leng 伦格高地 (onMinionPlayed)', () => {
+    it('手牌有同名随从 → 直接授予同名随从额度', () => {
         const core = makeState({
             bases: [makeBase('base_plateau_of_leng')],
             players: {
@@ -233,7 +233,57 @@ describe('集成: base_plateau_of_leng 伦格高原 (onMinionPlayed)', () => {
         });
         const ms = makeMatchState(core);
         const { ms: resultMs5 } = executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(resultMs5, 'base_plateau_of_leng')).toBe(true);
+        
+        // 验证：应该授予了同名随从额度
+        const player = resultMs5.core.players['0'];
+        expect(player.baseLimitedMinionQuota).toBeDefined();
+        expect(player.baseLimitedMinionQuota![0]).toBe(1);
+        
+        // 验证：额度限定为同名随从
+        expect(player.baseLimitedSameNameRequired?.[0]).toBe(true);
+        
+        // 验证：保存了触发时的 defId
+        expect(player.baseLimitedSameNameDefId?.[0]).toBe('test_minion');
+    });
+
+    it('额度应检查触发时的 defId，而非基地上的随从', () => {
+        // 场景：打出 minion-1 → 触发能力 → minion-1 被消灭 → 打出 minion-2（同名）
+        const core = makeState({
+            bases: [makeBase('base_plateau_of_leng')],
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        { uid: 'minion-1', defId: 'test_minion', type: 'minion', owner: '0' },
+                        { uid: 'minion-2', defId: 'test_minion', type: 'minion', owner: '0' },
+                    ],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        
+        // 1. 打出第一个随从
+        const { ms: ms1 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        
+        // 验证：授予了额度
+        expect(ms1.core.players['0'].baseLimitedMinionQuota![0]).toBe(1);
+        expect(ms1.core.players['0'].baseLimitedSameNameDefId![0]).toBe('test_minion');
+        
+        // 2. 模拟第一个随从被消灭（直接修改状态）
+        const coreAfterDestroy = {
+            ...ms1.core,
+            bases: [makeBase('base_plateau_of_leng')], // 基地上没有随从
+        };
+        const ms2 = { ...ms1, core: coreAfterDestroy };
+        
+        // 3. 尝试打出第二个同名随从（应该成功，因为检查的是 baseLimitedSameNameDefId）
+        const { ms: ms3 } = executePlayMinion(ms2, '0', 'minion-2', 0);
+        
+        // 验证：第二个随从成功打出
+        expect(ms3.core.bases[0].minions).toHaveLength(1);
+        expect(ms3.core.bases[0].minions[0].uid).toBe('minion-2');
     });
 });
 

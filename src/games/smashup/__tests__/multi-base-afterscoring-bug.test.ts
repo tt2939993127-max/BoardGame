@@ -120,8 +120,8 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         expect(options.map((o: any) => o.value.baseIndex).sort()).toEqual([0, 1, 2]);
     });
 
-    // 跳过此测试 - 多基地计分链的复杂交互需要完整的系统支持
-    it.skip('完整流程：3个基地依次计分，中间有 afterScoring 交互', () => {
+    // 测试多基地计分链的复杂交互
+    it('完整流程：3个基地依次计分，中间有 afterScoring 交互', () => {
         const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
             domain: SmashUpDomain,
             systems: smashUpSystemsForTest,

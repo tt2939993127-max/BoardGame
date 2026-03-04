@@ -491,6 +491,7 @@ export function registerNinjaInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const baseIndex = ((iData as any)?.continuationContext as { baseIndex: number })?.baseIndex;
         if (baseIndex === undefined) return undefined;
+        // 不消耗正常额度（额外随从）
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
             payload: { playerId, cardUid, defId, baseIndex, power, consumesNormalLimit: false },

@@ -58,14 +58,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 [playerId]: [...(selection.playerSelections[playerId] || []), factionId],
             };
 
-            // 蛇形选秀逻辑
-            const N = state.turnOrder.length;
-            const k = newTaken.length;
-            let nextPlayerIndex = 0;
-            if (k < N) {
-                nextPlayerIndex = k;
-            } else if (k < 2 * N) {
-                nextPlayerIndex = 2 * N - 1 - k;
+            // 顺序选秀逻辑：每个玩家选完 2 个派系后才轮到下一个玩家
+            const currentPlayerSelections = newPlayerSelections[playerId] || [];
+            let nextPlayerIndex = state.currentPlayerIndex;
+            
+            // 如果当前玩家已选满 2 个派系，切换到下一个玩家
+            if (currentPlayerSelections.length >= 2) {
+                const currentIdx = state.turnOrder.indexOf(playerId);
+                nextPlayerIndex = (currentIdx + 1) % state.turnOrder.length;
             }
 
             return {
@@ -147,35 +147,41 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // consumesNormalLimit=false 时不消耗正常额度（忍者 special 额外打出、弃牌堆额外出牌等）
             const shouldIncrementPlayed = consumesNormalLimit !== false;
 
-            // 同名额度消耗：全局额度已用完且有同名额度剩余时，优先消耗同名额度
+            // 额度消耗优先级（从高到低）：
+            // 1. 基地限定额度（如果该基地有限定额度，优先消耗）
+            // 2. 同名额度（如果全局额度已用完且有同名额度剩余）
+            // 3. 全局额度（默认）
+
+            // 1. 基地限定额度：如果该基地有限定额度，优先消耗
+            const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
+            const useBaseQuota = shouldIncrementPlayed && baseQuota > 0;
+            
+            // 2. 同名额度：全局额度已用完且有同名额度剩余时，消耗同名额度
             const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
-            const globalFull0 = player.minionsPlayed >= player.minionLimit;
-            const useSameNameQuota = shouldIncrementPlayed && globalFull0 && sameNameRemaining > 0;
+            const globalFull = player.minionsPlayed >= player.minionLimit;
+            const useSameNameQuota = shouldIncrementPlayed && !useBaseQuota && globalFull && sameNameRemaining > 0;
+
+            // 应用额度消耗
+            let newBaseLimitedMinionQuota = player.baseLimitedMinionQuota;
             let newSameNameRemaining = player.sameNameMinionRemaining;
             let newSameNameDefId = player.sameNameMinionDefId;
-            if (useSameNameQuota) {
-                newSameNameRemaining = sameNameRemaining - 1;
-                // 锁定 defId（首次使用时从 null 锁定为实际 defId）
-                if (newSameNameDefId === null || newSameNameDefId === undefined) {
-                    newSameNameDefId = defId;
-                }
-            }
-
-            // 基地限定额度消耗：如果该基地有限定额度且全局额度和同名额度都已用完，优先消耗限定额度
-            const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
-            const globalFull = player.minionsPlayed >= player.minionLimit;
-            const useBaseQuota = shouldIncrementPlayed && !useSameNameQuota && globalFull && baseQuota > 0;
-            let newBaseLimitedMinionQuota = player.baseLimitedMinionQuota;
             let finalMinionsPlayed = player.minionsPlayed;
-            if (useSameNameQuota) {
-                // 消耗同名额度，不增加全局 minionsPlayed
-            } else if (useBaseQuota) {
+
+            if (useBaseQuota) {
                 // 消耗基地限定额度，不增加全局 minionsPlayed
                 newBaseLimitedMinionQuota = {
                     ...player.baseLimitedMinionQuota,
                     [baseIndex]: baseQuota - 1,
                 };
+            } else if (useSameNameQuota) {
+                // 消耗同名额度，不增加全局 minionsPlayed
+                newSameNameRemaining = sameNameRemaining - 1;
+                // 锁定 defId（首次使用时从 null 锁定为实际 defId）
+                if (newSameNameDefId === null || newSameNameDefId === undefined) {
+                    newSameNameDefId = defId;
+                }
             } else if (shouldIncrementPlayed) {
+                // 消耗全局额度
                 finalMinionsPlayed = player.minionsPlayed + 1;
             }
 
@@ -529,7 +535,23 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.BASE_REPLACED: {
             const { baseIndex, oldBaseDefId, newBaseDefId, keepCards } = (event as BaseReplacedEvent).payload;
-            const newBaseDeck = state.baseDeck.filter(id => id !== newBaseDefId);
+            // ✅ 修复：使用 indexOf + slice 移除第一个匹配的基地，而不是 filter
+            // 原因：filter 会移除所有匹配的基地，如果 baseDeck 中有重复基地会出错
+            // 而且 scoreOneBase 中已经用 slice(1) 移除了第一个基地，这里应该保持一致
+            // 但是 reduce 是基于事件的，不应该依赖 scoreOneBase 的返回值
+            // 所以这里需要找到 newBaseDefId 在 baseDeck 中的索引，然后移除它
+            const baseDefIdIndex = state.baseDeck.indexOf(newBaseDefId);
+            if (baseDefIdIndex < 0) {
+                console.warn(`[BASE_REPLACED] newBaseDefId ${newBaseDefId} not found in baseDeck`, {
+                    baseDeck: state.baseDeck,
+                    baseIndex,
+                    oldBaseDefId,
+                    newBaseDefId,
+                });
+            }
+            const newBaseDeck = baseDefIdIndex >= 0
+                ? [...state.baseDeck.slice(0, baseDefIdIndex), ...state.baseDeck.slice(baseDefIdIndex + 1)]
+                : state.baseDeck;
             // keepCards 模式：仅替换 defId，保留随从和 ongoing，旧 defId 回牌库
             if (keepCards) {
                 const updatedBases = state.bases.map((base, i) => {
@@ -682,12 +704,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                             [restrictToBase]: (oldQuota[restrictToBase] ?? 0) + delta,
                         },
                     };
-                    // 同名约束标记
+                    // 同名约束标记和 defId
                     if (sameNameOnly) {
                         updatedPlayer.baseLimitedSameNameRequired = {
                             ...(player.baseLimitedSameNameRequired ?? {}),
                             [restrictToBase]: true,
                         };
+                        // 保存触发能力时的随从 defId
+                        if (sameNameDefId) {
+                            updatedPlayer.baseLimitedSameNameDefId = {
+                                ...(player.baseLimitedSameNameDefId ?? {}),
+                                [restrictToBase]: sameNameDefId,
+                            };
+                        }
                     }
                     return {
                         ...state,
@@ -1316,6 +1345,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 sourceDefId: payload.sourceDefId,
                 playerId: payload.playerId,
                 baseIndex: payload.baseIndex,
+                cardUid: payload.cardUid,
                 ...(payload.minionSnapshots ? { minionSnapshots: payload.minionSnapshots } : {}),
             };
             const newState = {

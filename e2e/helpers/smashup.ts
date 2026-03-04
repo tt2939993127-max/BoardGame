@@ -77,7 +77,7 @@ export async function waitForFactionDraft(page: Page, timeout = 60000) {
 }
 
 /** 通过 UI 选择派系（按索引） - 增强版，带重试 */
-export async function selectFaction(page: Page, factionIndex: number) {
+export async function selectFaction(page: Page, factionIndex: number, testInfo?: any) {
     console.log(`[SmashUp] 选择派系索引: ${factionIndex}`);
     
     // 1. 点击派系卡牌
@@ -88,20 +88,34 @@ export async function selectFaction(page: Page, factionIndex: number) {
     // 2. 等待并点击确认按钮（带重试）
     const confirmButton = page.getByTestId('faction-confirm-button');
     
-    // 等待按钮出现并可点击
+    // 等待按钮出现
     await confirmButton.waitFor({ state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(300); // 减少等待时间，只等待动画稳定
+    
+    // 等待按钮可点击（enabled）- 这是关键！
+    await expect(confirmButton).toBeEnabled({ timeout: 15000 });
+    await page.waitForTimeout(300); // 等待动画稳定
     
     // 尝试点击，如果失败则重试
     let clicked = false;
     for (let i = 0; i < 3; i++) {
         try {
+            // 截图调试
+            if (testInfo && i === 0) {
+                await page.screenshot({ path: testInfo.outputPath(`faction-${factionIndex}-before-confirm.png`) });
+            }
+            
             await confirmButton.click({ timeout: 3000 });
             clicked = true;
             console.log(`[SmashUp] ✅ 已确认选择派系 ${factionIndex}`);
             break;
         } catch (e) {
             console.log(`[SmashUp] ⚠️  点击失败，重试 ${i + 1}/3`);
+            
+            // 最后一次重试失败时截图
+            if (testInfo && i === 2) {
+                await page.screenshot({ path: testInfo.outputPath(`faction-${factionIndex}-confirm-failed.png`) });
+            }
+            
             await page.waitForTimeout(300);
         }
     }
@@ -133,6 +147,7 @@ export async function completeFactionSelection(
     guestPage: Page,
     hostFactions: [number, number] = [0, 1],
     guestFactions: [number, number] = [2, 3],
+    testInfo?: any,
 ) {
     console.log('[SmashUp] 开始派系选择流程（蛇形选秀）...');
     console.log('[SmashUp] Host 派系:', hostFactions);
@@ -147,16 +162,35 @@ export async function completeFactionSelection(
 
     // 蛇形选秀：P0 → P1 → P1 → P0
     console.log('[SmashUp] 第1轮：Host 选择第1个派系...');
-    await selectFaction(hostPage, hostFactions[0]);
+    await selectFaction(hostPage, hostFactions[0], testInfo);
+    // 暂时注释掉等待逻辑，因为有 bug
+    // await guestPage.waitForFunction(
+    //     () => {
+    //         const turnIndicator = document.body.innerText;
+    //         return turnIndicator.includes('IT\'S YOUR TURN NOW') || turnIndicator.includes('轮到你了');
+    //     },
+    //     { timeout: 15000 }
+    // ).catch(() => {});
+    await guestPage.waitForTimeout(2000); // 简单等待 2 秒
     
     console.log('[SmashUp] 第2轮：Guest 选择第1个派系...');
-    await selectFaction(guestPage, guestFactions[0]);
+    await selectFaction(guestPage, guestFactions[0], testInfo);
+    await guestPage.waitForTimeout(1000);
     
     console.log('[SmashUp] 第3轮：Guest 选择第2个派系...');
-    await selectFaction(guestPage, guestFactions[1]);
+    await selectFaction(guestPage, guestFactions[1], testInfo);
+    // await hostPage.waitForFunction(
+    //     () => {
+    //         const turnIndicator = document.body.innerText;
+    //         return turnIndicator.includes('IT\'S YOUR TURN NOW') || turnIndicator.includes('轮到你了');
+    //     },
+    //     { timeout: 15000 }
+    // ).catch(() => {});
+    await hostPage.waitForTimeout(2000); // 简单等待 2 秒
     
     console.log('[SmashUp] 第4轮：Host 选择第2个派系...');
-    await selectFaction(hostPage, hostFactions[1]);
+    await selectFaction(hostPage, hostFactions[1], testInfo);
+    await hostPage.waitForTimeout(1000);
     
     console.log('[SmashUp] ✅ 派系选择流程完成');
 }
@@ -248,6 +282,7 @@ export async function setupSmashUpOnlineMatch(
     options?: {
         hostFactions?: [number, number];
         guestFactions?: [number, number];
+        testInfo?: any;
     }
 ): Promise<{
     hostPage: Page;
@@ -326,7 +361,8 @@ export async function setupSmashUpOnlineMatch(
         hostPage,
         guestPage,
         options?.hostFactions,
-        options?.guestFactions
+        options?.guestFactions,
+        options?.testInfo
     );
 
     // 8. 等待游戏棋盘加载

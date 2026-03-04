@@ -61,6 +61,7 @@ import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
 import { useAttackShowcase } from './hooks/useAttackShowcase';
 import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
+import { getAutoResponseEnabled } from './ui/AutoResponseToggle';
 
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 
@@ -101,6 +102,8 @@ function hasDivergentVariants(state: DiceThroneCore, playerId: string, variantId
     // 若 effect 类型不同（如一个造伤害、一个施加状态），则为分歧型，需要玩家选择
     const effectTypeSets = matches.map(m => {
         const effects = m?.variant?.effects ?? m?.ability.effects ?? [];
+        // 防御性检查：如果 effects 为空或未定义，返回特殊标记
+        if (!effects || effects.length === 0) return 'no-effects';
         return effects.map(e => e?.action?.type ?? 'unknown').sort().join(',');
     });
     const firstEffectTypeSet = effectTypeSets[0];
@@ -227,6 +230,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             setDismissedBonusDiceId(null);
         }
     }, [currentSettlementId, dismissedBonusDiceId]);
+
+    // 自动响应状态
+    const [autoResponseEnabled, setAutoResponseEnabled] = React.useState(() => getAutoResponseEnabled());
 
     // Atlas 配置（状态图标仍需异步加载）
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
@@ -433,6 +439,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         ? rawG.sys.responseWindow.current.responderQueue[rawG.sys.responseWindow.current.currentResponderIndex]
         : undefined;
 
+    // 自动跳过逻辑：当响应窗口打开且自己是响应者时，如果是自动跳过模式（!autoResponseEnabled），自动跳过
+    React.useEffect(() => {
+        // 灰色"自动跳过" = 自动跳过，不拦截
+        // 绿色"显示响应" = 显示响应窗口，等待手动选择
+        if (autoResponseEnabled || !isResponseWindowOpen || !currentResponderId || currentResponderId !== rootPid) return;
+        // 延迟一小段时间确保 UI 状态同步
+        const timer = setTimeout(() => {
+            engineMoves.responsePass(currentResponderId);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [autoResponseEnabled, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
+
     const { rollerId, shouldAutoObserve, viewMode, isSelfView, isResponseAutoSwitch } = computeViewModeState({
         currentPhase,
         pendingAttack: G.pendingAttack,
@@ -567,7 +585,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     );
 
     // 等待对方思考（isFocusPlayer 已在上方定义）
-    const isWaitingOpponent = !isFocusPlayer;
+    // 响应窗口期间不显示"对手思考中"提示，避免暴露对方有响应牌
+    const isWaitingOpponent = !isFocusPlayer && !isResponseWindowOpen;
     const thinkingOffsetClass = 'bottom-[12vw]';
 
     // 可被净化移除的负面状态：由定义驱动（支持扩展）
@@ -749,13 +768,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
         if (!abilityId) return getElementCenter(opponentHeaderRef.current);
-        const slotId = getAbilitySlotId(abilityId);
+        // 对于变体 ID，先获取基础技能 ID
+        const match = findPlayerAbility(G, G.activePlayerId, abilityId);
+        const baseAbilityId = match?.ability.id ?? abilityId;
+        const slotId = getAbilitySlotId(baseAbilityId);
         if (!slotId) return getElementCenter(opponentHeaderRef.current);
         const element = document.querySelector(`[data-ability-slot="${slotId}"]`) as HTMLElement | null;
         // 技能槽在 DOM 中存在 → 从技能槽飞出（自己的技能）
         // 技能槽不存在 → 说明是对手的技能，从对手悬浮窗飞出
         return element ? getElementCenter(element) : getElementCenter(opponentHeaderRef.current);
-    }, [opponentHeaderRef]);
+    }, [G, opponentHeaderRef]);
 
     // 获取效果动画的起点位置（优先从技能槽位置获取）
     const getEffectStartPos = React.useCallback(
@@ -1031,6 +1053,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         selfDamageFlashActive={selfImpact.flash.isActive}
                         selfDamageFlashDamage={selfImpact.flash.damage}
                         overrideHp={damageBuffer.get(`hp-${rootPid}`, player.resources[RESOURCE_IDS.HP] ?? 0)}
+                        onAutoResponseToggle={setAutoResponseEnabled}
                     />
 
                     <CenterBoard
@@ -1046,7 +1069,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             if (shouldBlockTutorialAction('ability-slots')) return;
                             // 进攻阶段确认骰面后，检查该 slot 是否有多个 variant 同时满足
                             if (currentPhase === 'offensiveRoll' && G.rollConfirmed) {
-                                const slotId = getAbilitySlotId(abilityId);
+                                // 对于变体 ID（如 incinerate），先通过 findPlayerAbility 获取基础技能 ID
+                                const match = findPlayerAbility(G, rollerId, abilityId);
+                                const baseAbilityId = match?.ability.id ?? abilityId;
+                                const slotId = getAbilitySlotId(baseAbilityId);
                                 if (slotId) {
                                     const mapping = ABILITY_SLOT_MAP[slotId];
                                     if (mapping) {

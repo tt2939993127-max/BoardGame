@@ -53,6 +53,7 @@ export default defineConfig({
             '**/.{idea,git,cache,output,temp}/**',
         ],
         testTimeout: 180000,
+        hookTimeout: 60000, // 60 秒 hook 超时（MongoDB 内存服务器启动可能较慢）
         setupFiles: ['./vitest.setup.ts', './apps/api/test/vitest.setup.ts'],
     },
 });

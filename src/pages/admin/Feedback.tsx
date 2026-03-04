@@ -653,6 +653,81 @@ function FeedbackRow({
 
 // ── 一键复制按钮 ──
 
+/**
+ * 压缩游戏状态为 AI 可读的紧凑格式
+ * 从完整 JSON 提取关键信息，避免复制几千行数据
+ */
+function compressStateSnapshot(stateJson: string): string {
+    try {
+        const state = JSON.parse(stateJson);
+        const lines: string[] = [];
+        
+        lines.push('=== 游戏状态快照（压缩版）===');
+        lines.push(`游戏: ${state.gameId || 'unknown'}`);
+        lines.push(`回合: P${state.core?.currentPlayer ?? '?'} | 阶段: ${state.core?.phase ?? '?'}`);
+        
+        // 玩家状态
+        if (state.core?.players) {
+            lines.push('\n--- 玩家 ---');
+            Object.entries(state.core.players).forEach(([pid, p]: [string, any]) => {
+                const resources = p.resources ? 
+                    Object.entries(p.resources).map(([k, v]) => `${k}:${v}`).join(' ') : 
+                    '';
+                lines.push(`P${pid}: HP=${p.hp ?? '?'} ${resources} | 手牌=${p.hand?.length ?? 0} 牌库=${p.deck?.length ?? 0} 弃牌=${p.discard?.length ?? 0}`);
+            });
+        }
+        
+        // 场上单位
+        if (state.core?.field && state.core.field.length > 0) {
+            lines.push('\n--- 场上 ---');
+            state.core.field.forEach((unit: any, idx: number) => {
+                const tags = unit.tags ? Object.keys(unit.tags).join(',') : '';
+                lines.push(`[${idx}] ${unit.card?.defId ?? '?'} (P${unit.owner}) HP=${unit.hp ?? '?'} ${tags ? `[${tags}]` : ''}`);
+            });
+        }
+        
+        // 交互状态
+        if (state.sys?.interaction?.current) {
+            const int = state.sys.interaction.current;
+            lines.push('\n--- 交互 ---');
+            lines.push(`类型: ${int.type} | 玩家: P${int.playerId}`);
+            lines.push(`选项数: ${int.data?.options?.length ?? 0}`);
+        }
+        
+        // 响应窗口
+        if (state.sys?.responseWindow?.current) {
+            lines.push('\n--- 响应窗口 ---');
+            lines.push(`触发事件: ${state.sys.responseWindow.current.triggerEvent?.type ?? '?'}`);
+        }
+        
+        // 最近事件（增加到 10 条，并显示关键参数）
+        if (state.sys?.eventStream?.entries) {
+            const recent = state.sys.eventStream.entries.slice(-10);
+            if (recent.length > 0) {
+                lines.push('\n--- 最近事件 ---');
+                recent.forEach((e: any) => {
+                    // 提取关键参数（避免完整 payload）
+                    let params = '';
+                    if (e.payload) {
+                        const p = e.payload;
+                        if (p.playerId !== undefined) params += ` P${p.playerId}`;
+                        if (p.targetId !== undefined) params += ` →${p.targetId}`;
+                        if (p.damage !== undefined) params += ` dmg=${p.damage}`;
+                        if (p.amount !== undefined) params += ` amt=${p.amount}`;
+                        if (p.cardDefId) params += ` [${p.cardDefId}]`;
+                        if (p.abilityId) params += ` {${p.abilityId}}`;
+                    }
+                    lines.push(`${e.id}: ${e.type}${params}`);
+                });
+            }
+        }
+        
+        return lines.join('\n');
+    } catch (err) {
+        return `[状态解析失败: ${err instanceof Error ? err.message : '未知错误'}]`;
+    }
+}
+
 function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
     const [copied, setCopied] = useState(false);
 
@@ -669,6 +744,7 @@ function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'adm
             '--- 反馈内容 ---',
             textContent,
             item.actionLog ? `\n--- 操作日志 ---\n${item.actionLog}` : '',
+            item.stateSnapshot ? `\n--- 游戏状态 ---\n${compressStateSnapshot(item.stateSnapshot)}` : '',
         ].filter(Boolean).join('\n');
 
         navigator.clipboard.writeText(parts).then(() => {

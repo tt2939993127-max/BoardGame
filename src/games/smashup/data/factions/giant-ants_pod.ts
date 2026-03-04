@@ -98,6 +98,7 @@ export const GIANT_ANT_ACTIONS: ActionCardDef[] = [
         nameEn: 'Under Pressure',
         faction: 'giant_ants_pod',
         abilityTags: ['special'],
+        specialTiming: 'beforeScoring',
         specialNeedsBase: true,
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS5, index: 40 },

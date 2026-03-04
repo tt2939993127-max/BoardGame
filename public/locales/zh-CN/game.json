@@ -7,7 +7,8 @@
     "character_not_selected": "尚未选择角色",
     "character_selection_not_initialized": "角色选择未初始化",
     "command_failed": "命令执行失败",
-    "internal_error": "服务器内部错误，操作已自动恢复"
+    "internal_error": "服务器内部错误，操作已自动恢复",
+    "pipeline_error": "命令执行异常，请稍后重试"
   },
   "controls": {
     "undo": {

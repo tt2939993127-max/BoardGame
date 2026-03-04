@@ -48,6 +48,7 @@ import type {
     PowerCounterRemovedEvent,
     TempPowerAddedEvent,
     CardToDeckBottomEvent,
+    SpecialAfterScoringArmedEvent,
 } from './types';
 import type { PlayerId } from '../../../engine/types';
 import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from './types';
@@ -241,25 +242,66 @@ function executeCommand(
             } else {
                 // standard / special 行动卡：执行效果
                 const isSpecial = def?.subtype === 'special';
-                const executor = isSpecial ? resolveSpecial(card.defId) : resolveOnPlay(card.defId);
-                // special 卡不走 onPlay，走 resolveSpecial；如果没有 special 注册则回退到 onPlay
-                const finalExecutor = executor ?? (isSpecial ? resolveOnPlay(card.defId) : undefined);
-                if (finalExecutor) {
-                    const ctx: AbilityContext = {
-                        state: core,
-                        matchState: state,
-                        playerId: command.playerId,
-                        cardUid: card.uid,
-                        defId: card.defId,
-                        baseIndex: command.payload.targetBaseIndex ?? 0,
-                        targetMinionUid: command.payload.targetMinionUid,
-                        random,
-                        now,
-                    };
-                    const result = finalExecutor(ctx);
-                    events.push(...result.events);
-                    if (result.matchState) {
-                        updatedState = result.matchState;
+                
+                if (isSpecial) {
+                    // Special 技能：根据 specialTiming 决定执行时机
+                    const specialTiming = def.specialTiming ?? 'beforeScoring'; // 默认 beforeScoring
+                    
+                    if (specialTiming === 'beforeScoring') {
+                        // beforeScoring：立即执行（当前行为）
+                        const executor = resolveSpecial(card.defId) ?? resolveOnPlay(card.defId);
+                        if (executor) {
+                            const ctx: AbilityContext = {
+                                state: core,
+                                matchState: state,
+                                playerId: command.playerId,
+                                cardUid: card.uid,
+                                defId: card.defId,
+                                baseIndex: command.payload.targetBaseIndex ?? 0,
+                                targetMinionUid: command.payload.targetMinionUid,
+                                random,
+                                now,
+                            };
+                            const result = executor(ctx);
+                            events.push(...result.events);
+                            if (result.matchState) {
+                                updatedState = result.matchState;
+                            }
+                        }
+                    } else if (specialTiming === 'afterScoring') {
+                        // afterScoring：生成 ARMED 事件，延迟到基地计分后执行
+                        const armedEvt: SpecialAfterScoringArmedEvent = {
+                            type: SU_EVENTS.SPECIAL_AFTER_SCORING_ARMED,
+                            payload: {
+                                sourceDefId: card.defId,
+                                playerId: command.playerId,
+                                baseIndex: command.payload.targetBaseIndex ?? 0,
+                                cardUid: card.uid,
+                            },
+                            timestamp: now,
+                        };
+                        events.push(armedEvt);
+                    }
+                } else {
+                    // Standard 行动卡：执行 onPlay 效果
+                    const executor = resolveOnPlay(card.defId);
+                    if (executor) {
+                        const ctx: AbilityContext = {
+                            state: core,
+                            matchState: state,
+                            playerId: command.playerId,
+                            cardUid: card.uid,
+                            defId: card.defId,
+                            baseIndex: command.payload.targetBaseIndex ?? 0,
+                            targetMinionUid: command.payload.targetMinionUid,
+                            random,
+                            now,
+                        };
+                        const result = executor(ctx);
+                        events.push(...result.events);
+                        if (result.matchState) {
+                            updatedState = result.matchState;
+                        }
                     }
                 }
             }

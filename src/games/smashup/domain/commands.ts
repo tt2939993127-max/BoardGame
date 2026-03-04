@@ -126,11 +126,12 @@ export function validate(
             // 基地限定同名额度检查：全局额度和全局同名额度都用完后，使用基地限定额度时检查同名约束
             if (globalQuotaRemaining <= 0 && sameNameRemaining <= 0 && baseQuota > 0) {
                 if (player.baseLimitedSameNameRequired?.[baseIndex]) {
-                    // 必须与该基地上已有随从同名
-                    const base = core.bases[baseIndex];
-                    const baseDefIds = new Set(base.minions.map(m => m.defId));
-                    if (!baseDefIds.has(card.defId)) {
-                        return { valid: false, error: '只能打出与该基地上随从同名的随从' };
+                    // 必须与触发能力时的随从同名
+                    const requiredDefId = player.baseLimitedSameNameDefId?.[baseIndex];
+                    if (requiredDefId && card.defId !== requiredDefId) {
+                        const requiredCard = getCardDef(requiredDefId);
+                        const requiredName = requiredCard?.name ?? requiredDefId;
+                        return { valid: false, error: `只能打出与触发能力的随从同名的随从（${requiredName}）` };
                     }
                 }
             }

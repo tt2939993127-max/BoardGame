@@ -53,8 +53,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const show = useCallback((toastInput: Omit<Toast, 'id' | 'createdAt'>) => {
         const { dedupeKey, tone } = toastInput;
 
-        // 去重检查
-        if (dedupeKey) {
+        // 去重检查（验证 dedupeKey 非空）
+        if (dedupeKey && dedupeKey.trim()) {
             const existing = toastsRef.current.find((t) => t.dedupeKey === dedupeKey);
             if (existing) {
                 // 如果已存在，可更新其时间戳以延长展示，或在过近时忽略

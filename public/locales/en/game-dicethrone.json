@@ -296,6 +296,8 @@
     "cpSpentPlain": "Spent {{amount}} CP",
     "cardDrawn": "Drew {{count}} card(s) ({{source}})",
     "cardDrawnPlain": "Drew {{count}} card(s)",
+    "damageShieldPercent": "Gained {{percent}}% damage reduction shield with [{{source}}]",
+    "damageShieldPercentPlain": "Gained {{percent}}% damage reduction shield",
     "usePurify": "Purified {{statusLabel}}",
     "payToRemoveKnockdown": "Paid 2CP to remove Knockdown",
     "usePassiveAbility": "Used passive: {{abilityName}}",
@@ -488,8 +490,13 @@
       "moonShadowStrike.other": "Draw 1 card",
       "volley": "Volley Roll: {{value}}",
       "volley.result": "{{bowCount}} Bow: +{{bonusDamage}} Damage",
-      "explodingArrow.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: {{damage}} Damage",
+      "explodingArrow.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 2×{{bowCount}} + 1×{{footCount}} = {{damage}} Damage",
+      "explodingArrow2.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 1×{{bowCount}} + 2×{{footCount}} = {{damage}} Damage",
+      "explodingArrow3.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 1×{{bowCount}} + 2×{{footCount}} = {{damage}} Damage",
       "watchOut": "Watch Out Roll: {{value}}",
+      "watchOut.bow": "Bow🏹: +2 Damage",
+      "watchOut.foot": "Foot🦶: Inflict Entangle",
+      "watchOut.moon": "Moon🌙: Inflict Blinded",
       "blinded": "Blinded Check",
       "blinded.miss": "Attack Failed!",
       "blinded.hit": "Attack Success",
@@ -586,7 +593,8 @@
     "bonus_reroll_limit_reached": "Bonus die reroll limit reached",
     "not_enough_token": "Not enough tokens to pay the cost",
     "invalid_die_index": "Invalid die index",
-    "player_is_dazed": "Player is dazed and cannot perform any actions"
+    "player_is_dazed": "Player is dazed and cannot perform any actions",
+    "attack_already_initiated": "Attack already initiated, cannot reselect ability"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",

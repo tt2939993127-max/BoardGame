@@ -151,16 +151,14 @@ export const resolveAttack = (
             random,
         });
         
-        // 如果有 Token 响应请求或需要用户交互的奖励骰重掷请求，提前返回（不生成 ATTACK_RESOLVED）
-        // - TOKEN_RESPONSE_REQUESTED：伤害被挂起等待玩家 Token 响应
-        // - BONUS_DICE_REROLL_REQUESTED（非 displayOnly）：骰子还未结算，需要用户交互（如重掷）
-        // 注意：displayOnly 的 BONUS_DICE_REROLL_REQUESTED 仅用于 UI 展示多骰结果，不阻止结算
+        // 如果有 Token 响应请求、需要用户交互的奖励骰重掷请求、或用户选择请求，提前返回（不生成 ATTACK_RESOLVED）
         const hasTokenResponse = withDamageEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
         const hasInteractiveBonusDiceReroll = withDamageEvents.some(e =>
             e.type === 'BONUS_DICE_REROLL_REQUESTED'
             && !(e as any).payload?.settlement?.displayOnly
         );
-        if (hasTokenResponse || hasInteractiveBonusDiceReroll) {
+        const hasChoiceInWithDamage = withDamageEvents.some(e => e.type === 'CHOICE_REQUESTED');
+        if (hasTokenResponse || hasInteractiveBonusDiceReroll || hasChoiceInWithDamage) {
             attackEvents.push(...withDamageEvents);
             events.push(...attackEvents);
             return events;
@@ -169,6 +167,20 @@ export const resolveAttack = (
         // 没有挂起的响应/结算，正常推入所有事件
         attackEvents.push(...withDamageEvents);
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
+        
+        // 检查 postDamage 阶段是否有需要用户交互的事件
+        const postDamageEvents = attackEvents.slice(withDamageEvents.length);
+        const hasChoiceInPostDamage = postDamageEvents.some(e => e.type === 'CHOICE_REQUESTED');
+        const hasTokenResponseInPostDamage = postDamageEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+        const hasBonusDiceRerollInPostDamage = postDamageEvents.some(e =>
+            e.type === 'BONUS_DICE_REROLL_REQUESTED'
+            && !(e as any).payload?.settlement?.displayOnly
+        );
+        if (hasChoiceInPostDamage || hasTokenResponseInPostDamage || hasBonusDiceRerollInPostDamage) {
+            events.push(...attackEvents);
+            return events;
+        }
+        
         totalDamage = attackCtx.damageDealt;
 
         // 技能专属音效由 FX 系统在伤害动画 onImpact 时播放（useAnimationEffects.findAbilitySfxKey），

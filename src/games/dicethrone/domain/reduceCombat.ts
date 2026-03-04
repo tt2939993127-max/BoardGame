@@ -100,10 +100,14 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
     let newDamageShields = target.damageShields;
     const shieldsConsumed: Array<{ sourceId: string; value?: number; reductionPercent?: number; absorbed: number }> = [];
 
+    // 终极技能（Ultimate）伤害不可被护盾抵消（规则FAQ：Not This Time 不能防御 Ultimate）
+    const isUltimateDamage = state.pendingAttack?.isUltimate ?? false;
+
     // 消耗护盾抵消伤害（忽略 preventStatus 护盾）
     // bypassShields: HP 重置类效果（如神圣祝福）跳过护盾消耗
+    // isUltimateDamage: 终极技能伤害跳过护盾
     // 优先级：百分比护盾 > 固定值护盾（百分比护盾先消耗）
-    if (!bypassShields && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
+    if (!bypassShields && !isUltimateDamage && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
         const updatedShields: typeof target.damageShields = [];
         
         // 分离护盾类型

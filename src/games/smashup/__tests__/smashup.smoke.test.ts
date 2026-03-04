@@ -32,12 +32,12 @@ function createRunner() {
     });
 }
 
-/** 蛇形选秀命令序列（多轮 afterEvents 会自动推进 factionSelect → startTurn → playCards） */
+/** 顺序选秀命令序列（多轮 afterEvents 会自动推进 factionSelect → startTurn → playCards） */
 const DRAFT_COMMANDS = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
 ];
 
 describe('smashup', () => {
@@ -86,13 +86,17 @@ describe('smashup', () => {
         const result = runner.run({
             name: '派系互斥',
             commands: [
+                // P0 选择两个派系
                 { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+                // P1 尝试选择已被 P0 选择的派系
                 { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
             ],
         });
         expect(result.steps[0]?.success).toBe(true);
-        expect(result.steps[1]?.success).toBe(false);
-        expect(result.steps[1]?.error).toContain('已被选择');
+        expect(result.steps[1]?.success).toBe(true);
+        expect(result.steps[2]?.success).toBe(false);
+        expect(result.steps[2]?.error).toContain('已被选择');
     });
 
     it('出牌阶段可以打出随从', () => {

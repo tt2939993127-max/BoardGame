@@ -8,6 +8,18 @@
 // 降级计数器，用于减少碰撞概率
 let fallbackCounter = 0;
 
+// 尝试从 sessionStorage 恢复计数器（防止页面刷新后重置）
+if (typeof sessionStorage !== 'undefined') {
+    try {
+        const stored = sessionStorage.getItem('uuid-fallback-counter');
+        if (stored) {
+            fallbackCounter = parseInt(stored, 10) || 0;
+        }
+    } catch (_e) {
+        // sessionStorage 不可用时忽略
+    }
+}
+
 /**
  * 生成 UUID v4
  * 
@@ -34,8 +46,19 @@ export function generateUUID(): string {
 
     // 最终降级：时间戳 + 计数器 + Math.random（降低碰撞概率）
     console.error('[UUID] 使用不安全的降级实现（时间戳+计数器+Math.random），建议升级 Node.js 或使用现代浏览器');
+    
+    // 递增计数器并持久化到 sessionStorage
+    fallbackCounter = (fallbackCounter + 1) % 0xFFFF;
+    if (typeof sessionStorage !== 'undefined') {
+        try {
+            sessionStorage.setItem('uuid-fallback-counter', fallbackCounter.toString());
+        } catch (_e) {
+            // sessionStorage 不可用时忽略
+        }
+    }
+    
     const timestamp = Date.now().toString(16).padStart(12, '0');
-    const counter = (++fallbackCounter % 0xFFFF).toString(16).padStart(4, '0');
+    const counter = fallbackCounter.toString(16).padStart(4, '0');
     const random1 = Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, '0');
     const random2 = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
     // 格式: timestamp(12)-counter(4)-4xxx-yxxx-random(12)

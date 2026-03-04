@@ -49,6 +49,7 @@ const DAMAGE_PREVENT_KEY = 'status.general.player_status_sound_fx_pack_vol.posit
 const BONUS_DICE_SETTLE_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
 const EXTRA_ATTACK_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1';
 const ABILITY_RESELECT_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001';
+const ABILITY_ACTIVATE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_arcane_ripple_001';
 
 /**
  * DiceThrone 事件音频配置
@@ -117,7 +118,7 @@ export const DT_EVENTS = defineEvents({
   CP_CHANGED: 'fx',              // CP 变化（飞行动画 onImpact）
   PREVENT_DAMAGE: 'fx',          // 伤害减免（飞行动画 onImpact）
   
-  ABILITY_ACTIVATED: 'immediate', // 技能激活（技能自带音效，立即播放）
+  ABILITY_ACTIVATED: { audio: 'immediate', sound: ABILITY_ACTIVATE_KEY }, // 技能激活（技能自带音效优先，无则用默认）
   ATTACK_RESOLVED: 'fx',         // 攻击结算（技能自带音效）
   ABILITY_REPLACED: 'fx',        // 技能替换（升级卡音效）
 

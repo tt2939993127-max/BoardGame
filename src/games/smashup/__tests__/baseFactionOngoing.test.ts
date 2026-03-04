@@ -417,17 +417,25 @@ describe('忍者 ongoing/special 能力', () => {
     });
 
     describe('consumesNormalLimit: 忍者 special 额外打出不消耗正常额度', () => {
-        test('ninja_acolyte_play 交互产生的 MINION_PLAYED 带 consumesNormalLimit=false', () => {
+        test('ninja_acolyte_play 交互产生 MINION_PLAYED 事件且 consumesNormalLimit=false', () => {
             const base = makeBase({
                 minions: [makeMinion({ defId: 'ninja_acolyte', uid: 'ac-1', controller: '0' })],
             });
             const state = makeState([base]);
+            state.players['0'].hand = [makeCard('h3', 'test_minion_b', 'minion', '0')];
+            state.players['0'].minionsPlayed = 0;
             const matchState = { core: state, sys: { interaction: { current: undefined, queue: [] } } } as any;
             const executor = resolveAbility('ninja_acolyte', 'special')!;
             const result = executor({
                 state, matchState, playerId: '0', cardUid: 'ac-1', defId: 'ninja_acolyte',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
+            // 应该有 MINION_RETURNED 事件，但不应该有 LIMIT_MODIFIED 事件
+            const returnEvt = result.events.find((e: any) => e.type === SU_EVENTS.MINION_RETURNED);
+            expect(returnEvt).toBeDefined();
+            const limitEvt = result.events.find((e: any) => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            expect(limitEvt).toBeUndefined();
+            
             // 模拟交互响应：选择手牌中的随从
             clearInteractionHandlers();
             registerNinjaInteractionHandlers();
@@ -442,6 +450,7 @@ describe('忍者 ongoing/special 能力', () => {
             expect(handlerResult).toBeDefined();
             const playedEvt = handlerResult!.events.find((e: any) => e.type === SU_EVENTS.MINION_PLAYED);
             expect(playedEvt).toBeDefined();
+            // 新行为：使用 consumesNormalLimit=false（不消耗正常额度）
             expect((playedEvt as any).payload.consumesNormalLimit).toBe(false);
         });
 

@@ -8,7 +8,8 @@
  * - 避免触发 React 组件堆栈（使用 console.log 而非 console.error）
  */
 
-const isDev = import.meta.env.DEV;
+// 兼容 Node.js 和浏览器环境
+const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV !== false;
 
 export const logger = {
   /**

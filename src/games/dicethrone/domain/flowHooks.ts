@@ -19,6 +19,7 @@ import type {
     ExtraAttackTriggeredEvent,
     TokenConsumedEvent,
     ChoiceRequestedEvent,
+    AttackResolvedEvent,
 } from './types';
 import { STATUS_IDS, TOKEN_IDS } from './ids';
 import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue, getRollerId } from './rules';
@@ -27,21 +28,105 @@ import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
-import { getGameMode, applyEvents } from './utils';
+import { getGameMode, applyEvents, getPendingAttackExpectedDamage } from './utils';
 import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
 import { getPlayerAbilityBaseDamage } from './abilityLookup';
-import { getPendingAttackExpectedDamage } from './utils';
 import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 /**
- * 闪避后的 postDamage 状态修正
+ * 计算玩家当前的眩晕层数（包含 core 中的和 events 中的）
  * 
+ * @param core - 当前游戏状态
+ * @param playerId - 玩家 ID
+ * @param events - 待处理的事件数组
+ * @returns 眩晕总层数
+ */
+function getTotalDazeStacks(
+    core: DiceThroneCore,
+    playerId: string,
+    events: GameEvent[]
+): number {
+    const player = core.players[playerId];
+    const dazeInCore = player?.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    
+    const dazeAppliedInEvents = events.filter(e => 
+        e.type === 'STATUS_APPLIED' && 
+        e.payload.targetId === playerId && 
+        e.payload.statusId === STATUS_IDS.DAZE
+    ).reduce((sum, e) => sum + (e.payload as any).stacks, 0);
+    
+    const dazeRemovedInEvents = events.filter(e => 
+        e.type === 'STATUS_REMOVED' && 
+        e.payload.targetId === playerId && 
+        e.payload.statusId === STATUS_IDS.DAZE
+    ).reduce((sum, e) => sum + e.payload.stacks, 0);
+    
+    return dazeInCore + dazeAppliedInEvents - dazeRemovedInEvents;
+}
+
+/**
+ * 检查防御方是否有晕眩（daze）
+ * 晕眩规则：攻击结算后，如果防御方有眩晕，立即移除眩晕并让攻击方再次攻击
+ * 
+ * 正确理解：
+ * - Player A 攻击 Player B，施加眩晕给 Player B
+ * - 攻击结算后，立即检查 Player B 是否有眩晕
+ * - 如果有，立即移除眩晕 + Player A 再次攻击（额外攻击）
+ * 
+ * @returns 额外攻击事件数组 + 是否触发了额外攻击
+ */
+function checkDazeExtraAttack(
+    core: DiceThroneCore,
+    events: GameEvent[],
+    commandType: string,
+    timestamp: number
+): { dazeEvents: GameEvent[]; triggered: boolean } {
+    // 从已生成的事件中找到 ATTACK_RESOLVED，获取攻击信息
+    const attackResolved = events.find(e => e.type === 'ATTACK_RESOLVED') as
+        Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }> | undefined;
+    if (!attackResolved) return { dazeEvents: [], triggered: false };
+
+    const { attackerId, defenderId } = attackResolved.payload;
+    
+    // ✅ 检查防御方是否有眩晕（不是攻击方！）
+    const totalDaze = getTotalDazeStacks(core, defenderId, events);
+    
+    if (totalDaze <= 0) return { dazeEvents: [], triggered: false };
+
+    const dazeEvents: GameEvent[] = [];
+
+    // 移除防御方的晕眩状态
+    dazeEvents.push({
+        type: 'STATUS_REMOVED',
+        payload: { targetId: defenderId, statusId: STATUS_IDS.DAZE, stacks: totalDaze },
+        sourceCommandType: commandType,
+        timestamp,
+    } as StatusRemovedEvent);
+
+    // 触发额外攻击：攻击方再次攻击防御方
+    dazeEvents.push({
+        type: 'EXTRA_ATTACK_TRIGGERED',
+        payload: {
+            attackerId: attackerId,  // 攻击方获得额外攻击
+            targetId: defenderId,    // 攻击防御方（有眩晕的玩家）
+            sourceStatusId: STATUS_IDS.DAZE,
+        },
+        sourceCommandType: commandType,
+        timestamp,
+    } as ExtraAttackTriggeredEvent);
+
+    return { dazeEvents, triggered: true };
+}
+
+/**
+ * 闪避后的 postDamage 状态修正
+ *
  * 闪避（evasive）完全免除伤害时，resolvedDamage 为 0（因为没有 DAMAGE_DEALT 事件）。
  * 但攻击仍然"命中"了——伤害只是被闪避免除，非伤害效果（grantToken/inflictStatus 等）
  * 仍应执行。与潜行（sneak）语义一致：攻击成功但伤害被免除。
- * 
+ *
  * 将 resolvedDamage 设为基础伤害值，让 onHit 条件正确判定为"命中"。
  * 调用方需要过滤掉 DAMAGE_DEALT 事件（伤害已被闪避免除）。
  */
@@ -54,7 +139,6 @@ function getCoreForPostDamageAfterEvasion(core: DiceThroneCore): DiceThroneCore 
     if ((pending.resolvedDamage ?? 0) > 0) return core;
 
     const baseDamage = getPendingAttackExpectedDamage(core, pending, 1);
-
     return {
         ...core,
         pendingAttack: {
@@ -62,52 +146,6 @@ function getCoreForPostDamageAfterEvasion(core: DiceThroneCore): DiceThroneCore 
             resolvedDamage: baseDamage,
         },
     };
-}
-
-/**
- * 检查攻击方是否有晕眩（daze）
- * 晕眩规则：攻击结算后，移除晕眩，对手获得一次额外攻击机会
- * @returns 额外攻击事件数组 + 是否触发了额外攻击
- */
-function checkDazeExtraAttack(
-    core: DiceThroneCore,
-    events: GameEvent[],
-    commandType: string,
-    timestamp: number
-): { dazeEvents: GameEvent[]; triggered: boolean } {
-    // 从已生成的事件中找到 ATTACK_RESOLVED，获取攻击方信息
-    const attackResolved = events.find(e => e.type === 'ATTACK_RESOLVED') as
-        Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }> | undefined;
-    if (!attackResolved) return { dazeEvents: [], triggered: false };
-
-    const { attackerId, defenderId } = attackResolved.payload;
-    const attacker = core.players[attackerId];
-    const dazeStacks = attacker?.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    if (dazeStacks <= 0) return { dazeEvents: [], triggered: false };
-
-    const dazeEvents: GameEvent[] = [];
-
-    // 移除晕眩状态
-    dazeEvents.push({
-        type: 'STATUS_REMOVED',
-        payload: { targetId: attackerId, statusId: STATUS_IDS.DAZE, stacks: dazeStacks },
-        sourceCommandType: commandType,
-        timestamp,
-    } as StatusRemovedEvent);
-
-    // 触发额外攻击：有眩晕的攻击方再次攻击同一目标
-    dazeEvents.push({
-        type: 'EXTRA_ATTACK_TRIGGERED',
-        payload: {
-            attackerId: attackerId,  // 有眩晕的人继续攻击
-            targetId: defenderId,    // 继续攻击同一目标
-            sourceStatusId: STATUS_IDS.DAZE,
-        },
-        sourceCommandType: commandType,
-        timestamp,
-    } as ExtraAttackTriggeredEvent);
-
-    return { dazeEvents, triggered: true };
 }
 
 /**
@@ -605,7 +643,8 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         return { events, halt: true };
                     }
 
-                    return { events, halt: true };
+                    // 所有处理完成，推进到 main2
+                    return { events, overrideNextPhase: 'main2' };
                 }
 
                 // 奖励骰已通过 BONUS_DICE_SETTLED 结算（autoContinue 重入），
@@ -758,6 +797,12 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
             const hasPendingDamage = !hasTokenResponseClosed && (core.pendingDamage !== null && core.pendingDamage !== undefined);
             
+            // 检查是否有待处理的奖励骰结算（非 displayOnly）
+            // displayOnly 的奖励骰不需要用户交互，不应阻塞阶段推进
+            const hasPendingBonusDice = core.pendingBonusDiceSettlement !== null 
+                && core.pendingBonusDiceSettlement !== undefined
+                && core.pendingBonusDiceSettlement.displayOnly !== true;
+            
             // 检查是否需要等待 offensiveRollEnd Token 选择的 CHOICE_RESOLVED 被 reduce 进 core。
             //
             // 时序问题：SYS_INTERACTION_RESPOND 命令执行后，afterEvents 多轮迭代中：
@@ -788,7 +833,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 && core.pendingAttack !== undefined
                 && core.pendingAttack.offensiveRollEndTokenResolved !== true;
             
-            if (!hasActiveInteraction && !hasActiveResponseWindow && !hasPendingDamage && !pendingOffensiveTokenChoice) {
+            if (!hasActiveInteraction && !hasActiveResponseWindow && !hasPendingDamage && !hasPendingBonusDice && !pendingOffensiveTokenChoice) {
                 // autoContinue 的 playerId 必须与 getCurrentPlayerId 返回值一致，
                 // 否则 FlowSystem.afterEvents 中的 player_mismatch 校验会拒绝推进。
                 // defensiveRoll 阶段由防御方（getRollerId）推进，offensiveRoll 由进攻方推进。

@@ -21,8 +21,9 @@ import type {
     RollLimitChangedEvent,
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
+import type { BonusDieInfo } from '../types';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
@@ -65,7 +66,7 @@ function dealDamage(
 ): DamageDealtEvent {
     // 使用新伤害计算管线
     const damageCalc = createDamageCalculation({
-        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: targetId },
         baseDamage: amount,
         state: ctx.state,
@@ -505,6 +506,7 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
         return [];
     }
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     // 投掷5骰，统计弓面数量
     const diceValues: number[] = [];
@@ -517,21 +519,24 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
     }
     
     const bowCount = diceFaces.filter(f => f === FACE.BOW).length;
+    const bonusDamage = bowCount; // 每个弓面 +1 伤害
     
-    // 发射一个汇总事件，显示弓面数量和伤害加成
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: { 
-            value: diceValues[0], 
-            face: diceFaces[0], 
-            playerId: attackerId, 
-            targetPlayerId: opponentId, 
-            effectKey: 'bonusDie.effect.volley.result', 
-            effectParams: { bowCount, bonusDamage: bowCount } 
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
+    // 发射5个独立的骰子事件，让UI显示所有5颗骰子
+    for (let i = 0; i < 5; i++) {
+        events.push({
+            type: 'BONUS_DIE_ROLLED',
+            payload: { 
+                value: diceValues[i], 
+                face: diceFaces[i], 
+                playerId: attackerId, 
+                targetPlayerId: opponentId, 
+                effectKey: 'bonusDie.effect.volley', 
+                effectParams: { value: diceValues[i], index: i } 
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + i, // 微小时间差，确保顺序
+        } as BonusDieRolledEvent);
+    }
 
     // 增加弓面数量的伤害（作为攻击修正加到 pendingAttack）
     if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
@@ -540,6 +545,20 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
 
     // 施加缠绕（给对手）
     events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
+
+    // 收集骰子数据（用于多骰面板显示）
+    // 为每个骰子添加 effectKey，显示汇总结果
+    for (let i = 0; i < 5; i++) {
+        dice.push({ 
+            index: i, 
+            value: diceValues[i], 
+            face: diceFaces[i],
+            effectKey: 'bonusDie.effect.volley.result', // 使用汇总 key
+        });
+    }
+
+    // 多骰展示汇总（触发 BonusDieOverlay 显示所有骰子）
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
 
     return events;
 }

@@ -489,7 +489,7 @@ export function queueInteraction<TCore>(
 export function resolveInteraction<TCore>(
     state: MatchState<TCore>,
 ): MatchState<TCore> {
-    const { queue } = state.sys.interaction;
+    const { current, queue } = state.sys.interaction;
     let next = queue[0];
     const newQueue = queue.slice(1);
 
@@ -499,6 +499,31 @@ export function resolveInteraction<TCore>(
         nextKind: next?.kind,
         queueLength: queue.length,
     });
+
+    // 【通用修复】传递延迟事件给下一个交互
+    // 当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），
+    // 延迟的 BASE_CLEARED 事件存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
+    // 第一个交互解决后，必须传递给下一个交互，最后一个交互解决时由交互处理器补发。
+    if (current && next) {
+        const currentData = current.data as Record<string, unknown>;
+        const currentCtx = (currentData.continuationContext ?? {}) as Record<string, unknown>;
+        const deferredEvents = currentCtx._deferredPostScoringEvents;
+        
+        if (deferredEvents && Array.isArray(deferredEvents) && deferredEvents.length > 0) {
+            console.log('[InteractionSystem] Transferring deferred events to next interaction:', {
+                currentId: current.id,
+                nextId: next.id,
+                deferredEventsCount: deferredEvents.length,
+            });
+            
+            const nextData = next.data as Record<string, unknown>;
+            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
+            nextCtx._deferredPostScoringEvents = deferredEvents;
+            nextData.continuationContext = nextCtx;
+            
+            next = { ...next, data: nextData };
+        }
+    }
 
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {

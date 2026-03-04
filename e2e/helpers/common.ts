@@ -117,7 +117,8 @@ export const getGameServerBaseURL = () => {
     // E2E 测试专用端口优先（PW_GAME_SERVER_PORT），避免与开发环境冲突
     const port =
         process.env.PW_GAME_SERVER_PORT || process.env.GAME_SERVER_PORT || '18000';
-    return `http://localhost:${port}`;
+    // 使用 127.0.0.1 而不是 localhost，避免 Windows 上 Playwright 优先尝试 IPv6 (::1) 导致 ECONNREFUSED
+    return `http://127.0.0.1:${port}`;
 };
 
 /** 检查游戏服务器是否可用 */

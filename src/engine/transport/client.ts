@@ -85,6 +85,16 @@ export class GameTransportClient {
         return this._matchPlayers;
     }
 
+    /**
+     * 更新本地缓存的最新状态
+     *
+     * 供 GameProvider 在乐观引擎回滚时回写权威状态，
+     * 确保后续 patch 应用基准正确。
+     */
+    updateLatestState(state: unknown): void {
+        this._latestState = state;
+    }
+
     /** 连接到服务端 */
     connect(): void {
         if (this._destroyed || this.socket) return;

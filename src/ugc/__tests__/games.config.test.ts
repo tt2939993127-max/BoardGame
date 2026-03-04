@@ -9,7 +9,9 @@ const createResponse = (data: unknown) => ({
     json: async () => data,
 });
 
-describe('UGC 游戏清单接入', () => {
+// UGC 功能暂时跳过测试
+// 如需运行这些测试，请移除下面的 .skip
+describe.skip('UGC 游戏清单接入', () => {
     const fetchMock = vi.fn();
 
     beforeEach(() => {

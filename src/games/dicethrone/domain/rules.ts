@@ -8,6 +8,7 @@ import type { DtResponseWindowType } from './core-types';
 import type { AbilityContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
 import { isCustomActionCategory } from './effects';
+import { logger } from '../../../lib/logger';
 import type {
     DiceThroneCore,
     Die,

@@ -5,9 +5,18 @@
  * 在 UI 上显示"已激活修正"指示器，直到攻击结算完成。
  *
  * 通过 EventStream 消费 CARD_PLAYED / ATTACK_RESOLVED 事件驱动。
+ * 
+ * 撤回处理：
+ * - 撤回操作会导致 EventStream 回退，didReset=true
+ * - 此时重新扫描当前 EventStream，恢复仍然存在的修正卡
+ * - 只有被撤回的修正卡会从 UI 上移除
+ * 
+ * 刷新恢复：
+ * - 首次挂载时扫描 EventStream 历史，恢复未结算的修正卡
+ * - 查找最后一个 ATTACK_RESOLVED 事件之后的所有 CARD_PLAYED 事件
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import { findHeroCard } from '../heroes';
 import { useEventStreamCursor } from '../../../engine/hooks';
@@ -20,10 +29,53 @@ export interface ActiveModifier {
     /** 卡牌效果描述 i18n key */
     descriptionKey: string;
     timestamp: number;
+    /** 事件 ID（用于撤回时精确匹配） */
+    eventId: number;
 }
 
 export interface UseActiveModifiersConfig {
     eventStreamEntries: EventStreamEntry[];
+}
+
+/**
+ * 从 EventStream 中扫描未结算的攻击修正卡
+ * 
+ * 逻辑：找到最后一个 ATTACK_RESOLVED 事件之后的所有 CARD_PLAYED 事件
+ */
+function scanActiveModifiers(entries: EventStreamEntry[]): ActiveModifier[] {
+    // 从后往前找最后一个 ATTACK_RESOLVED
+    let lastResolvedIndex = -1;
+    for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].event.type === 'ATTACK_RESOLVED') {
+            lastResolvedIndex = i;
+            break;
+        }
+    }
+
+    // 收集 ATTACK_RESOLVED 之后的所有攻击修正卡
+    const modifiers: ActiveModifier[] = [];
+    const startIndex = lastResolvedIndex + 1;
+    
+    for (let i = startIndex; i < entries.length; i++) {
+        const entry = entries[i];
+        const { type, payload, timestamp } = entry.event;
+
+        if (type === 'CARD_PLAYED') {
+            const p = payload as { cardId: string };
+            const card = findHeroCard(p.cardId);
+            if (card && card.isAttackModifier) {
+                modifiers.push({
+                    cardId: p.cardId,
+                    nameKey: typeof card.name === 'string' ? card.name : p.cardId,
+                    descriptionKey: typeof card.description === 'string' ? card.description : '',
+                    timestamp: typeof timestamp === 'number' ? timestamp : 0,
+                    eventId: entry.id,
+                });
+            }
+        }
+    }
+
+    return modifiers;
 }
 
 /**
@@ -33,9 +85,30 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
     const { eventStreamEntries } = config;
     const [modifiers, setModifiers] = useState<ActiveModifier[]>([]);
     const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
+    const isFirstMountRef = useRef(true);
 
     useEffect(() => {
-        const { entries: newEntries } = consumeNew();
+        // 首次挂载：扫描历史事件，恢复未结算的修正卡
+        if (isFirstMountRef.current) {
+            isFirstMountRef.current = false;
+            const restoredModifiers = scanActiveModifiers(eventStreamEntries);
+            if (restoredModifiers.length > 0) {
+                setModifiers(restoredModifiers);
+            }
+            // 推进游标（跳过历史事件）
+            consumeNew();
+            return;
+        }
+
+        const { entries: newEntries, didReset } = consumeNew();
+        
+        // 撤回操作：重新扫描当前 EventStream，恢复仍然存在的修正卡
+        if (didReset) {
+            const restoredModifiers = scanActiveModifiers(eventStreamEntries);
+            setModifiers(restoredModifiers);
+            return;
+        }
+        
         if (newEntries.length === 0) return;
 
         let shouldClear = false;
@@ -54,6 +127,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
                         nameKey: typeof card.name === 'string' ? card.name : p.cardId,
                         descriptionKey: typeof card.description === 'string' ? card.description : '',
                         timestamp: typeof timestamp === 'number' ? timestamp : 0,
+                        eventId: entry.id,
                     });
                 }
             }

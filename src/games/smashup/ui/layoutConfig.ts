@@ -72,7 +72,18 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
             };
         default:
             // 理论上不会到达这里（已在上方边界检查处理）
-            return getLayoutConfig(2);
+            // 为防止边界检查失效，直接返回 2 人局配置而非递归调用
+            console.error(`[layoutConfig] Unexpected playerCount after boundary check: ${playerCount}`);
+            return {
+                baseCardWidth: 14,
+                baseGap: 12,
+                minionCardWidth: 5.5,
+                minionStackOffset: -5.5,
+                playerColumnGap: 0.5,
+                ongoingCardWidth: 3.8,
+                ongoingTopOffset: 6,
+                handAreaHeight: 220,
+            };
     }
 }
 

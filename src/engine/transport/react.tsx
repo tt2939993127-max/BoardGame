@@ -624,6 +624,8 @@ export function LocalGameProvider({
             
             console.log('[LocalGameProvider] 派系选择完成，游戏状态已就绪:', {
                 phase: currentState.sys.flow?.phase,
+                hasFlow: !!currentState.sys.flow,
+                sysKeys: Object.keys(currentState.sys),
                 player0Hand: (currentState.core as any).players?.['0']?.hand?.length,
                 player1Hand: (currentState.core as any).players?.['1']?.hand?.length,
             });
@@ -767,6 +769,9 @@ export function LocalGameProvider({
         });
         
         if (!isTest) return;
+        
+        // 初始化 TestHarness（挂载到 window）
+        TestHarness.init();
         
         const harness = TestHarness.getInstance();
         

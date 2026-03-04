@@ -35,12 +35,12 @@ function createRunner() {
     });
 }
 
-/** 完成全部4次派系选择的标准命令序列（蛇形选秀：P0→P1→P1→P0） */
+/** 完成全部4次派系选择的标准命令序列（顺序选秀：P0→P0→P1→P1） */
 const FULL_DRAFT_COMMANDS = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
 ] as const;
 
 describe('派系选择系统', () => {
@@ -52,12 +52,14 @@ describe('派系选择系统', () => {
                 name: '互斥测试',
                 commands: [
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
                 ],
             });
             expect(result.steps[0]?.success).toBe(true);
-            expect(result.steps[1]?.success).toBe(false);
-            expect(result.steps[1]?.error).toContain('已被选择');
+            expect(result.steps[1]?.success).toBe(true);
+            expect(result.steps[2]?.success).toBe(false);
+            expect(result.steps[2]?.error).toContain('已被选择');
         });
 
         it('不同派系可以被不同玩家选择', () => {
@@ -66,11 +68,13 @@ describe('派系选择系统', () => {
                 name: '不同派系',
                 commands: [
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
                 ],
             });
             expect(result.steps[0]?.success).toBe(true);
             expect(result.steps[1]?.success).toBe(true);
+            expect(result.steps[2]?.success).toBe(true);
         });
 
         it('非当前玩家不能选择', () => {
@@ -85,10 +89,10 @@ describe('派系选择系统', () => {
             expect(result.steps[0]?.error).toContain('player_mismatch');
         });
 
-        it('蛇形选秀顺序正确（2人：P0→P1→P1→P0）', () => {
+        it('顺序选秀正确（2人：P0→P0→P1→P1）', () => {
             const runner = createRunner();
             const result = runner.run({
-                name: '蛇形选秀',
+                name: '顺序选秀',
                 commands: [...FULL_DRAFT_COMMANDS],
             });
             for (const step of result.steps) {
@@ -96,14 +100,14 @@ describe('派系选择系统', () => {
             }
         });
 
-        it('蛇形选秀中间步骤顺序错误被拒绝', () => {
+        it('顺序选秀中间步骤顺序错误被拒绝', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '顺序错误',
                 commands: [
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    // P1 应该选，但 P0 又选了
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    // P0 应该继续选第二个派系，但 P1 抢先选了
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
                 ],
             });
             expect(result.steps[0]?.success).toBe(true);
@@ -215,9 +219,9 @@ describe('派系选择系统', () => {
                 name: '基地扩展包筛选',
                 commands: [
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: selectedFactions[0] } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: selectedFactions[1] } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: selectedFactions[2] } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: selectedFactions[3] } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: selectedFactions[1] } },
                 ],
             });
 

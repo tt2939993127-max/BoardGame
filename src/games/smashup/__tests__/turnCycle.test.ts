@@ -41,12 +41,12 @@ function createRunner(setup?: (ids: PlayerId[], random: RandomFn) => MatchState<
     });
 }
 
-/** 蛇形选秀（多轮 afterEvents 自动推进 factionSelect → startTurn → playCards） */
+/** 顺序选秀（多轮 afterEvents 自动推进 factionSelect → startTurn → playCards） */
 const DRAFT_COMMANDS: SmashUpCommand[] = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
 ] as any[];
 
 // ============================================================================
@@ -106,9 +106,9 @@ describe('随从消灭能力集成', () => {
         // 选秀：P0 选 ninjas+pirates，P1 选 aliens+dinosaurs
         const ninjasDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
         ] as any[];
 
         const result = runner.run({
@@ -221,9 +221,9 @@ describe('额度修改能力', () => {
         // P0 选 wizards + aliens
         const wizardsDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
         ] as any[];
 
         const result = runner.run({
