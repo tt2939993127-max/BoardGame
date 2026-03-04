@@ -730,6 +730,7 @@ function compressStateSnapshot(stateJson: string): string {
 
 function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
     const [copied, setCopied] = useState(false);
+    const [copiedJson, setCopiedJson] = useState(false);
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -753,20 +754,47 @@ function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'adm
         });
     };
 
+    const handleCopyJson = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!item.stateSnapshot) return;
+        
+        navigator.clipboard.writeText(item.stateSnapshot).then(() => {
+            setCopiedJson(true);
+            setTimeout(() => setCopiedJson(false), 2000);
+        });
+    };
+
     return (
-        <button
-            onClick={handleCopy}
-            className={cn(
-                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
-                copied
-                    ? 'text-emerald-600 bg-emerald-50'
-                    : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+        <div className="inline-flex items-center gap-1">
+            <button
+                onClick={handleCopy}
+                className={cn(
+                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
+                    copied
+                        ? 'text-emerald-600 bg-emerald-50'
+                        : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+                )}
+                title={t('feedback.actions.copyAll')}
+            >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+                {copied ? t('feedback.actions.copied') : t('feedback.actions.copyAll')}
+            </button>
+            {item.stateSnapshot && (
+                <button
+                    onClick={handleCopyJson}
+                    className={cn(
+                        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
+                        copiedJson
+                            ? 'text-emerald-600 bg-emerald-50'
+                            : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+                    )}
+                    title="复制完整状态 JSON"
+                >
+                    {copiedJson ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedJson ? '已复制 JSON' : 'JSON'}
+                </button>
             )}
-            title={t('feedback.actions.copyAll')}
-        >
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-            {copied ? t('feedback.actions.copied') : t('feedback.actions.copyAll')}
-        </button>
+        </div>
     );
 }
 

@@ -1,167 +1,226 @@
-# 大杀四方 afterScoring 窗口未打开问题
+# SmashUp afterScoring 响应窗口未打开问题
 
 ## 问题描述
 
-用户反馈："应该是我们乃最强，在我手里，触发响应但没有弹窗"
+用户反馈："打出计分后响应窗口出来的时候，已经没有目标基地了"
 
-**症状**：
-- P1 手牌中有"我们乃最强"（afterScoring 卡牌）
-- 两个基地达到临界值，进入 scoreBases 阶段
-- beforeScoring 响应窗口打开
-- P1 pass 后，窗口切换到 P0
-- **P0 没有点击"跳过"，导致 beforeScoring 窗口一直打开**
-- **afterScoring 窗口无法打开，因为 beforeScoring 窗口还没有关闭**
+## 用户日志分析
 
-## 当前状态分析
+### Action Log
+```
+[08:00:00] 基地结算： 灰色猫眼石/海盗湾 管理员1 +3VP 游客6118 +1VP
+[08:00:00] 清空灰色猫眼石/海盗湾
+[08:00:00] 基地替换： 灰色猫眼石/海盗湾 → 印斯茅斯
+[08:00:00] 基地结算： 印斯茅斯
+[08:00:00] 清空印斯茅斯
+[08:00:00] 基地替换： 印斯茅斯 → 蚁丘
+```
 
-从用户提供的状态可以看到：
-
+### 状态快照
 ```json
 {
-  "sys": {
-    "responseWindow": {
-      "current": {
-        "id": "beforeScoring_scoreBases_1772622856496",
-        "windowType": "beforeScoring",
-        "sourceId": "scoreBases",
-        "responderQueue": ["1", "0"],
-        "currentResponderIndex": 1,  // 当前响应者是 P0
-        "passedPlayers": ["1"]  // P1 已经 pass
-      }
-    },
-    "phase": "scoreBases",
-    "scoringEligibleBaseIndices": [1, 2]
-  },
-  "core": {
-    "players": {
-      "1": {
-        "hand": [
-          // ... 其他卡牌 ...
-          {
-            "uid": "c60",
-            "defId": "giant_ant_we_are_the_champions",  // 我们乃最强
-            "type": "action",
-            "owner": "1"
-          }
-        ]
-      }
+  "bases": [
+    {"defId": "base_egg_chamber", "minions": []},
+    {"defId": "base_the_hill", "minions": []},  // ← 新基地，已经空了
+    {"defId": "base_ninja_dojo", "minions": [...]}
+  ],
+  "afterScoringTriggeredBases": [1],
+  "players": {
+    "1": {
+      "hand": [
+        {"defId": "giant_ant_we_are_the_champions"}  // ← afterScoring 卡牌！
+      ]
     }
   }
 }
 ```
 
-**关键信息**：
-1. ✅ P1 手牌中有"我们乃最强"（afterScoring 卡牌）
-2. ✅ beforeScoring 窗口正确打开
-3. ✅ P1 正确 pass（`passedPlayers: ["1"]`）
-4. ✅ 窗口切换到 P0（`currentResponderIndex: 1`）
-5. ❌ **P0 没有点击"跳过"，导致窗口卡住**
+## 问题分析
 
-## 根本原因
+### 预期流程
 
-**beforeScoring 窗口必须完全关闭后，才能执行计分并打开 afterScoring 窗口**。
+1. 基地 1（灰色猫眼石/海盗湾）计分
+2. 检查玩家手牌中是否有 afterScoring 卡牌 → **有**（玩家 1 的"我们乃最强"）
+3. **打开 afterScoring 响应窗口**
+4. **延迟发出 BASE_CLEARED 和 BASE_REPLACED**
+5. 玩家打出 afterScoring 卡牌或跳过
+6. 响应窗口关闭
+7. 发出 BASE_CLEARED 和 BASE_REPLACED
 
-工作流程：
-1. 进入 scoreBases 阶段
-2. 打开 beforeScoring 响应窗口
-3. 所有玩家 pass 或打出 beforeScoring 卡牌
-4. **beforeScoring 窗口关闭**
-5. 执行 `scoreOneBase` 函数
-6. 检查是否有玩家有 afterScoring 卡牌
-7. 如果有，打开 afterScoring 响应窗口
+### 实际情况
 
-**当前卡在步骤 3**：P0 还没有 pass，所以 beforeScoring 窗口无法关闭。
+1. 基地 1（灰色猫眼石/海盗湾）计分
+2. **立即发出 BASE_CLEARED 和 BASE_REPLACED**（基地被清空和替换）
+3. 基地 1（印斯茅斯）又立即计分
+4. **立即发出 BASE_CLEARED 和 BASE_REPLACED**（基地再次被清空和替换）
+5. 现在基地 1 是"蚁丘"（新基地），已经空了
+6. 响应窗口打开（？）
+7. 玩家打出 afterScoring 卡牌时，目标基地已经不存在了
 
 ## 可能的原因
 
-### 原因 1: P0 没有看到"跳过"按钮
+### 原因 1：检查 afterScoring 卡牌的逻辑有问题
+
+代码中检查 afterScoring 卡牌的逻辑：
+
+```typescript
+const playersWithAfterScoringCards: PlayerId[] = [];
+for (const [playerId, player] of Object.entries(afterScoringCore.players)) {
+    const hasAfterScoringCard = player.hand.some(c => {
+        if (c.type !== 'action') return false;
+        const def = getCardDef(c.defId) as ActionCardDef | undefined;
+        return def?.subtype === 'special' && def.specialTiming === 'afterScoring';
+    });
+    if (hasAfterScoringCard) {
+        playersWithAfterScoringCards.push(playerId);
+    }
+}
+```
+
+可能的问题：
+- `getCardDef` 返回 `undefined`？
+- `def.subtype` 不是 `'special'`？
+- `def.specialTiming` 不是 `'afterScoring'`？
+
+但是从卡牌定义来看，"我们乃最强"的定义是正确的：
+```typescript
+{
+    id: 'giant_ant_we_are_the_champions',
+    type: 'action',
+    subtype: 'special',
+    specialTiming: 'afterScoring',
+    // ...
+}
+```
+
+### 原因 2：多基地计分时的时序问题
+
+从日志来看，有两个基地同时计分：
+1. 基地 1（灰色猫眼石/海盗湾）
+2. 基地 1（印斯茅斯）- 新替换的基地
 
 可能的情况：
-- UI 没有正确显示"跳过"按钮
-- 按钮被其他元素遮挡
-- 按钮位置不明显
+- 第一个基地计分时，没有检查 afterScoring 卡牌（为什么？）
+- 第二个基地计分时，才检查 afterScoring 卡牌并打开响应窗口
+- 但是这时基地已经被替换了两次，目标基地已经不存在了
 
-### 原因 2: P0 点击了"跳过"但没有生效
+### 原因 3：响应窗口打开后立即被关闭
 
 可能的情况：
-- `RESPONSE_PASS` 命令验证失败
-- 网络延迟导致命令没有发送
-- 服务端处理命令时出错
+- 响应窗口打开了
+- 但是由于某种原因（如 `hasRespondableContent` 返回 `false`），响应窗口立即被关闭
+- BASE_CLEARED 和 BASE_REPLACED 事件被发出
 
-### 原因 3: P0 想打出 beforeScoring 卡牌但无法打出
+## 排查建议
 
-从状态可以看到，P0 手牌中有：
-- `pirate_saucy_wench`（粗鲁少妇，beforeScoring 随从）
+### 1. 添加日志
 
-P0 可能想打出这张卡牌，但：
-- 卡牌不可点击
-- 点击后没有反应
-- 验证失败
+在 `scoreOneBase` 函数中添加日志，记录：
+- 是否检查了 afterScoring 卡牌
+- 检查结果（哪些玩家有 afterScoring 卡牌）
+- 是否打开了响应窗口
+- 是否延迟发出 BASE_CLEARED
 
-## 调试建议
-
-### 1. 检查 UI 是否正确显示
-
-在浏览器控制台中检查：
-```javascript
-// 检查当前响应窗口状态
-window.__BG_STATE__?.sys?.responseWindow?.current
-
-// 检查当前玩家
-window.__BG_STATE__?.core?.currentPlayerIndex
-
-// 检查 P0 手牌
-window.__BG_STATE__?.core?.players?.['0']?.hand
+```typescript
+console.log('[scoreOneBase] 检查 afterScoring 卡牌:', {
+    baseIndex,
+    baseDefId: base.defId,
+    playersWithAfterScoringCards,
+    willOpenWindow: playersWithAfterScoringCards.length > 0,
+});
 ```
 
-### 2. 手动发送 RESPONSE_PASS 命令
+### 2. 检查 `hasRespondableContent`
 
-在浏览器控制台中：
-```javascript
-window.__BG_DISPATCH__({ type: 'RESPONSE_PASS', playerId: '0', payload: undefined })
+检查 `ResponseWindowSystem` 的 `hasRespondableContent` 函数，确认它能正确识别 afterScoring 卡牌：
+
+```typescript
+hasRespondableContent: (state, playerId, windowType) => {
+    if (windowType !== 'afterScoring') return true;
+    const core = state as SmashUpCore;
+    const player = core.players[playerId];
+    if (!player) return false;
+    
+    // 检查 afterScoring 卡牌
+    const hasAfterScoringCard = player.hand.some(c => {
+        if (c.type !== 'action') return false;
+        const def = getCardDef(c.defId) as ActionCardDef | undefined;
+        return def?.subtype === 'special' && def.specialTiming === 'afterScoring';
+    });
+    
+    console.log('[hasRespondableContent] afterScoring 检查:', {
+        playerId,
+        windowType,
+        hasAfterScoringCard,
+        handSize: player.hand.length,
+    });
+    
+    return hasAfterScoringCard;
+},
 ```
 
-### 3. 检查服务端日志
+### 3. 检查多基地计分逻辑
 
-查看服务端是否收到 `RESPONSE_PASS` 命令，以及是否有错误日志。
+检查 `onPhaseExit` 中的多基地计分逻辑，确认：
+- 第一个基地计分时是否正确检查了 afterScoring 卡牌
+- 响应窗口打开后是否正确 halt
+- 响应窗口关闭后是否正确恢复计分
 
-## 解决方案
+## 临时解决方案
 
-### 短期方案：手动跳过
+在修复根本原因之前，可以使用以下临时方案：
 
-用户可以在浏览器控制台中手动发送 `RESPONSE_PASS` 命令：
-```javascript
-window.__BG_DISPATCH__({ type: 'RESPONSE_PASS', playerId: '0', payload: undefined })
+### 方案 1：在响应窗口中记录目标基地 defId
+
+修改 `openAfterScoringWindow` 函数，将目标基地的 defId 存储到响应窗口的 `sourceId` 字段中：
+
+```typescript
+const afterScoringWindowEvt = openAfterScoringWindow(
+    'scoreBases',
+    pid,
+    afterScoringCore.turnOrder,
+    now,
+    base.defId  // ← 传递基地 defId
+);
 ```
 
-### 长期方案：改进 UI
+然后在 afterScoring 卡牌的执行逻辑中，使用 `sourceId` 来查找目标基地：
 
-1. **更明显的"跳过"按钮**：
-   - 增大按钮尺寸
-   - 使用更醒目的颜色
-   - 添加动画提示
+```typescript
+const targetBaseDefId = responseWindow.sourceId;
+const targetBaseIndex = state.bases.findIndex(b => b.defId === targetBaseDefId);
+if (targetBaseIndex === -1) {
+    // 基地已被替换，返回错误
+    return { events: [/* ABILITY_FEEDBACK */] };
+}
+```
 
-2. **自动跳过机制**：
-   - 如果玩家没有可用的卡牌，自动跳过
-   - 添加倒计时，超时自动跳过
+### 方案 2：在基地替换时保留随从快照
 
-3. **更好的状态提示**：
-   - 显示"等待 P0 响应"
-   - 显示当前响应者的名称
-   - 显示已 pass 的玩家列表
+在 `scoreOneBase` 函数中，将基地上的随从快照存储到 `matchState.sys`：
 
-## 相关文档
+```typescript
+if (ms) {
+    ms = {
+        ...ms,
+        sys: {
+            ...ms.sys,
+            afterScoringMinionSnapshots: {
+                baseIndex,
+                minions: currentBase.minions.map(m => ({ ...m })),
+            } as any,
+        },
+    };
+}
+```
 
-- `evidence/smashup-after-scoring-rescoring-analysis.md` - afterScoring 窗口设计文档
-- `evidence/smashup-newbasedeck-initialization-fix.md` - 最近的修复
-- `src/games/smashup/domain/index.ts` - scoreOneBase 函数实现
+然后在 afterScoring 卡牌的执行逻辑中，使用快照而不是当前基地状态。
 
-## 状态
+## 总结
 
-⚠️ **等待用户操作**：需要 P0 点击"跳过"才能继续
+问题的根本原因尚不明确，需要添加日志来排查。可能的原因包括：
+1. 检查 afterScoring 卡牌的逻辑有问题
+2. 多基地计分时的时序问题
+3. 响应窗口打开后立即被关闭
 
-## 下一步
-
-1. 用户手动发送 `RESPONSE_PASS` 命令关闭 beforeScoring 窗口
-2. 观察 afterScoring 窗口是否正确打开
-3. 如果 afterScoring 窗口仍然没有打开，检查服务端日志
+建议先添加日志，确认响应窗口是否正确打开，然后再决定修复方案。
