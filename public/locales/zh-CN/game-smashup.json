@@ -75,6 +75,7 @@
     "talent_used": "已用",
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
+    "after_scoring_title": "计分后响应",
     "thinking": "思考中...",
     "loading": "加载中...",
     "reveal_hand_title": "P{{player}} 的手牌",

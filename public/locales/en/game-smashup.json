@@ -75,6 +75,7 @@
     "talent_used": "Used",
     "card_placeholder": "Card",
     "me_first_title": "⚡ Me First!",
+    "after_scoring_title": "After Scoring Response",
     "thinking": "Thinking...",
     "loading": "Loading...",
     "reveal_hand_title": "P{{player}}'s Hand",

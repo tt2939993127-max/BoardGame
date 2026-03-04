@@ -62,6 +62,9 @@ const systems: EngineSystem<SmashUpCore>[] = [
             { eventType: 'su:minion_played', windowTypes: ['meFirst'] },
         ],
         loopUntilAllPass: true,
+        interactionLock: {
+            requestEvent: 'SYS_INTERACTION_REQUESTED',
+        },
         hasRespondableContent: (state, playerId, windowType) => {
             if (windowType !== 'meFirst' && windowType !== 'afterScoring') return true;
             const core = state as SmashUpCore;
