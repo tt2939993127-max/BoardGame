@@ -516,6 +516,7 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
         diceValues.push(value);
         diceFaces.push(face);
+        dice.push({ index: i, value, face });
     }
     
     const bowCount = diceFaces.filter(f => f === FACE.BOW).length;
@@ -538,27 +539,34 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
         } as BonusDieRolledEvent);
     }
 
+    // 发射汇总事件（显示伤害加成信息）
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: { 
+            value: diceValues[0], // 主要显示第一个骰子
+            face: diceFaces[0], 
+            playerId: attackerId, 
+            targetPlayerId: opponentId, 
+            effectKey: 'bonusDie.effect.volley.result', 
+            effectParams: { 
+                bowCount,
+                bonusDamage
+            } 
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: timestamp + 5,
+    } as BonusDieRolledEvent);
+
     // 增加弓面数量的伤害（作为攻击修正加到 pendingAttack）
     if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
         state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + bowCount;
     }
 
     // 施加缠绕（给对手）
-    events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-
-    // 收集骰子数据（用于多骰面板显示）
-    // 为每个骰子添加 effectKey，显示汇总结果
-    for (let i = 0; i < 5; i++) {
-        dice.push({ 
-            index: i, 
-            value: diceValues[i], 
-            face: diceFaces[i],
-            effectKey: 'bonusDie.effect.volley.result', // 使用汇总 key
-        });
-    }
+    events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp + 6));
 
     // 多骰展示汇总（触发 BonusDieOverlay 显示所有骰子）
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp + 7));
 
     return events;
 }

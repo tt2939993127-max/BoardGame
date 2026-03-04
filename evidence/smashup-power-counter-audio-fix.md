@@ -1,159 +1,108 @@
-# 大杀四方 - 施加力量指示物音效修复
+# 大杀四方 - 施加力量指示物音效调试
 
 ## 问题描述
 
 用户反馈：巨蚂蚁派系直接添加力量指示物的能力（如疯狂怪物派对）没有播放音效。
 
-## 根本原因
+## 当前状态
 
-### 音频去重机制缺陷
+已添加调试日志来定位问题。需要用户测试并提供控制台输出。
 
-`useGameAudio.ts` 中的批量事件处理使用了错误的去重策略：
+## 调试步骤
 
-```typescript
-// 修复前（错误）
-const playedKeys = new Set<SoundKey>();
-for (const entry of audioEntries) {
-    const key = resolveFeedback(event, ...);
-    if (!playedKeys.has(key)) {  // ❌ 基于音效 key 去重
-        playedKeys.add(key);
-        playSound(key);
-    }
-}
-```
-
-**问题**：当一次批量处理多个相同类型的事件时（如疯狂怪物派对给 5 个随从各放 1 个指示物），所有事件解析出相同的音效 key（`charged_a`），导致：
-1. 第一个 `POWER_COUNTER_ADDED` 事件播放音效 ✅
-2. 后续 4 个 `POWER_COUNTER_ADDED` 事件因为 key 相同被去重跳过 ❌
-
-### 为什么吸血鬼能力没有这个问题
-
-吸血鬼能力（如夜行者）同时生成"消灭随从"和"施加力量指示物"两个事件，它们的音效 key 不同：
-- `MINION_DESTROYED` → `smashed_1`
-- `POWER_COUNTER_ADDED` → `charged_a`
-
-因此不会被去重机制误杀。但之前修复的时间戳冲突问题仍然有效（避免音频节流和掩蔽）。
-
-## 修复方案
-
-### 改进去重策略
-
-将去重从"基于音效 key"改为"基于事件签名（时间戳 + 事件类型）"：
-
-```typescript
-// 修复后（正确）
-const playedEventSignatures = new Set<string>();
-for (const entry of audioEntries) {
-    const key = resolveFeedback(event, ...);
-    
-    // 生成事件签名（时间戳 + 事件类型 + 音效 key）
-    const eventSignature = getLogEntrySignature(entry);
-    
-    // 基于事件签名去重，而非音效 key
-    if (!playedEventSignatures.has(eventSignature)) {
-        playedEventSignatures.add(eventSignature);
-        playSound(key);
-    }
-}
-```
-
-### 为什么这样修复
-
-1. **事件签名唯一性**：每个事件都有唯一的时间戳和类型组合
-2. **允许相同音效多次播放**：5 个随从同时获得指示物 → 播放 5 次 `charged_a` 音效
-3. **仍然防止重复播放**：同一个事件不会被处理两次
-4. **向后兼容**：无法生成签名时直接播放（保持原有行为）
-
-## 技术细节
-
-### 事件签名生成
-
-```typescript
-function getLogEntrySignature(entry: unknown): string | null {
-    // EventStream 格式：{ id: number, event: { type, timestamp } }
-    if (typeof maybeEventStreamEntry.id === 'number') {
-        return `eventId:${maybeEventStreamEntry.id}`;
-    }
-
-    // 直接事件格式：{ type, timestamp, data: { type, timestamp } }
-    const signatureTimestamp = dataTimestamp ?? maybeEntry.timestamp;
-    if (typeof signatureTimestamp !== 'number') return null;
-
-    return `${signatureTimestamp}|${maybeEntry.type ?? ''}|${dataType}`;
-}
-```
-
-### 去重逻辑对比
-
-| 场景 | 旧逻辑（基于 key） | 新逻辑（基于签名） |
-|------|-------------------|-------------------|
-| 5 个随从同时获得指示物 | 只播放 1 次 ❌ | 播放 5 次 ✅ |
-| 同一事件重复处理 | 只播放 1 次 ✅ | 只播放 1 次 ✅ |
-| 不同事件相同音效 | 只播放 1 次 ❌ | 播放多次 ✅ |
-
-## 影响范围
-
-### 修改的文件
-
-- `src/lib/audio/useGameAudio.ts`（1 处修改）
-
-### 受益的场景
-
-1. **巨蚂蚁派系**：
-   - 疯狂怪物派对：所有没有指示物的随从各放一个
-   - 我们是冠军：计分后分配多个指示物
-   - 其他批量施加力量的能力
-
-2. **吸血鬼派系**：
-   - 保持之前的修复（时间戳偏移避免节流）
-   - 去重逻辑改进不影响现有行为
-
-3. **其他派系**：
-   - 所有批量生成相同类型事件的能力
-   - 例如：批量抽牌、批量移动随从等
-
-### 不受影响的场景
-
-- 单个事件的音效播放
-- 不同类型事件的音效播放
-- UI 本地交互音效（已在组件层播放）
-
-## 验证方法
-
-### 手动测试
+### 1. 运行游戏并触发能力
 
 1. 创建巨蚂蚁派系对局
-2. 打出"疯狂怪物派对"（给所有没有指示物的随从各放一个）
-3. 验证：
-   - ✅ 听到多次力量增加音效（charged_a.ogg）
-   - ✅ 音效次数 = 获得指示物的随从数量
+2. 打出"疯狂怪物派对"或其他添加力量指示物的能力
+3. 打开浏览器控制台（F12）
+4. 查看是否有 `[Audio Debug] POWER_COUNTER_ADDED event:` 日志
 
-### 自动化测试
+### 2. 分析日志输出
 
-现有测试已覆盖巨蚂蚁能力的逻辑正确性，音效播放属于 UI 层行为，不需要额外的单元测试。
+日志会显示：
+- `eventType`: 事件类型（应该是 `'su:power_counter_added'`）
+- `resolvedKey`: 解析出的音效 key（应该是 `'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a'`）
+- `payload`: 事件数据（包含 minionUid、baseIndex、amount、reason）
 
-## 教训总结
+### 3. 可能的问题场景
 
-### 问题定位流程
+#### 场景 A：没有日志输出
+- **原因**：事件没有被生成或没有进入音频处理流程
+- **排查**：检查事件生成代码（`abilityHelpers.ts` 中的 `addPowerCounter`）
 
-1. ✅ **用户反馈精准定位**：用户明确指出是"巨蚂蚁直接添加力量"而非"吸血鬼消灭+添加"
-2. ✅ **识别场景差异**：巨蚂蚁是批量相同事件，吸血鬼是不同事件组合
-3. ✅ **找到根本原因**：去重逻辑基于音效 key 而非事件签名
+#### 场景 B：日志显示 `resolvedKey: null`
+- **原因**：`feedbackResolver` 没有正确解析事件
+- **排查**：检查 `audio.config.ts` 中的 `feedbackResolver` 和 `baseFeedbackResolver`
 
-### 核心原则
+#### 场景 C：日志显示正确的 key 但没有音效
+- **原因**：音频文件加载失败或被节流机制拦截
+- **排查**：检查 `registry-slim.json` 中是否包含该音效，检查音频节流机制
 
-- **去重应该基于事件身份，而非事件效果**：同一个事件只播放一次，但不同事件即使音效相同也应该播放
-- **批量事件处理需要考虑相同类型事件**：不能假设批量事件中每个事件的音效 key 都不同
-- **音频系统应该透明**：游戏层生成多少个事件，就应该播放多少次音效（除非是真正的重复事件）
+#### 场景 D：日志显示正确的 key 且有音效，但音量太小
+- **原因**：音效文件本身音量较低，或被其他音效掩盖
+- **排查**：调整音量或使用不同的音效文件
 
-### 类似问题预防
+## 已验证的配置
 
-未来如果遇到"批量操作只有第一个有音效"的问题，检查清单：
+### 1. 事件定义正确
 
-1. [ ] 是否是批量相同类型的事件
-2. [ ] 去重逻辑是基于什么（key vs 签名）
-3. [ ] 是否应该允许相同音效多次播放
-4. [ ] 音频节流机制是否合理（80ms）
+```typescript
+// src/games/smashup/domain/events.ts
+'su:power_counter_added': { 
+    audio: 'immediate', 
+    sound: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a' 
+}
+```
+
+### 2. 事件类型常量正确
+
+```typescript
+// src/games/smashup/domain/events.ts
+export const SU_EVENT_TYPES = {
+    POWER_COUNTER_ADDED: SU_EVENTS['su:power_counter_added'].type,
+    // ...
+}
+```
+
+### 3. 事件生成正确
+
+```typescript
+// src/games/smashup/domain/abilityHelpers.ts
+export function addPowerCounter(...): PowerCounterAddedEvent {
+    return {
+        type: SU_EVENTS.POWER_COUNTER_ADDED,
+        payload: { minionUid, baseIndex, amount, reason },
+        timestamp: now,
+    };
+}
+```
+
+### 4. feedbackResolver 配置正确
+
+```typescript
+// src/games/smashup/audio.config.ts
+const baseFeedbackResolver = createFeedbackResolver(SU_EVENTS);
+
+feedbackResolver: (event) => {
+    // ... 特殊处理 ...
+    
+    // 使用框架自动生成的默认音效
+    return baseFeedbackResolver(event);
+}
+```
+
+### 5. 音频文件存在
+
+- 文件路径：`sfx/status/general/Player Status Sound FX Pack Vol. 3/Positive Buffs and Cures/Charged A.ogg`
+- 已在 `registry-slim.json` 中注册（298 个条目）
+
+## 修改的文件
+
+- `src/lib/audio/useGameAudio.ts`（添加调试日志）
+
+## 下一步
+
+等待用户提供控制台日志输出，根据日志内容进一步定位问题。
 
 ## 相关文档
 

@@ -92,6 +92,10 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
         if (isFirstMountRef.current) {
             isFirstMountRef.current = false;
             const restoredModifiers = scanActiveModifiers(eventStreamEntries);
+            console.log('[useActiveModifiers] 首次挂载，扫描历史事件:', {
+                totalEntries: eventStreamEntries.length,
+                restoredModifiers,
+            });
             if (restoredModifiers.length > 0) {
                 setModifiers(restoredModifiers);
             }
@@ -102,9 +106,19 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
 
         const { entries: newEntries, didReset } = consumeNew();
         
+        console.log('[useActiveModifiers] consumeNew 结果:', {
+            newEntriesCount: newEntries.length,
+            didReset,
+            totalEntries: eventStreamEntries.length,
+        });
+        
         // 撤回操作：重新扫描当前 EventStream，恢复仍然存在的修正卡
         if (didReset) {
             const restoredModifiers = scanActiveModifiers(eventStreamEntries);
+            console.log('[useActiveModifiers] 撤回操作，重新扫描:', {
+                totalEntries: eventStreamEntries.length,
+                restoredModifiers,
+            });
             setModifiers(restoredModifiers);
             return;
         }
@@ -120,6 +134,11 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
             if (type === 'CARD_PLAYED') {
                 const p = payload as { cardId: string };
                 const card = findHeroCard(p.cardId);
+                console.log('[useActiveModifiers] CARD_PLAYED 事件:', {
+                    cardId: p.cardId,
+                    card,
+                    isAttackModifier: card?.isAttackModifier,
+                });
                 // 只追踪显式标记为攻击修正的卡（isAttackModifier: true）
                 if (card && card.isAttackModifier) {
                     newModifiers.push({
@@ -134,6 +153,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
 
             // 攻击结算完成，清空所有修正指示
             if (type === 'ATTACK_RESOLVED') {
+                console.log('[useActiveModifiers] ATTACK_RESOLVED 事件，清空修正卡');
                 shouldClear = true;
             }
         }
@@ -141,6 +161,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
         if (shouldClear) {
             setModifiers([]);
         } else if (newModifiers.length > 0) {
+            console.log('[useActiveModifiers] 添加新修正卡:', newModifiers);
             setModifiers(prev => [...prev, ...newModifiers]);
         }
     }, [eventStreamEntries, consumeNew]);

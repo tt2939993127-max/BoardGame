@@ -211,28 +211,26 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             return key;
         }
 
-        // ABILITY_ACTIVATED：检查技能自带音效
+        // ABILITY_ACTIVATED：技能激活时不播放音效
+        // 技能音效由 FX 系统在攻击动画 onImpact 时播放（useAnimationEffects.findAbilitySfxKey）
         if (type === 'ABILITY_ACTIVATED') {
-            const payload = (event as AudioEvent & { payload?: { playerId?: string; abilityId?: string } }).payload;
-            if (payload?.playerId && payload?.abilityId) {
-                const match = findPlayerAbility(G, payload.playerId, payload.abilityId);
-                const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-                // 如果技能有自带音效，返回该音效 key
-                if (explicitKey) return explicitKey;
-            }
-            // 没有自带音效时，使用框架默认音效（从 DT_EVENTS 配置中获取）
-            // 不再返回 null，而是让框架处理
+            return null;
         }
 
-        // ATTACK_INITIATED：检查技能自带音效
+        // ATTACK_INITIATED：总是播放攻击发起音效（挥剑音效）
+        // 技能专属音效在伤害动画 onImpact 时播放，不在这里播放
+        // 不需要特殊处理，直接回退到框架默认音效
         if (type === 'ATTACK_INITIATED') {
-            const payload = (event as AudioEvent & { payload?: { attackerId?: string; sourceAbilityId?: string } }).payload;
-            if (payload?.attackerId && payload?.sourceAbilityId) {
-                const match = findPlayerAbility(G, payload.attackerId, payload.sourceAbilityId);
-                const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-                if (explicitKey) return null;
-            }
-            // 回退到框架默认
+            const payload = (event as AudioEvent & { payload?: { attackerId?: string; defenderId?: string } }).payload;
+            const attackerId = payload?.attackerId;
+            const defenderId = payload?.defenderId;
+            console.log('[DT Audio Debug] ATTACK_INITIATED:', {
+                attackerId,
+                defenderId,
+                currentPlayerId,
+                eventPayload: payload,
+            });
+            // 回退到框架默认音效
         }
 
         // RESPONSE_WINDOW_OPENED / RESPONSE_WINDOW_CLOSED：只有响应者才播放音效

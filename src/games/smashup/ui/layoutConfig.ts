@@ -47,27 +47,27 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
                 handAreaHeight: 220,
             };
         case 3:
-            // 三人局：适度缩放
+            // 三人局：适度缩放，缩小间距
             return {
-                baseCardWidth: 12,
-                baseGap: 8,
-                minionCardWidth: 4.8,
-                minionStackOffset: -4.8,
+                baseCardWidth: 13,
+                baseGap: 4,
+                minionCardWidth: 5,
+                minionStackOffset: -5,
                 playerColumnGap: 0.4,
-                ongoingCardWidth: 3.2,
-                ongoingTopOffset: 5,
+                ongoingCardWidth: 3.5,
+                ongoingTopOffset: 5.5,
                 handAreaHeight: 200,
             };
         case 4:
-            // 四人局：紧凑布局
+            // 四人局：紧凑布局，最小间距
             return {
-                baseCardWidth: 10,
-                baseGap: 6,
-                minionCardWidth: 4,
-                minionStackOffset: -4,
+                baseCardWidth: 12,
+                baseGap: 2,
+                minionCardWidth: 4.5,
+                minionStackOffset: -4.5,
                 playerColumnGap: 0.3,
-                ongoingCardWidth: 2.8,
-                ongoingTopOffset: 4.5,
+                ongoingCardWidth: 3,
+                ongoingTopOffset: 5,
                 handAreaHeight: 180,
             };
         default:

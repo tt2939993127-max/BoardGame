@@ -329,9 +329,9 @@
     "healthLabel": "血量: {{value}}",
     "energyLabel": "能量: {{value}}",
     "shieldLabel": "护盾: {{value}}",
-    "autoResponseEnabled": "自动响应已启用",
-    "autoResponseDisabled": "自动响应已禁用",
-    "autoResponse": "自动响应",
+    "autoResponseEnabled": "手动响应已启用",
+    "autoResponseDisabled": "自动跳过已启用",
+    "autoResponse": "自动跳过",
     "manualResponse": "手动响应"
   },
   "hero": {
@@ -420,6 +420,9 @@
   "modifierActive": {
     "label": "攻击修正",
     "tooltip": "已激活的攻击修正卡，效果将在伤害结算时触发"
+  },
+  "attackBonus": {
+    "label": "+{{damage}} 伤害"
   },
   "dice": {
     "waitingOpponent": "对方正在思考中...",

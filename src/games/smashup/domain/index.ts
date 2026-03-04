@@ -481,27 +481,34 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             },
         };
 
-        // 【修复】提取延迟的 BASE_CLEARED/BASE_REPLACED 事件
+        // 【修复】提取延迟的 BASE_CLEARED/BASE_REPLACED 事件（但不立即补发）
         const deferredEvents = (_iData?.continuationContext as any)?._deferredPostScoringEvents as 
             { type: string; payload: unknown; timestamp: number }[] | undefined;
-        
-        // 【修复】如果有延迟事件，先补发
-        if (deferredEvents && deferredEvents.length > 0) {
-            console.log('[multi_base_scoring] 补发延迟事件:', deferredEvents.length);
-            events.push(...deferredEvents as SmashUpEvent[]);
-            
-            // 立即 reduce 到本地 core 副本，确保后续逻辑使用最新状态
-            let updatedCore = currentState.core;
-            for (const evt of deferredEvents) {
-                updatedCore = reduce(updatedCore, evt as SmashUpEvent);
-            }
-            currentState = { ...currentState, core: updatedCore };
-        }
         // 1. 计分玩家选择的基地
         const result = scoreOneBase(currentState.core, baseIndex, currentBaseDeck, playerId, timestamp, random, currentState);
         events.push(...result.events);
         currentBaseDeck = result.newBaseDeck;
         if (result.matchState) currentState = result.matchState;
+
+        // 【关键修复】立即将基地标记为"已计分"，避免 onPhaseExit 重复计分
+        // 这是多基地计分重复计分 bug 的根本原因：
+        // 当 afterScoring 创建交互时，BASE_CLEARED 事件被延迟发出
+        // 如果不标记为"已计分"，onPhaseExit 在交互解决后重新进入时会再次计分同一个基地
+        if (!currentState.sys.scoredBaseIndices) {
+            currentState = {
+                ...currentState,
+                sys: { ...currentState.sys, scoredBaseIndices: [] },
+            };
+        }
+        if (!currentState.sys.scoredBaseIndices.includes(baseIndex)) {
+            currentState = {
+                ...currentState,
+                sys: {
+                    ...currentState.sys,
+                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices, baseIndex],
+                },
+            };
+        }
 
         // 2. 将已产生的事件 reduce 到本地 core 副本，获取最新状态
         let updatedCore = currentState.core;
@@ -509,8 +516,10 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             updatedCore = reduce(updatedCore, evt as SmashUpEvent);
         }
 
-        // 3. 检查剩余 eligible 基地
-        const remainingIndices = getScoringEligibleBaseIndices(updatedCore).filter(i => i !== baseIndex);
+        // 3. 检查剩余 eligible 基地（基于 sys.scoredBaseIndices，而不是 getScoringEligibleBaseIndices）
+        // 这样可以避免延迟事件未补发时，已计分的基地被重复计入
+        const allEligibleIndices = getScoringEligibleBaseIndices(updatedCore);
+        const remainingIndices = allEligibleIndices.filter(i => !currentState.sys.scoredBaseIndices?.includes(i));
 
         // 如果 beforeScoring/afterScoring 创建了交互 → 先处理交互，剩余基地后续再计分
         if (currentState.sys.interaction?.current) {
@@ -536,6 +545,22 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                         { sourceId: 'multi_base_scoring', targetType: 'base' },
                     );
                     currentState = queueInteraction(currentState, interaction);
+                    
+                    // 【关键修复】将剩余基地标记为"计分中"，避免 onPhaseExit 重复计分
+                    // 这是多基地计分重复计分 bug 的根本原因：
+                    // 当创建 multi_base_scoring 交互后，onPhaseExit 重新进入时会发现剩余基地还没有被标记为"已计分"
+                    // 导致 onPhaseExit 直接计分，然后 multi_base_scoring 交互解决时又计分一次
+                    for (const idx of remainingIndices) {
+                        if (!currentState.sys.scoredBaseIndices!.includes(idx)) {
+                            currentState = {
+                                ...currentState,
+                                sys: {
+                                    ...currentState.sys,
+                                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices!, idx],
+                                },
+                            };
+                        }
+                    }
                 }
             }
             return { state: currentState, events };
@@ -582,6 +607,14 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             for (const evt of r.events) {
                 updatedCore = reduce(updatedCore, evt as SmashUpEvent);
             }
+        }
+
+        // 【关键修复】所有基地计分完成后，补发延迟事件
+        // 只有当 remainingIndices 为空时（所有基地都计分完了），才补发延迟事件
+        // 这样可以避免在中间步骤重复补发
+        if (deferredEvents && deferredEvents.length > 0) {
+            console.log('[multi_base_scoring] 所有基地计分完成，补发延迟事件:', deferredEvents.length);
+            events.push(...deferredEvents as SmashUpEvent[]);
         }
 
         return { state: currentState, events };
@@ -807,8 +840,21 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return { events: [], halt: true, updatedState } as PhaseExitResult;
             }
 
-            // 1 个基地达标 → 直接记分
+            // 1 个基地达标 → 检查当前交互或队列中是否已有 multi_base_scoring 交互
+            // 如果有，说明之前已经创建了交互，不应该重复计分
             // 使用 remainingIndices（已过滤已记分基地），按顺序逐个计分
+            const currentIsMultiBaseScoring = 
+                (state.sys.interaction.current?.data as any)?.sourceId === 'multi_base_scoring';
+            const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
+                (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
+            );
+            
+            if (currentIsMultiBaseScoring || hasMultiBaseScoringInQueue) {
+                // 当前交互或队列中已有 multi_base_scoring 交互，不重复计分
+                // halt=true：等待交互解决
+                return { events: [], halt: true } as PhaseExitResult;
+            }
+            
             let currentBaseDeck = core.baseDeck;
             let currentMatchState: MatchState<SmashUpCore> = state;
             let currentCore = core;  // ✅ 修复：维护一个本地 core 副本，每次计分后更新

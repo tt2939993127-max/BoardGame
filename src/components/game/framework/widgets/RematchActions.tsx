@@ -122,8 +122,19 @@ export function RematchActions({
     });
 
     const handleVote = () => {
+        console.log('[RematchActions] handleVote called', {
+            onVote: !!onVote,
+            isMultiplayer,
+            playerID,
+            myVote,
+            ready,
+            rematchState,
+        });
         if (onVote) {
+            console.log('[RematchActions] calling onVote');
             onVote();
+        } else {
+            console.error('[RematchActions] onVote is undefined!');
         }
     };
 

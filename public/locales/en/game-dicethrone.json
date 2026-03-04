@@ -330,9 +330,9 @@
     "healthLabel": "Health: {{value}}",
     "energyLabel": "Energy: {{value}}",
     "shieldLabel": "Shield: {{value}}",
-    "autoResponseEnabled": "Auto Response Enabled",
-    "autoResponseDisabled": "Auto Response Disabled",
-    "autoResponse": "Auto Response",
+    "autoResponseEnabled": "Manual Response Enabled",
+    "autoResponseDisabled": "Auto Skip Enabled",
+    "autoResponse": "Auto Skip",
     "manualResponse": "Manual Response"
   },
   "hero": {
@@ -405,6 +405,9 @@
   "modifierActive": {
     "label": "Attack Modifier",
     "tooltip": "Active attack modifier card, effect triggers during damage resolution"
+  },
+  "attackBonus": {
+    "label": "+{{damage}} Damage"
   },
   "dice": {
     "waitingOpponent": "Opponent is thinking...",

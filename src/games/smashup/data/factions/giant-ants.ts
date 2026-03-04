@@ -132,6 +132,7 @@ export const GIANT_ANT_ACTIONS: ActionCardDef[] = [
         nameEn: 'We Are the Champions',
         faction: 'giant_ants',
         abilityTags: ['special'],
+        specialTiming: 'afterScoring',
         specialNeedsBase: true,
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS5, index: 46 },

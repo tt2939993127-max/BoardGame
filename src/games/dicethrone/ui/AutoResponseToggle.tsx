@@ -8,8 +8,8 @@ const AUTO_RESPONSE_KEY = 'dicethrone:autoResponse';
  * 响应窗口显示开关组件
  * - 持久化到 localStorage
  * - 显示在左侧边栏血量下方
- * - 绿色（开启）= 显示响应窗口，需要手动确认
- * - 灰色（关闭）= 自动跳过响应窗口，不拦截游戏流程
+ * - 绿色（开启）= 手动响应，显示响应窗口，需要手动确认
+ * - 灰色（关闭）= 自动跳过，自动跳过响应窗口，不拦截游戏流程
  */
 export const AutoResponseToggle = ({
     onToggle,
@@ -53,7 +53,7 @@ export const AutoResponseToggle = ({
                 <ZapOff className="w-[1.2vw] h-[1.2vw] text-slate-400" />
             )}
             <span className={`text-[0.7vw] font-bold ${enabled ? 'text-emerald-300' : 'text-slate-400'}`}>
-                {enabled ? t('hud.autoResponse') : t('hud.manualResponse')}
+                {enabled ? t('hud.manualResponse') : t('hud.autoResponse')}
             </span>
         </button>
     );

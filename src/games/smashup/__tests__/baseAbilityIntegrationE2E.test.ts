@@ -215,7 +215,7 @@ describe('集成: base_innsmouth_base 印斯茅斯 (onMinionPlayed)', () => {
         });
         const ms = makeMatchState(core);
         const { ms: resultMs4 } = executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(resultMs4, 'base_innsmouth_base')).toBe(true);
+        expect(hasInteraction(resultMs4, 'base_innsmouth_base_choose_player')).toBe(true);
     });
 });
 

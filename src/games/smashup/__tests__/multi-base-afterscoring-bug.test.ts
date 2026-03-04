@@ -152,6 +152,10 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
                 // Step 5: 海盗湾交互解决后，应该弹出最后一个 multi_base_scoring 交互
                 // P0 选择计分最后一个基地（忍者道场）
                 { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
+                
+                // Step 6: 忍者道场 afterScoring 创建交互（P0 冠军消灭随从）
+                // P0 响应忍者道场交互（跳过消灭）
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'skip' } },
             ],
         });
 
@@ -159,9 +163,13 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         // 每个基地计分后会被替换，所以最终应该有 3 个新基地
         const allEvents = result.steps.flatMap(step => step.events);
         const scoredEvents = allEvents.filter((e: string) => e === 'su:base_scored');
+        const clearedEvents = allEvents.filter((e: string) => e === 'su:base_cleared');
+        const replacedEvents = allEvents.filter((e: string) => e === 'su:base_replaced');
         
         console.log('=== 测试结果 ===');
         console.log('BASE_SCORED 事件数量:', scoredEvents.length);
+        console.log('BASE_CLEARED 事件数量:', clearedEvents.length);
+        console.log('BASE_REPLACED 事件数量:', replacedEvents.length);
         console.log('所有事件:', allEvents);
         console.log('所有步骤:', result.steps.map(s => ({
             command: s.commandType,
@@ -182,5 +190,13 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
 
         // 期望：3 个基地都应该计分
         expect(scoredEvents.length).toBe(3);
+        
+        // 【关键验证】期望：每个基地只被清空和替换一次（不重复）
+        // 基地0（丛林）：无 afterScoring，立即清空+替换 = 1次
+        // 基地2（海盗湾）：有 afterScoring，延迟清空+替换 = 1次
+        // 基地1（忍者道场）：有 afterScoring，延迟清空+替换 = 1次
+        // 总共应该是 3 次 BASE_CLEARED 和 3 次 BASE_REPLACED
+        expect(clearedEvents.length).toBe(3);
+        expect(replacedEvents.length).toBe(3);
     });
 });

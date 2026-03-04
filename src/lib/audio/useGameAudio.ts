@@ -367,11 +367,40 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 continue;
             }
             
+            // 临时调试：记录 ATTACK_INITIATED 事件的过滤情况
+            if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
+                console.log('[Audio Debug] ATTACK_INITIATED event processing:', {
+                    eventType: event.type,
+                    payload: event.payload,
+                    audioMetadata: event.audioMetadata,
+                    isFiltered: !!event.audioMetadata?.isLocalUIEvent,
+                });
+            }
+            
             const key = resolveFeedback(
                 event,
                 runtimeContextRef.current,
                 config,
             );
+            
+            // 临时调试：记录 ATTACK_INITIATED 事件的音效解析
+            if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
+                console.log('[Audio Debug] ATTACK_INITIATED feedback resolution:', {
+                    eventType: event.type,
+                    resolvedKey: key,
+                    payload: event.payload,
+                });
+            }
+            
+            // 临时调试：记录 POWER_COUNTER_ADDED 事件的音效解析
+            if (gameId === 'smashup' && event.type === 'su:power_counter_added') {
+                console.log('[Audio Debug] POWER_COUNTER_ADDED event:', {
+                    eventType: event.type,
+                    resolvedKey: key,
+                    payload: event.payload,
+                });
+            }
+            
             if (!key) continue;
             if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
                 const eventId = (entry as { id?: number }).id;
