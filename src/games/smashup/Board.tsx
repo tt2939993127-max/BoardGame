@@ -99,24 +99,19 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const { t } = useTranslation('game-smashup');
     const { setSelectedFactions } = useSmashUpOverlay();
     
-    // 等待状态就绪（在所有其他 Hooks 之前检查）
-    if (!G || !G.core) {
-        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
-    }
-    
-    const core = G.core;
-    const phase = G.sys.phase;
-    const currentPid = getCurrentPlayerId(core);
+    const core = G?.core;
+    const phase = G?.sys.phase;
+    const currentPid = core ? getCurrentPlayerId(core) : '0';
     const playerID = rawPlayerID;
     const isMyTurn = playerID === currentPid;
     // 观战模式下默认显示玩家 0 的视角
-    const myPlayer = playerID ? core.players[playerID] : core.players['0'];
-    const isGameOver = G.sys.gameover;
+    const myPlayer = playerID && core ? core.players[playerID] : (core ? core.players['0'] : undefined);
+    const isGameOver = G?.sys.gameover;
     const rootPid = playerID || '0';
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
     
     // 响应式布局配置
-    const playerCount = core.turnOrder.length;
+    const playerCount = core?.turnOrder.length || 2;
     const layout = getLayoutConfig(playerCount);
     
     // 更新选择的派系到 Context（游戏开始后）
@@ -1248,6 +1243,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const handleViewAction = useCallback((defId: string) => {
         setViewingCard({ defId, type: 'action' });
     }, []);
+
+    // 等待状态就绪
+    if (!G || !core) {
+        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
+    }
 
     // 防御性检查：HMR 或 client 重建时 core 可能不完整
     if (!core.turnOrder || !core.bases) {

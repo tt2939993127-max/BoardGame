@@ -192,7 +192,8 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
         expect(result.events).toHaveLength(0);
             const interactions = getInteractionsFromResult(result);
             expect(interactions).toHaveLength(1);
-        expect(interactions[0].data.sourceId).toBe('base_innsmouth_base');
+        // 修正：印斯茅斯基地现在是两步交互，第一步选择玩家
+        expect(interactions[0].data.sourceId).toBe('base_innsmouth_base_choose_player');
     });
 
     it('所有弃牌堆为空时不触发', () => {

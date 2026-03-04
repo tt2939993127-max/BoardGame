@@ -33,7 +33,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/audio/add-audio.md` — **从外部导入新音效素材到项目时必读**。含素材整理→目录结构→压缩（wav→ogg）→生成 registry→中文友好名→清单→浏览器验证→代码接入的全链路流程。配套工具文档见 `docs/tools.md`、音频使用规范见 `docs/audio/audio-usage.md`、语义目录见 `docs/audio/audio-catalog.md`。
 - `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、传输层架构（`GameBoardProps`/`GameTransportServer`）、游戏结束检测（`sys.gameover`）、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、`createSimpleChoice` API 使用规范（两种调用约定、multi 参数位置、`PromptOption.displayMode` 渲染模式声明、选项 defId 要求）、领域建模前置审查。
 - `docs/ai-rules/undo-auto-advance.md` — **了解撤回后自动推进问题时必读**。含问题根源、引擎层通用解决方案（FlowSystem.afterEvents 统一检查 restoredRandomCursor）、测试要求。**引擎层已统一处理，游戏层无需额外代码。**
-- **多 afterScoring 交互链式传递（已修复 bug，通用方案）**：当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），`_deferredPostScoringEvents` 必须在交互链中传递。**引擎层通用修复**：`src/engine/systems/InteractionSystem.ts` `resolveInteraction` 函数在弹出下一个交互时，自动检查当前交互的 `continuationContext._deferredPostScoringEvents`，如果有则自动传递给下一个交互。**游戏层简化**：交互处理器只需检查是否是最后一个交互（`!state.sys.interaction?.queue?.length`），如果是则补发延迟事件。**这是面向百游戏的通用解决方案**，适用于所有可能创建 afterScoring 交互的场景（随从 trigger + 基地能力），无需每个交互处理器手动实现传递逻辑。**教训**：多交互场景必须考虑延迟事件的传递链路，不能假设只有一个交互。详见 `evidence/smashup-multi-base-infinite-loop-fix.md`。
+- **多 afterScoring 交互链式传递（已修复 bug，通用方案）**：当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），`_deferredPostScoringEvents` 必须在交互链中传递。**引擎层通用修复**：`src/engine/systems/InteractionSystem.ts` `resolveInteraction` 函数在弹出下一个交互时，自动检查当前交互的 `continuationContext._deferredPostScoringEvents`，如果有则自动传递给下一个交互。**游戏层简化**：交互处理器只需检查是否是最后一个交互（`!state.sys.interaction?.queue?.length`），如果是则补发延迟事件。**延迟事件必须在补发后清除**：补发延迟事件后，必须立即清除 `_deferredPostScoringEvents`，避免事件在交互链中传播时被多次补发。**这是面向百游戏的通用解决方案**，适用于所有可能创建 afterScoring 交互的场景（随从 trigger + 基地能力），无需每个交互处理器手动实现传递逻辑。**教训**：多交互场景必须考虑延迟事件的传递链路和清理时机，不能假设只有一个交互。详见 `evidence/smashup-multi-base-infinite-loop-fix.md` 和 `evidence/smashup-multi-base-duplicate-events-fix.md`。
 - `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug/规划审计 spec 时必读**。含**通用实现缺陷检查维度（D1-D49 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、多系统 afterEvents 优先级竞争（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、触发频率门控（D21）、伤害计算管线配置（D22）、架构假设一致性（D23）、Handler 共返状态一致性（D24）、替代路径后处理对齐（D32）、交互选项 UI 渲染模式正确性（D34）、流程控制标志清除完整性（D39）、后处理循环事件去重完整性（D40）、系统职责重叠检测（D41）、事件流全链路审计（D42）、重构完整性检查（D43）、测试设计反模式检测（D44）、Pipeline 多阶段调用去重（D45）、交互选项 UI 渲染模式声明完整性（D46）、E2E 测试覆盖完整性（D47）、UI 交互渲染模式完整性（D48）、**abilityTags 与触发机制一致性（D49）**、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审计"、"审查"、"审核"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。"检查"不算触发词，不自动启动审计流程。规划/设计审计类 spec（requirements/design/tasks）时也必须先阅读本文档，逐条对照 D1-D49 维度确认覆盖范围。**
 - `docs/testing-best-practices.md` — **编写测试或测试失败时必读**。含测试工具选择（GameTestRunner/runCommand/E2E）、状态对象类型（Core vs MatchState）、常见错误模式（传递裸 Core、期望错误返回值、不控制随机数）、测试辅助函数（helpers.ts 工具）、测试编写检查清单、迁移指南、**E2E 测试框架最佳实践（GameTestContext API、轮询间隔优化、同步等待+异步降级、服务器就绪检查、测试前自动检查、性能基准、稳定性保障）**。**补充 `docs/automated-testing.md`，专注于测试编写的常见陷阱和最佳实践。**
 
@@ -209,6 +209,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
     - ❌ **绝对禁止**：当 pre-push 钩子中的测试失败时，禁止使用 `--no-verify` 推送
     - ❌ **绝对禁止**：涉及业务逻辑、引擎代码、领域层代码的提交
     - ❌ **绝对禁止**：修复 bug 或新增功能的提交
+    - ❌ **绝对禁止**：任何包含 React 组件代码（`.tsx` 文件）的提交
+    - ❌ **绝对禁止**：任何包含游戏逻辑代码（`domain/`、`execute.ts`、`reduce.ts`）的提交
   - **允许使用场景**（必须同时满足以下所有条件）：
     - ✅ 仅修改文档（`.md`）、配置文件（`.json`、`.yml`）、样式（`.css`）
     - ✅ ESLint 仅有 **warnings**（警告），无 **errors**（错误）
@@ -223,6 +225,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
     - ESLint errors → 必须修复所有错误后再提交
     - 测试失败 → 必须修复测试或修复代码后再推送
     - 无法立即修复 → 使用 `git stash` 暂存，或创建单独的修复提交
+  - **AI 特别注意**：
+    - ⚠️ **绝对禁止在任何情况下使用 `--no-verify`**
+    - ⚠️ 如果 ESLint 报告 errors，必须立即修复，不得提交
+    - ⚠️ 如果无法修复 errors，必须向用户说明问题并请求指导
+    - ⚠️ 使用 `--no-verify` 是严重违规行为，会导致代码质量下降
 - **文件移动/复制规范（强制）**：
   - **禁止使用 `robocopy /MOVE`**：移动操作会删除源文件，中途失败会导致数据丢失。
   - **推荐做法**：

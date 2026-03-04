@@ -78,7 +78,7 @@ describe.skip('Volley 5 Dice Display', () => {
             const event = bonusDieEvents[i].event;
             expect(event.payload.value).toBe(i + 1); // 骰子值 1, 2, 3, 4, 5
             expect(event.payload.effectKey).toBe('bonusDie.effect.volley'); // 单颗骰子的 key
-            expect(event.payload.effectParams).toEqual({ value: i + 1 });
+            expect(event.payload.effectParams).toEqual({ value: i + 1, index: i }); // 修正：包含 index
         }
         
         // 验证第 6 个事件是汇总
@@ -103,6 +103,10 @@ describe.skip('Volley 5 Dice Display', () => {
             e.event.payload.targetId === '1'
         );
         expect(entangleEvent).toBeDefined();
+        
+        // 验证有 settlement 事件（触发 BonusDieOverlay）
+        const settlementEvent = eventStream.find(e => e.event.type === 'BONUS_DICE_REROLL_REQUESTED');
+        expect(settlementEvent).toBeDefined();
     });
     
     it('should display all 5 dice with correct timestamps', () => {
