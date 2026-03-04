@@ -176,7 +176,7 @@ export function formatSmashUpActionEntry({
         index = entries.length
     ) => {
         entries.push({
-            id: `${kind}-${entryActorId}-${entryTimestamp}-${index}`,
+            id: `${kind}-${entryActorId}-${entryTimestamp}-${index}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             timestamp: entryTimestamp,
             actorId: entryActorId,
             kind,

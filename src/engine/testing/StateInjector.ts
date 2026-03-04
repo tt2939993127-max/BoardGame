@@ -51,21 +51,67 @@ export class StateInjector {
     /**
      * 修改状态（部分更新）
      * 
-     * @example
+     * 支持两种格式：
+     * 1. 嵌套对象格式：
      * ```typescript
-     * // 只修改玩家 HP
      * harness.state.patch({
      *     players: {
      *         '0': { resources: { hp: 10 } }
      *     }
      * });
      * ```
+     * 
+     * 2. 路径格式（推荐）：
+     * ```typescript
+     * harness.state.patch({
+     *     'core.players.0.hand': [...],
+     *     'core.bases.0.minions': [...]
+     * });
+     * ```
      */
     patch(patch: any) {
         const current = this.get();
-        const updated = this.deepMerge(current, patch);
+        let updated = current;
+
+        // 检查是否使用路径格式（key 包含 '.'）
+        const hasPathKeys = Object.keys(patch).some(key => key.includes('.'));
+
+        if (hasPathKeys) {
+            // 路径格式：逐个应用路径更新
+            updated = JSON.parse(JSON.stringify(current)); // 深拷贝
+            for (const path in patch) {
+                if (Object.prototype.hasOwnProperty.call(patch, path)) {
+                    this.setByPath(updated, path, patch[path]);
+                }
+            }
+        } else {
+            // 嵌套对象格式：使用深度合并
+            updated = this.deepMerge(current, patch);
+        }
+
         this.set(updated);
         console.log('[StateInjector] 应用补丁:', patch);
+    }
+
+    /**
+     * 通过路径设置值
+     * @example setByPath(obj, 'core.players.0.hand', [...])
+     */
+    private setByPath(obj: any, path: string, value: any) {
+        const keys = path.split('.');
+        let current = obj;
+
+        for (let i = 0; i < keys.length - 1; i++) {
+            const key = keys[i];
+            if (!(key in current)) {
+                // 如果下一个 key 是数字，创建数组，否则创建对象
+                const nextKey = keys[i + 1];
+                current[key] = /^\d+$/.test(nextKey) ? [] : {};
+            }
+            current = current[key];
+        }
+
+        current[keys[keys.length - 1]] = value;
     }
 
     /**

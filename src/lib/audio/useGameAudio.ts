@@ -27,19 +27,29 @@ const failedSounds = new Set<string>();
 const lastPlayedTime = new Map<string, number>();
 const SFX_THROTTLE_MS = 80;
 
-const DT_TRACE_SOUND_KEYS = new Set<string>([
-    'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none',
-    'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
-    'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003',
-    'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002',
-]);
+// 音效优先级配置
+const SOUND_PRIORITY = {
+    high: ['weapon_swoosh', 'melee_swoosh', 'damage', 'heal', 'hit', 'impact', 'punch'],
+    medium: ['dice_roll', 'card_play', 'card_draw', 'token'],
+    low: ['drums_of_fate', 'phase_change', 'turn_change', 'chime', 'update'],
+};
 
-const DT_TRACE_EVENT_TYPES = new Set<string>([
-    'CHARACTER_SELECTED',
-    'PLAYER_READY',
-    'HOST_STARTED',
-    'SYS_PHASE_CHANGED',
-]);
+// 记录上次高优先级音效播放时间
+let lastHighPrioritySoundTime: number = 0;
+const HIGH_PRIORITY_DELAY_MS = 250; // 高优先级音效播放后 250ms 内延迟低优先级音效
+
+/**
+ * 判断音效优先级
+ */
+function getSoundPriority(key: string): 'high' | 'medium' | 'low' {
+    if (SOUND_PRIORITY.high.some(pattern => key.includes(pattern))) {
+        return 'high';
+    }
+    if (SOUND_PRIORITY.low.some(pattern => key.includes(pattern))) {
+        return 'low';
+    }
+    return 'medium';
+}
 
 function getLogEntrySignature(entry: unknown): string | null {
     if (!entry || typeof entry !== 'object') return null;
@@ -80,6 +90,33 @@ function findLastLogEntryIndex(entries: unknown[], signature: string): number {
  * @param key 音效键名
  */
 export function playSound(key: SoundKey): void {
+    const now = Date.now();
+    const priority = getSoundPriority(key);
+    
+    // 高优先级音效：立即播放，更新时间戳
+    if (priority === 'high') {
+        lastHighPrioritySoundTime = now;
+    }
+    
+    // 低优先级音效：如果高优先级音效刚播放过，延迟播放
+    if (priority === 'low') {
+        const timeSinceHighPriority = now - lastHighPrioritySoundTime;
+        if (timeSinceHighPriority < HIGH_PRIORITY_DELAY_MS) {
+            const delayMs = HIGH_PRIORITY_DELAY_MS - timeSinceHighPriority;
+            setTimeout(() => {
+                playSoundInternal(key);
+            }, delayMs);
+            return;
+        }
+    }
+    
+    playSoundInternal(key);
+}
+
+/**
+ * 内部音效播放函数（不处理优先级）
+ */
+function playSoundInternal(key: SoundKey): void {
     // 节流：同一音效在 SFX_THROTTLE_MS 内只播放一次
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
@@ -361,8 +398,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             }
             
             // 框架层自动过滤 UI 本地交互事件（音效已由 UI 组件本地播放）
-            // 音频追踪日志已移除
-            
             if (event.audioMetadata?.isLocalUIEvent) {
                 continue;
             }
@@ -372,10 +407,23 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 runtimeContextRef.current,
                 config,
             );
-            if (!key) continue;
-            if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
-                const eventId = (entry as { id?: number }).id;
+            
+            // 临时调试：记录 ATTACK_INITIATED 事件的音效解析
+            if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
+                console.log('[Audio Debug] ATTACK_INITIATED feedback resolution:', {
+                    eventType: event.type,
+                    resolvedKey: key,
+                    payload: event.payload,
+                });
+                console.log('[Audio Debug] ATTACK_INITIATED - About to check playedKeys:', {
+                    key,
+                    hasKey: playedKeys.has(key),
+                    playedKeysSize: playedKeys.size,
+                    playedKeysArray: Array.from(playedKeys),
+                });
             }
+            
+            if (!key) continue;
             // 立即播放（去重）
             if (!playedKeys.has(key)) {
                 playedKeys.add(key);

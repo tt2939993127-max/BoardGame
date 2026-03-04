@@ -159,7 +159,7 @@ function vampireNightstalker(ctx: AbilityContext): AbilityResult {
         return {
             events: [
                 destroyMinion(val.minionUid, val.defId, val.baseIndex, ctx.state.bases[val.baseIndex]?.minions.find((m: any) => m.uid === val.minionUid)?.owner ?? ctx.playerId, ctx.playerId, 'vampire_nightstalker', ctx.now),
-                addPowerCounter(val.sourceMinionUid, val.sourceBaseIndex, 1, 'vampire_nightstalker', ctx.now),
+                addPowerCounter(val.sourceMinionUid, val.sourceBaseIndex, 1, 'vampire_nightstalker', ctx.now + 1), // +1ms 避免音频节流
             ],
         };
     });
@@ -178,6 +178,7 @@ function vampireBuffetSpecial(ctx: AbilityContext): AbilityResult {
                 sourceDefId: 'vampire_buffet',
                 playerId: ctx.playerId,
                 baseIndex: ctx.baseIndex,
+                cardUid: ctx.cardUid,
             },
             timestamp: ctx.now,
         } as SmashUpEvent],
@@ -450,7 +451,7 @@ const handleHeavyDrinkerChoice: IH = (state, playerId, value, _data, _random, no
         state,
         events: [
             destroyMinion(v.minionUid, v.defId, v.baseIndex, state.core.bases[v.baseIndex]?.minions.find((m: any) => m.uid === v.minionUid)?.owner ?? playerId, playerId, 'vampire_heavy_drinker', now),
-            addPowerCounter(hdUid, hdBase, 1, 'vampire_heavy_drinker', now),
+            addPowerCounter(hdUid, hdBase, 1, 'vampire_heavy_drinker', now + 1), // +1ms 避免音频节流
         ],
     };
 };
@@ -488,7 +489,7 @@ const handleNightstalkerChoice: IH = (state, playerId, value, _data, _random, no
         state,
         events: [
             destroyMinion(v.minionUid, v.defId, v.baseIndex, target.owner, playerId, 'vampire_nightstalker', now),
-            addPowerCounter(nsUid, nsBase, 1, 'vampire_nightstalker', now),
+            addPowerCounter(nsUid, nsBase, 1, 'vampire_nightstalker', now + 1), // +1ms 避免音频节流
         ],
     };
 };
@@ -522,6 +523,8 @@ const handleDinnerDateChooseTarget: IH = (state, playerId, value, _data, _random
     if (!target) {
         return { state, events: [] };
     }
+    // 晚餐约会：先+1指示物（已在 handleDinnerDateChooseMinion 中生成），再消灭随从
+    // 这里不需要 +1ms 偏移，因为两个事件在不同的交互步骤中生成
     return {
         state,
         events: [destroyMinion(v.minionUid, v.defId, v.baseIndex, target.owner, playerId, 'vampire_dinner_date', now)],
@@ -603,7 +606,7 @@ const handleCrackOfDuskChooseBase: IH = (state, playerId, value, interactionData
         state,
         events: [
             playedEvt,
-            addPowerCounter(context.cardUid, v.baseIndex, 1, 'vampire_crack_of_dusk', now),
+            addPowerCounter(context.cardUid, v.baseIndex, 1, 'vampire_crack_of_dusk', now + 1), // +1ms 避免与打出随从音效冲突
         ],
     };
 };

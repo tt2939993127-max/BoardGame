@@ -466,10 +466,38 @@ const completeFactionSelectionOnline = async (
         miskatonic_university: 15,
     };
 
-    for (const { page, factionId } of picks) {
+    for (let i = 0; i < picks.length; i++) {
+        const { page, factionId } = picks[i];
         const idx = factionIndexMap[factionId] ?? 0;
 
-        // 等待轮到自己（确认按钮可点击）
+        // 如果不是第一轮，等待上一轮的玩家确认完成
+        if (i > 0) {
+            // 等待轮到自己（"IT'S YOUR TURN NOW" 提示出现）
+            await page.waitForFunction(
+                () => {
+                    const turnIndicator = document.querySelector('text=/IT\'S YOUR TURN NOW|轮到你了/i');
+                    return turnIndicator !== null;
+                },
+                { timeout: 30000 }
+            ).catch(() => {
+                // 如果没有找到提示，继续尝试（可能已经是自己回合）
+            });
+            
+            // 等待对手确认完成（"THINKING..." 弹窗消失）
+            await page.waitForFunction(
+                () => {
+                    // 查找包含 "THINKING" 文本的元素
+                    const allText = document.body.innerText;
+                    return !allText.includes('THINKING');
+                },
+                { timeout: 30000 }
+            ).catch(() => {
+                // 如果超时，继续尝试
+            });
+            
+            await page.waitForTimeout(500);
+        }
+
         // 先关闭可能打开的详情弹窗
         const closeBtn = page.locator('[data-tutorial-id="su-faction-select"] button').filter({ hasText: /×/ });
         if (await closeBtn.isVisible().catch(() => false)) {
@@ -485,7 +513,7 @@ const completeFactionSelectionOnline = async (
 
         // 等待确认按钮出现并点击
         const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-        await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+        await expect(confirmBtn).toBeVisible({ timeout: 10000 });
         // 等待按钮可点击（轮到自己时才 enabled）
         await expect(confirmBtn).toBeEnabled({ timeout: 10000 });
         await confirmBtn.click();

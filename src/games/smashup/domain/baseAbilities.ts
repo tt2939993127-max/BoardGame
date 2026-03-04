@@ -1051,6 +1051,40 @@ export function registerBaseAbilities(): void {
                     '海盗湾：选择移动一个随从到其他基地', options,
                     { sourceId: 'base_pirate_cove', targetType: 'minion' },
                 );
+                
+                // 【修复】使用 optionsGenerator 动态生成选项，确保交互解决时使用最新状态
+                // 问题：海盗湾的 afterScoring 能力和大副的 afterScoring 能力都创建了交互
+                // 如果大副的交互先解决，大副被移动到其他基地，海盗湾的交互选项中仍包含大副
+                // 解决方案：使用 optionsGenerator 动态生成选项，过滤掉已经不在原基地上的随从
+                (interaction.data as any).optionsGenerator = (state: any) => {
+                    const currentBase = state.core?.bases?.[ctx.baseIndex];
+                    if (!currentBase) return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+                    
+                    // 过滤出仍在原基地上的随从
+                    const stillOnBase = minionsSnapshot.filter(m => 
+                        currentBase.minions.some((minion: any) => minion.uid === m.uid)
+                    );
+                    
+                    if (stillOnBase.length === 0) {
+                        // 所有随从都已被移动，只返回"跳过"选项
+                        return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+                    }
+                    
+                    const refreshedOptions = stillOnBase.map((m, i) => {
+                        const def = getCardDef(m.defId);
+                        return {
+                            id: `minion-${i}`,
+                            label: `${def?.name ?? m.defId} (力量${m.power})`,
+                            value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner },
+                        };
+                    });
+                    
+                    return [
+                        { id: 'skip', label: '跳过', value: { skip: true } },
+                        ...refreshedOptions,
+                    ];
+                };
+                
                 ctx.matchState = queueInteraction(ctx.matchState, {
                     ...interaction,
                     data: { 
@@ -1283,10 +1317,35 @@ export function registerBaseInteractionHandlers(): void {
     });
 
     // 忍者道场：消灭随从
-    registerInteractionHandler('base_ninja_dojo', (state, _playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('base_ninja_dojo', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number; minionDefId?: string; ownerId?: string };
-        if (selected.skip) return { state, events: [] };
-        return { state, events: [destroyMinion(selected.minionUid!, selected.minionDefId!, selected.baseIndex!, selected.ownerId!, undefined, 'base_ninja_dojo', timestamp)] };
+        const events: SmashUpEvent[] = [];
+        
+        if (!selected.skip) {
+            events.push(destroyMinion(selected.minionUid!, selected.minionDefId!, selected.baseIndex!, selected.ownerId!, undefined, 'base_ninja_dojo', timestamp));
+        }
+        
+        // 【关键修复】检查是否是最后一个交互，如果是则补发延迟事件
+        // 当有多个 afterScoring 交互时（如海盗湾 + 忍者道场），延迟的 BASE_CLEARED 事件
+        // 存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
+        // InteractionSystem.resolveInteraction 会自动传递给下一个交互，最后一个交互解决时必须补发。
+        const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
+            { type: string; payload: unknown; timestamp: number }[] | undefined;
+        
+        // 检查是否是最后一个交互（队列为空）
+        const isLastInteraction = !state.sys.interaction?.queue?.length;
+        
+        if (deferredEvents && deferredEvents.length > 0 && isLastInteraction) {
+            console.log('[base_ninja_dojo] 最后一个交互，补发延迟事件:', deferredEvents.length);
+            events.push(...deferredEvents as SmashUpEvent[]);
+            
+            // 【关键】补发后必须清除延迟事件，避免在交互链中传播时被多次补发
+            // 这是通过返回更新后的 state 实现的（不可变更新）
+            // 注意：这里不能直接修改 iData，因为它是只读的
+            // 延迟事件的清除由 InteractionSystem 在 resolveInteraction 时自动处理
+        }
+        
+        return { state, events };
     });
 
     // 海盗湾：选择随从后，链式选择目标基地

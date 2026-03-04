@@ -700,14 +700,15 @@ function resolveEffectAction(
 
                 // 触发匹配的条件效果，或 defaultEffect
                 if (matchedEffect) {
-                    events.push(...resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey, random));
+                    const conditionalEvents = resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey, random);
+                    events.push(...conditionalEvents);
                 } else if (action.defaultEffect) {
                     events.push(...resolveDefaultEffect(action.defaultEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey, random));
                 }
             }
 
-            // 多骰展示
-            if (diceCount > 1) {
+            // 骰子特写展示（单骰或多骰都显示）
+            if (diceCount >= 1) {
                 events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, rollDice, timestamp));
             }
             break;
@@ -857,6 +858,7 @@ function resolveEffectAction(
         }
     }
 
+    console.log('[effects.ts] resolveEffectAction returning', events.length, 'events, types:', events.map(e => e.type).join(', '));
     return events;
 }
 
@@ -1198,6 +1200,13 @@ export function resolveEffectsToEvents(
         // 后续效果（如 rollDie）应在 Token 响应完成后由 resolvePostDamageEffects 执行。
         // 此处必须中断，否则 rollDie 会消耗 random 值，导致后续重新执行时 random 队列偏移。
         if (effectEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED')) {
+            break;
+        }
+
+        // CHOICE_REQUESTED 同样需要中断：用户选择完成前不应执行后续效果
+        // 例如：taiji-combo 的 rollDie=莲花 产生选择，后续的 damage(6) 应等待选择完成后再执行
+        // 否则会导致伤害在选择前就被应用，破坏游戏流程
+        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED')) {
             break;
         }
 

@@ -22,7 +22,7 @@ interface CardDef {
 }
 
 /**
- * 玩家场景配置
+ * 玩家场景配置（SmashUp）
  */
 interface PlayerSceneConfig {
     /** 手牌（defId 数组） */
@@ -36,21 +36,39 @@ interface PlayerSceneConfig {
 }
 
 /**
- * 场景配置
+ * 玩家场景配置（DiceThrone）
+ */
+interface DiceThronePlayerConfig {
+    /** 手牌（defId 数组） */
+    hand?: string[];
+    /** 牌库（defId 数组） */
+    deck?: string[];
+    /** 弃牌堆（defId 数组） */
+    discard?: string[];
+    /** 资源（如 { CP: 3, HP: 50 }） */
+    resources?: Record<string, number>;
+    /** Token（如 { shield: 2 }） */
+    tokens?: Record<string, number>;
+}
+
+/**
+ * 场景配置（通用）
  */
 interface SceneConfig {
     /** 游戏 ID */
     gameId: string;
     /** 玩家 0 配置 */
-    player0?: PlayerSceneConfig;
+    player0?: PlayerSceneConfig | DiceThronePlayerConfig;
     /** 玩家 1 配置 */
-    player1?: PlayerSceneConfig;
+    player1?: PlayerSceneConfig | DiceThronePlayerConfig;
     /** 当前回合玩家 */
     currentPlayer?: string;
     /** 回合阶段 */
     phase?: string;
     /** 随机数队列 */
     randomQueue?: number[];
+    /** 额外的状态字段（游戏特定） */
+    extra?: Record<string, any>;
 }
 
 /**
@@ -75,10 +93,11 @@ export class GameTestContext {
      * 快速场景构建
      * 
      * 跳过所有前置步骤，直接构造目标场景。
+     * 支持 SmashUp 和 DiceThrone。
      * 
      * @param config 场景配置
      * 
-     * @example
+     * @example SmashUp
      * ```typescript
      * await game.setupScene({
      *   gameId: 'smashup',
@@ -88,6 +107,32 @@ export class GameTestContext {
      *   },
      *   currentPlayer: '0',
      *   phase: 'playCards'
+     * });
+     * ```
+     * 
+     * @example DiceThrone
+     * ```typescript
+     * await game.setupScene({
+     *   gameId: 'dicethrone',
+     *   player0: {
+     *     hand: ['volley'],
+     *     resources: { CP: 3, HP: 50 }
+     *   },
+     *   currentPlayer: '0',
+     *   phase: 'offense_roll',
+     *   extra: {
+     *     rollCount: 1,
+     *     rollConfirmed: true,
+     *     dice: [1, 2, 3, 4, 5],
+     *     pendingAttack: {
+     *       attackerId: '0',
+     *       targetId: '1',
+     *       baseDamage: 5,
+     *       bonusDamage: 0,
+     *       totalDamage: 5,
+     *       unblockable: false
+     *     }
+     *   }
      * });
      * ```
      */
@@ -107,104 +152,162 @@ export class GameTestContext {
             const state = harness.state.get();
             if (!state) throw new Error('State not available');
 
-            // 3. 生成卡牌 UID（使用时间戳 + 索引确保唯一性）
-            const now = Date.now();
-            const generateUid = (defId: string, index: number) => `${defId}_${now}_${index}`;
+            // 3. 根据游戏类型选择不同的构建策略
+            if (cfg.gameId === 'dicethrone') {
+                // DiceThrone 特定逻辑
+                const now = Date.now();
+                const generateUid = (defId: string, index: number) => `${defId}_${now}_${index}`;
 
-            // 4. 推断卡牌类型（基于 defId 命名规则）
-            const inferCardType = (defId: string): 'minion' | 'action' => {
-                // SmashUp 命名规则：
-                // - 行动卡通常包含动词或抽象名词（portal, time_loop, full_steam, etc.）
-                // - 随从卡通常是具体的生物/角色名词（invader, shinobi, overlord, etc.）
-                // 
-                // 启发式规则（按优先级）：
-                // 1. 显式 action_ 前缀 → action
-                // 2. 包含常见行动卡关键词 → action
-                // 3. 默认 → minion
-                
-                if (defId.startsWith('action_')) return 'action';
-                
-                // 常见行动卡关键词（不完整，但覆盖测试常用卡牌）
-                const actionKeywords = [
-                    'portal', 'time_loop', 'full_steam', 'cannon', 'broadside',
-                    'disintegrate', 'augmentation', 'upgrade', 'power_up',
-                    'terraform', 'crop_circles', 'abduction', 'probe',
-                    'shamble', 'not_dead_yet', 'grave_digger',
-                    'king', 'swashbuckling',  // 移除 'first_mate'（海盗大副是随从）
-                    'ninjutsu', 'disguise', 'smoke_bomb',
-                ];
-                
-                for (const keyword of actionKeywords) {
-                    if (defId.includes(keyword)) return 'action';
+                const buildDiceThronePlayerState = (playerConfig: any, playerId: string, offset: number) => {
+                    const hand = (playerConfig?.hand || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + i),
+                        defId,
+                        type: 'ability', // DiceThrone 卡牌类型
+                    }));
+
+                    const deck = (playerConfig?.deck || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + 1000 + i),
+                        defId,
+                        type: 'ability',
+                    }));
+
+                    const discard = (playerConfig?.discard || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + 2000 + i),
+                        defId,
+                        type: 'ability',
+                    }));
+
+                    return {
+                        hand,
+                        deck,
+                        discard,
+                        resources: playerConfig?.resources || {},
+                        tokens: playerConfig?.tokens || {},
+                    };
+                };
+
+                // 构造状态补丁
+                const patch: any = {
+                    core: {
+                        ...state.core,
+                        players: {
+                            ...state.core.players,
+                        },
+                    },
+                };
+
+                // 应用玩家配置
+                if (cfg.player0) {
+                    const player0State = buildDiceThronePlayerState(cfg.player0, '0', 0);
+                    patch.core.players['0'] = {
+                        ...state.core.players['0'],
+                        ...player0State,
+                    };
                 }
-                
-                return 'minion';
-            };
+                if (cfg.player1) {
+                    const player1State = buildDiceThronePlayerState(cfg.player1, '1', 10000);
+                    patch.core.players['1'] = {
+                        ...state.core.players['1'],
+                        ...player1State,
+                    };
+                }
 
-            // 5. 构造玩家状态
-            const buildPlayerState = (playerConfig: any, playerId: string, offset: number) => {
-                const hand = (playerConfig?.hand || []).map((defId: string, i: number) => ({
-                    uid: generateUid(defId, offset + i),
-                    defId,
-                    type: inferCardType(defId),
-                }));
+                // 设置当前玩家
+                if (cfg.currentPlayer !== undefined) {
+                    patch.core.currentPlayer = cfg.currentPlayer;
+                }
 
-                const deck = (playerConfig?.deck || []).map((defId: string, i: number) => ({
-                    uid: generateUid(defId, offset + 1000 + i),
-                    defId,
-                    type: inferCardType(defId),
-                }));
+                // 设置阶段
+                if (cfg.phase !== undefined) {
+                    patch.core.phase = cfg.phase;
+                }
 
-                const discard = (playerConfig?.discard || []).map((defId: string, i: number) => ({
-                    uid: generateUid(defId, offset + 2000 + i),
-                    defId,
-                    type: inferCardType(defId),
-                }));
+                // 应用额外字段（如 rollCount, dice, pendingAttack 等）
+                if (cfg.extra) {
+                    Object.assign(patch.core, cfg.extra);
+                }
 
-                return { hand, deck, discard };
-            };
+                // 应用状态
+                harness.state.set(patch);
+            } else {
+                // SmashUp 逻辑（原有代码）
+                const now = Date.now();
+                const generateUid = (defId: string, index: number) => `${defId}_${now}_${index}`;
 
-            // 6. 构造状态补丁
-            const patch: any = {
-                core: {
-                    players: {},
-                },
-            };
-
-            // 7. 应用玩家配置
-            if (cfg.player0) {
-                const player0State = buildPlayerState(cfg.player0, '0', 0);
-                // 确保玩家状态包含所有必要的字段（使用游戏默认值）
-                patch.core.players['0'] = {
-                    ...player0State,
-                    // 如果 setupScene 没有覆盖这些字段，保持原有值
-                    // 通过不设置这些字段，让 patch 保留原有值
+                const inferCardType = (defId: string): 'minion' | 'action' => {
+                    if (defId.startsWith('action_')) return 'action';
+                    
+                    const actionKeywords = [
+                        'portal', 'time_loop', 'full_steam', 'cannon', 'broadside',
+                        'disintegrate', 'augmentation', 'upgrade', 'power_up',
+                        'terraform', 'crop_circles', 'abduction', 'probe',
+                        'shamble', 'not_dead_yet', 'grave_digger',
+                        'king', 'swashbuckling',
+                        'ninjutsu', 'disguise', 'smoke_bomb',
+                    ];
+                    
+                    for (const keyword of actionKeywords) {
+                        if (defId.includes(keyword)) return 'action';
+                    }
+                    
+                    return 'minion';
                 };
-            }
-            if (cfg.player1) {
-                const player1State = buildPlayerState(cfg.player1, '1', 10000);
-                patch.core.players['1'] = {
-                    ...player1State,
+
+                const buildPlayerState = (playerConfig: any, playerId: string, offset: number) => {
+                    const hand = (playerConfig?.hand || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + i),
+                        defId,
+                        type: inferCardType(defId),
+                    }));
+
+                    const deck = (playerConfig?.deck || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + 1000 + i),
+                        defId,
+                        type: inferCardType(defId),
+                    }));
+
+                    const discard = (playerConfig?.discard || []).map((defId: string, i: number) => ({
+                        uid: generateUid(defId, offset + 2000 + i),
+                        defId,
+                        type: inferCardType(defId),
+                    }));
+
+                    return { hand, deck, discard };
                 };
-            }
 
-            // 8. 设置当前玩家和阶段
-            // 注意：SmashUp 使用 currentPlayerIndex（数字索引）而非 currentPlayer（字符串 ID）
-            if (cfg.currentPlayer !== undefined) {
-                const playerIndex = parseInt(cfg.currentPlayer, 10);
-                patch.core.currentPlayerIndex = playerIndex;
-            }
-            // 注意：phase 在 sys 中，不在 core 中
-            if (cfg.phase !== undefined) {
-                if (!patch.sys) patch.sys = {};
-                patch.sys.phase = cfg.phase;
-            }
+                const patch: any = {
+                    core: {
+                        players: {},
+                    },
+                };
 
-            // 9. 应用状态补丁（使用深度合并，不覆盖未指定的字段）
-            harness.state.patch(patch);
+                if (cfg.player0) {
+                    const player0State = buildPlayerState(cfg.player0, '0', 0);
+                    patch.core.players['0'] = {
+                        ...player0State,
+                    };
+                }
+                if (cfg.player1) {
+                    const player1State = buildPlayerState(cfg.player1, '1', 10000);
+                    patch.core.players['1'] = {
+                        ...player1State,
+                    };
+                }
+
+                if (cfg.currentPlayer !== undefined) {
+                    const playerIndex = parseInt(cfg.currentPlayer, 10);
+                    patch.core.currentPlayerIndex = playerIndex;
+                }
+                if (cfg.phase !== undefined) {
+                    if (!patch.sys) patch.sys = {};
+                    patch.sys.phase = cfg.phase;
+                }
+
+                harness.state.patch(patch);
+            }
         }, config);
 
-        // 等待 React 重新渲染（必要的等待，确保状态已应用）
+        // 等待 React 重新渲染
         await this.page.waitForTimeout(500);
     }
 

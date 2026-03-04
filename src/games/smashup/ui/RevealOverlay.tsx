@@ -18,7 +18,6 @@ import { UI_Z_INDEX } from '../../../core';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { getCardDef, getBaseDef, resolveCardName } from '../data/cards';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
-import { useEventStreamCursor } from '../../../engine/hooks';
 import type { EventStreamEntry, PlayerId } from '../../../engine/types';
 import { SU_EVENTS } from '../domain/types';
 import { CARD_DISPLAY_CONFIG } from './cardDisplayConfig';
@@ -53,39 +52,43 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
     const [queue, setQueue] = useState<RevealItem[]>([]);
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastSeenIdRef = useRef<number>(-1);
 
     const TRIGGER_EVENTS = useMemo(() => new Set([
         SU_EVENTS.REVEAL_HAND,
         SU_EVENTS.REVEAL_DECK_TOP,
     ]), []);
 
-    const { consumeNew } = useEventStreamCursor({ entries });
-
-    // 消费新事件（首次挂载时跳过历史事件）
-    const isFirstMount = useRef(true);
+    // 消费新事件
+    // 注意：展示 UI 需要显示历史的展示事件，所以不跳过历史事件
+    // 不使用 useEventStreamCursor（它会跳过历史事件），直接管理游标
     useEffect(() => {
-        const { entries: newEntries, didReset } = consumeNew();
+        // 检测 Undo 回退：最大 ID 回退时重置队列和游标
+        if (entries.length > 0) {
+            const maxId = entries[entries.length - 1].id;
+            if (maxId < lastSeenIdRef.current) {
+                console.log('[RevealOverlay] Undo 回退检测，重置队列');
+                setQueue([]);
+                lastSeenIdRef.current = maxId;
+                return;
+            }
+        }
+
+        // 过滤新事件（id > lastSeenId）
+        const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
         
-        console.log('[RevealOverlay] consumeNew:', {
+        console.log('[RevealOverlay] 消费事件:', {
             newEntriesCount: newEntries.length,
-            didReset,
-            isFirstMount: isFirstMount.current,
             currentPlayerId,
             totalEntries: entries.length,
+            lastSeenId: lastSeenIdRef.current,
+            newEntryIds: newEntries.map(e => e.id),
         });
         
-        // 首次挂载时跳过所有历史事件
-        if (isFirstMount.current) {
-            isFirstMount.current = false;
-            console.log('[RevealOverlay] 首次挂载，跳过历史事件');
-            return;
-        }
-        
-        if (didReset) {
-            setQueue([]);
-            if (newEntries.length === 0) return;
-        }
         if (newEntries.length === 0) return;
+
+        // 更新游标
+        lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
 
         const newItems: RevealItem[] = [];
         for (const entry of newEntries) {
@@ -94,9 +97,16 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                 eventType: entry.event.type,
                 isTriggerEvent: TRIGGER_EVENTS.has(entry.event.type),
                 payload: entry.event.payload,
+                TRIGGER_EVENTS_ARRAY: Array.from(TRIGGER_EVENTS),
             });
             
-            if (!TRIGGER_EVENTS.has(entry.event.type)) continue;
+            if (!TRIGGER_EVENTS.has(entry.event.type)) {
+                console.log('[RevealOverlay] 跳过：不是触发事件', {
+                    eventType: entry.event.type,
+                    expectedTypes: Array.from(TRIGGER_EVENTS),
+                });
+                continue;
+            }
             const p = entry.event.payload as {
                 targetPlayerId: string | string[];
                 viewerPlayerId: string | 'all';
@@ -123,22 +133,25 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
             const isTarget = targetIds.includes(currentPlayerId);
             
             console.log('[RevealOverlay] 权限检查:', {
+                reason: p.reason,
                 isAllMode,
                 targetIds,
                 currentPlayerId,
                 isTarget,
                 viewerPlayerId: p.viewerPlayerId,
+                viewerPlayerIdType: typeof p.viewerPlayerId,
+                viewerPlayerIdValue: JSON.stringify(p.viewerPlayerId),
             });
             
             // 权限过滤：
-            // - all 模式：所有人都能看（包括被展示者）
-            // - 单人模式：只有指定查看者能看，被展示者不能看
+            // - all 模式：所有人都能看
+            // - 单人模式：只有指定查看者能看
             if (!isAllMode && p.viewerPlayerId !== currentPlayerId) {
-                console.log('[RevealOverlay] 跳过：非 all 模式且不是指定查看者');
-                continue;
-            }
-            if (isTarget && !isAllMode) {
-                console.log('[RevealOverlay] 跳过：是被展示者且非 all 模式');
+                console.log('[RevealOverlay] 跳过：非 all 模式且不是指定查看者', {
+                    viewerPlayerId: p.viewerPlayerId,
+                    currentPlayerId,
+                    match: p.viewerPlayerId === currentPlayerId,
+                });
                 continue;
             }
 
@@ -162,7 +175,7 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
         } else {
             console.log('[RevealOverlay] 无新项添加到队列');
         }
-    }, [entries, consumeNew, currentPlayerId, TRIGGER_EVENTS]);
+    }, [entries, currentPlayerId, TRIGGER_EVENTS]);
 
     // 自动消失定时器
     const current = queue[0];

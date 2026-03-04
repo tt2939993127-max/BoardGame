@@ -100,11 +100,14 @@ describe('Feedback Module (e2e)', () => {
         return { adminToken, adminId, userToken, userId };
     };
 
-    it('未登录提交反馈 - unauthorized', async () => {
-        await request(app.getHttpServer())
+    it('未登录可以提交匿名反馈', async () => {
+        const res = await request(app.getHttpServer())
             .post('/feedback')
-            .send({ content: '没有登录的反馈' })
-            .expect(401);
+            .send({ content: '匿名反馈内容' })
+            .expect(201);
+        
+        expect(res.body.content).toBe('匿名反馈内容');
+        expect(res.body.userId).toBeUndefined(); // 匿名反馈没有 userId（返回 undefined）
     });
 
     it('用户提交 + 管理员查看/更新', async () => {

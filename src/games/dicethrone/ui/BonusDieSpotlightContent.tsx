@@ -78,8 +78,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     // 获取翻译后的效果文本
     const effectText = React.useMemo(() => {
         if (!effectKey) return null;
-        const translated = t(effectKey, effectParams);
-        return translated;
+        return t(effectKey, effectParams);
     }, [t, effectKey, effectParams]);
 
     return (

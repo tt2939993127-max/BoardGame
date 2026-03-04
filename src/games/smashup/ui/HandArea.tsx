@@ -80,6 +80,7 @@ const HandCard: React.FC<HandCardProps> = ({
 
     return (
         <motion.div
+            data-card-uid={card.uid}
             className={`
                 relative flex-shrink-0 origin-bottom pointer-events-auto
                 hover:!z-50
@@ -141,6 +142,21 @@ const HandCard: React.FC<HandCardProps> = ({
 
                 {/* Card Asset Preview */}
                 <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">
+                    {/* 🔍 DEBUG: Log CardPreview props for innsmouth_the_locals */}
+                    {card.defId === 'innsmouth_the_locals' && (() => {
+                        const previewRef = isOpponentView 
+                            ? SMASHUP_CARD_BACK
+                            : (def?.previewRef
+                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId } }
+                                : undefined);
+                        console.log('[HandCard] CardPreview props for innsmouth_the_locals:', {
+                            isOpponentView,
+                            defExists: !!def,
+                            defPreviewRef: def?.previewRef,
+                            finalPreviewRef: previewRef,
+                        });
+                        return null;
+                    })()}
                     <CardPreview
                         previewRef={isOpponentView 
                             ? SMASHUP_CARD_BACK

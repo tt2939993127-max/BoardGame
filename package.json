@@ -34,6 +34,8 @@
     "audio:verify": "node scripts/audio/verify-slim-registry.mjs",
     "atlas:scan": "node scripts/assets/atlas_grid_scan.js",
     "i18n:check": "npx tsx scripts/verify/i18n-check.ts",
+    "check:all": "npm run typecheck && npm run lint",
+    "check:full": "npm run check:all && npm run test:games:core",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:core": "vitest run src/core src/components src/hooks src/lib src/shared src/engine src/pages",
@@ -66,11 +68,14 @@
     "assets:upload:force": "cross-env FORCE_UPLOAD=1 node scripts/assets/upload-to-r2.js",
     "assets:check": "node scripts/assets/upload-to-r2.js --check",
     "assets:sync": "node scripts/assets/upload-to-r2.js --sync",
+    "monitor:kiro:timer:test": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 0.17 -MaxRetries 5",
+    "monitor:kiro:timer:20min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 20 -MaxRetries 20",
+    "monitor:kiro:timer:30min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 30 -MaxRetries 20",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged --concurrent 1",
-    "pre-push": "npm run build && npm run i18n:check && npm run test:games:core"
+    "pre-push": "npm run check:all && npm run build && npm run i18n:check && npm run test:games:core"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

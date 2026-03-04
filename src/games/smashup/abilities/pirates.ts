@@ -892,12 +892,32 @@ export function registerPirateInteractionHandlers(): void {
     // 注意：BASE_CLEARED 可能已 reduce，计分基地已从 bases 数组移除，随从已进弃牌堆
     registerInteractionHandler('pirate_first_mate_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; baseIndex?: number };
-        if (selected.skip) return { state, events: [] };
+        
+        // 【通用修复】检查是否有延迟事件需要补发
+        // 引擎层 resolveInteraction 已自动传递延迟事件，这里只需要在最后一个交互时补发
+        const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
+            { type: string; payload: unknown; timestamp: number }[] | undefined;
+        const hasNextInteraction = state.sys.interaction?.queue && state.sys.interaction.queue.length > 0;
+        
+        if (selected.skip) {
+            // 跳过时，如果这是最后一个交互，补发延迟事件
+            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
+                return { state, events: deferredEvents as any[] };
+            }
+            return { state, events: [] };
+        }
+        
         const { baseIndex: destBase } = selected;
         if (destBase === undefined) return undefined;
         const ctx = iData?.continuationContext as { mateUid: string; mateDefId: string; scoringBaseIndex: number } | undefined;
         if (!ctx) return undefined;
         const events: SmashUpEvent[] = [moveMinion(ctx.mateUid, ctx.mateDefId, ctx.scoringBaseIndex, destBase, 'pirate_first_mate', timestamp)];
+        
+        // 【通用修复】如果这是最后一个交互，补发延迟事件
+        if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
+            events.push(...deferredEvents as SmashUpEvent[]);
+        }
+        
         return { state, events };
     });
 }

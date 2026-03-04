@@ -16,6 +16,7 @@ import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { ActiveModifierBadge } from './ActiveModifierBadge';
+import { AttackBonusDamageDisplay } from './AttackBonusDamageDisplay';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
 
@@ -48,6 +49,7 @@ export const RightSidebar = ({
     interaction,
     dispatch,
     activeModifiers,
+    bonusDamage,
     passiveAbilityProps,
 }: {
     dice: Die[];
@@ -81,6 +83,8 @@ export const RightSidebar = ({
     dispatch: (type: string, payload?: unknown) => void;
     /** 已激活的攻击修正卡 */
     activeModifiers?: ActiveModifier[];
+    /** 当前攻击的伤害加成（从 pendingAttack.bonusDamage 读取） */
+    bonusDamage?: number;
     /** 被动能力面板 props */
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
 }) => {
@@ -132,6 +136,13 @@ export const RightSidebar = ({
 
     // 骰子交互操作提示
     const { t } = useTranslation('game-dicethrone');
+    
+    // 调试日志：检查 activeModifiers 是否传递正确
+    React.useEffect(() => {
+        console.log('[RightSidebar] activeModifiers:', activeModifiers);
+        console.log('[RightSidebar] bonusDamage:', bonusDamage);
+    }, [activeModifiers, bonusDamage]);
+    
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;
         const dtMeta = getDtMeta(interaction);
@@ -189,6 +200,12 @@ export const RightSidebar = ({
                 {activeModifiers && activeModifiers.length > 0 && (
                     <div className="absolute -top-[2.2vw] left-1/2 -translate-x-1/2 z-10">
                         <ActiveModifierBadge modifiers={activeModifiers} />
+                    </div>
+                )}
+                {/* 伤害加成显示：absolute 定位，在 ActiveModifierBadge 下方 */}
+                {bonusDamage && bonusDamage > 0 && (
+                    <div className="absolute -top-[3.8vw] left-1/2 -translate-x-1/2 z-10">
+                        <AttackBonusDamageDisplay bonusDamage={bonusDamage} />
                     </div>
                 )}
                 <div className="relative">

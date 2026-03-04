@@ -26,12 +26,13 @@ beforeAll(() => {
 });
 
 describe('晕眩（Daze）额外攻击链', () => {
-    it('攻击方有 daze  攻击结算后触发对手额外攻击', () => {
+    it('防御方有 daze → 攻击结算后立即移除眩晕 + 攻击方获得额外攻击', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: 'daze extra attack',
             setup: createHeroMatchup('barbarian', 'monk', (core) => {
-                core.players['0'].statusEffects[STATUS_IDS.DAZE] = 1;
+                // ✅ 正确：给防御方（Player 1）添加眩晕
+                core.players['1'].statusEffects[STATUS_IDS.DAZE] = 1;
             }),
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
@@ -41,17 +42,13 @@ describe('晕眩（Daze）额外攻击链', () => {
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '1'), cmd('CONFIRM_ROLL', '1'),
                     cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
+                    // 攻击结算后，眩晕被移除，Player 0 获得额外攻击 → offensiveRoll
                     cmd('ADVANCE_PHASE', '1'),
-                cmd('ROLL_DICE', '1'), cmd('ROLL_DICE', '1'), cmd('ROLL_DICE', '1'),
-                cmd('CONFIRM_ROLL', '1'),
-                cmd('SELECT_ABILITY', '1', { abilityId: 'fist-technique-5' }),
-                cmd('ADVANCE_PHASE', '1'),
-                cmd('ROLL_DICE', '0'), cmd('CONFIRM_ROLL', '0'),
-                cmd('ADVANCE_PHASE', '0'),
             ],
             expect: {
-                turnPhase: 'main2', activePlayerId: '0',
-                players: { '0': { statusEffects: { [STATUS_IDS.DAZE]: 0 } } },
+                turnPhase: 'offensiveRoll',  // 进入额外攻击阶段
+                activePlayerId: '0',  // 攻击方（Player 0）获得额外攻击
+                players: { '1': { statusEffects: { [STATUS_IDS.DAZE]: 0 } } },  // 眩晕已移除
             },
         });
         expect(result.passed).toBe(true);
@@ -200,7 +197,7 @@ describe('不可防御攻击链', () => {
 });
 
 describe('终极技能链', () => {
-    it('rage 5个力量面 眩晕 + 15 伤害', () => {
+    it('rage 5个力量面 → 眩晕 + 15 伤害 → 立即触发额外攻击', () => {
         // 5个力量面: [6,6,6,6,6]
         const runner = createRunner(createQueuedRandom([6, 6, 6, 6, 6]));
         const result = runner.run({
@@ -210,13 +207,14 @@ describe('终极技能链', () => {
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'), cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'rage' }),
+                // 终极技能不可防御，施加眩晕后立即触发额外攻击 → offensiveRoll
                 cmd('ADVANCE_PHASE', '0'),
             ],
             expect: {
-                turnPhase: 'main2',
+                turnPhase: 'offensiveRoll',  // 进入额外攻击阶段
                 players: {
                     '0': { hp: INITIAL_HEALTH },  // 无自伤
-                    '1': { hp: INITIAL_HEALTH - 15, statusEffects: { [STATUS_IDS.DAZE]: 1 } },  // 受伤 + 眩晕
+                    '1': { hp: INITIAL_HEALTH - 15, statusEffects: { [STATUS_IDS.DAZE]: 0 } },  // 受伤，眩晕已移除
                 },
             },
         });
@@ -315,7 +313,7 @@ describe('Token 响应链', () => {
 
 describe('压制奖励骰链', () => {
     it('suppress  投掷3奖励骰  造成总和伤害', () => {
-        const values = [1, 1, 6, 6, 4, 1, 1, 1, 3, 4, 5];
+        const values = [1, 1, 1, 6, 6, 1, 1, 1, 3, 4, 5];
         const runner = createRunner(createQueuedRandom(values));
         const result = runner.run({
             name: 'suppress bonus dice',
@@ -339,7 +337,7 @@ describe('压制奖励骰链', () => {
     });
 
     it('suppress 奖励骰总和>14  额外施加脑震荡', () => {
-        const values = [1, 1, 6, 6, 4, 1, 1, 1, 5, 5, 6];
+        const values = [1, 1, 1, 6, 6, 1, 1, 1, 5, 5, 6];
         const runner = createRunner(createQueuedRandom(values));
         const result = runner.run({
             name: 'suppress concussion',

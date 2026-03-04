@@ -379,7 +379,7 @@ describe('僵尸派系能力', () => {
         expect(current?.data?.sourceId).toBe('zombie_lend_a_hand');
     });
 
-    it('zombie_outbreak: 有空基地且有可打随从时，先选基地再给予额外随从额度', () => {
+    it('zombie_outbreak: 多个空基地时选择基地后直接授予额度', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -392,17 +392,19 @@ describe('僵尸派系能力', () => {
             },
             bases: [
                 { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 })], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m1', 'test', '1', 2, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [], ongoingActions: [] }, // 空基地
+                { defId: 'b3', minions: [], ongoingActions: [] }, // 空基地
             ],
         });
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
-        // onPlay 只创建第一段交互，不立即发放额外额度
+        // onPlay 只创建交互，不立即发放额度
         const immediateLimitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(immediateLimitEvents.length).toBe(0);
         const current = (matchState.sys as any).interaction?.current;
         expect(current?.data?.sourceId).toBe('zombie_outbreak_choose_base');
 
+        // 选择基地后直接授予额度（限定到该基地）
         const chooseBaseHandler = getInteractionHandler('zombie_outbreak_choose_base');
         expect(chooseBaseHandler).toBeDefined();
         const resolved = chooseBaseHandler!(matchState, '0', { baseIndex: 1 }, undefined, defaultRandom, 1);
@@ -410,6 +412,32 @@ describe('僵尸派系能力', () => {
         const granted = resolved!.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(granted.length).toBe(1);
         expect((granted[0] as any).payload.limitType).toBe('minion');
+        expect((granted[0] as any).payload.restrictToBase).toBe(1);
+    });
+
+    it('zombie_outbreak: 只有一个空基地时直接授予额度', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'zombie_outbreak', 'action', '0'),
+                        makeCard('m2', 'zombie_walker', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3, { powerModifier: 0 })], ongoingActions: [] },
+                { defId: 'b2', minions: [], ongoingActions: [] }, // 唯一的空基地
+            ],
+        });
+
+        const { events } = execPlayAction(state, '0', 'a1');
+        // 只有一个空基地时直接授予额度，不创建交互
+        const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents.length).toBe(1);
+        expect((limitEvents[0] as any).payload.limitType).toBe('minion');
+        expect((limitEvents[0] as any).payload.restrictToBase).toBe(1);
     });
 
     it('zombie_outbreak: 所有基地都有己方随从时不给额度', () => {

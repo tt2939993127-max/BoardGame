@@ -296,6 +296,8 @@
     "cpSpentPlain": "Spent {{amount}} CP",
     "cardDrawn": "Drew {{count}} card(s) ({{source}})",
     "cardDrawnPlain": "Drew {{count}} card(s)",
+    "damageShieldPercent": "Gained {{percent}}% damage reduction shield with [{{source}}]",
+    "damageShieldPercentPlain": "Gained {{percent}}% damage reduction shield",
     "usePurify": "Purified {{statusLabel}}",
     "payToRemoveKnockdown": "Paid 2CP to remove Knockdown",
     "usePassiveAbility": "Used passive: {{abilityName}}",
@@ -303,7 +305,11 @@
     "confirmRollWithAbility": "Confirmed roll ({{abilityName}}):",
     "confirmRollDefense": "Confirmed defense roll:",
     "confirmRollDefenseWithAbility": "Confirmed defense roll ({{abilityName}}):",
-    "cardRollResult": "Roll result:"
+    "cardRollResult": "Roll result:",
+    "dieModified": "Modified die #{{dieId}}: {{oldValue}} → {{newValue}}",
+    "dieModifiedSource": "({{source}})",
+    "dieRerolled": "Rerolled die #{{dieId}}: {{oldValue}} → {{newValue}}",
+    "dieRerolledSource": "({{source}})"
   },
   "purify": {
     "title": "Use Purify",
@@ -324,9 +330,9 @@
     "healthLabel": "Health: {{value}}",
     "energyLabel": "Energy: {{value}}",
     "shieldLabel": "Shield: {{value}}",
-    "autoResponseEnabled": "Auto Response Enabled",
-    "autoResponseDisabled": "Auto Response Disabled",
-    "autoResponse": "Auto Response",
+    "autoResponseEnabled": "Manual Response Enabled",
+    "autoResponseDisabled": "Auto Skip Enabled",
+    "autoResponse": "Auto Skip",
     "manualResponse": "Manual Response"
   },
   "hero": {
@@ -399,6 +405,9 @@
   "modifierActive": {
     "label": "Attack Modifier",
     "tooltip": "Active attack modifier card, effect triggers during damage resolution"
+  },
+  "attackBonus": {
+    "label": "+{{damage}} Damage"
   },
   "dice": {
     "waitingOpponent": "Opponent is thinking...",
@@ -484,8 +493,13 @@
       "moonShadowStrike.other": "Draw 1 card",
       "volley": "Volley Roll: {{value}}",
       "volley.result": "{{bowCount}} Bow: +{{bonusDamage}} Damage",
-      "explodingArrow.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: {{damage}} Damage",
+      "explodingArrow.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 2×{{bowCount}} + 1×{{footCount}} = {{damage}} Damage",
+      "explodingArrow2.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 1×{{bowCount}} + 2×{{footCount}} = {{damage}} Damage",
+      "explodingArrow3.result": "{{bowCount}}Bow {{footCount}}Foot {{moonCount}}Moon: 3 + 1×{{bowCount}} + 2×{{footCount}} = {{damage}} Damage",
       "watchOut": "Watch Out Roll: {{value}}",
+      "watchOut.bow": "Bow🏹: +2 Damage",
+      "watchOut.foot": "Foot🦶: Inflict Entangle",
+      "watchOut.moon": "Moon🌙: Inflict Blinded",
       "blinded": "Blinded Check",
       "blinded.miss": "Attack Failed!",
       "blinded.hit": "Attack Success",
@@ -581,7 +595,9 @@
     "no_pending_bonus_dice": "No pending bonus dice settlement",
     "bonus_reroll_limit_reached": "Bonus die reroll limit reached",
     "not_enough_token": "Not enough tokens to pay the cost",
-    "invalid_die_index": "Invalid die index"
+    "invalid_die_index": "Invalid die index",
+    "player_is_dazed": "Player is dazed and cannot perform any actions",
+    "attack_already_initiated": "Attack already initiated, cannot reselect ability"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",
@@ -678,7 +694,9 @@
     "hint_done": "Done",
     "hint_set": "Select die to set to {{value}}",
     "hint_adjust": "Select die to adjust",
-    "hint_any": "Select die to modify"
+    "hint_any": "Select die to modify",
+    "hint_select": "Select die ({{current}}/{{max}})",
+    "hint_select_opponent": "Select opponent's die ({{current}}/{{max}})"
   },
   "abilitySlots": {
     "fist": "Fist Technique",
@@ -1708,7 +1726,7 @@
     },
     "fiery-combo-2": {
       "name": "Fiery Combo II",
-      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Fiery Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
+      "description": "Small Straight: gain 2 Fire Mastery and deal 6+X damage. 2 Fire + 2 Magma: gain 2 Fire Mastery, inflict Burn, deal 6 damage.",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "main": "Deal 6 base damage. If you have Fire Mastery, deal +1 damage per Fire Mastery."
@@ -1716,7 +1734,7 @@
     },
     "incinerate": {
       "name": "Incinerate",
-      "description": "2 Fire + 2 Fire Soul: gain 2 Fire Mastery, inflict Burn, deal 6 damage",
+      "description": "2 Fire + 2 Magma: gain 2 Fire Mastery, inflict Burn, deal 6 damage",
       "effects": {
         "gainFM2": "Gain 2 Fire Mastery",
         "inflictBurn": "Inflict 1 Burn token",

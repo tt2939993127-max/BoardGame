@@ -30,6 +30,7 @@ import { initSmashUpAtlases } from './ui/cardAtlas';
 // 同步注册所有图集（cards1-4 + base1-4，懒解析模式），确保首次渲染时 atlas 注册已就绪
 initSmashUpAtlases();
 import { SMASH_UP_MANIFEST } from './manifest';
+import { getLayoutConfig } from './ui/layoutConfig';
 import './cursor';
 import { HandArea } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
@@ -98,21 +99,20 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const { t } = useTranslation('game-smashup');
     const { setSelectedFactions } = useSmashUpOverlay();
     
-    // 等待状态就绪
-    if (!G || !G.core) {
-        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
-    }
-    
-    const core = G.core;
-    const phase = G.sys.phase;
-    const currentPid = getCurrentPlayerId(core);
+    const core = G?.core;
+    const phase = G?.sys.phase;
+    const currentPid = core ? getCurrentPlayerId(core) : '0';
     const playerID = rawPlayerID;
     const isMyTurn = playerID === currentPid;
     // 观战模式下默认显示玩家 0 的视角
-    const myPlayer = playerID ? core.players[playerID] : core.players['0'];
-    const isGameOver = G.sys.gameover;
+    const myPlayer = playerID && core ? core.players[playerID] : (core ? core.players['0'] : undefined);
+    const isGameOver = G?.sys.gameover;
     const rootPid = playerID || '0';
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
+    
+    // 响应式布局配置
+    const playerCount = core?.turnOrder.length || 2;
+    const layout = getLayoutConfig(playerCount);
     
     // 更新选择的派系到 Context（游戏开始后）
     useEffect(() => {
@@ -177,6 +177,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         const sameNameRemaining = myPlayer?.sameNameMinionRemaining ?? 0;
         const sameNameDefId = myPlayer?.sameNameMinionDefId;
         const baseQuota = myPlayer?.baseLimitedMinionQuota ?? {};
+        const baseSameNameRequired = myPlayer?.baseLimitedSameNameRequired ?? {};
         const hasBaseQuota = Object.values(baseQuota).some(v => v > 0);
 
         return all.filter(opt => {
@@ -193,10 +194,27 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             if (!hasBaseQuota) return false;
             if (opt.allowedBaseIndices === 'all') {
                 // 可以打到任意基地，检查是否有任何基地有额度
-                return Object.keys(baseQuota).some(baseIdx => baseQuota[Number(baseIdx)] > 0);
+                return Object.keys(baseQuota).some(baseIdx => {
+                    const idx = Number(baseIdx);
+                    if (baseQuota[idx] <= 0) return false;
+                    // 检查同名约束
+                    if (baseSameNameRequired[idx]) {
+                        // 必须与该基地上已有随从同名（运行时检查）
+                        return true;
+                    }
+                    return true;
+                });
             }
             // 只能打到特定基地，检查这些基地是否有额度
-            return opt.allowedBaseIndices.some(baseIdx => (baseQuota[baseIdx] ?? 0) > 0);
+            return opt.allowedBaseIndices.some(baseIdx => {
+                if ((baseQuota[baseIdx] ?? 0) <= 0) return false;
+                // 检查同名约束
+                if (baseSameNameRequired[baseIdx]) {
+                    // 必须与该基地上已有随从同名（运行时检查）
+                    return true;
+                }
+                return true;
+            });
         });
     }, [core, isMyTurn, phase, playerID, myPlayer]);
 
@@ -522,7 +540,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     }, [discardStripSelectedUid, isDiscardMinionPrompt, discardMinionAllowedBases, discardPlayOptions, core.bases]);
 
 
-    // Me First! 响应状态判断
+    // 响应窗口状态判断（meFirst 或 afterScoring）
     const responseWindow = G.sys.responseWindow?.current;
     const isMeFirstResponse = useMemo(() => {
         if (!responseWindow || responseWindow.windowType !== 'meFirst') return false;
@@ -530,19 +548,34 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         return playerID === currentResponderId;
     }, [responseWindow, playerID]);
 
-    // Me First! 期间非 special 卡和非 beforeScoringPlayable 随从的禁用集合（置灰）
+    const isAfterScoringResponse = useMemo(() => {
+        if (!responseWindow || responseWindow.windowType !== 'afterScoring') return false;
+        const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
+        return playerID === currentResponderId;
+    }, [responseWindow, playerID]);
+
+    // 响应窗口期间禁用不匹配的卡牌（置灰）
     // 但当有手牌选择交互时（isHandDiscardPrompt），不禁用手牌（交互会自己处理可选项）
     const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
-        if (!isMeFirstResponse || !myPlayer) return undefined;
-        // 有手牌选择交互时，不应用 Me First! 禁用规则（交互自己控制可选项）
+        // 只在响应窗口期间且轮到我时生效
+        const isMyResponseTurn = isMeFirstResponse || isAfterScoringResponse;
+        if (!isMyResponseTurn || !myPlayer) return undefined;
+        // 有手牌选择交互时，不应用响应窗口禁用规则（交互自己控制可选项）
         if (isHandDiscardPrompt) return undefined;
         
         const disabled = new Set<string>();
+        const windowType = responseWindow?.windowType;
+        
         for (const card of myPlayer.hand) {
             if (card.type === 'minion') {
-                // beforeScoringPlayable 随从不禁用（影舞者等）
-                const mDef = getMinionDef(card.defId);
-                if (!mDef?.beforeScoringPlayable) {
+                // beforeScoringPlayable 随从只在 meFirst 窗口可用
+                if (windowType === 'meFirst') {
+                    const mDef = getMinionDef(card.defId);
+                    if (!mDef?.beforeScoringPlayable) {
+                        disabled.add(card.uid);
+                    }
+                } else {
+                    // afterScoring 窗口禁用所有随从
                     disabled.add(card.uid);
                 }
                 continue;
@@ -553,11 +586,23 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             }
             const def = getCardDef(card.defId) as ActionCardDef | undefined;
             if (def?.subtype !== 'special') {
+                // 非 special 卡全部禁用
+                disabled.add(card.uid);
+                continue;
+            }
+            
+            // Special 卡：检查 specialTiming 是否匹配窗口类型
+            const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+            if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
+                // meFirst 窗口：禁用非 beforeScoring 卡
+                disabled.add(card.uid);
+            } else if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') {
+                // afterScoring 窗口：禁用非 afterScoring 卡
                 disabled.add(card.uid);
             }
         }
         return disabled.size > 0 ? disabled : undefined;
-    }, [isMeFirstResponse, myPlayer, isHandDiscardPrompt]);
+    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isHandDiscardPrompt, responseWindow?.windowType]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
     // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）
@@ -1007,6 +1052,9 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             cardType: card.type,
             isHandDiscardPrompt,
             isMeFirstResponse,
+            isAfterScoringResponse,
+            isInResponseWindow: isMeFirstResponse || isAfterScoringResponse,
+            windowType: responseWindow?.windowType,
             hasCurrentPrompt: !!currentPrompt,
             currentPromptId: currentPrompt?.id,
             promptPlayerId: currentPrompt?.playerId,
@@ -1060,14 +1108,23 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         // Validation for play phase / turn
-        // Me First! 响应期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
-        if (isMeFirstResponse) {
-            console.log('[DEBUG] handleCardClick: in Me First! response mode', {
+        // 响应窗口期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
+        const isInResponseWindow = isMeFirstResponse || isAfterScoringResponse;
+        if (isInResponseWindow) {
+            const windowType = responseWindow?.windowType;
+            console.log('[DEBUG] handleCardClick: in response window mode', {
                 cardType: card.type,
                 cardDefId: card.defId,
+                windowType,
             });
-            // beforeScoringPlayable 随从（影舞者等）：进入基地选择模式
+            
+            // beforeScoringPlayable 随从（影舞者等）：只在 meFirst 窗口可用
             if (card.type === 'minion') {
+                if (windowType !== 'meFirst') {
+                    console.log('[DEBUG] handleCardClick: minion not allowed in afterScoring window, denied');
+                    playDeniedSound();
+                    return;
+                }
                 const mDef = getMinionDef(card.defId);
                 console.log('[DEBUG] handleCardClick: minion clicked in Me First!', {
                     hasBeforeScoringPlayable: !!mDef?.beforeScoringPlayable,
@@ -1088,17 +1145,17 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 return;
             }
             if (card.type !== 'action') {
-                console.log('[DEBUG] handleCardClick: not action card in Me First!, denied');
+                console.log('[DEBUG] handleCardClick: not action card in response window, denied');
                 playDeniedSound();
                 return;
             }
             const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
-            console.log('[DEBUG] handleCardClick: action card in Me First!', {
+            console.log('[DEBUG] handleCardClick: action card in response window', {
                 subtype: cardDef?.subtype,
                 specialNeedsBase: cardDef?.specialNeedsBase,
             });
             if (cardDef?.subtype !== 'special') {
-                console.log('[DEBUG] handleCardClick: not special action in Me First!, denied');
+                console.log('[DEBUG] handleCardClick: not special action in response window, denied');
                 playDeniedSound();
                 return;
             }
@@ -1168,7 +1225,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, responseWindow]);
 
     /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
@@ -1225,6 +1282,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const handleViewAction = useCallback((defId: string) => {
         setViewingCard({ defId, type: 'action' });
     }, []);
+
+    // 等待状态就绪
+    if (!G || !core) {
+        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
+    }
 
     // 防御性检查：HMR 或 client 重建时 core 可能不完整
     if (!core.turnOrder || !core.bases) {
@@ -1736,8 +1798,15 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
                 {/* --- MAIN BOARD --- */}
                 {/* Scrollable table area */}
-                <div className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" data-tutorial-id="su-base-area">
-                    <div className="flex items-start gap-12 px-20 min-w-max">
+                <div 
+                    className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" 
+                    data-tutorial-id="su-base-area"
+                    style={{ paddingBottom: `${layout.handAreaHeight}px` }}
+                >
+                    <div 
+                        className="flex items-start px-20 min-w-max"
+                        style={{ gap: `${layout.baseGap}vw` }}
+                    >
                         {core.bases.map((base, idx) => (
                             <BaseZone
                                 key={`${base.defId}-${idx}`}
@@ -1748,7 +1817,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 isDeployMode={
                                     (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
                                 }
-                                isMinionSelectMode={(selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0)}
+                                isMinionSelectMode={!isOngoingSelectPrompt && ((selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
                                 selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
                                 multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
                                 isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
@@ -1801,7 +1870,10 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 {/* 手牌区：z-60，在弃牌遮罩之上 */}
                 {
                     myPlayer && (
-                        <div className="absolute bottom-0 inset-x-0 h-[220px] z-60 pointer-events-none">
+                        <div 
+                            className="absolute bottom-0 inset-x-0 z-60 pointer-events-none"
+                            style={{ height: `${layout.handAreaHeight}px` }}
+                        >
 
                             <HandArea
                                 hand={viewMode === 'opponent' ? opponentPlayer.hand : myPlayer.hand}

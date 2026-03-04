@@ -41,10 +41,13 @@ import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
 import { drawCards } from './utils';
 import { countMadnessCards, madnessVpPenalty, fireMinionPlayedTriggers } from './abilityHelpers';
 import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
-import { openMeFirstWindow, buildBaseTargetOptions, isSpecialLimitBlocked } from './abilityHelpers';
+import { openMeFirstWindow, openAfterScoringWindow, buildBaseTargetOptions, isSpecialLimitBlocked } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { resolveSpecial } from './abilityRegistry';
+import type { AbilityContext } from './abilityRegistry';
+import type { SpecialAfterScoringConsumedEvent } from './types';
 
 // ============================================================================
 // 基地记分辅助函数（供 FlowHooks 和 Prompt 继续函数共用）
@@ -64,14 +67,6 @@ function scoreOneBase(
     random?: RandomFn,
     matchState?: MatchState<SmashUpCore>,
 ): { events: SmashUpEvent[]; newBaseDeck: string[]; matchState?: MatchState<SmashUpCore> } {
-    console.log('[scoreOneBase] 开始计分:', {
-        baseIndex,
-        baseDefId: core.bases[baseIndex]?.defId,
-        timestamp: now,
-        hasInteraction: !!matchState?.sys?.interaction?.current,
-        interactionId: matchState?.sys?.interaction?.current?.id,
-    });
-    
     // 默认 random（确定性回退，计分中大多数 trigger 不需要随机）
     const rng: RandomFn = random ?? {
         random: () => 0.5,
@@ -83,14 +78,13 @@ function scoreOneBase(
     let ms = matchState;
     const base = core.bases[baseIndex];
     const baseDef = getBaseDef(base.defId)!;
+    
+    // 【修复】newBaseDeck 必须在函数顶部声明，避免 TDZ 错误
+    // 问题：之前在两个不同的作用域中声明了 newBaseDeck（line 454 和 line 476）
+    // 当函数在 afterScoring 窗口打开后提前返回，再次调用时会访问未初始化的外层 newBaseDeck
+    let newBaseDeck = baseDeck;
     // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
     // 先于基地能力执行，确保基地能力能看到 ongoing 效果的结果
-    console.log('[scoreBase] Before fireTriggers beforeScoring:', {
-        baseIndex,
-        hasInteraction: !!ms?.sys?.interaction?.current,
-        interactionId: ms?.sys?.interaction?.current?.id,
-        alreadyTriggered: core.beforeScoringTriggeredBases?.includes(baseIndex),
-    });
     
     // 检查是否已经触发过 beforeScoring（防止交互解决后重复触发）
     const alreadyTriggeredBeforeScoring = core.beforeScoringTriggeredBases?.includes(baseIndex) ?? false;
@@ -130,24 +124,12 @@ function scoreOneBase(
         // - 第二次调用：如果没有立即 reduce，beforeScoringTriggeredBases 仍是 undefined → 又创建相同 ID 的交互 → UI 卡住
         core = reduce(core, markEvent as unknown as SmashUpEvent);
 
-        console.log('[scoreBase] After fireTriggers beforeScoring:', {
-            hasInteraction: !!ms?.sys?.interaction?.current,
-            interactionId: ms?.sys?.interaction?.current?.id,
-            eventsCount: beforeScoringEvents.events.length,
-            markedBases: core.beforeScoringTriggeredBases,
-        });
-
         // beforeScoring 可能创建了交互（如海盗王移动确认）
         // 必须先 halt 等交互解决、事件 reduce 到 core 后，再继续
         if (ms?.sys?.interaction?.current) {
-            console.log('[scoreBase] Has interaction, returning early');
             return { events, newBaseDeck: baseDeck, matchState: ms };
         }
-    } else {
-        console.log('[scoreBase] beforeScoring already triggered for this base, skipping');
     }
-
-    console.log('[scoreBase] No interaction, continuing to base ability beforeScoring');
 
     // 将 ongoing beforeScoring 产生的事件（如 TEMP_POWER_ADDED、MINION_MOVED）reduce 到 core，
     // 确保后续基地能力和排名计算使用最新状态
@@ -264,7 +246,61 @@ function scoreOneBase(
 
     let afterResult: BaseAbilityResult = { events: [] };
     if (!alreadyTriggeredAfterScoring) {
-        // 触发 afterScoring 基地能力（使用 reduce 后的 core，包含 beforeScoring 效果）
+        // 先触发 ARMED 的 afterScoring special 技能
+        const armedSpecials = (updatedCore.pendingAfterScoringSpecials ?? []).filter(
+            s => s.baseIndex === baseIndex
+        );
+        
+        for (const armed of armedSpecials) {
+            const executor = resolveSpecial(armed.sourceDefId);
+            if (executor) {
+                const ctx: AbilityContext = {
+                    state: updatedCore,
+                    matchState: ms,
+                    playerId: armed.playerId,
+                    cardUid: armed.cardUid,
+                    defId: armed.sourceDefId,
+                    baseIndex,
+                    random: rng,
+                    now,
+                };
+                const result = executor(ctx);
+                events.push(...result.events);
+                if (result.matchState) ms = result.matchState;
+                
+                // 将 special 技能产生的事件 reduce 到 core
+                for (const evt of result.events) {
+                    updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+                }
+            } else {
+                // 卡牌没有实现：生成 ABILITY_FEEDBACK 事件
+                const feedbackEvt: AbilityFeedbackEvent = {
+                    type: SU_EVENT_TYPES.ABILITY_FEEDBACK,
+                    payload: {
+                        playerId: armed.playerId,
+                        sourceDefId: armed.sourceDefId,
+                        message: 'actionLog.ability_not_implemented',
+                    },
+                    timestamp: now,
+                };
+                events.push(feedbackEvt);
+            }
+            
+            // 标记为已消费
+            const consumedEvt: SpecialAfterScoringConsumedEvent = {
+                type: SU_EVENT_TYPES.SPECIAL_AFTER_SCORING_CONSUMED,
+                payload: {
+                    sourceDefId: armed.sourceDefId,
+                    playerId: armed.playerId,
+                    baseIndex,
+                },
+                timestamp: now,
+            };
+            events.push(consumedEvt);
+            updatedCore = reduce(updatedCore, consumedEvt);
+        }
+        
+        // 触发 afterScoring 基地能力（使用 reduce 后的 core，包含 beforeScoring 效果 + ARMED special 效果）
         const afterCtx = {
             state: updatedCore,
             matchState: ms,
@@ -301,20 +337,7 @@ function scoreOneBase(
 
     // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
     // 使用 reduce 后的 core，包含基地能力的效果（如随从已被放入牌库底）
-    console.log('[scoreBase] 准备触发 ongoing afterScoring:', {
-        baseIndex,
-        baseDefId: base.defId,
-        afterScoringCoreBasesCount: afterScoringCore.bases.length,
-        minionsOnBase: afterScoringCore.bases[baseIndex]?.minions.map(m => ({
-            uid: m.uid,
-            defId: m.defId,
-            owner: m.owner,
-            controller: m.controller,
-        })) ?? [],
-        hasMatchState: !!ms,
-    });
     
-    console.log('🔥🔥🔥 [scoreBase] 即将调用 fireTriggers afterScoring 🔥🔥🔥');
     const afterScoringEvents = fireTriggers(afterScoringCore, 'afterScoring', {
         state: afterScoringCore,
         playerId: pid,
@@ -327,20 +350,79 @@ function scoreOneBase(
     events.push(...afterScoringEvents.events);
     if (afterScoringEvents.matchState) ms = afterScoringEvents.matchState;
 
-    console.log('🔥 [scoreBase] afterScoring 完成:', {
-        hasMatchState: !!ms,
-        hasCurrent: !!ms?.sys?.interaction?.current,
-        currentId: ms?.sys?.interaction?.current?.id,
-        currentPlayerId: ms?.sys?.interaction?.current?.playerId,
-        queueLength: ms?.sys?.interaction?.queue?.length ?? 0,
-    });
-
     // 判断 afterScoring 是否新增了交互
     const interactionAfter = ms?.sys?.interaction?.current?.id ?? null;
     const queueLenAfter = ms?.sys?.interaction?.queue?.length ?? 0;
     const afterScoringCreatedInteraction =
         (interactionAfter !== null && interactionAfter !== interactionBeforeAfterScoring) ||
         (queueLenAfter > queueLenBeforeAfterScoring);
+
+    // 【新增】检查是否需要打开 afterScoring 响应窗口
+    // 注意：afterScoring 响应窗口在 BASE_SCORED 之后、BASE_CLEARED 之前打开
+    // 这样玩家打出的 afterScoring 卡牌可以影响该基地的力量，并可能导致重新计分
+    if (!afterScoringCreatedInteraction) {
+        // 检查是否有玩家手牌中有 afterScoring 卡牌
+        const playersWithAfterScoringCards: PlayerId[] = [];
+        for (const [playerId, player] of Object.entries(afterScoringCore.players)) {
+            const hasAfterScoringCard = player.hand.some(c => {
+                if (c.type !== 'action') return false;
+                const def = getCardDef(c.defId) as ActionCardDef | undefined;
+                return def?.subtype === 'special' && def.specialTiming === 'afterScoring';
+            });
+            if (hasAfterScoringCard) {
+                playersWithAfterScoringCards.push(playerId);
+            }
+        }
+
+        // 如果有玩家有 afterScoring 卡牌，打开 afterScoring 响应窗口
+        if (playersWithAfterScoringCards.length > 0) {
+            // 【重新计分规则】记录初始力量（用于响应窗口关闭后对比）
+            // 规则：afterScoring 卡牌可以影响该基地的力量，如果力量变化则需要重新计分
+            const initialPowers = new Map<PlayerId, number>();
+            const currentBase = afterScoringCore.bases[baseIndex];
+            for (const m of currentBase.minions) {
+                const prev = initialPowers.get(m.controller) ?? 0;
+                initialPowers.set(m.controller, prev + getEffectivePower(afterScoringCore, m, baseIndex));
+            }
+            // 加上 ongoing 卡力量贡献
+            for (const playerId of Object.keys(afterScoringCore.players)) {
+                const bonus = getOngoingCardPowerContribution(currentBase, playerId);
+                if (bonus > 0) {
+                    const prev = initialPowers.get(playerId) ?? 0;
+                    initialPowers.set(playerId, prev + bonus);
+                }
+            }
+            
+            // 将初始力量存储到 matchState.sys（用于响应窗口关闭后对比）
+            // 注意：不能存到响应窗口的 continuationContext 中，因为响应窗口不是交互
+            if (ms) {
+                ms = {
+                    ...ms,
+                    sys: {
+                        ...ms.sys,
+                        afterScoringInitialPowers: {
+                            baseIndex,
+                            powers: Object.fromEntries(initialPowers.entries()),
+                        } as any,
+                    },
+                };
+            }
+            
+            // 打开 afterScoring 响应窗口（在 BASE_CLEARED 之前）
+            const afterScoringWindowEvt = openAfterScoringWindow('scoreBases', pid, afterScoringCore.turnOrder, now);
+            events.push(afterScoringWindowEvt);
+            
+            // 延迟发出 postScoringEvents（等响应窗口关闭后再发）
+            // 将 postScoringEvents 存到响应窗口的 continuationContext 中
+            // 注意：响应窗口关闭后，需要检查基地力量是否变化，如果变化则重新计分
+            // 这个逻辑需要在 onPhaseExit 中处理
+            
+            // 【修复】不需要在这里修改 newBaseDeck，因为还没有发出 BASE_REPLACED 事件
+            // BASE_REPLACED 事件会在响应窗口关闭后、postScoringEvents 中发出
+            
+            return { events, newBaseDeck, matchState: ms };
+        }
+    }
 
     // 构建清除+替换事件
     const postScoringEvents: SmashUpEvent[] = [];
@@ -352,7 +434,6 @@ function scoreOneBase(
     postScoringEvents.push(clearEvt);
 
     // 替换基地
-    let newBaseDeck = baseDeck;
     if (newBaseDeck.length > 0) {
         const newBaseDefId = newBaseDeck[0];
         const replaceEvt: BaseReplacedEvent = {
@@ -423,11 +504,47 @@ export function registerMultiBaseScoringInteractionHandler(): void {
         let currentState = state;
         let currentBaseDeck = state.core.baseDeck;
 
+        // ✅ 修复：清除当前交互（已经被解决了），避免 scoreOneBase 提前返回
+        // 注意：这里不能直接修改 state，必须创建新对象（不可变更新）
+        currentState = {
+            ...currentState,
+            sys: {
+                ...currentState.sys,
+                interaction: {
+                    ...currentState.sys.interaction,
+                    current: undefined,
+                },
+            },
+        };
+
+        // 【修复】提取延迟的 BASE_CLEARED/BASE_REPLACED 事件（但不立即补发）
+        const deferredEvents = (_iData?.continuationContext as any)?._deferredPostScoringEvents as 
+            { type: string; payload: unknown; timestamp: number }[] | undefined;
         // 1. 计分玩家选择的基地
         const result = scoreOneBase(currentState.core, baseIndex, currentBaseDeck, playerId, timestamp, random, currentState);
         events.push(...result.events);
         currentBaseDeck = result.newBaseDeck;
         if (result.matchState) currentState = result.matchState;
+
+        // 【关键修复】立即将基地标记为"已计分"，避免 onPhaseExit 重复计分
+        // 这是多基地计分重复计分 bug 的根本原因：
+        // 当 afterScoring 创建交互时，BASE_CLEARED 事件被延迟发出
+        // 如果不标记为"已计分"，onPhaseExit 在交互解决后重新进入时会再次计分同一个基地
+        if (!currentState.sys.scoredBaseIndices) {
+            currentState = {
+                ...currentState,
+                sys: { ...currentState.sys, scoredBaseIndices: [] },
+            };
+        }
+        if (!currentState.sys.scoredBaseIndices.includes(baseIndex)) {
+            currentState = {
+                ...currentState,
+                sys: {
+                    ...currentState.sys,
+                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices, baseIndex],
+                },
+            };
+        }
 
         // 2. 将已产生的事件 reduce 到本地 core 副本，获取最新状态
         let updatedCore = currentState.core;
@@ -435,8 +552,10 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             updatedCore = reduce(updatedCore, evt as SmashUpEvent);
         }
 
-        // 3. 检查剩余 eligible 基地
-        const remainingIndices = getScoringEligibleBaseIndices(updatedCore).filter(i => i !== baseIndex);
+        // 3. 检查剩余 eligible 基地（基于 sys.scoredBaseIndices，而不是 getScoringEligibleBaseIndices）
+        // 这样可以避免延迟事件未补发时，已计分的基地被重复计入
+        const allEligibleIndices = getScoringEligibleBaseIndices(updatedCore);
+        const remainingIndices = allEligibleIndices.filter(i => !currentState.sys.scoredBaseIndices?.includes(i));
 
         // 如果 beforeScoring/afterScoring 创建了交互 → 先处理交互，剩余基地后续再计分
         if (currentState.sys.interaction?.current) {
@@ -462,6 +581,22 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                         { sourceId: 'multi_base_scoring', targetType: 'base' },
                     );
                     currentState = queueInteraction(currentState, interaction);
+                    
+                    // 【关键修复】将剩余基地标记为"计分中"，避免 onPhaseExit 重复计分
+                    // 这是多基地计分重复计分 bug 的根本原因：
+                    // 当创建 multi_base_scoring 交互后，onPhaseExit 重新进入时会发现剩余基地还没有被标记为"已计分"
+                    // 导致 onPhaseExit 直接计分，然后 multi_base_scoring 交互解决时又计分一次
+                    for (const idx of remainingIndices) {
+                        if (!currentState.sys.scoredBaseIndices!.includes(idx)) {
+                            currentState = {
+                                ...currentState,
+                                sys: {
+                                    ...currentState.sys,
+                                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices!, idx],
+                                },
+                            };
+                        }
+                    }
                 }
             }
             return { state: currentState, events };
@@ -508,6 +643,14 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             for (const evt of r.events) {
                 updatedCore = reduce(updatedCore, evt as SmashUpEvent);
             }
+        }
+
+        // 【关键修复】所有基地计分完成后，补发延迟事件
+        // 只有当 remainingIndices 为空时（所有基地都计分完了），才补发延迟事件
+        // 这样可以避免在中间步骤重复补发
+        if (deferredEvents && deferredEvents.length > 0) {
+            console.log('[multi_base_scoring] 所有基地计分完成，补发延迟事件:', deferredEvents.length);
+            events.push(...deferredEvents as SmashUpEvent[]);
         }
 
         return { state: currentState, events };
@@ -645,6 +788,192 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // Me First! 响应完成后，执行实际基地记分
             const events: GameEvent[] = [];
 
+            // 【重新计分规则】检查是否刚关闭了 afterScoring 响应窗口
+            // 如果力量变化，需要重新计分该基地（即使没有达到临界值）
+            if (state.sys.afterScoringInitialPowers) {
+                const { baseIndex: scoredBaseIndex, powers: initialPowers } = state.sys.afterScoringInitialPowers as any;
+                
+                console.log('[onPhaseExit] 检查 afterScoring 后力量变化:', {
+                    baseIndex: scoredBaseIndex,
+                    initialPowers,
+                });
+                
+                // 计算当前力量
+                const currentPowers = new Map<PlayerId, number>();
+                const currentBase = core.bases[scoredBaseIndex];
+                if (currentBase) {
+                    for (const m of currentBase.minions) {
+                        const prev = currentPowers.get(m.controller) ?? 0;
+                        currentPowers.set(m.controller, prev + getEffectivePower(core, m, scoredBaseIndex));
+                    }
+                    // 加上 ongoing 卡力量贡献
+                    for (const playerId of Object.keys(core.players)) {
+                        const bonus = getOngoingCardPowerContribution(currentBase, playerId);
+                        if (bonus > 0) {
+                            const prev = currentPowers.get(playerId) ?? 0;
+                            currentPowers.set(playerId, prev + bonus);
+                        }
+                    }
+                }
+                
+                // 检查是否有力量变化
+                let powerChanged = false;
+                for (const [playerId, initialPower] of Object.entries(initialPowers)) {
+                    const currentPower = currentPowers.get(playerId) ?? 0;
+                    if (currentPower !== initialPower) {
+                        powerChanged = true;
+                        console.log('[onPhaseExit] 力量变化:', {
+                            playerId,
+                            initialPower,
+                            currentPower,
+                            delta: currentPower - initialPower,
+                        });
+                        break;
+                    }
+                }
+                
+                // 如果力量变化，重新计分该基地
+                if (powerChanged && currentBase) {
+                    console.log('[onPhaseExit] 力量变化，重新计分基地:', scoredBaseIndex);
+                    
+                    // 重新计算排名
+                    const playerPowers = new Map<PlayerId, number>();
+                    const playerHasMinions = new Map<PlayerId, boolean>();
+                    for (const m of currentBase.minions) {
+                        const prev = playerPowers.get(m.controller) ?? 0;
+                        playerPowers.set(m.controller, prev + getEffectivePower(core, m, scoredBaseIndex));
+                        playerHasMinions.set(m.controller, true);
+                    }
+                    // 加上 ongoing 卡力量贡献
+                    for (const playerId of Object.keys(core.players)) {
+                        const bonus = getOngoingCardPowerContribution(currentBase, playerId);
+                        if (bonus > 0) {
+                            const prev = playerPowers.get(playerId) ?? 0;
+                            playerPowers.set(playerId, prev + bonus);
+                        }
+                    }
+                    
+                    // 规则：须有至少 1 个随从或至少 1 点力量才有资格参与计分
+                    const sorted = Array.from(playerPowers.entries())
+                        .filter(([pid, p]) => p > 0 || playerHasMinions.get(pid))
+                        .sort((a, b) => b[1] - a[1]);
+                    
+                    // Property 16: 平局玩家获得该名次最高 VP
+                    const rankings: { playerId: string; power: number; vp: number }[] = [];
+                    let rankSlot = 0;
+                    const baseDef = getBaseDef(currentBase.defId)!;
+                    for (let i = 0; i < sorted.length; i++) {
+                        const [playerId, power] = sorted[i];
+                        if (i > 0 && power < sorted[i - 1][1]) {
+                            rankSlot = i;
+                        }
+                        rankings.push({
+                            playerId,
+                            power,
+                            vp: rankSlot < 3 ? baseDef.vpAwards[rankSlot] : 0,
+                        });
+                    }
+                    
+                    // 收集每位玩家的随从力量 breakdown（用于 ActionLog 展示）
+                    const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
+                    for (const m of currentBase.minions) {
+                        const bd = getEffectivePowerBreakdown(core, m, scoredBaseIndex);
+                        if (!minionBreakdowns[m.controller]) minionBreakdowns[m.controller] = [];
+                        minionBreakdowns[m.controller].push({
+                            defId: m.defId,
+                            basePower: bd.basePower,
+                            finalPower: bd.finalPower,
+                            modifiers: [
+                                ...(bd.permanentModifier !== 0 ? [{ sourceDefId: m.defId, sourceName: 'actionLog.powerModifier.permanent', value: bd.permanentModifier }] : []),
+                                ...(bd.tempModifier !== 0 ? [{ sourceDefId: m.defId, sourceName: 'actionLog.powerModifier.temp', value: bd.tempModifier }] : []),
+                                ...bd.ongoingDetails.map(d => ({ sourceDefId: d.sourceDefId, sourceName: d.sourceName, value: d.value })),
+                            ],
+                        });
+                    }
+                    
+                    // 发出新的 BASE_SCORED 事件（重新计分结果）
+                    const scoreEvt: BaseScoredEvent = {
+                        type: SU_EVENTS.BASE_SCORED,
+                        payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId, rankings, minionBreakdowns },
+                        timestamp: now,
+                    };
+                    events.push(scoreEvt);
+                    
+                    console.log('[onPhaseExit] 重新计分完成:', {
+                        baseIndex: scoredBaseIndex,
+                        rankings,
+                    });
+                }
+                
+                // ⚠️ 关键修复：无论力量是否变化，都需要发出 BASE_CLEARED 和 BASE_REPLACED 事件
+                // 原因：afterScoring 响应窗口打开时，这些事件被延迟发出
+                // 响应窗口关闭后，必须补发这些事件，否则基地不会被清除和替换
+                if (currentBase) {
+                    // 发出 BASE_CLEARED 事件
+                    const clearEvt: BaseClearedEvent = {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId },
+                        timestamp: now,
+                    };
+                    events.push(clearEvt);
+                    
+                    // 替换基地
+                    if (core.baseDeck.length > 0) {
+                        const newBaseDefId = core.baseDeck[0];
+                        const replaceEvt: BaseReplacedEvent = {
+                            type: SU_EVENTS.BASE_REPLACED,
+                            payload: {
+                                baseIndex: scoredBaseIndex,
+                                oldBaseDefId: currentBase.defId,
+                                newBaseDefId,
+                            },
+                            timestamp: now,
+                        };
+                        events.push(replaceEvt);
+                        
+                        // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
+                        const revealCtx = {
+                            state: core,
+                            matchState: state,
+                            baseIndex: scoredBaseIndex,
+                            baseDefId: newBaseDefId,
+                            playerId: pid,
+                            now,
+                        };
+                        const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
+                        events.push(...revealResult.events);
+                        if (revealResult.matchState) state = revealResult.matchState;
+                    }
+                    
+                    console.log('[onPhaseExit] 补发 BASE_CLEARED 和 BASE_REPLACED 事件');
+                }
+                
+                // 标记该基地已记分，防止后续正常计分循环重复计分
+                if (!state.sys.scoredBaseIndices) {
+                    state = {
+                        ...state,
+                        sys: { ...state.sys, scoredBaseIndices: [scoredBaseIndex] },
+                    };
+                } else if (!state.sys.scoredBaseIndices.includes(scoredBaseIndex)) {
+                    state = {
+                        ...state,
+                        sys: {
+                            ...state.sys,
+                            scoredBaseIndices: [...state.sys.scoredBaseIndices, scoredBaseIndex],
+                        },
+                    };
+                }
+                
+                // 清理状态（不可变更新）
+                state = {
+                    ...state,
+                    sys: {
+                        ...state.sys,
+                        afterScoringInitialPowers: undefined,
+                    },
+                };
+            }
+
             // 使用统一查询函数（优先锁定列表，回退实时计算）
             // Wiki Phase 3 Step 4：一旦基地在进入计分阶段时达到 breakpoint，必定计分
             const lockedIndices = getScoringEligibleBaseIndices(core);
@@ -733,10 +1062,24 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return { events: [], halt: true, updatedState } as PhaseExitResult;
             }
 
-            // 1 个基地达标 → 直接记分
+            // 1 个基地达标 → 检查当前交互或队列中是否已有 multi_base_scoring 交互
+            // 如果有，说明之前已经创建了交互，不应该重复计分
             // 使用 remainingIndices（已过滤已记分基地），按顺序逐个计分
+            const currentIsMultiBaseScoring = 
+                (state.sys.interaction.current?.data as any)?.sourceId === 'multi_base_scoring';
+            const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
+                (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
+            );
+            
+            if (currentIsMultiBaseScoring || hasMultiBaseScoringInQueue) {
+                // 当前交互或队列中已有 multi_base_scoring 交互，不重复计分
+                // halt=true：等待交互解决
+                return { events: [], halt: true } as PhaseExitResult;
+            }
+            
             let currentBaseDeck = core.baseDeck;
             let currentMatchState: MatchState<SmashUpCore> = state;
+            let currentCore = core;  // ✅ 修复：维护一个本地 core 副本，每次计分后更新
 
             const maxIterations = remainingIndices.length;
             for (let iter = 0; iter < maxIterations; iter++) {
@@ -746,10 +1089,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 console.log('[onPhaseExit] 记分基地:', {
                     iter,
                     foundIndex,
-                    baseDefId: core.bases[foundIndex]?.defId,
+                    baseDefId: currentCore.bases[foundIndex]?.defId,
+                    currentBaseDeck: currentBaseDeck.slice(0, 3),  // 只显示前3个
                 });
 
-                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
+                const result = scoreOneBase(currentCore, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
                 events.push(...result.events);
                 currentBaseDeck = result.newBaseDeck;
                 // 不可变传播 matchState（afterScoring 基地能力可能创建 Interaction）
@@ -757,7 +1101,38 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     currentMatchState = result.matchState;
                 }
 
+                // ✅ 修复：将本次计分的事件 reduce 到 currentCore，确保下次计分使用最新状态
+                for (const evt of result.events) {
+                    currentCore = reduce(currentCore, evt as SmashUpEvent);
+                }
+
+                // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
+                if (currentMatchState.sys.interaction?.current) {
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+                }
+                
+                // afterScoring 响应窗口打开 → halt 等响应窗口关闭后重新计分
+                // 检查返回的事件中是否包含 RESPONSE_WINDOW_OPENED 事件
+                const hasResponseWindowOpened = result.events.some(
+                    (evt: SmashUpEvent) => evt.type === 'RESPONSE_WINDOW_OPENED'
+                );
+                if (hasResponseWindowOpened) {
+                    console.log('[onPhaseExit] afterScoring 响应窗口打开（检测到 RESPONSE_WINDOW_OPENED 事件），halt 等待响应');
+                    // ⚠️ 关键修复：afterScoring 响应窗口打开时，不标记基地为"已记分"
+                    // 原因：响应窗口关闭后，onPhaseExit 重新进入时，需要重新计分该基地
+                    // 如果此时标记为"已记分"，remainingIndices 会过滤掉该基地，导致不计分
+                    // 
+                    // 正确流程：
+                    // 1. scoreOneBase 打开 afterScoring 响应窗口 → halt（不标记"已记分"）
+                    // 2. 响应窗口关闭 → onAutoContinueCheck 返回 autoContinue: true
+                    // 3. onPhaseExit 重新进入 → remainingIndices 包含该基地 → 重新计分
+                    // 4. 重新计分时检查力量变化 → 如果变化则发出新的 BASE_SCORED 事件
+                    // 5. 发出 BASE_CLEARED 和 BASE_REPLACED 事件 → 标记"已记分"
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+                }
+
                 // 标记该基地已记分（不可变更新）
+                // ⚠️ 只有在 scoreOneBase 成功完成（没有打开响应窗口）后，才标记为"已记分"
                 if (!currentMatchState.sys.scoredBaseIndices) {
                     currentMatchState = {
                         ...currentMatchState,
@@ -777,11 +1152,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     scoredBaseIndices: currentMatchState.sys.scoredBaseIndices,
                     scoredBaseIndicesRef: `[${currentMatchState.sys.scoredBaseIndices.join(',')}]`,
                 });
-
-                // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
-                if (currentMatchState.sys.interaction?.current) {
-                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
-                }
             }
 
             // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），
@@ -877,6 +1247,18 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         }
 
         if (to === 'scoreBases') {
+            // 清理上一轮的触发标记（防止异常退出导致标记残留）
+            events.push({
+                type: SU_EVENT_TYPES.BEFORE_SCORING_CLEARED,
+                payload: {},
+                timestamp: now,
+            } as GameEvent);
+            events.push({
+                type: SU_EVENT_TYPES.AFTER_SCORING_CLEARED,
+                payload: {},
+                timestamp: now,
+            } as GameEvent);
+
             // 检查是否有基地达到临界点，没有则跳过 Me First! 响应窗口
             const eligibleIndices = getScoringEligibleBaseIndices(core);
 
@@ -965,9 +1347,17 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 hasResponseWindow: !!state.sys.responseWindow?.current,
             });
             
-            // 情况1：flowHalted=true 且交互已解决 → 自动推进
-            if (state.sys.flowHalted && !state.sys.interaction.current) {
-                console.log('[onAutoContinueCheck] scoreBases: flowHalted=true 且交互已解决，自动推进');
+            // 情况1：flowHalted=true 且交互已解决且响应窗口已关闭 → 自动推进
+            if (state.sys.flowHalted && !state.sys.interaction.current && !state.sys.responseWindow?.current) {
+                // 【修复】如果存在 afterScoringInitialPowers，说明需要重新计分
+                // 返回 autoContinue: true，触发 ADVANCE_PHASE，这会再次调用 onPhaseExit
+                // onPhaseExit 开头的重新计分逻辑会执行，然后推进到 draw 阶段
+                if ((state.sys as any).afterScoringInitialPowers) {
+                    console.log('[onAutoContinueCheck] scoreBases: 检测到 afterScoringInitialPowers，自动推进触发重新计分');
+                    return { autoContinue: true, playerId: pid };
+                }
+                
+                console.log('[onAutoContinueCheck] scoreBases: flowHalted=true 且交互已解决且响应窗口已关闭，自动推进');
                 return { autoContinue: true, playerId: pid };
             }
             
@@ -1126,10 +1516,11 @@ function postProcessSystemEvents(
     // 初始化已处理事件集合（如果不存在）
     // 使用 any 类型断言绕过 SystemState 类型限制（这是游戏特定的临时状态）
     // 【D45 修复】统一处理 MINION_PLAYED 和 ACTION_PLAYED 的去重
-    if (!ms.sys._processedPlayedEvents) {
-        ms.sys._processedPlayedEvents = new Set<string>();
+    const sysAny = ms.sys as any;
+    if (!sysAny._processedPlayedEvents || !(sysAny._processedPlayedEvents instanceof Set)) {
+        sysAny._processedPlayedEvents = new Set<string>();
     }
-    const processedSet = ms.sys._processedPlayedEvents;
+    const processedSet = sysAny._processedPlayedEvents as Set<string>;
     
     // 【修复】清理返回手牌的随从的去重标记
     // 当随从返回手牌后再次打出时，应该重新触发 onPlay 能力

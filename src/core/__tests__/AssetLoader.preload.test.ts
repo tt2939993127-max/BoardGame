@@ -95,26 +95,33 @@ describe('preloadCriticalImages', () => {
         expect(warm).toEqual([]);
     });
 
-    it('10s 超时后放行（不无限等待）', async () => {
+    it('单张图片超时后不阻塞整体加载', async () => {
         vi.useFakeTimers();
 
-        // Image that never resolves
+        let imageCount = 0;
         vi.stubGlobal('Image', class {
             onload: (() => void) | null = null;
             onerror: (() => void) | null = null;
             private _src = '';
             get src() { return this._src; }
-            set src(value: string) { this._src = value; /* never fires */ }
+            set src(value: string) { 
+                this._src = value;
+                imageCount++;
+                // 第一张图片永远不触发（模拟超时），第二张图片立即成功
+                if (imageCount === 2 && this.onload) {
+                    setTimeout(() => this.onload?.(), 0);
+                }
+            }
         });
 
         registerGameAssets('test-timeout', {
-            criticalImages: ['slow.png'],
+            criticalImages: ['slow.png', 'fast.png'],
         });
 
         const promise = preloadCriticalImages('test-timeout');
 
-        // Advance past the 10s timeout
-        await vi.advanceTimersByTimeAsync(10_001);
+        // 推进单张图片的 30s 超时
+        await vi.advanceTimersByTimeAsync(30_001);
 
         const warm = await promise;
         expect(warm).toEqual([]);

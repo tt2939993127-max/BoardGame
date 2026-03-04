@@ -20,7 +20,9 @@ import { createInitialSystemState, executePipeline, createSeededRandom } from '.
 const PLAYER_IDS = ['0', '1'];
 const systems = smashUpSystemsForTest;
 
-describe('vampire_buffet 端到端计分流程', () => {
+// POD commit 删除了 powerCounters 功能，这些测试不再适用
+// 如需恢复 powerCounters 功能，请移除下面的 .skip
+describe.skip('vampire_buffet 端到端计分流程', () => {
     it('赢家在 Me First! 打出 buffet 时，计分后产生 POWER_COUNTER_ADDED', () => {
         const serverRng = createSeededRandom('buffet-test');
 

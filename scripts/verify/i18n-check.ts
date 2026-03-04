@@ -376,6 +376,54 @@ export const collectReferencesFromContent = (
         }
     }
 
+    // 处理 t(variable) 形式的调用
+    for (const aliasName of aliasMap.keys()) {
+        const variableRegex = new RegExp("\\b" + aliasName + "\\s*\\(\\s*([A-Za-z_$][\\w$]*)(?:\\s*[,)])", 'g');
+        let match: RegExpExecArray | null;
+        while ((match = variableRegex.exec(content)) !== null) {
+            const identifier = match[1];
+            const line = getLineNumber(content, match.index);
+            const source = `${aliasName}(${identifier})`;
+            
+            // 检查是否有 i18n.exists() 保护
+            const contextStart = Math.max(0, match.index - 300);
+            const context = content.slice(contextStart, match.index + 300);
+            const hasI18nExistsCheck = new RegExp(`i18n\\.exists\\s*\\(\\s*${identifier}\\b`).test(context);
+            if (hasI18nExistsCheck) {
+                continue;
+            }
+            
+            // 尝试解析变量值
+            const resolved = resolveIdentifierKeys(content, identifier, match.index);
+            
+            if (resolved.dynamic || resolved.keys.length === 0) {
+                addWarning({ 
+                    type: 'dynamic-key', 
+                    key: identifier, 
+                    file: filePath, 
+                    line, 
+                    source,
+                    detail: `变量 ${identifier} 的值无法静态解析` 
+                });
+                continue;
+            }
+            
+            // 解析成功，检查所有可能的 key
+            const callEnd = findCallEnd(content, match.index + match[0].length);
+            const snippet = content.slice(match.index, callEnd);
+            const overrideNamespaces = findNsOverride(snippet);
+            
+            for (const keyValue of resolved.keys) {
+                const parsed = parseI18nKey(keyValue, knownNamespaces);
+                const namespaces = parsed.namespace
+                    ? [parsed.namespace]
+                    : (overrideNamespaces.length ? overrideNamespaces : resolveAliasNamespaces(aliasName, line, source));
+                if (!namespaces.length) continue;
+                pushReference(parsed.key, namespaces, line, source);
+            }
+        }
+    }
+
     const i18nCallRegex = /\bi18n\.(t|exists)\s*\(\s*(['"`])((?:\\.|(?!\2).)*)\2/g;
     let i18nMatch: RegExpExecArray | null;
     while ((i18nMatch = i18nCallRegex.exec(content)) !== null) {

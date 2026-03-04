@@ -160,7 +160,8 @@ describe('AuthModule (e2e)', () => {
 
         const ip = '203.0.113.10';
         const attempts = [] as Array<{ success: boolean; code: string }>;
-        for (let i = 0; i < 5; i += 1) {
+        // LOGIN_FAIL_MAX_COUNT = 10，需要 10 次失败才会锁定
+        for (let i = 0; i < 10; i += 1) {
             const res = await request(app.getHttpServer())
                 .post('/auth/login')
                 .set('x-forwarded-for', ip)
@@ -170,8 +171,8 @@ describe('AuthModule (e2e)', () => {
         }
 
         expect(attempts[0].code).toBe('AUTH_INVALID_PASSWORD');
-        expect(attempts[4].code).toBe('AUTH_LOGIN_LOCKED');
-        expect(attempts[4].success).toBe(false);
+        expect(attempts[9].code).toBe('AUTH_LOGIN_LOCKED');
+        expect(attempts[9].success).toBe(false);
     });
 
     it('修改昵称流程', async () => {

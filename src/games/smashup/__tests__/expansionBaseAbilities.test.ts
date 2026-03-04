@@ -102,6 +102,19 @@ function makeCtx(overrides: Partial<BaseAbilityContext>): BaseAbilityContext {
     };
 }
 
+/** 检查 MatchState 是否包含指定 sourceId 的交互 */
+function hasInteraction(matchState: any, sourceId: string): boolean {
+    const queue = matchState?.sys?.interaction?.queue ?? [];
+    const current = matchState?.sys?.interaction?.current;
+    
+    // 检查队列中的交互
+    const inQueue = queue.some((i: any) => i.data?.sourceId === sourceId);
+    // 检查当前交互
+    const isCurrent = current?.data?.sourceId === sourceId;
+    
+    return inQueue || isCurrent;
+}
+
 // ============================================================================
 // 克苏鲁扩展
 // ============================================================================
@@ -179,7 +192,8 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
         expect(result.events).toHaveLength(0);
             const interactions = getInteractionsFromResult(result);
             expect(interactions).toHaveLength(1);
-        expect(interactions[0].data.sourceId).toBe('base_innsmouth_base');
+        // 修正：印斯茅斯基地现在是两步交互，第一步选择玩家
+        expect(interactions[0].data.sourceId).toBe('base_innsmouth_base_choose_player');
     });
 
     it('所有弃牌堆为空时不触发', () => {
@@ -279,6 +293,7 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
                 },
             }),
             baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
             minionUid: 'm1',
             minionDefId: 'alien_collector', // 刚打出的随从
         }));
@@ -310,6 +325,7 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
                 },
             }),
             baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
             minionUid: 'm2',
             minionDefId: 'alien_collector',
         }));
@@ -330,11 +346,12 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
                 },
             }),
             baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
             minionUid: 'm1',
             minionDefId: 'alien_collector',
         }));
 
-        // 实现已改为直接授予额度，不检查手牌
+        // 实现为直接授予额度，不检查手牌
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe('su:limit_modified');
         expect(events[0].payload).toMatchObject({
@@ -365,6 +382,7 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
                 },
             }),
             baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
             playerId: '1', // 玩家 1 打出随从
             minionUid: 'm1',
             minionDefId: 'innsmouth_the_locals',
@@ -381,6 +399,30 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
             restrictToBase: 0,
             sameNameOnly: true,
             sameNameDefId: 'innsmouth_the_locals',
+        });
+    });
+
+    it('额度应保存触发时的 defId（用于验证层检查）', () => {
+        // 测试 reduce 层是否正确保存了 sameNameDefId
+        const result = triggerBaseAbilityWithMS('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_plateau_of_leng')],
+                players: {
+                    '0': makePlayer('0', {
+                        minionsPlayedPerBase: { 0: 1 },
+                    }),
+                    '1': makePlayer('1'),
+                },
+            }),
+            baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
+            minionUid: 'm1',
+            minionDefId: 'alien_collector',
+        }));
+
+        // 验证事件包含 sameNameDefId
+        expect(result.events[0].payload).toMatchObject({
+            sameNameDefId: 'alien_collector',
         });
     });
 });

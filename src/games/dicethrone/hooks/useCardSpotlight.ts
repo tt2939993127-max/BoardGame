@@ -172,6 +172,9 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     ?? selectedCharacters?.[bonusPlayerId]
                     ?? undefined;
 
+                // 检测是否为汇总事件（effectKey 包含 .result）
+                const isSummaryEvent = bonusEffectKey?.includes('.result');
+
                 // 尝试绑定到卡牌队列（卡左骰右）
                 const cardQueue = cardSpotlightQueueRef.current;
                 const thresholdMs = 1500;
@@ -183,28 +186,46 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     );
 
                 if (cardCandidate) {
-                    setCardSpotlightQueue(prev =>
-                        prev.map(item =>
-                            item.id === cardCandidate.id
-                                ? {
-                                    ...item,
-                                    bonusDice: [
-                                        ...(item.bonusDice || []),
-                                        {
-                                            value: bonusValue,
-                                            face: bonusFace,
-                                            timestamp: eventTimestamp,
-                                            effectKey: bonusEffectKey,
-                                            effectParams: bonusEffectParams,
-                                            characterId: resolvedCharacterId,
+                    if (isSummaryEvent) {
+                        // 汇总事件：添加到 summaryText 字段
+                        setCardSpotlightQueue(prev =>
+                            prev.map(item =>
+                                item.id === cardCandidate.id
+                                    ? {
+                                        ...item,
+                                        summaryText: {
+                                            effectKey: bonusEffectKey!,
+                                            effectParams: bonusEffectParams!,
                                         },
-                                    ],
-                                }
-                                : item
-                        )
-                    );
+                                    }
+                                    : item
+                            )
+                        );
+                    } else {
+                        // 普通骰子事件：添加到 bonusDice 数组
+                        setCardSpotlightQueue(prev =>
+                            prev.map(item =>
+                                item.id === cardCandidate.id
+                                    ? {
+                                        ...item,
+                                        bonusDice: [
+                                            ...(item.bonusDice || []),
+                                            {
+                                                value: bonusValue,
+                                                face: bonusFace,
+                                                timestamp: eventTimestamp,
+                                                effectKey: bonusEffectKey,
+                                                effectParams: bonusEffectParams,
+                                                characterId: resolvedCharacterId,
+                                            },
+                                        ],
+                                    }
+                                    : item
+                            )
+                        );
+                    }
                 } else {
-                    // 独立骰子特写
+                    // 独立骰子特写（不绑定到卡牌）
                     setBonusDieValue(bonusValue);
                     setBonusDieFace(bonusFace);
                     setBonusDieEffectKey(bonusEffectKey);

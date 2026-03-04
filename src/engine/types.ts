@@ -238,6 +238,8 @@ export interface ResponseWindowState {
         pendingInteractionId?: string;
         /** 本轮是否有人执行了响应动作（用于 loopUntilAllPass 循环判定） */
         actionTakenThisRound?: boolean;
+        /** 连续所有人都 pass 的轮数（用于 loopUntilAllPass 循环判定） */
+        consecutivePassRounds?: number;
     };
 }
 

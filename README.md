@@ -187,14 +187,15 @@ bash deploy.sh update
 ## 🛠️ 常用命令
 
 ```bash
-npm run dev              # 启动完整开发环境
-npm run build            # 构建前端
-npm run generate:manifests  # 重新生成游戏清单
-npm run generate:locales    # 生成卡牌多语言文件
-npm run compress:images     # 压缩图片资源
-npm run compress:audio      # 压缩音频资源（wav → ogg）
-npm run assets:manifest     # 生成资源清单
-npm run check:arch          # 架构检查
+npm run dev                      # 启动完整开发环境
+npm run monitor:kiro:timer:20min # Kiro 自动恢复（每 20 分钟发送 continue）⭐
+npm run build                    # 构建前端
+npm run generate:manifests       # 重新生成游戏清单
+npm run generate:locales         # 生成卡牌多语言文件
+npm run compress:images          # 压缩图片资源
+npm run compress:audio           # 压缩音频资源（wav → ogg）
+npm run assets:manifest          # 生成资源清单
+npm run check:arch               # 架构检查
 
 # 音频注册表 & 资源上传（新增/修改音频文件后必须执行）
 node scripts/audio/generate_common_audio_registry.js  # 重新生成音频注册表
@@ -344,6 +345,7 @@ node scripts/infra/port-allocator.js 1  # Worker 1
 - [API 文档](docs/api/README.md) — 认证、社交、管理等接口说明
 - [原型构建器](docs/ugc-builder.md) — 简易游戏原型工具
 - [自动化测试](docs/automated-testing.md) — 测试策略与实践
+- **Kiro 自动恢复** — 定时发送 continue 命令，用于网络中断恢复（`npm run monitor:kiro:timer:20min`）
 
 
 ## 🤝 贡献

@@ -14,6 +14,31 @@ import { UI_Z_INDEX } from '../../../core';
 import type { DieFace } from '../types';
 import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
+import { useTranslation } from 'react-i18next';
+import { motion } from 'framer-motion';
+
+/** 汇总文本组件（显示伤害加成等信息） */
+const SummaryText: React.FC<{
+    effectKey: string;
+    effectParams: Record<string, string | number>;
+    locale?: string;
+}> = ({ effectKey, effectParams }) => {
+    const { t } = useTranslation('game-dicethrone');
+    const text = t(effectKey, effectParams);
+    
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-white text-[1.8vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
+            style={{
+                textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)',
+            }}
+        >
+            {text}
+        </motion.div>
+    );
+};
 
 /** 特写队列项 */
 export interface CardSpotlightItem {
@@ -37,6 +62,11 @@ export interface CardSpotlightItem {
         /** 骰子所属角色（用于图集选择） */
         characterId?: string;
     }>;
+    /** 汇总文本（如"2个弓面：伤害+2"） */
+    summaryText?: {
+        effectKey: string;
+        effectParams: Record<string, string | number>;
+    };
 }
 
 
@@ -118,19 +148,31 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
 
                 {/* 额外骰子（右）- 支持多颗骰子横向排列 */}
                 {hasBonusDice && (
-                    <div className="flex items-center gap-[1vw] relative z-[1]">
-                        {currentItem.bonusDice!.map((die, index) => (
-                            <BonusDieSpotlightContent
-                                key={`${die.timestamp}-${index}`}
-                                value={die.value}
-                                face={die.face}
-                                effectKey={die.effectKey}
-                                effectParams={die.effectParams}
+                    <div className="flex flex-col items-center gap-[1vw] relative z-[1]">
+                        {/* 骰子行 */}
+                        <div className="flex items-center gap-[1vw]">
+                            {currentItem.bonusDice!.map((die, index) => (
+                                <BonusDieSpotlightContent
+                                    key={`${die.timestamp}-${index}`}
+                                    value={die.value}
+                                    face={die.face}
+                                    effectKey={die.effectKey}
+                                    effectParams={die.effectParams}
+                                    locale={locale}
+                                    size="10vw"
+                                    characterId={die.characterId}
+                                />
+                            ))}
+                        </div>
+                        
+                        {/* 汇总文本（如"2个弓面：伤害+2"） */}
+                        {currentItem.summaryText && (
+                            <SummaryText
+                                effectKey={currentItem.summaryText.effectKey}
+                                effectParams={currentItem.summaryText.effectParams}
                                 locale={locale}
-                                size="10vw"
-                                characterId={die.characterId}
                             />
-                        ))}
+                        )}
                     </div>
                 )}
             </div>

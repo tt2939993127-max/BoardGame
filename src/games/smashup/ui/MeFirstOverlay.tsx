@@ -41,7 +41,10 @@ export const MeFirstOverlay: React.FC<{
     // 有交互/正在选择基地出牌时隐藏，避免遮挡场景操作
     const hasInteraction = !!G.sys.interaction?.current;
 
-    if (!responseWindow || responseWindow.windowType !== 'meFirst') return null;
+    // 支持 meFirst 和 afterScoring 两种窗口类型
+    if (!responseWindow) return null;
+    if (responseWindow.windowType !== 'meFirst' && 
+        responseWindow.windowType !== 'afterScoring') return null;
     if (hasInteraction || pendingCard) return null;
 
     const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
@@ -50,19 +53,39 @@ export const MeFirstOverlay: React.FC<{
 
     // 检查手牌中是否有特殊行动卡或 beforeScoringPlayable 随从
     const myPlayer = playerID ? core.players[playerID] : undefined;
+    
+    // 根据窗口类型过滤可用卡牌
     const specialCards = myPlayer?.hand.filter(c => {
         if (c.type !== 'action') return false;
         const def = getCardDef(c.defId) as ActionCardDef | undefined;
-        return def?.subtype === 'special';
+        if (def?.subtype !== 'special') return false;
+        
+        // 检查 specialTiming 是否匹配窗口类型
+        const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+        if (responseWindow.windowType === 'meFirst') {
+            // meFirst 窗口：只允许 beforeScoring 卡牌
+            return cardTiming === 'beforeScoring';
+        } else if (responseWindow.windowType === 'afterScoring') {
+            // afterScoring 窗口：只允许 afterScoring 卡牌
+            return cardTiming === 'afterScoring';
+        }
+        return false;
     }) ?? [];
     
     const beforeScoringMinions = myPlayer?.hand.filter(c => {
+        // beforeScoringPlayable 随从只在 meFirst 窗口可用
+        if (responseWindow.windowType === 'afterScoring') return false;
         if (c.type !== 'minion') return false;
         const def = getCardDef(c.defId);
         return (def as any)?.beforeScoringPlayable === true;
     }) ?? [];
     
     const hasRespondableCards = specialCards.length > 0 || beforeScoringMinions.length > 0;
+    
+    // 窗口标题
+    const windowTitle = responseWindow.windowType === 'afterScoring' 
+        ? t('ui.after_scoring_title', { defaultValue: '计分后响应' })
+        : t('ui.me_first_title');
 
     return (
         <motion.div
@@ -81,7 +104,7 @@ export const MeFirstOverlay: React.FC<{
                 layout>
                 <div className="text-center mb-3">
                     <h3 className="text-xl font-black uppercase tracking-tight text-amber-800 transform rotate-1">
-                        {t('ui.me_first_title')}
+                        {windowTitle}
                     </h3>
                     <p className="text-sm font-bold text-slate-600 mt-1" data-testid="me-first-status">
                         {isMyResponse

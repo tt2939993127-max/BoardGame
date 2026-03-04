@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { generateUUID } from '../../../lib/uuid';
 import { MAX_CHAT_LENGTH } from '../../../shared/chat';
 
 /**
@@ -42,7 +43,7 @@ describe('聊天消息验证', () => {
         const type = 'text' as const;
 
         const msg = {
-            id: serverResponse.messageData?.id ?? crypto.randomUUID(),
+            id: serverResponse.messageData?.id ?? generateUUID(),
             from: userId,
             to: toUserId,
             content,

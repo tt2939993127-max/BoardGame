@@ -492,6 +492,72 @@ function giantAntUnderPressure(ctx: AbilityContext): AbilityResult {
 }
 
 function giantAntWeAreTheChampions(ctx: AbilityContext): AbilityResult {
+    // 检查是否在 afterScoring 响应窗口中
+    const responseWindow = ctx.matchState?.sys.responseWindow?.current;
+    const isInAfterScoringWindow = responseWindow?.windowType === 'afterScoring';
+    
+    if (isInAfterScoringWindow) {
+        // 在响应窗口中：立即执行（不生成 ARMED 事件）
+        // 捕获当前基地上己方有力量指示物的随从
+        const base = ctx.state.bases[ctx.baseIndex];
+        const sources = base?.minions
+            .filter(m => m.controller === ctx.playerId && m.powerCounters > 0)
+            .map(m => ({
+                uid: m.uid,
+                defId: m.defId,
+                baseIndex: ctx.baseIndex,
+                counterAmount: m.powerCounters,
+            })) ?? [];
+        
+        if (sources.length === 0) {
+            // 没有符合条件的随从
+            return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+        }
+        
+        // 检查是否有足够的随从进行转移（至少需要2个随从：来源+目标）
+        const allMyMinions = collectOwnMinions(ctx.state, ctx.playerId);
+        if (allMyMinions.length < 2) {
+            return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+        }
+        
+        // 创建选择来源随从的交互
+        const sourceOptions = sources.map((s, i) => {
+            const def = getCardDef(s.defId);
+            return {
+                id: `minion-${i}`,
+                label: `${def?.name ?? s.defId}（力量指示物 ${s.counterAmount}）`,
+                value: { minionUid: s.uid, baseIndex: s.baseIndex, defId: s.defId, counterAmount: s.counterAmount },
+                _source: 'field' as const,
+            };
+        });
+        
+        const interaction = createSimpleChoice(
+            `giant_ant_we_are_the_champions_choose_source_${ctx.now}_${ctx.playerId}`,
+            ctx.playerId,
+            '我们乃最强：选择转出力量指示物的随从',
+            sourceOptions,
+            {
+                sourceId: 'giant_ant_we_are_the_champions_choose_source',
+                targetType: 'generic',
+            },
+        );
+        
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: {
+                    ...interaction.data,
+                    continuationContext: {
+                        reason: 'giant_ant_we_are_the_champions',
+                        scoringBaseIndex: ctx.baseIndex,
+                    } as WeAreTheChampionsSourceContext,
+                },
+            }),
+        };
+    }
+    
+    // 不在响应窗口中：生成 ARMED 事件（原有逻辑）
     // 捕获当前基地上己方有力量指示物的随从快照
     const base = ctx.state.bases[ctx.baseIndex];
     const sources = base?.minions
@@ -510,6 +576,7 @@ function giantAntWeAreTheChampions(ctx: AbilityContext): AbilityResult {
                 sourceDefId: 'giant_ant_we_are_the_champions',
                 playerId: ctx.playerId,
                 baseIndex: ctx.baseIndex,
+                cardUid: ctx.cardUid,
                 // 保存随从快照，供 afterScoring 使用（计分后随从已离场）
                 minionSnapshots: sources,
             },
@@ -823,7 +890,12 @@ const handleUnderPressureChooseSource: IH = (state, playerId, value, interaction
     const targets = collectOwnMinions(state.core, playerId).filter(m => 
         m.uid !== selected.minionUid && m.baseIndex !== scoringBaseIndex
     );
-    if (targets.length === 0) return { state, events: [] };
+    if (targets.length === 0) {
+        return { 
+            state, 
+            events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)]
+        };
+    }
 
     const interaction = createSimpleChoice(
         `giant_ant_under_pressure_choose_target_${timestamp}`,
@@ -951,7 +1023,12 @@ const handleWeAreTheChampionsChooseSource: IH = (state, playerId, value, _intera
     const targets = collectOwnMinions(state.core, playerId).filter(
         m => m.uid !== selected.minionUid,
     );
-    if (targets.length === 0) return { state, events: [] };
+    if (targets.length === 0) {
+        return { 
+            state, 
+            events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)]
+        };
+    }
 
     const interaction = createSimpleChoice(
         `giant_ant_we_are_the_champions_choose_target_${timestamp}`,

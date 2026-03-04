@@ -85,37 +85,33 @@ export function registerExpansionBaseAbilities(): void {
     });
 
     // ── 印斯茅斯基地（Innsmouth Base）────────────────────────────
-    // "在一个玩家打出一个随从到这后，该玩家可以将任意玩家弃牌堆中的一张卡放到其拥有者的牌库底?
+    // "在一个玩家打出一个随从到这后，该玩家可以将任意玩家弃牌堆中的一张卡放到其拥有者的牌库底"
+    // 第一步：选择从哪个玩家的弃牌堆选卡
     registerBaseAbility('base_innsmouth_base', 'onMinionPlayed', (ctx) => {
-        // 收集所有玩家弃牌堆中的卡牌
-        const discardCards: { uid: string; defId: string; ownerId: string; label: string }[] = [];
+        // 收集有弃牌堆卡牌的玩家
+        const playersWithDiscard: string[] = [];
         for (const [pid, player] of Object.entries(ctx.state.players)) {
-            for (const c of player.discard) {
-                const def = getCardDef(c.defId);
-                discardCards.push({
-                    uid: c.uid,
-                    defId: c.defId,
-                    ownerId: pid,
-                    label: `${def?.name ?? c.defId} (${getPlayerLabel(pid)}的弃牌堆)`,
-                });
+            if (player.discard.length > 0) {
+                playersWithDiscard.push(pid);
             }
         }
 
-        if (discardCards.length === 0) return { events: [] };
+        if (playersWithDiscard.length === 0) return { events: [] };
 
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
+        const options = [
             { id: 'skip', label: '跳过', value: { skip: true } },
-            ...discardCards.map((c, i) => ({
-                id: `card-${i}`,
-                label: c.label,
-                value: { cardUid: c.uid, defId: c.defId, ownerId: c.ownerId },
+            ...playersWithDiscard.map((pid, i) => ({
+                id: `player-${i}`,
+                label: pid === ctx.playerId ? '你自己的弃牌堆' : `${getPlayerLabel(pid)}的弃牌堆`,
+                value: { targetPlayerId: pid },
             })),
         ];
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
-            `base_innsmouth_base_${ctx.now}`, ctx.playerId,
-            '印斯茅斯基地：选择一张弃牌堆卡放入牌库底', options as any[], 'base_innsmouth_base',
+            `base_innsmouth_base_choose_player_${ctx.now}`, ctx.playerId,
+            '印斯茅斯基地：选择从哪个玩家的弃牌堆选卡', options as any[],
+            { sourceId: 'base_innsmouth_base_choose_player', autoCancelOption: true },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -194,39 +190,19 @@ export function registerExpansionBaseAbilities(): void {
 
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
     // "每回合玩家第一次打出一个随从到这里后，可以额外打出一张与其同名的随从到这里"
+    // 实现：直接授予同名随从额度，玩家可以选择何时使用
     registerBaseAbility('base_plateau_of_leng', 'onMinionPlayed', (ctx) => {
-        console.log('[base_plateau_of_leng] 触发，授予同名随从额度:', {
-            playerId: ctx.playerId,
-            baseIndex: ctx.baseIndex,
-            minionDefId: ctx.minionDefId,
-        });
-        
-        if (!ctx.minionDefId) {
-            console.log('[base_plateau_of_leng] 跳过：无 minionDefId');
-            return { events: [] };
-        }
+        if (!ctx.minionDefId) return { events: [] };
         
         const player = ctx.state.players[ctx.playerId];
-        if (!player) {
-            console.log('[base_plateau_of_leng] 跳过：找不到玩家');
-            return { events: [] };
-        }
+        if (!player) return { events: [] };
 
         // 每回合只有第一次打出随从到此基地才触发
+        // reduce 已执行，minionsPlayedPerBase 包含刚打出的随从，首次打出时值为 1
         const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
-        console.log('[base_plateau_of_leng] 检查首次打出:', {
-            playedAtBase,
-            baseIndex: ctx.baseIndex,
-        });
-        
-        if (playedAtBase !== 1) {
-            console.log('[base_plateau_of_leng] 跳过：不是首次打出（playedAtBase =', playedAtBase, '）');
-            return { events: [] };
-        }
+        if (playedAtBase !== 1) return { events: [] };
 
         // 直接授予1个同名随从额度，限定到此基地
-        console.log('[base_plateau_of_leng] 授予同名随从额度');
-        
         return {
             events: [
                 grantExtraMinion(
@@ -234,9 +210,9 @@ export function registerExpansionBaseAbilities(): void {
                     'base_plateau_of_leng',
                     ctx.now,
                     ctx.baseIndex, // 限定到此基地
-                    { sameNameOnly: true, sameNameDefId: ctx.minionDefId }
-                )
-            ]
+                    { sameNameOnly: true, sameNameDefId: ctx.minionDefId }, // 同名约束
+                ),
+            ],
         };
     });
 
@@ -653,7 +629,44 @@ export function registerExpansionBaseInteractionHandlers(): void {
         return { state, events: [returnMadnessCard(playerId, madnessCard.uid, '疯人院：返回疯狂卡', timestamp)] };
     });
 
-    registerInteractionHandler('base_innsmouth_base', (state, _playerId, value, _iData, _random, timestamp) => {
+    // 印斯茅斯基地第一步：选择玩家后，创建第二步交互（选择卡牌）
+    registerInteractionHandler('base_innsmouth_base_choose_player', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; targetPlayerId?: string };
+        if (selected.skip) return { state, events: [] };
+
+        const targetPlayerId = selected.targetPlayerId!;
+        const targetPlayer = state.core.players[targetPlayerId];
+        if (!targetPlayer || targetPlayer.discard.length === 0) {
+            return { state, events: [] };
+        }
+
+        // 创建第二步交互：从该玩家的弃牌堆选择卡牌
+        const discardCards = targetPlayer.discard.map((c, i) => {
+            const def = getCardDef(c.defId);
+            return {
+                id: `card-${i}`,
+                label: def?.name ?? c.defId,
+                value: { cardUid: c.uid, defId: c.defId, ownerId: targetPlayerId },
+            };
+        });
+
+        const options = [
+            { id: 'skip', label: '跳过', value: { skip: true } },
+            ...discardCards,
+        ];
+
+        const interaction = createSimpleChoice(
+            `base_innsmouth_base_choose_card_${timestamp}`, playerId,
+            `印斯茅斯基地：从${targetPlayerId === playerId ? '你的' : getPlayerLabel(targetPlayerId) + '的'}弃牌堆选择一张卡`,
+            options as any[],
+            { sourceId: 'base_innsmouth_base_choose_card', autoCancelOption: true },
+        );
+
+        return { state: queueInteraction(state, interaction), events: [] };
+    });
+
+    // 印斯茅斯基地第二步：选择卡牌后，放入牌库底
+    registerInteractionHandler('base_innsmouth_base_choose_card', (state, _playerId, value, _iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; cardUid?: string; defId?: string; ownerId?: string };
         if (selected.skip) return { state, events: [] };
         return { state, events: [({

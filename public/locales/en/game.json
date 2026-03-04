@@ -7,7 +7,8 @@
     "character_not_selected": "No character selected",
     "character_selection_not_initialized": "Character selection not initialized",
     "command_failed": "Command failed",
-    "internal_error": "Server error, action auto-recovered"
+    "internal_error": "Server error, action auto-recovered",
+    "pipeline_error": "Command execution error, please try again"
   },
   "controls": {
     "undo": {

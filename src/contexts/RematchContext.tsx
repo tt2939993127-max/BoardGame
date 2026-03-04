@@ -168,8 +168,17 @@ export function RematchProvider({
 
     // 投票
     const vote = useCallback(() => {
+        console.log('[RematchContext] vote called', {
+            isMultiplayer,
+            matchId: matchInfoRef.current.matchId,
+            playerId: matchInfoRef.current.playerId,
+            isConnected: matchSocket.isSocketConnected(),
+        });
         if (isMultiplayer) {
+            console.log('[RematchContext] calling matchSocket.vote');
             matchSocket.vote();
+        } else {
+            console.warn('[RematchContext] not multiplayer, vote ignored');
         }
     }, [isMultiplayer]);
 
