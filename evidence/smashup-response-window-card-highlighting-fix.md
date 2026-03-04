@@ -226,4 +226,47 @@ const specialCards = myPlayer?.hand.filter(c => {
 
 ## 总结
 
-修复完成，响应窗口期间的卡牌高亮现在正确反映了卡牌的 `specialTiming` 属性。玩家在 meFirst 窗口只能看到 beforeScoring 卡牌可用，在 afterScoring 窗口只能看到 afterScoring 卡牌可用。
+修复完成，响应窗口期间的卡牌高亮和点击交互现在正确反映了卡牌的 `specialTiming` 属性。玩家在 meFirst 窗口只能看到并打出 beforeScoring 卡牌，在 afterScoring 窗口只能看到并打出 afterScoring 卡牌。
+
+## 补充修复：afterScoring 窗口卡牌点击问题
+
+**问题**：afterScoring 窗口期间，点击 afterScoring 卡牌无法打出，提示"无法打出响应，计分后"。
+
+**根本原因**：`handleCardClick` 中只检查 `isMeFirstResponse`，不检查 `isAfterScoringResponse`，导致 afterScoring 窗口期间点击卡牌被当作正常出牌阶段处理，而不是响应窗口处理。
+
+**修复**（`Board.tsx` 第 1108 行）：
+```typescript
+// 修改前
+if (isMeFirstResponse) {
+    // 只处理 meFirst 窗口
+    console.log('[DEBUG] handleCardClick: in Me First! response mode', ...);
+    // ...
+}
+
+// 修改后
+const isInResponseWindow = isMeFirstResponse || isAfterScoringResponse;
+if (isInResponseWindow) {
+    const windowType = responseWindow?.windowType;
+    console.log('[DEBUG] handleCardClick: in response window mode', {
+        cardType: card.type,
+        cardDefId: card.defId,
+        windowType,
+    });
+    
+    // beforeScoringPlayable 随从只在 meFirst 窗口可用
+    if (card.type === 'minion') {
+        if (windowType !== 'meFirst') {
+            console.log('[DEBUG] handleCardClick: minion not allowed in afterScoring window, denied');
+            playDeniedSound();
+            return;
+        }
+        // meFirst 窗口的随从逻辑...
+    }
+    // special 卡牌逻辑（两种窗口都支持）...
+}
+```
+
+**修复效果**：
+- ✅ meFirst 窗口：可以打出 beforeScoring 卡牌和 beforeScoringPlayable 随从
+- ✅ afterScoring 窗口：可以打出 afterScoring 卡牌，禁止打出随从
+- ✅ 两种窗口都正确处理 special 卡牌的基地选择逻辑

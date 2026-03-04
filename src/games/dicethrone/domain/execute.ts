@@ -394,44 +394,62 @@ export function execute(
                     // 移除单个状态
                     const currentStacks = targetPlayer.statusEffects[statusId] ?? 0;
                     if (currentStacks > 0) {
-                        const event: StatusRemovedEvent = {
-                            type: 'STATUS_REMOVED',
-                            payload: { targetId: targetPlayerId, statusId, stacks: currentStacks },
-                            sourceCommandType: command.type,
-                            timestamp,
-                        };
-                        events.push(event);
+                        // 检查状态是否可被移除
+                        const statusDef = (state.tokenDefinitions ?? []).find(def => def.id === statusId);
+                        const isRemovable = statusDef?.passiveTrigger?.removable ?? true;
+                        if (isRemovable) {
+                            const event: StatusRemovedEvent = {
+                                type: 'STATUS_REMOVED',
+                                payload: { targetId: targetPlayerId, statusId, stacks: currentStacks },
+                                sourceCommandType: command.type,
+                                timestamp,
+                            };
+                            events.push(event);
+                        }
                     }
                     // 也检查 tokens
                     const tokenAmount = targetPlayer.tokens[statusId] ?? 0;
                     if (tokenAmount > 0) {
-                        events.push({
-                            type: 'TOKEN_CONSUMED',
-                            payload: { playerId: targetPlayerId, tokenId: statusId, amount: tokenAmount, newTotal: 0 },
-                            sourceCommandType: command.type,
-                            timestamp,
-                        } as DiceThroneEvent);
-                    }
-                } else {
-                    // 移除所有状态
-                    Object.entries(targetPlayer.statusEffects).forEach(([sid, stacks]) => {
-                        if (stacks > 0) {
+                        // 检查 token 是否可被移除
+                        const tokenDef = (state.tokenDefinitions ?? []).find(def => def.id === statusId);
+                        const isRemovable = tokenDef?.passiveTrigger?.removable ?? true;
+                        if (isRemovable) {
                             events.push({
-                                type: 'STATUS_REMOVED',
-                                payload: { targetId: targetPlayerId, statusId: sid, stacks },
+                                type: 'TOKEN_CONSUMED',
+                                payload: { playerId: targetPlayerId, tokenId: statusId, amount: tokenAmount, newTotal: 0 },
                                 sourceCommandType: command.type,
                                 timestamp,
-                            } as StatusRemovedEvent);
+                            } as DiceThroneEvent);
+                        }
+                    }
+                } else {
+                    // 移除所有状态（只移除可被移除的）
+                    Object.entries(targetPlayer.statusEffects).forEach(([sid, stacks]) => {
+                        if (stacks > 0) {
+                            const statusDef = (state.tokenDefinitions ?? []).find(def => def.id === sid);
+                            const isRemovable = statusDef?.passiveTrigger?.removable ?? true;
+                            if (isRemovable) {
+                                events.push({
+                                    type: 'STATUS_REMOVED',
+                                    payload: { targetId: targetPlayerId, statusId: sid, stacks },
+                                    sourceCommandType: command.type,
+                                    timestamp,
+                                } as StatusRemovedEvent);
+                            }
                         }
                     });
                     Object.entries(targetPlayer.tokens).forEach(([tid, amount]) => {
                         if (amount > 0) {
-                            events.push({
-                                type: 'TOKEN_CONSUMED',
-                                payload: { playerId: targetPlayerId, tokenId: tid, amount, newTotal: 0 },
-                                sourceCommandType: command.type,
-                                timestamp,
-                            } as DiceThroneEvent);
+                            const tokenDef = (state.tokenDefinitions ?? []).find(def => def.id === tid);
+                            const isRemovable = tokenDef?.passiveTrigger?.removable ?? true;
+                            if (isRemovable) {
+                                events.push({
+                                    type: 'TOKEN_CONSUMED',
+                                    payload: { playerId: targetPlayerId, tokenId: tid, amount, newTotal: 0 },
+                                    sourceCommandType: command.type,
+                                    timestamp,
+                                } as DiceThroneEvent);
+                            }
                         }
                     });
                 }
@@ -451,6 +469,15 @@ export function execute(
                 // 检查是 statusEffects 还是 tokens
                 const fromStacks = fromPlayer.statusEffects[statusId] ?? 0;
                 const fromTokens = fromPlayer.tokens[statusId] ?? 0;
+                
+                // 检查是否可被转移（不可移除的 token 也不能被转移）
+                const tokenDef = (state.tokenDefinitions ?? []).find(def => def.id === statusId);
+                const isRemovable = tokenDef?.passiveTrigger?.removable ?? true;
+                
+                if (!isRemovable) {
+                    // 不可移除的 token 不能被转移，跳过
+                    break;
+                }
                 
                 if (fromStacks > 0) {
                     // 移除源玩家的状态

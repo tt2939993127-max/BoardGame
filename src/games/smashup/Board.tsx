@@ -1052,6 +1052,9 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             cardType: card.type,
             isHandDiscardPrompt,
             isMeFirstResponse,
+            isAfterScoringResponse,
+            isInResponseWindow: isMeFirstResponse || isAfterScoringResponse,
+            windowType: responseWindow?.windowType,
             hasCurrentPrompt: !!currentPrompt,
             currentPromptId: currentPrompt?.id,
             promptPlayerId: currentPrompt?.playerId,
@@ -1105,14 +1108,23 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         // Validation for play phase / turn
-        // Me First! 响应期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
-        if (isMeFirstResponse) {
-            console.log('[DEBUG] handleCardClick: in Me First! response mode', {
+        // 响应窗口期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
+        const isInResponseWindow = isMeFirstResponse || isAfterScoringResponse;
+        if (isInResponseWindow) {
+            const windowType = responseWindow?.windowType;
+            console.log('[DEBUG] handleCardClick: in response window mode', {
                 cardType: card.type,
                 cardDefId: card.defId,
+                windowType,
             });
-            // beforeScoringPlayable 随从（影舞者等）：进入基地选择模式
+            
+            // beforeScoringPlayable 随从（影舞者等）：只在 meFirst 窗口可用
             if (card.type === 'minion') {
+                if (windowType !== 'meFirst') {
+                    console.log('[DEBUG] handleCardClick: minion not allowed in afterScoring window, denied');
+                    playDeniedSound();
+                    return;
+                }
                 const mDef = getMinionDef(card.defId);
                 console.log('[DEBUG] handleCardClick: minion clicked in Me First!', {
                     hasBeforeScoringPlayable: !!mDef?.beforeScoringPlayable,
@@ -1133,17 +1145,17 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 return;
             }
             if (card.type !== 'action') {
-                console.log('[DEBUG] handleCardClick: not action card in Me First!, denied');
+                console.log('[DEBUG] handleCardClick: not action card in response window, denied');
                 playDeniedSound();
                 return;
             }
             const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
-            console.log('[DEBUG] handleCardClick: action card in Me First!', {
+            console.log('[DEBUG] handleCardClick: action card in response window', {
                 subtype: cardDef?.subtype,
                 specialNeedsBase: cardDef?.specialNeedsBase,
             });
             if (cardDef?.subtype !== 'special') {
-                console.log('[DEBUG] handleCardClick: not special action in Me First!, denied');
+                console.log('[DEBUG] handleCardClick: not special action in response window, denied');
                 playDeniedSound();
                 return;
             }
@@ -1213,7 +1225,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, responseWindow]);
 
     /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {

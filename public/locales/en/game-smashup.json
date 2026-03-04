@@ -118,6 +118,7 @@
     "not_highest_power": "This minion doesn't have the highest power here, ability had no effect",
     "no_power_counters": "No +1 power counters to remove",
     "all_protected": "All targets are protected",
+    "ability_not_implemented": "Ability not yet implemented",
     "base_deck_empty": "Base deck is empty",
     "no_minion_cards_in_hand": "No minion cards in hand"
   },

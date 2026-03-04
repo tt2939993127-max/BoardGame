@@ -272,11 +272,23 @@ function scoreOneBase(
                 for (const evt of result.events) {
                     updatedCore = reduce(updatedCore, evt as SmashUpEvent);
                 }
+            } else {
+                // 卡牌没有实现：生成 ABILITY_FEEDBACK 事件
+                const feedbackEvt: AbilityFeedbackEvent = {
+                    type: SU_EVENT_TYPES.ABILITY_FEEDBACK,
+                    payload: {
+                        playerId: armed.playerId,
+                        sourceDefId: armed.sourceDefId,
+                        message: 'actionLog.ability_not_implemented',
+                    },
+                    timestamp: now,
+                };
+                events.push(feedbackEvt);
             }
             
             // 标记为已消费
             const consumedEvt: SpecialAfterScoringConsumedEvent = {
-                type: SU_EVENTS.SPECIAL_AFTER_SCORING_CONSUMED,
+                type: SU_EVENT_TYPES.SPECIAL_AFTER_SCORING_CONSUMED,
                 payload: {
                     sourceDefId: armed.sourceDefId,
                     playerId: armed.playerId,
@@ -891,24 +903,65 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         baseIndex: scoredBaseIndex,
                         rankings,
                     });
+                }
+                
+                // ⚠️ 关键修复：无论力量是否变化，都需要发出 BASE_CLEARED 和 BASE_REPLACED 事件
+                // 原因：afterScoring 响应窗口打开时，这些事件被延迟发出
+                // 响应窗口关闭后，必须补发这些事件，否则基地不会被清除和替换
+                if (currentBase) {
+                    // 发出 BASE_CLEARED 事件
+                    const clearEvt: BaseClearedEvent = {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId },
+                        timestamp: now,
+                    };
+                    events.push(clearEvt);
                     
-                    // 【修复】标记该基地已记分，防止后续正常计分循环重复计分
-                    // 注意：这里必须检查 scoredBaseIndices 是否已包含该基地
-                    // 因为第一次计分时已经添加过了
-                    if (!state.sys.scoredBaseIndices) {
-                        state = {
-                            ...state,
-                            sys: { ...state.sys, scoredBaseIndices: [scoredBaseIndex] },
-                        };
-                    } else if (!state.sys.scoredBaseIndices.includes(scoredBaseIndex)) {
-                        state = {
-                            ...state,
-                            sys: {
-                                ...state.sys,
-                                scoredBaseIndices: [...state.sys.scoredBaseIndices, scoredBaseIndex],
+                    // 替换基地
+                    if (core.baseDeck.length > 0) {
+                        const newBaseDefId = core.baseDeck[0];
+                        const replaceEvt: BaseReplacedEvent = {
+                            type: SU_EVENTS.BASE_REPLACED,
+                            payload: {
+                                baseIndex: scoredBaseIndex,
+                                oldBaseDefId: currentBase.defId,
+                                newBaseDefId,
                             },
+                            timestamp: now,
                         };
+                        events.push(replaceEvt);
+                        
+                        // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
+                        const revealCtx = {
+                            state: core,
+                            matchState: state,
+                            baseIndex: scoredBaseIndex,
+                            baseDefId: newBaseDefId,
+                            playerId: pid,
+                            now,
+                        };
+                        const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
+                        events.push(...revealResult.events);
+                        if (revealResult.matchState) state = revealResult.matchState;
                     }
+                    
+                    console.log('[onPhaseExit] 补发 BASE_CLEARED 和 BASE_REPLACED 事件');
+                }
+                
+                // 标记该基地已记分，防止后续正常计分循环重复计分
+                if (!state.sys.scoredBaseIndices) {
+                    state = {
+                        ...state,
+                        sys: { ...state.sys, scoredBaseIndices: [scoredBaseIndex] },
+                    };
+                } else if (!state.sys.scoredBaseIndices.includes(scoredBaseIndex)) {
+                    state = {
+                        ...state,
+                        sys: {
+                            ...state.sys,
+                            scoredBaseIndices: [...state.sys.scoredBaseIndices, scoredBaseIndex],
+                        },
+                    };
                 }
                 
                 // 清理状态（不可变更新）
@@ -1053,7 +1106,33 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     currentCore = reduce(currentCore, evt as SmashUpEvent);
                 }
 
+                // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
+                if (currentMatchState.sys.interaction?.current) {
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+                }
+                
+                // afterScoring 响应窗口打开 → halt 等响应窗口关闭后重新计分
+                // 检查返回的事件中是否包含 RESPONSE_WINDOW_OPENED 事件
+                const hasResponseWindowOpened = result.events.some(
+                    (evt: SmashUpEvent) => evt.type === 'RESPONSE_WINDOW_OPENED'
+                );
+                if (hasResponseWindowOpened) {
+                    console.log('[onPhaseExit] afterScoring 响应窗口打开（检测到 RESPONSE_WINDOW_OPENED 事件），halt 等待响应');
+                    // ⚠️ 关键修复：afterScoring 响应窗口打开时，不标记基地为"已记分"
+                    // 原因：响应窗口关闭后，onPhaseExit 重新进入时，需要重新计分该基地
+                    // 如果此时标记为"已记分"，remainingIndices 会过滤掉该基地，导致不计分
+                    // 
+                    // 正确流程：
+                    // 1. scoreOneBase 打开 afterScoring 响应窗口 → halt（不标记"已记分"）
+                    // 2. 响应窗口关闭 → onAutoContinueCheck 返回 autoContinue: true
+                    // 3. onPhaseExit 重新进入 → remainingIndices 包含该基地 → 重新计分
+                    // 4. 重新计分时检查力量变化 → 如果变化则发出新的 BASE_SCORED 事件
+                    // 5. 发出 BASE_CLEARED 和 BASE_REPLACED 事件 → 标记"已记分"
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+                }
+
                 // 标记该基地已记分（不可变更新）
+                // ⚠️ 只有在 scoreOneBase 成功完成（没有打开响应窗口）后，才标记为"已记分"
                 if (!currentMatchState.sys.scoredBaseIndices) {
                     currentMatchState = {
                         ...currentMatchState,
@@ -1073,21 +1152,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     scoredBaseIndices: currentMatchState.sys.scoredBaseIndices,
                     scoredBaseIndicesRef: `[${currentMatchState.sys.scoredBaseIndices.join(',')}]`,
                 });
-
-                // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
-                if (currentMatchState.sys.interaction?.current) {
-                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
-                }
-                
-                // afterScoring 响应窗口打开 → halt 等响应窗口关闭后重新计分
-                // 检查返回的事件中是否包含 RESPONSE_WINDOW_OPENED 事件
-                const hasResponseWindowOpened = result.events.some(
-                    (evt: SmashUpEvent) => evt.type === 'RESPONSE_WINDOW_OPENED'
-                );
-                if (hasResponseWindowOpened) {
-                    console.log('[onPhaseExit] afterScoring 响应窗口打开（检测到 RESPONSE_WINDOW_OPENED 事件），halt 等待响应');
-                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
-                }
             }
 
             // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），

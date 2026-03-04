@@ -1051,6 +1051,40 @@ export function registerBaseAbilities(): void {
                     '海盗湾：选择移动一个随从到其他基地', options,
                     { sourceId: 'base_pirate_cove', targetType: 'minion' },
                 );
+                
+                // 【修复】使用 optionsGenerator 动态生成选项，确保交互解决时使用最新状态
+                // 问题：海盗湾的 afterScoring 能力和大副的 afterScoring 能力都创建了交互
+                // 如果大副的交互先解决，大副被移动到其他基地，海盗湾的交互选项中仍包含大副
+                // 解决方案：使用 optionsGenerator 动态生成选项，过滤掉已经不在原基地上的随从
+                (interaction.data as any).optionsGenerator = (state: any) => {
+                    const currentBase = state.core?.bases?.[ctx.baseIndex];
+                    if (!currentBase) return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+                    
+                    // 过滤出仍在原基地上的随从
+                    const stillOnBase = minionsSnapshot.filter(m => 
+                        currentBase.minions.some((minion: any) => minion.uid === m.uid)
+                    );
+                    
+                    if (stillOnBase.length === 0) {
+                        // 所有随从都已被移动，只返回"跳过"选项
+                        return [{ id: 'skip', label: '跳过', value: { skip: true } }];
+                    }
+                    
+                    const refreshedOptions = stillOnBase.map((m, i) => {
+                        const def = getCardDef(m.defId);
+                        return {
+                            id: `minion-${i}`,
+                            label: `${def?.name ?? m.defId} (力量${m.power})`,
+                            value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner },
+                        };
+                    });
+                    
+                    return [
+                        { id: 'skip', label: '跳过', value: { skip: true } },
+                        ...refreshedOptions,
+                    ];
+                };
+                
                 ctx.matchState = queueInteraction(ctx.matchState, {
                     ...interaction,
                     data: { 

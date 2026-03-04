@@ -118,6 +118,7 @@
     "not_highest_power": "本随从不是这里力量最高的，能力未生效",
     "no_power_counters": "没有可移除的+1力量指示物",
     "all_protected": "所有目标都受到保护",
+    "ability_not_implemented": "功能尚未实现",
     "base_deck_empty": "基地牌库为空",
     "no_minion_cards_in_hand": "手牌中没有随从卡"
   },

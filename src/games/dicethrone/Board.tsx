@@ -564,15 +564,24 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 计算响应窗口中可响应的卡牌 ID 集合（用于高亮）
     const respondableCardIds = React.useMemo(() => {
-        if (!isResponseWindowOpen || !isResponder || !responseWindow?.windowType) return undefined;
-        const cardIds = new Set<string>();
-        for (const card of handOwner.hand) {
-            if (isCardPlayableInResponseWindow(G, rootPid, card, responseWindow.windowType, currentPhase)) {
-                cardIds.add(card.id);
+        if (!isResponseWindowOpen || !responseWindow?.windowType) return undefined;
+        
+        // 如果当前视角是响应者，高亮响应者的可响应卡牌
+        if (currentResponderId && viewPid === currentResponderId) {
+            const responder = G.players[currentResponderId];
+            if (!responder) return undefined;
+            
+            const cardIds = new Set<string>();
+            for (const card of responder.hand) {
+                if (isCardPlayableInResponseWindow(G, currentResponderId, card, responseWindow.windowType, currentPhase)) {
+                    cardIds.add(card.id);
+                }
             }
+            return cardIds.size > 0 ? cardIds : undefined;
         }
-        return cardIds.size > 0 ? cardIds : undefined;
-    }, [isResponseWindowOpen, isResponder, responseWindow?.windowType, handOwner.hand, G, rootPid, currentPhase]);
+        
+        return undefined;
+    }, [isResponseWindowOpen, currentResponderId, viewPid, responseWindow?.windowType, G, currentPhase]);
 
     // 检测当前响应者是否离线，如果离线则自动跳过
     const isResponderOffline = React.useMemo(() => {

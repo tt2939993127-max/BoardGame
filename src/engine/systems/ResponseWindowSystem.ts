@@ -228,21 +228,11 @@ export function advanceToNextResponder(
                 const consecutivePassRounds = (window.consecutivePassRounds ?? 0) + 1;
                 console.log('[advanceToNextResponder] 本轮无动作，consecutivePassRounds:', consecutivePassRounds);
                 
-                // 连续两轮所有人都 pass，关闭窗口
-                if (consecutivePassRounds >= 2) {
-                    console.log('[advanceToNextResponder] consecutivePassRounds >= 2，关闭窗口');
-                    return undefined;
-                }
-                
-                console.log('[advanceToNextResponder] 继续下一轮');
-                // 继续下一轮
-                return {
-                    ...window,
-                    currentResponderIndex: 0,
-                    passedPlayers: [],
-                    actionTakenThisRound: false,
-                    consecutivePassRounds,
-                };
+                // 一轮所有人都 pass，关闭窗口
+                // 注意：loopUntilAllPass 的目的是允许玩家在有人出牌后继续响应，
+                // 但如果所有人都 pass 了一轮，说明没有人想出牌，应该立即关闭窗口
+                console.log('[advanceToNextResponder] consecutivePassRounds >= 1，关闭窗口');
+                return undefined;
             }
         }
         console.log('[advanceToNextResponder] loopUntilAllPass=false，关闭窗口');
@@ -344,12 +334,24 @@ function skipToNextRespondableResponder<TCore>(
         return nextWindow;
     }
 
+    // 没有找到可响应玩家 - 说明从当前位置到队列末尾，所有玩家都没有可响应内容
+    console.log('[skipToNextRespondableResponder] 没有找到可响应玩家');
+    
+    // 【关键修复】如果当前是从队首开始扫描（currentResponderIndex === 0），
+    // 且没有找到任何可响应玩家，说明所有玩家都没有可响应内容，应该立即关闭窗口
+    // 注意：这里不检查 loopUntilAllPass，因为即使需要循环，如果所有玩家都没有可响应内容，
+    // 循环也没有意义，应该立即关闭
+    if (window.currentResponderIndex === 0) {
+        console.log('[skipToNextRespondableResponder] 从队首开始扫描但无人可响应，立即关闭窗口');
+        return undefined;
+    }
+    
     // loopUntilAllPass：若本轮有人出过牌，即使尾部玩家都被自动 skip，
     // 也需要重开新一轮，从队首继续检查可响应者。
-    // 注意：重新开始一轮时，不跳过没有可响应内容的玩家，让所有玩家都有机会 pass
+    // 【修复】重新开始一轮时，也要跳过没有可响应内容的玩家
     if (loopUntilAllPass) {
         if (window.actionTakenThisRound) {
-            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮有动作，重新开始（不跳过）');
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮有动作，重新开始（跳过无内容玩家）');
             const restartedWindow: CurrentWindow = {
                 ...window,
                 currentResponderIndex: 0,
@@ -357,29 +359,14 @@ function skipToNextRespondableResponder<TCore>(
                 actionTakenThisRound: false,
                 consecutivePassRounds: 0, // 重置计数器
             };
-            // 直接返回重启的窗口，不调用 findNextRespondable（不跳过玩家）
-            return restartedWindow;
+            // 【修复】调用 findNextRespondable 跳过没有可响应内容的玩家
+            return findNextRespondable(restartedWindow);
         } else {
-            // 本轮所有人都 pass，增加 consecutivePassRounds 计数
-            const consecutivePassRounds = (window.consecutivePassRounds ?? 0) + 1;
-            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮无动作，consecutivePassRounds:', consecutivePassRounds);
-            
-            // 连续两轮所有人都 pass，关闭窗口
-            if (consecutivePassRounds >= 2) {
-                console.log('[skipToNextRespondableResponder] consecutivePassRounds >= 2，关闭窗口');
-                return undefined;
-            }
-            
-            console.log('[skipToNextRespondableResponder] 继续下一轮');
-            // 继续下一轮
-            const restartedWindow: CurrentWindow = {
-                ...window,
-                currentResponderIndex: 0,
-                passedPlayers: [],
-                actionTakenThisRound: false,
-                consecutivePassRounds,
-            };
-            return restartedWindow;
+            // 本轮所有人都 pass，关闭窗口
+            // 注意：这里不需要 consecutivePassRounds 计数器，因为如果所有人都 pass 了一轮，
+            // 说明没有人想出牌，应该立即关闭窗口
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮无动作，关闭窗口');
+            return undefined;
         }
     }
 

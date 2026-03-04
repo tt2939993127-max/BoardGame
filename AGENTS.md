@@ -58,16 +58,20 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 > **核心原则：E2E 测试验证 UI 交互，单元测试验证业务逻辑，绝不混淆**
 
 #### E2E 测试强制要求（UI 交互必须用 E2E）
-1. **必须使用新测试框架（强制）**：
-   - ✅ 使用 `GameTestContext` API（`e2e/framework/GameTestContext.ts`）
+1. **必须使用三板斧（强制）**：
+   - ✅ **新框架**：`import { test } from './framework'`（获得 `page` 和 `game` fixture）
+   - ✅ **专用测试模式**：`page.goto('/play/<gameId>')`（自动启用 TestHarness）
+   - ✅ **状态注入**：`game.setupScene()`（跳过派系选择，直接构建场景）
    - ❌ 禁止使用旧 API（`setupSmashUpOnlineMatch`、`readCoreState`、`applyCoreState`）
-   - 示例：`const ctx = await gameTest.createMatch('smashup', { factions: [...] });`
+   - ❌ 禁止使用 Fixture 方式（`import { test } from './fixtures'`、`smashupMatch` fixture）
+   - ❌ 禁止使用 `harness.state.patch()` 手动注入状态
+   - 示例：详见下文「E2E 测试三板斧」章节
 2. **必须实际运行并通过（强制）**：
    - AI 编写测试后必须立即运行 `npm run test:e2e:ci -- <测试文件名>`
    - 禁止交给用户手动运行
    - 测试失败必须修复，不得跳过或降低标准
 3. **必须自审截图（强制）**：
-   - 使用 `await ctx.player(0).screenshot({ path: 'test-results/xxx.png' });` 保存截图
+   - 使用 `await game.screenshot('name', testInfo);` 保存截图
    - **必须使用 `mcp_image_viewer_view_image` 查看所有测试截图**：AI 必须实际查看 `test-results/` 目录中的每一张截图，分析截图内容（游戏状态、UI 元素、交互结果）
    - 确认 UI 显示正确、交互流程完整、没有视觉错误
    - 用户只需看截图即可验证，无需运行测试
@@ -117,6 +121,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **2026-03-04**：测试用例设计错误，基地力量不足无法触发 Me First! 窗口，导致测试失败。应该先验证实现是否工作，再编写测试
 - **2026-03-04**：Special Timing "没有效果" bug - 用户反馈"承受压力和重返深海没触发效果"，实际是前置条件不满足（没有其他基地上的己方随从可以接收力量指示物），不是 bug。**核心问题是 ActionLog 没有记录"没有效果"的原因**。修复方案：当交互处理器返回空事件时，生成 `ABILITY_FEEDBACK` 事件，ActionLog 显示"场上没有符合条件的目标"。**教训**：不要假设"没有效果"就是 bug，先确认是否是前置条件不满足，如果是则改进反馈而不是修改逻辑。详见 `evidence/special-timing-feedback-fix.md`。
 - **2026-03-04**：印斯茅斯"本地人"展示 bug - 用户反馈"展示只给自己看"，AI 花了多轮验证配置、加日志、修改类型定义，但没有运行 E2E 测试验证修复是否生效。**教训**：UI 交互问题必须用 E2E 测试验证，不能只靠日志和代码审查。修复后必须立即运行测试并自审截图，确认两个玩家都能看到展示 UI。
+- **2026-03-04**：afterScoring 卡牌点击 bug - AI 创建 E2E 测试时没有使用三板斧（用了旧的 Fixture 方式 + `harness.state.patch()`），导致测试超时失败。**教训**：只要提到 E2E 测试，就必须使用"新框架 + 专用测试模式 + 状态注入"三板斧，缺一不可。详见下文「E2E 测试三板斧」章节。
 
 ### 游戏名称映射（强制）
 
@@ -247,41 +252,20 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **日志存储**：`logs/` 目录，按日期自动轮转，普通日志保留 30 天，错误日志保留 90 天
   - **临时调试日志**：允许临时日志用于排障，不得引入额外 debug 开关，问题解决后必须清理
 - **新增功能必须补充测试（强制）**：新增功能/技能/API 必须同步补充测试，覆盖正常+异常场景。详见 `docs/automated-testing.md` 和 `docs/testing-best-practices.md`（测试编写常见陷阱和最佳实践）。
-- **E2E 测试必须使用正确的测试框架（强制）**：所有新的 E2E 测试必须使用以下两种方式之一。禁止使用旧的 helper 函数（`setupSmashUpOnlineMatch`、`readCoreState`、`applyCoreState` 等）或测试模式（`/play/<gameId>/test`）。E2E 测试用于验证 UI 交互，不得用 GameTestRunner 单元测试替代。详见 `docs/automated-testing.md`「测试框架 API（强制使用）」节。
-  - **方式 1：使用 Fixture（推荐，自动完成派系选择）**：
-    ```typescript
-    import { test, expect } from './fixtures';
-    
-    test('测试名称', async ({ smashupMatch }, testInfo) => {
-        test.setTimeout(180000); // 增加超时时间（包含派系选择）
-        
-        const { host, guest } = smashupMatch;
-        
-        // 等待游戏开始
-        await host.page.waitForSelector('[data-testid^="base-zone-"]', { timeout: 15000 });
-        await host.page.waitForTimeout(2000);
-        
-        // 注入测试状态
-        await host.page.evaluate(() => {
-            const harness = (window as any).__BG_TEST_HARNESS__;
-            harness.state.patch({
-                'core.players.0.hand': [
-                    { uid: 'card-1', defId: 'wizard_portal', type: 'action' }
-                ]
-            });
-        });
-        
-        await host.page.waitForTimeout(2000); // 等待 React 重新渲染
-        
-        // 测试逻辑...
-        await host.page.screenshot({ path: testInfo.outputPath('test.png'), fullPage: true });
-    });
-    ```
-  - **方式 2：使用 GameTestContext（手动控制，适合复杂场景）**：
+- **E2E 测试三板斧（强制）**：所有 E2E 测试必须使用"新框架 + 专用测试模式 + 状态注入"三板斧，缺一不可。禁止使用旧的 helper 函数（`setupSmashUpOnlineMatch`、`readCoreState`、`applyCoreState` 等）或测试模式（`/play/<gameId>/test`）。E2E 测试用于验证 UI 交互，不得用 GameTestRunner 单元测试替代。详见 `docs/automated-testing.md`「测试框架 API（强制使用）」节。
+  
+  **三板斧详解**：
+  1. **新框架**：使用 `import { test } from './framework'`，获得 `page` 和 `game` fixture
+  2. **专用测试模式**：通过 `page.goto('/play/<gameId>')` 自动启用 TestHarness（URL 不含 `/test` 后缀）
+  3. **状态注入**：使用 `game.setupScene()` 跳过派系选择，直接构建测试场景
+  
+  **标准模板（必须遵守）**：
     ```typescript
     import { test } from './framework';
     
     test('测试名称', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000); // 状态注入模式：60 秒足够
+        
         // 1. 导航到游戏（自动启用 TestHarness）
         await page.goto('/play/smashup');
         
@@ -291,33 +275,49 @@ Keep this managed block so 'openspec update' can refresh the instructions.
             { timeout: 15000 }
         );
         
-        // 3. 快速场景构建（跳过派系选择，直接注入状态）
+        // 3. 状态注入（跳过派系选择，直接构建场景）
         await game.setupScene({
             gameId: 'smashup',
-            player0: { hand: ['ninja_infiltrate'] },
+            player0: { 
+                hand: [{ uid: 'card-1', defId: 'wizard_portal', type: 'action' }],
+                field: [{ uid: 'minion-1', defId: 'ninja_shinobi', baseIndex: 0, power: 3 }]
+            },
+            player1: {
+                field: [{ uid: 'minion-2', defId: 'robot_microbot_alpha', baseIndex: 0, power: 2 }]
+            },
+            bases: [
+                { breakpoint: 10, power: 5 }
+            ],
             currentPlayer: '0',
             phase: 'playCards',
         });
         
-        // 4. 游戏动作
-        await game.playCard('ninja_infiltrate');
-        await game.waitForInteraction('ninja_infiltrate_pick');
-        await game.selectOption('base-0');
-        await game.confirm();
+        await page.waitForTimeout(2000); // 等待 React 重新渲染
         
-        // 5. 断言
-        await game.expectPhase('playCards');
+        // 4. 测试逻辑（点击、验证、截图）
+        await page.click('[data-card-uid="card-1"]');
+        await page.waitForTimeout(1000);
         
-        // 6. 截图
-        await game.screenshot('final-state', testInfo);
+        // 5. 截图
+        await game.screenshot('test-result', testInfo);
     });
     ```
-  - **两种方式的区别**：
-    - Fixture 方式：自动完成派系选择，代码量少，适合标准对局测试，需要 180 秒+ 超时
-    - GameTestContext 方式：跳过派系选择直接注入状态，灵活性高，适合复杂场景，需要 60 秒+ 超时
-  - **参考示例**：
-    - Fixture 方式：`e2e/smashup-ninja-infiltrate.e2e.ts`
-    - GameTestContext 方式：（待添加示例）
+  
+  **禁止的旧模式**：
+  - ❌ 使用 Fixture 方式（`import { test } from './fixtures'`，`smashupMatch` fixture）
+  - ❌ 使用 `harness.state.patch()` 手动注入状态
+  - ❌ 使用 `page.goto('/play/<gameId>/test')` 测试模式
+  - ❌ 等待派系选择完成（180 秒超时）
+  
+  **为什么必须用三板斧**：
+  - **新框架**：提供 `game.setupScene()` API，简化状态注入
+  - **专用测试模式**：自动启用 TestHarness，无需手动检查
+  - **状态注入**：跳过派系选择，测试速度快（60 秒 vs 180 秒），场景构建灵活
+  
+  **参考示例**：
+    - ✅ 正确：`e2e/smashup-ninja-infiltrate.e2e.ts`（使用三板斧）
+    - ❌ 错误：任何使用 `smashupMatch` fixture 或 `harness.state.patch()` 的测试
+
 - **E2E 测试必须通过并自审截图（强制）**：
   - **绝对禁止用单元测试糊弄**：UI 交互、多玩家协作、展示/提示等功能必须用 E2E 测试验证，不得用 GameTestRunner 单元测试替代
   - **测试必须实际运行并通过**：AI 编写测试后必须立即运行 `npm run test:e2e:ci -- <测试文件名>`，不得交给用户手动运行
