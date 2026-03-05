@@ -116,6 +116,57 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
         // 例如：清理临时状态
         return [];
     },
+    
+    /**
+     * 自动推进检查
+     * 
+     * 在 ability 阶段，当以下情况发生时自动推进到 end 阶段：
+     * 1. 所有交互完成后（INTERACTION_RESOLVED 事件）
+     * 2. 玩家跳过能力（ABILITY_SKIPPED 事件）
+     * 
+     * 注意：不在 ABILITY_ACTIVATED 事件时立即检查，因为 FlowSystem（优先级25）
+     * 会在 CardiaEventSystem（优先级50）之前执行，此时 ABILITY_INTERACTION_REQUESTED
+     * 事件还未被添加到 events 数组中。正确的做法是只在交互完成或跳过能力时自动推进。
+     */
+    onAutoContinueCheck: ({ state, events }) => {
+        const { core, sys } = state;
+        
+        // 只在 ability 阶段检查
+        if (core.phase !== 'ability') {
+            return;
+        }
+        
+        // 检查是否有交互正在进行
+        const hasCurrentInteraction = !!sys.interaction.current;
+        const hasQueuedInteractions = sys.interaction.queue.length > 0;
+        
+        // 如果还有交互未完成，不自动推进
+        if (hasCurrentInteraction || hasQueuedInteractions) {
+            return;
+        }
+        
+        // 在以下情况自动推进：
+        // 1. 交互完成（INTERACTION_RESOLVED 事件）
+        // 2. 玩家跳过能力（ABILITY_SKIPPED 事件）
+        const shouldAutoContinue = events.some(e => 
+            e.type === 'SYS_INTERACTION_RESOLVED' || 
+            e.type === CARDIA_EVENTS.ABILITY_SKIPPED
+        );
+        
+        if (!shouldAutoContinue) {
+            return;
+        }
+        
+        // 获取失败者 ID（能力阶段的活跃玩家）
+        const activePlayerId = core.currentEncounter?.loserId || core.currentPlayerId;
+        
+        console.log('[CardiaFlowHooks] Auto-continue check: interaction resolved or ability skipped, advancing to end phase');
+        
+        return {
+            autoContinue: true,
+            playerId: activePlayerId,
+        };
+    },
 };
 
 export default cardiaFlowHooks;

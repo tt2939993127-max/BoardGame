@@ -26,6 +26,10 @@ export function reduce(core: CardiaCore, event: CardiaEvent): CardiaCore {
         case CARDIA_EVENTS.ABILITY_ACTIVATED:
             return reduceAbilityActivated(core, event);
         
+        case CARDIA_EVENTS.ABILITY_SKIPPED:
+            // 能力跳过事件不改变状态，仅用于触发 FlowSystem 自动推进
+            return core;
+        
         case CARDIA_EVENTS.ABILITY_COPIED:
             // 能力复制事件不改变状态，实际执行在 execute 层处理
             return core;

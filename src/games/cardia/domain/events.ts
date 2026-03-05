@@ -9,6 +9,7 @@ export const CARDIA_EVENTS = {
     CARD_DRAWN: 'cardia:card_drawn',
     ENCOUNTER_RESOLVED: 'cardia:encounter_resolved',
     ABILITY_ACTIVATED: 'cardia:ability_activated',
+    ABILITY_SKIPPED: 'cardia:ability_skipped',
     ABILITY_INTERACTION_REQUESTED: 'cardia:ability_interaction_requested',
     ABILITY_NO_VALID_TARGET: 'cardia:ability_no_valid_target',
     ABILITY_COPIED: 'cardia:ability_copied',
@@ -81,6 +82,17 @@ export interface AbilityActivatedEvent extends GameEvent<typeof CARDIA_EVENTS.AB
         playerId: PlayerId;
         isInstant: boolean;
         isOngoing: boolean;
+    };
+}
+
+/**
+ * 能力跳过事件
+ * 当玩家选择跳过能力时发射此事件
+ */
+export interface AbilitySkippedEvent extends GameEvent<typeof CARDIA_EVENTS.ABILITY_SKIPPED> {
+    payload: {
+        playerId: PlayerId;
+        cardId?: string;  // 可选：跳过的卡牌ID
     };
 }
 
@@ -409,6 +421,7 @@ export type CardiaEvent =
     | CardDrawnEvent
     | EncounterResolvedEvent
     | AbilityActivatedEvent
+    | AbilitySkippedEvent
     | AbilityInteractionRequestedEvent
     | AbilityNoValidTargetEvent
     | AbilityCopiedEvent

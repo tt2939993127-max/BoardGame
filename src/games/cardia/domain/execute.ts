@@ -93,7 +93,93 @@ function executePlayCard(
         },
     });
     
-    // 2. 检查是否双方都已打出卡牌
+    // 2. 检查并触发延迟效果（onNextCardPlayed）
+    console.log('[Cardia] executePlayCard: START - checking delayed effects', {
+        playerId,
+        cardUid,
+        totalDelayedEffects: core.delayedEffects.length,
+        allDelayedEffects: core.delayedEffects.map(e => ({
+            effectType: e.effectType,
+            condition: e.condition,
+            sourcePlayerId: e.sourcePlayerId,
+            sourceAbilityId: e.sourceAbilityId,
+            value: e.value,
+        })),
+    });
+    
+    const delayedEffects = core.delayedEffects.filter(
+        effect => effect.condition === 'onNextCardPlayed' && effect.sourcePlayerId === playerId
+    );
+    
+    console.log('[Cardia] executePlayCard: AFTER FILTER - matching delayed effects', {
+        playerId,
+        cardUid,
+        matchingEffectsCount: delayedEffects.length,
+        matchingEffects: delayedEffects.map(e => ({
+            effectType: e.effectType,
+            condition: e.condition,
+            sourcePlayerId: e.sourcePlayerId,
+            sourceAbilityId: e.sourceAbilityId,
+            value: e.value,
+        })),
+    });
+    
+    for (const effect of delayedEffects) {
+        console.log('[Cardia] executePlayCard: TRIGGERING delayed effect', {
+            effectType: effect.effectType,
+            targetCardId: card.uid,
+            sourceAbilityId: effect.sourceAbilityId,
+            sourcePlayerId: effect.sourcePlayerId,
+            value: effect.value,
+        });
+        
+        // 发射延迟效果触发事件
+        events.push({
+            type: CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED,
+            timestamp,
+            payload: {
+                effectType: effect.effectType,
+                targetCardId: card.uid,
+                sourceAbilityId: effect.sourceAbilityId,
+                sourcePlayerId: effect.sourcePlayerId,
+            },
+        });
+        
+        // 根据效果类型执行相应操作
+        if (effect.effectType === 'modifyInfluence') {
+            console.log('[Cardia] executePlayCard: PLACING modifier token', {
+                cardId: card.uid,
+                value: effect.value,
+                source: effect.sourceAbilityId,
+            });
+            
+            events.push({
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                timestamp,
+                payload: {
+                    cardId: card.uid,
+                    value: effect.value,
+                    source: effect.sourceAbilityId,
+                    timestamp,
+                },
+            });
+            
+            console.log('[Cardia] executePlayCard: COMPLETED - triggered delayed effect', {
+                effectType: effect.effectType,
+                targetCardId: card.uid,
+                value: effect.value,
+                sourceAbilityId: effect.sourceAbilityId,
+                eventsGenerated: 2, // DELAYED_EFFECT_TRIGGERED + MODIFIER_TOKEN_PLACED
+            });
+        }
+    }
+    
+    console.log('[Cardia] executePlayCard: SUMMARY - delayed effects processing complete', {
+        totalEffectsProcessed: delayedEffects.length,
+        eventsGenerated: events.length - 1, // 减去 CARD_PLAYED 事件
+    });
+    
+    // 3. 检查是否双方都已打出卡牌
     const opponentId = getOpponentId(core, playerId);
     const opponent = core.players[opponentId];
     
@@ -156,10 +242,9 @@ function resolveEncounter(
     // 审判官规则："平局不会触发能力"，即使审判官赢得平局，也不进入能力阶段
     const originalWinner = winner;
     
-    // 3.1 检查调停者（forceTie）- 强制平局（只影响特定遭遇）
-    const currentEncounterIndex = core.turnNumber;
+    // 3.1 检查调停者（forceTie）- 强制平局（影响所有遭遇）
     const mediatorAbility = core.ongoingAbilities.find(
-        a => a.effectType === 'forceTie' && a.encounterIndex === currentEncounterIndex
+        a => a.effectType === 'forceTie'
     );
     if (mediatorAbility) {
         winner = 'tie';
@@ -200,20 +285,15 @@ function resolveEncounter(
             },
         });
         
-        // 5.2 检查财务官/顾问（extraSignet）- 额外印戒
-        // 财务官：不区分玩家，任何玩家获胜都触发（永久持续）
-        // 顾问：只对放置标记的玩家生效（一次性）
+        // 5.2 检查财务官和顾问（extraSignet）- 额外印戒（一次性）
         const extraSignetAbilities = core.ongoingAbilities.filter(
-            a => a.effectType === 'extraSignet'
+            a => a.effectType === 'extraSignet' && 
+            (a.abilityId === ABILITY_IDS.ADVISOR || a.abilityId === ABILITY_IDS.TREASURER)
         );
         
         for (const ability of extraSignetAbilities) {
-            // 检查是否应该触发
-            const shouldTrigger = ability.abilityId === ABILITY_IDS.TREASURER 
-                ? true  // 财务官：任何玩家获胜都触发
-                : ability.playerId === winner;  // 顾问：只对自己生效
-            
-            if (shouldTrigger) {
+            // 财务官和顾问：只对放置标记的玩家生效
+            if (ability.playerId === winner) {
                 // 额外印戒
                 events.push({
                     type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
@@ -224,18 +304,16 @@ function resolveEncounter(
                     },
                 });
                 
-                // 顾问是一次性效果，触发后移除；财务官是永久效果，不移除
-                if (ability.abilityId === ABILITY_IDS.ADVISOR) {
-                    events.push({
-                        type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
-                        timestamp: Date.now(),
-                        payload: {
-                            abilityId: ability.abilityId,
-                            cardId: ability.cardId,
-                            playerId: ability.playerId,
-                        },
-                    });
-                }
+                // 财务官和顾问都是一次性效果，触发后移除
+                events.push({
+                    type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                    timestamp: Date.now(),
+                    payload: {
+                        abilityId: ability.abilityId,
+                        cardId: ability.cardId,
+                        playerId: ability.playerId,
+                    },
+                });
             }
         }
         
@@ -383,15 +461,19 @@ function executeActivateAbility(
                     interaction: result.interaction,
                 },
             });
+            
+            // ✅ 修复：如果有交互，不执行回合结束逻辑
+            // 交互完成后，由交互处理器负责推进回合
+            console.log('[Cardia] executeActivateAbility: ability returned interaction, skipping auto end turn');
+            return events;
         }
     } else {
         console.warn('[Cardia] No executor found for ability', { abilityId });
     }
     
-    // 3. 自动执行回合结束逻辑（方案A：无需手动点击）
-    // 注意：如果有交互，回合结束会被 InteractionSystem 阻塞
-    const endTurnEvents = executeAutoEndTurn(core, playerId, random);
-    events.push(...endTurnEvents);
+    // ✅ 修复：移除自动回合结束逻辑
+    // 回合推进由 FlowSystem 的 onAutoContinueCheck 自动处理
+    // 当所有交互完成后，FlowSystem 会自动推进到下一阶段
     
     return events;
 }
@@ -404,11 +486,20 @@ function executeSkipAbility(
     command: Extract<CardiaCommand, { type: typeof CARDIA_COMMANDS.SKIP_ABILITY }>,
     random: RandomFn
 ): CardiaEvent[] {
-    const events: CardiaEvent[] = [];
+    const { playerId } = command.payload;
+    const timestamp = Date.now();
     
-    // 自动执行回合结束逻辑（方案A：无需手动点击）
-    const endTurnEvents = executeAutoEndTurn(core, command.playerId, random);
-    events.push(...endTurnEvents);
+    // 发射能力跳过事件，触发 FlowSystem 自动推进
+    const events: CardiaEvent[] = [
+        {
+            type: CARDIA_EVENTS.ABILITY_SKIPPED,
+            timestamp,
+            payload: {
+                playerId,
+                cardId: core.players[playerId].currentCard?.uid,
+            },
+        }
+    ];
     
     return events;
 }
