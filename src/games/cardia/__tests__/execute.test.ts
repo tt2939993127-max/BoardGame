@@ -166,7 +166,7 @@ describe('Cardia - Command Execution', () => {
     });
     
     describe('SKIP_ABILITY', () => {
-        it('should transition to end phase', () => {
+        it('should emit ABILITY_SKIPPED event', () => {
             core.phase = 'ability';
             const player0Card = core.players['0'].hand[0];
             const player1Card = core.players['1'].hand[0];
@@ -183,14 +183,16 @@ describe('Cardia - Command Execution', () => {
             const events = CardiaDomain.execute(state, {
                 type: CARDIA_COMMANDS.SKIP_ABILITY,
                 playerId: '0',
-                payload: {},
+                payload: {
+                    playerId: '0',
+                },
             }, random);
             
-            // SKIP_ABILITY should directly transition to end phase without interaction
+            // SKIP_ABILITY should emit ABILITY_SKIPPED event to trigger FlowSystem auto-advance
             expect(events.length).toBeGreaterThanOrEqual(1);
-            const phaseChangeEvent = events.find(e => e.type === CARDIA_EVENTS.PHASE_CHANGED);
-            expect(phaseChangeEvent).toBeDefined();
-            expect(phaseChangeEvent?.payload.newPhase).toBe('end');
+            const abilitySkippedEvent = events.find(e => e.type === CARDIA_EVENTS.ABILITY_SKIPPED);
+            expect(abilitySkippedEvent).toBeDefined();
+            expect(abilitySkippedEvent?.payload.playerId).toBe('0');
         });
     });
     

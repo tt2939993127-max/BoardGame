@@ -496,7 +496,7 @@ function executeSkipAbility(
             timestamp,
             payload: {
                 playerId,
-                cardId: core.players[playerId].currentCard?.uid,
+                cardId: core.players?.[playerId]?.currentCard?.uid,
             },
         }
     ];
