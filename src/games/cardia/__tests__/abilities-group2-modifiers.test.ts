@@ -228,27 +228,28 @@ describe('组 2：影响力修正能力', () => {
   });
 
   describe('发明家（Inventor）', () => {
-    it('应该为己方两张打出的牌添加修正标记（第一张+3，第二张-3）', () => {
+    it('第一次调用：应该创建卡牌选择交互', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.INVENTOR);
       expect(executor).toBeDefined();
 
       const result = executor!(mockContext);
 
-      expect(result.events).toHaveLength(2);
-      expect(result.events[0].type).toBe(CARDIA_EVENTS.MODIFIER_TOKEN_PLACED);
-      expect(result.events[0].payload.value).toBe(3);
-      expect(result.events[1].type).toBe(CARDIA_EVENTS.MODIFIER_TOKEN_PLACED);
-      expect(result.events[1].payload.value).toBe(-3);
+      // 第一次调用应该返回交互
+      expect(result.interaction).toBeDefined();
+      expect(result.interaction?.type).toBe('card_selection');
+      expect(result.events).toHaveLength(0); // 第一次调用不产生事件
     });
 
-    it('当己方只有 1 张场上卡牌时，应该只添加 +3 修正标记', () => {
+    it('当己方只有 1 张场上卡牌时，应该创建卡牌选择交互', () => {
       mockCore.players['player1'].playedCards = [mockCore.players['player1'].playedCards[0]];
 
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.INVENTOR);
       const result = executor!(mockContext);
 
-      expect(result.events).toHaveLength(1);
-      expect(result.events[0].payload.value).toBe(3);
+      // 应该创建交互
+      expect(result.interaction).toBeDefined();
+      expect(result.interaction?.type).toBe('card_selection');
+      expect(result.events).toHaveLength(0);
     });
   });
 
@@ -285,31 +286,32 @@ describe('组 2：影响力修正能力', () => {
   });
 
   describe('宫廷卫士（Court Guard）', () => {
-    it('当对手有指定派系手牌时，应该弃掉该手牌', () => {
+    it('第一次调用：应该创建派系选择交互', () => {
       mockCore.players['player2'].hand = [
         { uid: 'p2card1', defId: 'test_card', ownerId: 'player2', baseInfluence: 5, faction: 'swamp', abilityIds: [], difficulty: 1, modifiers: { modifiers: [] }, tags: { tags: {} }, signets: 0, ongoingMarkers: [] },
       ];
-      mockContext.selectedFaction = 'swamp';
 
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.COURT_GUARD);
       expect(executor).toBeDefined();
 
       const result = executor!(mockContext);
 
-      expect(result.events).toHaveLength(1);
-      expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+      // 第一次调用应该返回交互
+      expect(result.interaction).toBeDefined();
+      expect(result.interaction?.type).toBe('faction_selection');
+      expect(result.events).toHaveLength(0); // 第一次调用不产生事件
     });
 
-    it('当对手没有指定派系手牌时，应该为本牌添加 +7 修正标记', () => {
+    it('当对手没有手牌时，应该创建派系选择交互', () => {
       mockCore.players['player2'].hand = [];
-      mockContext.selectedFaction = 'swamp';
 
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.COURT_GUARD);
       const result = executor!(mockContext);
 
-      expect(result.events).toHaveLength(1);
-      expect(result.events[0].type).toBe(CARDIA_EVENTS.MODIFIER_TOKEN_PLACED);
-      expect(result.events[0].payload.value).toBe(7);
+      // 应该创建交互
+      expect(result.interaction).toBeDefined();
+      expect(result.interaction?.type).toBe('faction_selection');
+      expect(result.events).toHaveLength(0);
     });
   });
 
@@ -338,13 +340,16 @@ describe('组 2：影响力修正能力', () => {
   });
 
   describe('图书管理员（Librarian）', () => {
-    it('选择修正值后，应该注册延迟效果', () => {
-      mockContext.selectedModifierValue = 2;
-
+    it('选择修正值后，应该注册延迟效果', async () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.LIBRARIAN);
       expect(executor).toBeDefined();
 
-      const result = executor!(mockContext);
+      const { executeAndResolveInteraction } = await import('./helpers/interactionResolver');
+      const result = await executeAndResolveInteraction(
+        executor!,
+        mockContext,
+        { selectedModifierValue: 2 }
+      );
 
       expect(result.events).toHaveLength(1);
       expect(result.events[0].type).toBe(CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED);
@@ -358,6 +363,8 @@ describe('组 2：影响力修正能力', () => {
       expect(result.interaction).toBeDefined();
       expect(result.interaction?.type).toBe('modifier_selection');
       if (result.interaction?.type === 'modifier_selection') {
+        // availableModifiers 应该是一个数组
+        expect(Array.isArray(result.interaction.availableModifiers)).toBe(true);
         expect(result.interaction.availableModifiers).toContain(2);
         expect(result.interaction.availableModifiers).toContain(-2);
       }

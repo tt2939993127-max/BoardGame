@@ -12,7 +12,7 @@ import { createMockCore, createMockContext, createMockCard } from './test-helper
 import '../domain/abilities/group7-faction';
 
 describe('巫王（Witch King）', () => {
-  it('应该让对手弃掉手牌和牌库中所有沼泽派系的卡牌，然后混洗牌库', () => {
+  it('应该让对手弃掉手牌和牌库中所有沼泽派系的卡牌，然后混洗牌库', async () => {
     const mockCore = createMockCore();
     mockCore.players['player2'].hand = [
       createMockCard({ uid: 'hand1', defId: 'test1', ownerId: 'player2', baseInfluence: 7, faction: 'swamp' }),
@@ -29,7 +29,12 @@ describe('巫王（Witch King）', () => {
     const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.WITCH_KING);
     expect(executor).toBeDefined();
 
-    const result = executor!(mockContext);
+    const { executeAndResolveInteraction } = await import('./helpers/interactionResolver');
+    const result = await executeAndResolveInteraction(
+      executor!,
+      mockContext,
+      { selectedFaction: FACTION_IDS.SWAMP }
+    );
 
     expect(result.events).toHaveLength(4);
     
@@ -55,7 +60,7 @@ describe('巫王（Witch King）', () => {
     expect((result.events[3].payload as any).playerId).toBe('player2');
   });
 
-  it('当对手手牌和牌库中都没有沼泽派系卡牌时，应该只产生派系选择和混洗事件', () => {
+  it('当对手手牌和牌库中都没有沼泽派系卡牌时，应该只产生派系选择和混洗事件', async () => {
     const mockCore = createMockCore();
     mockCore.players['player2'].hand = [
       createMockCard({ uid: 'hand1', defId: 'test1', ownerId: 'player2', baseInfluence: 2, faction: 'academy' }),
@@ -66,7 +71,13 @@ describe('巫王（Witch King）', () => {
     const mockContext = createMockContext({ core: mockCore });
 
     const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.WITCH_KING);
-    const result = executor!(mockContext);
+    
+    const { executeAndResolveInteraction } = await import('./helpers/interactionResolver');
+    const result = await executeAndResolveInteraction(
+      executor,
+      mockContext,
+      { selectedFaction: FACTION_IDS.SWAMP }
+    );
 
     expect(result.events).toHaveLength(2);
     expect(result.events[0].type).toBe(CARDIA_EVENTS.FACTION_SELECTED);
