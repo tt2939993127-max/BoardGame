@@ -8,7 +8,19 @@
  */
 
 import { test, expect } from './fixtures';
-import { setupOnlineMatch, waitForPhase, playCard, activateAbility, skipAbility } from './helpers/cardia';
+import { setupOnlineMatch, waitForPhase, playCard } from './helpers/cardia';
+import type { Page } from '@playwright/test';
+
+// 本地辅助函数
+async function activateAbility(page: Page) {
+  await page.locator('[data-testid="cardia-activate-ability-btn"]').click();
+  await page.waitForTimeout(500);
+}
+
+async function skipAbility(page: Page) {
+  await page.locator('[data-testid="cardia-skip-ability-btn"]').click();
+  await page.waitForTimeout(500);
+}
 
 test.describe('虚空法师 - 无标记提示', () => {
     test('场上无标记时发动能力应显示 Toast 提示', async ({ page, context }) => {

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { setupOnlineMatch, waitForTestHarness } from './helpers/cardia';
+import { setupOnlineMatch } from './helpers/cardia';
+import { waitForTestHarness } from './helpers/common';
 
 test.describe('Cardia UI 标记显示', () => {
     test('应该显示持续能力标记', async ({ page }) => {
