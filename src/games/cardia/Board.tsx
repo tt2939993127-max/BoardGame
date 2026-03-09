@@ -19,6 +19,7 @@ import { CardSelectionModal } from './ui/CardSelectionModal';
 import { FactionSelectionModal } from './ui/FactionSelectionModal';
 import { ChoiceModal } from './ui/ChoiceModal';
 import { useAbilityAnimations, AbilityAnimationsLayer } from './ui/AbilityAnimations';
+import { CardMagnifyOverlay, type CardMagnifyTarget } from './ui/CardMagnifyOverlay';
 import type { FactionId } from './domain/ids';
 import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
@@ -40,6 +41,9 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const [showFactionSelection, setShowFactionSelection] = useState(false);
     const [showChoice, setShowChoice] = useState(false);
     const [currentInteraction, setCurrentInteraction] = useState<any>(null);
+    
+    // 卡牌放大状态
+    const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
     
     // 动画状态
     const animations = useAbilityAnimations();
@@ -381,6 +385,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             opponentId={opponentId}
                             core={core}
                             setCardRef={setCardRef}
+                            onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
                         />
                     </div>
                     
@@ -393,6 +398,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             canPlay={phase === 'play' && !myPlayer.hasPlayed}
                             totalSignets={mySignets}
                             setCardRef={setCardRef}
+                            onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
                         />
                     </div>
                     
@@ -491,6 +497,12 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     );
                 })()}
                 
+                {/* 卡牌放大预览 */}
+                <CardMagnifyOverlay
+                    target={magnifyTarget}
+                    onClose={() => setMagnifyTarget(null)}
+                />
+                
                 {isGameOver && <EndgameOverlay {...endgameProps} />}
                 <GameDebugPanel G={G} dispatch={dispatch} playerID={myPlayerId} />
                 
@@ -548,9 +560,10 @@ interface EncounterSequenceProps {
     opponentId: string;
     core: CardiaCore;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
+    onMagnifyCard?: (card: any) => void;
 }
 
-const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponent, myPlayerId, opponentId, core, setCardRef }) => {
+const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponent, myPlayerId, opponentId, core, setCardRef, onMagnifyCard }) => {
     const { t } = useTranslation('game-cardia');
     
     // 合并双方的场上卡牌，按遭遇序号排序
@@ -601,6 +614,7 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
                     opponentId={opponentId}
                     core={core}
                     setCardRef={setCardRef}
+                    onMagnifyCard={onMagnifyCard}
                 />
             ))}
         </div>
@@ -621,9 +635,10 @@ interface EncounterPairProps {
     opponentId: string;
     core: CardiaCore;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
+    onMagnifyCard?: (card: any) => void;
 }
 
-const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPlayerId, opponentId, core, setCardRef }) => {
+const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPlayerId, opponentId, core, setCardRef, onMagnifyCard }) => {
     const { t } = useTranslation('game-cardia');
     const { myCard, opponentCard } = encounter;
     
@@ -653,6 +668,7 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
                             core={core}
                             size="normal"
                             onRef={(el) => setCardRef(opponentCard.uid, el)}
+                            onMagnify={onMagnifyCard}
                         />
                     ) : (
                         <CardBack />
@@ -681,6 +697,7 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
                             core={core}
                             size="normal"
                             onRef={(el) => setCardRef(myCard.uid, el)}
+                            onMagnify={onMagnifyCard}
                         />
                     ) : (
                         <CardBack />
@@ -703,9 +720,10 @@ interface PlayerAreaProps {
     canPlay: boolean;
     totalSignets: number;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
+    onMagnifyCard?: (card: any) => void;
 }
 
-const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPlay, totalSignets, setCardRef }) => {
+const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPlay, totalSignets, setCardRef, onMagnifyCard }) => {
     const { t } = useTranslation('game-cardia');
     
     return (
@@ -739,6 +757,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                             core={core}
                             size="normal"
                             onRef={(el) => setCardRef(card.uid, el)}
+                            onMagnify={onMagnifyCard}
                         />
                     </button>
                 ))}
@@ -755,9 +774,10 @@ interface CardDisplayProps {
     core: CardiaCore;
     size?: 'normal' | 'small';
     onRef?: (element: HTMLElement | null) => void;
+    onMagnify?: (card: any) => void;
 }
 
-const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', onRef }) => {
+const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', onRef, onMagnify }) => {
     const { t } = useTranslation('game-cardia');
     const [imageError, setImageError] = React.useState(false);
     
@@ -785,7 +805,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
         <div 
             ref={onRef}
             data-testid={`card-${card.uid}`}
-            className={`relative ${sizeClasses} rounded-lg border-2 border-white/20 shadow-lg overflow-hidden`}
+            className={`relative ${sizeClasses} rounded-lg border-2 border-white/20 shadow-lg overflow-hidden group`}
         >
             {imagePath && !imageError ? (
                 <OptimizedImage
@@ -803,9 +823,25 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
                 <span className="text-white font-bold text-sm">{displayInfluence}</span>
             </div>
             
-            {/* 修正标记显示（右上角） */}
+            {/* 放大镜按钮（右上角） */}
+            {onMagnify && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onMagnify(card);
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg border border-white/20 z-10"
+                    title="查看大图"
+                >
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                        <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
+                    </svg>
+                </button>
+            )}
+            
+            {/* 修正标记显示（右上角，放大镜按钮下方） */}
             {modifierTotal !== 0 && (
-                <div className={`absolute top-2 right-2 ${
+                <div className={`absolute ${onMagnify ? 'top-12' : 'top-2'} right-2 ${
                     modifierTotal > 0 ? 'bg-green-500' : 'bg-red-500'
                 } text-white font-bold text-xs px-2 py-1 rounded-full shadow-lg`}>
                     {modifierTotal > 0 ? '+' : ''}{modifierTotal}
@@ -814,7 +850,11 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             
             {/* 持续能力标记（右上角，如果没有修正标记则显示在这里） */}
             {card.ongoingMarkers && card.ongoingMarkers.length > 0 && (
-                <div className={`absolute ${modifierTotal !== 0 ? 'top-12' : 'top-2'} right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1`}>
+                <div className={`absolute ${
+                    onMagnify && modifierTotal !== 0 ? 'top-[4.5rem]' : 
+                    onMagnify || modifierTotal !== 0 ? 'top-12' : 
+                    'top-2'
+                } right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1`}>
                     <span>🔄</span>
                     {card.ongoingMarkers.length > 1 && (
                         <span className="font-bold">×{card.ongoingMarkers.length}</span>
