@@ -1106,15 +1106,15 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 );
                 if (hasResponseWindowOpened) {
                     console.log('[onPhaseExit] afterScoring 响应窗口打开（检测到 RESPONSE_WINDOW_OPENED 事件），立即 halt');
-                    // ⚠️ 关键：不 push 事件到 events 数组，因为响应窗口打开后，
-                    // 这些事件会在响应窗口关闭后重新生成（重新计分）
-                    // 如果 push 了，会导致事件重复（第一次 halt 时 push，第二次重新计分时又 push）
-                    // 
-                    // 正确流程：
-                    // 1. scoreOneBase 打开 afterScoring 响应窗口 → 立即 halt（不 push 事件）
-                    // 2. 响应窗口关闭 → onPhaseExit 重新进入 → 重新计分该基地
-                    // 3. 重新计分时生成新的事件（包括 BASE_SCORED、BASE_CLEARED、BASE_REPLACED）
-                    return { events, halt: true, updatedState: result.matchState ?? currentMatchState } as PhaseExitResult;
+                    // ⚠️ 关键：必须保留 scoreOneBase 在打开响应窗口前已经生成的事件，
+                    // 包括 BASE_SCORED / BEFORE_SCORING_TRIGGERED / AFTER_SCORING_TRIGGERED。
+                    // 响应窗口关闭后只补发 BASE_CLEARED / BASE_REPLACED，并在力量变化时追加新的 BASE_SCORED，
+                    // 不能把首次计分结果整体丢掉，否则 reducer、ActionLog、特效和触发标记都会延后或重复。
+                    return {
+                        events: [...events, ...result.events],
+                        halt: true,
+                        updatedState: result.matchState ?? currentMatchState,
+                    } as PhaseExitResult;
                 }
                 
                 // 没有打开响应窗口，正常 push 事件
