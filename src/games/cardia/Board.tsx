@@ -814,6 +814,7 @@ interface CardDisplayProps {
 const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', onRef, onMagnify }) => {
     const { t } = useTranslation('game-cardia');
     const [imageError, setImageError] = React.useState(false);
+    const [isHovered, setIsHovered] = React.useState(false);
     
     const factionColors = {
         swamp: 'from-green-700 to-green-900',
@@ -836,11 +837,23 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
     // 计算当前影响力（基础影响力 + 修正标记）
     const displayInfluence = card.baseInfluence + modifierTotal;
     
+    // 获取能力描述文本（用于悬浮显示）
+    // abilityId 格式：ability_i_void_mage -> i18n key: abilities.void_mage.description
+    const abilityTexts = card.abilityIds
+        .map((abilityId: string) => {
+            // 提取能力名称（去掉 ability_i_ 或 ability_ii_ 前缀）
+            const abilityName = abilityId.replace(/^ability_(i{1,2}_)?/, '');
+            return t(`abilities.${abilityName}.description`, '');
+        })
+        .filter((text: string) => text.length > 0);
+    
     return (
         <div 
             ref={onRef}
             data-testid={`card-${card.uid}`}
-            className={`relative ${sizeClasses} rounded-lg border-2 border-white/20 shadow-lg overflow-hidden group`}
+            className={`relative ${sizeClasses} rounded-lg border-2 border-white/20 shadow-lg overflow-hidden`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
         >
             {imagePath && !imageError ? (
                 <OptimizedImage
@@ -865,7 +878,9 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
                         e.stopPropagation();
                         onMagnify(card);
                     }}
-                    className="absolute top-1 right-1 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg border border-white/20 z-10"
+                    className={`absolute top-1 right-1 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full transition-all duration-200 shadow-lg border border-white/20 z-20 ${
+                        isHovered ? 'opacity-100' : 'opacity-0'
+                    }`}
                     title="查看大图"
                 >
                     <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
@@ -903,6 +918,25 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
                     {Array.from({ length: card.signets }).map((_, i) => (
                         <div key={i} className="w-4 h-4 bg-yellow-400 rounded-full border border-yellow-600 shadow" />
                     ))}
+                </div>
+            )}
+            
+            {/* 能力文本悬浮覆盖层（参考 Smash Up） */}
+            {abilityTexts.length > 0 && (
+                <div 
+                    className={`absolute inset-0 z-10 pointer-events-none flex flex-col justify-end p-2 transition-opacity duration-200 ${
+                        isHovered ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    data-testid="ability-overlay"
+                >
+                    {/* 能力文本 - 白色背景，黑色粗体 */}
+                    <div className="w-full bg-white/90 backdrop-blur-md text-black font-bold rounded shadow-md leading-tight p-2 text-xs">
+                        {abilityTexts.map((text: string, index: number) => (
+                            <div key={index} className={index > 0 ? 'mt-1' : ''}>
+                                {text}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

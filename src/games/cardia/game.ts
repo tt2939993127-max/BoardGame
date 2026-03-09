@@ -10,6 +10,11 @@ import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 
 // 注册游戏资源（必须在游戏引擎创建前执行）
 import './assets';
+import { registerCriticalImageResolver } from '../../core';
+import { cardiaCriticalImageResolver } from './criticalImageResolver';
+
+// 注册关键图片解析器
+registerCriticalImageResolver('cardia', cardiaCriticalImageResolver);
 
 // 导入所有能力组以注册执行器（必须在游戏引擎创建前执行）
 import './domain/abilities/group1-resources';
