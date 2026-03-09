@@ -6,9 +6,9 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback, buildValidatedMoveEvents } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState } from '../../../engine/types';
@@ -17,6 +17,22 @@ import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel } from '../domain/utils';
+
+type SkipChoiceValue = { skip: true };
+type DoneChoiceValue = { done: true };
+type FactionChoiceValue = { factionId: string };
+type MinionTargetChoiceValue = { minionUid: string; baseIndex: number; defId: string };
+type MoveContext = { minionUid: string; minionDefId: string; fromBaseIndex: number };
+type FullSailContext = MoveContext & { movedUids?: string[] };
+type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
+
+function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
+    return interactionData?.continuationContext as T | undefined;
+}
+
+function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
+    return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+}
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -63,7 +79,7 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
     const allOptions = [
         { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true } , displayMode: 'button' as const },
         ...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
-    ] as any[];
+    ] as PromptOption<SkipChoiceValue | MinionTargetChoiceValue>[];
     const interaction = createSimpleChoice(
         `pirate_saucy_wench_${ctx.now}`, ctx.playerId,
         '你可以消灭本基地一个力量≤2的随从', allOptions, { sourceId: 'pirate_saucy_wench', targetType: 'minion' },
@@ -106,11 +122,13 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
     const options = candidates.map((c, i) => ({ 
         id: `target-${i}`, 
         label: c.label, 
-        value: { baseIndex: c.baseIndex, targetPlayerId: c.targetPlayerId } 
+        value: { baseIndex: c.baseIndex, targetPlayerId: c.targetPlayerId },
+        displayMode: 'card' as const,
     }));
     const interaction = createSimpleChoice(
         `pirate_broadside_${ctx.now}`, ctx.playerId,
-        '选择基地和玩家，消灭该玩家所有力量≤2的随从', options, 'pirate_broadside',
+        '选择基地和玩家，消灭该玩家所有力量≤2的随从', options,
+        { sourceId: 'pirate_broadside', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -192,9 +210,9 @@ function buildFullSailChooseMinionInteraction(
         ...buildMinionTargetOptions(myMinions, { state: state, sourcePlayerId: playerId }),
         { id: 'done', label: '完成移动', value: { done: true } , displayMode: 'button' as const },
     ];
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<DoneChoiceValue | MinionTargetChoiceValue>(
         `pirate_full_sail_minion_${now}`, playerId,
-        '选择要移动的己方随从（或完成）', options as any[], { sourceId: 'pirate_full_sail_choose_minion', targetType: 'minion' },
+        '选择要移动的己方随从（或完成）', options as PromptOption<DoneChoiceValue | MinionTargetChoiceValue>[], { sourceId: 'pirate_full_sail_choose_minion', targetType: 'minion' },
     );
     return { ...interaction, data: { ...interaction.data, continuationContext: { movedUids } } };
 }
@@ -214,7 +232,9 @@ function buildFullSailChooseMinionInteraction(
  */
 function buccaneerOnDestroyed(ctx: TriggerContext): SmashUpEvent[] | TriggerResult {
     const { state, triggerMinionUid, triggerMinionDefId, baseIndex } = ctx;
-    if (!triggerMinionUid || triggerMinionDefId !== 'pirate_buccaneer' || baseIndex === undefined) return [];
+    const isBuccaneer = triggerMinionDefId === 'pirate_buccaneer' || triggerMinionDefId === 'pirate_buccaneer_pod';
+    if (!triggerMinionUid || !isBuccaneer || baseIndex === undefined) return [];
+    const sourceDefId = triggerMinionDefId;
 
     // 收集可用的其他基地
     const candidates: { baseIndex: number; label: string }[] = [];
@@ -228,13 +248,13 @@ function buccaneerOnDestroyed(ctx: TriggerContext): SmashUpEvent[] | TriggerResu
 
     // 只有一个基地时自动移动（无需交互）
     if (candidates.length === 1) {
-        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, 'pirate_buccaneer', ctx.now)];
+        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, sourceDefId, ctx.now)];
     }
 
     // 多个基地→创建玩家选择交互
     if (!ctx.matchState) {
         // 无 matchState 降级：自动选第一个
-        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, 'pirate_buccaneer', ctx.now)];
+        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, sourceDefId, ctx.now)];
     }
 
     const minion = state.bases[baseIndex]?.minions.find(m => m.uid === triggerMinionUid);
@@ -247,9 +267,10 @@ function buccaneerOnDestroyed(ctx: TriggerContext): SmashUpEvent[] | TriggerResu
         candidates.map(c => ({
             id: `base_${c.baseIndex}`,
             label: c.label,
-            value: { minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, toBaseIndex: c.baseIndex, baseDefId: c.baseDefId },
+            value: { minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, baseIndex: c.baseIndex, toBaseIndex: c.baseIndex, baseDefId: c.baseDefId },
+            displayMode: 'card' as const,
         })),
-        { sourceId: 'pirate_buccaneer_move', targetType: 'generic' },
+        { sourceId: 'pirate_buccaneer_move', targetType: 'base' },
     );
     const updatedMS = queueInteraction(ctx.matchState, interaction);
     return { events: [], matchState: updatedMS };
@@ -272,7 +293,14 @@ function buccaneerMoveHandler(
     };
     return {
         state,
-        events: [moveMinion(selected.minionUid, selected.minionDefId, selected.fromBaseIndex, selected.toBaseIndex, 'pirate_buccaneer', timestamp)],
+        events: buildValidatedMoveEvents(state, {
+            minionUid: selected.minionUid,
+            minionDefId: selected.minionDefId,
+            fromBaseIndex: selected.fromBaseIndex,
+            toBaseIndex: selected.toBaseIndex,
+            reason: selected.minionDefId,
+            now: timestamp,
+        }),
     };
 }
 
@@ -295,7 +323,7 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
     for (let i = 0; i < ctx.state.bases.length; i++) {
         if (i === scoringBaseIndex) continue;
         for (const m of ctx.state.bases[i].minions) {
-            if (m.defId === 'pirate_king') {
+            if (m.defId === 'pirate_king' || m.defId === 'pirate_king_pod') {
                 kings.push({ uid: m.uid, defId: m.defId, fromBaseIndex: i, controller: m.controller });
             }
         }
@@ -306,7 +334,7 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
 
     // 无 matchState 时回退自动移动
     if (!ctx.matchState) {
-        return kings.map(k => moveMinion(k.uid, k.defId, k.fromBaseIndex, scoringBaseIndex, 'pirate_king', ctx.now));
+        return kings.map(k => moveMinion(k.uid, k.defId, k.fromBaseIndex, scoringBaseIndex, k.defId, ctx.now));
     }
 
     // 链式处理每个海盗王：创建确认交互（发送给各 king 的 controller）
@@ -320,10 +348,15 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
         interactionId, first.controller,
         `海盗王：是否移动到即将计分的「${baseName}」？`,
         [
-            { id: 'yes', label: '移动到该基地', value: { move: true, uid: first.uid, defId: first.defId, fromBaseIndex: first.fromBaseIndex } },
-            { id: 'no', label: '留在原地', value: { move: false } },
+            {
+                id: 'yes',
+                label: '移动到该基地',
+                value: { move: true, minionUid: first.uid, minionDefId: first.defId, defId: first.defId, fromBaseIndex: first.fromBaseIndex },
+                displayMode: 'button' as const,
+            },
+            { id: 'no', label: '留在原地', value: { move: false }, displayMode: 'button' as const },
         ],
-        'pirate_king_move',
+        { sourceId: 'pirate_king_move', targetType: 'minion' },
     );
     const ms = queueInteraction(ctx.matchState, {
         ...interaction,
@@ -348,7 +381,7 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
     if (!base) return [];
 
     // 收集计分基地上所有 first_mate（不限当前回合玩家）
-    const firstMates = base.minions.filter(m => m.defId === 'pirate_first_mate');
+    const firstMates = base.minions.filter(m => m.defId === 'pirate_first_mate' || m.defId === 'pirate_first_mate_pod');
     if (firstMates.length === 0) return [];
 
     // 可用的其他基地
@@ -361,7 +394,7 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
     if (!ctx.matchState) {
         const events: SmashUpEvent[] = [];
         for (const m of firstMates) {
-            events.push(moveMinion(m.uid, m.defId, scoringBaseIndex, otherBases[0].index, 'pirate_first_mate', ctx.now));
+            events.push(moveMinion(m.uid, m.defId, scoringBaseIndex, otherBases[0].index, m.defId, ctx.now));
         }
         return events;
     }
@@ -378,12 +411,12 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
         const baseOptions = otherBases.map(b => {
             const baseDef = getBaseDef(b.defId);
             const baseName = baseDef?.name ?? `基地 ${b.index + 1}`;
-            return { id: `base-${b.index}`, label: baseName, value: { baseIndex: b.index }, _source: 'base' as const };
+            return { id: `base-${b.index}`, label: baseName, value: { baseIndex: b.index }, _source: 'base' as const, displayMode: 'card' as const };
         });
         const allOptions = [
             { id: 'skip', label: '跳过（不移动大副）', value: { skip: true } , displayMode: 'button' as const },
             ...baseOptions,
-        ] as any[];
+        ] as PromptOption<SkipChoiceValue | { baseIndex: number }>[];
         const interaction = createSimpleChoice(
             `pirate_first_mate_choose_base_${mate.uid}_${ctx.now}`, controllerId,
             `${mateName}：你可以移动本随从到其他基地（而不是弃牌堆）`, allOptions,
@@ -477,9 +510,10 @@ function pirateSeaDogs(ctx: AbilityContext): AbilityResult {
     const options = Array.from(factionSet.keys()).map((fid, i) => ({
         id: `faction-${i}`, label: FACTION_DISPLAY_NAMES[fid] || fid, value: { factionId: fid },
     }));
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<FactionChoiceValue>(
         `pirate_sea_dogs_faction_${ctx.now}`, ctx.playerId,
-        '水手：指定一个派系', options as any[], 'pirate_sea_dogs_choose_faction',
+        '水手：指定一个派系', options,
+        { sourceId: 'pirate_sea_dogs_choose_faction', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -605,7 +639,7 @@ export function registerPirateInteractionHandlers(): void {
             [
                 { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } , displayMode: 'button' as const },
                 ...buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }),
-            ] as any[],
+            ] as PromptOption<SkipChoiceValue | MinionTargetChoiceValue>[],
             { sourceId: 'pirate_cannon_choose_second', targetType: 'minion' }
         );
         return { state: queueInteraction(state, next), events };
@@ -647,9 +681,19 @@ export function registerPirateInteractionHandlers(): void {
     // 上海：选择基地后移动
     registerInteractionHandler('pirate_shanghai_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number };
+        const ctx = getContinuationContext<MoveContext>(iData);
         if (!ctx) return undefined;
-        return { state, events: [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_shanghai', timestamp)] };
+        return {
+            state,
+            events: buildValidatedMoveEvents(state, {
+                minionUid: ctx.minionUid,
+                minionDefId: ctx.minionDefId,
+                fromBaseIndex: ctx.fromBaseIndex,
+                toBaseIndex: destBase,
+                reason: 'pirate_shanghai',
+                now: timestamp,
+            }),
+        };
     });
 
     // 海狗第一步：选择派系后，链式选择来源基地
@@ -672,14 +716,19 @@ export function registerPirateInteractionHandlers(): void {
         const next = createSimpleChoice(
             `pirate_sea_dogs_from_${timestamp}`, playerId, '选择来源基地（移动该派系所有对手随从）', buildBaseTargetOptions(candidates, state.core), { sourceId: 'pirate_sea_dogs_choose_from', targetType: 'base' }
         );
-        (next.data as any).continuationContext = { factionId };
-        return { state: queueInteraction(state, next), events: [] };
+        return {
+            state: queueInteraction(state, {
+                ...next,
+                data: { ...next.data, continuationContext: { factionId } },
+            }),
+            events: [],
+        };
     });
 
     // 海狗第二步：选择来源基地后，链式选择目标基地
     registerInteractionHandler('pirate_sea_dogs_choose_from', (state, playerId, value, iData, _random, timestamp) => {
         const { baseIndex: fromBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { factionId: string };
+        const ctx = getContinuationContext<{ factionId: string }>(iData);
         if (!ctx) return undefined;
         const destCandidates: { baseIndex: number; label: string }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
@@ -691,14 +740,19 @@ export function registerPirateInteractionHandlers(): void {
         const next = createSimpleChoice(
             `pirate_sea_dogs_to_${timestamp}`, playerId, '选择目标基地', buildBaseTargetOptions(destCandidates, state.core), { sourceId: 'pirate_sea_dogs_choose_to', targetType: 'base' }
         );
-        (next.data as any).continuationContext = { factionId: ctx.factionId, fromBase };
-        return { state: queueInteraction(state, next), events: [] };
+        return {
+            state: queueInteraction(state, {
+                ...next,
+                data: { ...next.data, continuationContext: { factionId: ctx.factionId, fromBase } },
+            }),
+            events: [],
+        };
     });
 
     // 海狗第三步：选择目标基地后，批量移动（只移动不受保护的随从）
     registerInteractionHandler('pirate_sea_dogs_choose_to', (state, playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { factionId: string; fromBase: number };
+        const ctx = getContinuationContext<{ factionId: string; fromBase: number }>(iData);
         if (!ctx) return undefined;
         const base = state.core.bases[ctx.fromBase];
         if (!base) return { state, events: [] };
@@ -709,7 +763,14 @@ export function registerPirateInteractionHandlers(): void {
             if (def?.faction !== ctx.factionId) continue;
             // 检查是否受保护（手动检查，因为这里是批量移动而非构建选项）
             if (isMinionProtected(state.core, m, ctx.fromBase, playerId, 'affect')) continue;
-            events.push(moveMinion(m.uid, m.defId, ctx.fromBase, destBase, 'pirate_sea_dogs', timestamp));
+            events.push(...buildValidatedMoveEvents(state, {
+                minionUid: m.uid,
+                minionDefId: m.defId,
+                fromBaseIndex: ctx.fromBase,
+                toBaseIndex: destBase,
+                reason: 'pirate_sea_dogs',
+                now: timestamp,
+            }));
         }
         return { state, events };
     });
@@ -737,9 +798,18 @@ export function registerPirateInteractionHandlers(): void {
     // 小艇第一步选基地后：移动，然后链式选第二个随从
     registerInteractionHandler('pirate_dinghy_first_choose_base', (state, playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number };
+        const ctx = getContinuationContext<MoveContext>(iData);
         if (!ctx) return undefined;
-        const events: SmashUpEvent[] = [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_dinghy', timestamp)];
+        const events: SmashUpEvent[] = [
+            ...buildValidatedMoveEvents(state, {
+                minionUid: ctx.minionUid,
+                minionDefId: ctx.minionDefId,
+                fromBaseIndex: ctx.fromBaseIndex,
+                toBaseIndex: destBase,
+                reason: 'pirate_dinghy',
+                now: timestamp,
+            }),
+        ];
         const remaining: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
             for (const m of state.core.bases[i].minions) {
@@ -759,7 +829,7 @@ export function registerPirateInteractionHandlers(): void {
             [
                 { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } , displayMode: 'button' as const },
                 ...buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId }),
-            ] as any[],
+            ] as PromptOption<SkipChoiceValue | MinionTargetChoiceValue>[],
             { sourceId: 'pirate_dinghy_choose_second', targetType: 'minion' }
         );
         return { state: queueInteraction(state, next), events };
@@ -791,9 +861,19 @@ export function registerPirateInteractionHandlers(): void {
     // 小艇第二步选基地后：移动
     registerInteractionHandler('pirate_dinghy_second_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number };
+        const ctx = getContinuationContext<MoveContext>(iData);
         if (!ctx) return undefined;
-        return { state, events: [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_dinghy', timestamp)] };
+        return {
+            state,
+            events: buildValidatedMoveEvents(state, {
+                minionUid: ctx.minionUid,
+                minionDefId: ctx.minionDefId,
+                fromBaseIndex: ctx.fromBaseIndex,
+                toBaseIndex: destBase,
+                reason: 'pirate_dinghy',
+                now: timestamp,
+            }),
+        };
     });
 
     // 全速航行：选择随从后，链式选择目标基地
@@ -805,7 +885,7 @@ export function registerPirateInteractionHandlers(): void {
         if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
         if (!minion) return undefined;
-        const movedUids = ((iData as any)?.continuationContext as { movedUids?: string[] })?.movedUids ?? [];
+        const movedUids = getContinuationContext<{ movedUids?: string[] }>(iData)?.movedUids ?? [];
         const next = buildMoveToBaseInteraction(
             state.core,
             minionUid!,
@@ -823,9 +903,18 @@ export function registerPirateInteractionHandlers(): void {
     // 全速航行：选择基地后移动，然后循环选择下一个
     registerInteractionHandler('pirate_full_sail_choose_base', (state, playerId, value, iData, _random, timestamp) => {
         const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number; movedUids?: string[] };
+        const ctx = getContinuationContext<FullSailContext>(iData);
         if (!ctx) return undefined;
-        const events: SmashUpEvent[] = [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_full_sail', timestamp)];
+        const events: SmashUpEvent[] = [
+            ...buildValidatedMoveEvents(state, {
+                minionUid: ctx.minionUid,
+                minionDefId: ctx.minionDefId,
+                fromBaseIndex: ctx.fromBaseIndex,
+                toBaseIndex: destBase,
+                reason: 'pirate_full_sail',
+                now: timestamp,
+            }),
+        ];
         const newMovedUids = [...(ctx.movedUids ?? []), ctx.minionUid];
         const nextInteraction = buildFullSailChooseMinionInteraction(state.core, playerId, timestamp, newMovedUids);
         if (nextInteraction) {
@@ -855,13 +944,29 @@ export function registerPirateInteractionHandlers(): void {
 
     // 海盗王：确认是否移动到计分基地（链式处理多个海盗王）
     registerInteractionHandler('pirate_king_move', (state, _playerId, value, iData, _random, timestamp) => {
-        const selected = value as { move: boolean; uid?: string; defId?: string; fromBaseIndex?: number };
+        const selected = value as {
+            move: boolean;
+            minionUid?: string;
+            minionDefId?: string;
+            uid?: string;
+            defId?: string;
+            fromBaseIndex?: number;
+        };
         const ctx = iData?.continuationContext as { scoringBaseIndex: number; remaining: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] } | undefined;
         if (!ctx) return undefined;
         const events: SmashUpEvent[] = [];
 
-        if (selected.move && selected.uid && selected.defId !== undefined && selected.fromBaseIndex !== undefined) {
-            events.push(moveMinion(selected.uid, selected.defId, selected.fromBaseIndex, ctx.scoringBaseIndex, 'pirate_king', timestamp));
+        const minionUid = selected.minionUid ?? selected.uid;
+        const minionDefId = selected.minionDefId ?? selected.defId;
+        if (selected.move && minionUid && minionDefId !== undefined && selected.fromBaseIndex !== undefined) {
+            events.push(...buildValidatedMoveEvents(state, {
+                minionUid,
+                minionDefId,
+                fromBaseIndex: selected.fromBaseIndex,
+                toBaseIndex: ctx.scoringBaseIndex,
+                reason: minionDefId,
+                now: timestamp,
+            }));
         }
 
         // 处理剩余海盗王
@@ -877,10 +982,15 @@ export function registerPirateInteractionHandlers(): void {
                 interactionId, next.controller,
                 `海盗王：是否移动到即将计分的「${baseName}」？`,
                 [
-                    { id: 'yes', label: '移动到该基地', value: { move: true, uid: next.uid, defId: next.defId, fromBaseIndex: next.fromBaseIndex } },
-                    { id: 'no', label: '留在原地', value: { move: false } },
+                    {
+                        id: 'yes',
+                        label: '移动到该基地',
+                        value: { move: true, minionUid: next.uid, minionDefId: next.defId, defId: next.defId, fromBaseIndex: next.fromBaseIndex },
+                        displayMode: 'button' as const,
+                    },
+                    { id: 'no', label: '留在原地', value: { move: false }, displayMode: 'button' as const },
                 ],
-                'pirate_king_move',
+                { sourceId: 'pirate_king_move', targetType: 'minion' },
             );
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, remaining: rest } } }), events };
         }
@@ -895,14 +1005,13 @@ export function registerPirateInteractionHandlers(): void {
         
         // 【通用修复】检查是否有延迟事件需要补发
         // 引擎层 resolveInteraction 已自动传递延迟事件，这里只需要在最后一个交互时补发
-        const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
-            { type: string; payload: unknown; timestamp: number }[] | undefined;
+        const deferredEvents = getDeferredPostScoringEvents(iData);
         const hasNextInteraction = state.sys.interaction?.queue && state.sys.interaction.queue.length > 0;
         
         if (selected.skip) {
             // 跳过时，如果这是最后一个交互，补发延迟事件
             if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-                return { state, events: deferredEvents as any[] };
+                return { state, events: deferredEvents };
             }
             return { state, events: [] };
         }
@@ -911,7 +1020,16 @@ export function registerPirateInteractionHandlers(): void {
         if (destBase === undefined) return undefined;
         const ctx = iData?.continuationContext as { mateUid: string; mateDefId: string; scoringBaseIndex: number } | undefined;
         if (!ctx) return undefined;
-        const events: SmashUpEvent[] = [moveMinion(ctx.mateUid, ctx.mateDefId, ctx.scoringBaseIndex, destBase, 'pirate_first_mate', timestamp)];
+        const events: SmashUpEvent[] = [
+            ...buildValidatedMoveEvents(state, {
+                minionUid: ctx.mateUid,
+                minionDefId: ctx.mateDefId,
+                fromBaseIndex: ctx.scoringBaseIndex,
+                toBaseIndex: destBase,
+                reason: ctx.mateDefId,
+                now: timestamp,
+            }),
+        ];
         
         // 【通用修复】如果这是最后一个交互，补发延迟事件
         if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
