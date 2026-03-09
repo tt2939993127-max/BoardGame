@@ -839,10 +839,17 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
     
     // 获取能力描述文本（用于悬浮显示）
     // abilityId 格式：ability_i_void_mage -> i18n key: abilities.void_mage.description
+    // 特殊映射：ability_i_magistrate -> abilities.judge.description
+    const abilityNameMap: Record<string, string> = {
+        'magistrate': 'judge', // 审判官的 i18n key 是 judge
+    };
+    
     const abilityTexts = card.abilityIds
         .map((abilityId: string) => {
             // 提取能力名称（去掉 ability_i_ 或 ability_ii_ 前缀）
-            const abilityName = abilityId.replace(/^ability_(i{1,2}_)?/, '');
+            let abilityName = abilityId.replace(/^ability_(i{1,2}_)?/, '');
+            // 应用映射
+            abilityName = abilityNameMap[abilityName] || abilityName;
             return t(`abilities.${abilityName}.description`, '');
         })
         .filter((text: string) => text.length > 0);

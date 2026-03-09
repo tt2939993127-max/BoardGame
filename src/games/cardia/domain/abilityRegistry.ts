@@ -176,8 +176,8 @@ abilityRegistry.register({
 // 影响力 8：审判官 - 🔄 你赢得所有平局，包括之后的遭遇。平局不会触发能力
 abilityRegistry.register({
     id: ABILITY_IDS.MAGISTRATE,
-    name: 'abilities.magistrate.name',
-    description: 'abilities.magistrate.description',
+    name: 'abilities.judge.name',
+    description: 'abilities.judge.description',
     trigger: 'ongoing',
     isInstant: false,
     isOngoing: true,
