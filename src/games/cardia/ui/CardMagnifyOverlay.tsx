@@ -8,7 +8,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
+import { CardPreview } from '../../../components/common/media/CardPreview';
 import type { CardInstance } from '../domain/core-types';
 import type { CardiaCore } from '../domain/core-types';
 
@@ -24,7 +24,6 @@ interface Props {
 
 export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     const { t } = useTranslation('game-cardia');
-    const [imageError, setImageError] = React.useState(false);
 
     if (!target) return null;
 
@@ -61,12 +60,11 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
 
                 {/* 卡牌内容 */}
                 <div className="relative w-full h-full rounded-xl border-4 border-white/30 shadow-2xl overflow-hidden">
-                    {imagePath && !imageError ? (
-                        <OptimizedImage
-                            src={imagePath}
+                    {imagePath ? (
+                        <CardPreview
+                            previewRef={{ type: 'image', src: imagePath }}
                             alt={t(card.defId)}
                             className="absolute inset-0 w-full h-full object-cover"
-                            onError={() => setImageError(true)}
                         />
                     ) : (
                         <div className={`absolute inset-0 bg-gradient-to-br ${bgColor}`}>
