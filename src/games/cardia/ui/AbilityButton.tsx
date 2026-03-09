@@ -24,7 +24,13 @@ export const AbilityButton: React.FC<AbilityButtonProps> = ({
     const { t } = useTranslation('game-cardia');
     
     // 将完整 ID 转换为简短格式（ability_i_mercenary_swordsman -> mercenary_swordsman）
-    const shortId = abilityId.replace(/^ability_(i|ii)_/, '');
+    let shortId = abilityId.replace(/^ability_(i|ii)_/, '');
+    
+    // 特殊映射：处理能力 ID 与 i18n key 不一致的情况
+    const abilityNameMap: Record<string, string> = {
+        'magistrate': 'judge', // 审判官的 i18n key 是 judge
+    };
+    shortId = abilityNameMap[shortId] || shortId;
     
     // 从 i18n 获取能力名称和描述
     const abilityName = t(`abilities.${shortId}.name`, { defaultValue: shortId });
