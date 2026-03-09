@@ -20,6 +20,7 @@ import { FactionSelectionModal } from './ui/FactionSelectionModal';
 import { ChoiceModal } from './ui/ChoiceModal';
 import { useAbilityAnimations, AbilityAnimationsLayer } from './ui/AbilityAnimations';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './ui/CardMagnifyOverlay';
+import { DiscardPile } from './ui/DiscardPile';
 import type { FactionId } from './domain/ids';
 import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
@@ -367,13 +368,39 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
             <div className="relative w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
                 <div className="relative w-full h-full flex flex-col p-4 gap-4">
-                    {/* 对手信息栏（顶部） */}
-                    <div className="flex-shrink-0">
-                        <PlayerInfoBar
-                            player={opponent}
-                            isOpponent={true}
-                            totalSignets={opponentSignets}
-                        />
+                    {/* 对手区域（顶部） */}
+                    <div className="flex-shrink-0 flex items-start gap-4">
+                        {/* 对手弃牌堆 */}
+                        <div className="flex-shrink-0">
+                            <div className="text-xs text-gray-400 mb-1 text-center">{t('discard')}</div>
+                            <DiscardPile
+                                cards={opponent.discard}
+                                isOpponent={true}
+                                onCardClick={(card) => setMagnifyTarget({ card, core })}
+                            />
+                        </div>
+                        
+                        {/* 对手信息栏 */}
+                        <div className="flex-1">
+                            <PlayerInfoBar
+                                player={opponent}
+                                isOpponent={true}
+                                totalSignets={opponentSignets}
+                            />
+                        </div>
+                        
+                        {/* 阶段和回合指示器 */}
+                        <div className="flex-shrink-0 flex flex-col gap-2">
+                            <div data-testid="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+                                <div className="text-xs text-gray-400">{t('phase')}</div>
+                                <div className="text-lg font-bold">{t(`phases.${phase}`)}</div>
+                            </div>
+                            
+                            <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+                                <div className="text-xs text-gray-400">{t('turn')}</div>
+                                <div data-testid="cardia-turn-number" className="text-lg font-bold">{core.turnNumber}</div>
+                            </div>
+                        </div>
                     </div>
                     
                     {/* 中央战场区域 - 遭遇序列 */}
@@ -389,29 +416,28 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         />
                     </div>
                     
-                    {/* 我的区域 */}
-                    <div className="flex-shrink-0">
-                        <PlayerArea
-                            player={myPlayer}
-                            core={core}
-                            onPlayCard={handlePlayCard}
-                            canPlay={phase === 'play' && !myPlayer.hasPlayed}
-                            totalSignets={mySignets}
-                            setCardRef={setCardRef}
-                            onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
-                        />
-                    </div>
-                    
-                    {/* 阶段指示器和操作按钮 */}
-                    <div className="absolute top-4 right-4 flex flex-col gap-2">
-                        <div data-testid="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
-                            <div className="text-xs text-gray-400">{t('phase')}</div>
-                            <div className="text-lg font-bold">{t(`phases.${phase}`)}</div>
+                    {/* 我的区域（底部） */}
+                    <div className="flex-shrink-0 flex items-end gap-4">
+                        {/* 我的弃牌堆 */}
+                        <div className="flex-shrink-0">
+                            <div className="text-xs text-gray-400 mb-1 text-center">{t('discard')}</div>
+                            <DiscardPile
+                                cards={myPlayer.discard}
+                                onCardClick={(card) => setMagnifyTarget({ card, core })}
+                            />
                         </div>
                         
-                        <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
-                            <div className="text-xs text-gray-400">{t('turn')}</div>
-                            <div data-testid="cardia-turn-number" className="text-lg font-bold">{core.turnNumber}</div>
+                        {/* 我的手牌和信息 */}
+                        <div className="flex-1">
+                            <PlayerArea
+                                player={myPlayer}
+                                core={core}
+                                onPlayCard={handlePlayCard}
+                                canPlay={phase === 'play' && !myPlayer.hasPlayed}
+                                totalSignets={mySignets}
+                                setCardRef={setCardRef}
+                                onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
+                            />
                         </div>
                     </div>
                     
@@ -604,7 +630,7 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
     }
     
     return (
-        <div className="flex gap-6 items-center">
+        <div className="flex gap-4 items-center">
             {encounters.map((encounter, idx) => (
                 <EncounterPair
                     key={encounter.encounterIndex}
@@ -657,10 +683,13 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
     const myRevealed = !isLatest || !!myCard;
     const opponentRevealed = !isLatest || opponent.cardRevealed;
     
+    // 只有双方都打出卡牌后才显示 VS 指示器
+    const showVS = myCard && opponentCard;
+    
     return (
-        <div className="flex flex-col items-center gap-2">
+        <div className="relative flex flex-col items-center gap-2">
             {/* 对手卡牌 */}
-            <div>
+            <div className="relative z-10">
                 {opponentCard ? (
                     opponentRevealed ? (
                         <CardDisplay 
@@ -678,18 +707,15 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
                 )}
             </div>
             
-            {/* VS 指示器 */}
-            <div className="flex flex-col items-center">
-                <div className="text-2xl font-bold text-purple-400">VS</div>
-                {isLatest && core.currentEncounter && (
-                    <div className="text-xs text-gray-400">
-                        {core.currentEncounter.player1Influence} : {core.currentEncounter.player2Influence}
-                    </div>
-                )}
-            </div>
+            {/* VS 指示器 - 悬浮在两张卡中间 */}
+            {showVS && (
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center bg-white rounded px-2 py-1 border border-gray-300 shadow-md">
+                    <div className="text-sm font-bold text-purple-600">VS</div>
+                </div>
+            )}
             
             {/* 我的卡牌 */}
-            <div>
+            <div className="relative z-10">
                 {myCard ? (
                     myRevealed ? (
                         <CardDisplay 
@@ -791,7 +817,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
     const bgColor = factionColors[card.faction as keyof typeof factionColors] || 'from-gray-700 to-gray-900';
     const imagePath = card.imagePath || (card.imageIndex ? `cardia/cards/${card.imageIndex}.jpg` : undefined);
     
-    const sizeClasses = size === 'small' ? 'w-24 h-36' : 'w-32 h-48';
+    // 调整卡牌尺寸：缩小到 95%（约 106px × 160px）
+    const sizeClasses = size === 'small' ? 'w-20 h-30' : 'w-[106px] h-[160px]';
     
     // 计算修正标记总和（从 core.modifierTokens 中过滤）
     const modifierTotal = core.modifierTokens
@@ -819,8 +846,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             )}
             
             {/* 影响力显示（左上角） */}
-            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-full w-10 h-10 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">{displayInfluence}</span>
+            <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full w-9 h-9 flex items-center justify-center">
+                <span className="text-white font-bold text-base">{displayInfluence}</span>
             </div>
             
             {/* 放大镜按钮（右上角） */}
@@ -830,7 +857,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
                         e.stopPropagation();
                         onMagnify(card);
                     }}
-                    className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg border border-white/20 z-10"
+                    className="absolute top-1 right-1 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg border border-white/20 z-10"
                     title="查看大图"
                 >
                     <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
@@ -841,9 +868,9 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             
             {/* 修正标记显示（右上角，放大镜按钮下方） */}
             {modifierTotal !== 0 && (
-                <div className={`absolute ${onMagnify ? 'top-12' : 'top-2'} right-2 ${
+                <div className={`absolute ${onMagnify ? 'top-10' : 'top-1'} right-1 ${
                     modifierTotal > 0 ? 'bg-green-500' : 'bg-red-500'
-                } text-white font-bold text-xs px-2 py-1 rounded-full shadow-lg`}>
+                } text-white font-bold text-xs px-1.5 py-0.5 rounded-full shadow-lg`}>
                     {modifierTotal > 0 ? '+' : ''}{modifierTotal}
                 </div>
             )}
@@ -852,9 +879,9 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             {card.ongoingMarkers && card.ongoingMarkers.length > 0 && (
                 <div className={`absolute ${
                     onMagnify && modifierTotal !== 0 ? 'top-[4.5rem]' : 
-                    onMagnify || modifierTotal !== 0 ? 'top-12' : 
-                    'top-2'
-                } right-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1`}>
+                    onMagnify || modifierTotal !== 0 ? 'top-10' : 
+                    'top-1'
+                } right-1 bg-purple-500 text-white text-xs px-1.5 py-0.5 rounded-full shadow-lg flex items-center gap-0.5`}>
                     <span>🔄</span>
                     {card.ongoingMarkers.length > 1 && (
                         <span className="font-bold">×{card.ongoingMarkers.length}</span>
@@ -864,7 +891,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             
             {/* 印戒标记（底部） */}
             {card.signets > 0 && (
-                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
+                <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5">
                     {Array.from({ length: card.signets }).map((_, i) => (
                         <div key={i} className="w-4 h-4 bg-yellow-400 rounded-full border border-yellow-600 shadow" />
                     ))}
@@ -881,7 +908,7 @@ const CardBack: React.FC = () => {
     const [imageError, setImageError] = React.useState(false);
     
     return (
-        <div className="w-32 h-48 rounded-lg border-2 border-purple-600 shadow-lg overflow-hidden">
+        <div className="w-[106px] h-[160px] rounded-lg border-2 border-purple-600 shadow-lg overflow-hidden">
             {!imageError ? (
                 <OptimizedImage
                     src="cardia/cards/deck1-back"
@@ -891,7 +918,7 @@ const CardBack: React.FC = () => {
                 />
             ) : (
                 <div className="w-full h-full bg-gradient-to-br from-purple-800 to-blue-800 flex items-center justify-center">
-                    <div className="text-6xl">🎴</div>
+                    <div className="text-5xl">🎴</div>
                 </div>
             )}
         </div>
@@ -903,7 +930,7 @@ const CardBack: React.FC = () => {
  */
 const EmptySlot: React.FC = () => {
     return (
-        <div className="w-32 h-48 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center text-gray-500">
+        <div className="w-[106px] h-[160px] border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center text-gray-500">
             <div className="text-xs">等待中...</div>
         </div>
     );
