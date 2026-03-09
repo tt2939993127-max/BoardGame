@@ -21,6 +21,8 @@ import { ChoiceModal } from './ui/ChoiceModal';
 import { useAbilityAnimations, AbilityAnimationsLayer } from './ui/AbilityAnimations';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './ui/CardMagnifyOverlay';
 import { DiscardPile } from './ui/DiscardPile';
+import { CardTransition, CardListTransition } from './ui/CardTransition';
+import { CardFlip } from './ui/CardFlip';
 import type { FactionId } from './domain/ids';
 import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
@@ -639,18 +641,21 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
     
     return (
         <div className="flex gap-4 items-center">
-            {encounters.map((encounter, idx) => (
-                <EncounterPair
-                    key={encounter.encounterIndex}
-                    encounter={encounter}
-                    isLatest={encounter.encounterIndex === core.turnNumber}
-                    myPlayerId={myPlayerId}
-                    opponentId={opponentId}
-                    core={core}
-                    setCardRef={setCardRef}
-                    onMagnifyCard={onMagnifyCard}
-                />
-            ))}
+            <CardListTransition>
+                {encounters.map((encounter, idx) => (
+                    <CardTransition key={encounter.encounterIndex} cardUid={`encounter-${encounter.encounterIndex}`} type="field">
+                        <EncounterPair
+                            encounter={encounter}
+                            isLatest={encounter.encounterIndex === core.turnNumber}
+                            myPlayerId={myPlayerId}
+                            opponentId={opponentId}
+                            core={core}
+                            setCardRef={setCardRef}
+                            onMagnifyCard={onMagnifyCard}
+                        />
+                    </CardTransition>
+                ))}
+            </CardListTransition>
         </div>
     );
 };
@@ -676,20 +681,45 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
     const { t } = useTranslation('game-cardia');
     const { myCard, opponentCard } = encounter;
     
-    // 判断是否已翻开
-    // 历史遭遇（已解析过的）永远显示为翻开状态
-    // 当前遭遇：
-    //   - 我的卡牌：只要打出就翻开（myCard 存在即翻开）
-    //   - 对手卡牌：需要对手也打出才翻开（opponentCard 存在且 opponent.cardRevealed）
-    const myPlayer = core.players[myPlayerId];
     const opponent = core.players[opponentId];
+    const myPlayer = core.players[myPlayerId];
     
-    // 如果是历史遭遇，卡牌已经被解析过，应该显示为翻开
-    // 如果是当前遭遇：
-    //   - 我的卡牌：只要存在就翻开（玩家知道自己打了什么）
-    //   - 对手卡牌：需要 cardRevealed 状态（双方都打出后才翻开）
+    // 追踪对手卡牌的翻转状态
+    // 关键：使用 useRef 追踪初始化状态，避免重复初始化
+    const isInitializedRef = React.useRef(false);
+    const [opponentFlipState, setOpponentFlipState] = React.useState(() => {
+        // 初始状态：
+        // - 历史遭遇：直接显示明牌（不播放动画）
+        // - 当前遭遇：从暗牌开始（等待翻转）
+        if (!isLatest) {
+            return true; // 历史遭遇直接显示明牌
+        }
+        // 当前遭遇：如果对手已经打出卡牌，初始为暗牌（等待我打牌后触发翻转）
+        return false;
+    });
+    
+    // 监听对手卡牌的翻开状态变化
+    React.useEffect(() => {
+        // 标记已初始化
+        if (!isInitializedRef.current) {
+            isInitializedRef.current = true;
+            return;
+        }
+        
+        // 只有当前遭遇才需要监听翻转
+        if (!isLatest) {
+            return;
+        }
+        
+        // 当对手卡牌应该翻开时，触发翻转
+        if (opponent.cardRevealed && !opponentFlipState) {
+            setOpponentFlipState(true);
+        }
+    }, [isLatest, opponent.cardRevealed, opponentFlipState]);
+    
+    // 判断是否已翻开
     const myRevealed = !isLatest || !!myCard;
-    const opponentRevealed = !isLatest || opponent.cardRevealed;
+    const opponentRevealed = opponentFlipState;
     
     // 只有双方都打出卡牌后才显示 VS 指示器
     const showVS = myCard && opponentCard;
@@ -699,17 +729,20 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
             {/* 对手卡牌 */}
             <div className="relative z-10">
                 {opponentCard ? (
-                    opponentRevealed ? (
-                        <CardDisplay 
-                            card={opponentCard} 
-                            core={core}
-                            size="normal"
-                            onRef={(el) => setCardRef(opponentCard.uid, el)}
-                            onMagnify={onMagnifyCard}
-                        />
-                    ) : (
-                        <CardBack />
-                    )
+                    <CardFlip
+                        showFront={opponentRevealed}
+                        enableAnimation={isLatest}
+                        frontContent={
+                            <CardDisplay 
+                                card={opponentCard} 
+                                core={core}
+                                size="normal"
+                                onRef={(el) => setCardRef(opponentCard.uid, el)}
+                                onMagnify={onMagnifyCard}
+                            />
+                        }
+                        backContent={<CardBack />}
+                    />
                 ) : (
                     <EmptySlot />
                 )}
@@ -778,23 +811,26 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
             
             {/* 手牌区 */}
             <div data-testid="cardia-hand-area" className="flex gap-2 overflow-x-auto">
-                {player.hand.map((card: any) => (
-                    <button
-                        key={card.uid}
-                        data-testid={`card-${card.uid}`}
-                        onClick={() => onPlayCard(card.uid)}
-                        disabled={!canPlay}
-                        className={`flex-shrink-0 ${canPlay ? 'hover:scale-105 cursor-pointer' : 'opacity-50 cursor-not-allowed'} transition-transform`}
-                    >
-                        <CardDisplay 
-                            card={card} 
-                            core={core}
-                            size="normal"
-                            onRef={(el) => setCardRef(card.uid, el)}
-                            onMagnify={onMagnifyCard}
-                        />
-                    </button>
-                ))}
+                <CardListTransition>
+                    {player.hand.map((card: any) => (
+                        <CardTransition key={card.uid} cardUid={card.uid} type="hand">
+                            <button
+                                data-testid={`card-${card.uid}`}
+                                onClick={() => onPlayCard(card.uid)}
+                                disabled={!canPlay}
+                                className={`flex-shrink-0 ${canPlay ? 'hover:scale-105 cursor-pointer' : 'opacity-50 cursor-not-allowed'} transition-transform`}
+                            >
+                                <CardDisplay 
+                                    card={card} 
+                                    core={core}
+                                    size="normal"
+                                    onRef={(el) => setCardRef(card.uid, el)}
+                                    onMagnify={onMagnifyCard}
+                                />
+                            </button>
+                        </CardTransition>
+                    ))}
+                </CardListTransition>
             </div>
         </div>
     );

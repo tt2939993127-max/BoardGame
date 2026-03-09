@@ -1,6 +1,7 @@
 import React from 'react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import type { CardInstance } from '../domain/core-types';
+import { CardTransition, CardListTransition } from './CardTransition';
 
 interface DiscardPileProps {
     cards: CardInstance[];
@@ -44,78 +45,83 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
     return (
         <div>
             <div className="relative" style={{ width: `${totalWidth}px`, height: `${cardHeight}px` }}>
-                {/* 历史弃牌 - 只显示左侧三分之一 */}
-                {historyCards.map((card, index) => {
-                    const zIndex = index;
-                    const offsetX = index * offsetStep;
-                    
-                    return (
+                <CardListTransition>
+                    {/* 历史弃牌 - 只显示左侧三分之一 */}
+                    {historyCards.map((card, index) => {
+                        const zIndex = index;
+                        const offsetX = index * offsetStep;
+                        
+                        return (
+                            <CardTransition key={`${card.uid}-${index}`} cardUid={`discard-${card.uid}-${index}`} type="discard" layoutAnimation={false}>
+                                <div
+                                    className="absolute bottom-0 overflow-hidden cursor-pointer hover:brightness-110 transition-all"
+                                    style={{
+                                        left: `${offsetX}px`,
+                                        width: `${historyWidth}px`,
+                                        height: `${cardHeight}px`,
+                                        zIndex,
+                                    }}
+                                    onClick={() => onCardClick?.(card)}
+                                    title={`影响力: ${card.baseInfluence}`}
+                                >
+                                    {/* 显示卡片左侧部分（数字区域） */}
+                                    <div className="relative" style={{ width: `${cardWidth}px`, height: `${cardHeight}px` }}>
+                                        <OptimizedImage
+                                            src={card.imagePath || `cardia/cards/card-${card.baseInfluence}.png`}
+                                            alt={`Card ${card.baseInfluence}`}
+                                            className="w-full h-full object-cover rounded-lg"
+                                            sizes={`${cardWidth}px`}
+                                        />
+                                    </div>
+                                </div>
+                            </CardTransition>
+                        );
+                    })}
+
+                    {/* 最新弃牌 - 显示完整卡面 */}
+                    <CardTransition key={latestCard.uid} cardUid={`discard-latest-${latestCard.uid}`} type="discard" layoutAnimation={false}>
                         <div
-                            key={`${card.uid}-${index}`}
-                            className="absolute bottom-0 overflow-hidden cursor-pointer hover:brightness-110 transition-all"
+                            className="absolute bottom-0 cursor-pointer hover:scale-105 transition-transform"
                             style={{
-                                left: `${offsetX}px`,
-                                width: `${historyWidth}px`,
+                                left: `${historyCards.length * offsetStep}px`,
+                                width: `${cardWidth}px`,
                                 height: `${cardHeight}px`,
-                                zIndex,
+                                zIndex: historyCards.length,
                             }}
-                            onClick={() => onCardClick?.(card)}
-                            title={`影响力: ${card.baseInfluence}`}
+                            onClick={() => onCardClick?.(latestCard)}
                         >
-                            {/* 显示卡片左侧部分（数字区域） */}
-                            <div className="relative" style={{ width: `${cardWidth}px`, height: `${cardHeight}px` }}>
+                            <div className="relative w-full h-full">
                                 <OptimizedImage
-                                    src={card.imagePath || `cardia/cards/card-${card.baseInfluence}.png`}
-                                    alt={`Card ${card.baseInfluence}`}
-                                    className="w-full h-full object-cover rounded-lg"
+                                    src={latestCard.imagePath || `cardia/cards/card-${latestCard.baseInfluence}.png`}
+                                    alt={`Card ${latestCard.baseInfluence}`}
+                                    className="w-full h-full object-cover rounded-lg shadow-lg"
                                     sizes={`${cardWidth}px`}
                                 />
+                                
+                                {/* 印戒标记 */}
+                                {latestCard.signets > 0 && (
+                                    <div className="absolute top-1 right-1 bg-yellow-500 text-black text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
+                                        {latestCard.signets}
+                                    </div>
+                                )}
+                                
+                                {/* 修正标记 */}
+                                {latestCard.tags && Object.keys(latestCard.tags).length > 0 && (
+                                    <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
+                                        🔧
+                                    </div>
+                                )}
+                                
+                                {/* 持续标记 */}
+                                {latestCard.ongoingMarkers && latestCard.ongoingMarkers.length > 0 && (
+                                    <div className="absolute bottom-1 left-1 bg-purple-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
+                                        🔄
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    );
-                })}
-
-                {/* 最新弃牌 - 显示完整卡面 */}
-                <div
-                    className="absolute bottom-0 cursor-pointer hover:scale-105 transition-transform"
-                    style={{
-                        left: `${historyCards.length * offsetStep}px`,
-                        width: `${cardWidth}px`,
-                        height: `${cardHeight}px`,
-                        zIndex: historyCards.length,
-                    }}
-                    onClick={() => onCardClick?.(latestCard)}
-                >
-                    <div className="relative w-full h-full">
-                        <OptimizedImage
-                            src={latestCard.imagePath || `cardia/cards/card-${latestCard.baseInfluence}.png`}
-                            alt={`Card ${latestCard.baseInfluence}`}
-                            className="w-full h-full object-cover rounded-lg shadow-lg"
-                            sizes={`${cardWidth}px`}
-                        />
-                        
-                        {/* 印戒标记 */}
-                        {latestCard.signets > 0 && (
-                            <div className="absolute top-1 right-1 bg-yellow-500 text-black text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
-                                {latestCard.signets}
-                            </div>
-                        )}
-                        
-                        {/* 修正标记 */}
-                        {latestCard.tags && Object.keys(latestCard.tags).length > 0 && (
-                            <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
-                                🔧
-                            </div>
-                        )}
-                        
-                        {/* 持续标记 */}
-                        {latestCard.ongoingMarkers && latestCard.ongoingMarkers.length > 0 && (
-                            <div className="absolute bottom-1 left-1 bg-purple-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
-                                🔄
-                            </div>
-                        )}
-                    </div>
-                </div>
+                    </CardTransition>
+                </CardListTransition>
             </div>
         </div>
     );
