@@ -50,7 +50,7 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
 
     return (
         <MagnifyOverlay isOpen onClose={onClose}>
-            <div className="relative w-[40vw] max-w-[500px] aspect-[0.667] bg-transparent">
+            <div className="relative w-[32vw] max-w-[400px] aspect-[0.667] bg-transparent">
                 {/* 关闭按钮 */}
                 <button
                     onClick={onClose}

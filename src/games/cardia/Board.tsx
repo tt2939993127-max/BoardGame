@@ -366,7 +366,15 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
-            <div className="relative w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
+            <div className="relative w-full h-full overflow-hidden">
+                {/* 背景图片层 */}
+                <div 
+                    className="absolute inset-0 w-full h-full bg-cover bg-center"
+                    style={{
+                        backgroundImage: `url(/assets/i18n/zh-CN/cardia/cards/compressed/background.jpg)`
+                    }}
+                />
+                
                 <div className="relative w-full h-full flex flex-col p-4 gap-4">
                     {/* 对手区域（顶部） */}
                     <div className="flex-shrink-0 flex items-start gap-4">
