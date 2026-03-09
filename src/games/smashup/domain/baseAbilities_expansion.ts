@@ -10,26 +10,37 @@ import type {
     SmashUpEvent,
     MinionDestroyedEvent,
     CardsDrawnEvent,
-    CardToDeckBottomEvent,
     MinionPlayedEvent,
+    PendingPostScoringAction,
 } from './types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
     returnMadnessCard,
-    moveMinion,
-    destroyMinion,
     grantExtraMinion,
     grantExtraAction,
     recoverCardsFromDiscard,
+    buildValidatedMoveEvents,
+    buildValidatedDestroyEvents,
+    buildValidatedCardToDeckBottomEvents,
 } from './abilityHelpers';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerBaseAbility, registerExtended as registerExtendedBase } from './baseAbilities';
 import { registerProtection, registerTrigger } from './ongoingEffects';
 import type { ProtectionCheckContext } from './ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { getPlayerLabel } from './utils';
+
+type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
+
+function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
+    return interactionData?.continuationContext as T | undefined;
+}
+
+function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
+    return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+}
 
 // ============================================================================
 // 克苏鲁扩展基地能力
@@ -52,7 +63,7 @@ export function registerExpansionBaseAbilities(): void {
         if (handMadness.length === 0 && discardMadness.length === 0) return { events: [] };
 
         // 按来源分组的按钮选项（返回1张）
-        const options: any[] = [];
+        const options: PromptOption<Record<string, unknown>>[] = [];
         if (handMadness.length > 0) {
             options.push({
                 id: 'hand',
@@ -79,7 +90,8 @@ export function registerExpansionBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_the_asylum_${ctx.now}`, ctx.playerId,
-            '疯人院：选择返回一张疯狂卡', options as any[], 'base_the_asylum',
+            '疯人院：选择返回一张疯狂卡', options,
+            { sourceId: 'base_the_asylum', targetType: 'button' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -99,7 +111,7 @@ export function registerExpansionBaseAbilities(): void {
         if (playersWithDiscard.length === 0) return { events: [] };
 
         const options = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...playersWithDiscard.map((pid, i) => ({
                 id: `player-${i}`,
                 label: pid === ctx.playerId ? '你自己的弃牌堆' : `${getPlayerLabel(pid)}的弃牌堆`,
@@ -110,8 +122,8 @@ export function registerExpansionBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_innsmouth_base_choose_player_${ctx.now}`, ctx.playerId,
-            '印斯茅斯基地：选择从哪个玩家的弃牌堆选卡', options as any[],
-            { sourceId: 'base_innsmouth_base_choose_player', autoCancelOption: true },
+            '印斯茅斯基地：选择从哪个玩家的弃牌堆选卡', options,
+            { sourceId: 'base_innsmouth_base_choose_player', targetType: 'player', autoCancelOption: true },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -136,7 +148,7 @@ export function registerExpansionBaseAbilities(): void {
         if (totalCount === 0) return { events: [] };
 
         // 按来源+数量分组的按钮选项
-        const options: any[] = [];
+        const options: PromptOption<Record<string, unknown>>[] = [];
 
         if (handMadness.length > 0) {
             for (let i = 1; i <= handMadness.length; i++) {
@@ -180,7 +192,8 @@ export function registerExpansionBaseAbilities(): void {
         if (ctx.matchState) {
             const interaction = createSimpleChoice(
                 `base_miskatonic_university_base_${winnerId}_${ctx.now}`, winnerId,
-                `密大基地：你有 ${totalCount} 张疯狂卡可以返回到疯狂牌库`, options as any[], 'base_miskatonic_university_base',
+                `密大基地：你有 ${totalCount} 张疯狂卡可以返回到疯狂牌库`, options,
+                { sourceId: 'base_miskatonic_university_base', targetType: 'button' },
             );
             ctx.matchState = queueInteraction(ctx.matchState, interaction);
         }
@@ -232,14 +245,15 @@ export function registerExpansionBaseAbilities(): void {
         const minionsInDeck = winner.deck.filter(c => c.type === 'minion');
         if (minionsInDeck.length === 0) return { events: [] };
 
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+        const options: PromptOption<Record<string, unknown>>[] = [
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...minionsInDeck.map((c, i) => {
                 const def = getMinionDef(c.defId);
                 return {
                     id: `minion-${i}`,
                     label: `${def?.name ?? c.defId} (力量${def?.power ?? '?'})`,
                     value: { cardUid: c.uid, defId: c.defId, power: def?.power ?? 0 },
+                    displayMode: 'card' as const,
                 };
             }),
         ];
@@ -247,10 +261,16 @@ export function registerExpansionBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_greenhouse_${ctx.now}`, winnerId,
-            '温室：从牌库中选择一个随从打出到新基地', options as any[], 'base_greenhouse',
+            '温室：从牌库中选择一个随从打出到新基地', options,
+            { sourceId: 'base_greenhouse', targetType: 'generic' },
         );
-        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } },
+            }),
+        };
     });
 
     // ── 神秘花园（Secret Garden）──────────────────────────────
@@ -279,14 +299,15 @@ export function registerExpansionBaseAbilities(): void {
         const actionsInDiscard = winner.discard.filter(c => c.type === 'action');
         if (actionsInDiscard.length === 0) return { events: [] };
 
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+        const options: PromptOption<Record<string, unknown>>[] = [
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...actionsInDiscard.map((c, i) => {
                 const def = getCardDef(c.defId);
                 return {
                     id: `action-${i}`,
                     label: def?.name ?? c.defId,
                     value: { cardUid: c.uid, defId: c.defId },
+                    displayMode: 'card' as const,
                 };
             }),
         ];
@@ -294,7 +315,8 @@ export function registerExpansionBaseAbilities(): void {
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_inventors_salon_${ctx.now}`, winnerId,
-            '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options as any[], 'base_inventors_salon',
+            '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options,
+            { sourceId: 'base_inventors_salon', targetType: 'generic' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -320,20 +342,27 @@ export function registerExpansionBaseAbilities(): void {
                 id: `minion-${i}`,
                 label: `${def?.name ?? m.defId} (力量${getEffectivePower(ctx.state, m, ctx.baseIndex)})`,
                 value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner },
+                displayMode: 'card' as const,
             };
         });
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+        const options: PromptOption<Record<string, unknown>>[] = [
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...minionOptions,
         ];
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_cat_fanciers_alley_${ctx.now}`, ctx.playerId,
-            '诡猫巷：消灭一个己方随从来抽一张卡牌', options as any[], 'base_cat_fanciers_alley',
+            '诡猫巷：消灭一个己方随从来抽一张卡牌', options,
+            { sourceId: 'base_cat_fanciers_alley', targetType: 'minion' },
         );
-        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } },
+            }),
+        };
     });
 
     // ── 魔法林地（Enchanted Glade）──────────────────────────────
@@ -408,19 +437,26 @@ export function registerExpansionBaseAbilities(): void {
             id: `minion-${i}`,
             label: m.label,
             value: { minionUid: m.uid, minionDefId: m.defId, fromBaseIndex: m.baseIndex },
+            displayMode: 'card' as const,
         }));
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+        const options: PromptOption<Record<string, unknown>>[] = [
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...minionOptions,
         ];
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
             `base_land_of_balance_${ctx.now}`, ctx.playerId,
-            '平衡之地：选择一个己方随从移动到这里', options as any[], 'base_land_of_balance',
+            '平衡之地：选择一个己方随从移动到这里', options,
+            { sourceId: 'base_land_of_balance', targetType: 'minion' },
         );
-        (interaction.data as any).continuationContext = { balanceBaseIndex };
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { balanceBaseIndex } },
+            }),
+        };
     });
 
     // ── 九命之屋（House of Nine Lives）──────────────────────────
@@ -457,12 +493,29 @@ export function registerExpansionBaseAbilities(): void {
             ownerId,
             '九命之屋：是否将随从移动到九命之屋？',
             [
-                { id: 'move', label: '移动到九命之屋', value: { move: true, minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, houseBaseIndex } },
-                { id: 'skip', label: '不移动（正常消灭）', value: { move: false, minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, ownerId } },
+                {
+                    id: 'move',
+                    label: '移动到九命之屋',
+                    value: { move: true, minionUid: triggerMinionUid, minionDefId: triggerMinionDefId },
+                    displayMode: 'button' as const,
+                },
+                { id: 'skip', label: '不移动（正常消灭）', value: { move: false }, displayMode: 'button' as const },
             ],
-            { sourceId: 'base_nine_lives_intercept', targetType: 'generic' },
+            { sourceId: 'base_nine_lives_intercept', targetType: 'minion' },
         );
-        const updatedMS = queueInteraction(trigCtx.matchState, interaction);
+        const updatedMS = queueInteraction(trigCtx.matchState, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: {
+                    minionUid: triggerMinionUid,
+                    minionDefId: triggerMinionDefId,
+                    fromBaseIndex: baseIndex,
+                    houseBaseIndex,
+                    ownerId,
+                },
+            },
+        });
         // 返回空事件 + 更新后的 matchState（processDestroyTriggers 检测到 matchState 变化 → pendingSaveMinionUids）
         return { events: [], matchState: updatedMS };
     });
@@ -544,18 +597,22 @@ export function registerExpansionBaseAbilities(): void {
                 id: `minion-${i}`,
                 label: m.label,
                 value: { minionUid: m.uid, minionDefId: m.defId, fromBaseIndex: m.baseIndex },
+                displayMode: 'card' as const,
             }));
-            const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-                { id: 'skip', label: '跳过', value: { skip: true } },
+            const options: PromptOption<Record<string, unknown>>[] = [
+                { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
                 ...minionOptions,
             ];
 
             const interaction = createSimpleChoice(
                 `base_sheep_shrine_${pid}_${ctx.now}`, pid,
-                '绵羊神社：选择移动一个己方随从到此基地', options as any[], 'base_sheep_shrine',
+                '绵羊神社：选择移动一个己方随从到此基地', options,
+                { sourceId: 'base_sheep_shrine', targetType: 'minion' },
             );
-            (interaction.data as any).continuationContext = { targetBaseIndex: ctx.baseIndex };
-            ms = queueInteraction(ms, interaction);
+            ms = queueInteraction(ms, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { targetBaseIndex: ctx.baseIndex } },
+            });
         }
 
         return { events: [], matchState: ms };
@@ -598,14 +655,22 @@ export function registerExpansionBaseAbilities(): void {
             id: `minion-${i}`,
             label: m.label,
             value: { minionUid: m.uid, minionDefId: m.defId, fromBaseIndex: m.baseIndex },
+            displayMode: 'card' as const,
         }));
 
         const interaction = createSimpleChoice(
             `base_the_pasture_${ctx.now}`, ctx.playerId,
-            '牧场：选择另一基地的一个随从移动到这里', minionOptions as any[], 'base_the_pasture',
+            '牧场：选择另一基地的一个随从移动到这里',
+            minionOptions,
+            { sourceId: 'base_the_pasture', targetType: 'minion' },
         );
-        (interaction.data as any).continuationContext = { targetBaseIndex: ctx.baseIndex };
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { targetBaseIndex: ctx.baseIndex } },
+            }),
+        };
     });
 }
 
@@ -647,19 +712,20 @@ export function registerExpansionBaseInteractionHandlers(): void {
                 id: `card-${i}`,
                 label: def?.name ?? c.defId,
                 value: { cardUid: c.uid, defId: c.defId, ownerId: targetPlayerId },
+                displayMode: 'card' as const,
             };
         });
 
         const options = [
-            { id: 'skip', label: '跳过', value: { skip: true } },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...discardCards,
         ];
 
         const interaction = createSimpleChoice(
             `base_innsmouth_base_choose_card_${timestamp}`, playerId,
             `印斯茅斯基地：从${targetPlayerId === playerId ? '你的' : getPlayerLabel(targetPlayerId) + '的'}弃牌堆选择一张卡`,
-            options as any[],
-            { sourceId: 'base_innsmouth_base_choose_card', autoCancelOption: true },
+            options,
+            { sourceId: 'base_innsmouth_base_choose_card', targetType: 'generic', autoCancelOption: true },
         );
 
         return { state: queueInteraction(state, interaction), events: [] };
@@ -669,11 +735,17 @@ export function registerExpansionBaseInteractionHandlers(): void {
     registerInteractionHandler('base_innsmouth_base_choose_card', (state, _playerId, value, _iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; cardUid?: string; defId?: string; ownerId?: string };
         if (selected.skip) return { state, events: [] };
-        return { state, events: [({
-            type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
-            payload: { cardUid: selected.cardUid!, defId: selected.defId!, ownerId: selected.ownerId!, reason: '印斯茅斯基地：弃牌堆卡放入牌库底' },
-            timestamp,
-        } as CardToDeckBottomEvent)] };
+        return {
+            state,
+            events: buildValidatedCardToDeckBottomEvents(state, {
+                cardUid: selected.cardUid!,
+                defId: selected.defId!,
+                ownerId: selected.ownerId!,
+                reason: '印斯茅斯基地：弃牌堆卡放入牌库底',
+                now: timestamp,
+                expectedLocation: 'discard',
+            }),
+        };
     });
 
     // 密大基地：按来源+数量返回疯狂卡（按钮单选，和金克丝同模式）
@@ -713,12 +785,61 @@ export function registerExpansionBaseInteractionHandlers(): void {
     registerInteractionHandler('base_greenhouse', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; cardUid?: string; defId?: string; power?: number };
         if (selected.skip) return { state, events: [] };
-        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        const ctx = getContinuationContext<{ baseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
+        const player = state.core.players[playerId];
+        if (!player || !selected.cardUid || !selected.defId) return { state, events: [] };
+        const cardInDeck = player.deck.some(card =>
+            card.uid === selected.cardUid
+            && card.defId === selected.defId
+            && card.type === 'minion',
+        );
+        if (!cardInDeck) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
+        const deferredEvents = (getDeferredPostScoringEvents(iData) ?? []) as Array<{
+            type: string;
+            payload?: { newBaseDefId?: string };
+            timestamp: number;
+        }>;
+        const replacementBaseDefId = deferredEvents.find(event => event.type === SU_EVENTS.BASE_REPLACED)?.payload?.newBaseDefId
+            ?? state.core.bases[ctx.baseIndex]?.defId;
+        if (!replacementBaseDefId) return { state, events: [] };
+        if (deferredEvents.length > 0) {
+            const pendingAction: PendingPostScoringAction = {
+                kind: 'playMinionOnReplacementBase',
+                playerId,
+                cardUid: selected.cardUid,
+                defId: selected.defId,
+                baseIndex: ctx.baseIndex,
+                targetBaseDefId: replacementBaseDefId,
+                power,
+            };
+            return {
+                state: {
+                    ...state,
+                    core: {
+                        ...state.core,
+                        pendingPostScoringActions: [
+                            ...(state.core.pendingPostScoringActions ?? []),
+                            pendingAction,
+                        ],
+                    },
+                },
+                events: [],
+            };
+        }
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, baseDefId: state.core.bases[ctx.baseIndex].defId, power },
+            payload: {
+                playerId,
+                cardUid: selected.cardUid,
+                defId: selected.defId,
+                baseIndex: ctx.baseIndex,
+                baseDefId: replacementBaseDefId,
+                power,
+                fromDeck: true,
+                consumesNormalLimit: false,
+            },
             timestamp,
         };
         return { state, events: [playedEvt] };
@@ -727,16 +848,29 @@ export function registerExpansionBaseInteractionHandlers(): void {
     registerInteractionHandler('base_inventors_salon', (state, playerId, value, _iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; cardUid?: string };
         if (selected.skip) return { state, events: [] };
+        const player = state.core.players[playerId];
+        if (!player || !selected.cardUid) return { state, events: [] };
+        const cardInDiscard = player.discard.some(card =>
+            card.uid === selected.cardUid
+            && card.type === 'action',
+        );
+        if (!cardInDiscard) return { state, events: [] };
         return { state, events: [recoverCardsFromDiscard(playerId, [selected.cardUid!], '发明家沙龙：从弃牌堆取回行动卡', timestamp)] };
     });
 
     registerInteractionHandler('base_cat_fanciers_alley', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string };
         if (selected.skip) return { state, events: [] };
-        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        const ctx = getContinuationContext<{ baseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        const events: SmashUpEvent[] = [];
-        events.push(destroyMinion(selected.minionUid!, selected.minionDefId!, ctx.baseIndex, selected.owner!, undefined, '诡猫巷：消灭己方随从', timestamp));
+        const events: SmashUpEvent[] = buildValidatedDestroyEvents(state, {
+            minionUid: selected.minionUid!,
+            minionDefId: selected.minionDefId!,
+            fromBaseIndex: ctx.baseIndex,
+            reason: '诡猫巷：消灭己方随从',
+            now: timestamp,
+        });
+        if (events.length === 0) return { state, events };
         const player = state.core.players[playerId];
         if (player && player.deck.length > 0) {
             events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [player.deck[0].uid] }, timestamp } as CardsDrawnEvent);
@@ -747,50 +881,105 @@ export function registerExpansionBaseInteractionHandlers(): void {
     registerInteractionHandler('base_land_of_balance', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; fromBaseIndex?: number };
         if (selected.skip) return { state, events: [] };
-        const ctx = (iData as any)?.continuationContext as { balanceBaseIndex: number };
+        const ctx = getContinuationContext<{ balanceBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        return { state, events: [moveMinion(selected.minionUid!, selected.minionDefId!, selected.fromBaseIndex!, ctx.balanceBaseIndex, '平衡之地：移动己方随从到此', timestamp)] };
+        return {
+            state,
+            events: buildValidatedMoveEvents(state, {
+                minionUid: selected.minionUid!,
+                minionDefId: selected.minionDefId!,
+                fromBaseIndex: selected.fromBaseIndex!,
+                toBaseIndex: ctx.balanceBaseIndex,
+                reason: '平衡之地：移动己方随从到此',
+                now: timestamp,
+            }),
+        };
     });
 
     // 绵羊神社：移动己方随从到此基地
     registerInteractionHandler('base_sheep_shrine', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; fromBaseIndex?: number };
         if (selected.skip) return { state, events: [] };
-        const ctx = (iData as any)?.continuationContext as { targetBaseIndex: number };
+        const ctx = getContinuationContext<{ targetBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        return { state, events: [moveMinion(selected.minionUid!, selected.minionDefId!, selected.fromBaseIndex!, ctx.targetBaseIndex, '绵羊神社：移动随从到新基地', timestamp)] };
+        return {
+            state,
+            events: buildValidatedMoveEvents(state, {
+                minionUid: selected.minionUid!,
+                minionDefId: selected.minionDefId!,
+                fromBaseIndex: selected.fromBaseIndex!,
+                toBaseIndex: ctx.targetBaseIndex,
+                reason: '绵羊神社：移动随从到新基地',
+                now: timestamp,
+            }),
+        };
     });
 
     // 牧场：移动另一基地的随从到这里
     registerInteractionHandler('base_the_pasture', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { minionUid?: string; minionDefId?: string; fromBaseIndex?: number };
-        const ctx = (iData as any)?.continuationContext as { targetBaseIndex: number };
+        const ctx = getContinuationContext<{ targetBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        return { state, events: [moveMinion(selected.minionUid!, selected.minionDefId!, selected.fromBaseIndex!, ctx.targetBaseIndex, '牧场：移动随从到牧场', timestamp)] };
+        return {
+            state,
+            events: buildValidatedMoveEvents(state, {
+                minionUid: selected.minionUid!,
+                minionDefId: selected.minionDefId!,
+                fromBaseIndex: selected.fromBaseIndex!,
+                toBaseIndex: ctx.targetBaseIndex,
+                reason: '牧场：移动随从到牧场',
+                now: timestamp,
+            }),
+        };
     });
 
     // 九命之屋：玩家选择是否将随从移动到九命之屋
-    registerInteractionHandler('base_nine_lives_intercept', (state, playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('base_nine_lives_intercept', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as {
             move: boolean;
-            minionUid: string;
-            minionDefId: string;
-            fromBaseIndex: number;
+            minionUid?: string;
+            minionDefId?: string;
+            fromBaseIndex?: number;
             houseBaseIndex?: number;
             ownerId?: string;
         };
-        if (selected.move && selected.houseBaseIndex !== undefined) {
+        const ctx = getContinuationContext<{
+            minionUid?: string;
+            minionDefId?: string;
+            fromBaseIndex?: number;
+            houseBaseIndex?: number;
+            ownerId?: string;
+        }>(iData);
+        const minionUid = selected.minionUid ?? ctx?.minionUid;
+        const minionDefId = selected.minionDefId ?? ctx?.minionDefId;
+        const fromBaseIndex = selected.fromBaseIndex ?? ctx?.fromBaseIndex;
+        const houseBaseIndex = selected.houseBaseIndex ?? ctx?.houseBaseIndex;
+        const ownerId = selected.ownerId ?? ctx?.ownerId ?? playerId;
+
+        if (!minionUid || !minionDefId || fromBaseIndex === undefined) return { state, events: [] };
+
+        if (selected.move && houseBaseIndex !== undefined) {
             // 玩家选择移动到九命之屋
-            return { state, events: [moveMinion(selected.minionUid, selected.minionDefId, selected.fromBaseIndex, selected.houseBaseIndex, '九命之屋：随从移动到九命之屋而非被消灭', timestamp)] };
+            return {
+                state,
+                events: buildValidatedMoveEvents(state, {
+                    minionUid,
+                    minionDefId,
+                    fromBaseIndex,
+                    toBaseIndex: houseBaseIndex,
+                    reason: '九命之屋：随从移动到九命之屋而非被消灭',
+                    now: timestamp,
+                }),
+            };
         } else {
             // 玩家选择不移动→恢复消灭事件
             return { state, events: [{
                 type: SU_EVENTS.MINION_DESTROYED,
                 payload: {
-                    minionUid: selected.minionUid,
-                    minionDefId: selected.minionDefId,
-                    fromBaseIndex: selected.fromBaseIndex,
-                    ownerId: selected.ownerId ?? playerId,
+                    minionUid,
+                    minionDefId,
+                    fromBaseIndex,
+                    ownerId,
                     reason: '九命之屋：玩家选择不拯救',
                 },
                 timestamp,

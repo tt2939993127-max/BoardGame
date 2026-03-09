@@ -6,14 +6,15 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { addTempPower, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { addTempPower, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck, buildAbilityFeedback, buildValidatedReturnEvents } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent, DeckReorderedEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
+import type { SmashUpEvent, DeckReorderedEvent, CardsDrawnEvent } from '../domain/types';
 import { registerProtection } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
 import { getCardDef } from '../data/cards';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { matchesDefId } from '../domain/utils';
 
 /** 注册印斯茅斯派系所有能力*/
 export function registerInnsmouthAbilities(): void {
@@ -37,6 +38,7 @@ export function registerInnsmouthAbilities(): void {
     // === ongoing 效果注册 ===
     // in_plain_sight: 力量的随从不收回受其他玩家影响
     registerProtection('innsmouth_in_plain_sight', 'affect', innsmouthInPlainSightChecker);
+    registerProtection('innsmouth_in_plain_sight_pod', 'affect', innsmouthInPlainSightChecker);
 }
 
 /** 深潜者?onPlay：每个你的力量≤2的随从获得?1力量 */
@@ -88,12 +90,13 @@ function innsmouthRecruitment(ctx: AbilityContext): AbilityResult {
             id: `draw-${i}`,
             label: i === 0 ? '不抽取' : `抽取 ${i} 张疯狂卡（获得 ${i} 个额外随从额度）`,
             value: { count: i },
+            displayMode: 'button' as const,
         });
     }
     const interaction = createSimpleChoice(
         `innsmouth_recruitment_${ctx.now}`, ctx.playerId,
         '选择抽取疯狂卡的数量（至多3张，每张获得1个额外随从额度）', options,
-        'innsmouth_recruitment',
+        { sourceId: 'innsmouth_recruitment', targetType: 'button' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -111,7 +114,7 @@ function innsmouthInPlainSightChecker(ctx: ProtectionCheckContext): boolean {
     const base = ctx.state.bases[ctx.targetBaseIndex];
     if (!base) return false;
     // 检查基地上是否?in_plain_sight ongoing 行动?
-    const sight = base.ongoingActions.find(o => o.defId === 'innsmouth_in_plain_sight');
+    const sight = base.ongoingActions.find(o => matchesDefId(o.defId, 'innsmouth_in_plain_sight'));
     if (!sight) return false;
     // 只保护?sight 拥有者的随从
     if (ctx.targetMinion.controller !== sight.ownerId) return false;
@@ -142,12 +145,17 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
     const options = sameDefMinions.map((m, i) => {
         const def = getCardDef(m.defId);
         const name = def?.name ?? m.defId;
-        return { id: `minion-${i}`, label: name, value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner } };
+        return {
+            id: `minion-${i}`,
+            label: name,
+            value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner, baseIndex: ctx.baseIndex },
+            displayMode: 'card' as const,
+        };
     });
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<{ minionUid: string; minionDefId: string; owner: string; baseIndex: number }>(
         `innsmouth_return_to_the_sea_${ctx.now}`, ctx.playerId,
-        '选择要返回手牌的同名随从', options as any[], 'innsmouth_return_to_the_sea',
-        undefined, { min: 0, max: sameDefMinions.length },
+        '选择要返回手牌的同名随从', options,
+        { sourceId: 'innsmouth_return_to_the_sea', targetType: 'minion', multi: { min: 0, max: sameDefMinions.length } },
     );
     return { events: [], matchState: ctx.matchState ? queueInteraction(ctx.matchState, interaction) : undefined };
 }
@@ -160,7 +168,7 @@ function innsmouthTheLocals(ctx: AbilityContext): AbilityResult {
         player: ctx.state.players[ctx.playerId],
         playerId: ctx.playerId,
         count: 3,
-        predicate: card => card.defId === 'innsmouth_the_locals',
+        predicate: card => matchesDefId(card.defId, 'innsmouth_the_locals'),
         maxPick: 3,
         revealTo: 'all', // 展示牌库顶给所有人看
         reason: 'innsmouth_the_locals',
@@ -205,13 +213,14 @@ function innsmouthMysteriesOfTheDeep(ctx: AbilityContext): AbilityResult {
     }
 
     // 提示：是否额外抽2张牌+2张疯狂卡
-    const options = [
-        { id: 'yes', label: '是 - 额外抽2张牌+2张疯狂卡', value: { accept: true } },
-        { id: 'no', label: '否 - 不收回额外抽牌', value: { accept: false } },
+    const options: PromptOption<{ accept: boolean }>[] = [
+        { id: 'yes', label: '是 - 额外抽2张牌+2张疯狂卡', value: { accept: true }, displayMode: 'button' as const },
+        { id: 'no', label: '否 - 不收回额外抽牌', value: { accept: false }, displayMode: 'button' as const },
     ];
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<{ accept: boolean }>(
         `innsmouth_mysteries_of_the_deep_${ctx.now}`, ctx.playerId,
-        '是否额外抽2张牌+2张疯狂卡？', options as any[], 'innsmouth_mysteries_of_the_deep',
+        '是否额外抽2张牌+2张疯狂卡？', options,
+        { sourceId: 'innsmouth_mysteries_of_the_deep', targetType: 'button' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -287,9 +296,10 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
         const count = player.hand.filter(c => c.type === 'minion' && c.defId === defId).length;
         return { id: `name-${i}`, label: `${name}（手牌中有 ${count} 张）`, value: { defId } };
     });
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<{ defId: string }>(
         `innsmouth_spreading_the_word_${ctx.now}`, ctx.playerId,
-        '选择一个随从名（额外打出至多2个同名随从）', options as any[], 'innsmouth_spreading_the_word',
+        '选择一个随从名（额外打出至多2个同名随从）', options,
+        { sourceId: 'innsmouth_spreading_the_word', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -349,21 +359,19 @@ export function registerInnsmouthInteractionHandlers(): void {
 
     // 重返深海：玩家选择返回手牌的同名随从
     registerInteractionHandler('innsmouth_return_to_the_sea', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as Array<{ minionUid: string; minionDefId: string; owner: string }>;
+        const selected = value as Array<{ minionUid: string; minionDefId: string; owner: string; baseIndex: number }>;
         if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
         const events: SmashUpEvent[] = [];
         for (const item of selected) {
-            events.push({
-                type: SU_EVENTS.MINION_RETURNED,
-                payload: {
-                    minionUid: item.minionUid,
-                    minionDefId: item.minionDefId,
-                    fromBaseIndex: -1, // 计分后基地已处理，baseIndex 不再关键
-                    toPlayerId: item.owner,
-                    reason: 'innsmouth_return_to_the_sea',
-                },
-                timestamp,
-            } as MinionReturnedEvent);
+            events.push(...buildValidatedReturnEvents(state, {
+                minionUid: item.minionUid,
+                minionDefId: item.minionDefId,
+                fromBaseIndex: item.baseIndex,
+                toPlayerId: item.owner,
+                reason: 'innsmouth_return_to_the_sea',
+                now: timestamp,
+                sourcePlayerId: playerId,
+            }));
         }
         return { state, events };
     });
