@@ -371,7 +371,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 <div 
                     className="absolute inset-0 w-full h-full bg-cover bg-center"
                     style={{
-                        backgroundImage: `url(/assets/i18n/zh-CN/cardia/cards/compressed/background.jpg)`
+                        backgroundImage: `url(/assets/i18n/zh-CN/cardia/cards/compressed/background.webp)`
                     }}
                 />
                 

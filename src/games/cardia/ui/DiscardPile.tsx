@@ -16,7 +16,11 @@ interface DiscardPileProps {
  * - 历史弃牌显示左侧三分之一（数字部分）
  * - 从下往上堆叠
  */
-export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent = false, onCardClick }) => {
+export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _isOpponent = false, onCardClick }) => {
+    // 卡牌尺寸：缩小到 90%（约 100px × 151px）
+    const cardWidth = 100;
+    const cardHeight = 151;
+    
     if (cards.length === 0) {
         return (
             <div className="relative border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center" style={{ width: `${cardWidth}px`, height: `${cardHeight}px` }}>
@@ -31,10 +35,6 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent = fa
     const displayCards = [...cards].reverse();
     const latestCard = displayCards[0];
     const historyCards = displayCards.slice(1);
-
-    // 卡牌尺寸：缩小到 90%（约 100px × 151px）
-    const cardWidth = 100;
-    const cardHeight = 151;
     const historyWidth = Math.floor(cardWidth / 3); // 三分之一宽度
     const offsetStep = 36; // 每张卡片向右偏移 36px
     
