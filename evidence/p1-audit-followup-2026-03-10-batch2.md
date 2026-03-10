@@ -496,3 +496,342 @@ npx vitest run src/components/social/__tests__/chatMessageValidation.test.ts src
 ```
 
 结果：6 个文件全部通过，共 30 条用例通过。
+
+---
+
+## 十四、框架 / 特效 / ActionLog 尾项复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/components/game/framework/CharacterSelectionSkeleton.tsx`
+- `src/components/game/framework/hooks/useAutoSkipPhase.ts`
+- `src/components/game/framework/widgets/GameDebugPanel.tsx`
+- `src/engine/fx/useFxBus.ts`
+- `src/engine/primitives/actionLogHelpers.ts`
+- `src/core/AssetLoader.ts`
+- `src/lib/utils.ts`
+
+### 2. 本轮重点核对内容
+
+- 角色选择骨架屏、自动跳阶段、调试面板这些框架尾项是否被 POD 删残或断链；
+- `useFxBus` 当前是否仍保留 FX cue 注册、超时兜底与 impact 回调保护，而不是被回滚成“只发不收”；
+- `actionLogHelpers` 是否仍承担统一格式化职责，避免 UI / 游戏层各自分叉一套；
+- `AssetLoader` 的关键资源预加载、失败回退与音频资源装载链是否仍完整；
+- `lib/utils.ts` 当前是否还是上层通用依赖可安全调用的实现，而不是被 POD 删空。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `CharacterSelectionSkeleton.tsx` 仍是完整骨架屏实现，不是被删成占位空组件；
+  - `useAutoSkipPhase.ts` 仍保留自动跳阶段的门控与清理逻辑，未见 POD 造成的“无条件推进”回退；
+  - `GameDebugPanel.tsx` 仍是可用调试面板，不是被删残的空壳；
+  - `useFxBus.ts` 仍保留 renderer 超时兜底与未调用 `onImpact` 的保护链，未见 FX 总线残缺；
+  - `actionLogHelpers.ts` 仍作为统一 ActionLog 格式化入口被测试覆盖，未见被 POD 打散；
+  - `AssetLoader.ts` 当前仍保留关键图片预加载、失败回退、音频预加载与 resolver 降级链；
+  - `src/lib/utils.ts` 当前虽有用户活跃改动上下文，但本轮只读复核未发现明确可归因到 POD 的回滚痕迹。
+
+### 4. 验证
+
+```bash
+npx vitest run src/core/__tests__/AssetLoader.test.ts src/core/__tests__/AssetLoader.preload.test.ts src/core/__tests__/AssetLoader.audio.test.ts src/lib/__tests__/i18n-check.test.ts src/components/game/framework/__tests__/CriticalImageGate.test.tsx src/components/game/framework/__tests__/TutorialSelectionGate.test.tsx src/components/__tests__/actionLogFormat.test.ts src/games/dicethrone/__tests__/actionLogFormat.test.ts src/games/smashup/__tests__/actionLogFormat.test.ts src/components/game/framework/__tests__/InteractionGuard.test.ts src/components/game/framework/hooks/__tests__/useVisualStateBuffer.test.ts src/components/game/framework/hooks/__tests__/useVisualSequenceGate.test.ts
+```
+
+结果：12 个文件全部通过，共 61 条用例通过。
+
+说明：
+
+- `i18n-check.test.ts` 运行时仍会输出一批既有的 `ambiguous-namespace` / `dynamic-key` 提示，但测试本身通过；
+- 这些提示本轮只作为现状记录，不直接构成 POD 回滚证据；
+- `AssetLoader.preload.test.ts` 中的失败/超时日志来自测试刻意构造的回退场景，属于预期覆盖，不是新增故障。
+
+---
+
+## 十五、SmashUp UI 特写 / 提示链复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/smashup/Board.tsx`
+- `src/games/smashup/ui/PromptOverlay.tsx`
+- `src/games/smashup/ui/RevealOverlay.tsx`
+- `src/games/smashup/ui/SmashUpOverlayContext.tsx`
+- `src/games/smashup/ui/cardPreviewHelper.ts`
+
+### 2. 本轮重点核对内容
+
+- `Board.tsx` 是否仍保留 `SmashUpOverlayProvider` → `RevealOverlay` → `PromptOverlay` → `CardSpotlightQueue` 的主渲染链；
+- `PromptOverlay.tsx` 是否仍保留基于 `CardPreview` / `CardMagnifyOverlay` 的上下文预览与选项预览，而不是被 POD 回滚成“只有文本无卡面”；
+- `RevealOverlay.tsx` 是否仍消费事件流并按查看权限显示展示卡牌，而不是展示链被删断；
+- `SmashUpOverlayContext.tsx` 是否仍保留英文卡图中文覆盖层开关与派系选择上下文；
+- `cardPreviewHelper.ts` 是否仍保留从 `cardId/defId` 映射预览引用的统一入口。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `Board.tsx` 仍在顶层包裹 `SmashUpOverlayProvider`，并继续挂载 `CardSpotlightQueue`、`RevealOverlay`、`CardMagnifyOverlay`、`PromptOverlay`；
+  - `PromptOverlay.tsx` 当前仍保留 `displayCards` / context preview / 选项卡牌预览 / 放大镜链路，没有出现“提示还在但卡面特写节点被删掉”的迹象；
+  - `RevealOverlay.tsx` 当前仍基于事件流消费 `REVEAL_*` 事件、执行 viewer 权限过滤并渲染卡牌展示队列；
+  - `SmashUpOverlayContext.tsx` 当前仍保留本地持久化的覆盖层开关和已选派系列表，不是被删残的空 Context；
+  - `cardPreviewHelper.ts` 当前仍统一把卡牌/基地 `defId` 映射到 `smashup-card-renderer` 预览引用，没有发现预览入口被 POD 拆散。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/smashup/__tests__/promptSystem.test.ts src/games/smashup/__tests__/promptResponseChain.test.ts src/games/smashup/__tests__/interactionChainE2E.test.ts
+```
+
+结果：3 个文件通过，共 62 条用例通过，1 条 skipped。
+
+说明：
+
+- 这组测试主要证明 Prompt / Interaction / 多步选择链仍闭环可走，不把它夸大成完整 E2E 视觉验收；
+- `RevealOverlay.tsx` 当前仍存在较多直接 `console.log` 调试输出，但本轮没有把它归因为 POD 回滚；当前只记录现状，不和用户活跃修复混淆。
+
+---
+
+## 十六、Summoner Wars UI / 交互模式链复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/summonerwars/Board.tsx`
+- `src/games/summonerwars/ui/StatusBanners.tsx`
+- `src/games/summonerwars/ui/modeTypes.ts`
+
+### 2. 本轮重点核对内容
+
+- `Board.tsx` 是否仍保留棋盘主界面、`StatusBanners`、`useGameEvents`、`useFxBus`、放大镜/选择浮层等主装配链；
+- `StatusBanners.tsx` 是否仍消费能力模式与事件卡模式，负责把多步交互提示暴露给 UI；
+- `modeTypes.ts` 是否仍保留事件卡 / 技能多步骤交互的共享类型，避免 UI 与领域层脱节。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `Board.tsx` 仍完整挂载 `StatusBanners`、`BoardGrid`、`useGameEvents`、`useCellInteraction`、`useFxBus` 等关键链路；
+  - `StatusBanners.tsx` 当前仍覆盖大量能力模式提示分支，没有出现“模式还在、提示节点被删掉”的明显回滚；
+  - `modeTypes.ts` 当前仍维持事件卡模式与技能模式的共享状态定义，未见 POD 造成的类型链断裂。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/summonerwars/__tests__/abilities-trickster-execute.test.ts src/games/summonerwars/__tests__/interaction-chain-comprehensive.test.ts src/games/summonerwars/__tests__/entity-chain-integrity.test.ts
+```
+
+结果：3 个文件全部通过，共 196 条用例通过。
+
+说明：
+
+- 原本尝试运行 `triggerEntryAudit.test.ts` / `interactionChainAudit.test.ts`，但项目 Vitest 配置会过滤 `*audit*.test.ts`；
+- 因此本轮实际采用未被过滤、且覆盖同类交互链的现成测试作为验证依据，避免把“命令没跑到”误记成已验证。
+
+---
+
+## 十七、DiceThrone 游戏装配 / 规则 / 动效钩子复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/dicethrone/game.ts`
+- `src/games/dicethrone/hooks/useAnimationEffects.ts`
+- `src/games/dicethrone/domain/rules.ts`
+- `src/games/dicethrone/debug-config.tsx`
+
+### 2. 本轮重点核对内容
+
+- `game.ts` 是否仍保留 `CharacterSelectionSystem`、`FlowSystem`、`ResponseWindowSystem`、`InteractionSystem`、ActionLog 格式化与 card preview 注册链；
+- `domain/rules.ts` 是否仍完整保留 `getActiveDice`、`getRollerId`、`canAdvancePhase`、`getNextPhase` 等核心规则入口；
+- `useAnimationEffects.ts` 是否仍基于 `useEventStreamCursor` + 视觉缓冲 + FX impact 映射消费事件流，而不是被 POD 删成半截；
+- `debug-config.tsx` 是否仍是完整调试面板，不是被删残的空壳。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `game.ts` 仍保留 DiceThrone 的系统装配主链、命令分类校验、ActionLog 格式化与卡牌预览注册；
+  - `rules.ts` 仍保留投掷者判定、阶段推进门禁与阶段流转分支，未见被 POD 删坏的明显缺口；
+  - `useAnimationEffects.ts` 当前仍通过 `useEventStreamCursor`、`useVisualStateBuffer`、`fxImpactMapRef` 等结构消费伤害/治疗/CP 事件，没有出现“事件有了但视觉层被删断”的静态迹象；
+  - `debug-config.tsx` 当前仍是完整可操作的作弊/调试面板，未见 POD 误删。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/dicethrone/__tests__/audio.config.test.ts src/games/dicethrone/__tests__/card-system.test.ts src/games/dicethrone/__tests__/boundaryEdgeCases.test.ts src/games/dicethrone/__tests__/cross-hero.test.ts
+```
+
+结果：4 个文件通过，共 68 条用例通过，1 条 skipped。
+
+说明：
+
+- 运行期间出现的 `Pipeline` 命令验证失败日志（如 `notEnoughCp`、`upgradeCardSkipLevel`、`roll_limit_reached`）来自测试显式覆盖的拒绝路径，属于预期断言，不是新增红灯；
+- 本轮仍维持“只读优先”策略，未直接改动 DiceThrone 业务文件，避免和你当前正在做的修复冲突。
+
+---
+
+## 十八、引擎尾项：事件流 / 撤回 / 选择 / 传输契约复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/engine/hooks/useEventStreamCursor.ts`
+- `src/engine/primitives/damageCalculation.ts`
+- `src/engine/systems/SimpleChoiceSystem.ts`
+- `src/engine/systems/UndoSystem.ts`
+- `src/engine/transport/latency/optimisticEngine.ts`
+- `src/engine/transport/protocol.ts`
+- `src/engine/transport/storage.ts`
+- `src/engine/types.ts`
+
+### 2. 本轮重点核对内容
+
+- `useEventStreamCursor.ts` 是否仍保留“首次挂载跳过历史 / Undo 回退重置 / 乐观回滚信号兼容”这条通用消费语义；
+- `damageCalculation.ts` 是否仍作为统一伤害计算入口，而不是被拆回到各游戏各自算；
+- `SimpleChoiceSystem.ts` / `UndoSystem.ts` 是否仍保留引擎层的通用交互与撤回职责，没有被 POD 删残；
+- `optimisticEngine.ts` 是否仍保留 pending 队列、预测重放、stateID 对账与 reconcile 逻辑；
+- `protocol.ts` / `storage.ts` / `types.ts` 是否仍维持前后端传输、存储、系统状态的基础契约。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `useEventStreamCursor.ts` 仍保留 Undo 回退、乐观回滚、重连场景的游标复位语义；
+  - `damageCalculation.ts` 当前仍是统一的伤害分解入口，没有明显被 POD 打散；
+  - `SimpleChoiceSystem.ts` 与 `UndoSystem.ts` 仍由引擎层统一提供，不是被删成“游戏各自兜底”；
+  - `optimisticEngine.ts` 当前仍保留 pending 命令预测、重放与 reconcile 主链；
+  - `protocol.ts`、`storage.ts`、`types.ts` 当前仍是完整契约定义，未见 POD 造成的关键字段缺口。
+
+### 4. 验证
+
+```bash
+npx vitest run src/engine/hooks/__tests__/useEventStreamCursor.test.ts src/engine/primitives/__tests__/damageCalculation.test.ts src/engine/__tests__/undo-eventstream.test.ts src/engine/systems/__tests__/InteractionSystem-auto-injection.test.ts src/engine/transport/latency/__tests__/optimisticEngine.test.ts src/engine/transport/__tests__/stateValidator.test.ts
+```
+
+结果：全部通过（本轮与下节合并统计共 209 条用例通过，0 失败）。
+
+说明：
+
+- `InteractionSystem-auto-injection.test.ts` 本轮作为 `SimpleChoiceSystem` 相关行为的现成覆盖；
+- `undo-eventstream.test.ts` 直接覆盖撤回恢复与事件流协同；
+- `protocol.ts` / `storage.ts` / `types.ts` 这类契约文件本轮仍以静态复核为主，没有额外新增专门测试文件。
+
+---
+
+## 十九、SmashUp 数据 / 注册 / 基地结算主链复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/smashup/abilities/index.ts`
+- `src/games/smashup/abilities/aliens.ts`
+- `src/games/smashup/abilities/cthulhu.ts`
+- `src/games/smashup/abilities/ghosts.ts`
+- `src/games/smashup/abilities/vampires.ts`
+- `src/games/smashup/data/cards.ts`
+- `src/games/smashup/domain/abilityRegistry.ts`
+- `src/games/smashup/domain/baseAbilities.ts`
+- `src/games/smashup/domain/events.ts`
+- `src/games/smashup/game.ts`
+
+### 2. 本轮重点核对内容
+
+- `abilities/index.ts` 是否仍完整注册基础派系、扩展派系、基地能力、持续修正与 `_pod` 别名映射；
+- `abilityRegistry.ts` 是否仍保留 `registerPodAbilityAliases()` 这条 POD 兼容主链；
+- `data/cards.ts` 是否仍作为卡牌/基地定义与名称文本解析的统一入口；
+- `baseAbilities.ts` 是否仍保留基地能力注册与交互处理器主链；
+- `game.ts` 是否仍保留响应窗口、ActionLog、预览注册、关键图片解析器注册等装配；
+- `aliens / cthulhu / ghosts / vampires` 是否仍是完整能力实现，而不是被 POD 留下半截注册。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `abilities/index.ts` 当前仍完整执行注册表清理、派系能力注册、基地能力注册、持续效果注册，以及 `_pod` 能力/交互/持续效果/力量修正别名注册；
+  - `abilityRegistry.ts` 当前仍通过统一批量映射为 `_pod` 版本复制能力标签，没有出现 POD 版逻辑入口整体丢失的迹象；
+  - `data/cards.ts` 当前仍提供 `getCardDef` / `getBaseDef` / `resolveCardName` / `resolveCardText` 的统一查询入口；
+  - `baseAbilities.ts` 当前仍保留基地能力与交互处理器注册主链，没有静态缺口；
+  - `game.ts` 当前仍保留 `meFirst / afterScoring` 响应窗口门控、卡牌预览注册与关键图片解析器注册；
+  - `game.ts` 中 `hasRespondableContent` 还有直接 `console.log` 调试输出，但本轮未把它归因为 POD 回滚，只作现状记录。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/smashup/__tests__/factionAbilities.test.ts src/games/smashup/__tests__/expansionAbilities.test.ts src/games/smashup/__tests__/ghostsAbilities.test.ts src/games/smashup/__tests__/cthulhuExpansionAbilities.test.ts src/games/smashup/__tests__/baseAbilityIntegration.test.ts src/games/smashup/__tests__/baseScoring.test.ts src/games/smashup/__tests__/alien-probe-bug.test.ts
+```
+
+结果：全部通过（本轮与上节合并统计共 209 条用例通过，0 失败）。
+
+说明：
+
+- 运行时出现的 `invalid_command` 等验证失败日志来自测试刻意覆盖的拒绝路径，属于预期输出，不是新增回归；
+- 本轮重点证明“能力注册 → 基地能力 → 响应窗口 → 计分/特定派系能力”这条主链当前仍可走通，不夸大成对全部 UI 视觉表现的终验。
+
+---
+
+## 二十、DiceThrone 支撑链：执行 / Token / 英雄数据 / UI 适配复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/dicethrone/audio.config.ts`
+- `src/games/dicethrone/criticalImageResolver.ts`
+- `src/games/dicethrone/domain/characters.ts`
+- `src/games/dicethrone/domain/commands.ts`
+- `src/games/dicethrone/domain/commonCards.ts`
+- `src/games/dicethrone/domain/execute.ts`
+- `src/games/dicethrone/domain/executeCards.ts`
+- `src/games/dicethrone/domain/systems.ts`
+- `src/games/dicethrone/domain/tokenResponse.ts`
+- `src/games/dicethrone/domain/tokenTypes.ts`
+- `src/games/dicethrone/domain/utils.ts`
+- `src/games/dicethrone/domain/view.ts`
+- `src/games/dicethrone/heroes/barbarian/cards.ts`
+- `src/games/dicethrone/heroes/monk/cards.ts`
+- `src/games/dicethrone/heroes/moon_elf/cards.ts`
+- `src/games/dicethrone/heroes/moon_elf/tokens.ts`
+- `src/games/dicethrone/heroes/pyromancer/abilities.ts`
+- `src/games/dicethrone/heroes/pyromancer/cards.ts`
+- `src/games/dicethrone/heroes/pyromancer/tokens.ts`
+- `src/games/dicethrone/heroes/shadow_thief/abilities.ts`
+- `src/games/dicethrone/heroes/shadow_thief/cards.ts`
+- `src/games/dicethrone/heroes/shadow_thief/tokens.ts`
+- `src/games/dicethrone/hooks/useAttackShowcase.ts`
+- `src/games/dicethrone/latencyConfig.ts`
+- `src/games/dicethrone/manifest.ts`
+- `src/games/dicethrone/tutorial.ts`
+- `src/games/dicethrone/ui/CenterBoard.tsx`
+- `src/games/dicethrone/ui/CharacterSelectionAdapter.tsx`
+- `src/games/dicethrone/ui/HandArea.tsx`
+- `src/games/dicethrone/ui/OpponentHeader.tsx`
+- `src/games/dicethrone/ui/TokenResponseModal.tsx`
+- `src/games/dicethrone/ui/fxSetup.ts`
+- `src/games/dicethrone/ui/resolveMoves.ts`
+
+### 2. 本轮重点核对内容
+
+- `execute.ts` / `executeCards.ts` / `commands.ts` 是否仍保留业务命令 → 事件生成 → 卡牌结算主链；
+- `tokenResponse.ts` / `tokenTypes.ts` / `systems.ts` 是否仍保留 Token 响应窗口、可用 Token 筛选与结算逻辑；
+- `characters.ts`、英雄 `cards.ts / abilities.ts / tokens.ts` 是否仍维持角色数据注册、起始牌组、Token 定义与能力升级链；
+- `view.ts` 是否仍保留隐藏对手手牌/牌库的视图过滤；
+- `audio.config.ts`、`criticalImageResolver.ts`、`manifest.ts`、`tutorial.ts`、`fxSetup.ts` 是否仍保留资源预加载、关键图片、教程与 FX 注册主链；
+- `useAttackShowcase.ts`、`TokenResponseModal.tsx`、`resolveMoves.ts`、`CenterBoard.tsx` 等 UI 适配层是否仍接在正确的状态与命令链上。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `execute.ts` 仍负责角色初始化、掷骰、技能选择、卡牌/Token 命令分派与教程场景特殊处理；
+  - `executeCards.ts` 当前仍统一处理 `PLAY_CARD` / `PLAY_UPGRADE_CARD` 等卡牌命令及 CP 资源扣减；
+  - `tokenResponse.ts` 当前仍保留可用 Token 查询、使用/跳过 Token 的事件生成与 Ultimate/可防御条件门控；
+  - `characters.ts` 与多名英雄的 `cards / abilities / tokens` 当前仍完整注册起始牌组、状态图集、初始 Token 与升级能力定义，没有静态缺口；
+  - `view.ts` 仍保留对手手牌/牌库隐藏逻辑；
+  - `useAttackShowcase.ts` 当前仍基于 `pendingAttack` + `findPlayerAbility` 构建防御前技能特写数据；
+  - `manifest.ts`、`tutorial.ts`、`fxSetup.ts`、`resolveMoves.ts` 当前仍是完整适配层，不是被 POD 删残的空壳。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/dicethrone/__tests__/audio.config.test.ts src/games/dicethrone/__tests__/entity-chain-integrity.test.ts src/games/dicethrone/__tests__/card-system.test.ts src/games/dicethrone/__tests__/pyromancer-tokens.test.ts src/games/dicethrone/__tests__/shield-cleanup.test.ts src/games/dicethrone/__tests__/steal-cp.test.ts src/games/dicethrone/__tests__/targeted-defense-damage.test.ts src/games/dicethrone/__tests__/token-fix-coverage.test.ts
+```
+
+结果：8 个文件通过，共 135 条用例通过，1 条 skipped。
+
+说明：
+
+- 测试输出中的 `ability_not_available`、`notEnoughCp`、`upgradeCardSkipLevel`、`wrongPhaseForUpgrade`、`no_pending_damage` 等日志都来自拒绝路径断言，属于预期覆盖；
+- 本轮刻意避开了工作树中有活跃修改的 `src/games/dicethrone/hooks/useCardSpotlight.ts`，避免把你当前正在修的特写链误记成 POD 残留。
