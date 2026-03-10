@@ -137,7 +137,10 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                 transition: { type: 'spring', stiffness: 200, damping: 25 },
             }}
         >
-            <div className={hasBonusDice ? 'flex items-center gap-[1.5vw]' : undefined}>
+            <div
+                data-testid="card-spotlight-overlay"
+                className={hasBonusDice ? 'flex items-center gap-[1.5vw]' : undefined}
+            >
                 {/* 卡牌（左） */}
                 <CardPreview
                     previewRef={currentItem.previewRef}
@@ -150,19 +153,20 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                 {hasBonusDice && (
                     <div className="flex flex-col items-center gap-[1vw] relative z-[1]">
                         {/* 骰子行 */}
-                        <div className="flex items-center gap-[1vw]">
+                        <div className="flex items-center gap-[1vw]" data-testid="card-spotlight-bonus-dice">
                             {currentItem.bonusDice!.map((die, index) => (
-                                <BonusDieSpotlightContent
-                                    key={`${die.timestamp}-${index}`}
-                                    value={die.value}
-                                    face={die.face}
-                                    effectKey={die.effectKey}
-                                    effectParams={die.effectParams}
-                                    locale={locale}
-                                    size="10vw"
-                                    characterId={die.characterId}
-                                    compact={true}
-                                />
+                                <div key={`${die.timestamp}-${index}`} data-testid="card-spotlight-die">
+                                    <BonusDieSpotlightContent
+                                        value={die.value}
+                                        face={die.face}
+                                        effectKey={die.effectKey}
+                                        effectParams={die.effectParams}
+                                        locale={locale}
+                                        size="10vw"
+                                        characterId={die.characterId}
+                                        compact={true}
+                                    />
+                                </div>
                             ))}
                         </div>
                         

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ValidationPipe } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
@@ -20,6 +20,7 @@ import { MatchRecord, type MatchRecordDocument } from '../src/modules/admin/sche
 import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from '../src/modules/admin/schemas/room-match.schema';
 import { UgcPackage, type UgcPackageDocument } from '../src/modules/ugc/schemas/ugc-package.schema';
 import { UgcAsset, type UgcAssetDocument } from '../src/modules/ugc/schemas/ugc-asset.schema';
+import { AdminService } from '../src/modules/admin/admin.service';
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 
 // MongoDB 内存服务器在某些环境下启动很慢或超时，暂时跳过测试
@@ -502,5 +503,79 @@ describe.skip('Admin Module (e2e)', () => {
             .delete(`/admin/users/${adminId}`)
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(400);
+    });
+});
+
+describe('AdminService.getRooms 容错', () => {
+    it('跳过异常房间并容忍旧 ownerKey 脏数据', async () => {
+        const validOwnerId = new Types.ObjectId().toString();
+        const ownerLean = vi.fn().mockResolvedValue([
+            { _id: new Types.ObjectId(validOwnerId), username: 'owner-user' },
+        ]);
+        const ownerSelect = vi.fn().mockReturnValue({ lean: ownerLean });
+        const userFind = vi.fn().mockReturnValue({ select: ownerSelect });
+        const cacheManager = {
+            get: vi.fn(),
+            set: vi.fn(),
+            del: vi.fn(),
+        };
+        const now = Date.now();
+        const hybridStorage = {
+            listMatches: vi.fn().mockResolvedValue(['boom-room', 'legacy-room', 'good-room']),
+            fetch: vi.fn().mockImplementation(async (matchID: string) => {
+                if (matchID === 'boom-room') {
+                    throw new Error('broken metadata');
+                }
+                if (matchID === 'legacy-room') {
+                    return {
+                        metadata: {
+                            gameName: 'tictactoe',
+                            players: { '0': { name: 'legacy-player' } },
+                            setupData: {
+                                roomName: 'legacy-room',
+                                ownerKey: { legacy: true } as unknown as string,
+                            },
+                            createdAt: now - 2000,
+                            updatedAt: now - 1000,
+                        },
+                    };
+                }
+                return {
+                    metadata: {
+                        gameName: 'tictactoe',
+                        players: { '0': { name: 'good-player', isConnected: true } },
+                        setupData: {
+                            roomName: 'good-room',
+                            ownerKey: `user:${validOwnerId}`,
+                            ownerType: 'user',
+                        },
+                        createdAt: now - 5000,
+                        updatedAt: now,
+                    },
+                };
+            }),
+        };
+
+        const service = new AdminService(
+            { find: userFind } as unknown as Model<UserDocument>,
+            {} as Model<FriendDocument>,
+            {} as Model<MessageDocument>,
+            {} as Model<ReviewDocument>,
+            {} as Model<MatchRecordDocument>,
+            {} as Model<RoomMatchDocument>,
+            {} as Model<UgcPackageDocument>,
+            {} as Model<UgcAssetDocument>,
+            cacheManager as unknown as Cache,
+            hybridStorage as never,
+        );
+
+        const result = await service.getRooms({ page: 1, limit: 10 } as never);
+
+        expect(result.total).toBe(2);
+        expect(result.items.map(item => item.matchID)).toEqual(['good-room', 'legacy-room']);
+        expect(result.items[0].ownerName).toBe('owner-user');
+        expect(result.items[1].ownerName).toBeUndefined();
+        expect(userFind).toHaveBeenCalledTimes(1);
+        expect(hybridStorage.fetch).toHaveBeenCalledTimes(3);
     });
 });

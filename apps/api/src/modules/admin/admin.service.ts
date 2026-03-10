@@ -18,6 +18,7 @@ import { MatchRecord, type MatchRecordDocument, type MatchRecordPlayer } from '.
 import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from './schemas/room-match.schema';
 import { HYBRID_STORAGE } from '../../shared/providers/hybrid-storage.provider';
 import type { MatchStorage } from '../../../../../src/engine/transport/storage';
+import logger from '../../../../../server/logger';
 
 const ADMIN_STATS_CACHE_KEY = 'admin:stats';
 const ADMIN_STATS_TREND_CACHE_PREFIX = 'admin:stats:trend:';
@@ -30,8 +31,9 @@ const UNREAD_TOTAL_KEY_PREFIX = 'social:unread:total:';
 const DELETED_USER_PLACEHOLDER = '[已删除用户]';
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const resolveOwnerUserId = (ownerKey?: string) => {
-    if (!ownerKey?.startsWith('user:')) return null;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const resolveOwnerUserId = (ownerKey?: unknown) => {
+    if (typeof ownerKey !== 'string' || !ownerKey.startsWith('user:')) return null;
     const trimmed = ownerKey.slice('user:'.length).trim();
     if (!trimmed.length) return null;
     return Types.ObjectId.isValid(trimmed) ? trimmed : null;
@@ -259,6 +261,46 @@ type RoomMatchLean = {
     updatedAt: Date;
 };
 
+const normalizeRoomSetupData = (value: unknown): RoomMatchSetupData => {
+    if (!isRecord(value)) return {};
+    const ownerType = value.ownerType === 'user' || value.ownerType === 'guest' ? value.ownerType : undefined;
+    return {
+        roomName: typeof value.roomName === 'string' ? value.roomName : undefined,
+        ownerKey: typeof value.ownerKey === 'string' ? value.ownerKey : undefined,
+        ownerType,
+        password: typeof value.password === 'string' ? value.password : undefined,
+    };
+};
+
+const normalizeRoomPlayers = (value: unknown): RoomPlayerItem[] => {
+    if (!isRecord(value)) return [];
+    return Object.entries(value)
+        .map(([id, player]) => {
+            const normalizedPlayer = isRecord(player) ? player : {};
+            return {
+                id: Number(id),
+                name: typeof normalizedPlayer.name === 'string' ? normalizedPlayer.name : undefined,
+                isConnected: typeof normalizedPlayer.isConnected === 'boolean'
+                    ? normalizedPlayer.isConnected
+                    : undefined,
+            };
+        })
+        .filter(player => Number.isFinite(player.id));
+};
+
+const normalizeRoomDate = (value: unknown, fallback = new Date()): Date => {
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? fallback : value;
+    }
+    if (typeof value === 'number' || typeof value === 'string') {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+    return fallback;
+};
+
 const isValidStats = (value: unknown): value is AdminStatsBase => {
     if (!value || typeof value !== 'object') return false;
     const stats = value as AdminStatsBase;
@@ -407,22 +449,26 @@ export class AdminService implements OnModuleInit {
         // 2. 获取每个房间的 metadata 并构建房间列表
         const allItems: RoomListItem[] = [];
         for (const matchID of allMatchIds) {
-            const { metadata } = await this.hybridStorage.fetch(matchID, { metadata: true });
-            if (!metadata) continue;
+            try {
+                const { metadata } = await this.hybridStorage.fetch(matchID, { metadata: true });
+                if (!metadata) continue;
 
             // 构建房间信息（从 metadata 中提取）
-            const item = this.buildRoomListItemFromMetadata(matchID, metadata);
+                const item = this.buildRoomListItemFromMetadata(matchID, metadata);
             
             // 应用搜索过滤
-            if (query.search) {
-                const search = query.search.trim().toLowerCase();
-                const matchesSearch = 
-                    matchID.toLowerCase().includes(search) ||
-                    (item.roomName && item.roomName.toLowerCase().includes(search));
-                if (!matchesSearch) continue;
-            }
+                if (query.search) {
+                    const search = query.search.trim().toLowerCase();
+                    const matchesSearch = 
+                        matchID.toLowerCase().includes(search) ||
+                        (item.roomName && item.roomName.toLowerCase().includes(search));
+                    if (!matchesSearch) continue;
+                }
 
-            allItems.push(item);
+                allItems.push(item);
+            } catch (error) {
+                logger.warn(`[AdminService] 跳过异常房间 metadata matchID=${matchID} error=${error instanceof Error ? error.message : String(error)}`);
+            }
         }
 
         // 3. 按更新时间降序排序
@@ -1134,20 +1180,15 @@ export class AdminService implements OnModuleInit {
     private buildRoomListItem(record: RoomMatchLean): RoomListItem {
         const metadata = record.metadata as { players?: Record<string, { name?: string; isConnected?: boolean }>; setupData?: RoomMatchSetupData } | null | undefined;
         const state = record.state as { G?: { __setupData?: RoomMatchSetupData } } | null | undefined;
-        const setupDataFromMeta = metadata?.setupData;
-        const setupDataFromState = state?.G?.__setupData;
+        const setupDataFromMeta = normalizeRoomSetupData(metadata?.setupData);
+        const setupDataFromState = normalizeRoomSetupData(state?.G?.__setupData);
         const setupData: RoomMatchSetupData = {
             roomName: setupDataFromMeta?.roomName ?? setupDataFromState?.roomName,
             ownerKey: setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey,
             ownerType: setupDataFromMeta?.ownerType ?? setupDataFromState?.ownerType,
             password: setupDataFromMeta?.password ?? setupDataFromState?.password,
         };
-        const playersObj = metadata?.players ?? {};
-        const players: RoomPlayerItem[] = Object.entries(playersObj).map(([id, data]) => ({
-            id: Number(id),
-            name: data?.name,
-            isConnected: data?.isConnected,
-        }));
+        const players = normalizeRoomPlayers(metadata?.players);
         const isLocked = Boolean(setupData.password && String(setupData.password).length > 0);
 
         return {
@@ -1158,8 +1199,8 @@ export class AdminService implements OnModuleInit {
             ownerType: setupData.ownerType,
             isLocked,
             players,
-            createdAt: record.createdAt,
-            updatedAt: record.updatedAt,
+            createdAt: normalizeRoomDate(record.createdAt),
+            updatedAt: normalizeRoomDate(record.updatedAt),
         };
     }
 
@@ -1167,33 +1208,28 @@ export class AdminService implements OnModuleInit {
      * 从 MatchMetadata 构建房间列表项（用于 HybridStorage 查询）
      */
     private buildRoomListItemFromMetadata(matchID: string, metadata: unknown): RoomListItem {
-        const meta = metadata as {
+        const meta = (isRecord(metadata) ? metadata : {}) as {
             gameName?: string;
             players?: Record<string, { name?: string; isConnected?: boolean }>;
             setupData?: RoomMatchSetupData;
-            createdAt?: number;
-            updatedAt?: number;
+            createdAt?: number | string | Date;
+            updatedAt?: number | string | Date;
         };
 
-        const setupData = meta.setupData ?? {};
-        const playersObj = meta.players ?? {};
-        const players: RoomPlayerItem[] = Object.entries(playersObj).map(([id, data]) => ({
-            id: Number(id),
-            name: data?.name,
-            isConnected: data?.isConnected,
-        }));
+        const setupData = normalizeRoomSetupData(meta.setupData);
+        const players = normalizeRoomPlayers(meta.players);
         const isLocked = Boolean(setupData.password && String(setupData.password).length > 0);
 
         return {
             matchID,
-            gameName: meta.gameName ?? 'unknown',
+            gameName: typeof meta.gameName === 'string' && meta.gameName.trim() ? meta.gameName : 'unknown',
             roomName: setupData.roomName,
             ownerKey: setupData.ownerKey,
             ownerType: setupData.ownerType,
             isLocked,
             players,
-            createdAt: meta.createdAt ? new Date(meta.createdAt) : new Date(),
-            updatedAt: meta.updatedAt ? new Date(meta.updatedAt) : new Date(),
+            createdAt: normalizeRoomDate(meta.createdAt),
+            updatedAt: normalizeRoomDate(meta.updatedAt),
         };
     }
 

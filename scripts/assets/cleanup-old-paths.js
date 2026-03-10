@@ -5,8 +5,17 @@
  * 保留 official/i18n/, official/common/
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { existsSync } from 'fs';
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+
+// 加载环境变量：优先 .env，回退到 .env.example
+if (existsSync('.env')) {
+  config({ path: '.env' });
+} else {
+  console.log('⚠️  未找到 .env 文件，使用 .env.example 中的配置');
+  config({ path: '.env.example' });
+}
 
 const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;

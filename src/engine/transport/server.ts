@@ -349,6 +349,41 @@ export class GameTransportServer {
     }
 
     /**
+     * 测试 / 管理接口：校验某个玩家是否有权访问指定对局。
+     *
+     * 复用与 socket `sync` / `command` 同源的 metadata + authenticate 规则，
+     * 避免 `/test` API 仅凭全局 token 绕过座位归属与凭证校验。
+     */
+    async validateTestAccess(
+        matchID: string,
+        playerID: string,
+        credentials?: string,
+        metadata?: MatchMetadata,
+    ): Promise<boolean> {
+        if (!playerID) return false;
+
+        const resolvedMetadata = metadata ?? (await this.storage.fetch(matchID, { metadata: true })).metadata;
+        if (!resolvedMetadata) return false;
+
+        const playerMeta = resolvedMetadata.players[playerID];
+        if (!playerMeta) return false;
+
+        const ok = this.authenticate
+            ? await this.authenticate(matchID, playerID, credentials, resolvedMetadata)
+            : typeof playerMeta.credentials === 'string'
+                && playerMeta.credentials.length > 0
+                && playerMeta.credentials === credentials;
+
+        if (!ok) return false;
+
+        const active = this.activeMatches.get(matchID);
+        if (active) {
+            active.metadata = resolvedMetadata;
+        }
+        return true;
+    }
+
+    /**
      * 测试专用：直接注入对局状态
      * 
      * 此方法绕过正常的命令执行流程，直接修改服务器状态并广播到所有客户端。

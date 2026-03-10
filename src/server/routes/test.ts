@@ -10,6 +10,9 @@ import type { MatchStorage, StoredMatchState } from '../../engine/transport/stor
 import type { MatchState } from '../../core/types';
 import { validateMatchState, deepMerge } from '../../engine/transport/stateValidator';
 
+const TEST_PLAYER_ID_HEADER = 'x-test-player-id';
+const TEST_PLAYER_CREDENTIALS_HEADER = 'x-test-player-credentials';
+
 /**
  * 快照存储（内存实现，测试环境使用）
  */
@@ -49,6 +52,41 @@ export function createTestRoutes(
 ): Router {
     const router = new Router({ prefix: '/test' });
 
+    const requireMatchAccess = async (ctx: Router.RouterContext, matchId: string): Promise<boolean> => {
+        const playerId = ctx.get(TEST_PLAYER_ID_HEADER);
+        const credentials = ctx.get(TEST_PLAYER_CREDENTIALS_HEADER);
+
+        if (!playerId || !credentials) {
+            ctx.status = 400;
+            ctx.body = {
+                error: 'Missing X-Test-Player-Id or X-Test-Player-Credentials',
+            };
+            return false;
+        }
+
+        const existing = await storage.fetch(matchId, { metadata: true });
+        if (!existing.metadata) {
+            ctx.status = 404;
+            ctx.body = { error: 'Match not found' };
+            return false;
+        }
+
+        const authorized = await transportServer.validateTestAccess(
+            matchId,
+            playerId,
+            credentials,
+            existing.metadata,
+        );
+
+        if (!authorized) {
+            ctx.status = 403;
+            ctx.body = { error: 'Forbidden' };
+            return false;
+        }
+
+        return true;
+    };
+
     // 环境检查中间件
     router.use(async (ctx, next) => {
         if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
@@ -83,6 +121,10 @@ export function createTestRoutes(
         if (!matchId || !state) {
             ctx.status = 400;
             ctx.body = { error: 'Missing matchId or state' };
+            return;
+        }
+
+        if (!(await requireMatchAccess(ctx, matchId))) {
             return;
         }
 
@@ -121,6 +163,10 @@ export function createTestRoutes(
         if (!matchId || !patch) {
             ctx.status = 400;
             ctx.body = { error: 'Missing matchId or patch' };
+            return;
+        }
+
+        if (!(await requireMatchAccess(ctx, matchId))) {
             return;
         }
 
@@ -164,6 +210,10 @@ export function createTestRoutes(
     router.get('/get-state/:matchId', async (ctx) => {
         const { matchId } = ctx.params;
 
+        if (!(await requireMatchAccess(ctx, matchId))) {
+            return;
+        }
+
         try {
             const result = await storage.fetch(matchId, { state: true, metadata: true });
             if (!result.state) {
@@ -194,6 +244,10 @@ export function createTestRoutes(
         if (!matchId) {
             ctx.status = 400;
             ctx.body = { error: 'Missing matchId' };
+            return;
+        }
+
+        if (!(await requireMatchAccess(ctx, matchId))) {
             return;
         }
 
@@ -235,11 +289,22 @@ export function createTestRoutes(
             return;
         }
 
+        if (!(await requireMatchAccess(ctx, matchId))) {
+            return;
+        }
+
         try {
             const snapshot = await snapshotStorage.load(snapshotId);
             if (!snapshot) {
                 ctx.status = 404;
                 ctx.body = { error: 'Snapshot not found' };
+                return;
+            }
+
+            const validation = await validateMatchState(matchId, snapshot.G as MatchState<unknown>, storage);
+            if (!validation.valid) {
+                ctx.status = 400;
+                ctx.body = { error: 'Invalid snapshot state', details: validation.errors };
                 return;
             }
 

@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * useCardSpotlight Hook
  * 
  * 绠＄悊鍗＄墝鐗瑰啓闃熷垪鍜岄澶栭瀛愮壒鍐欏睍绀恒€?
@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId, EventStreamEntry } from '../../../engine/types';
-import type { DieFace, CharacterId } from '../domain/types';
+import type { DieFace, CharacterId, BonusDieInfo } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
 import { findHeroCard } from '../heroes';
 import { useEventStreamCursor } from '../../../engine/hooks';
@@ -51,6 +51,11 @@ export interface CardSpotlightState {
         face?: DieFace;
         effectKey?: string;
         effectParams?: Record<string, string | number>;
+        bonusDice?: BonusDieInfo[];
+        summaryEffectKey?: string;
+        summaryEffectParams?: Record<string, string | number>;
+        showTotal?: boolean;
+        displayOnly?: boolean;
         show: boolean;
         /** 楠板瓙鎵€灞炶鑹诧紙鐢ㄤ簬鍥鹃泦閫夋嫨锛?*/
         characterId?: string;
@@ -67,7 +72,23 @@ interface BonusDieRerolledPayload { newValue: number; newFace: DieFace; playerId
 /** 鍗＄墝鐗瑰啓鐩稿叧鐨勪簨浠剁被鍨?*/
 const CARD_EVENT_TYPES = new Set(['CARD_PLAYED', 'ABILITY_REPLACED']);
 const BONUS_DIE_EVENT_TYPES = new Set(['BONUS_DIE_ROLLED', 'BONUS_DIE_REROLLED']);
+const CARD_BONUS_BIND_THRESHOLD_MS = 1500;
 const spotlightLogger = createScopedLogger('DT_SPOTLIGHT');
+
+function countRelatedBonusDiceEvents(
+    entries: EventStreamEntry[],
+    cardPlayerId: string,
+    cardTimestamp: number,
+): number {
+    return entries.filter((entry) => {
+        if (!BONUS_DIE_EVENT_TYPES.has(entry.event.type)) return false;
+        const payload = entry.event.payload as Partial<BonusDiePayload & BonusDieRerolledPayload>;
+        const bonusPlayerId = normalizePlayerId(payload.playerId);
+        if (bonusPlayerId !== cardPlayerId) return false;
+        const bonusTimestamp = typeof entry.event.timestamp === 'number' ? entry.event.timestamp : 0;
+        return Math.abs(bonusTimestamp - cardTimestamp) <= CARD_BONUS_BIND_THRESHOLD_MS;
+    }).length;
+}
 
 /**
  * 绠＄悊鍗＄墝鍜岄澶栭瀛愮壒鍐欓槦鍒楋紙EventStream 椹卞姩锛?
@@ -90,6 +111,11 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     const [bonusDieFace, setBonusDieFace] = useState<DieFace | undefined>(undefined);
     const [bonusDieEffectKey, setBonusDieEffectKey] = useState<string | undefined>(undefined);
     const [bonusDieEffectParams, setBonusDieEffectParams] = useState<Record<string, string | number> | undefined>(undefined);
+    const [bonusDiceList, setBonusDiceList] = useState<BonusDieInfo[] | undefined>(undefined);
+    const [bonusDieSummaryEffectKey, setBonusDieSummaryEffectKey] = useState<string | undefined>(undefined);
+    const [bonusDieSummaryEffectParams, setBonusDieSummaryEffectParams] = useState<Record<string, string | number> | undefined>(undefined);
+    const [bonusDieShowTotal, setBonusDieShowTotal] = useState<boolean | undefined>(undefined);
+    const [bonusDieDisplayOnly, setBonusDieDisplayOnly] = useState<boolean | undefined>(undefined);
     const [bonusDieCharacterId, setBonusDieCharacterId] = useState<string | undefined>(undefined);
     const [showBonusDie, setShowBonusDie] = useState(false);
 
@@ -125,6 +151,14 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             effectParams?: Record<string, string | number>;
             characterId?: string;
         } | null = null;
+        let pendingStandaloneMultiDice: {
+            bonusDice: BonusDieInfo[];
+            summaryEffectKey?: string;
+            summaryEffectParams?: Record<string, string | number>;
+            characterId?: string;
+            showTotal?: boolean;
+            displayOnly?: boolean;
+        } | null = null;
 
         spotlightLogger.info('consume', {
             currentPlayerId: String(currentPlayerId),
@@ -153,7 +187,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     skipSelfCardSpotlight,
                 });
 
-                // 鑷繁鎵撶殑鍗′笉鏄剧ず鐗瑰啓锛堣鎴樻ā寮忛櫎澶栵級
+                // 自己打出的卡牌默认不显示特写；自方多骰改走独立多骰面板聚合
                 if (skipSelfCardSpotlight) continue;
 
                 // 閫氳繃闈欐€佽〃瑙ｆ瀽 previewRef锛堟浛浠ｅ師 reducer 涓殑 findHeroCard 璋冪敤锛?
@@ -238,7 +272,6 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 const isSummaryEvent = bonusEffectKey?.includes('.result');
 
                 // 灏濊瘯缁戝畾鍒板崱鐗岄槦鍒楋紙鍗″乏楠板彸锛?
-                const thresholdMs = 1500;
                 let cardCandidateIndex = -1;
                 for (let index = nextCardSpotlightQueue.length - 1; index >= 0; index -= 1) {
                     const item = nextCardSpotlightQueue[index];
@@ -251,14 +284,14 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         cardTimestamp: item.timestamp,
                         diceTimestamp: eventTimestamp,
                         timeDiff,
-                        thresholdMs,
+                        thresholdMs: CARD_BONUS_BIND_THRESHOLD_MS,
                         playerMatch,
-                        withinThreshold: timeDiff <= thresholdMs,
+                        withinThreshold: timeDiff <= CARD_BONUS_BIND_THRESHOLD_MS,
                     });
                     
                     if (
                         normalizePlayerId(item.playerId) === bonusPid &&
-                        Math.abs(item.timestamp - eventTimestamp) <= thresholdMs
+                        Math.abs(item.timestamp - eventTimestamp) <= CARD_BONUS_BIND_THRESHOLD_MS
                     ) {
                         cardCandidateIndex = index;
                         break;
@@ -335,6 +368,46 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         });
                         continue;
                     }
+
+                    const relatedBonusDiceEventCount = countRelatedBonusDiceEvents(newEntries, bonusPid, eventTimestamp);
+                    const shouldAggregateStandaloneMultiDice =
+                        !isSpectator
+                        && bonusPid === selfId
+                        && relatedBonusDiceEventCount > 1;
+
+                    if (shouldAggregateStandaloneMultiDice) {
+                        if (!pendingStandaloneMultiDice) {
+                            pendingStandaloneMultiDice = {
+                                bonusDice: [],
+                                characterId: resolvedCharacterId,
+                                showTotal: false,
+                                displayOnly: true,
+                            };
+                        }
+
+                        if (isSummaryEvent && bonusEffectKey && bonusEffectParams) {
+                            pendingStandaloneMultiDice.summaryEffectKey = bonusEffectKey;
+                            pendingStandaloneMultiDice.summaryEffectParams = bonusEffectParams;
+                        } else {
+                            pendingStandaloneMultiDice.bonusDice.push({
+                                index: pendingStandaloneMultiDice.bonusDice.length,
+                                value: bonusValue,
+                                face: bonusFace ?? '',
+                                effectKey: bonusEffectKey,
+                            });
+                        }
+
+                        spotlightLogger.info('bonus-standalone-multi', {
+                            eventType: type,
+                            isSummaryEvent,
+                            relatedBonusDiceEventCount,
+                            diceCount: pendingStandaloneMultiDice.bonusDice.length,
+                            effectKey: bonusEffectKey,
+                            resolvedCharacterId,
+                        });
+                        continue;
+                    }
+
                     // 鐙珛楠板瓙鐗瑰啓锛堜笉缁戝畾鍒板崱鐗岋級
                     pendingStandaloneBonusDie = {
                         value: bonusValue,
@@ -364,7 +437,32 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             });
         }
 
+        if (pendingStandaloneMultiDice) {
+            setBonusDieValue(undefined);
+            setBonusDieFace(undefined);
+            setBonusDieEffectKey(undefined);
+            setBonusDieEffectParams(undefined);
+            setBonusDiceList(pendingStandaloneMultiDice.bonusDice);
+            setBonusDieSummaryEffectKey(pendingStandaloneMultiDice.summaryEffectKey);
+            setBonusDieSummaryEffectParams(pendingStandaloneMultiDice.summaryEffectParams);
+            setBonusDieShowTotal(pendingStandaloneMultiDice.showTotal);
+            setBonusDieDisplayOnly(pendingStandaloneMultiDice.displayOnly);
+            setBonusDieCharacterId(pendingStandaloneMultiDice.characterId);
+            setShowBonusDie(true);
+            spotlightLogger.info('bonus-multi-state-commit', {
+                diceCount: pendingStandaloneMultiDice.bonusDice.length,
+                summaryEffectKey: pendingStandaloneMultiDice.summaryEffectKey,
+                characterId: pendingStandaloneMultiDice.characterId,
+            });
+            return;
+        }
+
         if (pendingStandaloneBonusDie) {
+            setBonusDiceList(undefined);
+            setBonusDieSummaryEffectKey(undefined);
+            setBonusDieSummaryEffectParams(undefined);
+            setBonusDieShowTotal(undefined);
+            setBonusDieDisplayOnly(undefined);
             setBonusDieValue(pendingStandaloneBonusDie.value);
             setBonusDieFace(pendingStandaloneBonusDie.face);
             setBonusDieEffectKey(pendingStandaloneBonusDie.effectKey);
@@ -391,14 +489,27 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
      * 鍏抽棴棰濆楠板瓙鐗瑰啓
      */
     const handleBonusDieClose = useCallback(() => {
-        spotlightLogger.info('bonus-close', {
-            value: bonusDieValue,
-            face: bonusDieFace,
-            effectKey: bonusDieEffectKey,
-            characterId: bonusDieCharacterId,
-        });
-        setShowBonusDie(false);
-    }, [bonusDieCharacterId, bonusDieEffectKey, bonusDieFace, bonusDieValue]);
+            spotlightLogger.info('bonus-close', {
+                value: bonusDieValue,
+                face: bonusDieFace,
+                effectKey: bonusDieEffectKey,
+                bonusDiceCount: bonusDiceList?.length ?? 0,
+                summaryEffectKey: bonusDieSummaryEffectKey,
+                characterId: bonusDieCharacterId,
+            });
+            setShowBonusDie(false);
+            // 清除所有骰子状态，防止 useEffect 重新触发时又弹出
+            setBonusDieValue(undefined);
+            setBonusDieFace(undefined);
+            setBonusDieEffectKey(undefined);
+            setBonusDieEffectParams(undefined);
+            setBonusDiceList(undefined);
+            setBonusDieSummaryEffectKey(undefined);
+            setBonusDieSummaryEffectParams(undefined);
+            setBonusDieShowTotal(undefined);
+            setBonusDieDisplayOnly(undefined);
+            setBonusDieCharacterId(undefined);
+        }, [bonusDiceList?.length, bonusDieCharacterId, bonusDieEffectKey, bonusDieFace, bonusDieSummaryEffectKey, bonusDieValue])
 
 
     return {
@@ -409,6 +520,11 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             face: bonusDieFace,
             effectKey: bonusDieEffectKey,
             effectParams: bonusDieEffectParams,
+            bonusDice: bonusDiceList,
+            summaryEffectKey: bonusDieSummaryEffectKey,
+            summaryEffectParams: bonusDieSummaryEffectParams,
+            showTotal: bonusDieShowTotal,
+            displayOnly: bonusDieDisplayOnly,
             show: showBonusDie,
             characterId: bonusDieCharacterId,
         },
