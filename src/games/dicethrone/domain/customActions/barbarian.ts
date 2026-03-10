@@ -1,5 +1,5 @@
-/**
- * 野蛮人 (Barbarian) 专属 Custom Action 处理器
+﻿/**
+ * 閲庤洰浜?(Barbarian) 涓撳睘 Custom Action 澶勭悊鍣?
  */
 
 import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
@@ -18,21 +18,21 @@ import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomAc
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 // ============================================================================
-// 野蛮人技能处理器
-// 注意：骰面以 diceConfig.ts 为准
+// 閲庤洰浜烘妧鑳藉鐞嗗櫒
+// 娉ㄦ剰锛氶闈互 diceConfig.ts 涓哄噯
 // ============================================================================
 
 /**
- * 压制 (Suppress)：投掷3骰，造成点数总和的伤害；若总数>14，施加脑震荡 【已迁移到新伤害计算管线】
+ * 鍘嬪埗 (Suppress)锛氭姇鎺?楠帮紝閫犳垚鐐规暟鎬诲拰鐨勪激瀹筹紱鑻ユ€绘暟>14锛屾柦鍔犺剳闇囪崱 銆愬凡杩佺Щ鍒版柊浼ゅ璁＄畻绠＄嚎銆?
  */
 function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
-    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手），不能用 targetId（受 action.target 控制）
+    // D10 淇锛氳繘鏀绘妧鑳戒激瀹?debuff 鐩爣蹇呴』鐢?ctx.defenderId锛堝鎵嬶級锛屼笉鑳界敤 targetId锛堝彈 action.target 鎺у埗锛?
     const opponentId = ctx.defenderId;
 
-    // 投掷3个骰子，累加点数总和
+    // 鎶曟幏3涓瀛愶紝绱姞鐐规暟鎬诲拰
     let total = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
@@ -54,7 +54,7 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
         } as BonusDieRolledEvent);
     }
 
-    // 造成点数总和的伤害
+    // 閫犳垚鐐规暟鎬诲拰鐨勪激瀹?
     if (total > 0) {
         const damageCalc = createDamageCalculation({
             source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -66,7 +66,7 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
         events.push(...damageCalc.toEvents());
     }
 
-    // 若总数>14，施加脑震荡
+    // 鑻ユ€绘暟>14锛屾柦鍔犺剳闇囪崱
     if (total > 14) {
         const opponent = state.players[opponentId];
         const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
@@ -81,20 +81,20 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
         } as StatusAppliedEvent);
     }
 
-    // 多骰展示
+    // 澶氶灞曠ず
     events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
 
     return events;
 }
 
 /**
- * 压制 II (Suppress II) 力量变体：投掷3骰，造成点数总和伤害；若总数>9，施加脑震荡 【已迁移到新伤害计算管线】
+ * 鍘嬪埗 II (Suppress II) 鍔涢噺鍙樹綋锛氭姇鎺?楠帮紝閫犳垚鐐规暟鎬诲拰浼ゅ锛涜嫢鎬绘暟>9锛屾柦鍔犺剳闇囪崱 銆愬凡杩佺Щ鍒版柊浼ゅ璁＄畻绠＄嚎銆?
  */
 function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
-    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手）
+    // D10 淇锛氳繘鏀绘妧鑳戒激瀹?debuff 鐩爣蹇呴』鐢?ctx.defenderId锛堝鎵嬶級
     const opponentId = ctx.defenderId;
 
     let total = 0;
@@ -129,7 +129,7 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
         events.push(...damageCalc.toEvents());
     }
 
-    // 升级版阈值降低到 >9
+    // 鍗囩骇鐗堥槇鍊奸檷浣庡埌 >9
     if (total > 9) {
         const opponent = state.players[opponentId];
         const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
@@ -149,20 +149,20 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
 }
 
 /**
- * 厚皮 (Thick Skin)：根据心骰面数治疗
- * 防御阶段投掷骰子后，每个心骰面治疗1点
+ * 鍘氱毊 (Thick Skin)锛氭牴鎹績楠伴潰鏁版不鐤?
+ * 闃插尽闃舵鎶曟幏楠板瓙鍚庯紝姣忎釜蹇冮闈㈡不鐤?鐐?
  */
 function handleBarbarianThickSkin({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
-    // 统计心骰面数量
+    // 缁熻蹇冮闈㈡暟閲?
     const faceCounts = getFaceCounts(getActiveDice(state));
     const heartCount = faceCounts[FACES.HEART] ?? 0;
 
-    // 治疗 2 × 心骰面数量
+    // 娌荤枟 2 脳 蹇冮闈㈡暟閲?
     const healAmount = heartCount * 2;
 
-    // 始终生成治疗事件（即使 heartCount=0），确保 UI 播放防御技能反馈
+    // 濮嬬粓鐢熸垚娌荤枟浜嬩欢锛堝嵆浣?heartCount=0锛夛紝纭繚 UI 鎾斁闃插尽鎶€鑳藉弽棣?
     events.push({
         type: 'HEAL_APPLIED',
         payload: { targetId, amount: healAmount, sourceAbilityId },
@@ -174,20 +174,20 @@ function handleBarbarianThickSkin({ targetId, sourceAbilityId, state, timestamp 
 }
 
 /**
- * 厚皮 II (Thick Skin II)：根据心骰面数治疗 + 防止1个状态效果
- * 防御阶段投掷骰子后，恢复 2 × 心面数量 的生命值，并防止1个即将受到的状态效果
+ * 鍘氱毊 II (Thick Skin II)锛氭牴鎹績楠伴潰鏁版不鐤?+ 闃叉1涓姸鎬佹晥鏋?
+ * 闃插尽闃舵鎶曟幏楠板瓙鍚庯紝鎭㈠ 2 脳 蹇冮潰鏁伴噺 鐨勭敓鍛藉€硷紝骞堕槻姝?涓嵆灏嗗彈鍒扮殑鐘舵€佹晥鏋?
  */
 function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
-    // 统计心骰面数量
+    // 缁熻蹇冮闈㈡暟閲?
     const faceCounts = getFaceCounts(getActiveDice(state));
     const heartCount = faceCounts[FACES.HEART] ?? 0;
 
-    // 治疗 2 × 心骰面数量
+    // 娌荤枟 2 脳 蹇冮闈㈡暟閲?
     const healAmount = heartCount * 2;
 
-    // 始终生成治疗事件（即使 heartCount=0），确保 UI 播放防御技能反馈
+    // 濮嬬粓鐢熸垚娌荤枟浜嬩欢锛堝嵆浣?heartCount=0锛夛紝纭繚 UI 鎾斁闃插尽鎶€鑳藉弽棣?
     events.push({
         type: 'HEAL_APPLIED',
         payload: { targetId, amount: healAmount, sourceAbilityId },
@@ -195,7 +195,7 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
         timestamp,
     } as HealAppliedEvent);
 
-    // 若投出 2 个或以上心面，授予状态防护
+    // 鑻ユ姇鍑?2 涓垨浠ヤ笂蹇冮潰锛屾巿浜堢姸鎬侀槻鎶?
     if (heartCount >= 2) {
         events.push({
             type: 'DAMAGE_SHIELD_GRANTED',
@@ -209,7 +209,7 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
 }
 
 /**
- * 大吉大利！(Lucky)：投掷3骰，治疗 1 + 2×心骰面数
+ * 大吉大利 (Lucky)：投掷3骰，治疗 1 + 2×心面数
  */
 function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
@@ -231,7 +231,6 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
                 face,
                 playerId: attackerId,
                 targetPlayerId: attackerId,
-                // effectKey: undefined - 不设置，只显示骰面，不显示描述（统一效果在汇总中显示）
                 effectParams: { value, index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
@@ -239,7 +238,6 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         } as BonusDieRolledEvent);
     }
 
-    // 治疗 1 + 2×心骰面数
     const healAmount = 1 + 2 * heartCount;
     events.push({
         type: 'HEAL_APPLIED',
@@ -248,7 +246,6 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         timestamp,
     } as HealAppliedEvent);
 
-    // 发射汇总事件（显示治疗信息）
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: {
@@ -263,16 +260,12 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         timestamp: timestamp + 3,
     } as BonusDieRolledEvent);
 
-
-    // 卡牌的骰子绑定到卡牌特写，不需要独立骰子面板
-    // （不调用 createDisplayOnlySettlement）
-
     return events;
 }
 
 /**
- * 再来点儿！(More Please)：投掷5骰
- * - 增加 1×剑骰面数 伤害到当前攻击
+ * 再来点儿 (More Please)：投掷5骰
+ * - 增加 1×剑面数 伤害到当前攻击
  * - 施加脑震荡
  * 【已迁移到新伤害计算管线】
  */
@@ -280,7 +273,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
-    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手），不能用 targetId（受 action.target: 'self' 控制）
     const opponentId = ctx.defenderId;
 
     let swordCount = 0;
@@ -298,7 +290,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
                 face,
                 playerId: attackerId,
                 targetPlayerId: opponentId,
-                // effectKey: undefined - 不设置，只显示骰面，不显示描述（统一效果在汇总中显示）
                 effectParams: { value, index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
@@ -306,7 +297,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         } as BonusDieRolledEvent);
     }
 
-    // 直接造成剑骰面数量的伤害
     if (swordCount > 0) {
         const damageCalc = createDamageCalculation({
             source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -318,7 +308,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         events.push(...damageCalc.toEvents());
     }
 
-    // 发射汇总事件（显示伤害信息）
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: {
@@ -333,7 +322,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         timestamp: timestamp + 5,
     } as BonusDieRolledEvent);
 
-    // 对对手施加脑震荡
     const opponent = state.players[opponentId];
     const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
     const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
@@ -346,10 +334,6 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as StatusAppliedEvent);
-
-
-    // 卡牌的骰子绑定到卡牌特写，不需要独立骰子面板
-    // （不调用 createDisplayOnlySettlement）
 
     return events;
 }
@@ -378,3 +362,4 @@ export function registerBarbarianCustomActions(): void {
         categories: ['dice', 'damage', 'status'],
     });
 }
+

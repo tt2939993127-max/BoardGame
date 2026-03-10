@@ -455,7 +455,6 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
 
-    // 鎶曟幏5楠帮紝缁熻寮撻潰鏁伴噺
     const diceValues: number[] = [];
     const diceFaces: string[] = [];
     for (let i = 0; i < 5; i++) {
@@ -465,54 +464,47 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
         diceFaces.push(face);
         dice.push({ index: i, value, face });
     }
-    
+
     const bowCount = diceFaces.filter(f => f === FACE.BOW).length;
-    const bonusDamage = bowCount; // 姣忎釜寮撻潰 +1 浼ゅ
-    
-    // 鍙戝皠5涓嫭绔嬬殑楠板瓙浜嬩欢锛岃UI鏄剧ず鎵€鏈?棰楅瀛?
-    // 娉ㄦ剰锛氫笉璁剧疆 effectKey锛岄伩鍏嶆瘡涓瀛愪笅鏂规樉绀洪噸澶嶇殑鎻忚堪鏂囨湰
+    const bonusDamage = bowCount;
+
     for (let i = 0; i < 5; i++) {
         events.push({
             type: 'BONUS_DIE_ROLLED',
-            payload: { 
-                value: diceValues[i], 
-                face: diceFaces[i], 
-                playerId: attackerId, 
-                targetPlayerId: opponentId, 
-                // effectKey: undefined - 涓嶈缃紝鍙樉绀洪闈紝涓嶆樉绀烘弿杩?
-                effectParams: { value: diceValues[i], index: i } 
+            payload: {
+                value: diceValues[i],
+                face: diceFaces[i],
+                playerId: attackerId,
+                targetPlayerId: opponentId,
+                effectParams: { value: diceValues[i], index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i, // 寰皬鏃堕棿宸紝纭繚椤哄簭
+            timestamp: timestamp + i,
         } as BonusDieRolledEvent);
     }
 
-    // 鍙戝皠姹囨€讳簨浠讹紙鏄剧ず浼ゅ鍔犳垚淇℃伅锛?
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { 
-            value: diceValues[0], // 涓昏鏄剧ず绗竴涓瀛?
-            face: diceFaces[0], 
-            playerId: attackerId, 
-            targetPlayerId: opponentId, 
-            effectKey: 'bonusDie.effect.volley.result', 
-            effectParams: { 
+        payload: {
+            value: diceValues[0],
+            face: diceFaces[0],
+            playerId: attackerId,
+            targetPlayerId: opponentId,
+            effectKey: 'bonusDie.effect.volley.result',
+            effectParams: {
                 bowCount,
-                bonusDamage
-            } 
+                bonusDamage,
+            },
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: timestamp + 5,
     } as BonusDieRolledEvent);
 
-    // 澧炲姞寮撻潰鏁伴噺鐨勪激瀹筹紙浣滀负鏀诲嚮淇鍔犲埌 pendingAttack锛?
     if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
         state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + bowCount;
     }
 
-    // 鏂藉姞缂犵粫锛堢粰瀵规墜锛?
     events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp + 6));
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp + 7));
 
     return events;
 }

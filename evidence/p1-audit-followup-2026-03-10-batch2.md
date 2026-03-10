@@ -296,3 +296,203 @@ npx vitest run src/engine/transport/__tests__/server.test.ts src/engine/transpor
 
 - `patch.test.ts` 与 `patch-integration.test.ts` 中会输出预期内的 patch 失败 / resync 日志；
 - 这些属于测试场景覆盖，不记为 POD 问题。
+
+---
+
+## 十、全局 UI / 重赛 / 音频链复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/components/game/framework/widgets/RematchActions.tsx`
+- `src/components/game/framework/widgets/GameHUD.tsx`
+- `src/contexts/RematchContext.tsx`
+- `src/contexts/SocialContext.tsx`
+- `src/contexts/ToastContext.tsx`
+- `src/pages/Home.tsx`
+- `src/pages/MatchRoom.tsx`
+- `src/lib/audio/AudioManager.ts`
+- `src/lib/audio/useGameAudio.ts`
+- `src/components/system/FabMenu.tsx`
+- `src/components/lobby/LeaderboardTab.tsx`
+
+### 2. 本轮重点核对内容
+
+- `RematchActions` 的 `renderButton`、多人投票、返回大厅链是否仍在；
+- `GameHUD` 的聊天预览、toast 反馈、全屏/聊天输入保护是否仍在；
+- `RematchContext / ToastContext / SocialContext` 是否存在被 POD 删空入口的残留；
+- `MatchRoom / Home` 的房间入口、座位校验相关链是否仍完整；
+- `AudioManager / useGameAudio` 的音频路由、节流、优先级、缺失音频回退链是否仍完整；
+- `FabMenu / LeaderboardTab` 这类 UI 节点是否被回滚成缺失状态。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `RematchActions.tsx` 仍保留 `renderButton` 插槽、多人投票 / 取消投票 / 返回大厅分支；
+  - `GameHUD.tsx` 仍保留聊天输入长度保护、只读提示、网络状态提示和全屏失败 toast；
+  - `ToastContext` 的去重链路、`AudioManager / useGameAudio` 的音频路由与优先级链，当前都能通过现成测试；
+  - `MatchRoom` 相关座位校验现成测试通过，未见 POD 造成的房间进入主链缺口；
+  - `FabMenu / LeaderboardTab` 当前代码是完整可用组件，不是被删空的残留状态。
+
+### 4. 验证
+
+```bash
+npx vitest run src/components/game/framework/widgets/__tests__/RematchActions.test.tsx src/components/__tests__/GameHUDChatPreview.test.ts src/components/__tests__/ToastContext-dedupe.test.tsx src/lib/audio/__tests__/audioManager.test.ts src/lib/audio/__tests__/audioRouting.test.ts src/pages/__tests__/matchSeatValidation.test.ts
+```
+
+结果：6 个文件全部通过，共 32 条用例通过。
+
+说明：
+
+- `RematchActions.test.tsx` 当前会输出少量调试日志，但测试通过；
+- 本轮不把这些日志记为 POD 问题。
+
+---
+
+## 十一、服务层 / 存储层复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/services/lobbySocket.ts`
+- `src/services/matchApi.ts`
+- `src/services/matchSocket.ts`
+- `src/services/socialSocket.ts`
+- `src/server/claimSeat.ts`
+- `src/server/models/MatchRecord.ts`
+- `src/server/storage/HybridStorage.ts`
+- `src/server/storage/MongoStorage.ts`
+
+### 2. 本轮重点核对内容
+
+- `lobby / match / social` socket 服务是否存在被 POD 删掉的订阅、版本更新、重连/健康检查链；
+- `matchApi` 的基础请求能力与鉴权错误链是否仍在；
+- `claimSeat / MatchRecord` 的座位认领、身份回填、持久化模型链是否仍完整；
+- `HybridStorage / MongoStorage` 的状态裁剪、TTL 刷新、混合存储读写链是否存在回退。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `lobbySocket.ts` 仍保留大厅订阅、版本门控、可见性重同步和健康检查挂钩；
+  - `claimSeat.ts` 相关登录用户 / 游客认领链通过现成测试；
+  - `MongoStorage.ts` 仍保留存储前状态裁剪、TTL 刷新、日志记录等主链；
+  - `HybridStorage.ts` 当前是完整实现，不是残缺状态。
+
+### 4. 验证
+
+```bash
+npx vitest run src/server/__tests__/claimSeat.test.ts src/server/__tests__/joinGuard.test.ts src/server/storage/__tests__/hybridStorage.test.ts src/server/storage/__tests__/mongoStorage.test.ts src/server/__tests__/matchOccupancy.test.ts
+```
+
+结果：
+
+- `claimSeat / joinGuard / matchOccupancy` 通过；
+- `hybridStorage.test.ts`、`mongoStorage.test.ts` 当前为跳过状态，没有新增失败。
+
+说明：
+
+- 存储层两组测试本轮没有运行到有效断言（测试本身为 skipped），因此这里只把它们记为“未出现新红灯”，不把它们当成新增正向证据夸大。
+
+---
+
+## 十二、管理页 / UGC 构建器复核（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/pages/admin/Matches.tsx`
+- `src/pages/admin/Feedback.tsx`
+- `src/pages/admin/Notifications.tsx`
+- `src/ugc/builder/pages/components/HookField.tsx`
+- `src/ugc/builder/pages/components/RenderComponentManager.tsx`
+- `src/ugc/builder/pages/panels/BuilderModals.tsx`
+- `src/ugc/builder/pages/panels/PropertyPanel.tsx`
+
+### 2. 本轮重点核对内容
+
+- `admin/Matches` 里之前明确恢复过的 `MatchDetailModal` / 详情入口是否仍在；
+- `Feedback / Notifications` 页面是否仍保留完整的数据拉取、列表与操作链；
+- UGC 构建器里的 `HookField / RenderComponentManager / BuilderModals / PropertyPanel` 是否是完整可用实现，而不是被 POD 删残的空壳。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `src/pages/admin/Matches.tsx` 当前仍有 `MatchDetailModal`，说明之前恢复的核心详情入口还在；
+  - `Feedback.tsx` 与 `Notifications.tsx` 当前仍是完整页面，不是被删空状态；
+  - UGC 四个文件当前都是真实实现，并不是被 POD 留下的残缺节点。
+- 结合 UGC 现成测试，本轮没看到“POD 又把构建器关键面板删坏”的新证据。
+
+### 4. 验证
+
+```bash
+npx vitest run src/ugc/builder/__tests__/UnifiedBuilder.test.ts src/ugc/builder/__tests__/resolvePlayerContext.test.ts
+```
+
+结果：2 个文件全部通过，共 19 条用例通过。
+
+说明：
+
+- 管理页这批当前没有直接对口的现成页面测试；
+- 因此本轮对 `admin/*` 主要采用源码复核 + 关键入口存在性确认，不夸大成完整功能验收。
+
+---
+
+## 十三、低风险尾项收尾（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/App.tsx`
+- `src/main.tsx`
+- `src/index.css`
+- `src/shared/chat.ts`
+- `src/hooks/match/useMatchStatus.ts`
+- `src/games/tictactoe/domain/types.ts`
+- `src/games/ugc-wrapper/game.ts`
+- `src/pages/devtools/AudioBrowser.tsx`
+- `src/lib/utils.ts`
+- `src/lib/i18n/zh-CN-bundled.ts`
+- `src/assets/audio/registry-slim.json`
+- `src/games/dicethrone/rule/王权骰铸规则.md`
+- `"src/games/dicethrone/rule/\347\216\213\346\235\203\351\252\260\351\223\270\350\247\204\345\210\231.md"`（旧表转义路径，实际同上）
+- `public/locales/en/admin.json`
+- `public/locales/en/common.json`
+- `public/locales/en/game.json`
+- `public/locales/en/game-dicethrone.json`
+- `public/locales/en/game-smashup.json`
+- `public/locales/en/game-summonerwars.json`
+- `public/locales/en/lobby.json`
+- `public/locales/en/social.json`
+- `public/locales/zh-CN/admin.json`
+- `public/locales/zh-CN/common.json`
+- `public/locales/zh-CN/game.json`
+- `public/locales/zh-CN/game-dicethrone.json`
+- `public/locales/zh-CN/game-smashup.json`
+- `public/locales/zh-CN/game-summonerwars.json`
+- `public/locales/zh-CN/lobby.json`
+- `public/locales/zh-CN/social.json`
+
+### 2. 本轮重点核对内容
+
+- 应用入口、Provider 装配、TestHarness 初始化链是否存在被 POD 删坏的残留；
+- 共享聊天协议与基础工具函数是否完整；
+- devtools / 音频注册表 / bundled i18n 是否是可用状态，而不是删残或断链状态；
+- 语言包是否存在明显缺失导致基础页面测试失效。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `App.tsx` 仍保留路由、Provider 装配、`TestHarness.init()`、全局 HUD / Toast / Modal / ErrorBoundary 等主入口；
+  - `shared/chat.ts` 相关现成测试通过，未见 POD 造成的协议回退；
+  - `readyCheckPlugin`、`audioUtils`、基础页面测试都通过，说明入口/工具/基础页面尾项当前未见被 POD 回滚破坏；
+  - `src/games/dicethrone/rule/王权骰铸规则.md` 当前仍是完整规则文档，不是被删残的空壳；
+  - locale 文件当前仍包含本轮复核涉及的关键键（如 `feedback`、`leaderboard`、`socket`、`rematch`、`chat`、`watchOut`、`volley`、`pirate`、`baseScored` 等）；
+  - `registry-slim.json`、`zh-CN-bundled.ts` 与 `AudioBrowser` 当前至少处于可加载、可被上层依赖使用的状态。
+
+### 4. 验证
+
+```bash
+npx vitest run src/components/social/__tests__/chatMessageValidation.test.ts src/components/social/__tests__/chatSelectionLogic.test.ts src/lib/audio/__tests__/audioUtils.test.ts src/lib/__tests__/readyCheckPlugin.test.ts src/pages/__tests__/NotFound.test.tsx src/pages/__tests__/Maintenance.test.tsx
+```
+
+结果：6 个文件全部通过，共 30 条用例通过。

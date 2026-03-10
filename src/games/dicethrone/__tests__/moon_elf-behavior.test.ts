@@ -461,9 +461,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
             const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
-            expect(settlement).toHaveLength(1);
-            expect((settlement[0] as any).payload.settlement.dice).toHaveLength(5);
-            expect((settlement[0] as any).payload.settlement.displayOnly).toBe(true);
+            expect(settlement).toHaveLength(0);
         });
 
         it('5骰3弓2非弓时增加bonusDamage 3点', () => {

@@ -3,7 +3,7 @@
  *
  * 目标：
  * 1. 确认当前实现会发出 5 个独立 BONUS_DIE_ROLLED 事件 + 1 个汇总事件
- * 2. 确认会生成 displayOnly settlement，供 BonusDieOverlay 展示全部 5 颗骰子
+ * 2. 确认不会再生成额外 displayOnly settlement，避免与卡牌特写双弹
  * 3. 确认 bonusDamage 与缠绕状态正确落地
  */
 
@@ -71,7 +71,7 @@ function createVolleyState(playerIds: PlayerId[], random: RandomFn): MatchState<
 }
 
 describe('Volley 5 Dice Display', () => {
-    it('应发出 5 个独立奖励骰事件、1 个汇总事件，并创建 displayOnly 多骰面板', () => {
+    it('应发出 5 个独立奖励骰事件、1 个汇总事件，且不再创建 displayOnly settlement', () => {
         const queuedRandom = createQueuedRandom([1, 2, 3, 4, 5]);
 
         const runner = new GameTestRunner({
@@ -122,11 +122,8 @@ describe('Volley 5 Dice Display', () => {
         expect(entangleEvent).toBeDefined();
 
         const settlementEvent = eventStream.find(entry => entry.event.type === 'BONUS_DICE_REROLL_REQUESTED');
-        expect(settlementEvent).toBeDefined();
-        expect((settlementEvent?.event as any).payload.settlement.dice).toHaveLength(5);
-        expect((settlementEvent?.event as any).payload.settlement.displayOnly).toBe(true);
-        expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
-        expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
+        expect(settlementEvent).toBeUndefined();
+        expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
     });
 
     it('奖励骰事件时间戳应严格递增，便于 UI 按顺序展示', () => {

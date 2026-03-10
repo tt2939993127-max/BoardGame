@@ -2312,8 +2312,7 @@ describe('王权骰铸流程测试', () => {
 
         it('offensiveRoll 阶段打出大吉大利（instant 卡）不触发阶段推进', () => {
             // 场景：玩家在 offensiveRoll 阶段打出"大吉大利"（card-lucky），
-            // 卡牌效果生成 BONUS_DICE_REROLL_REQUESTED(displayOnly)，
-            // 玩家关闭展示后 SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED，
+            // 卡牌效果只产生治疗与奖励骰事件，不再创建 displayOnly settlement，
             // 阶段应停留在 offensiveRoll，不应自动推进
             const random = createQueuedRandom([
                 // card-lucky 的 handleLuckyRollHeal 需要 3 次 d(6)
@@ -2343,7 +2342,6 @@ describe('王权骰铸流程测试', () => {
                 commands: [
                     ...advanceTo('offensiveRoll'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-lucky' }),
-                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     turnPhase: 'offensiveRoll',
@@ -2354,8 +2352,7 @@ describe('王权骰铸流程测试', () => {
 
         it('flowHalted=true 状态下打出大吉大利不会误触发阶段推进', () => {
             // 场景：攻击结算产生 BONUS_DICE_REROLL_REQUESTED → halt → flowHalted=true
-            // 此时玩家打出"大吉大利"（instant 卡），产生新的 displayOnly BONUS_DICE_REROLL_REQUESTED
-            // 关闭展示后 BONUS_DICE_SETTLED → resolveInteraction
+            // 此时玩家打出"大吉大利"（instant 卡），不会覆盖当前攻击的 bonus dice settlement
             // 阶段应停留在 offensiveRoll（因为攻击的 bonus dice 还未处理）
             const random = createQueuedRandom([
                 // card-lucky 的 handleLuckyRollHeal 需要 3 次 d(6)
@@ -2411,8 +2408,6 @@ describe('王权骰铸流程测试', () => {
                 commands: [
                     // 打出"大吉大利"（instant 卡，不被 dt:bonus-dice interaction 阻塞）
                     cmd('PLAY_CARD', '0', { cardId: 'card-lucky' }),
-                    // 关闭大吉大利的 displayOnly 展示
-                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
                     // 阶段应停留在 offensiveRoll（攻击的 bonus dice 还未处理）
@@ -2420,6 +2415,7 @@ describe('王权骰铸流程测试', () => {
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.id).toBe('attack-thunder-bonus');
         });
     });
 });
