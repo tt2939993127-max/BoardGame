@@ -53,21 +53,9 @@ export const computeViewModeState = (params: ViewModeParams): ViewModeResult => 
     if (isResponseWindowOpen && currentResponderId) {
         // 当前响应者是自己 → 切换到对手视角（看对手的骰子/状态来决定如何响应）
         isResponseAutoSwitch = currentResponderId === rootPlayerId;
-        console.log('[viewMode] Response window check:', {
-            isResponseWindowOpen,
-            currentResponderId,
-            rootPlayerId,
-            isResponseAutoSwitch,
-            logic: currentResponderId === rootPlayerId ? 'Self is responder → switch to opponent' : 'Opponent is responder → stay on self',
-        });
     } else if (pendingDamage) {
         // Token 响应窗口：响应者是自己 → 切换到对手视角
         isResponseAutoSwitch = pendingDamage.responderId === rootPlayerId;
-        console.log('[viewMode] Token response check:', {
-            responderId: pendingDamage.responderId,
-            rootPlayerId,
-            isResponseAutoSwitch,
-        });
     }
 
     // 优先级：防御阶段自动观战 > 响应窗口自动切换 > 手动视角

@@ -161,6 +161,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                                     locale={locale}
                                     size="10vw"
                                     characterId={die.characterId}
+                                    compact={true}
                                 />
                             ))}
                         </div>

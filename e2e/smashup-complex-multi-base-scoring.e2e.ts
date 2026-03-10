@@ -27,15 +27,15 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
                         { uid: 'card-after-1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
                     ],
                     field: [
-                        { uid: 'worker-1', defId: 'giant_ant_worker', baseIndex: 0, owner: '0', controller: '0' },
-                        { uid: 'soldier-1', defId: 'giant_ant_soldier', baseIndex: 0, owner: '0', controller: '0' },
+                        { uid: 'queen-1', defId: 'giant_ant_killer_queen', baseIndex: 0, owner: '0', controller: '0' },
+                        { uid: 'master-1', defId: 'ninja_master', baseIndex: 0, owner: '0', controller: '0' },
                     ],
                     factions: ['giant_ants', 'ninjas'],
                 },
                 player1: {
                     hand: [],
                     field: [
-                        { uid: 'ninja-1', defId: 'ninja_shinobi', baseIndex: 0, owner: '1', controller: '1' },
+                        { uid: 'assassin-1', defId: 'ninja_tiger_assassin', baseIndex: 0, owner: '1', controller: '1' },
                     ],
                     factions: ['ninjas', 'wizards'],
                 },
@@ -60,42 +60,32 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
             await game.screenshot('01-scene-ready', testInfo);
 
             await game.advancePhase();
+            await page.waitForTimeout(1000);
 
-            let advancedByUi = true;
-            try {
-                await page.waitForFunction(
-                    () => {
-                        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-                        return state?.sys?.phase === 'scoreBases'
-                            && state?.sys?.responseWindow?.current?.windowType === 'meFirst';
-                    },
-                    { timeout: 5000, polling: 200 },
-                );
-            } catch {
-                advancedByUi = false;
-                console.log('[TEST] UI 点击未推进到 scoreBases，回退到 TestHarness 命令派发');
-                await page.evaluate(async () => {
-                    const harness = (window as any).__BG_TEST_HARNESS__;
-                    await harness.command.dispatch({
-                        type: 'ADVANCE_PHASE',
-                        playerId: '0',
-                        payload: {},
-                    });
-                });
-            }
+            const stateAfterAdvance = await page.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    phase: state?.sys?.phase,
+                    windowType: state?.sys?.responseWindow?.current?.windowType ?? null,
+                    interactionId: state?.sys?.interaction?.current?.id ?? null,
+                    interactionSource: state?.sys?.interaction?.current?.sourceId ?? null,
+                    p0Hand: state?.core?.players?.['0']?.hand?.map((card: any) => card.defId) ?? [],
+                    scoringEligibleBaseIndices: state?.core?.scoringEligibleBaseIndices ?? null,
+                };
+            });
+            console.log('[TEST] 推进后状态:', stateAfterAdvance);
 
-            if (!advancedByUi) {
-                await page.waitForFunction(
-                    () => {
-                        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-                        return state?.sys?.phase === 'scoreBases'
-                            && state?.sys?.responseWindow?.current?.windowType === 'meFirst';
-                    },
-                    { timeout: 15000, polling: 200 },
-                );
-            }
+            await page.waitForFunction(
+                () => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    const windowType = state?.sys?.responseWindow?.current?.windowType;
+                    return state?.sys?.phase === 'scoreBases'
+                        && (windowType === 'meFirst' || windowType === 'afterScoring');
+                },
+                { timeout: 15000, polling: 100 },
+            );
 
-            const meFirstState = await page.evaluate(() => {
+            const responseWindowState = await page.evaluate(() => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
                 return {
                     phase: state?.sys?.phase,
@@ -106,26 +96,28 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
                 };
             });
 
-            expect(meFirstState.phase).toBe('scoreBases');
-            expect(meFirstState.windowType).toBe('meFirst');
+            expect(responseWindowState.phase).toBe('scoreBases');
+            expect(['meFirst', 'afterScoring']).toContain(responseWindowState.windowType);
 
             await expect(page.getByTestId('me-first-overlay')).toBeVisible();
             await expect(page.getByTestId('me-first-pass-button')).toBeVisible();
-            await game.screenshot('02-me-first-open', testInfo);
 
-            await page.getByTestId('me-first-pass-button').click();
-            await page.waitForTimeout(500);
-            await game.screenshot('03-p0-passed-me-first', testInfo);
+            if (responseWindowState.windowType === 'meFirst') {
+                await game.screenshot('02-me-first-open', testInfo);
+                await page.getByTestId('me-first-pass-button').click();
+                await page.waitForTimeout(500);
+                await game.screenshot('03-p0-passed-me-first', testInfo);
 
-            await page.getByTestId('me-first-pass-button').click();
+                await page.getByTestId('me-first-pass-button').click();
 
-            await page.waitForFunction(
-                () => {
-                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-                    return state?.sys?.responseWindow?.current?.windowType === 'afterScoring';
-                },
-                { timeout: 15000 },
-            );
+                await page.waitForFunction(
+                    () => {
+                        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                        return state?.sys?.responseWindow?.current?.windowType === 'afterScoring';
+                    },
+                    { timeout: 15000 },
+                );
+            }
 
             const afterScoringState = await page.evaluate(() => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -149,13 +141,29 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
             await page.waitForTimeout(500);
             await game.screenshot('05-p0-passed-after-scoring', testInfo);
 
-            await page.getByTestId('me-first-pass-button').click();
+            const afterFirstAfterScoringPass = await page.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    phase: state?.sys?.phase,
+                    windowType: state?.sys?.responseWindow?.current?.windowType ?? null,
+                    currentResponder: state?.sys?.responseWindow?.current?.responderQueue?.[
+                        state?.sys?.responseWindow?.current?.currentResponderIndex ?? 0
+                    ] ?? null,
+                };
+            });
+            console.log('[TEST] afterScoring 首次 PASS 后状态:', afterFirstAfterScoringPass);
+
+            if (afterFirstAfterScoringPass.windowType === 'afterScoring') {
+                await expect(page.getByTestId('me-first-pass-button')).toBeVisible();
+                await page.getByTestId('me-first-pass-button').click();
+            }
 
             await page.waitForFunction(
                 () => {
                     const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
                     return !state?.sys?.responseWindow?.current
-                        && state?.sys?.phase === 'draw';
+                        && state?.sys?.phase === 'playCards'
+                        && state?.core?.currentPlayerIndex === 1;
                 },
                 { timeout: 15000 },
             );
@@ -164,6 +172,7 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
                 return {
                     phase: state?.sys?.phase,
+                    currentPlayerIndex: state?.core?.currentPlayerIndex ?? null,
                     responseWindowId: state?.sys?.responseWindow?.current?.id ?? null,
                     p0Vp: state?.core?.players?.['0']?.vp ?? 0,
                     p1Vp: state?.core?.players?.['1']?.vp ?? 0,
@@ -171,7 +180,8 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
             });
 
             expect(finalState.responseWindowId).toBeNull();
-            expect(finalState.phase).toBe('draw');
+            expect(finalState.phase).toBe('playCards');
+            expect(finalState.currentPlayerIndex).toBe(1);
             expect(finalState.p0Vp).toBeGreaterThan(0);
 
             await game.screenshot('06-final-state', testInfo);

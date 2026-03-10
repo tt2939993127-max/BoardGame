@@ -45,6 +45,7 @@ import { openMeFirstWindow, openAfterScoringWindow, buildBaseTargetOptions, isSp
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import { resolveSpecial } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import type { SpecialAfterScoringConsumedEvent } from './types';
@@ -58,7 +59,7 @@ import type { SpecialAfterScoringConsumedEvent } from './types';
  * 
  * 包含：beforeScoring 基地能力 → 排名计算 → BASE_SCORED → afterScoring 基地能力 → BASE_REPLACED
  */
-function scoreOneBase(
+export function scoreOneBase(
     core: SmashUpCore,
     baseIndex: number,
     baseDeck: string[],
@@ -551,23 +552,10 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             if (result.matchState) currentState = result.matchState;
         }
 
-        // 【关键修复】立即将基地标记为"已计分"，避免 onPhaseExit 重复计分
-        // 这是多基地计分重复计分 bug 的根本原因：
-        // 当 afterScoring 创建交互时，BASE_CLEARED 事件被延迟发出
-        // 如果不标记为"已计分"，onPhaseExit 在交互解决后重新进入时会再次计分同一个基地
         if (!currentState.sys.scoredBaseIndices) {
             currentState = {
                 ...currentState,
                 sys: { ...currentState.sys, scoredBaseIndices: [] },
-            };
-        }
-        if (!currentState.sys.scoredBaseIndices.includes(baseIndex)) {
-            currentState = {
-                ...currentState,
-                sys: {
-                    ...currentState.sys,
-                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices, baseIndex],
-                },
             };
         }
 
@@ -577,10 +565,27 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             updatedCore = reduce(updatedCore, evt as SmashUpEvent);
         }
 
-        // 3. 检查剩余 eligible 基地（基于 sys.scoredBaseIndices，而不是 getScoringEligibleBaseIndices）
-        // 这样可以避免延迟事件未补发时，已计分的基地被重复计入
+        const currentBaseCompleted = !currentState.sys.interaction?.current
+            && events.some((evt: SmashUpEvent) =>
+                evt.type === SU_EVENTS.BASE_SCORED
+                && (evt.payload as { baseIndex?: number } | undefined)?.baseIndex === baseIndex
+            );
+
+        if (currentBaseCompleted && !currentState.sys.scoredBaseIndices.includes(baseIndex)) {
+            currentState = {
+                ...currentState,
+                sys: {
+                    ...currentState.sys,
+                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices, baseIndex],
+                },
+            };
+        }
+
+        // 3. 检查剩余 eligible 基地（排除当前正在处理的基地，只把真正完成的基地视为已计分）
         const allEligibleIndices = getScoringEligibleBaseIndices(updatedCore);
-        const remainingIndices = allEligibleIndices.filter(i => !currentState.sys.scoredBaseIndices?.includes(i));
+        const remainingIndices = allEligibleIndices.filter(
+            i => i !== baseIndex && !currentState.sys.scoredBaseIndices?.includes(i)
+        );
 
         // 如果 beforeScoring/afterScoring 创建了交互 → 先处理交互，剩余基地后续再计分
         if (currentState.sys.interaction?.current) {
@@ -617,11 +622,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                     }
                     
                     currentState = queueInteraction(currentState, interaction);
-                    
-                    // 【关键修复】将剩余基地标记为"计分中"，避免 onPhaseExit 重复计分
-                    // 这是多基地计分重复计分 bug 的根本原因：
-                    // 当创建 multi_base_scoring 交互后，onPhaseExit 重新进入时会发现剩余基地还没有被标记为"已计分"
-                    // 导致 onPhaseExit 直接计分，然后 multi_base_scoring 交互解决时又计分一次
+
                     for (const idx of remainingIndices) {
                         if (!currentState.sys.scoredBaseIndices!.includes(idx)) {
                             currentState = {
@@ -695,6 +696,22 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             // 更新本地 core 副本
             for (const evt of r.events) {
                 updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+            }
+
+            if (!currentState.sys.scoredBaseIndices) {
+                currentState = {
+                    ...currentState,
+                    sys: { ...currentState.sys, scoredBaseIndices: [] },
+                };
+            }
+            if (!currentState.sys.scoredBaseIndices.includes(idx)) {
+                currentState = {
+                    ...currentState,
+                    sys: {
+                        ...currentState.sys,
+                        scoredBaseIndices: [...currentState.sys.scoredBaseIndices, idx],
+                    },
+                };
             }
         }
 
@@ -1178,6 +1195,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
                 }
 
+                const openedAfterScoringWindow = result.events.some((evt) =>
+                    evt.type === RESPONSE_WINDOW_EVENTS.OPENED
+                    && (evt.payload as { windowType?: string } | undefined)?.windowType === 'afterScoring',
+                );
+                if (openedAfterScoringWindow) {
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+                }
+
                 // 标记该基地已记分（不可变更新）
                 // ⚠️ 只有在 scoreOneBase 成功完成（没有打开响应窗口）后，才标记为"已记分"
                 if (!currentMatchState.sys.scoredBaseIndices) {
@@ -1388,6 +1413,23 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 interactionId: state.sys.interaction.current?.id,
                 hasResponseWindow: !!state.sys.responseWindow?.current,
             });
+
+            // 关键守卫：只要响应窗口仍然打开，就必须继续停在 scoreBases 等待玩家响应。
+            // 不能先看 eligibleIndices，因为 afterScoring 窗口打开后基地可能已经被清除/替换，
+            // 此时 eligibleIndices 会变成空数组；如果先按“无 eligible 基地”自动推进，
+            // 就会错误地带着仍然打开的 afterScoring 窗口一路推进到后续阶段。
+            if (state.sys.responseWindow?.current) {
+                console.log('[onAutoContinueCheck] scoreBases: 响应窗口仍打开，等待响应');
+                return undefined;
+            }
+
+            // 最后一个 afterScoring 交互刚补发清场/换基地事件时，
+            // 这些事件要等本轮 afterEvents 结束后才会被 reduce 到 core。
+            // 这里必须先停一轮，避免 FlowSystem 用旧 core 重新进入 scoreBases，导致重复计分。
+            if ((state.sys as any)._waitForPostScoringReduce) {
+                console.log('[onAutoContinueCheck] scoreBases: 等待延迟的记分后事件 reduce 到 core');
+                return undefined;
+            }
             
             // 情况1：flowHalted=true 且交互已解决且响应窗口已关闭 → 自动推进
             if (state.sys.flowHalted && !state.sys.interaction.current && !state.sys.responseWindow?.current) {
@@ -1415,16 +1457,9 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 console.log('[onAutoContinueCheck] scoreBases: 无 eligible 基地，自动推进');
                 return { autoContinue: true, playerId: pid };
             }
-            
-            // 情况3：有 eligible 基地且响应窗口已关闭 → 自动推进（触发计分）
-            if (!state.sys.responseWindow?.current) {
-                console.log('[onAutoContinueCheck] scoreBases: 响应窗口已关闭，自动推进触发计分');
-                return { autoContinue: true, playerId: pid };
-            }
-            
-            // 情况4：响应窗口仍打开 → 不自动推进（等待响应）
-            console.log('[onAutoContinueCheck] scoreBases: 响应窗口仍打开，等待响应');
-            return undefined;
+
+            console.log('[onAutoContinueCheck] scoreBases: 响应窗口已关闭，自动推进触发计分');
+            return { autoContinue: true, playerId: pid };
         }
 
         // draw 阶段：手牌不超限则自动推进到 endTurn

@@ -378,6 +378,8 @@ export interface HeroState {
     upgradeCardByAbilityId: Record<string, { cardId: string; cpCost: number }>;
     /** 被动能力列表（如教皇税：花费 CP 重掷/抽牌） */
     passiveAbilities?: PassiveAbilityDef[];
+    /** 待处理的攻击修正伤害（在 pendingAttack 创建前累积，创建时转移到 pendingAttack.bonusDamage） */
+    pendingBonusDamage?: number;
 }
 
 // ============================================================================
@@ -423,11 +425,11 @@ export interface DiceThroneCore {
     lastResolvedAttackDamage?: number;
     /**
      * 额外攻击进行中标志（晕眩 daze 触发）
-     * 当攻击方有 daze 时，攻击结算后对手获得一次额外攻击机会
+     * 当防御方带有 daze 时，攻击结算后当前攻击者立即再次攻击
      * 此标志在额外攻击的 offensiveRoll 开始时设置，在进入 main2 时清除并恢复原活跃玩家
      */
     extraAttackInProgress?: {
-        /** 额外攻击的发起者（即原攻击的防御方） */
+        /** 额外攻击的发起者（即原攻击的攻击方） */
         attackerId: PlayerId;
         /** 原回合的活跃玩家（额外攻击结束后恢复） */
         originalActivePlayerId: PlayerId;

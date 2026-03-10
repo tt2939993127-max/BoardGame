@@ -71,7 +71,7 @@ function createVolleyState(playerIds: PlayerId[], random: RandomFn): MatchState<
 }
 
 describe('Volley 5 Dice Display', () => {
-    it('应发出 5 个独立奖励骰事件和 1 个汇总事件', () => {
+    it('应发出 5 个独立奖励骰事件、1 个汇总事件，并创建 displayOnly 多骰面板', () => {
         const queuedRandom = createQueuedRandom([1, 2, 3, 4, 5]);
 
         const runner = new GameTestRunner({
@@ -98,7 +98,7 @@ describe('Volley 5 Dice Display', () => {
         for (let index = 0; index < 5; index += 1) {
             const event = bonusDieEvents[index].event as any;
             expect(event.payload.value).toBe(index + 1);
-            expect(event.payload.effectKey).toBe('bonusDie.effect.volley');
+            expect(event.payload.effectKey).toBeUndefined();
             expect(event.payload.effectParams).toEqual({ value: index + 1, index });
         }
 
@@ -123,8 +123,10 @@ describe('Volley 5 Dice Display', () => {
 
         const settlementEvent = eventStream.find(entry => entry.event.type === 'BONUS_DICE_REROLL_REQUESTED');
         expect(settlementEvent).toBeDefined();
-        expect((settlementEvent!.event as any).payload.settlement.dice).toHaveLength(5);
-        expect((settlementEvent!.event as any).payload.settlement.displayOnly).toBe(true);
+        expect((settlementEvent?.event as any).payload.settlement.dice).toHaveLength(5);
+        expect((settlementEvent?.event as any).payload.settlement.displayOnly).toBe(true);
+        expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
+        expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
     });
 
     it('奖励骰事件时间戳应严格递增，便于 UI 按顺序展示', () => {

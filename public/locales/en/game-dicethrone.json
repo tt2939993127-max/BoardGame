@@ -114,7 +114,7 @@
     "daze": {
       "name": "Daze",
       "description": [
-        "After your attack ends, gain an extra attack and remove this token."
+        "After the current attack ends, remove this token, then the current attacker attacks again immediately."
       ]
     },
     "poison": {
@@ -455,7 +455,9 @@
       "energeticStrength": "Strength! Heal 2 and inflict Concussion",
       "energeticOther": "Draw 1 card",
       "luckyRoll": "Lucky Roll: {{value}}",
+      "luckyRoll.result": "{{heartCount}} Heart: Heal {{healAmount}}",
       "morePleaseRoll": "More Please Roll: {{value}}",
+      "morePleaseRoll.result": "{{swordCount}} Sword: +{{damage}} Damage",
       "holyLight": "Holy Light",
       "holyDefense": "Holy Defense",
       "godsGrace": "God's Grace",
@@ -597,7 +599,7 @@
     "bonus_reroll_limit_reached": "Bonus die reroll limit reached",
     "not_enough_token": "Not enough tokens to pay the cost",
     "invalid_die_index": "Invalid die index",
-    "player_is_dazed": "Player is dazed and cannot perform any actions",
+    "player_is_dazed": "Player is dazed",
     "attack_already_initiated": "Attack already initiated, cannot reselect ability"
   },
   "actions": {

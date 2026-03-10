@@ -7,22 +7,47 @@
 
 import type { Plugin } from 'vite';
 
+const READY_DELAY_MS = 1000;
+
 export function readyCheckPlugin(): Plugin {
   let isReady = false;
+  let readyTimer: NodeJS.Timeout | null = null;
+
+  const clearReadyTimer = () => {
+    if (!readyTimer) return;
+    clearTimeout(readyTimer);
+    readyTimer = null;
+  };
+
+  const markNotReady = () => {
+    clearReadyTimer();
+    isReady = false;
+  };
+
+  const scheduleReady = () => {
+    markNotReady();
+    readyTimer = setTimeout(() => {
+      isReady = true;
+      console.log('✅ Vite 服务器已就绪（/__ready 端点可用）');
+    }, READY_DELAY_MS);
+  };
 
   return {
     name: 'ready-check',
     
     // 在服务器启动后设置就绪标志
     configureServer(server) {
-      // 监听 Vite 的就绪事件
-      server.httpServer?.once('listening', () => {
-        // 等待一小段时间确保所有初始化完成
-        setTimeout(() => {
-          isReady = true;
-          console.log('✅ Vite 服务器已就绪（/__ready 端点可用）');
-        }, 1000);
-      });
+      const originalListen = server.listen.bind(server) as typeof server.listen;
+      server.listen = (async (...args: Parameters<typeof originalListen>) => {
+        const result = await originalListen(...args);
+        server.httpServer?.once('close', markNotReady);
+        scheduleReady();
+        return result;
+      }) as typeof server.listen;
+
+      if (server.httpServer?.listening) {
+        scheduleReady();
+      }
 
       // 添加就绪检查端点
       server.middlewares.use('/__ready', (req, res) => {

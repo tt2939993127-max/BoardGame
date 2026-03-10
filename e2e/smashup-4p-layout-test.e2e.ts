@@ -98,7 +98,7 @@ async function openFourPlayerScoreScene(page: any, game: any) {
     await game.setupScene(buildFourPlayerMultiBaseScene());
     await expect.poll(async () => {
         const text = await page.evaluate(() => document.body?.innerText ?? '');
-        return text.includes('Loading match resources...') || text.includes('加载 games.');
+        return text.includes('Loading match resources...');
     }, { timeout: 20000 }).toBe(false);
     await expect(page.locator('[data-tutorial-id="su-scoreboard"]')).toBeVisible({ timeout: 15000 });
 }
@@ -115,7 +115,7 @@ async function getBaseOptions(game: any) {
 
 async function selectBaseByDefId(game: any, baseDefId: string) {
     const options = await getBaseOptions(game);
-    const option = options.find((entry) => entry.baseDefId === baseDefId);
+    const option = options.find((entry: any) => entry.baseDefId === baseDefId);
     expect(option, `未找到基地选项 ${baseDefId}`).toBeTruthy();
     await game.selectOption(option!.id);
 }
@@ -138,7 +138,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         const baseOptions = await getBaseOptions(game);
         expect(baseOptions).toHaveLength(3);
-        expect(baseOptions.map((option) => option.baseDefId).sort()).toEqual([...INITIAL_BASE_IDS].sort());
+        expect(baseOptions.map((option: any) => option.baseDefId).sort()).toEqual([...INITIAL_BASE_IDS].sort());
 
         await game.screenshot('01-four-player-multi-base-prompt', testInfo);
     });
@@ -154,22 +154,13 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await selectBaseByDefId(game, 'base_tsars_palace');
 
         await expect.poll(async () => {
-            return (await getBaseOptions(game)).map((option) => option.baseDefId).sort();
+            return (await getBaseOptions(game)).map((option: any) => option.baseDefId).sort();
         }).toEqual(['base_dread_lookout', 'base_the_jungle']);
         await expect(page.getByText('选择先记分的基地')).toBeVisible();
 
         await game.screenshot('02-after-first-base-choice', testInfo);
 
         await selectBaseByDefId(game, 'base_the_jungle');
-
-        await expect.poll(async () => {
-            return (await getBaseOptions(game)).map((option) => option.baseDefId);
-        }).toEqual(['base_dread_lookout']);
-        await expect(page.getByText('计分最后一个基地')).toBeVisible();
-
-        await game.screenshot('03-last-base-prompt', testInfo);
-
-        await selectBaseByDefId(game, 'base_dread_lookout');
 
         await expect.poll(async () => {
             const state = await game.getState();
@@ -191,6 +182,6 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             expect(base.ongoingActions).toHaveLength(0);
         }
 
-        await game.screenshot('04-final-four-player-state', testInfo);
+        await game.screenshot('03-final-four-player-state', testInfo);
     });
 });

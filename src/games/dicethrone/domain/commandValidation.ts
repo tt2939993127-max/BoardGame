@@ -247,13 +247,8 @@ const validateSelectAbility = (
             return fail('player_mismatch');
         }
 
-        // 晕眩状态检查：拥有晕眩标记的玩家不可进行防御掷骰
         const defender = state.players[state.pendingAttack.defenderId];
         if (!defender) return fail('player_not_found');
-        const dazeStacks = defender.statusEffects[STATUS_IDS.DAZE] ?? 0;
-        if (dazeStacks > 0) {
-            return fail('player_is_dazed');
-        }
 
         // 防御阶段分两步：
         // 1. 掷骰前选择/切换防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
@@ -476,16 +471,6 @@ const validatePlayCard = (
     if (!player) {
         console.warn('[validatePlayCard] 验证失败 - 玩家不存在:', { playerId: actingPlayerId });
         return fail('player_not_found');
-    }
-    
-    // 晕眩状态检查：拥有晕眩标记的玩家不可进行任何行动
-    const dazeStacks = player.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    if (dazeStacks > 0) {
-        console.warn('[validatePlayCard] 验证失败 - 玩家处于晕眩状态:', {
-            playerId: actingPlayerId,
-            dazeStacks,
-        });
-        return fail('player_is_dazed');
     }
     
     const card = player.hand.find(c => c.id === cmd.payload.cardId);
@@ -769,13 +754,8 @@ const validateUseToken = (
         return fail('player_mismatch');
     }
 
-    // 晕眩状态检查：拥有晕眩标记的玩家不可使用状态标记
     const p = state.players[playerId];
     if (!p) return fail('player_not_found');
-    const dazeStacks = p.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    if (dazeStacks > 0) {
-        return fail('player_is_dazed');
-    }
 
     const tokenDef = state.tokenDefinitions.find(t => t.id === cmd.payload.tokenId);
     if (!tokenDef) {
@@ -822,12 +802,6 @@ const validateUsePurify = (
     const p = state.players[playerId];
     if (!p) {
         return fail('player_not_found');
-    }
-    
-    // 晕眩状态检查：拥有晕眩标记的玩家不可使用状态标记
-    const dazeStacks = p.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    if (dazeStacks > 0) {
-        return fail('player_is_dazed');
     }
     
     const amount = p.tokens[TOKEN_IDS.PURIFY] ?? 0;
@@ -943,12 +917,6 @@ const validateUsePassiveAbility = (
 ): ValidationResult => {
     const player = state.players[playerId];
     if (!player) return fail('player_not_found');
-
-    // 晕眩状态检查：拥有晕眩标记的玩家不可使用被动能力
-    const dazeStacks = player.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    if (dazeStacks > 0) {
-        return fail('player_is_dazed');
-    }
 
     const passives = player.passiveAbilities ?? [];
     const passive = passives.find(p => p.id === cmd.payload.passiveId);

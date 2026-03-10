@@ -772,12 +772,12 @@ export interface BonusDiceSettledEvent extends GameEvent<'BONUS_DICE_SETTLED'> {
     };
 }
 
-/** 额外攻击触发事件（晕眩 daze 触发：攻击结算后对手获得一次额外攻击） */
+/** 额外攻击触发事件（晕眩 daze 触发：攻击结算后当前攻击者立即再次攻击） */
 export interface ExtraAttackTriggeredEvent extends GameEvent<'EXTRA_ATTACK_TRIGGERED'> {
     payload: {
-        /** 额外攻击的发起者（原攻击的防御方） */
+        /** 额外攻击的发起者（原攻击的攻击方） */
         attackerId: PlayerId;
-        /** 额外攻击的目标（原攻击方，即被 daze 的玩家） */
+        /** 额外攻击的目标（原攻击的防御方，即被 daze 的玩家） */
         targetId: PlayerId;
         /** 触发来源（状态效果 ID） */
         sourceStatusId: string;

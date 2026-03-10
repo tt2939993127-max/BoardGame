@@ -573,18 +573,17 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
 const resolveDmgPerFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const fmCount = getFireMasteryCount(ctx);
     if (fmCount <= 0) return [];
-    
-    // 生成事件而不是直接修改 state
+
     return [{
         type: 'BONUS_DAMAGE_ADDED',
         payload: {
             playerId: ctx.attackerId,
             amount: fmCount,
-            sourceCardId: 'card-red-hot',  // 用于日志显示
+            sourceCardId: 'card-red-hot',
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: ctx.timestamp,
-    } as any];  // TODO: 添加 BONUS_DAMAGE_ADDED 到事件类型定义
+    }];
 };
 
 /**

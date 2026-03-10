@@ -11,12 +11,14 @@ import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
-import type { MatchState } from '../../../engine/types';
+import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel } from '../domain/utils';
+import { reduce } from '../domain/reducer';
+import { scoreOneBase } from '../domain';
 
 type SkipChoiceValue = { skip: true };
 type DoneChoiceValue = { done: true };
@@ -25,6 +27,48 @@ type MinionTargetChoiceValue = { minionUid: string; baseIndex: number; defId: st
 type MoveContext = { minionUid: string; minionDefId: string; fromBaseIndex: number };
 type FullSailContext = MoveContext & { movedUids?: string[] };
 type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
+
+function takeQueuedMultiBaseInteractions(state: MatchState<SmashUpCore>): {
+    strippedState: MatchState<SmashUpCore>;
+    deferredMultiBaseInteractions: InteractionDescriptor[];
+} {
+    const current = state.sys.interaction?.current;
+    const queue = state.sys.interaction?.queue ?? [];
+    const deferredMultiBaseQueue = queue.filter(
+        interaction => (interaction.data as Record<string, unknown> | undefined)?.sourceId === 'multi_base_scoring'
+    );
+    const deferredMultiBaseCurrent =
+        current && (current.data as Record<string, unknown> | undefined)?.sourceId === 'multi_base_scoring'
+            ? [current]
+            : [];
+    const deferredMultiBaseInteractions = [...deferredMultiBaseCurrent, ...deferredMultiBaseQueue];
+
+    if (deferredMultiBaseInteractions.length === 0) {
+        return {
+            strippedState: state,
+            deferredMultiBaseInteractions,
+        };
+    }
+
+    return {
+        strippedState: {
+            ...state,
+            sys: {
+                ...state.sys,
+                interaction: state.sys.interaction
+                    ? {
+                        ...state.sys.interaction,
+                        current: deferredMultiBaseCurrent.length > 0 ? null : state.sys.interaction.current,
+                        queue: queue.filter(
+                            interaction => (interaction.data as Record<string, unknown> | undefined)?.sourceId !== 'multi_base_scoring'
+                        ),
+                    }
+                    : state.sys.interaction,
+            },
+        },
+        deferredMultiBaseInteractions,
+    };
+}
 
 function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
     return interactionData?.continuationContext as T | undefined;
@@ -951,7 +995,7 @@ export function registerPirateInteractionHandlers(): void {
     });
 
     // 海盗王：确认是否移动到计分基地（链式处理多个海盗王）
-    registerInteractionHandler('pirate_king_move', (state, _playerId, value, iData, _random, timestamp) => {
+    registerInteractionHandler('pirate_king_move', (state, _playerId, value, iData, random, timestamp) => {
         const selected = value as {
             move: boolean;
             minionUid?: string;
@@ -1003,7 +1047,109 @@ export function registerPirateInteractionHandlers(): void {
             return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, remaining: rest } } }), events };
         }
 
-        return { state, events };
+        const scoringPlayerId = state.core.turnOrder[state.core.currentPlayerIndex] as PlayerId | undefined;
+        if (ctx.scoringBaseIndex === undefined || !scoringPlayerId) {
+            return { state, events };
+        }
+
+        let continuedCore = state.core;
+        for (const event of events) {
+            continuedCore = reduce(continuedCore, event);
+        }
+
+        const { strippedState, deferredMultiBaseInteractions } = takeQueuedMultiBaseInteractions({
+            ...state,
+            core: continuedCore,
+        });
+
+        const continuedResult = scoreOneBase(
+            continuedCore,
+            ctx.scoringBaseIndex,
+            strippedState.core.baseDeck,
+            scoringPlayerId,
+            timestamp,
+            random as RandomFn | undefined,
+            strippedState,
+        );
+
+        const continuedEvents = [...events, ...continuedResult.events];
+        const continuedState = {
+            ...(continuedResult.matchState ?? strippedState),
+            core: continuedCore,
+        };
+        const baseScoredInContinuation = continuedResult.events.some(event => event.type === 'su:base_scored');
+        const stateAfterContinuation = baseScoredInContinuation
+            ? {
+                ...continuedState,
+                sys: {
+                    ...continuedState.sys,
+                    scoredBaseIndices: Array.from(new Set([
+                        ...(continuedState.sys.scoredBaseIndices ?? []),
+                        ctx.scoringBaseIndex,
+                    ])),
+                },
+            }
+            : continuedState;
+
+        if (deferredMultiBaseInteractions.length === 0 || !stateAfterContinuation.sys.interaction) {
+            return { state: stateAfterContinuation, events: continuedEvents };
+        }
+
+        const autoFinishBaseIndex = deferredMultiBaseInteractions.length === 1
+            && deferredMultiBaseInteractions[0]?.kind === 'simple-choice'
+            && (deferredMultiBaseInteractions[0].data as Record<string, unknown> | undefined)?.sourceId === 'multi_base_scoring'
+            ? ((deferredMultiBaseInteractions[0].data as { options?: Array<{ value?: { baseIndex?: number } }> }).options?.[0]?.value?.baseIndex)
+            : undefined;
+
+        if (autoFinishBaseIndex !== undefined) {
+            return {
+                state: {
+                    ...stateAfterContinuation,
+                    sys: {
+                        ...stateAfterContinuation.sys,
+                        scoredBaseIndices: (stateAfterContinuation.sys.scoredBaseIndices ?? []).filter(index => index !== autoFinishBaseIndex),
+                    },
+                },
+                events: continuedEvents,
+            };
+        }
+
+        const currentInteraction = stateAfterContinuation.sys.interaction.current;
+        const queuedInteractions = stateAfterContinuation.sys.interaction.queue ?? [];
+
+        if (!currentInteraction) {
+            return {
+                state: {
+                    ...stateAfterContinuation,
+                    sys: {
+                        ...stateAfterContinuation.sys,
+                        interaction: {
+                            ...stateAfterContinuation.sys.interaction,
+                            current: deferredMultiBaseInteractions[0] ?? null,
+                            queue: deferredMultiBaseInteractions.slice(1),
+                        },
+                    },
+                },
+                events: continuedEvents,
+            };
+        }
+
+        return {
+            state: {
+                ...stateAfterContinuation,
+                sys: {
+                    ...stateAfterContinuation.sys,
+                    interaction: {
+                        ...stateAfterContinuation.sys.interaction,
+                        queue: [
+                            ...queuedInteractions,
+                            ...deferredMultiBaseInteractions,
+                        ],
+                    },
+                },
+            },
+            events: continuedEvents,
+        };
     });
 
     // 大副：选择目标基地后移动大副自身

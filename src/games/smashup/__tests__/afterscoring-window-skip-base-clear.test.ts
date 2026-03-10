@@ -239,6 +239,91 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalCore?.bases[1].minions).toHaveLength(0);
     });
 
+    it('最后一个 afterScoring 交互已补发延迟事件时，不应再次重复补发', () => {
+        const system = createSmashUpEventSystem();
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_tortuga', {
+                    minions: [makeMinion('mate', '0', 2, 'pirate_first_mate')],
+                }),
+                makeBase('base_other'),
+                makeBase('base_else', {
+                    minions: [makeMinion('runner', '1', 2)],
+                }),
+            ],
+            baseDeck: ['base_secret_garden'],
+            pendingPostScoringActions: [{
+                kind: 'moveMinionToReplacementBase',
+                minionUid: 'runner',
+                minionDefId: 'd1',
+                fromBaseIndex: 2,
+                toBaseIndex: 0,
+                reason: '托尔图加：亚军移动随从到替换基地',
+            }],
+        }));
+
+        const result = system.afterEvents?.({
+            state,
+            random: undefined as any,
+            events: [{
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: 'i-first-mate',
+                    playerId: '0',
+                    optionId: 'base-1',
+                    value: { baseIndex: 1 },
+                    sourceId: 'pirate_first_mate_choose_base',
+                    interactionData: {
+                        sourceId: 'pirate_first_mate_choose_base',
+                        continuationContext: {
+                            mateUid: 'mate',
+                            mateDefId: 'pirate_first_mate',
+                            scoringBaseIndex: 0,
+                            _deferredPostScoringEvents: [
+                                {
+                                    type: SU_EVENTS.BASE_CLEARED,
+                                    payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
+                                    timestamp: 2300,
+                                },
+                                {
+                                    type: SU_EVENTS.BASE_REPLACED,
+                                    payload: {
+                                        baseIndex: 0,
+                                        oldBaseDefId: 'base_tortuga',
+                                        newBaseDefId: 'base_secret_garden',
+                                    },
+                                    timestamp: 2300,
+                                },
+                            ],
+                        },
+                    },
+                },
+                timestamp: 2300,
+            } as any],
+        });
+
+        const emittedEvents = result?.events as SmashUpEvent[] | undefined;
+        expect(emittedEvents?.map(event => event.type)).toEqual([
+            SU_EVENTS.MINION_MOVED,
+            SU_EVENTS.BASE_CLEARED,
+            SU_EVENTS.BASE_REPLACED,
+            SU_EVENTS.MINION_MOVED,
+        ]);
+        expect(emittedEvents?.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
+        expect(emittedEvents?.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+        expect(result?.state.core.pendingPostScoringActions).toBeUndefined();
+
+        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
+        expect(finalCore?.bases[0].defId).toBe('base_secret_garden');
+        expect(finalCore?.bases[0].minions.map(minion => minion.uid)).toEqual(['runner']);
+        expect(finalCore?.bases[1].minions.map(minion => minion.uid)).toEqual(['mate']);
+        expect(finalCore?.bases[2].minions).toHaveLength(0);
+    });
+
     it('scoreBases 因 afterScoring 响应窗口 halt 时应保留 scoredBaseIndices', () => {
         const state = wrapState(makeCore({
             players: {
@@ -277,5 +362,40 @@ describe('afterScoring 延迟清场回归', () => {
         expect(result.halt).toBe(true);
         expect(result.updatedState?.sys.afterScoringInitialPowers?.baseIndex).toBe(0);
         expect(result.updatedState?.sys.scoredBaseIndices).toEqual([0]);
+    });
+
+    it('scoreBases 在 afterScoring 响应窗口打开时，不应因 eligibleIndices 为空而自动推进', () => {
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('card-after', 'giant_ant_we_are_the_champions', 'action')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_secret_garden'),
+            ],
+            baseDeck: [],
+        }));
+
+        state.sys.flowHalted = true;
+        state.sys.responseWindow.current = {
+            id: 'after-scoring-window',
+            responderQueue: ['0', '1'],
+            currentResponderIndex: 0,
+            passedPlayers: [],
+            windowType: 'afterScoring',
+            sourceId: 'test-after-scoring',
+            actionTakenThisRound: false,
+            consecutivePassRounds: 0,
+        };
+
+        const result = smashUpFlowHooks.onAutoContinueCheck?.({
+            state,
+            events: [],
+            random: (() => 0.5) as any,
+        });
+
+        expect(result).toBeUndefined();
     });
 });

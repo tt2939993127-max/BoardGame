@@ -11,7 +11,7 @@
  */
 
 import { copyFile, mkdir } from 'node:fs/promises';
-import { join, parse } from 'node:path';
+import { dirname, join, parse } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { getCardDef as getSmashUpCardDef, getBaseDef } from '../../src/games/smashup/data/cards';
 import { CHARACTER_DATA_MAP, initHeroState } from '../../src/games/dicethrone/domain/characters';
@@ -1252,7 +1252,27 @@ export class GameTestContext {
      */
     async screenshot(name: string, testInfo: TestInfo): Promise<void> {
         const path = testInfo.outputPath(`${name}.png`);
-        await this.page.screenshot({ path, fullPage: true });
+        await mkdir(dirname(path), { recursive: true });
+
+        const withFileRetry = async (operation: () => Promise<void>) => {
+            let lastError: unknown;
+            for (let attempt = 0; attempt < 4; attempt++) {
+                try {
+                    await operation();
+                    return;
+                } catch (error) {
+                    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+                    if (code !== 'EBUSY' && code !== 'EPERM') {
+                        throw error;
+                    }
+                    lastError = error;
+                    await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+                }
+            }
+            throw lastError;
+        };
+
+        await withFileRetry(() => this.page.screenshot({ path, fullPage: true }).then(() => undefined));
 
         const fileStem = GameTestContext.sanitizePathSegment(parse(testInfo.file).name || 'unknown-test');
         const titleStem = GameTestContext.sanitizePathSegment(testInfo.title || 'unnamed');
@@ -1267,8 +1287,8 @@ export class GameTestContext {
         await mkdir(preservedDir, { recursive: true });
         await mkdir(flatDir, { recursive: true });
         await mkdir(evidenceDir, { recursive: true });
-        await copyFile(path, preservedPath);
-        await copyFile(path, flatPath);
-        await copyFile(path, evidencePath);
+        await withFileRetry(() => copyFile(path, preservedPath));
+        await withFileRetry(() => copyFile(path, flatPath));
+        await withFileRetry(() => copyFile(path, evidencePath));
     }
 }

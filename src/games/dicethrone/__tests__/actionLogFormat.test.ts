@@ -13,6 +13,7 @@ import type {
     DiceThroneCore,
     HealAppliedEvent,
     StatusAppliedEvent,
+    StatusRemovedEvent,
     TokenGrantedEvent,
     TokenUsedEvent,
 } from '../domain/types';
@@ -385,5 +386,36 @@ describe('formatDiceThroneActionEntry', () => {
         expect(healEntry).toBeTruthy();
         // 效果 entry 的 timestamp 必须严格大于命令 entry
         expect(healEntry!.timestamp).toBeGreaterThan(cardEntry!.timestamp);
+    });
+
+    it('STATUS_REMOVED 的共享状态名应写入正确的同 namespace i18n key', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'SKIP_TOKEN_RESPONSE',
+            playerId: '0',
+            payload: {},
+            timestamp: 40,
+        };
+        const statusRemovedEvent: StatusRemovedEvent = {
+            type: 'STATUS_REMOVED',
+            payload: {
+                targetId: '1',
+                statusId: STATUS_IDS.DAZE,
+                stacks: 1,
+            },
+            timestamp: 40,
+        };
+
+        const result = formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [statusRemovedEvent] as GameEvent[],
+        });
+        const entries = normalizeEntries(result);
+
+        expect(entries).toHaveLength(1);
+        const statusSeg = findI18nSegment(entries[0].segments, 'actionLog.statusRemoved');
+        expect(statusSeg?.params?.statusLabel).toBe('statusEffects.daze.name');
+        expect(statusSeg?.paramI18nKeys).toContain('statusLabel');
     });
 });

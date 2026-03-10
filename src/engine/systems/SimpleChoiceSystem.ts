@@ -73,6 +73,39 @@ export function createSimpleChoiceSystem<TCore>(
                 }
             }
         },
+
+        afterEvents: ({ state, events }): HookResult<TCore> | void => {
+            const current = state.sys.interaction.current;
+            if (!current || current.kind !== 'simple-choice') return;
+
+            const data = current.data as SimpleChoiceData;
+            if (data.autoResolveIfSingle !== true || data.multi) return;
+
+            const availableOptions = getFreshSimpleChoiceOptions(state, current as any);
+            if (availableOptions.length !== 1) return;
+
+            const onlyOption = availableOptions[0];
+            if (!onlyOption || onlyOption.disabled) return;
+
+            const newState = resolveInteraction(state);
+            const timestamp = events[events.length - 1]?.timestamp ?? 0;
+
+            const event: GameEvent = {
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: current.id,
+                    playerId: current.playerId,
+                    optionId: onlyOption.id,
+                    optionIds: undefined,
+                    value: onlyOption.value,
+                    sourceId: data.sourceId,
+                    interactionData: stripNonSerializableFromData({ ...current.data, options: availableOptions }),
+                },
+                timestamp,
+            };
+
+            return { halt: false, state: newState, events: [event] };
+        },
     };
 }
 

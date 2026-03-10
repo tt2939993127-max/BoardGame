@@ -8,8 +8,67 @@
 import { describe, it, expect } from 'vitest';
 import { createDamageCalculation } from '../../../engine/primitives/damageCalculation';
 import type { DiceThroneCore } from '../domain/core-types';
+import type { DiceThroneEvent } from '../domain/types';
+import { reduce } from '../domain/reducer';
+import { createInitializedState, fixedRandom } from './test-utils';
 
 describe('红热 + 陨石 伤害计算', () => {
+    it('先加入 bonusDamage 再发起攻击时，应该在 ATTACK_INITIATED 转移到 pendingAttack', () => {
+        const initial = createInitializedState(['0', '1'], fixedRandom).core;
+
+        const withQueuedBonus = reduce(initial, {
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: '0',
+                amount: 2,
+                sourceCardId: 'card-red-hot',
+            },
+            timestamp: 1,
+        } as DiceThroneEvent);
+
+        expect(withQueuedBonus.players['0'].pendingBonusDamage).toBe(2);
+        expect(withQueuedBonus.pendingAttack).toBeNull();
+
+        const initiated = reduce(withQueuedBonus, {
+            type: 'ATTACK_INITIATED',
+            payload: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'meteor',
+                isDefendable: false,
+            },
+            timestamp: 2,
+        } as DiceThroneEvent);
+
+        expect(initiated.pendingAttack?.bonusDamage).toBe(2);
+        expect(initiated.players['0'].pendingBonusDamage).toBeUndefined();
+    });
+
+    it('回合切换时应该清除未消费的 pendingBonusDamage', () => {
+        const initial = createInitializedState(['0', '1'], fixedRandom).core;
+        const withQueuedBonus = reduce(initial, {
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: '0',
+                amount: 2,
+                sourceCardId: 'card-red-hot',
+            },
+            timestamp: 1,
+        } as DiceThroneEvent);
+
+        const afterTurnChanged = reduce(withQueuedBonus, {
+            type: 'TURN_CHANGED',
+            payload: {
+                previousPlayerId: '0',
+                nextPlayerId: '1',
+                turnNumber: 2,
+            },
+            timestamp: 2,
+        } as DiceThroneEvent);
+
+        expect(afterTurnChanged.players['0'].pendingBonusDamage).toBeUndefined();
+    });
+
     it('应该将 bonusDamage 加到陨石的 FM 伤害上', () => {
         // 模拟游戏状态
         const state: Partial<DiceThroneCore> = {
@@ -69,14 +128,6 @@ describe('红热 + 陨石 伤害计算', () => {
         });
 
         const result = damageCalc.resolve();
-
-        console.log('=== 测试结果 ===');
-        console.log('基础伤害:', result.baseDamage);
-        console.log('最终伤害:', result.finalDamage);
-        console.log('修正列表:', result.modifiers);
-        console.log('\n=== Breakdown ===');
-        console.log('Base:', result.breakdown.base);
-        console.log('Steps:', result.breakdown.steps);
 
         // 验证
         expect(result.baseDamage).toBe(2);  // 基础伤害是 2 FM

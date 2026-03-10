@@ -8,8 +8,8 @@ import type { TokenDef } from './tokenTypes';
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_STATUS_ATLAS_IDS } from './ids';
 import { RESOURCE_IDS } from './resources';
 
-const statusText = (id: string, key: string) => `dicethrone:status.${id}.${key}`;
-const tokenText = (id: string, key: string) => `dicethrone:token.${id}.${key}`;
+const statusText = (id: string, key: string) => `statusEffects.${id}.${key}`;
+const tokenText = (id: string, key: string) => `tokens.${id}.${key}`;
 
 /**
  * 共享状态效果和 Token 定义
@@ -60,12 +60,12 @@ export const SHARED_TOKENS: TokenDef[] = [
     },
 
     /**
-     * 晕眩（Daze）- 攻击结算后触发额外攻击
+     * 晕眩（Daze）- 攻击结算后立即触发额外攻击
      * 
      * 规则：
-     * - Player A 攻击 Player B，施加晕眩给 Player B
-     * - 攻击结算后，立即检查 Player B 是否有晕眩
-     * - 如果有，立即移除晕眩 + Player A 再次攻击（额外攻击）
+     * - Player A 攻击 Player B，并对 Player B 施加晕眩
+     * - 当前攻击结算后，立即移除 Player B 的晕眩
+     * - Player A 立即再次攻击（额外攻击）
      * 
      * 使用角色：狂战士、火法师
      * 

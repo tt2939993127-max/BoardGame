@@ -74,6 +74,16 @@ function buildPendingPostScoringActionEvents(
     return events;
 }
 
+function isSameDeferredEvent(
+    emittedEvent: SmashUpEvent,
+    deferredEvent: { type: string; payload: unknown; timestamp: number },
+): boolean {
+    if (emittedEvent.type !== deferredEvent.type) return false;
+    const emittedPayload = (emittedEvent as GameEvent).payload;
+    return JSON.stringify(emittedPayload) === JSON.stringify(deferredEvent.payload)
+        && (typeof emittedEvent.timestamp === 'number' ? emittedEvent.timestamp : 0) === deferredEvent.timestamp;
+}
+
 /**
  * 创建 SmashUp 事件处理系统
  * 
@@ -89,6 +99,20 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
         afterEvents: ({ state, events, random }): HookResult<SmashUpCore> | void => {
             let newState = state;
             const nextEvents: GameEvent[] = [];
+            const pendingReduceFlag = '_waitForPostScoringReduce';
+
+            // 同一轮 afterEvents 中，后续系统看不到本轮新发出事件的 reduce 结果。
+            // 上一轮如果刚补发了 BASE_CLEARED / BASE_REPLACED，需要先等 pipeline 在轮末完成 reduce，
+            // 本轮开始时再清掉阻塞标记，允许 FlowSystem 继续自动推进。
+            if ((newState.sys as any)[pendingReduceFlag]) {
+                newState = {
+                    ...newState,
+                    sys: {
+                        ...newState.sys,
+                        [pendingReduceFlag]: undefined,
+                    } as typeof newState.sys,
+                };
+            }
 
             for (const event of events) {
                 // 监听 RESPONSE_WINDOW_CLOSED → 补发 afterScoring 延迟事件
@@ -223,8 +247,13 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     
                                     // 仅在没有后续交互时补发（链式交互需要等最后一个解决后再清除）
                                     if (!newState.sys.interaction?.current && (!newState.sys.interaction?.queue || newState.sys.interaction.queue.length === 0)) {
-                                        for (const d of deferred) {
-                                            nextEvents.push({ type: d.type, payload: d.payload, timestamp: d.timestamp } as GameEvent);
+                                        const handlerAlreadyEmittedDeferred = deferred.every(d =>
+                                            nextEvents.some(event => isSameDeferredEvent(event, d))
+                                        );
+                                        if (!handlerAlreadyEmittedDeferred) {
+                                            for (const d of deferred) {
+                                                nextEvents.push({ type: d.type, payload: d.payload, timestamp: d.timestamp } as GameEvent);
+                                            }
                                         }
                                         const pendingActions = newState.core.pendingPostScoringActions ?? [];
                                         if (pendingActions.length > 0) {
@@ -237,6 +266,13 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                                 },
                                             };
                                         }
+                                        newState = {
+                                            ...newState,
+                                            sys: {
+                                                ...newState.sys,
+                                                [pendingReduceFlag]: true,
+                                            } as typeof newState.sys,
+                                        };
                                     } else {
                                         // 还有后续交互：把 deferred events 传递到下一个交互的 continuationContext
                                         const nextInteraction = newState.sys.interaction.current ?? newState.sys.interaction.queue?.[0];

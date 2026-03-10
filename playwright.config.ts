@@ -17,6 +17,7 @@ const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = !forceStartServers && !process.env.CI;
 const headedMode = process.env.PW_HEADED === 'true' || process.env.PWDEBUG === '1';
+process.env.PW_REUSE_EXISTING_SERVERS = shouldReuseExistingServers ? 'true' : 'false';
 
 const ports = useDevServers ? DEV_PORTS : SINGLE_WORKER_PORTS;
 
@@ -64,8 +65,6 @@ if (!isMultiWorker) {
 
 const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || String(ports.frontend);
 const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${frontendPort}`;
-const gameServerPort = String(ports.gameServer);
-const apiServerPort = String(ports.apiServer);
 const multiWorkerSafeTests = collectFrameworkBackedTests(path.join(process.cwd(), 'e2e'));
 const explicitTestMatch = process.env.PW_TEST_MATCH?.trim();
 
@@ -75,7 +74,6 @@ const LEGACY_DISCOVERY_BROKEN_TESTS = [
     '**/dicethrone-status-interaction-cancel.e2e.ts',
     '**/dicethrone-status-interaction-complete.e2e.ts',
     '**/ninja-hidden-ninja-skip-option.e2e.ts',
-    '**/smashup-4p-layout-test.e2e.ts',
     '**/summonerwars-illusion-fix.e2e.ts',
 ];
 
@@ -86,30 +84,6 @@ if (isMultiWorker) {
 } else {
     console.log(`✅ E2E 测试模式：单 worker（${SINGLE_WORKER_PORTS.frontend}/${SINGLE_WORKER_PORTS.gameServer}/${SINGLE_WORKER_PORTS.apiServer}）`);
 }
-
-const webServerConfig = shouldStartServers && !isMultiWorker
-    ? [
-        {
-            command: `cross-env NODE_OPTIONS=--max-old-space-size=4096 E2E_PROXY_QUIET=true VITE_DEV_PORT=${frontendPort} GAME_SERVER_PORT=${gameServerPort} API_SERVER_PORT=${apiServerPort} npm run dev:frontend`,
-            url: `${singleWorkerBaseURL}/__ready`,
-            reuseExistingServer: shouldReuseExistingServers,
-            timeout: 120000,
-            ignoreHTTPSErrors: true,
-        },
-        {
-            command: `cross-env NODE_OPTIONS=--max-old-space-size=2048 USE_PERSISTENT_STORAGE=false GAME_SERVER_PORT=${gameServerPort} npm run dev:game`,
-            url: `http://localhost:${gameServerPort}/games`,
-            reuseExistingServer: shouldReuseExistingServers,
-            timeout: 120000,
-        },
-        {
-            command: `cross-env NODE_OPTIONS=--max-old-space-size=2048 API_SERVER_PORT=${apiServerPort} npm run dev:api`,
-            url: `http://localhost:${apiServerPort}/health`,
-            reuseExistingServer: shouldReuseExistingServers,
-            timeout: 120000,
-        },
-    ]
-    : undefined;
 
 const testMatch = explicitTestMatch
     ? explicitTestMatch
@@ -132,15 +106,14 @@ export default defineConfig({
     reporter: 'list',
     outputDir: './test-results',
     preserveOutput: 'always',
-    globalSetup: isMultiWorker ? './e2e/global-setup.ts' : undefined,
-    globalTeardown: isMultiWorker ? './e2e/global-teardown.ts' : undefined,
+    globalSetup: shouldStartServers ? './e2e/global-setup.ts' : undefined,
+    globalTeardown: shouldStartServers ? './e2e/global-teardown.ts' : undefined,
     use: {
         ...(!isMultiWorker ? { baseURL: singleWorkerBaseURL } : {}),
         headless: !headedMode,
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
     },
-    webServer: webServerConfig,
     projects: [
         {
             name: 'chromium',

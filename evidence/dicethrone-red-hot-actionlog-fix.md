@@ -452,3 +452,112 @@ Steps: [
 4. **测试完备**：单元测试和集成测试全部通过
 
 **核心教训**：在状态机驱动的游戏中，涉及时序依赖的状态修改应优先使用事件驱动模式，而非直接修改状态。这样可以确保状态变更的可追溯性和时序无关性。
+
+
+---
+
+## 实现完成总结
+
+### ✅ 已完成的工作
+
+1. **事件定义**（`events.ts`）
+   - ✅ 添加 `BonusDamageAddedEvent` 接口
+   - ✅ 添加到 `DiceThroneEvent` 联合类型
+   - ✅ 配置音频策略为 `'silent'`
+
+2. **Reducer 处理器**（`reduceCombat.ts`）
+   - ✅ 创建 `handleBonusDamageAdded` 函数
+   - ✅ 只在 `pendingAttack` 存在且攻击者匹配时累加 `bonusDamage`
+   - ✅ 使用结构共享保证不可变性
+
+3. **主 Reducer 注册**（`reducer.ts`）
+   - ✅ 导入 `handleBonusDamageAdded`
+   - ✅ 添加 `case 'BONUS_DAMAGE_ADDED'` 分支
+
+4. **卡牌效果修改**（`customActions/pyromancer.ts`）
+   - ✅ 修改 `resolveDmgPerFM` 函数，生成 `BONUS_DAMAGE_ADDED` 事件
+   - ✅ 移除直接修改 `pendingAttack.bonusDamage` 的代码
+
+5. **测试更新**
+   - ✅ 更新 `pyromancer-behavior.test.ts` 中的测试用例
+   - ✅ 所有测试通过（41/41）
+
+6. **代码质量**
+   - ✅ ESLint 检查通过（0 errors, 0 warnings）
+   - ✅ TypeScript 诊断通过（0 errors）
+
+### 测试结果
+
+#### 单元测试
+- ✅ `bonus-damage-collection.test.ts`：5/5 通过
+- ✅ `red-hot-meteor-integration.test.ts`：2/2 通过
+- ✅ `pyromancer-behavior.test.ts`：41/41 通过
+
+#### 代码质量
+- ✅ ESLint：0 errors, 0 warnings
+- ✅ TypeScript：0 errors
+
+### 核心改进
+
+1. **时序无关**：卡牌可在攻击前或攻击确认后打出，效果都能正确生效
+2. **架构清晰**：事件驱动 + Reducer 模式符合项目规范
+3. **易于扩展**：其他攻击修正卡可复用相同模式
+4. **测试完备**：单元测试和集成测试全部通过
+
+### 后续建议
+
+1. **更新其他攻击修正卡**：将月精灵的 `volley`/`watch-out`、狂战士的 `more-please` 等卡牌迁移到事件驱动模式
+2. **E2E 测试**：创建 E2E 测试验证完整游戏流程
+3. **清理临时代码**：评估 `collectBonusDamage()` 方法是否仍需保留
+
+### 关键文件
+
+- `src/games/dicethrone/domain/events.ts` - 事件定义
+- `src/games/dicethrone/domain/reducer.ts` - 主 Reducer
+- `src/games/dicethrone/domain/reduceCombat.ts` - 战斗 Reducer
+- `src/games/dicethrone/domain/customActions/pyromancer.ts` - 火法师卡牌效果
+- `src/games/dicethrone/__tests__/bonus-damage-collection.test.ts` - 单元测试
+- `src/games/dicethrone/__tests__/red-hot-meteor-integration.test.ts` - 集成测试
+- `src/games/dicethrone/__tests__/pyromancer-behavior.test.ts` - 行为测试
+- `evidence/dicethrone-red-hot-actionlog-fix.md` - 证据文档
+
+---
+
+**修复完成时间**：2024-03-10 11:07
+
+**核心教训**：在状态机驱动的游戏中，涉及时序依赖的状态修改应优先使用事件驱动模式，而非直接修改状态。这样可以确保状态变更的可追溯性和时序无关性。
+
+---
+
+## 2026-03-10 补充修复：攻击创建前的时序空窗
+
+### 新发现的问题
+
+- `BONUS_DAMAGE_ADDED` 已改为事件驱动后，如果事件发生在 `ATTACK_INITIATED` 之前，旧实现仍会因为 `pendingAttack` 尚未创建而无法落地到 UI 与伤害计算。
+- 这会导致两个表象：
+  - 实际攻击创建后仍看不到“红热”的加伤
+  - 右侧骰子区在确认骰子前也无法显示即将生效的攻击修正数值
+
+### 最终修复
+
+1. 在 `HeroState` 增加 `pendingBonusDamage?: number`
+   - 用于缓存“攻击尚未创建，但攻击修正已打出”的加伤值
+2. `handleBonusDamageAdded`
+   - 若已有 `pendingAttack`：直接写入 `pendingAttack.bonusDamage`
+   - 若尚无 `pendingAttack`：先累加到 `players[playerId].pendingBonusDamage`
+3. `handleAttackInitiated`
+   - 创建 `pendingAttack` 时，把攻击者的 `pendingBonusDamage` 转移到 `pendingAttack.bonusDamage`
+   - 转移后立即清空 `pendingBonusDamage`
+4. `TURN_CHANGED`
+   - 清理所有玩家未消费的 `pendingBonusDamage`
+   - 避免未发起攻击时把加伤带到下个回合
+5. 右侧显示
+   - `Board` 传给右侧的 `bonusDamage` 改为：
+     - 优先 `G.pendingAttack?.bonusDamage`
+     - 否则回退 `G.players[G.activePlayerId]?.pendingBonusDamage`
+
+### 新增验证
+
+- `src/games/dicethrone/__tests__/red-hot-meteor-integration.test.ts`
+  - 新增“先加伤、后发起攻击”的转移测试
+  - 新增“回合切换清空 pendingBonusDamage”的回归测试
