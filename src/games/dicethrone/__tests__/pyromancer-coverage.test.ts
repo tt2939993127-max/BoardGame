@@ -195,7 +195,7 @@ describe('炎术士 GTR 技能覆盖', () => {
                         },
                         '1': {
                             hp: 46,  // 50 - 2(FM伤害) - 2(对手伤害) = 46
-                            statusEffects: { [STATUS_IDS.STUN]: 1 },
+                            statusEffects: { [STATUS_IDS.DAZE]: 1 },
                         },
                     },
                 },
@@ -304,7 +304,7 @@ describe('炎术士 METEOR_2 升级后变体', () => {
                     },
                     '1': {
                         hp: 45,  // 50 - 2(FM伤害) - 3(对手伤害) = 45
-                        statusEffects: { [STATUS_IDS.STUN]: 1 },
+                        statusEffects: { [STATUS_IDS.DAZE]: 1 },
                     },
                 },
             },
@@ -338,7 +338,7 @@ describe('炎术士 METEOR_2 升级后变体', () => {
                         statusEffects: {
                             [STATUS_IDS.KNOCKDOWN]: 1,
                             [STATUS_IDS.BURN]: 1,
-                            [STATUS_IDS.STUN]: 1,
+                            [STATUS_IDS.DAZE]: 1,
                         },
                     },
                 },

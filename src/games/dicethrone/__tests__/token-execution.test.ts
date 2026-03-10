@@ -222,11 +222,11 @@ describe('眩晕 (Stun) 跳过进攻掷骰', () => {
                 cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll（stun 触发）
             ],
             setup: createSetupAtPlayer1Upkeep([
-                { playerId: '1', statusId: STATUS_IDS.STUN, stacks: 1 },
+                { playerId: '1', statusId: STATUS_IDS.DAZE, stacks: 1 },
             ]),
         });
         const core = result.finalState.core;
-        expect(core.players['1'].statusEffects[STATUS_IDS.STUN] ?? 0).toBe(0);
+        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
     });
 });
 

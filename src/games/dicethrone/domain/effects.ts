@@ -452,10 +452,14 @@ function resolveEffectAction(
                     : [targetId];
 
             for (const dmgTargetId of damageTargets) {
-                const baseDamage = (action.value ?? 0) + (bonusDamage ?? 0);
-                if (baseDamage <= 0) continue;
+                const baseDamage = action.value ?? 0;
+                const bonusDmg = bonusDamage ?? 0;
+                
+                // 如果 baseDamage + bonusDamage 都为 0，跳过
+                if (baseDamage + bonusDmg <= 0) continue;
 
                 // 统一使用 createDamageCalculation 引擎原语计算伤害
+                // bonusDamage 作为 additionalModifier 传入，确保在 breakdown 中显示
                 const calc = createDamageCalculation({
                     baseDamage,
                     source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -466,6 +470,15 @@ function resolveEffectAction(
                     autoCollectShields: true,
                     passiveTriggerHandler: createDTPassiveTriggerHandler(ctx, random),
                     timestamp,
+                    // bonusDamage 作为显式修正传入（而非直接加到 baseDamage）
+                    additionalModifiers: bonusDmg > 0 ? [{
+                        id: '__bonus_damage_from_config__',
+                        type: 'flat',
+                        value: bonusDmg,
+                        priority: 15,
+                        source: 'attack_modifier',
+                        description: 'actionLog.damageSource.attackModifier',
+                    }] : [],
                 });
                 const result = calc.resolve();
 

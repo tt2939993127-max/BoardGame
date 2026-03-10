@@ -238,4 +238,44 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalCore?.bases[0].minions.map(minion => minion.uid)).toEqual(['m3']);
         expect(finalCore?.bases[1].minions).toHaveLength(0);
     });
+
+    it('scoreBases 因 afterScoring 响应窗口 halt 时应保留 scoredBaseIndices', () => {
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('card-after', 'giant_ant_we_are_the_champions', 'action')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_jungle', {
+                    minions: [
+                        { ...makeMinion('m1', '0', 5, 'giant_ant_worker'), powerCounters: 2 },
+                        makeMinion('m2', '0', 3, 'giant_ant_soldier'),
+                        makeMinion('m3', '1', 2, 'ninja_shinobi'),
+                    ],
+                }),
+            ],
+            baseDeck: ['base_secret_garden'],
+        }));
+
+        const result = smashUpFlowHooks.onPhaseExit?.({
+            state,
+            from: 'scoreBases',
+            to: 'draw',
+            command: { type: 'ADVANCE_PHASE', timestamp: 2300 },
+            random: () => 0.5,
+        });
+
+        if (!result || Array.isArray(result)) {
+            throw new Error('Expected scoreBases to return PhaseExitResult when afterScoring window opens');
+        }
+
+        const emittedEvents = result.events as SmashUpEvent[];
+        expect(emittedEvents.map(event => event.type)).toContain(SU_EVENTS.BASE_SCORED);
+        expect(emittedEvents.map(event => event.type)).toContain('RESPONSE_WINDOW_OPENED');
+        expect(result.halt).toBe(true);
+        expect(result.updatedState?.sys.afterScoringInitialPowers?.baseIndex).toBe(0);
+        expect(result.updatedState?.sys.scoredBaseIndices).toEqual([0]);
+    });
 });

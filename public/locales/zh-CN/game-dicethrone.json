@@ -257,7 +257,8 @@
       "retribution": "报复反伤",
       "ability": "{{abilityName}}",
       "unknown": "未知来源",
-      "shieldReduction": "护盾减伤"
+      "shieldReduction": "护盾减伤",
+      "attackModifier": "攻击修正"
     },
     "damageOriginal": "（原始 {{amount}}）",
     "damageModifiers": "（原始 {{original}}，{{modifiers}}）",

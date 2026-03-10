@@ -1,6 +1,19 @@
 /**
  * Samurai (武士) Token 定义
- * TODO: 等待清晰图片后补充完整的 Token 定义
+ */
+
+import type { TokenDef } from '../../domain/tokenTypes';
+import { STATUS_IDS } from '../../domain/ids';
+
+// TODO: 添加武士特有的 Token ID
+export const SAMURAI_TOKEN_IDS = {
+    // 待补充
+} as const;
+
+export const SAMURAI_TOKENS: TokenDef[] = [
+    // ============================================
+    // 共享 token（从 sharedTokens 导入）
+    // ============================================
  */
 
 import type { TokenDef } from '../../domain/tokenTypes';

@@ -67,6 +67,7 @@ const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://localhost:$
 const gameServerPort = String(ports.gameServer);
 const apiServerPort = String(ports.apiServer);
 const multiWorkerSafeTests = collectFrameworkBackedTests(path.join(process.cwd(), 'e2e'));
+const explicitTestMatch = process.env.PW_TEST_MATCH?.trim();
 
 const LEGACY_DISCOVERY_BROKEN_TESTS = [
     '**/dicethrone-paladin-vengeance-select-player.e2e.ts',
@@ -110,9 +111,11 @@ const webServerConfig = shouldStartServers && !isMultiWorker
     ]
     : undefined;
 
-const testMatch = isMultiWorker && multiWorkerSafeTests.length > 0
-    ? multiWorkerSafeTests
-    : '**/*.e2e.ts';
+const testMatch = explicitTestMatch
+    ? explicitTestMatch
+    : isMultiWorker && multiWorkerSafeTests.length > 0
+        ? multiWorkerSafeTests
+        : '**/*.e2e.ts';
 
 export default defineConfig({
     testDir: './e2e',

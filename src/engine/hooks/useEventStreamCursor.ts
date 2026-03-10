@@ -44,6 +44,13 @@ export interface UseEventStreamCursorConfig {
     /** eventStream 的 entries 数组 */
     entries: EventStreamEntry[];
     /**
+     * reconcile 确认时是否继续消费新事件
+     *
+     * 默认 false：保持原行为，reconcile 只静默同步游标，避免重复动画。
+     * 设为 true：适用于 wait-confirm 场景下依赖服务端确认事件驱动 UI 的消费者。
+     */
+    consumeOnReconcile?: boolean;
+    /**
      * 重连令牌（可选）
      *
      * 当此值变化时（如从 0 变为 1），游标自动重置到当前 entries 最新位置，
@@ -115,7 +122,7 @@ export interface UseEventStreamCursorReturn {
  * ```
  */
 export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEventStreamCursorReturn {
-    const { entries, reconnectToken } = config;
+    const { entries, consumeOnReconcile = false, reconnectToken } = config;
 
     // 从 Context 自动读取乐观回滚信号（GameProvider 注入）
     const rollback = useEventStreamRollback();
@@ -187,6 +194,15 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
         // 不触发 didReset 或 didOptimisticRollback，不清理 UI 状态。
         if (rollback.reconcileSeq !== lastReconcileSeqRef.current) {
             lastReconcileSeqRef.current = rollback.reconcileSeq;
+            if (consumeOnReconcile) {
+                const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
+                if (newEntries.length > 0) {
+                    lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
+                } else if (curLen > 0) {
+                    lastSeenIdRef.current = entries[curLen - 1].id;
+                }
+                return { entries: newEntries, didReset: false, didOptimisticRollback: false };
+            }
             if (curLen > 0) {
                 lastSeenIdRef.current = entries[curLen - 1].id;
             }
@@ -247,7 +263,7 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
             lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
         }
         return { entries: newEntries, didReset: false, didOptimisticRollback: false };
-    }, [entries, reconnectToken, rollback.seq, rollback.watermark, rollback.reconcileSeq]);
+    }, [entries, consumeOnReconcile, reconnectToken, rollback.seq, rollback.watermark, rollback.reconcileSeq]);
 
     const getCursor = useCallback(() => lastSeenIdRef.current, []);
 

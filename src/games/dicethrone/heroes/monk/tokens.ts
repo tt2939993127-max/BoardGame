@@ -4,12 +4,12 @@
  * 
  * 包含：
  * - consumable 类型：太极、闪避、净化（可主动消耗）
- * - debuff 类型：击倒（被动触发）
+ * - 共享 token：击倒（从 sharedTokens 导入）
  */
 
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
-import { RESOURCE_IDS } from '../../domain/resources';
+import { SHARED_TOKENS } from '../../domain/sharedTokens';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
@@ -90,28 +90,9 @@ export const MONK_TOKENS: TokenDef[] = [
     },
     
     // ============================================
-    // debuff 类型（被动触发）
+    // 共享 token（从 sharedTokens 导入）
     // ============================================
-    
-    /**
-     * 击倒 - 跳过下个回合的进攻投掷阶段
-     */
-    {
-        id: STATUS_IDS.KNOCKDOWN,
-        name: statusText(STATUS_IDS.KNOCKDOWN, 'name'),
-        colorTheme: 'from-red-600 to-orange-500',
-        description: statusText(STATUS_IDS.KNOCKDOWN, 'description') as unknown as string[],
-        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion',
-        stackLimit: 1,
-        category: 'debuff',
-        passiveTrigger: {
-            timing: 'onPhaseEnter',
-            removable: true,
-            removalCost: { resource: RESOURCE_IDS.CP, amount: 2 },
-        },
-        frameId: 'knockdown',
-        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
-    },
+    ...SHARED_TOKENS.filter(t => t.id === STATUS_IDS.KNOCKDOWN),
 ];
 
 /**

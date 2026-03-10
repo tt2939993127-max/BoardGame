@@ -9,7 +9,7 @@
  * 风格遵循 smashup 设计系统：深色物理感，禁止毛玻璃，使用 GameButton
  */
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';

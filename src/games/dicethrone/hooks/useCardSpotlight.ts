@@ -12,6 +12,7 @@ import type { DieFace, CharacterId } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
 import { findHeroCard } from '../heroes';
 import { useEventStreamCursor } from '../../../engine/hooks';
+import { createScopedLogger } from '../../../lib/logger';
 
 /**
  * 鍗＄墝鐗瑰啓閰嶇疆
@@ -66,6 +67,7 @@ interface BonusDieRerolledPayload { newValue: number; newFace: DieFace; playerId
 /** 鍗＄墝鐗瑰啓鐩稿叧鐨勪簨浠剁被鍨?*/
 const CARD_EVENT_TYPES = new Set(['CARD_PLAYED', 'ABILITY_REPLACED']);
 const BONUS_DIE_EVENT_TYPES = new Set(['BONUS_DIE_ROLLED', 'BONUS_DIE_REROLLED']);
+const spotlightLogger = createScopedLogger('DT_SPOTLIGHT');
 
 /**
  * 绠＄悊鍗＄墝鍜岄澶栭瀛愮壒鍐欓槦鍒楋紙EventStream 椹卞姩锛?
@@ -92,7 +94,10 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     const [showBonusDie, setShowBonusDie] = useState(false);
 
     // 閫氱敤娓告爣锛堣嚜鍔ㄥ鐞嗛娆℃寕杞借烦杩?+ Undo 閲嶇疆锛?
-    const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
+    const { consumeNew } = useEventStreamCursor({
+        entries: eventStreamEntries,
+        consumeOnReconcile: true,
+    });
 
     // 鍚屾闃熷垪鍒?ref
     useEffect(() => {
@@ -121,6 +126,15 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             characterId?: string;
         } | null = null;
 
+        spotlightLogger.info('consume', {
+            currentPlayerId: String(currentPlayerId),
+            selfId,
+            isSpectator,
+            entryCount: newEntries.length,
+            eventTypes: newEntries.map((entry) => entry.event.type),
+            hasBonusDiceSettlement,
+        });
+
         for (const entry of newEntries) {
             const { type, payload, timestamp } = entry.event;
             const eventTimestamp = typeof timestamp === 'number' ? timestamp : 0;
@@ -129,9 +143,18 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             if (CARD_EVENT_TYPES.has(type)) {
                 const p = payload as CardEventPayload;
                 const cardPlayerId = normalizePlayerId(p.playerId);
+                const skipSelfCardSpotlight = !isSpectator && cardPlayerId === selfId;
+
+                spotlightLogger.info('card-event', {
+                    eventType: type,
+                    cardId: p.cardId,
+                    cardPlayerId,
+                    selfId,
+                    skipSelfCardSpotlight,
+                });
 
                 // 鑷繁鎵撶殑鍗′笉鏄剧ず鐗瑰啓锛堣鎴樻ā寮忛櫎澶栵級
-                if (!isSpectator && cardPlayerId === selfId) continue;
+                if (skipSelfCardSpotlight) continue;
 
                 // 閫氳繃闈欐€佽〃瑙ｆ瀽 previewRef锛堟浛浠ｅ師 reducer 涓殑 findHeroCard 璋冪敤锛?
                 const heroCard = findHeroCard(p.cardId);
@@ -173,7 +196,29 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 const bonusTid = normalizePlayerId(bonusTargetId ?? bonusPlayerId);
                 const shouldShowBonusDie = isSpectator || selfId === bonusPid || selfId === bonusTid;
 
-                if (!shouldShowBonusDie) continue;
+                spotlightLogger.info('bonus-event', {
+                    eventType: type,
+                    value: bonusValue,
+                    face: bonusFace,
+                    effectKey: bonusEffectKey,
+                    eventPlayerId: String(bonusPlayerId),
+                    eventTargetPlayerId: bonusTargetId === undefined ? undefined : String(bonusTargetId),
+                    bonusPid,
+                    bonusTid,
+                    selfId,
+                    shouldShowBonusDie,
+                });
+
+                if (!shouldShowBonusDie) {
+                    spotlightLogger.info('bonus-skip', {
+                        reason: 'viewer-not-involved',
+                        eventType: type,
+                        bonusPid,
+                        bonusTid,
+                        selfId,
+                    });
+                    continue;
+                }
 
                 // 浠?selectedCharacters 瑙ｆ瀽楠板瓙鎵€灞炶鑹?
                 const resolvedCharacterId = selectedCharacters?.[bonusPid as PlayerId]
@@ -196,6 +241,14 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         break;
                     }
                 }
+
+                spotlightLogger.info('bonus-match', {
+                    eventType: type,
+                    cardCandidateIndex,
+                    queueSize: nextCardSpotlightQueue.length,
+                    isSummaryEvent,
+                    resolvedCharacterId,
+                });
 
                 if (cardCandidateIndex >= 0) {
                     const cardCandidate = nextCardSpotlightQueue[cardCandidateIndex];
@@ -226,10 +279,21 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         };
                     }
                     didUpdateCardSpotlightQueue = true;
+                    spotlightLogger.info('bonus-bound-to-card', {
+                        eventType: type,
+                        cardCandidateIndex,
+                        isSummaryEvent,
+                    });
                 } else {
                     // 澶氶闈㈡澘锛圔onusDieOverlay reroll 妯″紡锛夊凡灞曠ず鍏ㄩ儴楠板瓙锛?
                     // 娌℃湁鍗＄墝鐗瑰啓鍙壙杞芥椂锛屾墠璺宠繃鐙珛鍗曢鐗瑰啓
-                    if (hasBonusDiceSettlement) continue;
+                    if (hasBonusDiceSettlement) {
+                        spotlightLogger.info('bonus-skip', {
+                            reason: 'reroll-settlement-present',
+                            eventType: type,
+                        });
+                        continue;
+                    }
                     // 鐙珛楠板瓙鐗瑰啓锛堜笉缁戝畾鍒板崱鐗岋級
                     pendingStandaloneBonusDie = {
                         value: bonusValue,
@@ -238,6 +302,13 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         effectParams: bonusEffectParams,
                         characterId: resolvedCharacterId,
                     };
+                    spotlightLogger.info('bonus-standalone', {
+                        eventType: type,
+                        value: bonusValue,
+                        face: bonusFace,
+                        effectKey: bonusEffectKey,
+                        resolvedCharacterId,
+                    });
                 }
             }
         }
@@ -245,6 +316,9 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         if (didUpdateCardSpotlightQueue) {
             cardSpotlightQueueRef.current = nextCardSpotlightQueue;
             setCardSpotlightQueue(nextCardSpotlightQueue);
+            spotlightLogger.info('card-queue-commit', {
+                queueSize: nextCardSpotlightQueue.length,
+            });
         }
 
         if (pendingStandaloneBonusDie) {
@@ -254,6 +328,12 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             setBonusDieEffectParams(pendingStandaloneBonusDie.effectParams);
             setBonusDieCharacterId(pendingStandaloneBonusDie.characterId);
             setShowBonusDie(true);
+            spotlightLogger.info('bonus-state-commit', {
+                value: pendingStandaloneBonusDie.value,
+                face: pendingStandaloneBonusDie.face,
+                effectKey: pendingStandaloneBonusDie.effectKey,
+                characterId: pendingStandaloneBonusDie.characterId,
+            });
         }
     }, [eventStreamEntries, consumeNew, currentPlayerId, opponentName, isSpectator, selectedCharacters]);
 
@@ -268,8 +348,14 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
      * 鍏抽棴棰濆楠板瓙鐗瑰啓
      */
     const handleBonusDieClose = useCallback(() => {
+        spotlightLogger.info('bonus-close', {
+            value: bonusDieValue,
+            face: bonusDieFace,
+            effectKey: bonusDieEffectKey,
+            characterId: bonusDieCharacterId,
+        });
         setShowBonusDie(false);
-    }, []);
+    }, [bonusDieCharacterId, bonusDieEffectKey, bonusDieFace, bonusDieValue]);
 
 
     return {

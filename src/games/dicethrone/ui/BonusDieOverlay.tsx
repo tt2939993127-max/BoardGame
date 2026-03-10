@@ -14,6 +14,9 @@ import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
+import { createScopedLogger } from '../../../lib/logger';
+
+const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
 interface BonusDieOverlayProps {
     /** 单颗骰子值 (1-6)，用于普通特写模式 */
@@ -80,7 +83,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
 
     // 调试日志：组件渲染
     React.useEffect(() => {
-        console.log('[BonusDieOverlay] 🎯 组件渲染:', {
+        bonusDieOverlayLogger.info('props', {
             isVisible,
             value,
             face,
@@ -88,22 +91,28 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             characterId,
             isRerollMode,
             bonusDiceCount: bonusDice?.length ?? 0,
-            timestamp: Date.now(),
         });
     }, [isVisible, value, face, effectKey, characterId, isRerollMode, bonusDice]);
 
     if (!isVisible) {
-        console.log('[BonusDieOverlay] ❌ isVisible=false, 不渲染, timestamp:', Date.now());
+        bonusDieOverlayLogger.info('skip', { reason: 'not-visible' });
         return null;
     }
-
-    console.log('[BonusDieOverlay] ✅ 开始渲染 SpotlightContainer, timestamp:', Date.now());
 
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
         // displayOnly 模式：允许自动关闭和点击背景关闭（防御方/观察者视角）
         const isInteractive = !displayOnly;
+
+        bonusDieOverlayLogger.info('render-reroll', {
+            total,
+            bonusDiceCount: bonusDice.length,
+            displayOnly,
+            canReroll: !!canReroll,
+            showTotal,
+            characterId,
+        });
 
         return (
             <SpotlightContainer
@@ -210,11 +219,15 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
 
     // 普通单颗骰子特写模式
     if (value === undefined) {
-        console.log('[BonusDieOverlay] ❌ value=undefined, 不渲染, timestamp:', Date.now());
+        bonusDieOverlayLogger.info('skip', { reason: 'value-undefined', isVisible });
         return null;
     }
-
-    console.log('[BonusDieOverlay] ✅ 渲染普通单骰特写, timestamp:', Date.now());
+    bonusDieOverlayLogger.info('render-single', {
+        value,
+        face,
+        effectKey,
+        characterId,
+    });
 
     return (
         <SpotlightContainer

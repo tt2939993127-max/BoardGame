@@ -983,11 +983,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             // 注意：不能在 onPhaseExit 中用 overrideNextPhase 跳过，因为测试期望两步推进：
             //   1. main1 → offensiveRoll（stun 移除）
             //   2. offensiveRoll → main2（无 pendingAttack，手动推进）
-            const stunStacks = player?.statusEffects[STATUS_IDS.STUN] ?? 0;
+            const stunStacks = player?.statusEffects[STATUS_IDS.DAZE] ?? 0;
             if (stunStacks > 0) {
                 events.push({
                     type: 'STATUS_REMOVED',
-                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.STUN, stacks: stunStacks },
+                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.DAZE, stacks: stunStacks },
                     sourceCommandType: command.type,
                     timestamp,
                 } as StatusRemovedEvent);
