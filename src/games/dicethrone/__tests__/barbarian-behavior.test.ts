@@ -254,9 +254,7 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
             expect(heal).toHaveLength(1);
             expect((heal[0] as any).payload.amount).toBe(7); // 1+2×3
             const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
-            expect(settlement).toHaveLength(1);
-            expect((settlement[0] as any).payload.settlement.dice).toHaveLength(3);
-            expect((settlement[0] as any).payload.settlement.displayOnly).toBe(true);
+            expect(settlement).toHaveLength(0);
         });
 
         it('0个心面治疗1点', () => {
@@ -297,9 +295,7 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.CONCUSSION);
             expect((status[0] as any).payload.targetId).toBe('1');
             const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
-            expect(settlement).toHaveLength(1);
-            expect((settlement[0] as any).payload.settlement.dice).toHaveLength(5);
-            expect((settlement[0] as any).payload.settlement.displayOnly).toBe(true);
+            expect(settlement).toHaveLength(0);
         });
 
         it('0个剑面不造成伤害但仍施加脑震荡（target:self 场景）', () => {

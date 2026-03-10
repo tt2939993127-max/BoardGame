@@ -50,6 +50,7 @@ import { useSpectatorMoves, useEventStreamCursor } from '../../engine';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useAnimationEffects } from './hooks/useAnimationEffects';
 import { useCardSpotlight } from './hooks/useCardSpotlight';
+import { shouldSuppressPendingDisplayOnlyBonusOverlay } from './ui/bonusDiceOverlayVisibility';
 import { useActiveModifiers } from './hooks/useActiveModifiers';
 import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
@@ -250,6 +251,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         opponentName,
         isSpectator,
         selectedCharacters: G.selectedCharacters,
+    });
+
+    const shouldHidePendingDisplayOnlyBonusOverlay = shouldSuppressPendingDisplayOnlyBonusOverlay({
+        settlement: G.pendingBonusDiceSettlement,
+        cardSpotlightQueue,
+        viewerPlayerId: rootPid,
     });
 
     // 监听 DIE_REROLLED 事件触发骰子重投动画
@@ -1406,7 +1413,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     pendingBonusDiceSettlement={G.pendingBonusDiceSettlement
                         ? G.pendingBonusDiceSettlement.attackerId === rootPid
                             ? G.pendingBonusDiceSettlement
-                            : dismissedBonusDiceId === G.pendingBonusDiceSettlement.id
+                            : dismissedBonusDiceId === G.pendingBonusDiceSettlement.id || shouldHidePendingDisplayOnlyBonusOverlay
                                 ? undefined
                                 : { ...G.pendingBonusDiceSettlement, displayOnly: true }
                         : undefined}

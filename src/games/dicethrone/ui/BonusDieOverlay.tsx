@@ -103,8 +103,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
-        // displayOnly 模式：允许自动关闭和点击背景关闭（防御方/观察者视角）
-        const isInteractive = !displayOnly;
+        // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
+        const isInteractive = !displayOnly && canReroll === true;
 
         bonusDieOverlayLogger.info('render-reroll', {
             total,
@@ -197,15 +197,15 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         </motion.div>
                     )}
 
-                    {/* 操作按钮 - 只在可重掷时显示（武僧等特殊情况） */}
-                    {canReroll && (
+                    {/* 操作按钮：只有可重掷时才显示确认入口 */}
+                    {isInteractive && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.8 }}
                         >
                             <GameButton
-                                onClick={onSkipReroll}
+                                onClick={onSkipReroll ?? onClose}
                                 variant="primary"
                                 size="md"
                                 className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"

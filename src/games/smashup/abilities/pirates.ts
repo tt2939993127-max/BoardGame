@@ -406,7 +406,14 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
     );
     const ms = queueInteraction(ctx.matchState, {
         ...interaction,
-        data: { ...interaction.data, continuationContext: { scoringBaseIndex, remaining } },
+        data: {
+            ...interaction.data,
+            continuationContext: {
+                scoringBaseIndex,
+                remaining,
+                continueScoring: true,
+            },
+        },
     });
     return { events: [], matchState: ms };
 }
@@ -1004,7 +1011,11 @@ export function registerPirateInteractionHandlers(): void {
             defId?: string;
             fromBaseIndex?: number;
         };
-        const ctx = iData?.continuationContext as { scoringBaseIndex: number; remaining: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] } | undefined;
+        const ctx = iData?.continuationContext as {
+            scoringBaseIndex: number;
+            remaining: { uid: string; defId: string; fromBaseIndex: number; controller: string }[];
+            continueScoring?: boolean;
+        } | undefined;
         if (!ctx) return undefined;
         const events: SmashUpEvent[] = [];
 
@@ -1044,7 +1055,24 @@ export function registerPirateInteractionHandlers(): void {
                 ],
                 { sourceId: 'pirate_king_move', targetType: 'minion' },
             );
-            return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, remaining: rest } } }), events };
+            return {
+                state: queueInteraction(state, {
+                    ...interaction,
+                    data: {
+                        ...interaction.data,
+                        continuationContext: {
+                            scoringBaseIndex: ctx.scoringBaseIndex,
+                            remaining: rest,
+                            continueScoring: ctx.continueScoring === true,
+                        },
+                    },
+                }),
+                events,
+            };
+        }
+
+        if (ctx.continueScoring !== true) {
+            return { state, events };
         }
 
         const scoringPlayerId = state.core.turnOrder[state.core.currentPlayerIndex] as PlayerId | undefined;
