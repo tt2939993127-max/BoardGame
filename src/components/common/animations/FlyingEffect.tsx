@@ -466,13 +466,22 @@ const FlyingEffectItem: React.FC<{
     const [arrived, setArrived] = React.useState(false);
     const [emitting, setEmitting] = React.useState(true);
     const pendingRef = React.useRef(0);
+    // 防止 onImpact 被多次调用（handleArrive + 兜底 timer）
+    const impactFiredRef = React.useRef(false);
+    // 防止 handleArrive 被多次调用（零距离 timer + onAnimationComplete）
+    const arrivedRef = React.useRef(false);
 
     const handleArrive = React.useCallback(() => {
+        if (arrivedRef.current) return;
+        arrivedRef.current = true;
         setArrived(true);
         setEmitting(false);
 
         // 冲击帧：触发音效/震屏等绑定在动画到达点的回调
-        effect.onImpact?.();
+        if (!impactFiredRef.current) {
+            impactFiredRef.current = true;
+            effect.onImpact?.();
+        }
 
         const hasDamageOrHeal = effect.type === 'damage' || effect.type === 'heal';
         pendingRef.current = hasDamageOrHeal ? 1 : 0;
@@ -499,9 +508,16 @@ const FlyingEffectItem: React.FC<{
     // 兜底清理
     React.useEffect(() => {
         const maxMs = (flightDuration + 3) * 1000;
-        const timer = window.setTimeout(() => onComplete(effect.id), maxMs);
+        const timer = window.setTimeout(() => {
+            // 兜底也触发 onImpact（防止 onAnimationComplete 未触发时音效/震屏丢失）
+            if (!impactFiredRef.current) {
+                impactFiredRef.current = true;
+                effect.onImpact?.();
+            }
+            onComplete(effect.id);
+        }, maxMs);
         return () => window.clearTimeout(timer);
-    }, [effect.id, flightDuration, onComplete]);
+    }, [effect.id, effect.onImpact, flightDuration, onComplete]);
 
     return (
         <>

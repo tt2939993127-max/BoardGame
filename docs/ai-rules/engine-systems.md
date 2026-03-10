@@ -623,12 +623,14 @@ interface SimpleChoiceConfig {
     timeout?: number;
     multi?: PromptMultiConfig;        // { min?: number; max?: number }
     targetType?: 'base' | 'minion' | 'hand' | 'discard_minion' | 'generic';
-    autoResolveIfSingle?: boolean;    // 默认 true
+    autoResolveIfSingle?: boolean;    // 显式传 true 时，单候选由引擎自动解决
     autoCancelOption?: boolean;       // 自动添加取消选项
 }
 ```
 
 ### 强制规则
+
+- `autoResolveIfSingle` 只在**显式传 `true`** 时生效；不传值时会保留交互，不会自动代替玩家点击。
 
 1. **"任意数量"/"any number" → 必须传 `multi: { min: 0, max: N }`**，N 为候选项总数。不传 `multi` 会导致单选模式。
 2. **"恰好 N 个" → `multi: { min: N, max: N }`**。

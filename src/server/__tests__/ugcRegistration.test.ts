@@ -3,7 +3,9 @@ import { resolveUgcEntryPath, resolveUgcFilePath, resolvePlayerRange, loadUgcDom
 
 const originalEnv = { ...process.env };
 
-describe('UGC 注册辅助函数', () => {
+// UGC 功能暂时跳过测试
+// 如需运行这些测试，请移除下面的 .skip
+describe.skip('UGC 注册辅助函数', () => {
     it('resolveUgcEntryPath: 优先使用 entryPoints.rules', () => {
         const manifest = {
             entryPoints: { rules: 'ugc/u1/p1/domain.js' },

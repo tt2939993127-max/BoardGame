@@ -4,12 +4,13 @@
  * 
  * 包含：
  * - consumable 类型：火焰精通（可主动消耗，增加伤害）
- * - debuff 类型：击倒、燃烧（被动触发）
+ * - debuff 类型：燃烧（被动触发）
+ * - 共享 token：击倒、晕眩（从 sharedTokens 导入）
  */
 
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
-import { RESOURCE_IDS } from '../../domain/resources';
+import { SHARED_TOKENS } from '../../domain/sharedTokens';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
@@ -48,27 +49,7 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
     // ============================================
 
     /**
-     * 击倒 - 跳过下个回合的进攻投掷阶段
-     */
-    {
-        id: STATUS_IDS.KNOCKDOWN,
-        name: statusText(STATUS_IDS.KNOCKDOWN, 'name'),
-        colorTheme: 'from-red-600 to-orange-500',
-        description: statusText(STATUS_IDS.KNOCKDOWN, 'description') as unknown as string[],
-        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion',
-        stackLimit: 1,
-        category: 'debuff',
-        passiveTrigger: {
-            timing: 'onPhaseEnter',
-            removable: true,
-            removalCost: { resource: RESOURCE_IDS.CP, amount: 2 },
-        },
-        frameId: 'knockdown',
-        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
-    },
-
-    /**
-     * 燃烧 - 回合开始时受到伤害
+     * 燃烧 - 回合开始时受到固定 2 点伤害（可移除的持续效果）
      */
     {
         id: STATUS_IDS.BURN,
@@ -80,32 +61,21 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
         category: 'debuff',
         passiveTrigger: {
             timing: 'onTurnStart',
-            removable: true,
-            // value 仅为占位，实际伤害按 stacks 数量计算（见 flowHooks.ts）
-            actions: [{ type: 'damage', target: 'self', value: 1 }],
+            removable: true, // 可移除的持续效果
+            // value 仅为占位，实际伤害固定为 2 点（见 flowHooks.ts）
+            actions: [{ type: 'damage', target: 'self', value: 2 }],
         },
         frameId: 'pyro-status-4',
         atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
     },
 
-    /**
-     * 眩晕 - 无法行动
-     */
-    {
-        id: STATUS_IDS.STUN,
-        name: statusText(STATUS_IDS.STUN, 'name'),
-        colorTheme: 'from-yellow-500 to-amber-600',
-        description: statusText(STATUS_IDS.STUN, 'description') as unknown as string[],
-        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_lightning',
-        stackLimit: 1,
-        category: 'debuff',
-        passiveTrigger: {
-            timing: 'onPhaseEnter',
-            removable: true,
-        },
-        frameId: 'pyro-status-1',
-        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
-    },
+    // ============================================
+    // 共享 token（从 sharedTokens 导入）
+    // ============================================
+    ...SHARED_TOKENS.filter(t => 
+        t.id === STATUS_IDS.KNOCKDOWN || 
+        t.id === STATUS_IDS.DAZE
+    ),
 ];
 
 /**
@@ -121,5 +91,5 @@ export const PYROMANCER_INITIAL_TOKENS: TokenState = {
     [TOKEN_IDS.FIRE_MASTERY]: 0,
     [STATUS_IDS.KNOCKDOWN]: 0,
     [STATUS_IDS.BURN]: 0,
-    [STATUS_IDS.STUN]: 0,
+    [STATUS_IDS.DAZE]: 0, // 使用 DAZE 替代 STUN
 };

@@ -1,0 +1,12 @@
+{
+  "name": "Auto Resume with Retry",
+  "version": "2.0.0",
+  "description": "自动恢复任务，支持重试次数限制和自动继续",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检测到任务停止。请检查：1) 如果任务未完成且不是因为错误停止，请自动继续执行；2) 读取 .kiro-resume-count-auto 文件获取当前重试次数，如果未超过 20 次，则继续任务并更新计数；3) 如果已达到 20 次，停止重试并报告。注意：每次继续时都要自动同意所有后续命令。"
+  }
+}

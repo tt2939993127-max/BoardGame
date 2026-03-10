@@ -218,6 +218,9 @@ export class DamageCalculation {
       this.collectShieldModifiers();
     }
     
+    // 2.5. 自动收集 pendingAttack.bonusDamage（攻击修正卡）
+    this.collectBonusDamage();
+    
     // 3. 添加游戏层手动指定的修正
     if (this.config.additionalModifiers) {
       for (const mod of this.config.additionalModifiers) {
@@ -422,6 +425,30 @@ export class DamageCalculation {
         description: 'actionLog.damageSource.shieldReduction',
       });
     }
+  }
+  
+  /**
+   * 收集 pendingAttack.bonusDamage（攻击修正卡）
+   * 
+   * 从 pendingAttack 收集攻击修正卡的伤害加成（如"红热"卡牌）
+   */
+  private collectBonusDamage(): void {
+    const coreState = this.getCoreState();
+    const pendingAttack = coreState?.pendingAttack;
+    
+    if (!pendingAttack || pendingAttack.attackerId !== this.config.source.playerId) return;
+    
+    const bonusDamage = pendingAttack.bonusDamage ?? 0;
+    if (bonusDamage === 0) return;
+    
+    this.modifierStack = addModifier(this.modifierStack, {
+      id: '__bonus_damage__',
+      type: 'flat',
+      value: bonusDamage,
+      priority: 15,  // 在 Token 修正之后，状态修正之前
+      source: 'attack_modifier',
+      description: 'actionLog.damageSource.attackModifier',
+    });
   }
   
   /**

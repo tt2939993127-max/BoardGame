@@ -45,6 +45,7 @@ export const INNSMOUTH_POD_ACTIONS: ActionCardDef[] = [
         nameEn: 'Return to the Sea',
         faction: 'innsmouth_pod',
         abilityTags: ['special'],
+        specialTiming: 'afterScoring',
         specialNeedsBase: true,
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS2, index: 29 },

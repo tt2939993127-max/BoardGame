@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CardPreview, registerCardPreviewRenderer } from '../../../components/common/media/CardPreview';
 import type { CardPreviewRef } from '../../../core';
@@ -16,9 +16,17 @@ interface SmashUpRendererArgs {
     locale?: string;
     className?: string;
     style?: CSSProperties;
+    onClick?: () => void;
+    onMouseEnter?: () => void;
+    onMouseLeave?: () => void;
 }
 
-export function SmashUpCardRenderer({ previewRef, locale, className, style }: SmashUpRendererArgs): ReactNode {
+export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
+  previewRef,
+  locale,
+  className,
+  style,
+}) => {
     // Hooks 必须在所有 early return 之前调用
     const { t, i18n } = useTranslation('game-smashup');
     const { overlayEnabled, selectedFactions } = useSmashUpOverlay();
@@ -41,14 +49,16 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
         if (baseDef?.previewRef?.type === 'atlas') {
             return { originalAtlasId: baseDef.previewRef.atlasId, originalIndex: baseDef.previewRef.index };
         }
+        console.log('[SmashUpCardRenderer] No previewRef found:', { defId, cardDef: !!cardDef, baseDef: !!baseDef });
         return { originalAtlasId: '', originalIndex: 0 };
     }, [defId]);
 
     let finalAtlasId = originalAtlasId;
     let finalIndex = originalIndex;
-
+    
     // 基础牌默认使用高清英文图集（由于缺少低清中文资源），POD 版本也全都是高清英文图集
     const isBase = defId ? !!getBaseDef(defId) : false;
+    
     // 判断是否为 POD 版本：
     // 1. 卡牌 ID 以 _pod 结尾（POD 派系的卡牌）
     // 2. 基地卡：只有当玩家选择了该基地对应派系的 POD 版本时，才使用 POD 图集
@@ -108,11 +118,13 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
     
     // Early returns after all hooks
     if (previewRef.type !== 'renderer' || !defId) {
+        console.log('[SmashUpCardRenderer] Early return:', { previewRefType: previewRef.type, defId });
         return null;
     }
 
     // 如果未配置任何图集，只渲染外框和名字
     if (!finalAtlasId) {
+        console.log('[SmashUpCardRenderer] No atlas, fallback render:', { defId, name });
         return (
             <div className={`relative bg-[#f3f0e8] flex flex-col items-center justify-center p-2 border-2 border-slate-300 rounded overflow-hidden ${className || ''}`} style={style}>
                 <div className="text-[1vw] font-black uppercase text-slate-800 mb-1">{name}</div>
@@ -147,6 +159,15 @@ export function SmashUpCardRenderer({ previewRef, locale, className, style }: Sm
                 previewRef={{ type: 'atlas', atlasId: finalAtlasId, index: finalIndex }}
                 locale={imageLocale}
                 className="w-full h-full"
+                onError={(e) => {
+                    console.error('[SmashUpCardRenderer] CardPreview image load failed:', {
+                        defId,
+                        atlasId: finalAtlasId,
+                        index: finalIndex,
+                        locale: imageLocale,
+                        error: e,
+                    });
+                }}
             />
             {/* 覆盖层：仅在需要时显示，且未禁用 hover 时才响应 hover */}
             {shouldShowOverlay && (

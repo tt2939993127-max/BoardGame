@@ -28,6 +28,7 @@ import { RESOURCE_IDS } from './resources';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { buildDrawEvents } from './deckEvents';
 import { applyEvents } from './utils';
+import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 type MatchStateView = {
     core: DiceThroneCore;
@@ -215,7 +216,7 @@ export function executeCardCommand(
                 // 先应用已产生的事件，然后检查响应队列（排除出牌玩家，因为可以主动出牌）
                 const stateAfterCard = applyEvents(state, events, reduce);
                 const responderQueue = getResponderQueue(stateAfterCard, 'afterCardPlayed', opponentId, card.id, actingPlayerId, phase);
-                if (responderQueue.length > 0) {
+                if (responderQueue.length > 0 && getAutoResponseEnabled()) {
                     const windowId = `afterCard-${card.id}-${timestamp}`;
                     const responseWindowEvent: ResponseWindowOpenedEvent = {
                         type: 'RESPONSE_WINDOW_OPENED',

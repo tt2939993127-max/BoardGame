@@ -87,7 +87,7 @@ export const LocalMatchRoom = () => {
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
         playDeniedSound();
-        toast.warning(resolveCommandError(i18n, error, gameId));
+        toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `local.rejected.${error}` });
     }, [toast, i18n, gameId]);
 
     if (!gameConfig) {

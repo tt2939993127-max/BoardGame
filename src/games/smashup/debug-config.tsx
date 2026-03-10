@@ -104,6 +104,34 @@ export const SmashUpDebugConfig: React.FC<SmashUpDebugConfigProps> = ({ G, dispa
                 </div>
             </div>
 
+            {/* 强制结算基地 */}
+            <div className="bg-orange-50 p-3 rounded-lg border border-orange-200" data-testid="su-debug-force-score">
+                <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-3">强制结算基地</h4>
+                <div className="space-y-2">
+                    <div className="text-[9px] text-orange-700 bg-orange-100 p-2 rounded mb-2">
+                        💡 将所有有随从的基地临界点设为 0，触发立即结算
+                    </div>
+                    <button
+                        onClick={() => {
+                            const basesWithMinions = core?.bases?.filter(b => b.minions.length > 0) ?? [];
+                            console.log('[强制结算基地] 点击按钮:', {
+                                basesWithMinions: basesWithMinions.map((b, i) => ({
+                                    index: i,
+                                    defId: b.defId,
+                                    minionCount: b.minions.length,
+                                })),
+                            });
+                            dispatch('SYS_CHEAT_FORCE_SCORE_BASES_WITH_MINIONS');
+                        }}
+                        disabled={!core?.bases || core.bases.every(b => b.minions.length === 0)}
+                        className="w-full px-3 py-1.5 bg-orange-500 text-white rounded text-xs font-bold hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        data-testid="su-debug-force-score-apply"
+                    >
+                        ⚡ 强制结算有随从的基地
+                    </button>
+                </div>
+            </div>
+
             {/* 发牌调试 */}
             <div className="bg-green-50 p-3 rounded-lg border border-green-200" data-testid="su-debug-deal">
                 <h4 className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-3">发牌调试 (牌库索引)</h4>

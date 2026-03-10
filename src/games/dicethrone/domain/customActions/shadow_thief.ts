@@ -303,9 +303,9 @@ function handleCornucopiaDiscard({ ctx, state, timestamp, random }: CustomAction
 /** 终极：Shadow Shank Damage (Deal CP + 5) 【已迁移到新伤害计算管线】 */
 function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0;
-    const damageAmt = currentCp + bonusCp + 5;
+    // bonusCp 参数已废弃：gainCp(3) 在 preDefense 阶段已执行，currentCp 已包含增益
+    // 伤害计算：CP + 5
+    const damageAmt = currentCp + 5;
 
     const damageCalc = createDamageCalculation({
         source: { playerId: attackerId, abilityId: sourceAbilityId },
@@ -317,6 +317,7 @@ function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state,
 
     return damageCalc.toEvents();
 }
+
 
 /** 防御：暗影守护 I 结算
  * 防御上下文约定（来自 attack.ts）：
@@ -790,7 +791,7 @@ export function registerShadowThiefCustomActions(): void {
 
 
     registerCustomActionHandler('shadow_thief-shadow-coins', handleShadowCoins, { categories: ['resource'] });
-    registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });
+    registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other', 'card'] });
     registerCustomActionHandler('shadow_thief-shadow-manipulation', handleShadowManipulation, {
         categories: ['dice'],
         requiresInteraction: true,

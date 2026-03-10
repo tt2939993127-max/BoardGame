@@ -238,6 +238,8 @@ export interface ResponseWindowState {
         pendingInteractionId?: string;
         /** 本轮是否有人执行了响应动作（用于 loopUntilAllPass 循环判定） */
         actionTakenThisRound?: boolean;
+        /** 连续所有人都 pass 的轮数（用于 loopUntilAllPass 循环判定） */
+        consecutivePassRounds?: number;
     };
 }
 
@@ -425,7 +427,7 @@ export interface DomainCore<
     gameId: string;
 
     /** 初始化游戏状态（仅返回 core，sys 由系统层 setup） */
-    setup(playerIds: PlayerId[], random: RandomFn): TState;
+    setup(playerIds: PlayerId[], random: RandomFn, setupData?: unknown): TState;
 
     /** 验证命令合法性（允许读取 sys 状态，例如 sys.phase） */
     validate(state: MatchState<TState>, command: TCommand): ValidationResult;

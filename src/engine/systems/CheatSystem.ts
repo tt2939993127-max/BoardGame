@@ -375,10 +375,22 @@ export function createCheatSystem<TCore>(
             // 处理直接设置状态命令
             if (command.type === CHEAT_COMMANDS.SET_STATE) {
                 const payload = command.payload as SetStatePayload<TCore>;
-                return {
-                    halt: true,
-                    state: { ...state, core: payload.state },
-                };
+                // 检查 payload.state 是否包含 sys 字段（完整 state）还是只有 core
+                const hasSystemFields = payload.state && typeof payload.state === 'object' && 'sys' in payload.state;
+                
+                if (hasSystemFields) {
+                    // 完整 state 对象，直接替换整个 state
+                    return {
+                        halt: true,
+                        state: payload.state as any,
+                    };
+                } else {
+                    // 只有 core，保留现有 sys 字段
+                    return {
+                        halt: true,
+                        state: { ...state, core: payload.state },
+                    };
+                }
             }
 
             // 处理合并部分字段到状态命令（教程注入 pendingDamage / 手牌等场景）

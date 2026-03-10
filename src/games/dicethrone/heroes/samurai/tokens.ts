@@ -1,6 +1,5 @@
 /**
  * Samurai (武士) Token 定义
- * TODO: 等待清晰图片后补充完整的 Token 定义
  */
 
 import type { TokenDef } from '../../domain/tokenTypes';
@@ -12,6 +11,9 @@ export const SAMURAI_TOKEN_IDS = {
 } as const;
 
 export const SAMURAI_TOKENS: TokenDef[] = [
+    // ============================================
+    // 共享 token（从 sharedTokens 导入）
+    // ============================================
     // 通用状态：击倒
     {
         id: STATUS_IDS.KNOCKDOWN,

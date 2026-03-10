@@ -15,6 +15,8 @@ import type { EngineSystem, HookResult } from './types';
 import {
     INTERACTION_COMMANDS,
     INTERACTION_EVENTS,
+    getFreshSimpleChoiceOptions,
+    getSimpleChoiceResponseValidationMode,
     resolveInteraction,
     stripNonSerializableFromData,
     type SimpleChoiceData,
@@ -71,6 +73,39 @@ export function createSimpleChoiceSystem<TCore>(
                 }
             }
         },
+
+        afterEvents: ({ state, events }): HookResult<TCore> | void => {
+            const current = state.sys.interaction.current;
+            if (!current || current.kind !== 'simple-choice') return;
+
+            const data = current.data as SimpleChoiceData;
+            if (data.autoResolveIfSingle !== true || data.multi) return;
+
+            const availableOptions = getFreshSimpleChoiceOptions(state, current as any);
+            if (availableOptions.length !== 1) return;
+
+            const onlyOption = availableOptions[0];
+            if (!onlyOption || onlyOption.disabled) return;
+
+            const newState = resolveInteraction(state);
+            const timestamp = events[events.length - 1]?.timestamp ?? 0;
+
+            const event: GameEvent = {
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: current.id,
+                    playerId: current.playerId,
+                    optionId: onlyOption.id,
+                    optionIds: undefined,
+                    value: onlyOption.value,
+                    sourceId: data.sourceId,
+                    interactionData: stripNonSerializableFromData({ ...current.data, options: availableOptions }),
+                },
+                timestamp,
+            };
+
+            return { halt: false, state: newState, events: [event] };
+        },
     };
 }
 
@@ -99,6 +134,10 @@ function handleSimpleChoiceRespond<TCore>(
 
     const data = current.data as SimpleChoiceData;
     const isMulti = !!data.multi;
+    const responseValidationMode = getSimpleChoiceResponseValidationMode(data);
+    const availableOptions = responseValidationMode === 'live'
+        ? getFreshSimpleChoiceOptions(state, current as any)
+        : data.options;
     let selectedOptions: PromptOption[] = [];
     let selectedOptionIds: string[] = [];
 
@@ -117,17 +156,8 @@ function handleSimpleChoiceRespond<TCore>(
         const uniqueIds = Array.from(new Set(optionIds)).filter(
             (id) => typeof id === 'string',
         );
-        const optionsById = new Map(data.options.map((o) => [o.id, o]));
-        
-        console.log('[SimpleChoiceSystem] Multi-select validation', {
-            uniqueIds,
-            optionsById: Array.from(optionsById.keys()),
-            invalidIds: uniqueIds.filter((id) => !optionsById.has(id)),
-        });
-        
-        const invalidIds = uniqueIds.filter((id) => !optionsById.has(id));
-        if (invalidIds.length > 0) {
-            console.error('[SimpleChoiceSystem] Invalid option IDs:', invalidIds);
+        const optionsById = new Map(availableOptions.map((o) => [o.id, o]));
+        if (uniqueIds.find((id) => !optionsById.has(id))) {
             return { halt: true, error: '无效的选择' };
         }
         if (uniqueIds.find((id) => optionsById.get(id)?.disabled)) {
@@ -147,7 +177,7 @@ function handleSimpleChoiceRespond<TCore>(
         if (typeof payload.optionId !== 'string') {
             return { halt: true, error: '无效的选择' };
         }
-        const selectedOption = data.options.find(
+        const selectedOption = availableOptions.find(
             (o) => o.id === payload.optionId,
         );
         if (!selectedOption) {
@@ -161,12 +191,16 @@ function handleSimpleChoiceRespond<TCore>(
     }
 
     const newState = resolveInteraction(state);
+    
 
     const resolvedValue = payload.mergedValue !== undefined
         ? payload.mergedValue
         : isMulti
             ? selectedOptions.map((o) => o.value)
             : selectedOptions[0]?.value;
+    const interactionDataForEvent = responseValidationMode === 'live'
+        ? { ...current.data, options: availableOptions }
+        : current.data;
 
     const event: GameEvent = {
         type: INTERACTION_EVENTS.RESOLVED,
@@ -178,7 +212,7 @@ function handleSimpleChoiceRespond<TCore>(
             optionIds: isMulti ? selectedOptionIds : undefined,
             value: resolvedValue,
             sourceId: data.sourceId,
-            interactionData: stripNonSerializableFromData(current.data),
+            interactionData: stripNonSerializableFromData(interactionDataForEvent),
         },
         timestamp,
     };

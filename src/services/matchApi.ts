@@ -61,6 +61,13 @@ async function apiPost<T = unknown>(url: string, body: unknown, extraHeaders?: R
     });
     if (!response.ok) {
         const text = await response.text().catch(() => '');
+        // 401 错误：token 失效，清除本地存储并提示用户重新登录
+        if (response.status === 401) {
+            console.error('[matchApi] 401 Unauthorized - Token 失效');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            // 不自动跳转，让 AuthContext 处理
+        }
         throw new Error(`${response.status}: ${text || response.statusText}`);
     }
     return response.json() as Promise<T>;
@@ -70,6 +77,13 @@ async function apiGet<T = unknown>(url: string): Promise<T> {
     const response = await fetch(url);
     if (!response.ok) {
         const text = await response.text().catch(() => '');
+        // 401 错误：token 失效，清除本地存储并提示用户重新登录
+        if (response.status === 401) {
+            console.error('[matchApi] 401 Unauthorized - Token 失效');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            // 不自动跳转，让 AuthContext 处理
+        }
         throw new Error(`${response.status}: ${text || response.statusText}`);
     }
     return response.json() as Promise<T>;

@@ -297,7 +297,12 @@ describe('base_house_of_nine_lives: 消灭时创建拯救交互', () => {
     it('交互处理：选择移动→产生 MINION_MOVED', () => {
         const handler = getInteractionHandler('base_nine_lives_intercept');
         expect(handler).toBeDefined();
-        const core = makeState({ bases: [makeBase('base_house_of_nine_lives'), makeBase('other')] });
+        const core = makeState({
+            bases: [
+                makeBase('base_house_of_nine_lives'),
+                makeBase('other', { minions: [makeMinion('m1', '0', 3)] }),
+            ],
+        });
         const ms: MatchState<SmashUpCore> = {
             core,
             sys: { interaction: { queue: [] } } as any,
@@ -309,6 +314,26 @@ describe('base_house_of_nine_lives: 消灭时创建拯救交互', () => {
         expect(result!.events).toHaveLength(1);
         expect(result!.events[0].type).toBe(SU_EVENTS.MINION_MOVED);
         expect((result!.events[0] as MinionMovedEvent).payload.toBaseIndex).toBe(0);
+    });
+
+    it('交互处理：目标随从已失效时不应再移动旧目标', () => {
+        const handler = getInteractionHandler('base_nine_lives_intercept');
+        expect(handler).toBeDefined();
+        const core = makeState({
+            bases: [
+                makeBase('base_house_of_nine_lives'),
+                makeBase('other', { minions: [makeMinion('m2', '0', 3)] }),
+            ],
+        });
+        const ms: MatchState<SmashUpCore> = {
+            core,
+            sys: { interaction: { queue: [] } } as any,
+        };
+        const result = handler!(ms, '0', {
+            move: true, minionUid: 'stale-minion', minionDefId: 'd1', fromBaseIndex: 1, houseBaseIndex: 0,
+        }, undefined, dummyRandom, 1000);
+        expect(result).toBeDefined();
+        expect(result!.events).toHaveLength(0);
     });
 
     it('交互处理：选择不移动→恢复 MINION_DESTROYED', () => {

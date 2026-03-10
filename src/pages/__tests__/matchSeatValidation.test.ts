@@ -37,11 +37,12 @@ describe('validateStoredMatchSeat', () => {
         expect(result.reason).toBe('seat_empty');
     });
 
-    it('昵称不一致时清理', () => {
+    it('昵称不一致时不清理（凭据才是认证手段）', () => {
         const stored = buildStored({ playerName: 'Alice' });
         const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 0, name: 'Carol' }]), '0');
-        expect(result.shouldClear).toBe(true);
-        expect(result.reason).toBe('name_mismatch');
+        // 业务逻辑变更：用户名变更后 localStorage 中的 playerName 可能与 match metadata 不一致，
+        // 这是正常情况，不应清除凭据。凭据（随机 nanoid）才是真正的认证手段。
+        expect(result.shouldClear).toBe(false);
     });
 
     it('昵称一致时不清理', () => {

@@ -150,7 +150,7 @@ export const MatchRoom = () => {
     const handleGameError = useCallback((error: string) => {
         if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
         playDeniedSound();
-        toast.warning(resolveCommandError(i18n, error, gameId));
+        toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.error.${error}` });
     }, [toast, i18n, gameId]);
 
     // 本地/教学模式：命令被引擎拒绝时的统一反馈
@@ -159,7 +159,7 @@ export const MatchRoom = () => {
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
         playDeniedSound();
-        toast.warning(resolveCommandError(i18n, error, gameId));
+        toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.rejected.${error}` });
     }, [toast, i18n, gameId]);
 
     // 包装 Board 组件（注入 CriticalImageGate）

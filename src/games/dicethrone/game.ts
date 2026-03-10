@@ -746,6 +746,66 @@ function formatDiceThroneActionEntry({
             });
         }
 
+        if (event.type === 'DIE_MODIFIED') {
+            const modEvent = event as DieModifiedEvent;
+            const { dieId, oldValue, newValue, playerId, sourceCardId } = modEvent.payload;
+            const card = sourceCardId ? findDiceThroneCard(core, sourceCardId, playerId) : undefined;
+            const cardName = card?.name ?? sourceCardId;
+            const isCardI18n = cardName?.includes('.');
+            
+            const segments: ActionLogSegment[] = [
+                i18nSeg('actionLog.dieModified', { 
+                    dieId: dieId + 1, 
+                    oldValue, 
+                    newValue 
+                }),
+            ];
+            if (sourceCardId && cardName) {
+                segments.push(i18nSeg('actionLog.dieModifiedSource', { 
+                    source: cardName 
+                }, isCardI18n ? ['source'] : undefined));
+            }
+            
+            entries.push({
+                id: `DIE_MODIFIED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'DIE_MODIFIED',
+                segments,
+            });
+            return;
+        }
+
+        if (event.type === 'DIE_REROLLED') {
+            const rerollEvent = event as DieRerolledEvent;
+            const { dieId, oldValue, newValue, playerId, sourceCardId } = rerollEvent.payload;
+            const card = sourceCardId ? findDiceThroneCard(core, sourceCardId, playerId) : undefined;
+            const cardName = card?.name ?? sourceCardId;
+            const isCardI18n = cardName?.includes('.');
+            
+            const segments: ActionLogSegment[] = [
+                i18nSeg('actionLog.dieRerolled', { 
+                    dieId: dieId + 1, 
+                    oldValue, 
+                    newValue 
+                }),
+            ];
+            if (sourceCardId && cardName) {
+                segments.push(i18nSeg('actionLog.dieRerolledSource', { 
+                    source: cardName 
+                }, isCardI18n ? ['source'] : undefined));
+            }
+            
+            entries.push({
+                id: `DIE_REROLLED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'DIE_REROLLED',
+                segments,
+            });
+            return;
+        }
+
         if (event.type === 'CARD_DRAWN') {
             // 抽牌事件在 forEach 外合并处理，跳过单条
         }

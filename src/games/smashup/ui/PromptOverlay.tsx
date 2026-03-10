@@ -9,7 +9,7 @@
  * 风格遵循 smashup 设计系统：深色物理感，禁止毛玻璃，使用 GameButton
  */
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
@@ -141,48 +141,9 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const { t } = useTranslation('game-smashup');
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
 
-    // 监听 interaction 变化，输出详细日志（仅首次）
-    const hasLoggedInteraction = useRef(false);
-    useEffect(() => {
-        if (!hasLoggedInteraction.current && interaction) {
-            hasLoggedInteraction.current = true;
-            console.log('[PromptOverlay] Interaction changed:', {
-                hasInteraction: !!interaction,
-                interactionId: interaction?.id,
-                promptId: prompt?.id,
-                promptTitle: prompt?.title,
-                optionsCount: prompt?.options?.length,
-                timestamp: Date.now(),
-            });
-        }
-    }, [interaction, prompt]);
     const { ref: revealScrollRef } = useHorizontalDragScroll();
     const { ref: cardScrollRef } = useHorizontalDragScroll();
     const toast = useToast();
-
-    // 🔍 调试日志：追踪 props 变化（仅首次）
-    const hasLoggedProps = useRef(false);
-    useEffect(() => {
-        if (!hasLoggedProps.current && interaction) {
-            hasLoggedProps.current = true;
-            console.log('[PromptOverlay] Props changed:', {
-                hasInteraction: !!interaction,
-                interactionId: interaction?.id,
-                interactionKind: interaction?.kind,
-                interactionData: interaction?.data,
-                hasPrompt: !!prompt,
-                promptId: prompt?.id,
-                promptPlayerId: prompt?.playerId,
-                myPlayerId: playerID,
-                isMyPrompt: !!prompt && prompt.playerId === playerID,
-                promptTitle: prompt?.title,
-                hasDisplayCards: !!displayCards,
-                optionsCount: prompt?.options?.length,
-                options: prompt?.options,
-                rawInteraction: interaction, // 完整的原始对象
-            });
-        }
-    }, [interaction, prompt, displayCards, playerID]);
 
     // 所有 hooks 必须在条件返回之前调用（React hooks 规则）
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
@@ -361,6 +322,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                 return (
                                     <motion.div
                                         key={card.uid}
+                                        data-card-uid={card.uid}
+                                        data-card-def-id={card.defId}
                                         initial={{ y: 30, opacity: 0 }}
                                         animate={{ y: 0, opacity: 1 }}
                                         transition={{ delay: idx * 0.04, type: 'spring', stiffness: 400, damping: 25 }}
@@ -385,10 +348,10 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                             </div>
                                         </div>
                                         <button
-                                            className={`absolute -top-[0.5vw] -right-[0.5vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border-2 border-white/30 z-40 cursor-zoom-in`}
+                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                             onClick={(e) => { e.stopPropagation(); setMagnifyTarget({ defId: card.defId, type: def?.type ?? 'action' }); }}
                                         >
-                                            <svg className={`w-[1.1vw] h-[1.1vw] fill-current`} viewBox="0 0 20 20">
+                                            <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M8 4a4 4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                             </svg>
                                         </button>
@@ -733,14 +696,14 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         {/* 放大镜按钮 - 右上角突出显示，多选模式下勾选在左上角 */}
                                         {defId && (
                                             <button
-                                                className={`absolute -top-[0.5vw] -right-[0.5vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border-2 border-white/30 z-40 cursor-zoom-in`}
+                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     const cardType = getBaseDef(defId) ? 'base' as const : (def && 'type' in def ? def.type : 'action' as const);
                                                     setMagnifyTarget({ defId, type: cardType });
                                                 }}
                                             >
-                                                <svg className={`w-[1.1vw] h-[1.1vw] fill-current`} viewBox="0 0 20 20">
+                                                <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
                                                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                                 </svg>
                                             </button>

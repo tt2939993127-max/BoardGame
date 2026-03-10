@@ -1,29 +1,77 @@
-/**
- * 动态端口分配器 - 支持并行测试
- * 
- * 为每个 worker 分配独立的端口范围，避免冲突
- * 测试结束后自动清理该 worker 的端口
- */
+import { execSync } from 'node:child_process';
+import { createServer } from 'node:net';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { E2E_MULTI_WORKER_BASE_PORTS } from './e2e-port-config.js';
 
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-
-// 基础端口配置
-const BASE_PORTS = {
-  frontend: 3000,
-  gameServer: 18000,
-  apiServer: 18001,
+export const BASE_PORTS = {
+  ...E2E_MULTI_WORKER_BASE_PORTS,
 };
 
-// 每个 worker 的端口偏移量（支持最多 10 个并行 worker）
 const PORT_OFFSET = 100;
+const PORT_SCAN_RANGE = 20;
 
-/**
- * 为指定 worker 分配端口
- * @param {number} workerId - Worker ID (0-based)
- * @returns {{ frontend: number, gameServer: number, apiServer: number }}
- */
+function getWindowsNetstatLines() {
+  try {
+    const result = execSync('netstat -ano -p tcp', { encoding: 'utf-8' });
+    return result.split(/\r?\n/).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseWindowsPortPids(port) {
+  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i');
+  const pids = new Set();
+
+  for (const line of getWindowsNetstatLines()) {
+    const match = line.match(portPattern);
+    if (match?.[1] && match[1] !== '0') {
+      pids.add(match[1]);
+    }
+  }
+
+  return Array.from(pids);
+}
+
+function normalizePortsInput(ports) {
+  if (Array.isArray(ports)) {
+    return ports;
+  }
+
+  if (ports && typeof ports === 'object') {
+    return Object.values(ports);
+  }
+
+  return [];
+}
+
+async function canBindPort(port, host = '0.0.0.0') {
+  return await new Promise(resolve => {
+    const server = createServer();
+    let settled = false;
+
+    const finalize = result => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      server.removeAllListeners();
+
+      try {
+        server.close(() => resolve(result));
+      } catch {
+        resolve(result);
+      }
+    };
+
+    server.once('error', () => finalize(false));
+    server.once('listening', () => finalize(true));
+    server.listen({ port, host, exclusive: true });
+  });
+}
+
 export function allocatePorts(workerId) {
   const offset = workerId * PORT_OFFSET;
   return {
@@ -33,55 +81,57 @@ export function allocatePorts(workerId) {
   };
 }
 
-/**
- * 检查端口是否被占用
- * @param {number} port
- * @returns {boolean}
- */
 export function isPortInUse(port) {
   try {
     if (process.platform === 'win32') {
-      const result = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      return result.trim().length > 0;
-    } else {
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
-      return result.trim().length > 0;
+      return parseWindowsPortPids(port).length > 0;
     }
+
+    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
+    return result.trim().length > 0;
   } catch {
     return false;
   }
 }
 
-/**
- * 获取占用指定端口的进程 PID 列表
- * @param {number} port
- * @returns {string[]}
- */
+export async function arePortsBindable(ports) {
+  const values = normalizePortsInput(ports);
+  const results = await Promise.all(values.map(port => canBindPort(Number(port))));
+  return results.every(Boolean);
+}
+
+async function findAvailablePort(startPort) {
+  for (let port = startPort; port < startPort + PORT_SCAN_RANGE; port++) {
+    if (await canBindPort(port)) {
+      return port;
+    }
+  }
+
+  throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${PORT_SCAN_RANGE}`);
+}
+
+export async function allocateAvailablePorts(workerId) {
+  const preferred = allocatePorts(workerId);
+  return {
+    frontend: await findAvailablePort(preferred.frontend),
+    gameServer: await findAvailablePort(preferred.gameServer),
+    apiServer: await findAvailablePort(preferred.apiServer),
+  };
+}
+
 export function getPortPids(port) {
   try {
     if (process.platform === 'win32') {
-      const result = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      const pids = new Set();
-      const lines = result.trim().split('\n');
-      for (const line of lines) {
-        const match = line.match(/\s+(\d+)\s*$/);
-        if (match) pids.add(match[1]);
-      }
-      return Array.from(pids);
-    } else {
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
-      return result.trim().split('\n').filter(Boolean);
+      return parseWindowsPortPids(port);
     }
+
+    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
+    return result.trim().split('\n').filter(Boolean);
   } catch {
     return [];
   }
 }
 
-/**
- * 终止指定 PID 的进程
- * @param {string} pid
- * @returns {boolean} 是否成功
- */
 export function killProcess(pid) {
   try {
     if (process.platform === 'win32') {
@@ -89,29 +139,25 @@ export function killProcess(pid) {
     } else {
       execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
     }
+
     return true;
   } catch {
     return false;
   }
 }
 
-/**
- * 清理指定 worker 的所有端口
- * @param {number} workerId
- */
-export function cleanupWorkerPorts(workerId) {
-  const ports = allocatePorts(workerId);
-  const allPorts = Object.values(ports);
-  
-  console.log(`[Worker ${workerId}] 清理端口: ${allPorts.join(', ')}`);
-  
+export function cleanupPorts(ports, label = 'Ports') {
+  const allPorts = [...new Set(normalizePortsInput(ports).map(port => Number(port)).filter(Number.isFinite))];
+
+  console.log(`[${label}] 清理端口: ${allPorts.join(', ')}`);
+
   for (const port of allPorts) {
     const pids = getPortPids(port);
     if (pids.length === 0) {
       console.log(`  端口 ${port}: 未被占用`);
       continue;
     }
-    
+
     console.log(`  端口 ${port}: 发现 ${pids.length} 个进程`);
     for (const pid of pids) {
       const success = killProcess(pid);
@@ -120,41 +166,16 @@ export function cleanupWorkerPorts(workerId) {
   }
 }
 
-/**
- * 等待端口释放
- * @param {number} port
- * @param {number} timeoutMs
- * @returns {Promise<boolean>}
- */
-export async function waitForPortFree(port, timeoutMs = 5000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (!isPortInUse(port)) return true;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  return false;
-}
-
-/**
- * 保存 worker 端口信息到临时文件（用于测试间共享）
- * @param {number} workerId
- * @param {{ frontend: number, gameServer: number, apiServer: number }} ports
- */
 export function saveWorkerPorts(workerId, ports) {
   const tmpDir = path.join(process.cwd(), '.tmp');
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, { recursive: true });
   }
-  
+
   const filePath = path.join(tmpDir, `worker-${workerId}-ports.json`);
   fs.writeFileSync(filePath, JSON.stringify({ workerId, ports, pid: process.pid }, null, 2));
 }
 
-/**
- * 读取 worker 端口信息
- * @param {number} workerId
- * @returns {{ frontend: number, gameServer: number, apiServer: number } | null}
- */
 export function loadWorkerPorts(workerId) {
   const filePath = path.join(process.cwd(), '.tmp', `worker-${workerId}-ports.json`);
   try {
@@ -165,29 +186,59 @@ export function loadWorkerPorts(workerId) {
   }
 }
 
-/**
- * 清理所有 worker 端口信息文件
- */
+export function removeWorkerPortFile(workerId) {
+  const filePath = path.join(process.cwd(), '.tmp', `worker-${workerId}-ports.json`);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+export function cleanupWorkerPorts(workerId) {
+  const ports = loadWorkerPorts(workerId) ?? allocatePorts(workerId);
+  cleanupPorts(ports, `Worker ${workerId}`);
+}
+
+export async function waitForPortFree(port, timeoutMs = 5000) {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    if (!isPortInUse(port)) {
+      return true;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return false;
+}
+
+export async function waitForPortsFree(ports, timeoutMs = 5000) {
+  const allPorts = [...new Set(normalizePortsInput(ports).map(port => Number(port)).filter(Number.isFinite))];
+  const results = await Promise.all(allPorts.map(port => waitForPortFree(port, timeoutMs)));
+  return results.every(Boolean);
+}
+
 export function cleanupAllWorkerPortFiles() {
   const tmpDir = path.join(process.cwd(), '.tmp');
-  if (!fs.existsSync(tmpDir)) return;
-  
-  const files = fs.readdirSync(tmpDir);
-  for (const file of files) {
+  if (!fs.existsSync(tmpDir)) {
+    return;
+  }
+
+  for (const file of fs.readdirSync(tmpDir)) {
     if (file.startsWith('worker-') && file.endsWith('-ports.json')) {
       fs.unlinkSync(path.join(tmpDir, file));
     }
   }
 }
 
-// CLI 模式：清理指定 worker 的端口
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const workerId = parseInt(process.argv[2]);
-  if (isNaN(workerId)) {
+  const workerId = Number.parseInt(process.argv[2] ?? '', 10);
+  if (Number.isNaN(workerId)) {
     console.error('用法: node port-allocator.js <workerId>');
     process.exit(1);
   }
-  
+
   cleanupWorkerPorts(workerId);
+  removeWorkerPortFile(workerId);
   console.log(`\n✅ Worker ${workerId} 端口清理完成`);
 }

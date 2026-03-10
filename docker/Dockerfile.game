@@ -3,7 +3,14 @@ FROM node:20-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+# 使用 npm 镜像源加速下载（可选，国内环境推荐）
+# RUN npm config set registry https://registry.npmmirror.com
+
+# 安装生产依赖（利用 BuildKit 缓存挂载加速）
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts && \
+    npm cache clean --force
 
 # ---- 阶段 2：最终生产镜像 ----
 FROM node:20-slim

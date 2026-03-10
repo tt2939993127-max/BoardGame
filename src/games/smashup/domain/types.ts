@@ -93,6 +93,9 @@ export interface MinionCardDef {
     soundKey?: string;
 }
 
+/** Special 技能触发时机 */
+export type SpecialTiming = 'beforeScoring' | 'afterScoring';
+
 /** 行动卡定义 */
 export interface ActionCardDef {
     id: string;
@@ -119,6 +122,12 @@ export interface ActionCardDef {
      * 仅对 subtype='special' 的行动卡有效。
      */
     specialLimitGroup?: string;
+    /**
+     * special 技能的触发时机（仅对 subtype='special' 有效）：
+     * - 'beforeScoring': 在 Me First! 窗口打出时立即执行（默认）
+     * - 'afterScoring': 生成 ARMED 事件，延迟到基地计分后执行
+     */
+    specialTiming?: SpecialTiming;
     /**
      * 打出时的音效 key（可选）。
      * 如果指定，优先使用此音效；否则 fallback 到派系默认音效池。
@@ -260,8 +269,12 @@ export interface PlayerState {
     baseLimitedMinionQuota?: Record<number, number>;
     /** 基地限定额度是否要求同名（baseIndex → true），与 baseLimitedMinionQuota 配合 */
     baseLimitedSameNameRequired?: Record<number, boolean>;
+    /** 基地限定额度的同名 defId（baseIndex → defId），与 baseLimitedSameNameRequired 配合 */
+    baseLimitedSameNameDefId?: Record<number, string>;
     /** 额外出牌的力量上限（如家园给的额外出牌只能打力量≤2的随从），回合结束清零 */
     extraMinionPowerMax?: number;
+    /** 带力量上限的全局额外随从额度集合（每个元素代表 1 次受限额度），回合结束清零 */
+    extraMinionPowerCaps?: number[];
     /** 同名额外随从约束：剩余额度数 */
     sameNameMinionRemaining?: number;
     /** 同名额外随从约束：已锁定的 defId（null = 尚未锁定，string = 已锁定） */
@@ -300,6 +313,8 @@ export interface PendingAfterScoringSpecial {
     sourceDefId: string;
     playerId: PlayerId;
     baseIndex: number;
+    /** 卡牌 UID（用于后续执行时的上下文） */
+    cardUid: string;
     // 随从快照（可选）：用于计分后随从已离场的场景（如 giant_ant_we_are_the_champions）
     minionSnapshots?: Array<{
         uid: string;
@@ -308,6 +323,29 @@ export interface PendingAfterScoringSpecial {
         counterAmount: number;
     }>;
 }
+
+/**
+ * 计分后需要等基地清场/替换完成后再执行的动作。
+ * 典型场景：效果目标是“替换后的基地”而不是已计分的旧基地。
+ */
+export type PendingPostScoringAction =
+    | {
+        kind: 'playMinionOnReplacementBase';
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        baseIndex: number;
+        targetBaseDefId: string;
+        power: number;
+    }
+    | {
+        kind: 'moveMinionToReplacementBase';
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        toBaseIndex: number;
+        reason: string;
+    };
 
 export interface SmashUpCore {
     players: Record<PlayerId, PlayerState>;
@@ -331,8 +369,8 @@ export interface SmashUpCore {
     factionSelection?: FactionSelectionState;
     /** 疯狂牌库（克苏鲁扩展，defId 列表） */
     madnessDeck?: string[];
-    /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力的精确判定） */
-    turnDestroyedMinions?: { defId: string; baseIndex: number; owner: string }[];
+    /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力判定，并阻止过期移动把它们从弃牌堆拉回场上） */
+    turnDestroyedMinions?: { uid: string; defId: string; baseIndex: number; owner: string }[];
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
@@ -349,6 +387,8 @@ export interface SmashUpCore {
     standingStonesDoubleTalentMinionUid?: string;
     /** 计分后触发的 special 延迟记录（回合开始自动清空） */
     pendingAfterScoringSpecials?: PendingAfterScoringSpecial[];
+    /** 计分后需等待基地完成清场/替换后再落地的动作 */
+    pendingPostScoringActions?: PendingPostScoringAction[];
     /**
      * 进入 scoreBases 阶段时锁定的 eligible 基地索引列表。
      * 规则：一旦基地在进入计分阶段时达到 breakpoint，即使 Me First! 响应窗口中
@@ -683,6 +723,7 @@ export type SmashUpEvent =
     | OngoingAttachedEvent
     | OngoingDetachedEvent
     | TalentUsedEvent
+    | CardRemovedFromDeckEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
     | CardTransferredEvent
@@ -822,6 +863,15 @@ export interface TalentUsedEvent extends GameEvent<typeof SU_EVENTS.TALENT_USED>
 }
 
 /** 卡牌放入牌库底 */
+export interface CardRemovedFromDeckEvent extends GameEvent<typeof SU_EVENTS.CARD_REMOVED_FROM_DECK> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        reason: string;
+    };
+}
+
 export interface CardToDeckBottomEvent extends GameEvent<typeof SU_EVENTS.CARD_TO_DECK_BOTTOM> {
     payload: {
         cardUid: string;
@@ -922,8 +972,8 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
     payload: {
         /** 牌库所有者（单人或多人） */
         targetPlayerId: string | string[];
-        /** 查看者 */
-        viewerPlayerId: string;
+        /** 查看者（'all' = 所有人，PlayerId = 指定玩家） */
+        viewerPlayerId: string | 'all';
         /** 牌库顶卡牌 */
         cards: { uid: string; defId: string }[];
         /** 展示数量 */
@@ -991,6 +1041,8 @@ export interface SpecialAfterScoringArmedEvent extends GameEvent<typeof SU_EVENT
         sourceDefId: string;
         playerId: PlayerId;
         baseIndex: number;
+        /** 卡牌 UID（用于后续执行时的上下文） */
+        cardUid: string;
         // 随从快照（可选）：用于计分后随从已离场的场景（如 giant_ant_we_are_the_champions）
         minionSnapshots?: Array<{
             uid: string;

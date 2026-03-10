@@ -56,6 +56,9 @@ jobs:
           labels: ${{ steps.meta-game.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # 启用 BuildKit 缓存挂载（加速 npm ci）
+          provenance: false
+          sbom: false
 
       - name: Extract metadata for web
         id: meta-web
@@ -81,6 +84,9 @@ jobs:
           build-args: |
             VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
             VITE_ASSETS_BASE_URL=${{ vars.VITE_ASSETS_BASE_URL }}
+          # 启用 BuildKit 缓存挂载（加速 npm ci）
+          provenance: false
+          sbom: false
 
       - name: Summary
         run: |

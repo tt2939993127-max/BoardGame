@@ -101,8 +101,9 @@ git status | grep -E "(BUG-|DEBUG-|fix-|test-|wiki-|temp_|tmp_|_vitest)"
 
 如果有输出，说明有临时文件需要处理。
 
-## 已完成的清理（2026-03-02）
+## 已完成的清理
 
+### 2026-03-02
 - ✅ 移动 16 个 Bug 分析文档到 `docs/bugs/`
 - ✅ 移动 12 个代码审查报告到 `docs/reviews/`
 - ✅ 移动 25 个 SmashUp/PR5 文档到 `evidence/`
@@ -110,4 +111,15 @@ git status | grep -E "(BUG-|DEBUG-|fix-|test-|wiki-|temp_|tmp_|_vitest)"
 - ✅ 移动 12 个测试结果文件到 `test-results/`
 - ✅ 移动 17 个 Wiki/数据文件到 `temp/`
 - ✅ 删除 13 个 Git 临时文件和其他临时文件
+
+### 2026-03-03
+- ✅ 删除 87 个临时脚本（fix-*/debug-*/analyze-*/check-*/rewrite-*/等）
+- ✅ 删除 2 个临时文件（test-mobile.html, server-performance-check.sh）
+- ✅ 删除 2 个重复/空脚本（compare-wiki-code.mjs, write-e2e-framework-doc.mjs）
+- ✅ 移动 check-audio-registry.js 到 scripts/audio/
+- ✅ scripts/ 根目录现在只保留 6 个正式工具：
+  - kiro-auto-resume.mjs（Kiro 监控工具）
+  - download-fonts.mjs（字体下载）
+  - scrape-wiki-*.mjs（Wiki 数据抓取，3 个）
+  - final-wiki-code-comparison.mjs（Wiki 对比工具）
 - ✅ 更新 `.gitignore` 添加临时文件忽略规则
