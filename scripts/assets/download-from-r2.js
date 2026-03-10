@@ -17,14 +17,19 @@
  * 合作者 clone 后只需 npm install → npm run assets:download 即可拉取资源。
  */
 
-import dotenv from 'dotenv';
+import { config } from 'dotenv';
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { join, dirname, relative, sep } from 'path';
 import { createHash } from 'crypto';
 
-// 下载脚本直接读 .env.example（R2 凭证已内置，合作者无需额外配置）
-dotenv.config({ path: '.env.example' });
+// 加载环境变量：优先 .env，回退到 .env.example
+if (existsSync('.env')) {
+  config({ path: '.env' });
+} else {
+  console.log('⚠️  未找到 .env 文件，使用 .env.example 中的配置');
+  config({ path: '.env.example' });
+}
 
 // R2 配置
 const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;

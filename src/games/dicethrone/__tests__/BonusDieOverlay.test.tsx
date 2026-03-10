@@ -208,6 +208,98 @@ describe('BonusDieOverlay', () => {
         });
     });
 
+    it('自己打出的 Volley 多骰事件应显示独立多骰特写，而不是卡牌特写或单骰特写', async () => {
+        const entries: EventStreamEntry[] = [
+            {
+                id: 1,
+                event: {
+                    type: 'CARD_PLAYED',
+                    payload: {
+                        playerId: '0',
+                        cardId: 'volley',
+                    },
+                    timestamp: 1000,
+                },
+            },
+            {
+                id: 2,
+                event: {
+                    type: 'BONUS_DIE_ROLLED',
+                    payload: {
+                        playerId: '0',
+                        targetPlayerId: '1',
+                        value: 4,
+                        face: 'bow',
+                        effectParams: { value: 4, index: 0 },
+                    },
+                    timestamp: 1100,
+                },
+            },
+            {
+                id: 3,
+                event: {
+                    type: 'BONUS_DIE_ROLLED',
+                    payload: {
+                        playerId: '0',
+                        targetPlayerId: '1',
+                        value: 3,
+                        face: 'moon',
+                        effectParams: { value: 3, index: 1 },
+                    },
+                    timestamp: 1150,
+                },
+            },
+            {
+                id: 4,
+                event: {
+                    type: 'BONUS_DIE_ROLLED',
+                    payload: {
+                        playerId: '0',
+                        targetPlayerId: '1',
+                        value: 4,
+                        face: 'bow',
+                        effectKey: 'bonusDie.effect.volley.result',
+                        effectParams: { bowCount: 1, bonusDamage: 1 },
+                    },
+                    timestamp: 1200,
+                },
+            },
+        ];
+
+        function HookProbe({ streamEntries }: { streamEntries: EventStreamEntry[] }) {
+            const state = useCardSpotlight({
+                eventStreamEntries: streamEntries,
+                currentPlayerId: '0',
+                opponentName: '对手',
+                selectedCharacters: {
+                    '0': 'moon_elf',
+                    '1': 'barbarian',
+                },
+            });
+
+            return (
+                <pre data-testid="self-volley-state">
+                    {JSON.stringify({
+                        cardSpotlightQueue: state.cardSpotlightQueue,
+                        bonusDie: state.bonusDie,
+                    })}
+                </pre>
+            );
+        }
+
+        const { rerender } = render(<HookProbe streamEntries={[]} />);
+        rerender(<HookProbe streamEntries={entries} />);
+
+        await waitFor(() => {
+            const state = JSON.parse(screen.getByTestId('self-volley-state').textContent ?? '{}');
+            expect(state.cardSpotlightQueue).toHaveLength(0);
+            expect(state.bonusDie.show).toBe(true);
+            expect(state.bonusDie.bonusDice).toHaveLength(2);
+            expect(state.bonusDie.summaryEffectKey).toBe('bonusDie.effect.volley.result');
+            expect(state.bonusDie.value).toBeUndefined();
+        });
+    });
+
     it('对手打出带 displayOnly settlement 的多骰卡牌时，应优先显示卡牌特写而不是重复弹多骰面板', async () => {
         const settlement = {
             id: 'volley-display-1200',

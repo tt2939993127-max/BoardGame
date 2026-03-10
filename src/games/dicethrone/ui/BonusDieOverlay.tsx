@@ -55,6 +55,10 @@ interface BonusDieOverlayProps {
     displayOnly?: boolean;
     /** 骰子所属角色（用于图集选择） */
     characterId?: string;
+    /** 多骰汇总文本 key（自己视角多骰卡等场景） */
+    summaryEffectKey?: string;
+    /** 多骰汇总文本参数 */
+    summaryEffectParams?: Record<string, string | number>;
 }
 
 export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
@@ -75,6 +79,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     rerollCostTokenId,
     displayOnly,
     characterId,
+    summaryEffectKey,
+    summaryEffectParams,
 }) => {
     const { t } = useTranslation('game-dicethrone');
     // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
@@ -194,6 +200,18 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     ({t('bonusDie.knockdownTrigger')})
                                 </span>
                             )}
+                        </motion.div>
+                    )}
+
+                    {summaryEffectKey && summaryEffectParams && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.6 }}
+                            className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
+                            style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
+                        >
+                            {t(summaryEffectKey, summaryEffectParams)}
                         </motion.div>
                     )}
 
