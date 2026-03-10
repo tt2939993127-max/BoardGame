@@ -14,6 +14,66 @@ const TEST_API_PORT = process.env.PW_API_SERVER_PORT || process.env.API_SERVER_P
 const TEST_API_BASE = process.env.TEST_API_BASE || `http://localhost:${TEST_API_PORT}`;
 const TEST_API_TOKEN = process.env.TEST_API_TOKEN || 'test-token-12345';
 
+export interface TestMatchAccess {
+    playerId: string;
+    credentials: string;
+}
+
+async function resolveTestMatchAccess(
+    matchId: string,
+    page?: Page,
+    access?: TestMatchAccess,
+): Promise<TestMatchAccess> {
+    if (access) {
+        return access;
+    }
+
+    if (!page) {
+        throw new Error('State injection requires page or explicit match access credentials');
+    }
+
+    const resolved = await page.evaluate((targetMatchId) => {
+        const params = new URLSearchParams(window.location.search);
+        const playerId = params.get('playerID');
+        const raw = localStorage.getItem(`match_creds_${targetMatchId}`);
+        if (!playerId || !raw) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(raw) as {
+                matchID?: string;
+                playerID?: string;
+                credentials?: string;
+            };
+            if (parsed.matchID !== targetMatchId || parsed.playerID !== playerId || typeof parsed.credentials !== 'string') {
+                return null;
+            }
+            return {
+                playerId,
+                credentials: parsed.credentials,
+            };
+        } catch {
+            return null;
+        }
+    }, matchId);
+
+    if (!resolved) {
+        throw new Error(`Unable to resolve test match access for ${matchId}`);
+    }
+
+    return resolved;
+}
+
+function buildTestHeaders(access: TestMatchAccess): Record<string, string> {
+    return {
+        'Content-Type': 'application/json',
+        'X-Test-Token': TEST_API_TOKEN,
+        'X-Test-Player-Id': access.playerId,
+        'X-Test-Player-Credentials': access.credentials,
+    };
+}
+
 /**
  * 完整状态注入
  * 
@@ -26,14 +86,13 @@ const TEST_API_TOKEN = process.env.TEST_API_TOKEN || 'test-token-12345';
 export async function injectMatchState(
     matchId: string,
     state: MatchState<unknown>,
-    page?: Page
+    page?: Page,
+    access?: TestMatchAccess,
 ): Promise<void> {
+    const resolvedAccess = await resolveTestMatchAccess(matchId, page, access);
     const response = await fetch(`${TEST_API_BASE}/test/inject-state`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Test-Token': TEST_API_TOKEN,
-        },
+        headers: buildTestHeaders(resolvedAccess),
         body: JSON.stringify({ matchId, state }),
     });
 
@@ -60,14 +119,13 @@ export async function injectMatchState(
 export async function patchMatchState(
     matchId: string,
     patch: Partial<MatchState<unknown>>,
-    page?: Page
+    page?: Page,
+    access?: TestMatchAccess,
 ): Promise<void> {
+    const resolvedAccess = await resolveTestMatchAccess(matchId, page, access);
     const response = await fetch(`${TEST_API_BASE}/test/patch-state`, {
         method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Test-Token': TEST_API_TOKEN,
-        },
+        headers: buildTestHeaders(resolvedAccess),
         body: JSON.stringify({ matchId, patch }),
     });
 
@@ -88,11 +146,14 @@ export async function patchMatchState(
  * @param matchId 对局 ID
  * @returns 当前服务器状态
  */
-export async function getMatchState(matchId: string): Promise<MatchState<unknown>> {
+export async function getMatchState(
+    matchId: string,
+    page?: Page,
+    access?: TestMatchAccess,
+): Promise<MatchState<unknown>> {
+    const resolvedAccess = await resolveTestMatchAccess(matchId, page, access);
     const response = await fetch(`${TEST_API_BASE}/test/get-state/${matchId}`, {
-        headers: {
-            'X-Test-Token': TEST_API_TOKEN,
-        },
+        headers: buildTestHeaders(resolvedAccess),
     });
 
     if (!response.ok) {
@@ -131,13 +192,15 @@ export async function waitForStateSync(page: Page, timeout = 5000): Promise<void
  * @param matchId 对局 ID
  * @returns 快照 ID
  */
-export async function snapshotMatchState(matchId: string): Promise<string> {
+export async function snapshotMatchState(
+    matchId: string,
+    page?: Page,
+    access?: TestMatchAccess,
+): Promise<string> {
+    const resolvedAccess = await resolveTestMatchAccess(matchId, page, access);
     const response = await fetch(`${TEST_API_BASE}/test/snapshot-state`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Test-Token': TEST_API_TOKEN,
-        },
+        headers: buildTestHeaders(resolvedAccess),
         body: JSON.stringify({ matchId }),
     });
 
@@ -160,14 +223,13 @@ export async function snapshotMatchState(matchId: string): Promise<string> {
 export async function restoreMatchState(
     matchId: string,
     snapshotId: string,
-    page?: Page
+    page?: Page,
+    access?: TestMatchAccess,
 ): Promise<void> {
+    const resolvedAccess = await resolveTestMatchAccess(matchId, page, access);
     const response = await fetch(`${TEST_API_BASE}/test/restore-state`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Test-Token': TEST_API_TOKEN,
-        },
+        headers: buildTestHeaders(resolvedAccess),
         body: JSON.stringify({ matchId, snapshotId }),
     });
 

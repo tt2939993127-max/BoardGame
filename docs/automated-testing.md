@@ -871,6 +871,7 @@ window.__BG_TEST_HARNESS__!.state.patch({
 - 在本地测试模式（`/play/<gameId>`）下，`state.set()` / `state.patch()` 直接修改当前页面持有的状态快照
 - 在联机页面（`/play/<gameId>/match/<matchId>`）下，客户端状态已经过 `playerView` 过滤，只允许读取，不允许直接写回
 - 需要为联机对局注入权威状态时，必须调用服务端 `/test/inject-state` 或 `/test/patch-state` 接口
+- `/test/*` 除了 `X-Test-Token` 外，还必须携带当前座位的 `playerID + credentials`；推荐复用 `e2e/helpers/state-injection.ts`，它会从当前页面的 `localStorage(match_creds_<matchId>)` 自动读取
 - 只有联机对局走服务端权威状态时，刷新页面才会重新拉取最新状态
 
 **命令分发**：

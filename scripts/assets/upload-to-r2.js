@@ -16,12 +16,21 @@
  * - R2_BUCKET_NAME: R2 存储桶名称
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { existsSync } from 'fs';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, extname, sep } from 'path';
 import { createHash } from 'crypto';
 import mime from 'mime-types';
+
+// 加载环境变量：优先 .env，回退到 .env.example
+if (existsSync('.env')) {
+  config({ path: '.env' });
+} else {
+  console.log('⚠️  未找到 .env 文件，使用 .env.example 中的配置');
+  config({ path: '.env.example' });
+}
 
 // R2 配置
 const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;

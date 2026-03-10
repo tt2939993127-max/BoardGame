@@ -93,6 +93,11 @@ export interface BoardOverlaysProps {
         face?: DieFace;
         effectKey?: string;
         effectParams?: Record<string, string | number>;
+        bonusDice?: import('../domain/types').BonusDieInfo[];
+        summaryEffectKey?: string;
+        summaryEffectParams?: Record<string, string | number>;
+        showTotal?: boolean;
+        displayOnly?: boolean;
         show: boolean;
         /** 骰子所属角色（用于图集选择） */
         characterId?: string;
@@ -359,14 +364,16 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         isVisible={props.bonusDie.show || Boolean(props.pendingBonusDiceSettlement)}
                         onClose={props.onBonusDieClose}
                         locale={props.locale}
-                        bonusDice={props.pendingBonusDiceSettlement?.dice}
+                        bonusDice={props.pendingBonusDiceSettlement?.dice ?? props.bonusDie.bonusDice}
                         canReroll={props.canRerollBonusDie}
                         onReroll={props.onRerollBonusDie}
                         onSkipReroll={props.onSkipBonusDiceReroll}
-                        showTotal={props.pendingBonusDiceSettlement?.showTotal ?? !props.pendingBonusDiceSettlement?.displayOnly}
+                        showTotal={props.pendingBonusDiceSettlement?.showTotal ?? props.bonusDie.showTotal ?? !props.pendingBonusDiceSettlement?.displayOnly}
                         rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
                         rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
-                        displayOnly={props.pendingBonusDiceSettlement?.displayOnly}
+                        displayOnly={props.pendingBonusDiceSettlement?.displayOnly ?? props.bonusDie.displayOnly}
+                        summaryEffectKey={props.bonusDie.summaryEffectKey}
+                        summaryEffectParams={props.bonusDie.summaryEffectParams}
                         characterId={
                             props.pendingBonusDiceSettlement
                                 ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]

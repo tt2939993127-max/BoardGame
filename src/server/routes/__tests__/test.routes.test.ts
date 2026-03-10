@@ -61,6 +61,16 @@ const createMockGameEngine = (gameId: string): GameEngineConfig => ({
     systemsConfig: {},
 });
 
+const TEST_TOKEN = 'test-token-12345';
+const TEST_PLAYER_ID = '0';
+const TEST_PLAYER_CREDENTIALS = 'cred-0';
+const TEST_HEADERS = {
+    'Content-Type': 'application/json',
+    'X-Test-Token': TEST_TOKEN,
+    'X-Test-Player-Id': TEST_PLAYER_ID,
+    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
+};
+
 describe('Test Routes Integration', () => {
     let app: Koa;
     let httpServer: ReturnType<typeof createServer>;
@@ -74,7 +84,7 @@ describe('Test Routes Integration', () => {
     beforeAll(async () => {
         // 设置测试环境
         process.env.NODE_ENV = 'test';
-        process.env.TEST_API_TOKEN = 'test-token-12345';
+        process.env.TEST_API_TOKEN = TEST_TOKEN;
 
         // 创建服务器
         app = new Koa();
@@ -86,6 +96,8 @@ describe('Test Routes Integration', () => {
             io,
             storage,
             games: [createMockGameEngine('smashup')],
+            authenticate: async (_matchID, playerID, credentials, metadata) =>
+                metadata.players[playerID]?.credentials === credentials,
         });
 
         // 注册路由
@@ -136,8 +148,8 @@ describe('Test Routes Integration', () => {
                 matchID: matchId,
                 gameName: 'smashup',
                 players: {
-                    0: { id: 0, name: 'Player 0', credentials: '', isConnected: false },
-                    1: { id: 1, name: 'Player 1', credentials: '', isConnected: false },
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
+                    1: { id: 1, name: 'Player 1', credentials: 'cred-1', isConnected: false },
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -152,8 +164,7 @@ describe('Test Routes Integration', () => {
             const response = await fetch(`${baseURL}/test/inject-state`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    ...TEST_HEADERS,
                 },
                 body: JSON.stringify({ matchId, state }),
             });
@@ -175,7 +186,7 @@ describe('Test Routes Integration', () => {
                 matchID: matchId,
                 gameName: 'smashup',
                 players: {
-                    0: { id: 0, name: 'Player 0', credentials: '', isConnected: false },
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -184,8 +195,7 @@ describe('Test Routes Integration', () => {
             const response = await fetch(`${baseURL}/test/inject-state`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    ...TEST_HEADERS,
                 },
                 body: JSON.stringify({ matchId, state: invalidState }),
             });
@@ -209,12 +219,60 @@ describe('Test Routes Integration', () => {
             expect(response.status).toBe(401);
         });
 
-        it('should return 400 for missing parameters', async () => {
+        it('should return 400 without match auth headers', async () => {
             const response = await fetch(`${baseURL}/test/inject-state`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                },
+                body: JSON.stringify({ matchId: 'match-1', state: {} }),
+            });
+
+            expect(response.status).toBe(400);
+            const data = await response.json();
+            expect(data.error).toBe('Missing X-Test-Player-Id or X-Test-Player-Credentials');
+        });
+
+        it('should return 403 for stale match credentials', async () => {
+            const matchId = 'match-auth-mismatch';
+            const state: MatchState<unknown> = {
+                sys: { matchId, turnOrder: [0, 1], currentPlayerIndex: 0 },
+                core: { phase: 'play', players: { 0: { hp: 10 }, 1: { hp: 10 } } },
+            };
+
+            await storage.setMetadata(matchId, {
+                matchID: matchId,
+                gameName: 'smashup',
+                players: {
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
+                    1: { id: 1, name: 'Player 1', credentials: 'cred-1', isConnected: false },
+                },
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            });
+
+            const response = await fetch(`${baseURL}/test/inject-state`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': 'stale-cred',
+                },
+                body: JSON.stringify({ matchId, state }),
+            });
+
+            expect(response.status).toBe(403);
+            const data = await response.json();
+            expect(data.error).toBe('Forbidden');
+        });
+
+        it('should return 400 for missing parameters', async () => {
+            const response = await fetch(`${baseURL}/test/inject-state`, {
+                method: 'POST',
+                headers: {
+                    ...TEST_HEADERS,
                 },
                 body: JSON.stringify({ matchId: 'match-1' }), // missing state
             });
@@ -238,8 +296,8 @@ describe('Test Routes Integration', () => {
                 matchID: matchId,
                 gameName: 'smashup',
                 players: {
-                    0: { id: 0, name: 'Player 0', credentials: '', isConnected: false },
-                    1: { id: 1, name: 'Player 1', credentials: '', isConnected: false },
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
+                    1: { id: 1, name: 'Player 1', credentials: 'cred-1', isConnected: false },
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -258,8 +316,7 @@ describe('Test Routes Integration', () => {
             const response = await fetch(`${baseURL}/test/patch-state`, {
                 method: 'PATCH',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    ...TEST_HEADERS,
                 },
                 body: JSON.stringify({ matchId, patch }),
             });
@@ -275,8 +332,7 @@ describe('Test Routes Integration', () => {
             const response = await fetch(`${baseURL}/test/patch-state`, {
                 method: 'PATCH',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    ...TEST_HEADERS,
                 },
                 body: JSON.stringify({ matchId: 'nonexistent', patch: {} }),
             });
@@ -299,7 +355,7 @@ describe('Test Routes Integration', () => {
                 matchID: matchId,
                 gameName: 'smashup',
                 players: {
-                    0: { id: 0, name: 'Player 0', credentials: '', isConnected: false },
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -313,7 +369,9 @@ describe('Test Routes Integration', () => {
 
             const response = await fetch(`${baseURL}/test/get-state/${matchId}`, {
                 headers: {
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
             });
 
@@ -327,7 +385,9 @@ describe('Test Routes Integration', () => {
         it('should return 404 for nonexistent match', async () => {
             const response = await fetch(`${baseURL}/test/get-state/nonexistent`, {
                 headers: {
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
             });
 
@@ -340,7 +400,7 @@ describe('Test Routes Integration', () => {
             const matchId = 'match-1';
             const state: MatchState<unknown> = {
                 sys: { matchId, turnOrder: [0, 1], currentPlayerIndex: 0 },
-                core: { phase: 'play', players: {} },
+                core: { phase: 'play', players: {}, bases: [] },
             };
 
             await storage.setState(matchId, {
@@ -354,7 +414,9 @@ describe('Test Routes Integration', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
                 body: JSON.stringify({ matchId }),
             });
@@ -371,7 +433,7 @@ describe('Test Routes Integration', () => {
             const matchId = 'match-1';
             const state: MatchState<unknown> = {
                 sys: { matchId, turnOrder: [0, 1], currentPlayerIndex: 0 },
-                core: { phase: 'play', players: {} },
+                core: { phase: 'play', players: {}, bases: [] },
             };
 
             // 设置初始状态
@@ -379,7 +441,7 @@ describe('Test Routes Integration', () => {
                 matchID: matchId,
                 gameName: 'smashup',
                 players: {
-                    0: { id: 0, name: 'Player 0', credentials: '', isConnected: false },
+                    0: { id: 0, name: 'Player 0', credentials: TEST_PLAYER_CREDENTIALS, isConnected: false },
                 },
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -396,10 +458,13 @@ describe('Test Routes Integration', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
                 body: JSON.stringify({ matchId }),
             });
+            expect(snapshotResponse.status).toBe(200);
             const snapshotData = await snapshotResponse.json();
             const snapshotId = snapshotData.snapshotId;
 
@@ -408,13 +473,16 @@ describe('Test Routes Integration', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
                 body: JSON.stringify({ matchId, snapshotId }),
             });
 
-            expect(restoreResponse.status).toBe(200);
-            const restoreData = await restoreResponse.json();
+            const restoreBody = await restoreResponse.text();
+            expect(restoreResponse.status, restoreBody).toBe(200);
+            const restoreData = JSON.parse(restoreBody);
             expect(restoreData.success).toBe(true);
         });
 
@@ -423,7 +491,9 @@ describe('Test Routes Integration', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Test-Token': 'test-token-12345',
+                    'X-Test-Token': TEST_TOKEN,
+                    'X-Test-Player-Id': TEST_PLAYER_ID,
+                    'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
                 },
                 body: JSON.stringify({ matchId: 'match-1', snapshotId: 'nonexistent' }),
             });
