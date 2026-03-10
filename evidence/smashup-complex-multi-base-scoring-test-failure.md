@@ -1,109 +1,111 @@
-# 大杀四方 - 复杂多基地计分测试失败分析
+# 大杀四方 - 复杂多基地计分测试失败调查
+
+## 测试目标
+
+测试 afterScoring 响应窗口在基地计分后是否正常打开。
+
+## 测试场景
+
+1. P0 手牌有 2 张卡：
+   - `giant_ant_under_pressure` (beforeScoring special)
+   - `giant_ant_we_are_the_champions` (afterScoring special)
+2. 基地 0 有 3 个随从，总力量 12（等于 breakpoint）
+3. 从 `playCards` 阶段开始，点击 "Finish Turn" 推进到 `scoreBases` 阶段
+4. 验证 Me First! 窗口打开
+5. 两个玩家都 PASS Me First! 窗口
+6. **期望**：afterScoring 响应窗口打开
+7. **实际**：测试超时，游戏卡在加载界面
+
+## 问题分析
+
+### 问题 1：测试环境加载失败
+
+**现象**：
+- 测试截图显示游戏卡在加载界面（"加载 GAMES.SMASHUP.TITLE... Loading match resources..."）
+- 测试在等待游戏状态时超时（10 秒 → 30 秒）
+
+**可能原因**：
+1. `setupScene` 后游戏没有正确初始化
+2. 等待条件太严格（要求手牌、随从数量完全匹配）
+3. 测试环境资源加载超时
+
+**已尝试的修复**：
+1. 增加超时时间：120 秒 → 180 秒
+2. 简化等待条件：只检查 `phase === 'playCards'` 和 `factionSelection === undefined`
+3. 增加详细日志：记录每次等待时的状态
+
+### 问题 2：afterScoring 窗口未打开（未验证）
+
+**代码逻辑**（`src/games/smashup/domain/index.ts` lines 379-395）：
+```typescript
+const playersWithAfterScoringCards: PlayerId[] = [];
+for (const [playerId, player] of Object.entries(afterScoringCore.players)) {
+    const hasAfterScoringCard = player.hand.some(c => {
+        if (c.type !== 'action') return false;
+        const def = getCardDef(c.defId) as ActionCardDef | undefined;
+        const isAfterScoring = def?.subtype === 'special' && def.specialTiming === 'afterScoring';
+        console.log('🔍 [scoreBase] 检查卡牌:', {
+            playerId,
+            cardUid: c.uid,
+            defId: c.defId,
+            type: c.type,
+            def: def ? { subtype: def.subtype, specialTiming: (def as any).specialTiming } : null,
+            isAfterScoring,
+        });
+        return isAfterScoring;
+    });
+    if (hasAfterScoringCard) {
+        playersWithAfterScoringCards.push(playerId);
+    }
+}
+```
+
+**检查点**：
+1. `afterScoringCore.players` 是否包含正确的玩家状态？
+2. `player.hand` 是否包含 `giant_ant_we_are_the_champions` 卡牌？
+3. `getCardDef` 是否返回正确的卡牌定义？
+4. `def.specialTiming` 是否为 `'afterScoring'`？
+
+**无法验证**：由于测试环境加载失败，无法获取日志验证上述检查点。
+
+## 下一步计划
+
+### 方案 A：修复测试环境加载问题（优先）
+
+1. **简化测试场景**：
+   - 不使用 `setupScene`，改用手动创建在线对局
+   - 通过调试面板注入状态（`applyCoreStateDirect`）
+   - 验证游戏能否正常加载
+
+2. **增加加载超时**：
+   - 将 `waitForFunction` 超时从 30 秒增加到 60 秒
+   - 添加更详细的加载进度日志
+
+3. **检查资源加载**：
+   - 验证图集、音频等资源是否正常加载
+   - 检查网络请求是否有失败
+
+### 方案 B：直接测试 scoreOneBase 函数（备选）
+
+如果测试环境问题无法解决，可以：
+1. 创建单元测试直接调用 `scoreOneBase` 函数
+2. 模拟 `afterScoringCore` 状态
+3. 验证 `openAfterScoringWindow` 是否被调用
 
 ## 测试文件
-`e2e/smashup-complex-multi-base-scoring.e2e.ts`
 
-## 失败原因
+- 测试文件：`e2e/smashup-complex-multi-base-scoring.e2e.ts`
+- 失败截图：`test-results/smashup-complex-multi-base-70531-分场景-两基地计分-afterScoring-响应窗口-chromium/test-failed-1.png`
+- 错误上下文：`test-results/smashup-complex-multi-base-70531-分场景-两基地计分-afterScoring-响应窗口-chromium/error-context.md`
 
-### 1. 框架迁移不完整
-测试文件使用了旧的测试模式，直接访问 `window.__BG_TEST_HARNESS__`，而不是使用新的 `game` fixture 提供的方法。
+## 相关代码
 
-**问题代码示例**：
-```typescript
-const state = await page.evaluate(() => {
-    const harness = (window as any).__BG_TEST_HARNESS__;
-    const state = harness.state.get();
-    return {
-        phase: state.sys.phase,
-        responseWindow: state.sys.responseWindow,
-        // ...
-    };
-});
-```
+- `src/games/smashup/domain/index.ts` (scoreOneBase 函数, lines 368-430)
+- `src/games/smashup/domain/abilityHelpers.ts` (openAfterScoringWindow 函数, lines 1020-1050)
+- `e2e/framework/GameTestContext.ts` (setupScene 实现)
 
-**正确做法**：
-```typescript
-const state = await game.getState();
-const stateInfo = {
-    phase: state.sys.phase,
-    responseWindow: state.sys.responseWindow,
-    // ...
-};
-```
+## 总结
 
-### 2. 直接访问 TestHarness 的位置
+当前测试失败的根本原因是测试环境加载失败，游戏卡在加载界面。需要先解决测试环境问题，才能验证 afterScoring 窗口是否正常工作。
 
-测试文件中有多处直接访问 `__BG_TEST_HARNESS__`：
-
-1. **Line 34**: 等待游戏加载
-2. **Line 87**: 验证初始状态
-3. **Line 153**: 注入 P1 RESPONSE_PASS 命令
-4. **Line 166**: 检查自动推进前状态（已修复）
-5. **Line 189**: 检查自动推进后状态
-6. **Line 212**: 检查当前交互
-7. **Line 241**: 解决交互
-8. **Line 291**: 验证最终状态
-
-### 3. Vite 服务器崩溃
-测试运行过程中，Vite 服务器因内存不足崩溃：
-```
-[WebServer] [2026-03-09T14:51:06.765Z] [EXIT] Vite 进程退出
-[WebServer] [2026-03-09T14:51:06.772Z] [EXIT] 异常退出！退出码: 1
-[WebServer] [2026-03-09T14:51:06.774Z] [EXIT] 可能的原因:
-[WebServer] [2026-03-09T14:51:06.775Z] [EXIT] - 内存不足 (OOM)
-```
-
-这可能是因为测试陷入无限循环，不断轮询状态导致内存泄漏。
-
-### 4. 测试陷入循环
-测试在等待响应窗口关闭时陷入循环：
-```
-[TEST] 状态 1: { "type": "responseWindow", ... }
-[TEST] 处理响应窗口
-[TEST] 状态 2: { "type": "responseWindow", ... }
-[TEST] 处理响应窗口
-...
-[TEST] 状态 14: { "type": "responseWindow", ... }
-[TEST] 处理响应窗口
-```
-
-响应窗口一直没有关闭，导致测试超时。
-
-## 修复方案
-
-### 方案 1：完全重写测试（推荐）
-使用新的 E2E 测试框架和 `game` fixture 重写整个测试：
-
-1. 使用 `game.getState()` 替代直接访问 `__BG_TEST_HARNESS__`
-2. 使用 `game.setupScene()` 构建测试场景
-3. 使用 `game.screenshot()` 保存截图
-4. 简化测试逻辑，避免复杂的轮询循环
-
-### 方案 2：逐步迁移（临时方案）
-保留测试逻辑，但将所有直接访问 `__BG_TEST_HARNESS__` 的地方改为使用 `game` fixture：
-
-1. 将 `page.evaluate(() => { const harness = ...; const state = harness.state.get(); ... })` 改为 `const state = await game.getState(); ...`
-2. 将 `harness.command.dispatch(...)` 改为使用 `game` fixture 提供的命令分发方法（如果有）
-3. 简化轮询逻辑，使用 `page.waitForFunction()` 等待特定条件
-
-## 下一步工作
-
-1. **优先级 1**：修复 `e2e/framework/fixtures.ts` 中的 ESLint 错误（已完成）
-2. **优先级 2**：决定使用方案 1 还是方案 2
-3. **优先级 3**：重写或迁移测试
-4. **优先级 4**：运行测试并验证通过
-5. **优先级 5**：创建证据文档，包含测试截图和分析
-
-## 相关文件
-
-- `e2e/smashup-complex-multi-base-scoring.e2e.ts` - 测试文件
-- `e2e/framework/fixtures.ts` - 测试框架 fixtures（已修复 ESLint 错误）
-- `e2e/framework/GameTestContext.ts` - 游戏测试上下文（提供 `getState()` 等方法）
-- `docs/automated-testing.md` - E2E 测试文档
-
-## 教训
-
-1. **框架迁移必须完整**：迁移到新框架时，必须同时更新所有测试文件，不能留下使用旧 API 的测试
-2. **避免复杂的轮询逻辑**：使用 `page.waitForFunction()` 等 Playwright 提供的等待方法，而不是手动轮询
-3. **测试必须有超时保护**：避免无限循环导致测试挂起和内存泄漏
-4. **使用 fixture 提供的方法**：不要直接访问全局变量（如 `__BG_TEST_HARNESS__`），使用 fixture 提供的封装方法
+**建议**：暂时搁置此测试，优先修复测试环境加载问题，或者改用单元测试验证 `scoreOneBase` 函数的逻辑。

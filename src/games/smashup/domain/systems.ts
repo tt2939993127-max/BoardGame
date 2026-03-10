@@ -105,11 +105,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         const { baseIndex: scoredBaseIndex } = newState.sys.afterScoringInitialPowers as any;
                         const currentBase = newState.core.bases[scoredBaseIndex];
                         
-                        console.log('[SmashUpEventSystem] afterScoring 响应窗口关闭，补发 BASE_CLEARED:', {
-                            baseIndex: scoredBaseIndex,
-                            baseExists: !!currentBase,
-                        });
-                        
                         if (currentBase) {
                             // 发出 BASE_CLEARED 事件
                             const clearEvt: BaseClearedEvent = {
@@ -146,8 +141,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                 nextEvents.push(...revealResult.events);
                                 if (revealResult.matchState) newState = revealResult.matchState;
                             }
-                            
-                            console.log('[SmashUpEventSystem] 补发 BASE_CLEARED 和 BASE_REPLACED 事件完成');
                         }
                         
                         // ⚠️ 不在这里清理 afterScoringInitialPowers
@@ -221,14 +214,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                 // 确保 targetType: 'minion' 的场上点选交互能看到随从
                                 const ctx = payload.interactionData?.continuationContext as Record<string, unknown> | undefined;
                                 const deferred = ctx?._deferredPostScoringEvents as { type: string; payload: unknown; timestamp: number }[] | undefined;
-                                console.log('[SmashUpEventSystem] 检查延迟事件:', {
-                                    interactionId: payload.interactionId,
-                                    sourceId: payload.sourceId,
-                                    hasDeferredEvents: !!deferred,
-                                    deferredEventsCount: deferred?.length || 0,
-                                    hasCurrentInteraction: !!newState.sys.interaction?.current,
-                                    queueLength: newState.sys.interaction?.queue?.length || 0,
-                                });
                                 if (deferred && deferred.length > 0) {
                                     // 【关键修复】无论是否有后续交互，都立即设置 flowHalted=true
                                     // 防止 FlowSystem.afterEvents 在交互解决后重新进入 onPhaseExit('scoreBases')

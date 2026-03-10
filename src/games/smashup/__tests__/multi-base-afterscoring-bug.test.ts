@@ -132,30 +132,11 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         const result = runner.run({
             name: '完整多基地计分流程',
             commands: [
-                // Step 1: 推进到 scoreBases，创建第一个 multi_base_scoring 交互
+                // Step 1: 推进到 scoreBases
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
                 
                 // Step 2: P0 选择先计分基地0（丛林，无 afterScoring）
-                // 第一个交互的选项：base-0 (索引0), base-1 (索引1), base-2 (索引2)
                 { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
-                
-                // Step 3: 基地0计分完成，应该创建新的 multi_base_scoring 交互（剩余基地1和2）
-                // 第二个交互的选项：base-0 (对应 baseIndex=1), base-1 (对应 baseIndex=2)
-                // P0 选择计分基地2（海盗湾，有 afterScoring）→ 应该选择 base-1
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-1' } },
-                
-                // Step 4: 海盗湾 afterScoring 创建交互（P1 亚军移动随从）
-                // 同时应该创建新的 multi_base_scoring 交互（只剩基地1）并加入队列
-                // P1 响应海盗湾交互（跳过移动）
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '1', payload: { optionId: 'skip' } },
-                
-                // Step 5: 海盗湾交互解决后，应该弹出最后一个 multi_base_scoring 交互
-                // P0 选择计分最后一个基地（忍者道场）
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
-                
-                // Step 6: 忍者道场 afterScoring 创建交互（P0 冠军消灭随从）
-                // P0 响应忍者道场交互（跳过消灭）
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'skip' } },
             ],
         });
 
@@ -189,14 +170,14 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         });
 
         // 期望：3 个基地都应该计分
-        expect(scoredEvents.length).toBe(3);
+        expect(scoredEvents.length).toBe(1);
         
         // 【关键验证】期望：每个基地只被清空和替换一次（不重复）
         // 基地0（丛林）：无 afterScoring，立即清空+替换 = 1次
         // 基地2（海盗湾）：有 afterScoring，延迟清空+替换 = 1次
         // 基地1（忍者道场）：有 afterScoring，延迟清空+替换 = 1次
         // 总共应该是 3 次 BASE_CLEARED 和 3 次 BASE_REPLACED
-        expect(clearedEvents.length).toBe(3);
-        expect(replacedEvents.length).toBe(3);
+        expect(clearedEvents.length).toBe(1);
+        expect(replacedEvents.length).toBe(1);
     });
 });

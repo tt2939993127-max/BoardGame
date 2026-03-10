@@ -1,157 +1,155 @@
-/**
- * E2E 测试：便衣忍者"跳过"选项
- * 
- * 验证便衣忍者交互在 Me First! 窗口中正确显示，并且有"跳过"选项
- */
+import { test, expect } from './framework';
+import type { GameTestContext } from './framework';
 
-import { test, expect } from '@playwright/test';
-import { setupOnlineMatch, waitForGameReady, readCoreState, applyCoreStateDirect } from './helpers/game-helpers';
+function getPlayer(state: any, playerId: '0' | '1') {
+    return state.core.players[playerId];
+}
 
-test.describe('便衣忍者"跳过"选项', () => {
-    test('便衣忍者交互应该显示浮动按钮（包含"跳过"选项）', async ({ page, context }) => {
-        const { player1Page, player2Page, matchId } = await setupOnlineMatch(page, context, 'smashup');
-        await waitForGameReady(player1Page);
-        await waitForGameReady(player2Page);
+async function openHiddenNinjaGame(game: GameTestContext): Promise<void> {
+    await game.openTestGame('smashup');
+}
 
-        // 构造场景：托尔图加基地达到临界点，玩家1 手牌中有便衣忍者和随从
-        const state = await readCoreState(player1Page);
-        const modifiedState = {
-            ...state,
-            players: {
-                '0': {
-                    ...state.players['0'],
-                    hand: [
-                        { uid: 'c1', defId: 'ninja_hidden_ninja', type: 'action', owner: '0' },
-                        { uid: 'c2', defId: 'ninja_acolyte', type: 'minion', owner: '0' },
-                        { uid: 'c3', defId: 'ninja_acolyte', type: 'minion', owner: '0' },
-                    ],
-                    minionsPlayed: 0,
-                    actionsPlayed: 0,
-                },
-                '1': {
-                    ...state.players['1'],
-                    hand: [],
-                },
+async function setupHiddenNinjaMeFirstScene(
+    game: GameTestContext,
+    options?: {
+        hand?: Array<{ uid: string; defId: string; type: 'action' | 'minion' }>;
+        baseMinions?: Array<{ uid: string; defId: string; owner: '0' | '1'; controller: '0' | '1'; basePower: number }>;
+    },
+): Promise<void> {
+    const hand = options?.hand ?? [
+        { uid: 'hand-hidden-ninja', defId: 'ninja_hidden_ninja', type: 'action' },
+        { uid: 'hand-acolyte-a', defId: 'ninja_acolyte', type: 'minion' },
+        { uid: 'hand-acolyte-b', defId: 'ninja_acolyte', type: 'minion' },
+    ];
+
+    const baseMinions = options?.baseMinions ?? [
+        { uid: 'base-buccaneer-a', defId: 'pirate_buccaneer', owner: '0', controller: '0', basePower: 4 },
+        { uid: 'base-buccaneer-b', defId: 'pirate_buccaneer', owner: '0', controller: '0', basePower: 4 },
+    ];
+
+    await game.setupScene({
+        gameId: 'smashup',
+        player0: {
+            hand,
+            field: baseMinions.map((minion) => ({
+                ...minion,
+                baseIndex: 0,
+            })),
+            factions: ['ninjas', 'pirates'],
+        },
+        player1: {
+            hand: [],
+            field: [],
+            factions: ['robots', 'aliens'],
+        },
+        bases: [
+            {
+                defId: 'base_tortuga',
+                breakpoint: 8,
+                minions: [],
             },
-            bases: [
-                {
-                    defId: 'base_tortuga',
-                    minions: [
-                        { uid: 'm1', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm2', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm3', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm4', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm5', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm6', defId: 'alien_scout', controller: '1', owner: '1', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                    ],
-                    ongoingActions: [],
-                },
-                {
-                    defId: 'base_the_mothership',
-                    minions: [],
-                    ongoingActions: [],
-                },
-            ],
-            turnNumber: 1,
-            currentPlayerIndex: 0,
-        };
-
-        await applyCoreStateDirect(player1Page, modifiedState);
-
-        // 玩家1 打出便衣忍者（special action）
-        await player1Page.click('[data-card-uid="c1"]');
-        await player1Page.waitForTimeout(500);
-
-        // 点击托尔图加基地（触发 Me First! 响应窗口）
-        await player1Page.click('[data-base-index="0"]');
-        await player1Page.waitForTimeout(1000);
-
-        // 验证：应该显示浮动按钮（包含"跳过"选项）
-        const floatingButtons = player1Page.locator('.fixed.bottom-8.left-1\\/2.-translate-x-1\\/2');
-        await expect(floatingButtons).toBeVisible({ timeout: 5000 });
-
-        // 验证：浮动按钮中应该有"跳过"按钮
-        const skipButton = floatingButtons.locator('button:has-text("跳过")');
-        await expect(skipButton).toBeVisible();
-
-        // 验证：点击"跳过"后交互应该关闭
-        await skipButton.click();
-        await player1Page.waitForTimeout(500);
-        await expect(floatingButtons).not.toBeVisible();
-
-        // 验证：没有随从被打出（基地上仍然是 6 个随从）
-        const finalState = await readCoreState(player1Page);
-        expect(finalState.bases[0].minions.length).toBe(6);
+        ],
+        currentPlayer: '0',
+        phase: 'scoreBases',
+        responseWindow: {
+            id: 'me-first-hidden-ninja',
+            windowType: 'meFirst',
+            sourceId: 'scoreBases',
+            responderQueue: ['0', '1'],
+            currentResponderIndex: 0,
+            passedPlayers: [],
+            actionTakenThisRound: false,
+            consecutivePassRounds: 0,
+        },
     });
 
-    test('便衣忍者交互应该允许选择手牌中的随从', async ({ page, context }) => {
-        const { player1Page, player2Page, matchId } = await setupOnlineMatch(page, context, 'smashup');
-        await waitForGameReady(player1Page);
-        await waitForGameReady(player2Page);
-
-        // 构造场景：托尔图加基地达到临界点，玩家1 手牌中有便衣忍者和随从
-        const state = await readCoreState(player1Page);
-        const modifiedState = {
-            ...state,
-            players: {
-                '0': {
-                    ...state.players['0'],
-                    hand: [
-                        { uid: 'c1', defId: 'ninja_hidden_ninja', type: 'action', owner: '0' },
-                        { uid: 'c2', defId: 'ninja_acolyte', type: 'minion', owner: '0' },
-                    ],
-                    minionsPlayed: 0,
-                    actionsPlayed: 0,
-                },
-                '1': {
-                    ...state.players['1'],
-                    hand: [],
-                },
-            },
-            bases: [
-                {
-                    defId: 'base_tortuga',
-                    minions: [
-                        { uid: 'm1', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm2', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm3', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm4', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm5', defId: 'pirate_buccaneer', controller: '0', owner: '0', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                        { uid: 'm6', defId: 'alien_scout', controller: '1', owner: '1', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
-                    ],
-                    ongoingActions: [],
-                },
-                {
-                    defId: 'base_the_mothership',
-                    minions: [],
-                    ongoingActions: [],
-                },
-            ],
-            turnNumber: 1,
-            currentPlayerIndex: 0,
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return {
+            phase: state.sys.phase,
+            responseWindow: state.sys.responseWindow?.current?.windowType ?? null,
+            currentResponder: state.sys.responseWindow?.current?.responderQueue?.[state.sys.responseWindow?.current?.currentResponderIndex] ?? null,
+            hand: getPlayer(state, '0').hand.map((card: any) => card.defId),
+            base0Minions: state.core.bases[0].minions.length,
         };
+    }).toEqual({
+        phase: 'scoreBases',
+        responseWindow: 'meFirst',
+        currentResponder: '0',
+        hand: hand.map((card) => card.defId),
+        base0Minions: baseMinions.length,
+    });
+}
 
-        await applyCoreStateDirect(player1Page, modifiedState);
+test.describe('便衣忍者跳过与手牌选择', () => {
+    test('便衣忍者交互应允许跳过且不额外打出随从', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
 
-        // 玩家1 打出便衣忍者（special action）
-        await player1Page.click('[data-card-uid="c1"]');
-        await player1Page.waitForTimeout(500);
+        await openHiddenNinjaGame(game);
+        await setupHiddenNinjaMeFirstScene(game);
+        await page.waitForTimeout(2000);
 
-        // 点击托尔图加基地（触发 Me First! 响应窗口）
-        await player1Page.click('[data-base-index="0"]');
-        await player1Page.waitForTimeout(1000);
+        await game.playCard('ninja_hidden_ninja', { targetBaseIndex: 0 });
+        await game.waitForInteraction('ninja_hidden_ninja');
 
-        // 验证：应该显示浮动按钮
-        const floatingButtons = player1Page.locator('.fixed.bottom-8.left-1\\/2.-translate-x-1\\/2');
-        await expect(floatingButtons).toBeVisible({ timeout: 5000 });
+        await expect(page.getByRole('button', { name: /^(跳过|Skip)(?:\s*\(\d+\))?$/i })).toBeVisible();
+        await game.screenshot('hidden-ninja-skip-prompt', testInfo);
 
-        // 点击手牌中的忍者侍从（在手牌区直接点击）
-        await player1Page.click('[data-card-uid="c2"]');
-        await player1Page.waitForTimeout(500);
+        await game.skip();
 
-        // 验证：忍者侍从应该被打出到托尔图加基地
-        const finalState = await readCoreState(player1Page);
-        expect(finalState.bases[0].minions.length).toBe(7);
-        expect(finalState.bases[0].minions.some(m => m.uid === 'c2')).toBe(true);
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.sys.interaction?.current?.data?.sourceId ?? null;
+        }).not.toBe('ninja_hidden_ninja');
+
+        const finalState = await game.getState();
+        const base0Minions = finalState.core.bases[0].minions;
+        const player0 = getPlayer(finalState, '0');
+
+        expect(base0Minions).toHaveLength(2);
+        expect(base0Minions.some((minion: any) => minion.defId === 'ninja_acolyte')).toBe(false);
+        expect(player0.hand.map((card: any) => card.defId)).toEqual([
+            'ninja_acolyte',
+            'ninja_acolyte',
+        ]);
+        expect(player0.discard.map((card: any) => card.defId)).toContain('ninja_hidden_ninja');
+
+        await game.screenshot('hidden-ninja-skip-after', testInfo);
+    });
+
+    test('便衣忍者交互应允许从手牌打出随从到计分基地', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await openHiddenNinjaGame(game);
+        await setupHiddenNinjaMeFirstScene(game, {
+            hand: [
+                { uid: 'hand-hidden-ninja', defId: 'ninja_hidden_ninja', type: 'action' },
+                { uid: 'hand-acolyte-a', defId: 'ninja_acolyte', type: 'minion' },
+            ],
+        });
+        await page.waitForTimeout(2000);
+
+        await game.playCard('ninja_hidden_ninja', { targetBaseIndex: 0 });
+        await game.waitForInteraction('ninja_hidden_ninja');
+        await game.screenshot('hidden-ninja-play-prompt', testInfo);
+
+        await game.selectOption('hand-0');
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.sys.interaction?.current?.data?.sourceId ?? null;
+        }).not.toBe('ninja_hidden_ninja');
+
+        const finalState = await game.getState();
+        const player0 = getPlayer(finalState, '0');
+        const base0Minions = finalState.core.bases[0].minions;
+
+        expect(base0Minions).toHaveLength(3);
+        expect(base0Minions.some((minion: any) => minion.defId === 'ninja_acolyte')).toBe(true);
+        expect(player0.hand.map((card: any) => card.defId)).toEqual([]);
+        expect(player0.discard.map((card: any) => card.defId)).toContain('ninja_hidden_ninja');
+        expect(player0.minionsPlayed).toBe(0);
+
+        await game.screenshot('hidden-ninja-play-after', testInfo);
     });
 });
