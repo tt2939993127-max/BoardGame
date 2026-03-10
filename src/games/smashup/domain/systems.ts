@@ -84,7 +84,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
     return {
         id: 'smashup-event-system',
         name: '大杀四方事件处理',
-        priority: 50, // 在 InteractionSystem(20) 之后执行
+        priority: 24, // 必须在 FlowSystem(25) 之前执行，确保交互处理器先于 onAutoContinueCheck 运行
 
         afterEvents: ({ state, events, random }): HookResult<SmashUpCore> | void => {
             let newState = state;
@@ -160,6 +160,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         interactionData?: Record<string, unknown>;
                     };
                     const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+
 
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);

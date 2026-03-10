@@ -2,17 +2,15 @@
  * Moon Elf 英雄的 Token 定义
  * 
  * 包含：
- * - Evasive (闪避): Monk 复用
  * - Blinded (致盲)
  * - Entangle (缠绕)
  * - Targeted (锁定)
+ * - 共享 token：Evasive (闪避) - 从 sharedTokens 导入
+ * 
+ * 注意：月精灵的 Evasive 有 activeUse 配置，与共享版本不同，所以保留自己的定义
  */
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
-
-// 复用 Monk 的 Evasive 定义，但在 Moon Elf 中重新声明以保持独立性结构，
-// 或者引用已有的定义如果完全一致。这里为了方便维护（如果音效/描述有微调），我们复制并适配。
-// 实际上 Evasive 是通用的，这里我们重新定义一份以确保正确引用 Text key。
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
@@ -24,6 +22,9 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
 
     /**
      * 闪避 (Evasive) - Stack limit 3
+     * 
+     * 注意：月精灵的 Evasive 有 activeUse 配置（投掷判定），
+     * 与共享版本（passiveTrigger）不同，所以保留自己的定义
      */
     {
         id: TOKEN_IDS.EVASIVE,
@@ -37,8 +38,7 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
             consumeAmount: 1,
             effect: {
                 type: 'rollToNegate',
-                rollSuccess: { range: [1, 2] }, // 1-2 成功减伤至0 (Wait, image says 1-2 prevents damage? "如果结果为1-2, 伤害减至0"。 通常 DiceThrone 是 6 成功？不，Monk Evasive 也是 1-2 吗？需确认。Monk Tokens 说 range [1,2]。)
-                // Image text: "掷骰1颗。如果结果为1-2，伤害减至0" matches Monk logic.
+                rollSuccess: { range: [1, 2] },
             },
         },
         frameId: 'dodge',
@@ -108,7 +108,6 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
             removable: true,
             actions: [
                 { type: 'modifyStat', target: 'self', value: 2 },
-                // 锁定是持续效果，不会在受伤后自动移除，只能通过净化等手段移除
             ],
         },
         frameId: 'targeted',

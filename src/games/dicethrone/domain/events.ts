@@ -95,6 +95,7 @@ export const DT_EVENTS = defineEvents({
   TOKEN_RESPONSE_CLOSED: { audio: 'immediate', sound: RESPONSE_WINDOW_CLOSE_KEY },
   
   ATTACK_INITIATED: { audio: 'immediate', sound: ATTACK_INITIATE_KEY },
+  BONUS_DAMAGE_ADDED: 'silent',
   ATTACK_PRE_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
   ATTACK_MADE_UNDEFENDABLE: { audio: 'immediate', sound: ATTACK_UNDEFENDABLE_KEY },
   
@@ -479,6 +480,15 @@ export interface AttackInitiatedEvent extends GameEvent<'ATTACK_INITIATED'> {
     };
 }
 
+/** 攻击修正伤害添加事件 */
+export interface BonusDamageAddedEvent extends GameEvent<'BONUS_DAMAGE_ADDED'> {
+    payload: {
+        playerId: PlayerId;
+        amount: number;
+        sourceCardId?: string;
+    };
+}
+
 /** 进攻方前置防御结算事件 */
 export interface AttackPreDefenseResolvedEvent extends GameEvent<'ATTACK_PRE_DEFENSE_RESOLVED'> {
     payload: {
@@ -804,6 +814,7 @@ export type DiceThroneEvent =
     | CardReorderedEvent
     | DeckShuffledEvent
     | AttackInitiatedEvent
+    | BonusDamageAddedEvent
     | AttackPreDefenseResolvedEvent
     | AttackResolvedEvent
     | AttackMadeUndefendableEvent

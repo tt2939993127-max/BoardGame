@@ -3,13 +3,15 @@
  * 使用统一的 TokenSystem
  * 
  * 包含：
- * - debuff 类型：脑震荡、眩晕（被动触发）
+ * - debuff 类型：脑震荡（被动触发）
+ * - 共享 token：晕眩（从 sharedTokens 导入）
  * 
  * 注意：狂战士没有 consumable 类型的 Token（不像僧侣有太极、闪避、净化）
  */
 
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
+import { SHARED_TOKENS } from '../../domain/sharedTokens';
 
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
 
@@ -44,34 +46,10 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
         atlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,
     },
     
-    /**
-     * 眩晕 Token
-     * 效果：被施加眩晕后，攻击结算时立即移除并触发攻击方的额外攻击
-     * 不可叠加，不可花费移除（但可被净化）
-     * 
-     * 规则：当玩家被施加眩晕后，攻击结算时立即检查并触发
-     * - Player A 攻击 Player B，施加眩晕给 Player B
-     * - 攻击结算后，立即移除 Player B 的眩晕
-     * - Player A 获得额外攻击机会，再次攻击 Player B
-     * 
-     * 注意：眩晕在攻击结算后立即触发，不会在 buff 区显示
-     */
-    {
-        id: STATUS_IDS.DAZE,
-        name: statusText(STATUS_IDS.DAZE, 'name'),
-        colorTheme: 'from-yellow-600 to-amber-500',
-        description: statusText(STATUS_IDS.DAZE, 'description') as unknown as string[],
-        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning',
-        stackLimit: 1,
-        category: 'debuff',
-        passiveTrigger: {
-            timing: 'onAttackEnd', // 在攻击结束时触发额外攻击
-            removable: true, // 攻击结束后自动移除（但可被净化）
-            actions: [{ type: 'extraAttack', target: 'self' }], // 攻击方获得额外攻击（target 字段未使用，实际逻辑在 checkDazeExtraAttack）
-        },
-        frameId: 'stun',
-        atlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,
-    },
+    // ============================================
+    // 共享 token（从 sharedTokens 导入）
+    // ============================================
+    ...SHARED_TOKENS.filter(t => t.id === STATUS_IDS.DAZE),
 ];
 
 /**

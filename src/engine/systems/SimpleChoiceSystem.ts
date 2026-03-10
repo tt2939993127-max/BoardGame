@@ -152,6 +152,7 @@ function handleSimpleChoiceRespond<TCore>(
     }
 
     const newState = resolveInteraction(state);
+    
 
     const resolvedValue = payload.mergedValue !== undefined
         ? payload.mergedValue

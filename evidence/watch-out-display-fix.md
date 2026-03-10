@@ -1,152 +1,105 @@
-# 看箭（Watch Out）特写描述修复完成
+# 看箭（Watch Out）特写描述修复
 
-## 问题描述
+## 问题结论
 
-用户反馈："看箭 投掷的额外骰子下面特写的描述"不清楚。
+- 本次错误不是翻译缺失，而是 **`Watch Out` 事件语义被回滚成了通用 key**。
+- `git blame` 定位到 `src/games/dicethrone/domain/customActions/moon_elf.ts:590` 的错误写法来自提交 **`9c9dd78`**：
+  - `Merge pull request #7 from zhuanggenhua/fix/restore-p1-deletions`
+- 该提交把 `Watch Out` 的 `BONUS_DIE_ROLLED.payload.effectKey` 固定成了 `bonusDie.effect.watchOut`，导致特写只拿到通用描述，无法按骰面显示实际效果。
 
-## 根本原因
+## 正确行为
 
-"看箭"（Watch Out）卡牌投掷1骰时，特写只显示 `"看箭投掷：3"`，没有显示投掷结果对应的效果（弓→+2伤害，足→缠绕，月→致盲）。
+`Watch Out` 投 1 颗奖励骰后，特写文案必须和实际骰面一致：
 
-**修复前**：
-```
-看箭投掷：3
-```
+- `bow` → `bonusDie.effect.watchOut.bow`
+- `foot` → `bonusDie.effect.watchOut.foot`
+- `moon` → `bonusDie.effect.watchOut.moon`
 
-用户看不出投出弓面会有什么效果。
-
-## 卡牌效果
-
-**看箭**（Watch Out）：
-- 类型：攻击修正卡
-- CP 消耗：0
-- 时机：投掷阶段（roll）
-- 效果：投掷1骰
-  - 弓🏹 → 增加2伤害
-  - 足🦶 → 施加缠绕
-  - 月🌙 → 施加致盲
-
-## 修复内容
-
-### 1. 中文 i18n（`public/locales/zh-CN/game-dicethrone.json`）
-
-```json
-"watchOut": "看箭投掷：{{value}}",
-"watchOut.bow": "弓🏹：伤害+2",
-"watchOut.foot": "足🦶：施加缠绕",
-"watchOut.moon": "月🌙：施加致盲"
-```
-
-### 2. 英文 i18n（`public/locales/en/game-dicethrone.json`）
-
-```json
-"watchOut": "Watch Out Roll: {{value}}",
-"watchOut.bow": "Bow🏹: +2 Damage",
-"watchOut.foot": "Foot🦶: Inflict Entangle",
-"watchOut.moon": "Moon🌙: Inflict Blinded"
-```
-
-### 3. 代码修改（`src/games/dicethrone/domain/customActions/moon_elf.ts`）
-
-**修改前**：
-```typescript
-events.push({
-    type: 'BONUS_DIE_ROLLED',
-    payload: { 
-        value, 
-        face, 
-        playerId: attackerId, 
-        targetPlayerId: opponentId, 
-        effectKey: 'bonusDie.effect.watchOut',  // 固定的 key
-        effectParams: { value } 
-    },
-    sourceCommandType: 'ABILITY_EFFECT',
-    timestamp,
-} as BonusDieRolledEvent);
-```
-
-**修改后**：
-```typescript
-// 根据投掷结果显示不同的效果描述
-let effectKey = 'bonusDie.effect.watchOut';
-if (face === FACE.BOW) {
-    effectKey = 'bonusDie.effect.watchOut.bow';
-} else if (face === FACE.FOOT) {
-    effectKey = 'bonusDie.effect.watchOut.foot';
-} else if (face === FACE.MOON) {
-    effectKey = 'bonusDie.effect.watchOut.moon';
-}
-
-events.push({
-    type: 'BONUS_DIE_ROLLED',
-    payload: { 
-        value, 
-        face, 
-        playerId: attackerId, 
-        targetPlayerId: opponentId, 
-        effectKey,  // 动态的 key
-        effectParams: { value } 
-    },
-    sourceCommandType: 'ABILITY_EFFECT',
-    timestamp,
-} as BonusDieRolledEvent);
-```
-
-## 修复后效果
-
-### 投出弓面（值 1-3）
-```
-看箭投掷：2
-弓🏹：伤害+2
-```
-
-### 投出足面（值 4-5）
-```
-看箭投掷：4
-足🦶：施加缠绕
-```
-
-### 投出月面（值 6）
-```
-看箭投掷：6
-月🌙：施加致盲
-```
-
-## 改进点
-
-1. ✅ **显示具体效果**：用户可以清楚看到投掷结果对应的效果
-2. ✅ **即时反馈**：不需要等待后续事件，立即知道会发生什么
-3. ✅ **符合卡牌描述**：特写描述与卡牌描述一致
-4. ✅ **使用表情符号**：弓🏹、足🦶、月🌙 更直观
-
-## 对比其他类似卡牌
-
-### 月影袭人（Moon Shadow Strike）
-已有类似的分支显示：
-```json
-"moonShadowStrike.moon": "月🌙：施加致盲、缠绕、锁定",
-"moonShadowStrike.other": "抽1张牌"
-```
-
-### 万箭齐发（Volley）
-显示统计结果：
-```json
-"volley.result": "{{bowCount}}个弓面：伤害+{{bonusDamage}}"
-```
-
-现在"看箭"的显示方式与这些卡牌保持一致。
-
-## 测试建议
-
-1. 进入游戏选择月精灵（Moon Elf）
-2. 在攻击投掷阶段使用"看箭"卡牌
-3. 投掷骰子后查看特写描述
-4. 验证不同骰面（弓/足/月）显示不同的效果描述
-5. 确认效果实际生效（弓→伤害+2，足→缠绕，月→致盲）
-
-## 相关文件
+对应文案在 locale 中原本就已经存在：
 
 - `public/locales/zh-CN/game-dicethrone.json`
 - `public/locales/en/game-dicethrone.json`
-- `src/games/dicethrone/domain/customActions/moon_elf.ts`
-- `src/games/dicethrone/heroes/moon_elf/cards.ts`（卡牌定义）
+
+## 实际修复
+
+### 1. 事件层修复
+
+文件：`src/games/dicethrone/domain/customActions/moon_elf.ts`
+
+将 `handleWatchOut` 从固定通用 key：
+
+```ts
+effectKey: 'bonusDie.effect.watchOut'
+```
+
+改为按骰面派发：
+
+```ts
+const effectKey = face === FACE.BOW
+    ? 'bonusDie.effect.watchOut.bow'
+    : face === FACE.FOOT
+        ? 'bonusDie.effect.watchOut.foot'
+        : face === FACE.MOON
+            ? 'bonusDie.effect.watchOut.moon'
+            : 'bonusDie.effect.watchOut';
+```
+
+### 2. 现有测试更新
+
+- `src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx`
+  - 将 `Watch Out` 特写用例改为断言 `bonusDie.effect.watchOut.bow`
+- `src/games/dicethrone/__tests__/moon_elf-behavior.test.ts`
+  - 为 `bow / foot / moon` 三个分支补充 `BONUS_DIE_ROLLED.payload.effectKey` 断言
+- `e2e/dicethrone-watch-out-spotlight.e2e.ts`
+  - 补充 UI 文案校验，要求特写文本与实际 `effectKey` 分支一致
+  - 同时断言不能再回退到通用 key
+
+## 验证结果
+
+### 命令结果
+
+```bash
+npm run typecheck
+npx vitest run src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx src/games/dicethrone/__tests__/moon_elf-behavior.test.ts
+PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone-watch-out-spotlight.e2e.ts
+```
+
+结果：全部通过。
+
+### 截图证据
+
+#### 1. 初始场景
+
+![初始场景](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/01-initial-state.png)
+
+分析：
+
+- 处于 `Offensive Roll Phase`
+- 玩家手里存在 `Watch Out`
+- 已进入可打出攻击修正卡的时机
+
+#### 2. 打出后特写
+
+![打出后特写](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/02-after-play-card.png)
+
+分析：
+
+- 奖励骰特写成功弹出
+- 特写底部文案显示为具体分支效果：`Moon🌙: Inflict Blinded`
+- 这说明当前事件已不再使用通用 `bonusDie.effect.watchOut`，而是正确落到了 `bonusDie.effect.watchOut.moon`
+
+#### 3. 最终状态
+
+![最终状态](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/03-final-state.png)
+
+分析：
+
+- 特写仍保持可见，便于用户确认奖励骰结果
+- E2E 同时校验了事件流中存在 `BONUS_DIE_ROLLED`
+- 且 `effectKey` 必须匹配 `bonusDie.effect.watchOut.(bow|foot|moon)`，不会再退回通用 key
+
+## 本次修复范围
+
+- 只修 `Watch Out` 奖励骰特写描述链路
+- 未改动其他 Dice Throne 卡牌逻辑
+- 未动用户当前其余审计/恢复中的其他游戏与 UI 修改

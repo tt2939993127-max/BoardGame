@@ -287,9 +287,14 @@ export class GameTestContext {
         query: Record<string, SceneQueryValue> = {},
         timeout = 15000,
     ): Promise<void> {
-        // 新框架：直接导航到 /play/<gameId>，不使用 /test 路由
-        // query 参数已废弃，保留参数签名仅为向后兼容
-        const url = `/play/${gameId}`;
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(query)) {
+            if (value === undefined || value === null) continue;
+            params.set(key, String(value));
+        }
+
+        const search = params.toString();
+        const url = `/play/${gameId}${search ? `?${search}` : ''}`;
 
         await this.page.goto(url);
         await this.waitForTestHarness(timeout);
@@ -377,6 +382,15 @@ export class GameTestContext {
                 
                 return base; // 找不到定义，保持原样
             };
+
+            const processBaseConfig = (baseConfig?: SmashUpBaseSceneConfig): SmashUpBaseSceneConfig | undefined => {
+                if (!baseConfig) return baseConfig;
+
+                return autoFillBaseBreakpoint({
+                    ...baseConfig,
+                    minions: baseConfig.minions?.map(autoFillMinionPower),
+                });
+            };
             
             // 3. 处理玩家配置
             const processPlayerConfig = (playerConfig?: PlayerSceneConfig | DiceThronePlayerConfig): PlayerSceneConfig | DiceThronePlayerConfig | undefined => {
@@ -396,7 +410,7 @@ export class GameTestContext {
                 ...config,
                 player0: processPlayerConfig(config.player0),
                 player1: processPlayerConfig(config.player1),
-                bases: config.bases?.map(autoFillBaseBreakpoint),
+                bases: config.bases?.map(processBaseConfig),
             };
         } else if (config.gameId === 'dicethrone') {
             const selectedCharacters = config.extra?.selectedCharacters as Record<string, SelectableCharacterId> | undefined;
@@ -780,6 +794,23 @@ export class GameTestContext {
                         ...(patch.sys ?? {}),
                         phase: cfg.phase,
                     };
+
+                    // 从派系选择直接注入到其他阶段时，必须清理残留的交互/响应窗口。
+                    // 否则 factionSelect 初始态留下的 system state 仍可能阻塞 ADVANCE_PHASE，
+                    // 导致 UI 看起来在 playCards，但点击“结束回合”没有任何效果。
+                    if (cfg.phase !== 'factionSelect') {
+                        patch.sys.interaction = {
+                            ...(state.sys?.interaction ?? {}),
+                            current: undefined,
+                            queue: [],
+                        };
+
+                        if (!('responseWindow' in cfg)) {
+                            patch.sys.responseWindow = {
+                                current: undefined,
+                            };
+                        }
+                    }
                     
                     // SmashUp 特殊处理：scoreBases 阶段需要设置 scoringEligibleBaseIndices
                     if (cfg.phase === 'scoreBases' && cfg.bases) {
@@ -1010,11 +1041,14 @@ export class GameTestContext {
      */
     async selectOption(optionId: string): Promise<void> {
         await this.dismissRevealOverlayIfPresent();
-        const cardLikeOption = this.page.locator(`[data-option-id="${optionId}"]`);
-        if ((await cardLikeOption.count()) > 0) {
+        const cardLikeOption = this.page.locator(`[data-option-id="${optionId}"]`).first();
+        try {
+            await cardLikeOption.waitFor({ state: 'visible', timeout: 2000 });
             await cardLikeOption.click({ force: true });
             await this.page.waitForTimeout(300);
             return;
+        } catch {
+            // 卡牌选项不可见，继续尝试其他方式
         }
 
         const optionMeta = await this.page.evaluate((id) => {
@@ -1043,7 +1077,33 @@ export class GameTestContext {
             throw new Error(`Interaction option ${optionId} not found`);
         }
 
-        await this.page.getByRole('button', { name: optionLabel }).click({ force: true });
+        try {
+            const buttonOption = this.page.getByRole('button', { name: optionLabel }).first();
+            await buttonOption.waitFor({ state: 'visible', timeout: 2000 });
+            await buttonOption.click({ force: true });
+            await this.page.waitForTimeout(300);
+            return;
+        } catch {
+            // 按钮选项不可见，继续尝试其他方式
+        }
+
+        await this.page.evaluate((id) => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            const interaction = state?.sys?.interaction?.current;
+            const options = interaction?.data?.options ?? [];
+            const option = options.find((entry: any) => entry.id === id);
+
+            if (!interaction || !option) {
+                throw new Error(`Interaction option ${id} not found in current interaction`);
+            }
+
+            harness.command.dispatch({
+                type: 'SYS_INTERACTION_RESPOND',
+                playerId: interaction.playerId,
+                payload: { optionId: id },
+            });
+        }, optionId);
         await this.page.waitForTimeout(300);
     }
 
@@ -1084,7 +1144,14 @@ export class GameTestContext {
      * ```
      */
     async advancePhase(): Promise<void> {
-        await this.page.click('[data-action="advance-phase"]');
+        const legacyButton = this.page.locator('[data-action="advance-phase"]');
+        if ((await legacyButton.count()) > 0) {
+            await legacyButton.click({ force: true });
+            await this.page.waitForTimeout(300);
+            return;
+        }
+
+        await this.page.getByRole('button', { name: /^(结束回合|Finish Turn|End)$/i }).click({ force: true });
         await this.page.waitForTimeout(300);
     }
 

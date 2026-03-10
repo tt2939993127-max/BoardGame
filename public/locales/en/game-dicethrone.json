@@ -258,7 +258,8 @@
       "retribution": "Retribution Reflect",
       "ability": "{{abilityName}}",
       "unknown": "Unknown",
-      "shieldReduction": "Shield reduction"
+      "shieldReduction": "Shield reduction",
+      "attackModifier": "Attack Modifier"
     },
     "damageOriginal": "(Original {{amount}})",
     "damageModifiers": "(Original {{original}}, {{modifiers}})",

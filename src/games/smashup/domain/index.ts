@@ -89,6 +89,7 @@ function scoreOneBase(
     // 检查是否已经触发过 beforeScoring（防止交互解决后重复触发）
     const alreadyTriggeredBeforeScoring = core.beforeScoringTriggeredBases?.includes(baseIndex) ?? false;
     
+    
     if (!alreadyTriggeredBeforeScoring) {
         const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
             state: core,
@@ -467,13 +468,6 @@ function scoreOneBase(
     // 关键：仅当 afterScoring 新增了交互时（如刚柔流寺庙平局选择、忍者道场消灭随从等），
     // 才延迟发出 BASE_CLEARED/BASE_REPLACED，确保 targetType: 'minion' 的场上点选交互能看到随从。
     // 不影响 beforeScoring/onBaseRevealed 等其他来源的交互。
-    console.log('🔥 [scoreBase] 检查是否延迟 postScoringEvents:', {
-        afterScoringCreatedInteraction,
-        interactionBefore: interactionBeforeAfterScoring,
-        interactionAfter,
-        queueLenBefore: queueLenBeforeAfterScoring,
-        queueLenAfter,
-    });
     
     if (afterScoringCreatedInteraction) {
         // 把 postScoringEvents 序列化存到交互的 continuationContext 中
@@ -528,6 +522,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
         const hasBeforeScoringTriggered = result.events.some((evt: SmashUpEvent) => 
             evt.type === SU_EVENT_TYPES.BEFORE_SCORING_TRIGGERED
         );
+        
         
         // 如果只触发了 beforeScoring 但没有 BASE_SCORED，说明 beforeScoring 创建了交互并提前返回
         // 交互已经被解决了（因为我们在 handler 中），所以需要重新调用 scoreOneBase 继续执行
@@ -640,6 +635,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                     }
                 }
             }
+
             return { state: currentState, events };
         }
 
@@ -664,6 +660,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                     { sourceId: 'multi_base_scoring', targetType: 'base' },
                 );
                 currentState = queueInteraction(currentState, interaction);
+
                 return { state: currentState, events };
             }
         }
@@ -690,13 +687,9 @@ export function registerMultiBaseScoringInteractionHandler(): void {
                         const existingDeferred = (ctx._deferredPostScoringEvents ?? []) as { type: string; payload: unknown; timestamp: number }[];
                         ctx._deferredPostScoringEvents = [...existingDeferred, ...deferredEvents];
                         iData.continuationContext = ctx;
-                        console.log('[multi_base_scoring] 将延迟事件传递给新交互:', {
-                            interactionId: newInteraction.id,
-                            deferredEventsCount: deferredEvents.length,
-                            totalDeferredCount: ctx._deferredPostScoringEvents.length,
-                        });
                     }
                 }
+
                 return { state: currentState, events };
             }
             // 更新本地 core 副本
@@ -709,7 +702,6 @@ export function registerMultiBaseScoringInteractionHandler(): void {
         // 只有当 remainingIndices 为空时（所有基地都计分完了），才补发延迟事件
         // 这样可以避免在中间步骤重复补发
         if (deferredEvents && deferredEvents.length > 0) {
-            console.log('[multi_base_scoring] 所有基地计分完成，补发延迟事件:', deferredEvents.length);
             events.push(...deferredEvents as SmashUpEvent[]);
         }
 
@@ -853,10 +845,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             if (state.sys.afterScoringInitialPowers) {
                 const { baseIndex: scoredBaseIndex, powers: initialPowers } = state.sys.afterScoringInitialPowers as any;
                 
-                console.log('[onPhaseExit] 检查 afterScoring 后力量变化:', {
-                    baseIndex: scoredBaseIndex,
-                    initialPowers,
-                });
                 
                 // 计算当前力量
                 const currentPowers = new Map<PlayerId, number>();
@@ -882,19 +870,12 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     const currentPower = currentPowers.get(playerId) ?? 0;
                     if (currentPower !== initialPower) {
                         powerChanged = true;
-                        console.log('[onPhaseExit] 力量变化:', {
-                            playerId,
-                            initialPower,
-                            currentPower,
-                            delta: currentPower - initialPower,
-                        });
                         break;
                     }
                 }
                 
                 // 如果力量变化，重新计分该基地
                 if (powerChanged && currentBase) {
-                    console.log('[onPhaseExit] 力量变化，重新计分基地:', scoredBaseIndex);
                     
                     // 重新计算排名
                     const playerPowers = new Map<PlayerId, number>();
@@ -959,10 +940,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     };
                     events.push(scoreEvt);
                     
-                    console.log('[onPhaseExit] 重新计分完成:', {
-                        baseIndex: scoredBaseIndex,
-                        rankings,
-                    });
                 }
                 
                 // ⚠️ 关键修复：无论力量是否变化，都需要发出 BASE_CLEARED 和 BASE_REPLACED 事件
@@ -1005,7 +982,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         if (revealResult.matchState) state = revealResult.matchState;
                     }
                     
-                    console.log('[onPhaseExit] 补发 BASE_CLEARED 和 BASE_REPLACED 事件');
                 }
                 
                 // 标记该基地已记分，防止后续正常计分循环重复计分
@@ -1097,8 +1073,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
                 (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
             );
-// Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
-            if (remainingIndices.length >= 2 && !state.sys.interaction.current && !currentIsMultiBaseScoring && !hasMultiBaseScoringInQueue) {
+            // Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
+            if (remainingIndices.length >= 2 && !currentIsMultiBaseScoring && !hasMultiBaseScoringInQueue) {
                 const candidates = remainingIndices.map(i => {
                     const base = core.bases[i];
                     const totalPower = getTotalEffectivePowerOnBase(core, base, i);
@@ -1168,10 +1144,19 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         },
                     };
                     
+                    const baseState = result.matchState ?? currentMatchState;
+                    const haltedState: MatchState<SmashUpCore> = {
+                        ...baseState,
+                        sys: {
+                            ...baseState.sys,
+                            scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || [])],
+                        },
+                    };
+
                     return {
                         events: [...events, ...result.events],
                         halt: true,
-                        updatedState: result.matchState ?? currentMatchState,
+                        updatedState: haltedState,
                     } as PhaseExitResult;
                 }
                 
@@ -1406,6 +1391,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             
             // 情况1：flowHalted=true 且交互已解决且响应窗口已关闭 → 自动推进
             if (state.sys.flowHalted && !state.sys.interaction.current && !state.sys.responseWindow?.current) {
+                // 【关键修复】如果正在执行 multi_base_scoring handler，不要自动推进
+                // 问题：handler 执行期间，onAutoContinueCheck 会检测到交互已解决，
+                // 然后触发 ADVANCE_PHASE，导致重新进入 onPhaseExit，又创建新的交互
+                // 解决方案：检查标志，如果 handler 正在执行，不要推进
+                
                 // 【修复】如果存在 afterScoringInitialPowers，说明需要重新计分
                 // 返回 autoContinue: true，触发 ADVANCE_PHASE，这会再次调用 onPhaseExit
                 // onPhaseExit 开头的重新计分逻辑会执行，然后推进到 draw 阶段

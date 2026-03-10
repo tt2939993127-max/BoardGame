@@ -453,6 +453,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             // 弓→+2伤害（修改 pendingAttack.bonusDamage）
             expect(state.pendingAttack!.bonusDamage).toBe(2);
             expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
+            const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
+            expect(bonusDieEvents).toHaveLength(1);
+            expect((bonusDieEvents[0] as any).payload.effectKey).toBe('bonusDie.effect.watchOut.bow');
         });
 
         it('投出足面时施加缠绕', () => {
@@ -465,6 +468,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
+            const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
+            expect(bonusDieEvents).toHaveLength(1);
+            expect((bonusDieEvents[0] as any).payload.effectKey).toBe('bonusDie.effect.watchOut.foot');
         });
 
         it('投出月面时施加致盲', () => {
@@ -477,6 +483,9 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.BLINDED);
+            const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
+            expect(bonusDieEvents).toHaveLength(1);
+            expect((bonusDieEvents[0] as any).payload.effectKey).toBe('bonusDie.effect.watchOut.moon');
         });
     });
 

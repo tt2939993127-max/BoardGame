@@ -19,7 +19,7 @@ import { getChoiceEffectHandler, registerChoiceEffectHandler } from './choiceEff
 import { removeCard } from './utils';
 import {
     handlePreventDamage, handleAttackPreDefenseResolved, handleDamageDealt,
-    handleHealApplied, handleAttackInitiated, handleAttackResolved,
+    handleHealApplied, handleAttackInitiated, handleBonusDamageAdded, handleAttackResolved,
     handleAttackMadeUndefendable, handleExtraAttackTriggered,
     handleDamageShieldGranted, handleDamagePrevented,
     handleAbilityReselectionRequired, handleTokenResponseRequested,
@@ -785,6 +785,8 @@ export const reduce = (
             return handleDeckShuffled(state, event);
         case 'ATTACK_INITIATED':
             return handleAttackInitiated(state, event);
+        case 'BONUS_DAMAGE_ADDED':
+            return handleBonusDamageAdded(state, event);
         case 'ATTACK_PRE_DEFENSE_RESOLVED':
             return handleAttackPreDefenseResolved(state, event);
         case 'ATTACK_RESOLVED':

@@ -31,6 +31,9 @@ import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem'
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
 import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
+import { createScopedLogger } from '../../../lib/logger';
+
+const boardOverlaysLogger = createScopedLogger('DT_BOARD_OVERLAYS');
 
 export interface BoardOverlaysProps {
     // 放大预览
@@ -180,7 +183,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
 
     // 调试日志：bonusDie prop
     React.useEffect(() => {
-        console.log('[BoardOverlays] 📦 bonusDie prop 更新:', {
+        boardOverlaysLogger.info('bonus-prop', {
             show: props.bonusDie.show,
             value: props.bonusDie.value,
             face: props.bonusDie.face,
@@ -188,6 +191,16 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
             characterId: props.bonusDie.characterId,
         });
     }, [props.bonusDie]);
+
+    React.useEffect(() => {
+        boardOverlaysLogger.info('token-modal-check', {
+            hasPendingDamage: !!props.pendingDamage,
+            hasTokenResponsePhase: !!props.tokenResponsePhase,
+            isTokenResponder: props.isTokenResponder,
+            shouldRender: !!(props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder),
+            usableTokensCount: props.usableTokens?.length ?? 0,
+        });
+    }, [props.pendingDamage, props.tokenResponsePhase, props.isTokenResponder, props.usableTokens]);
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
@@ -274,13 +287,6 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 {/* Token 响应窗口 */}
                 {(() => {
                     const shouldRender = props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder;
-                    console.log('[BoardOverlays] Token 响应窗口渲染检查', {
-                        hasPendingDamage: !!props.pendingDamage,
-                        hasTokenResponsePhase: !!props.tokenResponsePhase,
-                        isTokenResponder: props.isTokenResponder,
-                        shouldRender,
-                        usableTokensCount: props.usableTokens?.length ?? 0,
-                    });
                     return shouldRender ? (
                         <TokenResponseModal
                             key="token-response"

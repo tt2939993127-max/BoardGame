@@ -585,9 +585,16 @@ function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
 
     const value = random.d(6);
     const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    const effectKey = face === FACE.BOW
+        ? 'bonusDie.effect.watchOut.bow'
+        : face === FACE.FOOT
+            ? 'bonusDie.effect.watchOut.foot'
+            : face === FACE.MOON
+                ? 'bonusDie.effect.watchOut.moon'
+                : 'bonusDie.effect.watchOut';
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey: 'bonusDie.effect.watchOut', effectParams: { value } },
+        payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey, effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);

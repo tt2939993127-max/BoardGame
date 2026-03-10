@@ -9,6 +9,9 @@ import React from 'react';
 import type { MotionProps } from 'framer-motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UI_Z_INDEX } from '../../../core';
+import { createScopedLogger } from '../../../lib/logger';
+
+const spotlightContainerLogger = createScopedLogger('DT_SPOTLIGHT_CONTAINER');
 
 type SpotlightMotion = Pick<MotionProps, 'initial' | 'animate' | 'exit' | 'transition'>;
 
@@ -62,39 +65,32 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     disableBackdropClose = false,
     closeClickGuardMs = 180,
 }) => {
-    console.log('[SpotlightContainer] 🎬 渲染:', { 
-        id, 
-        isVisible, 
-        closeClickGuardMs,
-        timestamp: Date.now(),
-    });
     const visibleSinceRef = React.useRef<number>(0);
 
     React.useEffect(() => {
         if (isVisible) {
             const now = Date.now();
             visibleSinceRef.current = now;
-            console.log('[SpotlightContainer] 🟢 变为可见:', {
+            spotlightContainerLogger.info('visible', {
                 id,
                 visibleSince: now,
                 closeClickGuardMs,
             });
         }
-    }, [id, isVisible, closeClickGuardMs]);
+    }, [closeClickGuardMs, id, isVisible]);
 
     const isCloseClickGuardActive = React.useCallback(() => {
         if (closeClickGuardMs <= 0) return false;
         const elapsed = Date.now() - visibleSinceRef.current;
         const isActive = elapsed < closeClickGuardMs;
-        console.log('[SpotlightContainer] 🛡️ 检查点击保护:', {
+        spotlightContainerLogger.info('guard-check', {
             id,
             elapsed,
             closeClickGuardMs,
             isActive,
-            timestamp: Date.now(),
         });
         return isActive;
-    }, [id, closeClickGuardMs]);
+    }, [closeClickGuardMs, id]);
 
     // 自动关闭计时器
     React.useEffect(() => {
@@ -129,16 +125,16 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
                 onClick={disableBackdropClose
                     ? undefined
                     : () => {
-                        console.log('[SpotlightContainer] 🖱️ 背景点击:', {
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('backdrop-click', {
                             id,
-                            guardActive: isCloseClickGuardActive(),
-                            timestamp: Date.now(),
+                            guardActive,
                         });
-                        if (isCloseClickGuardActive()) {
-                            console.log('[SpotlightContainer] 🛡️ 点击保护生效，忽略关闭');
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
                             return;
                         }
-                        console.log('[SpotlightContainer] ❌ 执行关闭');
+                        spotlightContainerLogger.info('close', { id, source: 'backdrop' });
                         onClose();
                     }}
             >
@@ -151,21 +147,21 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
                     transition={m.transition}
                     onClick={(e) => {
                         e.stopPropagation();
-                        console.log('[SpotlightContainer] 🖱️ 内容点击:', {
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('content-click', {
                             id,
                             closeOnContentClick,
-                            guardActive: isCloseClickGuardActive(),
-                            timestamp: Date.now(),
+                            guardActive,
                         });
                         if (!closeOnContentClick) {
-                            console.log('[SpotlightContainer] ⏸️ closeOnContentClick=false，不关闭');
+                            spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
                             return;
                         }
-                        if (isCloseClickGuardActive()) {
-                            console.log('[SpotlightContainer] 🛡️ 点击保护生效，忽略关闭');
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
                             return;
                         }
-                        console.log('[SpotlightContainer] ❌ 执行关闭');
+                        spotlightContainerLogger.info('close', { id, source: 'content' });
                         onClose();
                     }}
                 >

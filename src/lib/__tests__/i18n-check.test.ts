@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createScopedLogger } from '../logger';
 import { parseNamespaceLiteral, collectReferencesFromContent } from '../../../scripts/verify/i18n-check';
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
 
 describe('i18n 静态检查工具', () => {
     it('解析 namespace 数组字面量', () => {
@@ -38,5 +43,18 @@ describe('i18n 静态检查工具', () => {
             knownNamespaces: new Set(['common', 'lobby']),
         });
         expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(true);
+    });
+});
+
+describe('logger scoped helper', () => {
+    it('输出单行 JSON 作用域日志', () => {
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const scopedLogger = createScopedLogger('TEST_SCOPE');
+
+        scopedLogger.info('hello', { value: 1, ok: true });
+
+        expect(logSpy).toHaveBeenCalled();
+        const firstCall = logSpy.mock.calls[0];
+        expect(String(firstCall[0])).toContain('[TEST_SCOPE] {"stage":"hello","value":1,"ok":true}');
     });
 });

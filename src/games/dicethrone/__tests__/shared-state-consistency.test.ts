@@ -222,7 +222,7 @@ describe('眩晕（stun）进攻阶段处理', () => {
             name: '眩晕跳过进攻',
             setup: (playerIds, random) => {
                 const state = createNoResponseSetupWithEmptyHand()(playerIds, random);
-                state.core.players['0'].statusEffects[STATUS_IDS.STUN] = 1;
+                state.core.players['0'].statusEffects[STATUS_IDS.DAZE] = 1;
                 return state;
             },
             commands: [
@@ -231,7 +231,7 @@ describe('眩晕（stun）进攻阶段处理', () => {
             ],
             expect: {
                 turnPhase: 'main2',
-                players: { '0': { statusEffects: { [STATUS_IDS.STUN]: 0 } } },
+                players: { '0': { statusEffects: { [STATUS_IDS.DAZE]: 0 } } },
             },
         });
         expect(result.assertionErrors).toEqual([]);

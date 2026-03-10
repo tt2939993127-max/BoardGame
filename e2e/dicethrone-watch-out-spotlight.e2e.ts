@@ -86,17 +86,30 @@ test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, test
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 2000 });
 
-    // 截图:打出卡牌后
-    await game.screenshot('02-after-play-card', testInfo);
-
     const afterClickState = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
         const entries = state?.sys?.eventStream?.entries ?? [];
+        const bonusDieEvent = [...entries].reverse().find((entry: any) => entry.event?.type === 'BONUS_DIE_ROLLED');
         return {
             player0Hand: state?.core?.players?.['0']?.hand?.map((card: any) => card.id),
             lastEventTypes: entries.slice(-4).map((entry: any) => entry.event?.type),
+            bonusDieEffectKey: bonusDieEvent?.event?.payload?.effectKey,
         };
     });
+
+    const expectedOverlayTextByEffectKey: Record<string, RegExp> = {
+        'bonusDie.effect.watchOut.bow': /(Bow🏹: \+2 Damage|弓🏹：伤害\+2)/,
+        'bonusDie.effect.watchOut.foot': /(Foot🦶: Inflict Entangle|足🦶：施加缠绕)/,
+        'bonusDie.effect.watchOut.moon': /(Moon🌙: Inflict Blinded|月🌙：施加致盲)/,
+    };
+
+    expect(afterClickState.bonusDieEffectKey).toMatch(/^bonusDie\.effect\.watchOut\.(bow|foot|moon)$/);
+    await expect(
+        bonusDieOverlay,
+    ).toContainText(expectedOverlayTextByEffectKey[afterClickState.bonusDieEffectKey], { timeout: 5000 });
+
+    // 截图:打出卡牌后，文案已出现
+    await game.screenshot('02-after-play-card', testInfo);
 
     await game.screenshot('03-final-state', testInfo);
     expect(afterClickState.player0Hand).not.toContain('watch-out');

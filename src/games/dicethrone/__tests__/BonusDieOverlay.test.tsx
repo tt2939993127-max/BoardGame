@@ -213,7 +213,7 @@ describe('BonusDieOverlay', () => {
                         targetPlayerId: '1',
                         value: 1,
                         face: 'bow',
-                        effectKey: 'bonusDie.effect.watchOut',
+                        effectKey: 'bonusDie.effect.watchOut.bow',
                         effectParams: { value: 1 },
                     },
                     timestamp: 1100,
@@ -251,7 +251,7 @@ describe('BonusDieOverlay', () => {
             expect(state.bonusDie.show).toBe(true);
             expect(state.bonusDie.value).toBe(1);
             expect(state.bonusDie.face).toBe('bow');
-            expect(state.bonusDie.effectKey).toBe('bonusDie.effect.watchOut');
+            expect(state.bonusDie.effectKey).toBe('bonusDie.effect.watchOut.bow');
         });
     });
 

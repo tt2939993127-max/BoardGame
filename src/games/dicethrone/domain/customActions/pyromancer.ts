@@ -568,15 +568,23 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
 
 /**
  * 烈焰赤红 (Red Hot)：每个烈焰精通增加 1 点伤害到当前攻击
- * 作为 immediate timing 使用，通过 pendingAttack.bonusDamage 增加
+ * 生成 BONUS_DAMAGE_ADDED 事件，由 reducer 累加到 pendingAttack.bonusDamage
  */
 const resolveDmgPerFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const fmCount = getFireMasteryCount(ctx);
     if (fmCount <= 0) return [];
-    if (ctx.state.pendingAttack && ctx.state.pendingAttack.attackerId === ctx.attackerId) {
-        ctx.state.pendingAttack.bonusDamage = (ctx.state.pendingAttack.bonusDamage ?? 0) + fmCount;
-    }
-    return [];
+    
+    // 生成事件而不是直接修改 state
+    return [{
+        type: 'BONUS_DAMAGE_ADDED',
+        payload: {
+            playerId: ctx.attackerId,
+            amount: fmCount,
+            sourceCardId: 'card-red-hot',  // 用于日志显示
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: ctx.timestamp,
+    } as any];  // TODO: 添加 BONUS_DAMAGE_ADDED 到事件类型定义
 };
 
 /**

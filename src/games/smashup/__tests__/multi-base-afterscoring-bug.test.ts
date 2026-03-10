@@ -120,10 +120,43 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         expect(options.map((o: any) => o.value.baseIndex).sort()).toEqual([0, 1, 2]);
     });
 
-    // 测试简化：只验证交互创建，不测试完整流程（完整流程应该用 E2E 测试）
-    it.skip('完整流程：3个基地依次计分，中间有 afterScoring 交互', () => {
-        // 这个测试需要模拟完整的交互链，包括 beforeScoring/afterScoring 交互
-        // 单元测试难以模拟这种复杂场景，应该用 E2E 测试
-        // 跳过此测试，等待 E2E 测试覆盖
+    // 测试多基地计分的完整流程
+    it('multi_base_scoring handler 应该执行计分逻辑', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+            playerIds: ['0', '1'],
+            setup: createMultiBaseScoringSetup,
+        });
+
+        const result = runner.run({
+            name: '多基地计分流程',
+            commands: [
+                // 从 playCards 推进到 scoreBases，自动创建 multi_base_scoring 交互
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+                // 选择基地 0 并计分
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
+            ],
+        });
+
+        // 验证：应该有 BASE_SCORED 事件
+        const allEvents = result.steps.flatMap(step => step.events);
+        const scoredEvents = allEvents.filter((e: string) => e === 'su:base_scored');
+        
+        console.log('=== Handler 测试结果 ===');
+        console.log('BASE_SCORED 事件数量:', scoredEvents.length);
+        console.log('所有事件:', allEvents);
+        console.log('玩家分数:', {
+            p0: result.finalState.core.players['0'].vp,
+            p1: result.finalState.core.players['1'].vp,
+        });
+        
+        // 至少应该有 1 个基地被计分
+        expect(scoredEvents.length).toBeGreaterThanOrEqual(1);
+        
+        // 验证：玩家应该获得了分数
+        const p0Score = result.finalState.core.players['0'].vp;
+        const p1Score = result.finalState.core.players['1'].vp;
+        expect(p0Score + p1Score).toBeGreaterThan(0);
     });
 });
