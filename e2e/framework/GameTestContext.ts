@@ -13,7 +13,9 @@
 import { copyFile, mkdir } from 'node:fs/promises';
 import { join, parse } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
-import { getCardDef as getSmashUpCardDef } from '../../src/games/smashup/data/cards';
+import { getCardDef as getSmashUpCardDef, getBaseDef } from '../../src/games/smashup/data/cards';
+import { CHARACTER_DATA_MAP, initHeroState } from '../../src/games/dicethrone/domain/characters';
+import type { AbilityCard, SelectableCharacterId } from '../../src/games/dicethrone/types';
 
 type SceneQueryValue = string | number | boolean | null | undefined;
 
@@ -95,12 +97,12 @@ interface PlayerSceneConfig {
  * 玩家场景配置（DiceThrone）
  */
 interface DiceThronePlayerConfig {
-    /** 手牌（defId 数组） */
-    hand?: string[];
-    /** 牌库（defId 数组） */
-    deck?: string[];
-    /** 弃牌堆（defId 数组） */
-    discard?: string[];
+    /** 手牌（卡牌 id 数组或完整卡牌对象） */
+    hand?: Array<string | AbilityCard>;
+    /** 牌库（卡牌 id 数组或完整卡牌对象） */
+    deck?: Array<string | AbilityCard>;
+    /** 弃牌堆（卡牌 id 数组或完整卡牌对象） */
+    discard?: Array<string | AbilityCard>;
     /** 资源（如 { CP: 3, HP: 50 }） */
     resources?: Record<string, number>;
     /** Token（如 { shield: 2 }） */
@@ -131,6 +133,8 @@ interface SceneConfig {
     randomQueue?: number[];
     /** 额外的状态字段（游戏特定） */
     extra?: Record<string, any>;
+    /** 预构建玩家状态（框架内部使用） */
+    prebuiltPlayers?: Partial<Record<'0' | '1', Record<string, any>>>;
 }
 
 /**
@@ -162,25 +166,77 @@ function resolveSmashUpCardType(defId: string, explicitType?: SmashUpCardType): 
     return 'minion';
 }
 
+const DICE_THRONE_DEFAULT_CHARACTERS: Record<'0' | '1', SelectableCharacterId> = {
+    '0': 'monk',
+    '1': 'barbarian',
+};
+
+const DICE_THRONE_PREPARE_RANDOM = {
+    shuffle: <T>(arr: T[]) => arr,
+    random: () => 0.5,
+    d: (_faces: number) => 1,
+    range: (min: number, _max: number) => min,
+};
+
+function getDiceThroneCardCatalog(characterId: SelectableCharacterId): Map<string, AbilityCard> {
+    const characterData = CHARACTER_DATA_MAP[characterId];
+    const deck = characterData.getStartingDeck(DICE_THRONE_PREPARE_RANDOM);
+    return new Map(deck.map((card) => [card.id, card]));
+}
+
+function createFallbackDiceThroneCard(cardId: string): AbilityCard {
+    return {
+        id: cardId,
+        name: cardId,
+        type: 'action',
+        cpCost: 0,
+        timing: 'main',
+        description: cardId,
+    };
+}
+
+function normalizeDiceThroneCardEntry(
+    entry: string | AbilityCard,
+    cardCatalog: Map<string, AbilityCard>,
+): AbilityCard {
+    if (typeof entry !== 'string') {
+        return {
+            ...createFallbackDiceThroneCard(entry.id),
+            ...entry,
+        };
+    }
+
+    const card = cardCatalog.get(entry);
+    if (card) {
+        return { ...card };
+    }
+
+    return createFallbackDiceThroneCard(entry);
+}
+
+function normalizeDiceThronePlayerConfig(
+    playerConfig: DiceThronePlayerConfig | undefined,
+    playerId: '0' | '1',
+    selectedCharacters?: Record<string, SelectableCharacterId>,
+): DiceThronePlayerConfig | undefined {
+    if (!playerConfig) return playerConfig;
+
+    const characterId = selectedCharacters?.[playerId] ?? DICE_THRONE_DEFAULT_CHARACTERS[playerId];
+    const cardCatalog = getDiceThroneCardCatalog(characterId);
+
+    return {
+        ...playerConfig,
+        hand: playerConfig.hand?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
+        deck: playerConfig.deck?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
+        discard: playerConfig.discard?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
+    };
+}
+
 function normalizeSmashUpCardEntry(entry: string | SmashUpCardSceneConfig): SmashUpCardSceneConfig {
     const card = typeof entry === 'string' ? { defId: entry } : { ...entry };
     return {
         ...card,
         type: resolveSmashUpCardType(card.defId, card.type),
-    };
-}
-
-function normalizeSmashUpPlayerConfig(
-    playerConfig?: PlayerSceneConfig | DiceThronePlayerConfig,
-): PlayerSceneConfig | DiceThronePlayerConfig | undefined {
-    if (!playerConfig) return playerConfig;
-
-    const config = playerConfig as PlayerSceneConfig;
-    return {
-        ...config,
-        hand: config.hand?.map(normalizeSmashUpCardEntry),
-        deck: config.deck?.map(normalizeSmashUpCardEntry),
-        discard: config.discard?.map(normalizeSmashUpCardEntry),
     };
 }
 
@@ -292,13 +348,96 @@ export class GameTestContext {
      */
     async setupScene(config: SceneConfig): Promise<void> {
         await this.waitForTestHarness();
-        const preparedConfig: SceneConfig = config.gameId === 'smashup'
-            ? {
+        
+        // 方案3：Node.js 环境预处理 - 自动填充 basePower 和 breakpoint
+        let preparedConfig: SceneConfig = config;
+        
+        if (config.gameId === 'smashup') {
+            // 1. 自动填充随从的 basePower（从卡牌定义读取）
+            const autoFillMinionPower = (minion: SmashUpMinionSceneConfig): SmashUpMinionSceneConfig => {
+                if (minion.basePower !== undefined) return minion; // 已有值，不覆盖
+                
+                const cardDef = getSmashUpCardDef(minion.defId);
+                if (cardDef?.type === 'minion' && typeof cardDef.power === 'number') {
+                    return { ...minion, basePower: cardDef.power };
+                }
+                
+                return minion; // 找不到定义，保持原样
+            };
+            
+            // 2. 自动填充基地的 breakpoint（从基地定义读取）
+            const autoFillBaseBreakpoint = (base: SmashUpBaseSceneConfig): SmashUpBaseSceneConfig => {
+                if (base.breakpoint !== undefined) return base; // 已有值，不覆盖
+                if (!base.defId) return base; // 没有 defId，无法查询
+                
+                const baseDef = getBaseDef(base.defId);
+                if (baseDef && typeof baseDef.breakpoint === 'number') {
+                    return { ...base, breakpoint: baseDef.breakpoint };
+                }
+                
+                return base; // 找不到定义，保持原样
+            };
+            
+            // 3. 处理玩家配置
+            const processPlayerConfig = (playerConfig?: PlayerSceneConfig | DiceThronePlayerConfig): PlayerSceneConfig | DiceThronePlayerConfig | undefined => {
+                if (!playerConfig) return playerConfig;
+                
+                const config = playerConfig as PlayerSceneConfig;
+                return {
+                    ...config,
+                    hand: config.hand?.map(normalizeSmashUpCardEntry),
+                    deck: config.deck?.map(normalizeSmashUpCardEntry),
+                    discard: config.discard?.map(normalizeSmashUpCardEntry),
+                    field: config.field?.map(autoFillMinionPower),
+                };
+            };
+            
+            preparedConfig = {
                 ...config,
-                player0: normalizeSmashUpPlayerConfig(config.player0),
-                player1: normalizeSmashUpPlayerConfig(config.player1),
-            }
-            : config;
+                player0: processPlayerConfig(config.player0),
+                player1: processPlayerConfig(config.player1),
+                bases: config.bases?.map(autoFillBaseBreakpoint),
+            };
+        } else if (config.gameId === 'dicethrone') {
+            const selectedCharacters = config.extra?.selectedCharacters as Record<string, SelectableCharacterId> | undefined;
+            const buildPrebuiltPlayer = (
+                playerId: '0' | '1',
+                playerConfig?: DiceThronePlayerConfig,
+            ) => {
+                const characterId = selectedCharacters?.[playerId] ?? DICE_THRONE_DEFAULT_CHARACTERS[playerId];
+                const baseState = initHeroState(playerId, characterId, DICE_THRONE_PREPARE_RANDOM);
+                const normalizedConfig = normalizeDiceThronePlayerConfig(playerConfig, playerId, selectedCharacters);
+
+                return {
+                    ...baseState,
+                    characterId,
+                    ...(normalizedConfig ?? {}),
+                    hand: normalizedConfig?.hand ?? baseState.hand,
+                    deck: normalizedConfig?.deck ?? baseState.deck,
+                    discard: normalizedConfig?.discard ?? baseState.discard,
+                    resources: {
+                        ...baseState.resources,
+                        ...(normalizedConfig?.resources ?? {}),
+                    },
+                    tokens: {
+                        ...baseState.tokens,
+                        ...(normalizedConfig?.tokens ?? {}),
+                    },
+                };
+            };
+
+            preparedConfig = {
+                ...config,
+                player0: normalizeDiceThronePlayerConfig(config.player0 as DiceThronePlayerConfig | undefined, '0', selectedCharacters),
+                player1: normalizeDiceThronePlayerConfig(config.player1 as DiceThronePlayerConfig | undefined, '1', selectedCharacters),
+                prebuiltPlayers: {
+                    '0': buildPrebuiltPlayer('0', config.player0 as DiceThronePlayerConfig | undefined),
+                    '1': buildPrebuiltPlayer('1', config.player1 as DiceThronePlayerConfig | undefined),
+                },
+            };
+        } else {
+            preparedConfig = config;
+        }
 
         await this.page.evaluate(async (cfg) => {
             const harness = (window as any).__BG_TEST_HARNESS__;
@@ -316,36 +455,49 @@ export class GameTestContext {
             // 3. 根据游戏类型选择不同的构建策略
             if (cfg.gameId === 'dicethrone') {
                 // DiceThrone 特定逻辑
-                const now = Date.now();
-                const generateUid = (defId: string, index: number) => `${defId}_${now}_${index}`;
+                const buildDiceThronePlayerState = (playerConfig: any, playerId: string) => {
+                    const prebuiltPlayer = cfg.prebuiltPlayers?.[playerId];
+                    if (prebuiltPlayer) {
+                        return { ...prebuiltPlayer };
+                    }
 
-                const buildDiceThronePlayerState = (playerConfig: any, playerId: string, offset: number) => {
-                    const hand = (playerConfig?.hand || []).map((defId: string, i: number) => ({
-                        uid: generateUid(defId, offset + i),
-                        defId,
-                        type: 'ability', // DiceThrone 卡牌类型
-                    }));
+                    const cloneCard = (entry: any) => {
+                        if (typeof entry === 'string') {
+                            return {
+                                id: entry,
+                                name: entry,
+                                type: 'action',
+                                cpCost: 0,
+                                timing: 'main',
+                                description: entry,
+                            };
+                        }
 
-                    const deck = (playerConfig?.deck || []).map((defId: string, i: number) => ({
-                        uid: generateUid(defId, offset + 1000 + i),
-                        defId,
-                        type: 'ability',
-                    }));
-
-                    const discard = (playerConfig?.discard || []).map((defId: string, i: number) => ({
-                        uid: generateUid(defId, offset + 2000 + i),
-                        defId,
-                        type: 'ability',
-                    }));
-
-                    return {
-                        hand,
-                        deck,
-                        discard,
-                        resources: playerConfig?.resources || {},
-                        tokens: playerConfig?.tokens || {},
+                        return { ...entry };
                     };
+
+                    const partialState: any = {};
+
+                    if (playerConfig?.hand !== undefined) {
+                        partialState.hand = playerConfig.hand.map((entry: any) => cloneCard(entry));
+                    }
+                    if (playerConfig?.deck !== undefined) {
+                        partialState.deck = playerConfig.deck.map((entry: any) => cloneCard(entry));
+                    }
+                    if (playerConfig?.discard !== undefined) {
+                        partialState.discard = playerConfig.discard.map((entry: any) => cloneCard(entry));
+                    }
+                    if (playerConfig?.resources !== undefined) {
+                        partialState.resources = playerConfig.resources;
+                    }
+                    if (playerConfig?.tokens !== undefined) {
+                        partialState.tokens = playerConfig.tokens;
+                    }
+
+                    return partialState;
                 };
+
+                const selectedCharacters = cfg.extra?.selectedCharacters ?? state.core.selectedCharacters ?? {};
 
                 // 构造状态补丁
                 const patch: any = {
@@ -362,24 +514,44 @@ export class GameTestContext {
                 };
 
                 // 应用玩家配置
-                if (cfg.player0) {
-                    const player0State = buildDiceThronePlayerState(cfg.player0, '0', 0);
+                if (cfg.player0 || cfg.prebuiltPlayers?.['0']) {
+                    const player0State = buildDiceThronePlayerState(cfg.player0, '0');
+                    const existingPlayer0 = state.core.players?.['0'] ?? {};
                     patch.core.players['0'] = {
-                        ...state.core.players['0'],
+                        ...existingPlayer0,
                         ...player0State,
+                        characterId: player0State.characterId ?? selectedCharacters['0'] ?? existingPlayer0.characterId,
+                        resources: {
+                            ...(existingPlayer0.resources ?? {}),
+                            ...(player0State.resources ?? {}),
+                        },
+                        tokens: {
+                            ...(existingPlayer0.tokens ?? {}),
+                            ...(player0State.tokens ?? {}),
+                        },
                     };
                 }
-                if (cfg.player1) {
-                    const player1State = buildDiceThronePlayerState(cfg.player1, '1', 10000);
+                if (cfg.player1 || cfg.prebuiltPlayers?.['1']) {
+                    const player1State = buildDiceThronePlayerState(cfg.player1, '1');
+                    const existingPlayer1 = state.core.players?.['1'] ?? {};
                     patch.core.players['1'] = {
-                        ...state.core.players['1'],
+                        ...existingPlayer1,
                         ...player1State,
+                        characterId: player1State.characterId ?? selectedCharacters['1'] ?? existingPlayer1.characterId,
+                        resources: {
+                            ...(existingPlayer1.resources ?? {}),
+                            ...(player1State.resources ?? {}),
+                        },
+                        tokens: {
+                            ...(existingPlayer1.tokens ?? {}),
+                            ...(player1State.tokens ?? {}),
+                        },
                     };
                 }
 
                 // 设置当前玩家
                 if (cfg.currentPlayer !== undefined) {
-                    patch.core.currentPlayer = cfg.currentPlayer;
+                    patch.core.activePlayerId = cfg.currentPlayer;
                 }
 
                 // 设置阶段（phase 在 sys 中，不在 core 中）
@@ -572,11 +744,13 @@ export class GameTestContext {
 
                 const patch: any = {
                     core: {
+                        ...state.core, // 保留所有现有字段
                         players: {
                             ...state.core.players,
                         },
                         bases,
-                        factionSelection: undefined,
+                        // 只有在 factionSelect 阶段才保留 factionSelection
+                        ...(cfg.phase === 'factionSelect' ? {} : { factionSelection: undefined }),
                     },
                 };
 
@@ -667,10 +841,16 @@ export class GameTestContext {
                 }
                 if (cfg.extra) {
                     if (cfg.extra.core) {
+                        // 保留自动计算的 scoringEligibleBaseIndices（如果存在）
+                        const preservedScoring = patch.core.scoringEligibleBaseIndices;
                         patch.core = {
                             ...patch.core,
                             ...cfg.extra.core,
                         };
+                        // 如果 extra.core 没有显式设置 scoringEligibleBaseIndices，恢复自动计算的值
+                        if (preservedScoring !== undefined && cfg.extra.core.scoringEligibleBaseIndices === undefined) {
+                            patch.core.scoringEligibleBaseIndices = preservedScoring;
+                        }
                     }
                     if (cfg.extra.sys) {
                         patch.sys = {

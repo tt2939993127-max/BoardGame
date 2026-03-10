@@ -75,7 +75,8 @@ function getWorkerPorts(parallelIndex: number): WorkerPorts {
  */
 export const test = base.extend<FrameworkFixtures>({
     baseURL: [async ({ workerPorts }, use) => {
-        await use(`http://127.0.0.1:${workerPorts.frontend}`);
+        const { frontend } = workerPorts;
+        await use(`http://127.0.0.1:${frontend}`);
     }, { option: true }],
 
     /**
@@ -83,7 +84,7 @@ export const test = base.extend<FrameworkFixtures>({
      * 
      * 提供当前 worker 的端口信息。
      */
-    workerPorts: [async (_: any, use, testInfo) => {
+    workerPorts: [async ({ browserName: _browserName }, use, testInfo) => {
         const ports = getWorkerPorts(testInfo.parallelIndex);
         await use(ports);
     }, { scope: 'worker' }],

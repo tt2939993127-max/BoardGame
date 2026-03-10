@@ -9,7 +9,7 @@
  * 风格遵循 smashup 设计系统：深色物理感，禁止毛玻璃，使用 GameButton
  */
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
@@ -141,48 +141,9 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const { t } = useTranslation('game-smashup');
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
 
-    // 监听 interaction 变化，输出详细日志（仅首次）
-    const hasLoggedInteraction = useRef(false);
-    useEffect(() => {
-        if (!hasLoggedInteraction.current && interaction) {
-            hasLoggedInteraction.current = true;
-            console.log('[PromptOverlay] Interaction changed:', {
-                hasInteraction: !!interaction,
-                interactionId: interaction?.id,
-                promptId: prompt?.id,
-                promptTitle: prompt?.title,
-                optionsCount: prompt?.options?.length,
-                timestamp: Date.now(),
-            });
-        }
-    }, [interaction, prompt]);
     const { ref: revealScrollRef } = useHorizontalDragScroll();
     const { ref: cardScrollRef } = useHorizontalDragScroll();
     const toast = useToast();
-
-    // 🔍 调试日志：追踪 props 变化（仅首次）
-    const hasLoggedProps = useRef(false);
-    useEffect(() => {
-        if (!hasLoggedProps.current && interaction) {
-            hasLoggedProps.current = true;
-            console.log('[PromptOverlay] Props changed:', {
-                hasInteraction: !!interaction,
-                interactionId: interaction?.id,
-                interactionKind: interaction?.kind,
-                interactionData: interaction?.data,
-                hasPrompt: !!prompt,
-                promptId: prompt?.id,
-                promptPlayerId: prompt?.playerId,
-                myPlayerId: playerID,
-                isMyPrompt: !!prompt && prompt.playerId === playerID,
-                promptTitle: prompt?.title,
-                hasDisplayCards: !!displayCards,
-                optionsCount: prompt?.options?.length,
-                options: prompt?.options,
-                rawInteraction: interaction, // 完整的原始对象
-            });
-        }
-    }, [interaction, prompt, displayCards, playerID]);
 
     // 所有 hooks 必须在条件返回之前调用（React hooks 规则）
     const isMyPrompt = !!prompt && prompt.playerId === playerID;

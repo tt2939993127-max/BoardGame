@@ -1079,14 +1079,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
             // 过滤掉已记分的基地
             const remainingIndices = lockedIndices.filter(i => !state.sys.scoredBaseIndices!.includes(i));
-            console.log('[onPhaseExit] scoreBases 基地过滤:', {
-                lockedIndices,
-                scoredBaseIndices: state.sys.scoredBaseIndices,
-                scoredBaseIndicesRef: state.sys.scoredBaseIndices ? `[${state.sys.scoredBaseIndices.join(',')}]` : 'null',
-                remainingIndices,
-                flowHalted: state.sys.flowHalted,
-                hasInteraction: !!state.sys.interaction.current,
-            });
 
             // 所有基地都已记分 → 清理状态并正常推进（不可变更新）
             if (remainingIndices.length === 0) {
@@ -1099,8 +1091,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return { events, updatedState: cleanedState } as PhaseExitResult;
             }
 
-            // Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
-            if (remainingIndices.length >= 2 && !state.sys.interaction.current) {
+            // 1 个基地达标 → 检查当前交互或队列中是否已有 multi_base_scoring 交互
+            const currentIsMultiBaseScoring = 
+                (state.sys.interaction.current?.data as any)?.sourceId === 'multi_base_scoring';
+            const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
+                (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
+            );
+// Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
+            if (remainingIndices.length >= 2 && !state.sys.interaction.current && !currentIsMultiBaseScoring && !hasMultiBaseScoringInQueue) {
                 const candidates = remainingIndices.map(i => {
                     const base = core.bases[i];
                     const totalPower = getTotalEffectivePowerOnBase(core, base, i);
@@ -1125,12 +1123,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 1 个基地达标 → 检查当前交互或队列中是否已有 multi_base_scoring 交互
             // 如果有，说明之前已经创建了交互，不应该重复计分
             // 使用 remainingIndices（已过滤已记分基地），按顺序逐个计分
-            const currentIsMultiBaseScoring = 
-                (state.sys.interaction.current?.data as any)?.sourceId === 'multi_base_scoring';
-            const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
-                (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
-            );
-            
             if (currentIsMultiBaseScoring || hasMultiBaseScoringInQueue) {
                 // 当前交互或队列中已有 multi_base_scoring 交互，不重复计分
                 // halt=true：等待交互解决
@@ -1146,13 +1138,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 if (iter >= remainingIndices.length) break;
                 const foundIndex = remainingIndices[iter];
 
-                console.log('[onPhaseExit] 记分基地:', {
-                    iter,
-                    foundIndex,
-                    baseDefId: currentCore.bases[foundIndex]?.defId,
-                    currentBaseDeck: currentBaseDeck.slice(0, 3),  // 只显示前3个
-                });
-
                 const result = scoreOneBase(currentCore, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
                 
                 // ⚠️ 【关键修复】立即检查是否打开了响应窗口，如果打开了就立即 halt
@@ -1163,11 +1148,26 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     (evt: SmashUpEvent) => evt.type === 'RESPONSE_WINDOW_OPENED'
                 );
                 if (hasResponseWindowOpened) {
-                    console.log('[onPhaseExit] afterScoring 响应窗口打开（检测到 RESPONSE_WINDOW_OPENED 事件），立即 halt');
                     // ⚠️ 关键：必须保留 scoreOneBase 在打开响应窗口前已经生成的事件，
                     // 包括 BASE_SCORED / BEFORE_SCORING_TRIGGERED / AFTER_SCORING_TRIGGERED。
                     // 响应窗口关闭后只补发 BASE_CLEARED / BASE_REPLACED，并在力量变化时追加新的 BASE_SCORED，
                     // 不能把首次计分结果整体丢掉，否则 reducer、ActionLog、特效和触发标记都会延后或重复。
+                    
+                    // 【关键修复】标记该基地已记分，避免响应窗口关闭后重复计分
+                    if (!currentMatchState.sys.scoredBaseIndices) {
+                        currentMatchState = {
+                            ...currentMatchState,
+                            sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
+                        };
+                    }
+                    currentMatchState = {
+                        ...currentMatchState,
+                        sys: {
+                            ...currentMatchState.sys,
+                            scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || []), foundIndex],
+                        },
+                    };
+                    
                     return {
                         events: [...events, ...result.events],
                         halt: true,
@@ -1209,11 +1209,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || []), foundIndex],
                     },
                 };
-                console.log('[onPhaseExit] 基地已记分，更新 scoredBaseIndices:', {
-                    foundIndex,
-                    scoredBaseIndices: currentMatchState.sys.scoredBaseIndices,
-                    scoredBaseIndicesRef: `[${currentMatchState.sys.scoredBaseIndices.join(',')}]`,
-                });
             }
 
             // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），

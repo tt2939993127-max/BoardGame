@@ -16,6 +16,7 @@ const forceStartServers = process.env.PW_START_SERVERS === 'true';
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = !forceStartServers && !process.env.CI;
+const headedMode = process.env.PW_HEADED === 'true' || process.env.PWDEBUG === '1';
 
 const ports = useDevServers ? DEV_PORTS : SINGLE_WORKER_PORTS;
 
@@ -73,7 +74,6 @@ const LEGACY_DISCOVERY_BROKEN_TESTS = [
     '**/dicethrone-status-interaction-cancel.e2e.ts',
     '**/dicethrone-status-interaction-complete.e2e.ts',
     '**/ninja-hidden-ninja-skip-option.e2e.ts',
-    '**/ninja-hidden-ninja-ui-debug.e2e.ts',
     '**/smashup-4p-layout-test.e2e.ts',
     '**/summonerwars-illusion-fix.e2e.ts',
 ];
@@ -133,6 +133,7 @@ export default defineConfig({
     globalTeardown: isMultiWorker ? './e2e/global-teardown.ts' : undefined,
     use: {
         ...(!isMultiWorker ? { baseURL: singleWorkerBaseURL } : {}),
+        headless: !headedMode,
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
     },

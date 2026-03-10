@@ -595,6 +595,7 @@ export const HandArea = ({
     return (
         <div
             ref={handAreaRef}
+            data-testid="hand-area"
             className="absolute bottom-0 left-0 right-0 flex justify-center items-end pb-0 h-[22vw] pointer-events-none"
             style={{ zIndex: UI_Z_INDEX.hud }}
         >
@@ -634,6 +635,7 @@ export const HandArea = ({
                             <motion.div
                                 key={`${cardKey}-${returnVersion}`}
                                 data-card-key={cardKey}
+                                data-card-id={card.id}
                                 data-can-drag={canDrag}
                                 data-is-flipped={isFlipped}
                                 data-is-discard-mode={isDiscardMode}

@@ -4,7 +4,7 @@
  * 验证:自己打出 Watch Out 后,应该看到独立骰子特写
  */
 
-import { test } from './framework';
+import { test, expect } from './framework';
 
 test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, testInfo) => {
     test.setTimeout(60000);
@@ -17,16 +17,14 @@ test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, test
         { timeout: 15000 }
     );
 
-    // 等待游戏完全加载（等待选角界面出现或游戏开始）
+    // 等待状态容器可读
     await page.waitForFunction(
         () => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
-            return state?.core?.phase !== undefined;
+            return state !== undefined;
         },
         { timeout: 20000 }
     );
-
-    console.log('[E2E] ✅ 游戏已加载，准备注入状态');
 
     // 状态注入:跳过选角,直接设置游戏状态
     await game.setupScene({
@@ -62,8 +60,14 @@ test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, test
         },
     });
 
-    console.log('[E2E] ⏳ 等待 React 重新渲染...');
     await page.waitForTimeout(3000);
+
+    await page.waitForFunction(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
+        return state?.sys?.phase === 'offensiveRoll'
+            && state?.core?.activePlayerId === '0'
+            && state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'watch-out');
+    }, { timeout: 10000 });
 
     // 截图:初始状态
     await game.screenshot('01-initial-state', testInfo);
@@ -71,45 +75,30 @@ test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, test
     // 检查手牌是否存在
     const handArea = page.locator('[data-testid="hand-area"]');
     const handCards = handArea.locator('[data-card-id]');
-    const cardCount = await handCards.count();
-    console.log('[E2E] 📋 手牌数量:', cardCount);
-    
-    if (cardCount === 0) {
-        console.error('[E2E] ❌ 手牌为空，状态注入可能失败');
-        await game.screenshot('error-no-cards', testInfo);
-        throw new Error('手牌为空，状态注入失败');
-    }
+    await expect(handCards).toHaveCount(1, { timeout: 10000 });
 
     // 点击 Watch Out 卡牌
     const watchOutCard = page.locator('[data-card-id="watch-out"]').first();
-    console.log('[E2E] 🔍 查找 Watch Out 卡牌...');
     await watchOutCard.waitFor({ state: 'visible', timeout: 10000 });
-    console.log('[E2E] ✅ 找到 Watch Out 卡牌');
-    
     await watchOutCard.click();
-    console.log('[E2E] 🖱️ 点击 Watch Out 卡牌');
 
     // 等待骰子特写出现
-    console.log('[E2E] ⏳ 等待骰子特写出现...');
-    await page.waitForTimeout(3000);
+    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 2000 });
 
     // 截图:打出卡牌后
     await game.screenshot('02-after-play-card', testInfo);
 
-    // 检查是否有骰子特写
-    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
-    const spotlightContainer = page.locator('.fixed.inset-0.z-\\[700\\]');
-    
-    await game.screenshot('03-final-state', testInfo);
-
-    // 输出调试信息
-    const hasOverlay = await bonusDieOverlay.count() > 0;
-    const hasSpotlight = await spotlightContainer.count() > 0;
-    
-    console.log('[E2E] 骰子特写检查:', {
-        hasOverlay,
-        hasSpotlight,
-        overlayCount: await bonusDieOverlay.count(),
-        spotlightCount: await spotlightContainer.count(),
+    const afterClickState = await page.evaluate(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
+        const entries = state?.sys?.eventStream?.entries ?? [];
+        return {
+            player0Hand: state?.core?.players?.['0']?.hand?.map((card: any) => card.id),
+            lastEventTypes: entries.slice(-4).map((entry: any) => entry.event?.type),
+        };
     });
+
+    await game.screenshot('03-final-state', testInfo);
+    expect(afterClickState.player0Hand).not.toContain('watch-out');
+    expect(afterClickState.lastEventTypes).toContain('BONUS_DIE_ROLLED');
 });

@@ -296,6 +296,7 @@ function skipToNextRespondableResponder<TCore>(
     ): ResponseWindowState['current'] | undefined => {
         const originalIndex = scanWindow.currentResponderIndex;
         let index = originalIndex;
+        // 保留传入窗口的 passedPlayers（包含 advanceToNextResponder 的更新）
         let passedPlayers = scanWindow.passedPlayers;
 
         while (index < scanWindow.responderQueue.length) {
@@ -309,10 +310,7 @@ function skipToNextRespondableResponder<TCore>(
             });
             
             if (hasContent) {
-                if (index === originalIndex && passedPlayers === scanWindow.passedPlayers) {
-                    console.log('[skipToNextRespondableResponder] 返回原窗口');
-                    return scanWindow;
-                }
+                // 即使 index === originalIndex，也要返回更新后的窗口（保留 passedPlayers 更新）
                 console.log('[skipToNextRespondableResponder] 返回更新后的窗口');
                 return {
                     ...scanWindow,
@@ -320,6 +318,7 @@ function skipToNextRespondableResponder<TCore>(
                     passedPlayers,
                 };
             }
+            // 只有在跳过玩家时才追加到 passedPlayers
             passedPlayers = [...passedPlayers, playerId];
             index += 1;
         }
