@@ -14,10 +14,150 @@ import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { SmashUpDomain } from '../domain';
 import { initAllAbilities } from '../abilities';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
+import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type { MatchState } from '../../../engine/types';
-import { makeMinion, makeBase } from './helpers';
+import { asSimpleChoice, INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
+import { makeMinion, makeBase, makePlayer, makeCard } from './helpers';
 import { smashUpSystemsForTest } from '../game';
-import { createInitialSystemState } from '../../../engine/pipeline';
+import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
+import { defaultTestRandom, runCommand } from './testRunner';
+
+function findOption(choice: any, predicate: (opt: any) => boolean): string {
+    const option = choice.options.find(predicate);
+    if (!option) {
+        throw new Error(`找不到匹配的选项: ${JSON.stringify(choice.options.map((item: any) => item.id))}`);
+    }
+    return option.id;
+}
+
+function runCommandWithFullSystems(
+    initialState: MatchState<SmashUpCore>,
+    command: SmashUpCommand,
+) {
+    const playerIds = Object.keys(initialState.core.players);
+    const result = executePipeline(
+        {
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+        },
+        initialState,
+        command,
+        defaultTestRandom,
+        playerIds,
+    );
+    return {
+        success: result.success,
+        finalState: result.state,
+        events: result.events,
+        error: result.error,
+    };
+}
+
+type CommandRunner = typeof runCommand;
+
+function resolvePirateKingFirstMateScoringChain(
+    stateWithMultiBaseChoice: MatchState<SmashUpCore>,
+    runner: CommandRunner,
+) {
+    const multiBaseChoice = asSimpleChoice(stateWithMultiBaseChoice.sys.interaction?.current)!;
+    expect(multiBaseChoice).toBeTruthy();
+    expect(multiBaseChoice.sourceId).toBe('multi_base_scoring');
+    const chooseTortuga = findOption(multiBaseChoice, (option: any) => option.value?.baseIndex === 0);
+
+    const chooseBase = runner(stateWithMultiBaseChoice, {
+        type: 'SYS_INTERACTION_RESPOND',
+        playerId: '0',
+        payload: { optionId: chooseTortuga },
+    });
+    expect(chooseBase.success).toBe(true);
+
+    const pirateKingChoice = asSimpleChoice(chooseBase.finalState.sys.interaction?.current)!;
+    expect(pirateKingChoice).toBeTruthy();
+    expect(pirateKingChoice.sourceId).toBe('pirate_king_move');
+    const movePirateKing = findOption(pirateKingChoice, (option: any) => option.value?.move === true);
+
+    const resolvePirateKing = runner(chooseBase.finalState, {
+        type: 'SYS_INTERACTION_RESPOND',
+        playerId: '0',
+        payload: { optionId: movePirateKing },
+    });
+    expect(resolvePirateKing.success).toBe(true);
+
+    const tortugaChoice = asSimpleChoice(resolvePirateKing.finalState.sys.interaction?.current)!;
+    expect(tortugaChoice).toBeTruthy();
+    expect(tortugaChoice.sourceId).toBe('base_tortuga');
+    const chooseReserveMinion = findOption(
+        tortugaChoice,
+        (option: any) => option.value?.minionUid === 'reserve-p1' && option.value?.fromBaseIndex === 2,
+    );
+
+    const resolveTortuga = runner(resolvePirateKing.finalState, {
+        type: 'SYS_INTERACTION_RESPOND',
+        playerId: '1',
+        payload: { optionId: chooseReserveMinion },
+    });
+    expect(resolveTortuga.success).toBe(true);
+
+    const firstMateChoice = asSimpleChoice(resolveTortuga.finalState.sys.interaction?.current)!;
+    expect(firstMateChoice).toBeTruthy();
+    expect(firstMateChoice.sourceId).toBe('pirate_first_mate_choose_base');
+    const moveFirstMate = findOption(firstMateChoice, (option: any) => option.value?.baseIndex === 2);
+
+    const resolveFirstMate = runner(resolveTortuga.finalState, {
+        type: 'SYS_INTERACTION_RESPOND',
+        playerId: '0',
+        payload: { optionId: moveFirstMate },
+    });
+    expect(resolveFirstMate.success).toBe(true);
+
+    return {
+        chooseBase,
+        resolvePirateKing,
+        resolveTortuga,
+        resolveFirstMate,
+        finalState: resolveFirstMate.finalState,
+        chainEvents: [
+            ...chooseBase.events,
+            ...resolvePirateKing.events,
+            ...resolveTortuga.events,
+            ...resolveFirstMate.events,
+        ],
+    };
+}
+
+function assertPirateKingFirstMateChainResult(
+    finalState: MatchState<SmashUpCore>,
+    allEvents: SmashUpEvent[],
+) {
+    const scoredBaseDefIds = allEvents
+        .filter(event => event.type === SU_EVENTS.BASE_SCORED)
+        .map(event => (event.payload as { baseDefId: string }).baseDefId);
+
+    expect(finalState.sys.interaction?.current).toBeFalsy();
+    expect(finalState.sys.phase).toBe('playCards');
+    expect(finalState.core.currentPlayerIndex).toBe(1);
+
+    expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(2);
+    expect(scoredBaseDefIds).toEqual(['base_tortuga', 'base_the_jungle']);
+    expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(2);
+    expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(2);
+    expect(allEvents.filter(event => event.type === SU_EVENTS.MINION_MOVED)).toHaveLength(3);
+
+    expect(finalState.core.players['0'].vp).toBe(6);
+    expect(finalState.core.players['1'].vp).toBe(3);
+    expect(finalState.core.bases.map(base => base.defId)).toEqual([
+        'base_central_brain',
+        'base_cave_of_shinies',
+        'base_secret_garden',
+    ]);
+    expect(finalState.core.bases[0].minions.map(minion => minion.uid)).toEqual(['reserve-p1']);
+    expect(finalState.core.bases[1].minions).toHaveLength(0);
+    expect(finalState.core.bases[2].minions.map(minion => minion.uid)).toEqual(['mate-0']);
+    const remainingMinionUids = finalState.core.bases.flatMap(base => base.minions.map(minion => minion.uid));
+    expect(remainingMinionUids).not.toContain('king-0');
+    expect(remainingMinionUids).not.toContain('jungle-p0');
+    expect(remainingMinionUids).not.toContain('tortuga-p0');
+}
 
 describe('多基地同时计分 afterScoring 触发问题', () => {
     beforeAll(() => {
@@ -94,6 +234,94 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         };
     }
 
+    function createThreeBaseAutoFinishSetup(): MatchState<SmashUpCore> {
+        const core: SmashUpCore = {
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            turnNumber: 5,
+            players: {
+                '0': makePlayer('0', { factions: ['dinosaurs', 'zombies'] as [string, string] }),
+                '1': makePlayer('1', { factions: ['ghosts', 'wizards'] as [string, string] }),
+            },
+            bases: [
+                makeBase('base_the_jungle', [
+                    makeMinion('b0-p0', 'test_minion', '0', 7),
+                    makeMinion('b0-p1', 'test_minion', '1', 6),
+                ]),
+                makeBase('base_dread_lookout', [
+                    makeMinion('b1-p1', 'test_minion', '1', 11),
+                    makeMinion('b1-p0', 'test_minion', '0', 10),
+                ]),
+                makeBase('base_tsars_palace', [
+                    makeMinion('b2-p0', 'test_minion', '0', 12),
+                    makeMinion('b2-p1', 'test_minion', '1', 11),
+                ]),
+            ],
+            baseDeck: [
+                'base_central_brain',
+                'base_cave_of_shinies',
+                'base_rhodes_plaza',
+                'base_the_factory',
+            ],
+            factionSelection: undefined,
+            scoringEligibleBases: undefined,
+        };
+
+        return {
+            core,
+            sys: {
+                ...createInitialSystemState(smashUpSystemsForTest, ['0', '1']),
+                phase: 'playCards',
+            },
+        };
+    }
+
+    function createPirateKingFirstMateEndToEndSetup(): MatchState<SmashUpCore> {
+        const core: SmashUpCore = {
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            turnNumber: 7,
+            players: {
+                '0': makePlayer('0', { factions: ['pirates', 'ninjas'] as [string, string] }),
+                '1': makePlayer('1', { factions: ['aliens', 'wizards'] as [string, string] }),
+            },
+            bases: [
+                makeBase('base_tortuga', [
+                    makeMinion('mate-0', 'pirate_first_mate', '0', 2),
+                    makeMinion('tortuga-p0', 'test_minion', '0', 10),
+                    makeMinion('tortuga-p1', 'test_minion', '1', 10),
+                ]),
+                makeBase('base_the_jungle', [
+                    makeMinion('king-0', 'pirate_king', '0', 5),
+                    makeMinion('jungle-p0', 'test_minion', '0', 7),
+                ]),
+                makeBase('base_secret_garden', [
+                    makeMinion('reserve-p1', 'test_minion', '1', 2),
+                ]),
+            ],
+            baseDeck: ['base_central_brain', 'base_cave_of_shinies'],
+            factionSelection: undefined,
+            scoringEligibleBases: undefined,
+        };
+
+        return {
+            core,
+            sys: {
+                ...createInitialSystemState(smashUpSystemsForTest, ['0', '1']),
+                phase: 'playCards',
+            },
+        };
+    }
+
+    function createPirateKingFirstMateWithHandSpecialSetup(): MatchState<SmashUpCore> {
+        const state = createPirateKingFirstMateEndToEndSetup();
+        state.core.players['0'].hand = [
+            makeCard('hidden-0', 'ninja_hidden_ninja', 'action', '0'),
+            makeCard('shinobi-hand-0', 'ninja_shinobi', 'minion', '0'),
+        ];
+        return state;
+    }
+
     it('验证多基地选择交互被正确创建', () => {
         const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
             domain: SmashUpDomain,
@@ -120,8 +348,8 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         expect(options.map((o: any) => o.value.baseIndex).sort()).toEqual([0, 1, 2]);
     });
 
-    // 跳过此测试 - 多基地计分链的复杂交互需要完整的系统支持
-    it.skip('完整流程：3个基地依次计分，中间有 afterScoring 交互', () => {
+    // 测试多基地计分的完整流程
+    it('multi_base_scoring handler 应该执行计分逻辑', () => {
         const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
             domain: SmashUpDomain,
             systems: smashUpSystemsForTest,
@@ -130,57 +358,160 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         });
 
         const result = runner.run({
-            name: '完整多基地计分流程',
+            name: '多基地计分流程',
             commands: [
-                // Step 1: 推进到 scoreBases，创建第一个 multi_base_scoring 交互
+                // 从 playCards 推进到 scoreBases，自动创建 multi_base_scoring 交互
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                
-                // Step 2: P0 选择先计分基地0（丛林，无 afterScoring）
-                // 第一个交互的选项：base-0 (索引0), base-1 (索引1), base-2 (索引2)
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
-                
-                // Step 3: 基地0计分完成，应该创建新的 multi_base_scoring 交互（剩余基地1和2）
-                // 第二个交互的选项：base-0 (对应 baseIndex=1), base-1 (对应 baseIndex=2)
-                // P0 选择计分基地2（海盗湾，有 afterScoring）→ 应该选择 base-1
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-1' } },
-                
-                // Step 4: 海盗湾 afterScoring 创建交互（P1 亚军移动随从）
-                // 同时应该创建新的 multi_base_scoring 交互（只剩基地1）并加入队列
-                // P1 响应海盗湾交互（跳过移动）
-                { type: 'SYS_INTERACTION_RESPOND', playerId: '1', payload: { optionId: 'skip' } },
-                
-                // Step 5: 海盗湾交互解决后，应该弹出最后一个 multi_base_scoring 交互
-                // P0 选择计分最后一个基地（忍者道场）
+                // 选择基地 0 并计分
                 { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'base-0' } },
             ],
         });
 
-        // 验证：通过检查最终状态来确认 3 个基地都计分了
-        // 每个基地计分后会被替换，所以最终应该有 3 个新基地
+        // 验证：应该有 BASE_SCORED 事件
         const allEvents = result.steps.flatMap(step => step.events);
         const scoredEvents = allEvents.filter((e: string) => e === 'su:base_scored');
         
-        console.log('=== 测试结果 ===');
+        console.log('=== Handler 测试结果 ===');
         console.log('BASE_SCORED 事件数量:', scoredEvents.length);
         console.log('所有事件:', allEvents);
-        console.log('所有步骤:', result.steps.map(s => ({
-            command: s.commandType,
-            success: s.success,
-            error: s.error,
-            eventsCount: s.events.length,
-            events: s.events,
-        })));
-        console.log('最终交互状态:', {
-            current: result.finalState.sys.interaction?.current?.id,
-            queue: result.finalState.sys.interaction?.queue?.map((i: any) => i.id),
-        });
-        console.log('最终基地:', result.finalState.core.bases.map((b: any) => b.defId));
         console.log('玩家分数:', {
             p0: result.finalState.core.players['0'].vp,
             p1: result.finalState.core.players['1'].vp,
         });
+        
+        // 至少应该有 1 个基地被计分
+        expect(scoredEvents.length).toBeGreaterThanOrEqual(1);
+        
+        // 验证：玩家应该获得了分数
+        const p0Score = result.finalState.core.players['0'].vp;
+        const p1Score = result.finalState.core.players['1'].vp;
+        expect(p0Score + p1Score).toBeGreaterThan(0);
+    });
 
-        // 期望：3 个基地都应该计分
-        expect(scoredEvents.length).toBe(3);
+    it('三个基地同时计分时，第二次选择后最后一个基地只会自动结算一次', () => {
+        const advance = runCommand(createThreeBaseAutoFinishSetup(), {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: undefined,
+        });
+        expect(advance.success).toBe(true);
+
+        const firstChoice = asSimpleChoice(advance.finalState.sys.interaction?.current)!;
+        expect(firstChoice).toBeTruthy();
+        expect(firstChoice.sourceId).toBe('multi_base_scoring');
+        const chooseTsars = findOption(firstChoice, (option: any) => option.value?.baseIndex === 2);
+
+        const firstRespond = runCommand(advance.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: chooseTsars },
+        });
+        expect(firstRespond.success).toBe(true);
+
+        const secondChoice = asSimpleChoice(firstRespond.finalState.sys.interaction?.current)!;
+        expect(secondChoice).toBeTruthy();
+        expect(secondChoice.sourceId).toBe('multi_base_scoring');
+        expect(secondChoice.options).toHaveLength(2);
+        const chooseJungle = findOption(secondChoice, (option: any) => option.value?.baseIndex === 0);
+
+        const secondRespond = runCommand(firstRespond.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: chooseJungle },
+        });
+        expect(secondRespond.success).toBe(true);
+        expect(secondRespond.finalState.sys.interaction?.current).toBeFalsy();
+
+        expect(secondRespond.finalState.core.players['0'].vp).toBe(9);
+        expect(secondRespond.finalState.core.players['1'].vp).toBe(7);
+        expect(secondRespond.finalState.core.bases.map(base => base.defId)).toEqual([
+            'base_cave_of_shinies',
+            'base_rhodes_plaza',
+            'base_central_brain',
+        ]);
+        expect(secondRespond.finalState.core.baseDeck).toEqual(['base_the_factory']);
+    });
+
+    it('复杂链路：海盗王 beforeScoring + 托尔图加 afterScoring + 大副 afterScoring 能完整走完计分链', () => {
+        const initialState = createPirateKingFirstMateEndToEndSetup();
+
+        const advance = runCommand(initialState, {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: undefined,
+        });
+        expect(advance.success).toBe(true);
+        const chain = resolvePirateKingFirstMateScoringChain(advance.finalState, runCommand);
+        assertPirateKingFirstMateChainResult(
+            chain.finalState,
+            [...advance.events, ...chain.chainEvents] as SmashUpEvent[],
+        );
+    });
+
+    it('复杂链路：计分前从手牌打出便衣忍者后，海盗王 + 托尔图加 + 大副链仍只结算一次', () => {
+        const initialState = createPirateKingFirstMateWithHandSpecialSetup();
+
+        const advance = runCommandWithFullSystems(initialState, {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: undefined,
+        });
+        expect(advance.success).toBe(true);
+        expect(advance.finalState.sys.responseWindow?.current?.windowType).toBe('meFirst');
+        expect(advance.finalState.sys.interaction?.current).toBeFalsy();
+
+        const playHiddenNinja = runCommandWithFullSystems(advance.finalState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'hidden-0', targetBaseIndex: 0 },
+        });
+        expect(playHiddenNinja.success).toBe(true);
+
+        const hiddenNinjaChoice = asSimpleChoice(playHiddenNinja.finalState.sys.interaction?.current)!;
+        expect(hiddenNinjaChoice).toBeTruthy();
+        expect(hiddenNinjaChoice.sourceId).toBe('ninja_hidden_ninja');
+        const chooseHandShinobi = findOption(
+            hiddenNinjaChoice,
+            (option: any) => option.value?.cardUid === 'shinobi-hand-0',
+        );
+
+        const resolveHiddenNinja = runCommandWithFullSystems(playHiddenNinja.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: chooseHandShinobi },
+        });
+        expect(resolveHiddenNinja.success).toBe(true);
+        expect(resolveHiddenNinja.finalState.sys.responseWindow?.current).toBeFalsy();
+
+        const chain = resolvePirateKingFirstMateScoringChain(resolveHiddenNinja.finalState, runCommandWithFullSystems);
+        const allEvents = [
+            ...advance.events,
+            ...playHiddenNinja.events,
+            ...resolveHiddenNinja.events,
+            ...chain.chainEvents,
+        ] as SmashUpEvent[];
+
+        assertPirateKingFirstMateChainResult(chain.finalState, allEvents);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.ACTION_PLAYED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.SPECIAL_LIMIT_USED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.MINION_PLAYED)).toHaveLength(1);
+        expect(allEvents).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: SU_EVENTS.ACTION_PLAYED,
+                    payload: expect.objectContaining({ cardUid: 'hidden-0', defId: 'ninja_hidden_ninja' }),
+                }),
+                expect.objectContaining({
+                    type: SU_EVENTS.MINION_PLAYED,
+                    payload: expect.objectContaining({
+                        cardUid: 'shinobi-hand-0',
+                        defId: 'ninja_shinobi',
+                        baseIndex: 0,
+                        consumesNormalLimit: false,
+                    }),
+                }),
+            ]),
+        );
+        expect(resolveHiddenNinja.finalState.core.players['0'].hand).toHaveLength(0);
     });
 });

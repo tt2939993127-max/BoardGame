@@ -231,7 +231,7 @@ describe('狂战士 GTR 技能覆盖', () => {
     // violent-assault — 暴力突袭（不可防御 + 眩晕）
     // ========================================================================
     describe('暴力突袭 (violent-assault)', () => {
-        it('4 力量造成 5 不可防御伤害 + 眩晕', () => {
+        it('4 力量造成 5 不可防御伤害 + 眩晕，并立即进入额外攻击', () => {
             // 进攻骰: [6,6,6,6,1] → 4 strength + 1 sword
             const random = createQueuedRandom([6, 6, 6, 6, 1]);
             const runner = new GameTestRunner({
@@ -246,13 +246,12 @@ describe('狂战士 GTR 技能覆盖', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'violent-assault' }),
-                    cmd('ADVANCE_PHASE', '0'),       // 不可防御 → main2
+                    cmd('ADVANCE_PHASE', '0'),       // 不可防御 → daze 触发额外攻击
                 ],
                 expect: {
-                    turnPhase: 'main2',
+                    turnPhase: 'offensiveRoll',
                     players: {
-                        '0': { statusEffects: { [STATUS_IDS.DAZE]: 1 } },  // 攻击方获得 DAZE
-                        '1': { hp: 45 },  // 防御方受到伤害
+                        '1': { hp: 45, statusEffects: { [STATUS_IDS.DAZE]: 0 } },  // daze 已被立即消费
                     },
                 },
             });
@@ -267,6 +266,7 @@ describe('狂战士 GTR 技能覆盖', () => {
         it('5个力量面 [6,6,6,6,6] 造成眩晕 + 15 伤害（0心防御）', () => {
             // 5个力量面: [6,6,6,6,6] → 5 strength
             // 防御骰: [6,6,6] → 0 heart（thick-skin 治疗 0）
+            // 眩晕立即触发额外攻击 → offensiveRoll
             const random = createQueuedRandom([6, 6, 6, 6, 6, 6, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
@@ -274,20 +274,20 @@ describe('狂战士 GTR 技能覆盖', () => {
                 setup: createBarbarianSetup(), assertFn: assertState, silent: true,
             });
             const result = runner.run({
-                name: '狂怒 5个力量面=眩晕+15伤害',
+                name: '狂怒 5个力量面=眩晕+15伤害→额外攻击',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'rage' }),
-                    // 终极技能不可防御，直接到 main2
+                    // 终极技能不可防御，施加眩晕后立即触发额外攻击 → offensiveRoll
                     cmd('ADVANCE_PHASE', '0'),
                 ],
                 expect: {
-                    turnPhase: 'main2',
+                    turnPhase: 'offensiveRoll',  // 进入额外攻击阶段
                     players: {
                         '0': { hp: 50 },  // 无自伤
-                        '1': { hp: 35, statusEffects: { [STATUS_IDS.DAZE]: 1 } },  // 50 - 15，眩晕
+                        '1': { hp: 35, statusEffects: { [STATUS_IDS.DAZE]: 0 } },  // 50 - 15，眩晕已移除
                     },
                 },
             });
@@ -301,15 +301,15 @@ describe('狂战士 GTR 技能覆盖', () => {
     // 此处仅验证技能触发和选择，完整结算流程由 barbarian-behavior.test.ts 覆盖
     // ========================================================================
     describe('压制 (suppress)', () => {
-        it('2 剑 + 2 力量可触发压制（与全力一击共享触发条件）', () => {
-            // 进攻骰: [1,1,6,6,4] → 2 sword + 2 strength + 1 heart
-            const random = createQueuedRandom([1, 1, 6, 6, 4]);
+        it('3 剑 + 2 力量可触发压制', () => {
+            // 进攻骰: [1,1,1,6,6] → 3 sword + 2 strength
+            const random = createQueuedRandom([1, 1, 1, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
                 playerIds: ['0', '1'], random,
                 setup: createBarbarianSetup(), assertFn: assertState, silent: true,
             });
-            // 验证 suppress 可被选择（与 all-out-strike 共享触发条件）
+            // 验证 suppress 可被选择
             const result = runner.run({
                 name: '压制可触发',
                 commands: [

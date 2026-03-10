@@ -91,8 +91,10 @@
 - 测试：@src/games/smashup/__tests__/newFactionAbilities.test.ts#313-709
 
 ### 架构级待办（非本轮回归缺陷）
-- `承受压力/我们乃最强` 文案是计分前/后窗口，但数据定义为 `subtype: 'standard'`
-- 定义：@src/games/smashup/data/factions/giant-ants.ts#93-100 @src/games/smashup/data/factions/giant-ants.ts#125-132
+- ✅ **已修复（2026-03-04）**：`承受压力/我们乃最强` 文案是计分前/后窗口，但数据定义缺少 `specialTiming` 字段
+  - 修复：为"我们乃最强"添加 `specialTiming: 'afterScoring'` 字段
+  - 证据：`evidence/smashup-we-are-the-champions-timing-fix.md`
+  - 定义：@src/games/smashup/data/factions/giant-ants.ts#93-100 @src/games/smashup/data/factions/giant-ants.ts#125-132
 
 ---
 

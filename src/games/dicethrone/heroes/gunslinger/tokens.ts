@@ -1,7 +1,5 @@
 /**
  * Gunslinger (枪手) Token 定义
- * 复用现有 Token：闪避（EVASIVE）、击倒（KNOCKDOWN）
- * 新增 Token：装填弹药（LOADED）、赏金（BOUNTY）
  */
 
 import type { TokenDef } from '../../domain/tokenTypes';

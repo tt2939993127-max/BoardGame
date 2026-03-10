@@ -14,13 +14,14 @@ import { SU_EVENTS } from '../domain/types';
 import type {
     SmashUpEvent, CardsDrawnEvent,
     DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
-    MinionPlayedEvent, BreakpointModifiedEvent,
+    MinionPlayedEvent, BreakpointModifiedEvent, CardInstance,
 } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { matchesDefId } from '../domain/utils';
 
 /** 急速生长?onPlay：额外打出一个随从*/
 function killerPlantInstaGrow(ctx: AbilityContext): AbilityResult {
@@ -58,7 +59,7 @@ function killerPlantWeedEater(ctx: AbilityContext): AbilityResult {
 function killerPlantDeepRootsChecker(ctx: ProtectionCheckContext): boolean {
     const base = ctx.state.bases[ctx.targetBaseIndex];
     if (!base) return false;
-    const deepRoots = base.ongoingActions.find(a => a.defId === 'killer_plant_deep_roots');
+    const deepRoots = base.ongoingActions.find(a => matchesDefId(a.defId, 'killer_plant_deep_roots'));
     if (!deepRoots) return false;
     // 只保护?deep_roots 拥有者的随从，且只拦截对手的效果
     return deepRoots.ownerId === ctx.targetMinion.controller
@@ -72,7 +73,7 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
     // 规则：每回合只能使用一次浇花睡莲的能力（多张在场也只触发一次）
     for (const base of ctx.state.bases) {
         for (const m of base.minions) {
-            if (m.defId !== 'killer_plant_water_lily') continue;
+            if (!matchesDefId(m.defId, 'killer_plant_water_lily')) continue;
             if (m.controller !== ctx.playerId) continue;
             const player = ctx.state.players[m.controller];
             if (!player || player.deck.length === 0) continue;
@@ -87,6 +88,14 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
     return [];
 }
 
+function getSproutEligibleMinions(deck: CardInstance[]): CardInstance[] {
+    return deck.filter(card => {
+        if (card.type !== 'minion') return false;
+        const def = getMinionDef(card.defId);
+        return def !== undefined && def.power <= 3;
+    });
+}
+
 
 
 /**
@@ -97,10 +106,11 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
 function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
     const events: SmashUpEvent[] = [];
     let matchState = ctx.matchState;
+    const simulatedDecks = new Map<string, CardInstance[]>();
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const m of base.minions) {
-            if (m.defId !== 'killer_plant_sprout') continue;
+            if (!matchesDefId(m.defId, 'killer_plant_sprout')) continue;
             if (m.controller !== ctx.playerId) continue;
             // 记住 sprout 所在基地索引（消灭前）
             const sproutBaseIndex = i;
@@ -109,20 +119,18 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
             // 搜索牌库中力量≤3的随从
             const player = ctx.state.players[m.controller];
             if (!player) continue;
-            const eligible = player.deck.filter(c => {
-                if (c.type !== 'minion') return false;
-                const def = getMinionDef(c.defId);
-                return def !== undefined && def.power <= 3;
-            });
+            const availableDeck = simulatedDecks.get(m.controller) ?? player.deck;
+            const eligible = getSproutEligibleMinions(availableDeck);
             if (eligible.length === 0) {
                 // 牌库中无符合条件的随从，规则仍要求重洗牌库
-                events.push(buildDeckReshuffle(player, m.controller, [], ctx.now));
+                events.push(buildDeckReshuffle({ deck: availableDeck }, m.controller, [], ctx.now));
                 events.push(buildAbilityFeedback(m.controller, 'feedback.deck_search_no_match', ctx.now));
                 continue;
             }
             if (eligible.length === 1) {
                 // 只有一个候选，自动选择：直接打出到 sprout 所在基地
                 const card = eligible[0];
+                simulatedDecks.set(m.controller, availableDeck.filter(deckCard => deckCard.uid !== card.uid));
                 const def = getMinionDef(card.defId);
                 const power = def?.power ?? 0;
                 events.push(
@@ -135,17 +143,25 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                     timestamp: ctx.now,
                 };
                 events.push(playedEvt);
-                events.push(buildDeckReshuffle(player, m.controller, [card.uid], ctx.now));
+                events.push(buildDeckReshuffle({ deck: availableDeck }, m.controller, [card.uid], ctx.now));
             } else if (matchState) {
                 // 多候选：创建交互让玩家选择
                 const options = eligible.map((c, idx) => {
                     const def = getMinionDef(c.defId);
-                    return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
+                    return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
                 });
                 options.push({ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const } as any);
                 const interaction = createSimpleChoice(
-                    `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
-                    '嫩芽：选择一个力量≤3的随从打出（可跳过）', options as any[], 'killer_plant_sprout_search',
+                    `killer_plant_sprout_search_${m.uid}_${ctx.now}`,
+                    m.controller,
+                    '嫩芽：选择一个力量≤3的随从打出（可跳过）',
+                    options as any[],
+                    {
+                        sourceId: 'killer_plant_sprout_search',
+                        targetType: 'generic',
+                        autoRefresh: 'deck',
+                        responseValidationMode: 'live',
+                    },
                 );
                 // 传递 sprout 所在基地索引，交互处理器需要用它来锁定目标基地
                 (interaction.data as any).continuationContext = { baseIndex: sproutBaseIndex };
@@ -153,6 +169,7 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
             } else {
                 // 无 matchState 回退：自动选第一个（测试环境等）
                 const card = eligible[0];
+                simulatedDecks.set(m.controller, availableDeck.filter(deckCard => deckCard.uid !== card.uid));
                 const def = getMinionDef(card.defId);
                 const power = def?.power ?? 0;
                 events.push(
@@ -165,7 +182,7 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                     timestamp: ctx.now,
                 };
                 events.push(playedEvt);
-                events.push(buildDeckReshuffle(player, m.controller, [card.uid], ctx.now));
+                events.push(buildDeckReshuffle({ deck: availableDeck }, m.controller, [card.uid], ctx.now));
             }
         }
     }
@@ -181,7 +198,7 @@ function killerPlantChokingVinesTrigger(ctx: TriggerContext): SmashUpEvent[] {
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const m of base.minions) {
-            const attached = m.attachedActions.find(a => a.defId === 'killer_plant_choking_vines');
+            const attached = m.attachedActions.find(a => matchesDefId(a.defId, 'killer_plant_choking_vines'));
             if (!attached) continue;
             if (attached.ownerId !== ctx.playerId) continue;
             // 消灭附着的随从
@@ -235,11 +252,19 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
     // 多个候选，Prompt 选择
     const options = eligible.map((c, idx) => {
         const def = getMinionDef(c.defId);
-        return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } , displayMode: 'card' as const };
+        return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
-        `killer_plant_venus_man_trap_search_${ctx.now}`, ctx.playerId,
-        '维纳斯捕食者：选择一个效果力量≤2的随从打出到此基地', options as any[], 'killer_plant_venus_man_trap_search',
+        `killer_plant_venus_man_trap_search_${ctx.now}`,
+        ctx.playerId,
+        '维纳斯捕食者：选择一个效果力量≤2的随从打出到此基地',
+        options as any[],
+        {
+            sourceId: 'killer_plant_venus_man_trap_search',
+            targetType: 'generic',
+            autoRefresh: 'deck',
+            responseValidationMode: 'live',
+        },
     );
     (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -300,18 +325,25 @@ export function registerKillerPlantAbilities(): void {
     // === ongoing 效果注册 ===
     // deep_roots: 保护随从不收回被移动
     registerProtection('killer_plant_deep_roots', 'move', killerPlantDeepRootsChecker);
+    registerProtection('killer_plant_deep_roots_pod', 'move', killerPlantDeepRootsChecker);
     // water_lily: 回合开始时控制者抽1?
     registerTrigger('killer_plant_water_lily', 'onTurnStart', killerPlantWaterLilyTrigger);
+    registerTrigger('killer_plant_water_lily_pod', 'onTurnStart', killerPlantWaterLilyTrigger);
     // sprout: 回合开始时消灭自身 + 搜索打出随从
     registerTrigger('killer_plant_sprout', 'onTurnStart', killerPlantSproutTrigger);
+    registerTrigger('killer_plant_sprout_pod', 'onTurnStart', killerPlantSproutTrigger);
     // choking_vines: 回合开始时消灭此基地上力量最低的随从
     registerTrigger('killer_plant_choking_vines', 'onTurnStart', killerPlantChokingVinesTrigger);
+    registerTrigger('killer_plant_choking_vines_pod', 'onTurnStart', killerPlantChokingVinesTrigger);
     // overgrowth: 回合开始时将本基地临界点降低到0（通过 tempBreakpointModifiers，回合结束自动清零）
     registerTrigger('killer_plant_overgrowth', 'onTurnStart', killerPlantOvergrowthTrigger);
+    registerTrigger('killer_plant_overgrowth_pod', 'onTurnStart', killerPlantOvergrowthTrigger);
     // entangled: 有己方随从的基地上的随从不收回可被移动?
     registerProtection('killer_plant_entangled', 'move', killerPlantEntangledChecker);
+    registerProtection('killer_plant_entangled_pod', 'move', killerPlantEntangledChecker);
     // entangled: 控制者回合开始时消灭本卡
     registerTrigger('killer_plant_entangled', 'onTurnStart', killerPlantEntangledDestroyTrigger);
+    registerTrigger('killer_plant_entangled_pod', 'onTurnStart', killerPlantEntangledDestroyTrigger);
 }
 
 // ============================================================================
@@ -347,21 +379,35 @@ export function registerKillerPlantInteractionHandlers(): void {
     registerInteractionHandler('killer_plant_venus_man_trap_search', (state, playerId, value, iData, _random, timestamp) => {
         const { cardUid, defId } = value as { cardUid: string; defId: string };
         const player = state.core.players[playerId];
+        const selectedCard = player.deck.find(card => card.uid === cardUid && card.defId === defId);
+        if (!selectedCard) {
+            return { state, events: [
+                buildDeckReshuffle(player, playerId, [], timestamp),
+                buildAbilityFeedback(playerId, 'feedback.condition_not_met', timestamp),
+            ] };
+        }
         // 从 continuationContext 获取锁定的目标基地
-        const contCtx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
-        const baseIndex = contCtx?.baseIndex ?? 0;
-        const def = getMinionDef(defId);
+        const venusTrapContCtx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
+        const baseIndex = venusTrapContCtx?.baseIndex ?? 0;
+        const def = getMinionDef(selectedCard.defId);
         const power = def?.power ?? 0;
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid, defId, baseIndex, power },
+            payload: {
+                playerId,
+                cardUid: selectedCard.uid,
+                defId: selectedCard.defId,
+                baseIndex,
+                baseDefId: state.core.bases[baseIndex]?.defId,
+                power,
+            },
             timestamp,
         };
         return { state, events: [
-            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as CardsDrawnEvent,
+            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [selectedCard.uid] }, timestamp } as CardsDrawnEvent,
             grantExtraMinion(playerId, 'killer_plant_venus_man_trap', timestamp),
             playedEvt,
-            buildDeckReshuffle(player, playerId, [cardUid], timestamp),
+            buildDeckReshuffle(player, playerId, [selectedCard.uid], timestamp),
         ] };
     });
 
@@ -377,20 +423,34 @@ export function registerKillerPlantInteractionHandlers(): void {
         const { cardUid, defId } = value as { cardUid: string; defId: string };
         const player = state.core.players[playerId];
         // 从 continuationContext 获取 sprout 所在基地索引
+        const sproutSelectedCard = player.deck.find(card => card.uid === cardUid && card.defId === defId);
+        if (!sproutSelectedCard) {
+            return { state, events: [
+                buildDeckReshuffle(player, playerId, [], timestamp),
+                buildAbilityFeedback(playerId, 'feedback.condition_not_met', timestamp),
+            ] };
+        }
         const contCtx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
         const baseIndex = contCtx?.baseIndex ?? 0;
-        const def = getMinionDef(defId);
+        const def = getMinionDef(sproutSelectedCard.defId);
         const power = def?.power ?? 0;
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid, defId, baseIndex, power },
+            payload: {
+                playerId,
+                cardUid: sproutSelectedCard.uid,
+                defId: sproutSelectedCard.defId,
+                baseIndex,
+                baseDefId: state.core.bases[baseIndex]?.defId,
+                power,
+            },
             timestamp,
         };
         return { state, events: [
-            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as CardsDrawnEvent,
+            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [sproutSelectedCard.uid] }, timestamp } as CardsDrawnEvent,
             grantExtraMinion(playerId, 'killer_plant_sprout', timestamp),
             playedEvt,
-            buildDeckReshuffle(player, playerId, [cardUid], timestamp),
+            buildDeckReshuffle(player, playerId, [sproutSelectedCard.uid], timestamp),
         ] };
     });
 
@@ -431,7 +491,7 @@ function killerPlantOvergrowthTrigger(ctx: TriggerContext): SmashUpEvent[] {
         const base = ctx.state.bases[i];
         // 统计属于当前回合玩家的过度生长张数（多张叠加）
         const count = base.ongoingActions.filter(
-            a => a.defId === 'killer_plant_overgrowth' && a.ownerId === ctx.playerId
+            a => matchesDefId(a.defId, 'killer_plant_overgrowth') && a.ownerId === ctx.playerId
         ).length;
         if (count === 0) continue;
         const baseDef = getBaseDef(base.defId);
@@ -450,7 +510,7 @@ function killerPlantOvergrowthTrigger(ctx: TriggerContext): SmashUpEvent[] {
 /** 藤蔓缠绕保护检查：有己方随从的基地上的所有随从不收回可被移动 */
 function killerPlantEntangledChecker(ctx: ProtectionCheckContext): boolean {
     for (const base of ctx.state.bases) {
-        const entangled = base.ongoingActions.find(a => a.defId === 'killer_plant_entangled');
+        const entangled = base.ongoingActions.find(a => matchesDefId(a.defId, 'killer_plant_entangled'));
         if (!entangled) continue;
         // 检查?entangled 拥有者在目标随从所在基地是否有随从
         const ownerHasMinion = ctx.state.bases[ctx.targetBaseIndex].minions.some(
@@ -466,7 +526,7 @@ function killerPlantEntangledDestroyTrigger(ctx: TriggerContext): SmashUpEvent[]
     const events: SmashUpEvent[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
-        const entangled = base.ongoingActions.find(a => a.defId === 'killer_plant_entangled');
+        const entangled = base.ongoingActions.find(a => matchesDefId(a.defId, 'killer_plant_entangled'));
         if (!entangled) continue;
         if (entangled.ownerId !== ctx.playerId) continue;
         events.push({

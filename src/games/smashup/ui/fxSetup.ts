@@ -58,6 +58,7 @@ const PowerChangeRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onI
   const stableComplete = useStableComplete(onComplete);
   const delta = event.params?.delta as number | undefined;
   const position = event.params?.position as { left: number; top: number } | undefined;
+  const shouldRender = !!delta && !!position;
 
   // 立即触发 impact（即时反馈）
   const impactFired = useRef(false);
@@ -69,11 +70,18 @@ const PowerChangeRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onI
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!shouldRender) return;
     const timer = setTimeout(stableComplete, 900);
     return () => clearTimeout(timer);
-  }, [stableComplete]);
+  }, [shouldRender, stableComplete]);
 
-  if (!delta || !position) { stableComplete(); return null; }
+  useEffect(() => {
+    if (!shouldRender) {
+      stableComplete();
+    }
+  }, [shouldRender, stableComplete]);
+
+  if (!shouldRender) return null;
 
   return React.createElement(motion.div, {
     initial: { opacity: 1, y: 0, scale: 0.8, rotate: -5 },
@@ -99,6 +107,7 @@ const PowerChangeRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onI
 const ActionShowRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }) => {
   const stableComplete = useStableComplete(onComplete);
   const defId = event.params?.defId as string | undefined;
+  const shouldRender = !!defId;
 
   const impactFired = useRef(false);
   useEffect(() => {
@@ -109,11 +118,18 @@ const ActionShowRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onIm
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!shouldRender) return;
     const timer = setTimeout(stableComplete, 800);
     return () => clearTimeout(timer);
-  }, [stableComplete]);
+  }, [shouldRender, stableComplete]);
 
-  if (!defId) { stableComplete(); return null; }
+  useEffect(() => {
+    if (!shouldRender) {
+      stableComplete();
+    }
+  }, [shouldRender, stableComplete]);
+
+  if (!shouldRender) return null;
 
   const t = i18next.getFixedT(null, 'game-smashup');
   const def = getCardDef(defId);
@@ -172,6 +188,8 @@ const ActionShowRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onIm
 const BaseScoredRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }) => {
   const stableComplete = useStableComplete(onComplete);
   const rankings = event.params?.rankings as Array<{ playerId: string; power: number; vp: number }> | undefined;
+  const validRankings = (rankings ?? []).filter(r => r.vp > 0);
+  const shouldRender = validRankings.length > 0;
 
   const impactFired = useRef(false);
   useEffect(() => {
@@ -182,15 +200,20 @@ const BaseScoredRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onIm
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!shouldRender) return;
     const timer = setTimeout(stableComplete, 2500);
     return () => clearTimeout(timer);
-  }, [stableComplete]);
+  }, [shouldRender, stableComplete]);
 
-  if (!rankings || rankings.length === 0) { stableComplete(); return null; }
+  useEffect(() => {
+    if (!shouldRender) {
+      stableComplete();
+    }
+  }, [shouldRender, stableComplete]);
+
+  if (!shouldRender) return null;
 
   const t = i18next.getFixedT(null, 'game-smashup');
-  const validRankings = rankings.filter(r => r.vp > 0);
-  if (validRankings.length === 0) { stableComplete(); return null; }
 
   // 使用 motion.div 作为根元素（与其他渲染器一致），确保 AnimatePresence 能正确追踪
   return React.createElement(motion.div, {
@@ -236,6 +259,7 @@ export const AbilityTriggeredRenderer: React.FC<FxRendererProps> = ({ event, onC
   const stableComplete = useStableComplete(onComplete);
   const sourceDefId = event.params?.sourceDefId as string | undefined;
   const position = event.params?.position as { left: number; top: number } | undefined;
+  const shouldRender = !!sourceDefId;
 
   const impactFired = useRef(false);
   useEffect(() => {
@@ -246,11 +270,18 @@ export const AbilityTriggeredRenderer: React.FC<FxRendererProps> = ({ event, onC
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!shouldRender) return;
     const timer = setTimeout(stableComplete, 1600);
     return () => clearTimeout(timer);
-  }, [stableComplete]);
+  }, [shouldRender, stableComplete]);
 
-  if (!sourceDefId) { stableComplete(); return null; }
+  useEffect(() => {
+    if (!shouldRender) {
+      stableComplete();
+    }
+  }, [shouldRender, stableComplete]);
+
+  if (!shouldRender) return null;
 
   const t = i18next.getFixedT(null, 'game-smashup');
   const def = getCardDef(sourceDefId);

@@ -14,6 +14,9 @@ import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
+import { createScopedLogger } from '../../../lib/logger';
+
+const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
 interface BonusDieOverlayProps {
     /** 单颗骰子值 (1-6)，用于普通特写模式 */
@@ -74,17 +77,43 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     characterId,
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0 && (onReroll || displayOnly));
+    // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
+    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
 
-    if (!isVisible) return null;
+    // 调试日志：组件渲染
+    React.useEffect(() => {
+        bonusDieOverlayLogger.info('props', {
+            isVisible,
+            value,
+            face,
+            effectKey,
+            characterId,
+            isRerollMode,
+            bonusDiceCount: bonusDice?.length ?? 0,
+        });
+    }, [isVisible, value, face, effectKey, characterId, isRerollMode, bonusDice]);
+
+    if (!isVisible) {
+        bonusDieOverlayLogger.info('skip', { reason: 'not-visible' });
+        return null;
+    }
 
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
-        // displayOnly 模式：允许自动关闭和点击背景关闭（防御方/观察者视角）
-        const isInteractive = !displayOnly;
+        // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
+        const isInteractive = !displayOnly && canReroll === true;
+
+        bonusDieOverlayLogger.info('render-reroll', {
+            total,
+            bonusDiceCount: bonusDice.length,
+            displayOnly,
+            canReroll: !!canReroll,
+            showTotal,
+            characterId,
+        });
 
         return (
             <SpotlightContainer
@@ -96,7 +125,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
             >
-                <div className="flex flex-col items-center gap-[1.5vw]">
+                <div className="flex flex-col items-center gap-[1.5vw]" data-testid="bonus-die-overlay">
                     {/* 提示文字 - DiceThrone 风格 */}
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
@@ -135,6 +164,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     size="7vw"
                                     rollingDurationMs={600 + die.index * 100}
                                     characterId={characterId}
+                                    compact={true}
                                 />
                                 {canReroll && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -167,30 +197,39 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         </motion.div>
                     )}
 
-                    {/* 操作按钮 - 使用 GameButton 保持风格一致 */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.8 }}
-                    >
-                        <GameButton
-                            onClick={displayOnly ? (onSkipReroll ?? onClose) : onSkipReroll}
-                            variant={canReroll ? 'primary' : 'secondary'}
-                            size="md"
-                            className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
+                    {/* 操作按钮：只有可重掷时才显示确认入口 */}
+                    {isInteractive && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.8 }}
                         >
-                            {displayOnly
-                                ? t('bonusDie.continue')
-                                : canReroll ? t('bonusDie.confirmDamage') : t('bonusDie.continue')}
-                        </GameButton>
-                    </motion.div>
+                            <GameButton
+                                onClick={onSkipReroll ?? onClose}
+                                variant="primary"
+                                size="md"
+                                className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
+                            >
+                                {t('bonusDie.confirmDamage')}
+                            </GameButton>
+                        </motion.div>
+                    )}
                 </div>
             </SpotlightContainer>
         );
     }
 
     // 普通单颗骰子特写模式
-    if (value === undefined) return null;
+    if (value === undefined) {
+        bonusDieOverlayLogger.info('skip', { reason: 'value-undefined', isVisible });
+        return null;
+    }
+    bonusDieOverlayLogger.info('render-single', {
+        value,
+        face,
+        effectKey,
+        characterId,
+    });
 
     return (
         <SpotlightContainer
@@ -200,15 +239,17 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             autoCloseDelay={autoCloseDelay}
             zIndex={UI_Z_INDEX.overlayRaised + 100}
         >
-            <BonusDieSpotlightContent
-                value={value}
-                face={face}
-                effectKey={effectKey}
-                effectParams={effectParams}
-                locale={locale}
-                size="8vw"
-                characterId={characterId}
-            />
+            <div data-testid="bonus-die-overlay">
+                <BonusDieSpotlightContent
+                    value={value}
+                    face={face}
+                    effectKey={effectKey}
+                    effectParams={effectParams}
+                    locale={locale}
+                    size="8vw"
+                    characterId={characterId}
+                />
+            </div>
         </SpotlightContainer>
     );
 };

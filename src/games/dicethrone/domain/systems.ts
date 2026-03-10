@@ -403,23 +403,31 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
 
                 // ---- BONUS_DICE_REROLL_REQUESTED → queue dt:bonus-dice ----
                 // 业务数据仅存 core.pendingBonusDiceSettlement；sys.interaction 只做阻塞标记
-                // displayOnly 模式（如正义冲击 rollDie 多骰展示）也创建交互阻塞，
-                // 确保 autoContinue 不会在用户看到 overlay 前推进阶段。
+                // displayOnly 模式（如正义冲击 rollDie 多骰展示）不创建交互，
+                // 仅通过事件让 UI 展示，不阻塞游戏流程。
                 // 用户点击 Continue → SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED → resolveInteraction
                 if (dtEvent.type === 'BONUS_DICE_REROLL_REQUESTED') {
                     const payload = (dtEvent as BonusDiceRerollRequestedEvent).payload;
-                    const interaction: EngineInteractionDescriptor = {
-                        id: `dt-bonus-dice-${payload.settlement.id}`,
-                        kind: 'dt:bonus-dice',
-                        playerId: payload.settlement.attackerId,
-                        data: null,
-                    };
-                    newState = queueInteraction(newState, interaction);
+                    // displayOnly settlement 不创建交互，不阻塞流程
+                    if (!payload.settlement.displayOnly) {
+                        const interaction: EngineInteractionDescriptor = {
+                            id: `dt-bonus-dice-${payload.settlement.id}`,
+                            kind: 'dt:bonus-dice',
+                            playerId: payload.settlement.attackerId,
+                            data: null,
+                        };
+                        newState = queueInteraction(newState, interaction);
+                    }
                 }
 
                 // ---- BONUS_DICE_SETTLED → resolve ----
+                // displayOnly 的 BONUS_DICE_SETTLED 不应 resolve 交互
+                // （displayOnly 用于展示，不影响游戏流程，不应清除攻击的 bonus dice 交互）
                 if (dtEvent.type === 'BONUS_DICE_SETTLED') {
-                    newState = resolveInteraction(newState);
+                    const payload = (dtEvent as any).payload;
+                    if (!payload?.displayOnly) {
+                        newState = resolveInteraction(newState);
+                    }
                 }
 
                 // ---- SYS_INTERACTION_CANCELLED → 生成领域 INTERACTION_CANCELLED 事件（返还卡牌） ----

@@ -187,14 +187,15 @@ bash deploy.sh update
 ## 🛠️ 常用命令
 
 ```bash
-npm run dev              # 启动完整开发环境
-npm run build            # 构建前端
-npm run generate:manifests  # 重新生成游戏清单
-npm run generate:locales    # 生成卡牌多语言文件
-npm run compress:images     # 压缩图片资源
-npm run compress:audio      # 压缩音频资源（wav → ogg）
-npm run assets:manifest     # 生成资源清单
-npm run check:arch          # 架构检查
+npm run dev                      # 启动完整开发环境
+npm run monitor:kiro:timer:20min # Kiro 自动恢复（每 20 分钟发送 continue）⭐
+npm run build                    # 构建前端
+npm run generate:manifests       # 重新生成游戏清单
+npm run generate:locales         # 生成卡牌多语言文件
+npm run compress:images          # 压缩图片资源
+npm run compress:audio           # 压缩音频资源（wav → ogg）
+npm run assets:manifest          # 生成资源清单
+npm run check:arch               # 架构检查
 
 # 音频注册表 & 资源上传（新增/修改音频文件后必须执行）
 node scripts/audio/generate_common_audio_registry.js  # 重新生成音频注册表
@@ -208,129 +209,24 @@ git push --no-verify
 
 ## 🧪 测试
 
-项目采用**完全隔离的测试架构**，测试环境与开发环境使用不同端口，互不干扰。
-
 - **Vitest 单元测试** — 游戏领域逻辑、引擎系统、API 服务等（2500+ 测试用例，99.4% 通过率）
 - **GameTestRunner** — 游戏领域专用测试运行器，输入命令序列 → 执行 pipeline → 断言最终状态
 - **Playwright E2E** — 端到端集成测试
 
-### 端口架构（完全隔离）
-
-| 环境 | 前端 | 游戏服务器 | API 服务器 | 说明 |
-|------|------|-----------|-----------|------|
-| **开发环境** | 3000 | 18000 | 18001 | `npm run dev` |
-| **E2E 测试** | 5173 | 19000 | 19001 | `npm run test:e2e` |
-| **并行测试 Worker 0** | 6000 | 20000 | 20001 | `npm run test:e2e:parallel` |
-| **并行测试 Worker 1** | 6100 | 20100 | 20101 | 每个 worker +100 |
-
-**核心优势**：
-- ✅ 测试与开发完全隔离，互不影响
-- ✅ 可以同时运行开发服务器和测试
-- ✅ 测试失败不会影响开发环境
-- ✅ 支持并行测试，每个 worker 独立端口
-
 ### 快速开始
 
 ```bash
-# 运行所有单元测试（~46秒）
+# 运行所有单元测试
 npm test
 
-# 运行特定游戏的测试（推荐开发时使用）
-npm run test:summonerwars    # Summoner Wars (~6秒)
-npm run test:smashup         # Smash Up (~8秒)
-npm run test:dicethrone      # Dice Throne (~12秒)
+# 运行特定游戏的测试
+npm run test:summonerwars
+npm run test:smashup
+npm run test:dicethrone
 
-# 运行核心框架测试
-npm run test:core            # 引擎、组件、工具库 (~5秒)
-
-# 运行所有游戏测试
-npm run test:games
-```
-
-### E2E 测试（完全隔离）
-
-**默认模式**（推荐，自动启动独立测试服务器）：
-
-```bash
-# 直接运行，会自动启动测试服务器（端口 5173, 19000, 19001）
+# 运行 E2E 测试
 npm run test:e2e
-
-# 检查配置和端口占用情况
-npm run test:e2e:check
-
-# 清理测试环境端口（测试异常退出时使用）
-npm run test:e2e:cleanup
 ```
-
-**开发模式**（使用开发服务器，不推荐）：
-
-```bash
-# 设置环境变量使用开发服务器（端口 3000, 18000, 18001）
-PW_USE_DEV_SERVERS=true npm run test:e2e
-```
-
-**并行模式**（实验性，适用于大量测试）：
-
-```bash
-# 方式 1：手动启动每个 worker 的服务器（推荐）
-# 终端 1: Worker 0 (端口 6000, 20000, 20001)
-npm run test:e2e:worker 0
-
-# 终端 2: Worker 1 (端口 6100, 20100, 20101)
-npm run test:e2e:worker 1
-
-# 终端 3: 运行并行测试
-npm run test:e2e:parallel
-
-# 方式 2：自动启动（需要更多配置）
-PW_WORKERS=3 npm run test:e2e:parallel
-
-# 清理指定 worker 的端口
-node scripts/infra/port-allocator.js 0  # 清理 Worker 0
-node scripts/infra/port-allocator.js 1  # 清理 Worker 1
-```
-
-### 测试模式对比
-
-| 模式 | 命令 | 端口 | 启动服务器 | 影响开发环境 | 适用场景 |
-|------|------|------|-----------|-------------|----------|
-| **默认模式** | `npm run test:e2e` | 5173, 19000, 19001 | ✅ 自动启动 | ❌ 不会 | 日常测试（推荐） |
-| **开发模式** | `PW_USE_DEV_SERVERS=true npm run test:e2e` | 3000, 18000, 18001 | ❌ 使用已有 | ⚠️ 可能 | 调试测试代码 |
-| **并行模式** | `npm run test:e2e:parallel` | 6000+, 20000+, 20001+ | ✅ 自动启动 | ❌ 不会 | 大量测试 |
-
-### 清理命令
-
-```bash
-# 清理测试环境端口（5173, 19000, 19001）
-npm run test:e2e:cleanup
-
-# 清理开发环境端口（3000, 18000, 18001）
-npm run test:e2e:cleanup -- --dev
-
-# 清理两个环境
-npm run test:e2e:cleanup -- --e2e --dev
-
-# 清理并行测试 worker 端口
-node scripts/infra/port-allocator.js 0  # Worker 0
-node scripts/infra/port-allocator.js 1  # Worker 1
-```
-
-### 常见问题
-
-- ❌ 测试超时/连接失败 → 检查测试服务器是否启动成功（查看终端日志）
-- ❌ 端口被占用 → 运行 `npm run test:e2e:cleanup` 清理测试环境
-- ❌ 开发服务器受影响 → 确认未设置 `PW_USE_DEV_SERVERS=true`
-- ❌ WebSocket 连接失败 → 检查防火墙设置，确认端口未被其他程序占用
-
-### 测试覆盖情况
-
-| 模块 | 测试文件 | 测试用例 | 通过率 | 运行时间 |
-|------|---------|---------|--------|---------|
-| Summoner Wars | 35 | 717 | ✅ 100% | ~6s |
-| Smash Up | 48 | 817 | ⚠️ 97.9% | ~8s |
-| Dice Throne | 31 | 471 | ✅ 100% | ~12s |
-| 核心框架 | ~30 | ~300 | ✅ 100% | ~5s |
-| **总计** | **193** | **2513** | **99.4%** | **~46s** |
 
 详见 [自动化测试文档](docs/automated-testing.md)。
 

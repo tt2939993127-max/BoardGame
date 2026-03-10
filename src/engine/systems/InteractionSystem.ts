@@ -47,6 +47,26 @@ export interface PromptMultiConfig {
     max?: number;
 }
 
+export type SimpleChoiceAutoRefresh =
+    | 'hand'
+    | 'discard'
+    | 'deck'
+    | 'field'
+    | 'base'
+    | 'ongoing';
+
+export type SimpleChoiceResponseValidationMode = 'snapshot' | 'live';
+
+export type SimpleChoiceTargetType =
+    | 'base'
+    | 'minion'
+    | 'hand'
+    | 'ongoing'
+    | 'player'
+    | 'button'
+    | 'discard_minion'
+    | 'generic';
+
 // ============================================================================
 // 核心类型
 // ============================================================================
@@ -77,9 +97,12 @@ export interface SimpleChoiceData<T = unknown> {
      * - 'minion': 高亮棋盘上的候选随从，点击随从完成选择
      * - 'hand': 高亮手牌区的候选卡牌，点击卡牌完成选择
      * - 'ongoing': 高亮棋盘上的候选持续行动卡，点击行动卡完成选择
+     * - 'player': 使用通用弹窗中的玩家选项按钮完成选择
+     * - 'button': 使用通用弹窗中的纯分支/确认按钮完成选择
+     * - 'discard_minion': 使用游戏自定义的“弃牌堆选随从后再点击基地”直点交互
      * - undefined / 'generic': 使用通用弹窗选择
      */
-    targetType?: 'base' | 'minion' | 'hand' | 'ongoing' | 'generic';
+    targetType?: SimpleChoiceTargetType;
     /**
      * 单候选时是否自动解决（跳过玩家选择）。
      * - true（默认）：强制效果，只有一个候选时自动执行
@@ -101,7 +124,18 @@ export interface SimpleChoiceData<T = unknown> {
      * @param data - 交互数据（包含 continuationContext 等上下文信息）
      */
     optionsGenerator?: <TCore>(state: { core: TCore; sys: any }, data: SimpleChoiceData<T>) => PromptOption<T>[];
-
+    autoRefresh?: SimpleChoiceAutoRefresh;
+    /**
+     * 响应校验语义：
+     * - snapshot: 按交互创建/弹出时的候选快照校验（默认，兼容旧行为）
+     * - live: 按玩家响应时的最新状态重算候选并校验
+     *
+     * 经验规则：
+     * - 只有“候选本身是活引用”的交互才应使用 live（如牌库/弃牌堆/场上可变对象）
+     * - 已冻结候选池的多步交互通常应保持 snapshot
+     */
+    responseValidationMode?: SimpleChoiceResponseValidationMode;
+    revalidateOnRespond?: boolean;
 }
 
 /**
@@ -210,8 +244,8 @@ export interface SimpleChoiceConfig {
     sourceId?: string;
     timeout?: number;
     multi?: PromptMultiConfig;
-    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'hand' | 'ongoing' | 'generic'） */
-    targetType?: 'base' | 'minion' | 'hand' | 'ongoing' | 'generic';
+    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'hand' | 'ongoing' | 'player' | 'button' | 'discard_minion' | 'generic'） */
+    targetType?: SimpleChoiceTargetType;
     /** 单候选时是否自动解决，默认 true（强制效果自动跳过） */
     autoResolveIfSingle?: boolean;
     /**
@@ -239,7 +273,13 @@ export interface SimpleChoiceConfig {
      * - 对于复杂场景（如从多个来源选择、基于数量生成选项），应使用 optionsGenerator
      * - autoRefresh 只适用于简单的"引用类型选项"（cardUid/minionUid/baseIndex）
      */
-    autoRefresh?: 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing';
+    autoRefresh?: SimpleChoiceAutoRefresh;
+    /**
+     * 显式声明响应期使用快照还是最新状态。
+     * 默认保持 snapshot；只有明确需要防止过期引用时才用 live。
+     */
+    responseValidationMode?: SimpleChoiceResponseValidationMode;
+    revalidateOnRespond?: boolean;
 }
 
 /**
@@ -298,7 +338,9 @@ export function createSimpleChoice<T>(
             targetType: config.targetType,
             autoResolveIfSingle: config.autoResolveIfSingle,
             // 将 autoRefresh 传递到 data 中（作为私有字段）
-            ...(config.autoRefresh ? { autoRefresh: config.autoRefresh } : {}),
+            autoRefresh: config.autoRefresh,
+            responseValidationMode: config.responseValidationMode ?? (config.revalidateOnRespond ? 'live' : undefined),
+            revalidateOnRespond: config.revalidateOnRespond,
         } as any,
     };
 }
@@ -489,7 +531,7 @@ export function queueInteraction<TCore>(
 export function resolveInteraction<TCore>(
     state: MatchState<TCore>,
 ): MatchState<TCore> {
-    const { queue } = state.sys.interaction;
+    const { current, queue } = state.sys.interaction;
     let next = queue[0];
     const newQueue = queue.slice(1);
 
@@ -499,6 +541,31 @@ export function resolveInteraction<TCore>(
         nextKind: next?.kind,
         queueLength: queue.length,
     });
+
+    // 【通用修复】传递延迟事件给下一个交互
+    // 当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），
+    // 延迟的 BASE_CLEARED 事件存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
+    // 第一个交互解决后，必须传递给下一个交互，最后一个交互解决时由交互处理器补发。
+    if (current && next) {
+        const currentData = current.data as Record<string, unknown>;
+        const currentCtx = (currentData.continuationContext ?? {}) as Record<string, unknown>;
+        const deferredEvents = currentCtx._deferredPostScoringEvents;
+        
+        if (deferredEvents && Array.isArray(deferredEvents) && deferredEvents.length > 0) {
+            console.log('[InteractionSystem] Transferring deferred events to next interaction:', {
+                currentId: current.id,
+                nextId: next.id,
+                deferredEventsCount: deferredEvents.length,
+            });
+            
+            const nextData = next.data as Record<string, unknown>;
+            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
+            nextCtx._deferredPostScoringEvents = deferredEvents;
+            nextData.continuationContext = nextCtx;
+            
+            next = { ...next, data: nextData };
+        }
+    }
 
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
@@ -612,7 +679,7 @@ function refreshOptionsGeneric<T>(
     state: any,
     interaction: InteractionDescriptor,
     originalOptions: PromptOption<T>[],
-    autoRefresh?: 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing',
+    autoRefresh?: SimpleChoiceAutoRefresh,
 ): PromptOption<T>[] {
     // opt-in：未声明 autoRefresh 时不刷新
     if (!autoRefresh) {
@@ -624,7 +691,7 @@ function refreshOptionsGeneric<T>(
 
         // 跳过/完成/取消等操作选项：一律保留
         if (!val || typeof val !== 'object') return true;
-        if (val.skip || val.done || val.cancel || val.__cancel__) return true;
+        if (val.skip || val.done || val.cancel || val.__cancel__ || val.__emergency_skip__) return true;
 
         switch (autoRefresh) {
             case 'hand': {
@@ -667,6 +734,24 @@ function refreshOptionsGeneric<T>(
                 return true;
         }
     });
+}
+
+export function getFreshSimpleChoiceOptions<TCore, T = unknown>(
+    state: MatchState<TCore>,
+    interaction: InteractionDescriptor<SimpleChoiceData<T>>,
+): PromptOption<T>[] {
+    const data = interaction.data;
+    if (data.optionsGenerator) {
+        return data.optionsGenerator(state, data);
+    }
+    return refreshOptionsGeneric(state, interaction, data.options, data.autoRefresh);
+}
+
+export function getSimpleChoiceResponseValidationMode(
+    data: Pick<SimpleChoiceData, 'responseValidationMode' | 'revalidateOnRespond'>,
+): SimpleChoiceResponseValidationMode {
+    if (data.responseValidationMode) return data.responseValidationMode;
+    return data.revalidateOnRespond ? 'live' : 'snapshot';
 }
 
 /**

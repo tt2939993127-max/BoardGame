@@ -200,7 +200,7 @@ export const TestMatchRoom: React.FC = () => {
     }
 
     if (loading) {
-        return <LoadingScreen title={gameConfig ? `加载 ${gameConfig.title}...` : '加载中...'} />;
+        return <LoadingScreen title={gameConfig ? `加载 ${gameConfig.titleKey}...` : '加载中...'} />;
     }
 
     if (!engineConfig || !WrappedBoard) {
@@ -220,8 +220,8 @@ export const TestMatchRoom: React.FC = () => {
     return (
         <>
             <SEO
-                title={`${gameConfig.title} - 测试模式`}
-                description={`${gameConfig.title} E2E 测试模式`}
+                title={`${gameConfig.titleKey} - 测试模式`}
+                description={`${gameConfig.titleKey} E2E 测试模式`}
             />
             <div
                 className="w-full h-full relative overflow-hidden"
@@ -241,7 +241,7 @@ export const TestMatchRoom: React.FC = () => {
                             <GameHUD gameId={gameId} mode="test" />
                             <BoardBridge 
                                 board={WrappedBoard}
-                                loading={<LoadingScreen title={gameConfig ? `加载 ${gameConfig.title}...` : '加载中...'} />}
+                                loading={<LoadingScreen title={gameConfig ? `加载 ${gameConfig.titleKey}...` : '加载中...'} />}
                             />
                         </LocalGameProvider>
                     ) : (

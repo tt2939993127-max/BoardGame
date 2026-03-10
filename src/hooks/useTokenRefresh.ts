@@ -150,7 +150,8 @@ export function useTokenRefresh() {
                         console.warn('[TokenRefresh] Token 刷新失败，但 token 未过期，稍后重试');
                         timerRef.current = window.setTimeout(() => scheduleRefresh(), RETRY_INTERVAL_MS);
                     } else {
-                        console.warn('[TokenRefresh] Token 刷新失败且已过期，退出登录');
+                        console.error('[TokenRefresh] Token 刷新失败且已过期，退出登录');
+                        console.error('[TokenRefresh] 可能原因：服务器 JWT_SECRET 变化、token 被截断、时钟不同步');
                         logout();
                     }
                 }

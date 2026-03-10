@@ -199,20 +199,47 @@ export function advanceToNextResponder(
     const newPassedPlayers = [...window.passedPlayers, currentPlayerId];
     const nextIndex = window.currentResponderIndex + 1;
     
+    console.log('[advanceToNextResponder] 开始:', {
+        currentPlayerId,
+        currentIndex: window.currentResponderIndex,
+        nextIndex,
+        queueLength: window.responderQueue.length,
+        actionTakenThisRound: window.actionTakenThisRound,
+        consecutivePassRounds: window.consecutivePassRounds,
+        loopUntilAllPass,
+    });
+    
     // 所有人都已响应
     if (nextIndex >= window.responderQueue.length) {
-        if (loopUntilAllPass && window.actionTakenThisRound) {
-            // 本轮有人执行了动作，重新开始新一轮
-            return {
-                ...window,
-                currentResponderIndex: 0,
-                passedPlayers: [],
-                actionTakenThisRound: false,
-            };
+        console.log('[advanceToNextResponder] 到达队列末尾');
+        if (loopUntilAllPass) {
+            if (window.actionTakenThisRound) {
+                console.log('[advanceToNextResponder] 本轮有动作，重新开始（重置 consecutivePassRounds）');
+                // 本轮有人执行了动作，重新开始新一轮，重置 consecutivePassRounds
+                return {
+                    ...window,
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                    actionTakenThisRound: false,
+                    consecutivePassRounds: 0,
+                };
+            } else {
+                // 本轮所有人都 pass，增加 consecutivePassRounds 计数
+                const consecutivePassRounds = (window.consecutivePassRounds ?? 0) + 1;
+                console.log('[advanceToNextResponder] 本轮无动作，consecutivePassRounds:', consecutivePassRounds);
+                
+                // 一轮所有人都 pass，关闭窗口
+                // 注意：loopUntilAllPass 的目的是允许玩家在有人出牌后继续响应，
+                // 但如果所有人都 pass 了一轮，说明没有人想出牌，应该立即关闭窗口
+                console.log('[advanceToNextResponder] consecutivePassRounds >= 1，关闭窗口');
+                return undefined;
+            }
         }
+        console.log('[advanceToNextResponder] loopUntilAllPass=false，关闭窗口');
         return undefined;
     }
     
+    console.log('[advanceToNextResponder] 推进到下一个响应者:', nextIndex);
     return {
         ...window,
         currentResponderIndex: nextIndex,
@@ -256,47 +283,93 @@ function skipToNextRespondableResponder<TCore>(
 
     type CurrentWindow = NonNullable<ResponseWindowState['current']>;
 
+    console.log('[skipToNextRespondableResponder] 开始:', {
+        currentIndex: window.currentResponderIndex,
+        queueLength: window.responderQueue.length,
+        actionTakenThisRound: window.actionTakenThisRound,
+        consecutivePassRounds: window.consecutivePassRounds,
+        loopUntilAllPass,
+    });
+
     const findNextRespondable = (
         scanWindow: CurrentWindow
     ): ResponseWindowState['current'] | undefined => {
         const originalIndex = scanWindow.currentResponderIndex;
         let index = originalIndex;
+        // 保留传入窗口的 passedPlayers（包含 advanceToNextResponder 的更新）
         let passedPlayers = scanWindow.passedPlayers;
 
         while (index < scanWindow.responderQueue.length) {
             const playerId = scanWindow.responderQueue[index];
-            if (hasRespondableContent(state.core as unknown, playerId, scanWindow.windowType, scanWindow.sourceId)) {
-                if (index === originalIndex && passedPlayers === scanWindow.passedPlayers) {
-                    return scanWindow;
-                }
+            const hasContent = hasRespondableContent(state.core as unknown, playerId, scanWindow.windowType, scanWindow.sourceId);
+            
+            console.log('[skipToNextRespondableResponder] 检查玩家:', {
+                index,
+                playerId,
+                hasContent,
+            });
+            
+            if (hasContent) {
+                // 即使 index === originalIndex，也要返回更新后的窗口（保留 passedPlayers 更新）
+                console.log('[skipToNextRespondableResponder] 返回更新后的窗口');
                 return {
                     ...scanWindow,
                     currentResponderIndex: index,
                     passedPlayers,
                 };
             }
+            // 只有在跳过玩家时才追加到 passedPlayers
             passedPlayers = [...passedPlayers, playerId];
             index += 1;
         }
 
+        console.log('[skipToNextRespondableResponder] 没有找到可响应玩家');
         return undefined;
     };
 
     const nextWindow = findNextRespondable(window);
-    if (nextWindow) return nextWindow;
-
-    // loopUntilAllPass：若本轮有人出过牌，即使尾部玩家都被自动 skip，
-    // 也需要重开新一轮，从队首继续检查可响应者。
-    if (loopUntilAllPass && window.actionTakenThisRound) {
-        const restartedWindow: CurrentWindow = {
-            ...window,
-            currentResponderIndex: 0,
-            passedPlayers: [],
-            actionTakenThisRound: false,
-        };
-        return findNextRespondable(restartedWindow);
+    if (nextWindow) {
+        console.log('[skipToNextRespondableResponder] 找到下一个窗口，返回');
+        return nextWindow;
     }
 
+    // 没有找到可响应玩家 - 说明从当前位置到队列末尾，所有玩家都没有可响应内容
+    console.log('[skipToNextRespondableResponder] 没有找到可响应玩家');
+    
+    // 【关键修复】如果当前是从队首开始扫描（currentResponderIndex === 0），
+    // 且没有找到任何可响应玩家，说明所有玩家都没有可响应内容，应该立即关闭窗口
+    // 注意：这里不检查 loopUntilAllPass，因为即使需要循环，如果所有玩家都没有可响应内容，
+    // 循环也没有意义，应该立即关闭
+    if (window.currentResponderIndex === 0) {
+        console.log('[skipToNextRespondableResponder] 从队首开始扫描但无人可响应，立即关闭窗口');
+        return undefined;
+    }
+    
+    // loopUntilAllPass：若本轮有人出过牌，即使尾部玩家都被自动 skip，
+    // 也需要重开新一轮，从队首继续检查可响应者。
+    // 【修复】重新开始一轮时，也要跳过没有可响应内容的玩家
+    if (loopUntilAllPass) {
+        if (window.actionTakenThisRound) {
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮有动作，重新开始（跳过无内容玩家）');
+            const restartedWindow: CurrentWindow = {
+                ...window,
+                currentResponderIndex: 0,
+                passedPlayers: [],
+                actionTakenThisRound: false,
+                consecutivePassRounds: 0, // 重置计数器
+            };
+            // 【修复】调用 findNextRespondable 跳过没有可响应内容的玩家
+            return findNextRespondable(restartedWindow);
+        } else {
+            // 本轮所有人都 pass，关闭窗口
+            // 注意：这里不需要 consecutivePassRounds 计数器，因为如果所有人都 pass 了一轮，
+            // 说明没有人想出牌，应该立即关闭窗口
+            console.log('[skipToNextRespondableResponder] loopUntilAllPass: 本轮无动作，关闭窗口');
+            return undefined;
+        }
+    }
+
+    console.log('[skipToNextRespondableResponder] 返回 undefined（窗口应关闭）');
     return undefined;
 }
 
@@ -554,10 +627,28 @@ export function createResponseWindowSystem<TCore>(
                 {
                     const currentWindow = newState.sys.responseWindow?.current;
                     if (currentWindow && currentWindow.pendingInteractionId && !newState.sys.interaction.current) {
-                        // 同批事件中有交互锁定请求（如 INTERACTION_REQUESTED），但更高优先级的系统
-                        // （如 DiceThroneEventSystem）尚未执行，sys.interaction.current 还是空的。
-                        // 此时不能解锁，等下一轮 afterEvents 再检查。
-                        if (hasInteractionLockRequest) {
+                        // 【修复】检查本轮事件中是否有 ABILITY_FEEDBACK（交互失败）
+                        // 交互失败时，解锁但不推进，当前响应者继续响应
+                        const hasAbilityFeedback = events.some(e => 
+                            e.type === 'su:ability_feedback' || 
+                            e.type === 'dt:ability_feedback' ||
+                            e.type === 'sw:ability_feedback'
+                        );
+                        
+                        if (hasAbilityFeedback) {
+                            // 交互失败，解锁但不推进（当前响应者继续响应）
+                            const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
+                            newState = {
+                                ...newState,
+                                sys: {
+                                    ...newState.sys,
+                                    responseWindow: { current: unlockedWindow },
+                                },
+                            };
+                        } else if (hasInteractionLockRequest) {
+                            // 同批事件中有交互锁定请求（如 INTERACTION_REQUESTED），但更高优先级的系统
+                            // （如 DiceThroneEventSystem）尚未执行，sys.interaction.current 还是空的。
+                            // 此时不能解锁，等下一轮 afterEvents 再检查。
                             // 不做任何操作，等待交互被创建
                         } else if (hasInteractionResolved) {
                             // 本轮有 RESOLVED，推迟到下一轮检查（发出内部驱动事件）
@@ -567,6 +658,7 @@ export function createResponseWindowSystem<TCore>(
                                 timestamp: eventTimestamp,
                             });
                         } else {
+                            // 正常推进到下一个响应者
                             const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
                             const currentResponderId = getCurrentResponderId(unlockedWindow);
                             
@@ -607,37 +699,57 @@ export function createResponseWindowSystem<TCore>(
                 if (event.type === RESPONSE_WINDOW_EVENTS._CHECK_UNLOCK) {
                     const currentWindow = newState.sys.responseWindow?.current;
                     if (currentWindow && currentWindow.pendingInteractionId && !newState.sys.interaction.current) {
-                        const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
-                        const currentResponderId = getCurrentResponderId(unlockedWindow);
-                        
-                        const nextWindow = skipToNextRespondableResponder(
-                            newState,
-                            advanceToNextResponder(unlockedWindow, currentResponderId!, loopUntilAllPass),
-                            hasRespondableContent,
-                            loopUntilAllPass
+                        // 【修复】检查本轮事件中是否有 ABILITY_FEEDBACK（交互失败）
+                        const hasAbilityFeedback = events.some(e => 
+                            e.type === 'su:ability_feedback' || 
+                            e.type === 'dt:ability_feedback' ||
+                            e.type === 'sw:ability_feedback'
                         );
                         
-                        if (nextWindow) {
-                            newState = openResponseWindow(newState, nextWindow);
-                            additionalEvents.push({
-                                type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
-                                payload: {
-                                    windowId: currentWindow.id,
-                                    previousResponderId: currentResponderId,
-                                    nextResponderId: getCurrentResponderId(nextWindow),
+                        if (hasAbilityFeedback) {
+                            // 交互失败，解锁但不推进（当前响应者继续响应）
+                            const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
+                            newState = {
+                                ...newState,
+                                sys: {
+                                    ...newState.sys,
+                                    responseWindow: { current: unlockedWindow },
                                 },
-                                timestamp: eventTimestamp,
-                            });
+                            };
                         } else {
-                            newState = closeResponseWindow(newState);
-                            additionalEvents.push({
-                                type: RESPONSE_WINDOW_EVENTS.CLOSED,
-                                payload: {
-                                    windowId: currentWindow.id,
-                                    allPassed: false,
-                                },
-                                timestamp: eventTimestamp,
-                            });
+                            // 正常推进到下一个响应者
+                            const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
+                            const currentResponderId = getCurrentResponderId(unlockedWindow);
+                            
+                            const nextWindow = skipToNextRespondableResponder(
+                                newState,
+                                advanceToNextResponder(unlockedWindow, currentResponderId!, loopUntilAllPass),
+                                hasRespondableContent,
+                                loopUntilAllPass
+                            );
+                            
+                            if (nextWindow) {
+                                newState = openResponseWindow(newState, nextWindow);
+                                additionalEvents.push({
+                                    type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
+                                    payload: {
+                                        windowId: currentWindow.id,
+                                        previousResponderId: currentResponderId,
+                                        nextResponderId: getCurrentResponderId(nextWindow),
+                                    },
+                                    timestamp: eventTimestamp,
+                                });
+                            } else {
+                                newState = closeResponseWindow(newState);
+                                additionalEvents.push({
+                                    type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                                    payload: {
+                                        windowId: currentWindow.id,
+                                        allPassed: false,
+                                    },
+                                    timestamp: eventTimestamp,
+                                });
+                            }
                         }
                     }
                 }
@@ -664,7 +776,7 @@ export function createResponseWindowSystem<TCore>(
                     if (newState.sys.interaction?.current) {
                         const interactionId = newState.sys.interaction.current.id;
                         const markedForLock = loopUntilAllPass
-                            ? { ...currentWindow, pendingInteractionId: interactionId, actionTakenThisRound: true }
+                            ? { ...currentWindow, pendingInteractionId: interactionId, actionTakenThisRound: true, consecutivePassRounds: 0 }
                             : { ...currentWindow, pendingInteractionId: interactionId };
                         newState = {
                             ...newState,
@@ -676,9 +788,9 @@ export function createResponseWindowSystem<TCore>(
                         break;
                     }
                     
-                    // 标记本轮有人执行了动作（用于 loopUntilAllPass 循环判定）
+                    // 标记本轮有人执行了动作（用于 loopUntilAllPass 循环判定），并重置 consecutivePassRounds
                     const markedWindow = loopUntilAllPass
-                        ? { ...currentWindow, actionTakenThisRound: true }
+                        ? { ...currentWindow, actionTakenThisRound: true, consecutivePassRounds: 0 }
                         : currentWindow;
                     
                     const _advAdvance = advanceToNextResponder(markedWindow, currentResponderId, loopUntilAllPass);

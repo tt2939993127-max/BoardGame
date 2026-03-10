@@ -248,3 +248,114 @@ describe('护盾清理机制', () => {
         expect(newCore.players['1'].damageShields).toEqual([]);
     });
 });
+
+describe('终极技能（Ultimate）护盾免疫', () => {
+    it('Ultimate 伤害不被护盾抵消', () => {
+        const core = createCoreState();
+        
+        // 防御方有 6 点护盾（下次一定）
+        core.players['1'].damageShields = [
+            { value: 6, sourceId: 'card-next-time', preventStatus: false },
+        ];
+        
+        // 设置 pendingAttack 为 Ultimate
+        core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: false,
+            isUltimate: true,
+            damageResolved: false,
+            resolvedDamage: 0,
+        };
+        
+        // 受到 10 点 Ultimate 伤害
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: '1',
+                amount: 10,
+                actualDamage: 10,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+        
+        const newCore = reduce(core, event);
+        
+        // Ultimate 伤害不被护盾抵消，全额扣血 10 点
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(40); // 50 - 10
+        // 护盾未消耗（Ultimate 跳过护盾逻辑）
+        expect(newCore.players['1'].damageShields).toEqual([
+            { value: 6, sourceId: 'card-next-time', preventStatus: false },
+        ]);
+    });
+
+    it('非 Ultimate 伤害仍被护盾正常抵消', () => {
+        const core = createCoreState();
+        
+        // 防御方有 6 点护盾
+        core.players['1'].damageShields = [
+            { value: 6, sourceId: 'card-next-time', preventStatus: false },
+        ];
+        
+        // 设置 pendingAttack 为非 Ultimate
+        core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            isUltimate: false,
+            damageResolved: false,
+            resolvedDamage: 0,
+        };
+        
+        // 受到 10 点普通伤害
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: '1',
+                amount: 10,
+                actualDamage: 10,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+        
+        const newCore = reduce(core, event);
+        
+        // 护盾抵消 6 点，实际扣血 4 点
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(46); // 50 - 4
+        // 护盾完全消耗
+        expect(newCore.players['1'].damageShields).toEqual([]);
+    });
+
+    it('无 pendingAttack 时护盾正常工作（非攻击伤害）', () => {
+        const core = createCoreState();
+        
+        // 防御方有护盾
+        core.players['1'].damageShields = [
+            { value: 6, sourceId: 'card-next-time', preventStatus: false },
+        ];
+        
+        // 没有 pendingAttack（非攻击伤害，如毒素、燃烧）
+        core.pendingAttack = null;
+        
+        // 受到 10 点非攻击伤害
+        const event: DiceThroneEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: '1',
+                amount: 10,
+                actualDamage: 10,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: 0,
+        };
+        
+        const newCore = reduce(core, event);
+        
+        // 护盾正常抵消（非攻击伤害不是 Ultimate）
+        expect(newCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(46); // 50 - 4
+        // 护盾完全消耗
+        expect(newCore.players['1'].damageShields).toEqual([]);
+    });
+});

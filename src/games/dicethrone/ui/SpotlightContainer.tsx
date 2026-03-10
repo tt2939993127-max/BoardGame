@@ -9,6 +9,9 @@ import React from 'react';
 import type { MotionProps } from 'framer-motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UI_Z_INDEX } from '../../../core';
+import { createScopedLogger } from '../../../lib/logger';
+
+const spotlightContainerLogger = createScopedLogger('DT_SPOTLIGHT_CONTAINER');
 
 type SpotlightMotion = Pick<MotionProps, 'initial' | 'animate' | 'exit' | 'transition'>;
 
@@ -33,6 +36,8 @@ interface SpotlightContainerProps {
     disableAutoClose?: boolean;
     /** 禁用点击背景关闭（用于交互模式） */
     disableBackdropClose?: boolean;
+    /** 首次挂载后的点击关闭保护时长，避免触发它的同一次点击立刻把特写关掉 */
+    closeClickGuardMs?: number;
 }
 
 const DEFAULT_CONTENT_MOTION: SpotlightMotion = {
@@ -58,7 +63,34 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     closeOnContentClick = true,
     disableAutoClose = false,
     disableBackdropClose = false,
+    closeClickGuardMs = 180,
 }) => {
+    const visibleSinceRef = React.useRef<number>(0);
+
+    React.useEffect(() => {
+        if (isVisible) {
+            const now = Date.now();
+            visibleSinceRef.current = now;
+            spotlightContainerLogger.info('visible', {
+                id,
+                visibleSince: now,
+                closeClickGuardMs,
+            });
+        }
+    }, [closeClickGuardMs, id, isVisible]);
+
+    const isCloseClickGuardActive = React.useCallback(() => {
+        if (closeClickGuardMs <= 0) return false;
+        const elapsed = Date.now() - visibleSinceRef.current;
+        const isActive = elapsed < closeClickGuardMs;
+        spotlightContainerLogger.info('guard-check', {
+            id,
+            elapsed,
+            closeClickGuardMs,
+            isActive,
+        });
+        return isActive;
+    }, [closeClickGuardMs, id]);
 
     // 自动关闭计时器
     React.useEffect(() => {
@@ -90,7 +122,21 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                onClick={disableBackdropClose ? undefined : onClose}
+                onClick={disableBackdropClose
+                    ? undefined
+                    : () => {
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('backdrop-click', {
+                            id,
+                            guardActive,
+                        });
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
+                            return;
+                        }
+                        spotlightContainerLogger.info('close', { id, source: 'backdrop' });
+                        onClose();
+                    }}
             >
                 {/* 内容容器 */}
                 <motion.div
@@ -99,7 +145,25 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
                     animate={m.animate}
                     exit={m.exit}
                     transition={m.transition}
-                    onClick={closeOnContentClick ? onClose : (e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('content-click', {
+                            id,
+                            closeOnContentClick,
+                            guardActive,
+                        });
+                        if (!closeOnContentClick) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
+                            return;
+                        }
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
+                            return;
+                        }
+                        spotlightContainerLogger.info('close', { id, source: 'content' });
+                        onClose();
+                    }}
                 >
                     {children}
                 </motion.div>

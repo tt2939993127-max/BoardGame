@@ -6,7 +6,11 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import type { PromptOption as EnginePromptOption, SimpleChoiceConfig } from '../../../engine/systems/InteractionSystem';
+import type {
+    PromptOption as EnginePromptOption,
+    SimpleChoiceConfig,
+    SimpleChoiceTargetType,
+} from '../../../engine/systems/InteractionSystem';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import { resolveOnPlay } from './abilityRegistry';
@@ -16,6 +20,7 @@ import type {
     MinionOnBase,
     MinionPlayedEvent,
     LimitModifiedEvent,
+    MinionReturnedEvent,
     MinionDestroyedEvent,
     MinionMovedEvent,
     PowerCounterAddedEvent,
@@ -34,6 +39,7 @@ import type {
     DeckReorderedEvent,
     AbilityFeedbackEvent,
     OngoingCardCounterChangedEvent,
+    CardToDeckBottomEvent,
 } from './types';
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
@@ -102,7 +108,6 @@ export function destroyMinion(
     reason: string,
     now: number
 ): MinionDestroyedEvent {
-    console.log(`[destroyMinion] uid=${minionUid}, defId=${minionDefId}, ownerId=${ownerId}, destroyerId=${destroyerId}, reason=${reason}`);
     return {
         type: SU_EVENTS.MINION_DESTROYED,
         payload: { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId, reason },
@@ -128,6 +133,159 @@ export function moveMinion(
         payload: { minionUid, minionDefId, fromBaseIndex, toBaseIndex, reason },
         timestamp: now,
     };
+}
+
+export function buildValidatedMoveEvents(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    params: {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        toBaseIndex: number;
+        reason: string;
+        now: number;
+    },
+): MinionMovedEvent[] {
+    const core = 'core' in state ? state.core : state;
+    const sourceBase = core.bases[params.fromBaseIndex];
+    if (!sourceBase) return [];
+    const targetBase = core.bases[params.toBaseIndex];
+    if (!targetBase) return [];
+
+    const minion = sourceBase.minions.find(candidate => candidate.uid === params.minionUid);
+    if (!minion) return [];
+
+    return [
+        moveMinion(
+            params.minionUid,
+            minion.defId ?? params.minionDefId,
+            params.fromBaseIndex,
+            params.toBaseIndex,
+            params.reason,
+            params.now,
+        ),
+    ];
+}
+
+export function findMinionOnBase(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    baseIndex: number,
+    minionUid: string,
+): MinionOnBase | undefined {
+    const core = 'core' in state ? state.core : state;
+    const base = core.bases[baseIndex];
+    if (!base) return undefined;
+    return base.minions.find(candidate => candidate.uid === minionUid);
+}
+
+export function buildValidatedDestroyEvents(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    params: {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        destroyerId?: PlayerId;
+        reason: string;
+        now: number;
+    },
+): MinionDestroyedEvent[] {
+    const minion = findMinionOnBase(state, params.fromBaseIndex, params.minionUid);
+    if (!minion) return [];
+
+    return [
+        destroyMinion(
+            params.minionUid,
+            minion.defId ?? params.minionDefId,
+            params.fromBaseIndex,
+            minion.owner,
+            params.destroyerId,
+            params.reason,
+            params.now,
+        ),
+    ];
+}
+
+export function buildValidatedReturnEvents(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    params: {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        toPlayerId?: PlayerId;
+        reason: string;
+        now: number;
+        sourcePlayerId?: PlayerId;
+    },
+): MinionReturnedEvent[] {
+    const minion = findMinionOnBase(state, params.fromBaseIndex, params.minionUid);
+    if (!minion) return [];
+
+    return [{
+        type: SU_EVENTS.MINION_RETURNED,
+        payload: {
+            minionUid: params.minionUid,
+            minionDefId: minion.defId ?? params.minionDefId,
+            fromBaseIndex: params.fromBaseIndex,
+            toPlayerId: params.toPlayerId ?? minion.owner,
+            reason: params.reason,
+            ...(params.sourcePlayerId !== undefined ? { sourcePlayerId: params.sourcePlayerId } : {}),
+        },
+        timestamp: params.now,
+    }];
+}
+
+export function buildValidatedCardToDeckBottomEvents(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    params: {
+        cardUid: string;
+        defId: string;
+        ownerId: PlayerId;
+        reason: string;
+        now: number;
+        expectedLocation?: 'discard' | 'hand' | 'deck' | 'bases' | 'any';
+    },
+): CardToDeckBottomEvent[] {
+    const core = 'core' in state ? state.core : state;
+    const owner = core.players[params.ownerId];
+    if (!owner) return [];
+
+    const exists = (() => {
+        switch (params.expectedLocation ?? 'any') {
+            case 'discard':
+                return owner.discard.some(card => card.uid === params.cardUid);
+            case 'hand':
+                return owner.hand.some(card => card.uid === params.cardUid);
+            case 'deck':
+                return owner.deck.some(card => card.uid === params.cardUid);
+            case 'bases':
+                return core.bases.some(
+                    base => base.minions.some(minion => minion.uid === params.cardUid)
+                        || base.ongoingActions.some(action => action.uid === params.cardUid),
+                );
+            case 'any':
+            default:
+                return owner.hand.some(card => card.uid === params.cardUid)
+                    || owner.deck.some(card => card.uid === params.cardUid)
+                    || owner.discard.some(card => card.uid === params.cardUid)
+                    || core.bases.some(
+                        base => base.minions.some(minion => minion.uid === params.cardUid)
+                            || base.ongoingActions.some(action => action.uid === params.cardUid),
+                    );
+        }
+    })();
+
+    if (!exists) return [];
+
+    return [{
+        type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+        payload: {
+            cardUid: params.cardUid,
+            defId: params.defId,
+            ownerId: params.ownerId,
+            reason: params.reason,
+        },
+        timestamp: params.now,
+    }];
 }
 
 // ============================================================================
@@ -269,7 +427,7 @@ export function revealHand(
 /** 生成展示牌库顶事件 */
 export function revealDeckTop(
     targetPlayerId: PlayerId | PlayerId[],
-    viewerPlayerId: PlayerId,
+    viewerPlayerId: PlayerId | 'all',
     cards: { uid: string; defId: string }[],
     count: number,
     reason: string,
@@ -623,6 +781,33 @@ export function recoverCardsFromDiscard(
     };
 }
 
+export type PlayerCardZone = 'hand' | 'deck' | 'discard';
+
+export function findCardInPlayerZone(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    zone: PlayerCardZone,
+    cardUid: string,
+    defId?: string,
+): CardInstance | undefined {
+    const player = core.players[playerId];
+    if (!player) return undefined;
+    return player[zone].find(card => {
+        if (card.uid !== cardUid) return false;
+        if (defId !== undefined && card.defId !== defId) return false;
+        return true;
+    });
+}
+
+export function filterCardsPresentInPlayerZone<T extends { uid: string; defId?: string }>(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    zone: PlayerCardZone,
+    cards: T[],
+): T[] {
+    return cards.filter(card => findCardInPlayerZone(core, playerId, zone, card.uid, card.defId) != null);
+}
+
 /**
  * 交互取消回滚（行动卡）通用事件构建。
  *
@@ -830,6 +1015,41 @@ export function openMeFirstWindow(
     };
 }
 
+/**
+ * 打开计分后响应窗口（After Scoring）
+ * 
+ * 用于基地计分后，允许玩家打出 specialTiming: 'afterScoring' 的特殊行动卡
+ * 
+ * @param triggerContext 触发上下文（如 'scoreBases'）
+ * @param currentPlayerId 当前玩家 ID
+ * @param turnOrder 玩家回合顺序
+ * @param now 时间戳
+ */
+export function openAfterScoringWindow(
+    triggerContext: string,
+    currentPlayerId: PlayerId,
+    turnOrder: PlayerId[],
+    now: number
+): GameEvent {
+    // 构建响应者队列：从当前玩家开始顺时针
+    const startIdx = turnOrder.indexOf(currentPlayerId);
+    const responderQueue: PlayerId[] = [];
+    for (let i = 0; i < turnOrder.length; i++) {
+        responderQueue.push(turnOrder[(startIdx + i) % turnOrder.length]);
+    }
+
+    return {
+        type: RESPONSE_WINDOW_EVENTS.OPENED,
+        payload: {
+            windowId: `afterScoring_${triggerContext}_${now}`,
+            responderQueue,
+            windowType: 'afterScoring' as const,
+            sourceId: triggerContext,
+        },
+        timestamp: now,
+    };
+}
+
 
 // ============================================================================
 // 交互辅助函数（目标选择）
@@ -928,7 +1148,7 @@ export function resolveOrPrompt<T>(
         id: string;
         title: string;
         sourceId: string;
-        targetType: 'base' | 'minion' | 'generic';
+        targetType: SimpleChoiceTargetType;
         /** 单候选自动执行（默认 true，强制效果）；false = 可选效果，始终让玩家选 */
         autoResolveIfSingle?: boolean;
         /** 是否自动添加取消选项（默认 false） */
@@ -972,4 +1192,3 @@ export function buildAbilityFeedback(
         timestamp: now,
     };
 }
-

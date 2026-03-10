@@ -13,10 +13,12 @@ import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText 
 import { isSpecialLimitBlocked } from '../domain/abilityHelpers';
 import { getScoringEligibleBaseIndices } from '../domain/ongoingModifiers';
 import { getBaseRestrictions } from '../domain/ongoingEffects';
+import { matchesDefId } from '../domain/utils';
 import { getFactionMeta } from './factionMeta';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
+import { getLayoutConfig } from './layoutConfig';
 
 // ============================================================================
 // Base Zone: The "Battlefield"
@@ -55,6 +57,10 @@ export const BaseZone: React.FC<{
 }> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
     
+    // 响应式布局配置
+    const playerCount = turnOrder.length;
+    const layout = getLayoutConfig(playerCount);
+    
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
     const baseText = resolveCardText(baseDef, t);
@@ -76,11 +82,17 @@ export const BaseZone: React.FC<{
 
 
     return (
-        <div className="relative flex flex-col items-center group/base mx-[1vw]">
+        <div 
+            className="relative flex flex-col items-center group/base"
+            style={{ marginLeft: `${layout.baseGap / 2}vw`, marginRight: `${layout.baseGap / 2}vw` }}
+        >
 
             {/* --- ONGOING EFFECTS (above base card, absolute positioned) --- */}
             {base.ongoingActions && base.ongoingActions.length > 0 && (
-                <div className="absolute -top-[6vw] left-1/2 -translate-x-1/2 flex items-center gap-[0.4vw] z-30">
+                <div 
+                    className="absolute left-1/2 -translate-x-1/2 flex items-center gap-[0.4vw] z-30"
+                    style={{ top: `-${layout.ongoingTopOffset}vw` }}
+                >
                     {base.ongoingActions.map((oa, idx) => {
                         const actionDef = getCardDef(oa.defId);
                         const actionName = resolveCardName(actionDef, t) || oa.defId;
@@ -96,6 +108,7 @@ export const BaseZone: React.FC<{
                         return (
                             <motion.div
                                 key={oa.uid}
+                                data-ongoing-uid={oa.uid}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (isSelectableOngoing && onOngoingSelect) {
@@ -106,13 +119,14 @@ export const BaseZone: React.FC<{
                                         onViewAction(oa.defId);
                                     }
                                 }}
-                                className={`relative w-[3.8vw] aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
+                                className={`relative aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
                                     hover:z-50 hover:scale-125 hover:-translate-y-[0.3vw] transition-all
                                     border-[0.12vw] ${isDimmedOngoing
                                         ? 'opacity-40 grayscale cursor-not-allowed'
                                         : isSelectableOngoing
                                         ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
                                         : canUseOngoingTalent ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : `${pConf.border} ${pConf.shadow}`}`}
+                                style={{ width: `${layout.ongoingCardWidth}vw` }}
                                 initial={{ y: 20, opacity: 0, scale: 0.6 }}
                                 animate={isSelectableOngoing
                                     ? { y: 0, opacity: 1, scale: 1, rotate: [-1, 1, -1], transition: { rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } } }
@@ -164,8 +178,9 @@ export const BaseZone: React.FC<{
             <div
                 onClick={onClick}
                 ref={tokenRef}
+                data-base-index={baseIndex}
                 className={`
-                    relative w-[14vw] aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
+                    relative aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
                     ${isDimmed
                         ? 'opacity-40 grayscale cursor-not-allowed rotate-1'
                         : isSelectable
@@ -175,6 +190,7 @@ export const BaseZone: React.FC<{
                         : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-zoom-in'}
                 `}
                 style={{
+                    width: `${layout.baseCardWidth}vw`,
                     backgroundImage: 'repeating-linear-gradient(45deg, #fff 0px, #fff 2px, #fdfdfd 2px, #fdfdfd 4px)',
                 }}
             >
@@ -265,7 +281,7 @@ export const BaseZone: React.FC<{
                                         initial={{ scale: 0, rotate: -180, x: 20 }}
                                         animate={{ scale: 1, rotate: 0, x: 0 }}
                                         transition={{ type: 'spring', stiffness: 300, damping: 15, delay: idx * 0.1 }}
-                                        title={`${factionMeta.nameKey} 派系随从不能打出到此基地`}
+                                        title={`${t(factionMeta.nameKey)} 派系随从不能打出到此基地`}
                                     >
                                         {/* 派系图标 */}
                                         <FactionIcon className="w-[1.5vw] h-[1.5vw] text-white" strokeWidth={2.5} />
@@ -283,7 +299,10 @@ export const BaseZone: React.FC<{
             </div>
 
             {/* --- PLAYER COLUMNS CONTAINER --- */}
-            <div className="flex items-start justify-center gap-[0.5vw] w-full pt-[0.5vw]">
+            <div 
+                className="flex items-start justify-center w-full pt-[0.5vw]"
+                style={{ gap: `${layout.playerColumnGap}vw` }}
+            >
                 {turnOrder.map(pid => {
                     const minions = minionsByController[pid] || [];
 
@@ -298,7 +317,11 @@ export const BaseZone: React.FC<{
                     const pConf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
 
                     return (
-                        <div key={pid} className="flex flex-col items-center min-w-[5.5vw] relative">
+                        <div 
+                            key={pid} 
+                            className="flex flex-col items-center relative"
+                            style={{ minWidth: `${layout.minionCardWidth}vw` }}
+                        >
 
                             {/* --- MINIONS --- */}
                             {minions.length > 0 ? (
@@ -325,12 +348,17 @@ export const BaseZone: React.FC<{
                                             onOngoingSelect={onOngoingSelect}
                                             isTutorialTargetAllowed={isTutorialTargetAllowed}
                                             phase={phase}
+                                            layout={layout}
+                                            turnOrder={turnOrder}
                                         />
                                     ))}
                                 </div>
                             ) : (
                                 /* Empty Placeholder for Layout Stability */
-                                <div className={`w-[5.5vw] h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}>
+                                <div 
+                                    className={`h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}
+                                    style={{ width: `${layout.minionCardWidth}vw` }}
+                                >
                                     {isDeployMode && isMyTurn && myPlayerId === pid && minions.length === 0 && (
                                         <div className="w-full h-full flex items-center justify-center text-white/50 text-[0.8vw]">+</div>
                                     )}
@@ -408,7 +436,11 @@ const MinionCard: React.FC<{
     isTutorialTargetAllowed?: (targetId: string) => boolean;
     /** 当前游戏阶段 */
     phase?: string;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed, phase }) => {
+    /** 响应式布局配置 */
+    layout: ReturnType<typeof getLayoutConfig>;
+    /** 玩家回合顺序（用于判断是否是最右边玩家） */
+    turnOrder: string[];
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed, phase, layout, turnOrder }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -439,7 +471,7 @@ const MinionCard: React.FC<{
         // scoreBases 阶段：仅在达标基地上高亮
         && (phase !== 'scoreBases' || getScoringEligibleBaseIndices(core).includes(baseIndex))
         // 忍者侍从额外条件：本回合未打出随从
-        && (minion.defId !== 'ninja_acolyte' || (myPlayerId != null && core.players[myPlayerId]?.minionsPlayed === 0));
+        && (!matchesDefId(minion.defId, 'ninja_acolyte') || (myPlayerId != null && core.players[myPlayerId]?.minionsPlayed === 0));
 
     // 合并：天赋或 special 都可以激活
     const canActivate = canUseTalent || canActivateSpecial;
@@ -448,9 +480,10 @@ const MinionCard: React.FC<{
     const rotation = (seed % 6) - 3;
 
     const style = {
-        marginTop: index === 0 ? 0 : '-5.5vw',
+        marginTop: index === 0 ? 0 : `${layout.minionStackOffset}vw`,
         zIndex: index + 1,
         transform: `rotate(${rotation}deg)`,
+        width: `${layout.minionCardWidth}vw`,
     };
 
     const handleClick = useCallback((e: React.MouseEvent) => {
@@ -474,9 +507,11 @@ const MinionCard: React.FC<{
 
     return (
         <motion.div
+            data-minion-uid={minion.uid}
+            data-minion-def-id={minion.defId}
             onClick={handleClick}
             className={`
-                relative w-[5.5vw] aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
+                relative aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
                 transition-shadow duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0
                 border-[0.15vw] shadow-md
                 ${isDimmed
@@ -587,22 +622,30 @@ const MinionCard: React.FC<{
                 </div>
             )}
 
-            {/* 附着的 ongoing 行动卡 - 角标 + hover 时右侧弹出小卡片 */}
+            {/* 附着的 ongoing 行动卡 - 角标 + hover 时弹出小卡片 */}
             {minion.attachedActions && minion.attachedActions.length > 0 && (
                 <>
                     <AttachedBadge count={minion.attachedActions.length} />
                     {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
                     {/* 行动卡选择模式下始终显示（不需要 hover） */}
-                    {/* right-0 + pl 桥接：容器左边界与随从卡右边界重叠，消除鼠标移动死区 */}
-                    <div
-                        className={`absolute top-0 left-full flex flex-col gap-[0.2vw] pl-[0.6vw]
-                            ${selectableOngoingUids
-                                ? 'opacity-100 scale-100 pointer-events-auto'
-                                : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
-                            }`}
-                        style={{ zIndex: UI_Z_INDEX.tooltip }}
-                    >
-                        {minion.attachedActions.map((aa) => {
+                    {/* 最右侧基地的最右边玩家：显示在左侧；其他：显示在右侧 */}
+                    {(() => {
+                        const isRightmostBase = baseIndex === core.bases.length - 1;
+                        const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
+                        const shouldShowLeft = isRightmostBase && isRightmostPlayer;
+                        const positionClass = shouldShowLeft 
+                            ? 'right-full flex-col-reverse pr-[0.6vw]' 
+                            : 'left-full flex-col pl-[0.6vw]';
+                        return (
+                            <div
+                                className={`absolute top-0 flex gap-[0.2vw] ${positionClass}
+                                    ${selectableOngoingUids
+                                        ? 'opacity-100 scale-100 pointer-events-auto'
+                                        : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
+                                    }`}
+                                style={{ zIndex: UI_Z_INDEX.tooltip }}
+                            >
+                                {minion.attachedActions.map((aa) => {
                             const actionDef = getCardDef(aa.defId);
                             const actionName = resolveCardName(actionDef, t) || aa.defId;
                             const actionText = resolveCardText(actionDef, t);
@@ -625,7 +668,7 @@ const MinionCard: React.FC<{
                                         }
                                     }}
                                     className={`w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
-                                        hover:scale-[2] hover:translate-x-[0.8vw] transition-transform duration-150
+                                        hover:scale-[2] ${shouldShowLeft ? 'hover:-translate-x-[0.8vw]' : 'hover:translate-x-[0.8vw]'} transition-transform duration-150
                                         border-[0.08vw] ${isDimmedAA
                                             ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
                                             : isSelectableAA
@@ -649,6 +692,8 @@ const MinionCard: React.FC<{
                             );
                         })}
                     </div>
+                );
+            })()}
                 </>
             )}
         </motion.div>

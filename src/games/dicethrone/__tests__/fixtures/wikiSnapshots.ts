@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dice Throne Wiki 描述快照数据
  *
  * 数据来源：Dice Throne Season 1 Rerolled 官方 Wiki (https://dice-throne.fandom.com/)
@@ -79,7 +79,7 @@ export const BARBARIAN_ABILITY_SNAPSHOTS: WikiAbilitySnapshot[] = [
   { heroId: 'barbarian', abilityId: 'steadfast', level: 2, wikiName: 'Steadfast II', wikiDescription: '3 Hearts: Heal 5, remove a status effect. 4 Hearts: Heal 6, remove a status effect. 5 Hearts: Heal 7, remove a status effect.', wikiHeal: 5, wikiTrigger: '3/4/5 Hearts' },
 
   // --- Suppress ---
-  { heroId: 'barbarian', abilityId: 'suppress', level: 1, wikiName: 'Suppress', wikiDescription: 'Roll 3 dice. Deal damage equal to the number of Swords rolled x2.', wikiTrigger: '2 Swords + 2 Strength' },
+  { heroId: 'barbarian', abilityId: 'suppress', level: 1, wikiName: 'Suppress', wikiDescription: 'Roll 3 dice. Deal damage equal to the number of Swords rolled x2.', wikiTrigger: '3 Swords + 2 Strength' },
   { heroId: 'barbarian', abilityId: 'suppress', level: 2, wikiName: 'Suppress II', wikiDescription: 'Battle Cry: 2 Swords + 2 Hearts: Heal 2, deal 2 unblockable damage. Mighty Suppress: 3 Swords + 2 Strength: Roll 3 dice, deal Swords x2 damage.', wikiTrigger: '2 Swords + 2 Hearts / 3 Swords + 2 Strength', wikiTags: ['unblockable'] },
 
   // --- Reckless Strike ---
@@ -157,7 +157,7 @@ export const PYROMANCER_ABILITY_SNAPSHOTS: WikiAbilitySnapshot[] = [
   { heroId: 'pyromancer', abilityId: 'fiery-combo', level: 2, wikiName: 'Hot Streak II', wikiDescription: 'Small Straight: Gain 2 FM, spend all FM, deal 2x FM spent + 2 damage. Incinerate (2 Fire + 2 Fiery Soul): Gain 2 FM, inflict Burn, deal 6 damage.', wikiDamage: 6, wikiTrigger: 'Small Straight / 2 Fire + 2 Fiery Soul', wikiStatusEffect: 'burn', wikiStatusValue: 1 },
 
   // --- Meteor ---
-  { heroId: 'pyromancer', abilityId: 'meteor', level: 1, wikiName: 'Meteor', wikiDescription: 'Inflict Stun. Gain 2 FM. Deal 2x FM unblockable damage. Deal 2 collateral damage.', wikiStatusEffect: 'stun', wikiStatusValue: 1, wikiTrigger: '4 Meteor', wikiTags: ['unblockable'] },
+  { heroId: 'pyromancer', abilityId: 'meteor', level: 1, wikiName: 'Meteor', wikiDescription: 'Inflict Stun. Gain 2 FM. Deal 2x FM unblockable damage. Deal 2 collateral damage.', wikiStatusEffect: 'daze', wikiStatusValue: 1, wikiTrigger: '4 Meteor', wikiTags: ['unblockable'] },
   { heroId: 'pyromancer', abilityId: 'meteor', level: 2, wikiName: 'Meteor II', wikiDescription: 'Meteor Shower (3 Meteor): Inflict Knockdown, Burn, and Stun. 4 Meteor: Inflict Stun, gain 2 FM, deal 2x FM unblockable damage, deal 3 collateral.', wikiTrigger: '3/4 Meteor', wikiTags: ['unblockable'] },
 
   // --- Pyro Blast ---
@@ -342,7 +342,7 @@ export const PYROMANCER_TOKEN_SNAPSHOTS: WikiTokenSnapshot[] = [
   { heroId: 'pyromancer', tokenId: 'fire_mastery', wikiName: 'Fire Mastery', wikiDescription: 'Used by abilities to increase fire damage. Consumed by abilities automatically.', wikiStackLimit: 5, wikiCategory: 'consumable' },
   { heroId: 'pyromancer', tokenId: 'knockdown', wikiName: 'Knockdown', wikiDescription: 'Skip your next Offensive Roll Phase. You may spend 2 CP to remove this instead.', wikiTiming: 'onPhaseEnter', wikiStackLimit: 1, wikiCategory: 'debuff' },
   { heroId: 'pyromancer', tokenId: 'burn', wikiName: 'Burn', wikiDescription: 'At the start of your turn, take 2 undefendable damage. Then remove this token.', wikiTiming: 'onTurnStart', wikiStackLimit: 1, wikiCategory: 'debuff' },
-  { heroId: 'pyromancer', tokenId: 'stun', wikiName: 'Stun', wikiDescription: 'Skip your next Offensive Roll Phase. Then remove this token.', wikiTiming: 'onPhaseEnter', wikiStackLimit: 1, wikiCategory: 'debuff' },
+  { heroId: 'pyromancer', tokenId: 'daze', wikiName: 'Stun', wikiDescription: 'Skip your next Offensive Roll Phase. Then remove this token.', wikiTiming: 'onPhaseEnter', wikiStackLimit: 1, wikiCategory: 'debuff' },
 ];
 
 export const MOON_ELF_TOKEN_SNAPSHOTS: WikiTokenSnapshot[] = [

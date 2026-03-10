@@ -14,9 +14,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { PlayerId } from '../../../engine/types';
-import type { TurnPhase, CharacterId, PendingAttack } from '../domain/types';
+import type { TurnPhase, CharacterId, PendingAttack, DiceThroneCore } from '../domain/types';
 import type { CardPreviewRef } from '../../../core';
-import { getUpgradeCardPreviewRef, getAbilitySlotId } from '../ui/AbilityOverlays';
+import { getUpgradeCardPreviewRef } from '../ui/AbilityOverlays';
+import { getAbilitySlotId } from '../ui/abilitySlotMapping';
+import { findPlayerAbility } from '../domain/abilityLookup';
 
 export interface AttackShowcaseData {
     /** 攻击方角色 ID */
@@ -53,6 +55,8 @@ interface AttackShowcaseConfig {
     abilityLevels: Record<string, Record<string, number>>;
     /** 当前 pendingAttack 状态（直接从 core 读取） */
     pendingAttack: PendingAttack | null;
+    /** 游戏状态（用于查找变体技能） */
+    state: DiceThroneCore;
 }
 
 /**
@@ -69,6 +73,7 @@ function buildShowcaseData(
     pendingAttack: PendingAttack,
     selectedCharacters: Record<PlayerId, CharacterId>,
     abilityLevels: Record<string, Record<string, number>>,
+    state: DiceThroneCore,
 ): AttackShowcaseData | null {
     const sourceAbilityId = pendingAttack.sourceAbilityId;
     if (!sourceAbilityId) return null;
@@ -76,16 +81,21 @@ function buildShowcaseData(
     const attackerCharId = selectedCharacters[pendingAttack.attackerId];
     if (!attackerCharId || attackerCharId === 'unselected') return null;
 
-    const slotId = getAbilitySlotId(sourceAbilityId);
+    // 使用 findPlayerAbility 查找技能（支持变体ID）
+    const match = findPlayerAbility(state, pendingAttack.attackerId, sourceAbilityId);
+    if (!match) return null;
 
-    // 技能 ID 可能带变体后缀（如 fist-technique-5 或 fist-technique-2-3），提取基础 ID
-    // 格式：基础ID-[等级-]骰子数
-    // 示例：fist-technique-5（基础版，5个骰子）→ fist-technique
-    //       fist-technique-2-3（2级，3个骰子）→ fist-technique
-    const baseAbilityId = sourceAbilityId.replace(/-\d+(-\d+)?$/, '');
+    // 获取基础技能ID（用于查找槽位和等级）
+    const baseAbilityId = match.ability.id;
+    
+    // 使用基础ID查找槽位
+    const slotId = getAbilitySlotId(baseAbilityId);
+
+    // 使用基础ID查找等级
     const attackerLevels = abilityLevels[pendingAttack.attackerId] ?? {};
-    const level = attackerLevels[baseAbilityId] ?? attackerLevels[sourceAbilityId] ?? 1;
+    const level = attackerLevels[baseAbilityId] ?? 1;
 
+    // 使用基础ID和等级查找升级卡
     const upgradePreviewRef = level > 1
         ? getUpgradeCardPreviewRef(attackerCharId, baseAbilityId, level)
         : undefined;
@@ -107,6 +117,7 @@ export function useAttackShowcase(config: AttackShowcaseConfig): AttackShowcaseS
         selectedCharacters,
         abilityLevels,
         pendingAttack,
+        state,
     } = config;
 
     // 已关闭的攻击 key（用户点击"继续"后设置，触发重渲染隐藏遮罩）
@@ -130,7 +141,7 @@ export function useAttackShowcase(config: AttackShowcaseConfig): AttackShowcaseS
         && getAttackKey(pendingAttack) !== dismissedKey;
 
     const showcaseData = shouldShow && pendingAttack
-        ? buildShowcaseData(pendingAttack, selectedCharacters, abilityLevels)
+        ? buildShowcaseData(pendingAttack, selectedCharacters, abilityLevels, state)
         : null;
 
     const isShowcaseVisible = shouldShow && showcaseData !== null;

@@ -32,15 +32,23 @@ import type { MatchState } from '../../../engine/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import type { RandomFn } from '../../../engine/types';
 
 // ============================================================================
 // 测试工具
 // ============================================================================
 
 const PLAYER_IDS = ['0', '1'];
+
+const handlerRandom: RandomFn = {
+    shuffle: (arr: any[]) => [...arr],
+    random: () => 0.5,
+    d: (_max: number) => 1,
+    range: (min: number, _max: number) => min,
+};
 
 function makeMinion(
     uid: string, defId: string, controller: string, power: number,
@@ -1025,9 +1033,9 @@ describe('P2: bear_cavalry_borscht（罗宋汤）2步链', () => {
 // P2: 2步链（续）
 // ============================================================================
 
-describe('P2: zombie_outbreak（爆发）2步链', () => {
-    it('选空基地 → 选手牌随从 → 额外打出到该基地', () => {
-        // 场景：P0 在 base0 有随从，base1 空，手牌有 outbreak + 一个随从
+describe('P2: zombie_outbreak（爆发）授予额度', () => {
+    it('多个空基地：选基地后授予额度（限定到该基地）', () => {
+        // 场景：P0 在 base0 有随从，base1/base2 空，手牌有 outbreak + 一个随从
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1060,29 +1068,57 @@ describe('P2: zombie_outbreak（爆发）2步链', () => {
         const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
         expect(choice1.sourceId).toBe('zombie_outbreak_choose_base');
 
-        // Step 2: 选 base1 → 选手牌随从
+        // Step 2: 选 base1 → 直接授予额度（限定到 base1）
         const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 1);
         const r2 = respond(r1.finalState, '0', baseOpt, 'outbreak step2: 选基地');
 
         expect(r2.steps[0]?.success).toBe(true);
-        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
-        expect(choice2.sourceId).toBe('zombie_outbreak_choose_minion');
+        expect(r2.finalState.sys.interaction.current).toBeUndefined();
 
-        // Step 3: 选手牌随从 → 链路结束
-        const minionOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'hand-m1');
-        const r3 = respond(r2.finalState, '0', minionOpt, 'outbreak step3: 选随从');
+        // 验证：授予了基地限定额度
+        const player = r2.finalState.core.players['0'];
+        expect(player.baseLimitedMinionQuota?.[1]).toBe(1);
+    });
 
-        expect(r3.steps[0]?.success).toBe(true);
-        expect(r3.finalState.sys.interaction.current).toBeUndefined();
+    it('只有一个空基地：直接授予额度（不创建交互）', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('outbreak1', 'zombie_outbreak', '0', 'action'),
+                        makeCard('hand-m1', 'pirate_first_mate', '0', 'minion'),
+                    ],
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [
+                    makeMinion('my-m1', 'zombie_walker', '0', 3),
+                ]),
+                makeBase('test_base_2'), // 唯一的空基地
+            ],
+        });
 
-        // 验证：hand-m1 打出到 base1
-        const fc = r3.finalState.core;
-        expect(fc.bases[1].minions.some(m => m.defId === 'pirate_first_mate')).toBe(true);
+        const state = makeFullMatchState(core);
+
+        // 打出 outbreak → 直接授予额度
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'outbreak1' },
+        }, 'outbreak: 唯一空基地');
+
+        expect(r1.steps[0]?.success).toBe(true);
+        expect(r1.finalState.sys.interaction.current).toBeUndefined();
+
+        // 验证：授予了基地限定额度
+        const player = r1.finalState.core.players['0'];
+        expect(player.baseLimitedMinionQuota?.[1]).toBe(1);
     });
 });
 
-describe('P2: zombie_they_keep_coming（它们不断来临）2步链', () => {
-    it('选弃牌堆随从 → 选基地 → 从弃牌堆打出', () => {
+describe('P2: zombie_they_keep_coming（它们不断来临）授予额度', () => {
+    it('直接授予额度，玩家可通过 PLAY_MINION fromDiscard 打出', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1102,34 +1138,18 @@ describe('P2: zombie_they_keep_coming（它们不断来临）2步链', () => {
 
         const state = makeFullMatchState(core);
 
-        // Step 1: 打出 → 选弃牌堆随从
+        // 打出 → 直接授予额度
         const r1 = runCommand(state, {
             type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
             payload: { cardUid: 'tkc1' },
-        }, 'they_keep_coming step1');
+        }, 'they_keep_coming: 授予额度');
 
         expect(r1.steps[0]?.success).toBe(true);
-        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
-        expect(choice1.sourceId).toBe('zombie_they_keep_coming');
+        expect(r1.finalState.sys.interaction.current).toBeUndefined();
 
-        // Step 2: 选弃牌堆随从 → 选基地
-        const mOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'disc-m1');
-        const r2 = respond(r1.finalState, '0', mOpt, 'they_keep_coming step2: 选随从');
-
-        expect(r2.steps[0]?.success).toBe(true);
-        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
-        expect(choice2.sourceId).toBe('zombie_they_keep_coming_choose_base');
-
-        // Step 3: 选基地 → 链路结束
-        const baseOpt = findOption(choice2, (o: any) => o.value?.baseIndex === 0);
-        const r3 = respond(r2.finalState, '0', baseOpt, 'they_keep_coming step3: 选基地');
-
-        expect(r3.steps[0]?.success).toBe(true);
-        expect(r3.finalState.sys.interaction.current).toBeUndefined();
-
-        // 验证：disc-m1 从弃牌堆打出到 base0
-        const fc = r3.finalState.core;
-        expect(fc.bases[0].minions.some(m => m.defId === 'pirate_first_mate')).toBe(true);
+        // 验证：授予了额外随从额度
+        const player = r1.finalState.core.players['0'];
+        expect(player.minionLimit).toBe(2); // 1 (基础) + 1 (额外)
     });
 });
 
@@ -2225,5 +2245,170 @@ describe('P3: multi_base_scoring（多基地计分）触发链', () => {
 
         // handler 调用 scoreOneBase，关键是 handler 被正确调用且不报错
         expect(r1.steps[0]?.success).toBe(true);
+    });
+});
+
+describe('stale move regression: bear cavalry interaction chains', () => {
+    it('bear_cavalry_commission_move_dest: 目标已离开来源基地时不再移动', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('comm1', 'bear_cavalry_commission', '0', 'action'),
+                        makeCard('hand-m1', 'bear_cavalry_cub_scout', '0', 'minion'),
+                    ],
+                    factions: ['bear_cavalry', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [makeMinion('enemy-m1', 'test_minion', '1', 3)]),
+                makeBase('test_base_2'),
+                makeBase('test_base_3'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'comm1' } }, 'commission stale step1');
+        const r2 = respond(r1.finalState, '0', findOption(asSimpleChoice(r1.finalState.sys.interaction.current)!, (o: any) => o.value?.cardUid === 'hand-m1'), 'commission stale step2');
+        const r3 = respond(r2.finalState, '0', findOption(asSimpleChoice(r2.finalState.sys.interaction.current)!, (o: any) => o.value?.baseIndex === 0), 'commission stale step3');
+        const r4 = respond(r3.finalState, '0', findOption(asSimpleChoice(r3.finalState.sys.interaction.current)!, (o: any) => o.value?.minionUid === 'enemy-m1'), 'commission stale step4');
+        const chooseDest = asSimpleChoice(r4.finalState.sys.interaction.current)!;
+        expect(chooseDest.sourceId).toBe('bear_cavalry_commission_move_dest');
+
+        const staleCore = {
+            ...r4.finalState.core,
+            players: {
+                ...r4.finalState.core.players,
+                '1': {
+                    ...r4.finalState.core.players['1'],
+                    discard: [...r4.finalState.core.players['1'].discard, makeCard('enemy-m1', 'test_minion', '1', 'minion')],
+                },
+            },
+            bases: r4.finalState.core.bases.map((base, index) => index === 0 ? { ...base, minions: base.minions.filter(m => m.uid !== 'enemy-m1') } : base),
+        };
+
+        const handler = getInteractionHandler('bear_cavalry_commission_move_dest');
+        expect(handler).toBeDefined();
+        const resolved = handler!(makeFullMatchState(staleCore), '0', { baseIndex: 1 }, (chooseDest as any).data, handlerRandom, 3000);
+        expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('bear_cavalry_bear_cavalry_choose_base: 目标已离开来源基地时不再移动', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('bc1', 'bear_cavalry_bear_cavalry', '0', 'action')],
+                    factions: ['bear_cavalry', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [makeMinion('enemy-m1', 'test_minion', '1', 3)]),
+                makeBase('test_base_2'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'bc1' } }, 'bear_cavalry stale step1');
+        const r2 = respond(r1.finalState, '0', findOption(asSimpleChoice(r1.finalState.sys.interaction.current)!, (o: any) => o.value?.minionUid === 'enemy-m1'), 'bear_cavalry stale step2');
+        const chooseBase = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        expect(chooseBase.sourceId).toBe('bear_cavalry_bear_cavalry_choose_base');
+
+        const staleCore = {
+            ...r2.finalState.core,
+            players: {
+                ...r2.finalState.core.players,
+                '1': {
+                    ...r2.finalState.core.players['1'],
+                    discard: [...r2.finalState.core.players['1'].discard, makeCard('enemy-m1', 'test_minion', '1', 'minion')],
+                },
+            },
+            bases: r2.finalState.core.bases.map((base, index) => index === 0 ? { ...base, minions: base.minions.filter(m => m.uid !== 'enemy-m1') } : base),
+        };
+
+        const handler = getInteractionHandler('bear_cavalry_bear_cavalry_choose_base');
+        expect(handler).toBeDefined();
+        const resolved = handler!(makeFullMatchState(staleCore), '0', { baseIndex: 1 }, (chooseBase as any).data, handlerRandom, 3001);
+        expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('bear_cavalry_youre_screwed_choose_dest: 目标已离开来源基地时不再移动', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('ys1', 'bear_cavalry_youre_screwed', '0', 'action')],
+                    factions: ['bear_cavalry', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [
+                    makeMinion('my-m1', 'bear_cavalry_cub_scout', '0', 3),
+                    makeMinion('enemy-m1', 'test_minion', '1', 3),
+                ]),
+                makeBase('test_base_2'),
+                makeBase('test_base_3'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'ys1' } }, 'youre_screwed stale step1');
+        const r2 = respond(r1.finalState, '0', findOption(asSimpleChoice(r1.finalState.sys.interaction.current)!, (o: any) => o.value?.baseIndex === 0), 'youre_screwed stale step2');
+        const r3 = respond(r2.finalState, '0', findOption(asSimpleChoice(r2.finalState.sys.interaction.current)!, (o: any) => o.value?.minionUid === 'enemy-m1'), 'youre_screwed stale step3');
+        const chooseDest = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        expect(chooseDest.sourceId).toBe('bear_cavalry_youre_screwed_choose_dest');
+
+        const staleCore = {
+            ...r3.finalState.core,
+            players: {
+                ...r3.finalState.core.players,
+                '1': {
+                    ...r3.finalState.core.players['1'],
+                    discard: [...r3.finalState.core.players['1'].discard, makeCard('enemy-m1', 'test_minion', '1', 'minion')],
+                },
+            },
+            bases: r3.finalState.core.bases.map((base, index) => index === 0 ? { ...base, minions: base.minions.filter(m => m.uid !== 'enemy-m1') } : base),
+        };
+
+        const handler = getInteractionHandler('bear_cavalry_youre_screwed_choose_dest');
+        expect(handler).toBeDefined();
+        const resolved = handler!(makeFullMatchState(staleCore), '0', { baseIndex: 1 }, (chooseDest as any).data, handlerRandom, 3002);
+        expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('bear_cavalry_bear_rides_you_choose_base: 目标已离开来源基地时不再移动', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('bry1', 'bear_cavalry_bear_rides_you', '0', 'action')],
+                    factions: ['bear_cavalry', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [makeMinion('my-m1', 'bear_cavalry_cub_scout', '0', 3)]),
+                makeBase('test_base_2'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'bry1' } }, 'bear_rides_you stale step1');
+        const r2 = respond(r1.finalState, '0', findOption(asSimpleChoice(r1.finalState.sys.interaction.current)!, (o: any) => o.value?.minionUid === 'my-m1'), 'bear_rides_you stale step2');
+        const chooseBase = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        expect(chooseBase.sourceId).toBe('bear_cavalry_bear_rides_you_choose_base');
+
+        const staleCore = {
+            ...r2.finalState.core,
+            players: {
+                ...r2.finalState.core.players,
+                '0': {
+                    ...r2.finalState.core.players['0'],
+                    discard: [...r2.finalState.core.players['0'].discard, makeCard('my-m1', 'bear_cavalry_cub_scout', '0', 'minion')],
+                },
+            },
+            bases: r2.finalState.core.bases.map((base, index) => index === 0 ? { ...base, minions: base.minions.filter(m => m.uid !== 'my-m1') } : base),
+        };
+
+        const handler = getInteractionHandler('bear_cavalry_bear_rides_you_choose_base');
+        expect(handler).toBeDefined();
+        const resolved = handler!(makeFullMatchState(staleCore), '0', { baseIndex: 1 }, (chooseBase as any).data, handlerRandom, 3003);
+        expect(resolved?.events ?? []).toHaveLength(0);
     });
 });

@@ -19,6 +19,8 @@ import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
 import { InteractionOverlay } from './InteractionOverlay';
 import { EndgameOverlay } from '../../../components/game/framework/widgets/EndgameOverlay';
+import { RematchActions } from '../../../components/game/framework/widgets/RematchActions';
+import { DiceThroneEndgameContent, renderDiceThroneButton } from './DiceThroneEndgame';
 import type { StatusAtlases } from './statusEffects';
 import type { AbilityCard, DieFace, HeroState, InteractionDescriptor, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -29,6 +31,9 @@ import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem'
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
 import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
+import { createScopedLogger } from '../../../lib/logger';
+
+const boardOverlaysLogger = createScopedLogger('DT_BOARD_OVERLAYS');
 
 export interface BoardOverlaysProps {
     // 放大预览
@@ -176,6 +181,27 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const { t } = useTranslation('game-dicethrone');
     const { ref: multiCardScrollRef, dragProps: multiCardDragProps } = useHorizontalDragScroll();
 
+    // 调试日志：bonusDie prop
+    React.useEffect(() => {
+        boardOverlaysLogger.info('bonus-prop', {
+            show: props.bonusDie.show,
+            value: props.bonusDie.value,
+            face: props.bonusDie.face,
+            effectKey: props.bonusDie.effectKey,
+            characterId: props.bonusDie.characterId,
+        });
+    }, [props.bonusDie]);
+
+    React.useEffect(() => {
+        boardOverlaysLogger.info('token-modal-check', {
+            hasPendingDamage: !!props.pendingDamage,
+            hasTokenResponsePhase: !!props.tokenResponsePhase,
+            isTokenResponder: props.isTokenResponder,
+            shouldRender: !!(props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder),
+            usableTokensCount: props.usableTokens?.length ?? 0,
+        });
+    }, [props.pendingDamage, props.tokenResponsePhase, props.isTokenResponder, props.usableTokens]);
+
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
     const magnifyContainerClassName = `
@@ -261,13 +287,6 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 {/* Token 响应窗口 */}
                 {(() => {
                     const shouldRender = props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder;
-                    console.log('[BoardOverlays] Token 响应窗口渲染检查', {
-                        hasPendingDamage: !!props.pendingDamage,
-                        hasTokenResponsePhase: !!props.tokenResponsePhase,
-                        isTokenResponder: props.isTokenResponder,
-                        shouldRender,
-                        usableTokensCount: props.usableTokens?.length ?? 0,
-                    });
                     return shouldRender ? (
                         <TokenResponseModal
                             key="token-response"
@@ -370,7 +389,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 )}
             </AnimatePresence>
 
-            {/* 游戏结束覆盖层 - 独立管理其 Portal */}
+            {/* 游戏结束覆盖层 - 注入王权骰铸专属结算内容和重赛按钮样式 */}
             <EndgameOverlay
                 isGameOver={props.isGameOver}
                 result={props.gameoverResult}
@@ -380,6 +399,21 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 totalPlayers={Object.keys(props.players).length}
                 rematchState={props.rematchState}
                 onVote={props.onRematchVote}
+                renderContent={(contentProps) => (
+                    <DiceThroneEndgameContent
+                        {...contentProps}
+                        players={props.players}
+                        myPlayerId={props.playerID ?? null}
+                        locale={props.locale}
+                    />
+                )}
+                renderActions={(actionsProps) => (
+                    <RematchActions
+                        {...actionsProps}
+                        className="mt-4"
+                        renderButton={renderDiceThroneButton}
+                    />
+                )}
             />
         </>
     );

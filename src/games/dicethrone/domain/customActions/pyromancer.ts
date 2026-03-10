@@ -76,7 +76,7 @@ const resolveSoulBurnDamage = (ctx: CustomActionContext): DiceThroneEvent[] => {
         opponentIds.forEach((targetId, idx) => {
             // 使用新伤害计算管线（基础伤害，自动收集所有修正）
             const damageCalc = createDamageCalculation({
-                source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+                source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
                 target: { playerId: targetId },
                 baseDamage: dmg,
                 state: ctx.state,
@@ -117,7 +117,7 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
     // 使用新伤害计算管线
     // 注意：伤害基于授予后的 FM 数量，需要手动添加修正（因为 state 还未更新）
     const damageCalc = createDamageCalculation({
-        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: opponentId },
         baseDamage: 5,
         state: ctx.state,
@@ -153,7 +153,7 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     
     // 使用新伤害计算管线
     const damageCalc = createDamageCalculation({
-        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: opponentId },
         baseDamage: 6,
         state: ctx.state,
@@ -202,7 +202,7 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
     if (updatedFM > 0) {
         // 使用新伤害计算管线（伤害值 = FM 数量，自动收集所有修正）
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: updatedFM,
             state: ctx.state,
@@ -248,7 +248,7 @@ const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: n
 
         // 使用新伤害计算管线
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: toConsume * dmgPerToken,
             state: ctx.state,
@@ -287,7 +287,7 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
 
     // 使用新伤害计算管线，添加乘法修正
     const damageCalc = createDamageCalculation({
-        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
         target: { playerId: opponentId },
         baseDamage: base,
         state: ctx.state,
@@ -375,7 +375,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, opts: { dmgPerFire?: number
 
         // 使用新伤害计算管线（自动收集所有修正）
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: totalDamage,
             state: ctx.state,
@@ -434,7 +434,7 @@ const resolveMagmaArmor3 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     if (totalDamage > 0) {
         const opponentId = ctx.ctx.defenderId;
         const damageCalc = createDamageCalculation({
-            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId, phase: ctx.damagePhase },
             target: { playerId: opponentId },
             baseDamage: totalDamage,
             state: ctx.state,
@@ -568,15 +568,22 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
 
 /**
  * 烈焰赤红 (Red Hot)：每个烈焰精通增加 1 点伤害到当前攻击
- * 作为 immediate timing 使用，通过 pendingAttack.bonusDamage 增加
+ * 生成 BONUS_DAMAGE_ADDED 事件，由 reducer 累加到 pendingAttack.bonusDamage
  */
 const resolveDmgPerFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const fmCount = getFireMasteryCount(ctx);
     if (fmCount <= 0) return [];
-    if (ctx.state.pendingAttack && ctx.state.pendingAttack.attackerId === ctx.attackerId) {
-        ctx.state.pendingAttack.bonusDamage = (ctx.state.pendingAttack.bonusDamage ?? 0) + fmCount;
-    }
-    return [];
+
+    return [{
+        type: 'BONUS_DAMAGE_ADDED',
+        payload: {
+            playerId: ctx.attackerId,
+            amount: fmCount,
+            sourceCardId: 'card-red-hot',
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: ctx.timestamp,
+    }];
 };
 
 /**

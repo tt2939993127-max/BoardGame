@@ -87,7 +87,7 @@ function createSetupAtPlayer1Upkeep(
 // ============================================================================
 
 describe('燃烧 (Burn) upkeep 执行', () => {
-    it('1 层燃烧：upkeep 造成 1 点伤害并移除 1 层', () => {
+    it('1 层燃烧：upkeep 造成固定 2 点伤害，状态持续不移除', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '1层燃烧upkeep',
@@ -100,11 +100,11 @@ describe('燃烧 (Burn) upkeep 执行', () => {
         });
 
         const core = result.finalState.core;
-        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 1);
-        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(0);
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
+        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(1); // 持续效果，不移除
     });
 
-    it('3 层燃烧：upkeep 造成 3 点伤害并移除 1 层（剩余 2 层）', () => {
+    it('3 层燃烧：upkeep 造成固定 2 点伤害，状态持续不移除', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '3层燃烧upkeep',
@@ -116,8 +116,8 @@ describe('燃烧 (Burn) upkeep 执行', () => {
             ]),
         });
         const core = result.finalState.core;
-        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 3);
-        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(2);
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2); // 固定 2 点伤害
+        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(3); // 持续效果，不移除
     });
 });
 
@@ -166,7 +166,7 @@ describe('中毒 (Poison) upkeep 执行', () => {
 // ============================================================================
 
 describe('燃烧 + 中毒 同时 upkeep', () => {
-    it('1 层燃烧 + 1 层中毒：总共造成 2 点伤害', () => {
+    it('1 层燃烧 + 1 层中毒：总共造成 3 点伤害（燃烧 2 + 中毒 1）', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '燃烧+中毒同时',
@@ -179,9 +179,9 @@ describe('燃烧 + 中毒 同时 upkeep', () => {
             ]),
         });
         const core = result.finalState.core;
-        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
-        // 燃烧移除 1 层（变为 0），毒液持续（保持 1 层）
-        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(0);
+        expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 3); // 燃烧 2 + 中毒 1
+        // 燃烧持续（保持 1 层），毒液持续（保持 1 层）
+        expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(1);
         expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(1);
     });
 });
@@ -209,24 +209,24 @@ describe('脑震荡 (Concussion) 跳过收入', () => {
 });
 
 // ============================================================================
-// 眩晕 (Stun) — 跳过进攻掷骰阶段
+// 晕眩 (Daze) — 不在进入 offensiveRoll 时自动移除
 // ============================================================================
 
-describe('眩晕 (Stun) 跳过进攻掷骰', () => {
-    it('有眩晕时进入 offensiveRoll 阶段自动移除', () => {
+describe('晕眩 (Daze) 进入 offensiveRoll', () => {
+    it('有 daze 时进入 offensiveRoll 阶段不会自动移除', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
-            name: '眩晕跳过进攻',
+            name: 'daze 进入 offensiveRoll 不自动移除',
             commands: [
                 cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll（stun 触发）
+                cmd('ADVANCE_PHASE', '1'), // 进入 offensiveRoll
             ],
             setup: createSetupAtPlayer1Upkeep([
-                { playerId: '1', statusId: STATUS_IDS.STUN, stacks: 1 },
+                { playerId: '1', statusId: STATUS_IDS.DAZE, stacks: 1 },
             ]),
         });
         const core = result.finalState.core;
-        expect(core.players['1'].statusEffects[STATUS_IDS.STUN] ?? 0).toBe(0);
+        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(1);
     });
 });
 
@@ -852,7 +852,7 @@ describe('伏击 (Sneak Attack) 执行逻辑', () => {
 // ============================================================================
 
 /**
- * 创建 setup：player 0 在 offensiveRoll 阶段，有 pendingAttack + rollConfirmed + daze
+ * 创建 setup：player 0 在 offensiveRoll 阶段，有 pendingAttack + rollConfirmed + 防御方有 daze
  * 攻击不可防御，这样 onPhaseExit 会直接结算攻击（不进入 defensiveRoll）
  */
 function createSetupAtOffensiveRollWithDaze(
@@ -860,7 +860,7 @@ function createSetupAtOffensiveRollWithDaze(
         attackerId?: string;
         defenderId?: string;
         isDefendable?: boolean;
-        dazeOnAttacker?: boolean;
+        dazeOnDefender?: boolean;  // ✅ 改名：dazeOnDefender（默认 true）
         dazeStacks?: number;
     } = {}
 ) {
@@ -868,7 +868,7 @@ function createSetupAtOffensiveRollWithDaze(
         attackerId = '0',
         defenderId = '1',
         isDefendable = false,
-        dazeOnAttacker = true,
+        dazeOnDefender = true,  // ✅ 默认给防御方添加眩晕
         dazeStacks = 1,
     } = options;
     const baseSetup = createNoResponseSetupWithEmptyHand();
@@ -890,8 +890,9 @@ function createSetupAtOffensiveRollWithDaze(
             damageResolved: false,
             attackFaceCounts: {},
         } as any;
-        if (dazeOnAttacker) {
-            state.core.players[attackerId].statusEffects[STATUS_IDS.DAZE] = dazeStacks;
+        if (dazeOnDefender) {
+            // ✅ 给防御方添加眩晕
+            state.core.players[defenderId].statusEffects[STATUS_IDS.DAZE] = dazeStacks;
         }
         return state;
     };
@@ -922,16 +923,16 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             }),
         });
         const core = result.finalState.core;
-        // daze 被移除
-        expect(core.players['0'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
+        // daze 被移除（防御方 Player 1）
+        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
         // 进入额外攻击的 offensiveRoll
         expect(result.finalState.sys.phase).toBe('offensiveRoll');
         // 额外攻击进行中标志已设置
         expect(core.extraAttackInProgress).toBeDefined();
-        expect(core.extraAttackInProgress!.attackerId).toBe('1'); // 防御方获得额外攻击
+        expect(core.extraAttackInProgress!.attackerId).toBe('0'); // 攻击方（Player 0）获得额外攻击
         expect(core.extraAttackInProgress!.originalActivePlayerId).toBe('0'); // 原活跃玩家
-        // 活跃玩家切换为额外攻击方（Player 1）
-        expect(core.activePlayerId).toBe('1');
+        // 活跃玩家仍是 Player 0（攻击方）
+        expect(core.activePlayerId).toBe('0');
     });
 
     it('额外攻击结束后进入 main2：extraAttackInProgress 清除，活跃玩家恢复', () => {
@@ -940,7 +941,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             name: 'daze额外攻击-结束恢复',
             commands: [
                 cmd('ADVANCE_PHASE', '0'), // offensiveRoll exit → daze 触发 → 进入额外攻击 offensiveRoll
-                cmd('ADVANCE_PHASE', '1'), // 额外攻击 offensiveRoll exit → 无 pendingAttack → 进入 main2
+                cmd('ADVANCE_PHASE', '0'), // 额外攻击 offensiveRoll exit → 无 pendingAttack → 进入 main2
             ],
             setup: createSetupAtOffensiveRollWithDaze({
                 isDefendable: false,
@@ -951,19 +952,19 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
         expect(result.finalState.sys.phase).toBe('main2');
         // 额外攻击标志已清除
         expect(core.extraAttackInProgress).toBeUndefined();
-        // 活跃玩家恢复为原回合玩家（Player 0）
+        // 活跃玩家仍是原回合玩家（Player 0）
         expect(core.activePlayerId).toBe('0');
     });
 
     it('额外攻击不会递归触发（daze 已在第一次攻击后移除）', () => {
-        // Player 0 有 daze，攻击结算后 daze 移除，Player 1 获得额外攻击
-        // Player 1 在额外攻击中不应再触发 daze（因为 Player 0 的 daze 已移除）
+        // Player 1（防御方）有 daze，攻击结算后 daze 移除，Player 0（攻击方）获得额外攻击
+        // Player 0 在额外攻击中不应再触发 daze（因为 Player 1 的 daze 已移除）
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: 'daze不递归',
             commands: [
                 cmd('ADVANCE_PHASE', '0'), // 第一次攻击 → daze 触发额外攻击
-                cmd('ADVANCE_PHASE', '1'), // 额外攻击 → 无 pendingAttack → main2
+                cmd('ADVANCE_PHASE', '0'), // 额外攻击 → 无 pendingAttack → main2
             ],
             setup: createSetupAtOffensiveRollWithDaze({
                 isDefendable: false,
@@ -1002,18 +1003,19 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
                     damageResolved: false,
                     attackFaceCounts: {},
                 } as any;
-                state.core.players['0'].statusEffects[STATUS_IDS.DAZE] = 1;
+                // ✅ 给防御方（Player 1）添加眩晕
+                state.core.players['1'].statusEffects[STATUS_IDS.DAZE] = 1;
                 return state;
             },
         });
         const core = result.finalState.core;
-        // daze 被移除
-        expect(core.players['0'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
+        // daze 被移除（防御方 Player 1）
+        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
         // 进入额外攻击的 offensiveRoll
         expect(result.finalState.sys.phase).toBe('offensiveRoll');
         expect(core.extraAttackInProgress).toBeDefined();
-        expect(core.extraAttackInProgress!.attackerId).toBe('1');
-        expect(core.activePlayerId).toBe('1');
+        expect(core.extraAttackInProgress!.attackerId).toBe('0'); // 攻击方（Player 0）获得额外攻击
+        expect(core.activePlayerId).toBe('0');
     });
 
     it('无 daze 时攻击结算后正常进入 main2', () => {
@@ -1025,7 +1027,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             ],
             setup: createSetupAtOffensiveRollWithDaze({
                 isDefendable: false,
-                dazeOnAttacker: false, // 无 daze
+                dazeOnDefender: false, // 无 daze
             }),
         });
         const core = result.finalState.core;

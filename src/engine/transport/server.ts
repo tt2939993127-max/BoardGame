@@ -296,6 +296,7 @@ export class GameTransportServer {
             socket.on('disconnect', () => {
                 this.handleDisconnect(socket);
             });
+
         });
     }
 
@@ -309,13 +310,13 @@ export class GameTransportServer {
         gameId: string,
         playerIds: PlayerId[],
         seed: string,
-        _setupData?: unknown,
+        setupData?: unknown,
     ): Promise<{ state: MatchState<unknown>; randomCursor: number } | null> {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return null;
 
         const trackedRandom = createTrackedRandom(seed, 0);
-        const core = engineConfig.domain.setup(playerIds, trackedRandom.random);
+        const core = engineConfig.domain.setup(playerIds, trackedRandom.random, setupData);
         const sys = createInitialSystemState(
             playerIds,
             engineConfig.systems as EngineSystem[],
@@ -553,6 +554,12 @@ export class GameTransportServer {
             seed: match.randomSeed,
             cursor: match.getRandomCursor(),
         });
+
+        // 写入缓存，确保后续走 diff 基准正确
+        // JSON round-trip 消除 undefined 值的 key，确保缓存结构与客户端（经 socket.io JSON 序列化）一致。
+        // 否则 fast-json-patch 的 compare 会对 { key: undefined } → { key: value } 生成 replace 而非 add，
+        // 导致客户端 patch 应用失败（路径不存在）。
+        match.lastBroadcastedViews.set(playerID ?? 'spectator', JSON.parse(JSON.stringify(viewState)));
 
         // 通知其他玩家（旁观者不触发玩家连接事件）
         if (playerID !== null) {

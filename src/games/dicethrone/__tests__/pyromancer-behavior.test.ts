@@ -707,9 +707,14 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
             const handler = getCustomActionHandler('pyro-details-dmg-per-fm')!;
             const events = handler(buildCtx(state, 'pyro-details-dmg-per-fm'));
 
-            // 不产生事件，直接修改 pendingAttack.bonusDamage
-            expect(events).toHaveLength(0);
-            expect(state.pendingAttack!.bonusDamage).toBe(3);
+            // 新实现：生成 BONUS_DAMAGE_ADDED 事件
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe('BONUS_DAMAGE_ADDED');
+            expect(events[0].payload).toMatchObject({
+                playerId: '0',
+                amount: 3,
+                sourceCardId: 'card-red-hot',
+            });
         });
 
         it('FM=0时不修改bonusDamage', () => {

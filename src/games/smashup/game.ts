@@ -54,16 +54,19 @@ const systems: EngineSystem<SmashUpCore>[] = [
         allowedCommands: ['su:play_action', 'su:play_minion'],
         responderExemptCommands: [],
         commandWindowTypeConstraints: {
-            'su:play_action': ['meFirst'],
+            'su:play_action': ['meFirst', 'afterScoring'],
             'su:play_minion': ['meFirst'],
         },
         responseAdvanceEvents: [
-            { eventType: 'su:action_played', windowTypes: ['meFirst'] },
+            { eventType: 'su:action_played', windowTypes: ['meFirst', 'afterScoring'] },
             { eventType: 'su:minion_played', windowTypes: ['meFirst'] },
         ],
         loopUntilAllPass: true,
+        interactionLock: {
+            requestEvent: 'SYS_INTERACTION_REQUESTED',
+        },
         hasRespondableContent: (state, playerId, windowType) => {
-            if (windowType !== 'meFirst') return true;
+            if (windowType !== 'meFirst' && windowType !== 'afterScoring') return true;
             const core = state as SmashUpCore;
             const player = core.players[playerId];
             if (!player) return false;
@@ -74,23 +77,52 @@ const systems: EngineSystem<SmashUpCore>[] = [
                 const def = getCardDef(c.defId) as ActionCardDef | undefined;
                 if (def?.subtype !== 'special') return false;
                 
+                // 检查 specialTiming 是否匹配窗口类型
+                const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+                if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') return false;
+                if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') return false;
+                
                 // 特殊检查：便衣忍者需要手牌中有随从才能使用
                 if (c.defId === 'ninja_hidden_ninja') {
                     return player.hand.some(card => card.type === 'minion');
                 }
                 
                 // 其他 special 卡默认可用
+                console.log('[hasRespondableContent] Found special card:', {
+                    playerId,
+                    windowType,
+                    cardDefId: c.defId,
+                    cardTiming,
+                });
                 return true;
             });
             
-            // 检查 beforeScoringPlayable 随从（如影舞者）
-            const hasBeforeScoringMinion = player.hand.some(c => {
+            // 检查 beforeScoringPlayable 随从（如影舞者）- 只在 meFirst 窗口可用
+            const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
                 if (c.type !== 'minion') return false;
                 const def = getMinionDef(c.defId);
-                return def?.beforeScoringPlayable === true;
+                if (def?.beforeScoringPlayable === true) {
+                    console.log('[hasRespondableContent] Found beforeScoringPlayable minion:', {
+                        playerId,
+                        windowType,
+                        minionDefId: c.defId,
+                    });
+                    return true;
+                }
+                return false;
             });
             
-            return hasSpecialAction || hasBeforeScoringMinion;
+            const result = hasSpecialAction || hasBeforeScoringMinion;
+            console.log('[hasRespondableContent] Result:', {
+                playerId,
+                windowType,
+                hasSpecialAction,
+                hasBeforeScoringMinion,
+                result,
+                handSize: player.hand.length,
+            });
+            
+            return result;
         },
     }),
     createTutorialSystem(),

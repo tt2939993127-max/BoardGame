@@ -80,6 +80,7 @@ const HandCard: React.FC<HandCardProps> = ({
 
     return (
         <motion.div
+            data-card-uid={card.uid}
             className={`
                 relative flex-shrink-0 origin-bottom pointer-events-auto
                 hover:!z-50

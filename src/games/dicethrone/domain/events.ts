@@ -49,6 +49,7 @@ const DAMAGE_PREVENT_KEY = 'status.general.player_status_sound_fx_pack_vol.posit
 const BONUS_DICE_SETTLE_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
 const EXTRA_ATTACK_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1';
 const ABILITY_RESELECT_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001';
+const ABILITY_ACTIVATE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_arcane_ripple_001';
 
 /**
  * DiceThrone 事件音频配置
@@ -94,6 +95,7 @@ export const DT_EVENTS = defineEvents({
   TOKEN_RESPONSE_CLOSED: { audio: 'immediate', sound: RESPONSE_WINDOW_CLOSE_KEY },
   
   ATTACK_INITIATED: { audio: 'immediate', sound: ATTACK_INITIATE_KEY },
+  BONUS_DAMAGE_ADDED: 'silent',
   ATTACK_PRE_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
   ATTACK_MADE_UNDEFENDABLE: { audio: 'immediate', sound: ATTACK_UNDEFENDABLE_KEY },
   
@@ -117,7 +119,7 @@ export const DT_EVENTS = defineEvents({
   CP_CHANGED: 'fx',              // CP 变化（飞行动画 onImpact）
   PREVENT_DAMAGE: 'fx',          // 伤害减免（飞行动画 onImpact）
   
-  ABILITY_ACTIVATED: 'fx',       // 技能激活（技能自带音效）
+  ABILITY_ACTIVATED: { audio: 'immediate', sound: ABILITY_ACTIVATE_KEY }, // 技能激活（技能自带音效优先，无则用默认）
   ATTACK_RESOLVED: 'fx',         // 攻击结算（技能自带音效）
   ABILITY_REPLACED: 'fx',        // 技能替换（升级卡音效）
 
@@ -478,6 +480,15 @@ export interface AttackInitiatedEvent extends GameEvent<'ATTACK_INITIATED'> {
     };
 }
 
+/** 攻击修正伤害添加事件 */
+export interface BonusDamageAddedEvent extends GameEvent<'BONUS_DAMAGE_ADDED'> {
+    payload: {
+        playerId: PlayerId;
+        amount: number;
+        sourceCardId?: string;
+    };
+}
+
 /** 进攻方前置防御结算事件 */
 export interface AttackPreDefenseResolvedEvent extends GameEvent<'ATTACK_PRE_DEFENSE_RESOLVED'> {
     payload: {
@@ -761,12 +772,12 @@ export interface BonusDiceSettledEvent extends GameEvent<'BONUS_DICE_SETTLED'> {
     };
 }
 
-/** 额外攻击触发事件（晕眩 daze 触发：攻击结算后对手获得一次额外攻击） */
+/** 额外攻击触发事件（晕眩 daze 触发：攻击结算后当前攻击者立即再次攻击） */
 export interface ExtraAttackTriggeredEvent extends GameEvent<'EXTRA_ATTACK_TRIGGERED'> {
     payload: {
-        /** 额外攻击的发起者（原攻击的防御方） */
+        /** 额外攻击的发起者（原攻击的攻击方） */
         attackerId: PlayerId;
-        /** 额外攻击的目标（原攻击方，即被 daze 的玩家） */
+        /** 额外攻击的目标（原攻击的防御方，即被 daze 的玩家） */
         targetId: PlayerId;
         /** 触发来源（状态效果 ID） */
         sourceStatusId: string;
@@ -803,6 +814,7 @@ export type DiceThroneEvent =
     | CardReorderedEvent
     | DeckShuffledEvent
     | AttackInitiatedEvent
+    | BonusDamageAddedEvent
     | AttackPreDefenseResolvedEvent
     | AttackResolvedEvent
     | AttackMadeUndefendableEvent

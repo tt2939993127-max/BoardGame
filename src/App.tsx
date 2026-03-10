@@ -32,6 +32,7 @@ const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Hom
 const MatchRoom = React.lazy(() => import('./pages/MatchRoom').then(m => ({ default: m.MatchRoom })));
 const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoom').then(m => ({ default: m.LocalMatchRoom })));
 const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoom').then(m => ({ default: m.TestMatchRoom })));
+// 旧的测试路由已废弃，使用新的 TestHarness 框架
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
+const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest'));
 
 const AppContent = () => {
   const { t } = useTranslation('lobby');
@@ -95,7 +97,9 @@ const AppContent = () => {
                     <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
                     <Route path="/play/:gameId/match/:matchId" element={<React.Suspense fallback={<LoadingScreen />}><MatchRoom /></React.Suspense>} />
                     <Route path="/play/:gameId/local" element={<React.Suspense fallback={<LoadingScreen />}><LocalMatchRoom /></React.Suspense>} />
-                    <Route path="/play/:gameId/test" element={<React.Suspense fallback={<LoadingScreen />}><TestMatchRoom /></React.Suspense>} />
+                    {/* E2E 测试路由：使用 TestMatchRoom + TestHarness 框架进行状态注入测试 */}
+                    <Route path="/play/:gameId" element={<React.Suspense fallback={<LoadingScreen />}><TestMatchRoom /></React.Suspense>} />
+                    {/* /test 路由已废弃，使用新的 TestHarness 框架（/play/:gameId + setupScene） */}
                     <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
                     <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                     <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
@@ -103,6 +107,8 @@ const AppContent = () => {
                     <Route path="/dev/ugc" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcBuilder')} />}><UnifiedBuilder /></React.Suspense>} />
                     <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
                     <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
+                    {/* 临时测试路由：大杀四方四人局布局预览 */}
+                    <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={<LoadingScreen title="四人局布局测试" />}><SmashUp4PLayoutTest /></React.Suspense>} />
                     {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
                         强制 React 在在线↔教程路由切换时完全卸载/重建，防止状态泄漏 */}
                     <Route path="/play/:gameId/tutorial" element={<React.Suspense fallback={<LoadingScreen />}><TutorialMatchRoom /></React.Suspense>} />
