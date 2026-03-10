@@ -20,6 +20,8 @@ describe('CommandCategories', () => {
             expect(getCommandCategory('PLAY_CARD')).toBe(CommandCategory.TACTICAL);
             expect(getCommandCategory('MODIFY_DIE')).toBe(CommandCategory.STATE_MANAGEMENT);
             expect(getCommandCategory('SELECT_ABILITY')).toBe(CommandCategory.STRATEGIC);
+            expect(getCommandCategory('GRANT_TOKENS')).toBe(CommandCategory.STATE_MANAGEMENT);
+            expect(getCommandCategory('PLAYER_UNREADY')).toBe(CommandCategory.STRATEGIC);
         });
 
         it('应该自动识别 SYS_ 前缀的系统命令', () => {

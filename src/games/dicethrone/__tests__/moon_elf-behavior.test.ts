@@ -209,6 +209,31 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.BLINDED);
+
+            const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
+            expect(settlement).toHaveLength(1);
+            expect((settlement[0] as any).payload.settlement.dice).toHaveLength(5);
+            expect((settlement[0] as any).payload.settlement.displayOnly).toBe(true);
+        });
+        it('应发出5个独立奖励骰、1个汇总事件和1个 displayOnly settlement', () => {
+            const state = createState({});
+            const handler = getCustomActionHandler('moon_elf-exploding-arrow-resolve-2')!;
+            let callIdx = 0;
+            const diceQueue = [1, 2, 4, 5, 6];
+            const events = handler(buildCtx(state, 'moon_elf-exploding-arrow-resolve-2', {
+                random: () => diceQueue[callIdx++]! / 6,
+            }));
+
+            const bonusEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
+            expect(bonusEvents).toHaveLength(6);
+            expect((bonusEvents[0] as any).payload.value).toBe(1);
+            expect((bonusEvents[4] as any).payload.value).toBe(6);
+            expect((bonusEvents[5] as any).payload.effectKey).toBe('bonusDie.effect.explodingArrow2.result');
+
+            const settlementEvents = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
+            expect(settlementEvents).toHaveLength(1);
+            expect((settlementEvents[0] as any).payload.settlement.displayOnly).toBe(true);
+            expect((settlementEvents[0] as any).payload.settlement.dice).toHaveLength(5);
         });
     });
 
@@ -235,6 +260,23 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect(status).toHaveLength(2);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.BLINDED);
             expect((status[1] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
+        });
+        it('汇总奖励骰事件应使用 III 级专属文案 key', () => {
+            const state = createState({});
+            const handler = getCustomActionHandler('moon_elf-exploding-arrow-resolve-3')!;
+            let callIdx = 0;
+            const diceQueue = [1, 2, 4, 5, 6];
+            const events = handler(buildCtx(state, 'moon_elf-exploding-arrow-resolve-3', {
+                random: () => diceQueue[callIdx++]! / 6,
+            }));
+
+            const bonusEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
+            expect(bonusEvents).toHaveLength(6);
+            expect((bonusEvents[5] as any).payload.effectKey).toBe('bonusDie.effect.explodingArrow3.result');
+
+            const settlementEvents = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
+            expect(settlementEvents).toHaveLength(1);
+            expect((settlementEvents[0] as any).payload.settlement.dice).toHaveLength(5);
         });
     });
 
@@ -418,6 +460,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
+            const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
+            expect(settlement).toHaveLength(1);
+            expect((settlement[0] as any).payload.settlement.dice).toHaveLength(5);
+            expect((settlement[0] as any).payload.settlement.displayOnly).toBe(true);
         });
 
         it('5骰3弓2非弓时增加bonusDamage 3点', () => {

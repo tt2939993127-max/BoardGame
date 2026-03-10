@@ -791,7 +791,7 @@ export function registerShadowThiefCustomActions(): void {
 
 
     registerCustomActionHandler('shadow_thief-shadow-coins', handleShadowCoins, { categories: ['resource'] });
-    registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });
+    registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other', 'card'] });
     registerCustomActionHandler('shadow_thief-shadow-manipulation', handleShadowManipulation, {
         categories: ['dice'],
         requiresInteraction: true,

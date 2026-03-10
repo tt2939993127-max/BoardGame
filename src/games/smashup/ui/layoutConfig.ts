@@ -38,7 +38,7 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
             // 二人局：宽松布局，原始尺寸
             return {
                 baseCardWidth: 14,
-                baseGap: 12,
+                baseGap: 6,
                 minionCardWidth: 5.5,
                 minionStackOffset: -5.5,
                 playerColumnGap: 0.5,

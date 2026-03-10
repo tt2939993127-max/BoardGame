@@ -77,7 +77,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     characterId,
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0 && (onReroll || displayOnly));
+    // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
+    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
 
@@ -163,6 +164,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     size="7vw"
                                     rollingDurationMs={600 + die.index * 100}
                                     characterId={characterId}
+                                    compact={true}
                                 />
                                 {canReroll && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -195,23 +197,23 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         </motion.div>
                     )}
 
-                    {/* 操作按钮 - 使用 GameButton 保持风格一致 */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.8 }}
-                    >
-                        <GameButton
-                            onClick={displayOnly ? (onSkipReroll ?? onClose) : onSkipReroll}
-                            variant={canReroll ? 'primary' : 'secondary'}
-                            size="md"
-                            className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
+                    {/* 操作按钮 - 只在可重掷时显示（武僧等特殊情况） */}
+                    {canReroll && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.8 }}
                         >
-                            {displayOnly
-                                ? t('bonusDie.continue')
-                                : canReroll ? t('bonusDie.confirmDamage') : t('bonusDie.continue')}
-                        </GameButton>
-                    </motion.div>
+                            <GameButton
+                                onClick={onSkipReroll}
+                                variant="primary"
+                                size="md"
+                                className="!text-[1.1vw] !px-[2.5vw] !py-[0.8vw]"
+                            >
+                                {t('bonusDie.confirmDamage')}
+                            </GameButton>
+                        </motion.div>
+                    )}
                 </div>
             </SpotlightContainer>
         );

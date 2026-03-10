@@ -244,9 +244,21 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
 ) => {
     const { attackerId, defenderId, sourceAbilityId, isDefendable, isUltimate } = event.payload;
     const attackFaceCounts = getFaceCounts(getActiveDice(state));
+    const attacker = state.players[attackerId];
+    const queuedBonusDamage = attacker?.pendingBonusDamage ?? 0;
+    const players = attacker?.pendingBonusDamage !== undefined
+        ? {
+            ...state.players,
+            [attackerId]: {
+                ...attacker,
+                pendingBonusDamage: undefined,
+            },
+        }
+        : state.players;
 
     return {
         ...state,
+        players,
         pendingAttack: {
             attackerId,
             defenderId,
@@ -256,7 +268,7 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             damageResolved: false,
             resolvedDamage: 0,
             attackDiceFaceCounts: attackFaceCounts,
-            bonusDamage: 0,  // 初始化为 0，攻击修正卡会累加到这个值
+            bonusDamage: queuedBonusDamage,
         },
         lastResolvedAttackDamage: undefined,
     };
@@ -265,23 +277,39 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
 /**
  * 处理攻击修正伤害添加事件
  * 用于攻击修正卡（如红热、月精灵的 volley/watch-out 等）在攻击前增加伤害
+ * 
+ * 时序处理：
+ * - 如果 pendingAttack 存在：直接累加到 pendingAttack.bonusDamage
+ * - 如果 pendingAttack 不存在：累加到玩家的 pendingBonusDamage（待处理），等 ATTACK_INITIATED 时转移
  */
 export const handleBonusDamageAdded: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DAMAGE_ADDED' }>> = (
     state,
     event
 ) => {
     const { playerId, amount } = event.payload;
-    
-    // 只有当 pendingAttack 存在且攻击者匹配时才累加
-    if (!state.pendingAttack || state.pendingAttack.attackerId !== playerId) {
-        return state;
+    if (amount === 0) return state;
+
+    if (state.pendingAttack && state.pendingAttack.attackerId === playerId) {
+        return {
+            ...state,
+            pendingAttack: {
+                ...state.pendingAttack,
+                bonusDamage: (state.pendingAttack.bonusDamage ?? 0) + amount,
+            },
+        };
     }
+    
+    const player = state.players[playerId];
+    if (!player) return state;
     
     return {
         ...state,
-        pendingAttack: {
-            ...state.pendingAttack,
-            bonusDamage: (state.pendingAttack.bonusDamage ?? 0) + amount,
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                pendingBonusDamage: (player.pendingBonusDamage ?? 0) + amount,
+            },
         },
     };
 };
@@ -486,8 +514,7 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
  * 处理 Token 响应窗口关闭事件
  */
 export const handleTokenResponseClosed: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_RESPONSE_CLOSED' }>> = (
-    state,
-    event
+    state
 ) => {
     const pendingAttack = state.pendingAttack
         ? { ...state.pendingAttack, damageResolved: true }

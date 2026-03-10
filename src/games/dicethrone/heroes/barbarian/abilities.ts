@@ -33,13 +33,6 @@ const inflictStatus = (statusId: string, value: number, description: string, opt
     condition: opts?.condition,
 });
 
-const grantStatusSelf = (statusId: string, value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
-    description,
-    action: { type: 'grantStatus', target: 'self', statusId, value },
-    timing: opts?.timing,
-    condition: opts?.condition,
-});
-
 const removeStatus = (description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
     action: { type: 'custom', target: 'self', customActionId: 'remove-status-self' },
@@ -90,7 +83,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         description: abilityText('violent-assault', 'description'),
         sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-        effects: [grantStatusSelf(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault', 'inflictDaze')), damage(5, abilityEffectText('violent-assault', 'damage5Unblockable'))],
+        effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault', 'inflictDaze')), damage(5, abilityEffectText('violent-assault', 'damage5Unblockable'))],
         tags: ['unblockable'],
     },
     {
@@ -221,7 +214,7 @@ export const VIOLENT_ASSAULT_2: AbilityDef = {
         {
             id: 'violent-assault-2-shake',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-            effects: [grantStatusSelf(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault-2-shake', 'inflictDaze')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Unblockable'))],
+            effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault-2-shake', 'inflictDaze')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Unblockable'))],
             tags: ['unblockable'],
             priority: 2,
         },

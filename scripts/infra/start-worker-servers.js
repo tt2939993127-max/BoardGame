@@ -1,36 +1,12 @@
 /**
- * 为指定 worker 启动一组独立的 E2E 服务。
+ * 为指定 worker 启动一组隔离的 E2E 服务。
  *
  * 用法：
  *   node scripts/infra/start-worker-servers.js <workerId>
  */
 
-import { spawn } from 'child_process';
 import { allocateAvailablePorts, loadWorkerPorts, saveWorkerPorts, isPortInUse } from './port-allocator.js';
-
-const isWindows = process.platform === 'win32';
-const cmdCommand = isWindows ? 'cmd.exe' : undefined;
-
-function spawnNode(scriptPath, env) {
-  return spawn(process.execPath, [scriptPath], {
-    stdio: 'inherit',
-    env,
-  });
-}
-
-function spawnNpx(args, env) {
-  if (isWindows) {
-    return spawn(cmdCommand, ['/c', 'npx', ...args], {
-      stdio: 'inherit',
-      env,
-    });
-  }
-
-  return spawn('npx', args, {
-    stdio: 'inherit',
-    env,
-  });
-}
+import { registerExitGuard, spawnNodeScript, spawnPackageScript, spawnTsxScript } from './e2e-server-launcher.js';
 
 const workerId = Number.parseInt(process.argv[2] ?? '', 10);
 if (Number.isNaN(workerId)) {
@@ -39,10 +15,10 @@ if (Number.isNaN(workerId)) {
 }
 
 const ports = loadWorkerPorts(workerId) ?? await allocateAvailablePorts(workerId);
-console.log(`\n🚀 启动 Worker ${workerId} 的服务器...`);
+console.log(`\n🚀 启动 Worker ${workerId} 的 E2E 服务...`);
 console.log(`  前端: http://localhost:${ports.frontend}`);
-console.log(`  游戏服务器: http://localhost:${ports.gameServer}`);
-console.log(`  API 服务器: http://localhost:${ports.apiServer}\n`);
+console.log(`  游戏服务: http://localhost:${ports.gameServer}`);
+console.log(`  API 服务: http://localhost:${ports.apiServer}\n`);
 
 const busyPorts = Object.entries(ports)
   .filter(([, port]) => isPortInUse(port))
@@ -56,7 +32,7 @@ if (busyPorts.length > 0) {
 
 saveWorkerPorts(workerId, ports);
 
-const frontend = spawnNode('scripts/infra/vite-with-logging.js', {
+const frontend = spawnNodeScript('scripts/infra/vite-with-logging.js', {
   ...process.env,
   E2E_PROXY_QUIET: 'true',
   VITE_DEV_PORT: String(ports.frontend),
@@ -64,19 +40,19 @@ const frontend = spawnNode('scripts/infra/vite-with-logging.js', {
   API_SERVER_PORT: String(ports.apiServer),
 });
 
-const gameServer = spawnNpx(['tsx', 'server.ts'], {
+const gameServer = spawnTsxScript(['server.ts'], {
   ...process.env,
   GAME_SERVER_PORT: String(ports.gameServer),
   USE_PERSISTENT_STORAGE: 'false',
 });
 
-const apiServer = spawnNpx(['tsx', '--tsconfig', 'apps/api/tsconfig.json', 'apps/api/src/main.ts'], {
+const apiServer = spawnPackageScript('dev:api', {
   ...process.env,
   API_SERVER_PORT: String(ports.apiServer),
 });
 
 const cleanup = () => {
-  console.log(`\n🛑 停止 Worker ${workerId} 的服务器...`);
+  console.log(`\n🛑 停止 Worker ${workerId} 的 E2E 服务...`);
   frontend.kill();
   gameServer.kill();
   apiServer.kill();
@@ -86,26 +62,9 @@ const cleanup = () => {
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
-frontend.on('exit', code => {
-  if (code !== 0 && code !== null) {
-    console.error(`前端服务器异常退出 (code ${code})`);
-    cleanup();
-  }
-});
+registerExitGuard(frontend, '前端服务', cleanup);
+registerExitGuard(gameServer, '游戏服务', cleanup);
+registerExitGuard(apiServer, 'API 服务', cleanup);
 
-gameServer.on('exit', code => {
-  if (code !== 0 && code !== null) {
-    console.error(`游戏服务器异常退出 (code ${code})`);
-    cleanup();
-  }
-});
-
-apiServer.on('exit', code => {
-  if (code !== 0 && code !== null) {
-    console.error(`API 服务器异常退出 (code ${code})`);
-    cleanup();
-  }
-});
-
-console.log(`✅ Worker ${workerId} 服务器已启动`);
+console.log(`✅ Worker ${workerId} 服务已启动`);
 console.log('   按 Ctrl+C 停止所有服务\n');

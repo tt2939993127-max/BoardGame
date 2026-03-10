@@ -26,6 +26,8 @@ interface BonusDieSpotlightContentProps {
     rollingDurationMs?: number;
     /** 骰子资源所属角色（用于图集选择） */
     characterId?: string;
+    /** 是否为紧凑模式（多骰场景，文字变小） */
+    compact?: boolean;
 }
 
 /** Die face glow colors */
@@ -61,6 +63,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     size = '8vw',
     rollingDurationMs = 800,
     characterId = 'monk',
+    compact = false,
 }) => {
 
     const { t } = useTranslation('game-dicethrone');
@@ -108,7 +111,9 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className="text-white text-[1.8vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
+                        className={`text-white font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg ${
+                            compact ? 'text-[1.2vw]' : 'text-[1.8vw]'
+                        }`}
                         style={{
                             textShadow: `0 0 1vw ${FACE_GLOW_COLORS[face]}`,
                         }}

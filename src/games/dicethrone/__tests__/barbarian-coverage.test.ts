@@ -231,7 +231,7 @@ describe('狂战士 GTR 技能覆盖', () => {
     // violent-assault — 暴力突袭（不可防御 + 眩晕）
     // ========================================================================
     describe('暴力突袭 (violent-assault)', () => {
-        it('4 力量造成 5 不可防御伤害 + 眩晕', () => {
+        it('4 力量造成 5 不可防御伤害 + 眩晕，并立即进入额外攻击', () => {
             // 进攻骰: [6,6,6,6,1] → 4 strength + 1 sword
             const random = createQueuedRandom([6, 6, 6, 6, 1]);
             const runner = new GameTestRunner({
@@ -246,13 +246,12 @@ describe('狂战士 GTR 技能覆盖', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'violent-assault' }),
-                    cmd('ADVANCE_PHASE', '0'),       // 不可防御 → main2
+                    cmd('ADVANCE_PHASE', '0'),       // 不可防御 → daze 触发额外攻击
                 ],
                 expect: {
-                    turnPhase: 'main2',
+                    turnPhase: 'offensiveRoll',
                     players: {
-                        '0': { statusEffects: { [STATUS_IDS.DAZE]: 1 } },  // 攻击方获得 DAZE
-                        '1': { hp: 45 },  // 防御方受到伤害
+                        '1': { hp: 45, statusEffects: { [STATUS_IDS.DAZE]: 0 } },  // daze 已被立即消费
                     },
                 },
             });

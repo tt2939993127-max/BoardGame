@@ -154,7 +154,7 @@ describe('致盲（Blinded）攻击判定链', () => {
 });
 
 describe('不可防御攻击链', () => {
-    it('violent-assault 不可防御  跳过防御直接结算', () => {
+    it('violent-assault 不可防御  跳过防御后立即触发额外攻击', () => {
         const runner = createRunner(createQueuedRandom([6, 6, 6, 6, 1]));
         const result = runner.run({
             name: 'violent-assault',
@@ -166,9 +166,9 @@ describe('不可防御攻击链', () => {
                 cmd('ADVANCE_PHASE', '0'),
             ],
             expect: {
-                turnPhase: 'main2',
+                turnPhase: 'offensiveRoll',
                 players: {
-                    '0': { statusEffects: { [STATUS_IDS.DAZE]: 1 } },  // 攻击方获得 DAZE
+                    '0': { statusEffects: { [STATUS_IDS.DAZE]: 0 } },
                     '1': { hp: INITIAL_HEALTH - 5 },  // 防御方受到伤害
                 },
             },

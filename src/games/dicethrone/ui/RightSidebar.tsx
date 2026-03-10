@@ -137,12 +137,6 @@ export const RightSidebar = ({
     // 骰子交互操作提示
     const { t } = useTranslation('game-dicethrone');
     
-    // 调试日志：检查 activeModifiers 是否传递正确
-    React.useEffect(() => {
-        console.log('[RightSidebar] activeModifiers:', activeModifiers);
-        console.log('[RightSidebar] bonusDamage:', bonusDamage);
-    }, [activeModifiers, bonusDamage]);
-    
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;
         const dtMeta = getDtMeta(interaction);

@@ -188,7 +188,16 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     bonusEffectKey = p.effectKey;
                     bonusEffectParams = p.effectParams;
                 } else {
-                    // BONUS_DIE_REROLLED锛氶噸鎺蜂簨浠朵笉瑙﹀彂鐙珛鐗瑰啓锛堢敤鎴峰凡鍦?BonusDieOverlay 涓湅鍒帮級
+                        // 普通骰子事件：添加到 bonusDice 数组
+                        const currentDiceCount = (cardCandidate.bonusDice || []).length;
+                        spotlightLogger.info('bonus-dice-event', {
+                            cardId: cardCandidate.id,
+                            diceIndex: currentDiceCount,
+                            value: bonusValue,
+                            face: bonusFace,
+                            effectKey: bonusEffectKey,
+                            hasEffectKey: !!bonusEffectKey,
+                        });
                     continue;
                 }
 
@@ -233,6 +242,20 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 let cardCandidateIndex = -1;
                 for (let index = nextCardSpotlightQueue.length - 1; index >= 0; index -= 1) {
                     const item = nextCardSpotlightQueue[index];
+                    const timeDiff = Math.abs(item.timestamp - eventTimestamp);
+                    const playerMatch = normalizePlayerId(item.playerId) === bonusPid;
+                    
+                    spotlightLogger.info('bonus-card-match-attempt', {
+                        index,
+                        cardId: item.id,
+                        cardTimestamp: item.timestamp,
+                        diceTimestamp: eventTimestamp,
+                        timeDiff,
+                        thresholdMs,
+                        playerMatch,
+                        withinThreshold: timeDiff <= thresholdMs,
+                    });
+                    
                     if (
                         normalizePlayerId(item.playerId) === bonusPid &&
                         Math.abs(item.timestamp - eventTimestamp) <= thresholdMs
@@ -253,7 +276,12 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 if (cardCandidateIndex >= 0) {
                     const cardCandidate = nextCardSpotlightQueue[cardCandidateIndex];
                     if (isSummaryEvent) {
-                        // 姹囨€讳簨浠讹細娣诲姞鍒?summaryText 瀛楁
+                        // 汇总事件：添加到 summaryText 字段
+                        spotlightLogger.info('bonus-summary-event', {
+                            cardId: cardCandidate.id,
+                            effectKey: bonusEffectKey,
+                            effectParams: bonusEffectParams,
+                        });
                         nextCardSpotlightQueue[cardCandidateIndex] = {
                             ...cardCandidate,
                             summaryText: {
@@ -262,7 +290,16 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                             },
                         };
                     } else {
-                        // 鏅€氶瀛愪簨浠讹細娣诲姞鍒?bonusDice 鏁扮粍
+                        // 普通骰子事件：添加到 bonusDice 数组
+                        const currentDiceCount = (cardCandidate.bonusDice || []).length;
+                        spotlightLogger.info('bonus-dice-event', {
+                            cardId: cardCandidate.id,
+                            diceIndex: currentDiceCount,
+                            value: bonusValue,
+                            face: bonusFace,
+                            effectKey: bonusEffectKey,
+                            hasEffectKey: !!bonusEffectKey,
+                        });
                         nextCardSpotlightQueue[cardCandidateIndex] = {
                             ...cardCandidate,
                             bonusDice: [
@@ -279,10 +316,14 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                         };
                     }
                     didUpdateCardSpotlightQueue = true;
+                    const finalDiceCount = isSummaryEvent 
+                        ? (cardCandidate.bonusDice || []).length 
+                        : (nextCardSpotlightQueue[cardCandidateIndex].bonusDice || []).length;
                     spotlightLogger.info('bonus-bound-to-card', {
                         eventType: type,
                         cardCandidateIndex,
                         isSummaryEvent,
+                        finalDiceCount,
                     });
                 } else {
                     // 澶氶闈㈡澘锛圔onusDieOverlay reroll 妯″紡锛夊凡灞曠ず鍏ㄩ儴楠板瓙锛?
@@ -318,6 +359,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             setCardSpotlightQueue(nextCardSpotlightQueue);
             spotlightLogger.info('card-queue-commit', {
                 queueSize: nextCardSpotlightQueue.length,
+                queueIds: nextCardSpotlightQueue.map(item => item.id),
+                queueDiceCounts: nextCardSpotlightQueue.map(item => (item.bonusDice || []).length),
             });
         }
 

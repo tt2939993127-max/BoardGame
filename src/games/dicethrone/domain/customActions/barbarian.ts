@@ -231,7 +231,7 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
                 face,
                 playerId: attackerId,
                 targetPlayerId: attackerId,
-                effectKey: 'bonusDie.effect.luckyRoll',
+                // effectKey: undefined - 不设置，只显示骰面，不显示描述（统一效果在汇总中显示）
                 effectParams: { value, index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
@@ -248,8 +248,24 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
         timestamp,
     } as HealAppliedEvent);
 
-    // 多骰展示
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, dice, timestamp));
+    // 发射汇总事件（显示治疗信息）
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: {
+            value: dice[0].value,
+            face: dice[0].face,
+            playerId: attackerId,
+            targetPlayerId: attackerId,
+            effectKey: 'bonusDie.effect.luckyRoll.result',
+            effectParams: { heartCount, healAmount },
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: timestamp + 3,
+    } as BonusDieRolledEvent);
+
+
+    // 卡牌的骰子绑定到卡牌特写，不需要独立骰子面板
+    // （不调用 createDisplayOnlySettlement）
 
     return events;
 }
@@ -282,7 +298,7 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
                 face,
                 playerId: attackerId,
                 targetPlayerId: opponentId,
-                effectKey: 'bonusDie.effect.morePleaseRoll',
+                // effectKey: undefined - 不设置，只显示骰面，不显示描述（统一效果在汇总中显示）
                 effectParams: { value, index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
@@ -302,6 +318,21 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         events.push(...damageCalc.toEvents());
     }
 
+    // 发射汇总事件（显示伤害信息）
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: {
+            value: dice[0].value,
+            face: dice[0].face,
+            playerId: attackerId,
+            targetPlayerId: opponentId,
+            effectKey: 'bonusDie.effect.morePleaseRoll.result',
+            effectParams: { swordCount, damage: swordCount },
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: timestamp + 5,
+    } as BonusDieRolledEvent);
+
     // 对对手施加脑震荡
     const opponent = state.players[opponentId];
     const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
@@ -316,8 +347,9 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
         timestamp,
     } as StatusAppliedEvent);
 
-    // 多骰展示
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
+
+    // 卡牌的骰子绑定到卡牌特写，不需要独立骰子面板
+    // （不调用 createDisplayOnlySettlement）
 
     return events;
 }
@@ -334,10 +366,10 @@ export function registerBarbarianCustomActions(): void {
         categories: ['dice', 'damage', 'status'],
     });
     registerCustomActionHandler('barbarian-thick-skin', handleBarbarianThickSkin, {
-        categories: ['other'],
+        categories: ['other', 'resource'],
     });
     registerCustomActionHandler('barbarian-thick-skin-2', handleBarbarianThickSkin2, {
-        categories: ['other'],
+        categories: ['other', 'resource'],
     });
     registerCustomActionHandler('lucky-roll-heal', handleLuckyRollHeal, {
         categories: ['dice', 'resource'],

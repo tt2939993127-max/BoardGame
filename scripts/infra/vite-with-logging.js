@@ -46,7 +46,6 @@ const vite = spawn('node', [
   stdio: ['inherit', 'pipe', 'pipe'],
   env: {
     ...process.env,
-    DEBUG: 'vite:*',
     FORCE_COLOR: '1',
   },
 });

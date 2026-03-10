@@ -1,7 +1,7 @@
+import { execSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { E2E_MULTI_WORKER_BASE_PORTS } from './e2e-port-config.js';
 
 export const BASE_PORTS = {
@@ -11,27 +11,39 @@ export const BASE_PORTS = {
 const PORT_OFFSET = 100;
 const PORT_SCAN_RANGE = 20;
 
-export function allocatePorts(workerId) {
-  const offset = workerId * PORT_OFFSET;
-  return {
-    frontend: BASE_PORTS.frontend + offset,
-    gameServer: BASE_PORTS.gameServer + offset,
-    apiServer: BASE_PORTS.apiServer + offset,
-  };
+function getWindowsNetstatLines() {
+  try {
+    const result = execSync('netstat -ano -p tcp', { encoding: 'utf-8' });
+    return result.split(/\r?\n/).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
-export function isPortInUse(port) {
-  try {
-    if (process.platform === 'win32') {
-      const result = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      return result.trim().length > 0;
-    }
+function parseWindowsPortPids(port) {
+  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i');
+  const pids = new Set();
 
-    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
-    return result.trim().length > 0;
-  } catch {
-    return false;
+  for (const line of getWindowsNetstatLines()) {
+    const match = line.match(portPattern);
+    if (match?.[1] && match[1] !== '0') {
+      pids.add(match[1]);
+    }
   }
+
+  return Array.from(pids);
+}
+
+function normalizePortsInput(ports) {
+  if (Array.isArray(ports)) {
+    return ports;
+  }
+
+  if (ports && typeof ports === 'object') {
+    return Object.values(ports);
+  }
+
+  return [];
 }
 
 async function canBindPort(port, host = '0.0.0.0') {
@@ -40,9 +52,13 @@ async function canBindPort(port, host = '0.0.0.0') {
     let settled = false;
 
     const finalize = result => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
+
       settled = true;
       server.removeAllListeners();
+
       try {
         server.close(() => resolve(result));
       } catch {
@@ -56,12 +72,32 @@ async function canBindPort(port, host = '0.0.0.0') {
   });
 }
 
+export function allocatePorts(workerId) {
+  const offset = workerId * PORT_OFFSET;
+  return {
+    frontend: BASE_PORTS.frontend + offset,
+    gameServer: BASE_PORTS.gameServer + offset,
+    apiServer: BASE_PORTS.apiServer + offset,
+  };
+}
+
+export function isPortInUse(port) {
+  try {
+    if (process.platform === 'win32') {
+      return parseWindowsPortPids(port).length > 0;
+    }
+
+    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
+    return result.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function arePortsBindable(ports) {
-  return await Promise.all([
-    canBindPort(ports.frontend),
-    canBindPort(ports.gameServer),
-    canBindPort(ports.apiServer),
-  ]).then(results => results.every(Boolean));
+  const values = normalizePortsInput(ports);
+  const results = await Promise.all(values.map(port => canBindPort(Number(port))));
+  return results.every(Boolean);
 }
 
 async function findAvailablePort(startPort) {
@@ -71,7 +107,7 @@ async function findAvailablePort(startPort) {
     }
   }
 
-  throw new Error(`未找到可绑定端口，起始端口=${startPort}，扫描范围=${PORT_SCAN_RANGE}`);
+  throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${PORT_SCAN_RANGE}`);
 }
 
 export async function allocateAvailablePorts(workerId) {
@@ -86,16 +122,7 @@ export async function allocateAvailablePorts(workerId) {
 export function getPortPids(port) {
   try {
     if (process.platform === 'win32') {
-      const result = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      const pids = new Set();
-      const lines = result.trim().split('\n');
-      for (const line of lines) {
-        const match = line.match(/\s+(\d+)\s*$/);
-        if (match && match[1] !== '0') {
-          pids.add(match[1]);
-        }
-      }
-      return Array.from(pids);
+      return parseWindowsPortPids(port);
     }
 
     const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
@@ -112,9 +139,30 @@ export function killProcess(pid) {
     } else {
       execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
     }
+
     return true;
   } catch {
     return false;
+  }
+}
+
+export function cleanupPorts(ports, label = 'Ports') {
+  const allPorts = [...new Set(normalizePortsInput(ports).map(port => Number(port)).filter(Number.isFinite))];
+
+  console.log(`[${label}] 清理端口: ${allPorts.join(', ')}`);
+
+  for (const port of allPorts) {
+    const pids = getPortPids(port);
+    if (pids.length === 0) {
+      console.log(`  端口 ${port}: 未被占用`);
+      continue;
+    }
+
+    console.log(`  端口 ${port}: 发现 ${pids.length} 个进程`);
+    for (const pid of pids) {
+      const success = killProcess(pid);
+      console.log(`    PID ${pid}: ${success ? '已终止' : '终止失败'}`);
+    }
   }
 }
 
@@ -147,37 +195,34 @@ export function removeWorkerPortFile(workerId) {
 
 export function cleanupWorkerPorts(workerId) {
   const ports = loadWorkerPorts(workerId) ?? allocatePorts(workerId);
-  const allPorts = Object.values(ports);
-
-  console.log(`[Worker ${workerId}] 清理端口: ${allPorts.join(', ')}`);
-
-  for (const port of allPorts) {
-    const pids = getPortPids(port);
-    if (pids.length === 0) {
-      console.log(`  端口 ${port}: 未被占用`);
-      continue;
-    }
-
-    console.log(`  端口 ${port}: 发现 ${pids.length} 个进程`);
-    for (const pid of pids) {
-      const success = killProcess(pid);
-      console.log(`    PID ${pid}: ${success ? '已终止' : '终止失败'}`);
-    }
-  }
+  cleanupPorts(ports, `Worker ${workerId}`);
 }
 
 export async function waitForPortFree(port, timeoutMs = 5000) {
   const start = Date.now();
+
   while (Date.now() - start < timeoutMs) {
-    if (!isPortInUse(port)) return true;
+    if (!isPortInUse(port)) {
+      return true;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 100));
   }
+
   return false;
+}
+
+export async function waitForPortsFree(ports, timeoutMs = 5000) {
+  const allPorts = [...new Set(normalizePortsInput(ports).map(port => Number(port)).filter(Number.isFinite))];
+  const results = await Promise.all(allPorts.map(port => waitForPortFree(port, timeoutMs)));
+  return results.every(Boolean);
 }
 
 export function cleanupAllWorkerPortFiles() {
   const tmpDir = path.join(process.cwd(), '.tmp');
-  if (!fs.existsSync(tmpDir)) return;
+  if (!fs.existsSync(tmpDir)) {
+    return;
+  }
 
   for (const file of fs.readdirSync(tmpDir)) {
     if (file.startsWith('worker-') && file.endsWith('-ports.json')) {

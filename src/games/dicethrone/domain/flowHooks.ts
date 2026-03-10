@@ -50,19 +50,19 @@ function getTotalDazeStacks(
 ): number {
     const player = core.players[playerId];
     const dazeInCore = player?.statusEffects[STATUS_IDS.DAZE] ?? 0;
-    
-    const dazeAppliedInEvents = events.filter(e => 
-        e.type === 'STATUS_APPLIED' && 
-        e.payload.targetId === playerId && 
+
+    const dazeAppliedInEvents = events.filter(e =>
+        e.type === 'STATUS_APPLIED' &&
+        e.payload.targetId === playerId &&
         e.payload.statusId === STATUS_IDS.DAZE
     ).reduce((sum, e) => sum + (e.payload as any).stacks, 0);
-    
+
     const dazeRemovedInEvents = events.filter(e => 
         e.type === 'STATUS_REMOVED' && 
         e.payload.targetId === playerId && 
         e.payload.statusId === STATUS_IDS.DAZE
     ).reduce((sum, e) => sum + e.payload.stacks, 0);
-    
+
     return dazeInCore + dazeAppliedInEvents - dazeRemovedInEvents;
 }
 
@@ -974,24 +974,9 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
         }
 
-        // ========== 进入 offensiveRoll 阶段：检查眩晕和缠绕状态 ==========
+        // ========== 进入 offensiveRoll 阶段：检查缠绕状态 ==========
         if (to === 'offensiveRoll') {
             const player = core.players[core.activePlayerId];
-
-            // 眩晕 (stun) — 进入 offensiveRoll 时移除，但不跳过阶段
-            // 规则：有眩晕时玩家进入进攻掷骰阶段但无法掷骰（stun 被移除，玩家仍需手动推进）
-            // 注意：不能在 onPhaseExit 中用 overrideNextPhase 跳过，因为测试期望两步推进：
-            //   1. main1 → offensiveRoll（stun 移除）
-            //   2. offensiveRoll → main2（无 pendingAttack，手动推进）
-            const stunStacks = player?.statusEffects[STATUS_IDS.DAZE] ?? 0;
-            if (stunStacks > 0) {
-                events.push({
-                    type: 'STATUS_REMOVED',
-                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.DAZE, stacks: stunStacks },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as StatusRemovedEvent);
-            }
 
             // 缠绕 (entangle) — 减少掷骰次数
             const entangleStacks = player?.statusEffects[STATUS_IDS.ENTANGLE] ?? 0;

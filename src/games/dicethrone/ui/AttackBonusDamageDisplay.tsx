@@ -1,7 +1,7 @@
 /**
  * AttackBonusDamageDisplay 组件
  *
- * 在攻击阶段显示当前攻击的伤害加成（pendingAttack.bonusDamage）
+ * 在攻击阶段显示当前攻击或待发起攻击的伤害加成
  * 位置：右上角骰子区域上方，ActiveModifierBadge 下方
  */
 

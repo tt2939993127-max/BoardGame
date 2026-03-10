@@ -209,24 +209,24 @@ describe('脑震荡 (Concussion) 跳过收入', () => {
 });
 
 // ============================================================================
-// 眩晕 (Stun) — 跳过进攻掷骰阶段
+// 晕眩 (Daze) — 不在进入 offensiveRoll 时自动移除
 // ============================================================================
 
-describe('眩晕 (Stun) 跳过进攻掷骰', () => {
-    it('有眩晕时进入 offensiveRoll 阶段自动移除', () => {
+describe('晕眩 (Daze) 进入 offensiveRoll', () => {
+    it('有 daze 时进入 offensiveRoll 阶段不会自动移除', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
-            name: '眩晕跳过进攻',
+            name: 'daze 进入 offensiveRoll 不自动移除',
             commands: [
                 cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll（stun 触发）
+                cmd('ADVANCE_PHASE', '1'), // 进入 offensiveRoll
             ],
             setup: createSetupAtPlayer1Upkeep([
                 { playerId: '1', statusId: STATUS_IDS.DAZE, stacks: 1 },
             ]),
         });
         const core = result.finalState.core;
-        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
+        expect(core.players['1'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(1);
     });
 });
 

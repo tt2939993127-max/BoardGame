@@ -1046,6 +1046,25 @@ describe('BASE_REPLACED keepCards 模式 (terraform)', () => {
         expect(next.baseDeck).not.toContain('new_base');
     });
 
+    it('基地替换后应清除该位置残留的 before/afterScoring 标记', () => {
+        const state = makeState({
+            bases: [makeBase({ defId: 'old_base' })],
+            baseDeck: ['new_base'],
+            beforeScoringTriggeredBases: [0],
+            afterScoringTriggeredBases: [0],
+        });
+
+        const evt: BaseReplacedEvent = {
+            type: SU_EVENTS.BASE_REPLACED,
+            payload: { baseIndex: 0, oldBaseDefId: 'old_base', newBaseDefId: 'new_base' },
+            timestamp: 0,
+        };
+
+        const next = reduce(state, evt);
+        expect(next.beforeScoringTriggeredBases).toBeUndefined();
+        expect(next.afterScoringTriggeredBases).toBeUndefined();
+    });
+
     it('keepCards=false/默认时创建空基地并插入', () => {
         const base = makeBase({ defId: 'old_base' });
         const state = makeState({ bases: [base], baseDeck: ['new_base'] });

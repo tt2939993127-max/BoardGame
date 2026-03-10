@@ -621,6 +621,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
         const interactions = getInteractionsFromResult(result);
         expect(interactions).toHaveLength(1);
         expect(interactions[0].data.sourceId).toBe('base_tortuga');
+        expect(interactions[0].data.title).toBe('托尔图加：选择移动一个其他基地上的随从到替换基地');
         expect(interactions[0].playerId).toBe('1'); // 亚军
     });
 

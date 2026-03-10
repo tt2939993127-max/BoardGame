@@ -619,13 +619,28 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newBaseDeck = baseDefIdIndex >= 0
                 ? [...state.baseDeck.slice(0, baseDefIdIndex), ...state.baseDeck.slice(baseDefIdIndex + 1)]
                 : state.baseDeck;
+            
+            // ✅ 修复：清除被替换基地的触发标记
+            // 原因：基地替换后，新基地不应该继承旧基地的"已触发"状态
+            // 否则新基地达到 breakpoint 时会被跳过，无法计分
+            const cleanedBeforeScoring = (state.beforeScoringTriggeredBases ?? [])
+                .filter(idx => idx !== baseIndex);
+            const cleanedAfterScoring = (state.afterScoringTriggeredBases ?? [])
+                .filter(idx => idx !== baseIndex);
+            
             // keepCards 模式：仅替换 defId，保留随从和 ongoing，旧 defId 回牌库
             if (keepCards) {
                 const updatedBases = state.bases.map((base, i) => {
                     if (i !== baseIndex) return base;
                     return { ...base, defId: newBaseDefId };
                 });
-                return { ...state, bases: updatedBases, baseDeck: [...newBaseDeck, oldBaseDefId] };
+                return {
+                    ...state,
+                    bases: updatedBases,
+                    baseDeck: [...newBaseDeck, oldBaseDefId],
+                    beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
+                    afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
+                };
             }
             // 默认模式：插入新空基地（配合 BASE_SCORED 删除旧基地后使用）
             const newBase: BaseInPlay = {
@@ -644,6 +659,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 bases: newBases,
                 baseDeck: newBaseDeck,
+                beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
+                afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
                 ...(adjustedEligible ? { scoringEligibleBaseIndices: adjustedEligible } : {}),
             };
         }

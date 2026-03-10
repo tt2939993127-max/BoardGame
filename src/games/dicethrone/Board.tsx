@@ -1276,7 +1276,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         interaction={diceMultistepInteraction ?? pendingInteraction}
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
-                        bonusDamage={G.pendingAttack?.bonusDamage}
+                        bonusDamage={G.pendingAttack?.bonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage}
                         passiveAbilityProps={passiveAbilityProps}
                     />
                 </div>

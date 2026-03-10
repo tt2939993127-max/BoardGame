@@ -113,7 +113,7 @@
     "daze": {
       "name": "恍惚",
       "description": [
-        "在你的攻击结算结束后，获得一次额外攻击并移除此标记。"
+        "本次攻击结算结束后，移除此标记，然后当前攻击者立即再次攻击。"
       ]
     },
     "poison": {
@@ -470,7 +470,9 @@
       "energeticStrength": "星！治疗 2 并施加脑震荡",
       "energeticOther": "抽 1 张牌",
       "luckyRoll": "幸运投掷：{{value}}",
+      "luckyRoll.result": "{{heartCount}}个心面：治疗{{healAmount}}",
       "morePleaseRoll": "再来投掷：{{value}}",
+      "morePleaseRoll.result": "{{swordCount}}个剑面：伤害+{{damage}}",
       "holyLight": "圣光术",
       "holyDefense": "神圣防御",
       "godsGrace": "神佑",
@@ -612,7 +614,7 @@
     "bonus_reroll_limit_reached": "已达到奖励骰重掷次数上限",
     "not_enough_token": "Token 数量不足以支付费用",
     "invalid_die_index": "无效的骰子索引",
-    "player_is_dazed": "玩家处于晕眩状态，无法进行任何行动",
+    "player_is_dazed": "玩家处于恍惚状态",
     "attack_already_initiated": "攻击已发起，无法重新选择技能"
   },
   "actions": {

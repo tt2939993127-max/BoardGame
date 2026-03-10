@@ -152,7 +152,7 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     state,
     event
 ) => {
-    const isDisplayOnly = !!(event.payload as any)?.displayOnly;
+    const isDisplayOnly = !!(event.payload as { displayOnly?: boolean })?.displayOnly;
     // 非 displayOnly 时，标记 pendingAttack.bonusDiceResolved
     const pendingAttack = !isDisplayOnly && state.pendingAttack
         ? { ...state.pendingAttack, bonusDiceResolved: true }
@@ -472,8 +472,23 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
     event
 ) => {
     const { nextPlayerId, turnNumber } = event.payload;
+    let players = state.players;
+
+    for (const playerId of Object.keys(state.players)) {
+        const player = state.players[playerId];
+        if (player?.pendingBonusDamage === undefined) continue;
+        if (players === state.players) {
+            players = { ...state.players };
+        }
+        players[playerId] = {
+            ...player,
+            pendingBonusDamage: undefined,
+        };
+    }
+
     return {
         ...state,
+        players,
         activePlayerId: nextPlayerId,
         turnNumber,
         lastResolvedAttackDamage: undefined,
@@ -875,8 +890,26 @@ export const reduce = (
                     };
                 }
 
-                if (to === 'main2' && state.extraAttackInProgress) {
-                    return { ...state, activePlayerId, extraAttackInProgress: undefined };
+                if (to === 'main2') {
+                    // 清理攻击相关状态
+                    let players = state.players;
+                    const activePlayer = state.players[activePlayerId];
+                    if (activePlayer?.pendingBonusDamage !== undefined) {
+                        players = {
+                            ...state.players,
+                            [activePlayerId]: {
+                                ...activePlayer,
+                                pendingBonusDamage: undefined,
+                            },
+                        };
+                    }
+                    
+                    return {
+                        ...state,
+                        activePlayerId,
+                        players,
+                        extraAttackInProgress: state.extraAttackInProgress ? undefined : state.extraAttackInProgress,
+                    };
                 }
 
                 return { ...state, activePlayerId };
