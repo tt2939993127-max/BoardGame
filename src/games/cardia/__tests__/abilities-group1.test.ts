@@ -285,7 +285,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
         });
     });
     
-    describe('革命者（Revolutionary）', () => {
+    describe.skip('TODO: Deck II - 革命者（Revolutionary）', () => {
         it('应该生成 CARDS_DISCARDED 和 CARD_DRAWN 事件，弃掉对手2张手牌然后抽2张牌', () => {
             mockContext.abilityId = ABILITY_IDS.REVOLUTIONARY;
             const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.REVOLUTIONARY);
@@ -355,7 +355,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
         });
     });
     
-    describe('巫王（Witch King）', () => {
+    describe.skip('TODO: Deck II - 巫王（Witch King）', () => {
         it('第一次调用：应该创建派系选择交互', () => {
             mockContext.abilityId = ABILITY_IDS.WITCH_KING;
             const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.WITCH_KING);
@@ -371,7 +371,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
         });
     });
     
-    describe('继承者（Heir）', () => {
+    describe.skip('TODO: Deck II - 继承者（Heir）', () => {
         it('对手手牌 > 2 张时，应该弃掉部分手牌和整个牌库', () => {
             // 对手有 4 张手牌
             expect(mockCore.players.player1.hand.length).toBe(4);

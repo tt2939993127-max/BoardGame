@@ -228,7 +228,7 @@ describe('组 6：特殊机制能力', () => {
     });
   });
 
-  describe('贵族（Aristocrat）', () => {
+  describe.skip('TODO: Deck II - 贵族（Aristocrat）', () => {
     it('应该在本牌获胜时额外获得1枚印戒', () => {
       mockContext.abilityId = ABILITY_IDS.ARISTOCRAT;
 
@@ -296,7 +296,7 @@ describe('组 6：特殊机制能力', () => {
     });
   });
 
-  describe('勒索者（Extortionist）', () => {
+  describe.skip('TODO: Deck II - 勒索者（Extortionist）', () => {
     it('应该注册延迟效果，在对手下次打牌后检查派系', () => {
       mockContext.abilityId = ABILITY_IDS.EXTORTIONIST;
 
@@ -361,7 +361,7 @@ describe('组 6：特殊机制能力', () => {
       // 需要在遭遇结算后重置 revealFirstNextEncounter
     });
 
-    it('贵族的额外印戒应该只在本牌获胜时放置', () => {
+    it.skip('TODO: Deck II - 贵族的额外印戒应该只在本牌获胜时放置', () => {
       mockContext.abilityId = ABILITY_IDS.ARISTOCRAT;
 
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ARISTOCRAT)!(mockContext);

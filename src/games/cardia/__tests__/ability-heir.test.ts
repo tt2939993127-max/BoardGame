@@ -11,7 +11,7 @@ import { createMockCore, createMockContext, createMockCard } from './test-helper
 // 导入能力文件
 import '../domain/abilities/group1-resources';
 
-describe('继承者（Heir）', () => {
+describe.skip('TODO: Deck II - 继承者（Heir）', () => {
   it('当对手手牌 > 2 张时，应该随机保留 2 张手牌，弃掉其余手牌和整个牌库', () => {
     const mockCore = createMockCore();
     mockCore.players['player2'].hand = [

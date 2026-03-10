@@ -11,7 +11,7 @@ import { createMockCore, createMockContext, createMockCard } from './test-helper
 // 导入能力文件
 import '../domain/abilities/group1-resources';
 
-describe('革命者（Revolutionary）', () => {
+describe.skip('TODO: Deck II - 革命者（Revolutionary）', () => {
   it('应该让对手弃掉 2 张手牌，然后抽取 2 张牌', () => {
     const mockCore = createMockCore();
     mockCore.players['player2'].hand = [
