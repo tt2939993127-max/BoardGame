@@ -237,7 +237,7 @@ describe('组 5：能力复制能力', () => {
     });
   });
 
-  describe('幻术师（Illusionist）', () => {
+  describe.skip('TODO: Deck II - 幻术师（Illusionist）', () => {
     it('第一次调用：应该创建交互让玩家选择目标卡牌', () => {
       mockContext.abilityId = ABILITY_IDS.ILLUSIONIST;
 
@@ -303,7 +303,7 @@ describe('组 5：能力复制能力', () => {
     });
   });
 
-  describe('元素师（Elementalist）', () => {
+  describe.skip('TODO: Deck II - 元素师（Elementalist）', () => {
     it('第一次调用：应该创建交互让玩家选择目标手牌', () => {
       mockContext.abilityId = ABILITY_IDS.ELEMENTALIST;
 

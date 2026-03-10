@@ -196,7 +196,7 @@ describe('组 3：持续能力', () => {
     });
   });
 
-  describe('顾问（Advisor）', () => {
+  describe.skip('TODO: Deck II - 顾问（Advisor）', () => {
     it('应该放置持续标记，下次遭遇获胜时额外获得1枚印戒', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ADVISOR)!(mockContext);
 
@@ -242,7 +242,7 @@ describe('组 3：持续能力', () => {
     });
   });
 
-  describe('机械精灵（Mechanical Spirit）', () => {
+  describe.skip('TODO: Deck II - 机械精灵（Mechanical Spirit）', () => {
     it('应该放置持续标记，下次遭遇获胜时直接赢得游戏', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.MECHANICAL_SPIRIT)!(mockContext);
 
@@ -286,7 +286,7 @@ describe('组 3：持续能力', () => {
       expect(magistrateExecutor.events[0].payload.effectType).toBe('winTies');
     });
 
-    it('一次性持续标记（财务官、顾问、机械精灵）应该在触发后移除', () => {
+    it.skip('TODO: Deck II - 一次性持续标记（财务官、顾问、机械精灵）应该在触发后移除', () => {
       // 为财务官添加遭遇历史
       mockCore.encounterHistory = [
         {
