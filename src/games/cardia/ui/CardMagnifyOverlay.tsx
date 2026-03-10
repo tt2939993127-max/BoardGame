@@ -11,6 +11,7 @@ import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverl
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import type { CardInstance } from '../domain/core-types';
 import type { CardiaCore } from '../domain/core-types';
+import { resolveCardiaCardImagePath } from '../imagePaths';
 
 export interface CardMagnifyTarget {
     card: CardInstance;
@@ -24,7 +25,7 @@ interface Props {
 
 export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     const { card } = target || {};
-    const imagePath = card?.imagePath || (card?.imageIndex ? `cardia/cards/${card.imageIndex}.jpg` : undefined);
+    const imagePath = card ? resolveCardiaCardImagePath(card) : undefined;
 
     return (
         <MagnifyOverlay isOpen={!!target} onClose={onClose}>

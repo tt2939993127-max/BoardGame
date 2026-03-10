@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PlayedCard } from '../domain/core-types';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
+import { resolveCardiaCardImagePath } from '../imagePaths';
 
 interface CardSelectionModalProps {
     title: string;
@@ -267,7 +268,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card }) => {
     };
     
     const bgColor = factionColors[card.faction as keyof typeof factionColors] || 'from-gray-700 to-gray-900';
-    const imagePath = card.imagePath || (card.imageIndex ? `cardia/cards/${card.imageIndex}.jpg` : undefined);
+    const imagePath = resolveCardiaCardImagePath(card);
     
     // 使用 currentInfluence（如果有）或 baseInfluence
     const displayInfluence = card.currentInfluence ?? card.baseInfluence;

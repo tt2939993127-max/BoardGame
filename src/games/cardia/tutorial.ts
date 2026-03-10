@@ -5,44 +5,57 @@
  * 带着玩家走一遍完整回合，而不是一股脑把信息扔给玩家。
  *
  * 使用作弊命令设置固定手牌，确保教学流程可控：
- * - 玩家手牌：学徒（抽1张牌）、盗贼（对手弃1张牌）
- * - 通过 MERGE_STATE 设置玩家手牌为教学指定卡牌
+ * - 玩家手牌：外科医生（演示能力阶段）
+ * - 对手手牌：宫廷卫士（保证首回合对局能结算出失败方）
  */
 
 import type { TutorialManifest } from '../../engine/types';
 import type { CardInstance } from './domain/types';
 import { CARDIA_COMMANDS } from './domain/commands';
 import { CARDIA_EVENTS } from './domain/events';
-import { FLOW_COMMANDS, FLOW_EVENTS } from '../../engine/systems/FlowSystem';
+import { FLOW_EVENTS } from '../../engine/systems/FlowSystem';
 import { CHEAT_COMMANDS } from '../../engine/systems/CheatSystem';
-import { ABILITY_IDS } from './domain/ids';
-
-// ============================================================================
-// 事件匹配器常量
-// ============================================================================
-
-/** 匹配进入打牌阶段 */
-const MATCH_PHASE_PLAY = { type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'play' } };
-
-/** 匹配进入能力阶段 */
-const MATCH_PHASE_ABILITY = { type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'ability' } };
-
-/** 匹配进入结束阶段 */
-const MATCH_PHASE_END = { type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'end' } };
+import { CARD_IDS_DECK_I, type CardId } from './domain/ids';
+import cardRegistry from './domain/cardRegistry';
+import { createModifierStack } from '../../engine/primitives/modifier';
+import { createTagContainer } from '../../engine/primitives/tags';
 
 // ============================================================================
 // 教学固定手牌
 // ============================================================================
 
+function createTutorialCard(uid: string, defId: CardId, ownerId: '0' | '1'): CardInstance {
+    const def = cardRegistry.get(defId);
+    if (!def) {
+        throw new Error(`[CardiaTutorial] 未找到卡牌定义: ${defId}`);
+    }
+    return {
+        uid,
+        defId,
+        ownerId,
+        baseInfluence: def.influence,
+        faction: def.faction,
+        abilityIds: [...def.abilityIds],
+        difficulty: def.difficulty,
+        modifiers: createModifierStack(),
+        tags: createTagContainer(),
+        signets: 0,
+        ongoingMarkers: [],
+        imagePath: def.imagePath,
+    };
+}
+
 /**
- * 教学用固定手牌：
- * - 学徒：简单的抽牌能力（抽1张牌）
- * - 盗贼：简单的弃牌能力（对手随机弃1张牌）
- * uid 使用 'tut-' 前缀避免与游戏生成的 uid 冲突
+ * 教学固定手牌（真实卡牌定义 + 固定 UID，保证教程步骤可控）
+ * - P0: 外科医生（-5 到你下一张打出的牌）
+ * - P1: 宫廷卫士（高影响力，保证 P0 本回合为失败方，能进入能力教学）
  */
 const TUTORIAL_HAND_P0: CardInstance[] = [
-    { uid: 'tut-1', defId: 'apprentice', owner: '0' },
-    { uid: 'tut-2', defId: 'thief', owner: '0' },
+    createTutorialCard('tut-1', CARD_IDS_DECK_I.CARD_03, '0'),
+];
+
+const TUTORIAL_HAND_P1: CardInstance[] = [
+    createTutorialCard('tut-op-1', CARD_IDS_DECK_I.CARD_07, '1'),
 ];
 
 // ============================================================================
@@ -72,6 +85,7 @@ const CARDIA_TUTORIAL: TutorialManifest = {
                         fields: {
                             players: {
                                 '0': { hand: TUTORIAL_HAND_P0 },
+                                '1': { hand: TUTORIAL_HAND_P1 },
                             },
                         },
                     },
@@ -140,7 +154,7 @@ const CARDIA_TUTORIAL: TutorialManifest = {
             infoStep: true,
         },
 
-        // 7: 打出第一张牌 — 玩家打出学徒
+        // 7: 打出第一张牌 — 玩家打出外科医生
         {
             id: 'playFirstCard',
             content: 'game-cardia:tutorial.steps.playFirstCard',
@@ -149,14 +163,32 @@ const CARDIA_TUTORIAL: TutorialManifest = {
             requireAction: true,
             allowedCommands: [CARDIA_COMMANDS.PLAY_CARD],
             allowedTargets: ['tut-1'],
-            advanceOnEvents: [{ type: CARDIA_EVENTS.CARD_PLAYED }],
+            advanceOnEvents: [{ type: CARDIA_EVENTS.CARD_PLAYED, match: { playerId: '0' } }],
+        },
+
+        // 8: 对手打牌（AI 自动）— 触发遭遇结算，推进到能力阶段
+        {
+            id: 'opponentPlayCard',
+            content: 'game-cardia:tutorial.steps.opponentPlayCard',
+            position: 'center',
+            requireAction: false,
+            showMask: true,
+            viewAs: '1',
+            aiActions: [
+                {
+                    commandType: CARDIA_COMMANDS.PLAY_CARD,
+                    payload: { cardUid: 'tut-op-1' },
+                    playerId: '1',
+                },
+            ],
+            advanceOnEvents: [{ type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'ability' } }],
         },
 
         // ================================================================
         // 第四部分：能力阶段教学
         // ================================================================
 
-        // 8: 能力阶段说明 — 介绍能力激活
+        // 9: 能力阶段说明 — 介绍能力激活
         {
             id: 'abilityPhaseExplain',
             content: 'game-cardia:tutorial.steps.abilityPhaseExplain',
@@ -164,71 +196,22 @@ const CARDIA_TUTORIAL: TutorialManifest = {
             infoStep: true,
         },
 
-        // 9: 激活能力 — 玩家激活学徒的能力（抽1张牌）
+        // 10: 激活能力 — 玩家激活外科医生能力
         {
             id: 'activateAbility',
             content: 'game-cardia:tutorial.steps.activateAbility',
-            highlightTarget: 'cardia-battlefield',
-            position: 'bottom',
+            highlightTarget: 'cardia-activate-ability-btn',
+            position: 'left',
             requireAction: true,
             allowedCommands: [CARDIA_COMMANDS.ACTIVATE_ABILITY],
             advanceOnEvents: [{ type: CARDIA_EVENTS.ABILITY_ACTIVATED }],
         },
 
         // ================================================================
-        // 第五部分：结束回合
+        // 第五部分：遭遇战解析
         // ================================================================
 
-        // 10: 结束回合说明 — 介绍结束回合按钮
-        {
-            id: 'endTurnExplain',
-            content: 'game-cardia:tutorial.steps.endTurnExplain',
-            highlightTarget: 'cardia-end-turn-btn',
-            position: 'left',
-            infoStep: true,
-        },
-
-        // 11: 结束回合 — 玩家点击结束回合
-        {
-            id: 'endTurn',
-            content: 'game-cardia:tutorial.steps.endTurn',
-            highlightTarget: 'cardia-end-turn-btn',
-            position: 'left',
-            requireAction: true,
-            allowedCommands: [CARDIA_COMMANDS.END_TURN],
-            advanceOnEvents: [{ type: CARDIA_EVENTS.TURN_ENDED }],
-        },
-
-        // ================================================================
-        // 第六部分：对手回合
-        // ================================================================
-
-        // 12: 对手回合 — AI 自动操作
-        {
-            id: 'opponentTurn',
-            content: 'game-cardia:tutorial.steps.opponentTurn',
-            position: 'center',
-            requireAction: false,
-            showMask: true,
-            viewAs: '1',
-            aiActions: [
-                // P1 打出一张牌
-                { commandType: CARDIA_COMMANDS.PLAY_CARD, payload: { cardUid: 'any' }, playerId: '1' },
-                // P1 跳过能力
-                { commandType: CARDIA_COMMANDS.SKIP_ABILITY, payload: {}, playerId: '1' },
-                // P1 结束回合
-                { commandType: CARDIA_COMMANDS.END_TURN, payload: {}, playerId: '1' },
-            ],
-            advanceOnEvents: [
-                { type: CARDIA_EVENTS.TURN_ENDED, match: { playerId: '1' } },
-            ],
-        },
-
-        // ================================================================
-        // 第七部分：遭遇战解析
-        // ================================================================
-
-        // 13: 遭遇战说明 — 介绍遭遇战机制
+        // 11: 遭遇战说明 — 介绍遭遇战机制
         {
             id: 'encounterExplain',
             content: 'game-cardia:tutorial.steps.encounterExplain',
@@ -236,7 +219,7 @@ const CARDIA_TUTORIAL: TutorialManifest = {
             infoStep: true,
         },
 
-        // 14: 影响力计算 — 介绍影响力计算规则
+        // 12: 影响力计算 — 介绍影响力计算规则
         {
             id: 'influenceExplain',
             content: 'game-cardia:tutorial.steps.influenceExplain',
@@ -246,10 +229,10 @@ const CARDIA_TUTORIAL: TutorialManifest = {
         },
 
         // ================================================================
-        // 第八部分：总结
+        // 第六部分：总结
         // ================================================================
 
-        // 15: 教学总结 — 核心要点回顾
+        // 13: 教学总结 — 核心要点回顾
         {
             id: 'summary',
             content: 'game-cardia:tutorial.steps.summary',
@@ -257,7 +240,7 @@ const CARDIA_TUTORIAL: TutorialManifest = {
             requireAction: false,
         },
 
-        // 16: 完成 — 教学结束
+        // 14: 完成 — 教学结束
         {
             id: 'finish',
             content: 'game-cardia:tutorial.steps.finish',

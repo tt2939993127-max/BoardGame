@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { CardiaCore, PlayedCard } from './domain/core-types';
+import { getLocalizedImageUrls, getLocalizedLocalAssetPath, getOptimizedImageUrls } from '../../core';
 import { EndgameOverlay } from '../../components/game/framework/widgets/EndgameOverlay';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
@@ -27,6 +28,7 @@ import type { FactionId } from './domain/ids';
 import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
+import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
 
 type Props = GameBoardProps<CardiaCore>;
 
@@ -36,8 +38,27 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const isGameOver = G.sys.gameover;
     const gameMode = useGameMode();
     const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
-    const { t } = useTranslation('game-cardia');
+    const { t, i18n } = useTranslation('game-cardia');
     const toast = useToast();
+    const effectiveLocale = i18n.resolvedLanguage ?? i18n.language ?? 'zh-CN';
+    const boardBackgroundUrls = React.useMemo(
+        () => getLocalizedImageUrls(CARDIA_IMAGE_PATHS.BOARD_BACKGROUND, effectiveLocale),
+        [effectiveLocale],
+    );
+    const boardBackgroundLocalUrls = React.useMemo(() => {
+        const primaryLocalPath = getLocalizedLocalAssetPath(CARDIA_IMAGE_PATHS.BOARD_BACKGROUND, effectiveLocale);
+        const primary = getOptimizedImageUrls(primaryLocalPath).webp;
+
+        const fallbackLocale = effectiveLocale === 'zh-CN' ? 'en' : 'zh-CN';
+        const fallbackLocalPath = getLocalizedLocalAssetPath(CARDIA_IMAGE_PATHS.BOARD_BACKGROUND, fallbackLocale);
+        const fallback = getOptimizedImageUrls(fallbackLocalPath).webp;
+
+        return { primary, fallback };
+    }, [effectiveLocale]);
+    const legacyBoardBackgroundUrls = React.useMemo(
+        () => getLocalizedImageUrls('cardia/cards/background', effectiveLocale),
+        [effectiveLocale],
+    );
     
     // 交互状态
     const [showCardSelection, setShowCardSelection] = useState(false);
@@ -368,12 +389,20 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
-            <div className="relative w-full h-full overflow-hidden">
+            <div data-testid="cardia-board" className="relative w-full h-full overflow-hidden">
                 {/* 背景图片层 */}
                 <div 
                     className="absolute inset-0 w-full h-full bg-cover bg-center"
                     style={{
-                        backgroundImage: `url(/assets/i18n/zh-CN/cardia/cards/compressed/background.webp)`
+                        // 回退顺序：CDN 新路径 -> CDN 旧路径 -> 本地新路径
+                        backgroundImage: [
+                            `url("${boardBackgroundUrls.primary.webp}")`,
+                            `url("${boardBackgroundUrls.fallback.webp}")`,
+                            `url("${legacyBoardBackgroundUrls.primary.webp}")`,
+                            `url("${legacyBoardBackgroundUrls.fallback.webp}")`,
+                            `url("${boardBackgroundLocalUrls.primary}")`,
+                            `url("${boardBackgroundLocalUrls.fallback}")`,
+                        ].join(', '),
                     }}
                 />
                 
@@ -401,7 +430,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         
                         {/* 阶段和回合指示器 */}
                         <div className="flex-shrink-0 flex flex-col gap-2">
-                            <div data-testid="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+                            <div data-testid="cardia-phase-indicator" data-tutorial-id="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
                                 <div className="text-xs text-gray-400">{t('phase')}</div>
                                 <div className="text-lg font-bold">{t(`phases.${phase}`)}</div>
                             </div>
@@ -414,7 +443,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     </div>
                     
                     {/* 中央战场区域 - 遭遇序列 */}
-                    <div data-testid="cardia-battlefield" className="flex-1 flex items-center justify-center overflow-x-auto px-4">
+                    <div data-testid="cardia-battlefield" data-tutorial-id="cardia-battlefield" className="flex-1 flex items-center justify-center overflow-x-auto px-4">
                         <EncounterSequence
                             myPlayer={myPlayer}
                             opponent={opponent}
@@ -478,6 +507,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
                             <button
                                 data-testid="cardia-end-turn-btn"
+                                data-tutorial-id="cardia-end-turn-btn"
                                 onClick={() => dispatch(CARDIA_COMMANDS.END_TURN, {})}
                                 className="bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-4 rounded-lg shadow-lg transition-colors text-xl"
                             >
@@ -572,7 +602,7 @@ const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets }) =
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="text-white font-bold">{player.name}</div>
-                    <div data-testid="cardia-signet-display" className="text-sm text-yellow-400">
+                    <div data-testid="cardia-signet-display" data-tutorial-id="cardia-signet-display" className="text-sm text-yellow-400">
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
@@ -798,7 +828,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-4">
                     <div className="text-white font-bold">{player.name}</div>
-                    <div data-testid="cardia-signet-display" className="text-sm text-yellow-400">
+                    <div data-testid="cardia-signet-display" data-tutorial-id="cardia-signet-display" className="text-sm text-yellow-400">
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
@@ -810,7 +840,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
             </div>
             
             {/* 手牌区 */}
-            <div data-testid="cardia-hand-area" className="flex gap-2 overflow-x-auto">
+            <div data-testid="cardia-hand-area" data-tutorial-id="cardia-hand-area" className="flex gap-2 overflow-x-auto">
                 <CardListTransition>
                     {player.hand.map((card: any) => (
                         <CardTransition key={card.uid} cardUid={card.uid} type="hand">
@@ -860,7 +890,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
     };
     
     const bgColor = factionColors[card.faction as keyof typeof factionColors] || 'from-gray-700 to-gray-900';
-    const imagePath = card.imagePath || (card.imageIndex ? `cardia/cards/${card.imageIndex}.jpg` : undefined);
+    const imagePath = resolveCardiaCardImagePath(card);
     
     // 调整卡牌尺寸：缩小到 95%（约 106px × 160px）
     const sizeClasses = size === 'small' ? 'w-20 h-30' : 'w-[106px] h-[160px]';
@@ -996,7 +1026,7 @@ const CardBack: React.FC = () => {
         <div className="w-[106px] h-[160px] rounded-lg border-2 border-purple-600 shadow-lg overflow-hidden">
             {!imageError ? (
                 <OptimizedImage
-                    src="cardia/cards/deck1-back"
+                    src={CARDIA_IMAGE_PATHS.DECK1_BACK}
                     alt="Card Back"
                     className="w-full h-full object-cover"
                     onError={() => setImageError(true)}

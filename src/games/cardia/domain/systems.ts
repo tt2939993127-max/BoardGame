@@ -589,8 +589,7 @@ export function createCardiaEventSystem(): EngineSystem<CardiaCore> {
                     // 调用状态回溯函数
                     const recalcEvents = recalculateEncounterState(
                         newState.core,
-                        modEvent.cardId,
-                        modEvent.value
+                        modEvent.cardId
                     );
                     
                     console.log('[CardiaEventSystem] Recalculation generated events:', {

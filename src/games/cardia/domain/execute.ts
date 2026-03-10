@@ -689,12 +689,10 @@ function executeEndTurn(
  *
  * @param core 当前核心状态
  * @param affectedCardUid 受影响的卡牌 UID
- * @param newModifierValue 新添加的修正标记值（用于临时计算）
  */
 export function recalculateEncounterState(
     core: CardiaCore,
-    affectedCardUid: string,
-    newModifierValue: number
+    affectedCardUid: string
 ): CardiaEvent[] {
     const events: CardiaEvent[] = [];
     const timestamp = Date.now();
@@ -727,7 +725,7 @@ export function recalculateEncounterState(
     }
 
     // 2. 重新计算双方卡牌的最终影响力
-    // 注意：此时 MODIFIER_TOKEN_PLACED 事件还未被 reduce，所以需要手动加上新修正标记
+    // 注意：调用方在触发回溯前已完成 MODIFIER_TOKEN_PLACED 的 reduce，这里只读取 core.modifierTokens。
     const player1Card = encounter.player1Card;
     const player2Card = encounter.player2Card;
 
@@ -738,15 +736,8 @@ export function recalculateEncounterState(
     const player1ModifierSum = player1Modifiers.reduce((acc, m) => acc + m.value, 0);
     const player2ModifierSum = player2Modifiers.reduce((acc, m) => acc + m.value, 0);
 
-    // 如果受影响的是 player1 的卡牌，加上新修正标记
-    const newPlayer1Influence = player1Card.uid === affectedCardUid
-        ? player1Card.baseInfluence + player1ModifierSum + newModifierValue
-        : player1Card.baseInfluence + player1ModifierSum;
-
-    // 如果受影响的是 player2 的卡牌，加上新修正标记
-    const newPlayer2Influence = player2Card.uid === affectedCardUid
-        ? player2Card.baseInfluence + player2ModifierSum + newModifierValue
-        : player2Card.baseInfluence + player2ModifierSum;
+    const newPlayer1Influence = player1Card.baseInfluence + player1ModifierSum;
+    const newPlayer2Influence = player2Card.baseInfluence + player2ModifierSum;
 
     // 3. 发射影响力变化事件
     if (newPlayer1Influence !== encounter.player1Influence) {
@@ -882,8 +873,8 @@ function executeAddModifier(
         },
     });
     
-    // 2. 触发状态回溯（传入新修正标记值用于临时计算）
-    const recalculationEvents = recalculateEncounterState(core, cardUid, modifierValue);
+    // 2. 触发状态回溯（基于当前状态中的 modifierTokens 重新计算）
+    const recalculationEvents = recalculateEncounterState(core, cardUid);
     events.push(...recalculationEvents);
     
     return events;

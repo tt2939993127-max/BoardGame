@@ -59,6 +59,7 @@ export const AbilityButton: React.FC<AbilityButtonProps> = ({
             <div className="flex gap-2">
                 <button
                     data-testid="cardia-activate-ability-btn"
+                    data-tutorial-id="cardia-activate-ability-btn"
                     onClick={onActivate}
                     disabled={disabled}
                     className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg transition-colors"

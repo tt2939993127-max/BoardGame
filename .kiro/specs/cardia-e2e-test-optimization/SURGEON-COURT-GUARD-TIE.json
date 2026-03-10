@@ -1,0 +1,345 @@
+{
+  "description": "测试外科医生延迟效果 + 宫廷卫士能力的影响力计算（应该平局）",
+  "scenario": "P0 第1回合打出外科医生（注册-5延迟效果），第2回合打出宫廷卫士（触发-5，然后激活能力+7），最终影响力 7-5+7=9，与 P1 的 9 平局",
+  "players": {
+    "0": {
+      "id": "0",
+      "name": "Player 1",
+      "hand": [
+        {
+          "uid": "p1_hand_court_guard",
+          "defId": "deck_i_card_07",
+          "ownerId": "0",
+          "baseInfluence": 7,
+          "faction": "guild",
+          "abilityIds": ["ability_i_court_guard"],
+          "difficulty": 1,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/7"
+        }
+      ],
+      "deck": [
+        {
+          "uid": "p1_deck_card01",
+          "defId": "deck_i_card_01",
+          "ownerId": "0",
+          "baseInfluence": 1,
+          "faction": "swamp",
+          "abilityIds": ["ability_i_mercenary_swordsman"],
+          "difficulty": 0,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/1"
+        },
+        {
+          "uid": "p1_deck_card05",
+          "defId": "deck_i_card_05",
+          "ownerId": "0",
+          "baseInfluence": 5,
+          "faction": "swamp",
+          "abilityIds": ["ability_i_saboteur"],
+          "difficulty": 1,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/5"
+        }
+      ],
+      "discard": [],
+      "playedCards": [
+        {
+          "uid": "p1_played_surgeon",
+          "defId": "deck_i_card_03",
+          "ownerId": "0",
+          "baseInfluence": 3,
+          "faction": "guild",
+          "abilityIds": ["ability_i_surgeon"],
+          "difficulty": 0,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "encounterIndex": 1,
+          "imagePath": "cardia/cards/deck1/3"
+        }
+      ],
+      "signets": 0,
+      "tags": {
+        "tags": {}
+      },
+      "hasPlayed": false,
+      "cardRevealed": false,
+      "currentCard": null
+    },
+    "1": {
+      "id": "1",
+      "name": "Player 2",
+      "hand": [
+        {
+          "uid": "p2_hand_ambusher",
+          "defId": "deck_i_card_09",
+          "ownerId": "1",
+          "baseInfluence": 9,
+          "faction": "swamp",
+          "abilityIds": ["ability_i_ambusher"],
+          "difficulty": 2,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/9"
+        }
+      ],
+      "deck": [
+        {
+          "uid": "p2_deck_card07",
+          "defId": "deck_i_card_07",
+          "ownerId": "1",
+          "baseInfluence": 7,
+          "faction": "guild",
+          "abilityIds": ["ability_i_court_guard"],
+          "difficulty": 1,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/7"
+        },
+        {
+          "uid": "p2_deck_card11",
+          "defId": "deck_i_card_11",
+          "ownerId": "1",
+          "baseInfluence": 11,
+          "faction": "guild",
+          "abilityIds": ["ability_i_clockmaker"],
+          "difficulty": 2,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 0,
+          "ongoingMarkers": [],
+          "imagePath": "cardia/cards/deck1/11"
+        }
+      ],
+      "discard": [],
+      "playedCards": [
+        {
+          "uid": "p2_played_mediator",
+          "defId": "deck_i_card_04",
+          "ownerId": "1",
+          "baseInfluence": 4,
+          "faction": "dynasty",
+          "abilityIds": ["ability_i_mediator"],
+          "difficulty": 0,
+          "modifiers": {
+            "entries": [],
+            "nextOrder": 0
+          },
+          "tags": {},
+          "signets": 1,
+          "ongoingMarkers": [],
+          "encounterIndex": 1,
+          "imagePath": "cardia/cards/deck1/4"
+        }
+      ],
+      "signets": 0,
+      "tags": {
+        "tags": {}
+      },
+      "hasPlayed": false,
+      "cardRevealed": false,
+      "currentCard": null
+    }
+  },
+  "playerOrder": ["0", "1"],
+  "currentPlayerId": "0",
+  "turnNumber": 2,
+  "phase": "play",
+  "encounterHistory": [
+    {
+      "player1Card": {
+        "uid": "p1_played_surgeon",
+        "defId": "deck_i_card_03",
+        "ownerId": "0",
+        "baseInfluence": 3,
+        "faction": "guild",
+        "abilityIds": ["ability_i_surgeon"],
+        "difficulty": 0
+      },
+      "player2Card": {
+        "uid": "p2_played_mediator",
+        "defId": "deck_i_card_04",
+        "ownerId": "1",
+        "baseInfluence": 4,
+        "faction": "dynasty",
+        "abilityIds": ["ability_i_mediator"],
+        "difficulty": 0
+      },
+      "player1Influence": 3,
+      "player2Influence": 4,
+      "winnerId": "1",
+      "loserId": "0"
+    }
+  ],
+  "deckVariant": "I",
+  "targetSignets": 5,
+  "ongoingAbilities": [],
+  "modifierTokens": [],
+  "delayedEffects": [
+    {
+      "effectType": "modifyInfluence",
+      "target": "self",
+      "value": -5,
+      "condition": "onNextCardPlayed",
+      "sourceAbilityId": "ability_i_surgeon",
+      "sourcePlayerId": "0",
+      "timestamp": 1773000000000
+    }
+  ],
+  "revealFirstNextEncounter": null,
+  "forcedPlayOrderNextEncounter": null,
+  "mechanicalSpiritActive": null,
+  "previousEncounter": {
+    "player1Card": {
+      "uid": "p1_played_surgeon",
+      "defId": "deck_i_card_03",
+      "ownerId": "0",
+      "baseInfluence": 3,
+      "faction": "guild",
+      "abilityIds": ["ability_i_surgeon"],
+      "difficulty": 0
+    },
+    "player2Card": {
+      "uid": "p2_played_mediator",
+      "defId": "deck_i_card_04",
+      "ownerId": "1",
+      "baseInfluence": 4,
+      "faction": "dynasty",
+      "abilityIds": ["ability_i_mediator"],
+      "difficulty": 0
+    },
+    "player1Influence": 3,
+    "player2Influence": 4,
+    "winnerId": "1",
+    "loserId": "0"
+  },
+  "currentEncounter": null,
+  "testSteps": [
+    {
+      "step": 1,
+      "description": "P1 打出宫廷卫士（影响力 7）",
+      "action": "playCard",
+      "playerId": "0",
+      "cardUid": "p1_hand_court_guard",
+      "expectedEvents": [
+        "CARD_PLAYED",
+        "DELAYED_EFFECT_TRIGGERED (外科医生的 -5)",
+        "MODIFIER_TOKEN_PLACED (value: -5, source: ability_i_surgeon)"
+      ],
+      "expectedState": {
+        "delayedEffects": "应该为空（延迟效果已触发）",
+        "modifierTokens": "应该有 1 个修正标记（-5）"
+      }
+    },
+    {
+      "step": 2,
+      "description": "P2 打出伏击者（影响力 9）",
+      "action": "playCard",
+      "playerId": "1",
+      "cardUid": "p2_hand_ambusher",
+      "expectedEvents": [
+        "CARD_PLAYED",
+        "ENCOUNTER_RESOLVED (player1Influence: 2, player2Influence: 9, winner: '1')"
+      ],
+      "expectedState": {
+        "currentEncounter": {
+          "player1Influence": 2,
+          "player2Influence": 9,
+          "winnerId": "1",
+          "loserId": "0"
+        },
+        "encounterHistory": "应该有 2 条记录，第 2 条的 player1Influence 应该是 2"
+      }
+    },
+    {
+      "step": 3,
+      "description": "P1 激活宫廷卫士能力",
+      "action": "activateAbility",
+      "playerId": "0",
+      "abilityId": "ability_i_court_guard",
+      "expectedInteraction": "选择派系（guild/dynasty/swamp/academy）"
+    },
+    {
+      "step": 4,
+      "description": "P1 选择派系（假设选择 dynasty）",
+      "action": "resolveInteraction",
+      "playerId": "0",
+      "value": {
+        "faction": "dynasty"
+      },
+      "expectedInteraction": "P2 选择是否弃牌（discard/decline）"
+    },
+    {
+      "step": 5,
+      "description": "P2 选择不弃牌",
+      "action": "resolveInteraction",
+      "playerId": "1",
+      "value": {
+        "option": "decline"
+      },
+      "expectedEvents": [
+        "MODIFIER_TOKEN_PLACED (value: 7, source: ability_i_court_guard)"
+      ],
+      "expectedState": {
+        "modifierTokens": "应该有 2 个修正标记（-5 和 +7）",
+        "finalInfluence": "7 - 5 + 7 = 9（与 P2 的 9 平局）"
+      }
+    },
+    {
+      "step": 6,
+      "description": "验证最终状态",
+      "verification": {
+        "encounterHistory[1].player1Influence": 2,
+        "encounterHistory[1].player2Influence": 9,
+        "encounterHistory[1].winnerId": "1",
+        "encounterHistory[1].loserId": "0",
+        "modifierTokens.length": 2,
+        "modifierTokens[0]": {
+          "value": -5,
+          "source": "ability_i_surgeon"
+        },
+        "modifierTokens[1]": {
+          "value": 7,
+          "source": "ability_i_court_guard"
+        },
+        "note": "修复前：encounterHistory[1].player1Influence 会错误地显示为 16 或其他错误值"
+      }
+    }
+  ]
+}

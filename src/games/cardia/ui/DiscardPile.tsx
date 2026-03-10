@@ -2,6 +2,7 @@ import React from 'react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import type { CardInstance } from '../domain/core-types';
 import { CardTransition, CardListTransition } from './CardTransition';
+import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from '../imagePaths';
 
 interface DiscardPileProps {
     cards: CardInstance[];
@@ -67,7 +68,7 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
                                     {/* 显示卡片左侧部分（数字区域） */}
                                     <div className="relative" style={{ width: `${cardWidth}px`, height: `${cardHeight}px` }}>
                                         <OptimizedImage
-                                            src={card.imagePath || `cardia/cards/card-${card.baseInfluence}.png`}
+                                            src={resolveCardiaCardImagePath(card) || CARDIA_IMAGE_PATHS.DECK1_BACK}
                                             alt={`Card ${card.baseInfluence}`}
                                             className="w-full h-full object-cover rounded-lg"
                                             sizes={`${cardWidth}px`}
@@ -92,7 +93,7 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
                         >
                             <div className="relative w-full h-full">
                                 <OptimizedImage
-                                    src={latestCard.imagePath || `cardia/cards/card-${latestCard.baseInfluence}.png`}
+                                    src={resolveCardiaCardImagePath(latestCard) || CARDIA_IMAGE_PATHS.DECK1_BACK}
                                     alt={`Card ${latestCard.baseInfluence}`}
                                     className="w-full h-full object-cover rounded-lg shadow-lg"
                                     sizes={`${cardWidth}px`}

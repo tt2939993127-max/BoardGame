@@ -1,43 +1,50 @@
 /**
  * Cardia 关键图片解析器
  *
- * Cardia 游戏的所有卡牌图片在游戏开始时就需要加载完成，
- * 因为玩家可以随时查看手牌、弃牌堆、场上卡牌的大图。
+ * 设计目标：
+ * 1. 教程 setup 阶段最小化加载，避免卡在资源加载页。
+ * 2. playing 阶段只加载当前牌组所需卡图（I 或 II），不再全量加载两套牌。
  */
 
 import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
+import type { MatchState } from '../../engine/types';
+import type { CardiaCore } from './domain/core-types';
+import { DECK_VARIANT_IDS } from './domain/ids';
+import { CARDIA_IMAGE_PATHS, getCardiaDeckCardPaths, getCardiaLocationPaths } from './imagePaths';
+
+function buildDeckCriticalImages(deckVariant: string): string[] {
+    const normalizedDeckVariant = deckVariant === DECK_VARIANT_IDS.II ? DECK_VARIANT_IDS.II : DECK_VARIANT_IDS.I;
+    return [
+        CARDIA_IMAGE_PATHS.DECK1_BACK,
+        ...getCardiaDeckCardPaths(normalizedDeckVariant),
+        ...getCardiaLocationPaths(),
+    ];
+}
 
 /**
  * Cardia 关键图片解析器
  *
- * 所有卡牌图片都作为关键图片预加载，确保游戏过程中不会出现加载延迟。
+ * 教程模式下：
+ * - setup 步骤（stepIndex=0）返回空关键图，快速通过门禁
+ * - setup 结束后按当前牌组加载关键图
  */
-export const cardiaCriticalImageResolver: CriticalImageResolver = (): CriticalImageResolverResult => {
-    const criticalImages: string[] = [];
-    
-    // 标题和辅助图片
-    criticalImages.push('cardia/cards/title');
-    criticalImages.push('cardia/cards/helper1');
-    criticalImages.push('cardia/cards/helper2');
-    
-    // Deck I 卡牌（1-16）
-    for (let i = 1; i <= 16; i++) {
-        criticalImages.push(`cardia/cards/deck1/${i}`);
+export const cardiaCriticalImageResolver: CriticalImageResolver = (gameState): CriticalImageResolverResult => {
+    const state = gameState as MatchState<CardiaCore> | undefined;
+    const deckVariant = state?.core?.deckVariant ?? DECK_VARIANT_IDS.I;
+    const isTutorial = state?.sys?.tutorial?.active === true;
+    const tutorialStepIndex = state?.sys?.tutorial?.stepIndex ?? -1;
+
+    if (isTutorial && tutorialStepIndex === 0) {
+        return {
+            critical: [],
+            warm: [],
+            phaseKey: 'tutorial-setup',
+        };
     }
-    
-    // Deck II 卡牌（1-16）
-    for (let i = 1; i <= 16; i++) {
-        criticalImages.push(`cardia/cards/deck2/${i}`);
-    }
-    
-    // 地点卡牌（1-8）
-    for (let i = 1; i <= 8; i++) {
-        criticalImages.push(`cardia/cards/locations/${i}`);
-    }
-    
+
     return {
-        critical: criticalImages,
+        critical: buildDeckCriticalImages(deckVariant),
         warm: [],
-        phaseKey: 'playing', // Cardia 没有派系选择阶段，直接进入游戏
+        phaseKey: isTutorial ? `tutorial-playing:${deckVariant}` : `playing:${deckVariant}`,
     };
 };
