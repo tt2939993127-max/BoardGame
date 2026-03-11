@@ -9,7 +9,7 @@ export class AdminAuditLog {
     action!: string;
 
     @Prop({ type: String, required: true, trim: true })
-    status!: 'created' | 'exists' | 'failed';
+    status!: 'created' | 'exists' | 'updated' | 'failed';
 
     @Prop({ type: String, required: true, trim: true })
     actor!: string;

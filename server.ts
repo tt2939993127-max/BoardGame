@@ -1609,33 +1609,55 @@ lobbySocketIO.on('connection', (socket) => {
 // 服务器启动
 // ============================================================================
 
+const runStartupCleanupInBackground = async () => {
+    const cleanupTasks = [
+        {
+            reason: 'cleanupEmptyMatches:boot',
+            run: () => mongoStorage.cleanupEmptyMatches(),
+            errorMessage: '[MongoStorage] 启动清理空房间失败:',
+        },
+        {
+            reason: 'cleanupEphemeralMatches:boot',
+            run: () => hybridStorage.cleanupEphemeralMatches(),
+            errorMessage: '[MongoStorage] 启动清理临时房间失败:',
+        },
+        {
+            reason: 'cleanupExpiredTtlMatches:boot',
+            run: () => mongoStorage.cleanupExpiredTtlMatches(),
+            errorMessage: '[MongoStorage] 启动清理过期 TTL 房间失败:',
+        },
+        {
+            reason: 'cleanupLegacyMatches:boot',
+            run: () => mongoStorage.cleanupLegacyMatches(0),
+            errorMessage: '[MongoStorage] 启动清理遗留房间失败:',
+        },
+        {
+            reason: 'cleanupDuplicateOwnerMatches:boot',
+            run: () => mongoStorage.cleanupDuplicateOwnerMatches(),
+            errorMessage: '[MongoStorage] 启动清理重复 ownerKey 房间失败:',
+        },
+    ];
+
+    for (const cleanupTask of cleanupTasks) {
+        try {
+            const cleanedCount = await cleanupTask.run();
+            if (cleanedCount > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, cleanupTask.reason);
+                }
+            }
+        } catch (err) {
+            logger.error(cleanupTask.errorMessage, err);
+        }
+    }
+};
+
 async function startServer() {
+    const bootstrapStartedAt = Date.now();
+
     // 连接存储后端
     if (USE_PERSISTENT_STORAGE) {
         await hybridStorage.connect();
-
-        // 启动时清理损坏/临时/遗留/重复房间
-        try {
-            const cleanedEmpty = await mongoStorage.cleanupEmptyMatches();
-            if (cleanedEmpty > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEmptyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理空房间失败:', err);
-        }
-
-        try {
-            const cleanedEphemeral = await hybridStorage.cleanupEphemeralMatches();
-            if (cleanedEphemeral > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理临时房间失败:', err);
-        }
 
         // 定时清理断线超时的临时房间 + 过期 TTL 房间
         setInterval(async () => {
@@ -1660,39 +1682,6 @@ async function startServer() {
                 logger.error('[MongoStorage] 定时清理过期 TTL 房间失败:', err);
             }
         }, 60 * 1000);
-
-        try {
-            const cleanedExpiredTtl = await mongoStorage.cleanupExpiredTtlMatches();
-            if (cleanedExpiredTtl > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupExpiredTtlMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理过期 TTL 房间失败:', err);
-        }
-
-        try {
-            const cleanedLegacy = await mongoStorage.cleanupLegacyMatches(0);
-            if (cleanedLegacy > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupLegacyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理遗留房间失败:', err);
-        }
-
-        try {
-            const cleanedDuplicate = await mongoStorage.cleanupDuplicateOwnerMatches();
-            if (cleanedDuplicate > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupDuplicateOwnerMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理重复 ownerKey 房间失败:', err);
-        }
     }
 
     // 启动游戏传输层
@@ -1700,10 +1689,22 @@ async function startServer() {
 
     // 启动 HTTP 服务器
     httpServer.listen(GAME_SERVER_PORT, () => {
+        logger.info('[GameServer] 启动完成', {
+            port: GAME_SERVER_PORT,
+            bootstrap_ms: Date.now() - bootstrapStartedAt,
+            registered_engines: SERVER_ENGINES.length,
+            registered_game_ids: SERVER_GAME_IDS.length,
+            use_persistent_storage: USE_PERSISTENT_STORAGE,
+        });
         logger.info(`🎮 游戏服务器运行在 http://localhost:${GAME_SERVER_PORT}`);
         logger.info('📡 大厅广播服务已启动 (namespace: /lobby-socket)');
-        logger.info(`🎯 游戏传输层已启动 (namespace: /game)`);
+        logger.info('🎯 游戏传输层已启动 (namespace: /game)');
         logger.info(`📦 已注册 ${SERVER_ENGINES.length} 个游戏引擎, ${SERVER_GAME_IDS.length} 个游戏 ID`);
+
+        if (USE_PERSISTENT_STORAGE) {
+            // 先对外提供服务，再在后台执行启动清理，避免清理耗时阻塞 ready
+            void runStartupCleanupInBackground();
+        }
     });
 }
 

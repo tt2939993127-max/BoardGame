@@ -15,6 +15,6 @@
     "src/engine/fx/**"
   ],
   "ext": "ts",
-  "exec": "npx tsx server.ts",
+  "exec": "node ./node_modules/tsx/dist/cli.mjs server.ts",
   "delay": "2000"
 }

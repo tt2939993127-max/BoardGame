@@ -201,6 +201,57 @@ Authorization: Bearer <admin_token>
 
 ---
 
+### PATCH /admin/users/:id/role
+
+更新用户角色（普通用户 `user` / 管理员 `admin`）。操作会写入审计日志。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 用户 ID |
+
+**请求体**:
+```json
+{
+  "role": "admin"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| role | string | 是 | `user` 或 `admin` |
+
+**请求示例**:
+```http
+PATCH /admin/users/507f1f77bcf86cd799439011/role
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+```
+
+**响应示例**:
+```json
+{
+  "message": "用户角色已更新",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "testuser",
+    "role": "admin"
+  },
+  "changed": true
+}
+```
+
+**错误响应**:
+- `400` - 不能修改自己的管理员身份
+- `400` - 至少需要保留一个管理员账号
+- `404` - 用户不存在
+
+---
+
 ### POST /admin/users/:id/ban
 
 封禁用户。
