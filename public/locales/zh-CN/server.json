@@ -110,14 +110,17 @@
       "ugcPackageNotFound": "UGC 包不存在",
       "missingBanReason": "请输入封禁原因",
       "cannotBanAdmin": "不能封禁管理员账号",
-      "cannotDeleteAdmin": "不能删除管理员账号"
+      "cannotDeleteAdmin": "不能删除管理员账号",
+      "cannotChangeOwnRole": "不能修改自己的管理员身份",
+      "mustKeepOneAdmin": "至少需要保留一个管理员账号"
     },
     "success": {
       "userBanned": "用户已封禁",
       "userUnbanned": "用户已解封",
       "roomDestroyed": "房间已销毁",
       "userDeleted": "用户已删除",
-      "matchDeleted": "对局已删除"
+      "matchDeleted": "对局已删除",
+      "userRoleUpdated": "用户角色已更新"
     }
   },
   "email": {

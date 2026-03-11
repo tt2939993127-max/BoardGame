@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { ADMIN_API_URL } from '../../config/server';
@@ -6,10 +6,13 @@ import { useToast } from '../../contexts/ToastContext';
 import {
     ArrowLeft, Calendar, Ban, CheckCircle, Clock,
     Trophy, Gamepad2, Swords, MessageSquare, Trash2,
-    ShieldAlert, Activity
+    ShieldAlert, Activity, Shield
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { logger } from '../../lib/logger';
+import { ConfirmModal } from '../../components/common/overlays/ConfirmModal';
 import ImageLightbox from '../../components/common/ImageLightbox';
+import { useModalStack } from '../../contexts/ModalStackContext';
 import DataTable, { type Column } from './components/DataTable';
 
 // --- Types ---
@@ -18,7 +21,7 @@ interface UserDetail {
     id: string;
     username: string;
     email?: string;
-    role: string;
+    role: 'user' | 'admin';
     banned: boolean;
     bannedReason?: string;
     bannedAt?: string;
@@ -33,18 +36,11 @@ interface UserStats {
     winRate: number;
 }
 
-interface MatchRecord {
-    result?: string;
-    winnerID?: string;
-    [key: string]: unknown;
-}
-
-interface matchID {
+interface RecentMatchItem {
     matchID: string;
     gameName: string;
     result: string;
-    winnerID?: string;
-    players: { id: string; name: string }[];
+    opponent: string;
     endedAt: string;
 }
 
@@ -57,20 +53,27 @@ interface MatchTableItem {
     endedAt: string;
 }
 
+const parseActionError = async (response: Response, fallback: string) => {
+    const payload = await response.json().catch(() => null) as null | { error?: string; message?: string };
+    return payload?.error || payload?.message || fallback;
+};
+
 // --- Component ---
 
 export default function UserDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { token } = useAuth();
+    const { token, user: authUser } = useAuth();
     const { error: toastError, success } = useToast();
+    const { openModal, closeModal } = useModalStack();
 
     // State
     const [user, setUser] = useState<UserDetail | null>(null);
     const [stats, setStats] = useState<UserStats | null>(null);
-    const [recentMatches, setRecentMatches] = useState<matchID[]>([]);
+    const [recentMatches, setRecentMatches] = useState<RecentMatchItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const roleConfirmModalIdRef = useRef<string | null>(null);
 
     // Fetch Data
     const fetchUser = async () => {
@@ -84,40 +87,13 @@ export default function UserDetailPage() {
             const data = await res.json();
             setUser(data.user);
             if (data.stats) setStats(data.stats);
-
-            // Fetch Matches to calc stats locally if needed
-            const matchesQuery = new URLSearchParams({ search: id, limit: '100' });
-            const matchesRes = await fetch(`${ADMIN_API_URL}/matches?${matchesQuery.toString()}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (matchesRes.ok) {
-                const matchesData = await matchesRes.json();
-                const items = matchesData.items || [];
-                setRecentMatches(items);
-
-                // Fallback stats calculation
-                if ((!data.stats || data.stats.totalMatches === 0) && items.length > 0) {
-                    const total = matchesData.total || items.length;
-                    const wins = items.filter((m: MatchRecord) => {
-                        const resStr = String(m.result || '').toUpperCase();
-                        if (resStr.includes('WIN') || resStr.includes('VICTORY')) return true;
-                        if (m.winnerID && m.winnerID === id) return true;
-                        return false;
-                    }).length;
-
-                    setStats({
-                        totalMatches: total,
-                        wins: wins,
-                        winRate: total > 0 ? (wins / Math.min(total, items.length)) * 100 : 0
-                    });
-                }
-            } else if (data.recentMatches) {
-                setRecentMatches(data.recentMatches);
-            }
+            setRecentMatches(Array.isArray(data.recentMatches) ? data.recentMatches : []);
 
         } catch (err) {
-            console.error(err);
+            logger.error('[AdminUserDetail] 获取用户详情失败', {
+                userId: id,
+                error: err,
+            });
             toastError('获取详情失败');
             navigate('/admin/users');
         } finally {
@@ -130,10 +106,21 @@ export default function UserDetailPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, token]);
 
+    useEffect(() => () => {
+        if (roleConfirmModalIdRef.current) {
+            closeModal(roleConfirmModalIdRef.current);
+            roleConfirmModalIdRef.current = null;
+        }
+    }, [closeModal]);
+
     // --- Actions ---
 
     const handleBanToggle = async () => {
         if (!user) return;
+        if (user.role === 'admin') {
+            toastError('不能封禁管理员账号');
+            return;
+        }
         if (!confirm(`确定要${user.banned ? '解封' : '封禁'}该用户吗？`)) return;
 
         try {
@@ -157,7 +144,11 @@ export default function UserDetailPage() {
             success('操作成功');
             fetchUser();
         } catch (err) {
-            console.error(err);
+            logger.error('[AdminUserDetail] 更新封禁状态失败', {
+                userId: user.id,
+                action: user.banned ? 'unban' : 'ban',
+                error: err,
+            });
             toastError('操作失败');
         }
     };
@@ -179,33 +170,119 @@ export default function UserDetailPage() {
             success('用户已删除');
             navigate('/admin/users');
         } catch (err) {
+            logger.error('[AdminUserDetail] 删除用户失败', {
+                userId: user.id,
+                error: err,
+            });
             toastError('删除失败');
         }
     };
 
     const handleSendMessage = () => toastError('这是演示功能，尚未实装');
 
+    const handleRoleToggle = async (nextRole: 'user' | 'admin', close: () => void) => {
+        if (!user || !token) return;
+
+        try {
+            const res = await fetch(`${ADMIN_API_URL}/users/${user.id}/role`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ role: nextRole }),
+            });
+
+            if (!res.ok) {
+                const message = await parseActionError(res, '更新用户角色失败');
+                throw new Error(message);
+            }
+
+            success(nextRole === 'admin'
+                ? '已设为管理员'
+                : '已撤销管理员');
+            close();
+            roleConfirmModalIdRef.current = null;
+            await fetchUser();
+        } catch (err) {
+            logger.error('[AdminUserDetail] 更新用户角色失败', {
+                userId: user.id,
+                nextRole,
+                error: err,
+            });
+            toastError(err instanceof Error ? err.message : '更新用户角色失败');
+        }
+    };
+
+    const openRoleConfirm = () => {
+        if (!user) return;
+        if (authUser?.id === user.id) {
+            toastError('不能修改自己的管理员身份');
+            return;
+        }
+
+        const nextRole = user.role === 'admin' ? 'user' : 'admin';
+        const title = nextRole === 'admin'
+            ? '设为管理员'
+            : '撤销管理员';
+        const description = nextRole === 'admin'
+            ? `确认将 ${user.username} 提升为管理员？本次操作会写入审计日志。`
+            : `确认撤销 ${user.username} 的管理员身份？本次操作会写入审计日志。`;
+
+        if (roleConfirmModalIdRef.current) {
+            closeModal(roleConfirmModalIdRef.current);
+            roleConfirmModalIdRef.current = null;
+        }
+
+        roleConfirmModalIdRef.current = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                roleConfirmModalIdRef.current = null;
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <ConfirmModal
+                    title={title}
+                    description={description}
+                    confirmText={nextRole === 'admin'
+                        ? '确认提升'
+                        : '确认撤销'}
+                    cancelText="取消"
+                    onConfirm={() => {
+                        void handleRoleToggle(nextRole, close);
+                    }}
+                    onCancel={close}
+                    tone="cool"
+                    closeOnBackdrop={closeOnBackdrop}
+                    overlayClassName="bg-zinc-950/50 backdrop-blur-sm"
+                    theme={{
+                        panel: 'bg-white border border-zinc-200 shadow-2xl rounded-2xl p-6 w-full max-w-sm text-left pointer-events-auto',
+                        title: 'text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 mb-2',
+                        description: 'text-sm leading-6 text-zinc-900 font-semibold mb-5',
+                        actions: 'flex items-center justify-end gap-3',
+                        confirmButton: cn(
+                            'px-4 py-2 text-xs font-bold rounded-lg transition-colors',
+                            nextRole === 'admin'
+                                ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                                : 'bg-rose-600 text-white hover:bg-rose-500'
+                        ),
+                        cancelButton: 'px-4 py-2 text-xs font-semibold rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50',
+                    }}
+                />
+            ),
+        });
+    };
+
     // --- Render Helpers ---
 
     const tableData: MatchTableItem[] = recentMatches.map(m => {
-        let resultLabel = m.result;
-        if (typeof resultLabel !== 'string') {
-            if (m.winnerID) resultLabel = m.winnerID === user?.id ? 'WIN' : 'LOSS';
-            else resultLabel = 'DRAW';
-        }
-
-        let opponent = '未知对手';
-        if (m.players && m.players.length > 0) {
-            const opp = m.players.find(p => p.id !== user?.id);
-            if (opp) opponent = opp.name || '未知对手';
-        }
-
         return {
             id: m.matchID,
             matchID: m.matchID,
             gameName: m.gameName,
-            result: resultLabel,
-            opponent: opponent,
+            result: m.result || 'draw',
+            opponent: m.opponent || '未知对手',
             endedAt: m.endedAt
         };
     });
@@ -336,13 +413,37 @@ export default function UserDetailPage() {
                             <MessageSquare size={14} /> <span className="hidden sm:inline">发消息</span>
                         </button>
                         <button
+                            onClick={openRoleConfirm}
+                            disabled={authUser?.id === user.id}
+                            className={cn(
+                                'h-8 px-3 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm border',
+                                authUser?.id === user.id
+                                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed'
+                                    : user.role === 'admin'
+                                        ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                            )}
+                            title={authUser?.id === user.id
+                                ? '不能修改自己的管理员身份'
+                                : user.role === 'admin'
+                                    ? '撤销管理员'
+                                    : '设为管理员'}
+                        >
+                            <Shield size={14} />
+                            <span className="hidden sm:inline">{user.role === 'admin' ? '撤销管理员' : '设为管理员'}</span>
+                        </button>
+                        <button
                             onClick={handleBanToggle}
+                            disabled={user.role === 'admin'}
                             className={cn(
                                 "h-8 px-3 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm border",
-                                user.banned
-                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
-                                    : "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
+                                user.role === 'admin'
+                                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed'
+                                    : user.banned
+                                        ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
+                                        : "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
                             )}
+                            title={user.role === 'admin' ? '不能封禁管理员' : user.banned ? '解封' : '封禁'}
                         >
                             {user.banned ? <CheckCircle size={14} /> : <Ban size={14} />}
                             <span className="hidden sm:inline">{user.banned ? '解封' : '封禁'}</span>
@@ -407,6 +508,19 @@ export default function UserDetailPage() {
                                 <ShieldAlert size={14} /> 账户信息
                             </h3>
                             <div className="space-y-3">
+                                <div className="flex justify-between items-center text-sm py-1 border-b border-dashed border-zinc-100">
+                                    <span className="text-zinc-500 flex items-center gap-2">
+                                        <Shield size={14} /> 角色
+                                    </span>
+                                    <span className={cn(
+                                        'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
+                                        user.role === 'admin'
+                                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                            : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                                    )}>
+                                        {user.role === 'admin' ? '管理员' : '普通用户'}
+                                    </span>
+                                </div>
                                 <div className="flex justify-between items-center text-sm py-1 border-b border-dashed border-zinc-100">
                                     <span className="text-zinc-500 flex items-center gap-2">
                                         <Calendar size={14} /> 注册时间

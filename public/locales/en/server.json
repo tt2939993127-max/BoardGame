@@ -110,14 +110,17 @@
       "ugcPackageNotFound": "UGC package not found",
       "missingBanReason": "Please provide a ban reason",
       "cannotBanAdmin": "Cannot ban admin account",
-      "cannotDeleteAdmin": "Cannot delete admin account"
+      "cannotDeleteAdmin": "Cannot delete admin account",
+      "cannotChangeOwnRole": "Cannot change your own admin role",
+      "mustKeepOneAdmin": "At least one admin account must remain"
     },
     "success": {
       "userBanned": "User banned",
       "userUnbanned": "User unbanned",
       "roomDestroyed": "Room destroyed",
       "userDeleted": "User deleted",
-      "matchDeleted": "Match deleted"
+      "matchDeleted": "Match deleted",
+      "userRoleUpdated": "User role updated"
     }
   },
   "email": {

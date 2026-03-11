@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
+import { AdminUserRoleService } from './admin-user-role.service';
 import { BanUserDto } from './dtos/ban-user.dto';
 import { BulkIdsDto } from './dtos/bulk-ids.dto';
 import { RoomFilterDto } from './dtos/room-filter.dto';
@@ -10,6 +12,7 @@ import { QueryRoomsDto } from './dtos/query-rooms.dto';
 import { QueryStatsDto } from './dtos/query-stats.dto';
 import { QueryUsersDto } from './dtos/query-users.dto';
 import { QueryUgcPackagesDto } from './dtos/query-ugc-packages.dto';
+import { UpdateUserRoleDto } from './dtos/update-user-role.dto';
 import { AdminGuard } from './guards/admin.guard';
 import { Roles } from './guards/roles.decorator';
 import { AdminService } from './admin.service';
@@ -18,7 +21,10 @@ import { AdminService } from './admin.service';
 @Roles('admin')
 @Controller('admin')
 export class AdminController {
-    constructor(@Inject(AdminService) private readonly adminService: AdminService) {}
+    constructor(
+        @Inject(AdminService) private readonly adminService: AdminService,
+        @Inject(AdminUserRoleService) private readonly adminUserRoleService: AdminUserRoleService,
+    ) {}
 
     @Get('stats')
     async getStats(@Req() req: Request, @Res() res: Response) {
@@ -122,6 +128,44 @@ export class AdminController {
         return res.json(result.data);
     }
 
+    @Patch('users/:id/role')
+    async updateUserRole(
+        @Param('id') userId: string,
+        @Body() body: UpdateUserRoleDto,
+        @CurrentUser() currentUser: { userId: string; username: string } | null,
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        if (!currentUser?.userId) {
+            return this.sendError(res, 401, t('auth.error.invalidToken'));
+        }
+
+        const result = await this.adminUserRoleService.updateUserRole({
+            actorUserId: currentUser.userId,
+            actorUsername: currentUser.username,
+            actorIp: this.resolveClientIp(req),
+            targetUserId: userId,
+            role: body.role,
+        });
+
+        if (!result.ok) {
+            const map: Record<string, { status: number; message: string }> = {
+                notFound: { status: 404, message: t('admin.error.userNotFound') },
+                cannotChangeOwnRole: { status: 400, message: t('admin.error.cannotChangeOwnRole') },
+                mustKeepOneAdmin: { status: 400, message: t('admin.error.mustKeepOneAdmin') },
+            };
+            const payload = map[result.code];
+            return this.sendError(res, payload.status, payload.message);
+        }
+
+        return res.status(200).json({
+            message: t('admin.success.userRoleUpdated'),
+            user: result.user,
+            changed: result.changed,
+        });
+    }
+
     @Post('users/:id/ban')
     async banUser(
         @Param('id') userId: string,
@@ -209,6 +253,19 @@ export class AdminController {
     async bulkDeleteMatches(@Body() body: BulkIdsDto, @Res() res: Response) {
         const result = await this.adminService.bulkDeleteMatches(body.ids || []);
         return res.status(200).json(result);
+    }
+
+    private resolveClientIp(req: Request): string | null {
+        const forwarded = req.headers['x-forwarded-for'];
+        if (typeof forwarded === 'string') {
+            const ip = forwarded.split(',')[0]?.trim();
+            return ip || null;
+        }
+        if (Array.isArray(forwarded)) {
+            const ip = forwarded[0]?.split(',')[0]?.trim();
+            return ip || null;
+        }
+        return req.ip ?? null;
     }
 
     private sendError(res: Response, status: number, message: string) {

@@ -5,17 +5,17 @@
   "type": "module",
   "scripts": {
     "predev": "node scripts/infra/clean_ports.js && node scripts/game/generate_game_manifests.js && node scripts/audio/generate-slim-registry.mjs && docker compose up -d mongodb",
-    "dev": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
+    "dev": "node scripts/infra/dev-orchestrator.js",
     "predev:un": "node scripts/infra/clean_ports.js && node scripts/game/generate_game_manifests.js && node scripts/audio/generate-slim-registry.mjs && docker compose up -d mongodb",
-    "dev:un": "concurrently \"npx tsx server.ts\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
+    "dev:un": "concurrently \"node ./node_modules/tsx/dist/cli.mjs server.ts\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
     "predev:lite": "node scripts/infra/clean_ports.js && node scripts/game/generate_game_manifests.js && node scripts/audio/generate-slim-registry.mjs",
-    "dev:lite": "cross-env USE_PERSISTENT_STORAGE=false concurrently \"npx tsx server.ts\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
+    "dev:lite": "cross-env USE_PERSISTENT_STORAGE=false concurrently \"node ./node_modules/tsx/dist/cli.mjs server.ts\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
     "db:start": "docker compose up -d mongodb",
     "db:stop": "docker compose stop mongodb",
     "dev:frontend": "node scripts/infra/vite-with-logging.js",
     "dev:frontend:wait": "node scripts/infra/wait_for_ports.js && node scripts/infra/vite-with-logging.js",
-    "dev:api": "npx tsx --tsconfig apps/api/tsconfig.json apps/api/src/main.ts",
-    "dev:game": "nodemon",
+    "dev:api": "node ./node_modules/tsx/dist/cli.mjs --tsconfig apps/api/tsconfig.json apps/api/src/main.ts",
+    "dev:game": "node ./node_modules/nodemon/bin/nodemon.js",
     "prebuild": "node scripts/game/generate_game_manifests.js && node scripts/audio/generate-slim-registry.mjs",
     "build": "vite build",
     "build:full": "tsc -b && npx vite build",
@@ -76,7 +76,8 @@
     "monitor:kiro:timer:test": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 0.17 -MaxRetries 5",
     "monitor:kiro:timer:20min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 20 -MaxRetries 20",
     "monitor:kiro:timer:30min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 30 -MaxRetries 20",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "dev:parallel": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\""
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged --concurrent 1",

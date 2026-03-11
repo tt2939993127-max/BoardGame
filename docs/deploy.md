@@ -352,7 +352,9 @@ WEB_ORIGINS=https://your-domain.com
   - `VITE_GAME_SERVER_URL` 仅用于分离部署；本地 dev 建议留空，走 Vite 代理。
   - 查看 `src/config/server.ts` 的回退逻辑，确保 dev 时不会强制指向 `http://127.0.0.1:18000`。
 - **为什么 dev 没问题但部署报错**：
-  - 本地 `npm run dev:api` 使用 `tsx --tsconfig apps/api/tsconfig.json`，自动启用 `experimentalDecorators`；
-    Docker 若未指定 tsconfig，会导致 NestJS 装饰器报错。
-  - 本地 `npm run dev:game` 使用 `vite-node`，ESM 解析与 Docker 中 `tsx` 直接运行不同；
-    可能触发 `某些 ESM 模块` 解析到不存在的 `index.jsx`.
+  - 本地 `npm run dev` 现在由 `scripts/infra/dev-orchestrator.js` 串行启动：
+    先起 `dev:api` 并等待 `18001` 就绪，再起 `dev:game` 并等待 `18000`，最后才起前端，避免代理目标未就绪时前端先连错地址。
+  - 本地 `npm run dev:api` 使用 `node ./node_modules/tsx/dist/cli.mjs --tsconfig apps/api/tsconfig.json apps/api/src/main.ts`，
+    会显式加载 API 侧 tsconfig；Docker 若未指定 tsconfig，仍可能导致 NestJS 装饰器报错。
+  - 本地 `npm run dev:game` 使用 `node ./node_modules/nodemon/bin/nodemon.js`，而 `nodemon.json` 会执行
+    `node ./node_modules/tsx/dist/cli.mjs server.ts`；这和 Docker 中直接跑源码更接近，能更早暴露 ESM / 启动顺序 / 代理配置问题。
