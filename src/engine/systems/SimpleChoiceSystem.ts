@@ -141,6 +141,12 @@ function handleSimpleChoiceRespond<TCore>(
     let selectedOptions: PromptOption[] = [];
     let selectedOptionIds: string[] = [];
 
+    console.log('[SimpleChoiceSystem] handleSimpleChoiceRespond', {
+        isMulti,
+        payload,
+        availableOptions: data.options.map(o => o.id),
+    });
+
     if (isMulti) {
         const optionIds = Array.isArray(payload.optionIds)
             ? payload.optionIds
@@ -210,6 +216,14 @@ function handleSimpleChoiceRespond<TCore>(
         },
         timestamp,
     };
+
+    console.info('[SimpleChoiceSystem] Producing INTERACTION_RESOLVED event', {
+        type: event.type,
+        sourceId: data.sourceId,
+        playerId,
+        optionId: selectedOptionIds[0],
+        value: resolvedValue,
+    });
 
     return { halt: false, state: newState, events: [event] };
 }

@@ -24,12 +24,17 @@ export const MagnifyOverlay = ({
         return document.getElementById('modal-root') ?? document.body;
     }, []);
 
-    if (!isOpen) return null;
-
+    // 性能优化：始终渲染，只控制可见性（pointer-events 和 opacity）
+    // 避免重复挂载/卸载的开销
+    // 移除 backdrop-blur 以减少渲染开销
     const overlay = (
         <div
-            className={`fixed inset-0 bg-black/30 flex items-center justify-center p-8 backdrop-blur-sm animate-in fade-in duration-200 ${overlayClassName}`}
-            style={{ zIndex: UI_Z_INDEX.magnify }}
+            className={`fixed inset-0 bg-black/30 flex items-center justify-center p-8 transition-opacity duration-75 ${overlayClassName}`}
+            style={{ 
+                zIndex: UI_Z_INDEX.magnify,
+                opacity: isOpen ? 1 : 0,
+                pointerEvents: isOpen ? 'auto' : 'none',
+            }}
             onClick={onClose}
             data-interaction-allow
         >

@@ -127,6 +127,10 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
     }, [cdnUrl, cdnFallbackUrl, localUrl, fallbackLevel]);
 
     const isSvg = isSvgSource(currentSrc);
+    
+    // 同步修正：如果 loaded 为 false 但缓存已就绪，立即同步为 true，
+    // 避免 useLayoutEffect 异步更新导致的一帧 shimmer 闪烁
+    const effectiveLoaded = loaded || preloaded;
 
     // src 或 locale 变化时完全重置
     React.useLayoutEffect(() => {
@@ -229,13 +233,13 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         };
     }, []);
 
-    const showShimmer = placeholder && !loaded;
+    const showShimmer = placeholder && !effectiveLoaded;
 
     const imgStyle: React.CSSProperties = {
         ...styleProp,
         ...(showShimmer ? SHIMMER_BG : {}),
         transition: [styleProp?.transition, 'opacity 0.3s ease'].filter(Boolean).join(', '),
-        opacity: errored ? 0 : loaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
+        opacity: errored ? 0 : effectiveLoaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
     };
 
     if (isSvg) {
