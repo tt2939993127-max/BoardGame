@@ -1,258 +1,262 @@
 /**
- * 大杀四方 - After Scoring 响应窗口重新计分测试
- * 
- * 测试场景：
- * 1. 基本重新计分：力量变化后重新计分
- * 2. 无力量变化：不重新计分
+ * 大杀四方 - afterScoring 响应窗口重新计分测试
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
-import { SmashUpDomain } from '../domain';
-import type { SmashUpCore, SmashUpCommand, SmashUpEvent, MinionOnBase } from '../domain/types';
-import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
-import { initAllAbilities } from '../abilities';
-import { smashUpSystemsForTest } from '../game';
-import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
-import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { getCardDef } from '../data/cards';
+import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import { initAllAbilities } from '../abilities';
+import { SmashUpDomain } from '../domain';
+import { smashUpSystemsForTest } from '../game';
+import type { MinionOnBase, SmashUpCommand, SmashUpCore, SmashUpEvent } from '../domain/types';
+import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 
-const PLAYER_IDS = ['0', '1'];
+const PLAYER_IDS: PlayerId[] = ['0', '1'];
 const systems = smashUpSystemsForTest;
 
 beforeAll(() => {
     initAllAbilities();
 });
 
+function makeMinion(
+    uid: string,
+    defId: string,
+    owner: PlayerId,
+    controller: PlayerId,
+    basePower: number,
+    powerCounters: number,
+): MinionOnBase {
+    return {
+        uid,
+        defId,
+        owner,
+        controller,
+        basePower,
+        powerModifier: 0,
+        tempPowerModifier: 0,
+        powerCounters,
+        attachedActions: [],
+        talentUsed: false,
+    };
+}
+
+function createRunner(
+    setup: (ids: PlayerId[], random: RandomFn) => MatchState<SmashUpCore>,
+): GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent> {
+    return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+        domain: SmashUpDomain,
+        systems,
+        playerIds: PLAYER_IDS,
+        setup,
+    });
+}
+
 describe('After Scoring 响应窗口 - 重新计分功能', () => {
-    it('基本重新计分：力量变化后重新计分', () => {
-        // Setup: 基地达到临界点，玩家有 afterScoring 卡牌
-        function setup(ids: PlayerId[], random: RandomFn): MatchState<SmashUpCore> {
+    it('基本重新计分：afterScoring 改变计分基地力量后应重新计分', () => {
+        const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
             const sys = createInitialSystemState(ids, systems, undefined);
-            
-            // 跳过派系选择
+
             core.factionSelection = undefined;
             sys.phase = 'playCards';
-            
-            // 设置基地达到临界点
-            core.bases[0] = {
-                defId: 'base_the_mothership', // 临界点 20
-                minions: [],
-                ongoingActions: [],
-            };
-            
-            // 添加随从达到临界点
-            const minions: MinionOnBase[] = [
+
+            core.bases = [
                 {
-                    uid: 'm1',
-                    defId: 'alien_invader',
-                    owner: '0',
-                    controller: '0',
-                    basePower: 3,
-                    powerModifier: 0,
-                    tempPowerModifier: 0,
-                    powerCounters: 10,
-                    attachedActions: [],
-                    talentUsed: false,
+                    defId: 'base_the_jungle',
+                    minions: [
+                        makeMinion('m1', 'alien_invader', '0', '0', 3, 7),
+                        makeMinion('m2', 'ninja_shinobi', '1', '1', 2, 2),
+                    ],
+                    ongoingActions: [],
                 },
                 {
-                    uid: 'm2',
-                    defId: 'ninja_shinobi',
-                    owner: '1',
-                    controller: '1',
-                    basePower: 2,
-                    powerModifier: 0,
-                    tempPowerModifier: 0,
-                    powerCounters: 8,
-                    attachedActions: [],
-                    talentUsed: false,
+                    defId: 'base_great_library',
+                    minions: [
+                        makeMinion('m3', 'robot_microbot_alpha', '0', '0', 2, 0),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_the_hill',
+                    minions: [],
+                    ongoingActions: [],
                 },
             ];
-            core.bases[0].minions = minions;
-            
-            // 给玩家 0 一张 afterScoring 卡牌
+            core.baseDeck = ['base_secret_garden', 'base_temple_of_goju'];
+
             core.players['0'].hand = [
                 { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
             ];
-            
-            // 玩家 1 没有卡牌（避免 beforeScoring 窗口）
             core.players['1'].hand = [];
-            
-            console.log('[TEST SETUP] P0 hand:', core.players['0'].hand);
-            console.log('[TEST SETUP] Card def:', getCardDef('giant_ant_we_are_the_champions'));
-            
-            return { sys, core };
-        }
-        
-        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
-            domain: SmashUpDomain,
-            systems,
-            playerIds: PLAYER_IDS,
-            setup,
-        });
-        
-        // 执行测试命令序列
-        const result = runner.run({
-            name: '基本重新计分测试',
-            commands: [
-                // 步骤 1：推进到 scoreBases 阶段
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                
-                // 步骤 2：所有玩家 pass beforeScoring 响应窗口（无人有 beforeScoring 卡牌）
-                { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-                
-                // beforeScoring 窗口关闭，基地计分（BASE_SCORED #1），afterScoring 响应窗口打开
-                // 响应者队列：['0', '1']，当前响应者：P0
-                
-                // 步骤 3：p0 打出"我们乃最强"（afterScoring 卡牌）
-                // 注意：必须指定 targetBaseIndex（该卡牌需要选择基地）
-                { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'c1', targetBaseIndex: 0 } },
-                
-                // 步骤 4：选择转移指示物（从 m1 转移 2 个指示物到 m2）
-                // 注意：根据实际实现，需要三步交互
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'm1-0' } },
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'm2-0' } },
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'amount-2' } },
-                
-                // 步骤 5：所有玩家 pass afterScoring 响应窗口
-                // 注意：由于 loopUntilAllPass=true + consecutivePassRounds 逻辑，
-                // P0 打出卡牌后会重新开始一轮（consecutivePassRounds = 0）
-                // 需要连续两轮所有人都 pass 才能关闭窗口：
-                // - 第一轮：P1 pass, P0 pass → consecutivePassRounds = 1
-                // - 第二轮：P1 pass, P0 pass → consecutivePassRounds = 2 → 窗口关闭
-                { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
-                
-                // 响应窗口关闭，检测到力量变化，重新计分（BASE_SCORED #2）
-                // 注意：需要再次 ADVANCE_PHASE 触发 onPhaseExit 的重新计分逻辑
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-            ] as any[],
-        });
-        
-        // Debug: 打印所有步骤的状态
-        console.log('=== Test Steps Debug ===');
-        result.steps.forEach((step, index) => {
-            if (!step.state) {
-                console.log(`Step ${index}: NO STATE`);
-                return;
-            }
-            const p0Hand = step.state.core?.players?.['0']?.hand || [];
-            console.log(`Step ${index}:`, JSON.stringify({
-                cmd: step.command?.type,
-                pid: step.command?.playerId,
-                phase: step.state.sys?.phase,
-                hasRW: !!step.state.sys?.responseWindow?.current,
-                rwType: step.state.sys?.responseWindow?.current?.windowType,
-                p0HandSize: p0Hand.length,
-                p0Cards: p0Hand.map((c: any) => c.defId),
-                eventCount: step.events?.length || 0,
-            }));
-        });
-        console.log('===================');
-        const initialScoringStep = result.steps[0];
-        expect(initialScoringStep?.events).toContain('su:before_scoring_triggered');
-        expect(initialScoringStep?.events).toContain(SU_EVENTS.BASE_SCORED);
-        expect(initialScoringStep?.events).toContain('su:after_scoring_triggered');
-        expect(initialScoringStep?.events).toContain('RESPONSE_WINDOW_OPENED');
 
-        // 验证：应该有两次 BASE_SCORED 事件
-        // 注意：由于测试框架的限制，第二次 BASE_SCORED 可能不会被记录
-        // 因为基地已经被清除和替换了
-        // 我们改为验证：至少有一次 BASE_SCORED 事件
-        const allEvents = result.steps.flatMap(s => s.events);
-        const scoredCount = allEvents.filter((e: string) => e === SU_EVENTS.BASE_SCORED).length;
-        expect(scoredCount).toBeGreaterThanOrEqual(1);
-        
-        console.log('测试通过：基地至少计分了一次');
+            return { sys, core };
+        });
+
+        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanceResult.success).toBe(true);
+        expect(runner.getState().sys.phase).toBe('scoreBases');
+        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
+
+        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
+            playerId: '0',
+            cardUid: 'c1',
+            targetBaseIndex: 0,
+        });
+        expect(playResult.success).toBe(true);
+
+        const sourcePrompt = runner.getState().sys.interaction?.current;
+        expect(sourcePrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
+
+        const chooseSourceResult = runner.resolveInteraction('0', { optionId: 'minion-0' });
+        expect(chooseSourceResult.success).toBe(true);
+
+        const targetPrompt = runner.getState().sys.interaction?.current;
+        expect(targetPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
+        const targetOption = targetPrompt?.data?.options?.find(
+            option => option?.value?.minionUid === 'm3',
+        );
+        expect(targetOption).toBeDefined();
+
+        const chooseTargetResult = runner.resolveInteraction('0', { optionId: targetOption!.id });
+        expect(chooseTargetResult.success).toBe(true);
+
+        const amountPrompt = runner.getState().sys.interaction?.current;
+        expect(amountPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_amount');
+        expect(amountPrompt?.data?.slider?.max).toBe(7);
+
+        const chooseAmountResult = runner.resolveInteraction('0', {
+            optionId: 'confirm-transfer',
+            mergedValue: { amount: 7, value: 7 },
+        });
+        expect(chooseAmountResult.success).toBe(true);
+
+        const allEvents = [
+            ...advanceResult.events,
+            ...playResult.events,
+            ...chooseSourceResult.events,
+            ...chooseTargetResult.events,
+            ...chooseAmountResult.events,
+        ];
+        const scoredEvents = allEvents.filter(
+            (event): event is Extract<SmashUpEvent, { type: typeof SU_EVENTS.BASE_SCORED }> =>
+                event.type === SU_EVENTS.BASE_SCORED,
+        );
+
+        expect(scoredEvents).toHaveLength(2);
+        expect(scoredEvents[0].payload.rankings[0]?.playerId).toBe('0');
+        expect(scoredEvents[1].payload.rankings[0]?.playerId).toBe('1');
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+
+        const finalState = runner.getState();
+        expect(finalState.sys.responseWindow?.current).toBeUndefined();
+        expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+        expect(finalState.core.bases[1].minions.find(minion => minion.uid === 'm3')?.powerCounters).toBe(7);
     });
-    
-    it('无力量变化：不重新计分', () => {
-        // Setup: 基地达到临界点，但 afterScoring 窗口中无人出牌
-        function setup(ids: PlayerId[], random: RandomFn): MatchState<SmashUpCore> {
+
+    it('afterScoring 窗口打开期间不应提前清场换基地，窗口关闭后只补发一次', () => {
+        const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
             const sys = createInitialSystemState(ids, systems, undefined);
-            
-            // 跳过派系选择
+
             core.factionSelection = undefined;
             sys.phase = 'playCards';
-            
-            // 设置基地达到临界点
-            core.bases[0] = {
-                defId: 'base_the_mothership', // 临界点 20
-                minions: [],
-                ongoingActions: [],
-            };
-            
-            // 添加随从达到临界点
-            const minions: MinionOnBase[] = [
+
+            core.bases = [
                 {
-                    uid: 'm1',
-                    defId: 'alien_invader',
-                    owner: '0',
-                    controller: '0',
-                    basePower: 3,
-                    powerModifier: 0,
-                    tempPowerModifier: 0,
-                    powerCounters: 15,
-                    attachedActions: [],
-                    talentUsed: false,
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('m1', 'alien_invader', '0', '0', 3, 10),
+                        makeMinion('m2', 'ninja_shinobi', '1', '1', 2, 8),
+                    ],
+                    ongoingActions: [],
                 },
                 {
-                    uid: 'm2',
-                    defId: 'ninja_shinobi',
-                    owner: '1',
-                    controller: '1',
-                    basePower: 2,
-                    powerModifier: 0,
-                    tempPowerModifier: 0,
-                    powerCounters: 10,
-                    attachedActions: [],
-                    talentUsed: false,
+                    defId: 'base_great_library',
+                    minions: [],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_the_hill',
+                    minions: [],
+                    ongoingActions: [],
                 },
             ];
-            core.bases[0].minions = minions;
-            
-            // 玩家没有 afterScoring 卡牌
+            core.baseDeck = ['base_secret_garden', 'base_temple_of_goju'];
+
+            core.players['0'].hand = [
+                { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
+            ];
+            core.players['1'].hand = [];
+
+            return { sys, core };
+        });
+
+        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanceResult.success).toBe(true);
+        expect(advanceResult.events.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(0);
+        expect(advanceResult.events.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(0);
+
+        const stateAfterAdvance = runner.getState();
+        expect(stateAfterAdvance.sys.phase).toBe('scoreBases');
+        expect(stateAfterAdvance.sys.responseWindow?.current?.windowType).toBe('afterScoring');
+        expect(stateAfterAdvance.core.bases[0].defId).toBe('base_the_mothership');
+        expect(stateAfterAdvance.core.bases[0].minions.map(minion => minion.uid)).toEqual(['m1', 'm2']);
+
+        const closeWindowResult = runner.dispatch('RESPONSE_PASS', { playerId: '0' });
+        expect(closeWindowResult.success).toBe(true);
+
+        const allEvents = [...advanceResult.events, ...closeWindowResult.events];
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+
+        const finalState = runner.getState();
+        expect(finalState.sys.responseWindow?.current).toBeUndefined();
+        expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+    });
+
+    it('无力量变化：afterScoring 窗口无人出牌时不重新计分', () => {
+        const runner = createRunner((ids, random) => {
+            const core = SmashUpDomain.setup(ids, random);
+            const sys = createInitialSystemState(ids, systems, undefined);
+
+            core.factionSelection = undefined;
+            sys.phase = 'playCards';
+
+            core.bases = [
+                {
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('m1', 'alien_invader', '0', '0', 3, 15),
+                        makeMinion('m2', 'ninja_shinobi', '1', '1', 2, 10),
+                    ],
+                    ongoingActions: [],
+                },
+            ];
+
             core.players['0'].hand = [];
             core.players['1'].hand = [];
-            
+
             return { sys, core };
-        }
-        
-        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
-            domain: SmashUpDomain,
-            systems,
-            playerIds: PLAYER_IDS,
-            setup,
         });
-        
-        // 执行测试命令序列
+
         const result = runner.run({
-            name: '无力量变化测试',
+            name: '无力量变化：不重新计分',
             commands: [
-                // 步骤 1：推进到 scoreBases 阶段
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                
-                // 步骤 2：所有玩家 pass beforeScoring 响应窗口
                 { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
                 { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-                
-                // 步骤 3：所有玩家 pass afterScoring 响应窗口（无人出牌）
                 { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
                 { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-            ] as any[],
+            ],
         });
-        
-        // 验证：只有一次 BASE_SCORED 事件（不重新计分）
-        const allEvents = result.steps.flatMap(s => s.events);
-        const scoredCount = allEvents.filter((e: string) => e === SU_EVENTS.BASE_SCORED).length;
+
+        const scoredCount = result.steps
+            .flatMap(step => step.events)
+            .filter(eventType => eventType === SU_EVENTS.BASE_SCORED)
+            .length;
+
         expect(scoredCount).toBe(1);
-        
-        console.log('测试通过：基地只计分了一次（无力量变化，不重新计分）');
     });
 });

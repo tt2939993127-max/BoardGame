@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { createFlowSystem, createBaseSystems } from '../../../engine/systems';
+import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
@@ -18,8 +19,10 @@ import { createSmashUpEventSystem } from '../domain/systems';
 import { smashUpFlowHooks } from '../domain/index';
 import { reduce } from '../domain/reduce';
 import type { SmashUpCore, SmashUpEvent, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
+import type { SmashUpCommand } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { SmashUpDomain, smashUpSystemsForTest } from '../game';
 
 beforeAll(() => {
     clearRegistry();
@@ -397,5 +400,55 @@ describe('afterScoring 延迟清场回归', () => {
         });
 
         expect(result).toBeUndefined();
+    });
+
+    it('afterScoring 已完成清场换基地后，后续结束回合不应再次给第一个基地计分', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+            playerIds: ['0', '1'],
+            setup: (playerIds, _random) => {
+                const sys = createInitialSystemState(playerIds, smashUpSystemsForTest, undefined);
+                sys.phase = 'playCards';
+
+                const core = makeCore({
+                    currentPlayerIndex: 1,
+                    turnNumber: 8,
+                    bases: [
+                        makeBase('base_secret_garden'),
+                        makeBase('base_great_library', {
+                            minions: [
+                                {
+                                    ...makeMinion('m3', '0', 2, 'robot_microbot_alpha'),
+                                    powerCounters: 7,
+                                },
+                            ],
+                        }),
+                        makeBase('base_the_jungle'),
+                    ],
+                    baseDeck: ['base_temple_of_goju'],
+                });
+
+                return { core, sys };
+            },
+        });
+
+        const player1EndTurn = runner.dispatch('ADVANCE_PHASE', { playerId: '1' });
+        expect(player1EndTurn.success).toBe(true);
+        expect(player1EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
+
+        const stateAfterPlayer1Turn = runner.getState();
+        expect(stateAfterPlayer1Turn.sys.phase).toBe('playCards');
+        expect(stateAfterPlayer1Turn.core.turnOrder[stateAfterPlayer1Turn.core.currentPlayerIndex]).toBe('0');
+        expect(stateAfterPlayer1Turn.core.bases[0].defId).toBe('base_secret_garden');
+
+        const player0EndTurn = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(player0EndTurn.success).toBe(true);
+        expect(player0EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
+
+        const finalState = runner.getState();
+        expect(finalState.sys.phase).toBe('playCards');
+        expect(finalState.core.turnOrder[finalState.core.currentPlayerIndex]).toBe('1');
+        expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
     });
 });

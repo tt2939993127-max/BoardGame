@@ -19,6 +19,7 @@ import type { CustomActionContext } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { pyromancerDiceDefinition } from '../heroes/pyromancer/diceConfig';
+import { reduce } from '../domain/reducer';
 
 // 模块顶层初始化
 initializeCustomActions();
@@ -155,11 +156,8 @@ function eventsOfType<T extends DiceThroneEvent>(events: DiceThroneEvent[], type
     return events.filter(e => e && e.type === type) as T[];
 }
 
-/** 计算事件中某类型的总量 */
-function sumPayloadField(events: DiceThroneEvent[], type: string, field: string): number {
-    return events
-        .filter(e => e.type === type)
-        .reduce((sum, e) => sum + ((e as any).payload?.[field] ?? 0), 0);
+function reduceAll(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore {
+    return events.reduce((acc, event) => reduce(acc, event as any), state);
 }
 
 // ============================================================================
@@ -731,6 +729,47 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
 
             expect(events).toHaveLength(0);
             expect(state.pendingAttack!.bonusDamage).toBe(0);
+        });
+    });
+
+    describe('pyro-get-fired-up-roll (火之高兴！)', () => {
+        it('投出 fire 面时应发出 BONUS_DAMAGE_ADDED，并在 reduce 后增加 3 点伤害', () => {
+            const state = createState({ attackerFM: 0 });
+            state.pendingAttack = {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                damage: 5,
+                bonusDamage: 0,
+            } as any;
+            const handler = getCustomActionHandler('pyro-get-fired-up-roll')!;
+            const events = handler(buildCtx(state, 'pyro-get-fired-up-roll', {
+                random: () => 1 / 6, // fire
+            }));
+
+            const bonusEvents = eventsOfType(events, 'BONUS_DAMAGE_ADDED');
+            expect(bonusEvents).toHaveLength(1);
+            expect((bonusEvents[0] as any).payload).toMatchObject({
+                playerId: '0',
+                amount: 3,
+                sourceCardId: 'card-get-fired-up',
+            });
+
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack?.bonusDamage).toBe(3);
+            expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(3);
+        });
+
+        it('当前攻击尚未创建时，fire 面加伤应先写入 pendingBonusDamage', () => {
+            const state = createState({ attackerFM: 0 });
+            const handler = getCustomActionHandler('pyro-get-fired-up-roll')!;
+            const events = handler(buildCtx(state, 'pyro-get-fired-up-roll', {
+                random: () => 1 / 6, // fire
+            }));
+
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack).toBeNull();
+            expect((reduced.players['0'] as any).pendingBonusDamage).toBe(3);
         });
     });
 

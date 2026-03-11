@@ -6,22 +6,13 @@
  * - 对交互解决产生的事件应用保护过滤和触发链（与 execute() 后处理对齐）
  */
 
-import type { GameEvent, RandomFn } from '../../../engine/types';
+import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { INTERACTION_EVENTS, resolveInteraction } from '../../../engine/systems/InteractionSystem';
-import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import type { SmashUpCore, SmashUpEvent, MinionPlayedEvent, PendingPostScoringAction } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
-import {
-    processDestroyMoveCycle,
-    processAffectTriggers,
-    filterProtectedReturnEvents,
-    filterProtectedDeckBottomEvents,
-} from './reducer';
 import { buildValidatedMoveEvents } from './abilityHelpers';
 import { interceptEvent } from './ongoingEffects';
-import { triggerExtendedBaseAbility } from './baseAbilities';
-import type { BaseClearedEvent, BaseReplacedEvent } from './events';
 import { SU_EVENT_TYPES } from './events';
 
 // ============================================================================
@@ -115,64 +106,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             }
 
             for (const event of events) {
-                // 监听 RESPONSE_WINDOW_CLOSED → 补发 afterScoring 延迟事件
-                if (event.type === RESPONSE_WINDOW_EVENTS.CLOSED) {
-                    const payload = event.payload as {
-                        windowId: string;
-                        allPassed: boolean;
-                    };
-                    const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
-
-                    // 检查是否是 afterScoring 响应窗口关闭
-                    // 如果是，需要补发 BASE_CLEARED 和 BASE_REPLACED 事件
-                    if (newState.sys.afterScoringInitialPowers) {
-                        const { baseIndex: scoredBaseIndex } = newState.sys.afterScoringInitialPowers as any;
-                        const currentBase = newState.core.bases[scoredBaseIndex];
-                        
-                        if (currentBase) {
-                            // 发出 BASE_CLEARED 事件
-                            const clearEvt: BaseClearedEvent = {
-                                type: SU_EVENT_TYPES.BASE_CLEARED,
-                                payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId },
-                                timestamp: eventTimestamp,
-                            };
-                            nextEvents.push(clearEvt);
-                            
-                            // 替换基地
-                            if (newState.core.baseDeck.length > 0) {
-                                const newBaseDefId = newState.core.baseDeck[0];
-                                const replaceEvt: BaseReplacedEvent = {
-                                    type: SU_EVENT_TYPES.BASE_REPLACED,
-                                    payload: {
-                                        baseIndex: scoredBaseIndex,
-                                        oldBaseDefId: currentBase.defId,
-                                        newBaseDefId,
-                                    },
-                                    timestamp: eventTimestamp,
-                                };
-                                nextEvents.push(replaceEvt);
-                                
-                                // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
-                                const revealCtx = {
-                                    state: newState.core,
-                                    matchState: newState,
-                                    baseIndex: scoredBaseIndex,
-                                    baseDefId: newBaseDefId,
-                                    playerId: newState.core.turnOrder[newState.core.currentPlayerIndex],
-                                    now: eventTimestamp,
-                                };
-                                const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
-                                nextEvents.push(...revealResult.events);
-                                if (revealResult.matchState) newState = revealResult.matchState;
-                            }
-                        }
-                        
-                        // ⚠️ 不在这里清理 afterScoringInitialPowers
-                        // 原因：onPhaseExit 重新进入时需要检查力量变化，如果变化则重新计分
-                        // afterScoringInitialPowers 会在 onPhaseExit 的重新计分逻辑之后清除
-                    }
-                }
-
                 // 监听 SYS_INTERACTION_RESOLVED → 从 sourceId 查找处理函数 → 生成后续事件
                 if (event.type === INTERACTION_EVENTS.RESOLVED) {
                     const payload = event.payload as {

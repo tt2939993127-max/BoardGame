@@ -519,10 +519,17 @@ const resolveGetFiredUpRoll = (ctx: CustomActionContext): DiceThroneEvent[] => {
     let effectKey = `bonusDie.effect.${face}`;
     if (face === PYROMANCER_DICE_FACE_IDS.FIRE) {
         effectKey = 'bonusDie.effect.fire';
-        // 增加3伤害到 pendingAttack
-        if (state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
-            state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + 3;
-        }
+        // 统一走事件 + reducer，保证攻击修正卡在攻击创建前后都能落到正确的伤害字段。
+        events.push({
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: attackerId,
+                amount: 3,
+                sourceCardId: 'card-get-fired-up',
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DiceThroneEvent);
     } else if (face === PYROMANCER_DICE_FACE_IDS.MAGMA) {
         effectKey = 'bonusDie.effect.magma';
         // 施加灼烧给对手

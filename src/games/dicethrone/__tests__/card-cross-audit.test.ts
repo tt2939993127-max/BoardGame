@@ -131,6 +131,63 @@ describe('卡牌 i18n 完整性', () => {
     });
 });
 
+describe('月精灵长弓文案一致性', () => {
+    const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+    const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+
+    it('长弓 II / III 应明确使用相同符号文案', () => {
+        expect(zhAbilities['longbow-2']?.description).toContain('相同符号');
+        expect(zhAbilities['longbow-2']?.description).not.toContain('相同数字');
+        expect(zhAbilities['longbow-3']?.description).toContain('相同符号');
+        expect(zhAbilities['longbow-3']?.description).not.toContain('相同数字');
+        expect(enAbilities['longbow-2']?.description).toContain('matching symbols');
+        expect(enAbilities['longbow-3']?.description).toContain('matching symbols');
+    });
+});
+
+describe('武僧拳术 III 文案一致性', () => {
+    const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+    const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+    const zhCards = (zhCN as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
+    const enCards = (en as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
+
+    it('拳术 III 应明确使用 3/4/5 拳 与击倒文案', () => {
+        expect(zhAbilities['fist-technique-3']?.description).toContain('3/4/5拳');
+        expect(zhAbilities['fist-technique-3']?.description).toContain('4个及以上拳');
+        expect(zhAbilities['fist-technique-3']?.description).not.toContain('相同数字');
+        expect(enAbilities['fist-technique-3']?.description).toContain('3/4/5 Fists');
+        expect(enAbilities['fist-technique-3']?.description).toContain('Knockdown');
+        expect(enAbilities['fist-technique-3']?.description).not.toContain('four of a kind');
+
+        expect(zhCards['card-thrust-punch-3']?.description).toContain('3/4/5拳');
+        expect(zhCards['card-thrust-punch-3']?.description).not.toContain('相同数字');
+        expect(enCards['card-thrust-punch-3']?.description).toContain('3/4/5 Fists');
+        expect(enCards['card-thrust-punch-3']?.description).toContain('Knockdown');
+        expect(enCards['card-thrust-punch-3']?.description).not.toContain('Stun');
+    });
+});
+
+describe('野蛮人符号计数文案一致性', () => {
+    const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+    const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
+
+    it('百折不挠 II 与重击 II/III 应显式描述 Hearts / Swords 触发', () => {
+        expect(zhAbilities['steadfast-2']?.description).toContain('3/4/5心');
+        expect(zhAbilities['steadfast-2']?.description).not.toContain('三连');
+        expect(enAbilities['steadfast-2']?.description).toContain('3/4/5 Hearts');
+        expect(enAbilities['steadfast-2']?.description).not.toContain('three of a kind');
+
+        expect(zhAbilities['slap-2']?.description).toContain('4/5剑');
+        expect(zhAbilities['slap-2']?.description).not.toContain('4个相同');
+        expect(zhAbilities['slap-3']?.description).toContain('4/5剑');
+        expect(zhAbilities['slap-3']?.description).not.toContain('4个相同');
+        expect(enAbilities['slap-2']?.description).toContain('3/4/5 Swords');
+        expect(enAbilities['slap-2']?.description).not.toContain('of a kind');
+        expect(enAbilities['slap-3']?.description).toContain('3/4/5 Swords');
+        expect(enAbilities['slap-3']?.description).not.toContain('of a kind');
+    });
+});
+
 // ============================================================================
 // 2. grantToken target 合理性
 // ============================================================================

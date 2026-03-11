@@ -612,6 +612,59 @@ describe('巨蚁派系能力', () => {
         expect((drawEvt as any).payload.count).toBe(1);
     });
 
+    it('无人想要永生：旧 optionId 不应在最后一个指示物移除后吞掉交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'giant_ant_who_wants_to_live_forever', 'action', '0')],
+                    deck: [makeCard('d1', 'filler_minion_1', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('m1', 'giant_ant_worker', '0', 3, { powerCounters: 1 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const playResult = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+            defaultTestRandom,
+        );
+        expect(playResult.success).toBe(true);
+
+        const prompt1 = getInteractionsFromMS(playResult.finalState)[0];
+        expect(prompt1?.data?.sourceId).toBe('giant_ant_who_wants_to_live_forever');
+        const removeOption = prompt1.data.options.find((o: any) => o?.value?.minionUid === 'm1');
+        expect(removeOption).toBeDefined();
+
+        const firstRemoveResult = runCommand(
+            playResult.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: removeOption.id } } as any,
+            defaultTestRandom,
+        );
+        expect(firstRemoveResult.success).toBe(true);
+        expect(firstRemoveResult.events.some(e => e.type === SU_EVENTS.POWER_COUNTER_REMOVED)).toBe(true);
+
+        const staleRespondResult = runCommand(
+            firstRemoveResult.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: removeOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(staleRespondResult.success).toBe(false);
+        expect(staleRespondResult.error).toBe('无效的选择');
+        expect(staleRespondResult.events).toHaveLength(0);
+        expect(staleRespondResult.finalState).toEqual(firstRemoveResult.finalState);
+        expect(staleRespondResult.finalState.sys.interaction?.current?.data?.sourceId).toBe('giant_ant_who_wants_to_live_forever');
+    });
+
     it('如同魔法：先移除全部，再可取消并回滚', () => {
         const core = makeState({
             players: {

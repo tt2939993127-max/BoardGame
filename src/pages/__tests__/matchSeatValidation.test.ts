@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { validateStoredMatchSeat, type StoredMatchCredentials } from '../../hooks/match/useMatchStatus';
+/* @vitest-environment happy-dom */
+import { createElement } from 'react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isMatchNotFoundError, validateStoredMatchSeat, type StoredMatchCredentials } from '../../hooks/match/useMatchStatus';
 
 type Player = { id: number; name?: string | null };
 
@@ -40,8 +43,6 @@ describe('validateStoredMatchSeat', () => {
     it('昵称不一致时不清理（凭据才是认证手段）', () => {
         const stored = buildStored({ playerName: 'Alice' });
         const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 0, name: 'Carol' }]), '0');
-        // 业务逻辑变更：用户名变更后 localStorage 中的 playerName 可能与 match metadata 不一致，
-        // 这是正常情况，不应清除凭据。凭据（随机 nanoid）才是真正的认证手段。
         expect(result.shouldClear).toBe(false);
     });
 
@@ -55,5 +56,244 @@ describe('validateStoredMatchSeat', () => {
         const stored = buildStored({ playerName: undefined });
         const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 0, name: 'Any' }]), '0');
         expect(result.shouldClear).toBe(false);
+    });
+});
+
+describe('isMatchNotFoundError', () => {
+    it('识别 404 异常对象', () => {
+        expect(isMatchNotFoundError({ status: 404, message: 'Match not found' })).toBe(true);
+    });
+
+    it('识别带 404 文本的 Error', () => {
+        expect(isMatchNotFoundError(new Error('404: Match not found'))).toBe(true);
+    });
+
+    it('忽略非 404 错误', () => {
+        expect(isMatchNotFoundError(new Error('500: network error'))).toBe(false);
+    });
+});
+
+describe('Home 活跃对局缺房确认', () => {
+    let Home: typeof import('../Home').Home;
+    let latestStoredMatch: StoredMatchCredentials | null;
+    let storedMatch: StoredMatchCredentials | null;
+    let lobbyPresenceState: {
+        matches: Array<{ matchID: string; gameName: string; players: unknown[] }>;
+        hasSnapshot: boolean;
+        hasSeen: boolean;
+        exists: boolean;
+        isMissing: boolean;
+    };
+    let getMatchMock: ReturnType<typeof vi.fn>;
+    let clearMatchCredentialsMock: ReturnType<typeof vi.fn>;
+    let clearOwnerActiveMatchMock: ReturnType<typeof vi.fn>;
+    let publishMatchCleanupNoticeMock: ReturnType<typeof vi.fn>;
+    let markMatchCleanupNoticeSeenMock: ReturnType<typeof vi.fn>;
+    let toastWarningMock: ReturnType<typeof vi.fn>;
+    let toastErrorMock: ReturnType<typeof vi.fn>;
+    let navigateMock: ReturnType<typeof vi.fn>;
+    let setSearchParamsMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+        vi.resetModules();
+
+        latestStoredMatch = {
+            matchID: 'match-1',
+            playerID: '0',
+            credentials: 'cred-1',
+            gameName: 'tictactoe',
+            updatedAt: 1,
+        };
+        storedMatch = latestStoredMatch;
+        lobbyPresenceState = {
+            matches: [{ matchID: 'match-1', gameName: 'tictactoe', players: [] }],
+            hasSnapshot: true,
+            hasSeen: true,
+            exists: true,
+            isMissing: false,
+        };
+
+        getMatchMock = vi.fn()
+            .mockResolvedValueOnce({
+                matchID: 'match-1',
+                gameName: 'tictactoe',
+                players: [{ id: 0, name: 'Alice', isConnected: true }],
+            })
+            .mockResolvedValueOnce({
+                matchID: 'match-1',
+                gameName: 'tictactoe',
+                players: [{ id: 0, name: 'Alice', isConnected: true }],
+            })
+            .mockRejectedValueOnce(new Error('404: not found'));
+
+        clearMatchCredentialsMock = vi.fn(() => {
+            latestStoredMatch = null;
+            storedMatch = null;
+        });
+        clearOwnerActiveMatchMock = vi.fn();
+        publishMatchCleanupNoticeMock = vi.fn(() => ({
+            matchID: 'match-1',
+            reason: 'destroyed',
+            timestamp: Date.now(),
+            nonce: 'notice-1',
+        }));
+        markMatchCleanupNoticeSeenMock = vi.fn();
+        toastWarningMock = vi.fn();
+        toastErrorMock = vi.fn();
+        navigateMock = vi.fn();
+        setSearchParamsMock = vi.fn();
+
+        vi.doMock('react-router-dom', () => ({
+            useNavigate: () => navigateMock,
+            useSearchParams: () => [new URLSearchParams(), setSearchParamsMock],
+        }));
+
+        vi.doMock('react-i18next', () => ({
+            useTranslation: () => ({
+                t: (key: string) => key,
+                i18n: { resolvedLanguage: 'zh-CN', language: 'zh-CN' },
+            }),
+        }));
+
+        vi.doMock('../../components/layout/CategoryPills', () => ({
+            CategoryPills: () => null,
+        }));
+        vi.doMock('../../components/lobby/GameDetailsModal', () => ({
+            GameDetailsModal: () => null,
+        }));
+        vi.doMock('../../components/lobby/GameList', () => ({
+            GameList: () => null,
+        }));
+        vi.doMock('../../components/auth/AuthModal', () => ({
+            AuthModal: () => null,
+        }));
+        vi.doMock('../../components/common/overlays/ConfirmModal', () => ({
+            ConfirmModal: () => null,
+        }));
+        vi.doMock('../../components/common/i18n/LanguageSwitcher', () => ({
+            LanguageSwitcher: () => null,
+        }));
+        vi.doMock('../../components/social/UserMenu', () => ({
+            UserMenu: () => null,
+        }));
+        vi.doMock('../../components/common/SEO', () => ({
+            SEO: () => null,
+        }));
+
+        vi.doMock('../../config/games.config', () => ({
+            getGamesByCategory: () => [],
+            getGameById: () => null,
+            refreshUgcGames: vi.fn().mockResolvedValue(undefined),
+            subscribeGameRegistry: () => () => undefined,
+        }));
+
+        vi.doMock('../../contexts/AuthContext', () => ({
+            useAuth: () => ({
+                user: null,
+                token: null,
+                logout: vi.fn(),
+            }),
+        }));
+
+        vi.doMock('../../contexts/ModalStackContext', () => ({
+            useModalStack: () => ({
+                openModal: vi.fn(() => 'modal-1'),
+                closeModal: vi.fn(),
+            }),
+        }));
+
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                warning: toastWarningMock,
+                error: toastErrorMock,
+            }),
+        }));
+
+        vi.doMock('../../hooks/routing/useUrlModal', () => ({
+            useUrlModal: () => ({
+                navigateAwayRef: { current: vi.fn() },
+            }),
+        }));
+
+        vi.doMock('../../hooks/useLobbyStats', () => ({
+            useLobbyStats: () => ({ mostPopularGameId: null }),
+        }));
+
+        vi.doMock('../../hooks/useLobbyMatchPresence', () => ({
+            useLobbyMatchPresence: () => lobbyPresenceState,
+        }));
+
+        vi.doMock('../../core/cursor/useGlobalCursor', () => ({
+            useGlobalCursor: () => undefined,
+        }));
+
+        vi.doMock('../../services/matchApi', () => ({
+            getMatch: getMatchMock,
+        }));
+
+        vi.doMock('../../hooks/match/useMatchStatus', async () => {
+            const actual = await vi.importActual<typeof import('../../hooks/match/useMatchStatus')>('../../hooks/match/useMatchStatus');
+            return {
+                ...actual,
+                getLatestStoredMatchCredentials: () => latestStoredMatch,
+                pruneStoredMatchCredentials: vi.fn(),
+                getOwnerActiveMatch: () => null,
+                clearMatchCredentials: clearMatchCredentialsMock,
+                clearOwnerActiveMatch: clearOwnerActiveMatchMock,
+                publishMatchCleanupNotice: publishMatchCleanupNoticeMock,
+                readMatchCleanupNotice: () => null,
+                hasSeenMatchCleanupNotice: () => false,
+                markMatchCleanupNoticeSeen: markMatchCleanupNoticeSeenMock,
+                isOwnerActiveMatchSuppressed: () => false,
+                readStoredMatchCredentials: () => storedMatch,
+            };
+        });
+
+        Home = (await import('../Home')).Home;
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.clearAllMocks();
+    });
+
+    it('宽限期确认成功后会重置确认标记，后续真正销毁时仍会再次确认并清理', async () => {
+        const { rerender } = render(createElement(Home));
+
+        await screen.findByText('lobby:home.activeMatch.status');
+        expect(getMatchMock).toHaveBeenCalledTimes(1);
+
+        lobbyPresenceState = {
+            ...lobbyPresenceState,
+            matches: [],
+            exists: false,
+            isMissing: true,
+        };
+        rerender(createElement(Home));
+
+        await waitFor(() => {
+            expect(getMatchMock).toHaveBeenCalledTimes(2);
+        });
+        expect(clearMatchCredentialsMock).not.toHaveBeenCalled();
+        expect(clearOwnerActiveMatchMock).not.toHaveBeenCalled();
+
+        lobbyPresenceState = {
+            ...lobbyPresenceState,
+            matches: [],
+            exists: false,
+            isMissing: true,
+        };
+        rerender(createElement(Home));
+
+        await waitFor(() => {
+            expect(getMatchMock).toHaveBeenCalledTimes(3);
+            expect(clearMatchCredentialsMock).toHaveBeenCalledWith('match-1');
+        });
+        expect(clearOwnerActiveMatchMock).toHaveBeenCalledWith('match-1');
+        expect(markMatchCleanupNoticeSeenMock).toHaveBeenCalled();
+        expect(toastWarningMock).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        await waitFor(() => {
+            expect(screen.queryByText('lobby:home.activeMatch.status')).toBeNull();
+        });
     });
 });

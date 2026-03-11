@@ -18,6 +18,7 @@ import {
     readMatchCleanupNotice,
     hasSeenMatchCleanupNotice,
     markMatchCleanupNoticeSeen,
+    isMatchNotFoundError,
     isOwnerActiveMatchSuppressed,
     rejoinMatch,
     getLatestStoredMatchCredentials,
@@ -70,6 +71,7 @@ export const Home = () => {
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
+    const missingMatchConfirmRef = useRef<string | null>(null);
 
     const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
         paramKey: 'game',
@@ -264,7 +266,7 @@ export const Home = () => {
                     })),
                 });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 // 不在这里处理 404，交给 WebSocket 监听统一处理
                 // 只设置一个临时状态，等待 WebSocket 确认
@@ -288,18 +290,49 @@ export const Home = () => {
     });
 
     useEffect(() => {
-        if (!activeMatch || !lobbyPresence.isMissing) return;
-        const notice = publishMatchCleanupNotice(activeMatch.matchID);
-        if (notice && !hasSeenMatchCleanupNotice(notice)) {
-            markMatchCleanupNoticeSeen(notice);
-            toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        if (!activeMatch || !lobbyPresence.isMissing) {
+            missingMatchConfirmRef.current = null;
+            return;
         }
-        clearMatchCredentials(activeMatch.matchID);
-        clearOwnerActiveMatch(activeMatch.matchID);
-        setActiveMatch(null);
-        setMyMatchRole(null);
-        setLocalStorageTick((t) => t + 1);
-    }, [activeMatch, lobbyPresence.isMissing, toast]);
+
+        const { gameName, matchID } = activeMatch;
+        if (missingMatchConfirmRef.current === matchID) return;
+        missingMatchConfirmRef.current = matchID;
+
+        let cancelled = false;
+
+        void matchApi.getMatch(gameName, matchID)
+            .then(() => {
+                if (cancelled) return;
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+            })
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+                if (!isMatchNotFoundError(error)) {
+                    return;
+                }
+
+                const notice = publishMatchCleanupNotice(matchID);
+                if (notice && !hasSeenMatchCleanupNotice(notice)) {
+                    markMatchCleanupNoticeSeen(notice);
+                    toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                }
+                clearMatchCredentials(matchID);
+                clearOwnerActiveMatch(matchID);
+                setActiveMatch(null);
+                setMyMatchRole(null);
+                setLocalStorageTick((t) => t + 1);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeMatch, lobbyPresence.isMissing, lobbyPresence.matches, toast]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;

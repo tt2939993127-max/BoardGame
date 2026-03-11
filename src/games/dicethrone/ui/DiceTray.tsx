@@ -166,9 +166,9 @@ export const DiceTray = ({
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
                     const isModified = isModifyMode && d.id in (modifyResult?.modifications ?? {});
-                    // adjust 模式：对所有未锁定骰子显示 +/- 按钮（不依赖 selected，因为 adjust 模式下骰子无需先"选中"）
-                    // targetOpponentDice=true 时，忽略锁定状态（对手的锁定不影响我方修改）
-                    const canModifyDie = dtMeta?.targetOpponentDice ? true : !d.isKept;
+                    // 锁定只影响重投保留，不应阻止卡牌/效果对骰子的修改。
+                    // 因此 modifyDie 的所有模式（set/copy/any/adjust）都允许选中已锁定骰子。
+                    const canModifyDie = true;
                     const showAdjustButtons = isInteractionMode && isAdjustMode && canModifyDie;
                     const showAnyModeButtons = isInteractionMode && isAnyMode && canModifyDie &&
                         (isModified || currentSelectCount < maxSelectCount);

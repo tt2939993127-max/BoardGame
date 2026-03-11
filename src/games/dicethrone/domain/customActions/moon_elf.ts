@@ -9,14 +9,14 @@
  */
 
 import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
-import { STATUS_IDS, TOKEN_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
+import { STATUS_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
 import { RESOURCE_IDS } from '../resources';
 import type {
     DiceThroneEvent,
     DamageDealtEvent,
+    DamageShieldGrantedEvent,
     StatusAppliedEvent,
     StatusRemovedEvent,
-    TokenGrantedEvent,
     BonusDieRolledEvent,
     RollLimitChangedEvent,
 } from '../types';
@@ -347,7 +347,7 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
-        } as any);
+        } as DamageShieldGrantedEvent);
     }
 
     return events;
@@ -387,7 +387,7 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
-        } as any);
+        } as DamageShieldGrantedEvent);
     }
 
     return events;
@@ -500,11 +500,21 @@ function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
         timestamp: timestamp + 5,
     } as BonusDieRolledEvent);
 
-    if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
-        state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + bowCount;
+    if (bowCount > 0) {
+        // 统一走事件 + reducer，让攻击修正卡在攻击已创建和未创建两种时序下都能生效。
+        events.push({
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: attackerId,
+                amount: bowCount,
+                sourceCardId: 'volley',
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 6,
+        } as DiceThroneEvent);
     }
 
-    events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp + 6));
+    events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp + 7));
 
     return events;
 }
@@ -538,10 +548,17 @@ function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
     } as BonusDieRolledEvent);
 
     if (face === FACE.BOW) {
-        // 寮擄細澧炲姞2浼ゅ锛堟敾鍑讳慨姝ｏ級
-        if (state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
-            state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + 2;
-        }
+        // 弓：增加 2 伤害（统一交给 reducer 决定是直接加到当前攻击，还是排队到 pendingBonusDamage）。
+        events.push({
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: attackerId,
+                amount: 2,
+                sourceCardId: 'watch-out',
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DiceThroneEvent);
     } else if (face === FACE.FOOT) {
         // 瓒筹細鏂藉姞缂犵粫
         events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
