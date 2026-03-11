@@ -55,7 +55,7 @@ import { useActiveModifiers } from './hooks/useActiveModifiers';
 import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
 import { playDeniedSound } from '../../lib/audio/useGameAudio';
-import { computeViewModeState } from './ui/viewMode';
+import { computeViewModeState, getResponseViewSuggestionKey, shouldSuggestOpponentViewOnResponseChange } from './ui/viewMode';
 import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
 import { LayoutSaveButton } from './ui/LayoutSaveButton';
 import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
@@ -449,6 +449,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 响应窗口状态
     const isResponseWindowOpen = !!rawG.sys.responseWindow?.current;
+    const currentResponderIndex = rawG.sys.responseWindow?.current?.currentResponderIndex;
     const currentResponderId = rawG.sys.responseWindow?.current
         ? rawG.sys.responseWindow.current.responderQueue[rawG.sys.responseWindow.current.currentResponderIndex]
         : undefined;
@@ -465,7 +466,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return () => clearTimeout(timer);
     }, [autoResponseEnabled, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
 
-    const { rollerId, shouldAutoObserve, viewMode, isSelfView, isResponseAutoSwitch } = computeViewModeState({
+    const { rollerId, shouldAutoObserve, viewMode, isSelfView } = computeViewModeState({
         currentPhase,
         pendingAttack: G.pendingAttack,
         activePlayerId: G.activePlayerId,
@@ -476,40 +477,29 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         pendingDamage,
     });
 
-    // 响应窗口视角自动切换（已禁用）
-    // const prevResponseWindowRef = React.useRef<boolean>(false);
-    // React.useEffect(() => {
-    //     const wasOpen = prevResponseWindowRef.current;
-    //     const isOpen = isResponseWindowOpen;
-    //     prevResponseWindowRef.current = isOpen;
+    const responseViewSuggestionKey = getResponseViewSuggestionKey({
+        rootPlayerId: rootPid,
+        isResponseWindowOpen,
+        currentResponderId,
+        currentResponderIndex,
+        pendingDamage,
+    });
+    const prevResponseSuggestionKeyRef = React.useRef<string | null>(null);
 
-    //     console.log('[Board] Response window effect:', {
-    //         wasOpen,
-    //         isOpen,
-    //         isResponseAutoSwitch,
-    //         autoResponseEnabled,
-    //         currentResponderId,
-    //         rootPid,
-    //         logic: isResponseAutoSwitch ? 'Self is responder → switch to opponent view' : 'Opponent is responder → stay on self view',
-    //         currentPhase,
-    //         currentViewMode: viewMode,
-    //     });
+    React.useEffect(() => {
+        const previousSuggestionKey = prevResponseSuggestionKeyRef.current;
+        prevResponseSuggestionKeyRef.current = responseViewSuggestionKey;
 
-    //     // 只在显示响应窗口时才切换视角（自动跳过模式不切换）
-    //     if (!autoResponseEnabled) {
-    //         console.log('[Board] Auto-skip enabled, not switching view');
-    //         return;
-    //     }
+        if (!shouldSuggestOpponentViewOnResponseChange({
+            previousSuggestionKey,
+            currentSuggestionKey: responseViewSuggestionKey,
+            autoResponseEnabled,
+        })) {
+            return;
+        }
 
-    //     // 自己响应时切换到对手视角（看对手的骰子/状态）
-    //     if (isOpen && isResponseAutoSwitch) {
-    //         console.log('[Board] Switching to opponent view (self is responder, need to see opponent dice)');
-    //         setViewMode('opponent');
-    //     }
-    //     // 注意：
-    //     // 1. 对手响应时（isOpen && !isResponseAutoSwitch）不做任何操作，保持当前视角（通常是自己视角）
-    //     // 2. 响应窗口关闭时也不做任何操作，避免干扰正常的视角切换
-    // }, [isResponseWindowOpen, isResponseAutoSwitch, autoResponseEnabled, currentResponderId, rootPid, currentPhase, setViewMode, viewMode]);
+        setViewMode('opponent');
+    }, [responseViewSuggestionKey, autoResponseEnabled, setViewMode]);
 
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
@@ -1283,7 +1273,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         interaction={diceMultistepInteraction ?? pendingInteraction}
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
-                        bonusDamage={G.pendingAttack?.bonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage}
+                        attackModifierBonusDamage={
+                            G.pendingAttack?.attackModifierBonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage
+                        }
                         passiveAbilityProps={passiveAbilityProps}
                     />
                 </div>

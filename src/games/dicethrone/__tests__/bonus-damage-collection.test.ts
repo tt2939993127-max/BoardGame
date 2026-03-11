@@ -214,4 +214,47 @@ describe('bonusDamage 自动收集测试', () => {
         expect(bonusMod).toBeDefined();
         expect(bonusMod?.value).toBe(2);
     });
+
+    it('显式传入 attack_modifier 时不应再次自动收集 pendingAttack.bonusDamage', () => {
+        const state = {
+            core: {
+                players: {
+                    '0': { id: 'player-0', characterId: 'paladin', tokens: {} },
+                    '1': { id: 'player-1', characterId: 'monk', tokens: {} },
+                },
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    sourceAbilityId: 'holy-strike-2-small',
+                    bonusDamage: 4,
+                },
+                tokenDefinitions: [],
+            },
+        };
+
+        const calc = createDamageCalculation({
+            baseDamage: 7,
+            source: { playerId: '0', abilityId: 'holy-strike-2-small' },
+            target: { playerId: '1' },
+            state,
+            timestamp: Date.now(),
+            additionalModifiers: [{
+                id: '__bonus_damage_from_config__',
+                type: 'flat',
+                value: 4,
+                priority: 15,
+                source: 'attack_modifier',
+                description: 'actionLog.damageSource.attackModifier',
+            }],
+        });
+
+        const result = calc.resolve();
+
+        expect(result.finalDamage).toBe(11);
+        expect(result.breakdown.base.value).toBe(7);
+        expect(result.breakdown.steps).toHaveLength(1);
+        expect(result.breakdown.steps[0].sourceId).toBe('attack_modifier');
+        expect(result.breakdown.steps[0].value).toBe(4);
+        expect(result.modifiers).toHaveLength(1);
+    });
 });

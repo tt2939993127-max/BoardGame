@@ -641,6 +641,8 @@ function createWhoWantsToLiveForeverInteraction(
             sourceId: 'giant_ant_who_wants_to_live_forever',
             targetType: 'minion',
             autoResolveIfSingle: false,
+            // 最后一个指示物移除后，旧点击命中的是过期选项，响应期必须按最新状态重验。
+            responseValidationMode: 'live',
         },
     );
 

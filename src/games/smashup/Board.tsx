@@ -685,7 +685,9 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const myPid = playerID || '0';
     const gameEvents = useGameEvents({ G, myPlayerId: myPid, fxBus, baseRefs: baseRefsMap });
 
-    // 行动卡特写队列（只显示其他玩家打出的行动卡，点击关闭）
+    // 行动卡特写队列：
+    // - 在线模式：只显示对手打出的行动卡
+    // - 本地/测试模式：显示双方行动卡；测试页会固定注入 playerID='0'，因此不能仅靠 playerID 是否为空来区分
     const extractActionCard = useCallback((event: { type: string; payload: unknown }) => {
         const p = event.payload as { playerId: string; defId: string };
         if (!p?.playerId || !p?.defId) return null;
@@ -696,10 +698,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
     // 事件流条目（统一获取，避免重复调用）
     const eventStreamEntries = getEventStreamEntries(G);
+    const spotlightViewerId = isMultiplayer ? playerID : null;
 
     const { queue: spotlightQueue, dismiss: dismissSpotlight } = useCardSpotlightQueue<{ defId: string }>({
         entries: eventStreamEntries,
-        currentPlayerId: myPid,
+        currentPlayerId: spotlightViewerId,
         triggerEventTypes: SPOTLIGHT_TRIGGER_EVENTS,
         extractCard: extractActionCard,
         maxQueue: 5,
@@ -711,7 +714,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         const resolvedName = resolveCardName(def, t) || item.cardData.defId;
         const resolvedText = resolveCardText(def, t);
         return (
-            <div className="relative w-[20vw] max-w-[320px] aspect-[0.714] bg-white rounded-lg shadow-2xl border-2 border-slate-300 overflow-hidden">
+            <div
+                className="relative w-[20vw] max-w-[320px] aspect-[0.714] bg-white rounded-lg shadow-2xl border-2 border-slate-300 overflow-hidden"
+                data-testid="smashup-action-spotlight-card"
+                data-card-def-id={item.cardData.defId}
+            >
                 <CardPreview
                     previewRef={def?.previewRef}
                     className="w-full h-full object-cover"
@@ -1809,7 +1816,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     <SmashUpDebugConfig G={G} dispatch={dispatch} />
                 </GameDebugPanel>
 
-                {/* 行动卡特写队列（其他玩家打出的行动卡，点击关闭） */}
+                {/* 行动卡特写队列（在线只看对手，本地模式显示双方，点击关闭） */}
                 <CardSpotlightQueue
                     queue={spotlightQueue}
                     onDismiss={dismissSpotlight}

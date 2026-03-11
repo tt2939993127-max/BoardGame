@@ -49,7 +49,7 @@ export const RightSidebar = ({
     interaction,
     dispatch,
     activeModifiers,
-    bonusDamage,
+    attackModifierBonusDamage,
     passiveAbilityProps,
 }: {
     dice: Die[];
@@ -83,8 +83,8 @@ export const RightSidebar = ({
     dispatch: (type: string, payload?: unknown) => void;
     /** 已激活的攻击修正卡 */
     activeModifiers?: ActiveModifier[];
-    /** 当前攻击的伤害加成（从 pendingAttack.bonusDamage 读取） */
-    bonusDamage?: number;
+    /** 当前攻击修正卡提供的伤害加成 */
+    attackModifierBonusDamage?: number;
     /** 被动能力面板 props */
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
 }) => {
@@ -197,9 +197,9 @@ export const RightSidebar = ({
                     </div>
                 )}
                 {/* 伤害加成显示：absolute 定位，在 ActiveModifierBadge 下方 */}
-                {bonusDamage && bonusDamage > 0 && (
+                {attackModifierBonusDamage && attackModifierBonusDamage > 0 && (
                     <div className="absolute -top-[3.8vw] left-1/2 -translate-x-1/2 z-10">
-                        <AttackBonusDamageDisplay bonusDamage={bonusDamage} />
+                        <AttackBonusDamageDisplay bonusDamage={attackModifierBonusDamage} />
                     </div>
                 )}
                 <div className="relative">

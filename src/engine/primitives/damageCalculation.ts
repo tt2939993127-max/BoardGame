@@ -437,6 +437,12 @@ export class DamageCalculation {
     const pendingAttack = coreState?.pendingAttack;
     
     if (!pendingAttack || pendingAttack.attackerId !== this.config.source.playerId) return;
+
+    // 调用方若已显式传入攻击修正，则不再重复自动收集 pendingAttack.bonusDamage。
+    const hasExplicitAttackModifier = this.config.additionalModifiers?.some(mod =>
+      mod.id === '__bonus_damage_from_config__' || mod.source === 'attack_modifier'
+    );
+    if (hasExplicitAttackModifier) return;
     
     const bonusDamage = pendingAttack.bonusDamage ?? 0;
     if (bonusDamage === 0) return;

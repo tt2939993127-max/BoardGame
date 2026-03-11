@@ -156,10 +156,16 @@ describe('暴击 Token 完整转移+使用流程（圣骑士→暗影贼）', ()
         });
 
         const core = result.finalState.core;
+        const actionLogEntries = result.finalState.sys.actionLog?.entries ?? [];
 
         expect(core.players['0'].tokens[TOKEN_IDS.CRIT]).toBe(0);
         expect(core.pendingAttack?.bonusDamage).toBe(4);
+        expect(core.pendingAttack?.attackModifierBonusDamage ?? 0).toBe(0);
         expect(core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
+        const critLogEntry = actionLogEntries.find(entry =>
+            entry.segments.some(segment => segment.type === 'i18n' && (segment as any).key === 'actionLog.offensiveRollEndTokenUsed')
+        );
+        expect(critLogEntry).toBeDefined();
     });
 
     it('完整端到端：打出乾坤大挪移→转移→攻击→使用暴击', () => {

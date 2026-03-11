@@ -11,6 +11,7 @@ import type { CustomActionContext } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
+import { reduce } from '../domain/reducer';
 
 initializeCustomActions();
 registerDiceDefinition(moonElfDiceDefinition);
@@ -100,6 +101,10 @@ function eventsOfType(events: DiceThroneEvent[], type: string) {
     return events.filter(e => e.type === type);
 }
 
+function reduceAll(state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore {
+    return events.reduce((acc, event) => reduce(acc, event as any), state);
+}
+
 // ============================================================================
 // 测试套件
 // ============================================================================
@@ -109,8 +114,8 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
     // ========================================================================
     // 长弓连击判定
     // ========================================================================
-    describe('moon_elf-longbow-bonus-check-4 (长弓II连击：≥4同面→缠绕)', () => {
-        it('4个相同骰面时施加缠绕', () => {
+    describe('moon_elf-longbow-bonus-check-4 (长弓II连击：≥4相同符号→缠绕)', () => {
+        it('4个相同符号时施加缠绕', () => {
             const state = createState({
                 pendingAttackFaceCounts: { [FACES.BOW]: 4, [FACES.FOOT]: 1 },
             });
@@ -122,7 +127,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
         });
 
-        it('不足4个相同骰面时不施加', () => {
+        it('不足4个相同符号时不施加', () => {
             const state = createState({
                 pendingAttackFaceCounts: { [FACES.BOW]: 3, [FACES.FOOT]: 2 },
             });
@@ -442,7 +447,7 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
     });
 
     describe('moon_elf-action-volley (齐射：弓面数伤害+缠绕)', () => {
-        it('5骰全弓时增加bonusDamage 5点并施加缠绕', () => {
+        it('5骰全弓时应发出 BONUS_DAMAGE_ADDED，并在 reduce 后增加 5 点伤害且施加缠绕', () => {
             const state = createState({});
             state.pendingAttack = {
                 attackerId: '0', defenderId: '1', isDefendable: true,
@@ -454,17 +459,22 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
                 random: () => 1 / 6, // d(6)→1 → bow
             }));
 
-            // 5个弓面 → bonusDamage +5
-            expect(state.pendingAttack!.bonusDamage).toBe(5);
-            // 施加缠绕
-            const status = eventsOfType(events, 'STATUS_APPLIED');
-            expect(status).toHaveLength(1);
-            expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
+            const bonusEvents = eventsOfType(events, 'BONUS_DAMAGE_ADDED');
+            expect(bonusEvents).toHaveLength(1);
+            expect((bonusEvents[0] as any).payload).toMatchObject({
+                playerId: '0',
+                amount: 5,
+                sourceCardId: 'volley',
+            });
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack?.bonusDamage).toBe(5);
+            expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(5);
+            expect(reduced.players['1'].statusEffects[STATUS_IDS.ENTANGLE]).toBe(1);
             const settlement = eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED');
             expect(settlement).toHaveLength(0);
         });
 
-        it('5骰3弓2非弓时增加bonusDamage 3点', () => {
+        it('5骰3弓2非弓时应在 reduce 后增加 3 点伤害', () => {
             const state = createState({});
             state.pendingAttack = {
                 attackerId: '0', defenderId: '1', isDefendable: true,
@@ -477,13 +487,29 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
                 random: () => { callCount++; return callCount <= 3 ? 1 / 6 : 4 / 6; },
             }));
 
-            expect(state.pendingAttack!.bonusDamage).toBe(3);
-            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(1);
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack?.bonusDamage).toBe(3);
+            expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(3);
+            expect(reduced.players['1'].statusEffects[STATUS_IDS.ENTANGLE]).toBe(1);
+        });
+
+        it('当前攻击尚未创建时，应先写入 pendingBonusDamage 等待 ATTACK_INITIATED 转移', () => {
+            const state = createState({});
+            let callCount = 0;
+            const handler = getCustomActionHandler('moon_elf-action-volley')!;
+            const events = handler(buildCtx(state, 'moon_elf-action-volley', {
+                random: () => { callCount++; return callCount <= 3 ? 1 / 6 : 4 / 6; },
+            }));
+
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack).toBeNull();
+            expect((reduced.players['0'] as any).pendingBonusDamage).toBe(3);
+            expect(reduced.players['1'].statusEffects[STATUS_IDS.ENTANGLE]).toBe(1);
         });
     });
 
     describe('moon_elf-action-watch-out (看箭！)', () => {
-        it('投出弓面时增加2伤害', () => {
+        it('投出弓面时应发出 BONUS_DAMAGE_ADDED，并在 reduce 后增加 2 伤害', () => {
             const state = createState({});
             state.pendingAttack = {
                 attackerId: '0', defenderId: '1', isDefendable: true,
@@ -494,12 +520,32 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
                 random: () => 1 / 6, // d(6)→1 → bow
             }));
 
-            // 弓→+2伤害（修改 pendingAttack.bonusDamage）
-            expect(state.pendingAttack!.bonusDamage).toBe(2);
+            const bonusEvents = eventsOfType(events, 'BONUS_DAMAGE_ADDED');
+            expect(bonusEvents).toHaveLength(1);
+            expect((bonusEvents[0] as any).payload).toMatchObject({
+                playerId: '0',
+                amount: 2,
+                sourceCardId: 'watch-out',
+            });
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack?.bonusDamage).toBe(2);
+            expect(reduced.pendingAttack?.attackModifierBonusDamage).toBe(2);
             expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
             const bonusDieEvents = eventsOfType(events, 'BONUS_DIE_ROLLED');
             expect(bonusDieEvents).toHaveLength(1);
             expect((bonusDieEvents[0] as any).payload.effectKey).toBe('bonusDie.effect.watchOut.bow');
+        });
+
+        it('当前攻击尚未创建时，弓面加伤应先写入 pendingBonusDamage', () => {
+            const state = createState({});
+            const handler = getCustomActionHandler('moon_elf-action-watch-out')!;
+            const events = handler(buildCtx(state, 'moon_elf-action-watch-out', {
+                random: () => 1 / 6, // d(6)→1 → bow
+            }));
+
+            const reduced = reduceAll(state, events);
+            expect(reduced.pendingAttack).toBeNull();
+            expect((reduced.players['0'] as any).pendingBonusDamage).toBe(2);
         });
 
         it('投出足面时施加缠绕', () => {

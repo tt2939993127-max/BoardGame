@@ -22,11 +22,12 @@ import {
 import { createGameEngine } from '../../engine/adapter';
 import { buildDamageBreakdownSegment, type DamageSourceResolver } from '../../engine/primitives/actionLogHelpers';
 import { DiceThroneDomain } from './domain';
-import { DICETHRONE_COMMANDS } from './domain/ids';
+import { DICETHRONE_COMMANDS, TOKEN_IDS } from './domain/ids';
 import type {
     AbilityCard,
     DiceThroneCore,
     TurnPhase,
+    ChoiceResolvedEvent,
     DamageDealtEvent,
     AttackResolvedEvent,
     HealAppliedEvent,
@@ -66,6 +67,8 @@ const ACTION_LOG_ALLOWLIST = [
     'USE_PASSIVE_ABILITY',
     // 确认投掷：记录最终骰面结果
     'CONFIRM_ROLL',
+    // 交互确认会承载关键选择结果（如暴击/精准），需要进入操作日志
+    'SYS_INTERACTION_RESPOND',
 ] as const;
 
 const UNDO_ALLOWLIST = [
@@ -77,6 +80,19 @@ const UNDO_ALLOWLIST = [
 ] as const;
 
 const DT_NS = 'game-dicethrone';
+
+const OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS: Partial<Record<string, string>> = {
+    [TOKEN_IDS.CRIT]: 'actionLog.offensiveRollEndTokenEffect.crit',
+    [TOKEN_IDS.ACCURACY]: 'actionLog.offensiveRollEndTokenEffect.accuracy',
+};
+
+function getOffensiveRollEndTokenEffectKey(
+    tokenId?: string,
+    customId?: string,
+): string | null {
+    if (!tokenId || !customId?.startsWith('use-')) return null;
+    return OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS[tokenId] ?? null;
+}
 
 /** DiceThrone 伤害来源解析器（实现 DamageSourceResolver 接口） */
 const dtDamageSourceResolver: DamageSourceResolver = {
@@ -442,6 +458,35 @@ function formatDiceThroneActionEntry({
         const rawEventTs = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
         const entryTimestamp = Math.max(rawEventTs, timestamp + 1 + index);
 
+        if (command.type === 'SYS_INTERACTION_RESPOND' && event.type === 'CHOICE_RESOLVED') {
+            const choiceEvent = event as ChoiceResolvedEvent;
+            const { tokenId, customId, playerId } = choiceEvent.payload;
+            const effectKey = getOffensiveRollEndTokenEffectKey(tokenId, customId);
+
+            if (tokenId && effectKey) {
+                const tokenKey = getTokenI18nKey(tokenId);
+                const paramI18nKeys = ['effectLabel'];
+                if (tokenKey.includes('.')) {
+                    paramI18nKeys.push('tokenLabel');
+                }
+
+                entries.push({
+                    id: `TOKEN_USED-${playerId}-${entryTimestamp}-${index}`,
+                    timestamp: entryTimestamp,
+                    actorId: playerId,
+                    kind: 'TOKEN_USED',
+                    segments: [
+                        i18nSeg(
+                            'actionLog.offensiveRollEndTokenUsed',
+                            { tokenLabel: tokenKey, effectLabel: effectKey },
+                            paramI18nKeys,
+                        ),
+                    ],
+                });
+                return;
+            }
+        }
+
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;
             const { targetId, amount, actualDamage, sourceAbilityId, modifiers, breakdown, sourcePlayerId, shieldsConsumed } = damageEvent.payload;
@@ -784,7 +829,7 @@ function formatDiceThroneActionEntry({
             const isCardI18n = cardName?.includes('.');
             
             const segments: ActionLogSegment[] = [
-                i18nSeg('actionLog.dieRerolled', { 
+                i18nSeg('actionLog.dieRerolled', {
                     dieId: dieId + 1, 
                     oldValue, 
                     newValue 

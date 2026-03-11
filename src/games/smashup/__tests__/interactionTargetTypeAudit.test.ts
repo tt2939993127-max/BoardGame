@@ -76,6 +76,7 @@ const REQUIRED_SOURCE_CONFIGS: Record<string, { targetType?: string; autoRefresh
     pirate_buccaneer_move: { targetType: 'base' },
     pirate_king_move: { targetType: 'minion' },
     pirate_sea_dogs_choose_faction: { targetType: 'generic' },
+    giant_ant_who_wants_to_live_forever: { targetType: 'minion', responseValidationMode: 'live' },
     giant_ant_drone_prevent_destroy: { targetType: 'minion' },
     giant_ant_we_are_the_champions_choose_source: { targetType: 'minion' },
     giant_ant_we_are_the_champions_choose_snapshot_source: { targetType: 'generic' },

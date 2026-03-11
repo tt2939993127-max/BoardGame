@@ -30,7 +30,7 @@ import {
 import type { DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
-import { BLESSING_OF_MIGHT_2 } from '../heroes/paladin/abilities';
+import { BLESSING_OF_MIGHT_2, HOLY_STRIKE_2 } from '../heroes/paladin/abilities';
 
 // ============================================================================
 // 自定义 Setup：双方圣骑士，移除响应卡避免干扰
@@ -112,6 +112,7 @@ describe('圣骑士 GTR 技能覆盖', () => {
             });
             expect(result.assertionErrors).toEqual([]);
         });
+
     });
 
     // ========================================================================
@@ -150,6 +151,48 @@ describe('圣骑士 GTR 技能覆盖', () => {
                     players: {
                         '0': { hp: 51 }, // 50 + 1 = 51（未超上限 60）
                         '1': { hp: 45 }, // 50 - 5 = 45
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('II 级小顺 + 暴击只应额外增加 1 次 +4 伤害', () => {
+            const random = createQueuedRandom([1, 2, 3, 4, 5]);
+            const setup = (playerIds: PlayerId[], rng: RandomFn): MatchState<DiceThroneCore> => {
+                const base = createPaladinSetup()(playerIds, rng);
+                const attacker = base.core.players['0'];
+                const idx = attacker.abilities.findIndex(a => a.id === 'holy-strike');
+                if (idx >= 0) attacker.abilities[idx] = HOLY_STRIKE_2 as any;
+                attacker.abilityLevels['holy-strike'] = 2;
+                attacker.tokens[TOKEN_IDS.CRIT] = 1;
+                return base;
+            };
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup, assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '神圣攻击II 小顺 + 暴击 = 11伤害',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'holy-strike-2-small' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': {
+                            hp: 48,
+                            tokens: { [TOKEN_IDS.CRIT]: 0 },
+                        },
+                        '1': { hp: 39 },
                     },
                 },
             });

@@ -632,9 +632,10 @@ const MinionCard: React.FC<{
                     {(() => {
                         const isRightmostBase = baseIndex === core.bases.length - 1;
                         const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
-                        const shouldShowLeft = isRightmostBase && isRightmostPlayer;
-                        const positionClass = shouldShowLeft 
-                            ? 'right-full flex-col-reverse pr-[0.6vw]' 
+                        const isFourPlayerGame = turnOrder.length === 4;
+                        const shouldShowLeft = isRightmostBase && isRightmostPlayer && isFourPlayerGame;
+                        const positionClass = shouldShowLeft
+                            ? 'right-full flex-col-reverse pr-[0.6vw]'
                             : 'left-full flex-col pl-[0.6vw]';
                         return (
                             <div
