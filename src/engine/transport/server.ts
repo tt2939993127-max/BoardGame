@@ -45,6 +45,11 @@ const resolveOfflineAdjudicationCommandType = (kind: unknown): string => {
     return OFFLINE_ADJUDICATION_COMMAND_BY_KIND[kind] ?? INTERACTION_COMMANDS.CANCEL;
 };
 
+const ALLOWED_INJECT_STATE_ENVS = new Set(['test', 'development']);
+
+const canInjectStateInCurrentEnv = (nodeEnv: string | undefined): boolean =>
+    typeof nodeEnv === 'string' && ALLOWED_INJECT_STATE_ENVS.has(nodeEnv);
+
 // ============================================================================
 // 游戏引擎定义
 // ============================================================================
@@ -394,7 +399,8 @@ export class GameTransportServer {
      */
     async injectState(matchID: string, state: MatchState<unknown>): Promise<void> {
         // 环境检查
-        if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
+        // 仅允许显式 test/development，避免在 staging/preview 中暴露状态注入能力。
+        if (!canInjectStateInCurrentEnv(process.env.NODE_ENV)) {
             throw new Error('injectState is only available in test/development environment');
         }
 

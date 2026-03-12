@@ -166,6 +166,8 @@
     "tutorialTitle": "正在学习 {{game}}",
     "matchTitle": "正在对局 {{game}}",
     "loadingResources": "正在加载对局资源...",
+    "namespaceLoadFailed": "游戏文案加载失败",
+    "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
     "title": {
       "joining": "加入中",

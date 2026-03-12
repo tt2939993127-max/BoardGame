@@ -6,13 +6,20 @@
 
 import type { Page } from '@playwright/test';
 import type { MatchState } from '../../src/core/types';
+import { resolveSharedTestApiToken } from '../../src/server/testApiToken';
+import { getGameServerBaseURL } from './common';
 
 /**
  * 测试环境配置
  */
-const TEST_API_PORT = process.env.PW_API_SERVER_PORT || process.env.API_SERVER_PORT || '18001';
-const TEST_API_BASE = process.env.TEST_API_BASE || `http://localhost:${TEST_API_PORT}`;
-const TEST_API_TOKEN = process.env.TEST_API_TOKEN || 'test-token-12345';
+const TEST_API_BASE = process.env.TEST_API_BASE || getGameServerBaseURL();
+function getRequiredTestApiToken(): string {
+    const token = resolveSharedTestApiToken(process.env);
+    if (!token) {
+        throw new Error('TEST_API_TOKEN 未配置，无法调用 /test/* 状态注入接口');
+    }
+    return token;
+}
 
 export interface TestMatchAccess {
     playerId: string;
@@ -68,7 +75,7 @@ async function resolveTestMatchAccess(
 function buildTestHeaders(access: TestMatchAccess): Record<string, string> {
     return {
         'Content-Type': 'application/json',
-        'X-Test-Token': TEST_API_TOKEN,
+        'X-Test-Token': getRequiredTestApiToken(),
         'X-Test-Player-Id': access.playerId,
         'X-Test-Player-Credentials': access.credentials,
     };

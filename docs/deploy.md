@@ -352,9 +352,9 @@ WEB_ORIGINS=https://your-domain.com
   - `VITE_GAME_SERVER_URL` 仅用于分离部署；本地 dev 建议留空，走 Vite 代理。
   - 查看 `src/config/server.ts` 的回退逻辑，确保 dev 时不会强制指向 `http://127.0.0.1:18000`。
 - **为什么 dev 没问题但部署报错**：
-  - 本地 `npm run dev` 现在由 `scripts/infra/dev-orchestrator.js` 串行启动：
-    先起 `dev:api` 并等待 `18001` 就绪，再起 `dev:game` 并等待 `18000`，最后才起前端，避免代理目标未就绪时前端先连错地址。
-  - 本地 `npm run dev:api` 使用 `node ./node_modules/tsx/dist/cli.mjs --tsconfig apps/api/tsconfig.json apps/api/src/main.ts`，
-    会显式加载 API 侧 tsconfig；Docker 若未指定 tsconfig，仍可能导致 NestJS 装饰器报错。
-  - 本地 `npm run dev:game` 使用 `node ./node_modules/nodemon/bin/nodemon.js`，而 `nodemon.json` 会执行
-    `node ./node_modules/tsx/dist/cli.mjs server.ts`；这和 Docker 中直接跑源码更接近，能更早暴露 ESM / 启动顺序 / 代理配置问题。
+  - 本地 `npm run dev:api` 现在通过 `node scripts/infra/dev-bundle-runner.mjs --label api --entry apps/api/src/main.ts --outfile temp/dev-bundles/api/main.mjs --tsconfig apps/api/tsconfig.json`
+    先 bundle 再运行产物；Docker 若直接跑源码、tsconfig 或环境变量不一致，仍可能暴露与本地不同的问题。
+  - 本地 `npm run dev:game` 现在通过 `node scripts/infra/dev-bundle-runner.mjs --label game --entry server.ts --outfile temp/dev-bundles/game/server.mjs --tsconfig tsconfig.server.json`
+    先 bundle 再运行产物；这比直接 `tsx` 更接近“构建后运行”的链路，但仍不等于生产镜像。
+  - 默认 `npm run dev` 由 `scripts/infra/dev-orchestrator.js` 协调：API 和 game-server 并行 ready 后才启动前端。
+    如果你在 Docker / 服务器环境里没有这层编排，代理目标未就绪、端口未监听或 bundle 产物不存在，都可能只在部署链路中暴露。

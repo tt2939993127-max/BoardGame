@@ -1,0 +1,149 @@
+---
+name: adapt-game-mobile
+description: "审计并接入本项目中的单个游戏到 PC 主导、移动端横屏优先的通用适配框架。用于用户要求“给某个游戏做移动端适配”“评估某游戏是否适合手机横屏”“给 manifest 声明 mobileProfile / preferredOrientation / mobileLayoutPreset / shellTargets”“把 hover / 拖拽 / 常驻侧栏接入通用 mobile shell”“沉淀游戏层移动端接入流程”时。只处理游戏层接入与验收，不重写原生 App 或小程序，不替代框架层实现。"
+---
+
+# 适配游戏移动端
+
+## 概览
+
+- 以 PC 版为权威版本，移动端做适配，不重写整套 Board。
+- 以手机横屏完整支持为默认目标，竖屏提示或缩放只作为兜底。
+- 把适配成本优先收敛到框架层；游戏层只做最小必要声明和例外修正。
+- 把 App WebView、小程序 `web-view` 视为分发容器，不把它们当成适配方案本身。
+
+## 先读权威来源
+
+先读这些文件，再判断本次任务落在框架层还是游戏层：
+
+- `docs/mobile-adaptation.md`
+- `docs/ai-rules/ui-ux.md`
+- `docs/ai-rules/engine-systems.md`
+- `openspec/changes/add-pc-first-mobile-adaptation-framework/design.md`
+- `openspec/changes/add-pc-first-mobile-adaptation-framework/specs/game-registry/spec.md`
+
+按需读 references：
+
+- 字段和命名：`references/manifest-fields.md`
+- 审计和验收：`references/checklist.md`
+- 王权骰铸试点：`references/dicethrone-pilot.md`
+
+如果用户这次要的是提案、spec、proposal，而不是直接接入，先走 OpenSpec 流程，不要直接改代码。
+
+## 核心裁决
+
+最正确方案固定为：
+
+1. 保持现有 `React + Vite + UI Engine Framework` 为唯一真实前端运行时。
+2. 以 H5 / PWA 作为唯一真实运行时。
+3. 以通用移动壳承接横屏、安全区、抽屉、触屏预览、操作轨道等共性能力。
+4. 以游戏层 manifest + 少量例外处理完成接入。
+5. 把 App WebView 放在适配完成之后，把小程序 `web-view` 放在更后面的入口容器阶段。
+
+不要把“响应式 CSS + WebView”误判成完整移动端方案。只要关键交互仍依赖 hover、精细拖拽或常驻侧栏，它就还没有真正适配完成。
+
+## 工作流
+
+### 1. 确认边界
+
+- 默认采用 `PC 优先 + 横屏优先 + 通用壳优先`。
+- 默认不新建 `MobileBoard.tsx`、不重写第二套移动端 UI。
+- 默认不把问题转移成 React Native、Flutter、原生小程序重写。
+- 如果用户没有明确要求，默认不做竖屏完整布局。
+
+### 2. 审计游戏层
+
+先读：
+
+- `src/games/<gameId>/manifest.ts`
+- `src/games/<gameId>/Board.tsx`
+- `src/games/<gameId>/ui/`
+
+优先用 `rg` 搜这些模式，快速找到移动端风险点：
+
+```powershell
+rg -n "hover|onMouse|mouseenter|mouseleave|drag|draggable|pointer|tooltip|sidebar|drawer|panel|absolute|fixed" src/games/<gameId>
+```
+
+至少记录这 5 类问题：
+
+- `hover` 依赖：信息、预览、状态说明只能悬停查看。
+- `drag` 依赖：关键路径只能拖拽完成，且要求高精度指针。
+- 固定尺寸：固定宽高、固定列数、桌面专用 absolute 布局。
+- 常驻侧栏：左右侧信息区在手机横屏下无法同时保留。
+- 信息密度：同一屏同时堆太多按钮、标签、日志、说明。
+
+把每个问题分到三类之一：
+
+- 框架层已能解决。
+- 游戏层需要补 manifest 或轻量接入。
+- 游戏层必须写例外处理，框架无法猜测语义。
+
+### 3. 选定 manifest
+
+不要自创字段名。只使用已经批准的字段和值；详见 `references/manifest-fields.md`。
+
+对大多数复杂桌游，默认推荐：
+
+```ts
+mobileProfile: 'landscape-adapted'
+preferredOrientation: 'landscape'
+mobileLayoutPreset: 'board-shell'
+shellTargets: ['pwa']
+```
+
+只有在 H5 横屏适配已经跑通后，才考虑把 `shellTargets` 扩到 `app-webview` 或 `mini-program-webview`。
+
+### 4. 接入通用移动壳
+
+优先保持现有 Board 作为主画布，只做这些方向的接入：
+
+- 把常驻侧栏改成抽屉、分页面板或切换面板。
+- 把 hover 说明改成点击切换、长按预览、底部抽屉或模态层。
+- 给关键操作提供非拖拽备选路径，例如“点选目标 -> 点击确认”。
+- 把高频操作放到更稳定的触屏入口，不要求用户先缩放再点。
+- 给移动端降特效、降动画、降阴影和粒子密度。
+
+不要把“允许用户双指缩放”当成适配完成。缩放只能作为最后一道兜底。
+
+### 5. 只做最小必要的游戏层例外
+
+通常只在这些点上写游戏层代码：
+
+- 触屏预览需要的卡牌或状态信息入口。
+- 手势无法准确替代时的点击回退路径。
+- 面板折叠后仍需保留的核心信息优先级。
+- 某些特定交互的确认顺序、面板文案、图标或操作轨道排序。
+
+如果一个例外将来大概率会复用到很多游戏，优先回推到框架层，不要把它锁死在单个游戏里。
+
+### 6. 验收
+
+按 `references/checklist.md` 验收。最低要求：
+
+- 手机横屏不依赖 hover 也能完成核心回合。
+- 玩家能查看手牌、状态、日志、说明，不必先手动缩放。
+- 主要按钮达到触屏目标尺寸。
+- 竖屏要么有清晰引导，要么明确降级，但不能误导成“已完整支持”。
+- 只有 H5 通过后，才讨论 App 或小程序壳。
+
+## 输出要求
+
+执行这个 skill 时，最终至少输出这些内容：
+
+1. 审计过的文件和风险点。
+2. 选定的 manifest 字段值。
+3. 框架层承接项与游戏层例外项的边界。
+4. 需要修改的组件列表。
+5. 验收结果，或尚未通过的阻塞项。
+
+如果用户要求直接实现，就实现并验证；不要只停留在建议。
+
+## 不要做
+
+- 不要把 WebView 当作“自动获得移动端支持”。
+- 不要把小程序 `web-view` 当成首个落地方向。
+- 不要为了移动端复制一套完整桌面 UI。
+- 不要发明另一套 manifest 命名。
+- 不要只看布局宽度，不检查真实交互路径。
+- 不要因为能缩放就宣布适配完成。

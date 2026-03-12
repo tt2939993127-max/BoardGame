@@ -1,8 +1,9 @@
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { MatchMetadata, StoredMatchState, CreateMatchData } from '../../../engine/transport/storage';
 import { mongoStorage } from '../MongoStorage';
+import { runStartupCleanupTasks, type StartupCleanupTask } from '../startupCleanup';
 
 const buildState = (setupData: Record<string, unknown>): StoredMatchState => ({
     G: { __setupData: setupData },
@@ -491,5 +492,56 @@ describe.skip('MongoStorage 行为', () => {
         const ttlMs = 86400 * 1000;
         expect(expiresAt).toBeGreaterThanOrEqual(start + ttlMs);
         expect(expiresAt).toBeLessThanOrEqual(end + ttlMs + 1000);
+    });
+});
+
+describe('runStartupCleanupTasks', () => {
+    it('在任一清理任务报错后仍继续执行后续任务', async () => {
+        const calls: string[] = [];
+        const onError = vi.fn<(message: string, error: unknown) => void>((message) => {
+            calls.push(`error:${message}`);
+        });
+        const tasks: StartupCleanupTask[] = [
+            {
+                reason: 'cleanup:a',
+                run: async () => {
+                    calls.push('run:a');
+                    return 1;
+                },
+                errorMessage: 'cleanup a failed',
+            },
+            {
+                reason: 'cleanup:b',
+                run: async () => {
+                    calls.push('run:b');
+                    throw new Error('boom');
+                },
+                errorMessage: 'cleanup b failed',
+            },
+            {
+                reason: 'cleanup:c',
+                run: async () => {
+                    calls.push('run:c');
+                    return 0;
+                },
+                errorMessage: 'cleanup c failed',
+            },
+        ];
+
+        await runStartupCleanupTasks(tasks, {
+            onDirty: async (reason) => {
+                calls.push(`dirty:${reason}`);
+            },
+            onError,
+        });
+
+        expect(calls).toEqual([
+            'run:a',
+            'dirty:cleanup:a',
+            'run:b',
+            'error:cleanup b failed',
+            'run:c',
+        ]);
+        expect(onError).toHaveBeenCalledTimes(1);
     });
 });

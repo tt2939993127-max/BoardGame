@@ -635,7 +635,7 @@ test: {
 2. **轮询间隔优化**：`waitForFunction` 必须使用 `{ polling: 200 }`
 3. **同步等待优先**：UI 操作后先 `waitForTimeout(300)`，再按需异步等待
 4. **服务器就绪检查**：Playwright 配置使用 `/__ready` 端点
-5. **文件编码检查**：测试命令前运行 `check-file-encoding.mjs`
+5. **文件编码检查**：测试命令前运行 `npm run check:encoding`；发现 BOM 时执行 `npm run check:encoding:fix`；如果要把可疑乱码也视为失败，使用 `npm run check:encoding:strict`
 
 ### 代码示例
 

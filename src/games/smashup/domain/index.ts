@@ -33,7 +33,7 @@ import {
     VP_TO_WIN,
     getCurrentPlayerId,
 } from './types';
-import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getOngoingCardPowerContribution, getScoringEligibleBaseIndices } from './ongoingModifiers';
+import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './ongoingModifiers';
 import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
@@ -53,6 +53,50 @@ import type { SpecialAfterScoringConsumedEvent } from './types';
 // ============================================================================
 // 基地记分辅助函数（供 FlowHooks 和 Prompt 继续函数共用）
 // ============================================================================
+
+function collectQualifiedPlayerPowers(
+    core: SmashUpCore,
+    base: BaseInPlay,
+    baseIndex: number,
+): Map<PlayerId, number> {
+    const playersWithMinions = new Set<PlayerId>(
+        base.minions.map(minion => minion.controller),
+    );
+    const playerPowers = new Map<PlayerId, number>();
+
+    for (const playerId of Object.keys(core.players) as PlayerId[]) {
+        const power = getPlayerEffectivePowerOnBase(core, base, baseIndex, playerId);
+        if (power > 0 || playersWithMinions.has(playerId)) {
+            playerPowers.set(playerId, power);
+        }
+    }
+
+    return playerPowers;
+}
+
+function buildBaseRankings(
+    baseDef: { vpAwards: number[] },
+    playerPowers: Map<PlayerId, number>,
+): { playerId: PlayerId; power: number; vp: number }[] {
+    const sorted = Array.from(playerPowers.entries())
+        .sort((a, b) => b[1] - a[1]);
+    const rankings: { playerId: PlayerId; power: number; vp: number }[] = [];
+    let rankSlot = 0;
+
+    for (let i = 0; i < sorted.length; i++) {
+        const [playerId, power] = sorted[i];
+        if (i > 0 && power < sorted[i - 1][1]) {
+            rankSlot = i;
+        }
+        rankings.push({
+            playerId,
+            power,
+            vp: rankSlot < 3 ? baseDef.vpAwards[rankSlot] : 0,
+        });
+    }
+
+    return rankings;
+}
 
 /**
  * 对指定基地执行记分逻辑，返回所有相关事件
@@ -160,43 +204,8 @@ export function scoreOneBase(
 
     // 计算排名（使用 reduce 后的 core，包含 beforeScoring 的临时力量修正 + ongoing 卡力量贡献）
     const updatedBase = updatedCore.bases[baseIndex];
-    const playerPowers = new Map<PlayerId, number>();
-    const playerHasMinions = new Map<PlayerId, boolean>();
-    for (const m of updatedBase.minions) {
-        const prev = playerPowers.get(m.controller) ?? 0;
-        playerPowers.set(m.controller, prev + getEffectivePower(updatedCore, m, baseIndex));
-        playerHasMinions.set(m.controller, true);
-    }
-    // 加上 ongoing 卡力量贡献（如 vampire_summon_wolves 的力量指示物）
-    // 必须遍历所有玩家，因为可能有玩家无随从但有 ongoing 卡力量贡献
-    for (const pid of Object.keys(updatedCore.players)) {
-        const bonus = getOngoingCardPowerContribution(updatedBase, pid);
-        if (bonus > 0) {
-            const prev = playerPowers.get(pid) ?? 0;
-            playerPowers.set(pid, prev + bonus);
-        }
-    }
-
-    // 规则：须有至少 1 个随从或至少 1 点力量才有资格参与计分
-    // 修复 Bug：战力为0但有随从的玩家应该参与计分
-    const sorted = Array.from(playerPowers.entries())
-        .filter(([pid, p]) => p > 0 || playerHasMinions.get(pid))
-        .sort((a, b) => b[1] - a[1]);
-
-    // Property 16: 平局玩家获得该名次最高 VP
-    const rankings: { playerId: string; power: number; vp: number }[] = [];
-    let rankSlot = 0;
-    for (let i = 0; i < sorted.length; i++) {
-        const [playerId, power] = sorted[i];
-        if (i > 0 && power < sorted[i - 1][1]) {
-            rankSlot = i;
-        }
-        rankings.push({
-            playerId,
-            power,
-            vp: rankSlot < 3 ? baseDef.vpAwards[rankSlot] : 0,
-        });
-    }
+    const playerPowers = collectQualifiedPlayerPowers(updatedCore, updatedBase, baseIndex);
+    const rankings = buildBaseRankings(baseDef, playerPowers);
 
     // 收集每位玩家的随从力量 breakdown（用于 ActionLog 展示）
     const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
@@ -383,20 +392,8 @@ export function scoreOneBase(
     if (playersWithAfterScoringCards.length > 0) {
         // 【重新计分规则】记录初始力量（用于响应窗口关闭后对比）
         // 规则：afterScoring 卡牌可以影响该基地的力量，如果力量变化则需要重新计分
-        const initialPowers = new Map<PlayerId, number>();
         const currentBase = afterScoringCore.bases[baseIndex];
-        for (const m of currentBase.minions) {
-            const prev = initialPowers.get(m.controller) ?? 0;
-            initialPowers.set(m.controller, prev + getEffectivePower(afterScoringCore, m, baseIndex));
-        }
-        // 加上 ongoing 卡力量贡献
-        for (const playerId of Object.keys(afterScoringCore.players)) {
-            const bonus = getOngoingCardPowerContribution(currentBase, playerId);
-            if (bonus > 0) {
-                const prev = initialPowers.get(playerId) ?? 0;
-                initialPowers.set(playerId, prev + bonus);
-            }
-        }
+        const initialPowers = collectQualifiedPlayerPowers(afterScoringCore, currentBase, baseIndex);
         
         // 将初始力量存储到 matchState.sys（用于响应窗口关闭后对比）
         // 注意：不能存到响应窗口的 continuationContext 中，因为响应窗口不是交互
@@ -864,26 +861,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 
                 
                 // 计算当前力量
-                const currentPowers = new Map<PlayerId, number>();
                 const currentBase = core.bases[scoredBaseIndex];
-                if (currentBase) {
-                    for (const m of currentBase.minions) {
-                        const prev = currentPowers.get(m.controller) ?? 0;
-                        currentPowers.set(m.controller, prev + getEffectivePower(core, m, scoredBaseIndex));
-                    }
-                    // 加上 ongoing 卡力量贡献
-                    for (const playerId of Object.keys(core.players)) {
-                        const bonus = getOngoingCardPowerContribution(currentBase, playerId);
-                        if (bonus > 0) {
-                            const prev = currentPowers.get(playerId) ?? 0;
-                            currentPowers.set(playerId, prev + bonus);
-                        }
-                    }
-                }
+                const currentPowers = currentBase
+                    ? collectQualifiedPlayerPowers(core, currentBase, scoredBaseIndex)
+                    : new Map<PlayerId, number>();
                 
                 // 检查是否有力量变化
                 let powerChanged = false;
-                for (const [playerId, initialPower] of Object.entries(initialPowers)) {
+                const comparedPlayerIds = new Set<PlayerId>([
+                    ...(Object.keys(initialPowers) as PlayerId[]),
+                    ...currentPowers.keys(),
+                ]);
+                for (const playerId of comparedPlayerIds) {
+                    const hadInitialEntry = Object.prototype.hasOwnProperty.call(initialPowers, playerId);
+                    const hasCurrentEntry = currentPowers.has(playerId);
+                    if (hadInitialEntry !== hasCurrentEntry) {
+                        powerChanged = true;
+                        break;
+                    }
+                    const initialPower = (initialPowers as Record<string, number>)[playerId] ?? 0;
                     const currentPower = currentPowers.get(playerId) ?? 0;
                     if (currentPower !== initialPower) {
                         powerChanged = true;
@@ -893,44 +889,9 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 
                 // 如果力量变化，重新计分该基地
                 if (powerChanged && currentBase) {
-                    
-                    // 重新计算排名
-                    const playerPowers = new Map<PlayerId, number>();
-                    const playerHasMinions = new Map<PlayerId, boolean>();
-                    for (const m of currentBase.minions) {
-                        const prev = playerPowers.get(m.controller) ?? 0;
-                        playerPowers.set(m.controller, prev + getEffectivePower(core, m, scoredBaseIndex));
-                        playerHasMinions.set(m.controller, true);
-                    }
-                    // 加上 ongoing 卡力量贡献
-                    for (const playerId of Object.keys(core.players)) {
-                        const bonus = getOngoingCardPowerContribution(currentBase, playerId);
-                        if (bonus > 0) {
-                            const prev = playerPowers.get(playerId) ?? 0;
-                            playerPowers.set(playerId, prev + bonus);
-                        }
-                    }
-                    
-                    // 规则：须有至少 1 个随从或至少 1 点力量才有资格参与计分
-                    const sorted = Array.from(playerPowers.entries())
-                        .filter(([pid, p]) => p > 0 || playerHasMinions.get(pid))
-                        .sort((a, b) => b[1] - a[1]);
-                    
-                    // Property 16: 平局玩家获得该名次最高 VP
-                    const rankings: { playerId: string; power: number; vp: number }[] = [];
-                    let rankSlot = 0;
+                    const playerPowers = collectQualifiedPlayerPowers(core, currentBase, scoredBaseIndex);
                     const baseDef = getBaseDef(currentBase.defId)!;
-                    for (let i = 0; i < sorted.length; i++) {
-                        const [playerId, power] = sorted[i];
-                        if (i > 0 && power < sorted[i - 1][1]) {
-                            rankSlot = i;
-                        }
-                        rankings.push({
-                            playerId,
-                            power,
-                            vp: rankSlot < 3 ? baseDef.vpAwards[rankSlot] : 0,
-                        });
-                    }
+                    const rankings = buildBaseRankings(baseDef, playerPowers);
                     
                     // 收集每位玩家的随从力量 breakdown（用于 ActionLog 展示）
                     const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};

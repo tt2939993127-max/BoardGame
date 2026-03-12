@@ -105,6 +105,51 @@ describe('formatSmashUpActionEntry', () => {
         expect(rankingSegs[0].params?.vp).toBe(3);
     });
 
+    it('BASE_SCORED 在非随从力量存在时仍显示正确总力量', () => {
+        const command: Command = {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'pirate_dinghy-1-1' },
+            timestamp: 2,
+        };
+        const event: GameEvent = {
+            type: SU_EVENTS.BASE_SCORED,
+            payload: {
+                baseIndex: 0,
+                baseDefId: 'base_the_homeworld',
+                rankings: [
+                    { playerId: '0', power: 10, vp: 3 },
+                ],
+                minionBreakdowns: {
+                    '0': [
+                        {
+                            defId: 'test_minion',
+                            basePower: 5,
+                            finalPower: 5,
+                            modifiers: [],
+                        },
+                    ],
+                },
+            },
+            timestamp: 2,
+        } as GameEvent;
+
+        const result = formatSmashUpActionEntry({
+            command,
+            state: createMatchState(),
+            events: [event],
+        });
+        const entries = normalizeEntries(result);
+        const scoredEntry = entries.find((entry) => entry.kind === SU_EVENTS.BASE_SCORED);
+
+        expect(scoredEntry).toBeTruthy();
+        const breakdownSegment = scoredEntry!.segments.find(
+            segment => segment.type === 'breakdown'
+        ) as { type: 'breakdown'; displayText: string; lines: Array<{ label: string }> } | undefined;
+        expect(breakdownSegment?.displayText).toBe('10');
+        expect(breakdownSegment?.lines.some(line => line.label === 'actionLog.powerModifier.nonMinion')).toBe(true);
+    });
+
     it('MINION_MOVED 生成 fromTo i18n segment', () => {
         const command: Command = {
             type: SU_COMMANDS.USE_TALENT,

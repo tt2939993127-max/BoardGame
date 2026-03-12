@@ -327,17 +327,20 @@ API_SERVER_PORT=18001
 
 #### 1. 文件编码检查
 
+**命令**：`npm run check:encoding`
+
 **脚本**：`scripts/infra/check-file-encoding.mjs`
 
 **功能**：
-- 自动扫描所有源码文件（`src/**/*.{ts,tsx}`）
-- 检测 UTF-8 BOM（Byte Order Mark）
-- 自动修复 BOM 问题
-- 检测无效字符（编码错误）
+- 自动扫描 `src/`、`apps/`、`e2e/`、`scripts/`、`docs/` 等文本文件
+- 检测 UTF-8 BOM（Byte Order Mark）；需要修复时执行 `npm run check:encoding:fix`
+- 严格拦截非 UTF-8 字节流
+- 对 replacement character、连续问号占位符、常见乱码片段给出告警
+- 需要把告警也当成失败时，可执行：`npm run check:encoding:strict`
 
 **触发时机**：
-- 所有 E2E 测试命令（`test:e2e`、`test:e2e:ci`、`test:e2e:isolated`）
-- 自动运行，无需手动执行
+- 所有主 E2E 测试命令会先执行 `npm run check:encoding`
+- 也可以在修改中文源码/文档后手动单跑
 
 **输出示例**：
 ```
@@ -356,8 +359,12 @@ API_SERVER_PORT=18001
 
 **为什么需要**：
 - UTF-8 BOM 会导致 Vite 编译失败
-- 编码错误会导致服务器启动超时
-- 自动修复避免手动排查
+- 非 UTF-8 字节会导致服务器启动或编译异常
+- “PowerShell 终端显示乱码”和“文件真的被写坏”是两回事，需要工具链帮你区分
+
+**PowerShell 乱码处理**：
+- 仅显示乱码时，先在当前会话点源：`. .\scripts\infra\enable-utf8.ps1`
+- 该脚本只修复显示，不允许替代 `apply_patch` / Node 显式 UTF-8 写回
 
 #### 2. 服务器就绪检查
 

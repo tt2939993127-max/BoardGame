@@ -9,9 +9,19 @@ import type { GameTransportServer } from '../../engine/transport/server';
 import type { MatchStorage, StoredMatchState } from '../../engine/transport/storage';
 import type { MatchState } from '../../core/types';
 import { validateMatchState, deepMerge } from '../../engine/transport/stateValidator';
+import { resolveSharedTestApiToken } from '../testApiToken';
 
 const TEST_PLAYER_ID_HEADER = 'x-test-player-id';
 const TEST_PLAYER_CREDENTIALS_HEADER = 'x-test-player-credentials';
+const ALLOWED_TEST_ROUTE_ENVS = new Set(['test', 'development']);
+
+export function isTestRoutesEnabledEnv(nodeEnv: string | undefined): boolean {
+    return typeof nodeEnv === 'string' && ALLOWED_TEST_ROUTE_ENVS.has(nodeEnv);
+}
+
+export function getConfiguredTestApiToken(env: NodeJS.ProcessEnv = process.env): string | null {
+    return resolveSharedTestApiToken(env);
+}
 
 /**
  * 快照存储（内存实现，测试环境使用）
@@ -88,10 +98,12 @@ export function createTestRoutes(
     };
 
     // 环境检查中间件
+    // 测试路由只允许显式的 test/development 环境。
+    // 这样既能覆盖本地开发与 E2E，又不会在 staging/preview 里意外暴露状态注入接口。
     router.use(async (ctx, next) => {
-        if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
+        if (!isTestRoutesEnabledEnv(process.env.NODE_ENV)) {
             ctx.status = 403;
-            ctx.body = { error: 'Test endpoints are disabled in production' };
+            ctx.body = { error: 'Test endpoints are disabled outside explicit test/development environments' };
             return;
         }
         await next();
@@ -99,8 +111,15 @@ export function createTestRoutes(
 
     // 认证中间件（可选，测试环境可能不需要）
     router.use(async (ctx, next) => {
+        const expectedToken = getConfiguredTestApiToken();
+        if (!expectedToken) {
+            ctx.status = 503;
+            ctx.body = { error: 'Test API token is not configured' };
+            return;
+        }
+
         const token = ctx.headers['x-test-token'];
-        if (!token || token !== process.env.TEST_API_TOKEN) {
+        if (!token || token !== expectedToken) {
             ctx.status = 401;
             ctx.body = { error: 'Unauthorized' };
             return;

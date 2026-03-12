@@ -1,47 +1,22 @@
 import { spawn } from 'child_process';
-import path from 'node:path';
-
-const isWindows = process.platform === 'win32';
-const cmdCommand = isWindows ? 'cmd.exe' : undefined;
-
-export function spawnNodeScript(scriptPath, env) {
-  return spawn(process.execPath, [scriptPath], {
+export function spawnNodeScript(scriptPath, env, args = []) {
+  return spawn(process.execPath, [scriptPath, ...args], {
     stdio: 'inherit',
     env,
   });
+}
+
+export function spawnBundleRunner({ label, entry, outfile, tsconfig, env }) {
+  return spawnNodeScript('scripts/infra/dev-bundle-runner.mjs', env, [
+    '--label', label,
+    '--entry', entry,
+    '--outfile', outfile,
+    '--tsconfig', tsconfig,
+  ]);
 }
 
 export function spawnNpxCommand(args, env) {
-  if (isWindows) {
-    return spawn(cmdCommand, ['/c', 'npx', ...args], {
-      stdio: 'inherit',
-      env,
-    });
-  }
-
-  return spawn('npx', args, {
-    stdio: 'inherit',
-    env,
-  });
-}
-
-export function spawnTsxScript(args, env) {
-  const tsxCliPath = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  return spawn(process.execPath, [tsxCliPath, ...args], {
-    stdio: 'inherit',
-    env,
-  });
-}
-
-export function spawnPackageScript(scriptName, env) {
-  if (isWindows) {
-    return spawn('powershell.exe', ['-Command', `npm run ${scriptName}`], {
-      stdio: 'inherit',
-      env,
-    });
-  }
-
-  return spawn('npm', ['run', scriptName], {
+  return spawn(process.execPath, ['node_modules/npm/bin/npm-cli.js', 'exec', '--yes', '--', ...args], {
     stdio: 'inherit',
     env,
   });

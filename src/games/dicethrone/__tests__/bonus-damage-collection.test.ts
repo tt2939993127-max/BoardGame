@@ -238,6 +238,7 @@ describe('bonusDamage 自动收集测试', () => {
             target: { playerId: '1' },
             state,
             timestamp: Date.now(),
+            autoCollectBonusDamage: false,
             additionalModifiers: [{
                 id: '__bonus_damage_from_config__',
                 type: 'flat',

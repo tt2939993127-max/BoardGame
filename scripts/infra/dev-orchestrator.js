@@ -1,30 +1,14 @@
-import fs from 'node:fs';
 import net from 'node:net';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 const managedChildren = [];
 let shuttingDown = false;
 const repoRoot = process.cwd();
+const devBundleDir = process.env.DEV_BUNDLE_DIR || path.join('temp', 'dev-bundles');
 
-function resolveLocalCli(...segments) {
-    const cliPath = path.join(repoRoot, ...segments);
-    if (!fs.existsSync(cliPath)) {
-        throw new Error(`missing local cli: ${cliPath}`);
-    }
-    return cliPath;
-}
-
-const tsxCliPath = resolveLocalCli('node_modules', 'tsx', 'dist', 'cli.mjs');
-const nodemonCliPath = resolveLocalCli('node_modules', 'nodemon', 'bin', 'nodemon.js');
-
-function createChildEnv() {
-    const delimiter = process.platform === 'win32' ? ';' : ':';
-    const localBin = path.join(repoRoot, 'node_modules', '.bin');
-    return {
-        ...process.env,
-        PATH: `${localBin}${delimiter}${process.env.PATH || ''}`,
-    };
+function getBundleOutfile(...segments) {
+    return path.join(devBundleDir, ...segments);
 }
 
 function prefixOutput(label, stream, target) {
@@ -48,7 +32,7 @@ function prefixOutput(label, stream, target) {
 function startCommand(label, command, args = []) {
     const child = spawn(command, args, {
         cwd: repoRoot,
-        env: createChildEnv(),
+        env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -124,13 +108,26 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 async function main() {
-    console.log('[dev-orchestrator] starting api first');
-    startCommand('dev:api', process.execPath, [tsxCliPath, '--tsconfig', 'apps/api/tsconfig.json', 'apps/api/src/main.ts']);
-    await waitForPort(Number(process.env.API_SERVER_PORT) || 18001, 'api');
+    console.log('[dev-orchestrator] starting api and game in parallel');
+    startCommand('dev:api', process.execPath, [
+        'scripts/infra/dev-bundle-runner.mjs',
+        '--label', 'api',
+        '--entry', 'apps/api/src/main.ts',
+        '--outfile', getBundleOutfile('api', 'main.mjs'),
+        '--tsconfig', 'apps/api/tsconfig.json',
+    ]);
+    startCommand('dev:game', process.execPath, [
+        'scripts/infra/dev-bundle-runner.mjs',
+        '--label', 'game',
+        '--entry', 'server.ts',
+        '--outfile', getBundleOutfile('game', 'server.mjs'),
+        '--tsconfig', 'tsconfig.server.json',
+    ]);
 
-    console.log('[dev-orchestrator] starting game server');
-    startCommand('dev:game', process.execPath, [nodemonCliPath]);
-    await waitForPort(Number(process.env.GAME_SERVER_PORT) || 18000, 'game');
+    await Promise.all([
+        waitForPort(Number(process.env.API_SERVER_PORT) || 18001, 'api'),
+        waitForPort(Number(process.env.GAME_SERVER_PORT) || 18000, 'game'),
+    ]);
 
     console.log('[dev-orchestrator] starting frontend');
     startCommand('dev:frontend', process.execPath, ['scripts/infra/vite-with-logging.js']);

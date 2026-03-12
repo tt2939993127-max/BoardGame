@@ -65,14 +65,17 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 [playerId]: [...(selection.playerSelections[playerId] || []), factionId],
             };
 
-            // 顺序选秀逻辑：每个玩家选完 2 个派系后才轮到下一个玩家
-            const currentPlayerSelections = newPlayerSelections[playerId] || [];
+            // 蛇形选秀：第 1 轮按 turnOrder 正向选择，第 2 轮按 turnOrder 反向选择。
+            // 例如 2 人时顺序为 P0 → P1 → P1 → P0。
+            const totalPlayers = state.turnOrder.length;
+            const totalRequired = totalPlayers * 2;
+            const nextPickNumber = newTaken.length;
             let nextPlayerIndex = state.currentPlayerIndex;
-            
-            // 如果当前玩家已选满 2 个派系，切换到下一个玩家
-            if (currentPlayerSelections.length >= 2) {
-                const currentIdx = state.turnOrder.indexOf(playerId);
-                nextPlayerIndex = (currentIdx + 1) % state.turnOrder.length;
+
+            if (nextPickNumber < totalRequired) {
+                nextPlayerIndex = nextPickNumber < totalPlayers
+                    ? nextPickNumber
+                    : (totalRequired - 1 - nextPickNumber);
             }
 
             return {
@@ -480,11 +483,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
-            const player = state.players[playerId];
-            
-            // 检查是否是新的游戏回合（turnNumber 增加）
-            const isNewGameTurn = turnNumber > state.turnNumber;
-            
+
             // 重置天赋使用状态 + 清零临时力量修正（随从 + ongoing 行动卡）
             const newBases = state.bases.map(base => ({
                 ...base,
@@ -512,52 +511,21 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newSleepMarked = isSleepMarked
                 ? (state.sleepMarkedPlayers?.filter(p => p !== playerId) ?? [])
                 : state.sleepMarkedPlayers;
-            
-            // 如果是新的游戏回合，清空所有玩家的 minionsPlayedPerBase
-            // 否则只清空当前玩家的其他回合状态
-            let newPlayers: Record<PlayerId, SmashUpPlayer>;
-            if (isNewGameTurn) {
-                // 新游戏回合：清空所有玩家的 minionsPlayedPerBase
-                newPlayers = {};
-                for (const pid of Object.keys(state.players)) {
-                    const p = state.players[pid];
-                    if (pid === playerId) {
-                        // 当前玩家：清空所有回合状态
-                        newPlayers[pid] = {
-                            ...p,
-                            minionsPlayed: 0,
-                            minionLimit: 1,
-                            actionsPlayed: 0,
-                            actionLimit: newActionLimit,
-                            minionsPlayedPerBase: undefined,
-                            usedDiscardPlayAbilities: undefined,
-                            baseLimitedMinionQuota: undefined,
-                            baseLimitedSameNameRequired: undefined,
-                            extraMinionPowerCaps: undefined,
-                            extraMinionPowerMax: undefined,
-                            sameNameMinionRemaining: undefined,
-                            sameNameMinionDefId: null,
-                            pendingMinionPlayEffects: undefined,
-                        };
-                    } else {
-                        // 其他玩家：只清空 minionsPlayedPerBase
-                        newPlayers[pid] = {
-                            ...p,
-                            minionsPlayedPerBase: undefined,
-                        };
-                    }
-                }
-            } else {
-                // 同一游戏回合内的玩家回合：只清空当前玩家的回合状态，保留 minionsPlayedPerBase
-                newPlayers = {
-                    ...state.players,
-                    [playerId]: {
-                        ...player,
+
+            // Smash Up 的 each turn 以“当前玩家回合”为单位。
+            // 因此每个玩家回合开始时，都要清空全体玩家在各基地的本回合出牌计数，
+            // 否则会把“当前回合内基地全局首次”错误拉长成整轮。
+            const newPlayers: Record<PlayerId, SmashUpPlayer> = {};
+            for (const pid of Object.keys(state.players)) {
+                const current = state.players[pid];
+                if (pid === playerId) {
+                    newPlayers[pid] = {
+                        ...current,
                         minionsPlayed: 0,
                         minionLimit: 1,
                         actionsPlayed: 0,
                         actionLimit: newActionLimit,
-                        // minionsPlayedPerBase 保留，不清空
+                        minionsPlayedPerBase: undefined,
                         usedDiscardPlayAbilities: undefined,
                         baseLimitedMinionQuota: undefined,
                         baseLimitedSameNameRequired: undefined,
@@ -566,10 +534,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         sameNameMinionRemaining: undefined,
                         sameNameMinionDefId: null,
                         pendingMinionPlayEffects: undefined,
-                    },
+                    };
+                    continue;
+                }
+
+                newPlayers[pid] = {
+                    ...current,
+                    minionsPlayedPerBase: undefined,
                 };
             }
-            
+
             return {
                 ...state,
                 turnNumber,

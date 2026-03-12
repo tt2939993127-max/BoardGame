@@ -703,6 +703,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const { queue: spotlightQueue, dismiss: dismissSpotlight } = useCardSpotlightQueue<{ defId: string }>({
         entries: eventStreamEntries,
         currentPlayerId: spotlightViewerId,
+        // 联机时对手页依赖服务端确认事件驱动特写，不能在 reconcile 时静默吞掉。
+        consumeOnReconcile: true,
         triggerEventTypes: SPOTLIGHT_TRIGGER_EVENTS,
         extractCard: extractActionCard,
         maxQueue: 5,

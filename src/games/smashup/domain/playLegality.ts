@@ -1,0 +1,148 @@
+import type { ValidationResult } from '../../../engine/types';
+import type { ActionCardDef, PlayConstraint, SmashUpCore } from './types';
+import { getCardDef, getMinionDef } from '../data/cards';
+import { isOperationRestricted } from './ongoingEffects';
+import { getPlayerEffectivePowerOnBase } from './ongoingModifiers';
+import { mustUseBaseLimitedMinionQuota } from './utils';
+
+export function validateDiscardMinionPlaySemantics(
+    core: SmashUpCore,
+    playerId: string,
+    params: {
+        cardUid: string;
+        baseIndex: number;
+        consumesNormalLimit: boolean;
+    },
+): ValidationResult {
+    const player = core.players[playerId];
+    if (!player) return { valid: false, error: '玩家不存在' };
+
+    const { cardUid, baseIndex, consumesNormalLimit } = params;
+    if (baseIndex < 0 || baseIndex >= core.bases.length) {
+        return { valid: false, error: '无效的基地索引' };
+    }
+
+    if (consumesNormalLimit && player.minionsPlayed >= player.minionLimit) {
+        return { valid: false, error: '本回合随从额度已用完' };
+    }
+
+    const discardCard = player.discard.find(card => card.uid === cardUid);
+    if (!discardCard || discardCard.type !== 'minion') {
+        return { valid: false, error: '弃牌堆中没有该随从' };
+    }
+
+    const minionDef = getMinionDef(discardCard.defId);
+    const basePower = minionDef?.power ?? 0;
+    const usesBaseLimitedMinionQuota = consumesNormalLimit
+        && mustUseBaseLimitedMinionQuota(core, player, baseIndex, discardCard.defId, basePower);
+
+    if (isOperationRestricted(core, baseIndex, playerId, 'play_minion', {
+        minionDefId: discardCard.defId,
+        basePower,
+        usesBaseLimitedMinionQuota,
+    })) {
+        return { valid: false, error: '该基地禁止打出该随从' };
+    }
+
+    return { valid: true };
+}
+
+export function validateActionPlaySemantics(
+    core: SmashUpCore,
+    playerId: string,
+    params: {
+        defId: string;
+        targetBaseIndex?: number;
+        targetMinionUid?: string;
+        effectiveHandSize?: number;
+    },
+): ValidationResult {
+    const def = getCardDef(params.defId) as ActionCardDef | undefined;
+    if (!def) return { valid: false, error: '卡牌定义不存在' };
+
+    if (def.subtype === 'special') {
+        const cardTiming = def.specialTiming ?? 'beforeScoring';
+        if (cardTiming === 'beforeScoring') {
+            return { valid: false, error: '该特殊行动卡只能在基地计分前的响应窗口中打出' };
+        }
+        return { valid: false, error: '该特殊行动卡只能在基地计分后的响应窗口中打出' };
+    }
+
+    const targetBaseIndex = params.targetBaseIndex;
+    if (def.subtype === 'ongoing') {
+        if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
+            return { valid: false, error: '持续行动卡需要选择目标基地' };
+        }
+        if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
+            return { valid: false, error: '无效的基地索引' };
+        }
+
+        const ongoingTarget = def.ongoingTarget ?? 'base';
+        if (ongoingTarget === 'minion') {
+            if (!params.targetMinionUid) {
+                return { valid: false, error: '该持续行动卡需要选择目标随从' };
+            }
+            const targetMinion = core.bases[targetBaseIndex].minions.find(
+                minion => minion.uid === params.targetMinionUid,
+            );
+            if (!targetMinion) {
+                return { valid: false, error: '基地上没有该随从' };
+            }
+        } else if (params.targetMinionUid !== undefined) {
+            return { valid: false, error: '该持续行动卡不需要选择随从目标' };
+        }
+
+        if (def.playConstraint) {
+            const constraintError = checkPlayConstraint(
+                def.playConstraint,
+                core,
+                targetBaseIndex,
+                playerId,
+                params.effectiveHandSize,
+            );
+            if (constraintError) {
+                return { valid: false, error: constraintError };
+            }
+        }
+    }
+
+    if (typeof targetBaseIndex === 'number') {
+        const ongoingTarget = def.ongoingTarget ?? 'base';
+        if (ongoingTarget === 'base' && isOperationRestricted(core, targetBaseIndex, playerId, 'play_action')) {
+            return { valid: false, error: '该基地禁止打出行动卡' };
+        }
+    }
+
+    return { valid: true };
+}
+
+export function checkPlayConstraint(
+    constraint: PlayConstraint,
+    core: SmashUpCore,
+    baseIndex: number,
+    playerId: string,
+    effectiveHandSize?: number,
+): string | null {
+    if (constraint === 'requireOwnMinion') {
+        const hasOwnMinion = core.bases[baseIndex].minions.some(minion => minion.controller === playerId);
+        if (!hasOwnMinion) return '目标基地上必须有你的随从';
+        return null;
+    }
+
+    if (constraint === 'onlyCardInHand') {
+        const handSize = effectiveHandSize ?? (core.players[playerId]?.hand.length ?? 0);
+        if (handSize !== 1) return '只能在本卡是你的唯一手牌时打出';
+        return null;
+    }
+
+    if (typeof constraint === 'object' && constraint.type === 'requireOwnPower') {
+        const base = core.bases[baseIndex];
+        const myPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, playerId);
+        if (myPower < constraint.minPower) {
+            return `只能打到你至少拥有 ${constraint.minPower} 点力量的基地`;
+        }
+        return null;
+    }
+
+    return null;
+}

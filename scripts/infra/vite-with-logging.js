@@ -13,6 +13,9 @@
 import { spawn } from 'child_process';
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+
+await assertChildProcessSupport('Vite 开发服务器启动');
 
 const logDir = join(process.cwd(), 'logs');
 if (!existsSync(logDir)) {
@@ -38,7 +41,7 @@ log(`内存限制: ${process.execArgv.join(' ')}`);
 const viteArgs = process.argv.slice(2);
 log(`Vite 参数: ${viteArgs.join(' ')}`);
 
-const vite = spawn('node', [
+const vite = spawn(process.execPath, [
   '--max-old-space-size=4096',
   'node_modules/vite/bin/vite.js',
   ...viteArgs

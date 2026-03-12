@@ -6,6 +6,9 @@
 
 import { execSync } from 'child_process';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './e2e-port-config.js';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+
+await assertChildProcessSupport('E2E 测试环境检查', { probeFork: true, probeEsbuild: true });
 
 const DEV_PORTS = DEV_SERVER_PORTS;
 const E2E_PORTS = E2E_SINGLE_WORKER_PORTS;

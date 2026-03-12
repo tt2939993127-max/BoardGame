@@ -1,6 +1,6 @@
 /* @vitest-environment happy-dom */
 import { createElement } from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isMatchNotFoundError, validateStoredMatchSeat, type StoredMatchCredentials } from '../../hooks/match/useMatchStatus';
 
@@ -279,6 +279,14 @@ describe('Home 活跃对局缺房确认', () => {
 
         lobbyPresenceState = {
             ...lobbyPresenceState,
+            matches: [{ matchID: 'match-1', gameName: 'tictactoe', players: [] }],
+            exists: true,
+            isMissing: false,
+        };
+        rerender(createElement(Home));
+
+        lobbyPresenceState = {
+            ...lobbyPresenceState,
             matches: [],
             exists: false,
             isMissing: true,
@@ -295,5 +303,113 @@ describe('Home 活跃对局缺房确认', () => {
         await waitFor(() => {
             expect(screen.queryByText('lobby:home.activeMatch.status')).toBeNull();
         });
+    });
+
+    it('缺房确认遇到非 404 时会延迟重试，直到后续确认 404 再清理', async () => {
+        vi.useFakeTimers();
+        getMatchMock.mockReset()
+            .mockResolvedValueOnce({
+                matchID: 'match-1',
+                gameName: 'tictactoe',
+                players: [{ id: 0, name: 'Alice', isConnected: true }],
+            })
+            .mockRejectedValueOnce(new Error('500: transient error'))
+            .mockRejectedValueOnce(new Error('404: not found'));
+
+        try {
+            const flushEffects = async () => {
+                await act(async () => {
+                    await Promise.resolve();
+                });
+                await act(async () => {
+                    await Promise.resolve();
+                });
+            };
+
+            const { rerender } = render(createElement(Home));
+            await flushEffects();
+            expect(getMatchMock).toHaveBeenCalledTimes(1);
+
+            lobbyPresenceState = {
+                ...lobbyPresenceState,
+                matches: [],
+                exists: false,
+                isMissing: true,
+            };
+            rerender(createElement(Home));
+            await flushEffects();
+            expect(getMatchMock).toHaveBeenCalledTimes(2);
+            expect(clearMatchCredentialsMock).not.toHaveBeenCalled();
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(1500);
+            });
+            await flushEffects();
+
+            expect(getMatchMock).toHaveBeenCalledTimes(3);
+            expect(clearMatchCredentialsMock).toHaveBeenCalledWith('match-1');
+            expect(clearOwnerActiveMatchMock).toHaveBeenCalledWith('match-1');
+            expect(toastWarningMock).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('大厅快照持续更新时不会取消进行中的缺房确认', async () => {
+        let rejectMissingCheck!: (reason?: unknown) => void;
+        const pendingMissingCheck = new Promise<never>((_, reject) => {
+            rejectMissingCheck = reject;
+        });
+
+        getMatchMock.mockReset()
+            .mockResolvedValueOnce({
+                matchID: 'match-1',
+                gameName: 'tictactoe',
+                players: [{ id: 0, name: 'Alice', isConnected: true }],
+            })
+            .mockImplementationOnce(() => pendingMissingCheck)
+            .mockImplementation(() => new Promise(() => undefined));
+
+        const { rerender } = render(createElement(Home));
+
+        await screen.findByText('lobby:home.activeMatch.status');
+        expect(getMatchMock).toHaveBeenCalledTimes(1);
+
+        lobbyPresenceState = {
+            ...lobbyPresenceState,
+            matches: [],
+            exists: false,
+            isMissing: true,
+        };
+        rerender(createElement(Home));
+
+        await waitFor(() => {
+            expect(getMatchMock).toHaveBeenCalledTimes(2);
+        });
+
+        lobbyPresenceState = {
+            ...lobbyPresenceState,
+            matches: [{ matchID: 'match-2', gameName: 'tictactoe', players: [] }],
+            exists: false,
+            isMissing: true,
+        };
+        await act(async () => {
+            rerender(createElement(Home));
+            await Promise.resolve();
+        });
+
+        expect(getMatchMock).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+            rejectMissingCheck({ status: 404, message: 'Match not found' });
+            await Promise.resolve();
+        });
+
+        await waitFor(() => {
+            expect(clearMatchCredentialsMock).toHaveBeenCalledWith('match-1');
+            expect(clearOwnerActiveMatchMock).toHaveBeenCalledWith('match-1');
+        });
+        expect(markMatchCleanupNoticeSeenMock).toHaveBeenCalled();
+        expect(toastWarningMock).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
     });
 });

@@ -237,6 +237,7 @@ export const TestMatchRoom: React.FC = () => {
                             numPlayers={testConfig.numPlayers}
                             seed={testConfig.randomSeed}
                             playerId="0"
+                            followCurrentTurnPlayer
                         >
                             <GameHUD gameId={gameId} mode="test" />
                             <BoardBridge 

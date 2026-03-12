@@ -79,12 +79,18 @@ export async function waitForFactionDraft(page: Page, timeout = 60000) {
 /** 通过 UI 选择派系（按索引） - 增强版，带重试 */
 export async function selectFaction(page: Page, factionIndex: number, testInfo?: any) {
     console.log(`[SmashUp] 选择派系索引: ${factionIndex}`);
-    
-    // 1. 等待轮到该玩家（检查按钮文本）
+
+    // 1. 先点击派系卡，展开左侧详情面板；确认按钮只有在面板里才会渲染。
+    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') });
+    await expect(factionCards.nth(factionIndex)).toBeVisible({ timeout: 10000 });
+    await factionCards.nth(factionIndex).click();
+    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}`);
+
+    // 2. 等待详情面板中的确认按钮出现。
     const confirmButton = page.getByTestId('faction-confirm-button');
     await confirmButton.waitFor({ state: 'visible', timeout: 10000 });
-    
-    // 等待按钮文本变为"确认选择"（而不是"Wait for your turn"）
+
+    // 3. 等待按钮文本变为"确认选择"（而不是"Wait for your turn"）。
     await page.waitForFunction(
         () => {
             const button = document.querySelector('[data-testid="faction-confirm-button"]');
@@ -98,19 +104,14 @@ export async function selectFaction(page: Page, factionIndex: number, testInfo?:
         console.log(`[SmashUp]    按钮文本: ${buttonText}`);
         throw e;
     });
-    
-    console.log(`[SmashUp] ✅ 轮到该玩家，开始选择派系`);
-    
-    // 2. 点击派系卡牌
-    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') });
-    await factionCards.nth(factionIndex).click();
-    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}`);
-    
-    // 3. 等待按钮可点击（enabled）
+
+    console.log('[SmashUp] ✅ 轮到该玩家，确认按钮可用');
+
+    // 4. 等待按钮可点击（enabled）
     await expect(confirmButton).toBeEnabled({ timeout: 15000 });
     await page.waitForTimeout(300); // 等待动画稳定
-    
-    // 尝试点击，如果失败则重试
+
+    // 5. 尝试点击，如果失败则重试
     let clicked = false;
     for (let i = 0; i < 3; i++) {
         try {

@@ -15,6 +15,7 @@ import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { resolveOnPlay } from '../domain/abilityRegistry';
+import { validateActionPlaySemantics } from '../domain/playLegality';
 import { reduce } from '../domain/reduce';
 import { matchesDefId } from '../domain/utils';
 
@@ -22,7 +23,7 @@ import { matchesDefId } from '../domain/utils';
 export function registerSteampunkAbilities(): void {
     // 废物利用（行动卡）：从弃牌堆取回一张行动卡到手牌
     registerAbility('steampunk_scrap_diving', 'onPlay', steampunkScrapDiving);
-    // 机械师（随从 onPlay）：从弃牌堆打出一张持续行动卡
+    // 机械师（随从 onPlay）：从弃牌堆额外打出一张可打到基地上的行动牌
     registerAbility('steampunk_mechanic', 'onPlay', steampunkMechanic);
     // 换场（行动卡）：取回一张己?ongoing 行动卡到手牌 + 额外行动
     registerAbility('steampunk_change_of_venue', 'onPlay', steampunkChangeOfVenue);
@@ -216,17 +217,33 @@ function steampunkEscapeHatchTrigger(ctx: TriggerContext): SmashUpEvent[] {
 // ============================================================================
 
 /**
- * 机械臂?onPlay：从弃牌堆打出一张持续行动卡到基地
+ * 当前数据模型里，“可打到基地上的行动牌”统一表示为：
+ * ongoing 行动卡，且附着目标不是随从。
+ */
+function canMechanicPlayAction(def?: ActionCardDef): boolean {
+    return def?.subtype === 'ongoing' && (def.ongoingTarget ?? 'base') === 'base';
+}
+
+function getRecoveredActionEffectiveHandSize(state: SmashUpCore, playerId: string): number {
+    return (state.players[playerId]?.hand.length ?? 0) + 1;
+}
+
+/**
+ * 机械师 onPlay：从弃牌堆额外打出一张可打到基地上的行动牌
  */
 function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 机械师只能选择打出到基地上的持续行动卡（不包括打出到随从上的）
+    const effectiveHandSize = getRecoveredActionEffectiveHandSize(ctx.state, ctx.playerId);
+    // 机械师只能选择可打到基地上的行动牌（不包括打到随从上的和普通行动牌）
     const actionsInDiscard = player.discard.filter(c => {
         if (c.type !== 'action' || c.uid === ctx.cardUid) return false;
         const def = getCardDef(c.defId) as ActionCardDef | undefined;
-        // 排除 ongoingTarget === 'minion' 的持续行动卡
-        if (def?.subtype === 'ongoing' && def.ongoingTarget === 'minion') return false;
-        return true;
+        if (!canMechanicPlayAction(def)) return false;
+        return ctx.state.bases.some((_, baseIndex) => validateActionPlaySemantics(ctx.state, ctx.playerId, {
+            defId: c.defId,
+            targetBaseIndex: baseIndex,
+            effectiveHandSize,
+        }).valid);
     });
     if (actionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = actionsInDiscard.map((c, i) => {
@@ -455,7 +472,7 @@ export function registerSteampunkInteractionHandlers(): void {
         };
     });
 
-    registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, random, timestamp) => {
+    registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, _random, timestamp) => {
         // 检查取消标记
         if ((value as any).__cancel__) return { state, events: [] };
         
@@ -464,56 +481,46 @@ export function registerSteampunkInteractionHandlers(): void {
         if (!card) return { state, events: [] };
         const cardDefId = defId ?? card?.defId ?? '';
         const def = getCardDef(cardDefId) as ActionCardDef | undefined;
+        if (!canMechanicPlayAction(def)) {
+            return { state, events: [] };
+        }
+        const effectiveHandSize = getRecoveredActionEffectiveHandSize(state.core, playerId);
 
-        // ongoing 卡需要选择附着目标基地 → 创建后续交互
-        if (def?.subtype === 'ongoing') {
-            const baseOptions = state.core.bases.map((base, i) => {
-                const baseDef = getBaseDef(base.defId);
-                const name = baseDef?.name ?? base.defId;
-                return {
-                    id: `base-${i}`,
-                    label: name,
-                    value: { baseIndex: i, baseDefId: base.defId },
-                    _source: 'base' as const,
-                    displayMode: 'card' as const,
-                };
-            });
-            const interaction = createSimpleChoice(
-                `steampunk_mechanic_target_${timestamp}`, playerId,
-                '选择要将行动卡打出到的基地', baseOptions,
-                { sourceId: 'steampunk_mechanic_target', targetType: 'base' },
-            );
-            const extended = {
-                ...interaction,
-                data: { ...interaction.data, continuationContext: { cardUid, defId: cardDefId } },
-            };
-            // 先恢复到手牌（后续 ACTION_PLAYED 需要从手牌移除）
+        const baseOptions = state.core.bases.map((base, i) => {
+            const baseDef = getBaseDef(base.defId);
+            const name = baseDef?.name ?? base.defId;
             return {
-                state: queueInteraction(state, extended),
-                events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp)],
+                id: `base-${i}`,
+                label: name,
+                value: { baseIndex: i, baseDefId: base.defId },
+                _source: 'base' as const,
+                displayMode: 'card' as const,
             };
-        }
-
-        // standard 行动卡：恢复到手牌→立刻打出（不消耗行动额度）
-        const events: SmashUpEvent[] = [
-            recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp),
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId: cardDefId }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
-        ];
-        // 执行 onPlay 能力
-        const executor = resolveOnPlay(cardDefId);
-        if (executor) {
-            let simCore = state.core;
-            for (const evt of events) { simCore = reduce(simCore, evt); }
-            const ctx: AbilityContext = {
-                state: simCore, matchState: { ...state, core: simCore },
-                playerId, cardUid, defId: cardDefId, baseIndex: 0, random, now: timestamp,
-            };
-            const result = executor(ctx);
-            events.push(...result.events);
-            if (result.matchState) return { state: result.matchState, events };
-        }
-        return { state, events };
+        });
+        const validBaseOptions = baseOptions.filter((option) => {
+            const target = option.value as { baseIndex: number };
+            return validateActionPlaySemantics(state.core, playerId, {
+                defId: cardDefId,
+                targetBaseIndex: target.baseIndex,
+                effectiveHandSize,
+            }).valid;
+        });
+        if (validBaseOptions.length === 0) return { state, events: [] };
+        const interaction = createSimpleChoice(
+            `steampunk_mechanic_target_${timestamp}`, playerId,
+            '选择要将行动卡打出到的基地', baseOptions,
+            { sourceId: 'steampunk_mechanic_target', targetType: 'base' },
+        );
+        (interaction.data as { options?: unknown[] }).options = validBaseOptions;
+        const extended = {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { cardUid, defId: cardDefId } },
+        };
+        // 先恢复到手牌（后续 ACTION_PLAYED 需要从手牌移除）
+        return {
+            state: queueInteraction(state, extended),
+            events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp)],
+        };
     });
 
     registerInteractionHandler('steampunk_change_of_venue', (state, playerId, value, _iData, _random, timestamp) => {
@@ -630,6 +637,13 @@ export function registerSteampunkInteractionHandlers(): void {
         if (!state.core.bases[baseIndex]) return { state, events: [] };
         const handCard = findCardInPlayerZone(state.core, playerId, 'hand', cardUid, defId);
         if (!handCard) return { state, events: [] };
+        if (!validateActionPlaySemantics(state.core, playerId, {
+            defId,
+            targetBaseIndex: baseIndex,
+            effectiveHandSize: state.core.players[playerId]?.hand.length ?? 0,
+        }).valid) {
+            return { state, events: [] };
+        }
         const events: SmashUpEvent[] = [
             { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
             { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent,
