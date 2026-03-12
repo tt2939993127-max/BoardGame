@@ -9,7 +9,7 @@ export const WIZARD_POD_MINIONS: MinionCardDef[] = [
         nameEn: 'Archmage',
         faction: 'wizards_pod',
         power: 4,
-        abilityTags: ['ongoing', 'extra'],
+        abilityTags: ['talent', 'extra'],
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS4, index: 12 },
     },

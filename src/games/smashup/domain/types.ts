@@ -375,6 +375,8 @@ export interface SmashUpCore {
     sleepMarkedPlayers?: PlayerId[];
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
     minionsMovedToBaseThisTurn?: Record<string, Record<number, number>>;
+    /** 海盗 POD：私掠者每回合一次触发追踪（minionUid 列表） */
+    buccaneerPodUsedUids?: string[];
     /** 临时临界点修正（回合结束自动清零，baseIndex → delta） */
     tempBreakpointModifiers?: Record<number, number>;
     /**
