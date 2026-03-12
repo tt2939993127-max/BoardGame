@@ -34,6 +34,7 @@ export function registerGhostAbilities(): void {
     // === ongoing 效果注册 ===
     // ghost_incorporeal: 打出到随从上，持续：该随从不受其他玩家卡牌影响?
     registerProtection('ghost_incorporeal', 'affect', ghostIncorporealChecker);
+    registerProtection('ghost_incorporeal_pod', 'affect', ghostIncorporealChecker);
     // ghost_haunting: 持续：手牌≤2时，本随从不受其他玩家卡牌影响?
     registerProtection('ghost_haunting', 'affect', ghostHauntingChecker);
 
@@ -59,18 +60,16 @@ export function registerGhostAbilities(): void {
             if (player.hand.length > 2) return [];
             // 需要有随从额度才能打出（"任何你可以打出一个随从的时候"）
             if (player.minionsPlayed >= player.minionLimit) return [];
-            const cards = player.discard.filter(c => c.defId === 'ghost_spectre');
+            const cards = player.discard.filter(c => c.defId === 'ghost_spectre' || c.defId === 'ghost_spectre_pod');
             if (cards.length === 0) return [];
-            // 返回所有同 defId 的卡牌，用户选哪张都行
-            const def = getCardDef('ghost_spectre') as MinionCardDef | undefined;
             return cards.map(card => ({
                 card,
                 allowedBaseIndices: 'all' as const,
                 consumesNormalLimit: true, // 消耗正常随从额度
                 sourceId: 'ghost_spectre',
                 defId: card.defId,
-                power: def?.power ?? 0,
-                name: def?.name ?? card.defId,
+                power: (getCardDef(card.defId) as MinionCardDef | undefined)?.power ?? 0,
+                name: (getCardDef(card.defId) as MinionCardDef | undefined)?.name ?? card.defId,
             }));
         },
     });
@@ -173,7 +172,9 @@ function ghostGhostlyArrival(ctx: AbilityContext): AbilityResult {
  */
 function ghostIncorporealChecker(ctx: ProtectionCheckContext): boolean {
     // 检查目标随从是否附着了?ghost_incorporeal
-    const hasIncorporeal = ctx.targetMinion.attachedActions.some(a => a.defId === 'ghost_incorporeal');
+    const hasIncorporeal = ctx.targetMinion.attachedActions.some(
+        a => a.defId === 'ghost_incorporeal' || a.defId === 'ghost_incorporeal_pod'
+    );
     if (!hasIncorporeal) return false;
     // 只保护不受其他玩家影响?
     return ctx.sourcePlayerId !== ctx.targetMinion.controller;

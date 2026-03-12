@@ -325,7 +325,14 @@ function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerR
 
     // 无 matchState 时回退自动移动
     if (!ctx.matchState) {
-        return kings.map(k => moveMinion(k.uid, k.defId, k.fromBaseIndex, scoringBaseIndex, 'pirate_king', ctx.now));
+        return kings.map(k => moveMinion(
+            k.uid,
+            k.defId,
+            k.fromBaseIndex,
+            scoringBaseIndex,
+            k.defId === 'pirate_king_pod' ? 'pirate_king_pod' : 'pirate_king',
+            ctx.now
+        ));
     }
 
     // 链式处理每个海盗王：创建确认交互（发送给各 king 的 controller）
@@ -380,7 +387,14 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
     if (!ctx.matchState) {
         const events: SmashUpEvent[] = [];
         for (const m of firstMates) {
-            events.push(moveMinion(m.uid, m.defId, scoringBaseIndex, otherBases[0].index, 'pirate_first_mate', ctx.now));
+            events.push(moveMinion(
+                m.uid,
+                m.defId,
+                scoringBaseIndex,
+                otherBases[0].index,
+                m.defId === 'pirate_first_mate_pod' ? 'pirate_first_mate_pod' : 'pirate_first_mate',
+                ctx.now
+            ));
         }
         return events;
     }
@@ -930,7 +944,14 @@ export function registerPirateInteractionHandlers(): void {
         if (destBase === undefined) return undefined;
         const ctx = iData?.continuationContext as { mateUid: string; mateDefId: string; scoringBaseIndex: number } | undefined;
         if (!ctx) return undefined;
-        const events: SmashUpEvent[] = [moveMinion(ctx.mateUid, ctx.mateDefId, ctx.scoringBaseIndex, destBase, 'pirate_first_mate', timestamp)];
+        const events: SmashUpEvent[] = [moveMinion(
+            ctx.mateUid,
+            ctx.mateDefId,
+            ctx.scoringBaseIndex,
+            destBase,
+            ctx.mateDefId === 'pirate_first_mate_pod' ? 'pirate_first_mate_pod' : 'pirate_first_mate',
+            timestamp
+        )];
         
         // 【通用修复】如果这是最后一个交互，补发延迟事件
         if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {

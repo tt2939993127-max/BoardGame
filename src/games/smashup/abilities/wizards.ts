@@ -104,7 +104,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
             { id: 'to_hand', label: '放入手牌', value: { action: 'to_hand' } },
             { id: 'play_extra', label: '作为额外行动打出', value: { action: 'play_extra' } },
         ],
-        { sourceId: 'wizard_neophyte', displayCard: { defId: topCard.defId } },
+        { sourceId: 'wizard_neophyte', targetType: 'generic', displayCard: { defId: topCard.defId } } as any,
     );
     const extended = {
         ...interaction,
@@ -169,8 +169,8 @@ export function registerWizardAbilities(): void {
     ];
 
     for (const [id, handler] of abilities) {
-        // 自动识别 talent 还是 onPlay
-        const timing = id.includes('_archmage_pod') ? 'talent' : 'onPlay';
+        // POD 版大法师为 talent，其余为 onPlay
+        const timing = id === 'wizard_archmage_pod' ? 'talent' : 'onPlay';
         registerAbility(id, timing, handler);
     }
 
@@ -457,7 +457,7 @@ export function registerWizardInteractionHandlers(): void {
             const interaction = createSimpleChoice(
                 `wizard_neophyte_choose_base_${timestamp}`, playerId,
                 `选择「${cardDef?.name ?? defId}」的目标基地`, baseOptions,
-                { sourceId: 'wizard_neophyte_choose_base', displayCard: { defId } },
+                { sourceId: 'wizard_neophyte_choose_base', displayCard: { defId } } as any,
             );
             // 手动添加 continuationContext（与第一个交互相同的模式）
             const extended = {
