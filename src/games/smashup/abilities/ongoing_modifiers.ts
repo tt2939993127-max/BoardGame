@@ -11,6 +11,7 @@ import type { MinionOnBase, SmashUpCore } from '../domain/types';
 import { getBaseDef } from '../data/cards';
 import { isMicrobot } from '../domain/utils';
 import type { PlayerId } from '../../../engine/types';
+import { registerKillerPlantModifiers as registerKillerPlantAbilitiesModifiers } from './killer_plants';
 
 // ============================================================================
 // 辅助函数
@@ -138,7 +139,7 @@ function registerNinjaModifiers(): void {
 }
 
 // ============================================================================
-// 食人花派系?
+// 食人花派系
 // ============================================================================
 
 function registerKillerPlantModifiers(): void {
@@ -149,6 +150,9 @@ function registerKillerPlantModifiers(): void {
     // 规则："持续：自你的回合开始时，将本基地的爆破点降低到0点。"
     // 实现方式：onTurnStart 触发器产生 BREAKPOINT_MODIFIED 事件（tempBreakpointModifiers，回合结束自动清零）
     // 注册在 killer_plants.ts 的 registerKillerPlantAbilities() 中
+
+    // 注册派系自定义力量修正（Weed Eater POD）
+    registerKillerPlantAbilitiesModifiers();
 }
 
 // ============================================================================

@@ -718,6 +718,7 @@ export type SmashUpEvent =
     | AllFactionsSelectedEvent
     | MinionDestroyedEvent
     | MinionMovedEvent
+    | MinionMetadataUpdatedEvent
     | PowerCounterAddedEvent
     | PowerCounterRemovedEvent
     | OngoingAttachedEvent
@@ -796,6 +797,17 @@ export interface MinionMovedEvent extends GameEvent<typeof SU_EVENTS.MINION_MOVE
         minionDefId: string;
         fromBaseIndex: number;
         toBaseIndex: number;
+        reason: string;
+    };
+}
+
+/** 随从元数据更新事件（用于 POD 等复杂状态追踪） */
+export interface MinionMetadataUpdatedEvent extends GameEvent<typeof SU_EVENTS.MINION_METADATA_UPDATED> {
+    payload: {
+        minionUid: string;
+        /** 方便定位的基地索引（可选，reducer 会回退全场扫描） */
+        baseIndex?: number;
+        metadataUpdate: Record<string, unknown>;
         reason: string;
     };
 }
