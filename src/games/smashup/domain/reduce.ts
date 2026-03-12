@@ -952,6 +952,29 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return { ...state, bases: newBases };
         }
 
+        case SU_EVENTS.MINION_METADATA_UPDATED: {
+            const { minionUid, baseIndex, metadataUpdate } = (event as any as { payload: { minionUid: string; baseIndex?: number; metadataUpdate: Record<string, unknown> } }).payload;
+            const tryUpdateBase = (b: BaseInPlay) => ({
+                ...b,
+                minions: b.minions.map(m => {
+                    if (m.uid !== minionUid) return m;
+                    return { ...m, metadata: { ...(m.metadata ?? {}), ...metadataUpdate } };
+                }),
+            });
+
+            // 优先使用 baseIndex 定位；否则回退全场扫描
+            if (typeof baseIndex === 'number' && state.bases[baseIndex]) {
+                return {
+                    ...state,
+                    bases: state.bases.map((b, i) => (i === baseIndex ? tryUpdateBase(b) : b)),
+                };
+            }
+            return {
+                ...state,
+                bases: state.bases.map(tryUpdateBase),
+            };
+        }
+
         case SU_EVENTS.POWER_COUNTER_ADDED: {
             const { minionUid, amount } = (event as PowerCounterAddedEvent).payload;
             // 力量指示物：操作 powerCounters 字段（独立可追踪实体）
