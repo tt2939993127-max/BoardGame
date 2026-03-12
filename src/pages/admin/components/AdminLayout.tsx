@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useEffect, Suspense } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useModalStack } from '../../../contexts/ModalStackContext';
-import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen, Activity, Package, Heart, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen, Activity, Package, Heart, Bell, ScrollText } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { motion } from 'framer-motion';
 
@@ -16,18 +16,28 @@ export default function AdminLayout() {
         closeAll();
     }, [closeAll]);
 
-
-    const navItems = [
-        { icon: LayoutDashboard, label: '概览', path: '/admin' },
-        { icon: Users, label: '用户管理', path: '/admin/users' },
-        { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
-        { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
-        { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
-        { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
-        { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
-        { icon: Bell, label: '系统通知', path: '/admin/notifications' },
-        { icon: Activity, label: '系统健康', path: '/admin/health' },
-    ];
+    const isDeveloper = user?.role === 'developer';
+    const navItems = isDeveloper
+        ? [
+            { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
+        ]
+        : [
+            { icon: LayoutDashboard, label: '概览', path: '/admin' },
+            { icon: Users, label: '用户管理', path: '/admin/users' },
+            { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
+            { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
+            { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
+            { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
+            { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
+            { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
+            { icon: Bell, label: '系统通知', path: '/admin/notifications' },
+            { icon: Activity, label: '系统健康', path: '/admin/health' },
+        ];
+    const roleLabel = user?.role === 'admin'
+        ? '管理员'
+        : user?.role === 'developer'
+            ? '开发者'
+            : '普通用户';
 
     const isActive = (path: string) => {
         if (path === '/admin') return location.pathname === '/admin';
@@ -44,8 +54,12 @@ export default function AdminLayout() {
                             <span className="text-white font-bold text-lg">A</span>
                         </div>
                         <div>
-                            <h1 className="text-sm font-bold text-white tracking-wide">ADMIN PANEL</h1>
-                            <p className="text-[10px] uppercase tracking-wider font-semibold opacity-60">BoardGame Platform</p>
+                            <h1 className="text-sm font-bold text-white tracking-wide">
+                                {isDeveloper ? 'CONTENT PANEL' : 'ADMIN PANEL'}
+                            </h1>
+                            <p className="text-[10px] uppercase tracking-wider font-semibold opacity-60">
+                                {isDeveloper ? 'Game Changelog Studio' : 'BoardGame Platform'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -95,7 +109,7 @@ export default function AdminLayout() {
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-white truncate">{user?.username}</p>
-                                <p className="text-xs text-zinc-500 truncate">{user?.role || 'Admin'}</p>
+                                <p className="text-xs text-zinc-500 truncate">{roleLabel}</p>
                             </div>
                         </div>
                         <button

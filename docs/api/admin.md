@@ -1,12 +1,13 @@
 # 后台管理 API
 
-> 所有接口需要管理员权限（`role: 'admin'`）
+> 默认需要 `admin` 权限；其中更新日志管理接口允许 `admin` 与 `developer` 访问。`developer` 仅可操作自己被分配到的游戏。
 
 ## 概述
 
 后台管理 API 提供平台数据的查看和管理功能，包括：
 - 统计数据
-- 用户管理（列表、详情、封禁）
+- 用户管理（列表、详情、角色、封禁）
+- 游戏更新日志管理
 - 对局记录查看
 
 ---
@@ -117,6 +118,7 @@ Authorization: Bearer <admin_token>
 | page | number | 否 | 页码，默认 1 |
 | limit | number | 否 | 每页数量，默认 20，最大 100 |
 | search | string | 否 | 搜索关键词（用户名或邮箱） |
+| role | string | 否 | 角色筛选，支持 `user` / `developer` / `admin` |
 | banned | boolean | 否 | 筛选封禁状态 |
 
 **请求示例**:
@@ -134,7 +136,8 @@ Authorization: Bearer <admin_token>
       "username": "testuser",
       "email": "test@example.com",
       "emailVerified": true,
-      "role": "user",
+      "role": "developer",
+      "developerGameIds": ["smashup", "dicethrone"],
       "banned": false,
       "matchCount": 42,
       "createdAt": "2026-01-01T00:00:00.000Z",
@@ -173,7 +176,8 @@ Authorization: Bearer <admin_token>
     "username": "testuser",
     "email": "test@example.com",
     "emailVerified": true,
-    "role": "user",
+    "role": "developer",
+    "developerGameIds": ["smashup", "dicethrone"],
     "banned": false,
     "bannedAt": null,
     "bannedReason": null,
@@ -203,7 +207,7 @@ Authorization: Bearer <admin_token>
 
 ### PATCH /admin/users/:id/role
 
-更新用户角色（普通用户 `user` / 管理员 `admin`）。操作会写入审计日志。
+更新用户角色（`user` / `developer` / `admin`）。操作会写入审计日志，仅 `admin` 可调用。
 
 **路径参数**:
 | 参数 | 类型 | 说明 |
@@ -213,13 +217,15 @@ Authorization: Bearer <admin_token>
 **请求体**:
 ```json
 {
-  "role": "admin"
+  "role": "developer",
+  "developerGameIds": ["smashup", "dicethrone"]
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| role | string | 是 | `user` 或 `admin` |
+| role | string | 是 | `user` / `developer` / `admin` |
+| developerGameIds | string[] | 否 | 当 `role='developer'` 时必填，表示该开发者可管理的多个游戏 |
 
 **请求示例**:
 ```http
@@ -228,7 +234,8 @@ Authorization: Bearer <admin_token>
 Content-Type: application/json
 
 {
-  "role": "admin"
+  "role": "developer",
+  "developerGameIds": ["smashup", "dicethrone"]
 }
 ```
 
@@ -239,7 +246,8 @@ Content-Type: application/json
   "user": {
     "id": "507f1f77bcf86cd799439011",
     "username": "testuser",
-    "role": "admin"
+    "role": "developer",
+    "developerGameIds": ["smashup", "dicethrone"]
   },
   "changed": true
 }
@@ -248,7 +256,119 @@ Content-Type: application/json
 **错误响应**:
 - `400` - 不能修改自己的管理员身份
 - `400` - 至少需要保留一个管理员账号
+- `400` - 将用户设为 `developer` 时未提供可管理游戏
 - `404` - 用户不存在
+
+---
+
+## 游戏更新日志管理
+
+> 以下接口允许 `admin` 与 `developer` 访问。`developer` 只能读取/写入其 `developerGameIds` 内的游戏。
+
+### GET /admin/game-changelogs
+
+获取后台可管理的更新日志列表。
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| gameId | string | 否 | 按目标游戏筛选 |
+
+**请求示例**:
+```http
+GET /admin/game-changelogs?gameId=smashup
+Authorization: Bearer <token>
+```
+
+**响应示例**:
+```json
+{
+  "items": [
+    {
+      "id": "507f1f77bcf86cd799439031",
+      "gameId": "smashup",
+      "title": "平衡性调整",
+      "versionLabel": "v1.2.0",
+      "content": "修正若干卡牌数值。",
+      "published": true,
+      "pinned": false,
+      "publishedAt": "2026-03-12T10:00:00.000Z",
+      "createdBy": "507f1f77bcf86cd799439001",
+      "updatedBy": "507f1f77bcf86cd799439001",
+      "createdAt": "2026-03-12T09:00:00.000Z",
+      "updatedAt": "2026-03-12T10:00:00.000Z"
+    }
+  ],
+  "availableGameIds": ["smashup", "dicethrone"]
+}
+```
+
+**响应字段**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items | array | 当前角色可管理的更新日志列表 |
+| availableGameIds | string[] \| null | `developer` 返回可管理游戏列表；`admin` 返回 `null` |
+
+---
+
+### POST /admin/game-changelogs
+
+创建更新日志。
+
+**请求体**:
+```json
+{
+  "gameId": "smashup",
+  "title": "平衡性调整",
+  "versionLabel": "v1.2.0",
+  "content": "修正若干卡牌数值。",
+  "published": true,
+  "pinned": false
+}
+```
+
+**错误响应**:
+- `403` - `developer` 试图操作未分配的游戏
+- `403` - 当前 `developer` 未分配任何游戏
+
+---
+
+### PUT /admin/game-changelogs/:id
+
+更新、发布或撤回发布指定更新日志。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 更新日志 ID |
+
+**请求体**: 所有字段可选，字段语义与创建接口一致。
+
+**错误响应**:
+- `403` - `developer` 试图修改未分配游戏的日志
+- `404` - 更新日志不存在
+
+---
+
+### DELETE /admin/game-changelogs/:id
+
+删除指定更新日志。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 更新日志 ID |
+
+**响应示例**:
+```json
+{
+  "deleted": true
+}
+```
+
+**错误响应**:
+- `403` - `developer` 试图删除未分配游戏的日志
+- `404` - 更新日志不存在
 
 ---
 

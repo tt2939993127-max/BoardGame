@@ -71,14 +71,29 @@
   "tabs": {
     "lobby": "Lobby",
     "reviews": "Reviews",
-    "leaderboard": "Leaderboard"
+    "leaderboard": "Leaderboard",
+    "changelog": "Changelog"
   },
   "leaderboard": {
     "loading": "Loading...",
     "title": "Top Wins",
     "empty": "No data",
     "record": "{{wins}} W / {{matches}} G",
-    "error": "Failed to load leaderboard"
+    "error": "Failed to load leaderboard",
+    "changelogTitle": "Changelog",
+    "changelogLoading": "Loading changelog...",
+    "changelogEmpty": "No changelog yet",
+    "changelogError": "Failed to load changelog",
+    "changelogPublishedAt": "Latest update: {{date}}",
+    "changelogPinned": "Pinned"
+  },
+  "authorInfo": {
+    "button": "By {{author}}",
+    "buttonHint": "Click to view author information",
+    "title": "Author",
+    "game": "Work: {{game}}",
+    "hint": "This entry currently shows the credited author. More detailed creator info can expand here later.",
+    "close": "Close"
   },
   "player": {
     "guest": "Guest{{id}}"

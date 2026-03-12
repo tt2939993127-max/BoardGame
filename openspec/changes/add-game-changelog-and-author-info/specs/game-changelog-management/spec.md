@@ -15,29 +15,48 @@
 ### Requirement: 后台单游戏更新日志管理
 系统 SHALL 在后台提供按游戏维护更新日志的管理能力，支持创建、编辑、发布、撤回发布与删除。
 
-#### Scenario: 为指定游戏创建草稿
-- **WHEN** 已授权管理员在后台提交包含目标 `gameId` 的更新日志
+#### Scenario: 管理员为任意游戏创建草稿
+- **WHEN** `admin` 在后台提交包含目标 `gameId` 的更新日志
 - **THEN** 系统为该游戏保存一条日志记录
 - **AND** 在未发布前该记录保持草稿状态
 
+#### Scenario: 开发者只能管理被分配到的游戏
+- **WHEN** `developer` 对其 `developerGameIds` 中的某个 `gameId` 创建、编辑、发布或删除更新日志
+- **THEN** 系统允许该操作成功
+
+#### Scenario: 开发者不能管理未分配的游戏
+- **WHEN** `developer` 对不在其 `developerGameIds` 中的 `gameId` 执行更新日志写操作
+- **THEN** 系统拒绝该操作
+
 #### Scenario: 发布草稿
-- **WHEN** 已授权管理员将某条草稿日志切换为已发布
+- **WHEN** 已授权的 `admin` 或 `developer` 将某条草稿日志切换为已发布
 - **THEN** 该日志出现在对应游戏的公开读取接口结果中
 - **AND** 后台列表展示该日志的目标游戏与发布状态
 
-### Requirement: 管理员按游戏更新日志权限设置
-系统 SHALL 支持为管理员配置“全部游戏”或“指定游戏”的更新日志管理范围，并在写接口中强制执行。
+### Requirement: 后台角色与开发者游戏范围配置
+系统 SHALL 使用 `user / developer / admin` 角色模型管理后台权限，并允许 `admin` 为 `developer` 分配多个可管理游戏。
 
-#### Scenario: 历史管理员默认保留全量权限
-- **WHEN** 一个已有管理员账号还没有显式配置更新日志范围
-- **THEN** 系统按“全部游戏”解释其更新日志权限
+#### Scenario: 管理员可以授权同级管理员
+- **WHEN** `admin` 在用户管理中将另一个用户的角色改为 `admin`
+- **THEN** 目标用户获得完整后台权限
+- **AND** 目标用户后续也可以继续授权其他用户为 `admin`
 
-#### Scenario: 将管理员限制为指定游戏
-- **WHEN** 管理员账号被设置为“指定游戏”模式
-- **THEN** 该账号只能对配置列表中的 `gameId` 执行更新日志写操作
-- **AND** 对未配置游戏的写操作会被拒绝
+#### Scenario: 管理员为开发者分配多个游戏
+- **WHEN** `admin` 在用户管理中将某个用户设置为 `developer` 并提交多个 `gameId`
+- **THEN** 系统持久化该用户的 `developerGameIds`
+- **AND** 用户列表与用户详情读取接口返回最新角色与游戏范围
 
-#### Scenario: 后台保存管理员权限范围
-- **WHEN** 另一名管理员在后台用户详情中保存某个管理员的更新日志权限范围
-- **THEN** 系统持久化该模式与 `gameId` 列表
-- **AND** 用户详情读取接口返回最新配置
+#### Scenario: 开发者必须至少绑定一个游戏
+- **WHEN** `admin` 尝试将某个用户设置为 `developer` 但未提供任何 `gameId`
+- **THEN** 系统拒绝该角色变更
+
+### Requirement: 开发者后台访问边界
+系统 SHALL 将 `developer` 的后台入口限制在更新日志管理范围内。
+
+#### Scenario: 开发者可以进入更新日志后台
+- **WHEN** `developer` 访问 `/admin/changelogs`
+- **THEN** 系统允许其进入更新日志管理页
+
+#### Scenario: 开发者不能进入其他后台页面
+- **WHEN** `developer` 访问 `/admin/users`、`/admin/matches` 或其他非更新日志后台页面
+- **THEN** 系统拒绝该访问或回退到 `/admin/changelogs`

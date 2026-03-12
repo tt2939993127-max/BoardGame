@@ -35,6 +35,7 @@ export interface GameManifestEntry {
     enabled: boolean;
     titleKey: string;
     descriptionKey: string;
+    authorName?: string;
     category: GameCategory;
     playersKey: string;
     icon: string;

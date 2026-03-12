@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { DebugProvider } from './contexts/DebugContext';
 import { TestHarness } from './engine/testing';
 import { TutorialProvider } from './contexts/TutorialContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';
 import { CursorPreferenceProvider } from './core/cursor/CursorPreferenceContext';
 import { AudioProvider } from './contexts/AudioContext';
@@ -61,6 +61,7 @@ const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayou
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
 const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
+const GameChangelogsPage = React.lazy(() => import('./pages/admin/GameChangelogs'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
 const RoomsPage = React.lazy(() => import('./pages/admin/Rooms'));
 const UgcPackagesPage = React.lazy(() => import('./pages/admin/UgcPackages'));
@@ -72,6 +73,7 @@ const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest
 
 const AppContent = () => {
   const { t } = useTranslation('lobby');
+  const { user } = useAuth();
   
   // Token 自动刷新
   useTokenRefresh();
@@ -83,6 +85,12 @@ const AppContent = () => {
       initialLoader.remove();
     }
   }, []);
+
+  const renderAdminOnly = (element: React.ReactNode) => (
+    <AdminGuard allowedRoles={['admin']} fallbackPath="/admin/changelogs">
+      {element}
+    </AdminGuard>
+  );
 
   return (
     <CursorPreferenceProvider>
@@ -116,22 +124,30 @@ const AppContent = () => {
 
                     {/* Admin Routes */}
                     <Route path="/admin" element={
-                      <AdminGuard>
+                      <AdminGuard allowedRoles={['admin', 'developer']}>
                         <React.Suspense fallback={<LoadingScreen title={t('matchRoom.admin.dashboard')} />}>
                           <AdminLayout />
                         </React.Suspense>
                       </AdminGuard>
                     }>
-                      <Route index element={<AdminDashboard />} />
-                      <Route path="users" element={<UsersPage />} />
-                      <Route path="users/:id" element={<UserDetailPage />} />
-                      <Route path="matches" element={<MatchesPage />} />
-                      <Route path="rooms" element={<RoomsPage />} />
-                      <Route path="ugc" element={<UgcPackagesPage />} />
-                      <Route path="sponsors" element={<SponsorsPage />} />
-                      <Route path="feedback" element={<FeedbackPage />} />
-                      <Route path="health" element={<SystemHealthPage />} />
-                      <Route path="notifications" element={<NotificationsPage />} />
+                      <Route path="changelogs" element={<GameChangelogsPage />} />
+                      <Route
+                        index
+                        element={
+                          user?.role === 'developer'
+                            ? <Navigate to="changelogs" replace />
+                            : renderAdminOnly(<AdminDashboard />)
+                        }
+                      />
+                      <Route path="users" element={renderAdminOnly(<UsersPage />)} />
+                      <Route path="users/:id" element={renderAdminOnly(<UserDetailPage />)} />
+                      <Route path="matches" element={renderAdminOnly(<MatchesPage />)} />
+                      <Route path="rooms" element={renderAdminOnly(<RoomsPage />)} />
+                      <Route path="ugc" element={renderAdminOnly(<UgcPackagesPage />)} />
+                      <Route path="sponsors" element={renderAdminOnly(<SponsorsPage />)} />
+                      <Route path="feedback" element={renderAdminOnly(<FeedbackPage />)} />
+                      <Route path="health" element={renderAdminOnly(<SystemHealthPage />)} />
+                      <Route path="notifications" element={renderAdminOnly(<NotificationsPage />)} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

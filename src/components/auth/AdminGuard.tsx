@@ -1,8 +1,18 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, type UserRole } from '../../contexts/AuthContext';
 
-export default function AdminGuard({ children }: { children: ReactNode }) {
+type AdminGuardProps = {
+    children: ReactNode;
+    allowedRoles?: UserRole[];
+    fallbackPath?: string;
+};
+
+export default function AdminGuard({
+    children,
+    allowedRoles = ['admin'],
+    fallbackPath = '/',
+}: AdminGuardProps) {
     const { user, isLoading } = useAuth();
     const location = useLocation();
 
@@ -14,8 +24,8 @@ export default function AdminGuard({ children }: { children: ReactNode }) {
         );
     }
 
-    if (!user || user.role !== 'admin') {
-        return <Navigate to="/" state={{ from: location }} replace />;
+    if (!user || !allowedRoles.includes(user.role)) {
+        return <Navigate to={fallbackPath} state={{ from: location }} replace />;
     }
 
     return <>{children}</>;

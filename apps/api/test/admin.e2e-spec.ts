@@ -22,6 +22,8 @@ import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from '../src/modules/ad
 import { UgcPackage, type UgcPackageDocument } from '../src/modules/ugc/schemas/ugc-package.schema';
 import { UgcAsset, type UgcAssetDocument } from '../src/modules/ugc/schemas/ugc-asset.schema';
 import { AdminService } from '../src/modules/admin/admin.service';
+import { GameChangelogModule } from '../src/modules/game-changelog/game-changelog.module';
+import { GameChangelog, type GameChangelogDocument } from '../src/modules/game-changelog/game-changelog.schema';
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 
 // MongoDB 内存服务器在某些环境下启动很慢或超时，暂时跳过测试
@@ -294,7 +296,7 @@ describe.skip('Admin Module (e2e)', () => {
 
         const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
         expect(logs).toHaveLength(2);
-        expect(logs.map(log => log.action)).toEqual(['grant-admin', 'revoke-admin']);
+        expect(logs.map(log => log.action)).toEqual(['change-role', 'change-role']);
         expect(logs.every(log => log.status === 'updated')).toBe(true);
         expect(logs.every(log => typeof log.message === 'string' && log.message.includes(`targetUserId=${userId}`))).toBe(true);
 
@@ -506,7 +508,6 @@ describe.skip('Admin Module (e2e)', () => {
 
     it('删除用户 - 级联清理', async () => {
         const { adminToken, adminId, userId } = await seedUsers();
-        const otherId = new Types.ObjectId();
         await friendModel.create({ user: adminId, friend: userId, status: 'accepted' });
         await messageModel.create({ from: adminId, to: userId, content: 'hi', type: 'text' });
         await reviewModel.create({ user: userId, gameId: 'tictactoe', isPositive: true, content: '好玩' });
@@ -665,11 +666,59 @@ describe('Admin user role update (e2e)', () => {
             .sort({ createdAt: 1 })
             .lean();
 
-        expect(logs.map(log => log.action)).toEqual(['grant-admin', 'revoke-admin', 'revoke-admin']);
+        expect(logs.map(log => log.action)).toEqual(['change-role', 'change-role', 'change-role']);
         expect(logs.map(log => log.status)).toEqual(['updated', 'updated', 'failed']);
         expect(logs[0]?.targetEmail).toBe(userEmail);
         expect(logs[2]?.targetEmail).toBe(adminEmail);
         expect(logs[2]?.message).toContain('self_role_change_forbidden');
+    });
+
+    it('可将用户设置为 developer 并保存多个游戏', async () => {
+        const { adminToken, userId, userEmail } = await seedUsers();
+
+        const updateRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                role: 'developer',
+                developerGameIds: ['smashup', 'dicethrone', 'smashup'],
+            })
+            .expect(200);
+
+        expect(updateRes.body.user.role).toBe('developer');
+        expect(updateRes.body.user.developerGameIds).toEqual(['smashup', 'dicethrone']);
+        expect(updateRes.body.changed).toBe(true);
+
+        const updatedUser = await userModel.findById(userId).lean();
+        expect(updatedUser?.role).toBe('developer');
+        expect(updatedUser?.developerGameIds).toEqual(['smashup', 'dicethrone']);
+
+        const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
+        expect(logs.at(-1)?.action).toBe('change-role');
+        expect(logs.at(-1)?.status).toBe('updated');
+        expect(logs.at(-1)?.message).toContain('developerGameIds=smashup,dicethrone');
+    });
+
+    it('将用户设置为 developer 但不分配游戏会被拒绝', async () => {
+        const { adminToken, userId, userEmail } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                role: 'developer',
+                developerGameIds: [],
+            })
+            .expect(400);
+
+        const updatedUser = await userModel.findById(userId).lean();
+        expect(updatedUser?.role).toBe('user');
+        expect(updatedUser?.developerGameIds ?? []).toEqual([]);
+
+        const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
+        expect(logs.at(-1)?.action).toBe('change-role');
+        expect(logs.at(-1)?.status).toBe('failed');
+        expect(logs.at(-1)?.message).toContain('developer_games_required');
     });
 
     it('并发互相降权时仍会保留至少一名管理员', async () => {
@@ -692,13 +741,220 @@ describe('Admin user role update (e2e)', () => {
         expect(await userModel.countDocuments({ role: 'admin' })).toBe(1);
 
         const revokeLogs = await adminAuditModel
-            .find({ action: 'revoke-admin' })
+            .find({ action: 'change-role' })
             .sort({ createdAt: 1 })
             .lean();
 
         expect(revokeLogs).toHaveLength(2);
         expect(revokeLogs.map((log) => log.status).sort()).toEqual(['failed', 'updated']);
         expect(revokeLogs.some((log) => log.message?.includes('must_keep_one_admin'))).toBe(true);
+    });
+});
+
+describe('Game changelog access (e2e)', () => {
+    let mongo: MongoMemoryServer | null;
+    let app: import('@nestjs/common').INestApplication;
+    let userModel: Model<UserDocument>;
+    let changelogModel: Model<GameChangelogDocument>;
+    let authService: AuthService;
+
+    beforeAll(async () => {
+        const externalMongoUri = process.env.MONGO_URI;
+        mongo = externalMongoUri ? null : await MongoMemoryServer.create();
+        const mongoUri = externalMongoUri ?? mongo?.getUri();
+        if (!mongoUri) {
+            throw new Error('缺少 MongoDB 连接地址，请配置 MONGO_URI 或启用内存 MongoDB');
+        }
+
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                CacheModule.register({ isGlobal: true }),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_game_changelog' } : undefined),
+                AuthModule,
+                AdminModule,
+                GameChangelogModule,
+            ],
+        }).compile();
+
+        app = moduleRef.createNestApplication();
+        userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
+        changelogModel = moduleRef.get<Model<GameChangelogDocument>>(getModelToken(GameChangelog.name));
+        authService = moduleRef.get<AuthService>(AuthService);
+        app.useGlobalPipes(
+            new ValidationPipe({
+                whitelist: true,
+                transform: true,
+            })
+        );
+        app.useGlobalFilters(new GlobalHttpExceptionFilter());
+        await app.init();
+    });
+
+    beforeEach(async () => {
+        await Promise.all([
+            userModel.deleteMany({}),
+            changelogModel.deleteMany({}),
+        ]);
+    });
+
+    afterAll(async () => {
+        if (app) {
+            await app.close();
+        }
+        if (mongo) {
+            await mongo.stop();
+        }
+    });
+
+    const seedBackofficeUsers = async () => {
+        const adminEmail = 'admin-changelog@example.com';
+        const developerEmail = 'developer-changelog@example.com';
+
+        await authService.storeEmailCode(adminEmail, '123456');
+        const adminRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'admin-changelog', email: adminEmail, code: '123456', password: 'pass1234' })
+            .expect(201);
+        await userModel.updateOne({ _id: adminRegister.body.user.id }, { role: 'admin' });
+
+        await authService.storeEmailCode(developerEmail, '654321');
+        const developerRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'developer-changelog', email: developerEmail, code: '654321', password: 'pass1234' })
+            .expect(201);
+        await userModel.updateOne(
+            { _id: developerRegister.body.user.id },
+            {
+                role: 'developer',
+                developerGameIds: ['smashup', 'dicethrone'],
+            }
+        );
+
+        return {
+            adminId: adminRegister.body.user.id as string,
+            developerToken: developerRegister.body.token as string,
+        };
+    };
+
+    it('developer 只能读取并管理自己被分配的游戏', async () => {
+        const { adminId, developerToken } = await seedBackofficeUsers();
+        const now = new Date();
+
+        await changelogModel.create([
+            {
+                gameId: 'smashup',
+                title: 'Smash Up 更新',
+                content: '开发者可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+            {
+                gameId: 'tictactoe',
+                title: '井字棋更新',
+                content: '开发者不可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .expect(200);
+
+        expect(listRes.body.availableGameIds).toEqual(['smashup', 'dicethrone']);
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0]?.gameId).toBe('smashup');
+
+        await request(app.getHttpServer())
+            .post('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                gameId: 'tictactoe',
+                title: '越权更新',
+                content: '不应成功',
+            })
+            .expect(403);
+
+        const forbiddenTarget = await changelogModel.findOne({ gameId: 'tictactoe' }).lean();
+        expect(forbiddenTarget?._id).toBeDefined();
+
+        await request(app.getHttpServer())
+            .put(`/admin/game-changelogs/${forbiddenTarget!._id.toString()}`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                title: '越权修改',
+            })
+            .expect(403);
+
+        await request(app.getHttpServer())
+            .delete(`/admin/game-changelogs/${forbiddenTarget!._id.toString()}`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .expect(403);
+
+        const createRes = await request(app.getHttpServer())
+            .post('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                gameId: 'dicethrone',
+                title: 'Dice Throne 更新',
+                versionLabel: 'v1.0.0',
+                content: '开发者可创建',
+                published: true,
+            })
+            .expect(201);
+
+        expect(createRes.body.changelog.gameId).toBe('dicethrone');
+        expect(createRes.body.changelog.published).toBe(true);
+    });
+
+    it('公开接口只返回已发布的游戏更新日志', async () => {
+        const { adminId } = await seedBackofficeUsers();
+        const now = new Date();
+
+        await changelogModel.create([
+            {
+                gameId: 'smashup',
+                title: '已发布日志',
+                content: '前台可见',
+                published: true,
+                pinned: true,
+                publishedAt: now,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+            {
+                gameId: 'smashup',
+                title: '草稿日志',
+                content: '前台不可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+
+        const res = await request(app.getHttpServer())
+            .get('/game-changelogs/smashup')
+            .expect(200);
+
+        expect(res.body.changelogs).toHaveLength(1);
+        expect(res.body.changelogs[0]?.title).toBe('已发布日志');
     });
 });
 

@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { Info } from 'lucide-react';
 import * as matchApi from '../../services/matchApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
@@ -11,7 +12,7 @@ import { ConfirmModal } from '../common/overlays/ConfirmModal';
 import { ModalBase } from '../common/overlays/ModalBase';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
-import { GAME_SERVER_URL } from '../../config/server';
+import { GAME_CHANGELOG_API_URL, GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
@@ -19,6 +20,9 @@ import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
+import { GameChangelogPanel } from './GameChangelogPanel';
+import { resolveGameAuthorName, type GameChangelogItem } from './gameDetailsContent';
+import { logger } from '../../lib/logger';
 
 
 interface GameDetailsModalProps {
@@ -52,6 +56,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const confirmJoinModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
+    const gameAuthorName = resolveGameAuthorName(gameManifest);
+    const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
+    const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
 
     // 房间列表状态
@@ -69,15 +76,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const roomsRef = useRef<Room[]>([]);
 
     // 排行榜状态
-    const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard' | 'reviews'>('lobby');
+    const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard' | 'changelog' | 'reviews'>('lobby');
     const [leaderboardData, setLeaderboardData] = useState<{
         leaderboard: { name: string; wins: number; matches: number }[];
     } | null>(null);
     const [leaderboardError, setLeaderboardError] = useState(false);
+    const [changelogItems, setChangelogItems] = useState<GameChangelogItem[] | null>(null);
+    const [changelogError, setChangelogError] = useState(false);
 
     // 创建房间弹窗状态
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
     const [passwordModalConfig, setPasswordModalConfig] = useState<{ matchID: string; gameName: string } | null>(null);
+    const [showAuthorInfoModal, setShowAuthorInfoModal] = useState(false);
 
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, getGuestId());
@@ -99,6 +109,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
             setLeaderboardError(false);
+            setLeaderboardData(null);
             fetch(`${GAME_SERVER_URL}/games/${normalizedGameId}/leaderboard`)
                 .then(res => {
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -107,13 +118,37 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 .then(data => {
                     if (data && !data.error) {
                         setLeaderboardData(data);
-                    } else {
-                        setLeaderboardError(true);
+                        return;
                     }
+                    setLeaderboardError(true);
                 })
                 .catch(err => {
-                    console.error('Failed to fetch leaderboard:', err);
+                    logger.error('[GameDetailsModal] 获取排行榜失败', {
+                        gameId: normalizedGameId,
+                        error: err,
+                    });
                     setLeaderboardError(true);
+                });
+        }
+
+        if (isOpen && activeTab === 'changelog') {
+            setChangelogError(false);
+            setChangelogItems(null);
+            fetch(`${GAME_CHANGELOG_API_URL}/${encodeURIComponent(normalizedGameId)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json() as Promise<{ changelogs?: GameChangelogItem[] }>;
+                })
+                .then(data => {
+                    setChangelogItems(Array.isArray(data.changelogs) ? data.changelogs : []);
+                })
+                .catch(err => {
+                    logger.error('[GameDetailsModal] 获取更新日志失败', {
+                        gameId: normalizedGameId,
+                        error: err,
+                    });
+                    setChangelogError(true);
+                    setChangelogItems([]);
                 });
         }
     }, [isOpen, activeTab, normalizedGameId]);
@@ -828,8 +863,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     ref={modalRef}
                     className="
                         bg-parchment-card-bg pointer-events-auto 
-                        w-[90vw] md:w-full max-w-sm md:max-w-2xl
-                        h-[75vh] md:h-[27.5rem] max-h-[85vh]
+                        w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
+                        h-[90vh] md:h-[33rem] max-h-[95vh]
                         rounded-sm shadow-parchment-card-hover 
                         flex flex-col md:flex-row 
                         border border-parchment-card-border/30 relative 
@@ -843,81 +878,96 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
                     {/* 左侧面板 - 游戏信息 */}
-                    <div className="w-full md:w-2/5 bg-parchment-base-bg/50 border-b md:border-b-0 md:border-r border-parchment-card-border/30 p-3 md:p-8 flex flex-col md:items-center text-left md:text-center font-serif shrink-0 transition-all overflow-y-auto">
-                        {/* 缩略图 - 移动端隐藏，桌面端显示 */}
-                        <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
-                            {thumbnail}
-                        </div>
+                    <div className="relative w-full md:w-2/5 shrink-0 overflow-hidden border-b border-parchment-card-border/30 bg-parchment-base-bg/50 transition-all md:border-b-0 md:border-r">
+                        <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3 pb-16 text-left font-serif md:items-center md:p-8 md:pb-20 md:text-center">
+                            {/* 缩略图 - 移动端隐藏，桌面端显示 */}
+                            <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
+                                {thumbnail}
+                            </div>
 
-                        {/* 标题 - 固定在顶部 */}
-                        <div className="shrink-0">
-                            <h2 className="text-lg md:text-2xl font-bold text-parchment-base-text mb-1 md:mb-2 tracking-wide leading-tight">
-                                {t(titleKey)}
-                            </h2>
-                            <div className="hidden md:block h-px w-12 bg-parchment-card-border/50 opacity-30 mb-4 mx-auto" />
-                        </div>
+                            {/* 标题 - 固定在顶部 */}
+                            <div className="shrink-0">
+                                <h2 className="text-lg md:text-2xl font-bold text-parchment-base-text mb-1 md:mb-2 tracking-wide leading-tight">
+                                    {t(titleKey)}
+                                </h2>
+                                <div className="hidden md:block h-px w-12 bg-parchment-card-border/50 opacity-30 mb-4 mx-auto" />
+                            </div>
 
-                        {/* 描述区域 - 可滚动 */}
-                        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-parchment-card-border/30 scrollbar-track-transparent pr-1 mb-3 md:mb-6 min-h-0">
-                            <p className="text-[11px] md:text-sm text-parchment-light-text leading-relaxed italic">
-                                {t(descriptionKey)}
-                            </p>
-                        </div>
+                            {/* 描述区域 - 可滚动 */}
+                            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-parchment-card-border/30 scrollbar-track-transparent pr-1 mb-3 md:mb-6 min-h-0">
+                                <p className="text-[11px] md:text-sm text-parchment-light-text leading-relaxed italic">
+                                    {t(descriptionKey)}
+                                </p>
+                            </div>
 
-                        {/* 人数显示 - 固定在底部上方 */}
-                        <div className="shrink-0 mb-3">
-                            {(() => {
-                                const playerOptions = gameManifest?.playerOptions || [2];
-                                const bestPlayers = gameManifest?.bestPlayers || [];
+                            {/* 人数显示 - 固定在底部上方 */}
+                            <div className="shrink-0 mb-3">
+                                {(() => {
+                                    const playerOptions = gameManifest?.playerOptions || [2];
+                                    const bestPlayers = gameManifest?.bestPlayers || [];
 
-                                return (
-                                    <div className="flex flex-col items-center gap-1.5">
-                                        <div className="flex items-center gap-2">
-                                            {playerOptions.map((count) => {
-                                                const isBest = bestPlayers.includes(count);
-                                                return (
-                                                    <div
-                                                        key={count}
-                                                        className={clsx(
-                                                            "flex items-center justify-center w-8 h-8 rounded-[4px] text-sm font-bold border transition-all cursor-default select-none",
-                                                            isBest
-                                                                ? "bg-parchment-base-text text-parchment-card-bg border-parchment-base-text shadow-sm scale-110"
-                                                                : "bg-transparent text-parchment-light-text border-parchment-card-border/50 opacity-70"
-                                                        )}
-                                                        title={isBest ? t('common:game_details.best_recommendation') : undefined}
-                                                    >
-                                                        {count}
-                                                    </div>
-                                                );
-                                            })}
+                                    return (
+                                        <div className="flex flex-col items-center gap-1.5">
+                                            <div className="flex items-center gap-2">
+                                                {playerOptions.map((count) => {
+                                                    const isBest = bestPlayers.includes(count);
+                                                    return (
+                                                        <div
+                                                            key={count}
+                                                            className={clsx(
+                                                                "flex items-center justify-center w-8 h-8 rounded-[4px] text-sm font-bold border transition-all cursor-default select-none",
+                                                                isBest
+                                                                    ? "bg-parchment-base-text text-parchment-card-bg border-parchment-base-text shadow-sm scale-110"
+                                                                    : "bg-transparent text-parchment-light-text border-parchment-card-border/50 opacity-70"
+                                                            )}
+                                                            title={isBest ? t('common:game_details.best_recommendation') : undefined}
+                                                        >
+                                                            {count}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            {bestPlayers.length > 0 && (
+                                                <span className="text-[10px] text-parchment-light-text font-medium opacity-60">
+                                                    {t('common:game_details.recommended_players')}
+                                                </span>
+                                            )}
                                         </div>
-                                        {bestPlayers.length > 0 && (
-                                            <span className="text-[10px] text-parchment-light-text font-medium opacity-60">
-                                                {t('common:game_details.recommended_players')}
-                                            </span>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                        </div>
+                                    );
+                                })()}
+                            </div>
 
-                        {/* 操作按钮 - 固定在底部 */}
-                        <div className="shrink-0 w-full flex flex-row md:flex-col gap-2">
-                            {allowLocalMode && (
+                            {/* 操作按钮 - 固定在底部 */}
+                            <div className="shrink-0 w-full flex flex-row md:flex-col gap-2">
+                                {allowLocalMode && (
+                                    <button
+                                        type="button"
+                                        onClick={handleLocalPlay}
+                                        className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
+                                    >
+                                        {t('actions.localPlay')}
+                                    </button>
+                                )}
                                 <button
                                     type="button"
-                                    onClick={handleLocalPlay}
+                                    onClick={handleTutorial}
                                     className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                                 >
-                                    {t('actions.localPlay')}
+                                    {t('actions.tutorial')}
                                 </button>
-                            )}
+                            </div>
+                        </div>
+
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-3 pb-1.5 md:px-8 md:pb-2">
                             <button
                                 type="button"
-                                onClick={handleTutorial}
-                                className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
+                                onClick={() => setShowAuthorInfoModal(true)}
+                                className="pointer-events-auto inline-flex max-w-full items-center gap-3 rounded-full border border-parchment-card-border/40 bg-parchment-card-bg/95 px-3.5 py-1.5 text-[10px] font-medium tracking-[0.08em] text-parchment-light-text shadow-sm transition-all hover:border-parchment-base-text/35 hover:bg-parchment-card-bg hover:text-parchment-base-text cursor-pointer"
+                                title={gameAuthorButtonHint}
+                                aria-label={gameAuthorButtonHint}
                             >
-                                {t('actions.tutorial')}
+                                <span className="truncate">{gameAuthorLabel}</span>
+                                <Info size={14} strokeWidth={2.2} className="shrink-0 opacity-90" />
                             </button>
                         </div>
                     </div>
@@ -958,6 +1008,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                     {t('tabs.leaderboard')}
                                     {activeTab === 'leaderboard' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-parchment-base-text" />}
                                 </button>
+                                <div className="w-px bg-[#e5e0d0] h-4 sm:h-6 shrink-0" />
+                                <button
+                                    onClick={() => setActiveTab('changelog')}
+                                    className={clsx(
+                                        "text-sm sm:text-lg font-bold tracking-wider uppercase transition-colors relative whitespace-nowrap shrink-0",
+                                        activeTab === 'changelog' ? "text-parchment-base-text" : "text-parchment-light-text hover:text-parchment-base-text"
+                                    )}
+                                >
+                                    {t('tabs.changelog')}
+                                    {activeTab === 'changelog' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-parchment-base-text" />}
+                                </button>
                             </div>
                             <button onClick={onClose} className="p-1.5 hover:bg-parchment-base-bg rounded-full text-parchment-light-text hover:text-parchment-base-text transition-colors cursor-pointer shrink-0">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -980,7 +1041,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             />
                         )}
                         {activeTab === 'leaderboard' && (
-                            <LeaderboardTab leaderboardData={leaderboardData} error={leaderboardError} />
+                            <LeaderboardTab
+                                leaderboardData={leaderboardData}
+                                error={leaderboardError}
+                            />
+                        )}
+                        {activeTab === 'changelog' && (
+                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                                <GameChangelogPanel items={changelogItems} error={changelogError} />
+                            </div>
                         )}
                         {activeTab === 'reviews' && (
                             <div className="flex-1 overflow-hidden h-full">
@@ -1000,6 +1069,44 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     gameManifest={gameManifest}
                     isLoading={isLoading}
                 />
+            )}
+
+            {showAuthorInfoModal && (
+                <ModalBase
+                    onClose={() => setShowAuthorInfoModal(false)}
+                    closeOnBackdrop
+                    containerClassName="p-4 sm:p-8"
+                >
+                    <div className="pointer-events-auto w-[min(92vw,24rem)] rounded-[8px] border border-parchment-card-border/30 bg-parchment-card-bg p-5 text-parchment-base-text shadow-parchment-card-hover">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-parchment-light-text">
+                                    <Info size={14} />
+                                    <span>{t('authorInfo.title')}</span>
+                                </div>
+                                <h3 className="mt-3 text-xl font-bold leading-tight">
+                                    {gameAuthorName}
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowAuthorInfoModal(false)}
+                                className="rounded-full p-1.5 text-parchment-light-text transition-colors hover:bg-parchment-base-bg hover:text-parchment-base-text cursor-pointer"
+                                title={t('authorInfo.close')}
+                            >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="mt-4 rounded-[6px] border border-parchment-card-border/20 bg-parchment-base-bg/40 px-3 py-2 text-sm">
+                            {t('authorInfo.game', { game: t(titleKey) })}
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-parchment-light-text">
+                            {t('authorInfo.hint')}
+                        </p>
+                    </div>
+                </ModalBase>
             )}
         </>
     );
