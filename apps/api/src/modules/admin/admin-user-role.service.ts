@@ -2,14 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model } from 'mongoose';
 import { AdminAuditLog, type AdminAuditLogDocument } from '../auth/schemas/admin-audit-log.schema';
+import {
+    areDeveloperGameIdsEqual,
+    normalizeDeveloperGameIds,
+    serializeDeveloperGameIds,
+} from '../auth/schemas/developer-game-access';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
+import type { UserRole } from '../auth/schemas/user-role';
 import logger from '../../../../../server/logger';
 
 type RoleUser = {
     _id: Types.ObjectId;
     username: string;
     email?: string;
-    role: 'user' | 'admin';
+    role: UserRole;
+    developerGameIds?: string[];
 };
 
 type UpdateUserRoleParams = {
@@ -17,7 +24,8 @@ type UpdateUserRoleParams = {
     actorUsername: string;
     actorIp?: string | null;
     targetUserId: string;
-    role: 'user' | 'admin';
+    role: UserRole;
+    developerGameIds?: string[];
 };
 
 export type UpdateUserRoleResult =
@@ -27,12 +35,13 @@ export type UpdateUserRoleResult =
         user: {
             id: string;
             username: string;
-            role: 'user' | 'admin';
+            role: UserRole;
+            developerGameIds?: string[];
         };
     }
     | {
         ok: false;
-        code: 'notFound' | 'cannotChangeOwnRole' | 'mustKeepOneAdmin';
+        code: 'notFound' | 'cannotChangeOwnRole' | 'mustKeepOneAdmin' | 'developerGamesRequired';
     };
 
 type AdminRoleUpdateLock = {
@@ -52,14 +61,17 @@ export class AdminUserRoleService {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
         @InjectModel(AdminAuditLog.name) private readonly auditModel: Model<AdminAuditLogDocument>,
-    ) { }
+    ) {}
 
     async updateUserRole(params: UpdateUserRoleParams): Promise<UpdateUserRoleResult> {
-        const action = params.role === 'admin' ? 'grant-admin' : 'revoke-admin';
+        const action = 'change-role';
+        const nextDeveloperGameIds = params.role === 'developer'
+            ? normalizeDeveloperGameIds(params.developerGameIds)
+            : [];
         const fallbackTargetEmail = `user:${params.targetUserId}`.toLowerCase();
         const target = await this.userModel
             .findById(params.targetUserId)
-            .select('_id username email role')
+            .select('_id username email role developerGameIds')
             .lean<RoleUser | null>();
 
         if (!target) {
@@ -105,10 +117,30 @@ export class AdminUserRoleService {
             return { ok: false, code: 'cannotChangeOwnRole' };
         }
 
+        if (params.role === 'developer' && nextDeveloperGameIds.length === 0) {
+            await this.writeAuditLog({
+                action,
+                status: 'failed',
+                actor: this.formatActor(params.actorUsername, params.actorUserId),
+                actorIp: params.actorIp ?? null,
+                targetEmail,
+                message: `targetUserId=${targetUserId} nextRole=developer reason=developer_games_required`,
+            });
+            logger.warn('admin_user_role_update_denied', {
+                actorUserId: params.actorUserId,
+                actorUsername: params.actorUsername,
+                targetUserId,
+                nextRole: params.role,
+                reason: 'developer_games_required',
+                actorIp: params.actorIp ?? null,
+            });
+            return { ok: false, code: 'developerGamesRequired' };
+        }
+
         return this.withRoleUpdateLock(async () => {
             const latestTarget = await this.userModel
                 .findById(targetUserId)
-                .select('_id username email role')
+                .select('_id username email role developerGameIds')
                 .lean<RoleUser | null>();
 
             if (!latestTarget) {
@@ -133,7 +165,13 @@ export class AdminUserRoleService {
 
             const latestTargetEmail = this.resolveTargetEmail(latestTarget);
 
-            if (latestTarget.role === params.role) {
+            if (
+                latestTarget.role === params.role
+                && areDeveloperGameIdsEqual(
+                    latestTarget.role === 'developer' ? latestTarget.developerGameIds : [],
+                    params.role === 'developer' ? nextDeveloperGameIds : [],
+                )
+            ) {
                 await this.writeAuditLog({
                     action,
                     status: 'exists',
@@ -156,11 +194,15 @@ export class AdminUserRoleService {
                         id: targetUserId,
                         username: latestTarget.username,
                         role: latestTarget.role,
+                        developerGameIds: serializeDeveloperGameIds(
+                            latestTarget.role,
+                            latestTarget.developerGameIds,
+                        ),
                     },
                 } satisfies UpdateUserRoleResult;
             }
 
-            if (latestTarget.role === 'admin' && params.role === 'user') {
+            if (latestTarget.role === 'admin' && params.role !== 'admin') {
                 const adminCount = await this.userModel.countDocuments({ role: 'admin' });
                 if (adminCount <= 1) {
                     await this.writeAuditLog({
@@ -169,7 +211,7 @@ export class AdminUserRoleService {
                         actor: this.formatActor(params.actorUsername, params.actorUserId),
                         actorIp: params.actorIp ?? null,
                         targetEmail: latestTargetEmail,
-                        message: `targetUserId=${targetUserId} previousRole=admin nextRole=user reason=must_keep_one_admin`,
+                        message: `targetUserId=${targetUserId} previousRole=admin nextRole=${params.role} reason=must_keep_one_admin`,
                     });
                     logger.warn('admin_user_role_update_denied', {
                         actorUserId: params.actorUserId,
@@ -184,9 +226,30 @@ export class AdminUserRoleService {
                 }
             }
 
+            const update =
+                params.role === 'developer'
+                    ? {
+                        $set: {
+                            role: params.role,
+                            developerGameIds: nextDeveloperGameIds,
+                        },
+                        $unset: {
+                            adminPermissions: 1,
+                        },
+                    }
+                    : {
+                        $set: {
+                            role: params.role,
+                        },
+                        $unset: {
+                            developerGameIds: 1,
+                            adminPermissions: 1,
+                        },
+                    };
+
             const updated = await this.userModel.findOneAndUpdate(
                 { _id: targetUserId, role: latestTarget.role },
-                { role: params.role },
+                update,
                 { new: true }
             );
 
@@ -216,7 +279,7 @@ export class AdminUserRoleService {
                 actor: this.formatActor(params.actorUsername, params.actorUserId),
                 actorIp: params.actorIp ?? null,
                 targetEmail: latestTargetEmail,
-                message: `targetUserId=${targetUserId} previousRole=${latestTarget.role} nextRole=${updated.role}`,
+                message: `targetUserId=${targetUserId} previousRole=${latestTarget.role} nextRole=${updated.role} developerGameIds=${nextDeveloperGameIds.join(',')}`,
             });
             logger.info('admin_user_role_updated', {
                 actorUserId: params.actorUserId,
@@ -224,6 +287,7 @@ export class AdminUserRoleService {
                 targetUserId,
                 previousRole: latestTarget.role,
                 nextRole: updated.role,
+                developerGameIds: nextDeveloperGameIds,
                 actorIp: params.actorIp ?? null,
             });
 
@@ -234,6 +298,7 @@ export class AdminUserRoleService {
                     id: updated._id.toString(),
                     username: updated.username,
                     role: updated.role,
+                    developerGameIds: serializeDeveloperGameIds(updated.role, updated.developerGameIds),
                 },
             } satisfies UpdateUserRoleResult;
         });

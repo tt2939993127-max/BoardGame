@@ -147,6 +147,7 @@ export class AdminController {
             actorIp: this.resolveClientIp(req),
             targetUserId: userId,
             role: body.role,
+            developerGameIds: body.developerGameIds,
         });
 
         if (!result.ok) {
@@ -154,6 +155,7 @@ export class AdminController {
                 notFound: { status: 404, message: t('admin.error.userNotFound') },
                 cannotChangeOwnRole: { status: 400, message: t('admin.error.cannotChangeOwnRole') },
                 mustKeepOneAdmin: { status: 400, message: t('admin.error.mustKeepOneAdmin') },
+                developerGamesRequired: { status: 400, message: t('admin.error.developerGamesRequired') },
             };
             const payload = map[result.code];
             return this.sendError(res, payload.status, payload.message);

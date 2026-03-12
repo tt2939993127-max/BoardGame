@@ -112,7 +112,8 @@
       "cannotBanAdmin": "Cannot ban admin account",
       "cannotDeleteAdmin": "Cannot delete admin account",
       "cannotChangeOwnRole": "Cannot change your own admin role",
-      "mustKeepOneAdmin": "At least one admin account must remain"
+      "mustKeepOneAdmin": "At least one admin account must remain",
+      "developerGamesRequired": "A developer must configure a changelog access scope"
     },
     "success": {
       "userBanned": "User banned",

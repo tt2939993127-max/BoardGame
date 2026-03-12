@@ -1,15 +1,16 @@
 ## 1. 后端数据与权限
-- [ ] 1.1 扩展用户模型与用户详情 DTO，新增 `adminPermissions.gameChangelog.mode/gameIds`，缺省按 `all` 回退。
+- [ ] 1.1 扩展用户角色枚举、用户模型与用户详情 DTO，支持 `user / developer / admin` 以及 `developerGameIds`。
 - [ ] 1.2 新建游戏更新日志模块（schema / dto / service / controller），支持按 `gameId` 过滤与排序。
 - [ ] 1.3 实现公开接口，仅返回某个游戏的已发布更新日志。
-- [ ] 1.4 实现后台 CRUD（新建、编辑、发布、撤回发布、删除）并在写接口中校验管理员的游戏范围权限。
-- [ ] 1.5 为公开过滤、发布状态切换、权限拒绝与权限保存补 API 测试。
+- [ ] 1.4 实现后台 CRUD（新建、编辑、发布、撤回发布、删除），允许 `admin/developer` 调用，并在写接口中校验 `developerGameIds` 范围。
+- [ ] 1.5 为公开过滤、角色切换、developer 越权拒绝与发布状态切换补 API 测试。
 
 ## 2. 后台管理界面
-- [ ] 2.1 在后台侧边栏新增“更新日志”入口，并复用现有 admin 布局与表单风格。
+- [ ] 2.1 在后台侧边栏新增“更新日志”入口，并完成 `admin/developer` 的后台路由与导航边界控制。
 - [ ] 2.2 实现按游戏筛选的更新日志管理页，支持草稿/已发布状态切换。
-- [ ] 2.3 在 `src/pages/admin/UserDetail.tsx` 增加“更新日志权限”设置区，支持“全部游戏 / 指定游戏”。
-- [ ] 2.4 为后台更新日志页和权限设置区补关键交互测试。
+- [ ] 2.3 在 `src/pages/admin/Users.tsx` 增加统一“角色设置”弹窗，支持 `user / developer / admin` 切换和 `developer` 的多游戏分配。
+- [ ] 2.4 在 `src/pages/admin/UserDetail.tsx` 只读展示角色摘要和已分配游戏，并引导回用户列表修改。
+- [ ] 2.5 为用户列表角色设置、developer 后台访问边界和更新日志页补关键交互测试。
 
 ## 3. 游戏注册与作者内容注入
 - [ ] 3.1 扩展 `GameManifestEntry`，增加轻量作者名称字段。

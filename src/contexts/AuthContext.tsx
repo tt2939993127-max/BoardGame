@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, t
 import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
 
+export type UserRole = 'user' | 'developer' | 'admin';
+
 interface User {
     id: string;
     username: string;
@@ -9,7 +11,8 @@ interface User {
     emailVerified?: boolean;
     lastOnline?: string;
     avatar?: string;
-    role: 'user' | 'admin';
+    role: UserRole;
+    developerGameIds?: string[];
     banned: boolean;
 }
 

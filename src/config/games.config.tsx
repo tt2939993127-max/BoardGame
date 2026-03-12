@@ -154,6 +154,9 @@ const buildUgcEntry = async (pkg: UgcPackageSummary): Promise<GameConfig | null>
     const manifest = pkg.coverAssetId ? await fetchPublishedManifest(pkg.packageId) : null;
     const coverUrl = resolveCoverUrl(manifest, pkg.coverAssetId);
     const metadata = manifest?.metadata ?? {};
+    const authorName = typeof (metadata as Record<string, unknown>).author === 'string'
+        ? (metadata as Record<string, unknown>).author.trim()
+        : '';
     const playerOptions = parseNumberArray((metadata as Record<string, unknown>).playerOptions);
     const bestPlayers = parseNumberArray((metadata as Record<string, unknown>).bestPlayers);
     const title = pkg.name?.trim() || `UGC ${pkg.packageId}`;
@@ -173,6 +176,7 @@ const buildUgcEntry = async (pkg: UgcPackageSummary): Promise<GameConfig | null>
         tags: normalizeTags(pkg.tags),
         mobileProfile: 'none',
         shellTargets: ['pwa'],
+        ...(authorName ? { authorName } : {}),
         ...(playerOptions ? { playerOptions } : {}),
         ...(bestPlayers ? { bestPlayers } : {}),
     };

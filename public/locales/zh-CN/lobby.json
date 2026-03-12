@@ -71,14 +71,29 @@
   "tabs": {
     "lobby": "在线大厅",
     "reviews": "评价",
-    "leaderboard": "排行榜"
+    "leaderboard": "排行榜",
+    "changelog": "更新日志"
   },
   "leaderboard": {
     "loading": "加载中...",
     "title": "胜场排行",
     "empty": "暂无数据",
     "record": "{{wins}} 胜 / {{matches}} 局",
-    "error": "排行榜加载失败"
+    "error": "排行榜加载失败",
+    "changelogTitle": "更新日志",
+    "changelogLoading": "更新日志加载中...",
+    "changelogEmpty": "暂无日志",
+    "changelogError": "更新日志加载失败",
+    "changelogPublishedAt": "最近更新：{{date}}",
+    "changelogPinned": "置顶"
+  },
+  "authorInfo": {
+    "button": "作者：{{author}}",
+    "buttonHint": "点击查看作者信息",
+    "title": "作者信息",
+    "game": "作品：{{game}}",
+    "hint": "当前先展示作者署名，后续如有更完整的作者介绍，会从这里展开。",
+    "close": "关闭"
   },
   "player": {
     "guest": "游客{{id}}"

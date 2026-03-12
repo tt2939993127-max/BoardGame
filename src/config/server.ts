@@ -81,6 +81,15 @@ export const NOTIFICATION_API_URL = normalizeUrl(
     (metaEnv.VITE_NOTIFICATION_API_URL as string | undefined) || FALLBACK_NOTIFICATION_API_URL
 );
 
+// 更新日志 API 地址
+const FALLBACK_GAME_CHANGELOG_API_URL = isDev
+    ? '/game-changelogs'
+    : (BACKEND_URL ? `${BACKEND_URL}/game-changelogs` : '/game-changelogs');
+
+export const GAME_CHANGELOG_API_URL = normalizeUrl(
+    (metaEnv.VITE_GAME_CHANGELOG_API_URL as string | undefined) || FALLBACK_GAME_CHANGELOG_API_URL
+);
+
 // UGC API 地址
 const FALLBACK_UGC_API_URL = isDev
     ? '/ugc'
