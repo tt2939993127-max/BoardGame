@@ -386,6 +386,12 @@ export function isBaseAbilitySuppressed(
     state: SmashUpCore,
     baseIndex: number
 ): boolean {
+    // 1. 检查基于状态的临时压制（例如：效果已结算/卡已离场，但压制持续到下个回合开始）
+    if (state.suppressedBasesUntilTurnStart?.some(s => s.baseIndex === baseIndex)) {
+        return true;
+    }
+
+    // 2. 检查基于场上卡牌的持续压制
     if (baseAbilitySuppressionRegistry.length === 0) return false;
     for (const entry of baseAbilitySuppressionRegistry) {
         if (!isSourceActiveOnBase(state, entry.sourceDefId, baseIndex)) continue;

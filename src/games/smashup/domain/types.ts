@@ -408,6 +408,13 @@ export interface SmashUpCore {
      * 在 scoreBases 阶段结束时清空。
      */
     afterScoringTriggeredBases?: number[];
+
+    /**
+     * 临时基地能力压制（直到压制者的下个回合开始）
+     *
+     * 用于实现类似“渗透 POD 天赋”这种“即使牌已离场，压制仍持续到下回合开始”的规则。
+     */
+    suppressedBasesUntilTurnStart?: Array<{ baseIndex: number; suppressorPlayerId: PlayerId }>;
 }
 
 export interface FactionSelectionState {

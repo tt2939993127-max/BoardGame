@@ -554,6 +554,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 minionsMovedToBaseThisTurn: undefined,
                 // 清空临时临界点修正
                 tempBreakpointModifiers: undefined,
+                // 清理“直到本回合开始”的基地压制（仅清除由当前回合玩家施加的条目）
+                suppressedBasesUntilTurnStart: (() => {
+                    const remaining = (state.suppressedBasesUntilTurnStart ?? [])
+                        .filter(s => s.suppressorPlayerId !== playerId);
+                    return remaining.length ? remaining : undefined;
+                })(),
                 // 清空 special 能力限制组使用记录
                 specialLimitUsed: undefined,
                 // 清空巨石阵双才能追踪
