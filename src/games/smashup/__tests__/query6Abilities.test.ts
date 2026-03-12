@@ -12,7 +12,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
-import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import type {
     SmashUpCore,
     SmashUpEvent,
@@ -23,7 +22,6 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
@@ -48,10 +46,6 @@ function makeMinion(uid: string, defId: string, controller: string, power: numbe
 
 function makeCard(uid: string, defId: string, type: 'minion' | 'action', owner: string): CardInstance {
     return { uid, defId, type, owner };
-}
-
-function makeBase(defId: string) {
-    return { defId, minions: [], ongoingActions: [] };
 }
 
 function makePlayer(id: string, overrides?: Partial<PlayerState>): PlayerState {
@@ -194,62 +188,6 @@ describe('海盗派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('pirate_shanghai_choose_minion');
     });
 
-    it('pirate_shanghai: 第二步若目标已离开来源基地则不再移动', () => {
-        const core = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'pirate_shanghai', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test_minion', '1', 5)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m2', 'my_minion', '0', 3)], ongoingActions: [] },
-            ],
-        });
-
-        const { matchState } = execPlayAction(core, '0', 'a1');
-        const chooseMinion = getInteractionHandler('pirate_shanghai_choose_minion');
-        expect(chooseMinion).toBeDefined();
-        const step1 = chooseMinion!(
-            matchState,
-            '0',
-            { minionUid: 'm1', baseIndex: 0 },
-            undefined,
-            defaultRandom,
-            1000,
-        );
-        const step1Current = (step1?.state.sys as any).interaction?.queue?.[0];
-        expect(step1Current?.data?.sourceId).toBe('pirate_shanghai_choose_base');
-
-        const staleCore = makeState({
-            ...core,
-            players: {
-                ...core.players,
-                '1': makePlayer('1', {
-                    ...core.players['1'],
-                    discard: [makeCard('m1', 'test_minion', 'minion', '1')],
-                }),
-            },
-            bases: [
-                { ...core.bases[0], minions: [] },
-                core.bases[1],
-            ],
-        });
-
-        const chooseBase = getInteractionHandler('pirate_shanghai_choose_base');
-        expect(chooseBase).toBeDefined();
-        const step2 = chooseBase!(
-            makeMatchState(staleCore),
-            '0',
-            { baseIndex: 1 },
-            step1Current?.data,
-            defaultRandom,
-            1001,
-        );
-        expect(step2?.events ?? []).toHaveLength(0);
-    });
-
     it('pirate_sea_dogs: 多目标时创建 Prompt 选择派系', () => {
         const state = makeState({
             players: {
@@ -340,62 +278,6 @@ describe('忍者派系能力（第6批）', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('ninja_way_of_deception_choose_minion');
-    });
-
-    it('ninja_way_of_deception: 第二步若目标已离开来源基地则不再移动', () => {
-        const core = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'ninja_way_of_deception', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'ninja_adept', '0', 5)], ongoingActions: [] },
-                { defId: 'b2', minions: [], ongoingActions: [] },
-            ],
-        });
-
-        const { matchState } = execPlayAction(core, '0', 'a1');
-        const chooseMinion = getInteractionHandler('ninja_way_of_deception_choose_minion');
-        expect(chooseMinion).toBeDefined();
-        const step1 = chooseMinion!(
-            matchState,
-            '0',
-            { minionUid: 'm0', baseIndex: 0 },
-            undefined,
-            defaultRandom,
-            1100,
-        );
-        const step1Current = (step1?.state.sys as any).interaction?.queue?.[0];
-        expect(step1Current?.data?.sourceId).toBe('ninja_way_of_deception_choose_base');
-
-        const staleCore = makeState({
-            ...core,
-            players: {
-                ...core.players,
-                '0': makePlayer('0', {
-                    ...core.players['0'],
-                    discard: [makeCard('m0', 'ninja_adept', 'minion', '0')],
-                }),
-            },
-            bases: [
-                { ...core.bases[0], minions: [] },
-                core.bases[1],
-            ],
-        });
-
-        const chooseBase = getInteractionHandler('ninja_way_of_deception_choose_base');
-        expect(chooseBase).toBeDefined();
-        const step2 = chooseBase!(
-            makeMatchState(staleCore),
-            '0',
-            { baseIndex: 1 },
-            step1Current?.data,
-            defaultRandom,
-            1101,
-        );
-        expect(step2?.events ?? []).toHaveLength(0);
     });
 
     it('ninja_way_of_deception: 没有己方随从时无事件', () => {
@@ -513,7 +395,7 @@ describe('巫师派系能力（第6批）', () => {
                     hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
                 }),
                 '1': makePlayer('1', {
-                    deck: [makeCard('d1', 'wizard_summon', 'action', '1'), makeCard('d2', 'test_minion', 'minion', '1')],
+                    deck: [makeCard('d1', 'test_action', 'action', '1'), makeCard('d2', 'test_minion', 'minion', '1')],
                 }),
             },
         });
@@ -538,127 +420,6 @@ describe('巫师派系能力（第6批）', () => {
         const { events, matchState } = execPlayAction(state, '0', 'a1');
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(drawEvents.length).toBe(0);
-    });
-
-    it('wizard_mass_enchantment: 若所选对手行动已不在牌库则不再转移或打出', () => {
-        const handler = getInteractionHandler('wizard_mass_enchantment');
-        expect(handler).toBeDefined();
-
-        const state = makeState({
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1', { deck: [] }),
-            },
-        });
-
-        const result = handler!(
-            makeMatchState(state),
-            '0',
-            { cardUid: 'd1', defId: 'wizard_summon', pid: '1' },
-            undefined,
-            defaultRandom,
-            1000,
-        );
-
-        expect(result?.events ?? []).toHaveLength(0);
-    });
-
-    it('wizard_mass_enchantment: special 行动不应出现在可选额外打出列表中', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
-                }),
-                '1': makePlayer('1', {
-                    deck: [makeCard('d1', 'ninja_hidden_ninja', 'action', '1')],
-                }),
-            },
-            bases: [makeBase('b1'), makeBase('b2')],
-        });
-
-        const { matchState } = execPlayAction(state, '0', 'a1');
-        const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeUndefined();
-    });
-
-    it('wizard_mass_enchantment: onlyCardInHand 约束不满足时不应把该牌列为候选', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [
-                        makeCard('a1', 'wizard_mass_enchantment', 'action', '0'),
-                        makeCard('backup', 'test_minion', 'minion', '0'),
-                    ],
-                }),
-                '1': makePlayer('1', {
-                    deck: [makeCard('d1', 'ghost_make_contact', 'action', '1')],
-                }),
-            },
-            bases: [makeBase('b1'), makeBase('b2')],
-        });
-
-        const { matchState } = execPlayAction(state, '0', 'a1');
-        const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeUndefined();
-    });
-
-    it('wizard_mass_enchantment: 选中打到随从上的 ongoing 时应先选择目标随从', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
-                }),
-                '1': makePlayer('1', {
-                    deck: [
-                        makeCard('d1', 'ninja_smoke_bomb', 'action', '1'),
-                        makeCard('d2', 'test_minion', 'minion', '1'),
-                    ],
-                }),
-            },
-            bases: [
-                { defId: 'b1', minions: [makeMinion('m0', 'test_minion', '0', 3)], ongoingActions: [] },
-                { defId: 'b2', minions: [makeMinion('m1', 'test_minion', '1', 2)], ongoingActions: [] },
-            ],
-        });
-
-        const ms = makeMatchState(state);
-        const r1 = runCommand(ms, {
-            type: SU_COMMANDS.PLAY_ACTION,
-            playerId: '0',
-            payload: { cardUid: 'a1' },
-        } as any, defaultRandom);
-        expect(r1.success).toBe(true);
-
-        const interaction1 = r1.finalState.sys.interaction.current as any;
-        expect(interaction1?.data?.sourceId).toBe('wizard_mass_enchantment');
-        const actionOpt = interaction1.data.options.find((opt: any) => opt.value?.cardUid === 'd1');
-        expect(actionOpt).toBeDefined();
-
-        const r2 = runCommand(r1.finalState, {
-            type: INTERACTION_COMMANDS.RESPOND,
-            playerId: '0',
-            payload: { optionId: actionOpt.id },
-        } as any, defaultRandom);
-        expect(r2.success).toBe(true);
-
-        const interaction2 = r2.finalState.sys.interaction.current as any;
-        expect(interaction2?.data?.sourceId).toBe('wizard_mass_enchantment_choose_minion');
-        const targetOpt = interaction2.data.options.find((opt: any) => opt.value?.minionUid === 'm1');
-        expect(targetOpt).toBeDefined();
-
-        const r3 = runCommand(r2.finalState, {
-            type: INTERACTION_COMMANDS.RESPOND,
-            playerId: '0',
-            payload: { optionId: targetOpt.id },
-        } as any, defaultRandom);
-        expect(r3.success).toBe(true);
-
-        const finalCore = r3.finalState.core;
-        const targetMinion = finalCore.bases[1].minions.find(m => m.uid === 'm1');
-        expect(targetMinion?.attachedActions).toHaveLength(1);
-        expect(targetMinion?.attachedActions[0].defId).toBe('ninja_smoke_bomb');
-        expect(finalCore.players['1'].deck.find(c => c.uid === 'd1')).toBeUndefined();
-        expect(finalCore.players['0'].actionsPlayed).toBe(1);
     });
 
     it('wizard_portal: 有随从时创建选择 Prompt 让玩家选随从', () => {
@@ -731,44 +492,6 @@ describe('巫师派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('wizard_portal_order');
     });
 
-    it('wizard_portal_order: 若所选排序牌已不在牌库则不再凭空放回', () => {
-        const handler = getInteractionHandler('wizard_portal_order');
-        expect(handler).toBeDefined();
-
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    deck: [makeCard('d2', 'test_a2', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-        });
-
-        const result = handler!(
-            makeMatchState(state),
-            '0',
-            { cardUid: 'd1', defId: 'test_a' },
-            {
-                continuationContext: {
-                    remaining: [
-                        { uid: 'd1', defId: 'test_a' },
-                        { uid: 'd2', defId: 'test_a2' },
-                    ],
-                    ordered: [],
-                },
-            },
-            defaultRandom,
-            1000,
-        );
-
-        const topEvents = (result?.events ?? []).filter(event => event.type === SU_EVENTS.CARD_TO_DECK_TOP);
-        expect(topEvents).toHaveLength(1);
-        expect((topEvents[0] as any).payload.cardUid).toBe('d2');
-
-        const finalState = applyEvents(state, result?.events ?? []);
-        expect(finalState.players['0'].deck.map(card => card.uid)).toEqual(['d2']);
-    });
-
     it('wizard_scry: 单张行动卡时创建 Prompt', () => {
         const state = makeState({
             players: {
@@ -789,8 +512,6 @@ describe('巫师派系能力（第6批）', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('wizard_scry');
-        expect(current?.data?.autoRefresh).toBe('deck');
-        expect(current?.data?.responseValidationMode).toBe('live');
     });
 
     it('wizard_scry: 牌库无行动卡时无事件', () => {
@@ -807,31 +528,6 @@ describe('巫师派系能力（第6批）', () => {
         const { events, matchState } = execPlayAction(state, '0', 'a1');
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(drawEvents.length).toBe(0);
-    });
-
-    it('wizard_scry: 若所选行动已不在牌库则不再抽取', () => {
-        const handler = getInteractionHandler('wizard_scry');
-        expect(handler).toBeDefined();
-
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    deck: [makeCard('d1', 'test_m', 'minion', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-        });
-
-        const result = handler!(
-            makeMatchState(state),
-            '0',
-            { cardUid: 'missing-action', defId: 'test_action' },
-            undefined,
-            defaultRandom,
-            1000,
-        );
-
-        expect(result?.events ?? []).toHaveLength(0);
     });
 
     it('wizard_sacrifice: 多个己方随从时创建 Prompt 选择', () => {
