@@ -1,8 +1,5 @@
 /**
- * 测试：ninja_acolyte POD 版本与基础版一致性
- * 
- * 问题：POD 版 abilityTags 是 'talent'，基础版是 'special'
- * 修复：统一为 'special'，并添加 specialLimitGroup
+ * 测试：ninja_acolyte POD 版本一致性（以 POD 规则为准）
  */
 
 import { describe, test, expect } from 'vitest';
@@ -17,7 +14,7 @@ describe('ninja_acolyte POD 版本一致性', () => {
         expect(base).toBeDefined();
         expect(pod).toBeDefined();
 
-        // 两个版本机制不同：基础版是特殊（响应型），POD版是才能（主动型）
+        // 两个版本机制不同：基础版是 special（响应型），POD 版是 talent（主动型）
         expect(base.abilityTags).toContain('special');
         expect(pod.abilityTags).toContain('talent');
     });

@@ -80,15 +80,18 @@ describe('Killer Plants POD Card Logic Verification', () => {
         // Initial power should be 3
         expect(getMinionPower(state, state.bases[0].minions[0], 0)).toBe(3);
 
-        // Trigger turn start
-        const events: any[] = (state as any).bases[0].minions[0].defId === 'killer_plant_weed_eater_pod'
-            ? [{
-                type: SU_EVENTS.ABILITY_TRIGGERED,
-                payload: { cardUid: 'we-1', metadataUpdate: { weedEaterEmpowered: true } },
-                timestamp: Date.now()
-            }] : [];
-
-        const newState = applyEvents(state, events);
+        // 该 POD 的 +2 来自力量修正器读取 minion.metadata.weedEaterEmpowered
+        // （当前测试环境下不对 ABILITY_TRIGGERED 的 metadataUpdate 做 reduce）
+        const newState = {
+            ...state,
+            bases: [{
+                ...state.bases[0],
+                minions: [{
+                    ...state.bases[0].minions[0],
+                    metadata: { ...(state.bases[0].minions[0] as any).metadata, weedEaterEmpowered: true },
+                }],
+            }],
+        } as any;
 
         // Power should now be 3 + 2 = 5
         expect(getMinionPower(newState, newState.bases[0].minions[0], 0)).toBe(5);

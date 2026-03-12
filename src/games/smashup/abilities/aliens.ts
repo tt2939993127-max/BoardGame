@@ -304,7 +304,7 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
         id: 'alien_probe_choose_target',
         title: '选择要查看手牌的玩家',
         sourceId: 'alien_probe_choose_target',
-        targetType: 'generic',
+        targetType: 'player',
     }, (value) => {
         const targetPid = value.targetPlayerId;
         const targetPlayer = ctx.state.players[targetPid];
@@ -790,11 +790,18 @@ export function registerAlienInteractionHandlers(): void {
         const events: SmashUpEvent[] = [];
 
         if (selected.returnIt && selected.minionUid && selected.minionDefId && selected.owner !== undefined && selected.baseIndex !== undefined) {
+            const base = state.core.bases[selected.baseIndex];
+            const stillThere = !!base?.minions?.some(m => m.uid === selected.minionUid);
+            if (!stillThere) {
+                // 过期选择：侦察兵已离开基地（被消灭/移动），不再回手
+                // 仍继续处理 remaining 链
+            } else {
             events.push({
                 type: SU_EVENTS.MINION_RETURNED,
                 payload: { minionUid: selected.minionUid, minionDefId: selected.minionDefId, fromBaseIndex: selected.baseIndex, toPlayerId: selected.owner, reason: 'alien_scout', sourcePlayerId: playerId },
                 timestamp,
             } as MinionReturnedEvent);
+            }
         }
 
         const remaining = ctx?.remaining ?? [];
