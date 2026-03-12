@@ -5,6 +5,9 @@
  * 验证所有端点的成功场景和错误处理
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
@@ -14,7 +17,8 @@ import type { MatchState } from '../../../core/types';
 import type { MatchStorage, StoredMatchState, MatchMetadata } from '../../../engine/transport/storage';
 import { GameTransportServer } from '../../../engine/transport/server';
 import type { GameEngineConfig } from '../../../engine/transport/server';
-import { createTestRoutes } from '../test';
+import { createTestRoutes, getConfiguredTestApiToken, isTestRoutesEnabledEnv } from '../test';
+import { ensureSharedTestApiToken } from '../../testApiToken';
 
 // Mock storage
 const createMockStorage = (): MatchStorage => {
@@ -71,6 +75,53 @@ const TEST_HEADERS = {
     'X-Test-Player-Credentials': TEST_PLAYER_CREDENTIALS,
 };
 
+describe('Test Route Guards', () => {
+    it('should only enable explicit test environments', () => {
+        expect(isTestRoutesEnabledEnv('test')).toBe(true);
+        expect(isTestRoutesEnabledEnv('development')).toBe(true);
+        expect(isTestRoutesEnabledEnv('production')).toBe(false);
+        expect(isTestRoutesEnabledEnv('staging')).toBe(false);
+        expect(isTestRoutesEnabledEnv('')).toBe(false);
+        expect(isTestRoutesEnabledEnv(undefined)).toBe(false);
+    });
+
+    it('should require an explicitly configured test api token', () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-test-api-token-missing-'));
+        const missingTokenFile = path.join(tempDir, 'missing-token.txt');
+
+        try {
+            expect(getConfiguredTestApiToken({ TEST_API_TOKEN: ' route-token ' } as NodeJS.ProcessEnv)).toBe('route-token');
+            expect(
+                getConfiguredTestApiToken({
+                    TEST_API_TOKEN_FILE: missingTokenFile,
+                } as NodeJS.ProcessEnv),
+            ).toBeNull();
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    it('should reuse the shared test api token file when env token is missing', () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-test-api-token-'));
+        const tokenFile = path.join(tempDir, 'token.txt');
+
+        try {
+            const ensured = ensureSharedTestApiToken({
+                TEST_API_TOKEN_FILE: tokenFile,
+            } as NodeJS.ProcessEnv, tempDir);
+
+            expect(ensured).toMatch(/^pw-/);
+            expect(
+                getConfiguredTestApiToken({
+                    TEST_API_TOKEN_FILE: tokenFile,
+                } as NodeJS.ProcessEnv),
+            ).toBe(ensured);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('Test Routes Integration', () => {
     let app: Koa;
     let httpServer: ReturnType<typeof createServer>;
@@ -78,13 +129,17 @@ describe('Test Routes Integration', () => {
     let storage: MatchStorage;
     let gameTransport: GameTransportServer;
     let baseURL: string;
+    let tokenFileDir: string;
     const originalEnv = process.env.NODE_ENV;
     const originalToken = process.env.TEST_API_TOKEN;
+    const originalTokenFile = process.env.TEST_API_TOKEN_FILE;
 
     beforeAll(async () => {
         // 设置测试环境
+        tokenFileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-test-routes-'));
         process.env.NODE_ENV = 'test';
         process.env.TEST_API_TOKEN = TEST_TOKEN;
+        process.env.TEST_API_TOKEN_FILE = path.join(tokenFileDir, 'token.txt');
 
         // 创建服务器
         app = new Koa();
@@ -119,8 +174,21 @@ describe('Test Routes Integration', () => {
 
     afterAll(async () => {
         // 恢复环境变量
-        process.env.NODE_ENV = originalEnv;
-        process.env.TEST_API_TOKEN = originalToken;
+        if (originalEnv === undefined) {
+            delete process.env.NODE_ENV;
+        } else {
+            process.env.NODE_ENV = originalEnv;
+        }
+        if (originalToken === undefined) {
+            delete process.env.TEST_API_TOKEN;
+        } else {
+            process.env.TEST_API_TOKEN = originalToken;
+        }
+        if (originalTokenFile === undefined) {
+            delete process.env.TEST_API_TOKEN_FILE;
+        } else {
+            process.env.TEST_API_TOKEN_FILE = originalTokenFile;
+        }
 
         // 清理服务器
         await new Promise<void>((resolve) => {
@@ -128,6 +196,8 @@ describe('Test Routes Integration', () => {
                 httpServer.close(() => resolve());
             });
         });
+
+        fs.rmSync(tokenFileDir, { recursive: true, force: true });
     });
 
     beforeEach(async () => {
@@ -219,6 +289,40 @@ describe('Test Routes Integration', () => {
             expect(response.status).toBe(401);
         });
 
+        it('should return 503 when test api token is not configured', async () => {
+            const previousToken = process.env.TEST_API_TOKEN;
+            const previousTokenFile = process.env.TEST_API_TOKEN_FILE;
+            const emptyTokenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-test-routes-empty-'));
+            delete process.env.TEST_API_TOKEN;
+            process.env.TEST_API_TOKEN_FILE = path.join(emptyTokenDir, 'token.txt');
+
+            try {
+                const response = await fetch(`${baseURL}/test/inject-state`, {
+                    method: 'POST',
+                    headers: {
+                        ...TEST_HEADERS,
+                    },
+                    body: JSON.stringify({ matchId: 'match-1', state: {} }),
+                });
+
+                expect(response.status).toBe(503);
+                const data = await response.json();
+                expect(data.error).toBe('Test API token is not configured');
+            } finally {
+                if (previousToken === undefined) {
+                    delete process.env.TEST_API_TOKEN;
+                } else {
+                    process.env.TEST_API_TOKEN = previousToken;
+                }
+                if (previousTokenFile === undefined) {
+                    delete process.env.TEST_API_TOKEN_FILE;
+                } else {
+                    process.env.TEST_API_TOKEN_FILE = previousTokenFile;
+                }
+                fs.rmSync(emptyTokenDir, { recursive: true, force: true });
+            }
+        });
+
         it('should return 400 without match auth headers', async () => {
             const response = await fetch(`${baseURL}/test/inject-state`, {
                 method: 'POST',
@@ -232,6 +336,27 @@ describe('Test Routes Integration', () => {
             expect(response.status).toBe(400);
             const data = await response.json();
             expect(data.error).toBe('Missing X-Test-Player-Id or X-Test-Player-Credentials');
+        });
+
+        it('should return 403 outside explicit test environments', async () => {
+            const previousEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'staging';
+
+            try {
+                const response = await fetch(`${baseURL}/test/inject-state`, {
+                    method: 'POST',
+                    headers: {
+                        ...TEST_HEADERS,
+                    },
+                    body: JSON.stringify({ matchId: 'match-1', state: {} }),
+                });
+
+                expect(response.status).toBe(403);
+                const data = await response.json();
+                expect(data.error).toBe('Test endpoints are disabled outside explicit test/development environments');
+            } finally {
+                process.env.NODE_ENV = previousEnv;
+            }
         });
 
         it('should return 403 for stale match credentials', async () => {

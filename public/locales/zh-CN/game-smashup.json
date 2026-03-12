@@ -154,7 +154,8 @@
     "baseScoredRankingWithBreakdown": "{{playerId}} +{{vp}}VP 力量：",
     "powerModifier": {
       "permanent": "永久力量修正",
-      "temp": "临时力量修正"
+      "temp": "临时力量修正",
+      "nonMinion": "非随从力量修正"
     },
     "damageSource": {
       "original": "基础力量"

@@ -1,5 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+
+await assertChildProcessSupport('E2E 单文件调试运行', { probeFork: true, probeEsbuild: true });
 
 function parseArgs(argv) {
     let match = process.env.PW_TEST_MATCH?.trim();

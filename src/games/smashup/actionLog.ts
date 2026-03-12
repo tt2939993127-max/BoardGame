@@ -313,10 +313,13 @@ export function formatSmashUpActionEntry({
                     segments.push(textSegment(' '));
                     // 检查该玩家的随从是否有力量修正
                     const breakdowns = payload.minionBreakdowns?.[ranking.playerId];
+                    const minionTotal = breakdowns?.reduce((sum, bd) => sum + bd.finalPower, 0) ?? 0;
+                    const nonMinionPowerDelta = breakdowns ? ranking.power - minionTotal : 0;
                     const hasModifiers = breakdowns?.some(bd => bd.modifiers.length > 0);
-                    if (hasModifiers && breakdowns) {
+                    const hasPowerGap = breakdowns !== undefined && nonMinionPowerDelta !== 0;
+                    if ((hasModifiers || hasPowerGap) && breakdowns) {
                         // 有修正：显示玩家 + 力量 breakdown tooltip + VP
-                        const totalPower = breakdowns.reduce((sum, bd) => sum + bd.finalPower, 0);
+                        const totalPower = ranking.power;
                         // 构建总力量 breakdown：合并所有随从的基础力量和修正
                         const allModifiers = breakdowns.flatMap(bd => bd.modifiers.map(m => ({
                             type: 'flat',
@@ -324,6 +327,14 @@ export function formatSmashUpActionEntry({
                             sourceId: m.sourceDefId,
                             sourceName: m.sourceName,
                         })));
+                        if (hasPowerGap) {
+                            allModifiers.push({
+                                type: 'flat',
+                                value: nonMinionPowerDelta,
+                                sourceId: 'non_minion_power',
+                                sourceName: 'actionLog.powerModifier.nonMinion',
+                            });
+                        }
                         const breakdownSeg = buildDamageBreakdownSegment(
                             totalPower,
                             {

@@ -484,6 +484,13 @@ export interface LocalGameProviderProps {
      * 注意：本地模式不做 playerView 过滤，所有玩家信息对 Board 可见（单机/教程无需隐藏）。
      */
     playerId?: string;
+    /**
+     * 是否让本地模式的 Board 视角跟随当前回合玩家。
+     *
+     * 用于本地同屏/测试模式：回合切到谁，就显示谁的可操作手牌。
+     * 教程模式应保持 false，继续固定在指定 playerId 视角。
+     */
+    followCurrentTurnPlayer?: boolean;
 }
 
 export function LocalGameProvider({
@@ -493,6 +500,7 @@ export function LocalGameProvider({
     children,
     onCommandRejected,
     playerId: localPlayerId,
+    followCurrentTurnPlayer = false,
 }: LocalGameProviderProps) {
     console.log('[LocalGameProvider] 组件渲染:', {
         numPlayers,
@@ -754,15 +762,25 @@ export function LocalGameProvider({
         [playerIds],
     );
 
+    const localBoardPlayerId = useMemo(() => {
+        if (followCurrentTurnPlayer) {
+            const core = state.core as { turnOrder?: string[]; currentPlayerIndex?: number };
+            if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
+                return core.turnOrder[core.currentPlayerIndex] ?? null;
+            }
+        }
+        return localPlayerId ?? null;
+    }, [followCurrentTurnPlayer, localPlayerId, state.core]);
+
     const value = useMemo<GameClientContextValue>(() => ({
         state,
         dispatch,
-        playerId: localPlayerId ?? null, // 本地模式无特定玩家身份（未传 playerId 时）
+        playerId: localBoardPlayerId,
         matchPlayers,
         isConnected: true,
         isMultiplayer: false,
         reset,
-    }), [state, dispatch, matchPlayers, reset, localPlayerId, config.domain]);
+    }), [state, dispatch, matchPlayers, reset, localBoardPlayerId, config.domain]);
 
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {

@@ -6,6 +6,9 @@
 
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from './e2e-port-config.js';
 import { cleanupPorts } from './port-allocator.js';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+
+await assertChildProcessSupport('E2E 测试端口清理');
 
 const DEV_PORTS = toPortArray(DEV_SERVER_PORTS);
 const E2E_PORTS = toPortArray(E2E_SINGLE_WORKER_PORTS);

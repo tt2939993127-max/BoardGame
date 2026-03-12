@@ -5,14 +5,18 @@
  *   node scripts/infra/start-worker-servers.js <workerId>
  */
 
+import path from 'node:path';
 import { allocateAvailablePorts, loadWorkerPorts, saveWorkerPorts, isPortInUse } from './port-allocator.js';
-import { registerExitGuard, spawnNodeScript, spawnPackageScript, spawnTsxScript } from './e2e-server-launcher.js';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { registerExitGuard, spawnBundleRunner, spawnNodeScript } from './e2e-server-launcher.js';
 
 const workerId = Number.parseInt(process.argv[2] ?? '', 10);
 if (Number.isNaN(workerId)) {
   console.error('用法: node scripts/infra/start-worker-servers.js <workerId>');
   process.exit(1);
 }
+
+await assertChildProcessSupport(`Worker ${workerId} E2E 服务启动`, { probeEsbuild: true });
 
 const ports = loadWorkerPorts(workerId) ?? await allocateAvailablePorts(workerId);
 console.log(`\n🚀 启动 Worker ${workerId} 的 E2E 服务...`);
@@ -40,15 +44,28 @@ const frontend = spawnNodeScript('scripts/infra/vite-with-logging.js', {
   API_SERVER_PORT: String(ports.apiServer),
 });
 
-const gameServer = spawnTsxScript(['server.ts'], {
+const gameServer = spawnBundleRunner({
+  label: `e2e-game-worker-${workerId}`,
+  entry: 'server.ts',
+  outfile: path.join('temp', 'dev-bundles', `e2e-worker-${workerId}`, 'game', 'server.mjs'),
+  tsconfig: 'tsconfig.server.json',
+  env: {
   ...process.env,
+  NODE_ENV: 'test',
   GAME_SERVER_PORT: String(ports.gameServer),
   USE_PERSISTENT_STORAGE: 'false',
+  },
 });
 
-const apiServer = spawnPackageScript('dev:api', {
+const apiServer = spawnBundleRunner({
+  label: `e2e-api-worker-${workerId}`,
+  entry: 'apps/api/src/main.ts',
+  outfile: path.join('temp', 'dev-bundles', `e2e-worker-${workerId}`, 'api', 'main.mjs'),
+  tsconfig: 'apps/api/tsconfig.json',
+  env: {
   ...process.env,
   API_SERVER_PORT: String(ports.apiServer),
+  },
 });
 
 const cleanup = () => {

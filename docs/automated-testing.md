@@ -1,4 +1,4 @@
-﻿# 自动化测试
+# 自动化测试
 
 > 本文档是项目唯一的测试规范文档。引擎层审计工具的详细规范见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
 
@@ -245,11 +245,22 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 所有 E2E 测试命令会自动执行以下检查：
 
-**文件编码检查**（`scripts/infra/check-file-encoding.mjs`）：
-- 扫描所有源码文件（`src/**/*.{ts,tsx}`）
-- 检测并自动修复 UTF-8 BOM
-- 检测无效字符（编码错误）
-- 防止 Vite 编译失败
+**文件编码检查**（`npm run check:encoding` / `scripts/infra/check-file-encoding.mjs`）：
+- 扫描 `src/`、`apps/`、`e2e/`、`scripts/`、`docs/` 等文本文件
+- 检测 UTF-8 BOM；需要修复时执行 `npm run check:encoding:fix`
+- 严格拦截“非 UTF-8 字节流”这类真实编码错误
+- 对 replacement character、连续问号占位符、常见乱码片段给出告警
+- 需要把这些告警也当成失败时，使用 `npm run check:encoding:strict`
+
+**PowerShell 乱码处理**：
+- 当前会话如果只是“显示乱码”，先执行：`. .\scripts\infra\enable-utf8.ps1`
+- 这只修复终端显示，不代表文件已损坏
+- 即使切到 UTF-8，也仍然禁止用 `Set-Content` / `Out-File` / `>` / `>>` 写回含中文源码或文档
+
+**子进程能力预检**（`scripts/infra/assert-child-process-support.mjs`）：
+- 主 E2E 命令会先验证当前环境是否允许 `fork` 与 `esbuild` service
+- 若报 `spawn EPERM` / `fork EPERM`，会在进入 Playwright 前直接失败并给出原因
+- 这类错误通常说明当前终端、沙箱或 Runner 禁止 Node 子进程，不是业务代码问题
 
 **环境隔离检查**（`scripts/infra/check-e2e-safety.js`）：
 - 检查测试模式（独立测试环境 vs 使用开发服务器）
@@ -555,27 +566,38 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 #### 推荐工作流
 
-1. **开发模式**（手动启动服务，推荐）：
+1. **默认隔离模式**（推荐）：
    ```bash
-   # 终端 1：启动所有服务
-   npm run dev
-   
-   # 终端 2：运行测试
+   # 单终端：自动启动测试专用服务（6173 / 20000 / 21000）并执行测试
    npm run test:e2e
    ```
 
-2. **CI 模式**（自动启动服务）：
+2. **开发服务器复用模式**（只在调试测试代码时使用）：
+   ```bash
+   # 终端 1：启动开发服务（5173 / 18000 / 18001）
+   npm run dev
+   
+   # 终端 2：复用开发服务运行测试
+   npm run test:e2e:dev
+   ```
+
+3. **CI 模式**（自动启动测试专用服务）：
    ```bash
    # 单终端：自动启动服务并运行测试
    npm run test:e2e:ci
    ```
 
-3. **清理端口占用**（仅在测试异常退出，且确认没有其他 E2E 正在使用测试端口时）：
+4. **清理端口占用**（仅在测试异常退出，且确认没有其他 E2E 正在使用测试端口时）：
    ```bash
    npm run test:e2e:cleanup
    ```
 
-4. **WSL / 跨平台工作区注意事项**：
+5. **运行环境前置条件**：
+   - Vitest / Playwright / esbuild / E2E 三服务启动链都依赖 Node `child_process`
+   - 如果报错为 `spawn EPERM` / `spawnSync EPERM` / `fork EPERM`，优先判断当前终端或沙箱是否禁止子进程
+   - 这类错误通常不是业务代码问题，应改在本地终端、CI Runner 或允许子进程的环境执行
+
+6. **WSL / 跨平台工作区注意事项**：
    ```bash
    # 如果同一份仓库之前在 Windows 下装过依赖，再切到 WSL 跑 E2E，
    # 必须先重装一遍 Linux 依赖，否则可能缺少 rollup/esbuild 的 Linux 可选包。
@@ -593,27 +615,44 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 1. **检查端口配置**
    - 读取 `.env` 文件确认端口配置：
-     - `VITE_DEV_PORT`（默认 3000）
+     - `VITE_DEV_PORT`（默认 5173，开发环境）
      - `GAME_SERVER_PORT`（默认 18000）
      - `API_SERVER_PORT`（默认 18001）
+   - 单 worker 隔离测试端口固定为：
+     - 前端 `6173`
+     - game-server `20000`
+     - api-server `21000`
 
 2. **检查服务状态**
    ```powershell
-   # 检查端口是否被占用
-   netstat -ano | findstr ":3000"
+   # 开发环境端口
+   netstat -ano | findstr ":5173"
    netstat -ano | findstr ":18000"
    netstat -ano | findstr ":18001"
+
+   # E2E 隔离环境端口
+   netstat -ano | findstr ":6173"
+   netstat -ano | findstr ":20000"
+   netstat -ano | findstr ":21000"
    
    # 或使用 PowerShell
-   Get-NetTCPConnection -LocalPort 3000
+   Get-NetTCPConnection -LocalPort 5173
    Get-NetTCPConnection -LocalPort 18000
    Get-NetTCPConnection -LocalPort 18001
+   Get-NetTCPConnection -LocalPort 6173
+   Get-NetTCPConnection -LocalPort 20000
+   Get-NetTCPConnection -LocalPort 21000
    ```
 
 3. **验证服务可达性**
-   - 前端：访问 `http://localhost:3000`（或 `.env` 中配置的端口）
-   - 游戏服务器：访问 `http://localhost:18000/games`（应返回游戏列表）
-   - API 服务器：访问 `http://localhost:18001/auth/status`（应返回认证状态）
+   - 开发模式：
+     - 前端：`http://localhost:5173`
+     - 游戏服务器：`http://localhost:18000/games`
+     - API 服务器：`http://localhost:18001/health`
+   - 隔离测试模式：
+     - 前端：`http://localhost:6173/__ready`
+     - 游戏服务器：`http://localhost:20000/games`
+     - API 服务器：`http://localhost:21000/health`
 
 4. **验证代理配置**
    - 检查 `vite.config.ts` 中的 `server.proxy` 配置是否与 `.env` 端口一致
@@ -687,8 +726,8 @@ TimeoutError: page.goto: Timeout 30000ms exceeded
 
 **排查步骤**：
 1. 确认前端服务器正在运行（`http://localhost:3000`）
-2. 确认游戏服务器正在运行（`http://localhost:18000/games`）
-3. 确认 API 服务器正在运行（`http://localhost:18001/auth/status`）
+2. 确认游戏服务器正在运行（开发模式 `http://localhost:18000/games`，隔离模式 `http://localhost:20000/games`）
+3. 确认 API 服务器正在运行（开发模式 `http://localhost:18001/health`，隔离模式 `http://localhost:21000/health`）
 4. 检查浏览器控制台是否有错误（使用 `page.on('console', ...)` 监听）
 
 ### E2E 测试选择器多语言支持（强制）

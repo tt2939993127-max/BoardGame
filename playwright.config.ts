@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './scripts/infra/e2e-port-config.js';
+import { ensureSharedTestApiToken } from './src/server/testApiToken';
 
 dotenv.config({ quiet: true });
 
@@ -18,6 +19,7 @@ const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = !forceStartServers && !process.env.CI;
 const headedMode = process.env.PW_HEADED === 'true' || process.env.PWDEBUG === '1';
 process.env.PW_REUSE_EXISTING_SERVERS = shouldReuseExistingServers ? 'true' : 'false';
+ensureSharedTestApiToken(process.env);
 
 const ports = useDevServers ? DEV_PORTS : SINGLE_WORKER_PORTS;
 
@@ -64,7 +66,9 @@ if (!isMultiWorker) {
 }
 
 const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || String(ports.frontend);
-const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${frontendPort}`;
+// Chromium 在 Windows 上可能优先解析 localhost -> ::1，而测试前端默认只监听 IPv4。
+// 统一固定到 127.0.0.1，避免 page.goto 偶发 ERR_CONNECTION_REFUSED。
+const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://127.0.0.1:${frontendPort}`;
 const multiWorkerSafeTests = collectFrameworkBackedTests(path.join(process.cwd(), 'e2e'));
 const explicitTestMatch = process.env.PW_TEST_MATCH?.trim();
 

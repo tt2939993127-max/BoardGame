@@ -120,4 +120,127 @@ describe('useEventStreamCursor', () => {
 
         expect(consumedCount).toBe(0);
     });
+
+    it('consumeOnReconcile=true 时空 reconcile 不会把历史事件重新当成新事件消费', () => {
+        let rollbackValue: EventStreamRollbackValue = {
+            watermark: null,
+            seq: 0,
+            reconcileSeq: 0,
+        };
+
+        const wrapper = ({ children }: { children: React.ReactNode }) =>
+            React.createElement(
+                EventStreamRollbackContext.Provider,
+                { value: rollbackValue },
+                children,
+            );
+
+        const { result, rerender } = renderHook(
+            ({ entries }: { entries: EventStreamEntry[] }) =>
+                useEventStreamCursor({ entries, consumeOnReconcile: true }),
+            {
+                initialProps: {
+                    entries: [
+                        createEntry(1, 'ACTION_PLAYED'),
+                        createEntry(2, 'CARDS_DRAWN'),
+                    ],
+                },
+                wrapper,
+            },
+        );
+
+        act(() => {
+            result.current.consumeNew();
+        });
+
+        rollbackValue = {
+            watermark: null,
+            seq: 0,
+            reconcileSeq: 1,
+        };
+
+        rerender({ entries: [] });
+
+        act(() => {
+            expect(result.current.consumeNew().entries).toEqual([]);
+        });
+
+        rerender({ entries: [] });
+
+        act(() => {
+            expect(result.current.consumeNew().entries).toEqual([]);
+        });
+
+        rerender({
+            entries: [
+                createEntry(1, 'ACTION_PLAYED'),
+                createEntry(2, 'CARDS_DRAWN'),
+                createEntry(3, 'NEW_EVENT'),
+            ],
+        });
+
+        let consumedTypes: string[] = [];
+        act(() => {
+            consumedTypes = result.current.consumeNew().entries.map((entry) => entry.event.type);
+        });
+
+        expect(consumedTypes).toEqual(['NEW_EVENT']);
+    });
+
+    it('reconnect 后若 entries 先清空再恢复旧 ID，不应把历史事件整包重放', () => {
+        const rollbackValue: EventStreamRollbackValue = {
+            watermark: null,
+            seq: 0,
+            reconcileSeq: 0,
+        };
+
+        const wrapper = ({ children }: { children: React.ReactNode }) =>
+            React.createElement(
+                EventStreamRollbackContext.Provider,
+                { value: rollbackValue },
+                children,
+            );
+
+        const initialEntries = [
+            createEntry(1, 'ACTION_PLAYED'),
+            createEntry(2, 'CARDS_DRAWN'),
+        ];
+
+        const { result, rerender } = renderHook(
+            ({ entries, reconnectToken }: { entries: EventStreamEntry[]; reconnectToken: number }) =>
+                useEventStreamCursor({ entries, reconnectToken }),
+            {
+                initialProps: {
+                    entries: initialEntries,
+                    reconnectToken: 0,
+                },
+                wrapper,
+            },
+        );
+
+        act(() => {
+            expect(result.current.consumeNew().entries).toEqual([]);
+        });
+
+        rerender({
+            entries: [],
+            reconnectToken: 1,
+        });
+
+        act(() => {
+            expect(result.current.consumeNew().entries).toEqual([]);
+        });
+
+        rerender({
+            entries: initialEntries,
+            reconnectToken: 1,
+        });
+
+        let consumedTypes: string[] = [];
+        act(() => {
+            consumedTypes = result.current.consumeNew().entries.map((entry) => entry.event.type);
+        });
+
+        expect(consumedTypes).toEqual([]);
+    });
 });

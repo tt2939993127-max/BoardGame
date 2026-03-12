@@ -68,6 +68,17 @@ export function markMatchCleanupNoticeSeen(notice: MatchCleanupNotice): void {
     }
 }
 
+export function isMatchNotFoundError(err: unknown): boolean {
+    const status = typeof err === 'object' && err !== null && 'status' in err
+        ? (err as { status?: unknown }).status
+        : undefined;
+    if (status === 404) {
+        return true;
+    }
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found');
+}
+
 const OWNER_ACTIVE_MATCH_KEY = 'owner_active_match';
 const MATCH_CREDENTIALS_PREFIX = 'match_creds_';
 const OWNER_ACTIVE_MATCH_SUPPRESS_KEY = 'owner_active_match_suppressed';
@@ -536,11 +547,10 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             lastFailureAtRef.current = null;
             setError(null);
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
             console.error('获取房间状态失败:', err);
             
             // 404 错误（房间不存在）立即触发错误状态，无需等待 3 次失败
-            const is404 = errorMessage.includes('404') || errorMessage.includes('not found');
+            const is404 = isMatchNotFoundError(err);
             if (is404) {
                 clearMatchCredentials(currentMatchID);
                 setError('房间不存在或已被删除');
@@ -621,10 +631,9 @@ export async function leaveMatch(
         clearMatchCredentials(matchID);
         return { success: true };
     } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('离开房间失败:', err);
         // 404 说明房间已不存在，视为成功并清理凭据
-        if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        if (isMatchNotFoundError(err)) {
             clearMatchCredentials(matchID);
             return { success: true, cleanedLocal: true, error: 'not_found' };
         }

@@ -20,6 +20,7 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { validateDiscardMinionPlaySemantics } from '../domain/playLegality';
 import { registerDiscardPlayProvider } from '../domain/discardPlayability';
 
 /** 注册僵尸派系所有能力*/
@@ -400,17 +401,51 @@ function zombieMallCrawl(ctx: AbilityContext): AbilityResult {
 }
 
 // ============================================================================
-// 它们不收回断来临：从弃牌堆额外打出一个随从
+// 它们不断来临：从弃牌堆额外打出一个随从
 // ============================================================================
 
-/** 它们不断来临 onPlay：从弃牌堆额外打出一个随从（直接授予额度） */
+/** 它们不断来临 onPlay：选择弃牌堆中的一个随从，然后打出到任意基地 */
 function zombieTheyKeepComing(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
     if (minionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
-    
-    // 直接授予1个额外随从额度，玩家可以通过 PLAY_MINION fromDiscard 命令打出
-    return { events: [grantExtraMinion(ctx.playerId, 'zombie_they_keep_coming', ctx.now)] };
+
+    const buildOptions = (cards: typeof minionsInDiscard) => cards.map((c, i) => {
+        const def = getCardDef(c.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? c.defId;
+        const power = def?.power ?? 0;
+        return {
+            id: `card-${i}`,
+            label: `${name} (力量 ${power})`,
+            value: { cardUid: c.uid, defId: c.defId, power },
+            _source: 'discard' as const,
+            displayMode: 'card' as const,
+        };
+    });
+    const options = buildOptions(minionsInDiscard);
+
+    const interaction = createSimpleChoice(
+        `zombie_they_keep_coming_${ctx.now}`, ctx.playerId,
+        '它们不断来临：选择弃牌堆中的随从，然后点击目标基地',
+        options,
+        { sourceId: 'zombie_they_keep_coming', targetType: 'discard_minion' },
+    );
+
+    (interaction.data as any).optionsGenerator = (state: any) => {
+        const currentPlayer = state.core.players[ctx.playerId];
+        return buildOptions(currentPlayer.discard.filter((c: any) => c.type === 'minion'));
+    };
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                allowedBaseIndices: ctx.state.bases.map((_, index) => index),
+            },
+        }),
+    };
 }
 
 // ============================================================================
@@ -553,7 +588,50 @@ export function registerZombieInteractionHandlers(): void {
         };
     });
 
-    // 僵尸领主：选随从+选基地合并为单步交互
+    // 它们不断来临：选弃牌堆随从并指定基地后，额外打出该随从
+    registerInteractionHandler('zombie_they_keep_coming', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { cardUid?: string; baseIndex?: number };
+        if (!selected.cardUid || selected.baseIndex === undefined) {
+            return { state, events: [] };
+        }
+
+        const player = state.core.players[playerId];
+        const discardCard = player?.discard.find(c => c.uid === selected.cardUid && c.type === 'minion');
+        if (!discardCard) return { state, events: [] };
+        if (selected.baseIndex < 0 || selected.baseIndex >= state.core.bases.length) {
+            return { state, events: [] };
+        }
+        if (!validateDiscardMinionPlaySemantics(state.core, playerId, {
+            cardUid: discardCard.uid,
+            baseIndex: selected.baseIndex,
+            consumesNormalLimit: false,
+        }).valid) {
+            return { state, events: [] };
+        }
+
+        const def = getCardDef(discardCard.defId) as MinionCardDef | undefined;
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: {
+                playerId,
+                cardUid: discardCard.uid,
+                defId: discardCard.defId,
+                baseIndex: selected.baseIndex,
+                power: def?.power ?? 0,
+                fromDiscard: true,
+            },
+            timestamp,
+        };
+
+        return {
+            state,
+            events: [
+                grantExtraMinion(playerId, 'zombie_they_keep_coming', timestamp),
+                playedEvt,
+            ],
+        };
+    });
+
     registerInteractionHandler('zombie_lord_pick', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as { done?: boolean; cardUid?: string; defId?: string; power?: number; baseIndex?: number };
         if (selected.done) return { state, events: [] }; // 完成

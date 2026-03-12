@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import type {
     SmashUpCore,
     SmashUpEvent,
@@ -47,6 +48,10 @@ function makeMinion(uid: string, defId: string, controller: string, power: numbe
 
 function makeCard(uid: string, defId: string, type: 'minion' | 'action', owner: string): CardInstance {
     return { uid, defId, type, owner };
+}
+
+function makeBase(defId: string) {
+    return { defId, minions: [], ongoingActions: [] };
 }
 
 function makePlayer(id: string, overrides?: Partial<PlayerState>): PlayerState {
@@ -508,7 +513,7 @@ describe('巫师派系能力（第6批）', () => {
                     hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
                 }),
                 '1': makePlayer('1', {
-                    deck: [makeCard('d1', 'test_action', 'action', '1'), makeCard('d2', 'test_minion', 'minion', '1')],
+                    deck: [makeCard('d1', 'wizard_summon', 'action', '1'), makeCard('d2', 'test_minion', 'minion', '1')],
                 }),
             },
         });
@@ -535,27 +540,125 @@ describe('巫师派系能力（第6批）', () => {
         expect(drawEvents.length).toBe(0);
     });
 
-    it('wizard_mass_enchantment: 若所选对手行动已不在手牌则不再转移或打出', () => {
+    it('wizard_mass_enchantment: 若所选对手行动已不在牌库则不再转移或打出', () => {
         const handler = getInteractionHandler('wizard_mass_enchantment');
         expect(handler).toBeDefined();
 
         const state = makeState({
             players: {
                 '0': makePlayer('0'),
-                '1': makePlayer('1', { hand: [] }),
+                '1': makePlayer('1', { deck: [] }),
             },
         });
 
         const result = handler!(
             makeMatchState(state),
             '0',
-            { cardUid: 'd1', defId: 'test_action', pid: '1' },
+            { cardUid: 'd1', defId: 'wizard_summon', pid: '1' },
             undefined,
             defaultRandom,
             1000,
         );
 
         expect(result?.events ?? []).toHaveLength(0);
+    });
+
+    it('wizard_mass_enchantment: special 行动不应出现在可选额外打出列表中', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('d1', 'ninja_hidden_ninja', 'action', '1')],
+                }),
+            },
+            bases: [makeBase('b1'), makeBase('b2')],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeUndefined();
+    });
+
+    it('wizard_mass_enchantment: onlyCardInHand 约束不满足时不应把该牌列为候选', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'wizard_mass_enchantment', 'action', '0'),
+                        makeCard('backup', 'test_minion', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('d1', 'ghost_make_contact', 'action', '1')],
+                }),
+            },
+            bases: [makeBase('b1'), makeBase('b2')],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeUndefined();
+    });
+
+    it('wizard_mass_enchantment: 选中打到随从上的 ongoing 时应先选择目标随从', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [
+                        makeCard('d1', 'ninja_smoke_bomb', 'action', '1'),
+                        makeCard('d2', 'test_minion', 'minion', '1'),
+                    ],
+                }),
+            },
+            bases: [
+                { defId: 'b1', minions: [makeMinion('m0', 'test_minion', '0', 3)], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m1', 'test_minion', '1', 2)], ongoingActions: [] },
+            ],
+        });
+
+        const ms = makeMatchState(state);
+        const r1 = runCommand(ms, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1' },
+        } as any, defaultRandom);
+        expect(r1.success).toBe(true);
+
+        const interaction1 = r1.finalState.sys.interaction.current as any;
+        expect(interaction1?.data?.sourceId).toBe('wizard_mass_enchantment');
+        const actionOpt = interaction1.data.options.find((opt: any) => opt.value?.cardUid === 'd1');
+        expect(actionOpt).toBeDefined();
+
+        const r2 = runCommand(r1.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: actionOpt.id },
+        } as any, defaultRandom);
+        expect(r2.success).toBe(true);
+
+        const interaction2 = r2.finalState.sys.interaction.current as any;
+        expect(interaction2?.data?.sourceId).toBe('wizard_mass_enchantment_choose_minion');
+        const targetOpt = interaction2.data.options.find((opt: any) => opt.value?.minionUid === 'm1');
+        expect(targetOpt).toBeDefined();
+
+        const r3 = runCommand(r2.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: targetOpt.id },
+        } as any, defaultRandom);
+        expect(r3.success).toBe(true);
+
+        const finalCore = r3.finalState.core;
+        const targetMinion = finalCore.bases[1].minions.find(m => m.uid === 'm1');
+        expect(targetMinion?.attachedActions).toHaveLength(1);
+        expect(targetMinion?.attachedActions[0].defId).toBe('ninja_smoke_bomb');
+        expect(finalCore.players['1'].deck.find(c => c.uid === 'd1')).toBeUndefined();
+        expect(finalCore.players['0'].actionsPlayed).toBe(1);
     });
 
     it('wizard_portal: 有随从时创建选择 Prompt 让玩家选随从', () => {

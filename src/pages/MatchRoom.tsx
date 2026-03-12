@@ -40,6 +40,7 @@ import { createUgcClientGame } from '../ugc/client/game';
 import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
+import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
 import { preloadWarmImages } from '../core';
@@ -48,6 +49,7 @@ import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
+import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -270,12 +272,11 @@ export const MatchRoom = () => {
     const hasTutorialBoard = Boolean(WrappedBoard && engineConfig && gameId);
 
     const [isLeaving, setIsLeaving] = useState(false);
-    const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(() => {
-        // 如果有 gameId，namespace 需要加载，初始为 false 避免 Board 先挂载再卸载
-        if (!gameId) return true;
-        const namespace = `game-${gameId}`;
-        return i18n.hasLoadedNamespace(namespace);
-    });
+    const {
+        isGameNamespaceReady,
+        gameNamespaceError,
+        retryGameNamespaceLoad,
+    } = useGameNamespaceReady(gameId, i18n);
     const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const [forceExitModalId, setForceExitModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
@@ -285,38 +286,6 @@ export const MatchRoom = () => {
     const tutorialModalIdRef = useRef<string | null>(null);
     const errorToastRef = useRef<{ key: string; timestamp: number } | null>(null);
     const handledMissingMatchRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        if (!gameId) return;
-        const namespace = `game-${gameId}`;
-
-        // 如果 namespace 已加载（如从同游戏的在线对局返回后进入教程），
-        // 跳过 false→true 的状态翻转，避免不必要的 unmount/remount 循环。
-        // 该循环会导致 LocalGameProvider 重建、tutorialStartedRef 残留为 true，
-        // 使 startTutorial useLayoutEffect 在第二次挂载时跳过启动。
-        if (i18n.hasLoadedNamespace(namespace)) {
-            setIsGameNamespaceReady(true);
-            return;
-        }
-
-        let isActive = true;
-        setIsGameNamespaceReady(false);
-        i18n.loadNamespaces(namespace)
-            .then(() => {
-                if (isActive) {
-                    setIsGameNamespaceReady(true);
-                }
-            })
-            .catch(() => {
-                if (isActive) {
-                    setIsGameNamespaceReady(true);
-                }
-            });
-
-        return () => {
-            isActive = false;
-        };
-    }, [gameId, i18n]);
 
     // 大厅阶段暖预加载：在 i18n namespace 就绪后，后台预取当前游戏的图片资源。
     // 与 socket 连接/状态同步并行执行，利用等待时间把图片拉到浏览器缓存，
@@ -932,6 +901,16 @@ export const MatchRoom = () => {
             { dedupeKey: key }
         );
     }, [gameId, matchId, shouldShowMatchError, t, toast]);
+
+    if (gameNamespaceError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameNamespaceError}
+                onRetry={retryGameNamespaceLoad}
+            />
+        );
+    }
 
     if (!isGameNamespaceReady) {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;

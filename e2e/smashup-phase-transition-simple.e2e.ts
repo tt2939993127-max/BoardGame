@@ -1,70 +1,219 @@
 /**
- * 大杀四方 - 简单阶段转换测试
- * 
- * 目的：验证点击"结束回合"按钮能否正确触发阶段转换
+ * 大杀四方 - 阶段切换与行动卡特写回归
  */
 
-import { test } from './framework';
+import { copyFile, mkdir } from 'node:fs/promises';
+import { dirname, join, parse } from 'node:path';
+import type { Page, TestInfo } from '@playwright/test';
+import { test, expect } from './framework';
+import { waitForSmashUpUI } from './helpers/smashup';
+import { setupSmashUpMatchSkipSetup } from './helpers/smashup-skip-setup';
+import { getMatchState, injectMatchState } from './helpers/state-injection';
+
+const sanitizePathSegment = (value: string) =>
+    Array.from(value, (char) => (char.charCodeAt(0) < 32 ? '-' : char))
+        .join('')
+        .replace(/[<>:"/\\|?*]/g, '-')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 120);
+
+async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+    const path = testInfo.outputPath(`${name}.png`);
+    await mkdir(dirname(path), { recursive: true });
+    await page.screenshot({ path, fullPage: true });
+
+    const fileStem = sanitizePathSegment(parse(testInfo.file).name || 'unknown-test');
+    const titleStem = sanitizePathSegment(testInfo.title || 'unnamed');
+    const nameStem = sanitizePathSegment(name);
+    const evidenceDir = join(testInfo.config.rootDir, 'test-results', 'evidence-screenshots', fileStem);
+    const evidencePath = join(evidenceDir, `${titleStem}-${nameStem}.png`);
+
+    await mkdir(evidenceDir, { recursive: true });
+    await copyFile(path, evidencePath);
+}
+
+async function applyOnlineMatchState(
+    matchId: string,
+    page: Page,
+    updater: (state: any) => any,
+): Promise<void> {
+    const currentState = await getMatchState(matchId, page);
+    const nextState = updater(currentState);
+    await injectMatchState(matchId, nextState, page);
+    await page.waitForTimeout(800);
+}
+
+async function waitForTurnTracker(page: Page, side: 'YOU' | 'OPP'): Promise<void> {
+    await expect(
+        page.locator('[data-tutorial-id="su-turn-tracker"]').filter({ hasText: new RegExp(side, 'i') }),
+    ).toBeVisible({ timeout: 8000 });
+}
+
+const makeSmashUpCard = (uid: string, defId: string, type: 'action' | 'minion', owner: '0' | '1') => ({
+    uid,
+    defId,
+    type,
+    owner,
+});
+
+function buildActionSpotlightState(baseState: any, currentPlayerIndex: 0 | 1) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+
+    nextState.core.currentPlayerIndex = currentPlayerIndex;
+    nextState.core.phase = 'playCards';
+    nextState.core.factionSelection = undefined;
+    nextState.core.players['0'] = {
+        ...nextState.core.players['0'],
+        hand: [makeSmashUpCard('p0-action-1', 'wizard_mystic_studies', 'action', '0')],
+        deck: [
+            makeSmashUpCard('p0-deck-1', 'wizard_neophyte', 'minion', '0'),
+            makeSmashUpCard('p0-deck-2', 'wizard_apprentice', 'minion', '0'),
+        ],
+        discard: [],
+        actionsPlayed: 0,
+        actionLimit: 1,
+        minionsPlayed: 0,
+        minionLimit: 1,
+        minionsPlayedPerBase: {},
+        sameNameMinionDefId: null,
+        factions: ['wizards', 'steampunks'],
+    };
+    nextState.core.players['1'] = {
+        ...nextState.core.players['1'],
+        hand: [makeSmashUpCard('p1-action-1', 'wizard_mystic_studies', 'action', '1')],
+        deck: [
+            makeSmashUpCard('p1-deck-1', 'wizard_chronomage', 'minion', '1'),
+            makeSmashUpCard('p1-deck-2', 'wizard_archmage', 'minion', '1'),
+        ],
+        discard: [],
+        actionsPlayed: 0,
+        actionLimit: 1,
+        minionsPlayed: 0,
+        minionLimit: 1,
+        minionsPlayedPerBase: {},
+        sameNameMinionDefId: null,
+        factions: ['wizards', 'steampunks'],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder: Array.isArray(nextState.core.turnOrder) ? [...nextState.core.turnOrder] : nextState.sys.turnOrder,
+        currentPlayerIndex,
+        phase: 'playCards',
+        interaction: nextState.sys.interaction
+            ? { ...nextState.sys.interaction, current: undefined, queue: [], isBlocked: false }
+            : nextState.sys.interaction,
+        responseWindow: nextState.sys.responseWindow
+            ? { ...nextState.sys.responseWindow, current: undefined }
+            : nextState.sys.responseWindow,
+        eventStream: nextState.sys.eventStream
+            ? { ...nextState.sys.eventStream, entries: [], nextId: 1 }
+            : nextState.sys.eventStream,
+    };
+
+    return nextState;
+}
 
 test('简单阶段转换 - 点击结束回合', async ({ page, game }, testInfo) => {
     test.setTimeout(60000);
-    
-    // 1. 导航到游戏
+
     await page.goto('/play/smashup');
-    
-    // 2. 等待游戏加载
     await page.waitForFunction(
         () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered(),
-        { timeout: 15000 }
+        { timeout: 15000 },
     );
-    
-    // 3. 状态注入（最简单的场景：没有达到临界点的基地）
+
     await game.setupScene({
         gameId: 'smashup',
-        player0: { 
-            hand: [
-                { uid: 'card-1', defId: 'wizard_portal', type: 'action' }
-            ],
+        player0: {
+            hand: [{ uid: 'card-1', defId: 'wizard_portal', type: 'action' }],
         },
         player1: {},
-        bases: [
-            { breakpoint: 25, power: 0 }, // 空基地，不会触发计分
-        ],
+        bases: [{ breakpoint: 25, power: 0 }],
         currentPlayer: '0',
         phase: 'playCards',
     });
-    
+
     await page.waitForTimeout(2000);
     await game.screenshot('01-initial-state', testInfo);
-    
-    // 4. 验证初始阶段
+
     const initialPhase = await page.evaluate(() => {
         const harness = (window as any).__BG_TEST_HARNESS__;
         return harness.state.get().sys.phase;
     });
     console.log('[TEST] 初始阶段:', initialPhase);
-    
-    // 5. 点击"结束回合"按钮
-    console.log('[TEST] 点击"结束回合"按钮');
-    // 按钮文本可能被分成两行，使用更宽松的选择器
-    const finishTurnButton = page.locator('button').filter({ hasText: /Finish|Turn|结束|回合/i }).first();
-    await finishTurnButton.click();
-    await page.waitForTimeout(2000);
-    
+
+    await game.advancePhase();
+
     await game.screenshot('02-after-finish-turn', testInfo);
-    
-    // 6. 验证阶段是否改变
-    const afterPhase = await page.evaluate(() => {
-        const harness = (window as any).__BG_TEST_HARNESS__;
-        return harness.state.get().sys.phase;
+
+    await expect.poll(async () => {
+        const state = await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            return harness.state.get();
+        });
+        return {
+            phase: state.sys.phase,
+            currentPlayerIndex: state.core.currentPlayerIndex,
+        };
+    }, { timeout: 10000 }).toEqual({
+        phase: 'playCards',
+        currentPlayerIndex: 1,
     });
-    console.log('[TEST] 点击后阶段:', afterPhase);
-    
-    // 7. 期望：阶段应该从 playCards 变为 scoreBases（即使没有基地达标，也应该进入该阶段）
-    // 或者直接跳到 draw（如果 scoreBases 被自动跳过）
-    if (afterPhase === 'playCards') {
-        console.error('[TEST] ❌ 阶段没有改变，仍然是 playCards');
-    } else {
-        console.log('[TEST] ✅ 阶段已改变:', afterPhase);
+});
+
+test('在线模式对手打出行动卡时应显示特写', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpMatchSkipSetup(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp 联机房间创建失败');
+        return;
+    }
+
+    const { hostPage, guestPage, hostContext, guestContext } = setup;
+
+    try {
+        await applyOnlineMatchState(setup.matchId, hostPage, (state) => buildActionSpotlightState(state, 0));
+        await waitForSmashUpUI(hostPage);
+        await waitForSmashUpUI(guestPage);
+        await waitForTurnTracker(hostPage, 'YOU');
+        await waitForTurnTracker(guestPage, 'OPP');
+
+        const guestSpotlightCard = guestPage.getByTestId('smashup-action-spotlight-card');
+        const guestSpotlightQueue = guestPage.getByTestId('card-spotlight-queue');
+        const hostSpotlightQueue = hostPage.getByTestId('card-spotlight-queue');
+
+        await hostPage.locator('[data-card-uid="p0-action-1"]').click();
+        await expect(guestSpotlightCard).toBeVisible({ timeout: 8000 });
+        await expect(guestSpotlightCard).toHaveAttribute('data-card-def-id', 'wizard_mystic_studies');
+        await expect(hostSpotlightQueue).toHaveCount(0);
+        await saveEvidenceScreenshot(guestPage, testInfo, 'action-spotlight-online-p0');
+
+        await guestSpotlightQueue.click({ force: true });
+        await expect(guestSpotlightCard).toBeHidden({ timeout: 5000 });
+
+        await applyOnlineMatchState(setup.matchId, hostPage, (state) => buildActionSpotlightState(state, 1));
+        await waitForTurnTracker(hostPage, 'OPP');
+        await waitForTurnTracker(guestPage, 'YOU');
+
+        const hostSpotlightCard = hostPage.getByTestId('smashup-action-spotlight-card');
+        const hostSpotlightQueueAfter = hostPage.getByTestId('card-spotlight-queue');
+        const guestSpotlightQueueAfter = guestPage.getByTestId('card-spotlight-queue');
+
+        await guestPage.locator('[data-card-uid="p1-action-1"]').click();
+        await expect(hostSpotlightCard).toBeVisible({ timeout: 8000 });
+        await expect(hostSpotlightCard).toHaveAttribute('data-card-def-id', 'wizard_mystic_studies');
+        await expect(guestSpotlightQueueAfter).toHaveCount(0);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'action-spotlight-online-p1');
+
+        await hostSpotlightQueueAfter.click({ force: true });
+        await expect(hostSpotlightCard).toBeHidden({ timeout: 5000 });
+    } finally {
+        await guestContext.close();
+        await hostContext.close();
     }
 });

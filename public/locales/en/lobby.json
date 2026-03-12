@@ -166,6 +166,8 @@
     "tutorialTitle": "Learning {{game}}",
     "matchTitle": "Playing {{game}}",
     "loadingResources": "Loading match resources...",
+    "namespaceLoadFailed": "Failed to load game translations",
+    "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
     "title": {
       "joining": "Joining",

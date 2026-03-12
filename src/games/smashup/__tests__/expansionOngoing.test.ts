@@ -364,7 +364,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             const base = makeBase();
             const state = makeState([base]);
             state.players['0'].discard = [
-                makeCard('dis-1', 'some_action', 'action', '0', SMASHUP_FACTION_IDS.STEAMPUNKS),
+                makeCard('dis-1', 'steampunk_escape_hatch', 'action', '0', SMASHUP_FACTION_IDS.STEAMPUNKS),
             ];
             const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
@@ -379,7 +379,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             expect(current?.data?.sourceId).toBe('steampunk_mechanic');
         });
 
-        test('只能选择打出到基地上的持续行动卡，不包括打出到随从上的', () => {
+        test('只能选择打出到基地上的行动牌，不包括打到随从上的和普通行动牌', () => {
             const base = makeBase();
             const state = makeState([base]);
             // 弃牌堆包含：打出到基地的 ongoing、打出到随从的 ongoing、standard 行动卡
@@ -400,16 +400,34 @@ describe('蒸汽朋克 ongoing 能力', () => {
             expect(current).toBeDefined();
             const options = current?.data?.options || [];
             
-            // 应该有 3 个选项：escape_hatch（打出到基地）、scrap_diving（standard）、取消
-            expect(options.length).toBe(3);
+            // 应该只有 2 个选项：escape_hatch（打出到基地）+ 取消
+            expect(options.length).toBe(2);
             const cardUids = options.map((opt: any) => opt.value?.cardUid).filter(Boolean);
             expect(cardUids).toContain('dis-1'); // escape_hatch
-            expect(cardUids).toContain('dis-3'); // scrap_diving
             expect(cardUids).not.toContain('dis-2'); // smoke_bomb（打出到随从）应该被排除
+            expect(cardUids).not.toContain('dis-3'); // scrap_diving（普通行动牌）应该被排除
             
             // 验证有取消选项
             const hasCancelOption = options.some((opt: any) => opt.id === '__cancel__');
             expect(hasCancelOption).toBe(true);
+        });
+
+        test('无合法基地时不应把受 playConstraint 限制的 ongoing 列为候选', () => {
+            const base = makeBase();
+            const state = makeState([base]);
+            state.players['0'].discard = [
+                makeCard('dis-4', 'cthulhu_complete_the_ritual', 'action', '0', SMASHUP_FACTION_IDS.CTHULHU),
+            ];
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const executor = resolveAbility('steampunk_mechanic', 'onPlay')!;
+            const result = executor({
+                state, matchState: ms, playerId: '0', cardUid: 'mech-1', defId: 'steampunk_mechanic',
+                baseIndex: 0, random: dummyRandom, now: 1000,
+            });
+
+            expect((result.matchState?.sys as any)?.interaction?.current).toBeUndefined();
+            expect(result.events.some((event: any) => event.type === SU_EVENTS.ABILITY_FEEDBACK)).toBe(true);
         });
 
         test('若所选行动已不在弃牌堆则不再恢复或打出', () => {
@@ -424,6 +442,55 @@ describe('蒸汽朋克 ongoing 能力', () => {
                 state,
                 playerId: '0',
                 selectedValue: { cardUid: 'dis-1', defId: 'steampunk_escape_hatch' },
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(0);
+        });
+
+        test('steampunk_mechanic_target: 目标基地被对手 ornate_dome 封锁时不再附着', () => {
+            const handler = getInteractionHandler('steampunk_mechanic_target');
+            expect(handler).toBeDefined();
+
+            const base = makeBase();
+            base.ongoingActions = [{
+                uid: 'dome-1',
+                defId: 'steampunk_ornate_dome',
+                ownerId: '1',
+                talentUsed: false,
+            } as any];
+            const state = makeState([base]);
+            state.players['0'].hand = [
+                makeCard('dis-1', 'steampunk_escape_hatch', 'action', '0', SMASHUP_FACTION_IDS.STEAMPUNKS),
+            ];
+
+            const events = callHandler(handler!, {
+                state,
+                playerId: '0',
+                selectedValue: { baseIndex: 0 },
+                data: { cardUid: 'dis-1', defId: 'steampunk_escape_hatch' },
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(0);
+        });
+
+        test('若所选行动不是可打到基地上的行动牌则不再恢复或打出', () => {
+            const handler = getInteractionHandler('steampunk_mechanic');
+            expect(handler).toBeDefined();
+
+            const base = makeBase();
+            const state = makeState([base]);
+            state.players['0'].discard = [
+                makeCard('dis-3', 'steampunk_scrap_diving', 'action', '0', SMASHUP_FACTION_IDS.STEAMPUNKS),
+            ];
+
+            const events = callHandler(handler!, {
+                state,
+                playerId: '0',
+                selectedValue: { cardUid: 'dis-3', defId: 'steampunk_scrap_diving' },
                 random: dummyRandom,
                 now: 1000,
             });

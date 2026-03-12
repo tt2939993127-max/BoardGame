@@ -7,13 +7,16 @@
  */
 
 import { spawn } from 'child_process';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+
+await assertChildProcessSupport('Vite 独立启动测试');
 
 console.log('=== 独立测试 Vite ===');
 console.log('启动时间:', new Date().toISOString());
 console.log('Node 版本:', process.version);
 console.log('工作目录:', process.cwd());
 
-const vite = spawn('node', [
+const vite = spawn(process.execPath, [
   '--max-old-space-size=4096',
   'node_modules/vite/bin/vite.js',
   '--port', '5173',

@@ -132,27 +132,35 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
     const lastReconnectTokenRef = useRef(reconnectToken ?? 0);
     const lastRollbackSeqRef = useRef(rollback.seq);
     const lastReconcileSeqRef = useRef(rollback.reconcileSeq);
+    const suppressEmptyResetRef = useRef(false);
 
     const consumeNew = useCallback((): ConsumeResult => {
         const curLen = entries.length;
+        const syncCursorToLatest = (resetWhenEmpty = false) => {
+            if (curLen > 0) {
+                lastSeenIdRef.current = entries[curLen - 1].id;
+                return;
+            }
+            if (resetWhenEmpty) {
+                lastSeenIdRef.current = -1;
+            }
+        };
 
         // ── 重连检测：reconnectToken 变化时重置游标 ──
         const currentToken = reconnectToken ?? 0;
         if (currentToken !== lastReconnectTokenRef.current) {
             lastReconnectTokenRef.current = currentToken;
+            suppressEmptyResetRef.current = curLen === 0;
             // 重置游标到当前 entries 最新位置，跳过所有已有事件
-            if (curLen > 0) {
-                lastSeenIdRef.current = entries[curLen - 1].id;
-            }
+            syncCursorToLatest();
             return { entries: [], didReset: false, didOptimisticRollback: false };
         }
 
         // ── 首次调用：跳过历史事件 ──
         if (isFirstCallRef.current) {
             isFirstCallRef.current = false;
-            if (curLen > 0) {
-                lastSeenIdRef.current = entries[curLen - 1].id;
-            }
+            suppressEmptyResetRef.current = false;
+            syncCursorToLatest();
             return { entries: [], didReset: false, didOptimisticRollback: false };
         }
 
@@ -177,10 +185,9 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
                 return { entries: newEntries, didReset: false, didOptimisticRollback: true };
             } else {
                 // watermark === null：visibilitychange resync 场景
+                suppressEmptyResetRef.current = curLen === 0;
                 // 重置游标到当前最新位置，跳过所有已有事件
-                if (curLen > 0) {
-                    lastSeenIdRef.current = entries[curLen - 1].id;
-                }
+                syncCursorToLatest();
                 // 返回 didOptimisticRollback: true 通知消费者清理 gate/pendingAttack 等状态
                 return { entries: [], didReset: false, didOptimisticRollback: true };
             }
@@ -197,15 +204,17 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
             if (consumeOnReconcile) {
                 const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
                 if (newEntries.length > 0) {
+                    suppressEmptyResetRef.current = false;
                     lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
-                } else if (curLen > 0) {
-                    lastSeenIdRef.current = entries[curLen - 1].id;
+                } else {
+                    // reconcile 后若先收到空 EventStream，需要保留旧游标，避免服务端重发历史事件时被当成新事件重播。
+                    suppressEmptyResetRef.current = curLen === 0;
+                    syncCursorToLatest();
                 }
                 return { entries: newEntries, didReset: false, didOptimisticRollback: false };
             }
-            if (curLen > 0) {
-                lastSeenIdRef.current = entries[curLen - 1].id;
-            }
+            suppressEmptyResetRef.current = curLen === 0;
+            syncCursorToLatest();
             // 不返回任何事件，不触发任何 reset
             return { entries: [], didReset: false, didOptimisticRollback: false };
         }
@@ -216,12 +225,17 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
         // 但如果游标已经推进过（lastSeenIdRef > -1），且 entries 为空，
         // 说明 EventStream 被清空了，需要重置游标，防止后续新事件被跳过。
         if (curLen === 0) {
+            if (suppressEmptyResetRef.current) {
+                return { entries: [], didReset: false, didOptimisticRollback: false };
+            }
             if (lastSeenIdRef.current > -1) {
                 // EventStream 被清空，重置游标
                 lastSeenIdRef.current = -1;
             }
             return { entries: [], didReset: false, didOptimisticRollback: false };
         }
+
+        suppressEmptyResetRef.current = false;
 
         // ── Undo 回退检测：最大 ID 真正回退 ──
         const maxId = entries[curLen - 1].id;

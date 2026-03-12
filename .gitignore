@@ -148,6 +148,7 @@ test-*.md
 _*.cjs
 _*.mjs
 check-*.mjs
+!scripts/infra/check-file-encoding.mjs
 test-*.mjs
 
 # 临时数据文件（应移到 temp/）
@@ -169,3 +170,5 @@ _vitest_*.log
 threshold
 edge_check.txt
 scan_results.txt
+.codex-write-test.txt
+.learnings/

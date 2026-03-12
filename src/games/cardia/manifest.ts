@@ -20,6 +20,7 @@ const entry: GameManifestEntry = {
     playerOptions: [2],
     tags: ['card_driven', 'tactical'],
     bestPlayers: [2],
+    cursorTheme: 'cardia',
     setupOptions: {
         deckVariant: {
             type: 'select',
@@ -45,6 +46,10 @@ const entry: GameManifestEntry = {
             ...getCardiaLocationPaths(),
         ],
     },
+    mobileProfile: 'landscape-adapted',
+    preferredOrientation: 'landscape',
+    mobileLayoutPreset: 'board-shell',
+    shellTargets: ['pwa'],
 };
 
 export const CARDIA_MANIFEST: GameManifestEntry = entry;

@@ -41,6 +41,8 @@ import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 
+const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
+
 export const Home = () => {
     useGlobalCursor();
     const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -52,6 +54,7 @@ export const Home = () => {
     const [activeMatch, setActiveMatch] = useState<{ matchID: string; gameName: string; players: Array<{ id: number; name?: string; isConnected?: boolean }> } | null>(null);
     const [myMatchRole, setMyMatchRole] = useState<{ playerID: string; credentials?: string; gameName?: string } | null>(null);
     const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -64,7 +67,7 @@ export const Home = () => {
 
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
-    const toast = useToast();
+    const { warning: toastWarning, error: toastError } = useToast();
     const { t } = useTranslation(['lobby', 'auth']);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
@@ -72,6 +75,7 @@ export const Home = () => {
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
     const missingMatchConfirmRef = useRef<string | null>(null);
+    const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
 
     const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
         paramKey: 'game',
@@ -182,8 +186,8 @@ export const Home = () => {
         if (!notice) return;
         if (hasSeenMatchCleanupNotice(notice)) return;
         markMatchCleanupNoticeSeen(notice);
-        toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
-    }, [toast]);
+        toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    }, [toastWarning]);
 
     useEffect(() => {
         const handleStorageNotice = (event: StorageEvent) => {
@@ -288,22 +292,46 @@ export const Home = () => {
         enabled: Boolean(activeMatch?.gameName && activeMatch?.matchID),
         requireSeen: false, // 允许立即判断房间是否存在，无需等待"先看到再消失"
     });
+    const activeMatchGameName = activeMatch?.gameName ?? null;
+    const activeMatchId = activeMatch?.matchID ?? null;
 
     useEffect(() => {
-        if (!activeMatch || !lobbyPresence.isMissing) {
+        return () => {
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!activeMatchGameName || !activeMatchId || !lobbyPresence.isMissing) {
             missingMatchConfirmRef.current = null;
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
             return;
         }
 
-        const { gameName, matchID } = activeMatch;
+        const gameName = activeMatchGameName;
+        const matchID = activeMatchId;
         if (missingMatchConfirmRef.current === matchID) return;
         missingMatchConfirmRef.current = matchID;
+        if (missingMatchConfirmRetryTimerRef.current !== null) {
+            window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+            missingMatchConfirmRetryTimerRef.current = null;
+        }
 
         let cancelled = false;
 
         void matchApi.getMatch(gameName, matchID)
             .then(() => {
                 if (cancelled) return;
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
                 if (missingMatchConfirmRef.current === matchID) {
                     missingMatchConfirmRef.current = null;
                 }
@@ -314,13 +342,23 @@ export const Home = () => {
                     missingMatchConfirmRef.current = null;
                 }
                 if (!isMatchNotFoundError(error)) {
+                    if (missingMatchConfirmRetryTimerRef.current === null) {
+                        missingMatchConfirmRetryTimerRef.current = window.setTimeout(() => {
+                            missingMatchConfirmRetryTimerRef.current = null;
+                            setMissingMatchConfirmRetryTick((t) => t + 1);
+                        }, MISSING_MATCH_CONFIRM_RETRY_DELAY_MS);
+                    }
                     return;
                 }
 
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
                 const notice = publishMatchCleanupNotice(matchID);
                 if (notice && !hasSeenMatchCleanupNotice(notice)) {
                     markMatchCleanupNoticeSeen(notice);
-                    toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                    toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
                 }
                 clearMatchCredentials(matchID);
                 clearOwnerActiveMatch(matchID);
@@ -331,8 +369,15 @@ export const Home = () => {
 
         return () => {
             cancelled = true;
+            if (missingMatchConfirmRef.current === matchID) {
+                missingMatchConfirmRef.current = null;
+            }
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
         };
-    }, [activeMatch, lobbyPresence.isMissing, lobbyPresence.matches, toast]);
+    }, [activeMatchGameName, activeMatchId, lobbyPresence.isMissing, missingMatchConfirmRetryTick, toastWarning]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
@@ -381,7 +426,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 } else {
@@ -414,7 +459,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 }
@@ -483,12 +528,12 @@ export const Home = () => {
                 : result.error === 'network'
                     ? 'error.destroyNetwork'
                     : 'error.actionFailed';
-            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
+            toastError({ kind: 'i18n', key: errorKey, ns: 'lobby' });
             return;
         }
 
         if (result.cleanedLocal) {
-            toast.warning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
+            toastWarning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
         }
 
         // 成功后后端释放座位，本地状态同步更新

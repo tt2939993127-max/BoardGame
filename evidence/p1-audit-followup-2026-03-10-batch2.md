@@ -835,3 +835,297 @@ npx vitest run src/games/dicethrone/__tests__/audio.config.test.ts src/games/dic
 
 - 测试输出中的 `ability_not_available`、`notEnoughCp`、`upgradeCardSkipLevel`、`wrongPhaseForUpgrade`、`no_pending_damage` 等日志都来自拒绝路径断言，属于预期覆盖；
 - 本轮刻意避开了工作树中有活跃修改的 `src/games/dicethrone/hooks/useCardSpotlight.ts`，避免把你当前正在修的特写链误记成 POD 残留。
+
+---
+
+## 二十一、SmashUp 派系 / ongoing / 计分主链续查（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/smashup/abilities/bear_cavalry.ts`
+- `src/games/smashup/abilities/dinosaurs.ts`
+- `src/games/smashup/abilities/elder_things.ts`
+- `src/games/smashup/abilities/frankenstein.ts`
+- `src/games/smashup/abilities/giant_ants.ts`
+- `src/games/smashup/abilities/innsmouth.ts`
+- `src/games/smashup/abilities/miskatonic.ts`
+- `src/games/smashup/abilities/ninjas.ts`
+- `src/games/smashup/abilities/ongoing_modifiers.ts`
+- `src/games/smashup/abilities/robots.ts`
+- `src/games/smashup/abilities/steampunks.ts`
+- `src/games/smashup/abilities/tricksters.ts`
+- `src/games/smashup/abilities/zombies.ts`
+- `src/games/smashup/audio.config.ts`
+- `src/games/smashup/data/factions/aliens.ts`
+- `src/games/smashup/data/factions/aliens_pod.ts`
+- `src/games/smashup/data/factions/cthulhu.ts`
+- `src/games/smashup/data/factions/cthulhu_pod.ts`
+- `src/games/smashup/data/factions/ninjas.ts`
+- `src/games/smashup/data/factions/pirates.ts`
+- `src/games/smashup/domain/abilityHelpers.ts`
+- `src/games/smashup/domain/abilityInteractionHandlers.ts`
+- `src/games/smashup/domain/baseAbilities_expansion.ts`
+- `src/games/smashup/domain/commands.ts`
+- `src/games/smashup/domain/ids.ts`
+- `src/games/smashup/domain/ongoingEffects.ts`
+- `src/games/smashup/domain/ongoingModifiers.ts`
+- `src/games/smashup/domain/reducer.ts`
+- `src/games/smashup/domain/types.ts`
+- `src/games/smashup/ui/CardMagnifyOverlay.tsx`
+- `src/games/smashup/ui/DeckDiscardZone.tsx`
+- `src/games/smashup/ui/FactionSelection.tsx`
+- `src/games/smashup/ui/HandArea.tsx`
+- `src/games/smashup/ui/SmashUpCardRenderer.tsx`
+- `src/games/smashup/ui/cardAtlas.ts`
+- `src/games/smashup/ui/factionMeta.ts`
+- `src/games/smashup/ui/playerConfig.ts`
+
+### 2. 本轮重点核对内容
+
+- 各扩展派系能力文件是否仍保留注册函数与交互处理入口；
+- `ongoing_modifiers.ts`、`ongoingEffects.ts`、`ongoingModifiers.ts` 是否仍维持持续效果 / 力量修正 / 保护限制主链；
+- `commands.ts`、`reducer.ts`、`types.ts` 是否仍保留出牌验证、事件消费与核心数据结构定义；
+- `baseAbilities_expansion.ts` 是否仍保留扩展基地能力和交互处理链；
+- `data/factions/*.ts` 与 `_pod` 文件是否仍保留 POD 版派系数据，不是被删空的占位；
+- `FactionSelection / HandArea / CardMagnifyOverlay / SmashUpCardRenderer / cardAtlas / factionMeta / playerConfig` 等 UI 支撑节点是否仍接在完整数据链上。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - 多个扩展派系能力文件当前仍保留注册函数和交互处理逻辑，没有出现“数据还在、能力入口被删”的静态迹象；
+  - `ongoing_modifiers.ts` 仍注册了随从、ongoing 行动卡、基地持续修正与保护相关规则；
+  - `commands.ts` 当前仍保留 `meFirst`、弃牌堆出牌、ongoing 限制、特殊时机等关键验证分支；
+  - `reducer.ts`、`types.ts` 仍是完整核心状态与事件消费主链，没有看见 POD 造成的结构性缺口；
+  - `baseAbilities_expansion.ts` 当前仍保留扩展基地能力与其交互处理；
+  - `ui/CardMagnifyOverlay.tsx`、`DeckDiscardZone.tsx`、`FactionSelection.tsx`、`HandArea.tsx`、`SmashUpCardRenderer.tsx`、`cardAtlas.ts`、`factionMeta.ts`、`playerConfig.ts` 当前仍是可用支撑实现，不是空壳。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/smashup/__tests__/baseFactionOngoing.test.ts src/games/smashup/__tests__/baseProtection.test.ts src/games/smashup/__tests__/baseScoreCheck.test.ts src/games/smashup/__tests__/baseScoredNormalFlow.test.ts src/games/smashup/__tests__/baseScoredOptimistic.test.ts src/games/smashup/__tests__/baseScoredRaceCondition.test.ts src/games/smashup/__tests__/duplicateInteractionRespond.test.ts src/games/smashup/__tests__/elderThingAbilities.test.ts src/games/smashup/__tests__/expansionBaseAbilities.test.ts src/games/smashup/__tests__/expansionOngoing.test.ts src/games/smashup/__tests__/meFirst.test.ts src/games/smashup/__tests__/newBaseAbilities.test.ts src/games/smashup/__tests__/newFactionAbilities.test.ts src/games/smashup/__tests__/ongoingEffects.test.ts src/games/smashup/__tests__/query6Abilities.test.ts src/games/smashup/__tests__/turnTransitionInteractionBug.test.ts src/games/smashup/__tests__/zombieInteractionChain.test.ts src/games/smashup/__tests__/zombieWizardAbilities.test.ts
+```
+
+结果：18 个文件通过，共 372 条用例通过，1 条 skipped。
+
+说明：
+
+- 运行期间出现的 `该卡牌不能从弃牌堆打出到此基地`、`该基地禁止打出该随从` 等日志来自拒绝路径断言，属于预期覆盖；
+- `newFactionAbilities.test.ts` 中出现的 `BASE_REPLACED ... newBaseDefId base_c not found in baseDeck` 日志本轮仅记为测试构造场景输出，测试整体通过，暂不作为 POD 回滚证据；
+- 本轮刻意未动工作树中有活跃修改的 `src/games/smashup/ui/BaseZone.tsx`，避免和你正在进行的修复冲突。
+
+---
+
+## 二十二、SmashUp POD 阵营数据与尾测收尾（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/smashup/data/englishAtlasMap.json`
+- `src/games/smashup/data/factions/bear_cavalry_pod.ts`
+- `src/games/smashup/data/factions/dinosaurs_pod.ts`
+- `src/games/smashup/data/factions/elder_things_pod.ts`
+- `src/games/smashup/data/factions/frankenstein_pod.ts`
+- `src/games/smashup/data/factions/ghosts_pod.ts`
+- `src/games/smashup/data/factions/giant-ants_pod.ts`
+- `src/games/smashup/data/factions/innsmouth_pod.ts`
+- `src/games/smashup/data/factions/killer_plants_pod.ts`
+- `src/games/smashup/data/factions/miskatonic_pod.ts`
+- `src/games/smashup/data/factions/ninjas_pod.ts`
+- `src/games/smashup/data/factions/pirates_pod.ts`
+- `src/games/smashup/data/factions/robots_pod.ts`
+- `src/games/smashup/data/factions/steampunks_pod.ts`
+- `src/games/smashup/data/factions/tricksters_pod.ts`
+- `src/games/smashup/data/factions/vampires_pod.ts`
+- `src/games/smashup/data/factions/werewolves_pod.ts`
+- `src/games/smashup/data/factions/wizards_pod.ts`
+- `src/games/smashup/data/factions/zombies_pod.ts`
+- `src/games/smashup/__tests__/baseAbilityIntegrationE2E.test.ts`
+- `src/games/smashup/__tests__/bigGulpDroneIntercept.test.ts`
+- `src/games/smashup/__tests__/madnessAbilities.test.ts`
+- `src/games/smashup/__tests__/madnessPromptAbilities.test.ts`
+- `src/games/smashup/__tests__/ongoingE2E.test.ts`
+- `src/games/smashup/__tests__/promptE2E.test.ts`
+- `src/games/smashup/__tests__/properties/coreProperties.test.ts`
+- `src/games/smashup/__tests__/shoggoth-destroy-choice.test.ts`
+- `src/games/smashup/__tests__/sleep-spores-e2e.test.ts`
+- `src/games/smashup/__tests__/specialInteractionChain.test.ts`
+- `src/games/smashup/__tests__/vampireBuffetE2E.test.ts`
+
+### 2. 本轮重点核对内容
+
+- 余下的 `_pod` 阵营数据文件是否仍是完整的 minion/action/card 定义，而不是被 POD 自己删成残缺版本；
+- `englishAtlasMap.json` 是否仍作为英文卡图映射数据存在；
+- 余下的尾测是否仍能覆盖疯狂牌、Prompt、ongoing、特殊交互链、Shoggoth 选择权、POD/特殊基地交互等场景。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - 余下 `_pod` 阵营文件当前仍保留完整的卡牌数据数组与 atlas 预览引用，没有静态缺口；
+  - `englishAtlasMap.json` 当前仍存在，未见英文图集映射被删空；
+  - 这批尾测所覆盖的 madness / prompt / ongoing / 特殊交互链 / 属性协议 场景当前仍能跑通；
+  - `vampireBuffetE2E.test.ts` 当前存在但为 skipped 状态，本轮只记现状，不夸大成已执行通过。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/smashup/__tests__/baseAbilityIntegrationE2E.test.ts src/games/smashup/__tests__/bigGulpDroneIntercept.test.ts src/games/smashup/__tests__/madnessAbilities.test.ts src/games/smashup/__tests__/madnessPromptAbilities.test.ts src/games/smashup/__tests__/ongoingE2E.test.ts src/games/smashup/__tests__/promptE2E.test.ts src/games/smashup/__tests__/properties/coreProperties.test.ts src/games/smashup/__tests__/shoggoth-destroy-choice.test.ts src/games/smashup/__tests__/sleep-spores-e2e.test.ts src/games/smashup/__tests__/specialInteractionChain.test.ts src/games/smashup/__tests__/vampireBuffetE2E.test.ts
+```
+
+结果：10 个文件通过，1 个文件 skipped；共 173 条用例通过，2 条 skipped。
+
+说明：
+
+- `specialInteractionChain.test.ts` 中出现的“该基地禁止打出该随从”“该卡牌不能从弃牌堆打出到此基地”等日志来自拒绝路径断言；
+- 这批文件里仍有少量命名带 `E2E` 的 Vitest 集成测试，但本轮只把它们当作现成自动化覆盖，不把它们当成真正浏览器端到端验收。
+
+---
+
+## 二十三、SmashUp 最后 4 个尾项补记（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/smashup/__tests__/alienAuditFixes.test.ts`
+- `src/games/smashup/__tests__/choice-audit-fixes.test.ts`
+- `src/games/smashup/__tests__/helpers.ts`
+- `src/games/smashup/__tests__/ui-interaction-manual.test.ts`
+
+### 2. 本轮重点核对内容
+
+- `alienAuditFixes.test.ts`、`choice-audit-fixes.test.ts` 是否仍是有效的回归测试文件，而不是被删残或空壳；
+- `helpers.ts` 是否仍提供测试构造用的共享工具，不是断裂的辅助层；
+- `ui-interaction-manual.test.ts` 是否仍能验证 UI 交互选项结构。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `alienAuditFixes.test.ts` 仍覆盖外星人派系若干审计修复回归场景；
+  - `choice-audit-fixes.test.ts` 仍是有效回归测试文件；
+  - `helpers.ts` 当前仍为 SmashUp 测试提供共享建模/构造工具；
+  - `ui-interaction-manual.test.ts` 当前仍可运行并验证若干交互选项结构。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/smashup/__tests__/ui-interaction-manual.test.ts
+```
+
+结果：1 个文件通过，共 3 条用例通过。
+
+说明：
+
+- `alienAuditFixes.test.ts`、`choice-audit-fixes.test.ts` 的文件名命中当前项目 Vitest 排除规则 `*audit*.test.ts`，本轮无法通过现有默认命令直接执行，因此只做静态复核并在此明确记录；
+- `ui-interaction-manual.test.ts` 虽命名为“manual”，但当前仍是可自动运行的 Vitest 文件，本轮已实际执行通过。
+
+---
+
+## 二十四、DiceThrone 最后 7 项收尾（POD 口径，只读）
+
+### 1. 复核文件
+
+- `src/games/dicethrone/__tests__/defense-trigger-audit.test.ts`
+- `src/games/dicethrone/__tests__/pyromancer-damage.property.test.ts`
+- `src/games/dicethrone/__tests__/tutorial-e2e.test.ts`
+- `src/games/dicethrone/domain/combat/CombatAbilityManager.ts`
+- `src/games/dicethrone/domain/combat/types.ts`
+- `src/games/dicethrone/domain/customActions/pyromancer.ts`
+- `src/games/dicethrone/domain/ids.ts`
+
+### 2. 本轮重点核对内容
+
+- `CombatAbilityManager.ts` / `combat/types.ts` 是否仍保留战斗能力建模和执行支撑；
+- `customActions/pyromancer.ts` 是否仍保留炎术士自定义动作实现；
+- `ids.ts` 是否仍维护状态、Token、骰面、图集、命令等统一常量；
+- 剩余 3 个测试文件是否仍保留有效覆盖，尤其教程链和防御触发/伤害属性边界。
+
+### 3. 只读结论
+
+- 本轮未发现新的明确 POD 回滚残留。
+- 当前实现里可以确认：
+  - `CombatAbilityManager.ts` 与 `combat/types.ts` 仍保留战斗能力相关支撑结构；
+  - `customActions/pyromancer.ts` 当前仍是炎术士自定义效果实现入口，没有静态缺口；
+  - `ids.ts` 当前仍集中维护 DiceThrone 的状态/Token/骰面/图集/命令常量；
+  - `tutorial-e2e.test.ts` 当前仍覆盖教程流程；
+  - `defense-trigger-audit.test.ts`、`pyromancer-damage.property.test.ts` 当前文件本体仍完整，不是空壳。
+
+### 4. 验证
+
+```bash
+npx vitest run src/games/dicethrone/__tests__/pyromancer-abilities.test.ts src/games/dicethrone/__tests__/red-hot-meteor-integration.test.ts src/games/dicethrone/__tests__/tutorial-e2e.test.ts
+```
+
+结果：全部通过，共 24 条用例通过。
+
+说明：
+
+- `defense-trigger-audit.test.ts` 命中文件名排除规则 `*audit*.test.ts`，`pyromancer-damage.property.test.ts` 命中 `*.property.test.ts` 排除规则；本轮对这两份文件仅做静态复核，并在此明确记录；
+- `tutorial-e2e.test.ts` 虽命名含 `e2e`，但本轮作为现成 Vitest 集成测试运行通过，不把它夸大成浏览器端到端验收。
+
+---
+
+## 二十五、当前工作树与 POD 清单重叠项甄别（只读，不归因）
+
+### 1. 当前重叠文件
+
+- `public/locales/zh-CN/game-dicethrone.json`
+- `src/components/lobby/GameDetailsModal.tsx`
+- `src/games/dicethrone/domain/rules.ts`
+- `src/games/dicethrone/hooks/useCardSpotlight.ts`
+- `src/games/smashup/ui/BaseZone.tsx`
+- `src/server/storage/MongoStorage.ts`
+- `src/server/storage/__tests__/mongoStorage.test.ts`
+
+### 2. 甄别结论
+
+- 这 7 个文件当前都与 POD 清单有路径重叠，但**本轮不应直接按 POD 残留处理**。
+- 只读 diff 可见的现状更像是**用户当前正在进行的修复/增强**，例如：
+  - `src/games/dicethrone/domain/rules.ts`：新增“攻击修正只能用于当前攻击”的门控；
+  - `src/games/dicethrone/hooks/useCardSpotlight.ts`：调整奖励骰与卡牌特写绑定策略；
+  - `src/games/smashup/ui/BaseZone.tsx`：修正四人局右侧提示定位条件；
+  - `src/components/lobby/GameDetailsModal.tsx`：增加确认动作防重入；
+  - `src/server/storage/MongoStorage.ts` 与测试：增加脏房间清理逻辑；
+  - `public/locales/zh-CN/game-dicethrone.json`：属于文案/描述修正。
+
+### 3. 审计策略
+
+- 这些文件后续如需继续审，必须基于“当前用户活跃改动”单独甄别，不能直接套用 POD 回滚口径；
+- 在没有更强证据前，本轮明确将它们记为**活跃修复链**，不是自动回滚对象。
+
+### 4. 本轮补充验证
+
+```bash
+npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts src/server/storage/__tests__/mongoStorage.test.ts src/server/__tests__/claimSeat.test.ts src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx src/games/dicethrone/__tests__/righteous-combat-variant-selection.test.ts src/games/dicethrone/__tests__/card-system.test.ts
+```
+
+结果：6 个文件通过，共 32 条用例通过，10 条 skipped。
+
+补充判断：
+
+- `GameDetailsModal.tsx` 当前更像是“确认动作防重入 + claim-seat 重试链”修复，现有 lobby / claim-seat 相关测试未出现新红灯；
+- `MongoStorage.ts` 与 `mongoStorage.test.ts` 当前更像是新增“脏房间清理”能力，新增清理用例通过，不应按 POD 回滚处理；
+- `rules.ts` 与 `useCardSpotlight.ts` 当前相关测试（`card-system`、`BonusDieOverlay`、变体选择）均通过，更像当前修复链；
+- `BaseZone.tsx` 当前没有直接对口的现成测试，本轮只做静态甄别；从 diff 看更像四人局定位修正，不像 POD 残留；
+- `BonusDieOverlay.test.tsx` 运行时仍有 `whileHover` / `whileTap` 的 React 警告，但测试通过，本轮不把它记成 POD 证据。
+
+---
+
+## 二十六、直接对账 `pod-commit-complete-checklist`（口径校验）
+
+### 1. 校验方法
+
+- 直接从 `evidence/pod-commit-complete-checklist.md` 提取全部路径；
+- 再与以下续查文档做字符串覆盖对账：
+  - `evidence/p1-audit-followup-2026-03-10.md`
+  - `evidence/p1-audit-followup-2026-03-10-batch2.md`
+  - `evidence/dicethrone-audit-followup-2026-03-10.md`
+
+### 2. 结果
+
+- Checklist 路径总数：`336`
+- 当前未在续查文档中点名的路径数：`0`
+
+### 3. 说明
+
+- 这一步是对“旧总表清零”之外的二次口径校验；
+- 结论是：**POD 提交完整清单中的 336 个路径，当前都已经在续查文档体系中被显式覆盖/点名**。

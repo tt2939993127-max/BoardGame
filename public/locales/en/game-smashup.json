@@ -154,7 +154,8 @@
     "baseScoredRankingWithBreakdown": "{{playerId}} +{{vp}}VP Power:",
     "powerModifier": {
       "permanent": "Power Counters",
-      "temp": "Temp Power Modifier"
+      "temp": "Temp Power Modifier",
+      "nonMinion": "Non-minion Power Modifier"
     },
     "damageSource": {
       "original": "Base Power"

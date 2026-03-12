@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ManifestGameThumbnail } from '../components/lobby/thumbnails';
 import { GAME_CLIENT_MANIFEST } from '../games/manifest.client';
 import type { GameCategory, GameManifestEntry } from '../games/manifest.types';
+import { resolveGameManifestEntry } from '../games/mobileSupport';
 import { UGC_API_URL } from './server';
 import type {
     UgcAssetManifestEntry,
@@ -32,8 +33,9 @@ const buildGameRegistry = () => {
         if (!thumbnail) {
             throw new Error(`[GameManifest] 缺少缩略图配置: ${manifest.id}`);
         }
-        registry[manifest.id] = {
-            ...manifest,
+        const resolvedManifest = resolveGameManifestEntry(manifest);
+        registry[resolvedManifest.id] = {
+            ...resolvedManifest,
             thumbnail,
             isUgc: false,
         };
@@ -169,13 +171,17 @@ const buildUgcEntry = async (pkg: UgcPackageSummary): Promise<GameConfig | null>
         thumbnailPath: coverUrl,
         allowLocalMode: false,
         tags: normalizeTags(pkg.tags),
+        mobileProfile: 'none',
+        shellTargets: ['pwa'],
         ...(playerOptions ? { playerOptions } : {}),
         ...(bestPlayers ? { bestPlayers } : {}),
     };
 
+    const resolvedEntry = resolveGameManifestEntry(entry);
+
     return {
-        ...entry,
-        thumbnail: <ManifestGameThumbnail manifest={entry} />,
+        ...resolvedEntry,
+        thumbnail: <ManifestGameThumbnail manifest={resolvedEntry} />,
         isUgc: true,
     };
 };

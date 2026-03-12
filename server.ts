@@ -22,6 +22,7 @@ import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
 import { hybridStorage } from './src/server/storage/HybridStorage';
+import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
 import { hasOccupiedPlayers } from './src/server/matchOccupancy';
@@ -1610,7 +1611,7 @@ lobbySocketIO.on('connection', (socket) => {
 // ============================================================================
 
 const runStartupCleanupInBackground = async () => {
-    const cleanupTasks = [
+    const cleanupTasks: StartupCleanupTask[] = [
         {
             reason: 'cleanupEmptyMatches:boot',
             run: () => mongoStorage.cleanupEmptyMatches(),
@@ -1638,18 +1639,16 @@ const runStartupCleanupInBackground = async () => {
         },
     ];
 
-    for (const cleanupTask of cleanupTasks) {
-        try {
-            const cleanedCount = await cleanupTask.run();
-            if (cleanedCount > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, cleanupTask.reason);
-                }
+    await runStartupCleanupTasks(cleanupTasks, {
+        onDirty: (reason) => {
+            for (const gameName of SUPPORTED_GAMES) {
+                void broadcastLobbySnapshot(gameName, reason);
             }
-        } catch (err) {
-            logger.error(cleanupTask.errorMessage, err);
-        }
-    }
+        },
+        onError: (message, error) => {
+            logger.error(message, error);
+        },
+    });
 };
 
 async function startServer() {

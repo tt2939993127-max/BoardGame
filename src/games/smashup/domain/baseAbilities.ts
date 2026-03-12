@@ -114,6 +114,13 @@ function getDeferredPostScoringEvents(
     return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
 }
 
+function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): number {
+    return Object.values(state.players).reduce(
+        (total, player) => total + (player.minionsPlayedPerBase?.[baseIndex] ?? 0),
+        0,
+    );
+}
+
 // ============================================================================
 // 注册表
 // ============================================================================
@@ -710,11 +717,11 @@ export function registerBaseAbilities(): void {
     // "每回合第一个被打出到这里的随从，其控制者在上面放 +1 力量指示物"
     registerBaseAbility('base_laboratorium', 'onMinionPlayed', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
-        const player = ctx.state.players[ctx.playerId];
-        if (!base || !ctx.minionUid || !player) return { events: [] };
-        // "每回合"指当前玩家回合；reduce 已执行，首次打出到该基地时值为 1。
-        const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
-        if (playedAtBase !== 1) return { events: [] };
+        if (!base || !ctx.minionUid) return { events: [] };
+        // 每个玩家回合开始都会清空全体玩家的 minionsPlayedPerBase，
+        // 因此这里统计的是“当前回合里，这个基地全场累计被打出随从的次数”。
+        const playedAtBaseThisTurn = getTurnMinionsPlayedAtBase(ctx.state, ctx.baseIndex);
+        if (playedAtBaseThisTurn !== 1) return { events: [] };
         return {
             events: [addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'base_laboratorium', ctx.now)],
         };
@@ -740,11 +747,10 @@ export function registerBaseAbilities(): void {
     // "每回合第一个打出到这的随从获得 +2 力量直到回合结束"
     registerBaseAbility('base_moot_site', 'onMinionPlayed', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
-        const player = ctx.state.players[ctx.playerId];
-        if (!base || !ctx.minionUid || !player) return { events: [] };
-        // "每回合"指当前玩家回合；同一玩家本回合第一次打出到该基地时触发。
-        const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
-        if (playedAtBase !== 1) return { events: [] };
+        if (!base || !ctx.minionUid) return { events: [] };
+        // 这里需要识别“当前玩家回合内基地全局首次”，而不是当前玩家自己的首次。
+        const playedAtBaseThisTurn = getTurnMinionsPlayedAtBase(ctx.state, ctx.baseIndex);
+        if (playedAtBaseThisTurn !== 1) return { events: [] };
         const minion = base.minions.find(m => m.uid === ctx.minionUid);
         if (!minion) return { events: [] };
         return {
