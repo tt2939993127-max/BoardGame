@@ -786,7 +786,7 @@ describe('巫师 ongoing 能力', () => {
             expect((events[0] as any).payload.delta).toBe(1);
         });
 
-        test('POD 版控制者回合开始时也获得额外行动额度', () => {
+        test('POD 版不在 onTurnStart 触发（POD 为 talent）', () => {
             const archmage = makeMinion({ defId: 'wizard_archmage_pod', uid: 'am-pod-1', controller: '0' });
             const base = makeBase({ minions: [archmage] });
             const state = makeState([base]);
@@ -798,12 +798,7 @@ describe('巫师 ongoing 能力', () => {
                 now: 1000,
             });
 
-            expect(events).toHaveLength(1);
-            expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-            expect((events[0] as any).payload.playerId).toBe('0');
-            expect((events[0] as any).payload.limitType).toBe('action');
-            expect((events[0] as any).payload.delta).toBe(1);
-            expect((events[0] as any).payload.reason).toBe('wizard_archmage_pod');
+            expect(events).toHaveLength(0);
         });
 
         test('非控制者回合不触发', () => {
@@ -821,7 +816,7 @@ describe('巫师 ongoing 能力', () => {
             expect(events).toHaveLength(0);
         });
 
-        test('POD 版打出当回合立即获得额外行动额度', () => {
+        test('POD 版不在 onMinionPlayed 触发（POD 为 talent）', () => {
             const archmage = makeMinion({ defId: 'wizard_archmage_pod', uid: 'am-pod-1', controller: '0' });
             const base = makeBase({ minions: [archmage] });
             const state = makeState([base]);
@@ -836,12 +831,7 @@ describe('巫师 ongoing 能力', () => {
                 now: 1000,
             });
 
-            expect(events).toHaveLength(1);
-            expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-            expect((events[0] as any).payload.playerId).toBe('0');
-            expect((events[0] as any).payload.limitType).toBe('action');
-            expect((events[0] as any).payload.delta).toBe(1);
-            expect((events[0] as any).payload.reason).toBe('wizard_archmage_pod');
+            expect(events).toHaveLength(0);
         });
     });
 });

@@ -382,6 +382,8 @@ export interface SmashUpCore {
      * 生命周期：在 TURN_STARTED 时清空
      */
     movedToBasesThisTurn?: Record<number, boolean>;
+    /** 海盗 POD：私掠者每回合一次触发追踪（minionUid 列表） */
+    buccaneerPodUsedUids?: string[];
     /** 临时临界点修正（回合结束自动清零，baseIndex → delta） */
     tempBreakpointModifiers?: Record<number, number>;
     /**

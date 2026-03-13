@@ -553,6 +553,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 // 清空本回合移动追踪
                 minionsMovedToBaseThisTurn: undefined,
                 movedToBasesThisTurn: undefined,
+                // 清空海盗 POD：私掠者每回合一次追踪
+                buccaneerPodUsedUids: undefined,
                 // 清空临时临界点修正
                 tempBreakpointModifiers: undefined,
                 // 清理“直到本回合开始”的基地压制（仅清除由当前回合玩家施加的条目）
@@ -887,7 +889,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.MINION_MOVED: {
-            const { minionUid, fromBaseIndex, toBaseIndex } = (event as MinionMovedEvent).payload;
+            const { minionUid, fromBaseIndex, toBaseIndex, reason } = (event as MinionMovedEvent).payload as any;
+            const buccaneerPodUsedUids = reason === 'pirate_buccaneer_pod'
+                ? Array.from(new Set([...(state.buccaneerPodUsedUids ?? []), minionUid]))
+                : state.buccaneerPodUsedUids;
             let movedMinion: MinionOnBase | undefined;
             const newBases = state.bases.map((base, i) => {
                 if (i === fromBaseIndex) {
@@ -930,6 +935,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         return {
                             ...state,
                             bases: updatedBases,
+                            buccaneerPodUsedUids,
                             players: {
                                 ...state.players,
                                 [pid]: { ...player, discard: newDiscard },
@@ -959,13 +965,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...state,
                     minionsMovedToBaseThisTurn: updatedMoves,
                     movedToBasesThisTurn: updatedMovedOpp,
+                    buccaneerPodUsedUids,
                     bases: newBases.map((base, i) => {
                         if (i !== toBaseIndex) return base;
                         return { ...base, minions: [...base.minions, movedMinion!] };
                     }),
                 };
             }
-            return { ...state, bases: newBases };
+            return { ...state, bases: newBases, buccaneerPodUsedUids };
         }
 
         case SU_EVENTS.MINION_METADATA_UPDATED: {
