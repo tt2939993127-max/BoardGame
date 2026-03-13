@@ -10,6 +10,7 @@ export default defineConfig([
     'dist',
     '.tmp',
     '.temp',
+    'temp',
     '*.tmp',
     'test-results',
     '.npm-cache',
