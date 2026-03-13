@@ -149,7 +149,8 @@ describe('bear_cavalry_polar_commando 保护', () => {
         const commando = makeMinion('pc', 'bear_cavalry_polar_commando', '0', 4, { powerModifier: 0 });
         const base = makeBase({ minions: [commando] });
         const state = makeState({ bases: [base] });
-        expect(getEffectivePower(state, commando, 0)).toBe(6); // 4 + 2
+        // getEffectivePower 使用卡牌定义中的 printed power（bear_cavalry_polar_commando 为 6），再叠加唯一随从 +2
+        expect(getEffectivePower(state, commando, 0)).toBe(8);
     });
 });
 
