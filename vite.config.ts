@@ -21,6 +21,28 @@ const readCliFlag = (flagName: string): string | undefined => {
   return undefined
 }
 
+const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
+  name: 'android-build-meta',
+  apply: 'build' as const,
+  generateBundle() {
+    if (mode !== 'android') return
+
+    this.emitFile({
+      type: 'asset',
+      fileName: 'android-build-meta.json',
+      source: JSON.stringify(
+        {
+          mode,
+          backendUrl,
+          builtAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    })
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -34,6 +56,7 @@ export default defineConfig(({ mode }) => {
   const gameServerPort = Number(env.GAME_SERVER_PORT) || 18000
   const apiServerPort = Number(env.API_SERVER_PORT) || 18001
   const suppressE2EProxyNoise = env.E2E_PROXY_QUIET === 'true'
+  const backendUrl = env.VITE_BACKEND_URL || ''
 
   const isIgnorableProxyError = (err: Error & NodeJS.ErrnoException) => {
     if (err.code === 'ECONNABORTED') return true
@@ -48,7 +71,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      // 屏蔽 public/ 目录 import 警告，@locales alias 会内联打包 i18n JSON。
       {
         name: 'suppress-public-dir-warning',
         enforce: 'pre' as const,
@@ -76,13 +98,13 @@ export default defineConfig(({ mode }) => {
       },
       react(),
       localeHashPlugin(),
-      readyCheckPlugin(), // 添加就绪检查插件。
+      readyCheckPlugin(),
+      createAndroidBuildMetaPlugin(mode, backendUrl),
     ],
     build: {
       rollupOptions: {
         output: {
           manualChunks: {
-            // 重型第三方库拆成独立 chunk，便于并行加载与长期缓存。
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
             'vendor-motion': ['framer-motion'],
             'vendor-socket': ['socket.io-client'],
@@ -97,8 +119,6 @@ export default defineConfig(({ mode }) => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, './src'),
-        // 允许 src/ 中代码 import public/locales/ 下的 JSON，用于 i18n 内联打包。
-        // Vite 默认禁止 import public/ 文件，这里通过 alias 绕过限制且不产生重复文件。
         '@locales': path.resolve(__dirname, './public/locales'),
       },
     },
@@ -109,18 +129,15 @@ export default defineConfig(({ mode }) => {
       host: serverHost,
       port: devPort,
       strictPort: true,
-      // HMR 必须跟随实际启动端口，否则独立 Vite 会把 ws 重新绑回 5173。
       hmr: {
         protocol: 'ws',
         host: hmrHost,
         port: devPort,
         clientPort: devPort,
       },
-      // 排除测试产物、临时目录和配置文件，避免 E2E/脚本写盘触发开发页抖动。
       watch: {
-        // 使用轮询模式，避免 Windows 原生文件监听器崩溃。
         usePolling: true,
-        interval: 1000, // 轮询间隔 1 秒
+        interval: 1000,
         ignored: [
           '**/test-results/**',
           '**/playwright-report/**',
@@ -134,11 +151,11 @@ export default defineConfig(({ mode }) => {
           '**/*.spec.*',
           '**/e2e/**',
           '**/.tmp-*',
-          '**/.env', // 禁止监听 .env，避免环境变量变动触发重启。
-          '**/.env.*', // 禁止监听 .env.*，如 .env.local、.env.production。
-          '**/playwright.config.*', // 禁止监听 Playwright 配置文件。
-          '**/vitest.config.*', // 禁止监听 Vitest 配置文件。
-          '**/vite.config.*', // 禁止监听 Vite 配置文件，避免循环重启。
+          '**/.env',
+          '**/.env.*',
+          '**/playwright.config.*',
+          '**/vitest.config.*',
+          '**/vite.config.*',
         ],
       },
       proxy: {
@@ -146,7 +163,6 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${gameServerPort}`,
           changeOrigin: true,
         },
-        // socket.io 传输层，/game namespace 用于游戏状态同步。
         '/socket.io': {
           target: `http://127.0.0.1:${gameServerPort}`,
           changeOrigin: true,
@@ -210,13 +226,10 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
-        // UGC 上传资源代理到后端 uploads/ 目录。
-        // public/assets/ 下的静态资源仍由 Vite 直接提供。
         '/assets/ugc': {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
-        // 头像上传资源代理。
         '/assets/avatars': {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,

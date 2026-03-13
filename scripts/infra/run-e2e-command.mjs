@@ -86,7 +86,6 @@ const modeEnv = (() => {
                 NODE_OPTIONS: '--max-old-space-size=4096',
                 PW_START_SERVERS: 'true',
                 PW_SERVER_WATCH: 'false',
-                PW_SERVER_RUNTIME: 'tsx',
             });
         case 'critical':
             return createEnv();

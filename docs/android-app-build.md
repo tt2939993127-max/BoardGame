@@ -15,6 +15,18 @@
 
 只有要对接应用商店时，才使用 `npm run mobile:android:build:bundle` 产出 `AAB`。
 
+## 关键约束
+
+不要直接在 Android Studio 或命令行里只跑 `assembleRelease` / `bundleRelease`。Android 壳打包的是 `android/app/src/main/assets/public/`，如果这份目录没先和最新 `dist/` 同步，就会把旧前端资源打进 APK。现在构建链会写入 `dist/android-build-meta.json`，并在 Gradle 构建前检查它是否和 `android/app/src/main/assets/public/android-build-meta.json` 一致；不一致会直接阻止构建。最稳妥的正式发包方式仍然是 `npm run mobile:android:build:release`。
+
+如果你必须从 Android Studio 点构建，先执行：
+
+```bash
+npm run mobile:android:sync
+```
+
+再去执行 Release 构建。
+
 ## 图标与启动图
 
 默认资源源文件：
@@ -58,7 +70,7 @@ ANDROID_KEY_PASSWORD=
 
 `npm run mobile:android:prepare-release` 会：
 
-- 把 keystore 规范化到 `android/keystores/release-upload.keystore`
+- 把 `keystore` 规范化到 `android/keystores/release-upload.keystore`
 - 生成 `android/keystore.properties`
 
 `npm run mobile:android:build:release` 和 `npm run mobile:android:build:bundle` 都会在构建前强制检查签名配置。
