@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -23,6 +24,12 @@ const TEXT_EXTENSIONS = new Set([
     '.yaml',
     '.ps1',
     '.bat',
+    '.gradle',
+    '.properties',
+    '.xml',
+    '.java',
+    '.kt',
+    '.pro',
     '.txt',
 ]);
 
@@ -61,6 +68,30 @@ const IGNORED_DIRS = new Set([
     'temp',
     'logs',
 ]);
+
+const CHANGED_FILE_ROOTS = [
+    'public',
+    '.github',
+    'android',
+];
+
+const CHANGED_FILE_IGNORED_PREFIXES = [
+    '.kiro/',
+    '.windsurf/',
+    'evidence/',
+    'tmp/',
+];
+
+const ANDROID_GENERATED_PREFIXES = [
+    'android/.gradle/',
+    'android/app/build/',
+    'android/app/src/main/assets/',
+    'android/capacitor-cordova-android-plugins/build/',
+];
+
+const ROOT_LEVEL_CHANGED_EXTENSIONS = new Set(
+    Array.from(TEXT_EXTENSIONS).filter(extension => extension !== '.md' && extension !== '.txt'),
+);
 
 const WARNING_RULES = [
     {
@@ -110,6 +141,14 @@ function listGitFiles(args) {
     }
 }
 
+function listChangedGitFiles() {
+    return Array.from(new Set([
+        ...listGitFiles(['diff', '--name-only', '--diff-filter=ACMR']),
+        ...listGitFiles(['diff', '--cached', '--name-only', '--diff-filter=ACMR']),
+        ...listGitFiles(['ls-files', '--others', '--exclude-standard']),
+    ]));
+}
+
 function walkDirectory(relativeDir) {
     const absoluteDir = path.resolve(process.cwd(), relativeDir);
     if (!existsSync(absoluteDir)) return [];
@@ -147,16 +186,64 @@ function expandInputPath(inputPath) {
     return isTextLikeFile(normalized) ? [normalized] : [];
 }
 
-function listCandidateFiles(explicitPaths) {
+export function shouldIncludeChangedGitFile(relativePath) {
+    const normalized = normalizeRelativePath(relativePath);
+    if (!isTextLikeFile(normalized)) {
+        return false;
+    }
+
+    if (CHANGED_FILE_IGNORED_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+        return false;
+    }
+
+    if (ANDROID_GENERATED_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+        return false;
+    }
+
+    if (!normalized.includes('/')) {
+        const extension = path.extname(normalized).toLowerCase();
+        return ROOT_LEVEL_CHANGED_EXTENSIONS.has(extension) || ALWAYS_INCLUDE.has(path.basename(normalized));
+    }
+
+    return CHANGED_FILE_ROOTS.some(root => normalized === root || normalized.startsWith(`${root}/`));
+}
+
+export function collectImplicitCandidateFiles(defaultScopedFiles, changedGitFiles) {
+    const normalizedDefaultFiles = defaultScopedFiles.map(normalizeRelativePath);
+    const defaultFileSet = new Set(normalizedDefaultFiles);
+    const changedScopedFiles = changedGitFiles
+        .map(normalizeRelativePath)
+        .filter(file => !defaultFileSet.has(file))
+        .filter(shouldIncludeChangedGitFile);
+
+    return Array.from(new Set([
+        ...normalizedDefaultFiles,
+        ...changedScopedFiles,
+    ])).sort();
+}
+
+export function listCandidateFiles(explicitPaths) {
     if (explicitPaths.length > 0) {
         return Array.from(new Set(explicitPaths.flatMap(expandInputPath))).sort();
+    }
+
+    const defaultScopedFiles = Array.from(
+        new Set([
+            ...DEFAULT_ROOTS.flatMap(expandInputPath),
+            ...Array.from(ALWAYS_INCLUDE).flatMap(expandInputPath),
+        ]),
+    ).sort();
+
+    // 默认只扫正式目录；默认范围外只补充当前改动里的正式文件，避免把证据/临时目录噪音卷进门禁。
+    const implicitFiles = collectImplicitCandidateFiles(defaultScopedFiles, listChangedGitFiles());
+    if (implicitFiles.length > 0) {
+        return implicitFiles;
     }
 
     const gitFiles = [
         ...listGitFiles(['ls-files']),
         ...listGitFiles(['ls-files', '--others', '--exclude-standard']),
-    ]
-        .filter(isTextLikeFile);
+    ].filter(isTextLikeFile);
 
     if (gitFiles.length > 0) {
         return Array.from(new Set(gitFiles)).sort();
@@ -288,4 +375,11 @@ function main() {
     }
 }
 
-main();
+function isDirectExecution() {
+    const entryPath = process.argv[1];
+    return Boolean(entryPath) && import.meta.url === pathToFileURL(entryPath).href;
+}
+
+if (isDirectExecution()) {
+    main();
+}
