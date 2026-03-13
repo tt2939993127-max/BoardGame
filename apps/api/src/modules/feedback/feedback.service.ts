@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Feedback, FeedbackDocument, FeedbackStatus } from './feedback.schema';
+import { Feedback, FeedbackDocument, FeedbackStatus, FeedbackType } from './feedback.schema';
 import { CreateFeedbackDto, FeedbackFilterDto, QueryFeedbackDto } from './dto';
 
 @Injectable()
@@ -11,9 +11,17 @@ export class FeedbackService {
     ) { }
 
     async create(userId: string | null, dto: CreateFeedbackDto): Promise<Feedback> {
+        if (
+            dto.type === FeedbackType.BUG
+            && !dto.actionLog?.trim()
+            && !dto.stateSnapshot?.trim()
+        ) {
+            throw new BadRequestException('bug 反馈必须附带操作日志或状态快照');
+        }
+
         return this.feedbackModel.create({
             ...dto,
-            ...(userId && { userId }), // 只有在 userId 存在时才添加该字段
+            ...(userId && { userId }),
         });
     }
 
@@ -65,3 +73,4 @@ export class FeedbackService {
         return { requested: total, deleted: result.deletedCount ?? 0 };
     }
 }
+

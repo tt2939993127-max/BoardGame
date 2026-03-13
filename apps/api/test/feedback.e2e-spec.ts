@@ -100,18 +100,18 @@ describe('Feedback Module (e2e)', () => {
         return { adminToken, adminId, userToken, userId };
     };
 
-    it('未登录可以提交匿名反馈', async () => {
+    it('未登录可以匿名提交反馈', async () => {
         const res = await request(app.getHttpServer())
             .post('/feedback')
             .send({ content: '匿名反馈内容' })
             .expect(201);
-        
+
         expect(res.body.content).toBe('匿名反馈内容');
-        expect(res.body.userId).toBeUndefined(); // 匿名反馈没有 userId（返回 undefined）
+        expect(res.body.userId).toBeUndefined();
     });
 
-    it('用户提交 + 管理员查看/更新', async () => {
-        const { adminToken, userToken } = await seedUsers();
+    it('登录用户反馈会绑定 userId 且管理员可更新状态', async () => {
+        const { adminToken, userToken, userId } = await seedUsers();
 
         const createRes = await request(app.getHttpServer())
             .post('/feedback')
@@ -121,10 +121,12 @@ describe('Feedback Module (e2e)', () => {
                 type: 'bug',
                 severity: 'high',
                 gameName: 'tictactoe',
+                actionLog: '[12:00] P1: cast card',
             })
             .expect(201);
 
         expect(createRes.body.content).toBe('反馈内容');
+        expect(String(createRes.body.userId)).toBe(userId);
         const feedbackId = createRes.body._id as string;
 
         const listRes = await request(app.getHttpServer())
@@ -142,5 +144,55 @@ describe('Feedback Module (e2e)', () => {
             .expect(200);
 
         expect(updateRes.body.status).toBe('resolved');
+    });
+
+    it('bug 类型必须附带 actionLog 或 stateSnapshot', async () => {
+        const { userToken } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '缺少调试信息',
+                type: 'bug',
+                severity: 'high',
+                gameName: 'smashup',
+            })
+            .expect(400);
+
+        const accepted = await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '携带日志',
+                type: 'bug',
+                severity: 'high',
+                gameName: 'smashup',
+                actionLog: '[12:00] P1: cast card',
+                clientContext: {
+                    route: '/play/smashup/match/abc',
+                    mode: 'online',
+                    matchId: 'abc',
+                    playerId: '0',
+                    gameId: 'smashup',
+                    appVersion: 'dev',
+                    userAgent: 'vitest',
+                    viewport: { width: 1280, height: 720 },
+                    language: 'zh-CN',
+                    timezone: 'Asia/Shanghai',
+                },
+                errorContext: {
+                    message: 'Cannot read properties of undefined',
+                    name: 'TypeError',
+                    stack: 'TypeError: ...',
+                    source: 'react.error_boundary',
+                },
+            })
+            .expect(201);
+
+        expect(accepted.body.type).toBe('bug');
+        expect(accepted.body.actionLog).toContain('cast card');
+        expect(accepted.body.clientContext?.matchId).toBe('abc');
+        expect(accepted.body.errorContext?.name).toBe('TypeError');
     });
 });

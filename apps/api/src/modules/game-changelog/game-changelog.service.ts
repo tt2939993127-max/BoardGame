@@ -197,8 +197,12 @@ export class GameChangelogService {
         }
 
         const developerGameIds = normalizeDeveloperGameIds(actor.developerGameIds);
+        // 兼容历史数据：未配置开发者游戏范围时按“全范围”处理，避免后台管理被错误拦截。
         if (developerGameIds.length === 0) {
-            throw new ForbiddenException('当前开发者未配置更新日志权限范围');
+            return {
+                role: actor.role,
+                developerGameIds: null,
+            };
         }
 
         return {
@@ -208,7 +212,8 @@ export class GameChangelogService {
     }
 
     private assertManagerCanModifyGame(manager: ChangelogManager, gameId: string) {
-        if (manager.role === 'admin') {
+        // null 表示“全范围可管理”
+        if (manager.role === 'admin' || manager.developerGameIds === null) {
             return;
         }
         if (!manager.developerGameIds?.includes(gameId)) {

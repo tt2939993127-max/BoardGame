@@ -218,6 +218,56 @@ function formatDuration(ms) {
     return `${(ms / 1000).toFixed(2)}s`;
 }
 
+async function fetchJson(url, label, timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                Accept: 'application/json',
+            },
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const text = await response.text();
+
+        if (!response.ok) {
+            throw new Error(`${label} 返回 HTTP ${response.status}`);
+        }
+        if (!contentType.includes('application/json')) {
+            const snippet = text.slice(0, 120).replace(/\s+/g, ' ');
+            throw new Error(`${label} 未返回 JSON，content-type=${contentType || '(empty)'}，body=${snippet}`);
+        }
+
+        try {
+            return JSON.parse(text);
+        } catch (error) {
+            throw new Error(`${label} JSON 解析失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function verifyApiRoutes(apiPort) {
+    const baseUrl = `http://127.0.0.1:${apiPort}`;
+    const health = await fetchJson(`${baseUrl}/health`, 'health');
+    if (health?.status !== 'ok') {
+        throw new Error(`health 返回异常: ${JSON.stringify(health)}`);
+    }
+
+    const notifications = await fetchJson(`${baseUrl}/notifications`, 'notifications');
+    if (!notifications || !Array.isArray(notifications.notifications)) {
+        throw new Error(`notifications 返回结构异常: ${JSON.stringify(notifications)}`);
+    }
+
+    const changelogs = await fetchJson(`${baseUrl}/game-changelogs/dicethrone`, 'game-changelogs');
+    if (!changelogs || !Array.isArray(changelogs.changelogs)) {
+        throw new Error(`game-changelogs 返回结构异常: ${JSON.stringify(changelogs)}`);
+    }
+}
+
 async function runProcessSmoke(label, args, envOverrides, port) {
     console.log(`[smoke] 启动 ${label}...`);
     const managed = createManagedProcess(label, args, envOverrides);
@@ -280,6 +330,7 @@ async function main() {
         },
         apiPort,
     );
+    await verifyApiRoutes(apiPort);
 
     const gameDurationMs = await runProcessSmoke(
         'smoke-game',

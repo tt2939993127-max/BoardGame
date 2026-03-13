@@ -211,10 +211,13 @@ export const ensureDebugPanelClosed = async (page: Page) => {
     await expect(panel).toBeHidden({ timeout: 5000 });
 };
 
-/** 隐藏 FAB 菜单，避免遮挡移动端窄视口点击区域 */
+/** 隐藏 FAB 菜单和调试开关，避免遮挡移动端窄视口点击区域 */
 export const disableFabMenu = async (page: Page) => {
     await page.addStyleTag({
-        content: '[data-testid="fab-menu"] { pointer-events: none !important; opacity: 0 !important; }',
+        content: [
+            '[data-testid="fab-menu"] { pointer-events: none !important; opacity: 0 !important; }',
+            '[data-testid="debug-toggle-container"] { pointer-events: none !important; opacity: 0 !important; }',
+        ].join('\n'),
     }).catch(() => {});
 };
 

@@ -23,6 +23,7 @@ import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { InteractionGuardProvider } from './components/game/framework';
 import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
+import { installGlobalErrorContextCapture } from './lib/feedback/errorContext';
 
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
@@ -80,6 +81,7 @@ const AppContent = () => {
 
   // 兜底：App 挂载时移除 index.html 的静态占位（LoadingScreen 不出现时的情况）
   useEffect(() => {
+    installGlobalErrorContextCapture();
     const initialLoader = document.getElementById('initial-loader');
     if (initialLoader) {
       initialLoader.remove();

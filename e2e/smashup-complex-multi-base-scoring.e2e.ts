@@ -1,5 +1,61 @@
 import { test, expect } from './framework';
+import type { GameTestContext } from './framework';
+import type { Page } from '@playwright/test';
 import { attachPageDiagnostics } from './helpers/common';
+
+type SceneConfig = Parameters<GameTestContext['setupScene']>[0];
+
+async function openSmashupScene(page: Page, game: GameTestContext, scene: SceneConfig): Promise<void> {
+    await page.goto('/play/smashup');
+    await page.waitForFunction(
+        () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+        { timeout: 30000 },
+    );
+    await game.setupScene(scene);
+}
+
+function escapeRegExp(source: string): string {
+    return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function clickInteractionOption(page: Page, optionId: string, label?: string): Promise<void> {
+    try {
+        await page.locator(`[data-option-id="${optionId}"]`).first().click({ force: true, timeout: 5000 });
+        await page.waitForTimeout(200);
+        return;
+    } catch {
+        // fallback to role based click below
+    }
+    if (label) {
+        try {
+            await page.getByRole('button', { name: new RegExp(escapeRegExp(label), 'i') }).first().click({ force: true, timeout: 5000 });
+            await page.waitForTimeout(200);
+            return;
+        } catch {
+            // fallback to generic skip button below
+        }
+    }
+    if (optionId === 'skip') {
+        await page.getByRole('button', { name: /^(跳过|Skip)(?:\s*\(\d+\))?$/i }).first().click({ force: true, timeout: 5000 });
+        await page.waitForTimeout(200);
+        return;
+    }
+    throw new Error(`交互选项不可点击: ${optionId}`);
+}
+
+async function openFourPlayerTestGame(game: GameTestContext): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            await game.openTestGame('smashup', { numPlayers: 4, skipInitialization: true });
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt === 3) throw error;
+        }
+    }
+    throw lastError instanceof Error ? lastError : new Error('openFourPlayerTestGame failed');
+}
 
 test.describe('大杀四方 - afterScoring 响应窗口', () => {
     test('基地计分后 afterScoring 响应窗口正常打开', async ({ page, game }, testInfo) => {
@@ -13,14 +69,7 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
         });
 
         try {
-            await page.goto('/play/smashup');
-
-            await page.waitForFunction(
-                () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
-                { timeout: 30000 },
-            );
-
-            await game.setupScene({
+            await openSmashupScene(page, game, {
                 gameId: 'smashup',
                 player0: {
                     hand: [
@@ -188,6 +237,201 @@ test.describe('大杀四方 - afterScoring 响应窗口', () => {
         } catch (error) {
             if (diagnostics.errors.length > 0) {
                 console.log('[页面诊断]', diagnostics.errors);
+            }
+            throw error;
+        }
+    });
+
+    test('4p afterScoring chain handles 6 interactions without duplicate score', async ({ page, game }, testInfo) => {
+        test.setTimeout(240000);
+
+        const diagnostics = attachPageDiagnostics(page);
+        page.on('console', (msg) => {
+            if (msg.type() === 'error' || msg.text().includes('[LocalGame]')) {
+                console.log(`[browser-console] ${msg.type()}: ${msg.text()}`);
+            }
+        });
+
+        const createPlayer = (id: string, factions: [string, string]) => ({
+            id,
+            vp: 0,
+            hand: [],
+            deck: [],
+            discard: [],
+            factions,
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            minionsPlayedPerBase: {},
+            sameNameMinionDefId: null,
+        });
+
+        const createMinion = (uid: string, defId: string, owner: string, basePower: number) => ({
+            uid,
+            defId,
+            owner,
+            controller: owner,
+            basePower,
+            powerModifier: 0,
+            powerCounters: 0,
+            tempPowerModifier: 0,
+            talentUsed: false,
+            attachedActions: [],
+        });
+
+        try {
+            await openFourPlayerTestGame(game);
+            await game.setupScene({
+                gameId: 'smashup',
+                phase: 'playCards',
+                currentPlayer: '0',
+                extra: {
+                    core: {
+                        turnOrder: ['0', '1', '2', '3'],
+                        currentPlayerIndex: 0,
+                        turnNumber: 9,
+                        players: {
+                            '0': createPlayer('0', ['pirates', 'ninjas']),
+                            '1': createPlayer('1', ['aliens', 'wizards']),
+                            '2': createPlayer('2', ['robots', 'ghosts']),
+                            '3': createPlayer('3', ['dinosaurs', 'zombies']),
+                        },
+                        bases: [
+                            {
+                                defId: 'base_tortuga',
+                                minions: [
+                                    createMinion('mate-p0', 'pirate_first_mate', '0', 2),
+                                    createMinion('mate-p1', 'pirate_first_mate', '1', 2),
+                                    createMinion('mate-p2', 'pirate_first_mate', '2', 2),
+                                    createMinion('mate-p3', 'pirate_first_mate', '3', 2),
+                                    createMinion('pow-p0', 'test_minion', '0', 10),
+                                    createMinion('pow-p1', 'test_minion', '1', 9),
+                                    createMinion('pow-p2', 'test_minion', '2', 8),
+                                    createMinion('pow-p3', 'test_minion', '3', 7),
+                                ],
+                                ongoingActions: [],
+                            },
+                            {
+                                defId: 'base_the_jungle',
+                                minions: [
+                                    createMinion('king-0', 'pirate_king', '0', 5),
+                                ],
+                                ongoingActions: [],
+                            },
+                            {
+                                defId: 'base_secret_garden',
+                                minions: [
+                                    createMinion('reserve-p1', 'test_minion', '1', 2),
+                                ],
+                                ongoingActions: [],
+                            },
+                        ],
+                        baseDeck: ['base_central_brain'],
+                        factionSelection: undefined,
+                        scoringEligibleBases: undefined,
+                    },
+                },
+            });
+
+            await expect.poll(async () => {
+                const text = await page.evaluate(() => document.body?.innerText ?? '');
+                return text.includes('Loading match resources...');
+            }, { timeout: 20000 }).toBe(false);
+
+            await expect(page.locator('[data-tutorial-id="su-scoreboard"]')).toBeVisible({ timeout: 15000 });
+
+            await page.waitForFunction(
+                () => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return state?.sys?.phase === 'playCards'
+                        && state?.core?.turnOrder?.length === 4
+                        && state?.core?.bases?.[0]?.minions?.length === 8;
+                },
+                { timeout: 30000 },
+            );
+
+            await game.screenshot('4p-01-initial', testInfo);
+
+            await game.advancePhase();
+            await game.waitForInteraction('pirate_king_move', 20000);
+
+            const resolvedSources: string[] = [];
+
+            for (let step = 0; step < 10; step += 1) {
+                const currentInteraction = await page.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    const current = state?.sys?.interaction?.current;
+                    if (!current) return null;
+                    const options = (current.data?.options ?? []).map((option: any) => ({
+                        id: option.id,
+                        label: option.label,
+                        value: option.value,
+                    }));
+                    return {
+                        sourceId: current.data?.sourceId ?? '',
+                        options,
+                    };
+                });
+
+                if (!currentInteraction) break;
+                resolvedSources.push(currentInteraction.sourceId);
+
+                if (currentInteraction.sourceId === 'pirate_king_move') {
+                    const keepOnBase = currentInteraction.options.find((option: any) => option.value?.move === false || option.id === 'no');
+                    expect(keepOnBase).toBeTruthy();
+                    await clickInteractionOption(page, keepOnBase!.id, keepOnBase!.label);
+                    continue;
+                }
+
+                if (currentInteraction.sourceId === 'base_tortuga' || currentInteraction.sourceId === 'pirate_first_mate_choose_base') {
+                    const skip = currentInteraction.options.find((option: any) => option.id === 'skip' || option.value?.skip === true);
+                    expect(skip).toBeTruthy();
+                    await clickInteractionOption(page, skip!.id, skip!.label);
+                    continue;
+                }
+
+                throw new Error(`unexpected interaction sourceId: ${currentInteraction.sourceId}`);
+            }
+
+            expect(resolvedSources.filter((id) => id === 'pirate_king_move')).toHaveLength(1);
+            expect(resolvedSources.filter((id) => id === 'base_tortuga')).toHaveLength(1);
+            expect(resolvedSources.filter((id) => id === 'pirate_first_mate_choose_base')).toHaveLength(4);
+            expect(resolvedSources).toHaveLength(6);
+
+            await page.waitForFunction(
+                () => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    if (!state) return false;
+                    return !state.sys?.interaction?.current
+                        && !state.sys?.responseWindow?.current
+                        && state.sys?.phase === 'playCards'
+                        && state.core?.currentPlayerIndex === 1;
+                },
+                { timeout: 20000 },
+            );
+
+            const finalState = await page.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const logs = state?.sys?.actionLog?.entries ?? [];
+                const tortugaScoredCount = logs.filter((entry: any) =>
+                    entry?.eventType === 'su:base_scored' && entry?.payload?.baseDefId === 'base_tortuga'
+                ).length;
+                return {
+                    phase: state?.sys?.phase,
+                    currentPlayerIndex: state?.core?.currentPlayerIndex,
+                    tortugaScoredCount,
+                };
+            });
+
+            expect(finalState.phase).toBe('playCards');
+            expect(finalState.currentPlayerIndex).toBe(1);
+            expect(finalState.tortugaScoredCount).toBe(1);
+
+            await game.screenshot('4p-02-final', testInfo);
+        } catch (error) {
+            if (diagnostics.errors.length > 0) {
+                console.log('[page-diagnostics]', diagnostics.errors);
             }
             throw error;
         }

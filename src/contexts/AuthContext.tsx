@@ -1,8 +1,14 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
+import { normalizeDeveloperGameIds } from '../lib/developerGameAccess';
 
 export type UserRole = 'user' | 'developer' | 'admin';
+const BACKOFFICE_ROLES: ReadonlySet<UserRole> = new Set(['developer', 'admin']);
+
+export const isBackofficeRole = (role: UserRole | undefined | null): role is Extract<UserRole, 'developer' | 'admin'> => {
+    return role !== undefined && role !== null && BACKOFFICE_ROLES.has(role);
+};
 
 interface User {
     id: string;
@@ -84,29 +90,137 @@ const parseErrorMessage = async (response: Response, fallback: string) => {
     }
 };
 
+const normalizeUserRole = (value: unknown): UserRole => {
+    if (value === 'admin' || value === 'developer' || value === 'user') {
+        return value;
+    }
+    return 'user';
+};
+
+const normalizeAuthUser = (value: unknown): User | null => {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+
+    const raw = value as Partial<User>;
+    if (typeof raw.id !== 'string' || typeof raw.username !== 'string') {
+        return null;
+    }
+
+    const role = normalizeUserRole(raw.role);
+    const developerGameIds = role === 'developer'
+        ? normalizeDeveloperGameIds(raw.developerGameIds)
+        : undefined;
+
+    return {
+        id: raw.id,
+        username: raw.username,
+        email: typeof raw.email === 'string' ? raw.email : undefined,
+        emailVerified: typeof raw.emailVerified === 'boolean' ? raw.emailVerified : undefined,
+        lastOnline: typeof raw.lastOnline === 'string' ? raw.lastOnline : undefined,
+        avatar: typeof raw.avatar === 'string' ? raw.avatar : undefined,
+        role,
+        developerGameIds,
+        banned: typeof raw.banned === 'boolean' ? raw.banned : false,
+    };
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const syncedTokenRef = useRef<string | null>(null);
+    const currentTokenRef = useRef<string | null>(null);
+    currentTokenRef.current = token;
+
+    const clearLocalAuth = useCallback(() => {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+    }, []);
+
+    const syncCurrentUser = useCallback(async (tokenToSync: string) => {
+        try {
+            const response = await fetch(`${AUTH_API_URL}/me`, {
+                method: 'GET',
+                headers: {
+                    'Accept-Language': i18n.language,
+                    'Authorization': `Bearer ${tokenToSync}`,
+                },
+            });
+
+            if (currentTokenRef.current !== tokenToSync) {
+                return;
+            }
+
+            if (response.status === 401 || response.status === 403 || response.status === 404) {
+                setToken(null);
+                setUser(null);
+                clearLocalAuth();
+                return;
+            }
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json().catch(() => null) as null | { user?: unknown };
+            const normalized = normalizeAuthUser(data?.user);
+            if (!normalized) {
+                return;
+            }
+
+            if (currentTokenRef.current !== tokenToSync) {
+                return;
+            }
+
+            setUser(normalized);
+            localStorage.setItem('auth_user', JSON.stringify(normalized));
+        } catch {
+            // 网络异常时保留本地会话，避免误登出
+        }
+    }, [clearLocalAuth]);
 
     // 从 localStorage 加载 token
     useEffect(() => {
         const savedToken = localStorage.getItem('auth_token');
         const savedUser = localStorage.getItem('auth_user');
 
-        if (savedToken && savedUser) {
+        if (savedToken) {
+            setToken(savedToken);
+        }
+
+        if (savedUser) {
             try {
-                const parsedUser = JSON.parse(savedUser) as User;
-                setToken(savedToken);
-                setUser(parsedUser);
+                const parsedUser = normalizeAuthUser(JSON.parse(savedUser));
+                if (parsedUser) {
+                    setUser(parsedUser);
+                } else {
+                    localStorage.removeItem('auth_user');
+                }
             } catch {
-                localStorage.removeItem('auth_token');
                 localStorage.removeItem('auth_user');
             }
         }
         setIsLoading(false);
     }, []);
+
+    useEffect(() => {
+        if (isLoading) {
+            return;
+        }
+
+        if (!token) {
+            syncedTokenRef.current = null;
+            return;
+        }
+
+        if (syncedTokenRef.current === token) {
+            return;
+        }
+
+        syncedTokenRef.current = token;
+        void syncCurrentUser(token);
+    }, [isLoading, token, syncCurrentUser]);
 
     // 联动监控服务：标识用户信息（Sentry 异步加载，不阻塞首屏）
     useEffect(() => {
@@ -154,11 +268,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error('登录响应异常');
         }
 
+        const normalizedUser = normalizeAuthUser(user);
+        if (!normalizedUser) {
+            throw new Error('登录响应异常');
+        }
+
         setToken(token);
-        setUser(user);
+        setUser(normalizedUser);
 
         localStorage.setItem('auth_token', token);
-        localStorage.setItem('auth_user', JSON.stringify(user));
+        localStorage.setItem('auth_user', JSON.stringify(normalizedUser));
     }, []);
 
     const sendRegisterCode = useCallback(async (email: string) => {
@@ -204,11 +323,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const data = await response.json();
+        const normalizedUser = normalizeAuthUser(data.user);
+        if (!normalizedUser) {
+            throw new Error('注册响应异常');
+        }
+
         setToken(data.token);
-        setUser(data.user);
+        setUser(normalizedUser);
 
         localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
+        localStorage.setItem('auth_user', JSON.stringify(normalizedUser));
     }, []);
 
     const resetPassword = useCallback(async (email: string, code: string, newPassword: string) => {
@@ -237,11 +361,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
         }
 
+        syncedTokenRef.current = null;
+        currentTokenRef.current = null;
         setToken(null);
         setUser(null);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
-    }, [token]);
+        clearLocalAuth();
+    }, [token, clearLocalAuth]);
 
     // 直接更新 token state（供 useTokenRefresh 刷新后同步 React 状态）
     const setTokenDirect = useCallback((newToken: string) => {
@@ -286,7 +411,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const data = await response.json();
-        const updatedUser = data.user;
+        const updatedUser = normalizeAuthUser(data.user);
+        if (!updatedUser) {
+            throw new Error('用户信息更新失败');
+        }
         setUser(updatedUser);
         localStorage.setItem('auth_user', JSON.stringify(updatedUser));
     }, [token]);

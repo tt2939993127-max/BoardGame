@@ -24,8 +24,8 @@ export const CategoryPills = ({ activeCategory, onSelect }: CategoryPillsProps) 
     const { t } = useTranslation('common');
 
     return (
-        <div className="flex justify-center w-full">
-            <div className="flex items-center gap-6 font-serif overflow-x-auto no-scrollbar px-6 max-w-full py-2">
+        <div className="w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex min-w-max items-center gap-6 px-6 py-0 font-serif md:flex md:min-w-0 md:w-full md:justify-center md:py-2">
                 {categories.map((category) => {
                     const isActive = activeCategory === category;
                     return (

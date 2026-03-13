@@ -34,6 +34,7 @@ const REGISTER_CODE_SEND_INTERVAL_SECONDS = 60;
 const REGISTER_CODE_SEND_MAX = 5;
 const REGISTER_CODE_SEND_WINDOW_SECONDS = 10 * 60;
 const REGISTER_CODE_SEND_PREFIX = 'register:send:';
+const MEMORY_TTL_MAX_MS = 2_147_000_000;
 
 type RefreshTokenRecord = {
     userId: string;
@@ -147,12 +148,12 @@ export class AuthService {
 
         if (nextCount >= LOGIN_FAIL_MAX_COUNT) {
             const lockedUntil = nowSeconds + LOGIN_LOCK_SECONDS;
-            await this.cacheManager.set(this.loginLockKey(email, ip), lockedUntil, LOGIN_LOCK_SECONDS);
+            await this.setCacheWithSeconds(this.loginLockKey(email, ip), lockedUntil, LOGIN_LOCK_SECONDS);
             await this.cacheManager.del(failKey);
             return { locked: true, retryAfterSeconds: LOGIN_LOCK_SECONDS };
         }
 
-        await this.cacheManager.set(failKey, { count: nextCount, firstFailedAt }, ttlSeconds);
+        await this.setCacheWithSeconds(failKey, { count: nextCount, firstFailedAt }, ttlSeconds);
         return { locked: false };
     }
 
@@ -290,8 +291,8 @@ export class AuthService {
             }
         }
 
-        await this.cacheManager.set(this.refreshTokenKey(tokenHash), record, REFRESH_TOKEN_TTL_SECONDS);
-        await this.cacheManager.set(this.refreshUserKey(userId), tokenHash, REFRESH_TOKEN_TTL_SECONDS);
+        await this.setCacheWithSeconds(this.refreshTokenKey(tokenHash), record, REFRESH_TOKEN_TTL_SECONDS);
+        await this.setCacheWithSeconds(this.refreshUserKey(userId), tokenHash, REFRESH_TOKEN_TTL_SECONDS);
 
         return { token, expiresAt };
     }
@@ -323,8 +324,8 @@ export class AuthService {
             expiresAt: newExpiresAt,
         };
 
-        await this.cacheManager.set(this.refreshTokenKey(newHash), newRecord, REFRESH_TOKEN_TTL_SECONDS);
-        await this.cacheManager.set(this.refreshUserKey(record.userId), newHash, REFRESH_TOKEN_TTL_SECONDS);
+        await this.setCacheWithSeconds(this.refreshTokenKey(newHash), newRecord, REFRESH_TOKEN_TTL_SECONDS);
+        await this.setCacheWithSeconds(this.refreshUserKey(record.userId), newHash, REFRESH_TOKEN_TTL_SECONDS);
         await this.markRefreshTokenRevoked(tokenHash, record, newHash);
 
         return { status: 'ok', userId: record.userId, token: newToken, expiresAt: newExpiresAt };
@@ -359,13 +360,13 @@ export class AuthService {
 
     async blacklistToken(token: string): Promise<void> {
         const ttlSeconds = this.resolveTokenTtlSeconds(token);
-        await this.cacheManager.set(`jwt:blacklist:${token}`, true, ttlSeconds);
+        await this.setCacheWithSeconds(`jwt:blacklist:${token}`, true, ttlSeconds);
     }
 
     async storeEmailCode(email: string, code: string): Promise<void> {
         const normalized = this.normalizeEmail(email);
         if (!normalized) return;
-        await this.cacheManager.set(`verify:email:${normalized}`, code, EMAIL_CODE_TTL_SECONDS);
+        await this.setCacheWithSeconds(`verify:email:${normalized}`, code, EMAIL_CODE_TTL_SECONDS);
     }
 
     async verifyEmailCode(email: string, code: string): Promise<CodeVerifyResult> {
@@ -381,7 +382,7 @@ export class AuthService {
     async storeResetCode(email: string, code: string): Promise<void> {
         const normalized = this.normalizeEmail(email);
         if (!normalized) return;
-        await this.cacheManager.set(this.resetCodeKey(normalized), code, RESET_CODE_TTL_SECONDS);
+        await this.setCacheWithSeconds(this.resetCodeKey(normalized), code, RESET_CODE_TTL_SECONDS);
     }
 
     async verifyResetCode(email: string, code: string): Promise<CodeVerifyResult> {
@@ -412,7 +413,7 @@ export class AuthService {
         const normalized = this.normalizeEmail(email);
         if (!normalized) return;
         const nextAllowed = this.nowSeconds() + RESET_SEND_INTERVAL_SECONDS;
-        await this.cacheManager.set(this.resetSendKey(normalized, ip), nextAllowed, RESET_SEND_INTERVAL_SECONDS);
+        await this.setCacheWithSeconds(this.resetSendKey(normalized, ip), nextAllowed, RESET_SEND_INTERVAL_SECONDS);
     }
 
     // 注册验证码发送速率限制：60 秒冷却 + 10 分钟内最多 5 次
@@ -448,7 +449,7 @@ export class AuthService {
 
         // 设置冷却
         const nextAllowed = nowSeconds + REGISTER_CODE_SEND_INTERVAL_SECONDS;
-        await this.cacheManager.set(this.registerCodeCooldownKey(normalized, ip), nextAllowed, REGISTER_CODE_SEND_INTERVAL_SECONDS);
+        await this.setCacheWithSeconds(this.registerCodeCooldownKey(normalized, ip), nextAllowed, REGISTER_CODE_SEND_INTERVAL_SECONDS);
 
         // 累计计数
         const countKey = this.registerCodeCountKey(normalized, ip);
@@ -456,7 +457,7 @@ export class AuthService {
         const firstAt = existing?.firstAt ?? nowSeconds;
         const count = (existing?.count ?? 0) + 1;
         const ttl = Math.max(REGISTER_CODE_SEND_WINDOW_SECONDS - (nowSeconds - firstAt), 1);
-        await this.cacheManager.set(countKey, { count, firstAt }, ttl);
+        await this.setCacheWithSeconds(countKey, { count, firstAt }, ttl);
     }
 
     async getResetAttemptStatus(email: string): Promise<{ retryAfterSeconds: number } | null> {
@@ -481,7 +482,7 @@ export class AuthService {
         const firstFailedAt = existing?.firstFailedAt ?? nowSeconds;
         const nextCount = (existing?.count ?? 0) + 1;
         const ttlSeconds = Math.max(RESET_ATTEMPT_WINDOW_SECONDS - (nowSeconds - firstFailedAt), 1);
-        await this.cacheManager.set(this.resetAttemptKey(normalized), { count: nextCount, firstFailedAt }, ttlSeconds);
+        await this.setCacheWithSeconds(this.resetAttemptKey(normalized), { count: nextCount, firstFailedAt }, ttlSeconds);
         if (nextCount >= RESET_MAX_ATTEMPTS) {
             return { locked: true, retryAfterSeconds: ttlSeconds };
         }
@@ -558,6 +559,23 @@ export class AuthService {
         return Math.floor(Date.now() / 1000);
     }
 
+    private isRedisCacheStore(): boolean {
+        const store = (this.cacheManager as Cache & { store?: { getClient?: () => unknown; client?: unknown } }).store;
+        return Boolean(store?.getClient || store?.client);
+    }
+
+    private toStoreTtl(ttlSeconds: number): number {
+        const safeSeconds = Math.max(Math.floor(ttlSeconds), 1);
+        if (this.isRedisCacheStore()) {
+            return safeSeconds;
+        }
+        return Math.min(safeSeconds * 1000, MEMORY_TTL_MAX_MS);
+    }
+
+    private async setCacheWithSeconds<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+        await this.cacheManager.set(key, value, this.toStoreTtl(ttlSeconds));
+    }
+
     private async getRefreshTokenRecord(tokenHash: string): Promise<RefreshTokenRecord | null> {
         const record = await this.cacheManager.get<RefreshTokenRecord>(this.refreshTokenKey(tokenHash));
         return record ?? null;
@@ -580,7 +598,7 @@ export class AuthService {
             replacedBy: replacedBy ?? record.replacedBy,
         };
 
-        await this.cacheManager.set(
+        await this.setCacheWithSeconds(
             this.refreshTokenKey(tokenHash),
             updated,
             this.resolveRefreshTokenTtlSeconds(record.expiresAt)

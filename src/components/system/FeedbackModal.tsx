@@ -9,13 +9,21 @@ import { cn } from '../../lib/utils';
 import { FEEDBACK_API_URL as API_URL } from '../../config/server';
 import { UI_Z_INDEX } from '../../core';
 import { GAME_MANIFEST } from '../../games/manifest.generated';
+import { getLastErrorContext } from '../../lib/feedback/errorContext';
 
+interface FeedbackRuntimeContext {
+    mode?: 'online' | 'local' | 'tutorial';
+    matchId?: string;
+    playerId?: string | null;
+    gameId?: string;
+}
 interface FeedbackModalProps {
     onClose: () => void;
     /** 游戏内操作日志（纯文本，由 GameHUD 传入） */
     actionLogText?: string;
     /** 完整游戏状态 JSON（用于精确复现问题） */
     stateSnapshot?: string;
+    runtimeContext?: FeedbackRuntimeContext;
 }
 
 const FeedbackType = {
@@ -48,7 +56,7 @@ const FEEDBACK_SEVERITY_LABEL_KEYS: Record<FeedbackSeverity, string> = {
     [FeedbackSeverity.CRITICAL]: 'hud.feedback.severity.critical',
 };
 
-export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot }: FeedbackModalProps) => {
+export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeContext }: FeedbackModalProps) => {
     const { t } = useTranslation(['game', 'common']);
     const { token } = useAuth();
     const { success, error } = useToast();
@@ -109,10 +117,39 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot }: Feedbac
                 'Content-Type': 'application/json',
             };
             
-            // 如果用户已登录，添加 Authorization header
+            // 如果用户已登录，附带 Authorization header
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
+
+            const lastErrorContext = getLastErrorContext();
+            const route = `${location.pathname}${location.search}${location.hash}`;
+            const fallbackMode = (typeof window !== 'undefined'
+                ? ((window as Window & { __BG_GAME_MODE__?: string }).__BG_GAME_MODE__)
+                : undefined);
+            const clientContext = {
+                route: route || undefined,
+                mode: runtimeContext?.mode ?? (fallbackMode as 'online' | 'local' | 'tutorial' | undefined),
+                matchId: runtimeContext?.matchId,
+                playerId: runtimeContext?.playerId ?? undefined,
+                gameId: (runtimeContext?.gameId ?? gameName) || undefined,
+                appVersion: import.meta.env.VITE_APP_VERSION || import.meta.env.MODE || undefined,
+                userAgent: (typeof navigator !== 'undefined' ? navigator.userAgent : undefined),
+                viewport: (typeof window !== 'undefined')
+                    ? { width: window.innerWidth, height: window.innerHeight }
+                    : undefined,
+                language: (typeof navigator !== 'undefined' ? navigator.language : undefined),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+            };
+
+            const errorContext = lastErrorContext
+                ? {
+                    message: lastErrorContext.message,
+                    name: lastErrorContext.name,
+                    stack: lastErrorContext.stack,
+                    source: lastErrorContext.source,
+                }
+                : undefined;
 
             const res = await fetch(`${API_URL}`, {
                 method: 'POST',
@@ -125,6 +162,8 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot }: Feedbac
                     contactInfo: contactInfo || undefined,
                     actionLog: (attachLog && actionLogText) ? actionLogText : undefined,
                     stateSnapshot: (attachState && stateSnapshot) ? stateSnapshot : undefined,
+                    clientContext,
+                    errorContext,
                 })
             });
 
@@ -349,9 +388,9 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot }: Feedbac
 };
 
 
-// ── 图片压缩工具 ──
+// 图片压缩工具
 
-/** 最大 base64 大小约 500KB（压缩后） */
+/** 最大 base64 体积约 500KB（压缩后） */
 const MAX_WIDTH = 1280;
 const MAX_HEIGHT = 960;
 const JPEG_QUALITY = 0.7;
@@ -376,18 +415,18 @@ function compressImage(file: File): Promise<string> {
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             if (!ctx) {
-                reject(new Error('Canvas 不可用'));
+                reject(new Error('Canvas not available'));
                 return;
             }
             ctx.drawImage(img, 0, 0, width, height);
 
-            // 输出为 JPEG（体积远小于 PNG base64）
+            // 输出 JPEG（体积远小于 PNG base64）
             const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
             resolve(dataUrl);
         };
         img.onerror = () => {
             URL.revokeObjectURL(url);
-            reject(new Error('图片加载失败'));
+            reject(new Error('Image load failed'));
         };
         img.src = url;
     });

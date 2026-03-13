@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createScopedLogger } from '../logger';
 import { parseNamespaceLiteral, collectReferencesFromContent } from '../../../scripts/verify/i18n-check';
 import {

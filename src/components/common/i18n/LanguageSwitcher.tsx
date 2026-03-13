@@ -10,7 +10,7 @@ interface LanguageSwitcherProps {
 }
 
 export const LanguageSwitcher = ({ className = '' }: LanguageSwitcherProps) => {
-    const { i18n } = useTranslation('common');
+    const { i18n, t } = useTranslation('common');
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const currentLanguage = i18n.resolvedLanguage ?? i18n.language;
@@ -43,14 +43,12 @@ export const LanguageSwitcher = ({ className = '' }: LanguageSwitcherProps) => {
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={clsx(
-                    'flex items-center justify-center w-7 h-7 rounded-full transition-all duration-300 cursor-pointer',
-                    'bg-[#fefcf7] border border-[#d3ccba]',
-                    'hover:border-[#433422] hover:scale-105 active:scale-95',
-                    'text-sm leading-none'
+                    'group relative inline-flex h-8 items-center border-0 bg-transparent p-0 text-[11px] font-bold leading-none tracking-[0.08em] text-parchment-light-text transition-colors hover:text-[#2c2216] cursor-pointer md:text-sm'
                 )}
                 title={currentOption.label}
             >
-                <span className="relative top-[-0.5px]">{languageFlags[currentLanguage] || '🌐'}</span>
+                <span>{t('language.label')}</span>
+                <span className="underline-center" />
             </button>
 
             <AnimatePresence>

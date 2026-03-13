@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGu
 import { FeedbackService } from './feedback.service';
 import { BulkFeedbackIdsDto, CreateFeedbackDto, FeedbackFilterDto, UpdateFeedbackStatusDto, QueryFeedbackDto } from './dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../shared/guards/optional-jwt-auth.guard';
 import { Roles } from '../admin/guards/roles.decorator';
 import { AdminGuard } from '../admin/guards/admin.guard';
 
@@ -19,6 +20,7 @@ export class FeedbackController {
      * TODO: 添加 @nestjs/throttler 依赖后启用速率限制
      * @Throttle({ default: { limit: 3, ttl: 60000 } }) // 匿名用户限制
      */
+    @UseGuards(OptionalJwtAuthGuard)
     @Post()
     async create(@Request() req: any, @Body() dto: CreateFeedbackDto) {
         // 如果用户已登录，使用用户 ID；否则使用 null（匿名反馈）
