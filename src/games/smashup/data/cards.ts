@@ -623,7 +623,7 @@ export function getBaseDefIdsForFactions(factionIds: string[]): string[] {
     const matched = Array.from(_baseRegistry.values())
         .filter(base => base.faction && selected.has(base.faction))
         .map(base => base.id);
-    
+
     // 检查是否有派系没有对应基地（如 POD 派系）
     // 统计每个派系匹配到的基地数量
     const factionBaseCounts = new Map<string, number>();
@@ -632,22 +632,22 @@ export function getBaseDefIdsForFactions(factionIds: string[]): string[] {
             factionBaseCounts.set(base.faction, (factionBaseCounts.get(base.faction) || 0) + 1);
         }
     }
-    
+
     // 找出没有基地的派系
     const factionsWithoutBases = factionIds.filter(fid => !factionBaseCounts.has(fid));
-    
+
     // 如果有派系没有基地，为每个缺失的派系补充 2 个基地
     if (factionsWithoutBases.length > 0) {
         const allBases = getAllBaseDefIds();
         const usedBases = new Set(matched);
         const availableBases = allBases.filter(id => !usedBases.has(id));
-        
+
         const missingCount = factionsWithoutBases.length * 2;
         // 从可用基地中选择（不洗牌，保持确定性，由调用方洗牌）
         const supplementBases = availableBases.slice(0, Math.min(missingCount, availableBases.length));
         return [...matched, ...supplementBases];
     }
-    
+
     return matched;
 }
 
@@ -689,23 +689,23 @@ function getPodFallbackKeyId(defId: string): string | undefined {
  */
 export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
-    const localeKeys = [`cards.${def.id}.name`];
-    if (def.name.startsWith('cards.') && !localeKeys.includes(def.name)) {
-        localeKeys.push(def.name);
-    }
+    // 1) 优先尝试完整 ID（POD 版应优先命中 cards.xxx_pod.name）
+    const primaryKey = `cards.${def.id}.name`;
+    const resolvedPrimary = t(primaryKey);
+    if (resolvedPrimary && resolvedPrimary !== primaryKey) return resolvedPrimary;
 
+    // 2) 若未命中且是 POD 版，回退到基础版本 cards.xxx.name
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
     if (fallbackLocaleKeyId) {
-        localeKeys.push(`cards.${fallbackLocaleKeyId}.name`);
+        const fallbackKey = `cards.${fallbackLocaleKeyId}.name`;
+        const resolvedFallback = t(fallbackKey);
+        if (resolvedFallback && resolvedFallback !== fallbackKey) return resolvedFallback;
     }
 
-    const localeValue = resolveLocaleValue(t, localeKeys);
-    if (localeValue) return localeValue;
-    // 如果原定义是以 cards. 开头则直接使用；否则根据 id 生成
-    const keyId = def.id.replace(/_pod$/, '');
-    const key = def.name.startsWith('cards.') ? def.name : `cards.${keyId}.name`;
+    // 3) 若 def.name 已是 i18n key，则继续尝试；否则用 cards.<baseId>.name
+    const baseId = def.id.replace(/_pod$/, '');
+    const key = def.name.startsWith('cards.') ? def.name : `cards.${baseId}.name`;
     const resolved = t(key);
-    // 如果 i18n 未命中（返回 key 本身或空），回退到定义中的原始 name
     return (resolved && resolved !== key) ? resolved : def.name;
 }
 
@@ -729,6 +729,13 @@ export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key:
     if (localeValue) return localeValue;
     // 随从用 abilityText，行动卡用 effectText，基地用 abilityText
     const field = ('type' in def && def.type === 'action') ? 'effectText' : 'abilityText';
+
+    // 1. 优先尝试完整 ID (如果是 POD 版，这将匹配 cards.xxx_pod.xxxText)
+    const podKey = `cards.${def.id}.${field}`;
+    const resolvedPod = t(podKey);
+    if (resolvedPod && resolvedPod !== podKey) return resolvedPod;
+
+    // 2. 如果未命中，且 ID 含有 _pod，尝试去掉后缀的基础版本
     const keyId = def.id.replace(/_pod$/, '');
     const key = `cards.${keyId}.${field}`;
     const resolved = t(key);
