@@ -7,7 +7,6 @@ import type { Die, TurnPhase } from '../types';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { MultistepInteractionState } from '../../../engine/systems/useMultistepInteraction';
 import type { DiceModifyResult, DiceModifyStep, DiceSelectResult, DiceSelectStep } from '../domain/systems';
-import { useMobileViewport } from '../../../hooks/ui/useMobileViewport';
 import { Dice3D } from './Dice3D';
 
 // ============================================================================
@@ -48,21 +47,6 @@ const DESKTOP_DICE_TRAY_TOKENS = {
     selectedBadgeIconClassName: '',
 };
 
-const MOBILE_DICE_TRAY_TOKENS = {
-    diceSize: 'clamp(1.62rem,3vw,1.92rem)',
-    containerClassName: 'flex flex-col items-center p-[clamp(0.16rem,0.26vw,0.2rem)] rounded-[clamp(0.62rem,0.9vw,0.82rem)] gap-[clamp(0.1rem,0.14vw,0.16rem)] w-[clamp(4rem,7.8vw,4.55rem)] shrink-0 relative transition-all duration-300',
-    glossClassName: 'absolute inset-0 rounded-[clamp(0.62rem,0.9vw,0.82rem)] bg-gradient-to-tr from-white/0 via-white/4 to-transparent pointer-events-none',
-    rimClassName: 'absolute inset-px rounded-[clamp(0.58rem,0.82vw,0.76rem)] pointer-events-none border',
-    shadowClassName: 'absolute top-0 left-0 right-0 h-[clamp(0.54rem,0.72vw,0.66rem)] rounded-t-[clamp(0.62rem,0.9vw,0.82rem)] bg-gradient-to-b from-black/95 to-transparent pointer-events-none',
-    trayInnerClassName: 'flex flex-col gap-[clamp(0.08rem,0.12vw,0.12rem)] items-center justify-center w-full p-[clamp(0.05rem,0.08vw,0.08rem)]',
-    rowGapClassName: 'gap-[clamp(0.12rem,0.16vw,0.18rem)]',
-    dieGapClassName: 'gap-[clamp(0.06rem,0.1vw,0.1rem)]',
-    adjustButtonClassName: 'w-[clamp(0.92rem,1.7vw,1.1rem)] h-[clamp(0.92rem,1.7vw,1.1rem)] text-[clamp(0.56rem,1vw,0.68rem)]',
-    lockedLabelClassName: 'text-[clamp(0.38rem,0.52vw,0.48rem)] px-[clamp(0.16rem,0.2vw,0.22rem)] py-[1px]',
-    selectedBadgeClassName: 'w-[clamp(0.64rem,0.84vw,0.72rem)] h-[clamp(0.64rem,0.84vw,0.72rem)] -top-[clamp(0.08rem,0.12vw,0.12rem)] -right-[clamp(0.08rem,0.12vw,0.12rem)]',
-    selectedBadgeIconClassName: 'h-[clamp(0.42rem,0.52vw,0.5rem)] w-[clamp(0.42rem,0.52vw,0.5rem)]',
-};
-
 const DESKTOP_DICE_ACTION_TOKENS = {
     containerClassName: 'w-[10.2vw] grid grid-cols-2 gap-[0.4vw] items-stretch h-[2.5vw]',
     buttonClassName: '!px-[0.5vw] !rounded-[0.5vw]',
@@ -71,16 +55,6 @@ const DESKTOP_DICE_ACTION_TOKENS = {
     confirmTextClassName: '!text-[0.7vw]',
     dotClassName: 'w-[0.45vw] h-[0.45vw]',
     dotsContainerClassName: 'flex flex-col flex-wrap gap-[0.15vw] justify-center items-center h-[1.8vw] ml-[0.3vw] shrink-0 content-center',
-};
-
-const MOBILE_DICE_ACTION_TOKENS = {
-    containerClassName: 'w-[clamp(6rem,13vw,6.8rem)] grid grid-cols-2 gap-[clamp(0.18rem,0.24vw,0.24rem)] items-stretch h-[clamp(2rem,4vw,2.2rem)]',
-    buttonClassName: '!px-[clamp(0.26rem,0.38vw,0.34rem)] !min-h-0 !rounded-[0.62rem]',
-    interactionTextClassName: '!text-[clamp(0.62rem,1.28vw,0.72rem)] leading-none',
-    rollTextClassName: '!text-[clamp(0.56rem,1.18vw,0.66rem)] leading-none tracking-tight',
-    confirmTextClassName: '!text-[clamp(0.58rem,1.18vw,0.68rem)] leading-none',
-    dotClassName: 'w-[clamp(0.24rem,0.42vw,0.3rem)] h-[clamp(0.24rem,0.42vw,0.3rem)]',
-    dotsContainerClassName: 'flex flex-col flex-wrap gap-[clamp(0.08rem,0.12vw,0.1rem)] justify-center items-center h-[clamp(1.3rem,2.6vw,1.45rem)] ml-[clamp(0.16rem,0.22vw,0.2rem)] shrink-0 content-center',
 };
 
 /** 从 multistep-choice interaction 中提取 DiceThrone 元数据 */
@@ -122,8 +96,6 @@ export const DiceTray = ({
     isPassiveRerollMode?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isMobileNarrowViewport = useMobileViewport();
-    const trayTokens = isMobileNarrowViewport ? MOBILE_DICE_TRAY_TOKENS : DESKTOP_DICE_TRAY_TOKENS;
     const {
         diceSize,
         containerClassName,
@@ -137,7 +109,7 @@ export const DiceTray = ({
         lockedLabelClassName,
         selectedBadgeClassName,
         selectedBadgeIconClassName,
-    } = trayTokens;
+    } = DESKTOP_DICE_TRAY_TOKENS;
 
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);
@@ -297,7 +269,7 @@ export const DiceTray = ({
                                     )}
                                     {selected && !showAdjustButtons && !showAnyModeButtons && (
                                         <div className={`absolute ${selectedBadgeClassName} bg-amber-500 rounded-full flex items-center justify-center z-30`}>
-                                            <Check size={isMobileNarrowViewport ? 10 : 12} className={`text-white ${selectedBadgeIconClassName}`} strokeWidth={3} />
+                                            <Check size={12} className={`text-white ${selectedBadgeIconClassName}`} strokeWidth={3} />
                                         </div>
                                     )}
                                 </div>
@@ -359,8 +331,7 @@ export const DiceActions = ({
     setRerollingDiceIds: (ids: number[]) => void;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isMobileNarrowViewport = useMobileViewport();
-    const actionTokens = isMobileNarrowViewport ? MOBILE_DICE_ACTION_TOKENS : DESKTOP_DICE_ACTION_TOKENS;
+    const actionTokens = DESKTOP_DICE_ACTION_TOKENS;
     const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);

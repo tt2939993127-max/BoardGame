@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scripts/infra/e2e-port-config.js';
@@ -22,7 +22,6 @@ interface RuntimeRecord {
 }
 
 const TMP_DIR = path.join(process.cwd(), '.tmp');
-const PROCESS_FILE = path.join(TMP_DIR, 'playwright-worker-runtime.json');
 const SERVICE_READY_TIMEOUT_MS = Number.parseInt(process.env.PW_SERVICE_READY_TIMEOUT_MS || '240000', 10);
 const PORT_CLEANUP_TIMEOUT_MS = Number.parseInt(process.env.PW_PORT_CLEANUP_TIMEOUT_MS || '20000', 10);
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
@@ -30,6 +29,15 @@ const forceStartServers = process.env.PW_START_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = process.env.PW_REUSE_EXISTING_SERVERS === 'true';
 const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+
+function getRuntimeScope(): string {
+    const normalized = (process.env.PW_RUNTIME_SCOPE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    return normalized || 'default';
+}
+
+function getProcessFilePath(): string {
+    return path.join(TMP_DIR, `playwright-worker-runtime-${getRuntimeScope()}.json`);
+}
 
 async function isUrlReady(url: string): Promise<boolean> {
     try {
@@ -87,6 +95,41 @@ function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord
     };
 }
 
+function killProcessTree(pid: number): void {
+    try {
+        if (process.platform === 'win32') {
+            execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+            return;
+        }
+
+        process.kill(-pid, 'SIGTERM');
+    } catch {
+        // 进程可能已经退出，后续端口清理会兜底。
+    }
+}
+
+function cleanupRecordedRuntimes(): void {
+    const processFile = getProcessFilePath();
+    if (!fs.existsSync(processFile)) {
+        return;
+    }
+
+    try {
+        const runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
+        for (const runtime of runtimes) {
+            killProcessTree(runtime.pid);
+        }
+    } catch {
+        // ignore
+    } finally {
+        try {
+            fs.unlinkSync(processFile);
+        } catch {
+            // ignore
+        }
+    }
+}
+
 export default async function globalSetup() {
     const workers = Number.parseInt(process.env.PW_WORKERS || '1', 10);
 
@@ -111,16 +154,18 @@ export default async function globalSetup() {
             }
         }
 
+        cleanupRecordedRuntimes();
         await cleanupSingleWorkerPorts();
 
         const runtime = spawnDetachedServer('scripts/infra/start-single-worker-servers.js');
-        fs.writeFileSync(PROCESS_FILE, JSON.stringify([runtime], null, 2));
+        fs.writeFileSync(getProcessFilePath(), JSON.stringify([runtime], null, 2));
 
         await Promise.all(urls.map(url => waitForUrl(url)));
         console.log('\n✅ 单 worker E2E 服务已就绪\n');
         return;
     }
 
+    cleanupRecordedRuntimes();
     cleanupAllWorkerPortFiles();
 
     const runtimes: RuntimeRecord[] = [];
@@ -144,7 +189,7 @@ export default async function globalSetup() {
         );
     }
 
-    fs.writeFileSync(PROCESS_FILE, JSON.stringify(runtimes, null, 2));
+    fs.writeFileSync(getProcessFilePath(), JSON.stringify(runtimes, null, 2));
 
     await Promise.all(runtimes.map(async ({ workerId, ports }) => {
         await waitForUrl(`http://127.0.0.1:${ports.gameServer}/games`);

@@ -1,8 +1,10 @@
 import { spawn } from 'child_process';
+import { withWindowsHide } from './windows-hide.js';
 export function spawnNodeScript(scriptPath, env, args = []) {
   return spawn(process.execPath, [scriptPath, ...args], {
     stdio: 'inherit',
     env,
+    ...withWindowsHide({}, env),
   });
 }
 
@@ -31,6 +33,7 @@ export function spawnTsxEntry({ entry, tsconfig, env }) {
   ], {
     stdio: 'inherit',
     env,
+    ...withWindowsHide({}, env),
   });
 }
 
@@ -38,6 +41,7 @@ export function spawnNpxCommand(args, env) {
   return spawn(process.execPath, ['node_modules/npm/bin/npm-cli.js', 'exec', '--yes', '--', ...args], {
     stdio: 'inherit',
     env,
+    ...withWindowsHide({}, env),
   });
 }
 

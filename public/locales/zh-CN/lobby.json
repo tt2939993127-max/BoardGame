@@ -80,12 +80,12 @@
     "empty": "暂无数据",
     "record": "{{wins}} 胜 / {{matches}} 局",
     "error": "排行榜加载失败",
-    "changelogTitle": "更新日志",
-    "changelogLoading": "更新日志加载中...",
-    "changelogEmpty": "暂无日志",
-    "changelogError": "更新日志加载失败",
-    "changelogPublishedAt": "最近更新：{{date}}",
-    "changelogPinned": "置顶"
+    "changelogEmpty": "暂无日志"
+  },
+  "changelog": {
+    "loading": "加载更新日志中...",
+    "error": "更新日志加载失败",
+    "pinned": "置顶"
   },
   "authorInfo": {
     "button": "作者：{{author}}",

@@ -19,7 +19,6 @@ import { ActiveModifierBadge } from './ActiveModifierBadge';
 import { AttackBonusDamageDisplay } from './AttackBonusDamageDisplay';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
-import { useMobileViewport } from '../../../hooks/ui/useMobileViewport';
 
 export const RightSidebar = ({
     dice,
@@ -125,25 +124,16 @@ export const RightSidebar = ({
     const multistepInteraction = useMultistepInteraction(diceInteraction, dispatch);
 
     const { t } = useTranslation('game-dicethrone');
-    const isMobileNarrowViewport = useMobileViewport();
-    const actionRailWidthClassName = isMobileNarrowViewport
-        ? 'w-[clamp(6rem,13vw,6.8rem)]'
-        : 'w-[10.2vw]';
-    const sidebarFrameClassName = isMobileNarrowViewport
-        ? `absolute right-[clamp(0.58rem,0.75vw,0.8rem)] top-0 bottom-[clamp(0.62rem,0.82vw,0.8rem)] ${actionRailWidthClassName} flex flex-col items-center pointer-events-auto`
-        : 'absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto';
-    const advanceButtonSizeClassName = isMobileNarrowViewport
-        ? '!text-[clamp(0.58rem,1.28vw,0.72rem)] !py-[clamp(0.38rem,0.56vw,0.48rem)] !px-[clamp(0.24rem,0.36vw,0.34rem)] !min-h-[clamp(2rem,4vw,2.2rem)] !rounded-[0.65rem] leading-tight'
-        : '!text-[0.75vw] !py-[0.7vw]';
-    const stackGapClassName = isMobileNarrowViewport ? 'gap-[clamp(0.22rem,0.3vw,0.28rem)]' : 'gap-[0.75vw]';
-    const modifierTopClassName = isMobileNarrowViewport ? '-top-[1.45vw]' : '-top-[2.2vw]';
-    const bonusTopClassName = isMobileNarrowViewport ? '-top-[2.45vw]' : '-top-[3.8vw]';
-    const hintOffsetClassName = isMobileNarrowViewport ? 'mr-[0.32vw]' : 'mr-[0.6vw]';
-    const hintBubbleClassName = isMobileNarrowViewport
-        ? 'flex items-center gap-[0.22vw] bg-amber-950/90 border border-amber-500/35 rounded-[0.34vw] px-[0.34vw] py-[0.2vw] shadow-lg shadow-amber-900/25 backdrop-blur-sm whitespace-nowrap'
-        : 'flex items-center gap-[0.4vw] bg-amber-950/95 border border-amber-500/50 rounded-[0.5vw] px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
-    const hintIconClassName = isMobileNarrowViewport ? 'w-[0.64vw] h-[0.64vw] text-amber-400 shrink-0' : 'w-[1vw] h-[1vw] text-amber-400 shrink-0';
-    const hintTextClassName = isMobileNarrowViewport ? 'text-[0.52vw] text-amber-200 font-medium leading-snug tracking-[0.04em]' : 'text-[0.75vw] text-amber-200 font-medium leading-snug';
+    const actionRailWidthClassName = 'w-[10.2vw]';
+    const sidebarFrameClassName = 'absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto';
+    const advanceButtonSizeClassName = '!text-[0.75vw] !py-[0.7vw]';
+    const stackGapClassName = 'gap-[0.75vw]';
+    const modifierTopClassName = '-top-[2.2vw]';
+    const bonusTopClassName = '-top-[3.8vw]';
+    const hintOffsetClassName = 'mr-[0.6vw]';
+    const hintBubbleClassName = 'flex items-center gap-[0.4vw] bg-amber-950/95 border border-amber-500/50 rounded-[0.5vw] px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
+    const hintIconClassName = 'w-[1vw] h-[1vw] text-amber-400 shrink-0';
+    const hintTextClassName = 'text-[0.75vw] text-amber-200 font-medium leading-snug';
 
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;

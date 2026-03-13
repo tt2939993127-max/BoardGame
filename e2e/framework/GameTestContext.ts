@@ -254,12 +254,25 @@ export class GameTestContext {
             || error.message.includes('frame was detached');
     }
 
+    private isRetryableHarnessError(error: unknown): boolean {
+        if (!(error instanceof Error)) {
+            return false;
+        }
+
+        return error.message.includes('waitForFunction: Timeout')
+            || error.message.includes('page.goto: Timeout');
+    }
+
     private async gotoWithRetry(url: string, timeout: number): Promise<void> {
         const maxAttempts = 3;
+        const navigationTimeout = Math.max(timeout, 60000);
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             try {
-                await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+                // 共享开发服并发较高时，HTML 首次 commit 往往已成功，
+                // 但继续等 domcontentloaded 可能被慢热更新链路拖到超时。
+                // 这里先确保导航真正落到目标页，再由后续 TestHarness 就绪检查兜底。
+                await this.page.goto(url, { waitUntil: 'commit', timeout: navigationTimeout });
                 return;
             } catch (error) {
                 if (!this.isRetryableNavigationError(error) || attempt === maxAttempts) {
@@ -314,13 +327,25 @@ export class GameTestContext {
 
         const search = params.toString();
         const url = `/play/${gameId}${search ? `?${search}` : ''}`;
+        const maxAttempts = 3;
 
-        await this.gotoWithRetry(url, timeout);
-        await this.waitForTestHarness(timeout);
-        await this.page.waitForFunction(
-            () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
-            { timeout },
-        );
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                await this.gotoWithRetry(url, timeout);
+                await this.waitForTestHarness(timeout);
+                await this.page.waitForFunction(
+                    () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+                    { timeout },
+                );
+                return;
+            } catch (error) {
+                if (!this.isRetryableHarnessError(error) || attempt === maxAttempts) {
+                    throw error;
+                }
+
+                await this.page.waitForTimeout(1000);
+            }
+        }
     }
 
     /**

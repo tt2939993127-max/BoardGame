@@ -11,6 +11,15 @@ export const BASE_PORTS = {
 const PORT_OFFSET = 100;
 const PORT_SCAN_RANGE = 20;
 
+function getRuntimeScope(scope = process.env.PW_RUNTIME_SCOPE) {
+  const normalized = String(scope ?? 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  return normalized || 'default';
+}
+
+function getWorkerPortFilePath(workerId, scope = process.env.PW_RUNTIME_SCOPE) {
+  return path.join(process.cwd(), '.tmp', `worker-${getRuntimeScope(scope)}-${workerId}-ports.json`);
+}
+
 function getWindowsNetstatLines() {
   try {
     const result = execSync('netstat -ano -p tcp', { encoding: 'utf-8' });
@@ -172,12 +181,12 @@ export function saveWorkerPorts(workerId, ports) {
     fs.mkdirSync(tmpDir, { recursive: true });
   }
 
-  const filePath = path.join(tmpDir, `worker-${workerId}-ports.json`);
+  const filePath = getWorkerPortFilePath(workerId);
   fs.writeFileSync(filePath, JSON.stringify({ workerId, ports, pid: process.pid }, null, 2));
 }
 
 export function loadWorkerPorts(workerId) {
-  const filePath = path.join(process.cwd(), '.tmp', `worker-${workerId}-ports.json`);
+  const filePath = getWorkerPortFilePath(workerId);
   try {
     const data = fs.readFileSync(filePath, 'utf-8');
     return JSON.parse(data).ports;
@@ -187,7 +196,7 @@ export function loadWorkerPorts(workerId) {
 }
 
 export function removeWorkerPortFile(workerId) {
-  const filePath = path.join(process.cwd(), '.tmp', `worker-${workerId}-ports.json`);
+  const filePath = getWorkerPortFilePath(workerId);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }
@@ -224,8 +233,9 @@ export function cleanupAllWorkerPortFiles() {
     return;
   }
 
+  const scopePrefix = `worker-${getRuntimeScope()}-`;
   for (const file of fs.readdirSync(tmpDir)) {
-    if (file.startsWith('worker-') && file.endsWith('-ports.json')) {
+    if (file.startsWith(scopePrefix) && file.endsWith('-ports.json')) {
       fs.unlinkSync(path.join(tmpDir, file));
     }
   }

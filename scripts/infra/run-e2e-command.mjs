@@ -1,14 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { withWindowsHide } from './windows-hide.js';
 
 const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
 
 function run(command, args, env) {
-    const result = spawnSync(command, args, {
+    const result = spawnSync(command, args, withWindowsHide({
         stdio: 'inherit',
         env,
         shell: false,
-    });
+    }, env));
 
     if (result.error) {
         throw result.error;
