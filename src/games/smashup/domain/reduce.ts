@@ -1421,6 +1421,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.BASE_ABILITY_SUPPRESSED: {
+            const { baseIndex, suppressorPlayerId } = (event as BaseAbilitySuppressedEvent).payload;
+            const prev = state.suppressedBasesUntilTurnStart ?? [];
+            // 去重：同一基地同一压制者只记录一次
+            if (prev.some(s => s.baseIndex === baseIndex && s.suppressorPlayerId === suppressorPlayerId)) {
+                return state;
+            }
+            return {
+                ...state,
+                suppressedBasesUntilTurnStart: [...prev, { baseIndex, suppressorPlayerId }],
+            };
+        }
+
         // 基地牌库洗混
         case SU_EVENTS.BASE_DECK_SHUFFLED: {
             const { newBaseDeckDefIds } = (event as BaseDeckShuffledEvent).payload;
