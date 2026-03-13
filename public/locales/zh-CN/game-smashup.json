@@ -2003,27 +2003,27 @@
     },
     "miskatonic_professor_pod": {
       "name": "教授",
-      "abilityText": "天赋：弃掉一张疯狂卡。如果你这样做，你可以额外打出一个战术和/或一个额外的随从。"
+      "abilityText": "**天赋能力：**弃置一张疯狂卡。如果你这样做，你可以额外打出一张战术和/或一张额外的随从卡。"
     },
     "miskatonic_librarian_pod": {
-      "name": "图书管理员",
-      "abilityText": "天赋：弃掉一张疯狂卡。如果你这样做，抽一张牌。"
+      "name": "图书馆管理员",
+      "abilityText": "**天赋能力：**抓一张疯狂卡，或从你的手牌中打出一张疯狂卡作为额外战术。"
     },
     "miskatonic_psychologist_pod": {
       "name": "心理学家",
-      "abilityText": "你可以将手牌或弃牌堆中的一张疯狂卡返回疯狂牌库。"
+      "abilityText": "将你手牌或弃牌堆中的一张疯狂卡返回疯狂牌库，或者从你的弃牌堆中抓一张疯狂卡。"
     },
     "miskatonic_researcher_pod": {
       "name": "研究员",
-      "abilityText": "你可以抽一张疯狂卡。"
+      "abilityText": "你可以抓一张疯狂卡。"
     },
     "miskatonic_book_of_iter_the_unseen_pod": {
       "name": "金克丝!",
       "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
     },
     "miskatonic_it_might_just_work_pod": {
-      "name": "它可能有用",
-      "effectText": "弃掉一张疯狂卡来使你的每个随从获得+1力量直到回合结束。"
+      "name": "...没准能行",
+      "effectText": "弃置至多两张疯狂卡。每弃置一张，直到回合结束前你的每个随从获得+1战斗力。"
     },
     "miskatonic_thing_on_the_doorstep_pod": {
       "name": "老詹金斯!?",
@@ -2042,28 +2042,28 @@
       "effectText": "抽一张疯狂卡。你的每个随从获得+1力量直到回合结束。本回合你可以打出一个额外的战术。"
     },
     "miskatonic_those_meddling_kids_pod": {
-      "name": "这些多管闲事的小鬼",
-      "effectText": "消灭一个基地上任意数量的战术。"
+      "name": "那些爱管闲事的孩子",
+      "effectText": "消灭一个基地上任意数量的战术，或者抓一张疯狂卡并额外打出一张战术。"
     },
     "miskatonic_field_trip_pod": {
       "name": "实地考察",
-      "effectText": "从你的手上放置任意数量的卡牌到你的牌库底且你每放一张就可以抽一张卡。"
+      "effectText": "将你手牌中任意数量的卡牌放到你牌库底，并抓取相同数量加一的牌。"
     },
     "ninja_master_pod": {
       "name": "忍者大师",
-      "abilityText": "你可以消灭一个本基地的随从。"
+      "abilityText": "你可以消灭本基地的一个随从。"
     },
     "ninja_tiger_assassin_pod": {
       "name": "猛虎刺客",
-      "abilityText": "你可以消灭本基地一个力量为3或以下的随从。"
+      "abilityText": "你可以消灭一个战斗力为3或更低的随从。"
     },
     "ninja_shinobi_pod": {
       "name": "影舞者",
-      "abilityText": "特殊：在一个基地计分前，你可以打出本随从到那里。每个基地只能使用一次忍者的能力。"
+      "abilityText": "**特殊能力：**在基地计分前，你可以将该随从打出到那个基地。每个基地只能使用一次影舞者的能力。"
     },
     "ninja_acolyte_pod": {
       "name": "忍者侍从",
-      "abilityText": "特殊：在你的回合中，如果你还未打出随从卡，则你可以将本卡放回手中并额外打出一个随从到这个基地。"
+      "abilityText": "**天赋能力：**如果你在本回合尚未打出过随从，你可以将该随从返回你的手牌，并立即在这里额外打出一个随从。"
     },
     "ninja_way_of_deception_pod": {
       "name": "诈术",
@@ -2071,167 +2071,167 @@
     },
     "ninja_smoke_bomb_pod": {
       "name": "烟幕弹",
-      "effectText": "打出到你的一个随从上。持续：该随从不会受到其他玩家战术的影响。在你回合开始的时候消灭本卡。"
+      "effectText": "打出到你的一个随从上。**持续能力：**该随从不受其他玩家战术的影响。"
     },
     "ninja_assassination_pod": {
       "name": "暗杀",
-      "effectText": "打出到一个随从上。持续：在回合结束时消灭该随从。"
+      "effectText": "打出到随从上。**持续能力：**在回合结束时消灭该随从。"
     },
     "ninja_hidden_ninja_pod": {
       "name": "便衣忍者",
-      "effectText": "特殊：在一个基地计分前，打出一个随从到这。"
+      "effectText": "**特殊能力：**在基地计分前，打出一个随从到那里。"
     },
     "ninja_seeing_stars_pod": {
       "name": "手里剑",
-      "effectText": "消灭一个力量为3或以下的随从。"
+      "effectText": "消灭一个战斗力为3或更低的随从。"
     },
     "ninja_disguise_pod": {
       "name": "伪装",
-      "effectText": "选择一个基地里的你的一个或两个随从。打出等数量的随从到那里，并将选择的随从拿回手上。"
+      "effectText": "选择一个基地上你的一个或两个随从。在这里打出相同数量的额外随从，并将选择的随从返回你的手牌。"
     },
     "ninja_infiltrate_pod": {
       "name": "渗透",
-      "effectText": "打出到一个基地上。你可以消灭这个基地上的另一个战术。天赋：消灭本卡来取消这个基地的能力直到你回合开始的时候。"
+      "effectText": "打出到基地上。你可以消灭本基地的另一个战术。**天赋能力：**弃置这张战术，取消本基地的能力直到你的下个回合开始。"
     },
     "ninja_poison_pod": {
       "name": "下毒",
-      "effectText": "打出到一个随从上。消灭在它身上的任意数量的战术。持续：这个随从-4力量（随从的力量最低减到0）。"
+      "effectText": "打出到一个随从上。消灭其上任意数量的战术。**持续能力：**该随从战斗力-4（随从最低战斗力为0）。"
     },
     "pirate_king_pod": {
       "name": "海盗王",
-      "abilityText": "特殊：在一个基地计分前，你可以移动本随从到那里。"
+      "abilityText": "**特殊能力：**在基地计分前，你可以移动该随从到那里。"
     },
     "pirate_buccaneer_pod": {
       "name": "海盗",
-      "abilityText": "特殊：如果本随从将要被消灭，将其移动到其他基地来代替。"
+      "abilityText": "**持续能力：**每回合一次，如果该随从将被消灭，你可以将其移动到另一个基地作为替代。"
     },
     "pirate_saucy_wench_pod": {
-      "name": "粗鲁少妇",
-      "abilityText": "你可以消灭本基地的一个力量为2或以下的随从。"
+      "name": "女剑客",
+      "abilityText": "你可以消灭本基地的一个战斗力为2或更低的随从。"
     },
     "pirate_first_mate_pod": {
       "name": "大副",
-      "abilityText": "特殊：在本基地计分后，你可以移动本随从到其他基地而不是弃牌堆。"
+      "abilityText": "**特殊能力：**在本基地计分后，你可以将该随从移动到另一个基地，而不是进入弃牌堆。"
     },
     "pirate_dinghy_pod": {
       "name": "小船",
-      "effectText": "移动至多你的两个随从到其他基地。"
+      "effectText": "移动至多两个你的随从到其他基地。"
     },
     "pirate_powderkeg_pod": {
       "name": "炸药桶",
-      "effectText": "消灭一个你的随从之后消灭所有同基地中与你被消灭的随从相等力量或更低的随从。"
+      "effectText": "消灭你的一个随从，并消灭该基地上所有战斗力等级相等或更低的随从。"
     },
     "pirate_broadside_pod": {
       "name": "侧翼开炮",
-      "effectText": "消灭一个你拥有一个随从的基地里的一个玩家的所有力量为2或以下的随从。"
+      "effectText": "在一个你拥有随从的基地，消灭一名玩家的所有战斗力为2或更低的随从。"
     },
     "pirate_full_sail_pod": {
       "name": "全速航行",
-      "effectText": "移动你任意数量的随从到其他基地。特殊：在一个基地计分前，你可以打出本卡。"
+      "effectText": "移动任意数量的你的随从到其他基地。**特殊能力：**你可以在基地计分前打出该卡牌。"
     },
     "pirate_cannon_pod": {
       "name": "加农炮",
-      "effectText": "消灭至多两个力量为2或以下的随从。"
+      "effectText": "消灭至多两个战斗力为2或更低的随从。"
     },
     "pirate_shanghai_pod": {
       "name": "诱拐",
-      "effectText": "移动一个其他玩家的随从到另一个基地。"
+      "effectText": "将另一名玩家的一个随从移动到另一个基地。"
     },
     "pirate_sea_dogs_pod": {
       "name": "水手",
-      "effectText": "指定一个派系。移动所有其他玩家该派系的随从从一个基地到另一个。"
+      "effectText": "指定一个种族。将所有其他玩家该种族的随从从一基地移动到另一基地。"
     },
     "pirate_swashbuckling_pod": {
       "name": "虚张声势",
-      "effectText": "你的每个随从获得+1力量直到回合结束。"
+      "effectText": "你的每个随从获得+1战斗力直到回合结束。"
     },
     "robot_nukebot_pod": {
       "name": "核弹机器人",
-      "abilityText": "持续：在本随从被消灭后，消灭本基地上其他玩家的所有随从。"
+      "abilityText": "**持续能力：**在该随从被消灭后，消灭本基地上所有其他玩家的随从。"
     },
     "robot_warbot_pod": {
       "name": "战斗机器人",
-      "abilityText": "持续：本随从不能被消灭。"
+      "abilityText": "**持续能力：**该随从无法被消灭。"
     },
     "robot_hoverbot_pod": {
       "name": "盘旋机器人",
-      "abilityText": "展示你牌库顶的牌。如果它是随从牌，你可以将其作为额外随从打出。否则将其回你的牌库顶。"
+      "abilityText": "展示你牌库顶的牌。如果是随从卡，你可以将其作为额外随从打出。否则，将其放回牌库顶。"
     },
     "robot_zapbot_pod": {
       "name": "高速机器人",
-      "abilityText": "你可以打出一张力量为2或更低的额外随从。"
+      "abilityText": "你可以额外打出一个战斗力为2或更低的随从。"
     },
     "robot_microbot_reclaimer_pod": {
       "name": "微型机回收者",
-      "abilityText": "如果这是你在本回合中打出的第一个随从，你可以打出一张额外的随从。从你的弃牌堆中将任意数量的微型机洗回你的牌库。"
+      "abilityText": "若这是你本回合打出的第一个随从，可额外打出一个随从。将你弃牌堆中任意数量的微型机洗回牌库。"
     },
     "robot_microbot_archive_pod": {
-      "name": "微型机存储者",
-      "abilityText": "持续：每当你的一个微型机（包括本随从）被消灭后，抓一张牌。"
+      "name": "微型机档案馆",
+      "abilityText": "每当你的一个微型机（包括该随从）被消灭后，抓一张牌。"
     },
     "robot_microbot_guard_pod": {
-      "name": "微型机守护者",
-      "abilityText": "消灭本基地上一个力量低于你在这里随从数量的随从。"
+      "name": "微型机警卫",
+      "abilityText": "消灭本基地一个战斗力低于你在此基地随从数量的随从。"
     },
     "robot_microbot_alpha_pod": {
       "name": "微型机阿尔法号",
-      "abilityText": "持续：你每有一个其他的微型机在场上，都让微型机阿尔法号力量+1。你的所有随从均视为微型机。"
+      "abilityText": "**持续能力：**场上每有一个你的其他微型机，获得+1战斗力。你的所有随从均视为微型机。"
     },
     "robot_microbot_fixer_pod": {
-      "name": "微型机修理者",
-      "abilityText": "如果这是你在本回合中打出的第一个随从，你可以打出一张额外的随从。持续：你的每个微型机的力量+1。"
+      "name": "微型机修理工",
+      "abilityText": "若这是你本回合打出的第一个随从，你可以额外打出一个随从。**持续能力：**你的每个微型机获得+1战斗力。"
     },
     "robot_tech_center_pod": {
       "name": "技术中心",
-      "effectText": "选择一个基地。该基地上你每有一个随从，就抓一张牌。"
+      "effectText": "选择一个基地。该基地上你每拥有一个随从，抓一张牌。"
     },
     "steampunk_steam_queen_pod": {
-      "name": "蒸汽女皇",
-      "abilityText": "持续：你的战术不会被其他玩家的卡牌所影响。"
+      "name": "蒸汽女王",
+      "abilityText": "**持续能力：**你的卡牌不受其他玩家卡牌的影响。"
     },
     "steampunk_mechanic_pod": {
       "name": "机械师",
-      "abilityText": "选择一个在你弃牌堆中可以被打到基地上的战术，将其作为一个额外战术打出。"
+      "abilityText": "选择弃牌堆中一张可以打出到基地的战术，并将其作为额外战术打出。"
     },
     "steampunk_steam_man_pod": {
       "name": "蒸汽人",
-      "abilityText": "持续：+1力量如果你本基地有至少一个你的战术附属在它上面。"
+      "abilityText": "**持续能力：**如果本基地有你打出的战术，则该随从战斗力+1。"
     },
     "steampunk_captain_ahab_pod": {
       "name": "亚哈船长",
-      "abilityText": "天赋：移动该随从到一个附属有你的战术的基地上。"
+      "abilityText": "**天赋能力：**移动该随从到一个有你打出的战术的基地。"
     },
     "steampunk_ornate_dome_pod": {
-      "name": "华丽穹顶",
-      "effectText": "打出到基地上。摧毁所有其他玩家打到这里的战术。持续：其他玩家不能打出战术到本基地上。"
+      "name": "装饰性圆顶",
+      "effectText": "打出到基地上。消灭该基地上所有其他玩家的战术。**持续能力：**其他玩家无法打出战术到该基地上。"
     },
     "steampunk_aggromotive_pod": {
-      "name": "蒸汽机车",
-      "effectText": "打出到基地上。持续：如果你有一个随从在此基地，你在这里就拥有+5力量。"
+      "name": "攻击型列车",
+      "effectText": "打出到基地上。**持续能力：**如果你在这里拥有随从，你在这里的战斗力总计额外+5。"
     },
     "steampunk_scrap_diving_pod": {
-      "name": "废物利用",
-      "effectText": "将一个战术从你的弃牌堆中加入你的手牌。"
+      "name": "废料潜水",
+      "effectText": "将一张战术从弃牌堆加入你的手牌。"
     },
     "steampunk_zeppelin_pod": {
       "name": "齐柏林飞艇",
-      "effectText": "打出到基地上。天赋：从另一个基地移动一个你的随从到这里，或者从这里到另一个基地。"
+      "effectText": "打出到基地上。**天赋能力：**移动你的一个随从从另一个基地到这里，或从这里移动到另一个基地。"
     },
     "steampunk_change_of_venue_pod": {
-      "name": "集结号角",
-      "effectText": "将你的一个打出在基地或随从上的战术拿回手牌。将其作为一个额外战术打出。"
+      "name": "变换场地",
+      "effectText": "将一张打出在基地或随从上的战术返回你的手牌。再次将其作为额外战术打出。"
     },
     "steampunk_rotary_slug_thrower_pod": {
-      "name": "转轮式喷射机枪",
-      "effectText": "打出到基地上。持续：你在这里的每个随从都获得+2力量。"
+      "name": "旋转弹击器",
+      "effectText": "打出到基地上。**持续能力：**你在这里的每个随从获得+2战斗力。"
     },
     "steampunk_difference_engine_pod": {
       "name": "差分机",
-      "effectText": "打出到基地上。持续：如果你有一个随从在此基地，则在你回合结束时多抽一张牌。"
+      "effectText": "打出到基地上。**持续能力：**如果你在这里拥有随从，在你的回合结束时多抽一张牌。"
     },
     "steampunk_escape_hatch_pod": {
-      "name": "逃生通道",
-      "effectText": "打出到基地上。持续：当你在此基地的随从被消灭时，将它们放到手牌而不是弃牌堆。"
+      "name": "逃生舱",
+      "effectText": "打出到基地上。**持续能力：**当这里的你的随从被消灭时，将其返回手牌。"
     },
     "trickster_leprechaun_pod": {
       "name": "矮妖",
@@ -2475,6 +2475,66 @@
     },
     "pirate_cut_lass": {
       "name": "女剑客"
+    },
+    "miskatonic_old_man_jenkins_pod": {
+      "name": "詹金斯老头",
+      "effectText": "**特殊能力：**在基地计分前，消灭一个在那里拥有最高战斗力的随从。"
+    },
+    "miskatonic_eldritch_gate_pod": {
+      "name": "怪异传送门",
+      "effectText": "打出到基地上。**天赋能力：**抓一张疯狂卡。你可以额外打出一个随从到这里。"
+    },
+    "miskatonic_jinkies_pod": {
+      "name": "金奇斯",
+      "effectText": "将你手牌或弃牌堆中至多两张疯狂卡返回疯狂牌库。"
+    },
+    "miskatonic_thats_so_crazy_pod": {
+      "name": "太疯狂了...",
+      "effectText": "抓一张疯狂卡。直到回合结束前，你的每个随从获得+1战斗力。你可以额外打出一张战术。"
+    },
+    "miskatonic_things_best_not_known_pod": {
+      "name": "未知之事",
+      "effectText": "**特殊能力：**在基地计分前，抓至多三张疯狂卡。每抓一张疯狂卡，选择这里的一个随从，使其获得+2战斗力直到回合结束。"
+    },
+    "base_miskatonic_university_base_pod": {
+      "name": "米斯卡塔尼克大学",
+      "abilityText": "(24, VP 4-3-2) 每回合一次，在你在这里打出一个随从后，你可以抓两张疯狂卡，或者从手牌弃置一张疯狂卡来额外打出一张战术。"
+    },
+    "base_the_asylum_pod": {
+      "name": "庇护所",
+      "abilityText": "(16, VP 3-1-1) 在你在这里打出一个随从后，你可以将一张手牌移出游戏（放入盒子），在一个随从上放置一个+1战斗力标记。"
+    },
+    "base_ninja_dojo_pod": {
+      "name": "忍者道场",
+      "abilityText": "(18, VP 2-3-2) 无特殊能力。"
+    },
+    "base_temple_of_goju_pod": {
+      "name": "刚柔流寺庙",
+      "abilityText": "(16, VP 4-3-2) 每当这里有一个随从被消灭时，将其置于其持有者的牌库底。"
+    },
+    "base_the_grey_opal_pod": {
+      "name": "灰色猫眼石",
+      "abilityText": "(17, VP 3-1-1) 在本基地计分后，除了获胜者外的所有玩家可以将这里的一个随从移动到另一个基地。"
+    },
+    "base_tortuga_pod": {
+      "name": "托尔图加",
+      "abilityText": "(21, VP 4-3-2) 在本基地计分并被取代后，亚军可以将另一个基地上的一个随从移动到新替换的基地上。"
+    },
+    "base_factory_436_1337_pod": {
+      "name": "436-1337工厂",
+      "abilityText": "(25, VP 2-2-1) 当该基地计分时，获胜者每拥有5点战斗力则获得1点VP。"
+    },
+    "base_the_central_brain_pod": {
+      "name": "中央大脑",
+      "abilityText": "(19, VP 4-2-1) 这里的每个随从获得+1战斗力。"
+    },
+    "base_inventors_salon_pod": {
+      "name": "发明家沙龙",
+      "abilityText": "(22, VP 4-2-1) 在该基地计分后，获胜者可以从弃牌堆拿回一张战术。"
+    },
+    "base_the_workshop_pod": {
+      "name": "工坊",
+      "abilityText": "(20, VP 4-2-1) 每当有一名玩家将战术打出到该基地时，该玩家可以额外打出一个战术。"
     }
   },
   "endgame": {
