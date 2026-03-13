@@ -512,6 +512,7 @@ test('触控窄视口下放大入口常显且可点击', async ({ page, game }, 
 
     const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
     const discardPileInspectButton = page.locator('[data-testid="discard-pile-inspect-button"]');
+    const autoResponseToggle = page.locator('[data-testid="auto-response-toggle"]');
     const boardMagnifyOverlay = page.locator('[data-testid="board-magnify-overlay"]');
     const diceFaces = page.locator('[data-testid="dice-3d"]');
     const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
@@ -519,10 +520,11 @@ test('触控窄视口下放大入口常显且可点击', async ({ page, game }, 
 
     await expect(playerBoardMagnifyButton).toHaveCSS('opacity', '1');
     await expect(discardPileInspectButton).toHaveCSS('opacity', '1');
-    await expectMinBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 24, 24);
-    await expectMinBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 18, 18);
-    await expectMaxBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 38, 38);
-    await expectMaxBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 28, 28);
+    await expectMinBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 18, 18);
+    await expectMinBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 14, 14);
+    await expectMaxBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 24, 24);
+    await expectMaxBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 18, 18);
+    await expectMaxBoundingBox(autoResponseToggle, '自动响应开关', 88, 26);
     await expectMaxBoundingBox(rollButton, '投掷按钮', 44, 24);
     await expectMaxBoundingBox(confirmButton, '确认按钮', 44, 24);
     await expect(diceFaces).toHaveCount(5, { timeout: 5000 });

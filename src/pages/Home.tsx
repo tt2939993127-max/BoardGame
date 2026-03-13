@@ -581,14 +581,14 @@ export const Home = () => {
     }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
 
     return (
-        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
+        <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
             <SEO
                 title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
                 description={t('lobby:home.subtitle')}
             />
-            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
+            <header className="w-full relative px-6 md:px-12 pt-[calc(env(safe-area-inset-top)+1.25rem)] md:pt-8 pb-0">
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}
-                <div className="flex flex-col items-center justify-center mb-2 md:mb-4">
+                <div className="flex flex-col items-center justify-center mb-1 md:mb-4">
                     {/* 标题行：Logo + H1 */}
                     <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
                         <img
@@ -608,17 +608,17 @@ export const Home = () => {
                 </div>
 
                 {/* 顶级操作区域 - 移动端放在标题下方，桌面端锁定右上角 */}
-                <div className="flex items-center justify-center gap-4 mb-1 md:absolute md:top-8 md:right-12 md:mb-0 md:gap-4 md:justify-end">
+                <div className="flex items-center justify-center gap-4 mb-0 md:absolute md:top-8 md:right-12 md:mb-0 md:gap-4 md:justify-end">
                     {user ? (
                         <UserMenu onLogout={handleLogout} />
                     ) : (
                         <div className="flex items-center gap-6">
-                            <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
+                            <button onClick={() => openAuth('login')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
                                 {t('auth:menu.login')}
                                 <span className="underline-center" />
                             </button>
                             <div className="w-[1px] h-3 bg-parchment-light-text/30" />
-                            <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
+                            <button onClick={() => openAuth('register')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
                                 {t('auth:menu.register')}
                                 <span className="underline-center" />
                             </button>
@@ -631,7 +631,7 @@ export const Home = () => {
             {/* 主内容区域 - 商业级容器限制 */}
             <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-4 sm:px-6 md:px-8">
                 {/* 分类筛选 */}
-                <nav className="mb-6 w-full">
+                <nav className="mb-4 md:mb-6 w-full">
                     <CategoryPills activeCategory={activeCategory} onSelect={setActiveCategory} />
                 </nav>
 
@@ -643,7 +643,7 @@ export const Home = () => {
 
             {/* 活跃对局指示器 */}
             {activeMatch && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
+                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
                     <div className="bg-parchment-base-text text-parchment-card-bg px-6 py-3 rounded shadow-xl border border-parchment-brown flex items-center gap-4">
                         <div className="flex flex-col">
                             <span className="text-[10px] text-parchment-light-text uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>

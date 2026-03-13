@@ -111,7 +111,14 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     return (
         <>
             {activeBannerKind ? (
-                <div className="fixed top-0 left-0 right-0 bg-parchment-brown/95 backdrop-blur-sm text-parchment-cream py-3 px-4 z-[9999] shadow-lg border-b-2 border-parchment-gold/30">
+                <div
+                    className="fixed top-0 left-0 right-0 bg-parchment-brown/95 backdrop-blur-sm text-parchment-cream pb-3 z-[9999] shadow-lg border-b-2 border-parchment-gold/30"
+                    style={{
+                        paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)',
+                        paddingLeft: 'calc(env(safe-area-inset-left) + 1rem)',
+                        paddingRight: 'calc(env(safe-area-inset-right) + 1rem)',
+                    }}
+                >
                     <div className="flex items-center justify-between gap-3 max-w-4xl mx-auto">
                         <div className="flex items-center gap-3 text-sm font-serif">
                             {renderBannerVisual(activeBannerKind)}

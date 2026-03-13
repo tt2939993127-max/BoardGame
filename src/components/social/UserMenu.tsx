@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { isBackofficeRole, useAuth } from '../../contexts/AuthContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
-import { LogOut, History, MessageSquare, Bell, MousePointer2, Settings } from 'lucide-react';
+import { LayoutDashboard, LogOut, History, MessageSquare, MousePointer2, Settings } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
 import { FriendsChatModal, SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
 import { AccountSettingsModal } from '../auth/AccountSettingsModal';
@@ -12,12 +13,30 @@ import { useSocial } from '../../contexts/SocialContext';
 
 const NOTIFICATION_SEEN_KEY = 'notification_last_seen';
 
+const parseTimestamp = (value?: string | null) => {
+    if (!value) return 0;
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && numeric > 0) {
+        return numeric;
+    }
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const getLatestNotificationTimestamp = (list: { createdAt?: string }[]) => {
+    return list.reduce((latest, item) => {
+        const createdAt = parseTimestamp(item.createdAt ?? null);
+        return createdAt > latest ? createdAt : latest;
+    }, 0);
+};
+
 interface UserMenuProps {
     onLogout: () => void;
 }
 
 export const UserMenu = ({ onLogout }: UserMenuProps) => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const { openModal, closeModal } = useModalStack();
     const { requests, unreadTotal } = useSocial();
     const { t } = useTranslation(['auth', 'social']);
@@ -29,6 +48,7 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
 
     // 铃铛红点 = 系统通知 OR 好友请求 OR 未读消息
     const hasBellBadge = hasNewNotification || requests.length > 0 || unreadTotal > 0;
+    const canAccessAdmin = isBackofficeRole(user?.role);
 
     // 检查是否有新通知（对比 localStorage 记录的上次查看时间）
     useEffect(() => {
@@ -38,10 +58,13 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
             .then(data => {
                 if (!active) return;
                 const list = data.notifications as { _id: string; createdAt: string }[];
-                if (list.length === 0) return;
-                const lastSeen = localStorage.getItem(NOTIFICATION_SEEN_KEY) || '';
-                const latestTime = list[0].createdAt;
-                if (latestTime > lastSeen) setHasNewNotification(true);
+                if (list.length === 0) {
+                    setHasNewNotification(false);
+                    return;
+                }
+                const lastSeen = localStorage.getItem(NOTIFICATION_SEEN_KEY);
+                const latestTime = getLatestNotificationTimestamp(list);
+                setHasNewNotification(latestTime > parseTimestamp(lastSeen));
             })
             .catch(() => {});
         return () => { active = false; };
@@ -65,7 +88,7 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
 
     const markNotificationsSeen = useCallback(() => {
         setHasNewNotification(false);
-        localStorage.setItem(NOTIFICATION_SEEN_KEY, new Date().toISOString());
+        localStorage.setItem(NOTIFICATION_SEEN_KEY, Date.now().toString());
     }, []);
 
     const handleOpenFriends = () => {
@@ -136,25 +159,31 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
         });
     };
 
+    const handleOpenAdmin = () => {
+        setIsOpen(false);
+        navigate('/admin');
+    };
+
     if (!user) return null;
 
     return (
         <div className="relative flex items-center gap-1" ref={menuRef}>
-            {/* 通知铃铛 */}
+            {/* 通知入口 */}
             <button
                 onClick={handleOpenNotifications}
-                className="relative p-1.5 text-parchment-base-text hover:text-parchment-brown transition-colors"
-                aria-label="通知"
+                className="group relative inline-flex h-8 items-center pl-1 pr-3 text-parchment-base-text hover:text-parchment-brown transition-colors cursor-pointer"
+                aria-label={t('social:menu.notifications')}
             >
-                <Bell size={18} />
+                <span className="font-bold text-sm tracking-tight">{t('social:menu.notifications')}</span>
+                <span className="underline-center" />
                 {hasBellBadge && (
-                    <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
+                    <span className="absolute right-0 top-0.5 h-2 w-2 rounded-full bg-red-500" />
                 )}
             </button>
 
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="group relative flex items-center gap-2 cursor-pointer transition-colors px-2 py-1 outline-none"
+                className="group relative flex h-8 items-center gap-2 cursor-pointer px-2 outline-none transition-colors"
             >
                 {user.avatar ? (
                     <img
@@ -209,6 +238,16 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
                         <MousePointer2 size={16} />
                         {t('auth:menu.setCursor')}
                     </button>
+
+                    {canAccessAdmin && (
+                        <button
+                            onClick={handleOpenAdmin}
+                            className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
+                        >
+                            <LayoutDashboard size={16} />
+                            {t('auth:menu.adminDashboard')}
+                        </button>
+                    )}
 
                     {/* 退出登录 */}
                     <button

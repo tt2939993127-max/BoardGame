@@ -25,7 +25,7 @@ export const GameNamespaceLoadError = ({
     }, [gameId, navigate]);
 
     return (
-        <div className="relative w-full h-screen bg-black overflow-hidden font-sans flex items-center justify-center px-6">
+        <div className="relative w-full h-[100dvh] bg-black overflow-hidden font-sans flex items-center justify-center px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-sm">
                 <h2 className="text-xl font-semibold text-white">
                     {t('matchRoom.namespaceLoadFailed')}

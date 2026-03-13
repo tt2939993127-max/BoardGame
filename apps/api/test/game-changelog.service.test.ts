@@ -51,6 +51,24 @@ const buildItem = (): ChangelogRecord => {
     };
 };
 
+const buildItemByGame = (id: string, gameId: string): ChangelogRecord => {
+    const now = new Date('2026-03-12T10:00:00.000Z');
+    return {
+        _id: { toString: () => id },
+        gameId,
+        title: `${gameId} 更新`,
+        versionLabel: 'v1.0.0',
+        content: `${gameId} 内容`,
+        published: false,
+        pinned: false,
+        publishedAt: null,
+        createdBy: 'internal-user-1',
+        updatedBy: 'internal-user-1',
+        createdAt: now,
+        updatedAt: now,
+    };
+};
+
 describe('GameChangelogService', () => {
     it('公开列表不会返回内部用户 ID', async () => {
         const changelogModel = createChangelogModel([buildItem()]);
@@ -92,5 +110,40 @@ describe('GameChangelogService', () => {
         expect(result.availableGameIds).toBeNull();
         expect(result.items[0]?.createdBy).toBe('internal-user-1');
         expect(result.items[0]?.updatedBy).toBe('internal-user-2');
+    });
+
+    it('开发者未配置范围时默认全范围', async () => {
+        const changelogModel = createChangelogModel([
+            buildItemByGame('log-1', 'smashup'),
+            buildItemByGame('log-2', 'tictactoe'),
+        ]) as ReturnType<typeof createChangelogModel> & {
+            create: ReturnType<typeof vi.fn>;
+        };
+        changelogModel.create = vi.fn().mockResolvedValue(buildItemByGame('log-3', 'tictactoe'));
+        const userModel = createUserModel({
+            role: 'developer',
+            developerGameIds: [],
+        });
+        const service = new GameChangelogService(changelogModel as never, userModel as never);
+
+        const listResult = await service.listForAdmin('developer-user-1');
+        const createResult = await service.createForAdmin(
+            { userId: 'developer-user-1' },
+            {
+                gameId: 'tictactoe',
+                title: 'TicTacToe 更新',
+                content: '默认全范围可创建',
+            }
+        );
+
+        expect(listResult.availableGameIds).toBeNull();
+        expect(listResult.items).toHaveLength(2);
+        expect(changelogModel.find).toHaveBeenCalledWith({});
+        expect(changelogModel.create).toHaveBeenCalledWith(expect.objectContaining({
+            gameId: 'tictactoe',
+            title: 'TicTacToe 更新',
+            content: '默认全范围可创建',
+        }));
+        expect(createResult.gameId).toBe('tictactoe');
     });
 });

@@ -14,6 +14,7 @@ import {
 interface RuntimeRecord {
     workerId: number;
     pid: number;
+    logFile: string;
     ports: {
         frontend: number;
         gameServer: number;
@@ -39,6 +40,46 @@ function getProcessFilePath(): string {
     return path.join(TMP_DIR, `playwright-worker-runtime-${getRuntimeScope()}.json`);
 }
 
+function getBootstrapLogFile(workerId: number): string {
+    return path.join(TMP_DIR, `playwright-bootstrap-${getRuntimeScope()}-worker-${workerId}.log`);
+}
+
+function isProcessAlive(pid: number): boolean {
+    if (!Number.isInteger(pid) || pid <= 0) {
+        return false;
+    }
+
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        // EPERM 说明进程存在但当前进程无权限操作
+        return code === 'EPERM';
+    }
+}
+
+function getLogTail(logFile: string, maxChars = 4000): string {
+    try {
+        const content = fs.readFileSync(logFile, 'utf-8');
+        if (!content) {
+            return '(启动日志为空)';
+        }
+        if (content.length <= maxChars) {
+            return content;
+        }
+
+        return content.slice(content.length - maxChars);
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') {
+            return '(启动日志不存在)';
+        }
+
+        return `(读取启动日志失败: ${error instanceof Error ? error.message : String(error)})`;
+    }
+}
+
 async function isUrlReady(url: string): Promise<boolean> {
     try {
         const response = await fetch(url, { redirect: 'manual' });
@@ -48,10 +89,22 @@ async function isUrlReady(url: string): Promise<boolean> {
     }
 }
 
-async function waitForUrl(url: string, timeoutMs = SERVICE_READY_TIMEOUT_MS): Promise<void> {
+async function waitForUrl(runtime: RuntimeRecord, url: string, timeoutMs = SERVICE_READY_TIMEOUT_MS): Promise<void> {
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < timeoutMs) {
+        if (!isProcessAlive(runtime.pid)) {
+            throw new Error(
+                [
+                    `服务启动进程已退出: worker=${runtime.workerId}, pid=${runtime.pid}`,
+                    `目标 URL: ${url}`,
+                    `启动日志: ${runtime.logFile}`,
+                    '--- 启动日志尾部 ---',
+                    getLogTail(runtime.logFile),
+                ].join('\n'),
+            );
+        }
+
         if (await isUrlReady(url)) {
             return;
         }
@@ -59,7 +112,15 @@ async function waitForUrl(url: string, timeoutMs = SERVICE_READY_TIMEOUT_MS): Pr
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    throw new Error(`等待服务就绪超时: ${url}`);
+    throw new Error(
+        [
+            `等待服务就绪超时: ${url}`,
+            `worker=${runtime.workerId}, pid=${runtime.pid}`,
+            `启动日志: ${runtime.logFile}`,
+            '--- 启动日志尾部 ---',
+            getLogTail(runtime.logFile),
+        ].join('\n'),
+    );
 }
 
 async function cleanupSingleWorkerPorts(): Promise<void> {
@@ -67,20 +128,31 @@ async function cleanupSingleWorkerPorts(): Promise<void> {
 
     const released = await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
     if (!released) {
-        throw new Error(
-            `单 worker E2E 端口释放超时: ${toPortArray(singleWorkerPorts).join(', ')}`
-        );
+        throw new Error(`单 worker E2E 端口释放超时: ${toPortArray(singleWorkerPorts).join(', ')}`);
     }
 }
 
 function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord {
-    const child = spawn(process.execPath, [script, ...args], {
-        cwd: process.cwd(),
-        env: process.env,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-    });
+    const workerId = args[0] ? Number.parseInt(args[0], 10) : 0;
+    const logFile = getBootstrapLogFile(workerId);
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const logFd = fs.openSync(logFile, 'a');
+
+    let child;
+    try {
+        child = spawn(process.execPath, [script, ...args], {
+            cwd: process.cwd(),
+            env: {
+                ...process.env,
+                PW_BOOTSTRAP_LOG_FILE: logFile,
+            },
+            detached: true,
+            stdio: ['ignore', logFd, logFd],
+            windowsHide: true,
+        });
+    } finally {
+        fs.closeSync(logFd);
+    }
 
     if (!child.pid) {
         throw new Error(`启动服务失败，未获取到进程 PID: ${script}`);
@@ -89,8 +161,9 @@ function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord
     child.unref();
 
     return {
-        workerId: args[0] ? Number.parseInt(args[0], 10) : 0,
+        workerId,
         pid: child.pid,
+        logFile,
         ports: singleWorkerPorts,
     };
 }
@@ -104,7 +177,7 @@ function killProcessTree(pid: number): void {
 
         process.kill(-pid, 'SIGTERM');
     } catch {
-        // 进程可能已经退出，后续端口清理会兜底。
+        // 进程可能已经退出，后续端口清理兜底。
     }
 }
 
@@ -160,7 +233,7 @@ export default async function globalSetup() {
         const runtime = spawnDetachedServer('scripts/infra/start-single-worker-servers.js');
         fs.writeFileSync(getProcessFilePath(), JSON.stringify([runtime], null, 2));
 
-        await Promise.all(urls.map(url => waitForUrl(url)));
+        await Promise.all(urls.map(url => waitForUrl(runtime, url)));
         console.log('\n✅ 单 worker E2E 服务已就绪\n');
         return;
     }
@@ -185,16 +258,17 @@ export default async function globalSetup() {
         });
 
         console.log(
-            `Worker ${workerId}: Frontend=${ports.frontend}, GameServer=${ports.gameServer}, API=${ports.apiServer}, PID=${runtime.pid}`
+            `Worker ${workerId}: Frontend=${ports.frontend}, GameServer=${ports.gameServer}, API=${ports.apiServer}, PID=${runtime.pid}`,
         );
     }
 
     fs.writeFileSync(getProcessFilePath(), JSON.stringify(runtimes, null, 2));
 
-    await Promise.all(runtimes.map(async ({ workerId, ports }) => {
-        await waitForUrl(`http://127.0.0.1:${ports.gameServer}/games`);
-        await waitForUrl(`http://127.0.0.1:${ports.apiServer}/health`);
-        await waitForUrl(`http://127.0.0.1:${ports.frontend}/__ready`);
+    await Promise.all(runtimes.map(async (runtime) => {
+        const { workerId, ports } = runtime;
+        await waitForUrl(runtime, `http://127.0.0.1:${ports.gameServer}/games`);
+        await waitForUrl(runtime, `http://127.0.0.1:${ports.apiServer}/health`);
+        await waitForUrl(runtime, `http://127.0.0.1:${ports.frontend}/__ready`);
         console.log(`✅ Worker ${workerId} 服务已就绪`);
     }));
 }

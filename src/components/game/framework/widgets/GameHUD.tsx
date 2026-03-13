@@ -827,6 +827,12 @@ export const GameHUD = ({
             {showFeedback && (
                 <FeedbackModal
                     onClose={() => setShowFeedback(false)}
+                    runtimeContext={{
+                        mode,
+                        matchId,
+                        playerId: myPlayerId,
+                        gameId: _gameId,
+                    }}
                     actionLogText={(() => {
                         const G = undoState?.G;
                         if (!G) return undefined;

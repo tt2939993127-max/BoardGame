@@ -265,7 +265,10 @@ export class GameTestContext {
 
     private async gotoWithRetry(url: string, timeout: number): Promise<void> {
         const maxAttempts = 3;
-        const navigationTimeout = Math.max(timeout, 60000);
+        const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
+        const navigationTimeout = useDevServers
+            ? Math.max(timeout, 60000)
+            : Math.max(timeout, 15000);
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             try {
@@ -328,17 +331,34 @@ export class GameTestContext {
         const search = params.toString();
         const url = `/play/${gameId}${search ? `?${search}` : ''}`;
         const maxAttempts = 3;
+        const deadline = Date.now() + timeout;
+        let lastError: unknown;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) {
+                throw lastError instanceof Error ? lastError : new Error(`openTestGame 超时: ${url}`);
+            }
+
+            // 总预算拆分为“每次尝试预算”，保证有限重试在测试超时内真正发生。
+            const attemptTimeout = Math.max(
+                8000,
+                Math.min(
+                    remaining,
+                    Math.ceil(timeout / maxAttempts),
+                ),
+            );
+
             try {
-                await this.gotoWithRetry(url, timeout);
-                await this.waitForTestHarness(timeout);
+                await this.gotoWithRetry(url, attemptTimeout);
+                await this.waitForTestHarness(attemptTimeout);
                 await this.page.waitForFunction(
                     () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
-                    { timeout },
+                    { timeout: attemptTimeout, polling: 200 },
                 );
                 return;
             } catch (error) {
+                lastError = error;
                 if (!this.isRetryableHarnessError(error) || attempt === maxAttempts) {
                     throw error;
                 }

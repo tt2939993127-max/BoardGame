@@ -41,6 +41,12 @@
 
 /* Global Styles */
 @layer base {
+    :root {
+        --safe-area-top: env(safe-area-inset-top, 0px);
+        --safe-area-right: env(safe-area-inset-right, 0px);
+        --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+        --safe-area-left: env(safe-area-inset-left, 0px);
+    }
 
     /* Responsive Root Font Size System */
     html {
@@ -72,11 +78,16 @@
         font-family: 'Crimson Text', serif;
         /* Default to Serif for that retro book feel */
         margin: 0;
+        min-height: 100dvh;
     }
 
     button:not(:disabled) {
         cursor: pointer;
     }
+}
+
+#root {
+    min-height: 100dvh;
 }
 
 /* 游戏专属字体：manifest.fontFamily 通过 MatchRoom/LocalMatchRoom 注入为 CSS 变量，
@@ -217,6 +228,7 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
+    box-sizing: border-box;
 }
 
 .mobile-board-shell__canvas {
@@ -242,12 +254,12 @@
 }
 
 @media (max-width: 1023px) {
-    [data-game-page][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
+    [data-game-page][data-mobile-layout-preset="board-shell"] .mobile-board-shell {
         padding:
-            env(safe-area-inset-top)
-            env(safe-area-inset-right)
-            env(safe-area-inset-bottom)
-            env(safe-area-inset-left);
+            var(--safe-area-top)
+            var(--safe-area-right)
+            var(--safe-area-bottom)
+            var(--safe-area-left);
     }
 }
 

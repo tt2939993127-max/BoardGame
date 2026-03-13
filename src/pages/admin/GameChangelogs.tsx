@@ -41,7 +41,7 @@ const EMPTY_FORM: FormState = {
     versionLabel: '',
     content: '',
     pinned: false,
-    published: false,
+    published: true,
 };
 
 const normalizeErrorMessage = async (response: Response, fallback: string) => {
@@ -365,6 +365,9 @@ export default function AdminGameChangelogs() {
                                 立即发布
                             </label>
                         </div>
+                        <p className="text-xs leading-5 text-amber-700">
+                            未勾选“立即发布”的日志会保存为草稿，只在后台列表可见，不会出现在前台详情页的“更新”页签。
+                        </p>
 
                         <div className="flex gap-3 pt-2">
                             <button

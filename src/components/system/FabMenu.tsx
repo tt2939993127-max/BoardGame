@@ -26,6 +26,26 @@ interface FabMenuProps {
 }
 
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
+type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
+
+const parseCssPixels = (value: string) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getSafeAreaInsets = (): SafeAreaInsets => {
+    if (typeof window === 'undefined') {
+        return { top: 0, right: 0, bottom: 0, left: 0 };
+    }
+
+    const styles = window.getComputedStyle(document.documentElement);
+    return {
+        top: parseCssPixels(styles.getPropertyValue('--safe-area-top')),
+        right: parseCssPixels(styles.getPropertyValue('--safe-area-right')),
+        bottom: parseCssPixels(styles.getPropertyValue('--safe-area-bottom')),
+        left: parseCssPixels(styles.getPropertyValue('--safe-area-left')),
+    };
+};
 
 export const FabMenu = ({
     items,
@@ -37,10 +57,12 @@ export const FabMenu = ({
     const [buttonSize, setButtonSize] = useState(48);
     const [buttonGap, setButtonGap] = useState(12);
     const [edgePadding, setEdgePadding] = useState(32);
+    const [safeAreaInsets, setSafeAreaInsets] = useState<SafeAreaInsets>(() => getSafeAreaInsets());
     
     useEffect(() => {
         const updateSizes = () => {
             const mobile = window.innerWidth < 1024;
+            setSafeAreaInsets(getSafeAreaInsets());
             setButtonSize(mobile ? 36 : 48);
             setButtonGap(mobile ? 8 : 12);
             setEdgePadding(mobile ? 16 : 32);
@@ -69,13 +91,15 @@ export const FabMenu = ({
     }, []);
 
     const clampPosition = useCallback((target: { left: number; top: number }) => {
-        const maxLeft = window.innerWidth - buttonSize - edgePadding;
-        const maxTop = window.innerHeight - buttonSize - edgePadding;
+        const minLeft = edgePadding + safeAreaInsets.left;
+        const minTop = edgePadding + safeAreaInsets.top;
+        const maxLeft = Math.max(minLeft, window.innerWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = Math.max(minTop, window.innerHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         return {
-            left: Math.min(Math.max(target.left, edgePadding), maxLeft),
-            top: Math.min(Math.max(target.top, edgePadding), maxTop),
+            left: Math.min(Math.max(target.left, minLeft), maxLeft),
+            top: Math.min(Math.max(target.top, minTop), maxTop),
         };
-    }, [buttonSize, edgePadding]);
+    }, [buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top]);
 
     const getAlignmentForPosition = useCallback((target: { left: number; top: number }): FabAlignment => {
         const centerY = window.innerHeight / 2;
@@ -88,15 +112,17 @@ export const FabMenu = ({
     }, [buttonSize]);
 
     const getInitialPosition = useCallback(() => {
-        const maxLeft = window.innerWidth - buttonSize - edgePadding;
-        const maxTop = window.innerHeight - buttonSize - edgePadding;
+        const minLeft = edgePadding + safeAreaInsets.left;
+        const minTop = edgePadding + safeAreaInsets.top;
+        const maxLeft = Math.max(minLeft, window.innerWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = Math.max(minTop, window.innerHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         // 默认位置往内偏移，不贴边
         const DEFAULT_INSET = 48;
         if (initialPosition === 'bottom-right') return { left: maxLeft - DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
-        if (initialPosition === 'bottom-left') return { left: edgePadding + DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
-        if (initialPosition === 'top-right') return { left: maxLeft - DEFAULT_INSET, top: edgePadding + DEFAULT_INSET };
-        return { left: edgePadding + DEFAULT_INSET, top: edgePadding + DEFAULT_INSET };
-    }, [initialPosition, buttonSize, edgePadding]);
+        if (initialPosition === 'bottom-left') return { left: minLeft + DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
+        if (initialPosition === 'top-right') return { left: maxLeft - DEFAULT_INSET, top: minTop + DEFAULT_INSET };
+        return { left: minLeft + DEFAULT_INSET, top: minTop + DEFAULT_INSET };
+    }, [initialPosition, buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top]);
 
     // 加载保存的位置（支持百分比格式，兼容旧绝对坐标）
     useEffect(() => {

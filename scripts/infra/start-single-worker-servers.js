@@ -21,78 +21,79 @@ console.log(`  游戏服务: http://localhost:${ports.gameServer}`);
 console.log(`  API 服务: http://localhost:${ports.apiServer}\n`);
 
 const busyPorts = Object.entries(ports)
-  .filter(([, port]) => isPortInUse(port))
-  .map(([name, port]) => `${name}(${port})`);
+    .filter(([, port]) => isPortInUse(port))
+    .map(([name, port]) => `${name}(${port})`);
 
 if (busyPorts.length > 0) {
-  console.error(`以下端口已被占用: ${busyPorts.join(', ')}`);
-  process.exit(1);
+    console.error(`以下端口已被占用: ${busyPorts.join(', ')}`);
+    process.exit(1);
 }
 
 const frontend = spawnNodeScript('scripts/infra/vite-with-logging.js', {
-  ...process.env,
-  E2E_PROXY_QUIET: 'true',
-  VITE_DEV_PORT: String(ports.frontend),
-  GAME_SERVER_PORT: String(ports.gameServer),
-  API_SERVER_PORT: String(ports.apiServer),
+    ...process.env,
+    E2E_PROXY_QUIET: 'true',
+    VITE_DEV_PORT: String(ports.frontend),
+    GAME_SERVER_PORT: String(ports.gameServer),
+    API_SERVER_PORT: String(ports.apiServer),
 });
 
 const gameServerEnv = {
-  ...process.env,
-  NODE_ENV: 'test',
-  GAME_SERVER_PORT: String(ports.gameServer),
-  USE_PERSISTENT_STORAGE: 'false',
+    ...process.env,
+    NODE_ENV: 'test',
+    GAME_SERVER_PORT: String(ports.gameServer),
+    USE_PERSISTENT_STORAGE: 'false',
 };
 
 const gameServer = useTsxRuntime
-  ? spawnTsxEntry({
-    entry: 'server.ts',
-    tsconfig: 'tsconfig.server.json',
-    env: gameServerEnv,
-  })
-  : spawnBundleRunner({
-    label: 'e2e-game-single',
-    entry: 'server.ts',
-    outfile: path.join('temp', 'dev-bundles', 'e2e-single', 'game', 'server.mjs'),
-    tsconfig: 'tsconfig.server.json',
-    watch: bundleWatchEnabled,
-    env: gameServerEnv,
-  });
+    ? spawnTsxEntry({
+        entry: 'server.ts',
+        tsconfig: 'tsconfig.server.json',
+        env: gameServerEnv,
+    })
+    : spawnBundleRunner({
+        label: 'e2e-game-single',
+        entry: 'server.ts',
+        outfile: path.join('temp', 'dev-bundles', 'e2e-single', 'game', 'server.mjs'),
+        tsconfig: 'tsconfig.server.json',
+        watch: bundleWatchEnabled,
+        env: gameServerEnv,
+    });
 
 const apiServerEnv = {
-  ...process.env,
-  API_SERVER_PORT: String(ports.apiServer),
+    ...process.env,
+    API_SERVER_PORT: String(ports.apiServer),
 };
 
 const apiServer = useTsxRuntime
-  ? spawnTsxEntry({
-    entry: 'apps/api/src/main.ts',
-    tsconfig: 'apps/api/tsconfig.json',
-    env: apiServerEnv,
-  })
-  : spawnBundleRunner({
-    label: 'e2e-api-single',
-    entry: 'apps/api/src/main.ts',
-    outfile: path.join('temp', 'dev-bundles', 'e2e-single', 'api', 'main.mjs'),
-    tsconfig: 'apps/api/tsconfig.json',
-    watch: bundleWatchEnabled,
-    env: apiServerEnv,
-  });
+    ? spawnTsxEntry({
+        entry: 'apps/api/src/main.ts',
+        tsconfig: 'apps/api/tsconfig.json',
+        env: apiServerEnv,
+    })
+    : spawnBundleRunner({
+        label: 'e2e-api-single',
+        entry: 'apps/api/src/main.ts',
+        outfile: path.join('temp', 'dev-bundles', 'e2e-single', 'api', 'main.mjs'),
+        tsconfig: 'apps/api/tsconfig.json',
+        watch: bundleWatchEnabled,
+        env: apiServerEnv,
+    });
 
-const cleanup = () => {
-  console.log('\n🛑 停止单 worker E2E 服务...');
-  frontend.kill();
-  gameServer.kill();
-  apiServer.kill();
-  process.exit(0);
+const cleanup = (exitCode = 0) => {
+    console.log('\n🛑 停止单 worker E2E 服务...');
+    frontend.kill();
+    gameServer.kill();
+    apiServer.kill();
+    process.exit(exitCode);
 };
 
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
+process.on('SIGINT', () => cleanup(0));
+process.on('SIGTERM', () => cleanup(0));
 
-registerExitGuard(frontend, '前端服务', cleanup);
-registerExitGuard(gameServer, '游戏服务', cleanup);
-registerExitGuard(apiServer, 'API 服务', cleanup);
+// 子服务异常退出视为启动链失败，返回非 0 退出码
+registerExitGuard(frontend, '前端服务', () => cleanup(1));
+registerExitGuard(gameServer, '游戏服务', () => cleanup(1));
+registerExitGuard(apiServer, 'API 服务', () => cleanup(1));
 
 console.log('✅ 单 worker E2E 服务已启动');
 console.log('   按 Ctrl+C 停止所有服务\n');
