@@ -16,6 +16,7 @@ import type {
     DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
     MinionPlayedEvent, BreakpointModifiedEvent, CardInstance,
 } from '../domain/types';
+import { registerPowerModifier } from '../domain/ongoingModifiers';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
@@ -344,6 +345,45 @@ export function registerKillerPlantAbilities(): void {
     // entangled: 控制者回合开始时消灭本卡
     registerTrigger('killer_plant_entangled', 'onTurnStart', killerPlantEntangledDestroyTrigger);
     registerTrigger('killer_plant_entangled_pod', 'onTurnStart', killerPlantEntangledDestroyTrigger);
+
+    // weed_eater_pod: 控制者回合开始后获得 +2 力量（通过 metadata 标记 + PowerModifier）
+    registerTrigger('killer_plant_weed_eater_pod', 'onTurnStart', killerPlantWeedEaterPodTrigger);
+}
+
+/**
+ * Weed Eater POD 触发：控制者回合开始时，若尚未激活则写入 metadata 标记。
+ * 
+ * 这里使用 `MINION_METADATA_UPDATED` 事件驱动 reducer 更新状态，避免直接突变 state。
+ */
+function killerPlantWeedEaterPodTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    const events: SmashUpEvent[] = [];
+    for (let baseIndex = 0; baseIndex < ctx.state.bases.length; baseIndex++) {
+        const base = ctx.state.bases[baseIndex];
+        for (const m of base.minions) {
+            if (m.defId !== 'killer_plant_weed_eater_pod') continue;
+            if (m.controller !== ctx.playerId) continue;
+            if (m.metadata?.weedEaterEmpowered) continue;
+            events.push({
+                type: SU_EVENTS.MINION_METADATA_UPDATED,
+                payload: {
+                    minionUid: m.uid,
+                    baseIndex,
+                    metadataUpdate: { weedEaterEmpowered: true },
+                    reason: 'killer_plant_weed_eater_pod',
+                },
+                timestamp: ctx.now,
+            } as any);
+        }
+    }
+    return events;
+}
+
+/** 注册食人花派系的持续力量修正 */
+export function registerKillerPlantModifiers(): void {
+    // Weed Eater POD：当其 metadata 标记被激活后，获得 +2 力量
+    registerPowerModifier('killer_plant_weed_eater_pod', (ctx) => {
+        return ctx.minion.metadata?.weedEaterEmpowered ? 2 : 0;
+    });
 }
 
 // ============================================================================
