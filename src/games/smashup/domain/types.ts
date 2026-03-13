@@ -758,6 +758,7 @@ export type SmashUpEvent =
     | SpecialAfterScoringConsumedEvent
     | AbilityFeedbackEvent
     | AbilityTriggeredEvent
+    | BaseAbilitySuppressedEvent
     | BaseClearedEvent;
 
 // ============================================================================
@@ -1036,6 +1037,15 @@ export interface BreakpointModifiedEvent extends GameEvent<typeof SU_EVENTS.BREA
     payload: {
         baseIndex: number;
         delta: number;
+        reason: string;
+    };
+}
+
+/** 基地能力压制事件（直到压制者的下个回合开始） */
+export interface BaseAbilitySuppressedEvent extends GameEvent<typeof SU_EVENTS.BASE_ABILITY_SUPPRESSED> {
+    payload: {
+        baseIndex: number;
+        suppressorPlayerId: PlayerId;
         reason: string;
     };
 }

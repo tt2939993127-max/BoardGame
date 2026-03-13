@@ -30,6 +30,9 @@ export function registerNinjaAbilities(): void {
     registerAbility('ninja_disguise', 'onPlay', ninjaDisguise);
     // 渗透（ongoing 行动卡）：onPlay 消灭基地上一个已有的战术
     registerAbility('ninja_infiltrate', 'onPlay', ninjaInfiltrateOnPlay);
+    // 渗透 POD（ongoing 行动卡）：onPlay 可选消灭基地上另一张战术；talent 可自毁以压制基地能力
+    registerAbility('ninja_infiltrate_pod', 'onPlay', ninjaInfiltratePodOnPlay);
+    registerAbility('ninja_infiltrate_pod', 'talent', ninjaInfiltratePodTalent);
     // 隐忍（special action）：基地计分前打出手牌中的随从到该基地
     registerAbility('ninja_hidden_ninja', 'special', ninjaHiddenNinja);
     // 忍者侍从（special）：基地计分前返回手牌并额外打出一个随从到该基地
@@ -190,6 +193,60 @@ function ninjaInfiltrateOnPlay(ctx: AbilityContext): AbilityResult {
         { sourceId: 'ninja_infiltrate_destroy', targetType: 'ongoing' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+/**
+ * 渗透 POD onPlay：可选消灭基地上一个已有的战术（ongoing 行动卡）
+ * 描述："Play on a base. You may destroy another action on this base."
+ */
+function ninjaInfiltratePodOnPlay(ctx: AbilityContext): AbilityResult {
+    const base = ctx.state.bases[ctx.baseIndex];
+    if (!base) return { events: [] };
+
+    const targets: { uid: string; defId: string; ownerId: string; label: string }[] = [];
+    for (const o of base.ongoingActions) {
+        if (o.uid === ctx.cardUid) continue;
+        const def = getCardDef(o.defId);
+        targets.push({ uid: o.uid, defId: o.defId, ownerId: o.ownerId, label: def?.name ?? o.defId });
+    }
+
+    if (targets.length === 0) return { events: [] };
+
+    const options: any[] = targets.map((t, i) => ({
+        id: `tactic-${i}`,
+        label: t.label,
+        value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
+        _source: 'ongoing' as const,
+        displayMode: 'card' as const,
+    }));
+    options.push({ id: 'skip', label: '跳过（不消灭）', value: { skip: true }, displayMode: 'button' as const });
+
+    const interaction = createSimpleChoice(
+        `ninja_infiltrate_pod_onplay_${ctx.now}`, ctx.playerId,
+        '你可以消灭该基地上的另一张战术', options,
+        { sourceId: 'ninja_infiltrate_pod_destroy', targetType: 'ongoing' },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+/**
+ * 渗透 POD talent：消灭本战术，压制该基地能力直到你的下回合开始。
+ */
+function ninjaInfiltratePodTalent(ctx: AbilityContext): AbilityResult {
+    const ownerId = ctx.playerId;
+    const events: SmashUpEvent[] = [
+        {
+            type: SU_EVENTS.ONGOING_DETACHED,
+            payload: { cardUid: ctx.cardUid, defId: 'ninja_infiltrate_pod', ownerId, reason: 'ninja_infiltrate_pod_talent' },
+            timestamp: ctx.now,
+        } as OngoingDetachedEvent,
+        {
+            type: SU_EVENTS.BASE_ABILITY_SUPPRESSED,
+            payload: { baseIndex: ctx.baseIndex, suppressorPlayerId: ownerId, reason: 'ninja_infiltrate_pod_talent' },
+            timestamp: ctx.now,
+        } as any,
+    ];
+    return { events };
 }
 
 /** 欺骗之道 onPlay：选择己方一个随从移动到另一个基地*/
@@ -727,6 +784,19 @@ export function registerNinjaInteractionHandlers(): void {
             events: [{
                 type: SU_EVENTS.ONGOING_DETACHED,
                 payload: { cardUid: ongoingUid, defId, ownerId, reason: 'ninja_infiltrate_destroy' },
+                timestamp,
+            } as OngoingDetachedEvent],
+        };
+    });
+
+    registerInteractionHandler('ninja_infiltrate_pod_destroy', (state, _playerId, value, _iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
+        const { cardUid: ongoingUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        return {
+            state,
+            events: [{
+                type: SU_EVENTS.ONGOING_DETACHED,
+                payload: { cardUid: ongoingUid, defId, ownerId, reason: 'ninja_infiltrate_pod_destroy' },
                 timestamp,
             } as OngoingDetachedEvent],
         };

@@ -148,7 +148,7 @@ export const NINJA_POD_ACTIONS: ActionCardDef[] = [
         // [POD版效果] Play on a base. You may destroy another action on this base.
         // Talent: Destroy this action to cancel this base's ability until the start of your turn.
         // 注意：即时消灭战术是 onPlay 效果，加入 onPlay 标签
-        abilityTags: ['onPlay', 'ongoing'],
+        abilityTags: ['onPlay', 'ongoing', 'talent'],
         ongoingTarget: 'base',
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 22 },
