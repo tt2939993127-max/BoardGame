@@ -4,7 +4,7 @@
 
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './e2e-port-config.js';
 import { isPortInUse } from './port-allocator.js';
-import { registerExitGuard, spawnNodeScript, spawnPackageScript, spawnTsxScript } from './e2e-server-launcher.js';
+import { registerExitGuard, spawnApiServer, spawnNodeScript, spawnTsxScript } from './e2e-server-launcher.js';
 
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const ports = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
@@ -37,7 +37,7 @@ const gameServer = spawnTsxScript(['server.ts'], {
   USE_PERSISTENT_STORAGE: 'false',
 });
 
-const apiServer = spawnPackageScript('dev:api', {
+const apiServer = spawnApiServer({
   ...process.env,
   API_SERVER_PORT: String(ports.apiServer),
 });

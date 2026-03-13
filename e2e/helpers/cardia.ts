@@ -9,7 +9,6 @@ import {
     getGameServerBaseURL,
     ensureGameServerAvailable,
     seedMatchCredentials,
-    waitForTestHarness,
 } from './common';
 
 // Re-export commonly used functions
@@ -478,7 +477,8 @@ export const setupCardiaTestScenario = async (
     scenario: CardiaTestScenario
 ): Promise<CardiaMatchSetup> => {
     // 1. 创建基础对局
-    const baseURL = process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = process.env.VITE_FRONTEND_URL
+        || `http://localhost:${process.env.PW_PORT || process.env.E2E_PORT || '6173'}`;
     const tempContext = await browser.newContext({ baseURL });
     const tempPage = await tempContext.newPage();
     
@@ -486,37 +486,12 @@ export const setupCardiaTestScenario = async (
         const setup = await setupOnlineMatch(tempPage);
         await tempPage.close();
         
-        // 2. 构建完整状态
         const currentState = await readCoreState(setup.player1Page);
-        const newState = await buildStateFromScenario(
-            setup.player1Page,
-            currentState,
-            scenario
-        );
-        
-        // 3. 注入状态到两个玩家页面
-        await applyCoreStateDirect(setup.player1Page, newState);
-        await applyCoreStateDirect(setup.player2Page, newState);
-        
-        // 4. 如果场景指定了阶段，需要同步设置 sys.phase
-        if (scenario.phase) {
-            await setup.player1Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-            await setup.player2Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-        }
-        
-        // 5. 等待UI更新
-        await setup.player1Page.waitForTimeout(500);
-        await setup.player2Page.waitForTimeout(500);
+        const newState = await buildStateFromScenario(setup.player1Page, currentState, scenario);
+
+        // 2. 注入状态到两个玩家页面
+        await applyCardiaScenarioToPage(setup.player1Page, scenario, newState);
+        await applyCardiaScenarioToPage(setup.player2Page, scenario, newState);
         
         return setup;
     } catch (error) {
@@ -524,6 +499,39 @@ export const setupCardiaTestScenario = async (
         await tempContext.close();
         throw error;
     }
+};
+
+/**
+ * 将 Cardia 场景注入到当前页面（适用于 `/play/cardia` TestHarness 页面）
+ */
+export const applyCardiaScenarioToPage = async (
+    page: Page,
+    scenario: CardiaTestScenario,
+    prebuiltCoreState?: Record<string, unknown>,
+) => {
+    const currentState = prebuiltCoreState ?? await readCoreState(page);
+    const nextCoreState = prebuiltCoreState ?? await buildStateFromScenario(page, currentState, scenario);
+
+    await applyCoreStateDirect(page, nextCoreState);
+
+    if (scenario.phase) {
+        await page.evaluate((phase) => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            harness?.state?.patch?.({
+                sys: {
+                    phase,
+                },
+            });
+
+            const liveState = (window as any).__BG_STATE__;
+            if (liveState?.sys) {
+                liveState.sys.phase = phase;
+            }
+        }, scenario.phase);
+    }
+
+    await page.waitForTimeout(500);
+    await ensureDebugPanelClosed(page);
 };
 
 /**
@@ -738,9 +746,9 @@ async function createCardInstances(
     page: Page,
     defIds: string[],
     ownerId: string,
-    startIndex: number
+    _startIndex: number
 ): Promise<Array<Record<string, unknown>>> {
-    return await page.evaluate(({ defIds, ownerId, startIndex }) => {
+    return await page.evaluate(({ defIds, ownerId }) => {
         // 访问游戏的 cardRegistry
         const cardRegistry = (window as unknown as { __BG_CARD_REGISTRY__?: Map<string, unknown> }).__BG_CARD_REGISTRY__;
         if (!cardRegistry) {
@@ -776,7 +784,7 @@ async function createCardInstances(
                 encounterIndex: -1,
             };
         });
-    }, { defIds, ownerId, startIndex });
+    }, { defIds, ownerId });
 }
 
 // ============================================================================

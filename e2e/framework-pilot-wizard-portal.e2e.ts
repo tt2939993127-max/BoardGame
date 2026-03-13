@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SmashUp - Wizard Portal 新框架 E2E 试点
  */
 

@@ -20,6 +20,8 @@ const entry: GameManifestEntry = {
     playerOptions: [2],
     tags: ['card_driven', 'tactical'],
     bestPlayers: [2],
+    cursorTheme: 'cardia',
+    mobileLandscapeLayout: 'responsive',
     setupOptions: {
         deckVariant: {
             type: 'select',

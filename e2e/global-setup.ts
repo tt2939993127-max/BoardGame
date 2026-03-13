@@ -19,9 +19,11 @@ interface RuntimeRecord {
         gameServer: number;
         apiServer: number;
     };
+    logPath?: string;
 }
 
 const TMP_DIR = path.join(process.cwd(), '.tmp');
+const LOG_DIR = path.join(TMP_DIR, 'playwright-service-logs');
 const PROCESS_FILE = path.join(TMP_DIR, 'playwright-worker-runtime.json');
 const SERVICE_READY_TIMEOUT_MS = Number.parseInt(process.env.PW_SERVICE_READY_TIMEOUT_MS || '240000', 10);
 const PORT_CLEANUP_TIMEOUT_MS = Number.parseInt(process.env.PW_PORT_CLEANUP_TIMEOUT_MS || '10000', 10);
@@ -66,13 +68,23 @@ async function cleanupSingleWorkerPorts(): Promise<void> {
 }
 
 function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+
+    const logFileName = [
+        path.basename(script, path.extname(script)),
+        args.length > 0 ? args.join('-') : 'single',
+    ].join('-');
+    const logPath = path.join(LOG_DIR, `${logFileName}.log`);
+    const logFd = fs.openSync(logPath, 'a');
+
     const child = spawn(process.execPath, [script, ...args], {
         cwd: process.cwd(),
         env: process.env,
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', logFd, logFd],
         windowsHide: true,
     });
+    fs.closeSync(logFd);
 
     if (!child.pid) {
         throw new Error(`启动服务失败，未获取到进程 PID: ${script}`);
@@ -84,7 +96,17 @@ function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord
         workerId: args[0] ? Number.parseInt(args[0], 10) : 0,
         pid: child.pid,
         ports: singleWorkerPorts,
+        logPath,
     };
+}
+
+function readLogTail(logPath?: string, maxChars = 6000): string {
+    if (!logPath || !fs.existsSync(logPath)) {
+        return '（无可用日志）';
+    }
+
+    const content = fs.readFileSync(logPath, 'utf-8');
+    return content.length <= maxChars ? content : content.slice(-maxChars);
 }
 
 export default async function globalSetup() {
@@ -116,7 +138,14 @@ export default async function globalSetup() {
         const runtime = spawnDetachedServer('scripts/infra/start-single-worker-servers.js');
         fs.writeFileSync(PROCESS_FILE, JSON.stringify([runtime], null, 2));
 
-        await Promise.all(urls.map(url => waitForUrl(url)));
+        try {
+            await Promise.all(urls.map(url => waitForUrl(url)));
+        } catch (error) {
+            const logTail = readLogTail(runtime.logPath);
+            throw new Error(
+                `${(error as Error).message}\n\n[服务日志尾部: ${runtime.logPath}]\n${logTail}`
+            );
+        }
         console.log('\n✅ 单 worker E2E 服务已就绪\n');
         return;
     }
@@ -146,10 +175,17 @@ export default async function globalSetup() {
 
     fs.writeFileSync(PROCESS_FILE, JSON.stringify(runtimes, null, 2));
 
-    await Promise.all(runtimes.map(async ({ workerId, ports }) => {
-        await waitForUrl(`http://127.0.0.1:${ports.gameServer}/games`);
-        await waitForUrl(`http://127.0.0.1:${ports.apiServer}/health`);
-        await waitForUrl(`http://127.0.0.1:${ports.frontend}/__ready`);
-        console.log(`✅ Worker ${workerId} 服务已就绪`);
+    await Promise.all(runtimes.map(async ({ workerId, ports, logPath }) => {
+        try {
+            await waitForUrl(`http://127.0.0.1:${ports.gameServer}/games`);
+            await waitForUrl(`http://127.0.0.1:${ports.apiServer}/health`);
+            await waitForUrl(`http://127.0.0.1:${ports.frontend}/__ready`);
+            console.log(`✅ Worker ${workerId} 服务已就绪`);
+        } catch (error) {
+            const logTail = readLogTail(logPath);
+            throw new Error(
+                `${(error as Error).message}\n\n[Worker ${workerId} 服务日志尾部: ${logPath}]\n${logTail}`
+            );
+        }
     }));
 }

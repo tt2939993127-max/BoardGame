@@ -19,9 +19,9 @@ interface DiscardPileProps {
  * - 从下往上堆叠
  */
 export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _isOpponent = false, onCardClick }) => {
-    // 卡牌尺寸：缩小到 90%（约 100px × 151px）
-    const cardWidth = 100;
-    const cardHeight = 151;
+    // 移动端优先：缩小弃牌堆视觉占用，避免压缩主战场和手牌区域
+    const cardWidth = 68;
+    const cardHeight = 103;
     
     if (cards.length === 0) {
         return (
@@ -38,13 +38,16 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
     const latestCard = displayCards[0];
     const historyCards = displayCards.slice(1);
     const historyWidth = Math.floor(cardWidth / 3); // 三分之一宽度
-    const offsetStep = 36; // 每张卡片向右偏移 36px
+    const maxPileWidth = 112;
+    const offsetStep = historyCards.length > 0
+        ? Math.max(4, Math.min(24, Math.floor((maxPileWidth - cardWidth) / historyCards.length)))
+        : 0;
     
-    // 计算总宽度：历史卡片偏移量 + 完整卡片宽度
+    // 历史卡片自动压缩，避免在手机和平板上把信息栏顶出屏幕
     const totalWidth = historyCards.length * offsetStep + cardWidth;
 
     return (
-        <div>
+        <div className="max-w-full overflow-hidden">
             <div className="relative" style={{ width: `${totalWidth}px`, height: `${cardHeight}px` }}>
                 <CardListTransition>
                     {/* 历史弃牌 - 只显示左侧三分之一 */}
@@ -82,7 +85,7 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
                     {/* 最新弃牌 - 显示完整卡面 */}
                     <CardTransition key={latestCard.uid} cardUid={`discard-latest-${latestCard.uid}`} type="discard" layoutAnimation={false}>
                         <div
-                            className="absolute bottom-0 cursor-pointer hover:scale-105 transition-transform"
+                            className="absolute bottom-0 cursor-pointer transition-transform hover:scale-105"
                             style={{
                                 left: `${historyCards.length * offsetStep}px`,
                                 width: `${cardWidth}px`,
@@ -123,6 +126,12 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
                         </div>
                     </CardTransition>
                 </CardListTransition>
+
+                {cards.length > 1 && (
+                    <div className="absolute -bottom-2 -right-2 rounded-full border border-gray-800 bg-black/85 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-lg">
+                        {cards.length}
+                    </div>
+                )}
             </div>
         </div>
     );

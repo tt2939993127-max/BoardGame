@@ -6,7 +6,7 @@
  */
 
 import { allocateAvailablePorts, loadWorkerPorts, saveWorkerPorts, isPortInUse } from './port-allocator.js';
-import { registerExitGuard, spawnNodeScript, spawnPackageScript, spawnTsxScript } from './e2e-server-launcher.js';
+import { registerExitGuard, spawnApiServer, spawnNodeScript, spawnTsxScript } from './e2e-server-launcher.js';
 
 const workerId = Number.parseInt(process.argv[2] ?? '', 10);
 if (Number.isNaN(workerId)) {
@@ -46,7 +46,7 @@ const gameServer = spawnTsxScript(['server.ts'], {
   USE_PERSISTENT_STORAGE: 'false',
 });
 
-const apiServer = spawnPackageScript('dev:api', {
+const apiServer = spawnApiServer({
   ...process.env,
   API_SERVER_PORT: String(ports.apiServer),
 });

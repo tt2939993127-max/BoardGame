@@ -27,14 +27,22 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     const { card } = target || {};
     const imagePath = card ? resolveCardiaCardImagePath(card) : undefined;
 
+    const widthForThreeQuarterHeight = 'calc(75vh * (106 / 160))';
+
     return (
-        <MagnifyOverlay isOpen={!!target} onClose={onClose}>
+        <MagnifyOverlay isOpen={!!target} onClose={onClose} overlayClassName="p-3 sm:p-8">
             {target && (
-                <div className="relative w-[32vw] max-w-[400px] aspect-[0.667] bg-transparent">
+                <div
+                    className="relative aspect-[106/160] bg-transparent"
+                    style={{
+                        height: '75vh',
+                        width: `min(75vw, ${widthForThreeQuarterHeight})`,
+                    }}
+                >
                     {/* 关闭按钮 */}
                     <button
                         onClick={onClose}
-                        className="absolute -top-4 -right-4 bg-white text-black rounded-full w-10 h-10 font-black border-2 border-black z-50 hover:scale-110 transition-transform shadow-lg"
+                        className="absolute -right-2 -top-2 z-50 h-8 w-8 rounded-full border-2 border-black bg-white font-black text-black shadow-lg transition-transform hover:scale-110 sm:-right-4 sm:-top-4 sm:h-10 sm:w-10"
                     >
                         ✕
                     </button>
