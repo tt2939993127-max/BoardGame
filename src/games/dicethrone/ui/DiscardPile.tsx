@@ -17,15 +17,9 @@ export const DiscardPile = React.forwardRef<HTMLDivElement, {
     const showTouchInspectButton = useCoarsePointer();
     const topCard = cards[cards.length - 1];
     const overlayLabelClassName = 'px-[0.6vw] py-[0.3vw] bg-amber-600/90 rounded-[0.4vw] text-white text-[0.7vw] font-bold shadow-lg';
-    const inspectButtonClassName = showTouchInspectButton
-        ? 'absolute top-[-0.25rem] right-[-0.25rem] z-20 h-[2.75rem] w-[2.75rem] transition-opacity duration-300'
-        : 'absolute top-0 right-[-0.7vw] z-20 h-[3vw] w-[3vw] transition-opacity duration-300';
-    const inspectButtonVisualClassName = showTouchInspectButton
-        ? 'absolute top-[0.375rem] right-[0.375rem] flex h-[2rem] w-[2rem] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color] duration-300 hover:bg-amber-500/80'
-        : 'absolute top-[0.3vw] right-[1vw] flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color] duration-300 hover:bg-amber-500/80';
-    const inspectIconClassName = showTouchInspectButton
-        ? 'w-[1rem] h-[1rem] fill-current'
-        : 'w-[0.8vw] h-[0.8vw] fill-current';
+    const inspectButtonClassName = 'absolute top-0 right-[-0.7vw] z-20 h-[3vw] w-[3vw] transition-opacity duration-300';
+    const inspectButtonVisualClassName = 'absolute top-[0.3vw] right-[1vw] flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color] duration-300 hover:bg-amber-500/80';
+    const inspectIconClassName = 'w-[0.8vw] h-[0.8vw] fill-current';
 
     const getPreviewCards = React.useCallback(() => {
         if (cards.length === 0) return [];

@@ -1,1 +1,1 @@
-export { GameChangelogTab as GameChangelogPanel } from './GameChangelogTab';
+export { GameDetailsChangelogSection as GameChangelogPanel } from './GameDetailsChangelogSection';

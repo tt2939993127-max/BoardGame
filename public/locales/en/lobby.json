@@ -88,12 +88,12 @@
     "pinned": "Pinned"
   },
   "authorInfo": {
-    "button": "By {{author}}",
-    "mobileButton": "Author",
-    "buttonHint": "Click to view author information",
-    "title": "Author",
+    "button": "Digital edition: {{author}}",
+    "mobileButton": "Digital edition: {{author}}",
+    "buttonHint": "Click to view digital edition author information",
+    "title": "Digital Edition Author",
     "game": "Work: {{game}}",
-    "hint": "This entry currently shows the credited author. More detailed creator info can expand here later.",
+    "hint": "This entry currently shows the credited digital edition author. More detailed creator info can expand here later.",
     "close": "Close"
   },
   "player": {

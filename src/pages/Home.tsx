@@ -587,28 +587,8 @@ export const Home = () => {
                 description={t('lobby:home.subtitle')}
             />
             <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
-                {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
-                <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">
-                    {user ? (
-                        <UserMenu onLogout={handleLogout} />
-                    ) : (
-                        <div className="flex items-center gap-6">
-                            <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.login')}
-                                <span className="underline-center" />
-                            </button>
-                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
-                            <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.register')}
-                                <span className="underline-center" />
-                            </button>
-                        </div>
-                    )}
-                    <LanguageSwitcher />
-                </div>
-
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}
-                <div className="flex flex-col items-center justify-center mb-4">
+                <div className="flex flex-col items-center justify-center mb-2 md:mb-4">
                     {/* 标题行：Logo + H1 */}
                     <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
                         <img
@@ -625,6 +605,26 @@ export const Home = () => {
                     <p className="text-[10px] md:text-sm text-parchment-light-text tracking-[0.2em] font-bold uppercase opacity-80">
                         {t('lobby:home.subtitle')}
                     </p>
+                </div>
+
+                {/* 顶级操作区域 - 移动端放在标题下方，桌面端锁定右上角 */}
+                <div className="flex items-center justify-center gap-4 mb-1 md:absolute md:top-8 md:right-12 md:mb-0 md:gap-4 md:justify-end">
+                    {user ? (
+                        <UserMenu onLogout={handleLogout} />
+                    ) : (
+                        <div className="flex items-center gap-6">
+                            <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
+                                {t('auth:menu.login')}
+                                <span className="underline-center" />
+                            </button>
+                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
+                            <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
+                                {t('auth:menu.register')}
+                                <span className="underline-center" />
+                            </button>
+                        </div>
+                    )}
+                    <LanguageSwitcher />
                 </div>
             </header>
 

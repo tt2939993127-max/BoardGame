@@ -49,7 +49,7 @@ const DESKTOP_DICE_TRAY_TOKENS = {
 
 const DESKTOP_DICE_ACTION_TOKENS = {
     containerClassName: 'w-[10.2vw] grid grid-cols-2 gap-[0.4vw] items-stretch h-[2.5vw]',
-    buttonClassName: '!px-[0.5vw] !rounded-[0.5vw]',
+    buttonClassName: '!px-[0.5vw] !py-0 !min-h-0 !rounded-[0.5vw]',
     interactionTextClassName: '!text-[0.75vw]',
     rollTextClassName: '!text-[0.7vw] tracking-tighter',
     confirmTextClassName: '!text-[0.7vw]',

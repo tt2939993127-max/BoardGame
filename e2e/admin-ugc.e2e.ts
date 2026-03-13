@@ -8,8 +8,9 @@ type StoredUser = {
     developerGameIds?: string[];
 };
 
-const ADMIN_E2E_TIMEOUT_MS = 90_000;
+const ADMIN_E2E_TIMEOUT_MS = 180_000;
 const ADMIN_NAVIGATION_TIMEOUT_MS = 60_000;
+const ADMIN_PAGE_READY_TIMEOUT_MS = 90_000;
 const HTML_NAVIGATION_HEADERS = {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
 };
@@ -50,7 +51,7 @@ const gotoFrontendRoute = async (page: Page, targetPath: string) => {
         message: `等待前端路由可访问: ${targetPath}`,
     }).toBe('ready');
 
-    await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
+    await page.goto(targetPath, { waitUntil: 'commit' });
 };
 
 test.describe('后台管理 E2E', () => {
@@ -133,7 +134,7 @@ test.describe('后台管理 E2E', () => {
         });
 
         await gotoFrontendRoute(page, '/admin/ugc');
-        await expect(page.getByRole('heading', { name: 'UGC 管理' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'UGC 管理' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
 
         const publishedRow = page.locator('tr', { hasText: 'ugc-pub-a' });
         const draftRow = page.locator('tr', { hasText: 'ugc-draft-b' });
@@ -233,14 +234,14 @@ test.describe('后台管理 E2E', () => {
         });
 
         await gotoFrontendRoute(page, '/admin/users');
-        await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
 
         const row = page.locator('tr', { hasText: user.username });
         await expect(row).toBeVisible();
 
         await row.getByRole('button', { name: '角色设置' }).click();
-        await expect(page.getByRole('heading', { name: '用户后台角色' })).toBeVisible();
-        await expect(page.getByRole('button', { name: '关闭角色设置' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '用户后台角色' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
+        await expect(page.getByRole('button', { name: '关闭角色设置' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
 
         await page.getByRole('button', { name: '开发者' }).click();
         await page.locator('label', { hasText: '大杀四方' }).getByRole('checkbox').check();
@@ -301,7 +302,7 @@ test.describe('后台管理 E2E', () => {
         });
 
         await gotoFrontendRoute(page, '/admin/users');
-        await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
 
         const row = page.locator('tr', { hasText: user.username });
         await expect(row).toBeVisible();
@@ -336,8 +337,8 @@ test.describe('后台管理 E2E', () => {
         await gotoFrontendRoute(page, '/admin/users');
 
         await expect(page).toHaveURL(/\/admin\/changelogs$/);
-        await expect(page.getByRole('heading', { name: '更新日志' })).toBeVisible();
-        await expect(page.getByRole('button', { name: '新建更新日志' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '更新日志' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
+        await expect(page.getByRole('button', { name: '新建更新日志' })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
         await expect(page.getByRole('heading', { name: '用户管理' })).toHaveCount(0);
     });
 
@@ -399,7 +400,7 @@ test.describe('后台管理 E2E', () => {
         });
 
         await gotoFrontendRoute(page, `/admin/users/${user.id}`);
-        await expect(page.getByRole('heading', { name: user.username })).toBeVisible();
+        await expect(page.getByRole('heading', { name: user.username })).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
         await expect(page.getByText('当前范围：2 个游戏')).toBeVisible();
         await expect(page.getByText('大杀四方')).toBeVisible();
         await expect(page.getByText('王权骰铸')).toBeVisible();

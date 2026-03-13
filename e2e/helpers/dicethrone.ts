@@ -211,6 +211,13 @@ export const ensureDebugPanelClosed = async (page: Page) => {
     await expect(panel).toBeHidden({ timeout: 5000 });
 };
 
+/** 隐藏 FAB 菜单，避免遮挡移动端窄视口点击区域 */
+export const disableFabMenu = async (page: Page) => {
+    await page.addStyleTag({
+        content: '[data-testid="fab-menu"] { pointer-events: none !important; opacity: 0 !important; }',
+    }).catch(() => {});
+};
+
 /** 切换到调试面板的状态 Tab */
 export const ensureDebugStateTab = async (page: Page) => {
     await ensureDebugPanelOpen(page);

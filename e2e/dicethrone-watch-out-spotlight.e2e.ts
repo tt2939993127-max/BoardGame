@@ -13,6 +13,7 @@ import { BARBARIAN_CARDS } from '../src/games/dicethrone/heroes/barbarian/cards'
 import {
     advanceToOffensiveRoll,
     applyCoreStateDirect,
+    disableFabMenu,
     ensureDebugPanelClosed,
     readyAndStartGame,
     readCoreState,
@@ -27,6 +28,13 @@ async function expectMinBoundingBox(locator: Locator, label: string, minWidth: n
     expect(box, `${label} 应可见`).not.toBeNull();
     expect(box!.width, `${label} 宽度过小`).toBeGreaterThanOrEqual(minWidth);
     expect(box!.height, `${label} 高度过小`).toBeGreaterThanOrEqual(minHeight);
+}
+
+async function expectMaxBoundingBox(locator: Locator, label: string, maxWidth: number, maxHeight: number): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box, `${label} 应可见`).not.toBeNull();
+    expect(box!.width, `${label} 宽度过大`).toBeLessThanOrEqual(maxWidth);
+    expect(box!.height, `${label} 高度过大`).toBeLessThanOrEqual(maxHeight);
 }
 
 test('自己打出 Watch Out 应显示骰子特写', async ({ page, game }, testInfo) => {
@@ -500,22 +508,23 @@ test('触控窄视口下放大入口常显且可点击', async ({ page, game }, 
         { timeout: 10000, polling: 200 },
     );
     await ensureDebugPanelClosed(page);
-    await page.evaluate(() => {
-        const debugToggleContainer = document.querySelector('[data-testid="debug-toggle-container"]') as HTMLElement | null;
-        if (!debugToggleContainer) return;
-        debugToggleContainer.style.pointerEvents = 'none';
-        debugToggleContainer.style.opacity = '0';
-    });
+    await disableFabMenu(page);
 
     const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
     const discardPileInspectButton = page.locator('[data-testid="discard-pile-inspect-button"]');
     const boardMagnifyOverlay = page.locator('[data-testid="board-magnify-overlay"]');
     const diceFaces = page.locator('[data-testid="dice-3d"]');
+    const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
+    const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
 
     await expect(playerBoardMagnifyButton).toHaveCSS('opacity', '1');
     await expect(discardPileInspectButton).toHaveCSS('opacity', '1');
-    await expectMinBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 40, 40);
-    await expectMinBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 40, 40);
+    await expectMinBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 24, 24);
+    await expectMinBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 18, 18);
+    await expectMaxBoundingBox(playerBoardMagnifyButton, '玩家面板放大按钮', 38, 38);
+    await expectMaxBoundingBox(discardPileInspectButton, '弃牌堆查看按钮', 28, 28);
+    await expectMaxBoundingBox(rollButton, '投掷按钮', 44, 24);
+    await expectMaxBoundingBox(confirmButton, '确认按钮', 44, 24);
     await expect(diceFaces).toHaveCount(5, { timeout: 5000 });
 
     await game.screenshot('10-mobile-main-board-state', testInfo);
