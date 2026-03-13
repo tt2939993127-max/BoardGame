@@ -58,9 +58,8 @@ export const NINJA_POD_MINIONS: MinionCardDef[] = [
         power: 2,
         // Talent: If you have not played a minion on this turn, you may return this minion
         // to your hand and play an extra minion here immediately.
-        // 注意：虽然描述是 Talent，但实际机制是 special（需要点击激活），与基础版一致
-        abilityTags: ['special'],
-        specialLimitGroup: 'ninja_acolyte',
+        // POD版：天赋能力（与原版 special 不同，属于主动激活的 talent）
+        abilityTags: ['talent'],
         count: 4,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 15 },
     },
@@ -88,6 +87,7 @@ export const NINJA_POD_ACTIONS: ActionCardDef[] = [
         // Ongoing: This minion is not affected by other players' actions.
         abilityTags: ['ongoing'],
         ongoingTarget: 'minion',
+        playConstraint: 'requireOwnMinion',
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 17 },
     },
@@ -147,10 +147,10 @@ export const NINJA_POD_ACTIONS: ActionCardDef[] = [
         faction: 'ninjas_pod',
         // [POD版效果] Play on a base. You may destroy another action on this base.
         // Talent: Destroy this action to cancel this base's ability until the start of your turn.
-        // 注意：即时消灭战术是 onPlay 效果，加入 onPlay 标签
+        // onPlay：可消灭此基地上的另一张战术；talent：消灭本战术以压制基地能力
         abilityTags: ['onPlay', 'ongoing', 'talent'],
         ongoingTarget: 'base',
-        count: 1,
+        count: 2,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 22 },
     },
     {

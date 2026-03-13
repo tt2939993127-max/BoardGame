@@ -51,7 +51,6 @@ export const SMASHUP_FACTION_IDS = {
     INNSMOUTH: 'innsmouth',
     INNSMOUTH_POD: 'innsmouth_pod',
     MISKATONIC_UNIVERSITY: 'miskatonic_university',
-    MISKATONIC_UNIVERSITY_POD: 'miskatonic_university_pod',
     MADNESS: 'madness',
     FRANKENSTEIN: 'frankenstein',
     FRANKENSTEIN_POD: 'frankenstein_pod',
@@ -61,6 +60,7 @@ export const SMASHUP_FACTION_IDS = {
     VAMPIRES_POD: 'vampires_pod',
     GIANT_ANTS: 'giant_ants',
     GIANT_ANTS_POD: 'giant_ants_pod',
+    MISKATONIC_UNIVERSITY_POD: 'miskatonic_university_pod',
     NINJAS_POD: 'ninjas_pod',
 } as const;
 
@@ -96,7 +96,6 @@ export const FACTION_DISPLAY_NAMES: Record<string, string> = {
     [SMASHUP_FACTION_IDS.INNSMOUTH]: '印斯茅斯',
     [SMASHUP_FACTION_IDS.INNSMOUTH_POD]: '印斯茅斯 (POD版)',
     [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY]: '米斯卡塔尼克',
-    [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD]: '米斯卡塔尼克 (POD版)',
     [SMASHUP_FACTION_IDS.MADNESS]: '疯狂',
     [SMASHUP_FACTION_IDS.FRANKENSTEIN]: '科学怪人',
     [SMASHUP_FACTION_IDS.FRANKENSTEIN_POD]: '科学怪人 (POD版)',
@@ -106,5 +105,6 @@ export const FACTION_DISPLAY_NAMES: Record<string, string> = {
     [SMASHUP_FACTION_IDS.VAMPIRES_POD]: '吸血鬼 (POD版)',
     [SMASHUP_FACTION_IDS.GIANT_ANTS]: '巨蚁',
     [SMASHUP_FACTION_IDS.GIANT_ANTS_POD]: '巨蚁 (POD版)',
+    [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD]: '米斯卡塔尼克 (POD版)',
     [SMASHUP_FACTION_IDS.NINJAS_POD]: '忍者 (POD版)',
 };
