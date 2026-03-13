@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GameChangelogTab } from '../GameChangelogTab';
+import { GameDetailsChangelogSection } from '../GameDetailsChangelogSection';
 import { DEFAULT_AUTHOR_NAME, resolveGameAuthorName } from '../gameDetailsContent';
 
 const mockLoggerError = vi.fn();
@@ -52,7 +52,7 @@ describe('resolveGameAuthorName', () => {
     });
 });
 
-describe('GameChangelogTab', () => {
+describe('GameDetailsChangelogSection', () => {
     it('会渲染公开接口返回的更新日志内容', async () => {
         mockFetch.mockResolvedValue({
             ok: true,
@@ -74,7 +74,7 @@ describe('GameChangelogTab', () => {
             }),
         });
 
-        render(createElement(GameChangelogTab, { gameId: 'dicethrone' }));
+        render(createElement(GameDetailsChangelogSection, { gameId: 'dicethrone' }));
 
         await waitFor(() => {
             expect(screen.getByText('平衡调整')).toBeTruthy();
@@ -94,13 +94,13 @@ describe('GameChangelogTab', () => {
             json: async () => ({}),
         });
 
-        render(createElement(GameChangelogTab, { gameId: 'dicethrone' }));
+        render(createElement(GameDetailsChangelogSection, { gameId: 'dicethrone' }));
 
         await waitFor(() => {
             expect(screen.getByText('更新日志加载失败')).toBeTruthy();
         });
 
         expect(mockLoggerError).toHaveBeenCalledTimes(1);
-        expect(mockLoggerError.mock.calls[0]?.[0]).toBe('[GameChangelogTab] 获取更新日志失败');
+        expect(mockLoggerError.mock.calls[0]?.[0]).toBe('[GameDetailsChangelogSection] 获取更新日志失败');
     });
 });

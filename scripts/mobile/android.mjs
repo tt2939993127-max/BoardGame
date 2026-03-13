@@ -24,6 +24,9 @@ const gradleWrapper = process.platform === 'win32'
 const defaultAppId = 'top.easyboardgame.app';
 const defaultAppName = 'EasyBoardGame';
 const command = process.argv[2];
+const distDir = path.join(rootDir, 'dist');
+const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
+const androidBuildMetaFileName = 'android-build-meta.json';
 
 const envFiles = ['.env', '.env.android', '.env.android.local'];
 for (const file of envFiles) {
@@ -93,6 +96,111 @@ const runGradle = async (args) => {
 };
 
 const readText = (filePath) => readFileSync(filePath, 'utf8');
+const tryReadText = (filePath) => (existsSync(filePath) ? readText(filePath) : null);
+
+const getAndroidBuildMetaPaths = () => ({
+    distIndexPath: path.join(distDir, 'index.html'),
+    distMetaPath: path.join(distDir, androidBuildMetaFileName),
+    syncedIndexPath: path.join(androidPublicDir, 'index.html'),
+    syncedMetaPath: path.join(androidPublicDir, androidBuildMetaFileName),
+});
+
+const parseAndroidBuildMeta = (filePath, rawText) => {
+    try {
+        return JSON.parse(rawText);
+    } catch {
+        throw new Error(`Android build metadata is invalid: ${path.relative(rootDir, filePath)}`);
+    }
+};
+
+const getAndroidWebAssetsStatus = () => {
+    const paths = getAndroidBuildMetaPaths();
+    const currentBackendUrl = process.env.VITE_BACKEND_URL?.trim() || '';
+
+    if (!existsSync(paths.distIndexPath)) {
+        return {
+            ok: false,
+            code: 'dist-missing-index',
+            message: 'dist/index.html 缺失。请先重新执行 Android Web 构建。',
+        };
+    }
+
+    const distMetaRaw = tryReadText(paths.distMetaPath);
+    if (!distMetaRaw) {
+        return {
+            ok: false,
+            code: 'dist-missing-meta',
+            message: 'dist/android-build-meta.json 缺失。请先执行 npm run mobile:android:sync。',
+        };
+    }
+
+    const distMeta = parseAndroidBuildMeta(paths.distMetaPath, distMetaRaw);
+    if (!distMeta.backendUrl) {
+        return {
+            ok: false,
+            code: 'dist-missing-backend',
+            message: '当前 Android Web 构建没有写入 VITE_BACKEND_URL。请重新执行 npm run mobile:android:sync。',
+        };
+    }
+
+    if (currentBackendUrl && distMeta.backendUrl !== currentBackendUrl) {
+        return {
+            ok: false,
+            code: 'dist-backend-mismatch',
+            message: `dist/android-build-meta.json 中的后端地址仍是 ${distMeta.backendUrl}，与当前 VITE_BACKEND_URL=${currentBackendUrl} 不一致。请重新执行 npm run mobile:android:sync。`,
+        };
+    }
+
+    if (!existsSync(paths.syncedIndexPath)) {
+        return {
+            ok: false,
+            code: 'synced-missing-index',
+            message: 'android/app/src/main/assets/public/index.html 缺失。请先执行 npm run mobile:android:sync。',
+        };
+    }
+
+    const syncedMetaRaw = tryReadText(paths.syncedMetaPath);
+    if (!syncedMetaRaw) {
+        return {
+            ok: false,
+            code: 'synced-missing-meta',
+            message: 'android/app/src/main/assets/public/android-build-meta.json 缺失。请先执行 npm run mobile:android:sync。',
+        };
+    }
+
+    if (distMetaRaw.trim() !== syncedMetaRaw.trim()) {
+        return {
+            ok: false,
+            code: 'stale-sync',
+            message: 'Android 工程中的 Web 资源不是 dist 的最新同步结果。请先执行 npm run mobile:android:sync，或直接使用 npm run mobile:android:build:release。',
+        };
+    }
+
+    return {
+        ok: true,
+        code: 'ready',
+        message: `ready(${distMeta.backendUrl} @ ${distMeta.builtAt})`,
+    };
+};
+
+const ensureAndroidDistBuildReady = () => {
+    const status = getAndroidWebAssetsStatus();
+    if (
+        status.code === 'dist-missing-index'
+        || status.code === 'dist-missing-meta'
+        || status.code === 'dist-missing-backend'
+        || status.code === 'dist-backend-mismatch'
+    ) {
+        throw new Error(status.message);
+    }
+};
+
+const ensureAndroidWebAssetsSynced = () => {
+    const status = getAndroidWebAssetsStatus();
+    if (!status.ok) {
+        throw new Error(status.message);
+    }
+};
 
 const writeText = (filePath, content) => {
     mkdirSync(path.dirname(filePath), { recursive: true });
@@ -303,6 +411,27 @@ const updateAppBuildGradle = (appId) => {
                 `}\n`;
         }
 
+        if (!next.includes('distAndroidBuildMetaFile')) {
+            next = `${next}\n` +
+                `def distAndroidBuildMetaFile = rootProject.file('../dist/android-build-meta.json')\n` +
+                `def syncedAndroidBuildMetaFile = file('src/main/assets/public/android-build-meta.json')\n` +
+                `def requiresSyncedWebAssets = gradle.startParameter.taskNames.any { taskName ->\n` +
+                `    def lowerTaskName = taskName.toLowerCase()\n` +
+                `    lowerTaskName.contains('assemble') || lowerTaskName.contains('bundle') || lowerTaskName.contains('install')\n` +
+                `}\n` +
+                `if (requiresSyncedWebAssets) {\n` +
+                `    if (!distAndroidBuildMetaFile.exists()) {\n` +
+                `        throw new GradleException('Missing dist/android-build-meta.json. Run npm run mobile:android:sync before building Android.')\n` +
+                `    }\n` +
+                `    if (!syncedAndroidBuildMetaFile.exists()) {\n` +
+                `        throw new GradleException('Missing synced Android web assets. Run npm run mobile:android:sync before building Android.')\n` +
+                `    }\n` +
+                `    if (distAndroidBuildMetaFile.getText('UTF-8') != syncedAndroidBuildMetaFile.getText('UTF-8')) {\n` +
+                `        throw new GradleException('Android web assets are out of sync with dist. Run npm run mobile:android:sync or npm run mobile:android:build:release.')\n` +
+                `    }\n` +
+                `}\n`;
+        }
+
         return next;
     });
 };
@@ -378,9 +507,11 @@ const syncAndroid = async () => {
     ensureBackendUrl();
     await ensureBuildSupport();
     await runAndroidWebBuild();
+    ensureAndroidDistBuildReady();
     await ensureAndroidProject();
     await runCapacitor(['sync', 'android']);
     await prepareAndroidProject();
+    ensureAndroidWebAssetsSynced();
 };
 
 const prepareRelease = async ({ required }) => {
@@ -414,6 +545,7 @@ const printDoctor = async () => {
         androidDir,
         env: process.env,
     });
+    const androidWebAssetsStatus = getAndroidWebAssetsStatus();
 
     const lines = [
         `JAVA_HOME=${process.env.JAVA_HOME || '(未设置)'}`,
@@ -428,6 +560,7 @@ const printDoctor = async () => {
         `ANDROID_ICON_SOURCE=${path.relative(rootDir, assetConfig.iconSourcePath)}`,
         `ANDROID_SPLASH_SOURCE=${path.relative(rootDir, assetConfig.splashSourcePath)}`,
         `ANDROID_RELEASE_SIGNING=${signingState.configured ? `ready(${signingState.source})` : 'missing'}`,
+        `ANDROID_WEB_ASSETS=${androidWebAssetsStatus.message}`,
         `CHILD_PROCESS_BUILD=${probe.ok ? 'ready' : `blocked(${probe.stage})`}`,
     ];
 

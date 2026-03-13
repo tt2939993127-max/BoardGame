@@ -82,3 +82,21 @@ try {
 if (requiresReleaseSigning && !hasReleaseSigning) {
     throw new GradleException('Missing Android release signing. Run npm run mobile:android:prepare-release or set ANDROID_KEYSTORE_PATH / ANDROID_KEYSTORE_BASE64.')
 }
+
+def distAndroidBuildMetaFile = rootProject.file('../dist/android-build-meta.json')
+def syncedAndroidBuildMetaFile = file('src/main/assets/public/android-build-meta.json')
+def requiresSyncedWebAssets = gradle.startParameter.taskNames.any { taskName ->
+    def lowerTaskName = taskName.toLowerCase()
+    lowerTaskName.contains('assemble') || lowerTaskName.contains('bundle') || lowerTaskName.contains('install')
+}
+if (requiresSyncedWebAssets) {
+    if (!distAndroidBuildMetaFile.exists()) {
+        throw new GradleException('Missing dist/android-build-meta.json. Run npm run mobile:android:sync before building Android.')
+    }
+    if (!syncedAndroidBuildMetaFile.exists()) {
+        throw new GradleException('Missing synced Android web assets. Run npm run mobile:android:sync before building Android.')
+    }
+    if (distAndroidBuildMetaFile.getText('UTF-8') != syncedAndroidBuildMetaFile.getText('UTF-8')) {
+        throw new GradleException('Android web assets are out of sync with dist. Run npm run mobile:android:sync or npm run mobile:android:build:release.')
+    }
+}

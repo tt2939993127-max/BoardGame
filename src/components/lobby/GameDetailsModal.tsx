@@ -20,7 +20,7 @@ import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
-import { GameChangelogTab } from './GameChangelogTab';
+import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
 import { resolveGameAuthorName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
 
@@ -58,6 +58,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameManifest = getGameById(gameId);
     const gameAuthorName = resolveGameAuthorName(gameManifest);
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
+    const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
 
@@ -841,7 +842,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     className="
                         bg-parchment-card-bg pointer-events-auto 
                         w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
-                        h-[90vh] md:h-[33rem] max-h-[95vh]
+                        h-[60vh] md:h-[33rem] max-h-[60vh] md:max-h-[95vh]
                         rounded-sm shadow-parchment-card-hover 
                         flex flex-col md:flex-row 
                         border border-parchment-card-border/30 relative 
@@ -866,7 +867,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             </div>
 
                             {/* 标题 - 固定在顶部 */}
-                            <div className="mb-4 flex w-full shrink-0 flex-nowrap items-start justify-between gap-3 md:mb-0 md:block">
+                            <div className="mb-4 flex w-full shrink-0 items-baseline justify-between gap-3 md:mb-0 md:block">
                                 <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl">
                                     {t(titleKey)}
                                 </h2>
@@ -874,12 +875,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                     type="button"
                                     data-testid="game-details-author-button-mobile"
                                     onClick={() => setShowAuthorInfoModal(true)}
-                                    className="inline-flex shrink-0 items-center gap-1 self-start border-0 bg-transparent p-0 pt-0.5 text-[11px] font-semibold leading-none tracking-[0.08em] text-parchment-light-text/85 shadow-none transition-colors hover:bg-transparent hover:text-parchment-base-text focus-visible:outline-none cursor-pointer md:hidden"
+                                    className="inline-flex shrink-0 self-baseline whitespace-nowrap border-none bg-transparent p-0 text-right text-[10px] font-semibold leading-none tracking-[0.04em] text-parchment-light-text/85 shadow-none transition-colors hover:bg-transparent hover:text-parchment-base-text focus-visible:outline-none cursor-pointer md:hidden"
+                                    style={{ borderStyle: 'none' }}
                                     title={gameAuthorButtonHint}
                                     aria-label={gameAuthorButtonHint}
                                 >
-                                    <span>{t('authorInfo.mobileButton')}</span>
-                                    <Info size={11} strokeWidth={2.1} className="shrink-0" />
+                                    <span>{gameAuthorMobileLabel}</span>
                                 </button>
                                 <div className="hidden md:block h-px w-12 bg-parchment-card-border/50 opacity-30 mb-4 mx-auto" />
                             </div>
@@ -1045,7 +1046,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         )}
                         {activeTab === 'changelog' && (
                             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2">
-                                <GameChangelogTab gameId={normalizedGameId} />
+                                <GameDetailsChangelogSection gameId={normalizedGameId} />
                             </div>
                         )}
                         {activeTab === 'reviews' && (
