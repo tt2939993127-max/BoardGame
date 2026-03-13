@@ -36,14 +36,14 @@ const gotoLocalSmashUp = async (page: Page) => {
 
 /**
  * 在本地模式下完成派系选择（两个玩家都是自己）。
- * 蛇形选秀：P0选1 → P1选2 → P1选3 → P0选4。
+ * 蛇形选秀：P0 选1个 → P1 选2个 → P0 选最后1个。
  * 流程：点击派系卡片 → 打开详情弹窗 → 点击确认按钮。
  */
 const completeFactionSelectionLocal = async (page: Page) => {
     const factionHeading = page.locator('h1').filter({ hasText: /Draft Your Factions|选择你的派系/i });
     if (!await factionHeading.isVisible().catch(() => false)) return; // 已经跳过了
 
-    // 按名称依次选择 4 个派系（蛇形选秀：P0, P1, P1, P0）
+    // 保持原本派系归属：P0 = Pirates + Aliens，P1 = Ninjas + Dinosaurs。
     const factionNames = ['Pirates', 'Ninjas', 'Dinosaurs', 'Aliens'];
 
     for (let i = 0; i < factionNames.length; i++) {

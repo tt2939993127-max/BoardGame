@@ -20,7 +20,7 @@ import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
-import { GameChangelogPanel } from './GameChangelogPanel';
+import { GameChangelogTab } from './GameChangelogTab';
 import { resolveGameAuthorName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
 
@@ -855,7 +855,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
                     {/* 左侧面板 - 游戏信息 */}
-                    <div className="relative w-full md:w-2/5 shrink-0 overflow-hidden border-b border-parchment-card-border/30 bg-parchment-base-bg/50 transition-all md:border-b-0 md:border-r">
+                    <div
+                        data-testid="game-details-sidebar"
+                        className="relative w-full md:w-2/5 shrink-0 overflow-hidden border-b border-parchment-card-border/30 bg-parchment-base-bg/50 transition-all md:border-b-0 md:border-r"
+                    >
                         <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3 text-left font-serif md:items-center md:p-8 md:text-center">
                             {/* 缩略图 - 移动端隐藏，桌面端显示 */}
                             <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
@@ -863,19 +866,20 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             </div>
 
                             {/* 标题 - 固定在顶部 */}
-                            <div className="relative mb-4 min-h-[2.5rem] w-full shrink-0 pr-20 md:mb-0 md:block md:min-h-0 md:pr-0">
-                                <h2 className="min-w-0 text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl">
+                            <div className="mb-4 flex w-full shrink-0 flex-nowrap items-start justify-between gap-3 md:mb-0 md:block">
+                                <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl">
                                     {t(titleKey)}
                                 </h2>
                                 <button
                                     type="button"
+                                    data-testid="game-details-author-button-mobile"
                                     onClick={() => setShowAuthorInfoModal(true)}
-                                    className="absolute right-0 top-0 inline-flex items-center gap-1 rounded-full border border-parchment-card-border/35 bg-parchment-card-bg/90 px-2 py-1 text-[9px] font-medium leading-none tracking-[0.08em] text-parchment-light-text/85 shadow-[0_1px_0_rgba(255,255,255,0.45)_inset] transition-colors hover:border-parchment-base-text/25 hover:text-parchment-base-text cursor-pointer md:hidden"
+                                    className="inline-flex shrink-0 items-center gap-1 self-start border-0 bg-transparent p-0 pt-0.5 text-[11px] font-semibold leading-none tracking-[0.08em] text-parchment-light-text/85 shadow-none transition-colors hover:bg-transparent hover:text-parchment-base-text focus-visible:outline-none cursor-pointer md:hidden"
                                     title={gameAuthorButtonHint}
                                     aria-label={gameAuthorButtonHint}
                                 >
                                     <span>{t('authorInfo.mobileButton')}</span>
-                                    <Info size={10} strokeWidth={2.1} className="shrink-0" />
+                                    <Info size={11} strokeWidth={2.1} className="shrink-0" />
                                 </button>
                                 <div className="hidden md:block h-px w-12 bg-parchment-card-border/50 opacity-30 mb-4 mx-auto" />
                             </div>
@@ -1040,12 +1044,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             />
                         )}
                         {activeTab === 'changelog' && (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                                <GameChangelogPanel gameId={normalizedGameId} />
+                            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2">
+                                <GameChangelogTab gameId={normalizedGameId} />
                             </div>
                         )}
                         {activeTab === 'reviews' && (
-                            <div className="flex-1 overflow-hidden h-full">
+                            <div className="flex-1 min-h-0 overflow-hidden h-full">
                                 <GameReviews gameId={normalizedGameId} />
                             </div>
                         )}
@@ -1070,7 +1074,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     closeOnBackdrop
                     containerClassName="p-4 sm:p-8"
                 >
-                    <div className="pointer-events-auto w-[min(92vw,24rem)] rounded-[8px] border border-parchment-card-border/30 bg-parchment-card-bg p-5 text-parchment-base-text shadow-parchment-card-hover">
+                    <div
+                        data-testid="game-details-author-modal"
+                        className="pointer-events-auto w-[min(92vw,24rem)] rounded-[8px] border border-parchment-card-border/30 bg-parchment-card-bg p-5 text-parchment-base-text shadow-parchment-card-hover"
+                    >
                         <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
                                 <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-parchment-light-text">

@@ -629,7 +629,7 @@ export const Home = () => {
             </header>
 
             {/* 主内容区域 - 商业级容器限制 */}
-            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-6 md:px-8">
+            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-4 sm:px-6 md:px-8">
                 {/* 分类筛选 */}
                 <nav className="mb-6 w-full">
                     <CategoryPills activeCategory={activeCategory} onSelect={setActiveCategory} />

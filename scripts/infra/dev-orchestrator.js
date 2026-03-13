@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { withWindowsHide } from './windows-hide.js';
 
 const managedChildren = [];
 let shuttingDown = false;
@@ -30,11 +31,11 @@ function prefixOutput(label, stream, target) {
 }
 
 function startCommand(label, command, args = []) {
-    const child = spawn(command, args, {
+    const child = spawn(command, args, withWindowsHide({
         cwd: repoRoot,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    }));
 
     managedChildren.push(child);
     prefixOutput(label, child.stdout, process.stdout);
@@ -93,7 +94,9 @@ function shutdown(code = 0) {
         if (child.killed) continue;
         try {
             if (process.platform === 'win32') {
-                spawn('taskkill', ['/F', '/T', '/PID', String(child.pid)]);
+                spawn('taskkill', ['/F', '/T', '/PID', String(child.pid)], withWindowsHide({
+                    stdio: 'ignore',
+                }));
             } else {
                 child.kill('SIGTERM');
             }

@@ -1,6 +1,7 @@
 import { fork, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { withWindowsHide } from './windows-hide.js';
 
 const probeChildPath = fileURLToPath(new URL('./noop-child-process-probe.mjs', import.meta.url));
 
@@ -24,9 +25,9 @@ function normalizeError(error, stage) {
 
 function probeSpawnSupport() {
     try {
-        const result = spawnSync(process.execPath, ['-e', 'process.exit(0)'], {
+        const result = spawnSync(process.execPath, ['-e', 'process.exit(0)'], withWindowsHide({
             stdio: 'ignore',
-        });
+        }));
 
         if (result.error) {
             return { ok: false, ...normalizeError(result.error, 'spawn') };
@@ -48,7 +49,7 @@ function probeSpawnSupport() {
 async function probeForkSupport() {
     return await new Promise((resolve) => {
         try {
-            const child = fork(probeChildPath, [], { silent: true });
+            const child = fork(probeChildPath, [], withWindowsHide({ silent: true }));
             let settled = false;
             const finish = (result) => {
                 if (settled) {

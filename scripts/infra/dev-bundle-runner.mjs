@@ -2,6 +2,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { build, context } from 'esbuild';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { withWindowsHide } from './windows-hide.js';
 
 await assertChildProcessSupport('bundle-runner / esbuild watch', { probeEsbuild: true });
 
@@ -98,9 +99,9 @@ async function stopChildProcess(proc) {
     try {
         if (process.platform === 'win32') {
             await new Promise((resolve, reject) => {
-                const killer = spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], {
+                const killer = spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], withWindowsHide({
                     stdio: 'ignore',
-                });
+                }));
                 killer.once('error', reject);
                 killer.once('exit', () => resolve());
             });
@@ -133,11 +134,11 @@ async function restartRuntime(reason) {
     }
 
     console.log(`[bundle-runner] ${label} ${reason} -> starting ${outfile}`);
-    child = spawn(process.execPath, ['--enable-source-maps', absOutfile], {
+    child = spawn(process.execPath, ['--enable-source-maps', absOutfile], withWindowsHide({
         cwd: repoRoot,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    }));
     prefixOutput(`${label}:runtime`, child.stdout, process.stdout);
     prefixOutput(`${label}:runtime`, child.stderr, process.stderr);
     child.on('exit', (code, signal) => {

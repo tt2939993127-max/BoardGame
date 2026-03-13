@@ -80,12 +80,12 @@
     "empty": "No data",
     "record": "{{wins}} W / {{matches}} G",
     "error": "Failed to load leaderboard",
-    "changelogTitle": "Changelog",
-    "changelogLoading": "Loading changelog...",
-    "changelogEmpty": "No updates yet",
-    "changelogError": "Failed to load changelog",
-    "changelogPublishedAt": "Latest update: {{date}}",
-    "changelogPinned": "Pinned"
+    "changelogEmpty": "No updates yet"
+  },
+  "changelog": {
+    "loading": "Loading changelog...",
+    "error": "Failed to load changelog",
+    "pinned": "Pinned"
   },
   "authorInfo": {
     "button": "By {{author}}",

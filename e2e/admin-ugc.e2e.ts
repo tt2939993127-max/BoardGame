@@ -13,7 +13,6 @@ const ADMIN_NAVIGATION_TIMEOUT_MS = 60_000;
 const HTML_NAVIGATION_HEADERS = {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
 };
-
 const setStoredAuth = async (page: Page, user: StoredUser) => {
     await page.addInitScript((storedUser) => {
         localStorage.setItem('i18nextLng', 'zh-CN');
@@ -25,11 +24,17 @@ const setStoredAuth = async (page: Page, user: StoredUser) => {
 const gotoFrontendRoute = async (page: Page, targetPath: string) => {
     await expect.poll(async () => {
         try {
+            const readyResponse = await page.request.get('/__ready', {
+                failOnStatusCode: false,
+            });
+            if (readyResponse.status() !== 200) {
+                return `ready:${readyResponse.status()}`;
+            }
+
             const response = await page.request.get(targetPath, {
                 failOnStatusCode: false,
                 headers: HTML_NAVIGATION_HEADERS,
             });
-
             if (response.status() !== 200) {
                 return `status:${response.status()}`;
             }

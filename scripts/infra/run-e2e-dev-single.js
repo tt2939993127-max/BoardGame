@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { withWindowsHide } from './windows-hide.js';
 
 await assertChildProcessSupport('E2E 单文件调试运行', { probeFork: true, probeEsbuild: true });
 
@@ -34,11 +35,11 @@ function parseArgs(argv) {
 }
 
 function run(command, args, env) {
-    const result = spawnSync(command, args, {
+    const result = spawnSync(command, args, withWindowsHide({
         stdio: 'inherit',
         env,
         shell: false,
-    });
+    }, env));
 
     if (typeof result.status === 'number' && result.status !== 0) {
         process.exit(result.status);

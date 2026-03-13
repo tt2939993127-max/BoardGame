@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { UI_Z_INDEX } from '../../../core';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
-import { useMobileViewport } from '../../../hooks/ui/useMobileViewport';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
@@ -51,12 +50,9 @@ export const CenterBoard = ({
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
-    const isMobileNarrowViewport = useMobileViewport();
-    const useTouchOverlaySizing = showTouchMagnifyButton || isMobileNarrowViewport;
-    const shellFrameClassName = isMobileNarrowViewport
-        ? 'absolute left-[13.4vw] right-[clamp(6.8rem,14.4vw,7.6rem)] top-[-6vw] bottom-0 flex items-center justify-center pointer-events-auto'
-        : 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
-    const boardGapClassName = isMobileNarrowViewport ? 'gap-[0.35vw]' : 'gap-[0.5vw]';
+    const useTouchOverlaySizing = showTouchMagnifyButton;
+    const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
+    const boardGapClassName = 'gap-[0.5vw]';
     const overlayButtonIconClassName = useTouchOverlaySizing
         ? 'w-[clamp(1rem,1.8vw,1.15rem)] h-[clamp(1rem,1.8vw,1.15rem)] fill-current'
         : 'w-[1.2vw] h-[1.2vw] fill-current';
