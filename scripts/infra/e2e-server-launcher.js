@@ -33,6 +33,10 @@ export function spawnTsxScript(args, env) {
   });
 }
 
+export function spawnApiServer(env) {
+  return spawnTsxScript(['--tsconfig', 'apps/api/tsconfig.json', 'apps/api/src/main.ts'], env);
+}
+
 export function spawnPackageScript(scriptName, env) {
   if (isWindows) {
     return spawn('powershell.exe', ['-Command', `npm run ${scriptName}`], {
@@ -48,6 +52,11 @@ export function spawnPackageScript(scriptName, env) {
 }
 
 export function registerExitGuard(child, label, onFailure) {
+  child.on('error', error => {
+    console.error(`${label}启动失败: ${error.message}`);
+    onFailure();
+  });
+
   child.on('exit', code => {
     if (code !== 0 && code !== null) {
       console.error(`${label}异常退出 (code ${code})`);
