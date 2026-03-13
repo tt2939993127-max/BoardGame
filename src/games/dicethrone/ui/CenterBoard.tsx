@@ -50,18 +50,11 @@ export const CenterBoard = ({
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
-    const useTouchOverlaySizing = showTouchMagnifyButton;
     const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
     const boardGapClassName = 'gap-[0.5vw]';
-    const overlayButtonIconClassName = useTouchOverlaySizing
-        ? 'w-[clamp(1rem,1.8vw,1.15rem)] h-[clamp(1rem,1.8vw,1.15rem)] fill-current'
-        : 'w-[1.2vw] h-[1.2vw] fill-current';
-    const overlayButtonClassName = useTouchOverlaySizing
-        ? `absolute top-[-0.25rem] right-[-0.25rem] h-[2.75rem] w-[2.75rem] transition-opacity duration-300 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`
-        : `absolute top-0 right-[-1vw] h-[4.2vw] w-[4.2vw] transition-opacity duration-300 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`;
-    const overlayButtonVisualClassName = useTouchOverlaySizing
-        ? 'absolute top-[0.375rem] right-[0.375rem] flex h-[2rem] w-[2rem] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color,border-color] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45'
-        : 'absolute top-[1vw] right-[2vw] flex h-[2.2vw] w-[2.2vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color,border-color] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45';
+    const overlayButtonIconClassName = 'w-[1.2vw] h-[1.2vw] fill-current';
+    const overlayButtonClassName = `absolute top-0 right-[-1vw] h-[4.2vw] w-[4.2vw] transition-opacity duration-300 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`;
+    const overlayButtonVisualClassName = 'absolute top-[1vw] right-[2vw] flex h-[2.2vw] w-[2.2vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-xl transition-[background-color,border-color] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45';
     const tipToggleButtonOffsetClassName = isTipOpen ? 'right-[0.8vw]' : 'left-[0.1vw]';
     const tipToggleButtonClassName = `absolute top-[55%] z-50 flex p-[0.5vw] text-[inherit] -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white/50 transition-[background-color,color,border-color] duration-500 border border-white/8 hover:bg-black/50 hover:text-white hover:border-white/16 ${tipToggleButtonOffsetClassName}`;
 
