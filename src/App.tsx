@@ -20,6 +20,7 @@ import { LoadingScreen } from './components/system/LoadingScreen';
 import { Toaster } from 'react-hot-toast';
 import { GlobalHUD } from './components/system/GlobalHUD';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
+import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
 import { InteractionGuardProvider } from './components/game/framework';
 import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
@@ -102,6 +103,7 @@ const AppContent = () => {
             <DebugProvider>
               <TutorialProvider>
                 <BrowserRouter>
+                  <BrowserCompatibilityGate>
                   <MobileOrientationGuard>
                     <Routes>
                     <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
@@ -160,6 +162,7 @@ const AppContent = () => {
                     <Toaster />
                     <EngineNotificationListener />
                   </MobileOrientationGuard>
+                  </BrowserCompatibilityGate>
                 </BrowserRouter>
               </TutorialProvider>
             </DebugProvider>

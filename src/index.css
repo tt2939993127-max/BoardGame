@@ -288,6 +288,10 @@
     [data-game-page][data-game-id="dicethrone"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
         --mobile-board-shell-design-width: 940px;
     }
+
+    [data-game-page][data-game-id="smashup"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
+        --mobile-board-shell-design-width: 920px;
+    }
 }
 /* 绉诲姩绔Е鎽镐紭鍖?*/
 @media (max-width: 1023px) {

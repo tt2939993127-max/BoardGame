@@ -33,7 +33,7 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     const isBase = target.type === 'base';
 
     return (
-        <MagnifyOverlay isOpen onClose={onClose}>
+        <MagnifyOverlay isOpen onClose={onClose} overlayTestId="su-card-magnify-overlay">
             <div
                 className={`relative bg-transparent ${isBase ? 'w-[40vw] max-w-[600px] aspect-[1.43]' : 'w-[25vw] max-w-[400px] aspect-[0.714]'}`}
             >

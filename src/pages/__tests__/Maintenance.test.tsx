@@ -3,6 +3,11 @@ import { cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Home } from '../Home';
 import { MaintenancePage } from '../Maintenance';
+import {
+    detectBrowserCompatibility,
+    readBrowserCompatibilityBypass,
+    writeBrowserCompatibilityBypass,
+} from '../../lib/browserCompatibility';
 
 const mockLoggerError = vi.fn();
 const mockNavigate = vi.fn();
@@ -46,6 +51,9 @@ const storedMatch = {
     gameName: 'tictactoe',
     playerName: 'Alice',
 };
+
+const originalCss = globalThis.CSS;
+const originalUserAgent = navigator.userAgent;
 
 vi.mock('../../lib/logger', () => ({
     logger: {
@@ -185,6 +193,62 @@ describe('Maintenance Page', () => {
 
     it('should keep the expected function name', () => {
         expect(MaintenancePage.name).toBe('MaintenancePage');
+    });
+});
+
+describe('browser compatibility detection', () => {
+    beforeEach(() => {
+        window.sessionStorage.clear();
+        Object.defineProperty(navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 (Linux; Android 14; Redmi) AppleWebKit/537.36 Chrome/109.0.0.0 Mobile Safari/537.36 MiuiBrowser/18.2.1',
+        });
+        Object.defineProperty(globalThis, 'CSS', {
+            configurable: true,
+            value: {
+                supports: vi.fn((property: string, value: string) => {
+                    if (property === 'color' && value.startsWith('oklch(')) return false;
+                    if (property === 'translate' && value === '1px') return false;
+                    return true;
+                }),
+                registerProperty: undefined,
+            },
+        });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(navigator, 'userAgent', {
+            configurable: true,
+            value: originalUserAgent,
+        });
+        Object.defineProperty(globalThis, 'CSS', {
+            configurable: true,
+            value: originalCss,
+        });
+        window.sessionStorage.clear();
+    });
+
+    it('detects missing CSS features and parses browser identity', () => {
+        const report = detectBrowserCompatibility();
+
+        expect(report.isCompatible).toBe(false);
+        expect(report.browserName).toBe('Chrome');
+        expect(report.browserVersion).toBe('109.0.0.0');
+        expect(report.reasons).toEqual([
+            'css-oklch',
+            'css-translate',
+            'css-register-property',
+        ]);
+    });
+
+    it('supports bypassing the compatibility gate for the current session', () => {
+        expect(readBrowserCompatibilityBypass()).toBe(false);
+
+        writeBrowserCompatibilityBypass(true);
+        expect(readBrowserCompatibilityBypass()).toBe(true);
+
+        writeBrowserCompatibilityBypass(false);
+        expect(readBrowserCompatibilityBypass()).toBe(false);
     });
 });
 
