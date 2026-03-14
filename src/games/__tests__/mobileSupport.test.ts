@@ -29,11 +29,23 @@ describe('mobile support manifest contract', () => {
         );
     });
 
-    it('summonerwars stays in tablet-only mode', () => {
+    it('summonerwars declares landscape map-shell support without board-shell scaling', () => {
         const game = getGameById('summonerwars');
 
-        expect(game?.mobileProfile).toBe('tablet-only');
+        expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
+        expect(game?.mobileLayoutPreset).toBe('map-shell');
+        expect(
+            shouldUseBoardShellScale(
+                {
+                    mobileProfile: game?.mobileProfile,
+                    preferredOrientation: game?.preferredOrientation,
+                    mobileLayoutPreset: game?.mobileLayoutPreset,
+                },
+                900,
+                500,
+            ),
+        ).toBe(false);
     });
 });
 

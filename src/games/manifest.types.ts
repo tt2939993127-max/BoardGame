@@ -6,7 +6,7 @@ export type GameMobileProfile = 'none' | 'landscape-adapted' | 'portrait-adapted
 
 export type GameOrientationPreference = 'landscape' | 'portrait';
 
-export type GameMobileLayoutPreset = 'board-shell' | 'portrait-simple';
+export type GameMobileLayoutPreset = 'board-shell' | 'portrait-simple' | 'map-shell';
 
 export type GameShellTarget = 'pwa' | 'app-webview' | 'mini-program-webview';
 

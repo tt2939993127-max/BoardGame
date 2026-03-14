@@ -27,6 +27,7 @@ import { getUndoSnapshotCount } from '../../engine/systems/UndoSystem';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { useEndgame } from '../../hooks/game/useEndgame';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
@@ -87,6 +88,57 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
+  const isMobileViewport = useMobileViewport();
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: typeof window === 'undefined' ? 0 : window.innerWidth,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight,
+  }));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const updateViewportSize = () => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    updateViewportSize();
+    window.addEventListener('resize', updateViewportSize);
+    window.addEventListener('orientationchange', updateViewportSize);
+
+    return () => {
+      window.removeEventListener('resize', updateViewportSize);
+      window.removeEventListener('orientationchange', updateViewportSize);
+    };
+  }, []);
+
+  const isLandscapeMobile = isMobileViewport && viewportSize.width > viewportSize.height;
+  const mapContainerPadding = isLandscapeMobile ? '4vw' : '10vw';
+  const mapShadeWidth = isLandscapeMobile ? '4vw' : '10vw';
+  const activeEventLabelClass = isLandscapeMobile
+    ? 'text-[10px] px-1 py-0.5'
+    : 'text-[0.65vw] px-1.5 py-0.5';
+  const activeEventCardStyle = isLandscapeMobile
+    ? { width: 'clamp(52px, 7.5vw, 72px)' }
+    : { width: '4.5vw' };
+  const activeEventNameClass = isLandscapeMobile ? 'text-[9px] py-0.5 px-1' : 'text-[0.6vw] py-0.5 px-1';
+  const activeEventChargeDotStyle = isLandscapeMobile
+    ? { width: '5px', height: '5px' }
+    : { width: '0.4vw', height: '0.4vw' };
+  const opponentBarClass = isLandscapeMobile
+    ? 'absolute top-2 right-2 pointer-events-auto flex flex-col items-end gap-1.5'
+    : 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
+  const playerBarClass = isLandscapeMobile
+    ? 'absolute left-2 bottom-2 z-20 pointer-events-auto flex flex-col items-start gap-2'
+    : 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
+  const phaseControlsClass = isLandscapeMobile
+    ? 'absolute right-2 bottom-2 z-20 pointer-events-auto flex flex-col items-end gap-2'
+    : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
+  const phaseTrackerClass = isLandscapeMobile
+    ? 'bg-slate-900/50 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6.5rem]'
+    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -694,7 +746,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               {/* 地图层 */}
               <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
-                  className="w-full h-full flex items-center justify-center px-[10vw]"
+                  className="w-full h-full flex items-center justify-center"
                   initialScale={1}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
@@ -704,7 +756,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div className="relative inline-block">
+                  <div className="relative inline-block" style={{ paddingInline: mapContainerPadding }}>
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -785,9 +837,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               {/* UI 层 */}
               <div className="absolute inset-0 z-20 pointer-events-none">
                 {/* 左侧黑边渐变 */}
-                <div className="absolute inset-y-0 left-0" style={{ width: '10vw', background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
+                <div className="absolute inset-y-0 left-0" style={{ width: mapShadeWidth, background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
                 {/* 右侧黑边渐变 */}
-                <div className="absolute inset-y-0 right-0" style={{ width: '10vw', background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
+                <div className="absolute inset-y-0 right-0" style={{ width: mapShadeWidth, background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
 
                 {/* 全局暗角 (Vignette) 效果 */}
                 <div
@@ -799,9 +851,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 />
 
                 {/* 右上：对手名+魔力条 + 持续效果 */}
-                <div className="absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2" data-testid="sw-opponent-bar">
-                  <div className="flex items-center gap-3 bg-black/60 px-3 py-2 rounded-lg border border-slate-600/20">
-                    <span className="text-sm text-white font-medium text-opacity-100">
+                <div className={opponentBarClass} data-testid="sw-opponent-bar">
+                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
+                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
                       {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
                     </span>
                     <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
@@ -810,15 +862,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   {/* 对手持续效果 - 紧贴魔力条下方，竖直向下排列 */}
                   {opponentActiveEvents.length > 0 && (
                     <div className="flex flex-col items-end gap-1.5" data-testid="sw-opponent-active-events">
-                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px]">{t('ui.activeEvents')}</span>
+                      <span className={`${activeEventLabelClass} text-amber-400/70 font-bold tracking-tight bg-black/40 rounded border border-amber-900/30 backdrop-blur-[2px]`}>{t('ui.activeEvents')}</span>
                       {opponentActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
                         const charges = ev.charges ?? 0;
                         return (
                           <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
-                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
+                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" style={activeEventCardStyle} />
                             <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                            <div className={`absolute bottom-0 left-0 right-0 bg-black/80 text-amber-200 text-center rounded-b truncate border-t border-amber-500/20 ${activeEventNameClass}`}>{ev.name}</div>
                             {/* 充能标记 - 右上角 */}
                             {charges > 0 && (() => {
                               const rows: number[][] = [];
@@ -830,7 +882,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                                   {rows.map((r, ri) => (
                                     <div key={ri} className="flex gap-[3%]">
                                       {r.map(idx => (
-                                        <div key={idx} className="w-[0.4vw] h-[0.4vw] rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" />
+                                        <div key={idx} className="rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" style={activeEventChargeDotStyle} />
                                       ))}
                                     </div>
                                   ))}
@@ -845,19 +897,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 左下区域：玩家名+魔力条 + 持续效果 + 抽牌堆 */}
-                <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3" data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
+                <div className={playerBarClass} data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
                   {/* 玩家持续效果 - 放在魔力条上方，竖直向上排列 */}
                   {myActiveEvents.length > 0 && (
                     <div className="flex flex-col-reverse items-start gap-1.5 mb-1" data-testid="sw-my-active-events">
-                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px]">{t('ui.activeEvents')}</span>
+                      <span className={`${activeEventLabelClass} text-amber-400/70 font-bold tracking-tight bg-black/40 rounded border border-amber-900/30 backdrop-blur-[2px]`}>{t('ui.activeEvents')}</span>
                       {myActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
                         const charges = ev.charges ?? 0;
                         return (
                           <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
-                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
+                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" style={activeEventCardStyle} />
                             <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                            <div className={`absolute bottom-0 left-0 right-0 bg-black/80 text-amber-200 text-center rounded-b truncate border-t border-amber-500/20 ${activeEventNameClass}`}>{ev.name}</div>
                             {/* 充能标记 - 右上角 */}
                             {charges > 0 && (() => {
                               const rows: number[][] = [];
@@ -869,7 +921,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                                   {rows.map((r, ri) => (
                                     <div key={ri} className="flex gap-[3%]">
                                       {r.map(idx => (
-                                        <div key={idx} className="w-[0.4vw] h-[0.4vw] rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" />
+                                        <div key={idx} className="rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" style={activeEventChargeDotStyle} />
                                       ))}
                                     </div>
                                   ))}
@@ -882,19 +934,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 bg-black/60 px-3 py-2 rounded-lg border border-slate-600/20">
-                    <span className="text-sm text-white font-medium text-opacity-100">
+                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
+                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
                       {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
                     </span>
                     <EnergyBar current={myMagic} testId="sw-energy-player" />
                   </div>
-                  <div data-tutorial-id="sw-deck-draw" className="mt-8">
+                  <div data-tutorial-id="sw-deck-draw" className={isLandscapeMobile ? 'mt-3 origin-bottom-left scale-90' : 'mt-8'}>
                     <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
                   </div>
                 </div>
 
                 {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-                <div className="absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3" data-testid="sw-phase-controls">
+                <div className={phaseControlsClass} data-testid="sw-phase-controls">
                   <div className="flex gap-2">
                     {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
                       <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
@@ -911,7 +963,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
-                  <div data-tutorial-id="sw-discard-pile">
+                  <div data-tutorial-id="sw-discard-pile" className={isLandscapeMobile ? 'origin-bottom-right scale-90' : ''}>
                     <DeckPile
                       type="discard" count={myDiscardCount} position="right"
                       topCard={myDiscard[myDiscard.length - 1] ?? null}
@@ -921,19 +973,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 右侧：阶段指示器 */}
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-auto" data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                <div className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-auto ${isLandscapeMobile ? 'right-1.5' : 'right-2'}`} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
                   <PhaseTracker
                     currentPhase={currentPhase}
                     turnNumber={core.turnNumber}
                     isMyTurn={isMyTurn}
                     moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
                     attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
-                    className="bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]"
+                    className={phaseTrackerClass}
                   />
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-action-banner">
+                <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-auto z-30 ${isLandscapeMobile ? 'top-2' : 'top-3'}`} data-tutorial-id="sw-action-banner">
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}

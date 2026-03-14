@@ -1174,7 +1174,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     containerClassName="bg-[#3e2723]"
                     textClassName="text-lg"
                 >
-                    <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none">
+                    <div className="relative w-full h-full bg-[#3e2723] overflow-hidden font-sans select-none">
                         <div className="absolute inset-0 z-0 pointer-events-none opacity-40 mix-blend-multiply">
                             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]" />
                         </div>
@@ -1188,7 +1188,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: false }}>
             {/* BACKGROUND: A warm, dark wooden table texture. */}
-            <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none"
+            <div className="relative w-full h-full bg-[#3e2723] overflow-hidden font-sans select-none"
             >
 
                 {/* Table Texture Layer */}

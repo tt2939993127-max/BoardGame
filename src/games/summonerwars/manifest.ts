@@ -16,8 +16,9 @@ const entry: GameManifestEntry = {
     bestPlayers: [2],
     cursorTheme: 'summonerwars-ethereal',
     fontFamily: { display: 'Bebas Neue' },
-    mobileProfile: 'tablet-only',
+    mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
+    mobileLayoutPreset: 'map-shell',
     shellTargets: ['pwa'],
 };
 

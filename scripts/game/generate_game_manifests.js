@@ -49,7 +49,7 @@ const readManifestMeta = async (manifestPath) => {
     const enabledMatch = content.match(/enabled\s*:\s*(true|false)/);
     const mobileProfileMatch = content.match(/mobileProfile\s*:\s*['"`](none|landscape-adapted|portrait-adapted|tablet-only)['"`]/);
     const preferredOrientationMatch = content.match(/preferredOrientation\s*:\s*['"`](landscape|portrait)['"`]/);
-    const mobileLayoutPresetMatch = content.match(/mobileLayoutPreset\s*:\s*['"`](board-shell|portrait-simple)['"`]/);
+    const mobileLayoutPresetMatch = content.match(/mobileLayoutPreset\s*:\s*['"`](board-shell|portrait-simple|map-shell)['"`]/);
     const shellTargetsMatch = content.match(/shellTargets\s*:\s*\[[\s\S]*?\]/);
     if (!idMatch || !typeMatch || !enabledMatch) {
         throw new Error(`[Manifest] 无法解析 manifest: ${manifestPath}`);
