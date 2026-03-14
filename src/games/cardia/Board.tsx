@@ -552,7 +552,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
 
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
-            <div data-testid="cardia-board" className="relative w-full h-full overflow-hidden" style={cardSizeStyle}>
+            <div
+                data-testid="cardia-board"
+                className="relative w-full h-full overflow-hidden"
+                style={{
+                    ...cardSizeStyle,
+                    ...layoutStyle,
+                }}
+            >
                 {/* 背景图片层 */}
                 <div 
                     className="absolute inset-0 w-full h-full bg-cover bg-center"
@@ -572,7 +579,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 <div
                     className={
                         deviceType === 'phone-landscape'
-                            ? 'relative flex h-full min-h-0 w-full flex-col gap-1 p-1'
+                            ? 'relative flex h-full min-h-0 w-full flex-row gap-1 p-1'
                             : deviceType === 'phone-portrait'
                               ? 'relative flex h-full min-h-0 w-full flex-col gap-1 p-1 pb-[var(--cardia-reserved-bottom)]'
                               : deviceType === 'tablet-portrait'
@@ -581,12 +588,11 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                                   ? 'relative flex h-full min-h-0 w-full flex-col gap-2 p-2 pb-[var(--cardia-reserved-bottom)] lg:gap-3 lg:p-3 lg:pb-3'
                                 : 'relative flex h-full min-h-0 w-full flex-col gap-4 p-4'
                     }
-                    style={layoutStyle}
                 >
-                    {/* 对手区域（顶部） */}
+                    {/* 对手区域（顶部 / 横屏左栏） */}
                     <div className={
                         deviceType === 'phone-landscape'
-                            ? 'flex flex-shrink-0 flex-wrap items-start gap-2'
+                            ? 'flex w-[18rem] max-w-[42%] min-w-0 flex-shrink-0 flex-col gap-2'
                             : 'flex flex-shrink-0 flex-wrap items-start gap-1.5 sm:gap-3 md:gap-4'
                     }>
                         {/* 对手弃牌堆 */}
@@ -600,7 +606,11 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         </div>
                         
                         {/* 对手信息栏 */}
-                        <div className="min-w-0 flex-1 basis-[16rem]">
+                        <div className={
+                            deviceType === 'phone-landscape'
+                                ? 'min-w-0'
+                                : 'min-w-0 flex-1 basis-[16rem]'
+                        }>
                             <PlayerInfoBar
                                 player={opponent}
                                 isOpponent={true}
@@ -611,7 +621,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
 
                         <div className={
                             deviceType === 'phone-landscape'
-                                ? 'grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-1'
+                                ? 'grid w-full grid-cols-2 gap-2'
                                 : 'grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-1 md:gap-2'
                         }>
                             {boardStatusCards.map((card) => (
@@ -626,61 +636,118 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             ))}
                         </div>
                     </div>
-                    
-                    {/* 中央战场区域 - 遭遇序列 */}
-                    <div
-                        data-testid="cardia-battlefield"
-                        data-tutorial-id="cardia-battlefield"
-                        className={
-                            deviceType === 'phone-landscape'
-                                ? 'relative flex min-h-0 flex-1 items-start justify-center overflow-x-auto overflow-y-visible px-1 pt-0.5'
-                                : deviceType === 'phone-portrait'
-                                ? 'relative flex min-h-[7.5rem] flex-1 items-center justify-start overflow-x-auto overflow-y-visible px-1 py-0.5 pr-10'
-                                : deviceType === 'tablet-portrait'
-                                ? 'relative flex min-h-[10rem] flex-1 items-center justify-start overflow-x-auto overflow-y-visible px-2 py-1 pr-12'
-                                : deviceType === 'tablet-landscape'
-                                ? 'relative flex min-h-[10rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-3 py-1'
-                                : 'relative flex min-h-[12rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-4 py-2'
-                        }
-                    >
-                        <EncounterSequence
-                            myPlayer={myPlayer}
-                            opponent={opponent}
-                            myPlayerId={myPlayerId}
-                            opponentId={opponentId}
-                            core={core}
-                            setCardRef={setCardRef}
-                            onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
-                            deviceType={deviceType}
-                        />
 
-                        {/* 移动端视觉引导：右侧渐隐 + 滑动提示 */}
-                        {(deviceType === 'phone-portrait' || deviceType === 'tablet-portrait') && (
-                            <div className="pointer-events-none absolute right-0 top-0 h-full w-14 md:hidden">
-                                <div className="absolute inset-0 bg-gradient-to-l from-black/70 via-black/25 to-transparent" />
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 select-none text-xl font-black text-white/70">
-                                    ›
+                    {deviceType === 'phone-landscape' ? (
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                            {/* 中央战场区域 - 遭遇序列 */}
+                            <div
+                                data-testid="cardia-battlefield"
+                                data-tutorial-id="cardia-battlefield"
+                                className="relative flex min-h-0 flex-1 items-start justify-center overflow-x-auto overflow-y-visible px-1 pt-0.5"
+                            >
+                                <EncounterSequence
+                                    myPlayer={myPlayer}
+                                    opponent={opponent}
+                                    myPlayerId={myPlayerId}
+                                    opponentId={opponentId}
+                                    core={core}
+                                    setCardRef={setCardRef}
+                                    onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
+                                    deviceType={deviceType}
+                                />
+                            </div>
+
+                            {/* 我的区域（横屏右侧下栏） */}
+                            <div
+                                data-testid="cardia-player-zone"
+                                className="flex flex-shrink-0 items-end gap-1.5"
+                                style={playerZoneWrapperStyle}
+                            >
+                                <div className="flex-shrink-0">
+                                    <div className="mb-1 text-center text-[11px] text-gray-300 sm:text-xs">{t('discard')}</div>
+                                    <DiscardPile
+                                        cards={myPlayer.discard}
+                                        onCardClick={(card) => setMagnifyTarget({ card, core })}
+                                    />
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                    <PlayerArea
+                                        player={myPlayer}
+                                        core={core}
+                                        onPlayCard={handlePlayCard}
+                                        canPlay={phase === 'play' && !myPlayer.hasPlayed}
+                                        totalSignets={mySignets}
+                                        setCardRef={setCardRef}
+                                        onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
+                                        deviceType={deviceType}
+                                    />
                                 </div>
                             </div>
-                        )}
-                    </div>
-                    
-                    {/* 我的区域（底部） */}
-                    <div
-                        data-testid="cardia-player-zone"
-                        className={
-                            deviceType === 'phone-landscape'
-                                ? 'flex flex-shrink-0 items-end gap-1.5'
-                            : deviceType === 'phone-portrait'
-                                ? 'absolute inset-x-1 bottom-1 z-10 flex items-end gap-1.5'
-                                : deviceType === 'tablet-portrait'
-                                ? 'absolute inset-x-2 bottom-2 z-10 flex items-end gap-3 lg:static lg:z-auto lg:flex-shrink-0 lg:gap-4'
-                                : deviceType === 'tablet-landscape'
-                                  ? 'flex flex-shrink-0 items-end gap-3 lg:gap-4'
-                                : 'flex flex-shrink-0 items-end gap-4'
-                        }
-                        style={playerZoneWrapperStyle}
-                    >
+
+                            {/**
+                             * 移动端横屏：可视高度非常紧张。
+                             * 这里额外兜底一次，避免 PlayerArea 的手牌横向滚动容器
+                             * 把整个页面高度撑爆，导致出现纵向溢出/缩放。
+                             */}
+                            <style>{`
+                              [data-testid="cardia-player-zone"] [data-testid="cardia-hand-area"] {
+                                padding-bottom: 0 !important;
+                              }
+                            `}</style>
+                        </div>
+                    ) : (
+                        <>
+                            {/* 中央战场区域 - 遭遇序列 */}
+                            <div
+                                data-testid="cardia-battlefield"
+                                data-tutorial-id="cardia-battlefield"
+                                className={
+                                    deviceType === 'phone-portrait'
+                                        ? 'relative flex min-h-[7.5rem] flex-1 items-center justify-start overflow-x-auto overflow-y-visible px-1 py-0.5 pr-10'
+                                        : deviceType === 'tablet-portrait'
+                                        ? 'relative flex min-h-[10rem] flex-1 items-center justify-start overflow-x-auto overflow-y-visible px-2 py-1 pr-12'
+                                        : deviceType === 'tablet-landscape'
+                                          ? 'relative flex min-h-[10rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-3 py-1'
+                                        : 'relative flex min-h-[12rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-4 py-2'
+                                }
+                            >
+                                <EncounterSequence
+                                    myPlayer={myPlayer}
+                                    opponent={opponent}
+                                    myPlayerId={myPlayerId}
+                                    opponentId={opponentId}
+                                    core={core}
+                                    setCardRef={setCardRef}
+                                    onMagnifyCard={(card) => setMagnifyTarget({ card, core })}
+                                    deviceType={deviceType}
+                                />
+
+                                {/* 移动端视觉引导：右侧渐隐 + 滑动提示 */}
+                                {(deviceType === 'phone-portrait' || deviceType === 'tablet-portrait') && (
+                                    <div className="pointer-events-none absolute right-0 top-0 h-full w-14 md:hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-l from-black/70 via-black/25 to-transparent" />
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 select-none text-xl font-black text-white/70">
+                                            ›
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 我的区域（底部） */}
+                            <div
+                                data-testid="cardia-player-zone"
+                                className={
+                                    deviceType === 'phone-portrait'
+                                        ? 'absolute inset-x-1 bottom-1 z-10 flex items-end gap-1.5'
+                                        : deviceType === 'tablet-portrait'
+                                        ? 'absolute inset-x-2 bottom-2 z-10 flex items-end gap-3 lg:static lg:z-auto lg:flex-shrink-0 lg:gap-4'
+                                        : deviceType === 'tablet-landscape'
+                                          ? 'flex flex-shrink-0 items-end gap-3 lg:gap-4'
+                                        : 'flex flex-shrink-0 items-end gap-4'
+                                }
+                                style={playerZoneWrapperStyle}
+                            >
                         {/* 我的弃牌堆 */}
                         <div className="flex-shrink-0">
                             <div className="mb-1 text-center text-[11px] text-gray-300 sm:text-xs">{t('discard')}</div>
@@ -703,20 +770,9 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     deviceType={deviceType}
                 />
             </div>
-        </div>
-
-        {/**
-         * 移动端横屏：可视高度非常紧张。
-         * 这里额外兜底一次，避免 PlayerArea 的手牌横向滚动容器
-         * 把整个页面高度撑爆，导致出现纵向溢出/缩放。
-         */}
-        {deviceType === 'phone-landscape' && (
-            <style>{`
-              [data-testid="cardia-player-zone"] [data-testid="cardia-hand-area"] {
-                padding-bottom: 0 !important;
-              }
-            `}</style>
-        )}
+                            </div>
+                        </>
+                    )}
                     
                     {/* 能力按钮（居中显示） */}
                     {canActivateAbility && (
