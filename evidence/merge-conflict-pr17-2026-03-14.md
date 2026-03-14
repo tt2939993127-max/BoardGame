@@ -1,4 +1,4 @@
-﻿# 冲突解决汇报：PR#17（merge-open-prs-preview -> main）
+# 冲突解决汇报：PR#17（merge-open-prs-preview -> main）
 
 ## 1. 背景
 - 日期：2026-03-14
