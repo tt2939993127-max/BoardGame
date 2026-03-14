@@ -254,4 +254,5 @@ React.useEffect(() => {
     - **场景层 (Scene)**：棋盘、卡片等核心实体，需通过 `anchorPoint` 处理坐标缩放，确保跨平台逻辑一致性。
     - **UI 层 (HUD)**：状态信息、控制面板，执行 Overlay 挂载逻辑。
 - **高度稳定性**：核心游戏区（棋盘/面板）**必须**使用明确高度约束（如 `h-[35vw]`）代替 `h-full`，彻底解耦父级 Flex 依赖。
+- **`MobileBoardShell` 容器约束（强制）**：凡是 manifest 声明 `mobileLayoutPreset: 'board-shell'` 的游戏，Board 根容器必须跟随壳内画布高度，使用 `h-full` / `absolute inset-0` 等容器高度方案；**禁止**在 Board 根容器上写 `h-screen`、`min-h-screen`、`100vh`、`100dvh`。原因：`board-shell` 会在移动横屏下先做整体缩放，若子树继续读取原始视口高度，会导致内容实际渲染高度小于壳高度，出现底部黑边、下半截空白或布局漂移。
 - **相位敏感性**：UI 必须清晰反馈当前"游戏相位"与"操作权限"，通过高亮合规动作 (Valid Actions) 降低认知负荷。

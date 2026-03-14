@@ -39,7 +39,7 @@
 ```ts
 mobileProfile: 'none' | 'landscape-adapted' | 'portrait-adapted' | 'tablet-only';
 preferredOrientation?: 'landscape' | 'portrait';
-mobileLayoutPreset?: 'board-shell' | 'portrait-simple';
+mobileLayoutPreset?: 'board-shell' | 'portrait-simple' | 'map-shell';
 shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
 ```
 
@@ -55,6 +55,7 @@ shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
 - `mobileLayoutPreset`
   - `board-shell`：复杂桌游的横屏外壳方案。
   - `portrait-simple`：轻量游戏的竖屏方案。
+  - `map-shell`：地图区自己缩放拖拽，HUD 保持原始尺寸，不做整页缩放；移动端应支持触摸拖拽/双指缩放。
 - `shellTargets`
   - 标记允许进入哪些分发容器。
 
@@ -121,7 +122,8 @@ shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
   - `portrait-adapted`
   - `portrait-simple`
 - `summonerwars`
-  - `tablet-only`
+  - `landscape-adapted`
+  - `map-shell`
 - `smashup`
   - `landscape-adapted`
   - `board-shell`
