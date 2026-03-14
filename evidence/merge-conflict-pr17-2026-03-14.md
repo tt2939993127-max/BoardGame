@@ -39,10 +39,25 @@
   - `wizard-neophyte-ongoing.test.ts`：`2 passed`
   - `wizard-archmage-zombie-interaction.test.ts`：`1 skipped`
   - 总结：`1 passed file | 1 skipped file`
+- 冲突修复后补充回归（实际执行）：
+  - `src/games/smashup/__tests__/baseFactionOngoing.test.ts`
+  - `src/games/smashup/__tests__/factionAbilities.test.ts`
+  - `src/games/smashup/domain/__tests__/query6Abilities.test.ts`
+- 执行命令：
+  - `npx vitest run src/games/smashup/__tests__/baseFactionOngoing.test.ts src/games/smashup/__tests__/factionAbilities.test.ts src/games/smashup/domain/__tests__/query6Abilities.test.ts --config vitest.config.core.ts --pool threads --no-file-parallelism --maxWorkers 1`
+- 结果：`3 passed files`
 - 环境说明：
   - 临时工作树默认无 `node_modules`，首次执行报 `ERR_MODULE_NOT_FOUND`。
   - 已将 `F:\\gongzuo\\webgame\\BoardGame\\node_modules` 通过目录联接映射到当前工作树后复测通过。
 
 ## 6. 结果状态
 - 当前分支：`merge-pr17-resolve2`（用于修复冲突）
-- 当前状态：冲突已解，待补测、待提交 merge commit、待推送回 `merge-open-prs-preview`
+- 已完成提交：
+  - `0af19ec2`：merge 同步 `origin/main` 并解 `wizards.ts` 冲突
+  - `8512152c`：修复 BOM 编码问题（`wizards.ts` 与本汇报文档）
+  - `75417966`：修复 `check-file-encoding.mjs` 被 Vitest 导入时的 shebang 解析问题
+  - `f90ed790`：修正 `wizards.ts` 语义对齐（`neophyte/mass_enchantment/archmage`）
+- 推送状态（2026-03-14）：
+  - 目标：`origin/merge-open-prs-preview`
+  - 结果：`pre-push` 门禁失败（`quality:changed` 阶段触发大量 Vitest worker 超时）
+  - 结论：冲突修复与定向回归已完成，当前阻塞点为门禁执行稳定性，不是冲突未解。
