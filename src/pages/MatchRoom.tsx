@@ -42,7 +42,7 @@ import { LoadingScreen } from '../components/system/LoadingScreen';
 import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
-import { preloadWarmImages } from '../core';
+import { warmPreloadScheduler } from '../components/game/framework/warmPreloadScheduler';
 import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
@@ -321,7 +321,7 @@ export const MatchRoom = () => {
     // 大厅阶段暖预加载：在 i18n namespace 就绪后，后台预取当前游戏的图片资源。
     // 与 socket 连接/状态同步并行执行，利用等待时间把图片拉到浏览器缓存，
     // 减少 CriticalImageGate 挂载后的实际加载时间。
-    // 使用 preloadWarmImages（requestIdleCallback）不阻塞主线程。
+    // 使用 warmPreloadScheduler（requestIdleCallback 分批）不阻塞主线程。
     const lobbyPreloadStartedRef = useRef<string | null>(null);
     useEffect(() => {
         if (!gameId || !isGameNamespaceReady || isTutorialRoute || isUgcGame) return;
@@ -331,7 +331,8 @@ export const MatchRoom = () => {
         const resolved = resolveCriticalImages(gameId, undefined, i18n.language);
         const allPaths = [...new Set([...resolved.critical, ...resolved.warm])];
         if (allPaths.length > 0) {
-            preloadWarmImages(allPaths, i18n.language, gameId);
+            // 大厅阶段 warm 预取也走统一调度器，避免移动端一次性排队过多。
+            warmPreloadScheduler.enqueue(allPaths, i18n.language, gameId);
         }
     }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
 
