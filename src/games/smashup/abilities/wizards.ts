@@ -119,7 +119,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
             { id: 'to_hand', label: '放入手牌', value: { action: 'to_hand' }, displayMode: 'button' as const },
             { id: 'play_extra', label: '作为额外行动打出', value: { action: 'play_extra' }, displayMode: 'button' as const },
         ],
-        { sourceId: 'wizard_neophyte', targetType: 'button', displayCard: { defId: topCard.defId } },
+        { sourceId: 'wizard_neophyte', targetType: 'generic', displayCard: { defId: topCard.defId } },
     );
     (interaction.data as { options?: unknown[] }).options = options;
     const extended = {
@@ -271,7 +271,6 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     const allRevealCards: { uid: string; defId: string }[] = [];
     const revealTargetIds: string[] = [];
     const actionCandidates: { uid: string; defId: string; pid: string; label: string }[] = [];
-    const effectiveHandSize = getExternalActionEffectiveHandSize(ctx.matchState, ctx.playerId);
     for (const pid of ctx.state.turnOrder) {
         if (pid === ctx.playerId) continue;
         const opponent = ctx.state.players[pid];
@@ -282,7 +281,6 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
         if (topCard.type === 'action') {
             const def = getCardDef(topCard.defId);
             const name = def?.name ?? topCard.defId;
-            if (!canPlayExternalAction(ctx.matchState, ctx.playerId, topCard.defId, effectiveHandSize)) continue;
             actionCandidates.push({ uid: topCard.uid, defId: topCard.defId, pid, label: `${name}（来自${getOpponentLabel(pid)}）` });
         }
     }
@@ -532,7 +530,7 @@ function registerWizardOngoingEffects(): void {
         let archmageController: string | undefined;
         let archmageDefId: string | undefined;
         for (const base of trigCtx.state.bases) {
-            const archmage = base.minions.find(m => m.defId === 'wizard_archmage' || m.defId === 'wizard_archmage_pod');
+            const archmage = base.minions.find(m => m.defId === 'wizard_archmage');
             if (archmage) {
                 archmageController = archmage.controller;
                 archmageDefId = archmage.defId;
@@ -559,8 +557,7 @@ function registerWizardOngoingEffects(): void {
     // "You get the extra action on each of your turns, including the one when Archmage is played."
     registerTrigger('wizard_archmage', 'onMinionPlayed', (trigCtx) => {
         // 只有打出的是大法师本身时才触发
-        const isArchmage = trigCtx.triggerMinionDefId === 'wizard_archmage' || trigCtx.triggerMinionDefId === 'wizard_archmage_pod';
-        if (!isArchmage) return [];
+        if (trigCtx.triggerMinionDefId !== 'wizard_archmage') return [];
         // 只在控制者的回合触发（打出者就是控制者）
         return [{
             type: SU_EVENTS.LIMIT_MODIFIED,
