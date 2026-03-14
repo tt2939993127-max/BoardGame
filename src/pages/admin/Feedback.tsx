@@ -33,6 +33,19 @@ interface FeedbackItem {
     createdAt: string;
 }
 
+interface FeedbackAiPayload {
+    feedbackId: string;
+    createdAt: string;
+    type: FeedbackItem['type'];
+    severity: FeedbackItem['severity'];
+    status: FeedbackItem['status'];
+    reporter: string;
+    content: string;
+    gameId: string | null;
+    operationLogs: unknown[];
+    stateSnapshot: unknown | null;
+}
+
 // ── 常量 ──
 
 type StatusOption = { value: FeedbackItem['status']; color: string };
@@ -173,6 +186,7 @@ export default function AdminFeedbackPage() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [lastAiPayload, setLastAiPayload] = useState('');
     const requestIdRef = useRef(0);
 
     // 用于静默轮询（不显示 loading）
@@ -372,6 +386,19 @@ export default function AdminFeedbackPage() {
                 </div>
             </div>
 
+            {/* AI 导出载荷预览（用于自动化读取） */}
+            {lastAiPayload && (
+                <div className="flex-none mb-3" data-testid="feedback-ai-payload-viewer-panel">
+                    <div className="text-xs text-zinc-500 mb-1">AI Payload (Last Copied)</div>
+                    <textarea
+                        readOnly
+                        value={lastAiPayload}
+                        data-testid="feedback-ai-payload-viewer"
+                        className="w-full h-36 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-[11px] font-mono text-zinc-700 leading-relaxed"
+                    />
+                </div>
+            )}
+
             {/* 表格 */}
             <div className="flex-1 overflow-y-auto min-h-0">
                 {loading ? (
@@ -426,6 +453,7 @@ export default function AdminFeedbackPage() {
                                         onStatusUpdate={handleStatusUpdate}
                                         onDelete={handleDelete}
                                         onImageClick={setPreviewImage}
+                                        onAiPayloadCopy={setLastAiPayload}
                                     />
                                 );
                             })}
@@ -454,16 +482,19 @@ interface FeedbackRowProps {
     onStatusUpdate: (id: string, status: string) => void;
     onDelete: (id: string) => void;
     onImageClick: (src: string) => void;
+    onAiPayloadCopy: (payloadText: string) => void;
 }
 
 function FeedbackRow({
     item, expanded, selected, TypeIcon, typeOpt, sevCfg, statusOptions, t,
-    onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick,
+    onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick, onAiPayloadCopy,
 }: FeedbackRowProps) {
     return (
         <>
             <tr
                 onClick={onToggleExpand}
+                data-testid="feedback-row"
+                data-feedback-id={item._id}
                 className={cn(
                     'border-b border-zinc-50 cursor-pointer transition-colors group',
                     expanded ? 'bg-indigo-50/40' : 'hover:bg-zinc-50/80',
@@ -585,8 +616,11 @@ function FeedbackRow({
                                 <div className="px-10 py-4 bg-zinc-50/50 border-b border-zinc-100">
                                     <FeedbackContent content={item.content} onImageClick={onImageClick} t={t} />
                                     {item.actionLog && (
-                                        <details className="mt-3">
-                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium">
+                                        <details className="mt-3" data-testid="feedback-action-log-section" data-feedback-id={item._id}>
+                                            <summary
+                                                data-testid="feedback-action-log-toggle"
+                                                className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium"
+                                            >
                                                 {t('feedback.actionLog.title')}
                                             </summary>
                                             <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 border border-zinc-200 p-3 text-[11px] text-zinc-600 font-mono whitespace-pre-wrap leading-relaxed">
@@ -595,8 +629,11 @@ function FeedbackRow({
                                         </details>
                                     )}
                                     {item.stateSnapshot && (
-                                        <details className="mt-3">
-                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium flex items-center gap-2">
+                                        <details className="mt-3" data-testid="feedback-state-snapshot-section" data-feedback-id={item._id}>
+                                            <summary
+                                                data-testid="feedback-state-snapshot-toggle"
+                                                className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium flex items-center gap-2"
+                                            >
                                                 <ScrollText size={12} />
                                                 {t('feedback.stateSnapshot.title')}
                                             </summary>
@@ -605,6 +642,7 @@ function FeedbackRow({
                                                     {item.stateSnapshot}
                                                 </pre>
                                                 <button
+                                                    data-testid="feedback-copy-state-json-inline"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
@@ -639,7 +677,7 @@ function FeedbackRow({
                                             </span>
                                         )}
                                         <span>{t('feedback.table.id', { id: item._id })}</span>
-                                        <CopyFeedbackButton item={item} t={t} />
+                                        <CopyFeedbackButton item={item} t={t} onAiPayloadCopy={onAiPayloadCopy} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -653,102 +691,73 @@ function FeedbackRow({
 
 // ── 一键复制按钮 ──
 
-/**
- * 压缩游戏状态为 AI 可读的紧凑格式
- * 从完整 JSON 提取关键信息，避免复制几千行数据
- */
-function compressStateSnapshot(stateJson: string): string {
+
+function parseOperationLogs(actionLog?: string): unknown[] {
+    if (!actionLog?.trim()) return [];
     try {
-        const state = JSON.parse(stateJson);
-        const lines: string[] = [];
-        
-        lines.push('=== 游戏状态快照（压缩版）===');
-        lines.push(`游戏: ${state.gameId || 'unknown'}`);
-        lines.push(`回合: P${state.core?.currentPlayer ?? '?'} | 阶段: ${state.core?.phase ?? '?'}`);
-        
-        // 玩家状态
-        if (state.core?.players) {
-            lines.push('\n--- 玩家 ---');
-            Object.entries(state.core.players).forEach(([pid, p]: [string, any]) => {
-                const resources = p.resources ? 
-                    Object.entries(p.resources).map(([k, v]) => `${k}:${v}`).join(' ') : 
-                    '';
-                lines.push(`P${pid}: HP=${p.hp ?? '?'} ${resources} | 手牌=${p.hand?.length ?? 0} 牌库=${p.deck?.length ?? 0} 弃牌=${p.discard?.length ?? 0}`);
-            });
-        }
-        
-        // 场上单位
-        if (state.core?.field && state.core.field.length > 0) {
-            lines.push('\n--- 场上 ---');
-            state.core.field.forEach((unit: any, idx: number) => {
-                const tags = unit.tags ? Object.keys(unit.tags).join(',') : '';
-                lines.push(`[${idx}] ${unit.card?.defId ?? '?'} (P${unit.owner}) HP=${unit.hp ?? '?'} ${tags ? `[${tags}]` : ''}`);
-            });
-        }
-        
-        // 交互状态
-        if (state.sys?.interaction?.current) {
-            const int = state.sys.interaction.current;
-            lines.push('\n--- 交互 ---');
-            lines.push(`类型: ${int.type} | 玩家: P${int.playerId}`);
-            lines.push(`选项数: ${int.data?.options?.length ?? 0}`);
-        }
-        
-        // 响应窗口
-        if (state.sys?.responseWindow?.current) {
-            lines.push('\n--- 响应窗口 ---');
-            lines.push(`触发事件: ${state.sys.responseWindow.current.triggerEvent?.type ?? '?'}`);
-        }
-        
-        // 最近事件（增加到 10 条，并显示关键参数）
-        if (state.sys?.eventStream?.entries) {
-            const recent = state.sys.eventStream.entries.slice(-10);
-            if (recent.length > 0) {
-                lines.push('\n--- 最近事件 ---');
-                recent.forEach((e: any) => {
-                    // 提取关键参数（避免完整 payload）
-                    let params = '';
-                    if (e.payload) {
-                        const p = e.payload;
-                        if (p.playerId !== undefined) params += ` P${p.playerId}`;
-                        if (p.targetId !== undefined) params += ` →${p.targetId}`;
-                        if (p.damage !== undefined) params += ` dmg=${p.damage}`;
-                        if (p.amount !== undefined) params += ` amt=${p.amount}`;
-                        if (p.cardDefId) params += ` [${p.cardDefId}]`;
-                        if (p.abilityId) params += ` {${p.abilityId}}`;
-                    }
-                    lines.push(`${e.id}: ${e.type}${params}`);
-                });
-            }
-        }
-        
-        return lines.join('\n');
-    } catch (err) {
-        return `[状态解析失败: ${err instanceof Error ? err.message : '未知错误'}]`;
+        const parsed = JSON.parse(actionLog);
+        if (Array.isArray(parsed)) return parsed;
+        return [parsed];
+    } catch {
+        return actionLog
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
     }
 }
 
-function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
+function parseStateSnapshot(stateSnapshot?: string): unknown | null {
+    if (!stateSnapshot?.trim()) return null;
+    try {
+        return JSON.parse(stateSnapshot);
+    } catch {
+        return { parseError: true, raw: stateSnapshot };
+    }
+}
+
+function inferGameId(stateSnapshot: unknown, fallbackGameName?: string): string | null {
+    if (stateSnapshot && typeof stateSnapshot === 'object' && 'gameId' in stateSnapshot) {
+        const gameId = (stateSnapshot as { gameId?: unknown }).gameId;
+        if (typeof gameId === 'string' && gameId.trim()) return gameId;
+    }
+    return fallbackGameName ?? null;
+}
+
+function buildFeedbackAiPayload(item: FeedbackItem, t: TFunction<'admin'>): FeedbackAiPayload {
+    const parsedSnapshot = parseStateSnapshot(item.stateSnapshot);
+    return {
+        feedbackId: item._id,
+        createdAt: item.createdAt,
+        type: item.type,
+        severity: item.severity,
+        status: item.status,
+        reporter: item.userId?.username || t('feedback.anonymous'),
+        content: extractText(item.content, t),
+        gameId: inferGameId(parsedSnapshot, item.gameName),
+        operationLogs: parseOperationLogs(item.actionLog),
+        stateSnapshot: parsedSnapshot,
+    };
+}
+
+function CopyFeedbackButton({
+    item,
+    t,
+    onAiPayloadCopy,
+}: {
+    item: FeedbackItem;
+    t: TFunction<'admin'>;
+    onAiPayloadCopy: (payloadText: string) => void;
+}) {
     const [copied, setCopied] = useState(false);
     const [copiedJson, setCopiedJson] = useState(false);
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
-        const textContent = extractText(item.content, t);
-        const submitter = item.userId?.username || t('feedback.anonymous');
-        const parts = [
-            `【${t(`feedback.type.${item.type}`)}】${t(`feedback.severity.${item.severity}`)}`,
-            item.gameName ? `游戏: ${item.gameName}` : '',
-            `提交者: ${submitter}`,
-            `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
-            '',
-            '--- 反馈内容 ---',
-            textContent,
-            item.actionLog ? `\n--- 操作日志 ---\n${item.actionLog}` : '',
-            item.stateSnapshot ? `\n--- 游戏状态 ---\n${compressStateSnapshot(item.stateSnapshot)}` : '',
-        ].filter(Boolean).join('\n');
+        const payload = buildFeedbackAiPayload(item, t);
+        const payloadText = JSON.stringify(payload, null, 2);
 
-        navigator.clipboard.writeText(parts).then(() => {
+        navigator.clipboard.writeText(payloadText).then(() => {
+            onAiPayloadCopy(payloadText);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         });
@@ -757,7 +766,7 @@ function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'adm
     const handleCopyJson = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!item.stateSnapshot) return;
-        
+
         navigator.clipboard.writeText(item.stateSnapshot).then(() => {
             setCopiedJson(true);
             setTimeout(() => setCopiedJson(false), 2000);
@@ -765,8 +774,9 @@ function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'adm
     };
 
     return (
-        <div className="inline-flex items-center gap-1">
+        <div className="inline-flex items-center gap-1" data-testid="feedback-copy-actions" data-feedback-id={item._id}>
             <button
+                data-testid="feedback-copy-ai-payload"
                 onClick={handleCopy}
                 className={cn(
                     'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
@@ -781,6 +791,7 @@ function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'adm
             </button>
             {item.stateSnapshot && (
                 <button
+                    data-testid="feedback-copy-state-json"
                     onClick={handleCopyJson}
                     className={cn(
                         'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
