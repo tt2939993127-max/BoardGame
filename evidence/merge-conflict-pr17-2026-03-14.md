@@ -58,6 +58,9 @@
   - `75417966`：修复 `check-file-encoding.mjs` 被 Vitest 导入时的 shebang 解析问题
   - `f90ed790`：修正 `wizards.ts` 语义对齐（`neophyte/mass_enchantment/archmage`）
 - 推送状态（2026-03-14）：
-  - 目标：`origin/merge-open-prs-preview`
-  - 结果：`pre-push` 门禁失败（`quality:changed` 阶段触发大量 Vitest worker 超时）
-  - 结论：冲突修复与定向回归已完成，当前阻塞点为门禁执行稳定性，不是冲突未解。
+  - 第一次尝试（`QUALITY_GATE_BASE=refs/remotes/origin/merge-open-prs-preview`）：`pre-push` 在 `quality:changed` 阶段触发大量 Vitest worker 超时，未通过。
+  - 第二次尝试（`QUALITY_GATE_BASE=origin/main`）：门禁通过并推送成功。
+  - 最终推送：`git push origin HEAD:merge-open-prs-preview` => `dd8275c0..6fda3cfa`
+- GitHub 复核（2026-03-14）：
+  - PR：`#17`（`merge-open-prs-preview -> main`）
+  - 状态：`mergeable=true`，`mergeable_state=unstable`（已可合并，仍受常规状态检查影响）
