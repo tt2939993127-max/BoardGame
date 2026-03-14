@@ -221,3 +221,31 @@ shellTargets: ['pwa']
 - 不要在移动媒体查询里给整类交互元素或共享交互组件统一加 `min-width` / `min-height` / `padding` 来放大视觉尺寸。
 - 不要接受任何会影响 PC 布局的移动端方案。
 - 不要借移动端适配顺手重做视觉风格；没有明确需求时，不改 PC 端的阴影、边框、质感、色彩和整体观感。
+
+
+## 2026-03 追加：横向溢出防回归（DiceThrone 试点）
+
+### A. 缩放表达式必须返回无单位数字
+- 禁止写法：`transform: scale(calc(100vw / 1280))`。
+- 原因：`scale()` 需要 Number；`calc(100vw / 1280)` 是长度值，浏览器会把 `transform` 退化为 `none`。
+- 正确写法：`transform: scale(calc(100vw / 1280px))`，或先定义变量后使用 `scale(var(--mobile-board-shell-scale))`。
+
+### B. board-shell 缩放选择器默认使用后代命中
+- 规则：默认写 `[data-game-page... ] .mobile-board-shell`，不要默认写 `> .mobile-board-shell`。
+- 原因：`MatchRoom / LocalMatchRoom / TestMatchRoom` 层级不同，直系子选择器容易漏命中。
+
+### C. 缩放壳层内禁止再用 dvh 锁死内部主容器高度
+- 规则：在被缩放的壳层内，内部主容器优先使用 `h-full`，让高度跟随外层 shell。
+- 禁止模式：外层 scale + 内层 `h-dvh` / `100dvh` 双重锁高。
+- 典型后果：底部出现大块空白，交互区视觉错位。
+
+### D. 允许按 gameId 覆盖设计宽度
+- 通用默认可用 `1280px`，复杂游戏允许按 `data-game-id` 覆盖（例如 DiceThrone 的 `940px`）。
+- 覆盖必须是移动条件下的局部策略，不得改变 PC 设计基线。
+
+### E. 移动端 E2E 必须增加布局硬断言
+- 除功能断言外，新增以下断言：
+  1. `documentElement/body/#root` 满足 `scrollWidth <= innerWidth + 1`。
+  2. `.mobile-board-shell` 的 left/right 边界必须落在视口内。
+  3. 关键入口（Roll / Confirm / 放大入口）必须位于视口内。
+- 没有这些断言时，截图“看起来正常”不能作为布局通过依据。
