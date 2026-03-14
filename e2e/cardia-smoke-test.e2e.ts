@@ -130,10 +130,9 @@ async function expectResponsiveLayoutStable(page: Page, options?: { requireBattl
   });
 
   // Debug: 该断言主要用于保障“无整页缩放/无明显溢出”。
-  // 当出现意外失败时，先把关键数值打印出来，便于定位是 root 缩放、容器高度、还是滚动导致。
-  // （仅用于 E2E 诊断，不影响正式逻辑）
+  // 当出现意外失败时，可临时打开日志，便于定位 root 缩放/容器高度/滚动问题。
    
-  console.log('[Cardia E2E][layout-metrics]', viewportMetrics);
+  // console.log('[Cardia E2E][layout-metrics]', viewportMetrics);
 
   // 横屏手机由于浏览器 UI/地址栏与 viewport 计算差异，
   // bottom 可能会有轻微偏差；我们更关心是否出现明显的整页纵向滚动。
