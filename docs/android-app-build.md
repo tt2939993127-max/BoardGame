@@ -11,53 +11,46 @@
 - `npm run mobile:android:build:release`
 - `npm run mobile:android:build:bundle`
 
-## Android 壳加载模式
+## WebView 模式（强制约定）
 
-通过环境变量 `ANDROID_WEBVIEW_MODE` 控制 Android 壳加载哪一份 H5：
+通过环境变量 `ANDROID_WEBVIEW_MODE` 控制 Android 壳加载方式：
 
-- `embedded`：默认模式。继续把 `dist/` 同步到 `android/app/src/main/assets/public/`，APK 内直接加载本地资源。
-- `remote`：远程模式。通过 `Capacitor server.url` 直接加载线上 HTTPS 站点，不再要求当前前端版本打进 APK。
+- `remote`：默认模式（未显式指定时生效）
+  - 通过 `Capacitor server.url` 加载线上 HTTPS 页面
+  - 不把完整前端静态资源打进 APK
+  - 适合“只要壳子”的场景
+- `embedded`：仅在明确指定时启用
+  - 将 `dist/` 同步到 `android/app/src/main/assets/public/`
+  - APK 内置完整前端资源
+  - 适合离线/弱网兜底需求
 
-`remote` 模式必须额外配置：
+`remote` 模式必须配置：
 
 ```env
 ANDROID_WEBVIEW_MODE=remote
 ANDROID_REMOTE_WEB_URL=https://your-domain.com
 ```
 
-选择建议：
+## 默认策略
 
-- 需要离线启动、稳定发版、避免线上误发布立即影响 App：用 `embedded`
-- 不上商店、希望 Web 一发布 App 就立刻跟着更新：用 `remote`
-
-默认内部发包命令是 `npm run mobile:android:build:release`，产物是可直接安装分发的签名 `APK`。
-
-只有要对接应用商店时，才使用 `npm run mobile:android:build:bundle` 产出 `AAB`。
+- 除非明确指定，否则一律按 `remote` 构建。
+- 只有在你明确提出“要内置前端资源”时，才切换为 `embedded`。
 
 ## 关键约束
 
-不要直接在 Android Studio 或命令行里只跑 `assembleRelease` / `bundleRelease`。Android 壳打包的是 `android/app/src/main/assets/public/`，如果这份目录没先和最新 `dist/` 同步，就会把旧前端资源打进 APK。现在构建链会写入 `dist/android-build-meta.json`，并在 Gradle 构建前检查它是否和 `android/app/src/main/assets/public/android-build-meta.json` 一致；不一致会直接阻止构建。最稳妥的正式发包方式仍然是 `npm run mobile:android:build:release`。
-
-如果你必须从 Android Studio 点构建，先执行：
-
-```bash
-npm run mobile:android:sync
-```
-
-再去执行 Release 构建。
-
-如果当前是 `remote` 模式，则 Android 构建不再依赖 `assets/public` 与 `dist/` 同步；`npm run mobile:android:build:release` 会直接按远程模式生成 APK，但 `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTPS 地址。
-另外，`remote` 模式下构建链会改用 `cap update android`（不再复制 `dist`），并在打包前清空 `android/app/src/main/assets/public/`，避免把整套前端静态资源继续打进 APK。
-
-当前 release 构建默认开启了 `minifyEnabled` 与 `shrinkResources`，用于进一步压缩壳体体积。
+- 不要直接在 Android Studio 里只跑 `assembleRelease` / `bundleRelease`，应先执行构建脚本。
+- `embedded` 模式下，构建前会校验 `dist/android-build-meta.json` 与
+  `android/app/src/main/assets/public/android-build-meta.json` 一致性，不一致将阻断打包。
+- `remote` 模式下，构建链会走 `cap update android` + `cap copy android`，并清理
+  `android/app/src/main/assets/public/`，避免把完整前端资源误打进 APK。
 
 ## 图标与启动图
 
-默认资源源文件：
+默认素材：
 
 - `public/logos/logo_1_grid.png`
 
-脚本会自动生成：
+自动生成输出：
 
 - `android/app/src/main/res/mipmap-*/ic_launcher.png`
 - `android/app/src/main/res/mipmap-*/ic_launcher_round.png`
@@ -78,7 +71,7 @@ ANDROID_SPLASH_LOGO_RATIO=0.34
 
 ## Release 签名
 
-签名输入支持两种方式：
+支持两种输入：
 
 ```env
 # 本地文件
@@ -94,7 +87,7 @@ ANDROID_KEY_PASSWORD=
 
 `npm run mobile:android:prepare-release` 会：
 
-- 把 `keystore` 规范化到 `android/keystores/release-upload.keystore`
+- 规范化 keystore 到 `android/keystores/release-upload.keystore`
 - 生成 `android/keystore.properties`
 
-`npm run mobile:android:build:release` 和 `npm run mobile:android:build:bundle` 都会在构建前强制检查签名配置。
+`npm run mobile:android:build:release` 和 `npm run mobile:android:build:bundle` 会在构建前强制校验签名配置。

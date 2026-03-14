@@ -23,7 +23,7 @@ const gradleWrapper = process.platform === 'win32'
     : path.join(androidDir, 'gradlew');
 const defaultAppId = 'top.easyboardgame.app';
 const defaultAppName = '易桌游';
-const defaultAndroidWebviewMode = 'embedded';
+const defaultAndroidWebviewMode = 'remote';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
 const distDir = path.join(rootDir, 'dist');
