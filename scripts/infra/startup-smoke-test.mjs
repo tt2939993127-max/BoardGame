@@ -268,7 +268,7 @@ async function verifyApiRoutes(apiPort) {
     }
 }
 
-async function runProcessSmoke(label, args, envOverrides, port) {
+async function runProcessSmoke(label, args, envOverrides, port, verifier) {
     console.log(`[smoke] 启动 ${label}...`);
     const managed = createManagedProcess(label, args, envOverrides);
     try {
@@ -277,6 +277,9 @@ async function runProcessSmoke(label, args, envOverrides, port) {
             managed.exitPromise,
         ]);
         await sleep(250);
+        if (typeof verifier === 'function') {
+            await verifier();
+        }
         return durationMs;
     } finally {
         await stopChildProcess(managed.child);
@@ -329,8 +332,8 @@ async function main() {
             API_SERVER_PORT: String(apiPort),
         },
         apiPort,
+        () => verifyApiRoutes(apiPort),
     );
-    await verifyApiRoutes(apiPort);
 
     const gameDurationMs = await runProcessSmoke(
         'smoke-game',

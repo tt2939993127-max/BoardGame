@@ -68,6 +68,7 @@ import type { SpotlightItem } from '../../components/game/framework';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { RevealOverlay } from './ui/RevealOverlay';
 import { SmashUpOverlayProvider, useSmashUpOverlay } from './ui/SmashUpOverlayContext';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 
 type Props = GameBoardProps<SmashUpCore>;
 
@@ -114,10 +115,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const isGameOver = G?.sys.gameover;
     const rootPid = playerID || '0';
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
+    const isMobileViewport = useMobileViewport();
     
     // 响应式布局配置
     const playerCount = core?.turnOrder.length || 2;
-    const layout = getLayoutConfig(playerCount);
+    const layout = getLayoutConfig(playerCount, { isMobileViewport });
     
     // 更新选择的派系到 Context（游戏开始后）
     useEffect(() => {
@@ -877,7 +879,6 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const [viewingCard, setViewingCard] = useState<CardMagnifyTarget | null>(null);
 
     const handleBaseClick = useCallback((index: number) => {
-        const base = core.bases[index];
         // Me First! 基地选择模式：打出需要基地目标的 Special 卡
         if (meFirstPendingCard) {
             if (!meFirstEligibleBaseIndices.has(index)) {
@@ -957,8 +958,6 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             } else {
                 handlePlayMinion(selectedCardUid, index);
             }
-        } else {
-            setViewingCard({ defId: base.defId, type: 'base' });
         }
     }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer]);
 
@@ -1521,7 +1520,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             animate={{ y: 0, opacity: 1, scale: 1 }}
                             exit={{ y: -20, opacity: 0, scale: 0.95 }}
                             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                            className="absolute top-[72px] inset-x-0 z-30 flex justify-center pointer-events-none"
+                            className="absolute inset-x-0 z-30 flex justify-center pointer-events-none"
+                            style={{ top: `${layout.hudTopOffset}px` }}
                         >
                             <div className="bg-slate-900/95 backdrop-blur-sm text-white px-8 py-3 rounded border border-slate-600 shadow-[0_4px_0_#334155,0_8px_24px_rgba(0,0,0,0.5)]">
                                 <span className="font-black text-lg uppercase tracking-tighter">
@@ -1539,8 +1539,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint }}
+                            className="fixed inset-x-0 flex justify-center pointer-events-none"
+                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {baseSelectExtraOptions.map(opt => (
@@ -1565,8 +1565,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint }}
+                            className="fixed inset-x-0 flex justify-center pointer-events-none"
+                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
                         >
                             <div className="flex gap-3 items-center pointer-events-auto">
                                 {isMultiMinionSelect && (
@@ -1615,8 +1615,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint }}
+                            className="fixed inset-x-0 flex justify-center pointer-events-none"
+                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {handSelectExtraOptions.map(opt => (
@@ -1641,8 +1641,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed bottom-[280px] inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint }}
+                            className="fixed inset-x-0 flex justify-center pointer-events-none"
+                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {ongoingSelectExtraOptions.map(opt => (
@@ -1663,13 +1663,19 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 {/* --- MAIN BOARD --- */}
                 {/* Scrollable table area */}
                 <div 
-                    className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" 
+                    className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar"
                     data-tutorial-id="su-base-area"
-                    style={{ paddingBottom: `${layout.handAreaHeight}px` }}
+                    style={{
+                        paddingTop: `${layout.boardPaddingTop}px`,
+                        paddingBottom: `${layout.handAreaHeight}px`,
+                    }}
                 >
                     <div 
-                        className="flex items-start px-20 min-w-max"
-                        style={{ gap: `${layout.baseGap}vw` }}
+                        className="flex items-start min-w-max"
+                        style={{
+                            gap: `${layout.baseGap}vw`,
+                            paddingInline: `${layout.boardHorizontalPadding}px`,
+                        }}
                     >
                         {core.bases.map((base, idx) => (
                             <BaseZone
@@ -1721,7 +1727,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     <motion.div
                         initial={{ y: -20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        className="fixed top-[72px] inset-x-0 z-30 flex justify-center pointer-events-none"
+                        className="fixed inset-x-0 z-30 flex justify-center pointer-events-none"
+                        style={{ top: `${layout.hudTopOffset}px` }}
                     >
                         <div className="bg-red-900/90 backdrop-blur-sm text-white px-6 py-2 rounded border border-red-500 shadow-lg">
                             <span className="font-black text-base uppercase tracking-tight">
@@ -1743,6 +1750,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 hand={viewMode === 'opponent' ? opponentPlayer.hand : myPlayer.hand}
                                 selectedCardUid={selectedCardUid}
                                 onCardSelect={handleCardClick}
+                                compactLayout={isMobileViewport}
                                 isDiscardMode={needDiscard || isHandDiscardPrompt}
                                 discardSelection={discardSelection}
                                 // 教学模式下，当不允许打出随从和行动时禁用手牌交互（摇头反馈）
@@ -1762,6 +1770,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             <DeckDiscardZone
                                 deckCount={viewMode === 'opponent' ? opponentPlayer.deck.length : myPlayer.deck.length}
                                 discard={viewMode === 'opponent' ? opponentPlayer.discard : myPlayer.discard}
+                                compactLayout={isMobileViewport}
                                 isMyTurn={isMyTurn}
                                 hasPlayableFromDiscard={discardPlayOptions.length > 0 || isDiscardMinionPrompt}
                                 autoOpenPanel={isDiscardMinionPrompt}

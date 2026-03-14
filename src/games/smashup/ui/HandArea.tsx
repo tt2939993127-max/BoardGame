@@ -3,23 +3,25 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { CardInstance } from '../domain/types';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { getCardDef as lookupCardDef, getMinionDef as lookupMinionDef, resolveCardName, resolveCardText } from '../data/cards';
+import { getCardDef as lookupCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { UI_Z_INDEX } from '../../../core';
 import { SMASHUP_CARD_BACK } from '../domain/ids';
+import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
 
 // ============================================================================
 // Layout Constants
 // ============================================================================
-const CARD_WIDTH_VW = 8.5; // Reduced from 10 to fit better and look less overwhelming
 const CARD_ASPECT_RATIO = 0.714;
-
-const SELECTED_Y_LIFT_VW = 5;
-
+const DESKTOP_CARD_WIDTH_VW = 8.5;
+const MOBILE_CARD_WIDTH_VW = 10.5;
+const DESKTOP_SELECTED_Y_LIFT_VW = 5;
+const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
 type Props = {
     hand: CardInstance[];
     selectedCardUid: string | null;
     onCardSelect: (card: CardInstance) => void;
     onCardView?: (card: CardInstance) => void;
+    compactLayout?: boolean;
     isDiscardMode?: boolean;
     discardSelection?: Set<string>;
     disableInteraction?: boolean;
@@ -42,15 +44,37 @@ type HandCardProps = {
     isDisabled: boolean;
     /** 是否显示为对手视角（显示牌背） */
     isOpponentView: boolean;
+    compactLayout: boolean;
+    showTouchInspectButton: boolean;
     /** 跳过初始动画（用于视角切换） */
     skipAnimation?: boolean;
     onSelect: () => void;
     onViewDetail?: () => void;
+    onPointerDown?: (event: React.PointerEvent, card: CardInstance) => void;
+    onPointerMove?: (event: React.PointerEvent, card: CardInstance) => void;
+    onPointerEnd?: (card: CardInstance) => void;
+    shouldBlockClick?: (card: CardInstance) => boolean;
 };
 
 
 const HandCard: React.FC<HandCardProps> = ({
-    card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, isDisabled, isOpponentView, onSelect, onViewDetail
+    card,
+    index,
+    total,
+    isSelected,
+    isDiscardSelected,
+    isDiscardMode,
+    disableInteraction,
+    isDisabled,
+    isOpponentView,
+    compactLayout,
+    showTouchInspectButton,
+    onSelect,
+    onViewDetail,
+    onPointerDown,
+    onPointerMove,
+    onPointerEnd,
+    shouldBlockClick,
 }) => {
     const { t } = useTranslation('game-smashup');
     const [isHovered, setIsHovered] = useState(false);
@@ -72,7 +96,13 @@ const HandCard: React.FC<HandCardProps> = ({
     // Standard gap: 0.8vw
     // If crowded (> 7 cards), start overlapping
     // Max overlap at 10 cards
-    const spacingVw = total <= 7 ? 0.8 : -1 * ((total - 7) * 0.8);
+    const overlapStart = compactLayout ? 6 : 7;
+    const overlapStep = compactLayout ? 1.05 : 0.8;
+    const spacingVw = total <= overlapStart ? 0.8 : -1 * ((total - overlapStart) * overlapStep);
+    const cardWidthVw = compactLayout ? MOBILE_CARD_WIDTH_VW : DESKTOP_CARD_WIDTH_VW;
+    const selectedLiftVw = compactLayout ? MOBILE_SELECTED_Y_LIFT_VW : DESKTOP_SELECTED_Y_LIFT_VW;
+    const inspectButtonSizeVw = compactLayout ? 3.2 : 2;
+    const inspectIconSizeVw = compactLayout ? 1.55 : 1.1;
 
     // zIndex 用 CSS hover 提升，避免 state 变化触发 layout 重算导致抽搐
     // 弃牌选中时不提升 z-index，避免遮挡其他卡牌选择
@@ -87,7 +117,7 @@ const HandCard: React.FC<HandCardProps> = ({
                 ${isOpponentView ? 'cursor-default' : 'cursor-pointer'}
             `}
             style={{
-                width: `${CARD_WIDTH_VW}vw`,
+                width: `${cardWidthVw}vw`,
                 aspectRatio: `${CARD_ASPECT_RATIO}`,
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
                 zIndex: baseZIndex
@@ -96,7 +126,7 @@ const HandCard: React.FC<HandCardProps> = ({
             initial={isOpponentView ? { opacity: 1, y: 0, scale: 1, rotate: rotationSeed } : { y: 200, opacity: 0, scale: 0.8 }}
             animate={{
                 // 弃牌选中时小幅上移（2vw），普通选中时大幅上移（5vw）
-                y: isSelected && !isDiscardSelected ? `-${SELECTED_Y_LIFT_VW}vw` : isDiscardSelected ? '-2vw' : '0',
+                y: isSelected && !isDiscardSelected ? `-${selectedLiftVw}vw` : isDiscardSelected ? '-2vw' : '0',
                 scale: (isSelected && !isDiscardSelected) ? 1.15 : 1,
                 rotate: isShaking ? [0, -6, 6, -4, 4, 0] : ((isSelected && !isDiscardSelected) ? 0 : rotationSeed),
                 opacity: 1
@@ -105,7 +135,12 @@ const HandCard: React.FC<HandCardProps> = ({
             transition={isOpponentView ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 28 }}
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
+            onPointerDown={(event) => onPointerDown?.(event, card)}
+            onPointerMove={(event) => onPointerMove?.(event, card)}
+            onPointerUp={() => onPointerEnd?.(card)}
+            onPointerCancel={() => onPointerEnd?.(card)}
             onClick={() => {
+                if (shouldBlockClick?.(card)) return;
                 if (isOpponentView) return; // 对手视角不可点击
                 if (disableInteraction || isDisabled) {
                     // 不可操作时摇头抖动
@@ -128,13 +163,24 @@ const HandCard: React.FC<HandCardProps> = ({
                 {/* Detail View Button (Magnifying Glass) - Appears on hover, inside card top-right */}
                 {!isOpponentView && (
                     <button
-                        className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl border-2 border-white/30 z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+                        data-testid={`su-hand-card-inspect-${card.uid}`}
+                        className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl border-2 border-white/30 z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100' : 'opacity-0'}`}
+                        style={{
+                            top: compactLayout ? '0.45vw' : '0.3vw',
+                            right: compactLayout ? '0.45vw' : '0.3vw',
+                            width: `${inspectButtonSizeVw}vw`,
+                            height: `${inspectButtonSizeVw}vw`,
+                        }}
                         onClick={(e) => {
                             e.stopPropagation();
                             onViewDetail?.();
                         }}
                     >
-                        <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
+                        <svg
+                            className="fill-current"
+                            style={{ width: `${inspectIconSizeVw}vw`, height: `${inspectIconSizeVw}vw` }}
+                            viewBox="0 0 20 20"
+                        >
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                         </svg>
                     </button>
@@ -164,6 +210,7 @@ export const HandArea: React.FC<Props> = ({
     selectedCardUid,
     onCardSelect,
     onCardView,
+    compactLayout = false,
     isDiscardMode = false,
     discardSelection,
     disableInteraction = false,
@@ -172,16 +219,34 @@ export const HandArea: React.FC<Props> = ({
 }) => {
     // Basic mount animation
     const [isLoaded, setIsLoaded] = useState(false);
+    const {
+        isCoarsePointer,
+        getTouchInspectProps,
+        shouldBlockInspectClick,
+    } = useTouchInspectGesture<string, CardInstance>({
+        enabled: Boolean(onCardView) && !isOpponentView && !isDiscardMode,
+        onInspect: (_cardUid, card) => {
+            onCardView?.(card);
+        },
+    });
     useEffect(() => { setIsLoaded(true); }, []);
     if (!isLoaded) return null;
 
     return (
         <div
-            className="absolute bottom-4 left-0 right-0 h-[20vh] flex flex-col justify-end items-center pointer-events-none"
-            style={{ zIndex: UI_Z_INDEX.hud }}
+            className="absolute left-0 right-0 flex flex-col justify-end items-center pointer-events-none"
+            style={{
+                zIndex: UI_Z_INDEX.hud,
+                bottom: compactLayout ? '8px' : '16px',
+                height: compactLayout ? '18vh' : '20vh',
+            }}
             data-testid="su-hand-area"
         >
-            <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]" data-tutorial-id="su-hand-area">
+            <div
+                className="flex items-end justify-center px-4 perspective-[1000px]"
+                style={{ maxWidth: compactLayout ? '95vw' : '90vw' }}
+                data-tutorial-id="su-hand-area"
+            >
                 {/* 对手视角：不使用 AnimatePresence，直接渲染静态卡牌 */}
                 {isOpponentView ? (
                     hand.map((card, i) => (
@@ -196,6 +261,8 @@ export const HandArea: React.FC<Props> = ({
                             disableInteraction={true}
                             isDisabled={false}
                             isOpponentView={true}
+                            compactLayout={compactLayout}
+                            showTouchInspectButton={false}
                             onSelect={() => {}}
                             onViewDetail={() => {}}
                         />
@@ -214,8 +281,14 @@ export const HandArea: React.FC<Props> = ({
                                 disableInteraction={disableInteraction}
                                 isDisabled={!!disabledCardUids?.has(card.uid)}
                                 isOpponentView={false}
+                                compactLayout={compactLayout}
+                                showTouchInspectButton={isCoarsePointer && !isDiscardMode}
                                 onSelect={() => onCardSelect(card)}
                                 onViewDetail={() => onCardView?.(card)}
+                                onPointerDown={(event, pressedCard) => getTouchInspectProps(pressedCard.uid, pressedCard).onPointerDown(event)}
+                                onPointerMove={(event, pressedCard) => getTouchInspectProps(pressedCard.uid, pressedCard).onPointerMove(event)}
+                                onPointerEnd={(pressedCard) => getTouchInspectProps(pressedCard.uid, pressedCard).onPointerUp()}
+                                shouldBlockClick={(pressedCard) => shouldBlockInspectClick(pressedCard.uid)}
                             />
                         ))}
                     </AnimatePresence>
