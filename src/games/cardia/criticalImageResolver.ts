@@ -21,7 +21,6 @@ function buildDeckCriticalImages(deckVariant: string): string[] {
 }
 
 function buildDeckWarmImages(deckVariant: string): string[] {
-    const normalizedDeckVariant = deckVariant === DECK_VARIANT_IDS.II ? DECK_VARIANT_IDS.II : DECK_VARIANT_IDS.I;
     return [
         ...getCardiaLocationPaths(),
         // 预留：未来可把非首屏卡图/装饰图放入 warm。
