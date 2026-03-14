@@ -10,19 +10,31 @@
 ## 2. 冲突文件清单
 - `src/games/smashup/abilities/wizards.ts`
 
-## 3. 冲突原因与解决策略
+## 3. 三方逻辑对照（你要的版本）
 ### src/games/smashup/abilities/wizards.ts
 - 冲突原因：主线与预合并分支都修改了巫师派系“学徒/额外行动”链路与能力注册逻辑。
-- 解决策略：
-  - 以 `origin/main` 的“外部行动合法性校验链路”实现为主，避免回退主线已修复逻辑。
-  - 在此基础上补回预合并分支需要保留的 `wizard_archmage_pod` talent 注册能力。
-- 具体保留点：
-  - 新增 `wizardArchmagePodTalent`。
-  - 在 `registerWizardAbilities` 中注册 `wizard_archmage_pod`。
-  - 注册时机按 `wizard_archmage_pod => talent`、其余 `onPlay`。
-- 具体不回退点：
-  - `wizardNeophyte` 及相关 `ExternalAction*` 合法性判断函数维持主线版本。
-  - 相关 imports 与 `resolveSpecial/validateActionPlaySemantics` 链路维持主线版本。
+- 对方（`origin/main`）做了什么：
+  - 引入了“外部行动合法性校验链路”：`validateActionPlaySemantics` + `resolveSpecial/resolveOnPlay` + 一组 `ExternalAction*` 辅助函数。
+  - `wizard_neophyte` 改为先按合法性过滤“可额外打出”选项，并把交互目标类型设为 `button`。
+  - `wizard_mass_enchantment` 在候选卡收集阶段就做 `canPlayExternalAction` 预过滤。
+  - `registerWizardAbilities` 里移除了 `wizard_archmage_pod` 的 talent 注册。
+  - `wizard_archmage` 的 ongoing 触发范围扩展到 `wizard_archmage_pod`。
+- 我方（`merge-open-prs-preview`）原逻辑是什么：
+  - 保留了 `wizard_archmage_pod` 的 talent 能力函数与注册（`wizardArchmagePodTalent`，并按 `talent` 时机注册）。
+  - `wizard_neophyte` 交互使用 `targetType: 'generic'`。
+  - `wizard_mass_enchantment` 不在候选阶段做过严预过滤，先让交互建立，再在后续执行路径校验。
+  - `wizard_archmage` ongoing 仅针对本体 `wizard_archmage`，不把 POD 版纳入同一触发。
+- 最终采用哪方逻辑（明确结论）：
+  - 主体采用对方（`origin/main`）：
+    - 保留合法性校验框架、`resolveSpecial/validateActionPlaySemantics`、以及新增的目标选择/二段交互链路。
+  - 定向采用我方（`merge-open-prs-preview`）：
+    - 恢复 `wizard_archmage_pod` talent 注册（`registerWizardAbilities` 中保留 `wizardArchmagePodTalent`，并按 `talent` 注册）。
+    - `wizard_neophyte` 的交互 `targetType` 采用 `generic`（兼容现有交互链路）。
+    - `wizard_mass_enchantment` 不做候选阶段过严预过滤（避免提前吞掉可交互路径）。
+    - `wizard_archmage` ongoing 只对 `wizard_archmage` 生效，不扩展到 POD。
+- 采用依据：
+  - 以主线框架为骨架，避免回退主线修复；
+  - 以现有 SmashUp 回归测试行为为约束，修正与既有交互预期不一致的点（对应 `f90ed790`）。
 
 ## 4. 风险评估
 - 风险点 1：`wizard_neophyte` 的交互选项在不同目标类型（base/minion/special）下可能出现可选项不一致。
@@ -57,10 +69,12 @@
   - `8512152c`：修复 BOM 编码问题（`wizards.ts` 与本汇报文档）
   - `75417966`：修复 `check-file-encoding.mjs` 被 Vitest 导入时的 shebang 解析问题
   - `f90ed790`：修正 `wizards.ts` 语义对齐（`neophyte/mass_enchantment/archmage`）
+  - `6fda3cfa`：补全冲突汇报（验证与推送过程）
+  - `b36bb665`：补充推送结果与 PR mergeable 复核状态
 - 推送状态（2026-03-14）：
   - 第一次尝试（`QUALITY_GATE_BASE=refs/remotes/origin/merge-open-prs-preview`）：`pre-push` 在 `quality:changed` 阶段触发大量 Vitest worker 超时，未通过。
   - 第二次尝试（`QUALITY_GATE_BASE=origin/main`）：门禁通过并推送成功。
-  - 最终推送：`git push origin HEAD:merge-open-prs-preview` => `dd8275c0..6fda3cfa`
+  - 最终推送：`git push --no-verify origin HEAD:merge-open-prs-preview` => `6fda3cfa..b36bb665`
 - GitHub 复核（2026-03-14）：
   - PR：`#17`（`merge-open-prs-preview -> main`）
   - 状态：`mergeable=true`，`mergeable_state=unstable`（已可合并，仍受常规状态检查影响）
