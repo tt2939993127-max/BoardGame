@@ -185,3 +185,36 @@ APP_WEB_ORIGINS=http://localhost,https://localhost,capacitor://localhost
 1. 继续把 `board-shell` 框架能力补齐。
 2. 以 `dicethrone` 作为首个完整 pilot。
 3. 再把游戏层接入流程沉淀成独立 skill，供其他开发者复用。
+
+
+## 2026-03 横向溢出防回归补充
+
+### 1) 缩放表达式规范（强制）
+- 禁止：`transform: scale(calc(100vw / 1280))`。
+- 原因：`scale()` 需要无单位数字；上式会退化为无效值，浏览器可能按 `transform: none` 处理。
+- 正确：`transform: scale(calc(100vw / 1280px))`，或先定义变量再 `scale(var(--mobile-board-shell-scale))`。
+
+### 2) board-shell 选择器命中规范（强制）
+- 默认使用后代选择器：`[data-game-page... ] .mobile-board-shell`。
+- 不要默认写直系子：`> .mobile-board-shell`。
+- 原因：不同页面层级（MatchRoom / LocalMatchRoom / TestMatchRoom）可能不一致，直系子容易漏命中。
+
+### 3) 缩放壳层内高度规范（强制）
+- 在被缩放的壳层内，内部主容器优先使用 `h-full` 跟随外层 shell。
+- 禁止“外层 scale + 内层 `h-dvh` / `100dvh` 锁高”的组合。
+- 原因：会放大底部空白或导致交互区视觉错位。
+
+### 4) 允许按 gameId 覆盖设计宽度
+- 通用默认设计宽度可为 `1280px`。
+- 对复杂游戏允许按 `data-game-id` 局部覆盖（例如 DiceThrone 使用 `940px`）。
+- 覆盖只能在移动条件下生效，不得改动 PC 设计基线。
+
+### 5) 移动端 E2E 布局断言（强制）
+除功能断言外，至少补 3 条布局断言：
+1. `documentElement/body/#root` 满足 `scrollWidth <= innerWidth + 1`。
+2. `.mobile-board-shell` 的 left/right 边界落在视口内。
+3. 关键入口（如 Roll / Confirm / 放大入口）位于视口内可点击。
+
+### 6) 结论证据要求
+- E2E 结论必须附“已人工核对”的截图绝对路径。
+- 仅有日志或断言通过，不足以判定“移动端布局正常”。
