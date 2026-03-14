@@ -6,6 +6,7 @@ import { getGameById, subscribeGameRegistry } from '../../config/games.config';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
+    resolveGameMobileSupport,
     type GameMobileBannerKind,
 } from '../../games/mobileSupport';
 
@@ -16,21 +17,24 @@ const getViewport = () => ({
 
 const isNativeAppShell = () => Capacitor.isNativePlatform();
 
-const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrait') => {
-    if (typeof window === 'undefined') return;
+const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrait'): Promise<boolean> => {
+    if (typeof window === 'undefined') return false;
     const orientationApi = window.screen?.orientation;
-    if (!orientationApi?.lock) return;
-    await orientationApi.lock(orientation).catch(() => undefined);
+    if (!orientationApi?.lock) return false;
+    try {
+        await orientationApi.lock(orientation);
+        return true;
+    } catch {
+        return false;
+    }
 };
 
-const lockScreenByRoute = async (isGameRoute: boolean) => {
-    const targetOrientation = isGameRoute ? 'landscape' : 'portrait';
-
+const lockScreenByRoute = async (targetOrientation: 'landscape' | 'portrait'): Promise<boolean> => {
     try {
         await ScreenOrientation.lock({ orientation: targetOrientation });
-        return;
+        return true;
     } catch {
-        await lockScreenOrientationFallback(targetOrientation);
+        return lockScreenOrientationFallback(targetOrientation);
     }
 };
 
@@ -100,6 +104,12 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const preferredOrientation = gameId
+        ? resolveGameMobileSupport(gameConfig).preferredOrientation
+        : undefined;
+    const targetOrientation: 'landscape' | 'portrait' = gameId
+        ? (preferredOrientation === 'landscape' ? 'landscape' : 'portrait')
+        : 'portrait';
     const bannerKind = getGameMobileBannerKind(gameConfig, viewport.width, viewport.height);
     const bannerKey = bannerKind ? `${location.pathname}:${bannerKind}` : null;
     const shouldSuppressBannerInAppShell = nativeAppShell && Boolean(gameId);
@@ -136,8 +146,50 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
 
     useEffect(() => {
         if (!nativeAppShell) return;
-        void lockScreenByRoute(Boolean(gameId));
-    }, [nativeAppShell, gameId]);
+
+        let disposed = false;
+        const timeoutIds: number[] = [];
+
+        const lockNow = () => {
+            if (disposed) return;
+            void lockScreenByRoute(targetOrientation);
+        };
+
+        // 首屏进入时做多次重试，规避插件桥接尚未就绪导致的首次加锁失败
+        for (const delay of [0, 150, 500, 1200]) {
+            const id = window.setTimeout(() => {
+                lockNow();
+            }, delay);
+            timeoutIds.push(id);
+        }
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) return;
+            lockNow();
+        };
+
+        const handleFocus = () => {
+            lockNow();
+        };
+
+        const handleOrientationChange = () => {
+            lockNow();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('orientationchange', handleOrientationChange);
+
+        return () => {
+            disposed = true;
+            for (const timeoutId of timeoutIds) {
+                window.clearTimeout(timeoutId);
+            }
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('orientationchange', handleOrientationChange);
+        };
+    }, [nativeAppShell, targetOrientation, location.pathname]);
 
     return (
         <>

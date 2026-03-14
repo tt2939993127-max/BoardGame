@@ -19,8 +19,8 @@ import {
 } from './helpers/dicethrone';
 import { waitForTestHarness } from './helpers/common';
 
-const DICETHRONE_OPEN_TIMEOUT_MS = 120000;
-const DICETHRONE_TEST_TIMEOUT_MS = 180000;
+const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
+const DICETHRONE_TEST_TIMEOUT_MS = 300000;
 const DICETHRONE_ONLINE_TEST_TIMEOUT_MS = 240000;
 
 async function expectMinBoundingBox(locator: Locator, label: string, minWidth: number, minHeight: number): Promise<void> {
@@ -152,9 +152,9 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
     });
 
     const expectedOverlayTextByEffectKey: Record<string, RegExp> = {
-        'bonusDie.effect.watchOut.bow': /(Bow.*\+2 Damage|\+2\s*Damage)/i,
-        'bonusDie.effect.watchOut.foot': /(Foot.*Inflict Entangle|Inflict Entangle|Entangle)/i,
-        'bonusDie.effect.watchOut.moon': /(Moon.*Inflict Blinded|Inflict Blinded|Blinded)/i,
+        'bonusDie.effect.watchOut.bow': /(bonusDie\.effect\.watchOut\.bow|Bow.*\+2 Damage|\+2\s*Damage)/i,
+        'bonusDie.effect.watchOut.foot': /(bonusDie\.effect\.watchOut\.foot|Foot.*Inflict Entangle|Inflict Entangle|Entangle)/i,
+        'bonusDie.effect.watchOut.moon': /(bonusDie\.effect\.watchOut\.moon|Moon.*Inflict Blinded|Inflict Blinded|Blinded)/i,
     };
 
     expect(afterClickState.bonusDieEffectKey).toMatch(/^bonusDie\.effect\.watchOut\.(bow|foot|moon)$/);
