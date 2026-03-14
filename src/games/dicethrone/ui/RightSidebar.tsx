@@ -131,9 +131,9 @@ export const RightSidebar = ({
     const modifierTopClassName = '-top-[2.2vw]';
     const bonusTopClassName = '-top-[3.8vw]';
     const hintOffsetClassName = 'mr-[0.6vw]';
-    const hintBubbleClassName = 'flex items-center gap-[0.4vw] bg-amber-950/95 border border-amber-500/50 rounded-[0.5vw] px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
+    const hintBubbleClassName = 'flex max-w-[8.8vw] min-w-0 items-center gap-[0.4vw] overflow-hidden rounded-[0.5vw] border border-amber-500/50 bg-amber-950/95 px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
     const hintIconClassName = 'w-[1vw] h-[1vw] text-amber-400 shrink-0';
-    const hintTextClassName = 'text-[0.75vw] text-amber-200 font-medium leading-snug';
+    const hintTextClassName = 'min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.75vw] text-amber-200 font-medium leading-snug';
 
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;
