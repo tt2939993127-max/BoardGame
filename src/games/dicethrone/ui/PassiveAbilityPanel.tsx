@@ -47,17 +47,17 @@ export const PassiveAbilityPanel: React.FC<PassiveAbilityPanelProps> = ({
     if (passives.length === 0) return null;
 
     return (
-        <div className="w-[10.2vw] flex flex-col gap-[0.3vw]">
+        <div className="w-[10.2vw] min-w-0 flex flex-col gap-[0.3vw]">
             {passives.map(passive => {
                 const usability = actionUsability.get(passive.id) ?? [];
                 return (
-                    <div key={passive.id} className="flex flex-col gap-[0.25vw]">
+                    <div key={passive.id} className="flex min-w-0 flex-col gap-[0.25vw]">
                         {/* 被动能力名称 */}
-                        <div className="text-[0.55vw] font-bold text-emerald-400/80 uppercase tracking-wider text-center">
+                        <div className="truncate text-center text-[0.55vw] font-bold uppercase tracking-wider text-emerald-400/80">
                             {t(passive.nameKey)}
                         </div>
                         {/* 动作按钮 */}
-                        <div className="grid grid-cols-2 gap-[0.3vw]">
+                        <div className="grid min-w-0 grid-cols-2 gap-[0.3vw]">
                             {passive.actions.map((action, idx) => {
                                 const isUsable = usability[idx] ?? false;
                                 const isSelecting = rerollSelectingAction?.passiveId === passive.id
@@ -110,18 +110,18 @@ const PassiveActionButton: React.FC<{
             variant={isSelecting ? 'danger' : 'glass'}
             size="sm"
             className={`
-                !px-[0.3vw] !py-[0.35vw] !min-h-0 !rounded-[0.4vw] flex flex-col items-center gap-[0.1vw]
+                !px-[0.3vw] !py-[0.35vw] !min-h-0 !rounded-[0.4vw] flex min-w-0 flex-col items-center gap-[0.1vw] overflow-hidden
                 ${isSelecting ? 'ring-[0.15vw] ring-amber-400 animate-pulse' : ''}
                 ${isUsable && !isSelecting ? 'hover:!bg-emerald-500/20 hover:border-emerald-400/50' : ''}
             `}
         >
-            <div className="flex items-center gap-[0.2vw]">
+            <div className="flex min-w-0 items-center gap-[0.2vw]">
                 {icon}
-                <span className="!text-[0.6vw] font-bold">
+                <span className="truncate whitespace-nowrap !text-[0.6vw] font-bold">
                     {isSelecting ? t('passive.action.cancel') : label}
                 </span>
             </div>
-            <span className={`!text-[0.5vw] ${notEnoughCp ? 'text-red-400' : 'text-amber-300'}`}>
+            <span className={`truncate whitespace-nowrap !text-[0.5vw] ${notEnoughCp ? 'text-red-400' : 'text-amber-300'}`}>
                 {action.cpCost} CP
             </span>
         </GameButton>

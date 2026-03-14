@@ -509,7 +509,7 @@ const Panel = ({ item, isActive, alignment, isDark, buttonSize, buttonGap, isMob
     );
 };
 
-const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging }: any) => {
+const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging, buttonSize, isMobileViewport }: any) => {
     const [isHovered, setIsHovered] = useState(false);
     const showTooltip = isHovered && !isDragging && !(isActive && item.content);
     const showPreview = Boolean(item.preview) && !isDragging && !isActive;
@@ -541,6 +541,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
     const previewSide = useMemo(() => (tooltipSide === 'left' ? 'right' : 'left'), [tooltipSide]);
 
     const tooltipVerticalOffset = -(tooltipRect?.height ?? 0) / 2 + 8;
+    const floatingMaxWidth = isMobileViewport ? 'min(220px, 56vw)' : 'min(360px, 70vw)';
     const gap = 8; // tooltip/preview 与按钮边缘的间隙
 
     const activeStyle = isActive
@@ -579,14 +580,19 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                 data-fab-id={item.id}
                 className={`
                     relative flex items-center justify-center
-                    w-9 h-9 rounded-full backdrop-blur-md border
-                    md:w-12 md:h-12
+                    rounded-full backdrop-blur-md border
                     ${activeStyle}
                     ${item.color || ''}
                     transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105
                     cursor-pointer
                     z-20
                 `}
+                style={{
+                    width: buttonSize,
+                    height: buttonSize,
+                    minWidth: buttonSize,
+                    minHeight: buttonSize,
+                }}
             >
                 {tooltipPortalRoot && createPortal(
                     <>
@@ -598,7 +604,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                     animate={{ opacity: 1, x: 0, scale: 1 }}
                                     exit={{ opacity: 0, x: tooltipSide === 'right' ? 10 : -10, scale: 0.9 }}
                                     className={`
-                                        pointer-events-none px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap
+                                        pointer-events-none overflow-hidden text-ellipsis whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold
                                         ${isDark ? 'bg-black text-white border border-white/20 shadow-lg shadow-black/50' : 'bg-white text-[#433422] border border-[#d3ccba] shadow-xl'}
                                     `}
                                     style={{
@@ -612,6 +618,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             : undefined,
                                         transform: `translate(${tooltipSide === 'right' ? '0' : '-100%'}, -50%)`,
                                         zIndex: UI_Z_INDEX.tooltip,
+                                        maxWidth: floatingMaxWidth,
                                     }}
                                 >
                                     {item.label}
@@ -641,7 +648,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             : undefined,
                                         transform: `translate(${previewSide === 'right' ? '0' : '-100%'}, -50%)`,
                                         zIndex: UI_Z_INDEX.tooltip,
-                                        maxWidth: 'min(360px, 70vw)',
+                                        maxWidth: floatingMaxWidth,
                                     }}
                                 >
                                     {item.preview}
@@ -652,7 +659,10 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                     tooltipPortalRoot
                 )}
 
-                <div className="flex items-center justify-center w-full h-full max-md:scale-90">
+                <div
+                    className="flex h-full w-full items-center justify-center"
+                    style={{ transform: isMobileViewport ? 'scale(0.92)' : undefined }}
+                >
                     {item.icon}
                 </div>
             </motion.button>

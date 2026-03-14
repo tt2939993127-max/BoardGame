@@ -42,7 +42,7 @@ const DESKTOP_DICE_TRAY_TOKENS = {
     rowGapClassName: 'gap-[0.3vw]',
     dieGapClassName: 'gap-[0.25vw]',
     adjustButtonClassName: 'w-[1.2vw] h-[1.2vw] text-[0.8vw]',
-    lockedLabelClassName: 'text-[0.6vw] px-[0.4vw] py-[0.1vw]',
+    lockedLabelClassName: 'max-w-[4.4vw] overflow-hidden text-ellipsis whitespace-nowrap text-[0.6vw] px-[0.4vw] py-[0.1vw]',
     selectedBadgeClassName: 'w-[1vw] h-[1vw] -top-[0.3vw] -right-[0.3vw]',
     selectedBadgeIconClassName: '',
 };
