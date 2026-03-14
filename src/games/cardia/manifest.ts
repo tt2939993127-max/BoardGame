@@ -1,11 +1,5 @@
 import type { GameManifestEntry } from '../manifest.types';
-import {
-    CARDIA_IMAGE_PATHS,
-    getCardiaDeckCardPath,
-    getCardiaLocationPaths,
-} from './imagePaths';
-import { DECK_VARIANT_IDS } from './domain/ids';
-
+import { CARDIA_IMAGE_PATHS } from './imagePaths';
 const entry: GameManifestEntry = {
     id: 'cardia',
     type: 'game',
@@ -33,18 +27,14 @@ const entry: GameManifestEntry = {
             default: 'I',
         },
     },
+    // 移动端预算：不再全量 preload 卡牌图片。
+    // 首屏只保证背景/标题等 P0 资源，卡牌图由 CriticalImageGate（critical/warm）分阶段加载。
     preloadAssets: {
         images: [
-            // 标题和辅助图片
+            // P0：标题和辅助图片（用于列表页/入口页/基础 UI）
             CARDIA_IMAGE_PATHS.THUMBNAIL_TITLE,
             CARDIA_IMAGE_PATHS.HELPER_1,
             CARDIA_IMAGE_PATHS.HELPER_2,
-            // Deck I 卡牌（1-16）
-            ...Array.from({ length: 16 }, (_, i) => getCardiaDeckCardPath(DECK_VARIANT_IDS.I, i + 1)),
-            // Deck II 卡牌（1-16）
-            ...Array.from({ length: 16 }, (_, i) => getCardiaDeckCardPath(DECK_VARIANT_IDS.II, i + 1)),
-            // 地点卡牌
-            ...getCardiaLocationPaths(),
         ],
     },
 };

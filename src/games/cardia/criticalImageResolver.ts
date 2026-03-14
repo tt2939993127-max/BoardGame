@@ -17,7 +17,15 @@ function buildDeckCriticalImages(deckVariant: string): string[] {
     return [
         CARDIA_IMAGE_PATHS.DECK1_BACK,
         ...getCardiaDeckCardPaths(normalizedDeckVariant),
+    ];
+}
+
+function buildDeckWarmImages(deckVariant: string): string[] {
+    const normalizedDeckVariant = deckVariant === DECK_VARIANT_IDS.II ? DECK_VARIANT_IDS.II : DECK_VARIANT_IDS.I;
+    return [
         ...getCardiaLocationPaths(),
+        // 预留：未来可把非首屏卡图/装饰图放入 warm。
+        // Deck 卡图目前仍作为 critical，保证对局开始即刻可见。
     ];
 }
 
@@ -44,7 +52,7 @@ export const cardiaCriticalImageResolver: CriticalImageResolver = (gameState): C
 
     return {
         critical: buildDeckCriticalImages(deckVariant),
-        warm: [],
+        warm: buildDeckWarmImages(deckVariant),
         phaseKey: isTutorial ? `tutorial-playing:${deckVariant}` : `playing:${deckVariant}`,
     };
 };
