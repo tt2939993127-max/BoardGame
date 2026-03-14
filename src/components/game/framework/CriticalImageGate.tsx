@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingScreen } from '../../system/LoadingScreen';
-import { preloadCriticalImages, preloadWarmImages, areAllCriticalImagesCached, signalCriticalImagesReady, getCriticalImagesEpoch } from '../../../core';
+import { preloadCriticalImages, areAllCriticalImagesCached, signalCriticalImagesReady, getCriticalImagesEpoch } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
+import { warmPreloadScheduler } from './warmPreloadScheduler';
 
 export interface CriticalImageGateProps {
     gameId?: string;
@@ -35,6 +36,20 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     onReady,
     children,
 }) => {
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                warmPreloadScheduler.pause();
+            } else {
+                warmPreloadScheduler.resume();
+            }
+        };
+
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, []);
+
     // E2E 测试可通过 window.__E2E_SKIP_IMAGE_GATE__ 跳过图片预加载门禁
     const skipGate = typeof window !== 'undefined'
         && (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ === true;
@@ -144,7 +159,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 onReady?.();
-                preloadWarmImages(warmPaths, locale, gameId);
+                // warm 图片采用分批调度，避免一次性排队过多影响移动端交互流畅。
+                warmPreloadScheduler.enqueue(warmPaths, locale, gameId);
                 // 仅当本轮确实有关键图片时才 signal——空 criticalPaths 阶段
                 // 不应放行音频，后续阶段会紧接着加载图片
                 if (hasCriticalImages) {
