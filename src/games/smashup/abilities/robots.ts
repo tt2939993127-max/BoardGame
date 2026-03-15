@@ -13,7 +13,7 @@ import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
-import { drawCards, isDiscardMicrobot, matchesDefId, MICROBOT_DEF_IDS } from '../domain/utils';
+import { drawCards, isDiscardMicrobot, isMicrobot, matchesDefId, MICROBOT_DEF_IDS } from '../domain/utils';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
 /** 注册机器人派系所有能力*/
@@ -361,15 +361,35 @@ function registerRobotOngoingEffects(): void {
 
     // 微型机档案馆：微型机被消灭后控制者抽1张牌
     registerTrigger('robot_microbot_archive', 'onMinionDestroyed', (trigCtx) => {
-        if (!trigCtx.triggerMinionDefId) return [];
-        // 检查被消灭的是否是微型机
-        // 需要找到被消灭随从的控制者来判断 alpha 是否在场
-        // trigCtx 中没有被消灭随从的完整信息，用 defId 判断原始微型机
-        // alpha 联动需要知道控制者，但 onMinionDestroyed 触发时随从已移除
-        // 保守实现：原始微型机 defId 始终触发
-        if (!Array.from(MICROBOT_DEF_IDS).some(defId => matchesDefId(trigCtx.triggerMinionDefId, defId))) return [];
+        // 1. 需要有被消灭随从的 defId 或 uid，否则无法判断
+        if (!trigCtx.triggerMinionDefId && !trigCtx.triggerMinionUid && !trigCtx.triggerMinion) return [];
 
-        // 找到 microbot_archive 的拥有者
+        // 2. 找到被消灭的随从实例，用统一的 isMicrobot 判定是否是“微型机”
+        //    - 优先使用 triggerMinion（如果有快照）
+        //    - 否则在当前状态中按 uid 回溯（destroy pipeline 会在 reduce 之后触发，该随从可能已不在场，所以这是 best-effort）
+        let destroyedMinion = trigCtx.triggerMinion;
+        if (!destroyedMinion && trigCtx.triggerMinionUid) {
+            for (const base of trigCtx.state.bases) {
+                const found = base.minions.find(m => m.uid === trigCtx.triggerMinionUid);
+                if (found) {
+                    destroyedMinion = found;
+                    break;
+                }
+            }
+        }
+
+        // 若找不到实体，只能根据原始 defId 判断是否是“印刷微型机”
+        if (!destroyedMinion) {
+            if (!trigCtx.triggerMinionDefId) return [];
+            if (!Array.from(MICROBOT_DEF_IDS).some(defId => matchesDefId(trigCtx.triggerMinionDefId, defId))) {
+                return [];
+            }
+        } else {
+            // 有实体时，用统一的 isMicrobot 判定（支持 Alpha“视为微型机”）
+            if (!isMicrobot(trigCtx.state, destroyedMinion)) return [];
+        }
+
+        // 3. 找到任意一个 Microbot Archive 实例，确定控制者（Archive 控制者即该能力的收益方）
         let archiveOwner: string | undefined;
         for (const base of trigCtx.state.bases) {
             const archive = base.minions.find(m => matchesDefId(m.defId, 'robot_microbot_archive'));
@@ -380,10 +400,10 @@ function registerRobotOngoingEffects(): void {
         }
         if (!archiveOwner) return [];
 
-        // "你的"微型机 → 被消灭随从必须属于 archive 控制者
+        // 4. "你的微型机" → 被消灭随从必须属于 archive 控制者（控制关系由 trigCtx.playerId 表示）
         if (trigCtx.playerId !== archiveOwner) return [];
 
-        // 抽1张牌
+        // 5. 抽 1 张牌（按全局抽牌规则处理牌库为空 / 手牌上限）
         const player = trigCtx.state.players[archiveOwner];
         if (!player || player.deck.length === 0) return [];
         const { drawnUids } = drawCards(player, 1, trigCtx.random);

@@ -445,24 +445,17 @@ export function revealDeckTop(
 // 牌库顶翻牌通用 helper
 // ============================================================================
 
-/**
- * 从牌库顶翻牌 → 展示给所有玩家 → 按条件筛选 → 命中放手牌 → 未命中放牌库底
- *
- * 通用模式，替代各技能中重复的 deck.slice + CARDS_DRAWN + DECK_RESHUFFLED 硬编码。
- *
- * 支持两种翻牌模式：
- * - 固定数量：翻 count 张，按 predicate 筛选
- * - 搜索模式：逐张翻直到找到 maxPick 张满足条件的卡（count 不传）
- *
- * revealTo 控制展示范围：
- * - 'all' = 展示给所有玩家（生成 REVEAL_DECK_TOP 事件）
- * - 'none' = 不展示（私有搜索，由 PromptOverlay 展示给操作者）
- * - PlayerId = 展示给指定玩家
- */
 export function revealAndPickFromDeck(params: {
-    player: { deck: CardInstance[] };
+    /** 完整游戏状态，用于访问牌库 + 弃牌堆并支持洗牌 */
+    state: SmashUpCore;
+    /** 随机函数（用于弃牌堆洗入牌库时的随机顺序） */
+    random: RandomFn;
+    /** 进行翻牌/搜索的玩家 */
     playerId: PlayerId;
-    /** 翻多少张（不传 = 逐张翻直到满足 maxPick） */
+    /**
+     * 翻多少张（不传 = 搜索模式：逐张翻直到找到 maxPick 张满足条件的卡，
+     * 在牌库见底且弃牌堆非空时，会将弃牌堆洗入牌库继续搜索）
+     */
     count?: number;
     /** 筛选条件：返回 true 的卡被"命中" */
     predicate: (card: CardInstance) => boolean;
@@ -472,25 +465,37 @@ export function revealAndPickFromDeck(params: {
     missTarget?: 'deck_bottom' | 'deck_top';
     /** 展示给谁：'all' = 所有人，'none' = 不展示，PlayerId = 指定玩家（默认 'none'） */
     revealTo?: PlayerId | 'all' | 'none';
-    /** 触发来源（用于事件 reason） */
+    /** 触发来源（用于事件 reason 字段） */
     reason: string;
     now: number;
 }): { events: SmashUpEvent[]; picked: CardInstance[]; missed: CardInstance[] } {
-    const { player, playerId, predicate, maxPick, reason, now } = params;
+    const { state, random, playerId, predicate, maxPick, reason, now } = params;
     const missTarget = params.missTarget ?? 'deck_bottom';
     const revealTo = params.revealTo ?? 'none';
 
-    if (player.deck.length === 0) {
-        return { events: [], picked: [], missed: [] };
-    }
+    const player = state.players[playerId];
+    if (!player) return { events: [], picked: [], missed: [] };
 
+    // 使用本地模拟的牌库/弃牌堆数组，按照"需要翻牌/搜索时若牌库为空则洗弃牌堆"的规则处理。
+    let deckSim = [...player.deck];
+    let discardSim = [...player.discard];
     const picked: CardInstance[] = [];
     const missed: CardInstance[] = [];
+    const revealed: CardInstance[] = [];
 
     if (params.count !== undefined) {
         // 固定数量模式：翻 count 张
-        const topCards = player.deck.slice(0, params.count);
-        for (const card of topCards) {
+        const targetCount = params.count;
+        while (revealed.length < targetCount) {
+            if (deckSim.length === 0) {
+                if (discardSim.length === 0) break;
+                deckSim = random.shuffle([...discardSim]);
+                discardSim = [];
+            }
+            if (deckSim.length === 0) break;
+            const card = deckSim[0];
+            deckSim = deckSim.slice(1);
+            revealed.push(card);
             if (predicate(card) && picked.length < maxPick) {
                 picked.push(card);
             } else {
@@ -499,8 +504,16 @@ export function revealAndPickFromDeck(params: {
         }
     } else {
         // 搜索模式：逐张翻直到找到 maxPick 张
-        for (const card of player.deck) {
-            if (picked.length >= maxPick) break;
+        while (picked.length < maxPick) {
+            if (deckSim.length === 0) {
+                if (discardSim.length === 0) break;
+                deckSim = random.shuffle([...discardSim]);
+                discardSim = [];
+            }
+            if (deckSim.length === 0) break;
+            const card = deckSim[0];
+            deckSim = deckSim.slice(1);
+            revealed.push(card);
             if (predicate(card)) {
                 picked.push(card);
             } else {
@@ -509,45 +522,48 @@ export function revealAndPickFromDeck(params: {
         }
     }
 
-    if (picked.length === 0 && missed.length === 0) {
+    if (revealed.length === 0) {
         return { events: [], picked: [], missed: [] };
     }
 
-    const allRevealed = [...picked, ...missed];
     const events: SmashUpEvent[] = [];
 
     // 1. 展示事件（仅当 revealTo 不为 'none' 时生成）
     if (revealTo !== 'none') {
         const revealEvent = revealDeckTop(
             playerId, revealTo,
-            allRevealed.map(c => ({ uid: c.uid, defId: c.defId })),
-            allRevealed.length, reason, now,
+            revealed.map(c => ({ uid: c.uid, defId: c.defId })),
+            revealed.length, reason, now,
         );
         events.push(revealEvent);
     }
 
-    // 2. 命中的卡放入手牌
+    // 2. 重排牌库：根据模拟后的 deckSim + missed，为 reducer 提供新的牌库顺序
+    const remaining = deckSim;
+    const deckOrderBeforeDraw =
+        missTarget === 'deck_bottom'
+            ? [...remaining, ...picked, ...missed]
+            : [...missed, ...picked, ...remaining];
+
+    if (deckOrderBeforeDraw.length > 0) {
+        const deckReorderEvt: DeckReorderedEvent = {
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: {
+                playerId,
+                deckUids: deckOrderBeforeDraw.map(c => c.uid),
+            },
+            timestamp: now,
+        };
+        events.push(deckReorderEvt);
+    }
+
+    // 3. 命中的卡放入手牌
     if (picked.length > 0) {
         events.push({
             type: SU_EVENTS.CARDS_DRAWN,
             payload: { playerId, count: picked.length, cardUids: picked.map(c => c.uid) },
             timestamp: now,
         } as CardsDrawnEvent);
-    }
-
-    // 3. 未命中的卡放牌库底/顶 → 重排牌库
-    if (missed.length > 0) {
-        const processedUids = new Set(allRevealed.map(c => c.uid));
-        const remainingDeck = player.deck.filter(c => !processedUids.has(c.uid));
-        // 使用 DECK_REORDERED（仅重排牌库，不碰弃牌堆），避免 DECK_RESHUFFLED 清空弃牌堆
-        const newDeckUids = missTarget === 'deck_bottom'
-            ? [...remainingDeck.map(c => c.uid), ...missed.map(c => c.uid)]
-            : [...missed.map(c => c.uid), ...remainingDeck.map(c => c.uid)];
-        events.push({
-            type: SU_EVENTS.DECK_REORDERED,
-            payload: { playerId, deckUids: newDeckUids },
-            timestamp: now,
-        } as DeckReorderedEvent);
     }
 
     return { events, picked, missed };

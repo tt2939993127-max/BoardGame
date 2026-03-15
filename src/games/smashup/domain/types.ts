@@ -424,6 +424,14 @@ export interface SmashUpCore {
      * 用于实现类似“渗透 POD 天赋”这种“即使牌已离场，压制仍持续到下回合开始”的规则。
      */
     suppressedBasesUntilTurnStart?: Array<{ baseIndex: number; suppressorPlayerId: PlayerId }>;
+
+    /**
+     * 本回合已触发过“每回合一次”的持续行动卡 UID 列表。
+     *
+     * 用于实现类似 Altar to Cthulhu POD 等“每回合一次触发”的效果。
+     * 生命周期：在 TURN_STARTED 时清空。
+     */
+    turnUsedOngoingUids?: string[];
 }
 
 export interface FactionSelectionState {
