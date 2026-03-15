@@ -67,6 +67,7 @@
 | `useHorizontalDragScroll` | 横向滚动容器增强 | 滚轮纵向→横向转换 + 鼠标拖拽左右滑动。所有横向卡牌列表/弃牌堆浏览必须使用，禁止手写 wheel 事件监听。返回 `{ ref, dragProps }`，`dragProps` 需展开到容器元素。 |
 | `useTouchLongPress` | mobile long-press interaction | Provides touch long-press trigger, move-cancel, and post-long-press click suppression. Returns pointer handlers, `clearLongPressState`, and `shouldBlockClick`. |
 | `useTouchInspectGesture` | coarse-pointer inspect gesture | Combines coarse-pointer detection with long-press inspect behavior. Use when touch devices need long-press preview while keeping tap for the primary action. |
+| `useArmedActivation` | armed tap-to-activate interaction | Provides "first tap arms, second tap activates" state for touch-first UIs. Use when coarse-pointer devices need explicit selection before firing a primary action. |
 | `useDeferredRender` | 延迟渲染 | 避免首帧闪烁 |
 | `useDelayedBackdropBlur` | 延迟毛玻璃 | 毛玻璃效果延迟启用，避免动画期间性能问题 |
 

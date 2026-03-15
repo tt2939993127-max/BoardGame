@@ -16,6 +16,8 @@ import { CardSprite } from './CardSprite';
 import { useToast } from '../../../contexts/ToastContext';
 import { playDeniedSound } from '../../../lib/audio/useGameAudio';
 import { resolveCardAtlasId } from './cardAtlas';
+import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
+import { useTouchLongPress } from '../../../hooks/ui/useTouchLongPress';
 
 /** 放大镜图标 */
 const MagnifyIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -70,6 +72,9 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
 
 // 卡牌宽度（使用vw单位）
 const CARD_WIDTH_VW = 16; // 16vw
+const LONG_PRESS_DURATION_MS = 420;
+const LONG_PRESS_MOVE_CANCEL_PX = 14;
+const LONG_PRESS_CLICK_BLOCK_MS = 450;
 
 const HandCard: React.FC<{
   card: Card;
@@ -80,6 +85,11 @@ const HandCard: React.FC<{
   canPlay: boolean;
   onClick?: () => void;
   onMagnify?: () => void;
+  onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  onPointerMove?: React.PointerEventHandler<HTMLDivElement>;
+  onPointerUp?: React.PointerEventHandler<HTMLDivElement>;
+  onPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
+  showTouchMagnifyButton?: boolean;
 }> = ({
   card,
   index,
@@ -89,6 +99,11 @@ const HandCard: React.FC<{
   canPlay,
   onClick,
   onMagnify,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  showTouchMagnifyButton = false,
 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const spriteConfig = getCardSpriteConfig(card);
@@ -125,11 +140,15 @@ const HandCard: React.FC<{
         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onClick={onClick}
       >
         <div
           className={`
-          relative w-full rounded-lg overflow-hidden
+          relative w-full rounded-lg overflow-hidden pointer-events-none
           border-2 transition-all duration-150
           ${isSelected
               ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30'
@@ -147,7 +166,7 @@ const HandCard: React.FC<{
             <CardSprite
               atlasId={spriteConfig.atlasId}
               frameIndex={spriteConfig.frameIndex}
-              className="w-full"
+              className="w-full pointer-events-none"
             />
           ) : (
             <div className="w-full aspect-[1044/729] bg-gradient-to-b from-slate-700 to-slate-900 flex items-center justify-center">
@@ -162,9 +181,14 @@ const HandCard: React.FC<{
           {/* 放大镜按钮 */}
           <button
             onClick={handleMagnifyClick}
-            className="absolute top-[0.3vw] right-[0.3vw] w-[1.8vw] h-[1.8vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
+            data-testid="sw-hand-card-magnify"
+            className={
+              showTouchMagnifyButton
+                ? 'absolute left-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-white/25 bg-black/75 text-white shadow-lg transition-[background-color] duration-200 hover:bg-amber-500/80 pointer-events-auto'
+                : 'absolute top-[0.3vw] right-[0.3vw] z-20 flex h-[1.8vw] w-[1.8vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 group-hover:opacity-100 hover:bg-amber-500/80 pointer-events-auto'
+            }
           >
-            <MagnifyIcon className="w-[1vw] h-[1vw]" />
+            <MagnifyIcon className={showTouchMagnifyButton ? 'h-4 w-4' : 'w-[1vw] h-[1vw]'} />
           </button>
         </div>
       </motion.div>
@@ -189,6 +213,21 @@ export const HandArea: React.FC<HandAreaProps> = ({
 }) => {
   const { t } = useTranslation('game-summonerwars');
   const showToast = useToast();
+  const isCoarsePointer = useCoarsePointer();
+  const {
+    handlePointerDown: handleTouchLongPressStart,
+    handlePointerMove: handleTouchLongPressMove,
+    handlePointerUp: handleTouchLongPressEnd,
+    shouldBlockClick,
+  } = useTouchLongPress<string, Card>({
+    enabled: Boolean(onMagnifyCard) && isCoarsePointer,
+    durationMs: LONG_PRESS_DURATION_MS,
+    moveCancelPx: LONG_PRESS_MOVE_CANCEL_PX,
+    clickBlockMs: LONG_PRESS_CLICK_BLOCK_MS,
+    onLongPress: (_cardId, card) => {
+      onMagnifyCard?.(card);
+    },
+  });
 
   // 追踪新增卡牌（用于发牌动画）
   const prevCardIdsRef = useRef<string[]>([]);
@@ -227,6 +266,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
   const handleCardClick = useCallback((cardId: string) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
+    if (shouldBlockClick(cardId)) return;
 
     const cost = getCardCost(card);
     const canAfford = cost <= currentMagic;
@@ -316,7 +356,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast, t]);
+  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast, t, shouldBlockClick]);
 
   if (cards.length === 0) {
     return null;
@@ -351,10 +391,15 @@ export const HandArea: React.FC<HandAreaProps> = ({
                   totalCards={cards.length}
                   isSelected={isSelected}
                   canAfford={canAfford}
-                  canPlay={canPlay}
-                  onClick={() => handleCardClick(card.id)}
-                  onMagnify={() => onMagnifyCard?.(card)}
-                />
+                canPlay={canPlay}
+                onClick={() => handleCardClick(card.id)}
+                onMagnify={() => onMagnifyCard?.(card)}
+                onPointerDown={(event) => handleTouchLongPressStart(event, card.id, card)}
+                onPointerMove={(event) => handleTouchLongPressMove(event, card.id)}
+                onPointerUp={() => handleTouchLongPressEnd(card.id)}
+                onPointerCancel={() => handleTouchLongPressEnd(card.id)}
+                showTouchMagnifyButton={isCoarsePointer && Boolean(onMagnifyCard)}
+              />
               </motion.div>
             );
           })}

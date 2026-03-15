@@ -727,7 +727,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
           </>
         </TutorialSelectionGate>
       ) : (
-        <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col" data-game-page data-game-id="summonerwars">
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars">
           {isEditingLayout ? (
             <div className="flex-1 overflow-auto p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -1131,7 +1131,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               />
 
               {/* 卡牌放大预览 */}
-              <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]">
+              <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]" overlayTestId="sw-magnify-overlay" closeLabel={t('actions.close')}>
                 {magnifiedCard && <CardSprite atlasId={magnifiedCard.atlasId} frameIndex={magnifiedCard.frameIndex} className="h-[75vh] rounded-xl shadow-2xl" style={{ minWidth: '40vw' }} />}
               </MagnifyOverlay>
 
