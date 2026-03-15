@@ -44,8 +44,14 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     };
   }, [isGamePage]);
 
-  // 移动设备且竖屏且未关闭时显示建议
-  const shouldShowBanner = isMobile && isPortrait && !isDismissed;
+  // 移动端优先：竖屏是主流使用姿势，不应默认用强提示遮挡内容。
+  // 仅在“竖屏且可视高度极小”的场景给出横屏建议（例如部分设备分屏/横屏被误判等）。
+  const isTightPortrait = typeof window !== 'undefined'
+    && window.innerWidth <= 430
+    && window.innerHeight <= 700;
+
+  // 移动设备且竖屏且未关闭且确实非常拥挤时显示建议
+  const shouldShowBanner = isMobile && isPortrait && isTightPortrait && !isDismissed;
 
   return (
     <>
