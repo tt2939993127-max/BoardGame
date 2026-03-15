@@ -573,6 +573,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 pendingPostScoringActions: undefined,
                 // 清空计分阶段锁定的 eligible 基地列表
                 scoringEligibleBaseIndices: undefined,
+                // 清空本回合已使用的持续行动 UID 追踪
+                turnUsedOngoingUids: undefined,
                 sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
                 players: newPlayers,
             };

@@ -1616,7 +1616,11 @@
     },
     "bear_cavalry_commission_pod": {
       "name": "Commission",
-      "effectText": "Play an extra minion. Move another player's minion from that base to another base."
+      "effectText": "Play an extra minion. Move another player's minion from the extra minion's base to another base."
+    },
+    "bear_cavalry_bearing_down_pod": {
+      "name": "Bearing Down",
+      "effectText": "Play on a base. Ongoing: This base's breakpoint is increased by 2 for each player with a minion here, or decreased instead if you have moved another player's minion to this base this turn."
     },
     "bear_cavalry_superiority_pod": {
       "name": "Superiority",
