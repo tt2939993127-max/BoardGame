@@ -139,14 +139,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         switch (deviceType) {
             case 'phone-portrait':
                 // 手机竖屏：基于宽度，确保手牌区域不需要过度滚动
-                cardWidth = Math.max(70, Math.min(90, Math.round(width * 0.18)));
-                smallCardWidth = Math.max(56, Math.min(72, Math.round(width * 0.14)));
+                cardWidth = Math.max(66, Math.min(84, Math.round(width * 0.16)));
+                smallCardWidth = Math.max(52, Math.min(68, Math.round(width * 0.13)));
                 break;
                 
             case 'phone-landscape':
                 // 手机横屏：基于高度，充分利用垂直空间
-                cardWidth = Math.max(70, Math.min(desktopCardWidth, Math.round(height * 0.22)));
-                smallCardWidth = Math.max(56, Math.min(desktopSmallCardWidth, Math.round(height * 0.17)));
+                cardWidth = Math.max(66, Math.min(88, Math.round(height * 0.18)));
+                smallCardWidth = Math.max(52, Math.min(70, Math.round(height * 0.14)));
                 break;
                 
             case 'tablet-portrait':
@@ -892,7 +892,7 @@ interface PlayerInfoBarProps {
 const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets, deviceType }) => {
     const { t } = useTranslation('game-cardia');
     
-    const isCompact = deviceType === 'phone-landscape';
+    const isCompact = deviceType === 'phone-landscape' || deviceType === 'phone-portrait';
     
     return (
         <div className={isCompact
