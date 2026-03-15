@@ -342,7 +342,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(inspectButton).toHaveCSS('opacity', '1');
         await expect(talentMinion).toBeVisible({ timeout: 15000 });
         await expect(baseOngoingCard).toBeVisible({ timeout: 15000 });
-        await expect(attachedActionCard).toBeVisible({ timeout: 15000 });
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'false');
 
         const viewport = page.viewportSize();
         expect(viewport).not.toBeNull();
@@ -362,37 +362,50 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(magnifyOverlay).toHaveCount(0);
 
         await clickCenter(talentMinion, page);
+        await expect(talentMinion).toHaveAttribute('data-expanded', 'true');
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'true');
+        await expect(talentMinion).toHaveAttribute('data-activation-armed', 'true');
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed ?? false;
+        }, { timeout: 5000 }).toBe(false);
+        await expect(magnifyOverlay).toHaveCount(0);
+
+        await game.screenshot('05-mobile-single-tap-expands-attached-actions', testInfo);
+
+        await clickCenter(talentMinion, page);
         await expect.poll(async () => {
             const state = await game.getState();
             return state.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed ?? false;
         }, { timeout: 5000 }).toBe(true);
-        await expect(magnifyOverlay).toHaveCount(0);
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'true');
+        await expect(talentMinion).toHaveAttribute('data-activation-armed', 'false');
 
-        await game.screenshot('05-mobile-single-tap-keeps-primary-action', testInfo);
+        await game.screenshot('06-mobile-second-tap-uses-talent', testInfo);
 
         await longPressTouch(talentMinion, page, 1);
         await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
-        await game.screenshot('06-mobile-minion-long-press-magnify', testInfo);
+        await game.screenshot('07-mobile-minion-long-press-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         await longPressTouch(firstBase, page, 2);
         await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
-        await game.screenshot('07-mobile-base-long-press-magnify', testInfo);
+        await game.screenshot('08-mobile-base-long-press-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         await longPressTouch(baseOngoingCard, page, 3);
         await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
-        await game.screenshot('08-mobile-base-ongoing-long-press-magnify', testInfo);
+        await game.screenshot('09-mobile-base-ongoing-long-press-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         await longPressTouch(attachedActionCard, page, 4);
         await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
-        await game.screenshot('09-mobile-attached-action-long-press-magnify', testInfo);
+        await game.screenshot('10-mobile-attached-action-long-press-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         await longPressTouch(handCard, page, 5);
         await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
-        await game.screenshot('10-mobile-hand-long-press-magnify', testInfo);
+        await game.screenshot('11-mobile-hand-long-press-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         const stateAfterLongPress = await game.getState();

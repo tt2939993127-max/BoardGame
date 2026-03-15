@@ -19,6 +19,7 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
 import { getLayoutConfig } from './layoutConfig';
+import { useArmedActivation } from '../../../hooks/ui/useArmedActivation';
 import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
 
 // ============================================================================
@@ -57,6 +58,7 @@ export const BaseZone: React.FC<{
     phase?: string;
 }> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
+    const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
     // 响应式布局配置
     const playerCount = turnOrder.length;
@@ -95,6 +97,34 @@ export const BaseZone: React.FC<{
     });
 
     // 分组
+    React.useEffect(() => {
+        if (expandedMinionUid && !base.minions.some((minion) => minion.uid === expandedMinionUid)) {
+            setExpandedMinionUid(null);
+        }
+    }, [base.minions, expandedMinionUid]);
+
+    const toggleExpandedMinion = useCallback((minionUid: string) => {
+        setExpandedMinionUid((current) => current === minionUid ? null : minionUid);
+    }, []);
+
+    const isActivationKeyValid = useCallback((key: string) => {
+        const isValidMinionKey = base.minions.some((minion) => `minion-${minion.uid}` === key);
+        const isValidAttachedKey = base.minions.some((minion) => minion.attachedActions?.some((action) => `attached-${action.uid}` === key));
+        const isValidBaseOngoingKey = base.ongoingActions?.some((action) => `ongoing-${action.uid}` === key) ?? false;
+
+        return isValidMinionKey || isValidAttachedKey || isValidBaseOngoingKey;
+    }, [base.minions, base.ongoingActions]);
+
+    const {
+        isArmed: isActivationArmed,
+        clearArmed: clearArmedActivation,
+        armOrActivate,
+    } = useArmedActivation<string>({
+        requireArming: isCoarsePointer,
+        isKeyValid: isActivationKeyValid,
+        validationDeps: [base.minions, base.ongoingActions],
+    });
+
     const minionsByController: Record<string, MinionOnBase[]> = {};
     base.minions.forEach(m => {
         if (!minionsByController[m.controller]) minionsByController[m.controller] = [];
@@ -123,6 +153,8 @@ export const BaseZone: React.FC<{
                         // ongoing 行动卡天赋判定
                         const hasOngoingTalent = actionDef?.abilityTags?.includes('talent') ?? false;
                         const canUseOngoingTalent = hasOngoingTalent && !oa.talentUsed && isMyTurn && oa.ownerId === myPlayerId;
+                        const ongoingActivationKey = `ongoing-${oa.uid}`;
+                        const isOngoingActivationArmed = isActivationArmed(ongoingActivationKey);
                         // 交互驱动的行动卡选择
                         const isSelectableOngoing = !!selectableOngoingUids?.has(oa.uid);
                         const isDimmedOngoing = !!selectableOngoingUids && !selectableOngoingUids.has(oa.uid);
@@ -135,9 +167,14 @@ export const BaseZone: React.FC<{
                                     e.stopPropagation();
                                     if (shouldBlockOngoingClick(`ongoing-${oa.uid}`)) return;
                                     if (isSelectableOngoing && onOngoingSelect) {
+                                        clearArmedActivation();
                                         onOngoingSelect(oa.uid);
                                     } else if (canUseOngoingTalent) {
-                                        dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
+                                        armOrActivate(ongoingActivationKey, {
+                                            onActivate: () => {
+                                                dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
+                                            },
+                                        });
                                     }
                                 }}
                                 className={`relative aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
@@ -146,6 +183,8 @@ export const BaseZone: React.FC<{
                                         ? 'opacity-40 grayscale cursor-not-allowed'
                                         : isSelectableOngoing
                                         ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
+                                        : isOngoingActivationArmed
+                                        ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                                         : canUseOngoingTalent ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : `${pConf.border} ${pConf.shadow}`}`}
                                 style={{ width: `${layout.ongoingCardWidth}vw` }}
                                 initial={{ y: 20, opacity: 0, scale: 0.6 }}
@@ -202,6 +241,8 @@ export const BaseZone: React.FC<{
                         event.stopPropagation();
                         return;
                     }
+                    setExpandedMinionUid(null);
+                    clearArmedActivation();
                     onClick();
                 }}
                 {...getBaseTouchInspectProps(`base-${baseIndex}`, { defId: base.defId })}
@@ -376,6 +417,12 @@ export const BaseZone: React.FC<{
                                             onViewAction={onViewAction}
                                             selectableOngoingUids={selectableOngoingUids}
                                             onOngoingSelect={onOngoingSelect}
+                                            isExpanded={expandedMinionUid === m.uid}
+                                            onToggleExpanded={toggleExpandedMinion}
+                                            onExpandMinion={setExpandedMinionUid}
+                                            isActivationArmed={isActivationArmed}
+                                            clearArmedActivation={clearArmedActivation}
+                                            armOrActivate={armOrActivate}
                                             isTutorialTargetAllowed={isTutorialTargetAllowed}
                                             phase={phase}
                                             layout={layout}
@@ -464,6 +511,12 @@ const MinionCard: React.FC<{
     /** 交互驱动的持续行动卡选择：只有这些 UID 的行动卡可被选中 */
     selectableOngoingUids?: Set<string>;
     onOngoingSelect?: (ongoingUid: string) => void;
+    isExpanded?: boolean;
+    onToggleExpanded?: (minionUid: string) => void;
+    onExpandMinion?: React.Dispatch<React.SetStateAction<string | null>>;
+    isActivationArmed: (activationKey: string) => boolean;
+    clearArmedActivation: () => void;
+    armOrActivate: (activationKey: string, callbacks: { onArm?: () => void; onActivate: () => void }) => boolean;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
     /** 当前游戏阶段 */
     phase?: string;
@@ -472,7 +525,7 @@ const MinionCard: React.FC<{
     /** 玩家回合顺序（用于判断是否是最右边玩家） */
     turnOrder: string[];
     isCoarsePointer: boolean;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed, phase, layout, turnOrder, isCoarsePointer }) => {
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isTutorialTargetAllowed, phase, layout, turnOrder, isCoarsePointer }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -507,6 +560,17 @@ const MinionCard: React.FC<{
 
     // 合并：天赋或 special 都可以激活
     const canActivate = canUseTalent || canActivateSpecial;
+    const hasAttachedActions = Boolean(minion.attachedActions?.length);
+    const isRightmostBase = baseIndex === core.bases.length - 1;
+    const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
+    const isFourPlayerGame = turnOrder.length === 4;
+    const shouldShowAttachedLeft = isRightmostBase && isRightmostPlayer && isFourPlayerGame;
+    const shouldShowAttachedActions = Boolean(selectableOngoingUids) || (isCoarsePointer ? !!isExpanded : false);
+    const attachedActionsPositionClass = shouldShowAttachedLeft
+        ? 'right-full flex-col-reverse pr-[0.6vw]'
+        : 'left-full flex-col pl-[0.6vw]';
+    const minionActivationKey = `minion-${minion.uid}`;
+    const isMinionActivationArmed = isActivationArmed(minionActivationKey);
 
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
@@ -542,15 +606,41 @@ const MinionCard: React.FC<{
         if (shouldBlockMinionClick(`minion-${minion.uid}`)) return;
         // 随从选择模式：点击随从附着 ongoing 行动卡
         if (isMinionSelectMode && onMinionSelect) {
+            clearArmedActivation();
             onMinionSelect(minion.uid, baseIndex);
             return;
         }
+        if (isCoarsePointer) {
+            if (canActivate) {
+                armOrActivate(minionActivationKey, {
+                    onArm: () => {
+                        onExpandMinion?.(minion.uid);
+                    },
+                    onActivate: () => {
+                        onExpandMinion?.(minion.uid);
+                        if (canUseTalent) {
+                            dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
+                        } else if (canActivateSpecial) {
+                            dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { minionUid: minion.uid, baseIndex });
+                        }
+                    },
+                });
+                return;
+            }
+            if (hasAttachedActions) {
+                onToggleExpanded?.(minion.uid);
+                clearArmedActivation();
+                return;
+            }
+        }
         if (canUseTalent) {
+            clearArmedActivation();
             dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
         } else if (canActivateSpecial) {
+            clearArmedActivation();
             dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { minionUid: minion.uid, baseIndex });
         }
-    }, [isMinionSelectMode, onMinionSelect, canUseTalent, canActivateSpecial, dispatch, minion.uid, baseIndex, shouldBlockMinionClick]);
+    }, [isMinionSelectMode, onMinionSelect, clearArmedActivation, isCoarsePointer, canActivate, canUseTalent, canActivateSpecial, dispatch, minion.uid, baseIndex, shouldBlockMinionClick, armOrActivate, onToggleExpanded, onExpandMinion, hasAttachedActions, minionActivationKey]);
 
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
@@ -559,6 +649,9 @@ const MinionCard: React.FC<{
         <motion.div
             data-minion-uid={minion.uid}
             data-minion-def-id={minion.defId}
+            data-expanded={isExpanded ? 'true' : 'false'}
+            data-attached-actions-visible={hasAttachedActions ? (shouldShowAttachedActions ? 'true' : 'false') : 'none'}
+            data-activation-armed={isMinionActivationArmed ? 'true' : 'false'}
             {...getMinionTouchInspectProps(`minion-${minion.uid}`, undefined)}
             onClick={handleClick}
             className={`
@@ -571,6 +664,12 @@ const MinionCard: React.FC<{
                     ? 'cursor-pointer border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
                     : isSelectableMinion
                     ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
+                    : isExpanded
+                    ? isMinionActivationArmed
+                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                    : canActivate
+                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                    : 'cursor-pointer border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
                     : canActivate
                     ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
                     : `cursor-pointer ${conf.border} ${conf.shadow}`}
@@ -676,31 +775,21 @@ const MinionCard: React.FC<{
             )}
 
             {/* 附着的 ongoing 行动卡 - 角标 + hover 时弹出小卡片 */}
-            {minion.attachedActions && minion.attachedActions.length > 0 && (
+            {hasAttachedActions && (
                 <>
                     <AttachedBadge count={minion.attachedActions.length} />
                     {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
                     {/* 行动卡选择模式下始终显示（不需要 hover） */}
                     {/* 最右侧基地的最右边玩家：显示在左侧；其他：显示在右侧 */}
-                    {(() => {
-                        const isRightmostBase = baseIndex === core.bases.length - 1;
-                        const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
-                        const isFourPlayerGame = turnOrder.length === 4;
-                        const shouldShowLeft = isRightmostBase && isRightmostPlayer && isFourPlayerGame;
-                        const shouldShowAttachedActions = isCoarsePointer || !!selectableOngoingUids;
-                        const positionClass = shouldShowLeft
-                            ? 'right-full flex-col-reverse pr-[0.6vw]'
-                            : 'left-full flex-col pl-[0.6vw]';
-                        return (
-                            <div
-                                className={`absolute top-0 flex gap-[0.2vw] ${positionClass}
-                                    ${shouldShowAttachedActions
-                                        ? 'opacity-100 scale-100 pointer-events-auto'
-                                        : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
-                                    }`}
-                                style={{ zIndex: UI_Z_INDEX.tooltip }}
-                            >
-                                {minion.attachedActions.map((aa) => {
+                    <div
+                        className={`absolute top-0 flex gap-[0.2vw] ${attachedActionsPositionClass}
+                            ${shouldShowAttachedActions
+                                ? 'opacity-100 scale-100 pointer-events-auto'
+                                : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
+                            }`}
+                        style={{ zIndex: UI_Z_INDEX.tooltip }}
+                    >
+                        {minion.attachedActions.map((aa) => {
                             const actionDef = getCardDef(aa.defId);
                             const actionName = resolveCardName(actionDef, t) || aa.defId;
                             const actionText = resolveCardText(actionDef, t);
@@ -709,26 +798,36 @@ const MinionCard: React.FC<{
                             const isDimmedAA = !!selectableOngoingUids && !selectableOngoingUids.has(aa.uid);
                             const hasAATalent = actionDef?.abilityTags?.includes('talent') ?? false;
                             const canUseAATalent = hasAATalent && !aa.talentUsed && isMyTurn && aa.ownerId === myPlayerId;
+                            const attachedActivationKey = `attached-${aa.uid}`;
+                            const isAttachedActivationArmed = isActivationArmed(attachedActivationKey);
                             return (
                                 <motion.div
                                     key={aa.uid}
                                     data-attached-action-uid={aa.uid}
+                                    data-activation-armed={isAttachedActivationArmed ? 'true' : 'false'}
                                     {...getAttachedTouchInspectProps(`attached-${aa.uid}`, { defId: aa.defId })}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (shouldBlockAttachedClick(`attached-${aa.uid}`)) return;
                                         if (isSelectableAA && onOngoingSelect) {
+                                            clearArmedActivation();
                                             onOngoingSelect(aa.uid);
                                         } else if (canUseAATalent) {
-                                            dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: aa.uid, baseIndex });
+                                            armOrActivate(attachedActivationKey, {
+                                                onActivate: () => {
+                                                    dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: aa.uid, baseIndex });
+                                                },
+                                            });
                                         }
                                     }}
                                     className={`w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
-                                        hover:scale-[2] ${shouldShowLeft ? 'hover:-translate-x-[0.8vw]' : 'hover:translate-x-[0.8vw]'} transition-transform duration-150
+                                        hover:scale-[2] ${shouldShowAttachedLeft ? 'hover:-translate-x-[0.8vw]' : 'hover:translate-x-[0.8vw]'} transition-transform duration-150
                                         border-[0.08vw] ${isDimmedAA
                                             ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
                                             : isSelectableAA
                                             ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]'
+                                            : isAttachedActivationArmed
+                                            ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.75)]'
                                             : canUseAATalent
                                             ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]'
                                             : 'border-purple-400 ring-1 ring-purple-300/50'
@@ -748,8 +847,6 @@ const MinionCard: React.FC<{
                             );
                         })}
                     </div>
-                );
-            })()}
                 </>
             )}
         </motion.div>

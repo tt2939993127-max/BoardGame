@@ -48,6 +48,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
 - `docs/temp-files-management.md` — **创建临时文件或清理根目录时必读**。含临时文件分类规则、目录结构、.gitignore 规则、开发规范。
 - `docs/git-merge-checklist.md` — **执行 Git 合并操作时必读**。含合并前检查清单、冲突处理策略、合并后验证、AI 特定规范、常见错误与解决方案。**AI 执行任何 `git merge` 前必须先阅读本文档并执行预检查**。
+- `.windsurf/skills/adapt-game-mobile/SKILL.md` — **给现有游戏做移动端适配时必读**。这是项目内的 Windsurf 移动端适配技能，覆盖 `manifest` 移动端字段、横屏优先策略、通用 mobile shell 接入、hover/拖拽/侧栏的移动端降级方案。涉及“移动端适配”“手机横屏支持”“mobileProfile / preferredOrientation / mobileLayoutPreset / shellTargets”时优先使用。
 - `.windsurf/skills/create-new-game/SKILL.md` — **创建/添加新游戏时必读**。含六阶段工作流、验收门禁、引擎原语选型。必须先开分支（`feat/game-<gameId>`）再开始。
 - `docs/deploy.md` — **涉及部署、构建产物、环境变量注入、线上与本地行为差异、CDN/R2 资源加载问题时必读**。含镜像部署、Cloudflare Pages 分离部署、资源映射、环境变量配置。
   - **生产部署操作规范（强制）**：生产环境更新必须使用 `bash scripts/deploy/deploy-image.sh update`（基于 `docker-compose.prod.yml`）。**禁止在生产服务器上直接运行 `docker compose up -d`**（会使用默认的 `docker-compose.yml`，端口映射和环境变量与生产不同）。排查生产问题时，必须先读 `docs/deploy.md` 了解部署架构，禁止凭猜测给出服务器操作命令。
