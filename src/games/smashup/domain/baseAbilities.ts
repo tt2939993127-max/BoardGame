@@ -38,6 +38,7 @@ import { createSimpleChoice, queueInteraction, type PromptOption } from '../../.
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
+import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
 
 // ============================================================================
 // 类型定义
@@ -97,6 +98,11 @@ export interface BaseAbilityResult {
 /** 基地能力执行函数签名 */
 export type BaseAbilityExecutor = (ctx: BaseAbilityContext) => BaseAbilityResult;
 
+export type BaseAbilityRegistrationOptions = {
+    /** Whether this trigger is mandatory for reaction ordering rules */
+    mandatory?: boolean;
+};
+
 type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
 type PirateCoveSysState = MatchState<SmashUpCore>['sys'] & { _pirateCoveTriggered?: Set<number> };
 type HandCardChoiceValue = { cardUid: string; defId: string };
@@ -125,21 +131,26 @@ function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): numb
 // 注册表
 // ============================================================================
 
-/** 内部存储：baseDefId 到 Map<BaseTriggerTiming, BaseAbilityExecutor> */
-const baseAbilityRegistry = new Map<string, Map<BaseTriggerTiming, BaseAbilityExecutor>>();
+type BaseAbilityEntry = { executor: BaseAbilityExecutor; options: Required<BaseAbilityRegistrationOptions> };
+
+/** 内部存储：baseDefId 到 Map<BaseTriggerTiming, BaseAbilityEntry> */
+const baseAbilityRegistry = new Map<string, Map<BaseTriggerTiming, BaseAbilityEntry>>();
 
 /** 注册一个基地能力 */
 export function registerBaseAbility(
     baseDefId: string,
     timing: BaseTriggerTiming,
-    executor: BaseAbilityExecutor
+    executor: BaseAbilityExecutor,
+    options: BaseAbilityRegistrationOptions = {},
 ): void {
     let timingMap = baseAbilityRegistry.get(baseDefId);
     if (!timingMap) {
         timingMap = new Map();
         baseAbilityRegistry.set(baseDefId, timingMap);
     }
-    timingMap.set(timing, executor);
+    timingMap.set(timing, { executor, options: { mandatory: options.mandatory ?? true } });
+    // Make this base ability runnable by the global reaction queue.
+    registerBaseAbilityAsQueuedTrigger(baseDefId, timing);
 }
 
 /** 触发指定基地在指定时机的能力 */
@@ -150,9 +161,9 @@ export function triggerBaseAbility(
 ): BaseAbilityResult {
     // 检查基地能力是否被压制（如 alien_jammed_signal）
     if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
-    const executor = baseAbilityRegistry.get(baseDefId)?.get(timing);
-    if (!executor) return { events: [] };
-    return executor(ctx);
+    const entry = baseAbilityRegistry.get(baseDefId)?.get(timing);
+    if (!entry) return { events: [] };
+    return entry.executor(ctx);
 }
 
 /** 触发所有基地在指定时机的能力 */
@@ -196,6 +207,10 @@ export function hasBaseAbility(baseDefId: string, timing: BaseTriggerTiming): bo
     return baseAbilityRegistry.get(baseDefId)?.has(timing) ?? false;
 }
 
+export function getBaseAbilityOptions(baseDefId: string, timing: BaseTriggerTiming): Required<BaseAbilityRegistrationOptions> | undefined {
+    return baseAbilityRegistry.get(baseDefId)?.get(timing)?.options;
+}
+
 /** 清空注册表（测试用） */
 export function clearBaseAbilityRegistry(): void {
     baseAbilityRegistry.clear();
@@ -221,15 +236,26 @@ export function getBaseAbilityRegistrySize(): number {
 export type ExtendedBaseTrigger = BaseTriggerTiming | 'onMinionDestroyed';
 
 /** 扩展注册表：支持 onMinionDestroyed */
-const extendedRegistry = new Map<string, Map<string, BaseAbilityExecutor>>();
+type ExtendedBaseAbilityRegistrationOptions = {
+    mandatory?: boolean;
+};
 
-export function registerExtended(baseDefId: string, timing: string, executor: BaseAbilityExecutor): void {
+type ExtendedBaseAbilityEntry = { executor: BaseAbilityExecutor; options: Required<ExtendedBaseAbilityRegistrationOptions> };
+
+const extendedRegistry = new Map<string, Map<string, ExtendedBaseAbilityEntry>>();
+
+export function registerExtended(
+    baseDefId: string,
+    timing: string,
+    executor: BaseAbilityExecutor,
+    options: ExtendedBaseAbilityRegistrationOptions = {},
+): void {
     let timingMap = extendedRegistry.get(baseDefId);
     if (!timingMap) {
         timingMap = new Map();
         extendedRegistry.set(baseDefId, timingMap);
     }
-    timingMap.set(timing, executor);
+    timingMap.set(timing, { executor, options: { mandatory: options.mandatory ?? true } });
 }
 
 /** 触发扩展时机（如 onMinionDestroyed） */
@@ -240,9 +266,13 @@ export function triggerExtendedBaseAbility(
 ): BaseAbilityResult {
     // 扩展触发同样遵循基地能力压制（如 alien_jammed_signal）
     if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
-    const executor = extendedRegistry.get(baseDefId)?.get(timing);
-    if (!executor) return { events: [] };
-    return executor(ctx);
+    const entry = extendedRegistry.get(baseDefId)?.get(timing);
+    if (!entry) return { events: [] };
+    return entry.executor(ctx);
+}
+
+export function getExtendedBaseAbilityOptions(baseDefId: string, timing: string): Required<ExtendedBaseAbilityRegistrationOptions> | undefined {
+    return extendedRegistry.get(baseDefId)?.get(timing)?.options;
 }
 
 // ============================================================================
@@ -325,7 +355,7 @@ export function registerBaseAbilities(): void {
             events: [],
             matchState: queueInteraction(ctx.matchState, interaction),
         };
-    });
+    }, { mandatory: false });
 
     // base_central_brain: 中央大脑
     // "每个在这里的随从获得+1力量"
@@ -381,23 +411,10 @@ export function registerBaseAbilities(): void {
 
     // base_tar_pits: 焦油坑
     // "每当有一个随从在这里被消灭后，将它放到其拥有者的牌库底"
-    // 实现：onMinionDestroyed 时从弃牌堆移到牌库底
-    registerExtended('base_tar_pits', 'onMinionDestroyed', (ctx) => {
-        // ctx.minionUid / ctx.minionDefId 是被消灭的随从
-        if (!ctx.minionUid || !ctx.minionDefId) return { events: [] };
-        return {
-            events: [{
-                type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
-                payload: {
-                    cardUid: ctx.minionUid,
-                    defId: ctx.minionDefId,
-                    ownerId: ctx.playerId,
-                    reason: '焦油坑：被消灭的随从放入牌库底',
-                },
-                timestamp: ctx.now,
-            } as CardToDeckBottomEvent],
-        };
-    });
+    //
+    // 规则点：这不是“防止消灭”（replacement），而是“消灭已发生后，改变去向”。
+    // 为避免把它当成 saveEvent 而抑制 after-destroy 反应，
+    // 我们把去向替换做在 reducer 的 MINION_DESTROYED 归约阶段处理（见 reduce.ts）。
 
     // base_haunted_house: 伊万斯堡城镇公墓
     // "在这个基地计分后，冠军弃掉他的手牌并抽取5张牌"
@@ -532,7 +549,7 @@ export function registerBaseAbilities(): void {
         }
 
         return { events };
-    });
+    }, { mandatory: true });
 
     // base_great_library: 大图书馆
     // "在这个基地计分后，所有在这里有随从的玩家可以抽一张卡牌"
@@ -999,7 +1016,7 @@ export function registerBaseAbilities(): void {
             { sourceId: 'base_ninja_dojo', targetType: 'minion' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
-    });
+    }, { mandatory: false });
 
     // === 基础版需要 Prompt 的基地（续） ===
 
@@ -1599,7 +1616,8 @@ export function registerBaseInteractionHandlers(): void {
                 minionDefId: selected.minionDefId!,
                 fromBaseIndex: selected.fromBaseIndex!,
                 toBaseIndex: ctx.mushroomBaseIndex,
-                reason: '蘑菇王国：移动对手随从',
+                // 规则：基地能力不属于任何玩家；reason 用稳定 id，供保护/归因系统判断
+                reason: 'base_mushroom_kingdom',
                 now: timestamp,
             }),
         };

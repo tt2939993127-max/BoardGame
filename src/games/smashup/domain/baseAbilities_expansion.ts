@@ -94,7 +94,7 @@ export function registerExpansionBaseAbilities(): void {
             { sourceId: 'base_the_asylum', targetType: 'button' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
-    });
+    }, { mandatory: false });
 
     // ── 印斯茅斯基地（Innsmouth Base）────────────────────────────
     // "在一个玩家打出一个随从到这后，该玩家可以将任意玩家弃牌堆中的一张卡放到其拥有者的牌库底"
@@ -126,7 +126,7 @@ export function registerExpansionBaseAbilities(): void {
             { sourceId: 'base_innsmouth_base_choose_player', targetType: 'player', autoCancelOption: true },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
-    });
+    }, { mandatory: false });
 
     // ── 密斯卡托尼克大学基地（Miskatonic University Base）────────
     // "在这个基地计分后，冠军可以搜寻他的手牌和弃牌堆中任意数量的疯狂卡，然后返回到疯狂卡牌库。"
@@ -199,7 +199,7 @@ export function registerExpansionBaseAbilities(): void {
         }
 
         return { events: [], matchState: ctx.matchState };
-    });
+    }, { mandatory: false });
 
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
     // "每回合玩家第一次打出一个随从到这里后，可以额外打出一张与其同名的随从到这里"
@@ -272,7 +272,7 @@ export function registerExpansionBaseAbilities(): void {
                 data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } },
             }),
         };
-    });
+    }, { mandatory: false });
 
     // ── 神秘花园（Secret Garden）──────────────────────────────
     // "在你的回合，你可以额外打出一个力量为2或以下的随从到这里）?
@@ -621,7 +621,7 @@ export function registerExpansionBaseAbilities(): void {
         }
 
         return { events: [], matchState: ms };
-    });
+    }, { mandatory: false });
 
     // ── 牧场（The Pasture）──────────────────────────────────
     // "每回合玩家第一次移动一个随从到这里后，移动另一基地的一个随从到这。"

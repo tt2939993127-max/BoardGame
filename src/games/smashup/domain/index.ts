@@ -41,7 +41,8 @@ import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
 import { drawCards } from './utils';
 import { countMadnessCards, madnessVpPenalty, fireMinionPlayedTriggers } from './abilityHelpers';
-import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
+import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility, hasBaseAbility } from './baseAbilities';
+import { collectBaseAbilityTriggers, collectExtendedBaseAbilityTriggers } from './baseAbilityQueue';
 import { openMeFirstWindow, openAfterScoringWindow, buildBaseTargetOptions, isSpecialLimitBlocked } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -195,22 +196,27 @@ export function scoreOneBase(
         updatedCore = reduce(updatedCore, evt as SmashUpEvent);
     }
 
-    // 触发 beforeScoring 基地能力（用 reduce 后的 core，包含 ongoing 效果）
-    const beforeCtx = {
-        state: updatedCore,
-        matchState: ms,
+    // 触发 beforeScoring 基地能力（入队，按 Wiki 同时触发排序解决）
+    const queuedBeforeBase = collectBaseAbilityTriggers({
+        core: updatedCore,
+        timing: 'beforeScoring',
+        ownerPlayerId: pid,
         baseIndex,
-        baseDefId: base.defId,
-        playerId: pid,
         now,
-    };
-    const beforeResult = triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx);
-    events.push(...beforeResult.events);
-    if (beforeResult.matchState) ms = beforeResult.matchState;
-
-    // 基地能力也可能产生事件（如 VP_AWARDED），继续 reduce
-    for (const evt of beforeResult.events) {
-        updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+    });
+    if (queuedBeforeBase) {
+        events.push(queuedBeforeBase as unknown as SmashUpEvent);
+        updatedCore = reduce(updatedCore, queuedBeforeBase as unknown as SmashUpEvent);
+        if (ms) ms = { ...ms, core: updatedCore };
+        const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        }
+        if (ms?.sys?.interaction?.current) {
+            return { events, newBaseDeck: baseDeck, matchState: ms };
+        }
     }
 
     // 计算排名（使用 reduce 后的 core，包含 beforeScoring 的临时力量修正 + ongoing 卡力量贡献）
@@ -332,66 +338,58 @@ export function scoreOneBase(
             updatedCore = reduce(updatedCore, consumedEvt);
         }
         
-        // 触发 afterScoring 基地能力（使用 reduce 后的 core，包含 beforeScoring 效果 + ARMED special 效果）
-        const afterCtx = {
-            state: updatedCore,
-            matchState: ms,
+        // Queue afterScoring base ability + ongoing afterScoring triggers into the same reaction window,
+        // so moving/destroying one trigger's source doesn't prevent the others from being queued.
+        const queuedAfterBase = collectBaseAbilityTriggers({
+            core: updatedCore,
+            timing: 'afterScoring',
+            ownerPlayerId: pid,
             baseIndex,
-            baseDefId: base.defId,
-            playerId: pid,
             rankings,
             now,
-        };
-        afterResult = triggerBaseAbility(base.defId, 'afterScoring', afterCtx);
-        events.push(...afterResult.events);
-        if (afterResult.matchState) ms = afterResult.matchState;
+        });
+        if (queuedAfterBase) {
+            events.push(queuedAfterBase as unknown as SmashUpEvent);
+            updatedCore = reduce(updatedCore, queuedAfterBase as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+        }
 
-        // 发射事件标记此基地已触发过 afterScoring
+        const queuedAfterOngoing = collectTriggers(updatedCore, 'afterScoring', {
+            state: updatedCore,
+            playerId: pid,
+            baseIndex,
+            rankings,
+            matchState: ms,
+            random: rng,
+            now,
+        });
+        if (queuedAfterOngoing) {
+            events.push(queuedAfterOngoing);
+            updatedCore = reduce(updatedCore, queuedAfterOngoing as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+        }
+
+        // Mark afterScoring as triggered immediately (even if it creates an interaction),
+        // so re-entering scoreOneBase after resolving an interaction won't re-queue it.
         const markEvent = {
             type: SU_EVENT_TYPES.AFTER_SCORING_TRIGGERED,
             payload: { baseIndex },
             timestamp: now,
         };
         events.push(markEvent as unknown as SmashUpEvent);
-
-        // 立即 reduce 到本地 core 副本，确保后续调用 scoreOneBase 时能看到"已触发"标记
         updatedCore = reduce(updatedCore, markEvent as unknown as SmashUpEvent);
-    }
+        if (ms) ms = { ...ms, core: updatedCore };
 
-    // 将 afterScoring 基地能力产生的事件 reduce 到 core，
-    // 确保 ongoing afterScoring 触发器使用最新状态。
-    // 修复时序问题：寺庙 afterScoring 把随从放牌库底后，
-    // 大副 afterScoring 不应再看到该随从在场上。
-    let afterScoringCore = updatedCore;
-    for (const evt of afterResult.events) {
-        afterScoringCore = reduce(afterScoringCore, evt as SmashUpEvent);
+        const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        }
+        // NOTE: If an interaction was created here (e.g. reaction_queue_choose_next),
+        // we must still continue so scoreOneBase can defer BASE_CLEARED/BASE_REPLACED into continuationContext.
     }
-
-    // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
-    // 使用 reduce 后的 core，包含基地能力的效果（如随从已被放入牌库底）
-    
-    const queuedAfter = collectTriggers(afterScoringCore, 'afterScoring', {
-        state: afterScoringCore,
-        playerId: pid,
-        baseIndex,
-        rankings,
-        matchState: ms,
-        random: rng,
-        now,
-    });
-    if (queuedAfter) {
-        events.push(queuedAfter);
-        afterScoringCore = reduce(afterScoringCore, queuedAfter as unknown as SmashUpEvent);
-        if (ms) ms = { ...ms, core: afterScoringCore };
-    }
-
-    // Try to resolve queued afterScoring reactions immediately when possible.
-    const rq1 = maybeResolveReactionQueue(ms ? ms : ({ core: afterScoringCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
-    if (rq1) {
-        events.push(...rq1.events);
-        ms = rq1.state;
-        afterScoringCore = rq1.state.core;
-    }
+    const afterScoringCore = updatedCore;
 
     // 判断 afterScoring 是否新增了交互
     const interactionAfter = ms?.sys?.interaction?.current?.id ?? null;
@@ -500,17 +498,26 @@ export function scoreOneBase(
         newBaseDeck = newBaseDeck.slice(1);
 
         // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
-        const revealCtx = {
-            state: core,
-            matchState: ms,
+        // 改为入队，允许与其他同时触发反应统一排序（optional 按顺时针）
+        const queuedReveal = collectExtendedBaseAbilityTriggers({
+            core,
+            timing: 'onBaseRevealed',
+            ownerPlayerId: pid,
             baseIndex,
-            baseDefId: newBaseDefId,
-            playerId: pid,
             now,
-        };
-        const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
-        postScoringEvents.push(...revealResult.events);
-        if (revealResult.matchState) ms = revealResult.matchState;
+        });
+        if (queuedReveal) {
+            postScoringEvents.push(queuedReveal as unknown as SmashUpEvent);
+            const coreForQueue = reduce(core, queuedReveal as unknown as SmashUpEvent);
+            const msForQueue = ms ? { ...ms, core: coreForQueue } : ({ core: coreForQueue, sys: { interaction: { current: undefined, queue: [] } } } as any);
+            const rq = maybeResolveReactionQueue(msForQueue, rng, now);
+            if (rq) {
+                postScoringEvents.push(...rq.events);
+                ms = rq.state;
+            } else {
+                ms = msForQueue;
+            }
+        }
     }
 
     // 关键：仅当 afterScoring 新增了交互时（如刚柔流寺庙平局选择、忍者道场消灭随从等），
@@ -612,8 +619,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             updatedCore = reduce(updatedCore, evt as SmashUpEvent);
         }
 
-        const currentBaseCompleted = !currentState.sys.interaction?.current
-            && events.some((evt: SmashUpEvent) =>
+        const currentBaseCompleted = events.some((evt: SmashUpEvent) =>
                 evt.type === SU_EVENTS.BASE_SCORED
                 && (evt.payload as { baseIndex?: number } | undefined)?.baseIndex === baseIndex
             );
@@ -1318,13 +1324,31 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             };
             events.push(turnStarted);
 
-            // 触发基地 onTurnStart 能力（如拉莱耶：消灭随从获1VP、蘑菇王国：移动对手随从）
-            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now, undefined, currentMatchState);
-            events.push(...baseResult.events);
-            // 不可变传播 matchState（onTurnStart 基地能力可能创建 Interaction）
-            if (baseResult.matchState) {
-                currentMatchState = baseResult.matchState;
-                hasSysUpdate = true;
+            // 触发基地 onTurnStart 能力（改为入队，按 Wiki 同时触发排序解决）
+            for (let bi = 0; bi < core.bases.length; bi++) {
+                const b = core.bases[bi];
+                if (!b) continue;
+                if (!hasBaseAbility(b.defId, 'onTurnStart')) continue;
+                const queuedBase = collectBaseAbilityTriggers({
+                    core,
+                    timing: 'onTurnStart',
+                    ownerPlayerId: nextPlayerId,
+                    baseIndex: bi,
+                    now,
+                });
+                if (queuedBase) {
+                    events.push(queuedBase as unknown as SmashUpEvent);
+                    const coreForQueue = reduce(core, queuedBase as unknown as SmashUpEvent);
+                    currentMatchState = { ...currentMatchState, core: coreForQueue };
+                    const rq = maybeResolveReactionQueue(currentMatchState, random, now);
+                    if (rq) {
+                        events.push(...rq.events);
+                        currentMatchState = rq.state;
+                        hasSysUpdate = true;
+                    } else {
+                        hasSysUpdate = true;
+                    }
+                }
             }
 
             // 触发 ongoing 效果 onTurnStart（改为入队，按 Wiki 同时触发排序解决）

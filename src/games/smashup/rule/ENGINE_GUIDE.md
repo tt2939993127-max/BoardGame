@@ -49,6 +49,11 @@
     - `collectTriggers` → `TriggerInstance` → reaction queue；
     - 避免在 `fireTriggers` 里直接执行，绕过排序规则。
 
+- **基地能力也进入 reaction queue**：
+  - `registerBaseAbility(baseDefId, timing, ...)` 注册的基地能力，会被队列化为 `TriggerInstance`（`sourceDefId = baseDefId`，`sourceBaseIndex = baseIndex`，并填充 `lkiBase`）。
+  - 在计分/回合开始等时机，基地能力会通过 `SU_EVENTS.TRIGGER_QUEUED` 入队，并由 `maybeResolveReactionQueue` 执行；
+  - 因此当基地能力与其他持续反应同时触发时，可能先出现 `reaction_queue_choose_next`，再进入具体的基地/随从交互。
+
 ### 3. Witness / LKI（“卡必须看到 X 才能 After X”）
 
 - **基础 witness 规则**：

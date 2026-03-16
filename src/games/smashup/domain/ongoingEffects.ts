@@ -84,6 +84,8 @@ export type EventInterceptor = (
 /** 触发时机 */
 export type TriggerTiming =
     | 'onMinionPlayed'     // 随从入场时
+    | 'onActionPlayed'     // 行动卡打出时（用于基地能力队列化）
+    | 'onBaseRevealed'     // 基地翻出/替换后入场（扩展基地触发）
     | 'onMinionDestroyed'  // 随从被消灭时
     | 'onMinionMoved'      // 随从被移动时
     | 'onMinionAffected'   // 随从被对手效果影响时（聚合时机：消灭/移动/力量修改/附着/控制权变更）
@@ -267,6 +269,7 @@ export function collectTriggers(
             baseIndex: ctx.baseIndex,
             triggerMinionUid: ctx.triggerMinionUid,
             triggerMinionDefId: ctx.triggerMinionDefId,
+            triggerMinionPower: (ctx as any).triggerMinionPower,
             reason: ctx.reason,
             affectType: ctx.affectType,
             rankings: ctx.rankings,
