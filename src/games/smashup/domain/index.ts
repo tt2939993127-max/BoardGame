@@ -34,7 +34,7 @@ import {
     getCurrentPlayerId,
 } from './types';
 import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './ongoingModifiers';
-import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
+import { collectTriggers, fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
@@ -137,7 +137,7 @@ export function scoreOneBase(
     
     
     if (!alreadyTriggeredBeforeScoring) {
-        const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
+        const queuedBefore = collectTriggers(core, 'beforeScoring', {
             state: core,
             matchState: ms,
             playerId: pid,
@@ -145,8 +145,18 @@ export function scoreOneBase(
             random: rng,
             now,
         });
-        events.push(...beforeScoringEvents.events);
-        if (beforeScoringEvents.matchState) ms = beforeScoringEvents.matchState;
+        if (queuedBefore) {
+            events.push(queuedBefore);
+            core = reduce(core, queuedBefore as unknown as SmashUpEvent);
+        }
+
+        // Try to resolve reaction queue now so scoreOneBase can halt on interactions.
+        const rq0 = maybeResolveReactionQueue(ms ? { ...ms, core } : ({ core, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq0) {
+            events.push(...rq0.events);
+            ms = rq0.state;
+            core = rq0.state.core;
+        }
         
         // 发射事件标记此基地已触发过 beforeScoring
         const markEvent = {
@@ -350,7 +360,7 @@ export function scoreOneBase(
     // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
     // 使用 reduce 后的 core，包含基地能力的效果（如随从已被放入牌库底）
     
-    const afterScoringEvents = fireTriggers(afterScoringCore, 'afterScoring', {
+    const queuedAfter = collectTriggers(afterScoringCore, 'afterScoring', {
         state: afterScoringCore,
         playerId: pid,
         baseIndex,
@@ -359,8 +369,19 @@ export function scoreOneBase(
         random: rng,
         now,
     });
-    events.push(...afterScoringEvents.events);
-    if (afterScoringEvents.matchState) ms = afterScoringEvents.matchState;
+    if (queuedAfter) {
+        events.push(queuedAfter);
+        afterScoringCore = reduce(afterScoringCore, queuedAfter as unknown as SmashUpEvent);
+        if (ms) ms = { ...ms, core: afterScoringCore };
+    }
+
+    // Try to resolve queued afterScoring reactions immediately when possible.
+    const rq1 = maybeResolveReactionQueue(ms ? ms : ({ core: afterScoringCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+    if (rq1) {
+        events.push(...rq1.events);
+        ms = rq1.state;
+        afterScoringCore = rq1.state.core;
+    }
 
     // 判断 afterScoring 是否新增了交互
     const interactionAfter = ms?.sys?.interaction?.current?.id ?? null;
