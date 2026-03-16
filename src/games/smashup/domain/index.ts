@@ -865,20 +865,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         if (from === 'endTurn') {
             const events: SmashUpEvent[] = [];
 
-            // 触发 ongoing 效果 onTurnEnd（如 dunwich_horror 回合结束消灭自身、ninja_assassination 消灭目标）
-            const onTurnEndEvents = fireTriggers(core, 'onTurnEnd', {
+            // 触发 ongoing 效果 onTurnEnd（改为入队，按 Wiki 同时触发排序解决）
+            const queuedTurnEnd = collectTriggers(core, 'onTurnEnd', {
                 state: core,
+                matchState: state,
                 playerId: pid,
                 random,
                 now,
             });
-
-            // 关键修复：onTurnEnd 触发器产生的 MINION_DESTROYED 事件必须经过保护过滤
-            // （如伊万将军保护己方随从不被对手消灭），以及 onDestroy 触发链处理
-            if (onTurnEndEvents.events.length > 0) {
-                const ms = onTurnEndEvents.matchState ?? state;
-                const afterDestroyMove = processDestroyMoveCycle(onTurnEndEvents.events, ms, pid, random, now);
-                events.push(...afterDestroyMove.events);
+            if (queuedTurnEnd) {
+                events.push(queuedTurnEnd);
+                // Reduce queued event into a temporary core view so the resolver can see the pending queue immediately.
+                const coreForQueue = reduce(core, queuedTurnEnd as unknown as SmashUpEvent);
+                const msForQueue = { ...state, core: coreForQueue };
+                const rq = maybeResolveReactionQueue(msForQueue, random, now);
+                if (rq) {
+                    // 关键：onTurnEnd 触发器可能产生 MINION_DESTROYED 等，需要经过 destroy→move 循环后处理
+                    const afterDestroyMove = processDestroyMoveCycle(rq.events, rq.state, pid, random, now);
+                    events.push(...afterDestroyMove.events);
+                }
             }
 
             // 切换到下一个玩家
@@ -1312,18 +1317,26 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 hasSysUpdate = true;
             }
 
-            // 触发 ongoing 效果 onTurnStart
-            const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {
+            // 触发 ongoing 效果 onTurnStart（改为入队，按 Wiki 同时触发排序解决）
+            const queuedTurnStart = collectTriggers(core, 'onTurnStart', {
                 state: core,
                 matchState: currentMatchState,
                 playerId: nextPlayerId,
                 random,
                 now,
             });
-            events.push(...onTurnStartEvents.events);
-            if (onTurnStartEvents.matchState) {
-                currentMatchState = onTurnStartEvents.matchState;
-                hasSysUpdate = true;
+            if (queuedTurnStart) {
+                events.push(queuedTurnStart);
+                const coreForQueue = reduce(core, queuedTurnStart as unknown as SmashUpEvent);
+                currentMatchState = { ...currentMatchState, core: coreForQueue };
+                const rq = maybeResolveReactionQueue(currentMatchState, random, now);
+                if (rq) {
+                    events.push(...rq.events);
+                    currentMatchState = rq.state;
+                    hasSysUpdate = true;
+                } else {
+                    hasSysUpdate = true;
+                }
             }
 
             // 有 sys 变更时返回 PhaseEnterResult，否则返回纯事件数组
