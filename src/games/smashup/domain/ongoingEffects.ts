@@ -11,7 +11,9 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import type { SmashUpCore, SmashUpEvent, MinionOnBase } from './types';
+import type { SmashUpCore, SmashUpEvent, MinionOnBase, TriggerInstance, TriggerQueuedEvent } from './types';
+import { SU_EVENTS } from './types';
+import { registerTriggerExecutor } from './triggerExecutors';
 import { getBaseDef } from '../data/cards';
 import { matchesDefId, mustUseBaseLimitedMinionQuota } from './utils';
 
@@ -153,6 +155,7 @@ interface TriggerEntry {
     sourceDefId: string;
     timing: TriggerTiming;
     callback: TriggerCallback;
+    optional?: boolean;
 }
 
 interface InterceptorEntry {
@@ -197,11 +200,75 @@ export function registerRestriction(
 export function registerTrigger(
     sourceDefId: string,
     timing: TriggerTiming,
-    callback: TriggerCallback
+    callback: TriggerCallback,
+    options?: { optional?: boolean }
 ): void {
     // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
     if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
-    triggerRegistry.push({ sourceDefId, timing, callback });
+    triggerRegistry.push({ sourceDefId, timing, callback, optional: options?.optional });
+    registerTriggerExecutor(sourceDefId, timing, callback);
+}
+
+function locateSource(state: SmashUpCore, sourceDefId: string): { baseIndex?: number; controllerId?: PlayerId } {
+    for (let i = 0; i < state.bases.length; i++) {
+        const base = state.bases[i];
+        if (base.defId === sourceDefId) return { baseIndex: i };
+        const ongoing = base.ongoingActions.find(o => o.defId === sourceDefId);
+        if (ongoing) return { baseIndex: i, controllerId: ongoing.ownerId };
+        const minion = base.minions.find(m => m.defId === sourceDefId);
+        if (minion) return { baseIndex: i, controllerId: minion.controller };
+        for (const m of base.minions) {
+            const attached = m.attachedActions?.find(a => a.defId === sourceDefId);
+            if (attached) return { baseIndex: i, controllerId: attached.ownerId };
+        }
+    }
+    return {};
+}
+
+/** 收集触发器为 TriggerInstance（不立即执行），用于全局反应队列 */
+export function collectTriggers(
+    state: SmashUpCore,
+    timing: TriggerTiming,
+    ctx: Omit<TriggerContext, 'timing'>,
+): TriggerQueuedEvent | undefined {
+    if (triggerRegistry.length === 0) return undefined;
+    const triggers: TriggerInstance[] = [];
+    const now = ctx.now;
+    const pid = ctx.playerId;
+
+    for (const entry of triggerRegistry) {
+        if (entry.timing !== timing) continue;
+        const witnessed = isSourceActive(state, entry.sourceDefId);
+        if (!witnessed) continue;
+        const located = locateSource(state, entry.sourceDefId);
+        // witness rule (base-scoped): for move-related triggers, the source must be on the destination base at trigger time
+        if (timing === 'onMinionMoved' && ctx.baseIndex !== undefined) {
+            if (located.baseIndex !== ctx.baseIndex) continue;
+        }
+        triggers.push({
+            id: `${timing}:${entry.sourceDefId}:${now}:${triggers.length}`,
+            timing,
+            sourceDefId: entry.sourceDefId,
+            sourceControllerId: located.controllerId,
+            sourceBaseIndex: located.baseIndex,
+            mandatory: entry.optional ? false : true,
+            ownerPlayerId: pid,
+            witnessRequirement: 'inPlayAtTriggerTime',
+            witnessed: true,
+            baseIndex: ctx.baseIndex,
+            triggerMinionUid: ctx.triggerMinionUid,
+            triggerMinionDefId: ctx.triggerMinionDefId,
+            reason: ctx.reason,
+            affectType: ctx.affectType,
+        });
+    }
+
+    if (triggers.length === 0) return undefined;
+    return {
+        type: SU_EVENTS.TRIGGER_QUEUED,
+        payload: { triggers },
+        timestamp: now,
+    } as TriggerQueuedEvent;
 }
 
 /** 注册事件拦截器（替代效果） */

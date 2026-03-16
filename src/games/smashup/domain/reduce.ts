@@ -30,6 +30,8 @@ import type {
     SpecialLimitUsedEvent,
     SpecialAfterScoringArmedEvent,
     SpecialAfterScoringConsumedEvent,
+    TriggerQueuedEvent,
+    TriggerConsumedEvent,
     MinionOnBase,
     CardInstance,
     BaseInPlay,
@@ -481,6 +483,27 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         discard: [...player.discard, ...milledFromDeck],
                     },
                 },
+            };
+        }
+
+        case SU_EVENTS.TRIGGER_QUEUED: {
+            const { triggers } = (event as TriggerQueuedEvent).payload;
+            if (!Array.isArray(triggers) || triggers.length === 0) return state;
+            const prev = state.triggerQueue ?? [];
+            return {
+                ...state,
+                triggerQueue: [...prev, ...triggers],
+            };
+        }
+
+        case SU_EVENTS.TRIGGER_CONSUMED: {
+            const { triggerId } = (event as TriggerConsumedEvent).payload;
+            const prev = state.triggerQueue ?? [];
+            if (!triggerId || prev.length === 0) return state;
+            const next = prev.filter(t => t.id !== triggerId);
+            return {
+                ...state,
+                triggerQueue: next.length ? next : undefined,
             };
         }
 

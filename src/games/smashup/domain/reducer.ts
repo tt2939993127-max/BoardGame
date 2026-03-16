@@ -59,7 +59,7 @@ import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
-import { fireTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
+import { fireTriggers, collectTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { canPlayFromDiscard } from './discardPlayability';
 
 // ============================================================================
@@ -1008,8 +1008,8 @@ export function processMoveTriggers(
     for (const me of moveEvents) {
         const { minionUid, minionDefId, toBaseIndex } = me.payload;
 
-        // 触发 ongoing 拦截器 onMinionMoved
-        const ongoingMoveEvents = fireTriggers(core, 'onMinionMoved', {
+        // 触发 ongoing 拦截器 onMinionMoved（改为入队，按 Wiki 同时触发排序解决）
+        const queued = collectTriggers(core, 'onMinionMoved', {
             state: core,
             matchState: ms ?? state,
             playerId,
@@ -1019,10 +1019,7 @@ export function processMoveTriggers(
             random,
             now,
         });
-        extraEvents.push(...ongoingMoveEvents.events);
-        if (ongoingMoveEvents.matchState) {
-            ms = ongoingMoveEvents.matchState;
-        }
+        if (queued) extraEvents.push(queued);
 
         // 触发基地扩展时机 onMinionMoved（如牧场：首次移动触发额外移动）
         const targetBase = core.bases[toBaseIndex];

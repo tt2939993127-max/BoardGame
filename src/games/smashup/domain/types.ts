@@ -347,6 +347,60 @@ export type PendingPostScoringAction =
         reason: string;
     };
 
+// ============================================================================
+// Trigger queue (Wiki reaction ordering / witness / LKI)
+// ============================================================================
+
+export type WitnessRequirement = 'inPlayAtTriggerTime' | 'inPlayAtResolveTime';
+
+export interface MinionLkiSnapshot {
+    uid: string;
+    defId: string;
+    owner: PlayerId;
+    controller: PlayerId;
+    baseIndex: number;
+    basePower: number;
+    powerCounters: number;
+    powerModifier: number;
+    tempPowerModifier: number;
+    attachedActionDefIds?: string[];
+}
+
+export interface BaseLkiSnapshot {
+    baseIndex: number;
+    defId: string;
+}
+
+export interface TriggerInstance {
+    /** stable id for interaction selection */
+    id: string;
+    timing: import('./ongoingEffects').TriggerTiming;
+    /** defId of the triggering source (minion/action/base) */
+    sourceDefId: string;
+    /** who controls the source at trigger time (best-effort) */
+    sourceControllerId?: PlayerId;
+    /** base index where source is located at trigger time (best-effort) */
+    sourceBaseIndex?: number;
+
+    /** Wiki ordering */
+    mandatory: boolean;
+    /** who decides / is credited */
+    ownerPlayerId: PlayerId;
+    witnessRequirement: WitnessRequirement;
+    witnessed: boolean;
+
+    /** minimal context */
+    baseIndex?: number;
+    triggerMinionUid?: string;
+    triggerMinionDefId?: string;
+    reason?: string;
+    affectType?: import('./ongoingEffects').AffectType;
+
+    /** LKI snapshots captured at queue time */
+    lkiMinion?: MinionLkiSnapshot;
+    lkiBase?: BaseLkiSnapshot;
+}
+
 export interface SmashUpCore {
     players: Record<PlayerId, PlayerState>;
     /** 玩家回合顺序 */
@@ -434,6 +488,9 @@ export interface SmashUpCore {
      * 生命周期：在 TURN_STARTED 时清空。
      */
     turnUsedOngoingUids?: string[];
+
+    /** 全局触发队列：用于按 Wiki 规则统一“同时触发”的反应排序与 witness/LKI */
+    triggerQueue?: TriggerInstance[];
 }
 
 export interface FactionSelectionState {
@@ -669,6 +726,20 @@ export interface CardsMilledEvent extends GameEvent<'su:cards_milled'> {
     };
 }
 
+/** 入队一个或多个 TriggerInstance（silent / deterministic) */
+export interface TriggerQueuedEvent extends GameEvent<'su:trigger_queued'> {
+    payload: {
+        triggers: TriggerInstance[];
+    };
+}
+
+/** 消费（执行）了一个 TriggerInstance */
+export interface TriggerConsumedEvent extends GameEvent<'su:trigger_consumed'> {
+    payload: {
+        triggerId: string;
+    };
+}
+
 export interface TurnStartedEvent extends GameEvent<'su:turn_started'> {
     payload: {
         playerId: PlayerId;
@@ -750,6 +821,8 @@ export type SmashUpEvent =
     | CardsDrawnEvent
     | CardsDiscardedEvent
     | CardsMilledEvent
+    | TriggerQueuedEvent
+    | TriggerConsumedEvent
     | TurnStartedEvent
     | TurnEndedEvent
     | BaseReplacedEvent
