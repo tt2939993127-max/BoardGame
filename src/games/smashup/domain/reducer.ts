@@ -737,7 +737,11 @@ export function processDestroyTriggers(
             e.type === SU_EVENTS.MINION_MOVED &&
             (e as MinionMovedEvent).payload.minionUid === minionUid
         );
-        const hasSaveEvent = hasReturn || hasMoveAway;
+        const hasDeckRedirect = saveEvents.some(e =>
+            (e.type === SU_EVENTS.CARD_TO_DECK_BOTTOM || e.type === SU_EVENTS.CARD_TO_DECK_TOP) &&
+            (e as any).payload?.cardUid === minionUid
+        );
+        const hasSaveEvent = hasReturn || hasMoveAway || hasDeckRedirect;
         let isPendingSave = false;
         if (!hasSaveEvent && ms) {
             const interactionCountAfter =
@@ -766,14 +770,15 @@ export function processDestroyTriggers(
         // 因为消灭尚未确认，等交互解决后再决定是否触发。
         // 只保留 matchState 变更（交互创建），丢弃所有副作用事件。
         //
-        // 当 hasSaveEvent 时，随从被拯救（回手牌或移动到其他基地），消灭未发生，
-        // 同样需要抑制其他触发器的副作用事件，但保留 MINION_RETURNED/MINION_MOVED 事件本身。
+        // 当 hasSaveEvent 时，消灭被替代/改写（回手牌 / 移动走 / 放回牌库顶/底），
+        // 同样需要抑制其他触发器的副作用事件，但保留替代效果事件本身。
         const localEvents: SmashUpEvent[] = isPendingSave
             ? []
             : hasSaveEvent
                 ? saveEvents.filter(e =>
                     e.type === SU_EVENTS.MINION_RETURNED ||
-                    (e.type === SU_EVENTS.MINION_MOVED && (e as MinionMovedEvent).payload.minionUid === minionUid)
+                    (e.type === SU_EVENTS.MINION_MOVED && (e as MinionMovedEvent).payload.minionUid === minionUid) ||
+                    ((e.type === SU_EVENTS.CARD_TO_DECK_BOTTOM || e.type === SU_EVENTS.CARD_TO_DECK_TOP) && (e as any).payload?.cardUid === minionUid)
                 )
                 : [...saveEvents];
         if (!isPendingSave && !hasSaveEvent) {
@@ -816,7 +821,7 @@ export function processDestroyTriggers(
         extraEvents.push(...filteredLocal);
     }
 
-    // 需要抑制的随从 uid：已被 MINION_RETURNED/MINION_MOVED 拯救 + 待交互拯救
+    // 需要抑制的随从 uid：已被 replacement 改写去向（回手/移动走/放回牌库）+ 待交互拯救
     const suppressedMinionUids = new Set(
         extraEvents
             .filter(e => e.type === SU_EVENTS.MINION_RETURNED)
@@ -826,6 +831,10 @@ export function processDestroyTriggers(
     for (const e of extraEvents) {
         if (e.type === SU_EVENTS.MINION_MOVED) {
             suppressedMinionUids.add((e as MinionMovedEvent).payload.minionUid);
+        }
+        if (e.type === SU_EVENTS.CARD_TO_DECK_BOTTOM || e.type === SU_EVENTS.CARD_TO_DECK_TOP) {
+            const uid = (e as any).payload?.cardUid as string | undefined;
+            if (uid) suppressedMinionUids.add(uid);
         }
     }
     for (const uid of pendingSaveMinionUids) {
