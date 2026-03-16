@@ -15,6 +15,7 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import { resolveOnPlay } from './abilityRegistry';
 import { isMinionProtected, isMinionProtectedNonConsumable, type ProtectionType } from './ongoingEffects';
+import { collectBaseAbilityTriggers } from './baseAbilityQueue';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -675,18 +676,19 @@ export function fireMinionPlayedTriggers(params: {
         if (result.matchState) matchState = result.matchState;
     }
 
-    // 2. 基地能力触发 onMinionPlayed
+    // 2. 基地能力触发 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
     const minionDef = getMinionDef(defId);
-    const baseResult = triggerAllBaseAbilities(
-        'onMinionPlayed',
+    const queuedBase = collectBaseAbilityTriggers({
         core,
-        playerId,
+        timing: 'onMinionPlayed',
+        ownerPlayerId: playerId,
+        baseIndex,
+        triggerMinionUid: cardUid,
+        triggerMinionDefId: defId,
+        triggerMinionPower: minionDef?.power ?? power,
         now,
-        { baseIndex, minionUid: cardUid, minionDefId: defId, minionPower: minionDef?.power ?? power },
-        matchState,
-    );
-    events.push(...baseResult.events);
-    if (baseResult.matchState) matchState = baseResult.matchState;
+    });
+    if (queuedBase) events.push(queuedBase as unknown as SmashUpEvent);
 
     // 3. ongoing 触发器 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
     const playedMinion = core.bases[baseIndex]?.minions.find(m => m.uid === cardUid);

@@ -395,9 +395,12 @@ export interface TriggerInstance {
     baseIndex?: number;
     triggerMinionUid?: string;
     triggerMinionDefId?: string;
+    triggerMinionPower?: number;
     reason?: string;
     affectType?: import('./ongoingEffects').AffectType;
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    actionTargetBaseIndex?: number;
+    actionTargetMinionUid?: string;
 
     /** LKI snapshots captured at queue time */
     lkiMinion?: MinionLkiSnapshot;

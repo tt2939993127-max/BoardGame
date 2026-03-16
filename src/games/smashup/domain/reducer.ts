@@ -617,7 +617,11 @@ export function filterProtectedDestroyEvents(
         const minion = base?.minions.find(m => m.uid === minionUid);
         if (!minion) { result.push(e); continue; }
         // 优先使用事件中的 destroyerId（如暗杀卡的 ownerId），回退到传入的 sourcePlayerId
-        const effectiveSource = de.payload.destroyerId ?? sourcePlayerId;
+        const rawSource = de.payload.destroyerId ?? sourcePlayerId;
+        // 基地能力不属于任何玩家（Wiki/FAQ：base isn't any player's card）
+        // 对于 reason='base_*' 的事件，把 source 视为“目标自己”，从而不会触发
+        // “只有对手才会被拦截”的保护（如 deep_roots / elder_thing 等）。
+        const effectiveSource = de.payload.reason?.startsWith('base_') ? minion.controller : rawSource;
         // 检查 destroy 保护和 action 保护
         if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'destroy')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型（tooth_and_claw 注册为 'affect'）
@@ -889,14 +893,15 @@ export function filterProtectedMoveEvents(
         const base = core.bases[fromBaseIndex];
         const minion = base?.minions.find(m => m.uid === minionUid);
         if (!minion) { result.push(e); continue; }
-        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'move')) continue;
+        const effectiveSource = me.payload.reason?.startsWith('base_') ? minion.controller : sourcePlayerId;
+        if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'move')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型（与 filterProtectedDestroyEvents 对齐）
-        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'action');
-        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'affect');
+        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
+        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'affect');
         if (actionProtected || affectProtected) {
             // 消耗型保护：发射自毁事件
             const protType = actionProtected ? 'action' : 'affect';
-            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, sourcePlayerId, protType);
+            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, effectiveSource, protType);
             if (source) {
                 result.push({
                     type: SU_EVENTS.ONGOING_DETACHED,
@@ -942,14 +947,15 @@ export function filterProtectedReturnEvents(
         const minion = base?.minions.find(m => m.uid === minionUid);
         if (!minion) { result.push(e); continue; }
         // 'move' 保护同时阻止移动和返回手牌
-        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'move')) continue;
+        const effectiveSource = re.payload.reason?.startsWith('base_') ? minion.controller : sourcePlayerId;
+        if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'move')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型（与 filterProtectedDestroyEvents / filterProtectedMoveEvents 对齐）
-        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'action');
-        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'affect');
+        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
+        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'affect');
         if (actionProtected || affectProtected) {
             // 消耗型保护：发射自毁事件
             const protType = actionProtected ? 'action' : 'affect';
-            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, sourcePlayerId, protType);
+            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, effectiveSource, protType);
             if (source) {
                 result.push({
                     type: SU_EVENTS.ONGOING_DETACHED,
@@ -1006,16 +1012,18 @@ export function filterProtectedDeckBottomEvents(
         }
         // 不在基地上的卡牌（手牌/弃牌堆）不做保护检查
         if (fromBaseIndex === undefined || !minion) { result.push(e); continue; }
+        // 基地能力不属于任何玩家：reason='base_*' 时，把 source 视为“目标自己”
+        const effectiveSource = dbe.payload.reason?.startsWith('base_') ? minion.controller : sourcePlayerId;
         // 自身效果不拦截（如远古之物自己选择放牌库底）
-        if (ownerId === sourcePlayerId) { result.push(e); continue; }
+        if (ownerId === effectiveSource) { result.push(e); continue; }
         // 'move' 保护阻止放牌库底
-        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'move')) continue;
+        if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'move')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型
-        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'action');
-        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'affect');
+        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
+        const affectProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'affect');
         if (actionProtected || affectProtected) {
             const protType = actionProtected ? 'action' : 'affect';
-            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, sourcePlayerId, protType);
+            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, effectiveSource, protType);
             if (source) {
                 result.push({
                     type: SU_EVENTS.ONGOING_DETACHED,

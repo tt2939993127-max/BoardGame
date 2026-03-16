@@ -895,7 +895,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 if (i !== fromBaseIndex) return b;
                 return { ...b, minions: b.minions.filter(m => m.uid !== minionUid) };
             });
-            // 随从放入所有者弃牌堆
+            // 焦油坑：被消灭后改去向（仍算消灭），放入拥有者牌库底而不是弃牌堆
+            const isTarPits = base?.defId === 'base_tar_pits';
             let newPlayers = { ...state.players };
             const owner = newPlayers[ownerId];
             const destroyedCard: CardInstance = {
@@ -904,10 +905,15 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 type: 'minion',
                 owner: ownerId,
             };
-            newPlayers = {
-                ...newPlayers,
-                [ownerId]: { ...owner, discard: [...owner.discard, destroyedCard] },
-            };
+            newPlayers = isTarPits
+                ? {
+                    ...newPlayers,
+                    [ownerId]: { ...owner, deck: [...owner.deck, destroyedCard] },
+                }
+                : {
+                    ...newPlayers,
+                    [ownerId]: { ...owner, discard: [...owner.discard, destroyedCard] },
+                };
             // Property 12: 附着的行动卡回各自所有者弃牌堆
             if (minion) {
                 for (const attached of minion.attachedActions) {

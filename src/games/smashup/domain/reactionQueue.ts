@@ -4,6 +4,7 @@ import { SU_EVENTS } from './types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { getCurrentPlayerId } from './types';
 import { getTriggerExecutor } from './triggerExecutors';
+import { reduce } from './reduce';
 
 function getClockwiseOrder(turnOrder: PlayerId[], startingPlayerId: PlayerId): PlayerId[] {
   const idx = turnOrder.indexOf(startingPlayerId);
@@ -45,16 +46,18 @@ export function maybeResolveReactionQueue(
       timestamp: now,
     };
     const events: SmashUpEvent[] = [consumed];
+    const coreAfterConsume = reduce(core, consumed as unknown as SmashUpEvent);
     if (exec) {
       const result = exec({
-        state: core,
-        matchState: state,
+        state: coreAfterConsume,
+        matchState: { ...state, core: coreAfterConsume },
         timing: t.timing,
         playerId: t.ownerPlayerId,
         baseIndex: t.baseIndex,
         rankings: t.rankings,
         triggerMinionUid: t.triggerMinionUid,
         triggerMinionDefId: t.triggerMinionDefId,
+        triggerMinionPower: t.triggerMinionPower,
         triggerMinion: t.lkiMinion
           ? {
             uid: t.lkiMinion.uid,
@@ -71,15 +74,17 @@ export function maybeResolveReactionQueue(
           : undefined,
         reason: t.reason,
         affectType: t.affectType,
+        actionTargetBaseIndex: t.actionTargetBaseIndex,
+        actionTargetMinionUid: t.actionTargetMinionUid,
         random,
         now,
       } as any);
       const evts = Array.isArray(result) ? result : result.events;
       events.push(...evts);
       const ms = (!Array.isArray(result) && result.matchState) ? result.matchState : undefined;
-      return { state: ms ?? state, events };
+      return { state: ms ?? { ...state, core: coreAfterConsume }, events };
     }
-    return { state, events };
+    return { state: { ...state, core: coreAfterConsume }, events };
   }
 
   // if any interaction is already pending, don't interfere (multi-trigger ordering needs a prompt)
