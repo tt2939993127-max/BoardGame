@@ -42,6 +42,8 @@ export const SU_EVENTS = defineEvents({
   
   'su:cards_drawn': { audio: 'immediate', sound: CARD_DRAW_KEY },
   'su:cards_discarded': { audio: 'immediate', sound: CARD_DISCARD_KEY },
+  // 从牌库顶“磨牌/弃牌”（mill）：牌从 deck 进入 discard（不是手牌弃置）
+  'su:cards_milled': { audio: 'immediate', sound: CARD_DISCARD_KEY },
   'su:card_removed_from_deck': 'silent',
   'su:card_to_deck_top': { audio: 'immediate', sound: CARD_SCROLL_KEY },
   'su:card_to_deck_bottom': { audio: 'immediate', sound: CARD_SCROLL_KEY },
@@ -114,6 +116,7 @@ export const SU_EVENT_TYPES = {
   VP_AWARDED: SU_EVENTS['su:vp_awarded'].type,
   CARDS_DRAWN: SU_EVENTS['su:cards_drawn'].type,
   CARDS_DISCARDED: SU_EVENTS['su:cards_discarded'].type,
+  CARDS_MILLED: SU_EVENTS['su:cards_milled'].type,
   CARD_REMOVED_FROM_DECK: SU_EVENTS['su:card_removed_from_deck'].type,
   TURN_STARTED: SU_EVENTS['su:turn_started'].type,
   TURN_ENDED: SU_EVENTS['su:turn_ended'].type,

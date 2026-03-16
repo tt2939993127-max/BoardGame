@@ -653,6 +653,22 @@ export interface CardsDiscardedEvent extends GameEvent<'su:cards_discarded'> {
     };
 }
 
+/**
+ * 从牌库“磨牌/弃牌”（mill）：将指定 uid 的牌从 deck 移入 discard。
+ *
+ * 语义区分：
+ * - CARDS_DISCARDED：只允许从手牌弃置
+ * - CARDS_MILLED：只允许从牌库移入弃牌堆
+ */
+export interface CardsMilledEvent extends GameEvent<'su:cards_milled'> {
+    payload: {
+        playerId: PlayerId;
+        cardUids: string[];
+        /** 触发来源（可选，用于 actionLog/FX 识别） */
+        reason?: string;
+    };
+}
+
 export interface TurnStartedEvent extends GameEvent<'su:turn_started'> {
     payload: {
         playerId: PlayerId;
@@ -733,6 +749,7 @@ export type SmashUpEvent =
     | VpAwardedEvent
     | CardsDrawnEvent
     | CardsDiscardedEvent
+    | CardsMilledEvent
     | TurnStartedEvent
     | TurnEndedEvent
     | BaseReplacedEvent

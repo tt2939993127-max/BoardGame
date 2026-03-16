@@ -448,11 +448,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { playerId, cardUids } = event.payload;
             const player = state.players[playerId];
             const uidSet = new Set(cardUids);
-            // 从手牌和牌库中查找要弃掉的卡
+            // 只允许从手牌弃置（deck → discard 请使用 CARDS_MILLED）
             const discardedFromHand = player.hand.filter(c => uidSet.has(c.uid));
-            const discardedFromDeck = player.deck.filter(c => uidSet.has(c.uid));
             const remainingHand = player.hand.filter(c => !uidSet.has(c.uid));
-            const remainingDeck = player.deck.filter(c => !uidSet.has(c.uid));
             return {
                 ...state,
                 players: {
@@ -460,8 +458,27 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     [playerId]: {
                         ...player,
                         hand: remainingHand,
+                        discard: [...player.discard, ...discardedFromHand],
+                    },
+                },
+            };
+        }
+
+        case SU_EVENTS.CARDS_MILLED: {
+            const { playerId, cardUids } = event.payload as { playerId: PlayerId; cardUids: string[] };
+            const player = state.players[playerId];
+            const uidSet = new Set(cardUids);
+            const milledFromDeck = player.deck.filter(c => uidSet.has(c.uid));
+            const remainingDeck = player.deck.filter(c => !uidSet.has(c.uid));
+            if (milledFromDeck.length === 0) return state;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
                         deck: remainingDeck,
-                        discard: [...player.discard, ...discardedFromHand, ...discardedFromDeck],
+                        discard: [...player.discard, ...milledFromDeck],
                     },
                 },
             };
