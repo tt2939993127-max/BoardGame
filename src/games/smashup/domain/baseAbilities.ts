@@ -312,6 +312,11 @@ export function registerBaseAbilities(): void {
     registerBaseAbility('base_castle_blood', 'onMinionPlayed', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base || !ctx.minionUid) return { events: [] };
+        // Infiltrate：只影响你自己是否能用本基地能力
+        const ignored = base.ongoingActions?.some(o =>
+            o.ownerId === ctx.playerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignored) return { events: [] };
         // 计算当前玩家和最强对手的力量
         let myPower = 0;
         let maxOpponentPower = 0;
@@ -633,14 +638,6 @@ export function registerBaseAbilities(): void {
     registerExtended('base_the_field_of_honor', 'onMinionDestroyed', (ctx) => {
         // ctx.destroyerId 是消灭者；reason 标识本次消灭的直接来源（卡牌/能力）
         if (!ctx.destroyerId) return { events: [] };
-        // FAQ：同一张牌一次性消灭多个随从只给 1VP
-        // 使用 baseIndex + destroyerId + reason 作为“消灭批次”键，在本回合内去重。
-        const reason = (ctx as any).reason as string | undefined;
-        const key = `${ctx.baseIndex}::${ctx.destroyerId}::${reason ?? ''}`;
-        const batches = ctx.state.fieldOfHonorBatchesThisTurn ?? [];
-        if (batches.includes(key)) {
-            return { events: [] };
-        }
         return {
             events: [{
                 type: SU_EVENTS.VP_AWARDED,
@@ -651,10 +648,6 @@ export function registerBaseAbilities(): void {
                 },
                 timestamp: ctx.now,
             } as VpAwardedEvent],
-            state: {
-                ...ctx.state,
-                fieldOfHonorBatchesThisTurn: [...batches, key],
-            },
         };
     });
 
@@ -678,45 +671,24 @@ export function registerBaseAbilities(): void {
     // base_crypt: 地窖 (Crypt)
     // "当一个或多个随从在这被消灭，消灭者可在自己在这的随从上放 +1 指示物"
     registerExtended('base_crypt', 'onMinionDestroyed', (ctx) => {
-        console.log('[base_crypt] onMinionDestroyed triggered:', {
-            baseDefId: ctx.baseDefId,
-            minionUid: ctx.minionUid,
-            destroyerId: ctx.destroyerId,
-            playerId: ctx.playerId,
-            hasMatchState: !!ctx.matchState,
-        });
         // ✅ 只使用 destroyerId，不 fallback 到 playerId
         // playerId 在此上下文中是被消灭随从的拥有者，不是消灭者
-        if (!ctx.destroyerId) {
-            console.log('[base_crypt] no destroyerId, returning empty');
-            return { events: [] };
-        }
+        if (!ctx.destroyerId) return { events: [] };
         const destroyerId = ctx.destroyerId;
+
         const base = ctx.state.bases[ctx.baseIndex];
-        if (!base) {
-            console.log('[base_crypt] base not found, returning empty');
-            return { events: [] };
-        }
+        if (!base) return { events: [] };
         // 消灭者在这里有随从才能放指示物
         const destroyerMinions = base.minions.filter(m => m.controller === destroyerId && m.uid !== ctx.minionUid);
-        console.log('[base_crypt] destroyerMinions:', destroyerMinions.length, destroyerMinions.map(m => m.defId));
-        if (destroyerMinions.length === 0) {
-            console.log('[base_crypt] no destroyer minions, returning empty');
-            return { events: [] };
-        }
+        if (destroyerMinions.length === 0) return { events: [] };
         if (!ctx.matchState && destroyerMinions.length === 1) {
             // 无交互上下文时保持兼容：默认执行放置
-            console.log('[base_crypt] no matchState but single target, auto-placing counter');
             return {
                 events: [addPowerCounter(destroyerMinions[0].uid, ctx.baseIndex, 1, 'base_crypt', ctx.now)],
             };
         }
         // 可选效果：单目标/多目标都允许跳过
-        if (!ctx.matchState) {
-            console.log('[base_crypt] no matchState, cannot create interaction, returning empty');
-            return { events: [] };
-        }
-        console.log('[base_crypt] creating interaction with', destroyerMinions.length, 'options');
+        if (!ctx.matchState) return { events: [] };
         const minionOptions = destroyerMinions.map((m, i) => {
             const def = getCardDef(m.defId);
             return {
@@ -736,8 +708,10 @@ export function registerBaseAbilities(): void {
             '地窖：选择一个你的随从放置 +1 指示物', options,
             { sourceId: 'base_crypt', targetType: 'minion' },
         );
-        console.log('[base_crypt] interaction created, queueing');
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, interaction),
+        };
     });
 
     // === Monster Smash 基地能力 ===
@@ -751,6 +725,12 @@ export function registerBaseAbilities(): void {
         // 因此这里统计的是“当前回合里，这个基地全场累计被打出随从的次数”。
         const playedAtBaseThisTurn = getTurnMinionsPlayedAtBase(ctx.state, ctx.baseIndex);
         if (playedAtBaseThisTurn !== 1) return { events: [] };
+        const playedMinion = base.minions.find(m => m.uid === ctx.minionUid);
+        const controllerId = playedMinion?.controller ?? ctx.playerId;
+        const ignored = base.ongoingActions?.some(o =>
+            o.ownerId === controllerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignored) return { events: [] };
         return {
             events: [addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'base_laboratorium', ctx.now)],
         };
@@ -763,10 +743,16 @@ export function registerBaseAbilities(): void {
         const winnerId = ctx.rankings[0].playerId;
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return { events: [] };
+        const ignoredByWinner = base.ongoingActions?.some(o =>
+            o.ownerId === winnerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignoredByWinner) return { events: [] };
         const events: SmashUpEvent[] = [];
-        for (const m of base.minions) {
-            if (m.controller === winnerId) {
-                events.push(addPowerCounter(m.uid, ctx.baseIndex, 1, 'base_golem_schloss', ctx.now));
+        for (let bi = 0; bi < ctx.state.bases.length; bi++) {
+            const b = ctx.state.bases[bi];
+            for (const m of b.minions) {
+                if (m.controller !== winnerId) continue;
+                events.push(addPowerCounter(m.uid, bi, 1, 'base_golem_schloss', ctx.now));
             }
         }
         return { events };
@@ -782,6 +768,10 @@ export function registerBaseAbilities(): void {
         if (playedAtBaseThisTurn !== 1) return { events: [] };
         const minion = base.minions.find(m => m.uid === ctx.minionUid);
         if (!minion) return { events: [] };
+        const ignored = base.ongoingActions?.some(o =>
+            o.ownerId === minion.controller && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignored) return { events: [] };
         return {
             events: [{
                 type: SU_EVENTS.TEMP_POWER_ADDED,
@@ -808,6 +798,11 @@ export function registerBaseAbilities(): void {
     // base_the_hill: 蚁丘 (The Hill)
     // "每位玩家回合开始时，可以将一个自己的随从从任意基地移到这里"
     registerBaseAbility('base_the_hill', 'onTurnStart', (ctx) => {
+        const base = ctx.state.bases[ctx.baseIndex];
+        const ignored = base?.ongoingActions?.some(o =>
+            o.ownerId === ctx.playerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignored) return { events: [] };
         // 收集该玩家在其他基地的随从
         const candidates: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
         for (let bi = 0; bi < ctx.state.bases.length; bi++) {

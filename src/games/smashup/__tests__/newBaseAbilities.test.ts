@@ -19,6 +19,7 @@ import {
     triggerBaseAbility,
     triggerExtendedBaseAbility,
 } from '../domain/baseAbilities';
+import { processDestroyTriggers } from '../domain/reducer';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { SmashUpCore, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
@@ -175,46 +176,31 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         expect(events.length).toBe(0);
     });
 
-    it('同一张牌一次性消灭多个随从只给 1VP（按 FAQ）', () => {
-        const state = makeState({
+    it('同一张牌一次性消灭多个随从只给 1VP（按 FAQ，管线层 batch）', () => {
+        const core = makeState({
             bases: [{
                 defId: 'base_the_field_of_honor',
-                minions: [],
+                minions: [
+                    { uid: 'victim-1', defId: 'v1', controller: '1', owner: '1', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-2', defId: 'v2', controller: '1', owner: '1', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                ],
                 ongoingActions: [],
             }],
+            players: {
+                '0': { id: '0', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+                '1': { id: '1', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            } as any,
         });
-        const ctxBase: BaseAbilityContext = {
-            state,
-            baseIndex: 0,
-            baseDefId: 'base_the_field_of_honor',
-            playerId: '1',
-            destroyerId: '0',
-            now: 1000,
-        };
-
-        // 同一张牌（reason 相同）一次性消灭多个随从
-        const first = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', {
-            ...ctxBase,
-            minionUid: 'm1',
-            minionDefId: 'test_minion_1',
-            // reason 由 destroy 管线传入，这里模拟同一来源
-            // @ts-expect-error 测试环境补充 reason
-            reason: 'test_card_destroy_many',
-        } as any);
-        expect(first.events.length).toBe(1);
-        expect(first.events[0].type).toBe(SU_EVENTS.VP_AWARDED);
-
-        const second = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', {
-            ...ctxBase,
-            state: first.state ?? state,
-            minionUid: 'm2',
-            minionDefId: 'test_minion_2',
-            // 同一张牌的同一波消灭，reason 相同
-            // @ts-expect-error 测试环境补充 reason
-            reason: 'test_card_destroy_many',
-        } as any);
-        // 第二次不再产生 VP 事件
-        expect(second.events.length).toBe(0);
+        const ms = makeMatchState(core);
+        const events = [
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-1', minionDefId: 'v1', fromBaseIndex: 0, ownerId: '1', destroyerId: '0', reason: 'powderkeg' }, timestamp: 1000 },
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-2', minionDefId: 'v2', fromBaseIndex: 0, ownerId: '1', destroyerId: '0', reason: 'powderkeg' }, timestamp: 1000 },
+        ] as any;
+        const res = processDestroyTriggers(events, ms, '0', () => 0.5, 1000);
+        const vpEvents = res.events.filter((e: any) => e.type === SU_EVENTS.VP_AWARDED);
+        expect(vpEvents).toHaveLength(1);
+        expect(vpEvents[0].payload.playerId).toBe('0');
+        expect(vpEvents[0].payload.amount).toBe(1);
     });
 });
 
@@ -305,6 +291,35 @@ describe('base_crypt: 消灭者放指示物', () => {
 
         const { events } = triggerExtendedBaseAbility('base_crypt', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
+    });
+
+    it('同一张牌一次性消灭多个随从，只允许触发一次地窖（按 FAQ，管线层 batch）', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_crypt',
+                minions: [
+                    { uid: 'm_destroyer', defId: 'd1', controller: '1', owner: '1', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-1', defId: 'v1', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-2', defId: 'v2', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                ],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': { id: '0', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+                '1': { id: '1', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            } as any,
+        });
+        const ms = makeMatchState(core);
+        const events = [
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-1', minionDefId: 'v1', fromBaseIndex: 0, ownerId: '0', destroyerId: '1', reason: 'powderkeg' }, timestamp: 1000 },
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-2', minionDefId: 'v2', fromBaseIndex: 0, ownerId: '0', destroyerId: '1', reason: 'powderkeg' }, timestamp: 1000 },
+        ] as any;
+        const res = processDestroyTriggers(events, ms, '1', () => 0.5, 1000);
+        // base_crypt 是 optional，且有 matchState 时会创建交互；batch 后只创建一次
+        const queued = (res.matchState ?? ms).sys.interaction.queue;
+        const current = (res.matchState ?? ms).sys.interaction.current;
+        const all = [...queued, ...(current ? [current] : [])];
+        expect(all.filter((i: any) => i.data?.sourceId === 'base_crypt')).toHaveLength(1);
     });
 });
 

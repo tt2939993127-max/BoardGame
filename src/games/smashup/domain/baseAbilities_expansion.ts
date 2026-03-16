@@ -550,7 +550,14 @@ export function registerExpansionBaseAbilities(): void {
         const eggIndex = ctx.state.bases.findIndex(b => b.defId === 'base_egg_chamber');
         if (eggIndex === -1) return false;
         if (ctx.targetBaseIndex !== eggIndex) return false;
-        return ctx.targetMinion.powerModifier > 0;
+        const eggBase = ctx.state.bases[eggIndex];
+        // Infiltrate：该随从控制者若选择忽略，则其随从不再受保护
+        const ignored = eggBase.ongoingActions?.some(o =>
+            o.ownerId === ctx.targetMinion.controller && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignored) return false;
+        // 仅“+1 power counters”（力量指示物）提供保护
+        return (ctx.targetMinion.powerCounters ?? 0) > 0;
     });
 
     // 小马乐园（Pony Paradise）：拥有 2+ 随从的玩家，其随从免疫消灭

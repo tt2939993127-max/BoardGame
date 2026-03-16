@@ -681,6 +681,8 @@ export function processDestroyTriggers(
     // 待拯救随从：trigger 创建了交互（玩家选择是否拯救）但未产生 MINION_RETURNED，
     // 需要暂缓 MINION_DESTROYED，等交互解决后再决定消灭或拯救
     const pendingSaveMinionUids = new Set<string>();
+    // FAQ batching: some base triggers apply once per destruction ability
+    const baseDestroyBatchSeen = new Set<string>();
 
     for (const de of destroyEvents) {
         const { minionUid, minionDefId, fromBaseIndex, ownerId: eventOwnerId, destroyerId: eventDestroyerId, reason } = de.payload;
@@ -700,6 +702,32 @@ export function processDestroyTriggers(
 
         // 2. 触发基地扩展时机 onMinionDestroyed（如 nine_lives 防止消灭）
         if (base) {
+            // Field of Honor / Crypt FAQ: if one card destroys many minions at once,
+            // the base's reward should only happen once per destruction ability.
+            if (base.defId === 'base_the_field_of_honor' || base.defId === 'base_crypt') {
+                const batchKey = `${base.defId}::${fromBaseIndex}::${destroyerId}::${reason ?? ''}`;
+                if (baseDestroyBatchSeen.has(batchKey)) {
+                    // skip triggering this base ability again for this batch
+                } else {
+                    baseDestroyBatchSeen.add(batchKey);
+                    const baseCtx = {
+                        state: core,
+                        matchState: ms ?? state,
+                        baseIndex: fromBaseIndex,
+                        baseDefId: base.defId,
+                        playerId: ownerId,
+                        minionUid,
+                        minionDefId,
+                        controllerId: minion?.controller ?? ownerId,
+                        destroyerId,
+                        now,
+                        reason,
+                    };
+                    const baseResult = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
+                    saveEvents.push(...baseResult.events);
+                    if (baseResult.matchState) ms = baseResult.matchState;
+                }
+            } else {
             const baseCtx = {
                 state: core,
                 matchState: ms ?? state,
@@ -713,9 +741,10 @@ export function processDestroyTriggers(
                 now,
                 reason,
             };
-            const baseResult = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
-            saveEvents.push(...baseResult.events);
-            if (baseResult.matchState) ms = baseResult.matchState;
+                const baseResult = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
+                saveEvents.push(...baseResult.events);
+                if (baseResult.matchState) ms = baseResult.matchState;
+            }
         }
 
         // 3. 触发 ongoing 拦截器 onMinionDestroyed（replacement：如雄蜂防止消灭、逃生舱回手牌）
