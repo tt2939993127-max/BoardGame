@@ -402,6 +402,18 @@ export function formatSmashUpActionEntry({
                 })], payload.playerId, entryTimestamp, index);
                 break;
             }
+            case SU_EVENTS.CARDS_MILLED: {
+                const payload = event.payload as { playerId: PlayerId; cardUids: string[]; reason?: string };
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.cardsMilled', {
+                    playerId: payload.playerId,
+                    count: payload.cardUids?.length ?? 0,
+                })];
+                if (payload.reason) {
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
+                }
+                pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
+                break;
+            }
             case SU_EVENTS.TURN_STARTED: {
                 const payload = event.payload as { playerId: PlayerId };
                 pushEntry(event.type, [i18nSeg('actionLog.turnStarted', {

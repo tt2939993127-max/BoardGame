@@ -163,6 +163,7 @@
     "vpAwarded": "{{playerId}} 获得 {{amount}}VP",
     "cardsDrawn": "{{playerId}} 抽{{count}}张牌",
     "cardsDiscarded": "{{playerId}} 弃置{{count}}张牌",
+    "cardsMilled": "{{playerId}} 从牌库弃置{{count}}张牌",
     "turnStarted": "{{playerId}} 开始回合",
     "turnEnded": "{{playerId}} 结束回合",
     "baseReplaced": "基地替换：",

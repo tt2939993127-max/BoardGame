@@ -163,6 +163,7 @@
     "vpAwarded": "{{playerId}} gains {{amount}}VP",
     "cardsDrawn": "{{playerId}} draws {{count}} cards",
     "cardsDiscarded": "{{playerId}} discards {{count}} cards",
+    "cardsMilled": "{{playerId}} mills {{count}} cards",
     "turnStarted": "{{playerId}} starts turn",
     "turnEnded": "{{playerId}} ends turn",
     "baseReplaced": "Base replaced:",

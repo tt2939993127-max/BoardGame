@@ -67,6 +67,7 @@ export function useGameEvents({ G, fxBus, baseRefs }: UseGameEventsParams) {
   const TRIGGER_CARRIER_EVENTS = useMemo(() => new Set([
     SU_EVENTS.MINION_DESTROYED,
     SU_EVENTS.CARDS_DISCARDED,
+    SU_EVENTS.CARDS_MILLED,
     SU_EVENTS.ONGOING_DETACHED,
     SU_EVENTS.LIMIT_MODIFIED,
     SU_EVENTS.MINION_RETURNED,
