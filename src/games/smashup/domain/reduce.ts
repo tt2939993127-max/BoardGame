@@ -1185,6 +1185,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             if (!owner) return state;
 
             let found: CardInstance | undefined;
+            let attachedToDiscard: CardInstance[] | undefined;
             const removeCard = (cards: CardInstance[]): CardInstance[] => {
                 const idx = cards.findIndex(c => c.uid === cardUid);
                 if (idx === -1) return cards;
@@ -1204,6 +1205,15 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     const minion = base.minions.find(m => m.uid === cardUid);
                     if (minion) {
                         if (!found) found = { uid: cardUid, defId, type: 'minion', owner: ownerId };
+                        // 离场弃附属：随从被放入牌库时，其附着行动卡进入各自所有者弃牌堆
+                        if (!attachedToDiscard && minion.attachedActions.length > 0) {
+                            attachedToDiscard = minion.attachedActions.map(a => ({
+                                uid: a.uid,
+                                defId: a.defId,
+                                type: 'action' as const,
+                                owner: a.ownerId,
+                            }));
+                        }
                         return { ...base, minions: base.minions.filter(m => m.uid !== cardUid) };
                     }
                     // 搜索 ongoing 行动卡
@@ -1224,18 +1234,34 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 owner: ownerId,
             };
 
+            let updatedPlayers = {
+                ...state.players,
+                [ownerId]: {
+                    ...owner,
+                    hand: newHand,
+                    discard: newDiscard,
+                    deck: [...newDeck, card],
+                },
+            };
+
+            if (attachedToDiscard && attachedToDiscard.length > 0) {
+                for (const a of attachedToDiscard) {
+                    const p = updatedPlayers[a.owner];
+                    if (!p) continue;
+                    updatedPlayers = {
+                        ...updatedPlayers,
+                        [a.owner]: {
+                            ...p,
+                            discard: [...p.discard, a],
+                        },
+                    };
+                }
+            }
+
             return {
                 ...state,
                 bases: newBases,
-                players: {
-                    ...state.players,
-                    [ownerId]: {
-                        ...owner,
-                        hand: newHand,
-                        discard: newDiscard,
-                        deck: [...newDeck, card],
-                    },
-                },
+                players: updatedPlayers,
             };
         }
 
