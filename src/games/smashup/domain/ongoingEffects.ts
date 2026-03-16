@@ -269,6 +269,7 @@ export function collectTriggers(
             triggerMinionDefId: ctx.triggerMinionDefId,
             reason: ctx.reason,
             affectType: ctx.affectType,
+            rankings: ctx.rankings,
             lkiMinion: ctx.triggerMinion
                 ? {
                     uid: ctx.triggerMinion.uid,

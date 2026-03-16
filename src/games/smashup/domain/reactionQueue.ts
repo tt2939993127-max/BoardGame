@@ -52,6 +52,7 @@ export function maybeResolveReactionQueue(
         timing: t.timing,
         playerId: t.ownerPlayerId,
         baseIndex: t.baseIndex,
+        rankings: t.rankings,
         triggerMinionUid: t.triggerMinionUid,
         triggerMinionDefId: t.triggerMinionDefId,
         triggerMinion: t.lkiMinion

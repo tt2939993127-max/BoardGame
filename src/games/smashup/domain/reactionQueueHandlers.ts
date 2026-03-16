@@ -43,6 +43,7 @@ export function registerReactionQueueInteractionHandlers(): void {
       timing: t.timing,
       playerId: t.ownerPlayerId,
       baseIndex: t.baseIndex,
+      rankings: t.rankings,
       triggerMinionUid: t.triggerMinionUid,
       triggerMinionDefId: t.triggerMinionDefId,
       triggerMinion: lkiTriggerMinion,
