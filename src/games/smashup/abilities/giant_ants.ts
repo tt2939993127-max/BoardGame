@@ -4,6 +4,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
+import type { MinionPlayedEvent } from '../domain/types';
 import {
     addPowerCounter,
     addTempPower,
@@ -11,8 +12,10 @@ import {
     buildAbilityFeedback,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
+    destroyMinion,
     moveMinion,
     removePowerCounter,
+    revealAndPickFromDeck,
 } from '../domain/abilityHelpers';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
@@ -43,6 +46,16 @@ type DronePreventChoiceValue =
 function giantAntSoldierOnPlay(ctx: AbilityContext): AbilityResult {
     return {
         events: [addPowerCounter(ctx.cardUid, ctx.baseIndex, 2, 'giant_ant_soldier', ctx.now)],
+    };
+}
+
+function giantAntSoldierPodOnPlay(ctx: AbilityContext): AbilityResult {
+    const soldier = ctx.state.bases[ctx.baseIndex]?.minions.find(m => m.uid === ctx.cardUid);
+    if (!soldier || soldier.controller !== ctx.playerId) {
+        return { events: [] };
+    }
+    return {
+        events: [addPowerCounter(ctx.cardUid, ctx.baseIndex, 2, 'giant_ant_soldier_pod', ctx.now)],
     };
 }
 
@@ -99,6 +112,24 @@ function giantAntSoldierTalent(ctx: AbilityContext): AbilityResult {
 function giantAntDroneOnPlay(ctx: AbilityContext): AbilityResult {
     return {
         events: [addPowerCounter(ctx.cardUid, ctx.baseIndex, 1, 'giant_ant_drone', ctx.now)],
+    };
+}
+
+function giantAntDronePodTalent(ctx: AbilityContext): AbilityResult {
+    const drone = ctx.state.bases[ctx.baseIndex]?.minions.find(m => m.uid === ctx.cardUid);
+    if (!drone || drone.controller !== ctx.playerId) return { events: [] };
+
+    if (drone.powerCounters < 1) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_power_counters', ctx.now)] };
+    }
+
+    const drawEvents = buildDrawEvents(ctx.state, ctx.playerId, 1, ctx.random, ctx.now);
+
+    return {
+        events: [
+            removePowerCounter(ctx.cardUid, ctx.baseIndex, 1, 'giant_ant_drone_pod', ctx.now),
+            ...drawEvents,
+        ],
     };
 }
 
@@ -181,6 +212,15 @@ interface KindOfMagicContext {
     distributedByMinion: Record<string, CounterSnapshot>;
 }
 
+interface PowerCounterHolderCandidate {
+    uid: string;
+    defId: string;
+    baseIndex: number;
+    label: string;
+    // 未来可扩展为 'titan' | 'ongoing'
+    kind: 'minion';
+}
+
 interface TransferContext {
     sourceMinionUid: string;
     sourceDefId: string;
@@ -200,11 +240,21 @@ interface SoldierTransferContext {
     soldierBaseIndex: number;
 }
 
+interface SoldierPodTransferContext {
+    sourceMinionUid: string;
+    sourceBaseIndex: number;
+}
+
 interface DronePreventContext {
     targetMinionUid: string;
     targetMinionDefId: string;
     fromBaseIndex: number;
     toPlayerId: PlayerId;
+}
+
+interface GimmePodFirstContext {
+    firstMinionUid: string;
+    firstBaseIndex: number;
 }
 
 type IH = (
@@ -217,6 +267,7 @@ type IH = (
 ) => { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } | undefined;
 
 export function registerGiantAntAbilities(): void {
+    // 基础版
     registerAbility('giant_ant_worker', 'onPlay', giantAntWorker);
     registerAbility('giant_ant_soldier', 'onPlay', giantAntSoldierOnPlay);
     registerAbility('giant_ant_soldier', 'talent', giantAntSoldierTalent);
@@ -230,6 +281,21 @@ export function registerGiantAntAbilities(): void {
     registerAbility('giant_ant_under_pressure', 'special', giantAntUnderPressure);
     registerAbility('giant_ant_headlong', 'onPlay', giantAntHeadlong);
     registerAbility('giant_ant_we_are_the_champions', 'special', giantAntWeAreTheChampions);
+
+    // POD 版本
+    registerAbility('giant_ant_worker_pod', 'onPlay', giantAntWorker); // 复用基础版
+    registerAbility('giant_ant_soldier_pod', 'onPlay', giantAntSoldierPodOnPlay);
+    registerAbility('giant_ant_soldier_pod', 'talent', giantAntSoldierPodTalent);
+    registerAbility('giant_ant_drone_pod', 'onPlay', giantAntDroneOnPlay); // 复用基础版
+    registerAbility('giant_ant_drone_pod', 'talent', giantAntDronePodTalent);
+    registerAbility('giant_ant_killer_queen_pod', 'talent', giantAntKillerQueenPodTalent);
+    registerAbility('giant_ant_who_wants_to_live_forever_pod', 'onPlay', giantAntWhoWantsToLiveForeverPod);
+    registerAbility('giant_ant_a_kind_of_magic_pod', 'onPlay', giantAntAKindOfMagicPod);
+    registerAbility('giant_ant_we_will_rock_you_pod', 'onPlay', giantAntWeWillRockYouPod);
+    registerAbility('giant_ant_claim_the_prize_pod', 'onPlay', giantAntGimmeThePrizePod);
+    registerAbility('giant_ant_under_pressure_pod', 'special', giantAntUnderPressure); // 复用基础版
+    registerAbility('giant_ant_headlong_pod', 'onPlay', giantAntHeadlong); // 复用基础版
+    registerAbility('giant_ant_we_are_the_champions_pod', 'special', giantAntWeAreTheChampions); // 复用基础版
 
     registerGiantAntProtections();
 }
@@ -254,6 +320,19 @@ export function registerGiantAntInteractionHandlers(): void {
 
     registerInteractionHandler('giant_ant_headlong_choose_minion', handleHeadlongChooseMinion);
     registerInteractionHandler('giant_ant_headlong_choose_base', handleHeadlongChooseBase);
+    registerInteractionHandler('giant_ant_we_will_rock_you_pod_choose_base', handleWeWillRockYouPodChooseBase);
+
+    // POD 版本 handlers
+    registerInteractionHandler('giant_ant_gimme_the_prize_pod_first', handleGimmePodChooseFirst);
+    registerInteractionHandler('giant_ant_gimme_the_prize_pod_second', handleGimmePodChooseSecond);
+    registerInteractionHandler('giant_ant_soldier_pod_choose_source', handleSoldierPodChooseSource);
+    registerInteractionHandler('giant_ant_soldier_pod_choose_target', handleSoldierPodChooseTarget);
+    registerInteractionHandler('giant_ant_killer_queen_pod_choose', handleKillerQueenPodChoose);
+    registerInteractionHandler('giant_ant_killer_queen_pod_choose_minion', handleKillerQueenPodChooseMinion);
+    registerInteractionHandler('giant_ant_killer_queen_pod_search', handleKillerQueenPodSearch);
+    registerInteractionHandler('giant_ant_who_wants_to_live_forever_pod_destroy', handleWWTLFPodDestroy);
+    registerInteractionHandler('giant_ant_who_wants_to_live_forever_pod_search', handleWWTLFPodSearch);
+    registerInteractionHandler('giant_ant_worker_pod_replay', handleWorkerPodReplay);
 }
 
 function giantAntWorker(ctx: AbilityContext): AbilityResult {
@@ -278,6 +357,76 @@ const handleSoldierChooseMinion: IH = (state, playerId, value, interactionData, 
         events: [
             removePowerCounter(context.soldierUid, context.soldierBaseIndex, 1, 'giant_ant_soldier', timestamp),
             addPowerCounter(target.uid, selected.baseIndex, 1, 'giant_ant_soldier', timestamp),
+        ],
+    };
+};
+
+const handleSoldierPodChooseSource: IH = (state, playerId, value, _interactionData, _random, timestamp) => {
+    const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+
+    const source = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!source || source.controller !== playerId || source.powerCounters <= 0) return undefined;
+
+    // 目标：任意其它己方随从（不限基地）
+    const targets = collectOwnMinions(state.core, playerId).filter(m => m.uid !== selected.minionUid);
+    if (targets.length === 0) {
+        return {
+            state,
+            events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)],
+        };
+    }
+
+    const interaction = createSimpleChoice(
+        `giant_ant_soldier_pod_choose_target_${timestamp}`,
+        playerId,
+        '兵蚁 POD：选择接收力量指示物的随从',
+        buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'affect' }),
+        {
+            sourceId: 'giant_ant_soldier_pod_choose_target',
+            targetType: 'minion',
+        },
+    );
+
+    const context: SoldierPodTransferContext = {
+        sourceMinionUid: selected.minionUid,
+        sourceBaseIndex: selected.baseIndex,
+    };
+
+    return {
+        state: queueInteraction(state, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: context,
+            },
+        }),
+        events: [],
+    };
+};
+
+const handleSoldierPodChooseTarget: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as SoldierPodTransferContext | undefined;
+    if (!context) return undefined;
+
+    const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+    if (selected.minionUid === context.sourceMinionUid) return undefined;
+
+    const source = state.core.bases[context.sourceBaseIndex]?.minions.find(m => m.uid === context.sourceMinionUid);
+    const target = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!source || !target || source.controller !== playerId || target.controller !== playerId) {
+        return { state, events: [] };
+    }
+    if (source.powerCounters <= 0) {
+        return { state, events: [] };
+    }
+
+    return {
+        state,
+        events: [
+            removePowerCounter(source.uid, context.sourceBaseIndex, 1, 'giant_ant_soldier_pod', timestamp),
+            addPowerCounter(target.uid, selected.baseIndex, 1, 'giant_ant_soldier_pod', timestamp),
         ],
     };
 };
@@ -404,6 +553,53 @@ function giantAntAKindOfMagic(ctx: AbilityContext): AbilityResult {
     };
 }
 
+function giantAntAKindOfMagicPod(ctx: AbilityContext): AbilityResult {
+    // 通过统一的“指示物持有者”抽象收集己方所有带力量指示物的卡牌（当前仅随从）
+    const holders = collectOwnPowerCounterHolders(ctx.state, ctx.playerId);
+    if (holders.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_power_counters', ctx.now)] };
+    }
+
+    // “your cards” 至少要有两张牌，否则无法在牌之间转移
+    const allOwn = collectOwnMinions(ctx.state, ctx.playerId);
+    if (allOwn.length <= 1) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+
+    const snapshots = holders.map((h) => ({
+        minionUid: h.uid,
+        defId: h.defId,
+        baseIndex: h.baseIndex,
+        count: ctx.state.bases[h.baseIndex]?.minions.find(x => x.uid === h.uid)?.powerCounters ?? 0,
+    })).filter(item => item.count > 0);
+
+    const total = snapshots.reduce((sum, item) => sum + item.count, 0);
+    if (total <= 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_power_counters', ctx.now)] };
+    }
+
+    const removeEvents = snapshots.map(item =>
+        removePowerCounter(item.minionUid, item.baseIndex, item.count, 'giant_ant_a_kind_of_magic_pod', ctx.now),
+    );
+
+    const interaction = createAKindOfMagicInteraction(
+        ctx.matchState,
+        ctx.playerId,
+        {
+            actionCardUid: ctx.cardUid,
+            remaining: total,
+            removedSnapshots: snapshots,
+            distributedByMinion: {},
+        },
+        ctx.now,
+    );
+
+    return {
+        events: removeEvents,
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
 function giantAntWeWillRockYou(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -414,6 +610,31 @@ function giantAntWeWillRockYou(ctx: AbilityContext): AbilityResult {
         }
     }
     return { events };
+}
+
+function giantAntWeWillRockYouPod(ctx: AbilityContext): AbilityResult {
+    const baseCandidates: { baseIndex: number; label: string }[] = [];
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        const def = getCardDef(ctx.state.bases[i].defId);
+        baseCandidates.push({ baseIndex: i, label: def?.name ?? `基地 ${i + 1}` });
+    }
+    if (baseCandidates.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+    const interaction = createSimpleChoice(
+        `giant_ant_we_will_rock_you_pod_base_${ctx.now}`,
+        ctx.playerId,
+        '摇滚万岁 POD：选择一个基地（该基地上己方随从按力量指示物数获得临时+力量）',
+        buildBaseTargetOptions(baseCandidates, ctx.state),
+        {
+            sourceId: 'giant_ant_we_will_rock_you_pod_choose_base',
+            targetType: 'base',
+        },
+    );
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
 }
 
 function giantAntClaimThePrize(ctx: AbilityContext): AbilityResult {
@@ -440,6 +661,48 @@ function giantAntClaimThePrize(ctx: AbilityContext): AbilityResult {
             targetType: 'minion',
             multi: { min: 0, max: Math.min(3, options.length) },
             autoResolveIfSingle: false,
+        },
+    );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function giantAntGimmeThePrizePod(ctx: AbilityContext): AbilityResult {
+    const ownMinions = collectOwnMinions(ctx.state, ctx.playerId);
+    if (ownMinions.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+
+    // 只有 1 个随从时：效果退化为只给这一个随从 +2
+    if (ownMinions.length === 1) {
+        const m = ownMinions[0];
+        return {
+            events: [
+                addPowerCounter(m.uid, m.baseIndex, 2, 'giant_ant_gimme_the_prize_pod', ctx.now),
+            ],
+        };
+    }
+
+    // 有 2 个及以上随从时：先选择第一个随从（+2）
+    const options = ownMinions.map(m => ({
+        id: `minion-${m.uid}`,
+        label: m.label,
+        displayMode: 'card' as const,
+        _source: 'field' as const,
+        value: { minionUid: m.uid, baseIndex: m.baseIndex, defId: m.defId },
+    }));
+
+    const interaction = createSimpleChoice(
+        `giant_ant_gimme_the_prize_pod_first_${ctx.now}`,
+        ctx.playerId,
+        'Gimme the Prize POD：选择第一个随从（获得+2力量指示物）',
+        options,
+        {
+            sourceId: 'giant_ant_gimme_the_prize_pod_first',
+            targetType: 'minion',
         },
     );
 
@@ -590,7 +853,7 @@ function giantAntWeAreTheChampions(ctx: AbilityContext): AbilityResult {
         events: [{
             type: SU_EVENTS.SPECIAL_AFTER_SCORING_ARMED,
             payload: {
-                sourceDefId: 'giant_ant_we_are_the_champions',
+                sourceDefId: ctx.defId,
                 playerId: ctx.playerId,
                 baseIndex: ctx.baseIndex,
                 cardUid: ctx.cardUid,
@@ -976,7 +1239,7 @@ const handleUnderPressureChooseTarget: IH = (state, playerId, value, interaction
         `giant_ant_under_pressure_choose_amount_${timestamp}`,
         playerId,
         '承受压力：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, _source: 'static' as const, displayMode: 'button' as const }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount } }],
         {
             sourceId: 'giant_ant_under_pressure_choose_amount',
             targetType: 'generic',
@@ -1114,7 +1377,7 @@ const handleWeAreTheChampionsChooseTarget: IH = (state, playerId, value, interac
         `giant_ant_we_are_the_champions_choose_amount_${timestamp}`,
         playerId,
         '我们乃最强：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, _source: 'static' as const, displayMode: 'button' as const }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount } }],
         {
             sourceId: 'giant_ant_we_are_the_champions_choose_amount',
             targetType: 'generic',
@@ -1239,6 +1502,610 @@ const handleHeadlongChooseBase: IH = (state, playerId, value, interactionData, _
     };
 };
 
+const handleWeWillRockYouPodChooseBase: IH = (state, playerId, value, _interactionData, _random, timestamp) => {
+    const selected = value as { baseIndex?: number };
+    if (selected.baseIndex === undefined) return undefined;
+    const baseIndex = selected.baseIndex;
+    const base = state.core.bases[baseIndex];
+    if (!base) return undefined;
+
+    const events: SmashUpEvent[] = [];
+    for (const m of base.minions) {
+        if (m.controller !== playerId) continue;
+        if (m.powerCounters <= 0) continue;
+        events.push(addTempPower(m.uid, baseIndex, m.powerCounters, 'giant_ant_we_will_rock_you_pod', timestamp));
+    }
+    return { state, events };
+};
+
+// ============================================================================
+// POD 版本能力函数
+// ============================================================================
+
+function giantAntSoldierPodTalent(ctx: AbilityContext): AbilityResult {
+    // 收集有指示物的己方随从（可作为来源）
+    const sources = collectOwnMinionsWithCounters(ctx.state, ctx.playerId);
+    if (sources.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_power_counters', ctx.now)] };
+    }
+
+    // 收集所有己方随从（可作为目标）
+    const allOwn = collectOwnMinions(ctx.state, ctx.playerId);
+    if (allOwn.length <= 1) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+
+    // 先选择来源随从（有指示物的己方随从）
+    const sourceOptions = buildMinionTargetOptions(sources, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId,
+        effectType: 'affect',
+    });
+
+    const interaction = createSimpleChoice(
+        `giant_ant_soldier_pod_choose_source_${ctx.now}`,
+        ctx.playerId,
+        '兵蚁 POD：选择要移出力量指示物的随从',
+        sourceOptions,
+        {
+            sourceId: 'giant_ant_soldier_pod_choose_source',
+            targetType: 'minion',
+        },
+    );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function giantAntKillerQueenPodTalent(ctx: AbilityContext): AbilityResult {
+    const self = ctx.state.bases[ctx.baseIndex]?.minions.find(m => m.uid === ctx.cardUid);
+    if (!self || self.controller !== ctx.playerId) return { events: [] };
+
+    const player = ctx.state.players[ctx.playerId];
+    if (!player) return { events: [] };
+
+    // 本回合打出的其它己方随从（不限基地，严格按 POD 文本）
+    const playedThisTurn: MinionCandidate[] = [];
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        for (const m of ctx.state.bases[i].minions) {
+            if (m.controller !== ctx.playerId) continue;
+            if (!m.playedThisTurn) continue;
+            if (m.uid === ctx.cardUid) continue; // 排除杀手女皇自己
+            const def = getCardDef(m.defId);
+            playedThisTurn.push({
+                uid: m.uid,
+                defId: m.defId,
+                baseIndex: i,
+                label: def?.name ?? m.defId,
+            });
+        }
+    }
+
+    const options: any[] = [];
+
+    // 选项 A：从牌库顶开始寻找力量≤1的随从并抽到手牌
+    options.push({
+        id: 'search_deck',
+        label: '从牌库顶翻牌直到找到力量≤1的随从并抽到手牌',
+        value: { action: 'search_deck' },
+        _source: 'static' as const,
+        displayMode: 'button' as const,
+    });
+
+    // 选项 B：选择本回合打出的另一个随从，在其和女皇上各放1个力量指示物
+    for (let i = 0; i < playedThisTurn.length; i++) {
+        const m = playedThisTurn[i];
+        options.push({
+            id: `minion-${i}`,
+            label: `选择 ${m.label}（在该随从和杀手女皇上各放1个指示物）`,
+            value: {
+                action: 'add_counters',
+                minionUid: m.uid,
+                baseIndex: m.baseIndex,
+                defId: m.defId,
+            },
+            _source: 'field' as const,
+            displayMode: 'card' as const,
+        });
+    }
+
+    const interaction = createSimpleChoice(
+        `giant_ant_killer_queen_pod_choose_${ctx.now}`,
+        ctx.playerId,
+        '杀手女皇 POD：选择一个效果',
+        options,
+        {
+            sourceId: 'giant_ant_killer_queen_pod_choose',
+            targetType: 'generic',
+        },
+    );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: {
+                    queenUid: ctx.cardUid,
+                    queenBaseIndex: ctx.baseIndex,
+                },
+            },
+        }),
+    };
+}
+
+function giantAntWhoWantsToLiveForeverPod(ctx: AbilityContext): AbilityResult {
+    const ownMinions = collectOwnMinions(ctx.state, ctx.playerId);
+
+    // 若场上没有己方随从，仍然可以按勘误搜索牌库
+    if (ownMinions.length === 0) {
+        const player = ctx.state.players[ctx.playerId];
+        if (!player || player.deck.length === 0) {
+            return { events: [] };
+        }
+
+        const options = player.deck.map((c, i) => {
+            const def = getCardDef(c.defId);
+            return {
+                id: `deck-${i}`,
+                label: def?.name ?? c.defId,
+                value: { cardUid: c.uid, defId: c.defId },
+                _source: 'deck' as const,
+            };
+        });
+
+        const interaction = createSimpleChoice(
+            `giant_ant_who_wants_to_live_forever_pod_search_${ctx.now}`,
+            ctx.playerId,
+            '从牌库选择一张牌放到牌库顶（不展示）',
+            options,
+            {
+                sourceId: 'giant_ant_who_wants_to_live_forever_pod_search',
+                targetType: 'generic',
+            },
+        );
+
+        return {
+            events: [],
+            matchState: queueInteraction(ctx.matchState, interaction),
+        };
+    }
+
+    const minionOptions = ownMinions.map(m => ({
+        id: `minion-${m.uid}`,
+        label: m.label,
+        displayMode: 'card' as const,
+        _source: 'field' as const,
+        value: { minionUid: m.uid, baseIndex: m.baseIndex, defId: m.defId },
+    }));
+
+    const interaction = createSimpleChoice(
+        `giant_ant_who_wants_to_live_forever_pod_destroy_${ctx.now}`,
+        ctx.playerId,
+        '无人想要永生 POD：选择要消灭的一个己方随从',
+        minionOptions,
+        {
+            sourceId: 'giant_ant_who_wants_to_live_forever_pod_destroy',
+            targetType: 'minion',
+        },
+    );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: {
+                    actionCardUid: ctx.cardUid,
+                },
+            },
+        }),
+    };
+}
+
+// ============================================================================
+// POD 版本 handlers
+// ============================================================================
+
+const handleSoldierPodChooseMinion: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as SoldierTransferContext | undefined;
+    if (!context) return undefined;
+
+    const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+
+    const soldier = state.core.bases[context.soldierBaseIndex]?.minions.find(m => m.uid === context.soldierUid);
+    const target = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!soldier || !target || soldier.controller !== playerId || soldier.powerCounters < 1) return { state, events: [] };
+
+    return {
+        state,
+        events: [
+            removePowerCounter(context.soldierUid, context.soldierBaseIndex, 1, 'giant_ant_soldier_pod', timestamp),
+            addPowerCounter(target.uid, selected.baseIndex, 1, 'giant_ant_soldier_pod', timestamp),
+        ],
+    };
+};
+
+const handleGimmePodChooseFirst: IH = (state, playerId, value, _interactionData, _random, timestamp) => {
+    const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+
+    const first = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!first || first.controller !== playerId) return undefined;
+
+    // 找到其它己方随从作为第二目标候选
+    const targets = collectOwnMinions(state.core, playerId).filter(m => m.uid !== selected.minionUid);
+    const events: SmashUpEvent[] = [
+        addPowerCounter(first.uid, selected.baseIndex, 2, 'giant_ant_gimme_the_prize_pod', timestamp),
+    ];
+
+    if (targets.length === 0) {
+        // 没有其它随从 → 只给第一个随从 +2，结束
+        return { state, events };
+    }
+
+    const interaction = createSimpleChoice(
+        `giant_ant_gimme_the_prize_pod_second_${timestamp}`,
+        playerId,
+        'Gimme the Prize POD：选择第二个随从（获得+1力量指示物）',
+        buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId }),
+        {
+            sourceId: 'giant_ant_gimme_the_prize_pod_second',
+            targetType: 'minion',
+        },
+    );
+
+    const ctx: GimmePodFirstContext = {
+        firstMinionUid: selected.minionUid,
+        firstBaseIndex: selected.baseIndex,
+    };
+
+    const nextState = queueInteraction(state, {
+        ...interaction,
+        data: {
+            ...interaction.data,
+            continuationContext: ctx,
+        },
+    });
+
+    return { state: nextState, events };
+};
+
+const handleGimmePodChooseSecond: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as GimmePodFirstContext | undefined;
+    if (!context) return undefined;
+
+    const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+    if (selected.minionUid === context.firstMinionUid) return undefined;
+
+    const second = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!second || second.controller !== playerId) {
+        return { state, events: [] };
+    }
+
+    return {
+        state,
+        events: [
+            addPowerCounter(second.uid, selected.baseIndex, 1, 'giant_ant_gimme_the_prize_pod', timestamp),
+        ],
+    };
+};
+
+const handleKillerQueenPodChoose: IH = (state, playerId, value, interactionData, random, timestamp) => {
+    const ctx = interactionData?.continuationContext as { queenUid: string; queenBaseIndex: number } | undefined;
+    if (!ctx) return undefined;
+
+    const v = value as { action?: string; minionUid?: string; baseIndex?: number; defId?: string };
+    const events: SmashUpEvent[] = [];
+
+    if (v.action === 'search_deck') {
+        const player = state.core.players[playerId];
+        if (!player) return { state, events: [] };
+
+        const { events: revealEvents, picked } = revealAndPickFromDeck({
+            player,
+            playerId,
+            predicate: (card) => {
+                if (card.type !== 'minion') return false;
+                const def = getCardDef(card.defId);
+                if (!def || def.type !== 'minion') return false;
+                return (def as any).power <= 1;
+            },
+            maxPick: 1,
+            missTarget: 'deck_bottom',
+            // 展示给操作者，让其知道翻到了哪些牌
+            revealTo: playerId,
+            reason: 'giant_ant_killer_queen_pod_search',
+            now: timestamp,
+        });
+
+        events.push(...revealEvents);
+
+        // 将当前牌库随机洗混（包含未翻开的牌），满足"剩余牌洗回牌库"的随机性要求
+        const currentPlayer = state.core.players[playerId];
+        if (currentPlayer && currentPlayer.deck.length > 0) {
+            const shuffled = random.shuffle([...currentPlayer.deck]);
+            events.push({
+                type: SU_EVENTS.DECK_REORDERED,
+                payload: {
+                    playerId,
+                    deckUids: shuffled.map(c => c.uid),
+                },
+                timestamp,
+            } as SmashUpEvent);
+        }
+
+        if (picked.length === 0) {
+            events.push(buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp));
+        }
+
+        return { state, events };
+    }
+
+    if (v.action === 'add_counters' && v.minionUid && v.baseIndex !== undefined) {
+        const queen = state.core.bases[ctx.queenBaseIndex]?.minions.find(m => m.uid === ctx.queenUid);
+        const target = state.core.bases[v.baseIndex]?.minions.find(m => m.uid === v.minionUid);
+        if (!queen || !target || queen.controller !== playerId || target.controller !== playerId) {
+            return { state, events: [] };
+        }
+
+        events.push(
+            addPowerCounter(target.uid, v.baseIndex, 1, 'giant_ant_killer_queen_pod', timestamp),
+            addPowerCounter(queen.uid, ctx.queenBaseIndex, 1, 'giant_ant_killer_queen_pod', timestamp),
+        );
+
+        return { state, events };
+    }
+
+    return { state, events: [] };
+};
+
+const handleKillerQueenPodChooseMinion: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as { queenUid: string; queenBaseIndex: number } | undefined;
+    if (!context) return undefined;
+    const selected = value as { minionUid?: string; baseIndex?: number };
+    if (!selected.minionUid || selected.baseIndex === undefined) return undefined;
+
+    const queen = state.core.bases[context.queenBaseIndex]?.minions.find(m => m.uid === context.queenUid);
+    const target = state.core.bases[selected.baseIndex]?.minions.find(m => m.uid === selected.minionUid);
+    if (!queen || !target || queen.controller !== playerId || target.controller !== playerId) return { state, events: [] };
+
+    return {
+        state,
+        events: [
+            addPowerCounter(target.uid, selected.baseIndex, 1, 'giant_ant_killer_queen_pod', timestamp),
+            addPowerCounter(queen.uid, context.queenBaseIndex, 1, 'giant_ant_killer_queen_pod', timestamp),
+        ],
+    };
+};
+
+const handleKillerQueenPodSearch: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as { queenUid: string; queenBaseIndex: number } | undefined;
+    if (!context) return undefined;
+
+    const selected = value as { cardUid?: string; defId?: string };
+    if (!selected.cardUid || !selected.defId) return undefined;
+
+    const player = state.core.players[playerId];
+    if (!player) return undefined;
+
+    // 从牌库中找到卡牌实例
+    const card = player.deck.find(c => c.uid === selected.cardUid);
+    if (!card || card.type !== 'minion') return { state, events: [] };
+
+    // 获取卡牌定义
+    const def = getCardDef(card.defId);
+    if (!def || def.type !== 'minion') return { state, events: [] };
+
+    // 生成 MINION_PLAYED 事件
+    const playedEvt: MinionPlayedEvent = {
+        type: SU_EVENTS.MINION_PLAYED,
+        payload: {
+            playerId,
+            cardUid: card.uid,
+            defId: card.defId,
+            baseIndex: context.queenBaseIndex,
+            power: def.power,
+            fromDeck: true,
+            triggerOnTurnStart: false,
+        },
+        timestamp,
+    };
+
+    return { state, events: [playedEvt] };
+};
+
+const handleWWTLFPodDestroy: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as { actionCardUid: string } | undefined;
+    if (!context) return undefined;
+
+    const raw = Array.isArray(value) ? (value as Array<{ minionUid?: string; baseIndex?: number; defId?: string }>)[0] : value as { minionUid?: string; baseIndex?: number; defId?: string };
+    if (!raw?.minionUid || raw.baseIndex === undefined) return undefined;
+
+    const minion = state.core.bases[raw.baseIndex]?.minions.find(m => m.uid === raw.minionUid);
+    if (!minion || minion.controller !== playerId) return undefined;
+
+    const destroyEvents: SmashUpEvent[] = [
+        destroyMinion(
+            raw.minionUid,
+            raw.defId ?? minion.defId,
+            raw.baseIndex,
+            playerId,
+            playerId,
+            'giant_ant_who_wants_to_live_forever_pod',
+            timestamp,
+        ),
+    ];
+
+    const player = state.core.players[playerId];
+    if (!player || player.deck.length === 0) {
+        return { state, events: destroyEvents };
+    }
+
+    const options = player.deck.map((c, i) => {
+        const def = getCardDef(c.defId);
+        return {
+            id: `deck-${i}`,
+            label: def?.name ?? c.defId,
+            value: { cardUid: c.uid, defId: c.defId },
+            _source: 'deck' as const,
+        };
+    });
+
+    const interaction = createSimpleChoice(
+        `giant_ant_who_wants_to_live_forever_pod_search_${timestamp}`,
+        playerId,
+        '从牌库选择一张牌放到牌库顶（不展示）',
+        options,
+        {
+            sourceId: 'giant_ant_who_wants_to_live_forever_pod_search',
+            targetType: 'generic',
+        },
+    );
+
+    return {
+        state: queueInteraction(state, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: context,
+            },
+        }),
+        events: destroyEvents,
+    };
+};
+
+const handleWWTLFPodSearch: IH = (state, playerId, value, _interactionData, _random, timestamp) => {
+    const selected = value as { cardUid?: string; defId?: string };
+    if (!selected.cardUid || !selected.defId) return undefined;
+
+    const player = state.core.players[playerId];
+    if (!player) return undefined;
+
+    const card = player.deck.find(c => c.uid === selected.cardUid);
+    if (!card || card.owner !== playerId) return { state, events: [] };
+
+    const cardToDeckTopEvent: SmashUpEvent = {
+        type: SU_EVENTS.CARD_TO_DECK_TOP,
+        payload: {
+            cardUid: selected.cardUid,
+            defId: selected.defId,
+            ownerId: playerId,
+            reason: 'giant_ant_who_wants_to_live_forever_pod',
+        },
+        timestamp,
+    };
+    return { state, events: [cardToDeckTopEvent] };
+};
+
+const handleWorkerPodReplay: IH = (state, playerId, value, interactionData, _random, timestamp) => {
+    const context = interactionData?.continuationContext as {
+        cardUid: string;
+        defId: string;
+        fromBaseIndex: number;
+    } | undefined;
+    if (!context) return undefined;
+
+    const selected = value as { skip?: boolean; baseIndex?: number; baseDefId?: string };
+    if (selected.skip || selected.baseIndex === undefined) return { state, events: [] };
+
+    const player = state.core.players[playerId];
+    if (!player) return undefined;
+
+    // 必须已进入弃牌堆（严格按英文：goes to the discard pile from play）
+    const cardInDiscard = player.discard.find(c => c.uid === context.cardUid);
+    if (!cardInDiscard) {
+        return { state, events: [buildAbilityFeedback(playerId, 'feedback.condition_not_met', timestamp)] };
+    }
+
+    const def = getCardDef(context.defId);
+    const power = def && def.type === 'minion' ? def.power : 0;
+
+    // 计分清场（BASE_CLEARED）会移除基地并导致 baseIndex 变化。
+    // 如果传入的 baseIndex 已失效，尝试用 baseDefId 重新定位当前索引。
+    let chosenBaseIndex = selected.baseIndex;
+    if (!state.core.bases[chosenBaseIndex] && selected.baseDefId) {
+        const idx = state.core.bases.findIndex(b => b.defId === selected.baseDefId);
+        if (idx >= 0) chosenBaseIndex = idx;
+    }
+
+    // 生成 MINION_PLAYED 事件：从弃牌堆额外打出（触发 onPlay），且不消耗正常随从额度
+    const playedEvt: MinionPlayedEvent = {
+        type: SU_EVENTS.MINION_PLAYED,
+        payload: {
+            playerId,
+            cardUid: context.cardUid,
+            defId: context.defId,
+            baseIndex: chosenBaseIndex,
+            power,
+            fromDiscard: true,
+            consumesNormalLimit: false,
+            discardPlaySourceId: 'giant_ant_worker_pod',
+            triggerOnTurnStart: false,
+        },
+        timestamp,
+    };
+
+    return { state, events: [playedEvt] };
+};
+
+function giantAntWorkerPodReplayTrigger(
+    ctx: TriggerContext,
+): SmashUpEvent[] | { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
+    const { state, playerId, triggerMinionUid, triggerMinionDefId, baseIndex, now } = ctx;
+
+    if (triggerMinionDefId !== 'giant_ant_worker_pod') return [];
+    if (!triggerMinionUid || baseIndex === undefined) return [];
+    if (!ctx.matchState) return [];
+    if (state.bases.length < 2) return [];
+
+    // destroy / scoring discard 两种时机都发生在 reducer 移除随从前，此时仍可从基地读取到真实 counters
+    const minion = state.bases[baseIndex]?.minions.find(m => m.uid === triggerMinionUid);
+    if (!minion) return [];
+    if (minion.controller !== playerId) return [];
+    if (minion.powerCounters > 0) return [];
+
+    const baseCandidates = state.bases
+        .map((b, i) => ({ baseIndex: i, label: getCardDef(b.defId)?.name ?? `基地 ${i + 1}` }))
+        .filter(b => b.baseIndex !== baseIndex);
+    if (baseCandidates.length === 0) return [];
+
+    const interaction = createSimpleChoice(
+        `giant_ant_worker_pod_replay_${now}`,
+        playerId,
+        '工蚁 POD：是否从弃牌堆将其打到另一个基地？',
+        [
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const, _source: 'static' as const },
+            ...buildBaseTargetOptions(baseCandidates, state),
+        ],
+        {
+            sourceId: 'giant_ant_worker_pod_replay',
+            targetType: 'base',
+        },
+    );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                continuationContext: {
+                    cardUid: triggerMinionUid,
+                    defId: 'giant_ant_worker_pod',
+                    fromBaseIndex: baseIndex,
+                },
+            },
+        }),
+    };
+}
+
 function registerGiantAntProtections(): void {
     const checker: ProtectionChecker = ctx => {
         if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
@@ -1248,16 +2115,28 @@ function registerGiantAntProtections(): void {
         if (!base) return false;
 
         return base.ongoingActions.some(
-            (o) => o.defId === 'giant_ant_the_show_must_go_on' && o.ownerId === ctx.targetMinion.controller,
+            (o) => (o.defId === 'giant_ant_the_show_must_go_on' || o.defId === 'giant_ant_the_show_must_go_on_pod') && o.ownerId === ctx.targetMinion.controller,
         );
     };
 
-    registerProtection('giant_ant_the_show_must_go_on', 'affect', checker);
-    registerProtection('giant_ant_the_show_must_go_on', 'move', checker);
-    registerProtection('giant_ant_the_show_must_go_on', 'destroy', checker);
+    // 基础版 Protection
+    registerProtection('giant_ant_the_show_must_go_on', 'affect', checker as any);
+    registerProtection('giant_ant_the_show_must_go_on', 'move', checker as any);
+    registerProtection('giant_ant_the_show_must_go_on', 'destroy', checker as any);
 
+    // POD 版本 Protection
+    registerProtection('giant_ant_the_show_must_go_on_pod', 'affect', checker as any);
+    registerProtection('giant_ant_the_show_must_go_on_pod', 'move', checker as any);
+    registerProtection('giant_ant_the_show_must_go_on_pod', 'destroy', checker as any);
+
+    // 触发器
     registerTrigger('giant_ant_we_are_the_champions', 'afterScoring', giantAntWeAreTheChampionsAfterScoring);
+    registerTrigger('giant_ant_we_are_the_champions_pod', 'afterScoring', giantAntWeAreTheChampionsAfterScoring);
     registerTrigger('giant_ant_drone', 'onMinionDestroyed', giantAntDronePreventTrigger);
+    registerTrigger('giant_ant_drone_pod', 'onMinionDestroyed', giantAntDronePreventTrigger); // POD 版本复用基础版触发器
+    // Worker POD：离场进入弃牌堆（消灭 / 基地计分弃置）且当时无指示物时，可从弃牌堆额外打出到另一基地
+    registerTrigger('giant_ant_worker_pod', 'onMinionDestroyed', giantAntWorkerPodReplayTrigger);
+    registerTrigger('giant_ant_worker_pod', 'onMinionDiscardedFromBase', giantAntWorkerPodReplayTrigger);
 }
 
 function giantAntWeAreTheChampionsAfterScoring(
@@ -1267,7 +2146,7 @@ function giantAntWeAreTheChampionsAfterScoring(
     if (baseIndex === undefined) return [];
 
     const armed = (state.pendingAfterScoringSpecials ?? []).filter(
-        s => s.sourceDefId === 'giant_ant_we_are_the_champions' && s.baseIndex === baseIndex,
+        s => (s.sourceDefId === 'giant_ant_we_are_the_champions' || s.sourceDefId === 'giant_ant_we_are_the_champions_pod') && s.baseIndex === baseIndex,
     );
     if (armed.length === 0) return [];
 
@@ -1329,7 +2208,7 @@ function giantAntWeAreTheChampionsAfterScoring(
             data: {
                 ...interaction.data,
                 continuationContext: {
-                    reason: 'giant_ant_we_are_the_champions',
+                    reason: armedEntry.sourceDefId,
                     scoringBaseIndex: baseIndex,
                 } as WeAreTheChampionsSourceContext,
             },
@@ -1351,7 +2230,7 @@ function giantAntDronePreventTrigger(ctx: TriggerContext): SmashUpEvent[] | { ev
     const drones: { uid: string; defId: string; baseIndex: number }[] = [];
     for (let i = 0; i < state.bases.length; i++) {
         for (const m of state.bases[i].minions) {
-            if (m.defId !== 'giant_ant_drone') continue;
+            if (m.defId !== 'giant_ant_drone' && m.defId !== 'giant_ant_drone_pod') continue;
             if (m.controller !== playerId) continue;
             if (m.powerCounters <= 0) continue;
             drones.push({ uid: m.uid, defId: m.defId, baseIndex: i });
@@ -1443,6 +2322,25 @@ function collectOwnMinionsWithCounters(state: SmashUpCore, playerId: PlayerId): 
                 defId: m.defId,
                 baseIndex: i,
                 label: def?.name ?? m.defId,
+            });
+        }
+    }
+    return result;
+}
+
+function collectOwnPowerCounterHolders(core: SmashUpCore, playerId: PlayerId): PowerCounterHolderCandidate[] {
+    const result: PowerCounterHolderCandidate[] = [];
+    for (let i = 0; i < core.bases.length; i++) {
+        for (const m of core.bases[i].minions) {
+            if (m.controller !== playerId) continue;
+            if (m.powerCounters <= 0) continue;
+            const def = getCardDef(m.defId);
+            result.push({
+                uid: m.uid,
+                defId: m.defId,
+                baseIndex: i,
+                label: def?.name ?? m.defId,
+                kind: 'minion',
             });
         }
     }
