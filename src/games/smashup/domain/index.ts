@@ -35,6 +35,7 @@ import {
 } from './types';
 import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './ongoingModifiers';
 import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
+import { maybeResolveReactionQueue } from './reactionQueue';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
@@ -803,6 +804,7 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
         bases: activeBases,
         baseDeck,
         baseDiscard: [],
+        triggerQueue: undefined,
         turnNumber: 1,
         nextUid,
         gameResult: undefined,
@@ -1694,7 +1696,25 @@ function postProcessSystemEvents(
         finalDerived = afterDerivedAffect.events;
     }
 
-    return { events: [...afterAffect.events, ...finalDerived], matchState: ms };
+    const combined = [...afterAffect.events, ...finalDerived];
+
+    // === Global reaction queue resolution (Wiki simultaneous ordering) ===
+    // Important: TRIGGER_QUEUED/CONSUMED are domain events; they are not reduced into ms.core yet at this stage.
+    // We must apply them to a temporary core view so the resolver can see the pending queue immediately.
+    let coreForQueue = ms.core;
+    for (const e of combined) {
+        if (e.type === SU_EVENTS.TRIGGER_QUEUED || e.type === SU_EVENTS.TRIGGER_CONSUMED) {
+            coreForQueue = reduce(coreForQueue, e);
+        }
+    }
+    const msForQueue = coreForQueue === ms.core ? ms : { ...ms, core: coreForQueue };
+
+    const rq = maybeResolveReactionQueue(msForQueue, random, now);
+    if (rq) {
+        return { events: [...combined, ...rq.events], matchState: rq.state };
+    }
+
+    return { events: combined, matchState: ms };
 }
 
 // ============================================================================
