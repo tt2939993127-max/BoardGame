@@ -631,8 +631,16 @@ export function registerBaseAbilities(): void {
     // base_the_field_of_honor: 荣誉之地
     // "当一个或多个随从在这里被消灭，那个将它们消灭的玩家获得1VP"
     registerExtended('base_the_field_of_honor', 'onMinionDestroyed', (ctx) => {
-        // ctx.destroyerId 是消灭者
+        // ctx.destroyerId 是消灭者；reason 标识本次消灭的直接来源（卡牌/能力）
         if (!ctx.destroyerId) return { events: [] };
+        // FAQ：同一张牌一次性消灭多个随从只给 1VP
+        // 使用 baseIndex + destroyerId + reason 作为“消灭批次”键，在本回合内去重。
+        const reason = (ctx as any).reason as string | undefined;
+        const key = `${ctx.baseIndex}::${ctx.destroyerId}::${reason ?? ''}`;
+        const batches = ctx.state.fieldOfHonorBatchesThisTurn ?? [];
+        if (batches.includes(key)) {
+            return { events: [] };
+        }
         return {
             events: [{
                 type: SU_EVENTS.VP_AWARDED,
@@ -643,6 +651,10 @@ export function registerBaseAbilities(): void {
                 },
                 timestamp: ctx.now,
             } as VpAwardedEvent],
+            state: {
+                ...ctx.state,
+                fieldOfHonorBatchesThisTurn: [...batches, key],
+            },
         };
     });
 

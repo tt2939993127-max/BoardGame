@@ -433,6 +433,12 @@ export interface SmashUpCore {
     madnessDeck?: string[];
     /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力判定，并阻止过期移动把它们从弃牌堆拉回场上） */
     turnDestroyedMinions?: { uid: string; defId: string; baseIndex: number; owner: string }[];
+    /**
+     * 本回合在各荣誉之地结算过的“消灭事件批次”记录
+     * 用于实现 Field of Honor FAQ：“同一张牌一次性消灭多个随从只给 1VP”
+     * key: `${baseIndex}::${destroyerId ?? ''}::${reason ?? ''}`
+     */
+    fieldOfHonorBatchesThisTurn?: string[];
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */

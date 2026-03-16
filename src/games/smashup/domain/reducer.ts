@@ -683,7 +683,7 @@ export function processDestroyTriggers(
     const pendingSaveMinionUids = new Set<string>();
 
     for (const de of destroyEvents) {
-        const { minionUid, minionDefId, fromBaseIndex, ownerId: eventOwnerId, destroyerId: eventDestroyerId } = de.payload;
+        const { minionUid, minionDefId, fromBaseIndex, ownerId: eventOwnerId, destroyerId: eventDestroyerId, reason } = de.payload;
         const base = core.bases[fromBaseIndex];
         const minion = base?.minions.find(m => m.uid === minionUid);
         // ✅ 优先从 state 读取 owner（兜底修复：即使事件中的 ownerId 错了也能修复）
@@ -711,6 +711,7 @@ export function processDestroyTriggers(
                 controllerId: minion?.controller ?? ownerId,
                 destroyerId,
                 now,
+                reason,
             };
             const baseResult = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
             saveEvents.push(...baseResult.events);

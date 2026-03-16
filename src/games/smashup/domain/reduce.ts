@@ -592,6 +592,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 bases: newBases,
                 // 清空本回合消灭记录
                 turnDestroyedMinions: [],
+                // 清空荣誉之地本回合已结算的“消灭批次”
+                fieldOfHonorBatchesThisTurn: undefined,
                 // 清空本回合移动追踪
                 minionsMovedToBaseThisTurn: undefined,
                 movedToBasesThisTurn: undefined,

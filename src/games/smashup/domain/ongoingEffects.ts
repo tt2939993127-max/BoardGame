@@ -627,7 +627,20 @@ export function isOperationRestricted(
             // 条件限制：maxPower（力量 <= maxPower 的随从被禁止）
             if (r.condition.maxPower !== undefined && restrictionType === 'play_minion') {
                 const basePower = extra?.basePower as number | undefined;
-                if (basePower !== undefined && basePower <= r.condition.maxPower) return true;
+                if (basePower !== undefined && basePower <= r.condition.maxPower) {
+                    // Tsar's Palace + Infiltrate FAQ：
+                    // 若该玩家在该基地上有自己控制的 Infiltrate（play-on-base 行动），
+                    // 则可以无视“power≤2 不可打出”的限制。
+                    if (baseDef.id === 'base_tsars_palace') {
+                        const hasBaseInfiltrate = base.ongoingActions.some(o =>
+                            o.ownerId === playerId && o.defId.startsWith('ninja_infiltrate'),
+                        );
+                        if (hasBaseInfiltrate) {
+                            continue;
+                        }
+                    }
+                    return true;
+                }
             }
             // 条件限制：extraPlayMinionPowerMax（额外出牌时力量 > limit 的随从被禁止）
             if (r.condition.extraPlayMinionPowerMax !== undefined && restrictionType === 'play_minion') {

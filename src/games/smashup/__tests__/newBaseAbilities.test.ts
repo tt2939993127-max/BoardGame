@@ -174,6 +174,48 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
+
+    it('同一张牌一次性消灭多个随从只给 1VP（按 FAQ）', () => {
+        const state = makeState({
+            bases: [{
+                defId: 'base_the_field_of_honor',
+                minions: [],
+                ongoingActions: [],
+            }],
+        });
+        const ctxBase: BaseAbilityContext = {
+            state,
+            baseIndex: 0,
+            baseDefId: 'base_the_field_of_honor',
+            playerId: '1',
+            destroyerId: '0',
+            now: 1000,
+        };
+
+        // 同一张牌（reason 相同）一次性消灭多个随从
+        const first = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', {
+            ...ctxBase,
+            minionUid: 'm1',
+            minionDefId: 'test_minion_1',
+            // reason 由 destroy 管线传入，这里模拟同一来源
+            // @ts-expect-error 测试环境补充 reason
+            reason: 'test_card_destroy_many',
+        } as any);
+        expect(first.events.length).toBe(1);
+        expect(first.events[0].type).toBe(SU_EVENTS.VP_AWARDED);
+
+        const second = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', {
+            ...ctxBase,
+            state: first.state ?? state,
+            minionUid: 'm2',
+            minionDefId: 'test_minion_2',
+            // 同一张牌的同一波消灭，reason 相同
+            // @ts-expect-error 测试环境补充 reason
+            reason: 'test_card_destroy_many',
+        } as any);
+        // 第二次不再产生 VP 事件
+        expect(second.events.length).toBe(0);
+    });
 });
 
 // ============================================================================

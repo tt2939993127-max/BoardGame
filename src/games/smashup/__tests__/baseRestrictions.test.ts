@@ -363,6 +363,18 @@ describe('base_tsars_palace: 沙皇宫殿 power≤2 限制', () => {
         const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 5 });
         expect(restricted).toBe(false);
     });
+
+    it('挂有 Infiltrate 时，自己仍可在 Tsar’s Palace 打出 power≤2 随从（按 FAQ）', () => {
+        const state = makeState({
+            bases: [makeBase('base_tsars_palace', {
+                // 在基地上挂一张由玩家0控制的 Infiltrate（play-on-base 行动）
+                ongoingActions: [{ uid: 'inf-1', defId: 'ninja_infiltrate', ownerId: '0' }],
+            })],
+        });
+
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 2 });
+        expect(restricted).toBe(false);
+    });
 });
 
 // ============================================================================
