@@ -1271,6 +1271,10 @@
       "name": "North Pole",
       "abilityText": "Each player may play only one minion at this base each turn."
     },
+    "base_antarctic_base": {
+      "name": "Antarctic Base",
+      "abilityText": "Each player may play only one minion at this base each turn."
+    },
     "base_ritual_site": {
       "name": "Ritual Site",
       "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."

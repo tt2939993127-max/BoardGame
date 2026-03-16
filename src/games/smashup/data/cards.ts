@@ -453,6 +453,17 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         restrictions: [{ type: 'play_minion', condition: { minionPlayLimitPerTurn: 1 } }],
     },
     {
+        id: 'base_antarctic_base',
+        name: '南极基地',
+        nameEn: 'Antarctic Base',
+        breakpoint: 24,
+        vpAwards: [5, 3, 2],
+        faction: 'elder_things',
+        // NOTE: atlas index 10 is reserved for this base in our atlas map
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 10 },
+        restrictions: [{ type: 'play_minion', condition: { minionPlayLimitPerTurn: 1 } }],
+    },
+    {
         id: 'base_ritual_site',
         name: '仪式场所',
         nameEn: 'Ritual Site',
