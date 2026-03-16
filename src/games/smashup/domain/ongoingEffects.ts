@@ -662,6 +662,16 @@ export function isOperationRestricted(
                 const player = state.players[playerId];
                 const playedAtBase = player?.minionsPlayedPerBase?.[baseIndex] ?? 0;
                 if (playedAtBase >= r.condition.minionPlayLimitPerTurn) {
+                    // Antarctic Base + Infiltrate FAQ：
+                    // 若你在该基地上有自己控制的 Infiltrate（play-on-base 行动），则你可以忽略该限制。
+                    if (baseDef.id === 'base_antarctic_base') {
+                        const hasBaseInfiltrate = base.ongoingActions.some(o =>
+                            o.ownerId === playerId && o.defId.startsWith('ninja_infiltrate'),
+                        );
+                        if (hasBaseInfiltrate) {
+                            continue;
+                        }
+                    }
                     return true;
                 }
             }

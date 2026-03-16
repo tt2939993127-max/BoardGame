@@ -1271,6 +1271,10 @@
       "name": "北极基地",
       "abilityText": "玩家每回合只能打出一个随从到这个基地。"
     },
+    "base_antarctic_base": {
+      "name": "南极基地",
+      "abilityText": "玩家每回合在这个基地只能打出一个随从。"
+    },
     "base_ritual_site": {
       "name": "仪式场所",
       "abilityText": "在这个基地计分后。在它上面的所有随从洗回他们的拥有者牌库，而不是进入弃牌堆。"

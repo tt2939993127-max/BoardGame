@@ -50,46 +50,39 @@ function getDeferredPostScoringEvents(interactionData: Record<string, unknown> |
 export function registerExpansionBaseAbilities(): void {
 
     // ── 疯人院（The Asylum）──────────────────────────────────────
-    // "在一个玩家打出一个随从到这后，该玩家可以将一张疯狂卡从手牌或弃牌堆返回疯狂牌堆"
+    // "在一个随从被打出到这后，该随从的拥有者可以将一张疯狂卡从手牌返回疯狂牌堆"
     // 疯狂卡都是同一张牌（special_madness），按来源分组显示，无需逐张列出
     registerBaseAbility('base_the_asylum', 'onMinionPlayed', (ctx) => {
         if (!ctx.state.madnessDeck) return { events: [] };
-        const player = ctx.state.players[ctx.playerId];
-        if (!player) return { events: [] };
+        const base = ctx.state.bases[ctx.baseIndex];
+        const playedMinion = ctx.minionUid ? base?.minions.find(m => m.uid === ctx.minionUid) : undefined;
+        const ownerId = playedMinion?.owner ?? ctx.playerId;
+        const owner = ctx.state.players[ownerId];
+        if (!owner) return { events: [] };
 
-        const handMadness = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-        const discardMadness = player.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+        // Infiltrate：只让拥有者自己忽略（不影响其他玩家）
+        const ignoredByOwner = base?.ongoingActions?.some(o =>
+            o.ownerId === ownerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignoredByOwner) return { events: [] };
 
-        if (handMadness.length === 0 && discardMadness.length === 0) return { events: [] };
+        const handMadness = owner.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
+        if (handMadness.length === 0) return { events: [] };
 
         // 按来源分组的按钮选项（返回1张）
-        const options: PromptOption<Record<string, unknown>>[] = [];
-        if (handMadness.length > 0) {
-            options.push({
+        const options: PromptOption<Record<string, unknown>>[] = [
+            {
                 id: 'hand',
                 label: `从手牌返回 (${handMadness.length}张)`,
                 value: { source: 'hand' },
                 displayMode: 'button' as const,
-            });
-        }
-        if (discardMadness.length > 0) {
-            options.push({
-                id: 'discard',
-                label: `从弃牌堆返回 (${discardMadness.length}张)`,
-                value: { source: 'discard' },
-                displayMode: 'button' as const,
-            });
-        }
-        options.push({
-            id: 'skip',
-            label: '跳过',
-            value: { skip: true },
-            displayMode: 'button' as const,
-        });
+            },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ];
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
-            `base_the_asylum_${ctx.now}`, ctx.playerId,
+            `base_the_asylum_${ctx.now}`, ownerId,
             '疯人院：选择返回一张疯狂卡', options,
             { sourceId: 'base_the_asylum', targetType: 'button' },
         );
@@ -97,9 +90,19 @@ export function registerExpansionBaseAbilities(): void {
     }, { mandatory: false });
 
     // ── 印斯茅斯基地（Innsmouth Base）────────────────────────────
-    // "在一个玩家打出一个随从到这后，该玩家可以将任意玩家弃牌堆中的一张卡放到其拥有者的牌库底"
+    // "在一个随从被打出到这后，它的拥有者可以将任意玩家弃牌堆中的一张卡放到该卡拥有者的牌库底"
     // 第一步：选择从哪个玩家的弃牌堆选卡
     registerBaseAbility('base_innsmouth_base', 'onMinionPlayed', (ctx) => {
+        const base = ctx.state.bases[ctx.baseIndex];
+        const playedMinion = ctx.minionUid ? base?.minions.find(m => m.uid === ctx.minionUid) : undefined;
+        const ownerId = playedMinion?.owner ?? ctx.playerId;
+
+        // Infiltrate：只让拥有者自己忽略（不影响其他玩家）
+        const ignoredByOwner = base?.ongoingActions?.some(o =>
+            o.ownerId === ownerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignoredByOwner) return { events: [] };
+
         // 收集有弃牌堆卡牌的玩家
         const playersWithDiscard: string[] = [];
         for (const [pid, player] of Object.entries(ctx.state.players)) {
@@ -114,14 +117,14 @@ export function registerExpansionBaseAbilities(): void {
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ...playersWithDiscard.map((pid, i) => ({
                 id: `player-${i}`,
-                label: pid === ctx.playerId ? '你自己的弃牌堆' : `${getPlayerLabel(pid)}的弃牌堆`,
+                label: pid === ownerId ? '你自己的弃牌堆' : `${getPlayerLabel(pid)}的弃牌堆`,
                 value: { targetPlayerId: pid },
             })),
         ];
 
         if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
-            `base_innsmouth_base_choose_player_${ctx.now}`, ctx.playerId,
+            `base_innsmouth_base_choose_player_${ctx.now}`, ownerId,
             '印斯茅斯基地：选择从哪个玩家的弃牌堆选卡', options,
             { sourceId: 'base_innsmouth_base_choose_player', targetType: 'player', autoCancelOption: true },
         );
@@ -687,13 +690,13 @@ export function registerExpansionBaseAbilities(): void {
 /** 注册扩展包基地能力的交互解决处理函数 */
 export function registerExpansionBaseInteractionHandlers(): void {
 
-    // 疯人院：按来源返回1张疯狂卡（可跳过）
+    // 疯人院：从手牌返回1张疯狂卡（可跳过）
     registerInteractionHandler('base_the_asylum', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as { skip?: boolean; source?: 'hand' | 'discard' };
+        const selected = value as { skip?: boolean; source?: 'hand' };
         if (selected.skip) return { state, events: [] };
         
         const player = state.core.players[playerId];
-        const madnessCards = selected.source === 'hand' ? player.hand : player.discard;
+        const madnessCards = player.hand;
         const madnessCard = madnessCards.find(c => c.defId === MADNESS_CARD_DEF_ID);
         
         if (!madnessCard) return { state, events: [] };

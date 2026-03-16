@@ -876,9 +876,17 @@ export function registerBaseAbilities(): void {
     // === 克苏鲁扩展基地 ===
 
     // base_mountains_of_madness: 疯狂之山
-    // "在一个玩家打出一个随从到这后，这个玩家抽一张疯狂卡"
+    // "在一个随从被打出到这后，它的拥有者抽一张疯狂卡"
     registerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', (ctx) => {
-        const evt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'base_mountains_of_madness', ctx.now);
+        const base = ctx.state.bases[ctx.baseIndex];
+        const playedMinion = ctx.minionUid ? base?.minions.find(m => m.uid === ctx.minionUid) : undefined;
+        const ownerId = playedMinion?.owner ?? ctx.playerId;
+        // Infiltrate：只让“你自己”忽略基地能力（不影响其他玩家）
+        const ignoredByOwner = base?.ongoingActions?.some(o =>
+            o.ownerId === ownerId && o.defId.startsWith('ninja_infiltrate'),
+        ) ?? false;
+        if (ignoredByOwner) return { events: [] };
+        const evt = drawMadnessCards(ownerId, 1, ctx.state, 'base_mountains_of_madness', ctx.now);
         return { events: evt ? [evt] : [] };
     });
 
