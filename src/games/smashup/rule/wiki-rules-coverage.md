@@ -239,3 +239,9 @@
 4) **信息可见性（playerView 不隐藏）**（8.1）——若目标是线上对战，这是硬性缺口。  
 5) **反应排序 / witness 规则未统一建模**（7.2/7.3）——属于“规则精度”层面的系统工程。
 
+---
+
+> 💡 **工程实现规范**：  
+> 本文件聚焦“Wiki 规则→事件级覆盖检查”。  
+> 关于 **destroy 管线（replacement vs reaction）**、**reaction queue / TriggerInstance**、**witness/LKI**、**事件语义约定** 等具体实现约束，详见同目录下的 `ENGINE_GUIDE.md`（给未来扩展/AI 实现使用）。
+
