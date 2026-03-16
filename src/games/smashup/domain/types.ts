@@ -357,6 +357,8 @@ export interface SmashUpCore {
     bases: BaseInPlay[];
     /** 基地牌库（defId 列表） */
     baseDeck: string[];
+    /** 基地弃牌堆（defId 列表）。当基地牌库用尽时，会将弃牌堆洗回牌库继续补充。 */
+    baseDiscard: string[];
     /** 回合数 */
     turnNumber: number;
     /** UID 自增计数器 */
@@ -1066,6 +1068,11 @@ export interface BaseDeckShuffledEvent extends GameEvent<typeof SU_EVENTS.BASE_D
         /** 洗混后的基地牌库 defId 列表（确定性） */
         newBaseDeckDefIds: string[];
         reason: string;
+        /**
+         * 是否将 baseDiscard 一并清空。
+         * 用于“基地牌库见底 → 将弃牌堆洗回牌库”的确定性归约。
+         */
+        clearBaseDiscard?: boolean;
     };
 }
 
