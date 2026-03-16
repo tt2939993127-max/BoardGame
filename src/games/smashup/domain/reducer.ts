@@ -56,6 +56,7 @@ import { getMinionDef, getCardDef, getBaseDefIdsForFactions } from '../data/card
 import type { ActionCardDef } from './types';
 import { buildDeck, drawCards } from './utils';
 import { autoMulligan } from '../../../engine/primitives/mulligan';
+import { maybeQueueStartingHandMulliganPrompt } from './mulliganHandlers';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
@@ -436,23 +437,14 @@ function executeCommand(
                             random
                         );
 
-                        // 重抽检查：若手牌无随从则自动重抽一次（规则：若无随从可重抽一次，必须保留第二次）
-                        const mulliganResult = autoMulligan<CardInstance>(
-                            drawResult.hand,
-                            drawResult.deck,
-                            (h) => !h.some(c => c.type === 'minion'),
-                            STARTING_HAND_SIZE,
-                            random.shuffle,
-                        );
-
-                        if (mulliganResult.mulliganCount > 0) {
+                        readiedPlayers[pid] = {
+                            deck: drawResult.deck,
+                            hand: drawResult.hand,
+                        };
+                        // 起手无随从 → 标记为可选择重抽一次（may）
+                        if (!drawResult.hand.some(c => c.type === 'minion')) {
                             mulliganPlayers.push(pid);
                         }
-
-                        readiedPlayers[pid] = {
-                            deck: mulliganResult.deck,
-                            hand: mulliganResult.hand,
-                        };
                     }
                 }
 
@@ -468,6 +460,14 @@ function executeCommand(
                     timestamp: now,
                 };
                 events.push(allSelectedEvt);
+
+                // 规则：起手无随从“可”重抽一次 → 排队交互（不会影响核心事件链）
+                // 注意：这一步只改变 sys.interaction，不直接改 core；重抽由交互 handler 生成事件完成。
+                let updated = state;
+                for (const pid of mulliganPlayers) {
+                    updated = maybeQueueStartingHandMulliganPrompt(updated, pid, now);
+                }
+                return { events, updatedState: updated };
             }
 
             return { events };

@@ -109,6 +109,7 @@ export const SU_EVENTS = defineEvents({
 
   // ========== 静默事件 ==========
   'su:all_factions_selected': 'silent', // 所有阵营选择完成（内部状态）
+  'su:starting_hand_mulligan_used': 'silent',
 });
 
 // 导出事件类型常量（用于 emit 和类型定义）
@@ -132,6 +133,7 @@ export const SU_EVENT_TYPES = {
   LIMIT_MODIFIED: SU_EVENTS['su:limit_modified'].type,
   FACTION_SELECTED: SU_EVENTS['su:faction_selected'].type,
   ALL_FACTIONS_SELECTED: SU_EVENTS['su:all_factions_selected'].type,
+  STARTING_HAND_MULLIGAN_USED: SU_EVENTS['su:starting_hand_mulligan_used'].type,
   MINION_DESTROYED: SU_EVENTS['su:minion_destroyed'].type,
   MINION_MOVED: SU_EVENTS['su:minion_moved'].type,
   MINION_METADATA_UPDATED: SU_EVENTS['su:minion_metadata_updated'].type,
