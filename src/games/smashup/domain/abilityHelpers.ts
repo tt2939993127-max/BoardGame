@@ -578,21 +578,52 @@ export function revealAndPickFromDeck(params: {
  * @returns 牌库顶卡牌 + 展示事件（牌库为空返回 undefined）
  */
 export function peekDeckTop(
-    player: { deck: CardInstance[] },
+    state: SmashUpCore,
+    random: RandomFn,
     playerId: PlayerId,
     /** 展示给谁：'all' = 所有玩家，playerId = 仅自己 */
     revealTo: PlayerId | 'all',
     reason: string,
     now: number,
-): { card: CardInstance; revealEvent: RevealDeckTopEvent } | undefined {
-    if (player.deck.length === 0) return undefined;
+): { card: CardInstance; revealEvent: RevealDeckTopEvent; events: SmashUpEvent[] } | undefined {
+    const player = state.players[playerId];
+    if (!player) return undefined;
+
+    // 规则：当需要 look/reveal/search/draw 而牌库为空时，将弃牌堆洗入牌库并继续。
+    // peekDeckTop 不消耗牌库顶，只在必要时重排牌库顺序（DECK_REORDERED）。
+    const events: SmashUpEvent[] = [];
+    if (player.deck.length === 0) {
+        if (player.discard.length === 0) return undefined;
+        const shuffled = random.shuffle([...player.discard]);
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: {
+                playerId,
+                deckUids: shuffled.map(c => c.uid),
+            },
+            timestamp: now,
+        } as DeckReorderedEvent);
+        // 注意：此处不直接修改 state；由 reducer 根据 DECK_REORDERED 更新 deck/discard 后，
+        // 才会在后续流程中体现为“弃牌堆洗回牌库”。
+        // 为了本次 peek 能返回正确的 card，我们用模拟的 shuffled[0]。
+        const card = shuffled[0];
+        const revealEvent = revealDeckTop(
+            playerId, revealTo,
+            [{ uid: card.uid, defId: card.defId }],
+            1, reason, now,
+        );
+        events.push(revealEvent);
+        return { card, revealEvent, events };
+    }
+
     const card = player.deck[0];
     const revealEvent = revealDeckTop(
         playerId, revealTo,
         [{ uid: card.uid, defId: card.defId }],
         1, reason, now,
     );
-    return { card, revealEvent };
+    events.push(revealEvent);
+    return { card, revealEvent, events };
 }
 
 // ============================================================================
