@@ -145,8 +145,8 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 
             case 'phone-landscape':
                 // 手机横屏：基于高度，充分利用垂直空间
-                cardWidth = Math.max(66, Math.min(88, Math.round(height * 0.18)));
-                smallCardWidth = Math.max(52, Math.min(70, Math.round(height * 0.14)));
+                cardWidth = Math.max(62, Math.min(80, Math.round(height * 0.16)));
+                smallCardWidth = Math.max(48, Math.min(64, Math.round(height * 0.125)));
                 break;
                 
             case 'tablet-portrait':
@@ -592,7 +592,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     {/* 对手区域（顶部 / 横屏左栏） */}
                     <div className={
                         deviceType === 'phone-landscape'
-                            ? 'flex w-[18rem] max-w-[42%] min-w-0 flex-shrink-0 flex-col gap-2'
+                            ? 'flex w-[14rem] max-w-[32%] min-w-0 flex-shrink-0 flex-col gap-2'
                             : 'flex flex-shrink-0 flex-wrap items-start gap-1.5 sm:gap-3 md:gap-4'
                     }>
                         {/* 对手弃牌堆 */}
@@ -660,7 +660,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             {/* 我的区域（横屏右侧下栏） */}
                             <div
                                 data-testid="cardia-player-zone"
-                                className="flex flex-shrink-0 items-end gap-1.5"
+                                className="flex max-h-[38%] flex-shrink-0 items-end gap-1.5 overflow-hidden"
                                 style={playerZoneWrapperStyle}
                             >
                                 <div className="flex-shrink-0">
