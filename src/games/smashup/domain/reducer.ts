@@ -1238,7 +1238,7 @@ export function processAffectTriggers(
         const minion = base?.minions.find(m => m.uid === minionUid);
         if (!minion) continue;
 
-        const result = fireTriggers(core, 'onMinionAffected', {
+        const queued = collectTriggers(core, 'onMinionAffected', {
             state: core,
             matchState: ms ?? state,
             playerId: sourcePlayerId,
@@ -1250,8 +1250,7 @@ export function processAffectTriggers(
             random,
             now,
         });
-        extraEvents.push(...result.events);
-        if (result.matchState) ms = result.matchState;
+        if (queued) extraEvents.push(queued);
     }
 
     if (extraEvents.length === 0) return { events };

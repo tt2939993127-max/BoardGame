@@ -242,7 +242,7 @@ export function collectTriggers(
         if (!witnessed) continue;
         const located = locateSource(state, entry.sourceDefId);
         // witness rule (base-scoped): for move-related triggers, the source must be on the destination base at trigger time
-        if (timing === 'onMinionMoved' && ctx.baseIndex !== undefined) {
+        if ((timing === 'onMinionMoved' || timing === 'onMinionAffected') && ctx.baseIndex !== undefined) {
             if (located.baseIndex !== ctx.baseIndex) continue;
         }
         triggers.push({
