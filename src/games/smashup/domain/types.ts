@@ -261,6 +261,8 @@ export interface PlayerState {
     actionsPlayed: number;
     /** 本回合可打出行动额度（默认 1） */
     actionLimit: number;
+    /** 起手无随从时“可”重抽一次；用于防止重复重抽 */
+    startingHandMulliganUsed?: boolean;
     /** 本回合每个基地已打出随从数（baseIndex → count），用于北极基地等限制 */
     minionsPlayedPerBase?: Record<number, number>;
     /** 本回合已使用的弃牌堆出牌能力 sourceId 集合（用于每回合限制） */
@@ -846,6 +848,7 @@ export type SmashUpEvent =
     | CardTransferredEvent
     | CardRecoveredFromDiscardEvent
     | HandShuffledIntoDeckEvent
+    | StartingHandMulliganUsedEvent
     | MadnessDrawnEvent
     | MadnessReturnedEvent
     | BaseDeckReorderedEvent
@@ -885,9 +888,13 @@ export interface AllFactionsSelectedEvent extends GameEvent<'su:all_factions_sel
         bases?: BaseInPlay[];
         /** 按派系筛选后的基地牌库 */
         baseDeck?: string[];
-        /** 触发了自动重抽 (mulligan) 的玩家列表（规则：若无随从可重抽一次） */
+        /** 起手无随从的玩家列表（规则：若无随从“可”重抽一次） */
         mulliganPlayers?: PlayerId[];
     };
+}
+
+export interface StartingHandMulliganUsedEvent extends GameEvent<typeof SU_EVENTS.STARTING_HAND_MULLIGAN_USED> {
+    payload: { playerId: PlayerId; used: boolean };
 }
 
 // PromptCreatedEvent 和 PromptResolvedEvent 已移除

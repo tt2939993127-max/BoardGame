@@ -1399,6 +1399,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.STARTING_HAND_MULLIGAN_USED: {
+            const { playerId, used } = (event as any as { payload: { playerId: PlayerId; used: boolean } }).payload;
+            const player = state.players[playerId];
+            if (!player) return state;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        startingHandMulliganUsed: used ? true : player.startingHandMulliganUsed ?? false,
+                    },
+                },
+            };
+        }
+
         case SU_EVENTS.MADNESS_DRAWN: {
             const { playerId, count, cardUids } = (event as MadnessDrawnEvent).payload;
             const player = state.players[playerId];
