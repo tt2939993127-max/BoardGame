@@ -550,6 +550,11 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         },
     ];
 
+    const boardStatusCardClass =
+        deviceType === 'phone-landscape'
+            ? 'rounded-lg border border-white/10 bg-black/55 px-2 py-1 text-white backdrop-blur-md'
+            : 'rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-white backdrop-blur-md md:px-4';
+
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
             <div
@@ -592,7 +597,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     {/* 对手区域（顶部 / 横屏左栏） */}
                     <div className={
                         deviceType === 'phone-landscape'
-                            ? 'flex w-[14rem] max-w-[32%] min-w-0 flex-shrink-0 flex-col gap-2'
+                            ? 'flex w-[12rem] max-w-[28%] min-w-0 flex-shrink-0 flex-col gap-2'
                             : 'flex flex-shrink-0 flex-wrap items-start gap-1.5 sm:gap-3 md:gap-4'
                     }>
                         {/* 对手弃牌堆 */}
@@ -627,11 +632,15 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             {boardStatusCards.map((card) => (
                                 <div
                                     key={card.key}
-                                    className="rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-white backdrop-blur-md md:px-4"
+                                    className={boardStatusCardClass}
                                     {...card.containerProps}
                                 >
-                                    <div className="text-[11px] text-gray-300">{card.label}</div>
-                                    <div className="text-sm font-bold sm:text-base md:text-lg">{card.value}</div>
+                                    <div className={deviceType === 'phone-landscape' ? 'text-[10px] text-gray-300' : 'text-[11px] text-gray-300'}>
+                                        {card.label}
+                                    </div>
+                                    <div className={deviceType === 'phone-landscape' ? 'text-xs font-bold' : 'text-sm font-bold sm:text-base md:text-lg'}>
+                                        {card.value}
+                                    </div>
                                 </div>
                             ))}
                         </div>
