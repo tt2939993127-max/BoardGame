@@ -245,18 +245,28 @@ export function scoreOneBase(
     // 触发 onMinionDiscardedFromBase（基地结算弃置，非消灭）
     // 在 BASE_SCORED 后、afterScoring 前触发，此时随从仍在 core 中（reducer 尚未执行）
     for (const m of base.minions) {
-        const discardResult = fireTriggers(core, 'onMinionDiscardedFromBase', {
+        const queued = collectTriggers(core, 'onMinionDiscardedFromBase', {
             state: core,
             matchState: ms,
             playerId: m.controller,
             baseIndex,
             triggerMinionUid: m.uid,
             triggerMinionDefId: m.defId,
+            triggerMinion: m,
             random: rng,
             now,
         });
-        events.push(...discardResult.events);
-        if (discardResult.matchState) ms = discardResult.matchState;
+        if (queued) {
+            events.push(queued);
+            updatedCore = reduce(updatedCore, queued as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+            const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+            if (rq) {
+                events.push(...rq.events);
+                ms = rq.state;
+                updatedCore = rq.state.core;
+            }
+        }
     }
 
     // 记录 afterScoring 前的交互状态，用于判断 afterScoring 是否新增了交互
