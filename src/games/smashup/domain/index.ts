@@ -435,6 +435,24 @@ export function scoreOneBase(
     postScoringEvents.push(clearEvt);
 
     // 替换基地
+    if (newBaseDeck.length === 0) {
+        // 基地牌库见底：将基地弃牌堆洗回牌库（并把本次计分的旧基地也计入弃牌堆后一起洗回）
+        // 注意：此处尚未 reduce BASE_CLEARED，所以 core.baseDiscard 里不包含 base.defId，需要手动加入。
+        const pool = [...(core.baseDiscard ?? []), base.defId];
+        const rebuiltDeck = (random?.shuffle ? random.shuffle(pool) : [...pool]);
+        const shuffleEvt: BaseDeckShuffledEvent = {
+            type: SU_EVENTS.BASE_DECK_SHUFFLED,
+            payload: {
+                newBaseDeckDefIds: rebuiltDeck,
+                reason: 'base_deck_empty_reshuffle_discard',
+                clearBaseDiscard: true,
+            },
+            timestamp: now,
+        };
+        postScoringEvents.push(shuffleEvt);
+        newBaseDeck = rebuiltDeck;
+    }
+
     if (newBaseDeck.length > 0) {
         const newBaseDefId = newBaseDeck[0];
         const replaceEvt: BaseReplacedEvent = {
@@ -784,6 +802,7 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
         currentPlayerIndex: 0,
         bases: activeBases,
         baseDeck,
+        baseDiscard: [],
         turnNumber: 1,
         nextUid,
         gameResult: undefined,
@@ -933,8 +952,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     events.push(clearEvt);
                     
                     // 替换基地
-                    if (core.baseDeck.length > 0) {
-                        const newBaseDefId = core.baseDeck[0];
+                    const coreNow = state.core;
+                    let deckForReplacement = coreNow.baseDeck;
+                    if (deckForReplacement.length === 0) {
+                        const pool = [...(coreNow.baseDiscard ?? []), currentBase.defId];
+                        deckForReplacement = (random?.shuffle ? random.shuffle(pool) : [...pool]);
+                        const shuffleEvt: BaseDeckShuffledEvent = {
+                            type: SU_EVENTS.BASE_DECK_SHUFFLED,
+                            payload: {
+                                newBaseDeckDefIds: deckForReplacement,
+                                reason: 'base_deck_empty_reshuffle_discard',
+                                clearBaseDiscard: true,
+                            },
+                            timestamp: now,
+                        };
+                        events.push(shuffleEvt);
+                    }
+
+                    if (deckForReplacement.length > 0) {
+                        const newBaseDefId = deckForReplacement[0];
                         const replaceEvt: BaseReplacedEvent = {
                             type: SU_EVENTS.BASE_REPLACED,
                             payload: {
@@ -948,7 +984,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         
                         // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
                         const revealCtx = {
-                            state: core,
+                            state: coreNow,
                             matchState: state,
                             baseIndex: scoredBaseIndex,
                             baseDefId: newBaseDefId,

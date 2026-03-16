@@ -341,6 +341,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const scoredBase = state.bases[baseIndex];
             if (!scoredBase) return state;
             let newPlayers = { ...state.players };
+            const newBaseDiscard = [...(state.baseDiscard ?? []), scoredBase.defId];
 
             // Property 11: 持续行动卡回各自所有者弃牌堆
             for (const ongoing of scoredBase.ongoingActions) {
@@ -401,6 +402,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 players: newPlayers,
                 bases: newBases,
+                baseDiscard: newBaseDiscard,
                 scoringEligibleBaseIndices: newEligible?.length ? newEligible : undefined,
             };
         }
@@ -1471,8 +1473,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         // 基地牌库洗混
         case SU_EVENTS.BASE_DECK_SHUFFLED: {
-            const { newBaseDeckDefIds } = (event as BaseDeckShuffledEvent).payload;
-            return { ...state, baseDeck: newBaseDeckDefIds };
+            const { newBaseDeckDefIds, clearBaseDiscard } = (event as BaseDeckShuffledEvent).payload;
+            return {
+                ...state,
+                baseDeck: newBaseDeckDefIds,
+                baseDiscard: clearBaseDiscard ? [] : state.baseDiscard,
+            };
         }
 
         // special 能力限制组使用记录（每基地每回合一次）
