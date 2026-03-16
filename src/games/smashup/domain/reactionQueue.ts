@@ -35,12 +35,6 @@ export function maybeResolveReactionQueue(
   const pending = core.triggerQueue ?? [];
   if (pending.length === 0) return undefined;
 
-  // if any interaction is already pending, don't interfere
-  if (state.sys.interaction?.current) return undefined;
-
-  // choose who decides ordering at this step
-  const decider = chooseNextTriggerOwner(core, pending);
-
   // if only one trigger, execute directly
   if (pending.length === 1) {
     const t = pending[0];
@@ -60,6 +54,20 @@ export function maybeResolveReactionQueue(
         baseIndex: t.baseIndex,
         triggerMinionUid: t.triggerMinionUid,
         triggerMinionDefId: t.triggerMinionDefId,
+        triggerMinion: t.lkiMinion
+          ? {
+            uid: t.lkiMinion.uid,
+            defId: t.lkiMinion.defId,
+            owner: t.lkiMinion.owner,
+            controller: t.lkiMinion.controller,
+            basePower: t.lkiMinion.basePower,
+            powerCounters: t.lkiMinion.powerCounters,
+            powerModifier: t.lkiMinion.powerModifier,
+            tempPowerModifier: t.lkiMinion.tempPowerModifier,
+            talentUsed: false,
+            attachedActions: [],
+          }
+          : undefined,
         reason: t.reason,
         affectType: t.affectType,
         random,
@@ -72,6 +80,12 @@ export function maybeResolveReactionQueue(
     }
     return { state, events };
   }
+
+  // if any interaction is already pending, don't interfere (multi-trigger ordering needs a prompt)
+  if (state.sys.interaction?.current) return undefined;
+
+  // choose who decides ordering at this step
+  const decider = chooseNextTriggerOwner(core, pending);
 
   // multiple triggers: ask decider to choose next trigger to resolve
   const options = pending

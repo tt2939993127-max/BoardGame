@@ -22,6 +22,21 @@ export function registerReactionQueueInteractionHandlers(): void {
     const events: SmashUpEvent[] = [consumed];
     if (!exec) return { state, events };
 
+    const lkiTriggerMinion = t.lkiMinion
+      ? {
+        uid: t.lkiMinion.uid,
+        defId: t.lkiMinion.defId,
+        owner: t.lkiMinion.owner,
+        controller: t.lkiMinion.controller,
+        basePower: t.lkiMinion.basePower,
+        powerCounters: t.lkiMinion.powerCounters,
+        powerModifier: t.lkiMinion.powerModifier,
+        tempPowerModifier: t.lkiMinion.tempPowerModifier,
+        talentUsed: false,
+        attachedActions: [],
+      }
+      : undefined;
+
     const result = exec({
       state: core,
       matchState: state,
@@ -30,6 +45,7 @@ export function registerReactionQueueInteractionHandlers(): void {
       baseIndex: t.baseIndex,
       triggerMinionUid: t.triggerMinionUid,
       triggerMinionDefId: t.triggerMinionDefId,
+      triggerMinion: lkiTriggerMinion,
       reason: t.reason,
       affectType: t.affectType,
       random: random as RandomFn,

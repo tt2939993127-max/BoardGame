@@ -522,7 +522,7 @@ export function registerExpansionBaseAbilities(): void {
         });
         // 返回空事件 + 更新后的 matchState（processDestroyTriggers 检测到 matchState 变化 → pendingSaveMinionUids）
         return { events: [], matchState: updatedMS };
-    });
+    }, { phase: 'replacement' });
 
     // ── 被动保护类基地──────────────────────────────────────────
 

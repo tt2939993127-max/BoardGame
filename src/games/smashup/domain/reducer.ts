@@ -60,7 +60,9 @@ import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from '
 import type { AbilityContext } from './abilityRegistry';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
 import { fireTriggers, collectTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
+import { maybeResolveReactionQueue } from './reactionQueue';
 import { canPlayFromDiscard } from './discardPlayability';
+import { reduce } from './reduce';
 
 // ============================================================================
 // execute：命令 → 事件
@@ -711,7 +713,7 @@ export function processDestroyTriggers(
             if (baseResult.matchState) ms = baseResult.matchState;
         }
 
-        // 3. 触发 ongoing 拦截器 onMinionDestroyed（如雄蜂防止消灭、逃生舱回手牌）
+        // 3. 触发 ongoing 拦截器 onMinionDestroyed（replacement：如雄蜂防止消灭、逃生舱回手牌）
         const ongoingDestroyEvents = fireTriggers(core, 'onMinionDestroyed', {
             state: core,
             matchState: ms ?? state,
@@ -719,10 +721,11 @@ export function processDestroyTriggers(
             baseIndex: fromBaseIndex,
             triggerMinionUid: minionUid,
             triggerMinionDefId: minionDefId,
+            triggerMinion: minion,
             reason: de.payload.reason,
             random,
             now,
-        });
+        }, { phase: 'replacement' });
         saveEvents.push(...ongoingDestroyEvents.events);
         if (ongoingDestroyEvents.matchState) ms = ongoingDestroyEvents.matchState;
 
@@ -774,6 +777,22 @@ export function processDestroyTriggers(
                 )
                 : [...saveEvents];
         if (!isPendingSave && !hasSaveEvent) {
+            // reaction-phase triggers for onMinionDestroyed are queued and resolved later (Wiki simultaneous ordering)
+            const queuedDestroyReactions = collectTriggers(core, 'onMinionDestroyed', {
+                state: core,
+                matchState: ms ?? state,
+                playerId: ownerId,
+                baseIndex: fromBaseIndex,
+                triggerMinionUid: minionUid,
+                triggerMinionDefId: minionDefId,
+                triggerMinion: minion,
+                reason: de.payload.reason,
+                random,
+                now,
+            });
+            if (queuedDestroyReactions) {
+                localEvents.push(queuedDestroyReactions);
+            }
             // 1. 触发随从自身的 onDestroy 能力
             const executor = resolveOnDestroy(minionDefId);
             if (executor) {
@@ -821,7 +840,23 @@ export function processDestroyTriggers(
             return !suppressedMinionUids.has(minionUid);
         });
 
-    return { events: [...cleanedEvents, ...extraEvents], matchState: ms };
+    const combined = [...cleanedEvents, ...extraEvents];
+
+    // Attempt to auto-resolve reaction queue when possible (single trigger, no ordering prompt).
+    let coreForQueue = (ms ?? state).core;
+    for (const e of combined) {
+        if (e.type === SU_EVENTS.TRIGGER_QUEUED || e.type === SU_EVENTS.TRIGGER_CONSUMED) {
+            coreForQueue = reduce(coreForQueue, e);
+        }
+    }
+    const baseMS = ms ?? state;
+    const msForQueue = coreForQueue === baseMS.core ? baseMS : { ...baseMS, core: coreForQueue };
+    const rq = maybeResolveReactionQueue(msForQueue, random, now);
+    if (rq) {
+        return { events: [...combined, ...rq.events], matchState: rq.state };
+    }
+
+    return { events: combined, matchState: ms };
 }
 
 // ============================================================================

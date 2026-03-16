@@ -156,6 +156,7 @@ interface TriggerEntry {
     timing: TriggerTiming;
     callback: TriggerCallback;
     optional?: boolean;
+    phase?: 'replacement' | 'reaction';
 }
 
 interface InterceptorEntry {
@@ -201,11 +202,17 @@ export function registerTrigger(
     sourceDefId: string,
     timing: TriggerTiming,
     callback: TriggerCallback,
-    options?: { optional?: boolean }
+    options?: { optional?: boolean; phase?: 'replacement' | 'reaction' }
 ): void {
     // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
     if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
-    triggerRegistry.push({ sourceDefId, timing, callback, optional: options?.optional });
+    triggerRegistry.push({
+        sourceDefId,
+        timing,
+        callback,
+        optional: options?.optional,
+        phase: options?.phase ?? 'reaction',
+    });
     registerTriggerExecutor(sourceDefId, timing, callback);
 }
 
@@ -238,6 +245,8 @@ export function collectTriggers(
 
     for (const entry of triggerRegistry) {
         if (entry.timing !== timing) continue;
+        // Only queue reaction-phase triggers (replacement effects must remain immediate)
+        if (entry.phase === 'replacement') continue;
         const witnessed = isSourceActive(state, entry.sourceDefId);
         if (!witnessed) continue;
         const located = locateSource(state, entry.sourceDefId);
@@ -260,6 +269,20 @@ export function collectTriggers(
             triggerMinionDefId: ctx.triggerMinionDefId,
             reason: ctx.reason,
             affectType: ctx.affectType,
+            lkiMinion: ctx.triggerMinion
+                ? {
+                    uid: ctx.triggerMinion.uid,
+                    defId: ctx.triggerMinion.defId,
+                    owner: ctx.triggerMinion.owner,
+                    controller: ctx.triggerMinion.controller,
+                    baseIndex: ctx.baseIndex ?? located.baseIndex ?? -1,
+                    basePower: ctx.triggerMinion.basePower,
+                    powerCounters: ctx.triggerMinion.powerCounters,
+                    powerModifier: ctx.triggerMinion.powerModifier,
+                    tempPowerModifier: ctx.triggerMinion.tempPowerModifier,
+                    attachedActionDefIds: ctx.triggerMinion.attachedActions?.map(a => a.defId) ?? [],
+                }
+                : undefined,
         });
     }
 
@@ -677,7 +700,8 @@ export function interceptEvent(
 export function fireTriggers(
     state: SmashUpCore,
     timing: TriggerTiming,
-    ctx: Omit<TriggerContext, 'timing'>
+    ctx: Omit<TriggerContext, 'timing'>,
+    options?: { phase?: 'replacement' | 'reaction' }
 ): TriggerResult {
     if (triggerRegistry.length === 0) {
         return { events: [] };
@@ -689,6 +713,7 @@ export function fireTriggers(
 
     for (const entry of triggerRegistry) {
         if (entry.timing !== timing) continue;
+        if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
         
         const isActive = isSourceActive(state, entry.sourceDefId);
         if (!isActive) continue;
