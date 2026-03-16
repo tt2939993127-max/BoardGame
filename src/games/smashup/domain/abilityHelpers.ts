@@ -44,7 +44,7 @@ import type {
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
-import { fireTriggers } from './ongoingEffects';
+import { collectTriggers, fireTriggers } from './ongoingEffects';
 import { getMinionDef } from '../data/cards';
 
 // ============================================================================
@@ -688,15 +688,20 @@ export function fireMinionPlayedTriggers(params: {
     events.push(...baseResult.events);
     if (baseResult.matchState) matchState = baseResult.matchState;
 
-    // 3. ongoing 触发器 onMinionPlayed
-    const ongoingResult = fireTriggers(core, 'onMinionPlayed', {
-        state: core, matchState,
-        playerId, baseIndex,
-        triggerMinionUid: cardUid, triggerMinionDefId: defId,
-        random, now,
+    // 3. ongoing 触发器 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
+    const playedMinion = core.bases[baseIndex]?.minions.find(m => m.uid === cardUid);
+    const queued = collectTriggers(core, 'onMinionPlayed', {
+        state: core,
+        matchState,
+        playerId,
+        baseIndex,
+        triggerMinionUid: cardUid,
+        triggerMinionDefId: defId,
+        triggerMinion: playedMinion,
+        random,
+        now,
     });
-    events.push(...ongoingResult.events);
-    if (ongoingResult.matchState) matchState = ongoingResult.matchState;
+    if (queued) events.push(queued);
 
     // 4. 消费 pendingMinionPlayEffects 队列（如 crack_of_dusk / its_alive 的打出后+1指示物）
     const player = core.players[playerId];
