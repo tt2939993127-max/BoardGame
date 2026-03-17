@@ -39,7 +39,7 @@ export const PHASE_ORDER: GamePhase[] = [
 // ============================================================================
 
 /** 卡牌类别 */
-export type CardType = 'minion' | 'action';
+export type CardType = 'minion' | 'action' | 'fusion';
 
 /** 行动卡子类型 */
 export type ActionSubtype = 'standard' | 'ongoing' | 'special';
@@ -93,6 +93,38 @@ export interface MinionCardDef {
     soundKey?: string;
 }
 
+/** 融合卡打出模式 */
+export type FusionPlayAs = 'minion' | 'action';
+
+/** 融合卡定义（在牌库/手牌中同时视为随从与战术；打出时声明一种类型） */
+export interface FusionCardDef {
+    id: string;
+    type: 'fusion';
+    name: string;
+    /** @deprecated 历史英文名，已由 i18n 接管，待清理 */
+    nameEn?: string;
+    faction: FactionId;
+    /** 牌组中的数量 */
+    count: number;
+    previewRef?: CardPreviewRef;
+
+    // --- 作为随从打出 ---
+    minionPower: number;
+    minionAbilityTags?: AbilityTag[];
+    minionPlayConstraint?: PlayConstraint;
+    minionSpecialLimitGroup?: string;
+    minionBeforeScoringPlayable?: boolean;
+
+    // --- 作为战术打出 ---
+    actionSubtype: ActionSubtype;
+    actionAbilityTags?: AbilityTag[];
+    actionOngoingTarget?: 'base' | 'minion';
+    actionPlayConstraint?: PlayConstraint;
+    actionSpecialNeedsBase?: boolean;
+    actionSpecialLimitGroup?: string;
+    actionSpecialTiming?: SpecialTiming;
+}
+
 /** Special 技能触发时机 */
 export type SpecialTiming = 'beforeScoring' | 'afterScoring';
 
@@ -136,7 +168,7 @@ export interface ActionCardDef {
 }
 
 /** 卡牌定义联合类型 */
-export type CardDef = MinionCardDef | ActionCardDef;
+export type CardDef = MinionCardDef | ActionCardDef | FusionCardDef;
 
 /** 基地限制规则（数据驱动） */
 export interface BaseRestriction {
@@ -212,6 +244,8 @@ export interface MinionOnBase {
     playedThisTurn?: boolean;
     /** 附着的行动卡列表（带 owner 追踪） */
     attachedActions: AttachedActionOnMinion[];
+    /** 额外元数据（用于 POD 等复杂状态追踪） */
+    metadata?: Record<string, unknown>;
 }
 
 /** 随从上附着的行动卡 */
@@ -436,6 +470,10 @@ export interface SmashUpCore {
     // （保留扩展字段位于此处）
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
+    /** POD 沉睡印记：被标记的玩家本回合不能移动随从（通过事件拦截器阻止移动） */
+    sleepMoveMarkedPlayers?: PlayerId[];
+    /** POD 沉睡印记：标记过期的 turnNumber（到施放者下回合开始时清空） */
+    sleepMarkExpiresOnTurnNumber?: number;
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
     minionsMovedToBaseThisTurn?: Record<string, Record<number, number>>;
     /**
