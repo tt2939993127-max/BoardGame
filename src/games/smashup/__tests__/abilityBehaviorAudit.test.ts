@@ -28,7 +28,7 @@ import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { getRegisteredOngoingEffectIds } from '../domain/ongoingEffects';
 import { getRegisteredModifierIds } from '../domain/ongoingModifiers';
 import type { CardDef, ActionCardDef, MinionCardDef } from '../domain/types';
-import { FACTION_METADATA } from '../ui/factionMeta';
+import { FACTION_METADATA, getVisibleFactionMetadata } from '../ui/factionMeta';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 // ============================================================================
@@ -151,6 +151,20 @@ describe('SmashUp 能力行为审计', () => {
             }
 
             expect(violations, '以下 POD 阵营存在直接接入缺口').toEqual([]);
+        });
+
+        it('POD 阵营在中英文派系选择列表里都可见', () => {
+            const podFactionIds = collectPodFactionIdsFromDataFiles();
+            const zhVisibleIds = new Set(getVisibleFactionMetadata('zh-CN').map((meta) => meta.id));
+            const enVisibleIds = new Set(getVisibleFactionMetadata('en').map((meta) => meta.id));
+
+            for (const factionId of podFactionIds) {
+                expect(zhVisibleIds.has(factionId), `zh-CN 缺少 ${factionId}`).toBe(true);
+                expect(enVisibleIds.has(factionId), `en 缺少 ${factionId}`).toBe(true);
+            }
+
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES)).toBe(false);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES_POD)).toBe(true);
         });
     });
 

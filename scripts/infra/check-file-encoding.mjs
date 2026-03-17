@@ -296,8 +296,7 @@ function printSummary({ scanned, fixedBom, warnings, errors, strict }) {
     }
 }
 
-function main() {
-    const rawArgs = process.argv.slice(2);
+export function runEncodingCheck(rawArgs = process.argv.slice(2)) {
     const strict = rawArgs.includes('--strict');
     const quiet = rawArgs.includes('--quiet');
     const fixBom = rawArgs.includes('--fix-bom');
@@ -379,5 +378,5 @@ function isDirectExecution() {
 }
 
 if (isDirectExecution()) {
-    main();
+    runEncodingCheck();
 }

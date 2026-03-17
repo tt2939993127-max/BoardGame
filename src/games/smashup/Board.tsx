@@ -122,6 +122,22 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     // 响应式布局配置
     const playerCount = core?.turnOrder.length || 2;
     const layout = getLayoutConfig(playerCount, { isMobileViewport });
+    const endTurnButtonStyle = isMobileViewport
+        ? {
+            right: `${Math.max(layout.boardHorizontalPadding, 48)}px`,
+            bottom: `${layout.floatingActionBottom}px`,
+        }
+        : undefined;
+    const floatingHintClassName = isMobileViewport
+        ? 'absolute inset-x-0 flex justify-center pointer-events-none'
+        : 'fixed inset-x-0 flex justify-center pointer-events-none';
+    const floatingHintStyle = { zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` };
+    const topFloatingBannerClassName = isMobileViewport
+        ? 'absolute inset-x-0 z-30 flex justify-center pointer-events-none'
+        : 'fixed inset-x-0 z-30 flex justify-center pointer-events-none';
+    const turnNoticeClassName = isMobileViewport
+        ? 'absolute inset-0 flex items-center justify-center pointer-events-none'
+        : 'fixed inset-0 flex items-center justify-center pointer-events-none';
     
     // 更新选择的派系到 Context（游戏开始后）
     useEffect(() => {
@@ -147,11 +163,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const opponentPlayer = core.players[opponentPid];
     
     // 根据视角模式选择显示的玩家数据
-    const viewPlayer = viewMode === 'opponent' ? opponentPlayer : myPlayer;
-    const viewPid = viewMode === 'opponent' ? opponentPid : rootPid;
-
     // 重赛系统（通用 hook）
-    const { overlayProps: endgameProps, isSpectator } = useEndgame({
+    const { overlayProps: endgameProps } = useEndgame({
         result: isGameOver || undefined,
         playerID,
         reset,
@@ -429,7 +442,9 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     // 弃牌堆出牌横排选中的卡 uid（统一状态）
     const [discardStripSelectedUid, setDiscardStripSelectedUid] = useState<string | null>(null);
 
-    // interaction 激活时重置手牌选中状态，避免 selectedCardUid 残留干扰基地渲染
+    // interaction 切换时重置手牌/弃牌区选中状态。
+    // 这里必须监听 currentPrompt 对象引用，而不是 currentPrompt?.id，
+    // 否则同 id 的新交互复用时会残留上一轮移动端选中态。
     useEffect(() => {
         if (currentPrompt) {
             setSelectedCardUid(null);
@@ -438,7 +453,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
         setDiscardStripSelectedUid(null);
         setMultiSelectedOptionIds(new Set());
-    }, [currentPrompt?.id]);
+    }, [currentPrompt]);
 
     // 统一弃牌堆出牌：合并正常弃牌堆出牌 + interaction 驱动的弃牌堆随从选择
     const discardStripCards = useMemo<{ uid: string; defId: string; label: string; optionId?: string; optionValue?: unknown }[]>(() => {
@@ -1202,7 +1217,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     }, [isOngoingSelectPrompt, selectableOngoingUids, currentPrompt, dispatch]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
-        setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
+        const nextTarget = { defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' } as const;
+        if (typeof window !== 'undefined') {
+            window.setTimeout(() => {
+                setViewingCard(nextTarget);
+            }, 0);
+            return;
+        }
+        setViewingCard(nextTarget);
     }, []);
 
     const handleViewAction = useCallback((defId: string) => {
@@ -1385,7 +1407,13 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <div className="fixed right-[8vw] bottom-[28vh] z-50 flex pointer-events-none w-24 h-24" data-tutorial-id="su-end-turn-btn">
+                <div
+                    className={isMobileViewport
+                        ? 'absolute z-50 flex pointer-events-none w-24 h-24'
+                        : 'fixed right-[8vw] bottom-[28vh] z-50 flex pointer-events-none w-24 h-24'}
+                    style={endTurnButtonStyle}
+                    data-tutorial-id="su-end-turn-btn"
+                >
                     <AnimatePresence>
                         {isMyTurn && (phase === 'playCards' || (phase === 'scoreBases' && !G.sys.responseWindow?.current && !G.sys.interaction?.current)) && (
                             <motion.div
@@ -1602,8 +1630,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
+                            className={floatingHintClassName}
+                            style={floatingHintStyle}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {baseSelectExtraOptions.map(opt => (
@@ -1628,8 +1656,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
+                            className={floatingHintClassName}
+                            style={floatingHintStyle}
                         >
                             <div className="flex gap-3 items-center pointer-events-auto">
                                 {isMultiMinionSelect && (
@@ -1678,8 +1706,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
+                            className={floatingHintClassName}
+                            style={floatingHintStyle}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {handSelectExtraOptions.map(opt => (
@@ -1704,8 +1732,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: 40, opacity: 0 }}
-                            className="fixed inset-x-0 flex justify-center pointer-events-none"
-                            style={{ zIndex: UI_Z_INDEX.hint, bottom: `${layout.floatingActionBottom}px` }}
+                            className={floatingHintClassName}
+                            style={floatingHintStyle}
                         >
                             <div className="flex gap-3 pointer-events-auto">
                                 {ongoingSelectExtraOptions.map(opt => (
@@ -1734,7 +1762,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     }}
                 >
                     <div 
-                        className="flex items-start min-w-max"
+                        className="flex items-center min-w-max"
                         style={{
                             gap: `${layout.baseGap}vw`,
                             paddingInline: `${layout.boardHorizontalPadding}px`,
@@ -1747,6 +1775,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 baseIndex={idx}
                                 core={core}
                                 turnOrder={core.turnOrder}
+                                isMobileViewport={isMobileViewport}
                                 isDeployMode={
                                     (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
                                 }
@@ -1790,7 +1819,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     <motion.div
                         initial={{ y: -20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        className="fixed inset-x-0 z-30 flex justify-center pointer-events-none"
+                        className={topFloatingBannerClassName}
                         style={{ top: `${layout.hudTopOffset}px` }}
                     >
                         <div className="bg-red-900/90 backdrop-blur-sm text-white px-6 py-2 rounded border border-red-500 shadow-lg">
@@ -1912,7 +1941,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 <AnimatePresence>
                     {showTurnNotice && (
                         <motion.div
-                            className="fixed inset-0 flex items-center justify-center pointer-events-none"
+                            className={turnNoticeClassName}
                             style={{ zIndex: UI_Z_INDEX.hint }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

@@ -150,6 +150,16 @@ function StatusSelect({ value, onChange, options }: { value: string; onChange: (
     );
 }
 
+function StatusBadge({ value, options }: { value: string; options: StatusOptionWithLabel[] }) {
+    const current = options.find((option) => option.value === value) ?? options[0];
+
+    return (
+        <span className={cn('inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border', current.color)}>
+            {current.label}
+        </span>
+    );
+}
+
 /** 筛选标签按钮 */
 function FilterTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
@@ -170,9 +180,10 @@ function FilterTab({ active, onClick, children }: { active: boolean; onClick: ()
 // ── 主组件 ──
 
 export default function AdminFeedbackPage() {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const { success, error } = useToast();
     const { t } = useTranslation('admin');
+    const canManageFeedback = user?.role === 'admin';
 
     const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
     const typeOptions = useMemo(() => buildTypeOptions(t), [t]);
@@ -265,7 +276,11 @@ export default function AdminFeedbackPage() {
 
     // ── 操作 ──
 
-    const handleStatusUpdate = async (id: string, newStatus: string) => {
+    const handleStatusUpdate = useCallback(async (id: string, newStatus: string) => {
+        if (!canManageFeedback) {
+            error('开发者当前仅可查看反馈');
+            return;
+        }
         try {
             const res = await fetch(`${ADMIN_API_URL}/feedback/${id}/status`, {
                 method: 'PATCH',
@@ -278,9 +293,13 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.updateFailed'));
         }
-    };
+    }, [canManageFeedback, error, success, t, token]);
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = useCallback(async (id: string) => {
+        if (!canManageFeedback) {
+            error('开发者当前仅可查看反馈');
+            return;
+        }
         if (!confirm(t('feedback.confirm.delete'))) return;
         try {
             const res = await fetch(`${ADMIN_API_URL}/feedback/${id}`, {
@@ -294,9 +313,13 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.deleteFailed'));
         }
-    };
+    }, [canManageFeedback, error, success, t, token]);
 
-    const handleBulkDelete = async () => {
+    const handleBulkDelete = useCallback(async () => {
+        if (!canManageFeedback) {
+            error('开发者当前仅可查看反馈');
+            return;
+        }
         if (selectedIds.size === 0) return;
         if (!confirm(t('feedback.confirm.bulkDelete', { count: selectedIds.size }))) return;
         try {
@@ -312,7 +335,7 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.bulkDeleteFailed'));
         }
-    };
+    }, [canManageFeedback, error, fetchFeedbacks, selectedIds, success, t, token]);
 
     const changeFilter = (setter: (v: string) => void, value: string) => {
         setter(value);
@@ -329,6 +352,11 @@ export default function AdminFeedbackPage() {
                 <div className="flex items-center gap-3">
                     <h1 className="text-lg font-bold text-zinc-900">{t('feedback.title')}</h1>
                     <span className="text-xs text-zinc-400">{t('feedback.count', { count: feedbacks.length })}</span>
+                    {!canManageFeedback && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                            只读
+                        </span>
+                    )}
                     <button
                         onClick={() => fetchFeedbacks()}
                         title={t('feedback.refresh')}
@@ -340,7 +368,7 @@ export default function AdminFeedbackPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {selectedIds.size > 0 && (
+                    {canManageFeedback && selectedIds.size > 0 && (
                         <button
                             onClick={handleBulkDelete}
                             className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors"
@@ -385,6 +413,11 @@ export default function AdminFeedbackPage() {
                     })}
                 </div>
             </div>
+            {!canManageFeedback && (
+                <div className="mb-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-500">
+                    开发者可查看和复制反馈内容，改状态与删除仍仅管理员可用。
+                </div>
+            )}
 
             {/* AI 导出载荷预览（用于自动化读取） */}
             {lastAiPayload && (
@@ -411,15 +444,17 @@ export default function AdminFeedbackPage() {
                     <table className="w-full text-sm">
                         <thead className="sticky top-0 z-10 bg-zinc-50">
                             <tr className="text-left text-xs text-zinc-400 font-medium">
-                                <th className="w-8 py-2 px-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={allSelected}
-                                        onChange={toggleSelectAll}
-                                        className="rounded border-zinc-300"
-                                        aria-label={t('feedback.table.selectAll')}
-                                    />
-                                </th>
+                                {canManageFeedback && (
+                                    <th className="w-8 py-2 px-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={allSelected}
+                                            onChange={toggleSelectAll}
+                                            className="rounded border-zinc-300"
+                                            aria-label={t('feedback.table.selectAll')}
+                                        />
+                                    </th>
+                                )}
                                 <th className="w-8 py-2" />
                                 <th className="py-2 px-2">{t('feedback.table.content')}</th>
                                 <th className="py-2 px-2 w-20">{t('feedback.table.type')}</th>
@@ -427,7 +462,7 @@ export default function AdminFeedbackPage() {
                                 <th className="py-2 px-2 w-24">{t('feedback.table.status')}</th>
                                 <th className="py-2 px-2 w-24">{t('feedback.table.submitter')}</th>
                                 <th className="py-2 px-2 w-32">{t('feedback.table.time')}</th>
-                                <th className="py-2 px-2 w-16" />
+                                {canManageFeedback && <th className="py-2 px-2 w-16" />}
                             </tr>
                         </thead>
                         <tbody>
@@ -443,6 +478,7 @@ export default function AdminFeedbackPage() {
                                         item={item}
                                         expanded={expanded}
                                         selected={selectedIds.has(item._id)}
+                                        canManageFeedback={canManageFeedback}
                                         TypeIcon={TypeIcon}
                                         typeOpt={typeOpt}
                                         sevCfg={sevCfg}
@@ -472,6 +508,7 @@ interface FeedbackRowProps {
     item: FeedbackItem;
     expanded: boolean;
     selected: boolean;
+    canManageFeedback: boolean;
     TypeIcon: React.ElementType;
     typeOpt: TypeOptionWithLabel | undefined;
     sevCfg: SeverityConfig[FeedbackItem['severity']];
@@ -486,7 +523,7 @@ interface FeedbackRowProps {
 }
 
 function FeedbackRow({
-    item, expanded, selected, TypeIcon, typeOpt, sevCfg, statusOptions, t,
+    item, expanded, selected, canManageFeedback, TypeIcon, typeOpt, sevCfg, statusOptions, t,
     onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick, onAiPayloadCopy,
 }: FeedbackRowProps) {
     return (
@@ -502,15 +539,17 @@ function FeedbackRow({
                 )}
             >
                 {/* 选择框 */}
-                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                    <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={onToggleSelect}
-                        className="rounded border-zinc-300"
-                        aria-label={t('feedback.table.selectItem', { id: item._id })}
-                    />
-                </td>
+                {canManageFeedback && (
+                    <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={onToggleSelect}
+                            className="rounded border-zinc-300"
+                            aria-label={t('feedback.table.selectItem', { id: item._id })}
+                        />
+                    </td>
+                )}
 
                 {/* 展开箭头 */}
                 <td className="py-2">
@@ -550,7 +589,10 @@ function FeedbackRow({
 
                 {/* 状态 */}
                 <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                    <StatusSelect value={item.status} onChange={(v) => onStatusUpdate(item._id, v)} options={statusOptions} />
+                    {canManageFeedback
+                        ? <StatusSelect value={item.status} onChange={(v) => onStatusUpdate(item._id, v)} options={statusOptions} />
+                        : <StatusBadge value={item.status} options={statusOptions} />
+                    }
                 </td>
 
                 {/* 提交者 */}
@@ -578,34 +620,36 @@ function FeedbackRow({
                 </td>
 
                 {/* 操作 */}
-                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
-                            className="p-1 rounded hover:bg-zinc-100 transition-colors"
-                            title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
-                        >
-                            {item.status === 'resolved'
-                                ? <Circle size={14} className="text-zinc-400" />
-                                : <CheckCircle size={14} className="text-emerald-500" />
-                            }
-                        </button>
-                        <button
-                            onClick={() => onDelete(item._id)}
-                            className="p-1 rounded hover:bg-red-50 transition-colors"
-                            title={t('feedback.actions.delete')}
-                        >
-                            <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
-                        </button>
-                    </div>
-                </td>
+                {canManageFeedback && (
+                    <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
+                                className="p-1 rounded hover:bg-zinc-100 transition-colors"
+                                title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
+                            >
+                                {item.status === 'resolved'
+                                    ? <Circle size={14} className="text-zinc-400" />
+                                    : <CheckCircle size={14} className="text-emerald-500" />
+                                }
+                            </button>
+                            <button
+                                onClick={() => onDelete(item._id)}
+                                className="p-1 rounded hover:bg-red-50 transition-colors"
+                                title={t('feedback.actions.delete')}
+                            >
+                                <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
+                            </button>
+                        </div>
+                    </td>
+                )}
             </tr>
 
             {/* 展开详情 */}
             <AnimatePresence>
                 {expanded && (
                     <tr>
-                        <td colSpan={9} className="p-0">
+                        <td colSpan={canManageFeedback ? 9 : 7} className="p-0">
                             <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}

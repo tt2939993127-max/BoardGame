@@ -172,6 +172,9 @@ export const MatchRoom = () => {
     // → WrappedBoard 重建 → Board 卸载重挂载 → CriticalImageGate 重新预加载 → 循环
     const tRef = useRef(t);
     tRef.current = t;
+    // 联机对局刷新时先给玩家看到棋盘，再让图片在后台补齐；
+    // 教程模式仍保留强门禁，避免首步引导和资源切阶段互相打架。
+    const shouldBlockBoardOnImagePreload = isTutorialRoute;
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !gameImplReady) return null;
         const impl = getGameImplementation(gameId);
@@ -184,6 +187,7 @@ export const MatchRoom = () => {
                 locale={i18n.language}
                 playerID={props?.playerID}
                 enabled={!isUgcGame}
+                blockRendering={shouldBlockBoardOnImagePreload}
                 loadingDescription={tRef.current('matchRoom.loadingResources')}
             >
                 <Board {...props} />
@@ -191,7 +195,7 @@ export const MatchRoom = () => {
         );
         Wrapped.displayName = 'WrappedOnlineBoard';
         return Wrapped;
-    }, [gameId, i18n.language, isUgcGame, gameImplReady]);
+    }, [gameId, i18n.language, isUgcGame, gameImplReady, shouldBlockBoardOnImagePreload]);
 
     // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
@@ -290,20 +294,20 @@ export const MatchRoom = () => {
     const errorToastRef = useRef<{ key: string; timestamp: number } | null>(null);
     const handledMissingMatchRef = useRef<string | null>(null);
 
-    // 大厅阶段暖预加载：在 i18n namespace 就绪后，后台预取当前游戏的图片资源。
-    // 与 socket 连接/状态同步并行执行，利用等待时间把图片拉到浏览器缓存，
-    // 减少 CriticalImageGate 挂载后的实际加载时间。
+    // 大厅阶段只预热 resolver 标记为 critical 的基础资源。
+    // warm 资源保留到真正进入对局、拿到玩家视角后再排队，避免无关素材抢占连接池，
+    // 打乱“自己 -> 对手 -> 其他”的进入对局加载顺序。
     // 使用 preloadWarmImages（requestIdleCallback）不阻塞主线程。
     const lobbyPreloadStartedRef = useRef<string | null>(null);
     useEffect(() => {
         if (!gameId || !isGameNamespaceReady || isTutorialRoute || isUgcGame) return;
         if (lobbyPreloadStartedRef.current === gameId) return;
         lobbyPreloadStartedRef.current = gameId;
-        // resolver 无状态降级：返回该游戏的基础资源列表
+        // resolver 无状态降级：返回该游戏在大厅里也值得抢先预热的基础资源列表
         const resolved = resolveCriticalImages(gameId, undefined, i18n.language);
-        const allPaths = [...new Set([...resolved.critical, ...resolved.warm])];
-        if (allPaths.length > 0) {
-            preloadWarmImages(allPaths, i18n.language, gameId);
+        const criticalPaths = [...new Set(resolved.critical)];
+        if (criticalPaths.length > 0) {
+            preloadWarmImages(criticalPaths, i18n.language, gameId);
         }
     }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
 

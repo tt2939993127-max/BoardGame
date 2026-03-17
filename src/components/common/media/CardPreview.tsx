@@ -153,6 +153,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         ? [...new Set([localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean))]
         : [];
     const checkKey = checkUrls.join('|');
+    const shimmerTimeoutMs = 4000;
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
     // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer
@@ -186,10 +187,22 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         }
         setLoaded(false);
         let cancelled = false;
+        const timeoutId = window.setTimeout(() => {
+            if (!cancelled) {
+                setLoaded(true);
+            }
+        }, shimmerTimeoutMs);
+
+        const markReady = () => {
+            window.clearTimeout(timeoutId);
+            if (!cancelled) {
+                setLoaded(true);
+            }
+        };
 
         const tryLoad = (idx: number) => {
             if (idx >= checkUrls.length) {
-                if (!cancelled) setLoaded(true); // 全部失败也移除 shimmer
+                markReady(); // 全部失败也移除 shimmer
                 return;
             }
             const url = checkUrls[idx];
@@ -197,9 +210,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             img.onload = () => {
                 // 注册到统一缓存，供其他组件复用
                 if (source) markImageLoaded(source.image, effectiveLocale, img);
-                if (!cancelled) {
-                    setLoaded(true);
-                }
+                markReady();
             };
             img.onerror = () => {
                 tryLoad(idx + 1);
@@ -210,9 +221,10 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         tryLoad(0);
         return () => {
             cancelled = true;
+            window.clearTimeout(timeoutId);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [checkKey, source?.image, effectiveLocale]);
+    }, [checkKey, source?.image, effectiveLocale, shimmerTimeoutMs]);
 
     // Fallback：source 为 undefined 时（CriticalImageGate 预加载超时/失败），
     // 自行加载图片获取尺寸，触发懒解析提升

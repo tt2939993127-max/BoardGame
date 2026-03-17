@@ -17,6 +17,7 @@ export {
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,
+    cancelWarmPreload,
     areAllCriticalImagesCached,
     isImagePreloaded,
     getPreloadedImageElement,

@@ -76,11 +76,14 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   });
 
   useEffect(() => {
-    if (!isCoarsePointer) return;
-    setSelectedPhaseId(phaseCursor);
-  }, [isCoarsePointer, phaseCursor]);
+    if (!isCoarsePointer) {
+      setSelectedPhaseId(null);
+      return;
+    }
+    setSelectedPhaseId(null);
+  }, [isCoarsePointer, currentPhase]);
 
-  const detailPhaseId = isCoarsePointer ? (selectedPhaseId ?? phaseCursor) : hoveredPhaseId;
+  const detailPhaseId = isCoarsePointer ? selectedPhaseId : hoveredPhaseId;
   const detailPhase = detailPhaseId
     ? phasesWithCount.find(phase => phase.id === detailPhaseId) ?? null
     : null;

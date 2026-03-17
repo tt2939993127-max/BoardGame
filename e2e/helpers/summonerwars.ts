@@ -145,8 +145,8 @@ export const waitForSummonerWarsUI = async (page: Page, timeout = 30000) => {
   await disableFabMenu(page);
 };
 
-/** 等待阵营选择界面出现 */
-export const waitForFactionSelection = async (page: Page, timeout = 30000) => {
+/** 等待阵营选择界面出现；开发态首屏资源装载较慢，窗口需覆盖完整客户端加载。 */
+export const waitForFactionSelection = async (page: Page, timeout = 60000) => {
   await page.waitForFunction(
     () => {
       const h1 = document.querySelector('h1');
@@ -157,6 +157,29 @@ export const waitForFactionSelection = async (page: Page, timeout = 30000) => {
     },
     { timeout },
   );
+};
+
+/** 等待 overlay 进入打开或关闭态，兼容页面上存在多个同 test id 的常驻实例。 */
+export const waitForOverlayState = async (
+  page: Page,
+  overlayTestId: string,
+  expected: 'open' | 'closed',
+  timeout = 5000,
+) => {
+  await expect.poll(
+    async () => page.evaluate(({ testId, target }) => {
+      const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
+      const visibleCount = overlays.filter((overlay) => {
+        const styles = window.getComputedStyle(overlay);
+        return styles.display !== 'none'
+          && styles.visibility !== 'hidden'
+          && styles.pointerEvents !== 'none'
+          && styles.opacity !== '0';
+      }).length;
+      return target === 'open' ? visibleCount > 0 : visibleCount === 0;
+    }, { testId: overlayTestId, target: expected }),
+    { timeout },
+  ).toBe(true);
 };
 
 // ============================================================================

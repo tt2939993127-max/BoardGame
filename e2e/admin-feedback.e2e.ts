@@ -17,7 +17,7 @@ const HTML_NAVIGATION_HEADERS = {
 const setStoredAuth = async (page: Page, user: StoredUser) => {
     await page.addInitScript((storedUser) => {
         localStorage.setItem('i18nextLng', 'zh-CN');
-        localStorage.setItem('auth_token', 'fake_admin_token');
+        localStorage.setItem('auth_token', `fake_${storedUser.role}_token`);
         localStorage.setItem('auth_user', JSON.stringify(storedUser));
     }, user);
 };
@@ -78,13 +78,15 @@ test.describe('后台反馈管理 E2E', () => {
         await mockClipboard(page);
 
         await page.route('**/auth/me', async (route) => {
+            const authHeader = route.request().headers().authorization ?? '';
+            const role = authHeader.includes('fake_developer_token') ? 'developer' : 'admin';
             await route.fulfill({
                 status: 200,
                 json: {
                     user: {
-                        id: 'admin_1',
-                        username: 'Admin',
-                        role: 'admin',
+                        id: role === 'developer' ? 'developer_1' : 'admin_1',
+                        username: role === 'developer' ? 'Developer' : 'Admin',
+                        role,
                         banned: false,
                     },
                 },
@@ -208,6 +210,55 @@ test.describe('后台反馈管理 E2E', () => {
 
         await page.screenshot({
             path: 'test-results/admin-feedback-ai-payload.png',
+            fullPage: true,
+        });
+    });
+
+    test('developer 可以进入反馈页但只读', async ({ page }) => {
+        await setStoredAuth(page, {
+            id: 'developer_1',
+            username: 'Developer',
+            role: 'developer',
+            banned: false,
+        });
+
+        await page.route('**/admin/feedback?*', async (route) => {
+            if (route.request().method() !== 'GET') {
+                return route.fallback();
+            }
+            return route.fulfill({
+                status: 200,
+                json: {
+                    items: [{
+                        _id: 'feedback_readonly_001',
+                        content: '开发者应可查看这条反馈',
+                        type: 'suggestion',
+                        severity: 'low',
+                        status: 'open',
+                        createdAt: '2026-03-14T10:00:00.000Z',
+                    }],
+                    total: 1,
+                    limit: 100,
+                    page: 1,
+                },
+            });
+        });
+
+        await gotoFrontendRoute(page, '/admin/feedback');
+
+        await expect(page.getByText('只读')).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
+        await expect(page.getByText('开发者可查看和复制反馈内容，改状态与删除仍仅管理员可用。')).toBeVisible({
+            timeout: ADMIN_PAGE_READY_TIMEOUT_MS,
+        });
+        await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);
+
+        const row = page.locator('[data-testid="feedback-row"][data-feedback-id="feedback_readonly_001"]');
+        await expect(row).toBeVisible({ timeout: ADMIN_PAGE_READY_TIMEOUT_MS });
+        await row.click();
+        await expect(page.getByTestId('feedback-copy-ai-payload')).toBeVisible();
+
+        await page.screenshot({
+            path: 'test-results/admin-feedback-developer-readonly.png',
             fullPage: true,
         });
     });

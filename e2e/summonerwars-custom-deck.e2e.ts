@@ -10,11 +10,14 @@
  * - 遮罩层关闭抽屉
  */
 
-import { test, expect, type Page } from '@playwright/test';
-import { initContext, ensureGameServerAvailable } from './helpers/common';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { ensureGameServerAvailable, waitForMatchAvailable } from './helpers/common';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import {
-    createSummonerWarsRoom,
+    createSWRoomViaAPI,
     ensurePlayerIdInUrl,
+    initSWContext,
+    waitForOverlayState,
     waitForFactionSelection,
 } from './helpers/summonerwars';
 
@@ -25,7 +28,7 @@ import {
 /** 点击"自定义牌组"占位卡打开抽屉 */
 const openDeckBuilder = async (page: Page) => {
     const customDeckCard = page.locator('.grid > div').filter({
-        hasText: /Custom Deck|自定义牌组/i,
+        hasText: /New Deck|Custom Deck|自定义牌组|点击构建|Click to Build/i,
     });
     await expect(customDeckCard).toBeVisible({ timeout: 5000 });
     await customDeckCard.click();
@@ -67,20 +70,41 @@ const addCardFromPool = async (page: Page, sectionName: string, cardIndex: numbe
     if (count > cardIndex) await cards.nth(cardIndex).click();
 };
 
+const longPressTouch = async (locator: Locator, durationMs = 620, pointerId = 1) => {
+    await locator.dispatchEvent('pointerdown', {
+        pointerType: 'touch',
+        pointerId,
+        isPrimary: true,
+        buttons: 1,
+    });
+    await locator.page().waitForTimeout(durationMs);
+    await locator.dispatchEvent('pointerup', {
+        pointerType: 'touch',
+        pointerId,
+        isPrimary: true,
+        buttons: 0,
+    });
+};
+
 /** 通用的测试前置：创建上下文 + 创建房间 + 进入阵营选择 */
 const setupForDeckBuilder = async (
     browser: { newContext: (opts?: { baseURL?: string }) => Promise<import('@playwright/test').BrowserContext> },
     baseURL: string | undefined,
 ) => {
     const context = await browser.newContext({ baseURL });
-    await initContext(context, { storageKey: '__sw_storage_reset' });
+    await initSWContext(context, '__sw_storage_reset');
     const page = await context.newPage();
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
 
     if (!(await ensureGameServerAvailable(page))) return null;
 
-    const matchId = await createSummonerWarsRoom(page);
+    const matchId = await createSWRoomViaAPI(page);
     if (!matchId) return null;
+    if (!(await waitForMatchAvailable(page, 'summonerwars', matchId, 20000))) return null;
 
+    await page.goto(`/play/summonerwars/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
     await ensurePlayerIdInUrl(page, '0');
     await waitForFactionSelection(page);
     return { context, page };
@@ -99,7 +123,7 @@ test.describe('SummonerWars 自定义牌组', () => {
         const { context, page } = setup;
 
         const customDeckCard = page.locator('.grid > div').filter({
-            hasText: /Custom Deck|自定义牌组/i,
+            hasText: /New Deck|Custom Deck|自定义牌组|点击构建|Click to Build/i,
         });
         await expect(customDeckCard).toBeVisible({ timeout: 5000 });
         await expect(customDeckCard.getByText(/Click to Build|点击构建/i)).toBeVisible();
@@ -190,6 +214,73 @@ test.describe('SummonerWars 自定义牌组', () => {
         await removeButtons.first().click();
         await page.waitForTimeout(300);
         await page.screenshot({ path: testInfo.outputPath('deck-builder-card-removed.png') });
+        await context.close();
+    });
+
+    test('移动端长按卡池卡牌应可放大且不影响点击选择', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        await clearEvidenceScreenshotsForTest(testInfo);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+        const context = await browser.newContext({
+            baseURL,
+            viewport: { width: 812, height: 375 },
+            isMobile: true,
+            hasTouch: true,
+        });
+        await initSWContext(context, '__sw_storage_reset');
+        const page = await context.newPage();
+
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
+        if (!(await ensureGameServerAvailable(page))) {
+            test.skip(true, '服务器不可用或创建房间失败');
+            return;
+        }
+
+        const matchId = await createSWRoomViaAPI(page);
+        if (!matchId) {
+            test.skip(true, '创建房间失败');
+            return;
+        }
+
+        if (!(await waitForMatchAvailable(page, 'summonerwars', matchId, 20000))) {
+            test.skip(true, '对局不可用');
+            return;
+        }
+
+        await page.goto(`/play/summonerwars/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
+        await ensurePlayerIdInUrl(page, '0');
+        await waitForFactionSelection(page);
+
+        await openDeckBuilder(page);
+        await waitForDeckBuilderOpen(page);
+        await selectFactionInBuilder(page, 0);
+        await page.waitForTimeout(500);
+
+        const firstPoolCard = page.locator('[data-card-pool-id]').first();
+        await expect(firstPoolCard).toBeVisible({ timeout: 5000 });
+
+        await longPressTouch(firstPoolCard, 650, 31);
+        await waitForOverlayState(page, 'sw-deckbuilder-card-magnify-overlay', 'open');
+        const magnifyOverlay = page.locator('[data-testid="sw-deckbuilder-card-magnify-overlay"]');
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'deck-builder-mobile-long-press-magnify', {
+                filename: 'deck-builder-mobile-long-press-magnify.png',
+            }),
+        });
+        await magnifyOverlay.locator('button', { hasText: /关闭|Close/i }).click();
+        await waitForOverlayState(page, 'sw-deckbuilder-card-magnify-overlay', 'closed');
+
+        await firstPoolCard.click();
+        await page.waitForTimeout(500);
+        await expect(page.locator('.border-amber-400').first()).toBeVisible({ timeout: 5000 });
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'deck-builder-mobile-click-select-still-works', {
+                filename: 'deck-builder-mobile-click-select-still-works.png',
+            }),
+        });
+
         await context.close();
     });
 

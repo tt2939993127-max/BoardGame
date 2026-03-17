@@ -811,3 +811,64 @@ Authorization: Bearer <admin_token>
 
 **错误响应**:
 - `404` - 通知不存在
+
+---
+
+## 反馈管理
+
+> `GET /admin/feedback` 允许 `admin` 与 `developer` 访问。
+> `PATCH /admin/feedback/:id/status`、`DELETE /admin/feedback/:id`、批量删除接口仍仅 `admin` 可用。
+
+### GET /admin/feedback
+
+获取反馈列表。
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| limit | number | 否 | 返回条数上限，默认 100 |
+| status | string | 否 | 按状态筛选，支持 `open` / `in_progress` / `resolved` / `closed` |
+| type | string | 否 | 按类型筛选，支持 `bug` / `suggestion` / `other` |
+
+**响应示例**:
+```json
+{
+  "items": [
+    {
+      "_id": "feedback_001",
+      "content": "某张卡牌效果与描述不一致",
+      "type": "bug",
+      "severity": "medium",
+      "status": "open",
+      "gameName": "smashup",
+      "createdAt": "2026-03-14T10:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "page": 1
+}
+```
+
+### PATCH /admin/feedback/:id/status
+
+更新反馈状态，仅 `admin` 可用。
+
+**请求体**:
+```json
+{
+  "status": "resolved"
+}
+```
+
+### DELETE /admin/feedback/:id
+
+删除单条反馈，仅 `admin` 可用。
+
+### POST /admin/feedback/bulk-delete
+
+按 ID 批量删除反馈，仅 `admin` 可用。
+
+### POST /admin/feedback/bulk-delete-by-filter
+
+按筛选条件批量删除反馈，仅 `admin` 可用。

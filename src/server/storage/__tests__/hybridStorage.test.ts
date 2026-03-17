@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { MatchMetadata, StoredMatchState, CreateMatchData } from '../../../engine/transport/storage';
@@ -98,5 +98,61 @@ describe.skip('HybridStorage 行为', () => {
 
         const { metadata: fetchedMetadata } = await hybrid.fetch('guest-clean', { metadata: true });
         expect(fetchedMetadata).toBeUndefined();
+    });
+});
+
+const buildMongoStub = () => ({
+    connect: vi.fn(async () => {}),
+    createMatch: vi.fn(async () => {}),
+    setState: vi.fn(async () => {}),
+    setMetadata: vi.fn(async () => {}),
+    fetch: vi.fn(async () => ({})),
+    wipe: vi.fn(async () => {}),
+    listMatches: vi.fn(async () => []),
+    cleanupEphemeralMatches: vi.fn(async () => 0),
+    findMatchesByOwnerKey: vi.fn(async () => []),
+});
+
+describe('HybridStorage 纯内存模式', () => {
+    it('persistent=false 时用户房间也应只走内存，不触碰 Mongo', async () => {
+        const mongoStub = buildMongoStub();
+        const hybrid = new HybridStorage(mongoStub as unknown as typeof mongoStorage, {
+            persistentEnabled: false,
+        });
+
+        await hybrid.connect();
+        await hybrid.createMatch('user-room-1', buildCreateData({
+            ownerKey: 'user:owner-1',
+            ownerType: 'user',
+        }));
+
+        const fetched = await hybrid.fetch('user-room-1', { metadata: true, state: true });
+        const matches = await hybrid.listMatches();
+        const ownerMatches = await hybrid.findMatchesByOwnerKey('user:owner-1');
+
+        expect(fetched.metadata?.gameName).toBe('tictactoe');
+        expect(matches).toEqual(['user-room-1']);
+        expect(ownerMatches).toEqual([{ matchID: 'user-room-1', gameName: 'tictactoe' }]);
+
+        expect(mongoStub.connect).not.toHaveBeenCalled();
+        expect(mongoStub.createMatch).not.toHaveBeenCalled();
+        expect(mongoStub.fetch).not.toHaveBeenCalled();
+        expect(mongoStub.listMatches).not.toHaveBeenCalled();
+        expect(mongoStub.findMatchesByOwnerKey).not.toHaveBeenCalled();
+    });
+
+    it('persistent=false 时缺失房间查询不应回退到 Mongo', async () => {
+        const mongoStub = buildMongoStub();
+        const hybrid = new HybridStorage(mongoStub as unknown as typeof mongoStorage, {
+            persistentEnabled: false,
+        });
+
+        const result = await hybrid.fetch('missing-room', { metadata: true });
+        const cleaned = await hybrid.cleanupEphemeralMatches();
+
+        expect(result.metadata).toBeUndefined();
+        expect(cleaned).toBe(0);
+        expect(mongoStub.fetch).not.toHaveBeenCalled();
+        expect(mongoStub.cleanupEphemeralMatches).not.toHaveBeenCalled();
     });
 });

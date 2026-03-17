@@ -31,6 +31,7 @@ export const BaseZone: React.FC<{
     baseIndex: number;
     core: SmashUpCore;
     turnOrder: string[];
+    isMobileViewport?: boolean;
     isDeployMode: boolean;
     isMinionSelectMode?: boolean;
     /** 交互驱动的随从选择：只有这些 UID 的随从可被选中 */
@@ -56,17 +57,16 @@ export const BaseZone: React.FC<{
     isTutorialTargetAllowed?: (targetId: string) => boolean;
     /** 当前游戏阶段（用于限制 scoreBases 阶段的 special 高亮范围） */
     phase?: string;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
+}> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
     const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
     // 响应式布局配置
     const playerCount = turnOrder.length;
-    const layout = getLayoutConfig(playerCount);
+    const layout = getLayoutConfig(playerCount, { isMobileViewport });
     
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
-    const baseText = resolveCardText(baseDef, t);
     const totalPower = getTotalEffectivePowerOnBase(core, base, baseIndex);
     const breakpoint = getEffectiveBreakpoint(core, baseIndex);
     const ratio = totalPower / breakpoint;
@@ -175,6 +175,9 @@ export const BaseZone: React.FC<{
                                                 dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
                                             },
                                         });
+                                    } else {
+                                        clearArmedActivation();
+                                        onViewAction(oa.defId);
                                     }
                                 }}
                                 className={`relative aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
@@ -295,7 +298,7 @@ export const BaseZone: React.FC<{
                 {showDesktopInspectButton && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
-                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover/base:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
                     >
                         <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -717,7 +720,7 @@ const MinionCard: React.FC<{
             {showDesktopInspectButton && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onView(); }}
-                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
+                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
                 >
                     <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -818,6 +821,9 @@ const MinionCard: React.FC<{
                                                     dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: aa.uid, baseIndex });
                                                 },
                                             });
+                                        } else {
+                                            clearArmedActivation();
+                                            onViewAction(aa.defId);
                                         }
                                     }}
                                     className={`w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer

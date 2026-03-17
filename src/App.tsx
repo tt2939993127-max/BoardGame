@@ -72,6 +72,11 @@ const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
 const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest'));
+const DevMobileEvidenceCaptureAgent = import.meta.env.DEV
+  ? React.lazy(() =>
+      import('./components/system/MobileEvidenceCaptureAgent').then(m => ({ default: m.MobileEvidenceCaptureAgent })),
+    )
+  : null;
 
 const AppContent = () => {
   const { t } = useTranslation('lobby');
@@ -149,13 +154,25 @@ const AppContent = () => {
                       <Route path="rooms" element={renderAdminOnly(<RoomsPage />)} />
                       <Route path="ugc" element={renderAdminOnly(<UgcPackagesPage />)} />
                       <Route path="sponsors" element={renderAdminOnly(<SponsorsPage />)} />
-                      <Route path="feedback" element={renderAdminOnly(<FeedbackPage />)} />
+                      <Route
+                        path="feedback"
+                        element={(
+                          <AdminGuard allowedRoles={['admin', 'developer']} fallbackPath="/admin/changelogs">
+                            <FeedbackPage />
+                          </AdminGuard>
+                        )}
+                      />
                       <Route path="health" element={renderAdminOnly(<SystemHealthPage />)} />
                       <Route path="notifications" element={renderAdminOnly(<NotificationsPage />)} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />
                     </Routes>
+                    {DevMobileEvidenceCaptureAgent ? (
+                      <React.Suspense fallback={null}>
+                        <DevMobileEvidenceCaptureAgent />
+                      </React.Suspense>
+                    ) : null}
                     <GlobalHUD />
                     <ModalStackRoot />
                     <ToastViewport />

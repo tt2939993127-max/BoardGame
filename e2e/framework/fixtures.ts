@@ -79,6 +79,22 @@ export const test = base.extend<FrameworkFixtures>({
         await use(`http://127.0.0.1:${frontend}`);
     }, { option: true }],
 
+    context: async ({ context, workerPorts }, use) => {
+        await context.addInitScript(() => {
+            (window as any).__E2E_TEST_MODE__ = true;
+        });
+
+        await context.addInitScript((ports) => {
+            (window as any).__E2E_WORKER_PORTS__ = ports;
+        }, workerPorts);
+
+        await context.addInitScript(() => {
+            (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+        });
+
+        await use(context);
+    },
+
     /**
      * workerPorts fixture
      * 

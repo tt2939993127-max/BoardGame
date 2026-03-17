@@ -1,8 +1,56 @@
 import { io, Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
 import { AUTH_API_URL } from '../config/server';
+import { createScopedLogger } from '../lib/logger';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
+import { SOCKET_CONNECT_TIMEOUT_MS } from './socketConnectionConfig';
+
+const log = createScopedLogger('SocialSocket');
+
+export const SOCIAL_SOCKET_CONNECT_DELAY_MS = 1500;
+export const SOCIAL_SOCKET_IDLE_TIMEOUT_MS = 5000;
+
+type IdleSchedulerTarget = {
+    setTimeout: typeof window.setTimeout;
+    clearTimeout: typeof window.clearTimeout;
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+    cancelIdleCallback?: (handle: number) => void;
+};
+
+export function scheduleDeferredSocialConnect(
+    task: () => void,
+    target: IdleSchedulerTarget = window,
+    delayMs = SOCIAL_SOCKET_CONNECT_DELAY_MS,
+    idleTimeoutMs = SOCIAL_SOCKET_IDLE_TIMEOUT_MS,
+): () => void {
+    let timeoutHandle: number | null = null;
+    let idleHandle: number | null = null;
+
+    timeoutHandle = target.setTimeout(() => {
+        timeoutHandle = null;
+        if (typeof target.requestIdleCallback === 'function') {
+            idleHandle = target.requestIdleCallback(() => {
+                idleHandle = null;
+                task();
+            }, { timeout: idleTimeoutMs });
+            return;
+        }
+
+        task();
+    }, delayMs);
+
+    return () => {
+        if (timeoutHandle !== null) {
+            target.clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+        }
+        if (idleHandle !== null && typeof target.cancelIdleCallback === 'function') {
+            target.cancelIdleCallback(idleHandle);
+            idleHandle = null;
+        }
+    };
+}
 
 export const SOCIAL_EVENTS = {
     // 服务端 -> 客户端
@@ -82,7 +130,7 @@ class SocialSocketService {
                 ? new URL(AUTH_API_URL).origin
                 : window.location.origin;
 
-            console.log('[SocialSocket] Connecting to', baseUrl, 'path: /social-socket');
+            log.info('connecting', { baseUrl, path: '/social-socket' });
 
             this.socket = io(baseUrl, {
                 parser: msgpackParser,
@@ -92,6 +140,7 @@ class SocialSocketService {
                 reconnection: true,
                 reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
                 reconnectionDelay: 1000,
+                timeout: SOCKET_CONNECT_TIMEOUT_MS,
             });
 
             this.setupEventHandlers();
@@ -112,19 +161,19 @@ class SocialSocketService {
         if (!this.socket) return;
 
         this.socket.on('connect', () => {
-            console.log('[SocialSocket] Connected');
+            log.info('connected');
             this.isConnected = true;
             this.notifyListeners('connect', true);
         });
 
         this.socket.on('disconnect', (reason) => {
-            console.log('[SocialSocket] Disconnected:', reason);
+            log.info('disconnected', { reason });
             this.isConnected = false;
             this.notifyListeners('disconnect', reason);
         });
 
         this.socket.on('connect_error', (error) => {
-            console.error('[SocialSocket] Connection error:', error.message);
+            log.error('connect_error', { message: error.message });
             this.isConnected = false;
         });
 
@@ -177,7 +226,7 @@ class SocialSocketService {
             try {
                 callback(payload);
             } catch (err) {
-                console.error(`[SocialSocket] Error in listener for ${event}:`, err);
+                log.error('listener_failed', { event, error: err });
             }
         });
     }
@@ -206,7 +255,7 @@ class SocialSocketService {
             return;
         }
         // 连接已断：强制重连
-        console.log('[SocialSocket] 页面恢复可见，重新连接');
+        log.info('resync_reconnect');
         this.socket.connect();
     }
 

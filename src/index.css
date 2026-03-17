@@ -277,6 +277,7 @@
     [data-game-page][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
         --mobile-board-shell-design-width: 1280px;
         --mobile-board-shell-scale: calc(100vw / var(--mobile-board-shell-design-width));
+        --mobile-board-shell-inverse-scale: calc(1 / var(--mobile-board-shell-scale));
         transform-origin: top left;
         transform: scale(var(--mobile-board-shell-scale));
         width: var(--mobile-board-shell-design-width);
@@ -290,7 +291,11 @@
     }
 
     [data-game-page][data-game-id="smashup"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
-        --mobile-board-shell-design-width: 920px;
+        --mobile-board-shell-design-width: 1160px;
+    }
+
+    [data-game-page][data-game-id="summonerwars"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
+        --mobile-board-shell-design-width: 900px;
     }
 }
 /* 绉诲姩绔Е鎽镐紭鍖?*/
@@ -301,8 +306,7 @@
         user-select: text;
     }
     
-    /* 澧炲ぇ鎸夐挳鐐瑰嚮鍖哄煙 */
-    button,
+    /* 仅对显式 opt-in 的交互补命中区，避免把所有按钮一起做胖 */
     .touch-target-min {
         min-height: 44px;
         min-width: 44px;
