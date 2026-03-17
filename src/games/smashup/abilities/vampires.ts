@@ -198,7 +198,7 @@ function registerVampirePodOngoingEffects(): void {
         );
         (interaction.data as any).continuationContext = { cardUid: card.uid, baseIndex };
         return { events: [], matchState: queueInteraction(ctx.matchState!, interaction) } as any;
-    }, { optional: true });
+    }, { optional: true, global: true });
 
     registerInteractionHandler('vampire_mad_monster_party_pod_play', (state, playerId, value, iData, _random, timestamp) => {
         const v = value as any;
@@ -256,7 +256,7 @@ function registerVampirePodOngoingEffects(): void {
             { sourceId: 'vampire_fledgling_vampire_pod_bury_source', targetType: 'generic' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState!, interaction) } as any;
-    }, { optional: true });
+    }, { optional: true, global: true });
 
     // Stakeout POD restriction: block minions power>=3 when active
     registerRestriction('vampire_stakeout_pod', 'play_minion', (rctx) => {

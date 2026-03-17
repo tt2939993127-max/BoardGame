@@ -1242,7 +1242,6 @@ export function registerElderThingInteractionHandlers(): void {
             const myMinions: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
             for (let bi = 0; bi < state.core.bases.length; bi++) {
                 for (const m of state.core.bases[bi].minions) {
-                    if (m.controller !== ctx.casterPlayerId) continue;
                     const def = getCardDef(m.defId) as MinionCardDef | undefined;
                     myMinions.push({ uid: m.uid, defId: m.defId, baseIndex: bi, label: def?.name ?? m.defId });
                 }

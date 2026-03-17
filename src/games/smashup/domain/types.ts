@@ -447,6 +447,8 @@ export interface TriggerInstance {
     triggerMinionUid?: string;
     triggerMinionDefId?: string;
     triggerMinionPower?: number;
+    /** destroyer (for onMinionDestroyed "after you destroy" checks) */
+    destroyerId?: PlayerId;
     reason?: string;
     affectType?: import('./ongoingEffects').AffectType;
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
