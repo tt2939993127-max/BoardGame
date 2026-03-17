@@ -95,9 +95,16 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
 function alienCollector(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-    const targets = base.minions.filter(
-        m => getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
-    );
+    // BGB 勘误：基础版 Collector 只能收“非 Collector 的力量≤3 随从”
+    // POD 勘误：Collector POD 回到“可以收任何力量≤3 随从”（含 Collector 自己）
+    const isPod = ctx.defId === 'alien_collector_pod';
+    const targets = base.minions.filter(m => {
+        // 基础版：排除所有 Collector（无论是否 POD 版）
+        if (!isPod && (m.defId === 'alien_collector' || m.defId === 'alien_collector_pod')) {
+            return false;
+        }
+        return getMinionPower(ctx.state, m, ctx.baseIndex) <= 3;
+    });
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const minionTargets = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;

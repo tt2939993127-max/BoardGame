@@ -14,11 +14,11 @@ import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
-import type { SmashUpCore, CardInstance, ActionCardDef, MinionCardDef } from './domain/types';
+import type { SmashUpCore, CardInstance, ActionCardDef, FusionCardDef, MinionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
-import { getCardDef, getBaseDef, getMinionDef, resolveCardName, resolveCardText } from './data/cards';
+import { getCardDef, getBaseDef, getFusionDef, getMinionDef, resolveCardName, resolveCardText } from './data/cards';
 import { getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
 import { isSpecialLimitBlocked } from './domain/abilityHelpers';
@@ -50,6 +50,8 @@ import {
     getMaxRemainingGlobalPowerLimitedQuota,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
+    isCardActionLike,
+    isCardMinionLike,
 } from './domain/utils';
 import { SMASHUP_AUDIO_CONFIG } from './audio.config';
 import { useTutorialBridge, useTutorial } from '../../contexts/TutorialContext';
@@ -159,6 +161,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
     const [selectedCardUid, setSelectedCardUid] = useState<string | null>(null);
     const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | null>(null);
+    const [pendingFusionChoiceUid, setPendingFusionChoiceUid] = useState<string | null>(null);
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const [meFirstPendingCard, setMeFirstPendingCard] = useState<MeFirstPendingCard | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -431,6 +434,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         if (currentPrompt) {
             setSelectedCardUid(null);
             setSelectedCardMode(null);
+            setPendingFusionChoiceUid(null);
         }
         setDiscardStripSelectedUid(null);
         setMultiSelectedOptionIds(new Set());
@@ -998,13 +1002,15 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             const windowType = responseWindow?.windowType;
 
             // beforeScoringPlayable 随从（影舞者等）：只在 meFirst 窗口可用
-            if (card.type === 'minion') {
+            if (isCardMinionLike(card)) {
                 if (windowType !== 'meFirst') {
                     playDeniedSound();
                     return;
                 }
                 const mDef = getMinionDef(card.defId);
-                if (!mDef?.beforeScoringPlayable) {
+                const fDef = getFusionDef(card.defId);
+                const canBeforeScoring = mDef?.beforeScoringPlayable || fDef?.minionBeforeScoringPlayable;
+                if (!canBeforeScoring) {
                     playDeniedSound();
                     return;
                 }
@@ -1012,22 +1018,30 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 if (selectedCardUid === card.uid) {
                     setSelectedCardUid(null);
                     setSelectedCardMode(null);
+                    setPendingFusionChoiceUid(null);
                 } else {
                     setSelectedCardUid(card.uid);
                     setSelectedCardMode('minion');
+                    setPendingFusionChoiceUid(null);
                 }
                 return;
             }
-            if (card.type !== 'action') {
+            if (!isCardActionLike(card)) {
                 playDeniedSound();
                 return;
             }
-            const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
-            if (cardDef?.subtype !== 'special') {
+            const cardDef = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
+            const subtype = (cardDef as any)?.type === 'fusion'
+                ? (cardDef as FusionCardDef).actionSubtype
+                : (cardDef as ActionCardDef | undefined)?.subtype;
+            if (subtype !== 'special') {
                 playDeniedSound();
                 return;
             }
-            if (cardDef.specialNeedsBase) {
+            const needsBase = (cardDef as any)?.type === 'fusion'
+                ? (cardDef as FusionCardDef).actionSpecialNeedsBase
+                : (cardDef as ActionCardDef | undefined)?.specialNeedsBase;
+            if (needsBase) {
                 // 需要选基地：进入基地选择模式
                 setMeFirstPendingCard({ cardUid: card.uid, defId: card.defId });
             } else {
@@ -1044,7 +1058,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         // 教学模式下检查命令权限
-        const commandType = card.type === 'action' ? SU_COMMANDS.PLAY_ACTION : SU_COMMANDS.PLAY_MINION;
+        const commandType = isCardActionLike(card) ? SU_COMMANDS.PLAY_ACTION : SU_COMMANDS.PLAY_MINION;
         if (!isTutorialCommandAllowed(commandType)) {
             playDeniedSound();
             return;
@@ -1057,6 +1071,20 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         // Normal play logic
+        // Fusion card: ask playAs first (minion vs action)
+        if (card.type === 'fusion') {
+            // toggle: if already selected and no pending choice, clear
+            if (selectedCardUid === card.uid && !pendingFusionChoiceUid) {
+                setSelectedCardUid(null);
+                setSelectedCardMode(null);
+                return;
+            }
+            setPendingFusionChoiceUid(card.uid);
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode(null);
+            return;
+        }
+
         if (card.type === 'action') {
             // 行动额度检查（special 卡不消耗额度，在 Me First! 窗口打出）
             const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
@@ -1089,6 +1117,41 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             }
         }
     }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, responseWindow]);
+
+    const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
+        if (!pendingFusionChoiceUid || !myPlayer) return;
+        const card = myPlayer.hand.find(c => c.uid === pendingFusionChoiceUid);
+        if (!card || card.type !== 'fusion') return;
+        const def = getCardDef(card.defId) as FusionCardDef | undefined;
+        if (!def) return;
+
+        setPendingFusionChoiceUid(null);
+
+        if (playAs === 'minion') {
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode('minion');
+            return;
+        }
+
+        // playAs === 'action'
+        if (phase === 'playCards' && def.actionSubtype !== 'special' && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
+            playDeniedSound();
+            toast(t('ui.action_limit_reached', { defaultValue: '本回合战术额度已用完' }));
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
+            return;
+        }
+
+        if (def.actionSubtype === 'ongoing') {
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode((def.actionOngoingTarget ?? 'base') === 'minion' ? 'ongoing-minion' : 'ongoing');
+            return;
+        }
+
+        dispatch(SU_COMMANDS.PLAY_ACTION, { cardUid: card.uid });
+        setSelectedCardUid(null);
+        setSelectedCardMode(null);
+    }, [pendingFusionChoiceUid, myPlayer, phase, dispatch, t]);
 
     /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
@@ -1764,7 +1827,55 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 isOpponentView={viewMode === 'opponent'}
                             />
 
-
+                            {/* Fusion card playAs selector */}
+                            <AnimatePresence>
+                                {pendingFusionChoiceUid && (
+                                    <motion.div
+                                        className="fixed inset-0 flex items-center justify-center"
+                                        style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        onClick={() => {
+                                            setPendingFusionChoiceUid(null);
+                                            setSelectedCardUid(null);
+                                            setSelectedCardMode(null);
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" />
+                                        <motion.div
+                                            className="relative w-[92vw] max-w-[520px] rounded-lg border-2 border-amber-300/60 bg-[#f3f0e8] shadow-2xl p-4 pointer-events-auto"
+                                            initial={{ y: 16, scale: 0.98 }}
+                                            animate={{ y: 0, scale: 1 }}
+                                            exit={{ y: 10, scale: 0.98 }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div className="font-black text-slate-900 text-lg mb-3">
+                                                {t('ui.fusion_choose_playas', { defaultValue: '选择打出方式' })}
+                                            </div>
+                                            <div className="text-slate-700 text-sm mb-4">
+                                                {t('ui.fusion_choose_playas_desc', { defaultValue: '融合卡可以作为随从或战术打出。请选择本次打出的类型。' })}
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <SmashUpGameButton
+                                                    variant="primary"
+                                                    className="flex-1"
+                                                    onClick={() => confirmFusionPlayAs('minion')}
+                                                >
+                                                    {t('ui.play_as_minion', { defaultValue: '作为随从' })}
+                                                </SmashUpGameButton>
+                                                <SmashUpGameButton
+                                                    variant="secondary"
+                                                    className="flex-1"
+                                                    onClick={() => confirmFusionPlayAs('action')}
+                                                >
+                                                    {t('ui.play_as_action', { defaultValue: '作为战术' })}
+                                                </SmashUpGameButton>
+                                            </div>
+                                        </motion.div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
                             {/* NEW: Deck & Discard Zone */}
                             <DeckDiscardZone

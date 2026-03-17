@@ -341,7 +341,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         }`}>
                                             <div className="rounded shadow-xl overflow-hidden">
                                                 <CardPreview
-                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId } }}
+                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId, cardUid: card.uid } }}
                                                     className="w-[8.5vw] aspect-[0.714] bg-slate-900 rounded"
                                                     alt={name}
                                                 />

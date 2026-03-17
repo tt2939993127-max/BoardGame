@@ -30,6 +30,8 @@ import type {
     SpecialLimitUsedEvent,
     SpecialAfterScoringArmedEvent,
     SpecialAfterScoringConsumedEvent,
+    TriggerQueuedEvent,
+    TriggerConsumedEvent,
     MinionOnBase,
     CardInstance,
     BaseInPlay,
@@ -341,6 +343,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const scoredBase = state.bases[baseIndex];
             if (!scoredBase) return state;
             let newPlayers = { ...state.players };
+            const newBaseDiscard = [...(state.baseDiscard ?? []), scoredBase.defId];
 
             // Property 11: 持续行动卡回各自所有者弃牌堆
             for (const ongoing of scoredBase.ongoingActions) {
@@ -401,6 +404,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 players: newPlayers,
                 bases: newBases,
+                baseDiscard: newBaseDiscard,
                 scoringEligibleBaseIndices: newEligible?.length ? newEligible : undefined,
             };
         }
@@ -446,11 +450,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { playerId, cardUids } = event.payload;
             const player = state.players[playerId];
             const uidSet = new Set(cardUids);
-            // 从手牌和牌库中查找要弃掉的卡
+            // 只允许从手牌弃置（deck → discard 请使用 CARDS_MILLED）
             const discardedFromHand = player.hand.filter(c => uidSet.has(c.uid));
-            const discardedFromDeck = player.deck.filter(c => uidSet.has(c.uid));
             const remainingHand = player.hand.filter(c => !uidSet.has(c.uid));
-            const remainingDeck = player.deck.filter(c => !uidSet.has(c.uid));
             return {
                 ...state,
                 players: {
@@ -458,10 +460,50 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     [playerId]: {
                         ...player,
                         hand: remainingHand,
-                        deck: remainingDeck,
-                        discard: [...player.discard, ...discardedFromHand, ...discardedFromDeck],
+                        discard: [...player.discard, ...discardedFromHand],
                     },
                 },
+            };
+        }
+
+        case SU_EVENTS.CARDS_MILLED: {
+            const { playerId, cardUids } = event.payload as { playerId: PlayerId; cardUids: string[] };
+            const player = state.players[playerId];
+            const uidSet = new Set(cardUids);
+            const milledFromDeck = player.deck.filter(c => uidSet.has(c.uid));
+            const remainingDeck = player.deck.filter(c => !uidSet.has(c.uid));
+            if (milledFromDeck.length === 0) return state;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        deck: remainingDeck,
+                        discard: [...player.discard, ...milledFromDeck],
+                    },
+                },
+            };
+        }
+
+        case SU_EVENTS.TRIGGER_QUEUED: {
+            const { triggers } = (event as TriggerQueuedEvent).payload;
+            if (!Array.isArray(triggers) || triggers.length === 0) return state;
+            const prev = state.triggerQueue ?? [];
+            return {
+                ...state,
+                triggerQueue: [...prev, ...triggers],
+            };
+        }
+
+        case SU_EVENTS.TRIGGER_CONSUMED: {
+            const { triggerId } = (event as TriggerConsumedEvent).payload;
+            const prev = state.triggerQueue ?? [];
+            if (!triggerId || prev.length === 0) return state;
+            const next = prev.filter(t => t.id !== triggerId);
+            return {
+                ...state,
+                triggerQueue: next.length ? next : undefined,
             };
         }
 
@@ -504,13 +546,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     talentUsed: o.ownerId === playerId ? false : o.talentUsed,
                 })),
             }));
-            // 检查沉睡印记：被标记的玩家本回合 actionLimit 设为 0
-            const isSleepMarked = state.sleepMarkedPlayers?.includes(playerId);
-            const newActionLimit = isSleepMarked ? 0 : 1;
-            // 清除该玩家的沉睡标记
-            const newSleepMarked = isSleepMarked
-                ? (state.sleepMarkedPlayers?.filter(p => p !== playerId) ?? [])
-                : state.sleepMarkedPlayers;
+            // POD 沉睡印记：直到施放者下回合开始前，目标玩家 actionLimit = 0
+            const expires = state.sleepMarkExpiresOnTurnNumber;
+            const isExpired = typeof expires === 'number' && turnNumber >= expires;
+            const activeSleepMarked = isExpired ? undefined : state.sleepMarkedPlayers;
+            const activeSleepMoveMarked = isExpired ? undefined : state.sleepMoveMarkedPlayers;
+            const activeExpires = isExpired ? undefined : expires;
+            const newActionLimit = activeSleepMarked?.includes(playerId) ? 0 : 1;
 
             // Smash Up 的 each turn 以“当前玩家回合”为单位。
             // 因此每个玩家回合开始时，都要清空全体玩家在各基地的本回合出牌计数，
@@ -573,7 +615,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 pendingPostScoringActions: undefined,
                 // 清空计分阶段锁定的 eligible 基地列表
                 scoringEligibleBaseIndices: undefined,
-                sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
+                // 清空本回合已使用的持续行动 UID 追踪
+                turnUsedOngoingUids: undefined,
+                sleepMarkedPlayers: activeSleepMarked?.length ? activeSleepMarked : undefined,
+                sleepMoveMarkedPlayers: activeSleepMoveMarked?.length ? activeSleepMoveMarked : undefined,
+                sleepMarkExpiresOnTurnNumber: activeExpires,
                 players: newPlayers,
             };
         }
@@ -851,7 +897,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 if (i !== fromBaseIndex) return b;
                 return { ...b, minions: b.minions.filter(m => m.uid !== minionUid) };
             });
-            // 随从放入所有者弃牌堆
+            // 焦油坑：被消灭后改去向（仍算消灭），放入拥有者牌库底而不是弃牌堆
+            const isTarPits = base?.defId === 'base_tar_pits';
             let newPlayers = { ...state.players };
             const owner = newPlayers[ownerId];
             const destroyedCard: CardInstance = {
@@ -860,10 +907,15 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 type: 'minion',
                 owner: ownerId,
             };
-            newPlayers = {
-                ...newPlayers,
-                [ownerId]: { ...owner, discard: [...owner.discard, destroyedCard] },
-            };
+            newPlayers = isTarPits
+                ? {
+                    ...newPlayers,
+                    [ownerId]: { ...owner, deck: [...owner.deck, destroyedCard] },
+                }
+                : {
+                    ...newPlayers,
+                    [ownerId]: { ...owner, discard: [...owner.discard, destroyedCard] },
+                };
             // Property 12: 附着的行动卡回各自所有者弃牌堆
             if (minion) {
                 for (const attached of minion.attachedActions) {
@@ -1183,6 +1235,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             if (!owner) return state;
 
             let found: CardInstance | undefined;
+            let attachedToDiscard: CardInstance[] | undefined;
             const removeCard = (cards: CardInstance[]): CardInstance[] => {
                 const idx = cards.findIndex(c => c.uid === cardUid);
                 if (idx === -1) return cards;
@@ -1202,6 +1255,15 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     const minion = base.minions.find(m => m.uid === cardUid);
                     if (minion) {
                         if (!found) found = { uid: cardUid, defId, type: 'minion', owner: ownerId };
+                        // 离场弃附属：随从被放入牌库时，其附着行动卡进入各自所有者弃牌堆
+                        if (!attachedToDiscard && minion.attachedActions.length > 0) {
+                            attachedToDiscard = minion.attachedActions.map(a => ({
+                                uid: a.uid,
+                                defId: a.defId,
+                                type: 'action' as const,
+                                owner: a.ownerId,
+                            }));
+                        }
                         return { ...base, minions: base.minions.filter(m => m.uid !== cardUid) };
                     }
                     // 搜索 ongoing 行动卡
@@ -1222,18 +1284,34 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 owner: ownerId,
             };
 
+            let updatedPlayers = {
+                ...state.players,
+                [ownerId]: {
+                    ...owner,
+                    hand: newHand,
+                    discard: newDiscard,
+                    deck: [...newDeck, card],
+                },
+            };
+
+            if (attachedToDiscard && attachedToDiscard.length > 0) {
+                for (const a of attachedToDiscard) {
+                    const p = updatedPlayers[a.owner];
+                    if (!p) continue;
+                    updatedPlayers = {
+                        ...updatedPlayers,
+                        [a.owner]: {
+                            ...p,
+                            discard: [...p.discard, a],
+                        },
+                    };
+                }
+            }
+
             return {
                 ...state,
                 bases: newBases,
-                players: {
-                    ...state.players,
-                    [ownerId]: {
-                        ...owner,
-                        hand: newHand,
-                        discard: newDiscard,
-                        deck: [...newDeck, card],
-                    },
-                },
+                players: updatedPlayers,
             };
         }
 
@@ -1324,6 +1402,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         ...player,
                         hand: remainingHand,
                         deck: newDeck,
+                    },
+                },
+            };
+        }
+
+        case SU_EVENTS.STARTING_HAND_MULLIGAN_USED: {
+            const { playerId, used } = (event as any as { payload: { playerId: PlayerId; used: boolean } }).payload;
+            const player = state.players[playerId];
+            if (!player) return state;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        startingHandMulliganUsed: used ? true : player.startingHandMulliganUsed ?? false,
                     },
                 },
             };
@@ -1443,8 +1537,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         // 基地牌库洗混
         case SU_EVENTS.BASE_DECK_SHUFFLED: {
-            const { newBaseDeckDefIds } = (event as BaseDeckShuffledEvent).payload;
-            return { ...state, baseDeck: newBaseDeckDefIds };
+            const { newBaseDeckDefIds, clearBaseDiscard } = (event as BaseDeckShuffledEvent).payload;
+            return {
+                ...state,
+                baseDeck: newBaseDeckDefIds,
+                baseDiscard: clearBaseDiscard ? [] : state.baseDiscard,
+            };
         }
 
         // special 能力限制组使用记录（每基地每回合一次）

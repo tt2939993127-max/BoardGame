@@ -18,8 +18,9 @@ import {
 } from '../../engine';
 import { createGameEngine } from '../../engine/adapter';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
-import type { ActionCardDef } from './domain/types';
-import { getCardDef, getMinionDef } from './data/cards';
+import type { ActionCardDef, FusionCardDef } from './domain/types';
+import { getCardDef, getFusionDef, getMinionDef } from './data/cards';
+import { isCardActionLike, isCardMinionLike } from './domain/utils';
 import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
@@ -73,18 +74,24 @@ const systems: EngineSystem<SmashUpCore>[] = [
             
             // 检查 special 行动卡
             const hasSpecialAction = player.hand.some(c => {
-                if (c.type !== 'action') return false;
-                const def = getCardDef(c.defId) as ActionCardDef | undefined;
-                if (def?.subtype !== 'special') return false;
+                if (!isCardActionLike(c)) return false;
+                const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
+                if (!def) return false;
+                const subtype = (def as any).type === 'fusion'
+                    ? (def as FusionCardDef).actionSubtype
+                    : (def as ActionCardDef).subtype;
+                if (subtype !== 'special') return false;
                 
                 // 检查 specialTiming 是否匹配窗口类型
-                const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
+                const cardTiming = (def as any).type === 'fusion'
+                    ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
+                    : ((def as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
                 if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') return false;
                 if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') return false;
                 
                 // 特殊检查：便衣忍者需要手牌中有随从才能使用
                 if (c.defId === 'ninja_hidden_ninja') {
-                    return player.hand.some(card => card.type === 'minion');
+                    return player.hand.some(isCardMinionLike);
                 }
                 
                 // 其他 special 卡默认可用
@@ -99,9 +106,10 @@ const systems: EngineSystem<SmashUpCore>[] = [
             
             // 检查 beforeScoringPlayable 随从（如影舞者）- 只在 meFirst 窗口可用
             const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
-                if (c.type !== 'minion') return false;
+                if (!isCardMinionLike(c)) return false;
                 const def = getMinionDef(c.defId);
-                if (def?.beforeScoringPlayable === true) {
+                const fusionDef = getFusionDef(c.defId);
+                if (def?.beforeScoringPlayable === true || fusionDef?.minionBeforeScoringPlayable === true) {
                     console.log('[hasRespondableContent] Found beforeScoringPlayable minion:', {
                         playerId,
                         windowType,
