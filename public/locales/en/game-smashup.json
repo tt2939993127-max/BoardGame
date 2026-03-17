@@ -2020,47 +2020,47 @@
     },
     "miskatonic_librarian_pod": {
       "name": "Librarian",
-      "abilityText": "Talent: Discard a Madness card. If you do, draw a card."
+      "abilityText": "Talent: Draw a Madness card OR play a Madness card from your hand as an extra action."
     },
     "miskatonic_psychologist_pod": {
       "name": "Psychologist",
-      "abilityText": "You may return a Madness card from your hand or discard pile to the Madness deck."
+      "abilityText": "Return a Madness card from your hand or discard pile to the Madness deck OR draw a Madness card from your discard pile."
     },
     "miskatonic_researcher_pod": {
       "name": "Researcher",
       "abilityText": "You may draw a Madness card."
     },
-    "miskatonic_book_of_iter_the_unseen_pod": {
-      "name": "Jinkies!",
-      "effectText": "Look at any player's hand. Draw a Madness card and play two extra actions."
-    },
-    "miskatonic_it_might_just_work_pod": {
-      "name": "It Just Might Work",
-      "effectText": "Discard two Madness cards to destroy a minion."
-    },
-    "miskatonic_thing_on_the_doorstep_pod": {
-      "name": "Old Man Jenkins!?",
-      "effectText": "Search your deck for a minion or action and add it to your hand. Draw a Madness card. Shuffle your deck."
-    },
-    "miskatonic_lost_knowledge_pod": {
-      "name": "Gate to Beyond",
-      "effectText": "If you have two Madness cards in hand, reveal them to draw two cards and play an extra minion and an extra action this turn."
-    },
-    "miskatonic_mandatory_reading_pod": {
-      "name": "Things Best Not Known",
-      "effectText": "Choose a player. That player draws two Madness cards. You may play an extra action."
-    },
-    "miskatonic_psychological_profiling_pod": {
-      "name": "That's So Crazy...",
-      "effectText": "Draw two cards and draw a Madness card."
-    },
-    "miskatonic_those_meddling_kids_pod": {
-      "name": "Those Meddling Kids",
-      "effectText": "Destroy any number of actions on a base."
+    "miskatonic_old_man_jenkins_pod": {
+      "name": "\"Old Man Jenkins?\"",
+      "effectText": "Special: Before a base scores, destroy a minion with the highest power there."
     },
     "miskatonic_field_trip_pod": {
       "name": "Field Trip",
-      "effectText": "Place any number of cards from your hand on the bottom of your deck and draw a card for each card placed."
+      "effectText": "Place any number of cards from your hand on the bottom of your deck to draw that number plus one cards."
+    },
+    "miskatonic_eldritch_gate_pod": {
+      "name": "Eldritch Gate",
+      "effectText": "Play on a base. Talent: Draw a Madness card. You may play an extra minion here."
+    },
+    "miskatonic_jinkies_pod": {
+      "name": "Jinkies!",
+      "effectText": "Return up to two Madness cards from your hand and/or discard pile to the Madness deck."
+    },
+    "miskatonic_thats_so_crazy_pod": {
+      "name": "That's So Crazy...",
+      "effectText": "Draw a Madness card. Each of your minions gains +1 power until the end of the turn. You may play an extra action."
+    },
+    "miskatonic_it_just_might_work_pod": {
+      "name": "...It Just Might Work",
+      "effectText": "Discard up to two Madness cards to give your minions +1 power until the end of the turn for each."
+    },
+    "miskatonic_things_best_not_known_pod": {
+      "name": "Things Best Not Known",
+      "effectText": "Special: Before a base scores, draw up to three Madness cards. Give a minion there +2 power until the end of the turn for each Madness card drawn."
+    },
+    "miskatonic_those_meddling_kids_pod": {
+      "name": "Those Meddling Kids",
+      "effectText": "Destroy any number of actions on a single base OR draw a Madness card and play an extra action."
     },
     "ninja_master_pod": {
       "name": "Ninja Master",
