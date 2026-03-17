@@ -171,6 +171,8 @@ const resetMatchStorage = async (context: BrowserContext | Page) => {
 
     const newGuestId = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     localStorage.removeItem('owner_active_match');
+    localStorage.removeItem('hud_fab_position');
+    localStorage.removeItem('hud_fab_offset');
     Object.keys(localStorage).forEach((key) => {
       if (key.startsWith('match_creds_')) {
         localStorage.removeItem(key);
@@ -2298,6 +2300,8 @@ test.describe('SummonerWars', () => {
     await hostContext.addInitScript(() => {
       (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
       (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
     });
     await blockAudioRequests(hostContext);
     await mockSummonerWarsMapImage(hostContext);
