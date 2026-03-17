@@ -34,13 +34,15 @@ import {
     getCurrentPlayerId,
 } from './types';
 import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './ongoingModifiers';
-import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
+import { collectTriggers, fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
+import { maybeResolveReactionQueue } from './reactionQueue';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
 import { drawCards } from './utils';
 import { countMadnessCards, madnessVpPenalty, fireMinionPlayedTriggers } from './abilityHelpers';
-import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
+import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility, hasBaseAbility } from './baseAbilities';
+import { collectBaseAbilityTriggers, collectExtendedBaseAbilityTriggers } from './baseAbilityQueue';
 import { openMeFirstWindow, openAfterScoringWindow, buildBaseTargetOptions, isSpecialLimitBlocked } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -136,7 +138,7 @@ export function scoreOneBase(
     
     
     if (!alreadyTriggeredBeforeScoring) {
-        const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
+        const queuedBefore = collectTriggers(core, 'beforeScoring', {
             state: core,
             matchState: ms,
             playerId: pid,
@@ -144,8 +146,18 @@ export function scoreOneBase(
             random: rng,
             now,
         });
-        events.push(...beforeScoringEvents.events);
-        if (beforeScoringEvents.matchState) ms = beforeScoringEvents.matchState;
+        if (queuedBefore) {
+            events.push(queuedBefore);
+            core = reduce(core, queuedBefore as unknown as SmashUpEvent);
+        }
+
+        // Try to resolve reaction queue now so scoreOneBase can halt on interactions.
+        const rq0 = maybeResolveReactionQueue(ms ? { ...ms, core } : ({ core, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq0) {
+            events.push(...rq0.events);
+            ms = rq0.state;
+            core = rq0.state.core;
+        }
         
         // 发射事件标记此基地已触发过 beforeScoring
         const markEvent = {
@@ -184,22 +196,27 @@ export function scoreOneBase(
         updatedCore = reduce(updatedCore, evt as SmashUpEvent);
     }
 
-    // 触发 beforeScoring 基地能力（用 reduce 后的 core，包含 ongoing 效果）
-    const beforeCtx = {
-        state: updatedCore,
-        matchState: ms,
+    // 触发 beforeScoring 基地能力（入队，按 Wiki 同时触发排序解决）
+    const queuedBeforeBase = collectBaseAbilityTriggers({
+        core: updatedCore,
+        timing: 'beforeScoring',
+        ownerPlayerId: pid,
         baseIndex,
-        baseDefId: base.defId,
-        playerId: pid,
         now,
-    };
-    const beforeResult = triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx);
-    events.push(...beforeResult.events);
-    if (beforeResult.matchState) ms = beforeResult.matchState;
-
-    // 基地能力也可能产生事件（如 VP_AWARDED），继续 reduce
-    for (const evt of beforeResult.events) {
-        updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+    });
+    if (queuedBeforeBase) {
+        events.push(queuedBeforeBase as unknown as SmashUpEvent);
+        updatedCore = reduce(updatedCore, queuedBeforeBase as unknown as SmashUpEvent);
+        if (ms) ms = { ...ms, core: updatedCore };
+        const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        }
+        if (ms?.sys?.interaction?.current) {
+            return { events, newBaseDeck: baseDeck, matchState: ms };
+        }
     }
 
     // 计算排名（使用 reduce 后的 core，包含 beforeScoring 的临时力量修正 + ongoing 卡力量贡献）
@@ -234,18 +251,28 @@ export function scoreOneBase(
     // 触发 onMinionDiscardedFromBase（基地结算弃置，非消灭）
     // 在 BASE_SCORED 后、afterScoring 前触发，此时随从仍在 core 中（reducer 尚未执行）
     for (const m of base.minions) {
-        const discardResult = fireTriggers(core, 'onMinionDiscardedFromBase', {
+        const queued = collectTriggers(core, 'onMinionDiscardedFromBase', {
             state: core,
             matchState: ms,
             playerId: m.controller,
             baseIndex,
             triggerMinionUid: m.uid,
             triggerMinionDefId: m.defId,
+            triggerMinion: m,
             random: rng,
             now,
         });
-        events.push(...discardResult.events);
-        if (discardResult.matchState) ms = discardResult.matchState;
+        if (queued) {
+            events.push(queued);
+            updatedCore = reduce(updatedCore, queued as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+            const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+            if (rq) {
+                events.push(...rq.events);
+                ms = rq.state;
+                updatedCore = rq.state.core;
+            }
+        }
     }
 
     // 记录 afterScoring 前的交互状态，用于判断 afterScoring 是否新增了交互
@@ -311,55 +338,58 @@ export function scoreOneBase(
             updatedCore = reduce(updatedCore, consumedEvt);
         }
         
-        // 触发 afterScoring 基地能力（使用 reduce 后的 core，包含 beforeScoring 效果 + ARMED special 效果）
-        const afterCtx = {
-            state: updatedCore,
-            matchState: ms,
+        // Queue afterScoring base ability + ongoing afterScoring triggers into the same reaction window,
+        // so moving/destroying one trigger's source doesn't prevent the others from being queued.
+        const queuedAfterBase = collectBaseAbilityTriggers({
+            core: updatedCore,
+            timing: 'afterScoring',
+            ownerPlayerId: pid,
             baseIndex,
-            baseDefId: base.defId,
-            playerId: pid,
             rankings,
             now,
-        };
-        afterResult = triggerBaseAbility(base.defId, 'afterScoring', afterCtx);
-        events.push(...afterResult.events);
-        if (afterResult.matchState) ms = afterResult.matchState;
+        });
+        if (queuedAfterBase) {
+            events.push(queuedAfterBase as unknown as SmashUpEvent);
+            updatedCore = reduce(updatedCore, queuedAfterBase as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+        }
 
-        // 发射事件标记此基地已触发过 afterScoring
+        const queuedAfterOngoing = collectTriggers(updatedCore, 'afterScoring', {
+            state: updatedCore,
+            playerId: pid,
+            baseIndex,
+            rankings,
+            matchState: ms,
+            random: rng,
+            now,
+        });
+        if (queuedAfterOngoing) {
+            events.push(queuedAfterOngoing);
+            updatedCore = reduce(updatedCore, queuedAfterOngoing as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+        }
+
+        // Mark afterScoring as triggered immediately (even if it creates an interaction),
+        // so re-entering scoreOneBase after resolving an interaction won't re-queue it.
         const markEvent = {
             type: SU_EVENT_TYPES.AFTER_SCORING_TRIGGERED,
             payload: { baseIndex },
             timestamp: now,
         };
         events.push(markEvent as unknown as SmashUpEvent);
-
-        // 立即 reduce 到本地 core 副本，确保后续调用 scoreOneBase 时能看到"已触发"标记
         updatedCore = reduce(updatedCore, markEvent as unknown as SmashUpEvent);
-    }
+        if (ms) ms = { ...ms, core: updatedCore };
 
-    // 将 afterScoring 基地能力产生的事件 reduce 到 core，
-    // 确保 ongoing afterScoring 触发器使用最新状态。
-    // 修复时序问题：寺庙 afterScoring 把随从放牌库底后，
-    // 大副 afterScoring 不应再看到该随从在场上。
-    let afterScoringCore = updatedCore;
-    for (const evt of afterResult.events) {
-        afterScoringCore = reduce(afterScoringCore, evt as SmashUpEvent);
+        const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+        if (rq) {
+            events.push(...rq.events);
+            ms = rq.state;
+            updatedCore = rq.state.core;
+        }
+        // NOTE: If an interaction was created here (e.g. reaction_queue_choose_next),
+        // we must still continue so scoreOneBase can defer BASE_CLEARED/BASE_REPLACED into continuationContext.
     }
-
-    // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
-    // 使用 reduce 后的 core，包含基地能力的效果（如随从已被放入牌库底）
-    
-    const afterScoringEvents = fireTriggers(afterScoringCore, 'afterScoring', {
-        state: afterScoringCore,
-        playerId: pid,
-        baseIndex,
-        rankings,
-        matchState: ms,
-        random: rng,
-        now,
-    });
-    events.push(...afterScoringEvents.events);
-    if (afterScoringEvents.matchState) ms = afterScoringEvents.matchState;
+    const afterScoringCore = updatedCore;
 
     // 判断 afterScoring 是否新增了交互
     const interactionAfter = ms?.sys?.interaction?.current?.id ?? null;
@@ -435,6 +465,24 @@ export function scoreOneBase(
     postScoringEvents.push(clearEvt);
 
     // 替换基地
+    if (newBaseDeck.length === 0) {
+        // 基地牌库见底：将基地弃牌堆洗回牌库（并把本次计分的旧基地也计入弃牌堆后一起洗回）
+        // 注意：此处尚未 reduce BASE_CLEARED，所以 core.baseDiscard 里不包含 base.defId，需要手动加入。
+        const pool = [...(core.baseDiscard ?? []), base.defId];
+        const rebuiltDeck = (random?.shuffle ? random.shuffle(pool) : [...pool]);
+        const shuffleEvt: BaseDeckShuffledEvent = {
+            type: SU_EVENTS.BASE_DECK_SHUFFLED,
+            payload: {
+                newBaseDeckDefIds: rebuiltDeck,
+                reason: 'base_deck_empty_reshuffle_discard',
+                clearBaseDiscard: true,
+            },
+            timestamp: now,
+        };
+        postScoringEvents.push(shuffleEvt);
+        newBaseDeck = rebuiltDeck;
+    }
+
     if (newBaseDeck.length > 0) {
         const newBaseDefId = newBaseDeck[0];
         const replaceEvt: BaseReplacedEvent = {
@@ -450,17 +498,26 @@ export function scoreOneBase(
         newBaseDeck = newBaseDeck.slice(1);
 
         // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
-        const revealCtx = {
-            state: core,
-            matchState: ms,
+        // 改为入队，允许与其他同时触发反应统一排序（optional 按顺时针）
+        const queuedReveal = collectExtendedBaseAbilityTriggers({
+            core,
+            timing: 'onBaseRevealed',
+            ownerPlayerId: pid,
             baseIndex,
-            baseDefId: newBaseDefId,
-            playerId: pid,
             now,
-        };
-        const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
-        postScoringEvents.push(...revealResult.events);
-        if (revealResult.matchState) ms = revealResult.matchState;
+        });
+        if (queuedReveal) {
+            postScoringEvents.push(queuedReveal as unknown as SmashUpEvent);
+            const coreForQueue = reduce(core, queuedReveal as unknown as SmashUpEvent);
+            const msForQueue = ms ? { ...ms, core: coreForQueue } : ({ core: coreForQueue, sys: { interaction: { current: undefined, queue: [] } } } as any);
+            const rq = maybeResolveReactionQueue(msForQueue, rng, now);
+            if (rq) {
+                postScoringEvents.push(...rq.events);
+                ms = rq.state;
+            } else {
+                ms = msForQueue;
+            }
+        }
     }
 
     // 关键：仅当 afterScoring 新增了交互时（如刚柔流寺庙平局选择、忍者道场消灭随从等），
@@ -562,8 +619,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             updatedCore = reduce(updatedCore, evt as SmashUpEvent);
         }
 
-        const currentBaseCompleted = !currentState.sys.interaction?.current
-            && events.some((evt: SmashUpEvent) =>
+        const currentBaseCompleted = events.some((evt: SmashUpEvent) =>
                 evt.type === SU_EVENTS.BASE_SCORED
                 && (evt.payload as { baseIndex?: number } | undefined)?.baseIndex === baseIndex
             );
@@ -784,6 +840,8 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
         currentPlayerIndex: 0,
         bases: activeBases,
         baseDeck,
+        baseDiscard: [],
+        triggerQueue: undefined,
         turnNumber: 1,
         nextUid,
         gameResult: undefined,
@@ -823,20 +881,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         if (from === 'endTurn') {
             const events: SmashUpEvent[] = [];
 
-            // 触发 ongoing 效果 onTurnEnd（如 dunwich_horror 回合结束消灭自身、ninja_assassination 消灭目标）
-            const onTurnEndEvents = fireTriggers(core, 'onTurnEnd', {
+            // 触发 ongoing 效果 onTurnEnd（改为入队，按 Wiki 同时触发排序解决）
+            const queuedTurnEnd = collectTriggers(core, 'onTurnEnd', {
                 state: core,
+                matchState: state,
                 playerId: pid,
                 random,
                 now,
             });
-
-            // 关键修复：onTurnEnd 触发器产生的 MINION_DESTROYED 事件必须经过保护过滤
-            // （如伊万将军保护己方随从不被对手消灭），以及 onDestroy 触发链处理
-            if (onTurnEndEvents.events.length > 0) {
-                const ms = onTurnEndEvents.matchState ?? state;
-                const afterDestroyMove = processDestroyMoveCycle(onTurnEndEvents.events, ms, pid, random, now);
-                events.push(...afterDestroyMove.events);
+            if (queuedTurnEnd) {
+                events.push(queuedTurnEnd);
+                // Reduce queued event into a temporary core view so the resolver can see the pending queue immediately.
+                const coreForQueue = reduce(core, queuedTurnEnd as unknown as SmashUpEvent);
+                const msForQueue = { ...state, core: coreForQueue };
+                const rq = maybeResolveReactionQueue(msForQueue, random, now);
+                if (rq) {
+                    // 关键：onTurnEnd 触发器可能产生 MINION_DESTROYED 等，需要经过 destroy→move 循环后处理
+                    const afterDestroyMove = processDestroyMoveCycle(rq.events, rq.state, pid, random, now);
+                    events.push(...afterDestroyMove.events);
+                }
             }
 
             // 切换到下一个玩家
@@ -933,8 +996,25 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     events.push(clearEvt);
                     
                     // 替换基地
-                    if (core.baseDeck.length > 0) {
-                        const newBaseDefId = core.baseDeck[0];
+                    const coreNow = state.core;
+                    let deckForReplacement = coreNow.baseDeck;
+                    if (deckForReplacement.length === 0) {
+                        const pool = [...(coreNow.baseDiscard ?? []), currentBase.defId];
+                        deckForReplacement = (random?.shuffle ? random.shuffle(pool) : [...pool]);
+                        const shuffleEvt: BaseDeckShuffledEvent = {
+                            type: SU_EVENTS.BASE_DECK_SHUFFLED,
+                            payload: {
+                                newBaseDeckDefIds: deckForReplacement,
+                                reason: 'base_deck_empty_reshuffle_discard',
+                                clearBaseDiscard: true,
+                            },
+                            timestamp: now,
+                        };
+                        events.push(shuffleEvt);
+                    }
+
+                    if (deckForReplacement.length > 0) {
+                        const newBaseDefId = deckForReplacement[0];
                         const replaceEvt: BaseReplacedEvent = {
                             type: SU_EVENTS.BASE_REPLACED,
                             payload: {
@@ -948,7 +1028,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         
                         // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
                         const revealCtx = {
-                            state: core,
+                            state: coreNow,
                             matchState: state,
                             baseIndex: scoredBaseIndex,
                             baseDefId: newBaseDefId,
@@ -1244,27 +1324,53 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             };
             events.push(turnStarted);
 
-            // 触发基地 onTurnStart 能力（如拉莱耶：消灭随从获1VP、蘑菇王国：移动对手随从）
-            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now, undefined, currentMatchState);
-            events.push(...baseResult.events);
-            // 不可变传播 matchState（onTurnStart 基地能力可能创建 Interaction）
-            if (baseResult.matchState) {
-                currentMatchState = baseResult.matchState;
-                hasSysUpdate = true;
+            // 触发基地 onTurnStart 能力（改为入队，按 Wiki 同时触发排序解决）
+            for (let bi = 0; bi < core.bases.length; bi++) {
+                const b = core.bases[bi];
+                if (!b) continue;
+                if (!hasBaseAbility(b.defId, 'onTurnStart')) continue;
+                const queuedBase = collectBaseAbilityTriggers({
+                    core,
+                    timing: 'onTurnStart',
+                    ownerPlayerId: nextPlayerId,
+                    baseIndex: bi,
+                    now,
+                });
+                if (queuedBase) {
+                    events.push(queuedBase as unknown as SmashUpEvent);
+                    const coreForQueue = reduce(core, queuedBase as unknown as SmashUpEvent);
+                    currentMatchState = { ...currentMatchState, core: coreForQueue };
+                    const rq = maybeResolveReactionQueue(currentMatchState, random, now);
+                    if (rq) {
+                        events.push(...rq.events);
+                        currentMatchState = rq.state;
+                        hasSysUpdate = true;
+                    } else {
+                        hasSysUpdate = true;
+                    }
+                }
             }
 
-            // 触发 ongoing 效果 onTurnStart
-            const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {
+            // 触发 ongoing 效果 onTurnStart（改为入队，按 Wiki 同时触发排序解决）
+            const queuedTurnStart = collectTriggers(core, 'onTurnStart', {
                 state: core,
                 matchState: currentMatchState,
                 playerId: nextPlayerId,
                 random,
                 now,
             });
-            events.push(...onTurnStartEvents.events);
-            if (onTurnStartEvents.matchState) {
-                currentMatchState = onTurnStartEvents.matchState;
-                hasSysUpdate = true;
+            if (queuedTurnStart) {
+                events.push(queuedTurnStart);
+                const coreForQueue = reduce(core, queuedTurnStart as unknown as SmashUpEvent);
+                currentMatchState = { ...currentMatchState, core: coreForQueue };
+                const rq = maybeResolveReactionQueue(currentMatchState, random, now);
+                if (rq) {
+                    events.push(...rq.events);
+                    currentMatchState = rq.state;
+                    hasSysUpdate = true;
+                } else {
+                    hasSysUpdate = true;
+                }
             }
 
             // 有 sys 变更时返回 PhaseEnterResult，否则返回纯事件数组
@@ -1658,7 +1764,25 @@ function postProcessSystemEvents(
         finalDerived = afterDerivedAffect.events;
     }
 
-    return { events: [...afterAffect.events, ...finalDerived], matchState: ms };
+    const combined = [...afterAffect.events, ...finalDerived];
+
+    // === Global reaction queue resolution (Wiki simultaneous ordering) ===
+    // Important: TRIGGER_QUEUED/CONSUMED are domain events; they are not reduced into ms.core yet at this stage.
+    // We must apply them to a temporary core view so the resolver can see the pending queue immediately.
+    let coreForQueue = ms.core;
+    for (const e of combined) {
+        if (e.type === SU_EVENTS.TRIGGER_QUEUED || e.type === SU_EVENTS.TRIGGER_CONSUMED) {
+            coreForQueue = reduce(coreForQueue, e);
+        }
+    }
+    const msForQueue = coreForQueue === ms.core ? ms : { ...ms, core: coreForQueue };
+
+    const rq = maybeResolveReactionQueue(msForQueue, random, now);
+    if (rq) {
+        return { events: [...combined, ...rq.events], matchState: rq.state };
+    }
+
+    return { events: combined, matchState: ms };
 }
 
 // ============================================================================

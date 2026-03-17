@@ -42,6 +42,11 @@ export const SU_EVENTS = defineEvents({
   
   'su:cards_drawn': { audio: 'immediate', sound: CARD_DRAW_KEY },
   'su:cards_discarded': { audio: 'immediate', sound: CARD_DISCARD_KEY },
+  // 从牌库顶“磨牌/弃牌”（mill）：牌从 deck 进入 discard（不是手牌弃置）
+  'su:cards_milled': { audio: 'immediate', sound: CARD_DISCARD_KEY },
+  // 触发队列（静默）：用于实现 Wiki 的同时触发排序/见证规则
+  'su:trigger_queued': 'silent',
+  'su:trigger_consumed': 'silent',
   'su:card_removed_from_deck': 'silent',
   'su:card_to_deck_top': { audio: 'immediate', sound: CARD_SCROLL_KEY },
   'su:card_to_deck_bottom': { audio: 'immediate', sound: CARD_SCROLL_KEY },
@@ -104,6 +109,7 @@ export const SU_EVENTS = defineEvents({
 
   // ========== 静默事件 ==========
   'su:all_factions_selected': 'silent', // 所有阵营选择完成（内部状态）
+  'su:starting_hand_mulligan_used': 'silent',
 });
 
 // 导出事件类型常量（用于 emit 和类型定义）
@@ -114,6 +120,9 @@ export const SU_EVENT_TYPES = {
   VP_AWARDED: SU_EVENTS['su:vp_awarded'].type,
   CARDS_DRAWN: SU_EVENTS['su:cards_drawn'].type,
   CARDS_DISCARDED: SU_EVENTS['su:cards_discarded'].type,
+  CARDS_MILLED: SU_EVENTS['su:cards_milled'].type,
+  TRIGGER_QUEUED: SU_EVENTS['su:trigger_queued'].type,
+  TRIGGER_CONSUMED: SU_EVENTS['su:trigger_consumed'].type,
   CARD_REMOVED_FROM_DECK: SU_EVENTS['su:card_removed_from_deck'].type,
   TURN_STARTED: SU_EVENTS['su:turn_started'].type,
   TURN_ENDED: SU_EVENTS['su:turn_ended'].type,
@@ -124,6 +133,7 @@ export const SU_EVENT_TYPES = {
   LIMIT_MODIFIED: SU_EVENTS['su:limit_modified'].type,
   FACTION_SELECTED: SU_EVENTS['su:faction_selected'].type,
   ALL_FACTIONS_SELECTED: SU_EVENTS['su:all_factions_selected'].type,
+  STARTING_HAND_MULLIGAN_USED: SU_EVENTS['su:starting_hand_mulligan_used'].type,
   MINION_DESTROYED: SU_EVENTS['su:minion_destroyed'].type,
   MINION_MOVED: SU_EVENTS['su:minion_moved'].type,
   MINION_METADATA_UPDATED: SU_EVENTS['su:minion_metadata_updated'].type,

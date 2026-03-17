@@ -39,6 +39,8 @@ import { registerVampireAbilities, registerVampireInteractionHandlers } from './
 import { registerGiantAntAbilities, registerGiantAntInteractionHandlers } from './giant_ants';
 import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
+import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
+import { registerMulliganInteractionHandlers } from '../domain/mulliganHandlers';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry, registerPodPowerModifierAliases } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain/ongoingEffects';
@@ -85,6 +87,10 @@ export function initAllAbilities(): void {
 
     // 多基地计分 Prompt 继续函数
     registerMultiBaseScoringInteractionHandler();
+
+    // 全局反应队列（同时触发排序）
+    registerReactionQueueInteractionHandlers();
+    registerMulliganInteractionHandlers();
 
     // 扩展派系
     registerGhostAbilities();

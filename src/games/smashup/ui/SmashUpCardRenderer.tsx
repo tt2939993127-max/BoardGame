@@ -36,6 +36,7 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
     // 渲染器必须拿到具体的 defId 才能读取中文字典和做图集覆写
     // 由于只有 renderer 类型的 previewRef 能任意传参，我们假设这里的 payload 透传了 defId
     const defId = previewRef.type === 'renderer' ? (previewRef.payload?.defId as string | undefined) : undefined;
+    const cardUid = previewRef.type === 'renderer' ? (previewRef.payload?.cardUid as string | undefined) : undefined;
     const disableHoverOverlay = previewRef.type === 'renderer' ? (previewRef.payload?.disableHoverOverlay as boolean | undefined) ?? false : false;
 
     // 默认回退为原始数据的图集坐标，如果没有配置过的话
@@ -103,6 +104,18 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
                 finalAtlasId = mapped.atlasId;
                 finalIndex = mapped.index;
             }
+        }
+    }
+
+    // Pixie POD：同一 defId 有两张不同卡图（tts_atlas_6 第二排第 4/5 张：index 8/9）
+    // 当渲染器拿到了 cardUid（来自手牌/弃牌/展示等真实实例）时，按 uid 稳定分配两张图。
+    if (defId === 'trickster_pixie_pod') {
+        finalAtlasId = 'tts_atlas_6';
+        if (cardUid) {
+            const sum = cardUid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            finalIndex = 8 + (sum % 2); // 8 或 9
+        } else {
+            finalIndex = 8;
         }
     }
 
