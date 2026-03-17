@@ -12,6 +12,7 @@ import {
     buildAbilityFeedback,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
+    createSkipOption,
     destroyMinion,
     moveMinion,
     removePowerCounter,
@@ -36,9 +37,9 @@ interface MinionCandidate {
 
 type MinionTargetChoiceValue = { minionUid: string; baseIndex: number; defId: string };
 type WhoWantsControlChoiceValue =
-    | { skip: true; confirm: true; displayMode: 'button' }
-    | { skip: true; cancel: true; displayMode: 'button' };
-type KindOfMagicControlChoiceValue = { skip: true; cancel: true; displayMode: 'button' };
+    | { skip: true; confirm: true }
+    | { skip: true; cancel: true };
+type KindOfMagicControlChoiceValue = { skip: true; cancel: true };
 type DronePreventChoiceValue =
     | { skip: true }
     | { droneUid: string; droneBaseIndex: number; minionUid: string; minionDefId: string };
@@ -292,7 +293,7 @@ export function registerGiantAntAbilities(): void {
     registerAbility('giant_ant_who_wants_to_live_forever_pod', 'onPlay', giantAntWhoWantsToLiveForeverPod);
     registerAbility('giant_ant_a_kind_of_magic_pod', 'onPlay', giantAntAKindOfMagicPod);
     registerAbility('giant_ant_we_will_rock_you_pod', 'onPlay', giantAntWeWillRockYouPod);
-    registerAbility('giant_ant_claim_the_prize_pod', 'onPlay', giantAntGimmeThePrizePod);
+    registerAbility('giant_ant_gimme_the_prize_pod', 'onPlay', giantAntGimmeThePrizePod);
     registerAbility('giant_ant_under_pressure_pod', 'special', giantAntUnderPressure); // 复用基础版
     registerAbility('giant_ant_headlong_pod', 'onPlay', giantAntHeadlong); // 复用基础版
     registerAbility('giant_ant_we_are_the_champions_pod', 'special', giantAntWeAreTheChampions); // 复用基础版
@@ -491,7 +492,7 @@ const handleDronePreventDestroy: IH = (state, playerId, value, interactionData, 
 
     return {
         state,
-        events: [removePowerCounter(selected.droneUid, selected.droneBaseIndex, 1, 'giant_ant_drone', timestamp)],
+        events: [removePowerCounter(selected.droneUid, selected.droneBaseIndex, 1, drone.defId, timestamp)],
     };
 };
 
@@ -914,7 +915,7 @@ function createWhoWantsToLiveForeverInteraction(
         data: {
                 ...interaction.data,
                 continuationContext: context,
-                optionsGenerator: (nextState, data) => {
+                optionsGenerator: (nextState: MatchState<SmashUpCore>, data: unknown) => {
                     const cc = ((data as typeof interaction.data & { continuationContext?: WhoWantsContext }).continuationContext) ?? context;
                     return buildWhoWantsToLiveForeverOptions(nextState.core, playerId, cc.removedTotal);
                 },
@@ -1805,11 +1806,8 @@ const handleKillerQueenPodChoose: IH = (state, playerId, value, interactionData,
     const events: SmashUpEvent[] = [];
 
     if (v.action === 'search_deck') {
-        const player = state.core.players[playerId];
-        if (!player) return { state, events: [] };
-
         const { events: revealEvents, picked } = revealAndPickFromDeck({
-            player,
+            state: state.core,
             playerId,
             predicate: (card) => {
                 if (card.type !== 'minion') return false;
@@ -1823,6 +1821,7 @@ const handleKillerQueenPodChoose: IH = (state, playerId, value, interactionData,
             revealTo: playerId,
             reason: 'giant_ant_killer_queen_pod_search',
             now: timestamp,
+            random,
         });
 
         events.push(...revealEvents);
@@ -1913,7 +1912,6 @@ const handleKillerQueenPodSearch: IH = (state, playerId, value, interactionData,
             baseIndex: context.queenBaseIndex,
             power: def.power,
             fromDeck: true,
-            triggerOnTurnStart: false,
         },
         timestamp,
     };
@@ -2047,7 +2045,6 @@ const handleWorkerPodReplay: IH = (state, playerId, value, interactionData, _ran
             fromDiscard: true,
             consumesNormalLimit: false,
             discardPlaySourceId: 'giant_ant_worker_pod',
-            triggerOnTurnStart: false,
         },
         timestamp,
     };
@@ -2081,7 +2078,12 @@ function giantAntWorkerPodReplayTrigger(
         playerId,
         '工蚁 POD：是否从弃牌堆将其打到另一个基地？',
         [
-            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const, _source: 'static' as const },
+            {
+                id: 'skip',
+                label: '跳过',
+                value: { baseIndex: -1 },
+                displayMode: 'button' as const,
+            },
             ...buildBaseTargetOptions(baseCandidates, state),
         ],
         {
@@ -2240,7 +2242,7 @@ function giantAntDronePreventTrigger(ctx: TriggerContext): SmashUpEvent[] | { ev
     if (!ctx.matchState) return [];
 
     const options = [
-        { id: 'skip', label: '不防止消灭', value: { skip: true }, _source: 'static' as const , displayMode: 'button' as const },
+        createSkipOption('不防止消灭'),
         ...drones.map((d, i) => ({
             id: `drone-${i}`,
             label: `移除雄蜂的1个指示物（基地 ${d.baseIndex + 1}）来防止消灭`,
