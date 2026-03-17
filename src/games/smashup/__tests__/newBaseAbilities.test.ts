@@ -19,11 +19,13 @@ import {
     triggerBaseAbility,
     triggerExtendedBaseAbility,
 } from '../domain/baseAbilities';
+import { processDestroyTriggers } from '../domain/reducer';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { SmashUpCore, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { triggerBaseAbilityWithMS, getInteractionsFromResult, makeMatchState } from './helpers';
+import { reduce } from '../domain/reduce';
 
 beforeAll(() => {
     initAllAbilities();
@@ -173,6 +175,33 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
+
+    it('同一张牌一次性消灭多个随从只给 1VP（按 FAQ，管线层 batch）', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_the_field_of_honor',
+                minions: [
+                    { uid: 'victim-1', defId: 'v1', controller: '1', owner: '1', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-2', defId: 'v2', controller: '1', owner: '1', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                ],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': { id: '0', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+                '1': { id: '1', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            } as any,
+        });
+        const ms = makeMatchState(core);
+        const events = [
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-1', minionDefId: 'v1', fromBaseIndex: 0, ownerId: '1', destroyerId: '0', reason: 'powderkeg' }, timestamp: 1000 },
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-2', minionDefId: 'v2', fromBaseIndex: 0, ownerId: '1', destroyerId: '0', reason: 'powderkeg' }, timestamp: 1000 },
+        ] as any;
+        const res = processDestroyTriggers(events, ms, '0', () => 0.5, 1000);
+        const vpEvents = res.events.filter((e: any) => e.type === SU_EVENTS.VP_AWARDED);
+        expect(vpEvents).toHaveLength(1);
+        expect(vpEvents[0].payload.playerId).toBe('0');
+        expect(vpEvents[0].payload.amount).toBe(1);
+    });
 });
 
 // ============================================================================
@@ -263,6 +292,35 @@ describe('base_crypt: 消灭者放指示物', () => {
         const { events } = triggerExtendedBaseAbility('base_crypt', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
+
+    it('同一张牌一次性消灭多个随从，只允许触发一次地窖（按 FAQ，管线层 batch）', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_crypt',
+                minions: [
+                    { uid: 'm_destroyer', defId: 'd1', controller: '1', owner: '1', basePower: 4, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-1', defId: 'v1', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    { uid: 'victim-2', defId: 'v2', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                ],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': { id: '0', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+                '1': { id: '1', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            } as any,
+        });
+        const ms = makeMatchState(core);
+        const events = [
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-1', minionDefId: 'v1', fromBaseIndex: 0, ownerId: '0', destroyerId: '1', reason: 'powderkeg' }, timestamp: 1000 },
+            { type: SU_EVENTS.MINION_DESTROYED, payload: { minionUid: 'victim-2', minionDefId: 'v2', fromBaseIndex: 0, ownerId: '0', destroyerId: '1', reason: 'powderkeg' }, timestamp: 1000 },
+        ] as any;
+        const res = processDestroyTriggers(events, ms, '1', () => 0.5, 1000);
+        // base_crypt 是 optional，且有 matchState 时会创建交互；batch 后只创建一次
+        const queued = (res.matchState ?? ms).sys.interaction.queue;
+        const current = (res.matchState ?? ms).sys.interaction.current;
+        const all = [...queued, ...(current ? [current] : [])];
+        expect(all.filter((i: any) => i.data?.sourceId === 'base_crypt')).toHaveLength(1);
+    });
 });
 
 
@@ -271,48 +329,29 @@ describe('base_crypt: 消灭者放指示物', () => {
 // ============================================================================
 
 describe('base_tar_pits: 被消灭随从放入牌库底', () => {
-    it('随从被消灭后产生 CARD_TO_DECK_BOTTOM 事件', () => {
-        const ctx: BaseAbilityContext = {
-            state: makeState({
-                bases: [{
-                    defId: 'base_tar_pits',
-                    minions: [],
-                    ongoingActions: [],
-                }],
-            }),
-            baseIndex: 0,
-            baseDefId: 'base_tar_pits',
-            playerId: '0',
-            minionUid: 'm1',
-            minionDefId: 'test_minion',
-            now: 1000,
+    it('随从在 Tar Pits 被消灭时，MINION_DESTROYED 归约会把它放到拥有者牌库底（仍算被消灭）', () => {
+        const state = makeState({
+            bases: [{
+                defId: 'base_tar_pits',
+                minions: [makeMinion('m1', '0', 3, 'test_minion')],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': { id: '0', vp: 0, hand: [], discard: [], deck: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            } as any,
+        });
+
+        const evt = {
+            type: SU_EVENTS.MINION_DESTROYED,
+            payload: { minionUid: 'm1', minionDefId: 'test_minion', fromBaseIndex: 0, ownerId: '0', reason: 'test' },
+            timestamp: 1000,
         };
 
-        const { events } = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CARD_TO_DECK_BOTTOM);
-        expect((events[0] as any).payload.cardUid).toBe('m1');
-        expect((events[0] as any).payload.ownerId).toBe('0');
-    });
-
-    it('无随从信息时不触发', () => {
-        const ctx: BaseAbilityContext = {
-            state: makeState({
-                bases: [{
-                    defId: 'base_tar_pits',
-                    minions: [],
-                    ongoingActions: [],
-                }],
-            }),
-            baseIndex: 0,
-            baseDefId: 'base_tar_pits',
-            playerId: '0',
-            // minionUid 未设置
-            now: 1000,
-        };
-
-        const { events } = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
-        expect(events.length).toBe(0);
+        const next = reduce(state, evt);
+        expect(next.players['0'].discard.length).toBe(0);
+        expect(next.players['0'].deck.map((c: any) => c.uid)).toEqual(['m1']);
+        expect(next.bases[0].minions.length).toBe(0);
+        expect((next.turnDestroyedMinions ?? []).some((r: any) => r.uid === 'm1')).toBe(true);
     });
 });
 

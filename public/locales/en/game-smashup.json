@@ -105,7 +105,11 @@
     "waiting_opponent": "Waiting for opponent",
     "power_counter": "Power Counter",
     "skip": "Skip",
-    "wait_for_your_turn": "Wait for your response turn"
+    "wait_for_your_turn": "Wait for your response turn",
+    "fusion_choose_playas": "Choose how to play",
+    "fusion_choose_playas_desc": "Fusion cards can be played as a Minion or an Action. Choose the type for this play.",
+    "play_as_minion": "Play as Minion",
+    "play_as_action": "Play as Action"
   },
   "feedback": {
     "deck_search_no_match": "No matching card found in deck. Deck reshuffled.",
@@ -163,6 +167,7 @@
     "vpAwarded": "{{playerId}} gains {{amount}}VP",
     "cardsDrawn": "{{playerId}} draws {{count}} cards",
     "cardsDiscarded": "{{playerId}} discards {{count}} cards",
+    "cardsMilled": "{{playerId}} mills {{count}} cards",
     "turnStarted": "{{playerId}} starts turn",
     "turnEnded": "{{playerId}} ends turn",
     "baseReplaced": "Base replaced:",
@@ -1270,6 +1275,10 @@
       "name": "North Pole",
       "abilityText": "Each player may play only one minion at this base each turn."
     },
+    "base_antarctic_base": {
+      "name": "Antarctic Base",
+      "abilityText": "Each player may play only one minion at this base each turn."
+    },
     "base_ritual_site": {
       "name": "Ritual Site",
       "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."
@@ -1340,23 +1349,23 @@
     },
     "frankenstein_german_engineering": {
       "name": "German Engineering",
-      "effectText": "打出到基地上。持续：在你打出一个随从到这后，在它上面放置一个+1力量指示物。"
+      "effectText": "Play on a base. Ongoing: After you play a minion here, place a +1 power counter on it."
     },
     "frankenstein_jolt": {
       "name": "Jolt",
-      "effectText": "在你的每个随从上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions."
     },
     "frankenstein_grave_situation": {
       "name": "Grave Situation",
-      "effectText": "打出到基地上。持续：当你的一个随从在这里被消灭后，把它放到手牌而不是弃牌堆。"
+      "effectText": "Play on a base. Ongoing: When one of your minions here would be destroyed, return it to your hand instead of the discard pile."
     },
     "frankenstein_its_alive": {
       "name": "Its Alive",
-      "effectText": "打出一个额外的随从并在它的身上放置一个+1力量指示物。"
+      "effectText": "Play an extra minion. Place a +1 power counter on it."
     },
     "frankenstein_angry_mob": {
       "name": "Angry Mob",
-      "effectText": "选择你的一个随从。从你的手上放置任意数量的卡牌到你的牌库底。你每放一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Place any number of cards from your hand on the bottom of your deck. For each card placed, place a +1 power counter on that minion."
     },
     "frankenstein_igor": {
       "name": "Igor",
@@ -1364,15 +1373,15 @@
     },
     "frankenstein_body_shop": {
       "name": "Body Shop",
-      "effectText": "消灭你的一个随从。放置等同于该随从力量的+1力量指示物到你的随从上，你可以任意分配它们。"
+      "effectText": "Destroy one of your minions. Place +1 power counters equal to its power on your minions, divided as you choose."
     },
     "frankenstein_lab_assistant": {
       "name": "Lab Assistant",
-      "abilityText": "在你的另一个随从上放置一个+1力量指示物。"
+      "abilityText": "Place a +1 power counter on one of your other minions."
     },
     "frankenstein_uberserum": {
       "name": "Uberserum",
-      "effectText": "打出到一个随从上。持续：在你的回合开始时，在该随从上放置一个+1力量指示物。该随从不能被消灭。"
+      "effectText": "Play on a minion. Ongoing: At the start of your turn, place a +1 power counter on this minion. This minion cannot be destroyed."
     },
     "frankenstein_the_monster": {
       "name": "The Monster",
@@ -1380,155 +1389,155 @@
     },
     "frankenstein_blitzed": {
       "name": "Blitzed",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。消灭一个力量少于或等于你移除的数量的随从。"
+      "effectText": "Remove any number of +1 power counters from your minions. Destroy a minion with power less than or equal to the number you removed."
     },
     "frankenstein_herr_doktor": {
       "name": "Herr Doktor",
-      "abilityText": "天赋：在你的另一个随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Place a +1 power counter on one of your other minions."
     },
     "werewolf_full_moon": {
       "name": "Full Moon",
-      "effectText": "打出到基地上。持续：每个你在这里的随从获得+1力量。"
+      "effectText": "Play on a base. Ongoing: Each of your minions here has +1 power."
     },
     "werewolf_frenzy": {
       "name": "Frenzy",
-      "effectText": "每个你的力量为4或更高的随从获得+1力量直到回合结束。"
+      "effectText": "Each of your minions of power 4 or more gains +1 power until the end of the turn."
     },
     "werewolf_marking_territory": {
       "name": "Marking Territory",
-      "effectText": "打出到一个基地上。持续：在你的回合开始的时候，如果你在这里比其他玩家有更高的总力量，将本基地的爆破点降低到0。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, if you have more power here than each other player, reduce this base's breakpoint to 0."
     },
     "werewolf_chew_toy": {
       "name": "Chew Toy",
-      "effectText": "选择你的一个随从。消灭一个在你的随从所在基地中比它力量低的随从。"
+      "effectText": "Choose one of your minions on a base. Destroy a minion there with less power than yours."
     },
     "werewolf_leader_of_the_pack": {
       "name": "Leader Of The Pack",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，你就可以额外打出一个行动。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, you may play an extra action."
     },
     "werewolf_howler": {
       "name": "Howler",
-      "abilityText": "本随从获得+2力量直到回合结束。"
+      "abilityText": "This minion has +2 power until the end of the turn."
     },
     "werewolf_unstoppable": {
       "name": "Unstoppable",
-      "effectText": "打出到一个随从上。持续：本随从不能够被消灭。"
+      "effectText": "Play on a minion. Ongoing: This minion cannot be destroyed."
     },
     "werewolf_teenage_wolf": {
       "name": "Teenage Wolf",
-      "abilityText": "天赋：本随从获得+1力量直到回合结束。"
+      "abilityText": "Talent: This minion gains +1 power until the end of the turn."
     },
     "werewolf_let_the_dog_out": {
       "name": "Let The Dog Out",
-      "effectText": "选择一个你的随从。消灭任意数量力量加起来小于或等于你随从的力量的随从。"
+      "effectText": "Choose one of your minions. Destroy any number of minions with total power less than or equal to that minion's power."
     },
     "werewolf_loup_garou": {
       "name": "Loup Garou",
-      "abilityText": "异能：在本基地计分前，本随从获得+2力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, this minion has +2 power until the end of the turn."
     },
     "werewolf_moontouched": {
       "name": "Moontouched",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，抽一张牌。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, draw a card."
     },
     "werewolf_pack_alpha": {
       "name": "Pack Alpha",
-      "abilityText": "异能：在本基地计分前，每个你在这里的随从获得+1力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, each of your minions here gains +1 power until the end of the turn."
     },
     "vampire_dinner_date": {
       "name": "Dinner Date",
-      "effectText": "在你的一个随从身上放置一个+1力量指示物。消灭一个与该随从在同一个基地力量为2或以下的随从。"
+      "effectText": "Place a +1 power counter on one of your minions. Destroy a minion of power 2 or less at the same base."
     },
     "vampire_big_gulp": {
       "name": "Big Gulp",
-      "effectText": "消灭一个力量为4或者以下的随从。"
+      "effectText": "Destroy a minion of power 4 or less."
     },
     "vampire_opportunist": {
       "name": "Opportunist",
-      "effectText": "打出到一个随从上。持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "effectText": "Play on a minion. Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "vampire_mad_monster_party": {
       "name": "Mad Monster Party",
-      "effectText": "在每个你没有+1力量指示物的随从身上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions without one."
     },
     "vampire_cull_the_weak": {
       "name": "Cull The Weak",
-      "effectText": "选择你的一个随从。从你的手中弃置任意数量的随从卡。你每弃一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Discard any number of minion cards from your hand. For each card discarded, place a +1 power counter on that minion."
     },
     "vampire_fledgling_vampire": {
       "name": "Fledgling Vampire",
-      "abilityText": "在你打出本随从后，如果另一个玩家在这里比你有更高的力量，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "After you play this minion, if another player has more power here than you, place a +1 power counter on this minion."
     },
     "vampire_buffet": {
       "name": "Buffet",
-      "effectText": "异能：在一个基地计分后，如果你是赢家，在你的每个随从身上放置+1力量标记。"
+      "effectText": "Special: After a base scores, if you are the winner, place a +1 power counter on each of your minions."
     },
     "vampire_heavy_drinker": {
       "name": "Heavy Drinker",
-      "abilityText": "你可以消灭你的一个随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy one of your minions to place a +1 power counter on this minion."
     },
     "vampire_crack_of_dusk": {
       "name": "Crack Of Dusk",
-      "effectText": "从你的弃牌堆额外打出一个力量为2或以下的随从。放置一个+1力量指示物在它的上面。"
+      "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
     "vampire_nightstalker": {
       "name": "Nightstalker",
-      "abilityText": "消灭一个这里的力量为2或以下的随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy a minion of power 2 or less here to place a +1 power counter on this minion."
     },
     "vampire_summon_wolves": {
       "name": "Summon Wolves",
-      "effectText": "打出到基地上。持续：在你的回合开始时，在本卡上放置一个+1力量指示物。如果你有随从在这，指示物会被加进你的总力量中。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, place a +1 power counter on this card. If you have a minion here, this card's power counts toward your total power here."
     },
     "vampire_the_count": {
       "name": "The Count",
-      "abilityText": "持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "giant_ant_who_wants_to_live_forever": {
       "name": "Ant Who Wants To Live Forever",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。之后你每移除一个指示物，就抽一张卡。"
+      "effectText": "Remove any number of +1 power counters from your minions. Draw a card for each counter removed."
     },
     "giant_ant_a_kind_of_magic": {
       "name": "Ant A Kind Of Magic",
-      "effectText": "在你的随从之中随意分配它们身上的+1力量指示物。"
+      "effectText": "Redistribute any number of +1 power counters among your minions."
     },
     "giant_ant_we_will_rock_you": {
       "name": "Ant We Will Rock You",
-      "effectText": "每个你的随从为它自身上的每个+1力量指示物获得+1力量直到回合结束。"
+      "effectText": "Each of your minions gains +1 power for each +1 power counter on it until the end of the turn."
     },
     "giant_ant_claim_the_prize": {
       "name": "Ant Claim The Prize",
-      "effectText": "在至多3个你的随从的身上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of up to three of your minions."
     },
     "giant_ant_under_pressure": {
       "name": "Ant Under Pressure",
-      "effectText": "异能：在一个基地即将计分前，你可以从你的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: Before a base scores, you may move any number of +1 power counters from one of your minions to another."
     },
     "giant_ant_worker": {
       "name": "Ant Worker",
-      "abilityText": "在本随从身上放置两个+1力量指示物。"
+      "abilityText": "Place two +1 power counters on this minion."
     },
     "giant_ant_headlong": {
       "name": "Ant Headlong",
-      "effectText": "移动你的一个随从到另一个基地。在本随从上放置两个+1力量指示物。"
+      "effectText": "Move one of your minions to another base. Place two +1 power counters on it."
     },
     "giant_ant_soldier": {
       "name": "Ant Soldier",
-      "abilityText": "在本随从上放置两个+1力量指示物。天赋：从本随从身上移除两个+1力量指示物来移动另一个随从到另一个基地上。"
+      "abilityText": "Place two +1 power counters on this minion. Talent: Remove two +1 power counters from this minion to move a minion to another base."
     },
     "giant_ant_the_show_must_go_on": {
       "name": "Ant The Show Must Go On",
-      "effectText": "打出到基地上。持续：你在这里的拥有+1力量指示物的随从不受其他玩家卡牌的影响。"
+      "effectText": "Play on a base. Ongoing: Your minions here with +1 power counters are not affected by other players' cards."
     },
     "giant_ant_drone": {
       "name": "Ant Drone",
-      "abilityText": "在本随从上放置一个+1力量指示物。持续：在你的一个随从被消灭前，你可以从本随从身上移除一个+1力量指示物来防止你的随从被消灭。"
+      "abilityText": "Place a +1 power counter on this minion. Ongoing: Before one of your minions would be destroyed, you may remove a +1 power counter from this minion to prevent that destruction."
     },
     "giant_ant_we_are_the_champions": {
       "name": "Ant We Are The Champions",
-      "effectText": "异能：在一个基地计分后，从你在这里的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: After a base scores, you may move any number of +1 power counters from one of your minions here to another."
     },
     "giant_ant_killer_queen": {
       "name": "Ant Killer Queen",
-      "abilityText": "天赋：如果你在本回合中打出了一个随从到此基地，在该随从以及本随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: If you played a minion here this turn, place a +1 power counter on that minion and on this minion."
     },
     "alien_supreme_overlord_pod": {
       "name": "Supreme Overlord",
@@ -1584,19 +1593,19 @@
     },
     "bear_cavalry_polar_commando_pod": {
       "name": "Polar Commando",
-      "abilityText": "Ongoing: If this is your only minion on this base, it has +2 power and cannot be destroyed."
+      "abilityText": "Talent: Place a +1 power counter on this minion or a minion with less power than this minion."
     },
     "bear_cavalry_bear_cavalry_pod": {
       "name": "Bear Cavalry",
-      "abilityText": "Move another player's minion from this base to another base."
+      "abilityText": "You may move another player's minion from this base to another base."
     },
     "bear_cavalry_cub_scout_pod": {
       "name": "Cub Scout",
-      "abilityText": "Ongoing: After another player's minion is moved to this base, if it has less power than this minion, destroy it."
+      "abilityText": "Ongoing: After another player's minion moves here, if it has less power than this minion, you may destroy it. If you do, you may move one of your minions of printed power 3 or less to this base."
     },
     "bear_cavalry_bear_hug_pod": {
       "name": "Bear Hug",
-      "effectText": "Each other player destroys their lowest-power minion. (They choose in case of a tie.)"
+      "effectText": "Each other player destroys their minion with the least power. (Controller chooses in case of ties.)"
     },
     "bear_cavalry_youre_screwed_pod": {
       "name": "You're Screwed",
@@ -1604,7 +1613,7 @@
     },
     "bear_cavalry_bear_necessities_pod": {
       "name": "Bear Necessities",
-      "effectText": "Destroy a minion or an action played on a base."
+      "effectText": "Play on a base. Talent: Until the start of your turn, other players with a minion here cannot play extra cards. At the start of your next turn, destroy this action."
     },
     "bear_cavalry_youre_pretty_much_borscht_pod": {
       "name": "You're Pretty Much Borscht",
@@ -1612,19 +1621,23 @@
     },
     "bear_cavalry_bear_rides_you_pod": {
       "name": "Bear Rides You",
-      "effectText": "Move one of your minions to another base."
+      "effectText": "Move a minion. If you moved a minion you control, you may cancel the abilities of a card at its new base until the start of your next turn."
     },
     "bear_cavalry_commission_pod": {
       "name": "Commission",
-      "effectText": "Play an extra minion. Move another player's minion from that base to another base."
+      "effectText": "Play an extra minion immediately. You may move another player's minion from the extra minion's base to another base."
+    },
+    "bear_cavalry_bearing_down_pod": {
+      "name": "Bearing Down",
+      "effectText": "Play on a base. Ongoing: This base's breakpoint is increased by 2 for each player with a minion here, or decreased instead if you have moved another player's minion to this base this turn."
     },
     "bear_cavalry_superiority_pod": {
       "name": "Superiority",
-      "effectText": "Play on a base. Ongoing: Your minions here cannot be destroyed, moved, or returned to your hand or deck by other players' cards."
+      "effectText": "Play on a base. Talent: If you have the most power here, either draw a card OR your minions here cannot be affected by other players' cards until the start of your next turn."
     },
     "bear_cavalry_high_ground_pod": {
       "name": "High Ground",
-      "effectText": "Play on a base. Ongoing: If you have a minion here, destroy any minion another player moves here."
+      "effectText": "Play on a base. Ongoing: If you have a minion here, after another player's minion moves to this base, you may destroy this action to either destroy that minion OR to draw a card and play an action."
     },
     "cthulhu_star_spawn_pod": {
       "name": "Star-Spawn of Cthulhu",
@@ -1779,7 +1792,7 @@
     },
     "frankenstein_lab_assistant_pod": {
       "name": "Lab Assistant",
-      "abilityText": "在你的另一个随从上放置一个+1力量指示物。"
+      "abilityText": "Place a +1 power counter on one of your other minions."
     },
     "frankenstein_the_monster_pod": {
       "name": "The Monster",
@@ -1787,39 +1800,39 @@
     },
     "frankenstein_herr_doktor_pod": {
       "name": "Herr Doktor",
-      "abilityText": "天赋：在你的另一个随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Place a +1 power counter on one of your other minions."
     },
     "frankenstein_german_engineering_pod": {
       "name": "German Engineering",
-      "effectText": "打出到基地上。持续：在你打出一个随从到这后，在它上面放置一个+1力量指示物。"
+      "effectText": "Play on a base. Ongoing: After you play a minion here, place a +1 power counter on it."
     },
     "frankenstein_jolt_pod": {
       "name": "Jolt",
-      "effectText": "在你的每个随从上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions."
     },
     "frankenstein_grave_situation_pod": {
       "name": "Grave Situation",
-      "effectText": "打出到基地上。持续：当你的一个随从在这里被消灭后，把它放到手牌而不是弃牌堆。"
+      "effectText": "Play on a base. Ongoing: When one of your minions here would be destroyed, return it to your hand instead of the discard pile."
     },
     "frankenstein_its_alive_pod": {
       "name": "Its Alive",
-      "effectText": "打出一个额外的随从并在它的身上放置一个+1力量指示物。"
+      "effectText": "Play an extra minion. Place a +1 power counter on it."
     },
     "frankenstein_angry_mob_pod": {
       "name": "Angry Mob",
-      "effectText": "选择你的一个随从。从你的手上放置任意数量的卡牌到你的牌库底。你每放一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Place any number of cards from your hand on the bottom of your deck. For each card placed, place a +1 power counter on that minion."
     },
     "frankenstein_body_shop_pod": {
       "name": "Body Shop",
-      "effectText": "消灭你的一个随从。放置等同于该随从力量的+1力量指示物到你的随从上，你可以任意分配它们。"
+      "effectText": "Destroy one of your minions. Place +1 power counters equal to its power on your minions, divided as you choose."
     },
     "frankenstein_uberserum_pod": {
       "name": "Uberserum",
-      "effectText": "打出到一个随从上。持续：在你的回合开始时，在该随从上放置一个+1力量指示物。该随从不能被消灭。"
+      "effectText": "Play on a minion. Ongoing: At the start of your turn, place a +1 power counter on this minion. This minion cannot be destroyed."
     },
     "frankenstein_blitzed_pod": {
       "name": "Blitzed",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。消灭一个力量少于或等于你移除的数量的随从。"
+      "effectText": "Remove any number of +1 power counters from your minions. Destroy a minion with power less than or equal to the number you removed."
     },
     "ghost_spectre_pod": {
       "name": "Spectre",
@@ -1871,51 +1884,51 @@
     },
     "giant_ant_worker_pod": {
       "name": "Ant Worker",
-      "abilityText": "在本随从身上放置两个+1力量指示物。"
+      "abilityText": "Place two +1 power counters on this minion. Ongoing: After this minion goes to the discard pile from play, if it had no +1 power counters on it, you may play it on another base."
     },
     "giant_ant_soldier_pod": {
       "name": "Ant Soldier",
-      "abilityText": "在本随从上放置两个+1力量指示物。天赋：从本随从身上移除两个+1力量指示物来移动另一个随从到另一个基地上。"
+      "abilityText": "Place two +1 power counters on this minion. Talent: Transfer a +1 power counter between two of your minions."
     },
     "giant_ant_drone_pod": {
       "name": "Ant Drone",
-      "abilityText": "在本随从上放置一个+1力量指示物。持续：在你的一个随从被消灭前，你可以从本随从身上移除一个+1力量指示物来防止你的随从被消灭。"
+      "abilityText": "Place a +1 power counter on this minion. Ongoing: When one of your minions would be destroyed, you may remove a +1 power counter from this minion instead. Talent: Remove a +1 power counter from this minion to draw a card."
     },
     "giant_ant_killer_queen_pod": {
       "name": "Ant Killer Queen",
-      "abilityText": "天赋：如果你在本回合中打出了一个随从到此基地，在该随从以及本随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Draw a minion of power 1 or less off the top of your deck OR choose another minion you played this turn and place a +1 power counter on this minion and that minion."
     },
     "giant_ant_who_wants_to_live_forever_pod": {
       "name": "Ant Who Wants To Live Forever",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。之后你每移除一个指示物，就抽一张卡。"
+      "effectText": "Destroy one of your minions. Search your deck for a card and place it on top of your deck without revealing it."
     },
     "giant_ant_a_kind_of_magic_pod": {
       "name": "Ant A Kind Of Magic",
-      "effectText": "在你的随从之中随意分配它们身上的+1力量指示物。"
+      "effectText": "Transfer any number of +1 power counters between your cards."
     },
     "giant_ant_we_will_rock_you_pod": {
       "name": "Ant We Will Rock You",
-      "effectText": "每个你的随从为它自身上的每个+1力量指示物获得+1力量直到回合结束。"
+      "effectText": "Each of your minions on one base gain +1 power until the end of the turn for each +1 power counter on them."
     },
-    "giant_ant_claim_the_prize_pod": {
-      "name": "Ant Claim The Prize",
-      "effectText": "在至多3个你的随从的身上放置一个+1力量指示物。"
+    "giant_ant_gimme_the_prize_pod": {
+      "name": "Ant Gimme the Prize",
+      "effectText": "Place two +1 power counters on a minion and a +1 power counter on another minion."
     },
     "giant_ant_under_pressure_pod": {
       "name": "Ant Under Pressure",
-      "effectText": "异能：在一个基地即将计分前，你可以从你的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: Before a base scores, transfer any number of +1 power counters from one of your minions to another minion."
     },
     "giant_ant_headlong_pod": {
       "name": "Ant Headlong",
-      "effectText": "移动你的一个随从到另一个基地。在本随从上放置两个+1力量指示物。"
+      "effectText": "Move one of your minions to another base. Place two +1 power counters on it."
     },
     "giant_ant_the_show_must_go_on_pod": {
       "name": "Ant The Show Must Go On",
-      "effectText": "打出到基地上。持续：你在这里的拥有+1力量指示物的随从不受其他玩家卡牌的影响。"
+      "effectText": "Play on a base. Ongoing: Your minions here with +1 power counters are not affected by other players' cards."
     },
     "giant_ant_we_are_the_champions_pod": {
       "name": "Ant We Are The Champions",
-      "effectText": "异能：在一个基地计分后，从你在这里的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: After a base scores, transfer any number of +1 power counters from one of your minions there to another minion."
     },
     "innsmouth_the_locals_pod": {
       "name": "The Locals",
@@ -1947,7 +1960,7 @@
     },
     "innsmouth_in_plain_sight_pod": {
       "name": "In Plain Sight",
-      "effectText": "Play on a base. Your minions of power 2 or less here are not affected by other players' cards."
+      "effectText": "Play on a base. Your minions of printed power 2 or less here are not affected by other players' cards."
     },
     "innsmouth_the_deep_ones_pod": {
       "name": "The Deep Ones",
@@ -2007,47 +2020,47 @@
     },
     "miskatonic_librarian_pod": {
       "name": "Librarian",
-      "abilityText": "Talent: Discard a Madness card. If you do, draw a card."
+      "abilityText": "Talent: Draw a Madness card OR play a Madness card from your hand as an extra action."
     },
     "miskatonic_psychologist_pod": {
       "name": "Psychologist",
-      "abilityText": "You may return a Madness card from your hand or discard pile to the Madness deck."
+      "abilityText": "Return a Madness card from your hand or discard pile to the Madness deck OR draw a Madness card from your discard pile."
     },
     "miskatonic_researcher_pod": {
       "name": "Researcher",
       "abilityText": "You may draw a Madness card."
     },
-    "miskatonic_book_of_iter_the_unseen_pod": {
-      "name": "Jinkies!",
-      "effectText": "Look at any player's hand. Draw a Madness card and play two extra actions."
-    },
-    "miskatonic_it_might_just_work_pod": {
-      "name": "It Just Might Work",
-      "effectText": "Discard two Madness cards to destroy a minion."
-    },
-    "miskatonic_thing_on_the_doorstep_pod": {
-      "name": "Old Man Jenkins!?",
-      "effectText": "Search your deck for a minion or action and add it to your hand. Draw a Madness card. Shuffle your deck."
-    },
-    "miskatonic_lost_knowledge_pod": {
-      "name": "Gate to Beyond",
-      "effectText": "If you have two Madness cards in hand, reveal them to draw two cards and play an extra minion and an extra action this turn."
-    },
-    "miskatonic_mandatory_reading_pod": {
-      "name": "Things Best Not Known",
-      "effectText": "Choose a player. That player draws two Madness cards. You may play an extra action."
-    },
-    "miskatonic_psychological_profiling_pod": {
-      "name": "That's So Crazy...",
-      "effectText": "Draw two cards and draw a Madness card."
-    },
-    "miskatonic_those_meddling_kids_pod": {
-      "name": "Those Meddling Kids",
-      "effectText": "Destroy any number of actions on a base."
+    "miskatonic_old_man_jenkins_pod": {
+      "name": "\"Old Man Jenkins?\"",
+      "effectText": "Special: Before a base scores, destroy a minion with the highest power there."
     },
     "miskatonic_field_trip_pod": {
       "name": "Field Trip",
-      "effectText": "Place any number of cards from your hand on the bottom of your deck and draw a card for each card placed."
+      "effectText": "Place any number of cards from your hand on the bottom of your deck to draw that number plus one cards."
+    },
+    "miskatonic_eldritch_gate_pod": {
+      "name": "Eldritch Gate",
+      "effectText": "Play on a base. Talent: Draw a Madness card. You may play an extra minion here."
+    },
+    "miskatonic_jinkies_pod": {
+      "name": "Jinkies!",
+      "effectText": "Return up to two Madness cards from your hand and/or discard pile to the Madness deck."
+    },
+    "miskatonic_thats_so_crazy_pod": {
+      "name": "That's So Crazy...",
+      "effectText": "Draw a Madness card. Each of your minions gains +1 power until the end of the turn. You may play an extra action."
+    },
+    "miskatonic_it_just_might_work_pod": {
+      "name": "...It Just Might Work",
+      "effectText": "Discard up to two Madness cards to give your minions +1 power until the end of the turn for each."
+    },
+    "miskatonic_things_best_not_known_pod": {
+      "name": "Things Best Not Known",
+      "effectText": "Special: Before a base scores, draw up to three Madness cards. Give a minion there +2 power until the end of the turn for each Madness card drawn."
+    },
+    "miskatonic_those_meddling_kids_pod": {
+      "name": "Those Meddling Kids",
+      "effectText": "Destroy any number of actions on a single base OR draw a Madness card and play an extra action."
     },
     "ninja_master_pod": {
       "name": "Ninja Master",
@@ -2235,35 +2248,39 @@
     },
     "trickster_leprechaun_pod": {
       "name": "Leprechaun",
-      "abilityText": "Ongoing: After another player plays a minion here with less power than this minion, destroy it (after its ability resolves)."
+      "abilityText": "Ongoing: After the first time each turn another player plays a minion here that has less power here than this minion after resolving its ability, destroy it."
     },
     "trickster_brownie_pod": {
       "name": "Brownie",
-      "abilityText": "Ongoing: If another player's card affects this minion, that player discards two cards at random."
+      "abilityText": "Ongoing: Once per turn, after another player plays a minion on another base, draw a card."
     },
     "trickster_gnome_pod": {
       "name": "Gnome",
-      "abilityText": "You may destroy a minion here with power less than the number of minions you have here."
+      "abilityText": "Special: Before this base scores, you may destroy a minion here with less power than the number of minions and titans you have here."
     },
     "trickster_gremlin_pod": {
       "name": "Gremlin",
-      "abilityText": "Ongoing: After this minion is destroyed, draw a card and each other player discards a random card."
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, draw a card. If it was destroyed, each other player discards a random card."
+    },
+    "trickster_pixie_pod": {
+      "name": "Pixie",
+      "abilityText": "Minion: If you have more cards in your hand than at least one other player, place a +1 power counter on any number of your minions here.\nAction: Destroy an action to place two +1 power counters among your minions."
     },
     "trickster_enshrouding_mist_pod": {
       "name": "Enshrouding Mist",
-      "effectText": "Play on a base. Ongoing: On your turn, you may play an extra minion on this base."
+      "effectText": "Play on a base. Talent: Play an extra minion here."
     },
     "trickster_hideout_pod": {
       "name": "Hideout",
-      "effectText": "Play on a base. Ongoing: If another player's action would affect your minions on this base, destroy this card to cancel that action."
+      "effectText": "Play on a base. Ongoing: Other players cannot move minions to this base. Talent: Swap this action with a play-on-base action from your hand or deck, then you may destroy a minion of power 2 or less here."
     },
     "trickster_mark_of_sleep_pod": {
       "name": "Mark of Sleep",
-      "effectText": "Choose a player. That player cannot play actions on their next turn."
+      "effectText": "Choose one for each other player: until the start of your turn, either they cannot play actions OR they cannot move minions."
     },
     "trickster_flame_trap_pod": {
       "name": "Flame Trap",
-      "effectText": "Play on a base. Ongoing: When another player plays a minion here, destroy that minion (after its ability resolves) and this card."
+      "effectText": "Play on a base. Ongoing: After another player plays a minion here, destroy this card to destroy that minion. At the start of your turn, you may reduce this base's breakpoint by 4 until the end of the turn."
     },
     "trickster_take_the_shinies_pod": {
       "name": "Take the Shinies",
@@ -2271,7 +2288,7 @@
     },
     "trickster_block_the_path_pod": {
       "name": "Block the Path",
-      "effectText": "Play on a base. Ongoing: Choose a faction. Minions of that faction cannot be played here."
+      "effectText": "Play on a base. For each other player, name a faction they own. Ongoing: Minions of the named factions cannot be played here."
     },
     "trickster_disenchant_pod": {
       "name": "Disenchant",
@@ -2283,103 +2300,103 @@
     },
     "vampire_fledgling_vampire_pod": {
       "name": "Fledgling Vampire",
-      "abilityText": "在你打出本随从后，如果另一个玩家在这里比你有更高的力量，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "After you play this minion, if another player has more power here than you, place a +1 power counter on this minion."
     },
     "vampire_heavy_drinker_pod": {
       "name": "Heavy Drinker",
-      "abilityText": "你可以消灭你的一个随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy one of your minions to place a +1 power counter on this minion."
     },
     "vampire_nightstalker_pod": {
       "name": "Nightstalker",
-      "abilityText": "消灭一个这里的力量为2或以下的随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy a minion of power 2 or less here to place a +1 power counter on this minion."
     },
     "vampire_the_count_pod": {
       "name": "The Count",
-      "abilityText": "持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "vampire_dinner_date_pod": {
       "name": "Dinner Date",
-      "effectText": "在你的一个随从身上放置一个+1力量指示物。消灭一个与该随从在同一个基地力量为2或以下的随从。"
+      "effectText": "Place a +1 power counter on one of your minions. Destroy a minion of power 2 or less at the same base."
     },
     "vampire_big_gulp_pod": {
       "name": "Big Gulp",
-      "effectText": "消灭一个力量为4或者以下的随从。"
+      "effectText": "Destroy a minion of power 4 or less."
     },
     "vampire_opportunist_pod": {
       "name": "Opportunist",
-      "effectText": "打出到一个随从上。持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "effectText": "Play on a minion. Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "vampire_mad_monster_party_pod": {
       "name": "Mad Monster Party",
-      "effectText": "在每个你没有+1力量指示物的随从身上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions without one."
     },
     "vampire_cull_the_weak_pod": {
       "name": "Cull The Weak",
-      "effectText": "选择你的一个随从。从你的手中弃置任意数量的随从卡。你每弃一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Discard any number of minion cards from your hand. For each card discarded, place a +1 power counter on that minion."
     },
     "vampire_buffet_pod": {
       "name": "Buffet",
-      "effectText": "异能：在一个基地计分后，如果你是赢家，在你的每个随从身上放置+1力量标记。"
+      "effectText": "Special: After a base scores, if you are the winner, place a +1 power counter on each of your minions."
     },
     "vampire_crack_of_dusk_pod": {
       "name": "Crack Of Dusk",
-      "effectText": "从你的弃牌堆额外打出一个力量为2或以下的随从。放置一个+1力量指示物在它的上面。"
+      "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
     "vampire_summon_wolves_pod": {
       "name": "Summon Wolves",
-      "effectText": "打出到基地上。持续：在你的回合开始时，在本卡上放置一个+1力量指示物。如果你有随从在这，指示物会被加进你的总力量中。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, place a +1 power counter on this card. If you have a minion here, this card's power counts toward your total power here."
     },
     "werewolf_howler_pod": {
       "name": "Howler",
-      "abilityText": "本随从获得+2力量直到回合结束。"
+      "abilityText": "This minion has +2 power until the end of the turn."
     },
     "werewolf_teenage_wolf_pod": {
       "name": "Teenage Wolf",
-      "abilityText": "天赋：本随从获得+1力量直到回合结束。"
+      "abilityText": "Talent: This minion gains +1 power until the end of the turn."
     },
     "werewolf_loup_garou_pod": {
       "name": "Loup Garou",
-      "abilityText": "异能：在本基地计分前，本随从获得+2力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, this minion has +2 power until the end of the turn."
     },
     "werewolf_pack_alpha_pod": {
       "name": "Pack Alpha",
-      "abilityText": "异能：在本基地计分前，每个你在这里的随从获得+1力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, each of your minions here gains +1 power until the end of the turn."
     },
     "werewolf_full_moon_pod": {
       "name": "Full Moon",
-      "effectText": "打出到基地上。持续：每个你在这里的随从获得+1力量。"
+      "effectText": "Play on a base. Ongoing: Each of your minions here has +1 power."
     },
     "werewolf_frenzy_pod": {
       "name": "Frenzy",
-      "effectText": "每个你的力量为4或更高的随从获得+1力量直到回合结束。"
+      "effectText": "Each of your minions of power 4 or more gains +1 power until the end of the turn."
     },
     "werewolf_marking_territory_pod": {
       "name": "Marking Territory",
-      "effectText": "打出到一个基地上。持续：在你的回合开始的时候，如果你在这里比其他玩家有更高的总力量，将本基地的爆破点降低到0。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, if you have more power here than each other player, reduce this base's breakpoint to 0."
     },
     "werewolf_chew_toy_pod": {
       "name": "Chew Toy",
-      "effectText": "选择你的一个随从。消灭一个在你的随从所在基地中比它力量低的随从。"
+      "effectText": "Choose one of your minions on a base. Destroy a minion there with less power than yours."
     },
     "werewolf_leader_of_the_pack_pod": {
       "name": "Leader Of The Pack",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，你就可以额外打出一个行动。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, you may play an extra action."
     },
     "werewolf_unstoppable_pod": {
       "name": "Unstoppable",
-      "effectText": "打出到一个随从上。持续：本随从不能够被消灭。"
+      "effectText": "Play on a minion. Ongoing: This minion cannot be destroyed."
     },
     "werewolf_let_the_dog_out_pod": {
       "name": "Let The Dog Out",
-      "effectText": "选择一个你的随从。消灭任意数量力量加起来小于或等于你随从的力量的随从。"
+      "effectText": "Choose one of your minions. Destroy any number of minions with total power less than or equal to that minion's power."
     },
     "werewolf_moontouched_pod": {
       "name": "Moontouched",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，抽一张牌。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, draw a card."
     },
     "wizard_archmage_pod": {
       "name": "Archmage",
-      "abilityText": "Ongoing: You may play one extra action on each of your turns."
+      "abilityText": "Talent: Play an extra action."
     },
     "wizard_chronomage_pod": {
       "name": "Chronomage",

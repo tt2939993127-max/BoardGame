@@ -214,10 +214,10 @@ function registerBearCavalryModifiers(): void {
         return myMinionCount === 1 ? 2 : 0;
     });
 
-    // 你们已经完蛋 POD（ongoing 行动卡附着在基地上）：动态调整爆破点
+    // Bearing Down POD（ongoing 行动卡附着在基地上）：动态调整爆破点
     // 规则：每个在此基地有随从的玩家 +2 爆破点；如果本回合你曾把对手随从移动到此基地，则改为每个玩家 -2
-    registerBreakpointModifier('bear_cavalry_youre_screwed_pod', (ctx) => {
-        const card = ctx.base.ongoingActions.find(a => a.defId === 'bear_cavalry_youre_screwed_pod');
+    registerBreakpointModifier('bear_cavalry_bearing_down_pod', (ctx) => {
+        const card = ctx.base.ongoingActions.find(a => a.defId === 'bear_cavalry_bearing_down_pod');
         if (!card) return 0;
 
         const playersWithMinions = new Set(ctx.base.minions.map(m => m.controller)).size;

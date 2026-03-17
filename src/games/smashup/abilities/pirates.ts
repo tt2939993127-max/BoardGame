@@ -41,7 +41,7 @@ export function registerPirateAbilities(): void {
     // 副官：基地计分后移动到其他基地（而非弃牌堆）
     registerTrigger('pirate_first_mate', 'afterScoring', pirateFirstMateAfterScoring);
     // 海盗（海盗）：被消灭时移动到其他基地而非进入弃牌堆
-    registerTrigger('pirate_buccaneer', 'onMinionDestroyed', buccaneerOnDestroyed);
+    registerTrigger('pirate_buccaneer', 'onMinionDestroyed', buccaneerOnDestroyed, { phase: 'replacement' });
     registerInteractionHandler('pirate_buccaneer_move', buccaneerMoveHandler);
 }
 
