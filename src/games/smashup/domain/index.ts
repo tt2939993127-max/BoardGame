@@ -1305,6 +1305,18 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         let hasSysUpdate = false;
 
         if (to === 'startTurn') {
+            // Safety: afterScoringInitialPowers is only meaningful immediately after closing the afterScoring window.
+            // If it ever leaks across turns, it can cause unintended base clear/replace on later scoreBases exits.
+            if ((currentMatchState.sys as any).afterScoringInitialPowers) {
+                currentMatchState = {
+                    ...currentMatchState,
+                    sys: {
+                        ...currentMatchState.sys,
+                        afterScoringInitialPowers: undefined,
+                    } as any,
+                };
+                hasSysUpdate = true;
+            }
             let nextPlayerId = pid;
             let nextTurnNumber = core.turnNumber;
             if (from === 'endTurn') {
