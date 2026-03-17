@@ -47,7 +47,7 @@ const ROLE_CARDS: Array<{
     {
         role: 'developer',
         label: '开发者',
-        hint: '仅管理所选游戏更新日志',
+        hint: '可查看反馈并管理所选游戏更新日志',
         icon: ScrollText,
         activeClassName: 'border-amber-500 bg-amber-500 text-white',
     },
@@ -92,7 +92,7 @@ export function UserRoleModal({
                             用户后台角色
                         </h2>
                         <p className="mt-2 text-sm leading-6 text-zinc-500">
-                            管理员拥有完整后台权限；开发者只负责被分配游戏的更新日志。
+                            管理员拥有完整后台权限；开发者可查看反馈，并管理被分配游戏的更新日志。
                         </p>
                     </div>
                     <button
@@ -132,7 +132,7 @@ export function UserRoleModal({
                             <div>
                                 <p className="text-sm font-semibold text-zinc-900">角色</p>
                                 <p className="mt-1 text-xs leading-5 text-zinc-500">
-                                    管理员拥有完整后台权限；开发者只负责被分配游戏的更新日志。
+                                    管理员拥有完整后台权限；开发者可查看反馈，并管理被分配游戏的更新日志。
                                 </p>
                             </div>
 
@@ -177,7 +177,7 @@ export function UserRoleModal({
                                     <div>
                                         <p className="text-sm font-semibold text-amber-900">可管理游戏</p>
                                         <p className="mt-1 text-xs leading-5 text-amber-800/80">
-                                            可多选。开发者只能管理这里勾选游戏的更新日志。
+                                            可多选。开发者只能管理这里勾选游戏的更新日志，但可查看全部反馈。
                                         </p>
                                     </div>
                                     <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-700">

@@ -30,7 +30,7 @@ export class FeedbackController {
 }
 
 @UseGuards(JwtAuthGuard, AdminGuard)
-@Roles('admin')
+@Roles('admin', 'developer')
 @Controller('admin/feedback')
 export class FeedbackAdminController {
     constructor(@Inject(FeedbackService) private readonly feedbackService: FeedbackService) { }
@@ -40,6 +40,7 @@ export class FeedbackAdminController {
         return this.feedbackService.findAll(query);
     }
 
+    @Roles('admin')
     @Patch(':id/status')
     async updateStatus(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
         const updated = await this.feedbackService.updateStatus(id, dto.status);
@@ -49,17 +50,20 @@ export class FeedbackAdminController {
         return updated;
     }
 
+    @Roles('admin')
     @Delete(':id')
     async deleteOne(@Param('id') id: string) {
         const ok = await this.feedbackService.deleteOne(id);
         return { ok };
     }
 
+    @Roles('admin')
     @Post('bulk-delete')
     async bulkDelete(@Body() body: BulkFeedbackIdsDto) {
         return this.feedbackService.bulkDeleteByIds(body.ids || []);
     }
 
+    @Roles('admin')
     @Post('bulk-delete-by-filter')
     async bulkDeleteByFilter(@Body() body: FeedbackFilterDto) {
         return this.feedbackService.bulkDeleteByFilter(body);

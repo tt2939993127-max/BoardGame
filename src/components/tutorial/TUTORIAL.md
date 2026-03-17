@@ -80,13 +80,16 @@ export interface TutorialStep {
 3. **智能定位逻辑**：
    气泡定位优先级为：**右侧 > 左侧 > 下方 > 上方**。系统会自动检测边缘空间并进行约束（Clamping，防止超出屏幕）。
 
-4. **Hooks 限制**：
+4. **移动端横屏适配**：
+   当视口进入移动端横屏范围时，`TutorialOverlay` 会自动改用贴边的紧凑面板布局，优先避开刘海和手势安全区，而不是继续把标注气泡强行放在目标元素旁边。编写教程步骤时，不要假设文案卡片一定出现在高亮目标的同侧。
+
+5. **Hooks 限制**：
    修改 `TutorialOverlay` 时，严格遵守 React Hooks 规则：所有 Hooks 必须在任何 `return null` 之前调用。
 
-5. **`overflow: hidden` 容器与 `scrollIntoView`**：
+6. **`overflow: hidden` 容器与 `scrollIntoView`**：
    当高亮目标在 `overflow: hidden` 容器（如基于 CSS transform 平移的地图组件）内时，`TutorialOverlay` 会自动跳过 `scrollIntoView` 调用。这类容器通过 transform 自行管理可见性，`scrollIntoView` 会产生意外的 `scrollTop` 偏移，与 transform 定位冲突。如果你的游戏使用了类似的 transform 容器，无需额外处理——该逻辑已在 `TutorialOverlay` 中通用解决。
 
-6. **命令限制优先级**：
+7. **命令限制优先级**：
    教程系统按以下优先级检查命令限制：
    - `allowedCommands`：白名单模式，只允许列表中的命令
    - `infoStep: true`：纯说明步骤，阻止所有非系统命令
@@ -107,7 +110,7 @@ export interface TutorialStep {
    }
    ```
 
-7. **动画等待**：
+9. **动画等待**：
    对于有视觉效果的操作步骤（如召唤、攻击），设置 `waitForAnimation: true` 可以让教程等待动画播放完毕后才推进到下一步。
    
    游戏层需要在动画完成时调用 `tutorialAnimationComplete()`（从 `useTutorial()` 获取）。

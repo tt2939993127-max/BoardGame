@@ -1,8 +1,11 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import localeHashPlugin from './plugins/vite-locale-hash'
-import { readyCheckPlugin } from './vite-plugins/ready-check'
+import { fileURLToPath } from 'url'
+import localeHashPlugin from './plugins/vite-locale-hash.ts'
+import { readyCheckPlugin } from './vite-plugins/ready-check.ts'
+
+const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 const readCliFlag = (flagName: string): string | undefined => {
   const prefix = `--${flagName}=`
@@ -46,6 +49,10 @@ const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const forceInlineVite = env.BG_VITE_FORCE_INLINE === '1'
+  const disableViteWatch = process.env.PW_SERVER_WATCH === 'false'
+    || process.env.VITE_DISABLE_WATCH === 'true'
+    || env.VITE_DISABLE_WATCH === 'true'
   const cliPort = Number(readCliFlag('port'))
   const cliHost = readCliFlag('host')
   const devPort = Number.isFinite(cliPort) && cliPort > 0
@@ -118,48 +125,65 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {
-        '@': path.resolve(__dirname, './src'),
-        '@locales': path.resolve(__dirname, './public/locales'),
+        '@': path.resolve(configDir, './src'),
+        '@locales': path.resolve(configDir, './public/locales'),
       },
     },
     optimizeDeps: {
-      entries: ['index.html'],
+      ...(forceInlineVite
+        ? {
+            // In constrained environments, disable dep optimization to avoid esbuild spawn EPERM.
+            disabled: true,
+            noDiscovery: true,
+            include: [],
+            entries: undefined,
+          }
+        : {
+            entries: ['index.html'],
+          }),
     },
     server: {
       host: serverHost,
       port: devPort,
       strictPort: true,
-      hmr: {
-        protocol: 'ws',
-        host: hmrHost,
-        port: devPort,
-        clientPort: devPort,
-      },
-      watch: {
-        usePolling: true,
-        interval: 1000,
-        ignored: [
-          '**/test-results/**',
-          '**/playwright-report/**',
-          '**/.tmp/**',
-          '**/temp/**',
-          '**/tmp/**',
-          '**/evidence/**',
-          '**/logs/**',
-          '**/android/app/**',
-          '**/android/build/**',
-          '**/node_modules/**',
-          '**/*.test.*',
-          '**/*.spec.*',
-          '**/e2e/**',
-          '**/.tmp-*',
-          '**/.env',
-          '**/.env.*',
-          '**/playwright.config.*',
-          '**/vitest.config.*',
-          '**/vite.config.*',
-        ],
-      },
+      hmr: disableViteWatch
+        ? false
+        : {
+            protocol: 'ws',
+            host: hmrHost,
+            port: devPort,
+            clientPort: devPort,
+          },
+      // 单次 E2E 不依赖热更新；禁用监听可避免并发改工作区时触发 Vite 重启。
+      watch: disableViteWatch
+        ? {
+            ignored: ['**/*'],
+          }
+        : {
+            usePolling: true,
+            interval: 1000,
+            ignored: [
+              '**/test-results/**',
+              '**/playwright-report/**',
+              '**/.tmp/**',
+              '**/temp/**',
+              '**/tmp/**',
+              '**/evidence/**',
+              '**/logs/**',
+              '**/android/app/**',
+              '**/android/build/**',
+              '**/node_modules/**',
+              '**/*.test.*',
+              '**/*.spec.*',
+              '**/e2e/**',
+              '**/.tmp-*',
+              '**/.env',
+              '**/.env.*',
+              '**/playwright.config.*',
+              '**/vitest.config.*',
+              '**/vite.config.*',
+            ],
+          },
       proxy: {
         '/games': {
           target: `http://127.0.0.1:${gameServerPort}`,

@@ -36,6 +36,7 @@ import { ActionLogSegments } from './ActionLogSegments';
 import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
 import { generateId, copyToClipboard } from '../../../../lib/utils';
 import { OpponentOfflineBanner } from './OpponentOfflineBanner';
+import { logger } from '../../../../lib/logger';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -120,7 +121,7 @@ export const GameHUD = ({
 
     const locale = i18n.language;
     const { openModal, closeModal } = useModalStack();
-    const { unreadTotal, requests } = useSocial();
+    const { unreadTotal, requests, ensureRealtimeConnection } = useSocial();
     const [copied, setCopied] = useState(false);
 
     // 撤回状态
@@ -138,9 +139,13 @@ export const GameHUD = ({
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
     const isChatReadonly = isSpectator;
-    const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const [unreadChatState, setUnreadChatState] = useState<{ matchId?: string; count: number }>({
+        matchId,
+        count: 0,
+    });
     const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
     const isChatPanelOpenRef = useRef(false);
+    const unreadChatCount = unreadChatState.matchId === matchId ? unreadChatState.count : 0;
 
     const myDisplayName = useMemo(() => {
         if (user?.username) return user.username;
@@ -148,7 +153,7 @@ export const GameHUD = ({
         return matched?.name ?? (myPlayerId != null
             ? t('hud.status.player', { id: myPlayerId })
             : t('hud.status.playerUnknown'));
-    }, [myPlayerId, players, user?.username]);
+    }, [myPlayerId, players, t, user?.username]);
 
     const playerNameMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -175,24 +180,34 @@ export const GameHUD = ({
         return isSelfChatMessage(message, myPlayerId, myDisplayName);
     }, [myPlayerId, myDisplayName]);
 
+    const resetUnreadChatCount = useCallback(() => {
+        setUnreadChatState({
+            matchId,
+            count: 0,
+        });
+    }, [matchId]);
+
+    const incrementUnreadChatCount = useCallback(() => {
+        setUnreadChatState((prev) => ({
+            matchId,
+            count: (prev.matchId === matchId ? prev.count : 0) + 1,
+        }));
+    }, [matchId]);
+
+    const handleChatPanelOpenChange = useCallback((isActive: boolean) => {
+        setIsChatPanelOpen(isActive);
+        if (isActive) {
+            resetUnreadChatCount();
+        }
+    }, [resetUnreadChatCount]);
+
     const latestIncomingMessage = useMemo(() => {
         return getLatestIncomingMessage(chatMessages, myPlayerId, myDisplayName);
     }, [chatMessages, myPlayerId, myDisplayName]);
 
-    // 临时日志：确认局内聊天面板内容高度/布局是否生效（问题定位后删除）
-    const chatPanelRef = useRef<HTMLDivElement>(null);
-    // 日志已移除：ChatPanel 布局调试已完成
-
     useEffect(() => {
         isChatPanelOpenRef.current = isChatPanelOpen;
-        if (isChatPanelOpen) {
-            setUnreadChatCount(0);
-        }
     }, [isChatPanelOpen]);
-
-    useEffect(() => {
-        setUnreadChatCount(0);
-    }, [matchId]);
 
     useEffect(() => {
         if (!isOnline || !matchId) return;
@@ -222,12 +237,17 @@ export const GameHUD = ({
                 const trimmed = next.length > MAX_CHAT_MESSAGES;
                 const nextMessages = trimChatMessages(next);
                 if (trimmed) {
-                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'unknown'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                    logger.warn('HUD 聊天消息达到裁剪阈值', {
+                        event: 'trim_messages',
+                        matchId: matchId ?? 'unknown',
+                        size: next.length,
+                        max: MAX_CHAT_MESSAGES,
+                    });
                 }
                 return nextMessages;
             });
             if (!isSelfMessage(message) && !isChatPanelOpenRef.current) {
-                setUnreadChatCount((prev) => prev + 1);
+                incrementUnreadChatCount();
             }
             setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
         });
@@ -237,7 +257,7 @@ export const GameHUD = ({
             unsubHistory();
             matchSocket.leaveChat();
         };
-    }, [isOnline, matchId, isSelfMessage]);
+    }, [incrementUnreadChatCount, isOnline, matchId, isSelfMessage]);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -277,7 +297,12 @@ export const GameHUD = ({
                 const trimmed = next.length > MAX_CHAT_MESSAGES;
                 const nextMessages = trimChatMessages(next);
                 if (trimmed) {
-                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'local'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                    logger.warn('HUD 聊天消息达到裁剪阈值', {
+                        event: 'trim_messages',
+                        matchId: matchId ?? 'local',
+                        size: next.length,
+                        max: MAX_CHAT_MESSAGES,
+                    });
                 }
                 return nextMessages;
             });
@@ -305,7 +330,7 @@ export const GameHUD = ({
                     await elem.webkitRequestFullscreen((Element as any).ALLOW_KEYBOARD_INPUT);
                 }
                 setIsFullscreen(true);
-            } catch (error) {
+            } catch {
                 toast.error(t('hud.fullscreen.enterFailed'));
             }
             return;
@@ -322,7 +347,7 @@ export const GameHUD = ({
                 await doc.webkitExitFullscreen();
             }
             setIsFullscreen(false);
-        } catch (error) {
+        } catch {
             toast.error(t('hud.fullscreen.exitFailed'));
         }
     };
@@ -371,7 +396,7 @@ export const GameHUD = ({
         icon: <ListOrdered size={20} />,
         label: t('hud.actions.actionLog'),
         content: (
-            <div className="flex flex-col gap-2 pr-1">
+            <div className="flex flex-col gap-2 pr-0.5 sm:pr-1">
                 {actionLogRows.length === 0 ? (
                     <div className="text-xs text-white/40 text-center py-6">
                         {t('hud.actionLog.empty')}
@@ -379,12 +404,12 @@ export const GameHUD = ({
                 ) : (
                     <div className="flex flex-col gap-2">
                         {actionLogRows.map((row) => (
-                            <div key={row.id} className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-                                <div className="flex items-center justify-between text-[10px] text-white/50">
-                                    <span className="font-mono">{row.timeLabel}</span>
-                                    <span className="font-semibold text-white/70">{row.playerLabel}</span>
+                            <div key={row.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5" data-testid="hud-action-log-row">
+                                <div className="flex flex-col gap-1 text-[10px] text-white/50 sm:flex-row sm:items-center sm:justify-between" data-testid="hud-action-log-meta">
+                                    <span className="font-mono leading-none">{row.timeLabel}</span>
+                                    <span className="font-semibold leading-tight text-white/70 break-words sm:max-w-[10rem] sm:text-right">{row.playerLabel}</span>
                                 </div>
-                                <div className="text-xs text-white/90 mt-1 leading-relaxed">
+                                <div className="mt-1.5 break-words text-xs leading-relaxed text-white/90">
                                     <ActionLogSegments
                                         segments={row.segments}
                                         locale={locale}
@@ -421,9 +446,9 @@ export const GameHUD = ({
                     })}
                 </div>
             ) : undefined,
-            onActivate: (isActive) => setIsChatPanelOpen(isActive),
+            onActivate: handleChatPanelOpenChange,
             content: (
-                <div ref={chatPanelRef} className="flex flex-col h-80">
+                <div className="flex flex-col h-80">
                     {isOnline && (
                         <div className="mb-2 space-y-1 text-[10px] text-white/60">
                             <div className="flex items-center gap-2">
@@ -688,6 +713,7 @@ export const GameHUD = ({
             label: t('hud.actions.social'),
             active: totalBadge > 0,
             onClick: () => {
+                ensureRealtimeConnection();
                 if (socialModalId) {
                     closeModal(socialModalId);
                     return;

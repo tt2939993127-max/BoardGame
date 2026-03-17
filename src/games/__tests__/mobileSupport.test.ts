@@ -29,12 +29,12 @@ describe('mobile support manifest contract', () => {
         );
     });
 
-    it('summonerwars declares landscape map-shell support without board-shell scaling', () => {
+    it('summonerwars declares landscape board-shell support with board-shell scaling', () => {
         const game = getGameById('summonerwars');
 
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
-        expect(game?.mobileLayoutPreset).toBe('map-shell');
+        expect(game?.mobileLayoutPreset).toBe('board-shell');
         expect(
             shouldUseBoardShellScale(
                 {
@@ -45,7 +45,7 @@ describe('mobile support manifest contract', () => {
                 900,
                 500,
             ),
-        ).toBe(false);
+        ).toBe(true);
     });
 });
 

@@ -1,9 +1,4 @@
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
-import { assertChildProcessSupport } from './assert-child-process-support.mjs';
-import { withWindowsHide } from './windows-hide.js';
-
-await assertChildProcessSupport('E2E 单文件调试运行', { probeFork: true, probeEsbuild: true });
+import { runE2ECommand } from './run-e2e-command.mjs';
 
 function parseArgs(argv) {
     let match = process.env.PW_TEST_MATCH?.trim();
@@ -34,22 +29,6 @@ function parseArgs(argv) {
     return { match, playwrightArgs };
 }
 
-function run(command, args, env) {
-    const result = spawnSync(command, args, withWindowsHide({
-        stdio: 'inherit',
-        env,
-        shell: false,
-    }, env));
-
-    if (typeof result.status === 'number' && result.status !== 0) {
-        process.exit(result.status);
-    }
-
-    if (result.error) {
-        throw result.error;
-    }
-}
-
 const { match, playwrightArgs } = parseArgs(process.argv.slice(2));
 
 if (!match) {
@@ -58,19 +37,9 @@ if (!match) {
     process.exit(1);
 }
 
-const env = {
-    ...process.env,
-    PW_HEADED: 'false',
-    PWDEBUG: '0',
-    PW_USE_DEV_SERVERS: 'true',
-    PW_WORKERS: '1',
-    PW_TEST_MATCH: match,
-};
-
-const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
-
 console.log(`[test:e2e:dev:file] 复用现服单文件运行: ${match}`);
 
-run(process.execPath, ['scripts/infra/check-file-encoding.mjs'], env);
-run(process.execPath, ['scripts/infra/check-e2e-safety.js'], env);
-run(process.execPath, [playwrightCli, 'test', ...playwrightArgs], env);
+await runE2ECommand({
+    mode: 'dev',
+    extraArgs: [match, ...playwrightArgs],
+});

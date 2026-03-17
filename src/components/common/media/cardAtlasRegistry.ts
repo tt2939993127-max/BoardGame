@@ -64,7 +64,18 @@ export function getCardAtlasSource(id: string, locale?: string): CardAtlasSource
     }
 
     // 图片尚未预加载（边缘情况），返回 undefined，AtlasCard 会 fallback 加载
-    return undefined;
+    const fallbackSource: CardAtlasSource = {
+        image: lazy.image,
+        config: generateUniformAtlasConfig(
+            lazy.grid.cols,
+            lazy.grid.rows,
+            lazy.grid.rows,
+            lazy.grid.cols,
+        ),
+    };
+    cardAtlasRegistry.set(id, fallbackSource);
+    lazyRegistry.delete(id);
+    return fallbackSource;
 }
 
 /**

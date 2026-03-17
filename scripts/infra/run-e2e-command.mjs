@@ -1,6 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { withWindowsHide } from './windows-hide.js';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { runEncodingCheck } from './check-file-encoding.mjs';
+import { runE2ESafetyCheck } from './check-e2e-safety.js';
+import { cleanupTestConnections } from './cleanup_test_connections.js';
 
 const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
 
@@ -60,15 +65,7 @@ function hasExplicitPlaywrightTarget(args) {
     return false;
 }
 
-const mode = process.argv[2];
-const extraArgs = process.argv.slice(3);
-
-if (!mode) {
-    console.error('用法: node scripts/infra/run-e2e-command.mjs <default|dev|isolated|ci|critical|parallel> [...playwrightArgs]');
-    process.exit(1);
-}
-
-const modeEnv = (() => {
+function createModeEnv(mode) {
     switch (mode) {
         case 'default':
             return createEnv();
@@ -97,34 +94,57 @@ const modeEnv = (() => {
             console.error(`未知模式: ${mode}`);
             process.exit(1);
     }
-})();
-
-if (hasExplicitPlaywrightTarget(extraArgs)) {
-    modeEnv.PW_HAS_EXPLICIT_TARGET = 'true';
 }
 
-run(process.execPath, ['scripts/infra/assert-child-process-support.mjs', 'E2E', '--probe-fork', '--probe-esbuild'], modeEnv);
+export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } = {}) {
+    if (!mode) {
+        console.error('用法: node scripts/infra/run-e2e-command.mjs <default|dev|isolated|ci|critical|parallel> [...playwrightArgs]');
+        process.exit(1);
+    }
 
-if (mode === 'ci') {
-    run(process.execPath, ['scripts/infra/cleanup_test_connections.js'], modeEnv);
+    const modeEnv = {
+        ...createModeEnv(mode),
+        ...envOverrides,
+    };
+
+    if (hasExplicitPlaywrightTarget(extraArgs)) {
+        modeEnv.PW_HAS_EXPLICIT_TARGET = 'true';
+    }
+
+    await assertChildProcessSupport('E2E', { probeFork: true, probeEsbuild: true });
+
+    if (mode === 'ci') {
+        await cleanupTestConnections([]);
+    }
+
+    runEncodingCheck([]);
+
+    if (mode !== 'parallel') {
+        await runE2ESafetyCheck(modeEnv);
+    }
+
+    const playwrightArgs = ['test'];
+
+    if (mode === 'critical') {
+        playwrightArgs.push('e2e/smashup.e2e.ts', 'e2e/tictactoe-rematch.e2e.ts');
+    }
+
+    if (mode === 'parallel') {
+        playwrightArgs.push('--config=playwright.config.parallel.ts');
+    }
+
+    playwrightArgs.push(...extraArgs);
+
+    run(process.execPath, [playwrightCli, ...playwrightArgs], modeEnv);
 }
 
-run(process.execPath, ['scripts/infra/check-file-encoding.mjs'], modeEnv);
+const isDirectExecution = process.argv[1]
+    ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+    : false;
 
-if (mode !== 'parallel') {
-    run(process.execPath, ['scripts/infra/check-e2e-safety.js'], modeEnv);
+if (isDirectExecution) {
+    await runE2ECommand({
+        mode: process.argv[2],
+        extraArgs: process.argv.slice(3),
+    });
 }
-
-const playwrightArgs = ['test'];
-
-if (mode === 'critical') {
-    playwrightArgs.push('e2e/smashup.e2e.ts', 'e2e/tictactoe-rematch.e2e.ts');
-}
-
-if (mode === 'parallel') {
-    playwrightArgs.push('--config=playwright.config.parallel.ts');
-}
-
-playwrightArgs.push(...extraArgs);
-
-run(process.execPath, [playwrightCli, ...playwrightArgs], modeEnv);

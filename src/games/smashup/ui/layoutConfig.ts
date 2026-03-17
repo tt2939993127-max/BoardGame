@@ -4,6 +4,8 @@
  * 根据玩家数量动态调整布局参数，确保 2-4 人局都有良好的视觉体验
  */
 
+import { logger } from '../../../lib/logger';
+
 export interface LayoutConfig {
     /** 基地卡片宽度（vw） */
     baseCardWidth: number;
@@ -42,7 +44,7 @@ export function getLayoutConfig(
 
     // 边界检查：防止无效输入导致无限递归或错误布局
     if (!Number.isFinite(playerCount) || playerCount < 2 || playerCount > 4) {
-        console.warn(`[layoutConfig] Invalid playerCount: ${playerCount}, using 2-player layout`);
+        logger.warn('[layoutConfig] playerCount 超出范围，回退到 2 人局布局', { playerCount });
         playerCount = 2;
     }
 
@@ -60,7 +62,7 @@ export function getLayoutConfig(
                 handAreaHeight: isMobileViewport ? 210 : 220,
                 hudTopOffset: isMobileViewport ? 42 : 72,
                 floatingActionBottom: isMobileViewport ? 232 : 280,
-                boardPaddingTop: isMobileViewport ? 20 : 48,
+                boardPaddingTop: isMobileViewport ? 28 : 48,
                 boardHorizontalPadding: isMobileViewport ? 28 : 80,
             };
         case 3:
@@ -76,7 +78,7 @@ export function getLayoutConfig(
                 handAreaHeight: isMobileViewport ? 192 : 200,
                 hudTopOffset: isMobileViewport ? 42 : 72,
                 floatingActionBottom: isMobileViewport ? 214 : 260,
-                boardPaddingTop: isMobileViewport ? 18 : 48,
+                boardPaddingTop: isMobileViewport ? 26 : 48,
                 boardHorizontalPadding: isMobileViewport ? 24 : 80,
             };
         case 4:
@@ -92,13 +94,13 @@ export function getLayoutConfig(
                 handAreaHeight: isMobileViewport ? 176 : 180,
                 hudTopOffset: isMobileViewport ? 40 : 72,
                 floatingActionBottom: isMobileViewport ? 196 : 240,
-                boardPaddingTop: isMobileViewport ? 16 : 48,
+                boardPaddingTop: isMobileViewport ? 24 : 48,
                 boardHorizontalPadding: isMobileViewport ? 20 : 80,
             };
         default:
             // 理论上不会到达这里（已在上方边界检查处理）
             // 为防止边界检查失效，直接返回 2 人局配置而非递归调用
-            console.error(`[layoutConfig] Unexpected playerCount after boundary check: ${playerCount}`);
+            logger.error('[layoutConfig] 边界检查后仍收到异常 playerCount，回退到 2 人局布局', { playerCount });
             return {
                 baseCardWidth: 14,
                 baseGap: 12,

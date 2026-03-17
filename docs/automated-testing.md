@@ -288,6 +288,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 - 只有在 Vite 完全就绪后才返回 200 状态码
 - Playwright 等待此端点就绪才开始测试
 - 防止测试开始时服务还在编译
+- 当 `BG_ENABLE_CAPTURE_SAVE=1` 时，同一插件会额外开放 `/__capture/save`，供移动端证据补录脚本把页内截图直接写回工作区
 
 **配置示例**（`playwright.config.ts`）：
 ```typescript
@@ -626,6 +627,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 5. **运行环境前置条件**：
    - Vitest / Playwright / esbuild / E2E 三服务启动链都依赖 Node `child_process`
    - 如果报错为 `spawn EPERM` / `spawnSync EPERM` / `fork EPERM`，优先判断当前终端或沙箱是否禁止子进程
+   - 补充：`npm run dev:frontend` 现在会在 `spawn EPERM` 时自动回退到“当前进程直接执行 Vite”；这只能说明前端 dev server 还能起，不代表 Playwright worker / esbuild service / E2E 三服务链已经恢复
    - 这类错误通常不是业务代码问题，应改在本地终端、CI Runner 或允许子进程的环境执行
 
 6. **WSL / 跨平台工作区注意事项**：
@@ -1099,9 +1101,13 @@ npm run dev
 npm run test:e2e -- e2e/<相关文件>.e2e.ts
 # 或
 npm run test:e2e -- --grep "<相关用例名>"
+# 或（复用现服，仅跑单文件）
+npm run test:e2e:file -- e2e/<相关文件>.e2e.ts
 
 # CI 模式：自动启动服务器并运行相关测试
 npm run test:e2e:ci -- e2e/<相关文件>.e2e.ts
+# CI 单文件 + 单用例：优先用这个入口，避免 npm 壳层对 --grep 转发差异
+npm run test:e2e:ci:file -- e2e/<相关文件>.e2e.ts "<相关用例名>"
 
 # 明确需要全量时才使用
 npm run test:e2e:all
@@ -1116,6 +1122,7 @@ npm run test:e2e:ci:all
 - 默认禁止“无目标直接全量跑”`Playwright`，避免本地误触完整 E2E 套件卡死机器
 - 常用项目脚本（如 `npm run test:e2e`、`npm run test:e2e:ci`、`npm run test:e2e:parallel`）会显式强制无头运行，避免终端里残留的 `PW_HEADED` / `PWDEBUG` 导致突然弹出一批浏览器窗口
 - 如需可见浏览器调试，请显式使用 `npx playwright test --headed` 或 `npx playwright test --debug`
+- E2E 自动起服默认会给游戏服务注入 `USE_PERSISTENT_STORAGE=false`，此时游戏服应以纯内存模式启动，不要求本机先准备 MongoDB；对应代价是 UGC、排行榜归档等依赖 Mongo 的能力会被自动跳过
 
 ### 端口配置与隔离（重要）
 
@@ -1243,7 +1250,7 @@ npm run clean:ports
 5. `testInfo.outputPath()` 只用于临时附件路径，不是长期证据目录
 6. 禁止把同一张图复制到多个稳定目录；禁止默认自动写入 `evidence/screenshots/`
 7. `test-results/` 目录已被 git 忽略，测试产物不应提交
-8. 在对话、证据说明或交接里汇报截图位置时，直接给工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\...`
+8. 在对话、证据说明或交接里汇报截图位置时，必须直接给可复制的工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\...`，禁止只写相对目录、文件名或“看 test-results 下面”
 
 ```typescript
 test('Match started', async ({ page }, testInfo) => {
@@ -1332,8 +1339,16 @@ npm run test:api
 
 1. 任何 E2E 结论（通过/失败/已修复）都必须基于“已实际查看截图”的事实，不允许只看日志或断言。
 2. 若用例失败且 `test-results/playwright-artifacts/` 没有截图，必须在结论中明确写出“无截图”并说明原因（如服务未启动、用例未进入页面）。
-3. UI 问题交付时必须同时给出你亲自核对过的截图绝对路径（`F:\...`），并写出从图里确认到的可见结果。
+3. UI 问题交付时必须同时给出你亲自核对过的截图绝对路径（`F:\...`），路径要能让人直接复制打开，并写出从图里确认到的可见结果。
 4. 线上问题必须至少附一张线上环境现状截图；本地修复截图不能替代线上现状截图。
+5. UI / 移动端适配 / 布局 / 动画 / 触屏交互类 E2E，必须额外逐项核对这些视觉项：
+   - 主棋盘或主内容区的纵向锚点是否正确，是否明显偏上/偏下。
+   - 浮动按钮、结束回合区、顶部横幅、HUD 是否和主棋盘处于同一缩放体系，而不是肉眼看起来大小脱节。
+   - 预留空间是否和真实控件高度一致，是否出现大块空带、挤压或控件悬空。
+   - 移动端是否错误保留桌面 hover 入口、常驻放大按钮或其他假 hover 设计。
+   - 关键区域是否被遮挡、裁切、出屏或互相覆盖。
+6. 上述视觉结论必须来自实际看图，不得用“locator 可见”“元素在视口内”“断言通过”替代。
+7. 若首张主状态截图已经能肉眼看出明显问题，禁止继续把该轮结果汇报为“已通过”；必须先按失败处理并回到修复。
 
 ---
 

@@ -1,106 +1,165 @@
 # 大杀四方移动端适配 E2E 证据
 
-## 执行命令
+## 2026-03-16 当前复核
+
+- 本轮直接复核了以下现存截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\04-mobile-landscape-layout.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\04a-mobile-exit-fab-panel.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+- 复核结论：
+  - `04-mobile-landscape-layout.png` 仍可作为有效主状态图。
+  - `04a-mobile-exit-fab-panel.png` 仍可作为有效局部图。
+  - `07-mobile-minion-long-press-magnify.png` 与 `11-mobile-hand-long-press-magnify.png` 仍然是无效旧图，放大层只有半透明容器，没有真实卡面内容。
+- 当前截图目录实际库存为：`04`、`04a`、`06`、`07`、`08`、`09`、`10`、`11`。`05`、`06a`、`06b`、`12` 当前并不存在，后文若引用这些路径，应视为“待重跑后补图”，不是现成证据。
+- 本轮再次执行 `npm run check:child-process:e2e`，结果仍为 `fork -> spawn EPERM`，所以当前沙箱依旧无法补跑 Playwright。
+- 本轮静态验证结果：
+  - `npm run typecheck` 通过。
+  - `npx eslint e2e/smashup-4p-layout-test.e2e.ts src/games/smashup/Board.tsx src/games/summonerwars/Board.tsx src/games/mobileSupport.ts src/games/__tests__/mobileSupport.test.ts src/games/smashup/manifest.ts src/games/summonerwars/manifest.ts --max-warnings 999` 无 error，仅有仓库既有 warnings。
+
+## 本轮变更
+
+- `src/index.css`
+  - `smashup` 的 `board-shell` 设计宽度从 `920px` 调整到 `1160px`，让横屏手机下的主棋盘、计分板和结束回合按钮回到同一缩放体系。
+- `src/components/system/FabMenu.tsx`
+  - 移动端 FAB 视觉圆球缩小，但保留 `44px` 命中区。
+  - 面板宽高按当前位置和安全区动态限宽限高，避免退出面板溢出视口。
+- `e2e/smashup-4p-layout-test.e2e.ts`
+  - `04a` 截图后立即关闭退出面板，避免污染后续截图。
+  - 为 `exit` FAB tooltip 增加稳定 `data-testid`，并在 `04a -> 05` 之间显式断言 tooltip 不存在，避免旧版 hover 残影再次污染 `05`。
+  - 长按放大相关截图现在会先等待 overlay 内部不再存在 `.atlas-shimmer`，确认卡牌预览已真正渲染，再截图。
+  - 同一条移动端用例现在额外补了 `1024x768` 平板横屏断言与 `12-tablet-landscape-layout` 截图位，后续可直接补齐 `smashup` 的手机/平板双档证据。
+
+## 静态验证
+
+执行命令：
 
 ```bash
 npm run typecheck
-npm run test -- src/games/__tests__/mobileSupport.test.ts
-node scripts/infra/run-e2e-command.mjs ci e2e/smashup-4p-layout-test.e2e.ts --grep "移动端横屏应保持"
+npx eslint e2e/smashup-4p-layout-test.e2e.ts src/components/system/FabMenu.tsx src/games/smashup/Board.tsx --max-warnings 999
 ```
 
 结果：
-- `npm run typecheck` 通过
-- `src/games/__tests__/mobileSupport.test.ts` 8/8 通过
-- `e2e/smashup-4p-layout-test.e2e.ts` 中“移动端横屏应保持四人局布局可用，并支持手牌长按看牌”通过
 
-## 本轮验证目标
+- `typecheck` 通过。
+- `eslint` 无 error，仅有仓库既有 warning。
 
-- 移动端横屏下四人局布局仍在视口内
-- 场上卡牌不再把单击伪装成桌面的 `hover`
-- 随从附着行动卡默认隐藏，单击随从后才展开
-- 随从天赋改为“第一次点击选中，第二次点击激活”
-- 基地、随从、基地 `ongoing`、附着行动卡、手牌都继续支持长按看大图
+## 当前环境阻塞
 
-## 关键截图
+执行命令：
 
-### 1. 横屏布局稳定
+```bash
+npm run check:child-process:e2e
+```
 
-截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\04-mobile-landscape-layout.png`
+结果：
 
-结论：
-- 记分板、牌库、弃牌堆、手牌都还在 `812x375` 视口内
-- 第一块基地和场上随从可见，没有被右下角操作区挤出屏幕
+- 失败阶段：`fork`
+- 错误：`spawn EPERM`
 
-### 2. 第一次点击只选中并展开
+影响：
 
-截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\05-mobile-single-tap-expands-attached-actions.png`
+- 当前沙箱无法重跑 Playwright。
+- 本轮无法生成新的 `07-11` 截图，只能基于仓库现有截图做人审，并把无效旧图明确标出来。
 
-结论：
-- 随从 `p0-b0-armor-stego` 第一次点击后，附着行动卡展开
-- 测试断言该随从进入激活预备态，且 `talentUsed === false`
-- 放大层没有出现，说明第一次点击只承担选中/展开语义
+## 已人工查看的截图
 
-### 3. 第二次点击才激活天赋
+### 1. 主状态图
 
 截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\06-mobile-second-tap-uses-talent.png`
 
-结论：
-- 第二次点击同一随从后，测试断言 `talentUsed === true`
-- 激活预备态被清空，附着行动卡仍保持展开，便于继续后续交互
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\04-mobile-landscape-layout.png`
 
-### 4. 随从长按看大图
+嵌入：
 
-截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+![04-mobile-landscape-layout](../test-results/evidence-screenshots/smashup-4p-layout-test.e2e/移动端横屏应保持四人局布局可用，并支持手牌长按看牌/04-mobile-landscape-layout.png)
 
-结论：
-- 随从长按后稳定打开放大层
-- 长按流程没有误触发点击分支
+我从图里确认到：
 
-### 5. 基地长按看大图
+- 四个基地、底部手牌、左下牌库、右下弃牌、右侧 `FINISH TURN` 都还在 `812x375` 视口内。
+- 计分板没有再压住主棋盘。
+- 结束回合按钮和棋盘的缩放比例比旧版本更接近，没有明显“按钮过大、棋盘过小”的错位。
 
-截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\08-mobile-base-long-press-magnify.png`
+有效性裁定：
 
-结论：
-- 基地不再依赖移动端不存在的 `hover`
-- 单击不误开图，长按可稳定查看大图
+- `04-mobile-landscape-layout.png` 目前是有效主证据图。
 
-### 6. 基地 ongoing 长按看大图
+### 2. 退出 FAB 面板
 
 截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\09-mobile-base-ongoing-long-press-magnify.png`
 
-结论：
-- 基地顶部 `ongoing` 行动卡在移动端可直接长按查看
-- 长按后没有串到点击激活逻辑
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\04a-mobile-exit-fab-panel.png`
 
-### 7. 附着行动卡长按看大图
+嵌入：
+
+![04a-mobile-exit-fab-panel](../test-results/evidence-screenshots/smashup-4p-layout-test.e2e/移动端横屏应保持四人局布局可用，并支持手牌长按看牌/04a-mobile-exit-fab-panel.png)
+
+我从图里确认到：
+
+- 退出面板完整落在视口内，没有右侧或底部溢出。
+- FAB 视觉圆球已经缩小，没有像旧版那样压住主棋盘。
+
+有效性裁定：
+
+- `04a-mobile-exit-fab-panel.png` 目前是有效局部证据图。
+
+### 3. 单击随从展开附着行动
 
 截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\10-mobile-attached-action-long-press-magnify.png`
 
-结论：
-- 附着行动卡先通过点击随从展开，再可长按查看大图
-- 这说明移动端语义已经稳定为“点击选中/展开，长按查看”
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\05-mobile-single-tap-expands-attached-actions.png`
 
-### 8. 手牌长按能力未回归
+嵌入：
 
-截图：
-`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+![05-mobile-single-tap-expands-attached-actions](../test-results/evidence-screenshots/smashup-4p-layout-test.e2e/移动端横屏应保持四人局布局可用，并支持手牌长按看牌/05-mobile-single-tap-expands-attached-actions.png)
 
-结论：
-- 这轮收口没有破坏上一轮已经做好的手牌长按看牌
-- 长按后原手牌仍保留在手牌区，没有误打出
+我从图里确认到：
 
-## 最终结论
+- 图中仍残留旧版 `Exit` hover tooltip。
 
-本轮移动端交互已经对齐当前裁决：
+有效性裁定：
 
-- 附着行动卡不再常显，必须先点击随从展开
-- 随从天赋改为“第一次点击选中，第二次点击激活”
-- 长按统一承担查看大图
-- 相关 E2E 和单测都已通过
+- `05-mobile-single-tap-expands-attached-actions.png` 不是当前代码的有效收口图。
+
+### 4. 长按放大相关旧图
+
+已查看截图：
+
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\08-mobile-base-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\09-mobile-base-ongoing-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\10-mobile-attached-action-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+
+共同问题：
+
+- 图里放大层虽然出现了，但主体内容仍是 `atlas-shimmer` 占位态。
+- 这些图只能证明 overlay 已经打开，不能证明大图已经正确渲染完成。
+
+有效性裁定：
+
+- `07-11` 这一组历史截图都不应继续作为有效收口证据。
+
+## 当前结论
+
+- 代码层面，`smashup` 横屏主布局和 FAB 退出面板这一轮已经收敛，`04` 和 `04a` 可以继续作为有效截图。
+- 放大预览的旧截图链路不成立，不是功能必然错误，而是截图时机过早，截到了 `atlas-shimmer`。
+- 本轮已把等待条件补进 [e2e/smashup-4p-layout-test.e2e.ts](/D:/gongzuo/webgame/BoardGame/e2e/smashup-4p-layout-test.e2e.ts)：后续重跑必须先等 `.atlas-shimmer` 消失，再生成 `07-11` 新图。
+- 当前沙箱仍被 `spawn EPERM` 阻塞，无法在这里补跑新图。
+
+## 下一步
+
+在允许 `child_process` 的环境中执行：
+
+```bash
+npm run test:e2e:ci:file -- e2e/smashup-4p-layout-test.e2e.ts "移动端横屏应保持四人局布局可用，并支持手牌长按看牌"
+```
+
+重跑后优先人工核对：
+
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\08-mobile-base-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\09-mobile-base-ongoing-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\10-mobile-attached-action-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\12-tablet-landscape-layout.png`

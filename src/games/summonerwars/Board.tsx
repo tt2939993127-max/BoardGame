@@ -13,7 +13,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameBoardProps } from '../../engine/transport/protocol';
-import type { MatchState } from '../../engine/types';
 import type { SummonerWarsCore } from './domain';
 import { SW_COMMANDS } from './domain';
 import './cursor'; // Register cursor themes
@@ -31,7 +30,7 @@ import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
-import { TutorialSelectionGate } from '../../components/game/framework';
+import { MobileBoardShell, TutorialSelectionGate } from '../../components/game/framework';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
 import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
@@ -116,6 +115,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   const isLandscapeMobile = isMobileViewport && viewportSize.width > viewportSize.height;
   const mapContainerPadding = isLandscapeMobile ? '4vw' : '10vw';
+  const mapContainerPaddingBlock = isLandscapeMobile ? '8vh' : '0px';
   const mapShadeWidth = isLandscapeMobile ? '4vw' : '10vw';
   const activeEventLabelClass = isLandscapeMobile
     ? 'text-[10px] px-1 py-0.5'
@@ -139,6 +139,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const phaseTrackerClass = isLandscapeMobile
     ? 'bg-slate-900/50 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6.5rem]'
     : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = isLandscapeMobile
+    ? 'absolute right-1.5 top-14 z-20 pointer-events-auto'
+    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -742,9 +745,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               />
             </div>
           ) : (
-            <div className="flex-1 relative overflow-hidden">
-              {/* 地图层 */}
-              <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <MobileBoardShell>
+                <div className="relative h-full overflow-hidden">
+                  {/* 地图层 */}
+                  <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
                   className="w-full h-full flex items-center justify-center"
                   initialScale={1}
@@ -756,7 +761,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div className="relative inline-block" style={{ paddingInline: mapContainerPadding }}>
+                  <div
+                    className="relative inline-block"
+                    style={{ paddingInline: mapContainerPadding, paddingBlock: mapContainerPaddingBlock }}
+                  >
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -832,10 +840,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     </div>
                   </div>
                 </MapContainer>
-              </div>
+                  </div>
 
-              {/* UI 层 */}
-              <div className="absolute inset-0 z-20 pointer-events-none">
+                  {/* UI 层 */}
+                  <div className="absolute inset-0 z-20 pointer-events-none">
                 {/* 左侧黑边渐变 */}
                 <div className="absolute inset-y-0 left-0" style={{ width: mapShadeWidth, background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
                 {/* 右侧黑边渐变 */}
@@ -856,7 +864,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
                       {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
                     </span>
-                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
+                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" size={isLandscapeMobile ? 'compact' : 'normal'} />
                   </div>
 
                   {/* 对手持续效果 - 紧贴魔力条下方，竖直向下排列 */}
@@ -938,7 +946,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
                       {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
                     </span>
-                    <EnergyBar current={myMagic} testId="sw-energy-player" />
+                    <EnergyBar current={myMagic} testId="sw-energy-player" size={isLandscapeMobile ? 'compact' : 'normal'} />
                   </div>
                   <div data-tutorial-id="sw-deck-draw" className={isLandscapeMobile ? 'mt-3 origin-bottom-left scale-90' : 'mt-8'}>
                     <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
@@ -973,7 +981,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 右侧：阶段指示器 */}
-                <div className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-auto ${isLandscapeMobile ? 'right-1.5' : 'right-2'}`} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
                   <PhaseTracker
                     currentPhase={currentPhase}
                     turnNumber={core.turnNumber}
@@ -1050,27 +1058,29 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   />
                 </div>
 
-                {/* 底部：手牌区 */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
-                  <HandArea
-                    cards={myHand}
-                    phase={currentPhase}
-                    isMyTurn={isMyTurn}
-                    currentMagic={myMagic}
-                    selectedCardId={interaction.selectedHandCardId}
-                    selectedCardIds={abilityMode?.step === 'selectCards'
-                      ? interaction.abilitySelectedCardIds
-                      : interaction.selectedCardsForDiscard}
-                    onCardClick={interaction.handleCardClick}
-                    onCardSelect={interaction.handleCardSelect}
-                    onPlayEvent={interaction.handlePlayEvent}
+                  {/* 底部：手牌区 */}
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                    <HandArea
+                      cards={myHand}
+                      phase={currentPhase}
+                      isMyTurn={isMyTurn}
+                      currentMagic={myMagic}
+                      selectedCardId={interaction.selectedHandCardId}
+                      selectedCardIds={abilityMode?.step === 'selectCards'
+                        ? interaction.abilitySelectedCardIds
+                        : interaction.selectedCardsForDiscard}
+                      onCardClick={interaction.handleCardClick}
+                      onCardSelect={interaction.handleCardSelect}
+                      onPlayEvent={interaction.handlePlayEvent}
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
                   />
+                  </div>
                 </div>
-              </div>
+                </div>
+              </MobileBoardShell>
 
               {/* 技能卡牌选择器 */}
               {abilityMode && abilityMode.step === 'selectCard' && (

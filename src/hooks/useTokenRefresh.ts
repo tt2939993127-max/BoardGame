@@ -22,14 +22,30 @@ interface TokenPayload {
     exp: number; // expires at (秒)
 }
 
+function decodeBase64Url(value: string): string | null {
+    try {
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padding = normalized.length % 4 === 0
+            ? ''
+            : '='.repeat(4 - (normalized.length % 4));
+        const binary = atob(normalized + padding);
+        const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+    } catch {
+        return null;
+    }
+}
+
 /**
  * 解析 JWT token 获取过期时间
  */
-function parseToken(token: string): TokenPayload | null {
+export function parseToken(token: string): TokenPayload | null {
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
-        const payload = JSON.parse(atob(parts[1]));
+        const payloadText = decodeBase64Url(parts[1]);
+        if (!payloadText) return null;
+        const payload = JSON.parse(payloadText);
         return payload;
     } catch {
         return null;
@@ -39,7 +55,7 @@ function parseToken(token: string): TokenPayload | null {
 /**
  * 计算距离过期还有多久（毫秒）
  */
-function getTimeUntilExpiry(token: string): number | null {
+export function getTimeUntilExpiry(token: string): number | null {
     const payload = parseToken(token);
     if (!payload?.exp) return null;
     const expiryMs = payload.exp * 1000;
