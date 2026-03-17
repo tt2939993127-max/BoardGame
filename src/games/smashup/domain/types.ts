@@ -287,6 +287,8 @@ export interface PlayerState {
     /** 牌库（索引 0 为顶部） */
     deck: CardInstance[];
     discard: CardInstance[];
+    /** 移出游戏（放入盒中）的卡牌 */
+    removedFromGame?: CardInstance[];
     /** 本回合已打出随从数 */
     minionsPlayed: number;
     /** 本回合可打出随从额度（默认 1） */
@@ -886,6 +888,7 @@ export type SmashUpEvent =
     | OngoingDetachedEvent
     | TalentUsedEvent
     | CardRemovedFromDeckEvent
+    | CardRemovedFromGameEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
     | CardTransferredEvent
@@ -1043,6 +1046,16 @@ export interface TalentUsedEvent extends GameEvent<typeof SU_EVENTS.TALENT_USED>
 
 /** 卡牌放入牌库底 */
 export interface CardRemovedFromDeckEvent extends GameEvent<typeof SU_EVENTS.CARD_REMOVED_FROM_DECK> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        reason: string;
+    };
+}
+
+/** 卡牌移出游戏（放入盒中） */
+export interface CardRemovedFromGameEvent extends GameEvent<typeof SU_EVENTS.CARD_REMOVED_FROM_GAME> {
     payload: {
         playerId: PlayerId;
         cardUid: string;
