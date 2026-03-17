@@ -221,7 +221,6 @@ function ghostSpirit(ctx: AbilityContext): AbilityResult {
     const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
-            if (m.uid === ctx.cardUid) continue; // 排除灵魂自身
             const power = getMinionPower(ctx.state, m, i);
             if (power <= discardable.length) {
                 const def = getCardDef(m.defId) as MinionCardDef | undefined;

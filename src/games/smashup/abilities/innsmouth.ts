@@ -118,9 +118,13 @@ function innsmouthInPlainSightChecker(ctx: ProtectionCheckContext): boolean {
     if (!sight) return false;
     // 只保护?sight 拥有者的随从
     if (ctx.targetMinion.controller !== sight.ownerId) return false;
-    // 只保护力量≤2的随从
-    const power = getMinionPower(ctx.state, ctx.targetMinion, ctx.targetBaseIndex);
-    return power <= 2 && ctx.sourcePlayerId !== sight.ownerId;
+    // POD 版按印刷力量（basePower）判断；原版按当前有效力量判断
+    const isPodVersion = sight.defId.endsWith('_pod');
+    const protectedByPower =
+        isPodVersion
+            ? ctx.targetMinion.basePower <= 2
+            : getMinionPower(ctx.state, ctx.targetMinion, ctx.targetBaseIndex) <= 2;
+    return protectedByPower && ctx.sourcePlayerId !== sight.ownerId;
 }
 
 /**
@@ -148,12 +152,24 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
         return {
             id: `minion-${i}`,
             label: name,
-            value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner, baseIndex: ctx.baseIndex },
+            value: {
+                minionUid: m.uid,
+                minionDefId: m.defId,
+                owner: m.owner,
+                controller: m.controller,
+                baseIndex: ctx.baseIndex,
+            },
             _source: 'field' as const,
             displayMode: 'card' as const,
         };
     });
-    const interaction = createSimpleChoice<{ minionUid: string; minionDefId: string; owner: string; baseIndex: number }>(
+    const interaction = createSimpleChoice<{
+        minionUid: string;
+        minionDefId: string;
+        owner: string;
+        controller: string;
+        baseIndex: number;
+    }>(
         `innsmouth_return_to_the_sea_${ctx.now}`, ctx.playerId,
         '选择要返回手牌的同名随从', options,
         { sourceId: 'innsmouth_return_to_the_sea', targetType: 'minion', multi: { min: 0, max: sameDefMinions.length } },
@@ -166,7 +182,8 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
  */
 function innsmouthTheLocals(ctx: AbilityContext): AbilityResult {
     const { events } = revealAndPickFromDeck({
-        player: ctx.state.players[ctx.playerId],
+        state: ctx.state,
+        random: ctx.random,
         playerId: ctx.playerId,
         count: 3,
         predicate: card => matchesDefId(card.defId, 'innsmouth_the_locals'),
@@ -360,15 +377,25 @@ export function registerInnsmouthInteractionHandlers(): void {
 
     // 重返深海：玩家选择返回手牌的同名随从
     registerInteractionHandler('innsmouth_return_to_the_sea', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as Array<{ minionUid: string; minionDefId: string; owner: string; baseIndex: number }>;
+        const selected = value as Array<{
+            minionUid: string;
+            minionDefId: string;
+            owner: string;
+            controller: string;
+            baseIndex: number;
+        }>;
         if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
         const events: SmashUpEvent[] = [];
         for (const item of selected) {
+            const core = state.core;
+            const base = core.bases[item.baseIndex];
+            const minion = base?.minions.find(m => m.uid === item.minionUid);
+            const targetPlayerId = minion?.controller ?? item.controller ?? playerId;
             events.push(...buildValidatedReturnEvents(state, {
                 minionUid: item.minionUid,
                 minionDefId: item.minionDefId,
                 fromBaseIndex: item.baseIndex,
-                toPlayerId: item.owner,
+                toPlayerId: targetPlayerId,
                 reason: 'innsmouth_return_to_the_sea',
                 now: timestamp,
                 sourcePlayerId: playerId,

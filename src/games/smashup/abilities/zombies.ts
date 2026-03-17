@@ -8,11 +8,11 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
 import type {
-    CardsDiscardedEvent,
     DeckReshuffledEvent,
     SmashUpEvent,
     MinionCardDef,
     MinionPlayedEvent,
+    CardsMilledEvent,
 } from '../domain/types';
 import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -537,10 +537,10 @@ export function registerZombieInteractionHandlers(): void {
         return {
             state,
             events: [{
-                type: SU_EVENTS.CARDS_DISCARDED,
-                payload: { playerId, cardUids: [contCtx.cardUid] },
+                type: SU_EVENTS.CARDS_MILLED,
+                payload: { playerId, cardUids: [contCtx.cardUid], reason: 'zombie_walker' },
                 timestamp,
-            } as CardsDiscardedEvent],
+            } as CardsMilledEvent],
         };
     });
 
@@ -574,7 +574,7 @@ export function registerZombieInteractionHandlers(): void {
                 // 1. 重建牌库：只洗牌库，不合并弃牌堆（DECK_RESHUFFLED 会检查 deckUids 是否包含弃牌堆的卡）
                 { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
                 // 2. 弃牌：同名卡从 deck 移入 discard
-                { type: SU_EVENTS.CARDS_DISCARDED, payload: { playerId, cardUids: uids }, timestamp } as CardsDiscardedEvent,
+                { type: SU_EVENTS.CARDS_MILLED, payload: { playerId, cardUids: uids, reason: 'zombie_mall_crawl' }, timestamp } as CardsMilledEvent,
             ],
         };
     });

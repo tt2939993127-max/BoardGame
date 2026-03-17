@@ -139,13 +139,28 @@ describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
     it('有疯狂卡时生成 Prompt', () => {
         const result = triggerBaseAbilityWithMS('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
-                bases: [makeBase('base_the_asylum')],
+                bases: [makeBase('base_the_asylum', {
+                    minions: [{
+                        uid: 'm1',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '1', // Trade 场景：出牌者=0，拥有者=1
+                        basePower: 3,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        attachedActions: [],
+                    } as any],
+                })],
                 madnessDeck: Array(MADNESS_DECK_SIZE).fill(MADNESS_CARD_DEF_ID),
                 players: {
                     '0': makePlayer('0', {
                         hand: [makeCard('h1', MADNESS_CARD_DEF_ID, 'action')],
                     }),
-                    '1': makePlayer('1'),
+                    '1': makePlayer('1', {
+                        hand: [makeCard('h2', MADNESS_CARD_DEF_ID, 'action')],
+                    }),
                 },
             }),
             baseDefId: 'base_the_asylum',
@@ -157,6 +172,8 @@ describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
             expect(interactions).toHaveLength(1);
         expect(interactions[0].data.sourceId).toBe('base_the_asylum');
         expect(interactions[0].data.targetType).toBe('button');
+        // 拥有者（1）获得选择权
+        expect(interactions[0].playerId).toBe('1');
     });
 
     it('无疯狂卡时不触发', () => {
@@ -341,7 +358,20 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
     it('弃牌堆有卡时生成 Prompt', () => {
         const result = triggerBaseAbilityWithMS('base_innsmouth_base', 'onMinionPlayed', makeCtx({
             state: makeState({
-                bases: [makeBase('base_innsmouth_base')],
+                bases: [makeBase('base_innsmouth_base', {
+                    minions: [{
+                        uid: 'm1',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '1', // Trade 场景：出牌者=0，拥有者=1
+                        basePower: 3,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        attachedActions: [],
+                    } as any],
+                })],
                 players: {
                     '0': makePlayer('0', {
                         discard: [makeCard('d1', 'test_card', 'minion')],
@@ -359,6 +389,8 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
         // 修正：印斯茅斯基地现在是两步交互，第一步选择玩家
         expect(interactions[0].data.sourceId).toBe('base_innsmouth_base_choose_player');
         expect(interactions[0].data.targetType).toBe('player');
+        // 拥有者（1）获得选择权
+        expect(interactions[0].playerId).toBe('1');
     });
 
     it('所有弃牌堆为空时不触发', () => {
@@ -569,7 +601,20 @@ describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
     it('有疯狂牌库时生成 MADNESS_DRAWN 事件', () => {
         const { events } = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', makeCtx({
             state: makeState({
-                bases: [makeBase('base_mountains_of_madness')],
+                bases: [makeBase('base_mountains_of_madness', {
+                    minions: [{
+                        uid: 'm1',
+                        defId: 'test_minion',
+                        controller: '0',
+                        owner: '1', // Trade 场景：出牌者=0，拥有者=1
+                        basePower: 3,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        attachedActions: [],
+                    } as any],
+                })],
                 madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
             }),
             baseDefId: 'base_mountains_of_madness',
@@ -578,7 +623,8 @@ describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
 
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
-        expect((events[0] as any).payload.playerId).toBe('0');
+        // 按 FAQ：抽疯狂卡的是随从拥有者（1）
+        expect((events[0] as any).payload.playerId).toBe('1');
         expect((events[0] as any).payload.count).toBe(1);
     });
 
