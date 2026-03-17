@@ -79,6 +79,8 @@ export function registerVampireInteractionHandlers(): void {
     registerInteractionHandler('vampire_wolf_pact_pod_minion', handleWolfPactPodPickDebuffTarget);
     registerInteractionHandler('vampire_wolf_pact_pod_minion_target', handleWolfPactPodPickCounterTarget);
     registerInteractionHandler('vampire_wolf_pact_pod_action', handleWolfPactPodShuffleChoice);
+    registerInteractionHandler('vampire_fledgling_vampire_pod_bury_source', handleFledglingPodBuryChooseSource);
+    registerInteractionHandler('vampire_fledgling_vampire_pod_bury_base', handleFledglingPodBuryChooseBase);
 }
 
 function registerVampirePodAbilities(): void {
@@ -88,6 +90,7 @@ function registerVampirePodAbilities(): void {
     registerAbility('vampire_cull_the_weak_pod', 'onPlay', vampireCullTheWeakPod);
     registerAbility('vampire_crack_of_dusk_pod', 'onPlay', vampireCrackOfDuskPod);
     registerAbility('vampire_dinner_date_pod', 'onPlay', vampireDinnerDatePod);
+    registerAbility('vampire_fledgling_vampire_pod', 'onPlay', vampireFledglingVampirePodOnPlay);
     registerAbility('vampire_wolf_pact_pod', 'onPlay', vampireWolfPactPodMinionOnPlay);
     registerAbility('vampire_wolf_pact_pod_action', 'onPlay', vampireWolfPactPodActionOnPlay);
 
@@ -213,6 +216,48 @@ function registerVampirePodOngoingEffects(): void {
         return { state, events };
     });
 
+    // Fledgling Vampire POD: after you destroy another minion, you may bury this card from hand or discard on any base.
+    registerTrigger('vampire_fledgling_vampire_pod', 'onMinionDestroyed', (ctx: TriggerContext) => {
+        const { state, destroyerId, triggerMinionUid, now } = ctx;
+        if (!destroyerId) return [];
+        // "another minion" => don't trigger if the destroyed minion itself is a Fledgling in play
+        if (triggerMinionUid && state.bases.some(b => b.minions.some(m => m.uid === triggerMinionUid && m.defId === 'vampire_fledgling_vampire_pod'))) {
+            return [];
+        }
+        const p = state.players[destroyerId];
+        if (!p) return [];
+        const inHand = p.hand.filter(c => c.defId === 'vampire_fledgling_vampire_pod');
+        const inDiscard = p.discard.filter(c => c.defId === 'vampire_fledgling_vampire_pod');
+        if (inHand.length === 0 && inDiscard.length === 0) return [];
+
+        const options: any[] = [
+            ...inHand.map((c, i) => ({
+                id: `hand-${i}`,
+                label: '从手牌埋葬',
+                value: { cardUid: c.uid, from: 'hand' },
+                _source: 'hand' as const,
+                displayMode: 'card' as const,
+            })),
+            ...inDiscard.map((c, i) => ({
+                id: `discard-${i}`,
+                label: '从弃牌堆埋葬',
+                value: { cardUid: c.uid, from: 'discard' },
+                _source: 'discard' as const,
+                displayMode: 'card' as const,
+            })),
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ];
+
+        const interaction = createSimpleChoice(
+            `vampire_fledgling_vampire_pod_bury_${destroyerId}_${now}`,
+            destroyerId,
+            '新生吸血鬼：你可以埋葬这张牌到任意基地',
+            options,
+            { sourceId: 'vampire_fledgling_vampire_pod_bury_source', targetType: 'generic' },
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState!, interaction) } as any;
+    }, { optional: true });
+
     // Stakeout POD restriction: block minions power>=3 when active
     registerRestriction('vampire_stakeout_pod', 'play_minion', (rctx) => {
         const blocks = rctx.state.stakeoutPodBlocks ?? [];
@@ -224,9 +269,56 @@ function registerVampirePodOngoingEffects(): void {
     });
 }
 
+const handleFledglingPodBuryChooseSource: IH = (state, playerId, value, _data, _random, now) => {
+    const v = value as any;
+    if (v?.skip) return { state, events: [] };
+    if (!v?.cardUid) return { state, events: [] };
+    const bases = state.core.bases.map((b, i) => ({ baseIndex: i, label: getBaseDef(b.defId)?.name ?? `基地 #${i + 1}` }));
+    const baseOptions = buildBaseTargetOptions(bases, state.core);
+    const interaction = createSimpleChoice(
+        `vampire_fledgling_vampire_pod_bury_base_${now}`,
+        playerId,
+        '选择要埋葬到的基地',
+        baseOptions,
+        { sourceId: 'vampire_fledgling_vampire_pod_bury_base', targetType: 'base' },
+    );
+    (interaction.data as any).continuationContext = { cardUid: v.cardUid, fromDiscard: v.from === 'discard' };
+    return { state: queueInteraction(state, interaction), events: [] };
+};
+
+const handleFledglingPodBuryChooseBase: IH = (state, playerId, value, interactionData, _random, now) => {
+    const ctx = interactionData?.continuationContext as { cardUid: string; fromDiscard: boolean } | undefined;
+    if (!ctx) return { state, events: [] };
+    const v = value as any;
+    const baseIndex = v?.baseIndex as number | undefined;
+    if (baseIndex === undefined) return { state, events: [] };
+    const buriedEvt: SmashUpEvent = {
+        type: SU_EVENTS.CARD_BURIED,
+        payload: {
+            playerId,
+            cardUid: ctx.cardUid,
+            defId: 'vampire_fledgling_vampire_pod',
+            baseIndex,
+            trueOwnerId: playerId,
+            buriedFrom: ctx.fromDiscard ? 'discard' : 'hand',
+            reason: 'vampire_fledgling_vampire_pod',
+        } as any,
+        timestamp: now,
+    };
+    return { state, events: [buriedEvt] };
+};
+
 // ============================================================================
 // 随从能力
 // ============================================================================
+
+function vampireFledglingVampirePodOnPlay(ctx: AbilityContext): AbilityResult {
+    const found = findMinionOnBases(ctx.state, ctx.cardUid);
+    if (!found) return { events: [] };
+    const playedFrom = (found.minion.metadata?.playedFrom as string | undefined) ?? 'hand';
+    if (playedFrom === 'hand') return { events: [] };
+    return { events: [addPowerCounter(found.minion.uid, found.baseIndex, 1, 'vampire_fledgling_vampire_pod', ctx.now)] };
+}
 
 /** 新生吸血鬼 onPlay：如果对手在这里力量更高，本随从+1指示物 */
 function vampireFledgling(ctx: AbilityContext): AbilityResult {

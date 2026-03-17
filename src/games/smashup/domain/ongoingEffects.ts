@@ -114,6 +114,8 @@ export interface TriggerContext {
     triggerMinionUid?: string;
     /** 触发相关的随从 defId */
     triggerMinionDefId?: string;
+    /** 消灭者（仅 onMinionDestroyed 时提供，用于“在你消灭后”类能力判定） */
+    destroyerId?: PlayerId;
     /** 触发事件原因（用于二次分流，如拦截后恢复消灭） */
     reason?: string;
     /** 影响类型（仅 onMinionAffected 时有值） */
