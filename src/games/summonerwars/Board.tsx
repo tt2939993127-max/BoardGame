@@ -26,7 +26,6 @@ import { getUndoSnapshotCount } from '../../engine/systems/UndoSystem';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { useEndgame } from '../../hooks/game/useEndgame';
-import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
@@ -87,61 +86,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
-  const isMobileViewport = useMobileViewport();
-  const [viewportSize, setViewportSize] = useState(() => ({
-    width: typeof window === 'undefined' ? 0 : window.innerWidth,
-    height: typeof window === 'undefined' ? 0 : window.innerHeight,
-  }));
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-
-    const updateViewportSize = () => {
-      setViewportSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-
-    updateViewportSize();
-    window.addEventListener('resize', updateViewportSize);
-    window.addEventListener('orientationchange', updateViewportSize);
-
-    return () => {
-      window.removeEventListener('resize', updateViewportSize);
-      window.removeEventListener('orientationchange', updateViewportSize);
-    };
-  }, []);
-
-  const isLandscapeMobile = isMobileViewport && viewportSize.width > viewportSize.height;
-  const mapContainerPadding = isLandscapeMobile ? '4vw' : '10vw';
-  const mapContainerPaddingBlock = isLandscapeMobile ? '8vh' : '0px';
-  const mapShadeWidth = isLandscapeMobile ? '4vw' : '10vw';
-  const activeEventLabelClass = isLandscapeMobile
-    ? 'text-[10px] px-1 py-0.5'
-    : 'text-[0.65vw] px-1.5 py-0.5';
-  const activeEventCardStyle = isLandscapeMobile
-    ? { width: 'clamp(52px, 7.5vw, 72px)' }
-    : { width: '4.5vw' };
-  const activeEventNameClass = isLandscapeMobile ? 'text-[9px] py-0.5 px-1' : 'text-[0.6vw] py-0.5 px-1';
-  const activeEventChargeDotStyle = isLandscapeMobile
-    ? { width: '5px', height: '5px' }
-    : { width: '0.4vw', height: '0.4vw' };
-  const opponentBarClass = isLandscapeMobile
-    ? 'absolute top-2 right-2 pointer-events-auto flex flex-col items-end gap-1.5'
-    : 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
-  const playerBarClass = isLandscapeMobile
-    ? 'absolute left-2 bottom-2 z-20 pointer-events-auto flex flex-col items-start gap-2'
-    : 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseControlsClass = isLandscapeMobile
-    ? 'absolute right-2 bottom-2 z-20 pointer-events-auto flex flex-col items-end gap-2'
-    : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
-  const phaseTrackerClass = isLandscapeMobile
-    ? 'bg-slate-900/50 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6.5rem]'
-    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
-  const phaseTrackerWrapperClass = isLandscapeMobile
-    ? 'absolute right-1.5 top-14 z-20 pointer-events-auto'
-    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const mapContainerPadding = '10vw';
+  const mapContainerPaddingBlock = '0px';
+  const mapShadeWidth = '10vw';
+  const activeEventLabelClass = 'text-[0.65vw] px-1.5 py-0.5';
+  const activeEventCardStyle = { width: '4.5vw' };
+  const activeEventNameClass = 'text-[0.6vw] py-0.5 px-1';
+  const activeEventChargeDotStyle = { width: '0.4vw', height: '0.4vw' };
+  const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
+  const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
+  const phaseControlsClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
+  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -860,11 +816,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
                 {/* 右上：对手名+魔力条 + 持续效果 */}
                 <div className={opponentBarClass} data-testid="sw-opponent-bar">
-                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
-                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-600/20 bg-black/60 px-3 py-2">
+                    <span className="max-w-[9rem] truncate text-sm font-medium text-white text-opacity-100">
                       {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
                     </span>
-                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" size={isLandscapeMobile ? 'compact' : 'normal'} />
+                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" size="normal" />
                   </div>
 
                   {/* 对手持续效果 - 紧贴魔力条下方，竖直向下排列 */}
@@ -942,13 +898,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     </div>
                   )}
 
-                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
-                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-600/20 bg-black/60 px-3 py-2">
+                    <span className="max-w-[9rem] truncate text-sm font-medium text-white text-opacity-100">
                       {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
                     </span>
-                    <EnergyBar current={myMagic} testId="sw-energy-player" size={isLandscapeMobile ? 'compact' : 'normal'} />
+                    <EnergyBar current={myMagic} testId="sw-energy-player" size="normal" />
                   </div>
-                  <div data-tutorial-id="sw-deck-draw" className={isLandscapeMobile ? 'mt-3 origin-bottom-left scale-90' : 'mt-8'}>
+                  <div data-tutorial-id="sw-deck-draw" className="mt-8">
                     <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
                   </div>
                 </div>
@@ -971,7 +927,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
-                  <div data-tutorial-id="sw-discard-pile" className={isLandscapeMobile ? 'origin-bottom-right scale-90' : ''}>
+                  <div data-tutorial-id="sw-discard-pile">
                     <DeckPile
                       type="discard" count={myDiscardCount} position="right"
                       topCard={myDiscard[myDiscard.length - 1] ?? null}
@@ -993,7 +949,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
-                <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-auto z-30 ${isLandscapeMobile ? 'top-2' : 'top-3'}`} data-tutorial-id="sw-action-banner">
+                <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2 pointer-events-auto" data-tutorial-id="sw-action-banner">
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}

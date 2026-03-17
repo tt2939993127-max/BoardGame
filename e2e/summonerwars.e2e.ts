@@ -946,27 +946,41 @@ const openFabPanel = async (page: Page, panelId: string, mainId = 'chat') => {
   return panel;
 };
 
-const collapseFabMenuToMainButton = async (page: Page) => {
+const collapseFabMenuToMainButton = async (page: Page, mainId = 'settings') => {
   const fabButtons = page.locator('[data-testid="fab-menu"] button');
   const buttonCount = await fabButtons.count();
-  const visibleButtons: Array<{ index: number; y: number }> = [];
-  for (let index = 0; index < buttonCount; index += 1) {
-    const button = fabButtons.nth(index);
-    if (!await button.isVisible().catch(() => false)) {
-      continue;
+  const mainButton = page.locator(`[data-fab-id="${mainId}"]`);
+  const getVisibleButtons = async () => {
+    const visibleButtons: Array<{ index: number; y: number }> = [];
+    for (let index = 0; index < buttonCount; index += 1) {
+      const button = fabButtons.nth(index);
+      if (!await button.isVisible().catch(() => false)) {
+        continue;
+      }
+      const box = await button.boundingBox();
+      if (!box) {
+        continue;
+      }
+      visibleButtons.push({ index, y: box.y });
     }
-    const box = await button.boundingBox();
-    if (!box) {
-      continue;
+    return visibleButtons;
+  };
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const visibleButtons = await getVisibleButtons();
+    if (visibleButtons.length <= 1) {
+      return;
     }
-    visibleButtons.push({ index, y: box.y });
-  }
-  if (visibleButtons.length <= 1) {
-    return;
+
+    if (await mainButton.isVisible().catch(() => false)) {
+      await mainButton.click();
+    } else {
+      visibleButtons.sort((a, b) => b.y - a.y);
+      await fabButtons.nth(visibleButtons[0].index).click();
+    }
+    await page.waitForTimeout(120);
   }
 
-  visibleButtons.sort((a, b) => b.y - a.y);
-  await fabButtons.nth(visibleButtons[0].index).click();
   await expect.poll(async () => {
     let visibleCount = 0;
     for (let index = 0; index < buttonCount; index += 1) {
@@ -2270,7 +2284,7 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
-  test('移动横屏：触屏放大入口与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+  test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
