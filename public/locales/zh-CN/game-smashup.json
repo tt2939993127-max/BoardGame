@@ -586,7 +586,7 @@
     },
     "elder_thing_elder_thing": {
       "name": "远古之物",
-      "abilityText": "消灭两个你的其他的随从或将这个随从放到你的牌库底，这个随从不受对手卡牌的影响。"
+      "abilityText": "消灭两个你的其他随从，或将本随从放到你的牌库底。持续：本随从不受其他玩家的卡牌影响。"
     },
     "elder_thing_shoggoth": {
       "name": "修格斯",
@@ -1740,31 +1740,31 @@
     },
     "elder_thing_elder_thing_pod": {
       "name": "远古之物",
-      "abilityText": "消灭两个你的其他的随从或将这个随从放到你的牌库底，这个随从不受对手卡牌的影响。"
+      "abilityText": "你必须消灭两个你的其他随从，否则将本随从放到你的牌库底。持续：本随从不受其他玩家卡牌的影响。"
     },
     "elder_thing_shoggoth_pod": {
       "name": "修格斯",
-      "abilityText": "你只能将这张卡打到你至少拥有6点战斗力的基地。每位其他玩家可以抽一张疯狂卡。消灭每个没这样做的玩家在这个基地的一个随从。"
+      "abilityText": "每位其他玩家可以抽一张疯狂卡。每位没有这样做的其他玩家，你可以消灭其在这里的一个随从。之后，如果你在这里的总战斗力少于12点，抽两张疯狂卡。"
     },
     "elder_thing_mi_go_pod": {
       "name": "米-格",
-      "abilityText": "每个其他玩家可以抽一张疯狂卡。每个不这样做的玩家，都能让你抽一张卡。"
+      "abilityText": "每位其他玩家可以抽一张疯狂卡。每位没有这样做的其他玩家，你可以抽一张牌。如果没有其他玩家抽了疯狂卡，你可以在一个随从上放置一个+1战斗力指示物。"
     },
     "elder_thing_byakhee_pod": {
       "name": "拜亚基",
-      "abilityText": "如果其他玩家有随从在这个基地抽一张疯狂卡。"
+      "abilityText": "每位在这里有随从的其他玩家抽一张疯狂卡。"
     },
     "elder_thing_power_of_madness_pod": {
       "name": "疯狂之力",
-      "effectText": "所有其他玩家展示他们的手牌，弃掉所有疯狂卡并且将他们的弃牌堆洗回他们的牌库。"
+      "effectText": "对每位其他玩家，命名一张战术并展示其手牌。他必须弃置所有该战术的复制，并将其弃牌堆洗回其牌库。"
     },
     "elder_thing_insanity_pod": {
       "name": "精神错乱",
-      "effectText": "其他玩家抽两张疯狂卡。"
+      "effectText": "每位其他玩家抽两张疯狂卡。将本战术放入盒中。"
     },
     "elder_thing_dunwich_horror_pod": {
       "name": "敦威治恐怖",
-      "effectText": "打到一个随从上。这个随从获得+5战斗力。在回合结束时消灭这个随从。"
+      "effectText": "打出到一个随从上。持续：该随从获得+5战斗力。特殊：在本基地计分前，该随从的控制者必须抽两张疯狂卡或消灭该随从。"
     },
     "elder_thing_begin_the_summoning_pod": {
       "name": "开始召唤",
@@ -1772,15 +1772,15 @@
     },
     "elder_thing_spreading_horror_pod": {
       "name": "散播恐怖",
-      "effectText": "每位其他玩家随机弃牌直到弃出一张非疯狂卡。"
+      "effectText": "每位其他玩家可以弃置两张非疯狂卡。每位没有这样做的其他玩家，你可以从你的弃牌堆中将一个战斗力为3或更少的随从打出到一个不同的基地上。"
     },
     "elder_thing_the_price_of_power_pod": {
       "name": "力量的代价",
-      "effectText": "特殊：在一个基地计分前，所有有随从在这里的其他玩家展示他们的手牌。每展示出一张疯狂卡，你在这里的一个随从就获得+2战斗力。"
+      "effectText": "每位其他玩家展示其手牌。每展示出一张疯狂卡，在你的一个随从上放置一个+1战斗力指示物。特殊：在一个基地计分前打出。改为展示所有在那里的有随从的其他玩家的手牌。"
     },
     "elder_thing_unfathomable_goals_pod": {
       "name": "深不可测的目的",
-      "effectText": "所有其他玩家展示他的手牌。每位展示出疯狂卡的玩家必须消灭一个他的随从。"
+      "effectText": "每位其他玩家展示其手牌。如果一位玩家展示至少两张疯狂卡，额外打出一个随从。如果总共展示至少四张疯狂卡，额外打出一张战术。"
     },
     "elder_thing_touch_of_madness_pod": {
       "name": "疯狂接触",

@@ -523,6 +523,73 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.CARD_REMOVED_FROM_GAME: {
+            const { playerId, cardUid, defId } = event.payload;
+            const player = state.players[playerId];
+            if (!player) return state;
+
+            // 1) 先从玩家区域移除（hand/deck/discard）
+            let found: CardInstance | undefined;
+            const removeFrom = (cards: CardInstance[]): CardInstance[] => {
+                const idx = cards.findIndex(c => c.uid === cardUid);
+                if (idx === -1) return cards;
+                if (!found) found = cards[idx];
+                return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
+            };
+
+            const newHand = removeFrom(player.hand);
+            const newDeck = removeFrom(player.deck);
+            const newDiscard = removeFrom(player.discard);
+
+            // 2) 再从场上持续牌/附着牌移除（不触发“弃牌”语义，直接消失）
+            let removedFromBoard = false;
+            const newBases = state.bases.map(base => {
+                const hasOngoing = base.ongoingActions.some(o => o.uid === cardUid);
+                const hasAttachment = base.minions.some(m => m.attachedActions.some(a => a.uid === cardUid));
+                if (!hasOngoing && !hasAttachment) return base;
+
+                removedFromBoard = true;
+                const nextOngoing = hasOngoing ? base.ongoingActions.filter(o => o.uid !== cardUid) : base.ongoingActions;
+                const nextMinions = hasAttachment
+                    ? base.minions.map(m => {
+                          if (!m.attachedActions.some(a => a.uid === cardUid)) return m;
+                          return { ...m, attachedActions: m.attachedActions.filter(a => a.uid !== cardUid) };
+                      })
+                    : base.minions;
+
+                return { ...base, ongoingActions: nextOngoing, minions: nextMinions };
+            });
+
+            // 找不到卡：无变化（避免把不存在的 uid 强行塞进 removedFromGame）
+            if (!found && !removedFromBoard) return state;
+
+            const def = getCardDef(defId);
+            const removed: CardInstance =
+                found ??
+                ({
+                    uid: cardUid,
+                    defId,
+                    type: def?.type ?? 'action',
+                    owner: playerId,
+                } satisfies CardInstance);
+
+            const prevRemoved = player.removedFromGame ?? [];
+            return {
+                ...state,
+                bases: newBases,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        hand: newHand,
+                        deck: newDeck,
+                        discard: newDiscard,
+                        removedFromGame: [...prevRemoved, removed],
+                    },
+                },
+            };
+        }
+
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
 
