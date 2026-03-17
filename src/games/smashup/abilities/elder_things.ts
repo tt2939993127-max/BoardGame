@@ -32,7 +32,7 @@ import type {
     MinionOnBase,
 } from '../domain/types';
 import { drawCards, matchesDefId } from '../domain/utils';
-import { getAllCardDefs, getCardDef, getBaseDef } from '../data/cards';
+import { getFactionCards, getCardDef, getBaseDef } from '../data/cards';
 import { registerTrigger, registerProtection, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, ProtectionCheckContext } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
@@ -1484,15 +1484,26 @@ export function registerElderThingInteractionHandlers(): void {
         const ctx = (iData as any)?.continuationContext as { opponents: string[]; idx: number } | undefined;
         if (!ctx) return { state, events: [] };
         const targetPid = ctx.opponents[ctx.idx];
-        const allActionDefIds = Array.from(
-            new Set(
-                getAllCardDefs()
-                    .filter(d => d.type === 'action')
-                    .map(d => d.id),
-            ),
-        );
-        // ensure Madness is included (it's also an action)
-        if (!allActionDefIds.includes(MADNESS_CARD_DEF_ID)) allActionDefIds.unshift(MADNESS_CARD_DEF_ID);
+        // Only list actions from factions that are present in this match (all players' selected factions),
+        // plus Madness (also an action). This keeps the naming list searchable.
+        const factionIds = new Set<string>();
+        for (const p of Object.values(state.core.players)) {
+            const factions = (p as any)?.factions as [string, string] | undefined;
+            if (!factions) continue;
+            factionIds.add(factions[0]);
+            factionIds.add(factions[1]);
+        }
+        const actionDefIds = new Set<string>();
+        for (const fid of factionIds) {
+            for (const def of getFactionCards(fid as any)) {
+                if (def.type !== 'action') continue;
+                actionDefIds.add(def.id);
+            }
+        }
+        actionDefIds.add(MADNESS_CARD_DEF_ID);
+
+        const allActionDefIds = Array.from(actionDefIds);
+        allActionDefIds.sort((a, b) => (getCardDef(a)?.name ?? a).localeCompare(getCardDef(b)?.name ?? b, 'zh-CN'));
 
         const options = allActionDefIds.map((defId: string, i: number) => ({
             id: `a-${i}`,
