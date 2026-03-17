@@ -1755,12 +1755,11 @@ function postProcessSystemEvents(
             for (const preEvt of prePlayEvents) {
                 tempCore = reduce(tempCore, preEvt);
             }
-            // 【重要】对于从牌库打出的随从（fromDeck: true），必须 reduce 当前 MINION_PLAYED 事件
-            // 确保 onPlay 触发器看到更新后的牌库状态（当前卡已被移除）
-            // 例如：robot_hoverbot 从牌库打出时，onPlay 触发器需要看到新的牌库顶
-            // 对于从手牌打出的随从，state 已经包含了所有事件的 reduce 结果，不需要再 reduce
+            // 【重要】对于从非手牌来源“额外打出”的随从（fromDeck / fromDiscard / fromBuried），
+            // 必须在这里 reduce 当前 MINION_PLAYED 事件，确保 onPlay 触发器能在 core 中找到该随从，
+            // 并读到正确的 metadata.playedFrom（例如翻出埋葬牌时）。
             const payload = event.payload;
-            if (payload.fromDeck) {
+            if (payload.fromDeck || payload.fromDiscard || payload.fromBuried) {
                 tempCore = reduce(tempCore, event);
             }
             
