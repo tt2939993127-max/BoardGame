@@ -1008,25 +1008,27 @@ describe('诡术师 ongoing 能力', () => {
     });
 
     describe('trickster_brownie: 布朗尼', () => {
-        test('POD 版被对手影响时，对手弃两张牌', () => {
+        test('POD 版：每回合一次，对手在其他基地打出随从后，抽一张牌', () => {
             const brownie = makeMinion({ defId: 'trickster_brownie_pod', uid: 'brownie-pod-1', controller: '0', owner: '0' });
-            const base = makeBase({ minions: [brownie] });
-            const state = makeState([base]);
+            const base0 = makeBase({ minions: [brownie] });
+            const base1 = makeBase({});
+            const state = makeState([base0, base1]);
 
-            const { events } = fireTriggers(state, 'onMinionAffected', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1',
-                triggerMinionUid: 'brownie-pod-1',
-                triggerMinionDefId: 'trickster_brownie_pod',
-                triggerMinion: brownie,
+                baseIndex: 1,
+                triggerMinionUid: 'opp-new-m',
+                triggerMinionDefId: 'some_minion',
                 random: dummyRandom,
                 now: 1000,
             } as any);
 
-            expect(events).toHaveLength(1);
-            expect(events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
-            expect((events[0] as any).payload.playerId).toBe('1');
-            expect((events[0] as any).payload.cardUids).toHaveLength(2);
+            expect(events).toHaveLength(2);
+            expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
+            expect((events[0] as any).payload.playerId).toBe('0');
+            expect((events[0] as any).payload.count).toBe(1);
+            expect(events[1].type).toBe(SU_EVENTS.MINION_METADATA_UPDATED);
         });
     });
 

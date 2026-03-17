@@ -52,9 +52,9 @@ import type {
 } from './types';
 import type { PlayerId } from '../../../engine/types';
 import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from './types';
-import { getMinionDef, getCardDef, getBaseDefIdsForFactions } from '../data/cards';
-import type { ActionCardDef } from './types';
-import { buildDeck, drawCards } from './utils';
+import { getMinionDef, getMinionLikePower, getCardDef, getBaseDefIdsForFactions, getFusionDef } from '../data/cards';
+import type { ActionCardDef, FusionCardDef } from './types';
+import { buildDeck, drawCards, isCardMinionLike } from './utils';
 import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { maybeQueueStartingHandMulliganPrompt } from './mulliganHandlers';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from './abilityRegistry';
@@ -139,6 +139,7 @@ function executeCommand(
             const baseIndex = command.payload.baseIndex;
             const events: SmashUpEvent[] = [];
             let updatedState: MatchState<SmashUpCore> | undefined;
+            const basePower = getMinionLikePower(card.defId) ?? 0;
 
             const playedEvt: MinionPlayedEvent = {
                 type: SU_EVENTS.MINION_PLAYED,
@@ -148,14 +149,18 @@ function executeCommand(
                     defId: card.defId,
                     baseIndex,
                     baseDefId: core.bases[baseIndex].defId,
-                    power: minionDef?.power ?? 0,
+                    power: basePower,
                     fromDiscard: fromDiscard || undefined,
                     ...(fromDiscard ? (() => {
                         const info = canPlayFromDiscard(core, command.playerId, card.uid, baseIndex);
                         return info ? { discardPlaySourceId: info.sourceId, consumesNormalLimit: info.consumesNormalLimit } : {};
                     })() : {}),
                     // meFirst 响应窗口中打出 beforeScoringPlayable 随从不消耗正常额度
-                    ...(state.sys.responseWindow?.current?.windowType === 'meFirst' && minionDef?.beforeScoringPlayable
+                    ...(state.sys.responseWindow?.current?.windowType === 'meFirst' && (() => {
+                        if (minionDef?.beforeScoringPlayable) return true;
+                        const fusionDef = getFusionDef(card.defId);
+                        return fusionDef?.minionBeforeScoringPlayable === true;
+                    })()
                         ? { consumesNormalLimit: false }
                         : {}),
                 },
@@ -190,7 +195,7 @@ function executeCommand(
         case SU_COMMANDS.PLAY_ACTION: {
             const player = core.players[command.playerId];
             const card = player.hand.find(c => c.uid === command.payload.cardUid)!;
-            const def = getCardDef(card.defId) as ActionCardDef | undefined;
+            const def = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
             const events: SmashUpEvent[] = [];
             let updatedState: MatchState<SmashUpCore> | undefined;
 
@@ -206,7 +211,11 @@ function executeCommand(
             };
             events.push(event);
 
-            if (def?.subtype === 'ongoing') {
+            const subtype = (def as any)?.type === 'fusion'
+                ? (def as FusionCardDef).actionSubtype
+                : (def as ActionCardDef | undefined)?.subtype;
+
+            if (subtype === 'ongoing') {
                 // 持续行动卡：附着到目标
                 const targetBase = command.payload.targetBaseIndex ?? 0;
                 const attachEvt: OngoingAttachedEvent = {
@@ -244,11 +253,13 @@ function executeCommand(
                 }
             } else {
                 // standard / special 行动卡：执行效果
-                const isSpecial = def?.subtype === 'special';
+                const isSpecial = subtype === 'special';
                 
                 if (isSpecial) {
                     // Special 技能：根据 specialTiming 决定执行时机
-                    const specialTiming = def.specialTiming ?? 'beforeScoring'; // 默认 beforeScoring
+                    const specialTiming = (def as any)?.type === 'fusion'
+                        ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
+                        : ((def as ActionCardDef | undefined)?.specialTiming ?? 'beforeScoring'); // 默认 beforeScoring
                     
                     if (specialTiming === 'beforeScoring') {
                         // beforeScoring：立即执行（当前行为）
@@ -442,7 +453,8 @@ function executeCommand(
                             hand: drawResult.hand,
                         };
                         // 起手无随从 → 标记为可选择重抽一次（may）
-                        if (!drawResult.hand.some(c => c.type === 'minion')) {
+                        // 融合卡规则：未打出时同时算随从与战术，因此 fusion 也算“有随从”
+                        if (!drawResult.hand.some(isCardMinionLike)) {
                             mulliganPlayers.push(pid);
                         }
                     }

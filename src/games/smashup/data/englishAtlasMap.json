@@ -1371,6 +1371,10 @@
     "atlasId": "tts_atlas_6",
     "index": 6
   },
+  "trickster_pixie_pod": {
+    "atlasId": "tts_atlas_6",
+    "index": 8
+  },
   "robot_nukebot": {
     "atlasId": "tts_atlas_5",
     "index": 19

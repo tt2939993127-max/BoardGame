@@ -1,6 +1,7 @@
 import type { PlayerId, RandomFn } from '../../../engine/types';
 import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './types';
-import { getBaseDef, getFactionCards } from '../data/cards';
+import { getBaseDef, getCardDef, getFactionCards } from '../data/cards';
+import type { FusionCardDef } from './types';
 
 // ============================================================================
 // 玩家显示名
@@ -28,6 +29,25 @@ export function getOpponentLabel(pid: PlayerId): string {
  */
 export function matchesDefId(defId: string | undefined | null, baseDefId: string): boolean {
     return defId === baseDefId || defId === `${baseDefId}_pod`;
+}
+
+function isFusionDef(defId: string): boolean {
+    const def = getCardDef(defId) as FusionCardDef | undefined;
+    return def?.type === 'fusion';
+}
+
+/**
+ * 融合卡规则：除非“正在被打出”，否则融合卡同时视为随从与战术。
+ *
+ * 引擎侧的 CardInstance.type 只能是单值，因此提供这两个 helper
+ * 统一处理“是否算随从/是否算战术”的判断。
+ */
+export function isCardMinionLike(card: CardInstance): boolean {
+    return card.type === 'minion' || (card.type === 'fusion' && isFusionDef(card.defId));
+}
+
+export function isCardActionLike(card: CardInstance): boolean {
+    return card.type === 'action' || (card.type === 'fusion' && isFusionDef(card.defId));
 }
 
 /**
@@ -206,7 +226,7 @@ export function isMicrobot(state: SmashUpCore, minion: MinionOnBase): boolean {
  * alpha 在场时所有己方随从卡都算微型机
  */
 export function isDiscardMicrobot(state: SmashUpCore, card: CardInstance, playerId: PlayerId): boolean {
-    if (card.type !== 'minion') return false;
+    if (!isCardMinionLike(card)) return false;
     if (Array.from(MICROBOT_DEF_IDS).some(defId => matchesDefId(card.defId, defId))) return true;
     // 检查该玩家的 alpha 是否在场
     for (const base of state.bases) {

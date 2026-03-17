@@ -1,4 +1,4 @@
-import type { CardDef, BaseCardDef, MinionCardDef } from '../domain/types';
+import type { CardDef, BaseCardDef, MinionCardDef, FusionCardDef } from '../domain/types';
 import { SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
 
 import { PIRATE_CARDS } from './factions/pirates';
@@ -672,6 +672,21 @@ export function getCardDef(defId: string): CardDef | undefined {
 export function getMinionDef(defId: string): MinionCardDef | undefined {
     const def = _cardRegistry.get(defId);
     return def?.type === 'minion' ? def : undefined;
+}
+
+/** 查找融合卡定义 */
+export function getFusionDef(defId: string): FusionCardDef | undefined {
+    const def = _cardRegistry.get(defId);
+    return def?.type === 'fusion' ? def : undefined;
+}
+
+/** 获取“作为随从”打出时的印制力量（随从或融合卡） */
+export function getMinionLikePower(defId: string): number | undefined {
+    const def = _cardRegistry.get(defId);
+    if (!def) return undefined;
+    if (def.type === 'minion') return def.power;
+    if (def.type === 'fusion') return def.minionPower;
+    return undefined;
 }
 
 /** 查找基地定义 */

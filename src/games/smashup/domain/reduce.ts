@@ -546,13 +546,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     talentUsed: o.ownerId === playerId ? false : o.talentUsed,
                 })),
             }));
-            // 检查沉睡印记：被标记的玩家本回合 actionLimit 设为 0
-            const isSleepMarked = state.sleepMarkedPlayers?.includes(playerId);
-            const newActionLimit = isSleepMarked ? 0 : 1;
-            // 清除该玩家的沉睡标记
-            const newSleepMarked = isSleepMarked
-                ? (state.sleepMarkedPlayers?.filter(p => p !== playerId) ?? [])
-                : state.sleepMarkedPlayers;
+            // POD 沉睡印记：直到施放者下回合开始前，目标玩家 actionLimit = 0
+            const expires = state.sleepMarkExpiresOnTurnNumber;
+            const isExpired = typeof expires === 'number' && turnNumber >= expires;
+            const activeSleepMarked = isExpired ? undefined : state.sleepMarkedPlayers;
+            const activeSleepMoveMarked = isExpired ? undefined : state.sleepMoveMarkedPlayers;
+            const activeExpires = isExpired ? undefined : expires;
+            const newActionLimit = activeSleepMarked?.includes(playerId) ? 0 : 1;
 
             // Smash Up 的 each turn 以“当前玩家回合”为单位。
             // 因此每个玩家回合开始时，都要清空全体玩家在各基地的本回合出牌计数，
@@ -617,7 +617,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
                 turnUsedOngoingUids: undefined,
-                sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
+                sleepMarkedPlayers: activeSleepMarked?.length ? activeSleepMarked : undefined,
+                sleepMoveMarkedPlayers: activeSleepMoveMarked?.length ? activeSleepMoveMarked : undefined,
+                sleepMarkExpiresOnTurnNumber: activeExpires,
                 players: newPlayers,
             };
         }
