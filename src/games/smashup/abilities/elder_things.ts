@@ -32,7 +32,7 @@ import type {
     MinionOnBase,
 } from '../domain/types';
 import { drawCards, matchesDefId } from '../domain/utils';
-import { getCardDef, getBaseDef } from '../data/cards';
+import { getAllCardDefs, getCardDef, getBaseDef } from '../data/cards';
 import { registerTrigger, registerProtection, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, ProtectionCheckContext } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
@@ -534,24 +534,9 @@ function elderThingInsanityPod(ctx: AbilityContext): AbilityResult {
 }
 
 function elderThingPowerOfMadnessPod(ctx: AbilityContext): AbilityResult {
-    // Simplified implementation: reveal each opponent hand, then choose an action name from those revealed.
+    // Correct order (POD): name an action, then reveal hand, discard named copies, then shuffle discard into deck.
     const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
     if (opponents.length === 0) return { events: [] };
-
-    const allRevealCards: { uid: string; defId: string }[] = [];
-    const revealTargetIds: string[] = [];
-    for (const pid of opponents) {
-        const p = ctx.state.players[pid];
-        if (p.hand.length === 0) continue;
-        revealTargetIds.push(pid);
-        for (const c of p.hand) allRevealCards.push({ uid: c.uid, defId: c.defId });
-    }
-
-    const events: SmashUpEvent[] = [];
-    if (allRevealCards.length > 0) {
-        const targetIds = revealTargetIds.length === 1 ? revealTargetIds[0] : revealTargetIds;
-        events.push(revealHand(targetIds, 'all', allRevealCards, 'elder_thing_power_of_madness_pod', ctx.now, ctx.playerId));
-    }
 
     const interaction = createSimpleChoice(
         `elder_thing_power_of_madness_pod_${ctx.now}`,
@@ -563,7 +548,7 @@ function elderThingPowerOfMadnessPod(ctx: AbilityContext): AbilityResult {
         { sourceId: 'elder_thing_power_of_madness_pod_start', targetType: 'button' },
     );
     (interaction.data as any).continuationContext = { opponents, idx: 0 };
-    return { events, matchState: queueInteraction(ctx.matchState, interaction) };
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 function elderThingSpreadingHorrorPod(ctx: AbilityContext): AbilityResult {
@@ -1499,11 +1484,22 @@ export function registerElderThingInteractionHandlers(): void {
         const ctx = (iData as any)?.continuationContext as { opponents: string[]; idx: number } | undefined;
         if (!ctx) return { state, events: [] };
         const targetPid = ctx.opponents[ctx.idx];
-        const opponent = state.core.players[targetPid];
-        const actionDefs = Array.from(new Set(opponent.hand.filter((c: any) => c.type === 'action').map((c: any) => c.defId)));
-        const options = actionDefs.length > 0
-            ? actionDefs.map((defId: string, i: number) => ({ id: `a-${i}`, label: getCardDef(defId)?.name ?? defId, value: { defId }, displayMode: 'button' as const }))
-            : [{ id: 'none', label: '对手手牌无战术（仍洗弃牌堆回牌库）', value: { defId: '__none__' }, displayMode: 'button' as const }];
+        const allActionDefIds = Array.from(
+            new Set(
+                getAllCardDefs()
+                    .filter(d => d.type === 'action')
+                    .map(d => d.id),
+            ),
+        );
+        // ensure Madness is included (it's also an action)
+        if (!allActionDefIds.includes(MADNESS_CARD_DEF_ID)) allActionDefIds.unshift(MADNESS_CARD_DEF_ID);
+
+        const options = allActionDefIds.map((defId: string, i: number) => ({
+            id: `a-${i}`,
+            label: getCardDef(defId)?.name ?? defId,
+            value: { defId },
+            displayMode: 'button' as const,
+        }));
         const interaction = createSimpleChoice(
             `elder_thing_power_of_madness_pod_choose_${targetPid}_${timestamp}`,
             playerId,
@@ -1522,13 +1518,23 @@ export function registerElderThingInteractionHandlers(): void {
         const namedDefId = (value as any).defId as string;
         const opponent = state.core.players[targetPid];
         const events: SmashUpEvent[] = [];
-        if (namedDefId && namedDefId !== '__none__') {
+
+        // Reveal AFTER naming (rule order)
+        if (opponent.hand.length > 0) {
+            events.push(
+                revealHand(targetPid, 'all', opponent.hand.map((c: any) => ({ uid: c.uid, defId: c.defId })), 'elder_thing_power_of_madness_pod', timestamp, playerId)
+            );
+        }
+
+        // Discard all copies of the named action from hand
+        if (namedDefId) {
             const discards = opponent.hand.filter((c: any) => c.defId === namedDefId).map((c: any) => c.uid);
             if (discards.length > 0) {
                 events.push({ type: SU_EVENTS.CARDS_DISCARDED, payload: { playerId: targetPid, cardUids: discards }, timestamp } as any);
             }
         }
-        // shuffle discard pile into deck even if no discards
+
+        // Shuffle discard pile into deck even if no discards (FAQ)
         const newDeck = random.shuffle([...opponent.deck, ...opponent.discard]);
         events.push({ type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId: targetPid, deckUids: newDeck.map((c: any) => c.uid) }, timestamp } as any);
 
