@@ -469,6 +469,17 @@ export interface SmashUpCore {
     madnessDeck?: string[];
     /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力判定，并阻止过期移动把它们从弃牌堆拉回场上） */
     turnDestroyedMinions?: { uid: string; defId: string; baseIndex: number; owner: string }[];
+    /** 本回合曾“消灭过随从”的玩家列表（用于 Nightstalker POD 等判定）。TURN_STARTED 时清空。 */
+    destroyedMinionByPlayersThisTurn?: PlayerId[];
+    /**
+     * 本回合各基地上“玩家力量减少”的记录（baseIndex → playerIds[]）。
+     * 主要用于 Stakeout POD 的判定。TURN_STARTED 时清空。
+     */
+    basePowerDecreasedPlayersThisTurn?: Record<number, PlayerId[]>;
+    /**
+     * Stakeout POD 的临时限制：其他玩家不能在指定基地打出力量≥3的随从，直到 ownerId 的下回合开始。
+     */
+    stakeoutPodBlocks?: Array<{ baseIndex: number; ownerId: PlayerId; expiresOnTurnNumber: number }>;
     // （保留扩展字段位于此处）
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
@@ -889,6 +900,7 @@ export type SmashUpEvent =
     | TalentUsedEvent
     | CardRemovedFromDeckEvent
     | CardRemovedFromGameEvent
+    | StakeoutPodBlockAddedEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
     | CardTransferredEvent
@@ -1060,6 +1072,16 @@ export interface CardRemovedFromGameEvent extends GameEvent<typeof SU_EVENTS.CAR
         playerId: PlayerId;
         cardUid: string;
         defId: string;
+        reason: string;
+    };
+}
+
+/** Stakeout POD：添加临时基地打随从限制 */
+export interface StakeoutPodBlockAddedEvent extends GameEvent<typeof SU_EVENTS.STAKEOUT_POD_BLOCK_ADDED> {
+    payload: {
+        baseIndex: number;
+        ownerId: PlayerId;
+        expiresOnTurnNumber: number;
         reason: string;
     };
 }
