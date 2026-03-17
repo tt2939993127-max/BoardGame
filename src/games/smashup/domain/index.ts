@@ -1373,6 +1373,40 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 }
             }
 
+            // Wiki: Start Turn 时可免费揭开一张自己控制的埋葬卡（可选，且每回合仅一次）
+            const coreForUncover = currentMatchState.core;
+            const buriedChoices: { cardUid: string; baseIndex: number; label: string }[] = [];
+            for (let bi = 0; bi < coreForUncover.bases.length; bi++) {
+                const b = coreForUncover.bases[bi];
+                const buried = (b.buriedCards ?? []).filter(c => c.controllerId === nextPlayerId);
+                for (const bc of buried) {
+                    const def = getCardDef(bc.defId);
+                    buriedChoices.push({
+                        cardUid: bc.uid,
+                        baseIndex: bi,
+                        label: `${def?.name ?? bc.defId} @ ${(getBaseDef(b.defId)?.name ?? `基地 #${bi + 1}`)}`,
+                    });
+                }
+            }
+            if (buriedChoices.length > 0) {
+                const options = buriedChoices.map((c, i) => ({
+                    id: `u-${i}`,
+                    label: c.label,
+                    value: { cardUid: c.cardUid, baseIndex: c.baseIndex },
+                    displayMode: 'button' as const,
+                }));
+                options.push({ id: 'skip', label: '跳过（不揭开）', value: { skip: true }, displayMode: 'button' as const });
+                const interaction = createSimpleChoice(
+                    `bury_uncover_start_turn_${now}`,
+                    nextPlayerId,
+                    '你可以揭开一张你控制的埋葬卡，并立即作为额外卡打出',
+                    options as any[],
+                    { sourceId: 'bury_uncover_start_turn', targetType: 'generic' },
+                );
+                currentMatchState = queueInteraction(currentMatchState, interaction);
+                hasSysUpdate = true;
+            }
+
             // 有 sys 变更时返回 PhaseEnterResult，否则返回纯事件数组
             if (hasSysUpdate) {
                 return { events, updatedState: currentMatchState } as PhaseEnterResult;
@@ -1548,8 +1582,26 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 // playerView：不再隐藏手牌/牌库，直接发送完整数据（不需要防作弊）
 // ============================================================================
 
-function playerView(_state: SmashUpCore, _playerId: PlayerId): Partial<SmashUpCore> {
-    return {};
+function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore> {
+    // 默认不隐藏任何信息（项目内不防作弊），但埋葬卡需要遵循 Wiki：从手牌埋葬默认不公开。
+    // 因此对非控制者隐藏 buriedCards 的 defId 等信息，仅保留“有多少张、由谁控制、在哪个基地”的可见性。
+    const maskedBases = state.bases.map(b => {
+        if (!b.buriedCards || b.buriedCards.length === 0) return b;
+        return {
+            ...b,
+            buriedCards: b.buriedCards.map(c => {
+                if (c.controllerId === playerId) return c;
+                return {
+                    uid: c.uid,
+                    defId: 'buried_unknown',
+                    trueOwnerId: c.controllerId,
+                    controllerId: c.controllerId,
+                    buriedFrom: c.buriedFrom,
+                };
+            }),
+        };
+    });
+    return { bases: maskedBases };
 }
 
 

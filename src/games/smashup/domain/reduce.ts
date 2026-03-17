@@ -129,16 +129,20 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.MINION_PLAYED: {
-            const { playerId, cardUid, defId, baseIndex, power, fromDiscard, fromDeck, discardPlaySourceId, consumesNormalLimit } = event.payload;
+            const { playerId, cardUid, defId, baseIndex, power, fromDiscard, fromDeck, fromBuried, discardPlaySourceId, consumesNormalLimit } = event.payload;
             const player = state.players[playerId];
             const cardInHand = player.hand.some(card => card.uid === cardUid);
             const cardInDiscard = player.discard.some(card => card.uid === cardUid);
             const cardInDeck = player.deck.some(card => card.uid === cardUid);
-            if ((fromDiscard && !cardInDiscard) || (fromDeck && !cardInDeck) || (!fromDiscard && !fromDeck && !cardInHand)) {
+            const buriedHasCard = fromBuried
+                ? (state.bases[baseIndex]?.buriedCards ?? []).some(c => c.uid === cardUid)
+                : false;
+            if (fromBuried && !buriedHasCard) return state;
+            if (!fromBuried && ((fromDiscard && !cardInDiscard) || (fromDeck && !cardInDeck) || (!fromDiscard && !fromDeck && !cardInHand))) {
                 return state;
             }
             // 根据来源从手牌、弃牌堆或牌库移除卡牌
-            const newHand = (fromDiscard || fromDeck) ? player.hand : player.hand.filter(c => c.uid !== cardUid);
+            const newHand = (fromDiscard || fromDeck || fromBuried) ? player.hand : player.hand.filter(c => c.uid !== cardUid);
             const newDiscard = fromDiscard ? player.discard.filter(c => c.uid !== cardUid) : player.discard;
             const newDeck = fromDeck ? player.deck.filter(c => c.uid !== cardUid) : player.deck;
             const minion: MinionOnBase = {
@@ -153,10 +157,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 talentUsed: false,
                 playedThisTurn: true,
                 attachedActions: [],
+                metadata: (fromDiscard || fromDeck || fromBuried)
+                    ? { playedFrom: fromDiscard ? 'discard' : fromDeck ? 'deck' : 'buried' }
+                    : undefined,
             };
             const newBases = state.bases.map((base, i) => {
                 if (i !== baseIndex) return base;
-                return { ...base, minions: [...base.minions, minion] };
+                const buriedCards = fromBuried
+                    ? (base.buriedCards ?? []).filter(c => c.uid !== cardUid)
+                    : base.buriedCards;
+                return { ...base, minions: [...base.minions, minion], ...(buriedCards ? { buriedCards } : { buriedCards: undefined }) };
             });
             // 弃牌堆出牌：追踪已使用的能力 sourceId（用于每回合限制）
             const newUsedAbilities = fromDiscard && discardPlaySourceId
@@ -262,16 +272,38 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.ACTION_PLAYED: {
-            const { playerId, cardUid, isExtraAction } = event.payload;
+            const { playerId, cardUid, isExtraAction, fromBuried } = event.payload as any;
             const player = state.players[playerId];
             const card = player.hand.find(c => c.uid === cardUid);
-            const def = card ? getCardDef(card.defId) : undefined;
+            const buriedLookup = (() => {
+                if (!fromBuried) return undefined;
+                for (let i = 0; i < state.bases.length; i++) {
+                    const b = state.bases[i];
+                    const bc = (b.buriedCards ?? []).find(x => x.uid === cardUid);
+                    if (bc) return { baseIndex: i, buried: bc };
+                }
+                return undefined;
+            })();
+            const defId = card?.defId ?? buriedLookup?.buried.defId;
+            const def = defId ? getCardDef(defId) : undefined;
             const isOngoing = def && def.type === 'action' && (def as ActionCardDef).subtype === 'ongoing';
             const isSpecial = def && def.type === 'action' && (def as ActionCardDef).subtype === 'special';
 
-            const newHand = player.hand.filter(c => c.uid !== cardUid);
+            const newHand = fromBuried ? player.hand : player.hand.filter(c => c.uid !== cardUid);
             // ongoing 行动卡不进弃牌堆（由 ONGOING_ATTACHED 处理）
-            const newDiscard = card && !isOngoing ? [...player.discard, card] : player.discard;
+            const movedCard: CardInstance | undefined = card ?? (buriedLookup ? {
+                uid: buriedLookup.buried.uid,
+                defId: buriedLookup.buried.defId,
+                type: (getCardDef(buriedLookup.buried.defId)?.type === 'minion' ? 'minion' : 'action') as any,
+                owner: buriedLookup.buried.trueOwnerId,
+            } : undefined);
+            const newDiscard = movedCard && !isOngoing ? [...player.discard, movedCard] : player.discard;
+            const newBases = fromBuried && buriedLookup
+                ? state.bases.map((b, i) => i !== buriedLookup.baseIndex ? b : ({
+                    ...b,
+                    buriedCards: (b.buriedCards ?? []).filter(x => x.uid !== cardUid),
+                }))
+                : state.bases;
             return {
                 ...state,
                 players: {
@@ -284,7 +316,58 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         actionsPlayed: (isSpecial || isExtraAction) ? player.actionsPlayed : player.actionsPlayed + 1,
                     },
                 },
+                ...(newBases !== state.bases ? { bases: newBases } : {}),
             };
+        }
+
+        case SU_EVENTS.CARD_BURIED: {
+            const { playerId, cardUid, defId, baseIndex, trueOwnerId, buriedFrom } = event.payload as any;
+            const player = state.players[playerId];
+            const existsInHand = player.hand.some(c => c.uid === cardUid);
+            const existsInDiscard = player.discard.some(c => c.uid === cardUid);
+            const existsInDeck = player.deck.some(c => c.uid === cardUid);
+            const newHand = buriedFrom === 'hand' ? player.hand.filter(c => c.uid !== cardUid) : player.hand;
+            const newDiscard = buriedFrom === 'discard' ? player.discard.filter(c => c.uid === cardUid ? false : true) : player.discard;
+            const newDeck = buriedFrom === 'play' ? player.deck : player.deck; // play->buried handled later
+            if (buriedFrom === 'hand' && !existsInHand) return state;
+            if (buriedFrom === 'discard' && !existsInDiscard) return state;
+            if (buriedFrom === 'play' && !existsInDeck) { /* allow no-op for now */ }
+            const buriedEntry = { uid: cardUid, defId, trueOwnerId, controllerId: playerId, buriedFrom } as any;
+            const newBases = state.bases.map((b, i) => i !== baseIndex ? b : ({
+                ...b,
+                buriedCards: [...(b.buriedCards ?? []), buriedEntry],
+            }));
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: { ...player, hand: newHand, discard: newDiscard, deck: newDeck },
+                },
+                bases: newBases,
+            };
+        }
+
+        case SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE: {
+            const { baseIndex } = event.payload as any;
+            const base = state.bases[baseIndex];
+            if (!base || !base.buriedCards || base.buriedCards.length === 0) return state;
+            let newPlayers = { ...state.players };
+            for (const bc of base.buriedCards) {
+                const owner = newPlayers[bc.trueOwnerId];
+                if (!owner) continue;
+                const returned: CardInstance = {
+                    uid: bc.uid,
+                    defId: bc.defId,
+                    type: (getCardDef(bc.defId)?.type === 'minion' ? 'minion' : 'action') as any,
+                    owner: bc.trueOwnerId,
+                };
+                newPlayers = {
+                    ...newPlayers,
+                    [bc.trueOwnerId]: { ...owner, discard: [...owner.discard, returned] },
+                };
+            }
+            const newBases = state.bases.map((b, i) => i !== baseIndex ? b : ({ ...b, buriedCards: undefined }));
+            return { ...state, players: newPlayers, bases: newBases };
         }
 
         case SU_EVENTS.ONGOING_ATTACHED: {
@@ -344,6 +427,24 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             if (!scoredBase) return state;
             let newPlayers = { ...state.players };
             const newBaseDiscard = [...(state.baseDiscard ?? []), scoredBase.defId];
+
+            // 埋葬卡：基地离场时翻开弃置到真正所有者弃牌堆（不触发能力）
+            if (scoredBase.buriedCards && scoredBase.buriedCards.length > 0) {
+                for (const bc of scoredBase.buriedCards) {
+                    const owner = newPlayers[bc.trueOwnerId];
+                    if (!owner) continue;
+                    const returned: CardInstance = {
+                        uid: bc.uid,
+                        defId: bc.defId,
+                        type: (getCardDef(bc.defId)?.type === 'minion' ? 'minion' : 'action') as any,
+                        owner: bc.trueOwnerId,
+                    };
+                    newPlayers = {
+                        ...newPlayers,
+                        [bc.trueOwnerId]: { ...owner, discard: [...owner.discard, returned] },
+                    };
+                }
+            }
 
             // Property 11: 持续行动卡回各自所有者弃牌堆
             for (const ongoing of scoredBase.ongoingActions) {
@@ -1091,6 +1192,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 }
             }
             if (movedMinion) {
+                // Stakeout POD: moving away reduces that player's power on fromBaseIndex
+                const basePowerDecreasedPlayersThisTurn = {
+                    ...(state.basePowerDecreasedPlayersThisTurn ?? {}),
+                    [fromBaseIndex]: Array.from(new Set([...(state.basePowerDecreasedPlayersThisTurn?.[fromBaseIndex] ?? []), movedMinion.controller])),
+                };
                 // 追踪本回合移动到各基地的次数（用于牧场等"首次移动"触发）
                 const mover = movedMinion.controller;
                 const prevMoves = state.minionsMovedToBaseThisTurn ?? {};
@@ -1111,6 +1217,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...state,
                     minionsMovedToBaseThisTurn: updatedMoves,
                     movedToBasesThisTurn: updatedMovedOpp,
+                    basePowerDecreasedPlayersThisTurn,
                     buccaneerPodUsedUids,
                     bases: newBases.map((base, i) => {
                         if (i !== toBaseIndex) return base;
@@ -1161,15 +1268,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.POWER_COUNTER_REMOVED: {
             const { minionUid, amount } = (event as PowerCounterRemovedEvent).payload;
             // 力量指示物：操作 powerCounters 字段
-            const newBases = state.bases.map(base => ({
+            let decreased: { baseIndex: number; playerId: PlayerId } | undefined;
+            const newBases = state.bases.map((base, bi) => ({
                 ...base,
-                minions: base.minions.map(m => 
-                    m.uid === minionUid 
-                        ? { ...m, powerCounters: Math.max(0, (m.powerCounters ?? 0) - amount) }
-                        : m
-                ),
+                minions: base.minions.map(m => {
+                    if (m.uid !== minionUid) return m;
+                    if (amount > 0) decreased = { baseIndex: bi, playerId: m.controller };
+                    return { ...m, powerCounters: Math.max(0, (m.powerCounters ?? 0) - amount) };
+                }),
             }));
-            return { ...state, bases: newBases };
+            const basePowerDecreasedPlayersThisTurn = decreased
+                ? {
+                    ...(state.basePowerDecreasedPlayersThisTurn ?? {}),
+                    [decreased.baseIndex]: Array.from(new Set([...(state.basePowerDecreasedPlayersThisTurn?.[decreased.baseIndex] ?? []), decreased.playerId])),
+                }
+                : state.basePowerDecreasedPlayersThisTurn;
+            return { ...state, bases: newBases, ...(basePowerDecreasedPlayersThisTurn ? { basePowerDecreasedPlayersThisTurn } : {}) };
         }
 
         case SU_EVENTS.MINION_PLAY_EFFECT_QUEUED: {
@@ -1578,29 +1692,43 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.TEMP_POWER_ADDED: {
             const { minionUid, amount } = (event as TempPowerAddedEvent).payload;
             // 使用 minionUid 查找，不依赖 baseIndex（避免基地删除后索引错位）
-            const newBases = state.bases.map(base => ({
+            let decreased: { baseIndex: number; playerId: PlayerId } | undefined;
+            const newBases = state.bases.map((base, bi) => ({
                 ...base,
-                minions: base.minions.map(m => 
-                    m.uid === minionUid 
-                        ? { ...m, tempPowerModifier: (m.tempPowerModifier ?? 0) + amount }
-                        : m
-                ),
+                minions: base.minions.map(m => {
+                    if (m.uid !== minionUid) return m;
+                    if (amount < 0) decreased = { baseIndex: bi, playerId: m.controller };
+                    return { ...m, tempPowerModifier: (m.tempPowerModifier ?? 0) + amount };
+                }),
             }));
-            return { ...state, bases: newBases };
+            const basePowerDecreasedPlayersThisTurn = decreased
+                ? {
+                    ...(state.basePowerDecreasedPlayersThisTurn ?? {}),
+                    [decreased.baseIndex]: Array.from(new Set([...(state.basePowerDecreasedPlayersThisTurn?.[decreased.baseIndex] ?? []), decreased.playerId])),
+                }
+                : state.basePowerDecreasedPlayersThisTurn;
+            return { ...state, bases: newBases, ...(basePowerDecreasedPlayersThisTurn ? { basePowerDecreasedPlayersThisTurn } : {}) };
         }
 
         // 永久力量修正（非指示物，不可移动/转移）
         case SU_EVENTS.PERMANENT_POWER_ADDED: {
             const { minionUid, amount } = (event as PermanentPowerAddedEvent).payload;
-            const newBases = state.bases.map(base => ({
+            let decreased: { baseIndex: number; playerId: PlayerId } | undefined;
+            const newBases = state.bases.map((base, bi) => ({
                 ...base,
-                minions: base.minions.map(m => 
-                    m.uid === minionUid 
-                        ? { ...m, powerModifier: m.powerModifier + amount }
-                        : m
-                ),
+                minions: base.minions.map(m => {
+                    if (m.uid !== minionUid) return m;
+                    if (amount < 0) decreased = { baseIndex: bi, playerId: m.controller };
+                    return { ...m, powerModifier: m.powerModifier + amount };
+                }),
             }));
-            return { ...state, bases: newBases };
+            const basePowerDecreasedPlayersThisTurn = decreased
+                ? {
+                    ...(state.basePowerDecreasedPlayersThisTurn ?? {}),
+                    [decreased.baseIndex]: Array.from(new Set([...(state.basePowerDecreasedPlayersThisTurn?.[decreased.baseIndex] ?? []), decreased.playerId])),
+                }
+                : state.basePowerDecreasedPlayersThisTurn;
+            return { ...state, bases: newBases, ...(basePowerDecreasedPlayersThisTurn ? { basePowerDecreasedPlayersThisTurn } : {}) };
         }
 
         // 临界点临时修正（回合结束自动清零）
