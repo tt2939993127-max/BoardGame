@@ -1884,39 +1884,39 @@
     },
     "giant_ant_worker_pod": {
       "name": "Ant Worker",
-      "abilityText": "Place two +1 power counters on this minion."
+      "abilityText": "Place two +1 power counters on this minion. Ongoing: After this minion goes to the discard pile from play, if it had no +1 power counters on it, you may play it on another base."
     },
     "giant_ant_soldier_pod": {
       "name": "Ant Soldier",
-      "abilityText": "Place two +1 power counters on this minion. Talent: Remove two +1 power counters from this minion to move a minion to another base."
+      "abilityText": "Place two +1 power counters on this minion. Talent: Transfer a +1 power counter between two of your minions."
     },
     "giant_ant_drone_pod": {
       "name": "Ant Drone",
-      "abilityText": "Place a +1 power counter on this minion. Ongoing: Before one of your minions would be destroyed, you may remove a +1 power counter from this minion to prevent that destruction."
+      "abilityText": "Place a +1 power counter on this minion. Ongoing: When one of your minions would be destroyed, you may remove a +1 power counter from this minion instead. Talent: Remove a +1 power counter from this minion to draw a card."
     },
     "giant_ant_killer_queen_pod": {
       "name": "Ant Killer Queen",
-      "abilityText": "Talent: If you played a minion here this turn, place a +1 power counter on that minion and on this minion."
+      "abilityText": "Talent: Draw a minion of power 1 or less off the top of your deck OR choose another minion you played this turn and place a +1 power counter on this minion and that minion."
     },
     "giant_ant_who_wants_to_live_forever_pod": {
       "name": "Ant Who Wants To Live Forever",
-      "effectText": "Remove any number of +1 power counters from your minions. Draw a card for each counter removed."
+      "effectText": "Destroy one of your minions. Search your deck for a card and place it on top of your deck without revealing it."
     },
     "giant_ant_a_kind_of_magic_pod": {
       "name": "Ant A Kind Of Magic",
-      "effectText": "Redistribute any number of +1 power counters among your minions."
+      "effectText": "Transfer any number of +1 power counters between your cards."
     },
     "giant_ant_we_will_rock_you_pod": {
       "name": "Ant We Will Rock You",
-      "effectText": "Each of your minions gains +1 power for each +1 power counter on it until the end of the turn."
+      "effectText": "Each of your minions on one base gain +1 power until the end of the turn for each +1 power counter on them."
     },
-    "giant_ant_claim_the_prize_pod": {
-      "name": "Ant Claim The Prize",
-      "effectText": "Place a +1 power counter on each of up to three of your minions."
+    "giant_ant_gimme_the_prize_pod": {
+      "name": "Ant Gimme the Prize",
+      "effectText": "Place two +1 power counters on a minion and a +1 power counter on another minion."
     },
     "giant_ant_under_pressure_pod": {
       "name": "Ant Under Pressure",
-      "effectText": "Special: Before a base scores, you may move any number of +1 power counters from one of your minions to another."
+      "effectText": "Special: Before a base scores, transfer any number of +1 power counters from one of your minions to another minion."
     },
     "giant_ant_headlong_pod": {
       "name": "Ant Headlong",
@@ -1928,7 +1928,7 @@
     },
     "giant_ant_we_are_the_champions_pod": {
       "name": "Ant We Are The Champions",
-      "effectText": "Special: After a base scores, you may move any number of +1 power counters from one of your minions here to another."
+      "effectText": "Special: After a base scores, transfer any number of +1 power counters from one of your minions there to another minion."
     },
     "innsmouth_the_locals_pod": {
       "name": "The Locals",
