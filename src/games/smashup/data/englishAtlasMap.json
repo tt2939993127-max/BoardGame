@@ -1739,9 +1739,13 @@
     "atlasId": "tts_atlas_24",
     "index": 3
   },
-  "vampire_summon_wolves_pod": {
+  "vampire_stakeout_pod": {
     "atlasId": "tts_atlas_216",
     "index": 34
+  },
+  "vampire_wolf_pact_pod": {
+    "atlasId": "tts_atlas_216",
+    "index": 35
   },
   "giant_ant_worker": {
     "atlasId": "tts_atlas_22",

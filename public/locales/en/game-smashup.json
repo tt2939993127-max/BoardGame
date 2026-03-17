@@ -2300,23 +2300,23 @@
     },
     "vampire_fledgling_vampire_pod": {
       "name": "Fledgling Vampire",
-      "abilityText": "After you play this minion, if another player has more power here than you, place a +1 power counter on this minion."
+      "abilityText": "If this minion was played from anywhere other than your hand, place a +1 power counter on it. Special: After you destroy another minion, you may bury this card from your hand or discard pile on any base."
     },
     "vampire_heavy_drinker_pod": {
       "name": "Heavy Drinker",
-      "abilityText": "You may destroy one of your minions to place a +1 power counter on this minion."
+      "abilityText": "You may destroy a minion of power 2 or less here or one of your other minions on any base to place two +1 power counters on this minion."
     },
     "vampire_nightstalker_pod": {
       "name": "Nightstalker",
-      "abilityText": "You may destroy a minion of power 2 or less here to place a +1 power counter on this minion."
+      "abilityText": "Talent: If you have destroyed a minion this turn, draw a card and give this minion +2 power until the end of the turn."
     },
     "vampire_the_count_pod": {
       "name": "The Count",
-      "abilityText": "Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
+      "abilityText": "Ongoing: After a minion is destroyed, you may place a +1 power counter on a minion at its base. Talent: Give a minion -1 power until the start of your turn."
     },
     "vampire_dinner_date_pod": {
       "name": "Dinner Date",
-      "effectText": "Place a +1 power counter on one of your minions. Destroy a minion of power 2 or less at the same base."
+      "effectText": "Play on a minion. Place two +1 power counters on one of your minions. Ongoing: This minion has -2 power. If this minion has 0 power, destroy it."
     },
     "vampire_big_gulp_pod": {
       "name": "Big Gulp",
@@ -2328,23 +2328,27 @@
     },
     "vampire_mad_monster_party_pod": {
       "name": "Mad Monster Party",
-      "effectText": "Place a +1 power counter on each of your minions without one."
+      "effectText": "Choose a base and place a +1 power counter on each of your minions there. Special: Play after you destroy a minion. Choose its base."
     },
     "vampire_cull_the_weak_pod": {
       "name": "Cull The Weak",
-      "effectText": "Choose one of your minions. Discard any number of minion cards from your hand. For each card discarded, place a +1 power counter on that minion."
+      "effectText": "Search your deck for up to two minions and discard them. For each minion discarded, place a +1 power counter on a minion."
     },
     "vampire_buffet_pod": {
       "name": "Buffet",
-      "effectText": "Special: After a base scores, if you are the winner, place a +1 power counter on each of your minions."
+      "effectText": "Draw two cards. Special: Play after you destroy a minion."
     },
     "vampire_crack_of_dusk_pod": {
-      "name": "Crack Of Dusk",
+      "name": "Crack of Dusk",
       "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
-    "vampire_summon_wolves_pod": {
-      "name": "Summon Wolves",
-      "effectText": "Play on a base. Ongoing: At the start of your turn, place a +1 power counter on this card. If you have a minion here, this card's power counts toward your total power here."
+    "vampire_stakeout_pod": {
+      "name": "Stakeout",
+      "effectText": "Play on a base. Talent: If another player's power here has decreased this turn, other players cannot play minions of power 3 or more here until the start of your next turn."
+    },
+    "vampire_wolf_pact_pod": {
+      "name": "Wolf Pact",
+      "abilityText": "Fusion. Minion: You may give a minion -1 power until the start of your next turn to place a +1 power counter on another one of your minions here. Action: Shuffle a card from your discard pile into your deck."
     },
     "werewolf_howler_pod": {
       "name": "Howler",

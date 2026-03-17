@@ -590,6 +590,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.STAKEOUT_POD_BLOCK_ADDED: {
+            const { baseIndex, ownerId, expiresOnTurnNumber } = event.payload as any;
+            const prev = state.stakeoutPodBlocks ?? [];
+            const next = [...prev, { baseIndex, ownerId, expiresOnTurnNumber }];
+            return { ...state, stakeoutPodBlocks: next };
+        }
+
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
 
@@ -659,6 +666,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 bases: newBases,
                 // 清空本回合消灭记录
                 turnDestroyedMinions: [],
+                destroyedMinionByPlayersThisTurn: undefined,
+                basePowerDecreasedPlayersThisTurn: undefined,
+                stakeoutPodBlocks: (() => {
+                    const remaining = (state.stakeoutPodBlocks ?? []).filter(b => turnNumber < b.expiresOnTurnNumber);
+                    return remaining.length ? remaining : undefined;
+                })(),
                 // 清空本回合移动追踪
                 minionsMovedToBaseThisTurn: undefined,
                 movedToBasesThisTurn: undefined,
@@ -956,7 +969,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         // === 新增事件归约 ===
 
         case SU_EVENTS.MINION_DESTROYED: {
-            const { minionUid, minionDefId, fromBaseIndex, ownerId } = (event as MinionDestroyedEvent).payload;
+            const { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId } = (event as MinionDestroyedEvent).payload;
             // 从基地移除随从
             const base = state.bases[fromBaseIndex];
             const minion = base?.minions.find(m => m.uid === minionUid);
@@ -1004,7 +1017,21 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 追踪本回合被消灭的随从（用于 furthering_the_cause 等触发器，并阻止过期移动把弃牌堆里的牌复活）
             const destroyRecord = { uid: minionUid, defId: minionDefId, baseIndex: fromBaseIndex, owner: ownerId };
             const updatedDestroyList = [...(state.turnDestroyedMinions ?? []), destroyRecord];
-            return { ...state, bases: newBases, players: newPlayers, turnDestroyedMinions: updatedDestroyList };
+            const destroyedMinionByPlayersThisTurn = destroyerId
+                ? Array.from(new Set([...(state.destroyedMinionByPlayersThisTurn ?? []), destroyerId]))
+                : state.destroyedMinionByPlayersThisTurn;
+            const basePowerDecreasedPlayersThisTurn = {
+                ...(state.basePowerDecreasedPlayersThisTurn ?? {}),
+                [fromBaseIndex]: Array.from(new Set([...(state.basePowerDecreasedPlayersThisTurn?.[fromBaseIndex] ?? []), ownerId])),
+            };
+            return {
+                ...state,
+                bases: newBases,
+                players: newPlayers,
+                turnDestroyedMinions: updatedDestroyList,
+                destroyedMinionByPlayersThisTurn,
+                basePowerDecreasedPlayersThisTurn,
+            };
         }
 
         case SU_EVENTS.MINION_MOVED: {
