@@ -1812,7 +1812,7 @@
     },
     "frankenstein_grave_situation_pod": {
       "name": "Grave Situation",
-      "effectText": "Play on a base. Ongoing: When one of your minions here would be destroyed, return it to your hand instead of the discard pile."
+      "effectText": "Play on a base. Ongoing: If your minions here would be destroyed, return them to your hand instead."
     },
     "frankenstein_its_alive_pod": {
       "name": "Its Alive",

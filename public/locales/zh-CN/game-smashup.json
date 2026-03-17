@@ -1812,7 +1812,7 @@
     },
     "frankenstein_grave_situation_pod": {
       "name": "死亡境地",
-      "effectText": "打出到基地上。持续：当你的一个随从在这里被消灭后，把它放到手牌而不是弃牌堆。"
+      "effectText": "打出到基地上。持续：如果你的随从在这里将要被消灭，则改为把它们返回到你的手牌。"
     },
     "frankenstein_its_alive_pod": {
       "name": "它活过来了！",
