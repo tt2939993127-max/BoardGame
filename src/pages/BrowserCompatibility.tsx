@@ -124,6 +124,7 @@ export const BrowserCompatibilityPage = ({
             <SEO
                 title={t('compatibility.seoTitle')}
                 description={t('compatibility.seoDescription')}
+                noIndex
             />
 
             <div

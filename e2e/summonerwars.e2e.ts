@@ -994,6 +994,25 @@ const collapseFabMenuToMainButton = async (page: Page, mainId = 'exit') => {
   }, { timeout: 5000 }).toBeLessThanOrEqual(1);
 };
 
+const waitForSummonerWarsVisualStable = async (page: Page) => {
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const pageRoot = document.querySelector('[data-game-page][data-game-id="summonerwars"]');
+      if (!pageRoot) return 0;
+      const shimmerNodes = Array.from(pageRoot.querySelectorAll<HTMLElement>('[style*="img-shimmer"]'));
+      return shimmerNodes.filter((node) => {
+        const style = window.getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0.01) {
+          return false;
+        }
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }).length;
+    });
+  }, { timeout: 10000 }).toBe(0);
+  await page.waitForTimeout(120);
+};
+
 const getCurrentPhase = async (page: Page) => {
   const phase = await page.getByTestId('sw-action-banner').getAttribute('data-phase');
   if (!phase) {
@@ -2300,6 +2319,7 @@ test.describe('SummonerWars', () => {
     await hostContext.addInitScript(() => {
       (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
       (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
       localStorage.removeItem('hud_fab_position');
       localStorage.removeItem('hud_fab_offset');
     });
@@ -2371,6 +2391,7 @@ test.describe('SummonerWars', () => {
     expect(phoneLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(0);
     expect(phoneLayout.playerEnergyRect?.height ?? 0).toBeGreaterThan(0);
 
+    await waitForSummonerWarsVisualStable(hostPage);
     await collapseFabMenuToMainButton(hostPage);
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board', {
@@ -2454,6 +2475,7 @@ test.describe('SummonerWars', () => {
     });
     await hostPage.setViewportSize({ width: 1024, height: 768 });
     await openSummonerWarsMobileEvidencePage(hostPage);
+    await waitForSummonerWarsVisualStable(hostPage);
     await assertHandAreaVisible(hostPage, 'tablet-landscape');
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
 

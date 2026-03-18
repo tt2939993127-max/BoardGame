@@ -951,6 +951,7 @@ export const MatchRoom = () => {
                     ? t('matchRoom.tutorialTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })
                     : t('matchRoom.matchTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })}
                 ogType="game"
+                noIndex
             />
             {/* 统一的游戏 HUD */}
             <GameHUD

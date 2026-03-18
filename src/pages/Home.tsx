@@ -68,7 +68,8 @@ export const Home = () => {
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
     const { warning: toastWarning, error: toastError } = useToast();
-    const { t } = useTranslation(['lobby', 'auth']);
+    const { t, i18n } = useTranslation(['lobby', 'auth']);
+    const seoT = useMemo(() => i18n.getFixedT('zh-CN', ['lobby', 'common']), [i18n]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
@@ -583,8 +584,9 @@ export const Home = () => {
     return (
         <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
             <SEO
-                title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
-                description={t('lobby:home.subtitle')}
+                title={activeCategory === 'All' ? undefined : seoT(`common:category.${activeCategory}`)}
+                description={seoT('lobby:home.subtitle')}
+                canonical="https://easyboardgame.top/"
             />
             <header className="w-full relative px-6 md:px-12 pt-[calc(env(safe-area-inset-top)+1.25rem)] md:pt-8 pb-0">
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}

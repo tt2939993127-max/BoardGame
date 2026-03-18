@@ -263,6 +263,10 @@
     pointer-events: auto;
 }
 
+[data-game-page][data-game-id="summonerwars"] .sw-phase-end-button {
+    bottom: calc(120px + 0.75rem + 0.5rem);
+}
+
 @media (max-width: 1023px) {
     [data-game-page][data-mobile-layout-preset="board-shell"] .mobile-board-shell {
         padding:
@@ -296,6 +300,16 @@
 
     [data-game-page][data-game-id="summonerwars"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
         --mobile-board-shell-design-width: 900px;
+        --sw-hand-card-width-ratio: 0.145;
+    }
+
+    [data-game-page][data-game-id="summonerwars"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .sw-phase-end-button,
+    [data-game-page][data-game-id="summonerwars"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .sw-discard-pile-dock {
+        z-index: 32;
+    }
+
+    [data-game-page][data-game-id="summonerwars"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .sw-phase-end-button {
+        bottom: calc(120px + 1rem);
     }
 }
 /* 绉诲姩绔Е鎽镐紭鍖?*/
