@@ -11,7 +11,9 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import type { SmashUpCore, SmashUpEvent, MinionOnBase } from './types';
+import type { SmashUpCore, SmashUpEvent, MinionOnBase, TriggerInstance, TriggerQueuedEvent } from './types';
+import { SU_EVENTS } from './types';
+import { registerTriggerExecutor } from './triggerExecutors';
 import { getBaseDef } from '../data/cards';
 import { matchesDefId, mustUseBaseLimitedMinionQuota } from './utils';
 
@@ -82,6 +84,8 @@ export type EventInterceptor = (
 /** 触发时机 */
 export type TriggerTiming =
     | 'onMinionPlayed'     // 随从入场时
+    | 'onActionPlayed'     // 行动卡打出时（用于基地能力队列化）
+    | 'onBaseRevealed'     // 基地翻出/替换后入场（扩展基地触发）
     | 'onMinionDestroyed'  // 随从被消灭时
     | 'onMinionMoved'      // 随从被移动时
     | 'onMinionAffected'   // 随从被对手效果影响时（聚合时机：消灭/移动/力量修改/附着/控制权变更）
@@ -110,6 +114,8 @@ export interface TriggerContext {
     triggerMinionUid?: string;
     /** 触发相关的随从 defId */
     triggerMinionDefId?: string;
+    /** 消灭者（仅 onMinionDestroyed 时提供，用于“在你消灭后”类能力判定） */
+    destroyerId?: PlayerId;
     /** 触发事件原因（用于二次分流，如拦截后恢复消灭） */
     reason?: string;
     /** 影响类型（仅 onMinionAffected 时有值） */
@@ -153,6 +159,13 @@ interface TriggerEntry {
     sourceDefId: string;
     timing: TriggerTiming;
     callback: TriggerCallback;
+    optional?: boolean;
+    phase?: 'replacement' | 'reaction';
+    /**
+     * Global triggers bypass the "source must be in play" witness check.
+     * Use for Special cards that can be played from hand/discard when a condition happens.
+     */
+    global?: boolean;
 }
 
 interface InterceptorEntry {
@@ -197,11 +210,101 @@ export function registerRestriction(
 export function registerTrigger(
     sourceDefId: string,
     timing: TriggerTiming,
-    callback: TriggerCallback
+    callback: TriggerCallback,
+    options?: { optional?: boolean; phase?: 'replacement' | 'reaction'; global?: boolean }
 ): void {
     // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
     if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
-    triggerRegistry.push({ sourceDefId, timing, callback });
+    triggerRegistry.push({
+        sourceDefId,
+        timing,
+        callback,
+        optional: options?.optional,
+        phase: options?.phase ?? 'reaction',
+        global: options?.global,
+    });
+    registerTriggerExecutor(sourceDefId, timing, callback);
+}
+
+function locateSource(state: SmashUpCore, sourceDefId: string): { baseIndex?: number; controllerId?: PlayerId } {
+    for (let i = 0; i < state.bases.length; i++) {
+        const base = state.bases[i];
+        if (base.defId === sourceDefId) return { baseIndex: i };
+        const ongoing = base.ongoingActions.find(o => o.defId === sourceDefId);
+        if (ongoing) return { baseIndex: i, controllerId: ongoing.ownerId };
+        const minion = base.minions.find(m => m.defId === sourceDefId);
+        if (minion) return { baseIndex: i, controllerId: minion.controller };
+        for (const m of base.minions) {
+            const attached = m.attachedActions?.find(a => a.defId === sourceDefId);
+            if (attached) return { baseIndex: i, controllerId: attached.ownerId };
+        }
+    }
+    return {};
+}
+
+/** 收集触发器为 TriggerInstance（不立即执行），用于全局反应队列 */
+export function collectTriggers(
+    state: SmashUpCore,
+    timing: TriggerTiming,
+    ctx: Omit<TriggerContext, 'timing'>,
+): TriggerQueuedEvent | undefined {
+    if (triggerRegistry.length === 0) return undefined;
+    const triggers: TriggerInstance[] = [];
+    const now = ctx.now;
+    const pid = ctx.playerId;
+
+    for (const entry of triggerRegistry) {
+        if (entry.timing !== timing) continue;
+        // Only queue reaction-phase triggers (replacement effects must remain immediate)
+        if (entry.phase === 'replacement') continue;
+        const witnessed = entry.global ? isSourceInHandOrDiscard(state, entry.sourceDefId) : isSourceActive(state, entry.sourceDefId);
+        if (!witnessed) continue;
+        const located = locateSource(state, entry.sourceDefId);
+        // witness rule (base-scoped): for move-related triggers, the source must be on the destination base at trigger time
+        if ((timing === 'onMinionMoved' || timing === 'onMinionAffected') && ctx.baseIndex !== undefined) {
+            if (located.baseIndex !== ctx.baseIndex) continue;
+        }
+        triggers.push({
+            id: `${timing}:${entry.sourceDefId}:${now}:${triggers.length}`,
+            timing,
+            sourceDefId: entry.sourceDefId,
+            sourceControllerId: located.controllerId,
+            sourceBaseIndex: located.baseIndex,
+            mandatory: entry.optional ? false : true,
+            ownerPlayerId: pid,
+            witnessRequirement: 'inPlayAtTriggerTime',
+            witnessed: true,
+            baseIndex: ctx.baseIndex,
+            triggerMinionUid: ctx.triggerMinionUid,
+            triggerMinionDefId: ctx.triggerMinionDefId,
+            triggerMinionPower: (ctx as any).triggerMinionPower,
+            destroyerId: ctx.destroyerId,
+            reason: ctx.reason,
+            affectType: ctx.affectType,
+            rankings: ctx.rankings,
+            lkiMinion: ctx.triggerMinion
+                ? {
+                    uid: ctx.triggerMinion.uid,
+                    defId: ctx.triggerMinion.defId,
+                    owner: ctx.triggerMinion.owner,
+                    controller: ctx.triggerMinion.controller,
+                    baseIndex: ctx.baseIndex ?? located.baseIndex ?? -1,
+                    basePower: ctx.triggerMinion.basePower,
+                    powerCounters: ctx.triggerMinion.powerCounters,
+                    powerModifier: ctx.triggerMinion.powerModifier,
+                    tempPowerModifier: ctx.triggerMinion.tempPowerModifier,
+                    attachedActionDefIds: ctx.triggerMinion.attachedActions?.map(a => a.defId) ?? [],
+                }
+                : undefined,
+        });
+    }
+
+    if (triggers.length === 0) return undefined;
+    return {
+        type: SU_EVENTS.TRIGGER_QUEUED,
+        payload: { triggers },
+        timestamp: now,
+    } as TriggerQueuedEvent;
 }
 
 /** 注册事件拦截器（替代效果） */
@@ -533,7 +636,20 @@ export function isOperationRestricted(
             // 条件限制：maxPower（力量 <= maxPower 的随从被禁止）
             if (r.condition.maxPower !== undefined && restrictionType === 'play_minion') {
                 const basePower = extra?.basePower as number | undefined;
-                if (basePower !== undefined && basePower <= r.condition.maxPower) return true;
+                if (basePower !== undefined && basePower <= r.condition.maxPower) {
+                    // Tsar's Palace + Infiltrate FAQ：
+                    // 若该玩家在该基地上有自己控制的 Infiltrate（play-on-base 行动），
+                    // 则可以无视“power≤2 不可打出”的限制。
+                    if (baseDef.id === 'base_tsars_palace') {
+                        const hasBaseInfiltrate = base.ongoingActions.some(o =>
+                            o.ownerId === playerId && o.defId.startsWith('ninja_infiltrate'),
+                        );
+                        if (hasBaseInfiltrate) {
+                            continue;
+                        }
+                    }
+                    return true;
+                }
             }
             // 条件限制：extraPlayMinionPowerMax（额外出牌时力量 > limit 的随从被禁止）
             if (r.condition.extraPlayMinionPowerMax !== undefined && restrictionType === 'play_minion') {
@@ -555,6 +671,16 @@ export function isOperationRestricted(
                 const player = state.players[playerId];
                 const playedAtBase = player?.minionsPlayedPerBase?.[baseIndex] ?? 0;
                 if (playedAtBase >= r.condition.minionPlayLimitPerTurn) {
+                    // Antarctic Base + Infiltrate FAQ：
+                    // 若你在该基地上有自己控制的 Infiltrate（play-on-base 行动），则你可以忽略该限制。
+                    if (baseDef.id === 'base_antarctic_base') {
+                        const hasBaseInfiltrate = base.ongoingActions.some(o =>
+                            o.ownerId === playerId && o.defId.startsWith('ninja_infiltrate'),
+                        );
+                        if (hasBaseInfiltrate) {
+                            continue;
+                        }
+                    }
                     return true;
                 }
             }
@@ -610,7 +736,8 @@ export function interceptEvent(
 export function fireTriggers(
     state: SmashUpCore,
     timing: TriggerTiming,
-    ctx: Omit<TriggerContext, 'timing'>
+    ctx: Omit<TriggerContext, 'timing'>,
+    options?: { phase?: 'replacement' | 'reaction' }
 ): TriggerResult {
     if (triggerRegistry.length === 0) {
         return { events: [] };
@@ -622,8 +749,9 @@ export function fireTriggers(
 
     for (const entry of triggerRegistry) {
         if (entry.timing !== timing) continue;
+        if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
         
-        const isActive = isSourceActive(state, entry.sourceDefId);
+        const isActive = entry.global ? isSourceInHandOrDiscard(state, entry.sourceDefId) : isSourceActive(state, entry.sourceDefId);
         if (!isActive) continue;
         
         const result = entry.callback({ ...fullCtx, matchState });
@@ -637,6 +765,14 @@ export function fireTriggers(
     }
     
     return { events, matchState };
+}
+
+function isSourceInHandOrDiscard(state: SmashUpCore, sourceDefId: string): boolean {
+    for (const p of Object.values(state.players)) {
+        if (p.hand?.some(c => c.defId === sourceDefId)) return true;
+        if (p.discard?.some(c => c.defId === sourceDefId)) return true;
+    }
+    return false;
 }
 
 // ============================================================================

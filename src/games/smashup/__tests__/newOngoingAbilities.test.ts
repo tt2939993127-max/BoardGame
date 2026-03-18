@@ -106,11 +106,11 @@ describe('bear_cavalry_general_ivan 保护', () => {
         expect(isMinionProtected(state, ally, 0, '1', 'destroy')).toBe(true);
     });
 
-    it('不保护伊万将军自身', () => {
+    it('伊万将军自身也受保护（符合 FAQ）', () => {
         const ivan = makeMinion('ivan', 'bear_cavalry_general_ivan', '0', 6, { powerModifier: 0 });
         const base = makeBase({ minions: [ivan] });
         const state = makeState({ bases: [base] });
-        expect(isMinionProtected(state, ivan, 0, '1', 'destroy')).toBe(false);
+        expect(isMinionProtected(state, ivan, 0, '1', 'destroy')).toBe(true);
     });
 
     it('不保护对手的随从', () => {

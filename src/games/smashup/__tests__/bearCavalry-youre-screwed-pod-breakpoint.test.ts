@@ -8,13 +8,13 @@ beforeAll(() => {
     initAllAbilities();
 });
 
-describe('bear_cavalry_youre_screwed_pod: 动态爆破点修正', () => {
+describe('bear_cavalry_bearing_down_pod: 动态爆破点修正', () => {
     it('默认：每个在此基地有随从的玩家 +2 爆破点', () => {
         const base = makeBase('base_the_jungle', [
             makeMinion('m0', 'test_minion', '0', 3),
             makeMinion('m1', 'test_minion', '1', 3),
         ]);
-        base.ongoingActions = [{ uid: 'oa1', defId: 'bear_cavalry_youre_screwed_pod', ownerId: '0' } as any];
+        base.ongoingActions = [{ uid: 'oa1', defId: 'bear_cavalry_bearing_down_pod', ownerId: '0' } as any];
 
         const state = makeStateWithBases([base]);
         const baseBreakpoint = getEffectiveBreakpoint(
@@ -30,7 +30,7 @@ describe('bear_cavalry_youre_screwed_pod: 动态爆破点修正', () => {
             makeMinion('m0', 'test_minion', '0', 3),
             makeMinion('m1', 'test_minion', '1', 3),
         ]);
-        base.ongoingActions = [{ uid: 'oa1', defId: 'bear_cavalry_youre_screwed_pod', ownerId: '0' } as any];
+        base.ongoingActions = [{ uid: 'oa1', defId: 'bear_cavalry_bearing_down_pod', ownerId: '0' } as any];
 
         const state = makeStateWithBases([base], {
             movedToBasesThisTurn: { 0: true },

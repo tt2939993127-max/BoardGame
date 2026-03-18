@@ -38,7 +38,7 @@ export function registerSteampunkAbilities(): void {
     // difference_engine: 回合结束时控制者多??
     registerTrigger('steampunk_difference_engine', 'onTurnEnd', steampunkDifferenceEngineTrigger);
     // escape_hatch: 随从被消灭时回手牌
-    registerTrigger('steampunk_escape_hatch', 'onMinionDestroyed', steampunkEscapeHatchTrigger);
+    registerTrigger('steampunk_escape_hatch', 'onMinionDestroyed', steampunkEscapeHatchTrigger, { phase: 'replacement' });
     // zeppelin: 天赋 - 移动随从到此基地或从此基地移动?
     registerAbility('steampunk_zeppelin', 'talent', steampunkZeppelin);
 }

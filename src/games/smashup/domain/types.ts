@@ -39,7 +39,7 @@ export const PHASE_ORDER: GamePhase[] = [
 // ============================================================================
 
 /** 卡牌类别 */
-export type CardType = 'minion' | 'action';
+export type CardType = 'minion' | 'action' | 'fusion';
 
 /** 行动卡子类型 */
 export type ActionSubtype = 'standard' | 'ongoing' | 'special';
@@ -93,6 +93,38 @@ export interface MinionCardDef {
     soundKey?: string;
 }
 
+/** 融合卡打出模式 */
+export type FusionPlayAs = 'minion' | 'action';
+
+/** 融合卡定义（在牌库/手牌中同时视为随从与战术；打出时声明一种类型） */
+export interface FusionCardDef {
+    id: string;
+    type: 'fusion';
+    name: string;
+    /** @deprecated 历史英文名，已由 i18n 接管，待清理 */
+    nameEn?: string;
+    faction: FactionId;
+    /** 牌组中的数量 */
+    count: number;
+    previewRef?: CardPreviewRef;
+
+    // --- 作为随从打出 ---
+    minionPower: number;
+    minionAbilityTags?: AbilityTag[];
+    minionPlayConstraint?: PlayConstraint;
+    minionSpecialLimitGroup?: string;
+    minionBeforeScoringPlayable?: boolean;
+
+    // --- 作为战术打出 ---
+    actionSubtype: ActionSubtype;
+    actionAbilityTags?: AbilityTag[];
+    actionOngoingTarget?: 'base' | 'minion';
+    actionPlayConstraint?: PlayConstraint;
+    actionSpecialNeedsBase?: boolean;
+    actionSpecialLimitGroup?: string;
+    actionSpecialTiming?: SpecialTiming;
+}
+
 /** Special 技能触发时机 */
 export type SpecialTiming = 'beforeScoring' | 'afterScoring';
 
@@ -136,7 +168,7 @@ export interface ActionCardDef {
 }
 
 /** 卡牌定义联合类型 */
-export type CardDef = MinionCardDef | ActionCardDef;
+export type CardDef = MinionCardDef | ActionCardDef | FusionCardDef;
 
 /** 基地限制规则（数据驱动） */
 export interface BaseRestriction {
@@ -212,6 +244,8 @@ export interface MinionOnBase {
     playedThisTurn?: boolean;
     /** 附着的行动卡列表（带 owner 追踪） */
     attachedActions: AttachedActionOnMinion[];
+    /** 额外元数据（用于 POD 等复杂状态追踪） */
+    metadata?: Record<string, unknown>;
 }
 
 /** 随从上附着的行动卡 */
@@ -234,12 +268,27 @@ export interface OngoingActionOnBase {
     metadata?: Record<string, unknown>;
 }
 
+/** 埋葬在基地旁的面朝下卡牌（在场上但不可用） */
+export interface BuriedCardOnBase {
+    uid: string;
+    /** 真正的卡牌 defId（对非控制者应隐藏） */
+    defId: string;
+    /** 真正所有者（用于基地离场时弃置到正确弃牌堆） */
+    trueOwnerId: PlayerId;
+    /** 控制者：埋葬该卡的玩家 */
+    controllerId: PlayerId;
+    /** 来源：用于规则/日志调试 */
+    buriedFrom: 'hand' | 'discard' | 'play';
+}
+
 /** 场上的基地 */
 export interface BaseInPlay {
     defId: string;
     minions: MinionOnBase[];
     /** 持续行动卡列表 */
     ongoingActions: OngoingActionOnBase[];
+    /** 埋葬卡列表（面朝下） */
+    buriedCards?: BuriedCardOnBase[];
 }
 
 // ============================================================================
@@ -253,6 +302,8 @@ export interface PlayerState {
     /** 牌库（索引 0 为顶部） */
     deck: CardInstance[];
     discard: CardInstance[];
+    /** 移出游戏（放入盒中）的卡牌 */
+    removedFromGame?: CardInstance[];
     /** 本回合已打出随从数 */
     minionsPlayed: number;
     /** 本回合可打出随从额度（默认 1） */
@@ -261,6 +312,8 @@ export interface PlayerState {
     actionsPlayed: number;
     /** 本回合可打出行动额度（默认 1） */
     actionLimit: number;
+    /** 起手无随从时“可”重抽一次；用于防止重复重抽 */
+    startingHandMulliganUsed?: boolean;
     /** 本回合每个基地已打出随从数（baseIndex → count），用于北极基地等限制 */
     minionsPlayedPerBase?: Record<number, number>;
     /** 本回合已使用的弃牌堆出牌能力 sourceId 集合（用于每回合限制） */
@@ -347,6 +400,66 @@ export type PendingPostScoringAction =
         reason: string;
     };
 
+// ============================================================================
+// Trigger queue (Wiki reaction ordering / witness / LKI)
+// ============================================================================
+
+export type WitnessRequirement = 'inPlayAtTriggerTime' | 'inPlayAtResolveTime';
+
+export interface MinionLkiSnapshot {
+    uid: string;
+    defId: string;
+    owner: PlayerId;
+    controller: PlayerId;
+    baseIndex: number;
+    basePower: number;
+    powerCounters: number;
+    powerModifier: number;
+    tempPowerModifier: number;
+    attachedActionDefIds?: string[];
+}
+
+export interface BaseLkiSnapshot {
+    baseIndex: number;
+    defId: string;
+}
+
+export interface TriggerInstance {
+    /** stable id for interaction selection */
+    id: string;
+    timing: import('./ongoingEffects').TriggerTiming;
+    /** defId of the triggering source (minion/action/base) */
+    sourceDefId: string;
+    /** who controls the source at trigger time (best-effort) */
+    sourceControllerId?: PlayerId;
+    /** base index where source is located at trigger time (best-effort) */
+    sourceBaseIndex?: number;
+
+    /** Wiki ordering */
+    mandatory: boolean;
+    /** who decides / is credited */
+    ownerPlayerId: PlayerId;
+    witnessRequirement: WitnessRequirement;
+    witnessed: boolean;
+
+    /** minimal context */
+    baseIndex?: number;
+    triggerMinionUid?: string;
+    triggerMinionDefId?: string;
+    triggerMinionPower?: number;
+    /** destroyer (for onMinionDestroyed "after you destroy" checks) */
+    destroyerId?: PlayerId;
+    reason?: string;
+    affectType?: import('./ongoingEffects').AffectType;
+    rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    actionTargetBaseIndex?: number;
+    actionTargetMinionUid?: string;
+
+    /** LKI snapshots captured at queue time */
+    lkiMinion?: MinionLkiSnapshot;
+    lkiBase?: BaseLkiSnapshot;
+}
+
 export interface SmashUpCore {
     players: Record<PlayerId, PlayerState>;
     /** 玩家回合顺序 */
@@ -357,6 +470,8 @@ export interface SmashUpCore {
     bases: BaseInPlay[];
     /** 基地牌库（defId 列表） */
     baseDeck: string[];
+    /** 基地弃牌堆（defId 列表）。当基地牌库用尽时，会将弃牌堆洗回牌库继续补充。 */
+    baseDiscard: string[];
     /** 回合数 */
     turnNumber: number;
     /** UID 自增计数器 */
@@ -371,8 +486,24 @@ export interface SmashUpCore {
     madnessDeck?: string[];
     /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力判定，并阻止过期移动把它们从弃牌堆拉回场上） */
     turnDestroyedMinions?: { uid: string; defId: string; baseIndex: number; owner: string }[];
+    /** 本回合曾“消灭过随从”的玩家列表（用于 Nightstalker POD 等判定）。TURN_STARTED 时清空。 */
+    destroyedMinionByPlayersThisTurn?: PlayerId[];
+    /**
+     * 本回合各基地上“玩家力量减少”的记录（baseIndex → playerIds[]）。
+     * 主要用于 Stakeout POD 的判定。TURN_STARTED 时清空。
+     */
+    basePowerDecreasedPlayersThisTurn?: Record<number, PlayerId[]>;
+    /**
+     * Stakeout POD 的临时限制：其他玩家不能在指定基地打出力量≥3的随从，直到 ownerId 的下回合开始。
+     */
+    stakeoutPodBlocks?: Array<{ baseIndex: number; ownerId: PlayerId; expiresOnTurnNumber: number }>;
+    // （保留扩展字段位于此处）
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
+    /** POD 沉睡印记：被标记的玩家本回合不能移动随从（通过事件拦截器阻止移动） */
+    sleepMoveMarkedPlayers?: PlayerId[];
+    /** POD 沉睡印记：标记过期的 turnNumber（到施放者下回合开始时清空） */
+    sleepMarkExpiresOnTurnNumber?: number;
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
     minionsMovedToBaseThisTurn?: Record<string, Record<number, number>>;
     /**
@@ -424,6 +555,17 @@ export interface SmashUpCore {
      * 用于实现类似“渗透 POD 天赋”这种“即使牌已离场，压制仍持续到下回合开始”的规则。
      */
     suppressedBasesUntilTurnStart?: Array<{ baseIndex: number; suppressorPlayerId: PlayerId }>;
+
+    /**
+     * 本回合已触发过“每回合一次”的持续行动卡 UID 列表。
+     *
+     * 用于实现类似 Altar to Cthulhu POD 等“每回合一次触发”的效果。
+     * 生命周期：在 TURN_STARTED 时清空。
+     */
+    turnUsedOngoingUids?: string[];
+
+    /** 全局触发队列：用于按 Wiki 规则统一“同时触发”的反应排序与 witness/LKI */
+    triggerQueue?: TriggerInstance[];
 }
 
 export interface FactionSelectionState {
@@ -571,6 +713,8 @@ export interface MinionPlayedEvent extends GameEvent<'su:minion_played'> {
         fromDiscard?: boolean;
         /** 从牌库打出（而非手牌） */
         fromDeck?: boolean;
+        /** 从埋葬区打出（揭开时使用） */
+        fromBuried?: boolean;
         /** 弃牌堆出牌来源能力 ID（用于每回合限制追踪） */
         discardPlaySourceId?: string;
         /** 是否消耗正常随从额度 */
@@ -587,7 +731,38 @@ export interface ActionPlayedEvent extends GameEvent<'su:action_played'> {
         defId: string;
         /** 是否为额外行动（不消耗行动次数） */
         isExtraAction?: boolean;
+        /** 从埋葬区打出（揭开时使用） */
+        fromBuried?: boolean;
     };
+}
+
+/** 埋葬卡事件：将一张卡面朝下放到基地旁 */
+export interface CardBuriedEvent extends GameEvent<typeof SU_EVENTS.CARD_BURIED> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        baseIndex: number;
+        /** 真正所有者（用于基地离场清算） */
+        trueOwnerId: PlayerId;
+        buriedFrom: 'hand' | 'discard' | 'play';
+        reason: string;
+    };
+}
+
+/** 揭开埋葬卡事件：从埋葬区移除并立即“打出为额外卡” */
+export interface BuriedCardUncoveredEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARD_UNCOVERED> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        baseIndex: number;
+        reason: string;
+    };
+}
+
+/** 基地离场时丢弃其上的所有埋葬卡（翻开弃置，不触发能力） */
+export interface BuriedCardsDiscardedWithBaseEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE> {
+    payload: { baseIndex: number; reason: string };
 }
 
 /** 单个随从的力量 breakdown（用于 ActionLog 展示） */
@@ -640,6 +815,36 @@ export interface CardsDiscardedEvent extends GameEvent<'su:cards_discarded'> {
     payload: {
         playerId: PlayerId;
         cardUids: string[];
+    };
+}
+
+/**
+ * 从牌库“磨牌/弃牌”（mill）：将指定 uid 的牌从 deck 移入 discard。
+ *
+ * 语义区分：
+ * - CARDS_DISCARDED：只允许从手牌弃置
+ * - CARDS_MILLED：只允许从牌库移入弃牌堆
+ */
+export interface CardsMilledEvent extends GameEvent<'su:cards_milled'> {
+    payload: {
+        playerId: PlayerId;
+        cardUids: string[];
+        /** 触发来源（可选，用于 actionLog/FX 识别） */
+        reason?: string;
+    };
+}
+
+/** 入队一个或多个 TriggerInstance（silent / deterministic) */
+export interface TriggerQueuedEvent extends GameEvent<'su:trigger_queued'> {
+    payload: {
+        triggers: TriggerInstance[];
+    };
+}
+
+/** 消费（执行）了一个 TriggerInstance */
+export interface TriggerConsumedEvent extends GameEvent<'su:trigger_consumed'> {
+    payload: {
+        triggerId: string;
     };
 }
 
@@ -719,10 +924,16 @@ export interface LimitModifiedEvent extends GameEvent<'su:limit_modified'> {
 export type SmashUpEvent =
     | MinionPlayedEvent
     | ActionPlayedEvent
+    | CardBuriedEvent
+    | BuriedCardUncoveredEvent
+    | BuriedCardsDiscardedWithBaseEvent
     | BaseScoredEvent
     | VpAwardedEvent
     | CardsDrawnEvent
     | CardsDiscardedEvent
+    | CardsMilledEvent
+    | TriggerQueuedEvent
+    | TriggerConsumedEvent
     | TurnStartedEvent
     | TurnEndedEvent
     | BaseReplacedEvent
@@ -741,11 +952,14 @@ export type SmashUpEvent =
     | OngoingDetachedEvent
     | TalentUsedEvent
     | CardRemovedFromDeckEvent
+    | CardRemovedFromGameEvent
+    | StakeoutPodBlockAddedEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
     | CardTransferredEvent
     | CardRecoveredFromDiscardEvent
     | HandShuffledIntoDeckEvent
+    | StartingHandMulliganUsedEvent
     | MadnessDrawnEvent
     | MadnessReturnedEvent
     | BaseDeckReorderedEvent
@@ -785,9 +999,13 @@ export interface AllFactionsSelectedEvent extends GameEvent<'su:all_factions_sel
         bases?: BaseInPlay[];
         /** 按派系筛选后的基地牌库 */
         baseDeck?: string[];
-        /** 触发了自动重抽 (mulligan) 的玩家列表（规则：若无随从可重抽一次） */
+        /** 起手无随从的玩家列表（规则：若无随从“可”重抽一次） */
         mulliganPlayers?: PlayerId[];
     };
+}
+
+export interface StartingHandMulliganUsedEvent extends GameEvent<typeof SU_EVENTS.STARTING_HAND_MULLIGAN_USED> {
+    payload: { playerId: PlayerId; used: boolean };
 }
 
 // PromptCreatedEvent 和 PromptResolvedEvent 已移除
@@ -897,6 +1115,26 @@ export interface CardRemovedFromDeckEvent extends GameEvent<typeof SU_EVENTS.CAR
         playerId: PlayerId;
         cardUid: string;
         defId: string;
+        reason: string;
+    };
+}
+
+/** 卡牌移出游戏（放入盒中） */
+export interface CardRemovedFromGameEvent extends GameEvent<typeof SU_EVENTS.CARD_REMOVED_FROM_GAME> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        reason: string;
+    };
+}
+
+/** Stakeout POD：添加临时基地打随从限制 */
+export interface StakeoutPodBlockAddedEvent extends GameEvent<typeof SU_EVENTS.STAKEOUT_POD_BLOCK_ADDED> {
+    payload: {
+        baseIndex: number;
+        ownerId: PlayerId;
+        expiresOnTurnNumber: number;
         reason: string;
     };
 }
@@ -1058,6 +1296,11 @@ export interface BaseDeckShuffledEvent extends GameEvent<typeof SU_EVENTS.BASE_D
         /** 洗混后的基地牌库 defId 列表（确定性） */
         newBaseDeckDefIds: string[];
         reason: string;
+        /**
+         * 是否将 baseDiscard 一并清空。
+         * 用于“基地牌库见底 → 将弃牌堆洗回牌库”的确定性归约。
+         */
+        clearBaseDiscard?: boolean;
     };
 }
 

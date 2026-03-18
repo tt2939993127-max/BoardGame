@@ -198,7 +198,7 @@ export const BaseZone: React.FC<{
                                 <div className="w-full h-full overflow-hidden rounded-[0.1vw]">
                                     <CardPreview
                                         previewRef={actionDef?.previewRef
-                                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: oa.defId } }
+                                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: oa.defId, cardUid: oa.uid } }
                                             : undefined}
                                         className="w-full h-full"
                                         title={actionTitle}
@@ -687,7 +687,7 @@ const MinionCard: React.FC<{
             <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                 <CardPreview
                     previewRef={def?.previewRef
-                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId } }
+                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId, cardUid: minion.uid } }
                         : undefined}
                     className="w-full h-full"
                     title={minionTitle}
@@ -837,7 +837,7 @@ const MinionCard: React.FC<{
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
                                         <CardPreview
                                             previewRef={actionDef?.previewRef
-                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId, disableHoverOverlay: true } }
+                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId, cardUid: aa.uid, disableHoverOverlay: true } }
                                                 : undefined}
                                             className="w-full h-full"
                                             title={actionName}

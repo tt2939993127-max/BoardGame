@@ -192,7 +192,7 @@ const HandCard: React.FC<HandCardProps> = ({
                         previewRef={isOpponentView 
                             ? SMASHUP_CARD_BACK
                             : (def?.previewRef
-                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId } }
+                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId, cardUid: card.uid } }
                                 : undefined)
                         }
                         className="w-full h-full object-cover"

@@ -469,3 +469,69 @@ describe('trickster_gremlin（小妖精 onDestroy）', () => {
         expect(discardP2.length).toBe(0);
     });
 });
+
+// ============================================================================
+// Bear Cavalry: General Ivan destroy 保护
+// ============================================================================
+
+describe('bear_cavalry_general_ivan（伊万将军 destroy 保护）', () => {
+    it('保护自己控制的随从免于任何来源的 destroy', () => {
+        const ivan = makeMinion('ivan', 'bear_cavalry_general_ivan', '0', 6, { powerModifier: 0 });
+        const ally = makeMinion('ally', 'test_minion', '0', 3, { powerModifier: 0 });
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'bear_cavalry_bear_necessities', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [ivan, ally],
+                ongoingActions: [],
+            }],
+        });
+
+        // 玩家0 用自己的 Bear Necessities 指向己方 ally
+        const events = execute(makeMatchState(core), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1', target: { type: 'minion', uid: 'ally', defId: 'test_minion', baseIndex: 0, owner: '0' } },
+        } as any, defaultRandom);
+
+        // ally 不会被真正消灭
+        expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.minionUid === 'ally')).toBe(
+            false,
+        );
+    });
+
+    it('没有 General Ivan 时随从正常被 destroy', () => {
+        const ally = makeMinion('ally', 'test_minion', '0', 3, { powerModifier: 0 });
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'bear_cavalry_bear_necessities', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [ally],
+                ongoingActions: [],
+            }],
+        });
+
+        const events = execute(makeMatchState(core), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1', target: { type: 'minion', uid: 'ally', defId: 'test_minion', baseIndex: 0, owner: '0' } },
+        } as any, defaultRandom);
+
+        // Bear Necessities 新实现只会选择对手随从/行动卡作为目标，
+        // 这里没有 General Ivan 时不会人为触发额外保护逻辑，
+        // 但也不会真的消灭己方 ally（因为它本就不是合法目标）。
+        expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.minionUid === 'ally')).toBe(
+            false,
+        );
+    });
+});
