@@ -1,5 +1,6 @@
 # ---- 阶段 1：安装全量依赖 + 构建前端 ----
-FROM node:20-slim AS builder
+ARG NODE_VERSION=24.1.0
+FROM node:${NODE_VERSION}-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +26,7 @@ ENV VITE_ASSETS_BASE_URL=$VITE_ASSETS_BASE_URL
 RUN npm run build
 
 # ---- 阶段 2：仅安装生产依赖 ----
-FROM node:20-slim AS deps
+FROM node:${NODE_VERSION}-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -35,11 +36,10 @@ COPY package.json package-lock.json ./
 
 # 安装生产依赖（利用 BuildKit 缓存挂载加速）
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --ignore-scripts && \
-    npm cache clean --force
+    npm ci --omit=dev --ignore-scripts
 
 # ---- 阶段 3：最终生产镜像 ----
-FROM node:20-slim
+FROM node:${NODE_VERSION}-slim
 
 WORKDIR /app
 
