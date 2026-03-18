@@ -36,6 +36,23 @@ const BOARD_GRID_Z = {
   attacker: 50,
 } as const;
 
+const BOARD_SHELL_REFERENCE_WIDTH = 'var(--mobile-board-shell-design-width, 100vw)';
+const LIFE_BADGE_STYLE: React.CSSProperties = {
+  fontSize: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.01)`,
+  paddingInline: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
+  paddingBlock: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.001)`,
+};
+const MAGNIFY_BUTTON_STYLE: React.CSSProperties = {
+  top: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.002)`,
+  right: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.002)`,
+  width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.014)`,
+  height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.014)`,
+};
+const MAGNIFY_ICON_STYLE: React.CSSProperties = {
+  width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.008)`,
+  height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.008)`,
+};
+
 /** 计算格子位置（百分比） */
 export function getCellPosition(row: number, col: number, grid: GridConfig) {
   const cellBounds = cellToNormalizedBounds({ row, col }, grid);
@@ -542,7 +559,10 @@ const UnitCell: React.FC<{
           className={`absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${!isMyUnit ? 'rotate-180' : ''}`}
           style={{ zIndex: BOARD_GRID_Z.overlay }}
         >
-          <span className={`text-[1vw] font-bold px-[0.4vw] py-[0.1vw] rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}>
+          <span
+            className={`font-bold rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}
+            style={LIFE_BADGE_STYLE}
+          >
             {life - damage}/{life}
           </span>
         </div>
@@ -561,7 +581,11 @@ const UnitCell: React.FC<{
               {rows.map((r, ri) => (
                 <div key={ri} className="flex gap-[3%]">
                   {r.map(idx => (
-                    <div key={idx} className="w-[15%] aspect-square rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" style={{ width: '15%', minWidth: '0.8vw' }} />
+                    <div
+                      key={idx}
+                      className="w-[15%] aspect-square rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]"
+                      style={{ width: '15%', minWidth: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.008)` }}
+                    />
                   ))}
                 </div>
               ))}
@@ -574,10 +598,10 @@ const UnitCell: React.FC<{
         {showDesktopMagnifyButton && (
           <button
             onClick={(e) => { e.stopPropagation(); props.onMagnifyUnit(unit); }}
-            className={`absolute top-[0.2vw] right-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 ${!isMyUnit ? 'rotate-180' : ''}`}
-            style={{ zIndex: BOARD_GRID_Z.magnifyButton }}
+            className={`absolute flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 ${!isMyUnit ? 'rotate-180' : ''}`}
+            style={{ ...MAGNIFY_BUTTON_STYLE, zIndex: BOARD_GRID_Z.magnifyButton }}
           >
-            <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
+            <svg className="fill-current" style={MAGNIFY_ICON_STYLE} viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
             </svg>
           </button>
@@ -708,7 +732,10 @@ const StructureCell: React.FC<{
           className={`absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${!isMyStructure ? 'rotate-180' : ''}`}
           style={{ zIndex: BOARD_GRID_Z.overlay }}
         >
-          <span className={`text-[1vw] font-bold px-[0.4vw] py-[0.1vw] rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}>
+          <span
+            className={`font-bold rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}
+            style={LIFE_BADGE_STYLE}
+          >
             {life - damage}/{life}
           </span>
         </div>
@@ -716,10 +743,10 @@ const StructureCell: React.FC<{
         {showDesktopMagnifyButton && (
           <button
             onClick={(e) => { e.stopPropagation(); props.onMagnifyStructure(structure); }}
-            className={`absolute top-[0.2vw] right-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 ${!isMyStructure ? 'rotate-180' : ''}`}
-            style={{ zIndex: BOARD_GRID_Z.magnifyButton }}
+            className={`absolute flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 ${!isMyStructure ? 'rotate-180' : ''}`}
+            style={{ ...MAGNIFY_BUTTON_STYLE, zIndex: BOARD_GRID_Z.magnifyButton }}
           >
-            <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
+            <svg className="fill-current" style={MAGNIFY_ICON_STYLE} viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
             </svg>
           </button>
