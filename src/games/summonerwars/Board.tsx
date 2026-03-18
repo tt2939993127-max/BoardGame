@@ -29,7 +29,7 @@ import { useEndgame } from '../../hooks/game/useEndgame';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
-import { MobileBoardShell, TutorialSelectionGate } from '../../components/game/framework';
+import { TutorialSelectionGate } from '../../components/game/framework';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
 import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
@@ -702,7 +702,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
             </div>
           ) : (
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              <MobileBoardShell>
                 <div className="relative h-full overflow-hidden">
                   {/* 地图层 */}
                   <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
@@ -1036,7 +1035,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   </div>
                 </div>
                 </div>
-              </MobileBoardShell>
 
               {/* 技能卡牌选择器 */}
               {abilityMode && abilityMode.step === 'selectCard' && (
