@@ -40,7 +40,7 @@ export function spawnTsxEntry({ entry, tsconfig, env }) {
   });
 }
 
-export function spawnTsLoaderEntry({ entry, env }) {
+export function spawnTsLoaderEntry({ entry, env, tsconfig }) {
   const loaderUrl = pathToFileURL(path.resolve('scripts/infra/ts-runtime-loader.mjs')).href;
   return spawn(process.execPath, [
     '--loader',
@@ -48,7 +48,10 @@ export function spawnTsLoaderEntry({ entry, env }) {
     entry,
   ], {
     stdio: 'inherit',
-    env,
+    env: {
+      ...env,
+      ...(tsconfig ? { TS_RUNTIME_TSCONFIG: path.resolve(tsconfig) } : {}),
+    },
     ...withWindowsHide({}, env),
   });
 }

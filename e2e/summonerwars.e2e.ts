@@ -22,6 +22,10 @@ const setEnglishLocale = async (context: BrowserContext | Page) => {
 };
 
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
+  if (process.env.PW_SW_USE_REAL_MAP === 'true') {
+    return;
+  }
+
   const mapPlaceholderSvg = [
     '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">',
     '<defs>',
@@ -395,6 +399,8 @@ const injectSummonerWarsMobileEvidenceScene = async (page: Page) => {
 };
 
 const openSummonerWarsMobileEvidencePage = async (page: Page) => {
+  // 该证据页场景依赖 TestHarness 注入状态，因此必须走 /play/:gameId 测试路由，
+  // 不能切到 /tutorial 路由；教程路由当前不会注册 TestHarness。
   await page.goto('/play/summonerwars?skipInitialization=true&numPlayers=2', {
     waitUntil: 'domcontentloaded',
   });

@@ -63,6 +63,7 @@ import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
 import { PathTrailEffect } from './ui/PathTrailEffect';
 import { useMovementTrails } from './ui/useMovementTrails';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';

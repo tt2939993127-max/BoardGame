@@ -26,10 +26,13 @@ export class FeedbackService {
     }
 
     async findAll(query: QueryFeedbackDto) {
-        const { page = 1, limit = 20, status, type } = query;
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+        const { status, type, severity } = query;
         const filter: Record<string, unknown> = {};
         if (status) filter.status = status;
         if (type) filter.type = type;
+        if (severity) filter.severity = severity;
 
         const total = await this.feedbackModel.countDocuments(filter);
         const items = await this.feedbackModel
@@ -65,6 +68,7 @@ export class FeedbackService {
         const filter: Record<string, unknown> = {};
         if (filterDto.status) filter.status = filterDto.status;
         if (filterDto.type) filter.type = filterDto.type;
+        if (filterDto.severity) filter.severity = filterDto.severity;
         const total = await this.feedbackModel.countDocuments(filter);
         if (total === 0) {
             return { requested: 0, deleted: 0 };

@@ -2,7 +2,9 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import ts from 'typescript'
 import localeHashPlugin from './plugins/vite-locale-hash.ts'
+import assetHashPlugin from './plugins/vite-asset-hash.ts'
 import { readyCheckPlugin } from './vite-plugins/ready-check.ts'
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
@@ -46,10 +48,44 @@ const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
   },
 })
 
+const createInlineTypeScriptFallbackPlugin = (enabled: boolean) => ({
+  name: 'inline-typescript-fallback',
+  enforce: 'pre' as const,
+  transform(code: string, id: string) {
+    if (!enabled) return null
+
+    const [cleanId] = id.split('?')
+    if (!cleanId || cleanId.includes('/node_modules/')) return null
+    if (!cleanId.endsWith('.ts') && !cleanId.endsWith('.tsx')) return null
+
+    const transpiled = ts.transpileModule(code, {
+      fileName: cleanId,
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: cleanId.endsWith('.tsx') ? ts.JsxEmit.ReactJSX : undefined,
+        sourceMap: true,
+        inlineSources: true,
+        allowImportingTsExtensions: true,
+        importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+        preserveValueImports: false,
+        verbatimModuleSyntax: false,
+      },
+    })
+
+    return {
+      code: transpiled.outputText,
+      map: transpiled.sourceMapText ? JSON.parse(transpiled.sourceMapText) : null,
+    }
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const forceInlineVite = env.BG_VITE_FORCE_INLINE === '1'
+    || process.env.BG_VITE_FORCE_INLINE === '1'
   const disableViteWatch = process.env.PW_SERVER_WATCH === 'false'
     || process.env.VITE_DISABLE_WATCH === 'true'
     || env.VITE_DISABLE_WATCH === 'true'
@@ -103,11 +139,14 @@ export default defineConfig(({ mode }) => {
           }
         },
       },
-      react(),
+      ...(forceInlineVite ? [] : [react()]),
+      createInlineTypeScriptFallbackPlugin(forceInlineVite),
       localeHashPlugin(),
+      assetHashPlugin(),
       readyCheckPlugin(),
       createAndroidBuildMetaPlugin(mode, backendUrl),
     ],
+    esbuild: forceInlineVite ? false : undefined,
     build: {
       rollupOptions: {
         output: {
@@ -133,7 +172,6 @@ export default defineConfig(({ mode }) => {
       ...(forceInlineVite
         ? {
             // In constrained environments, disable dep optimization to avoid esbuild spawn EPERM.
-            disabled: true,
             noDiscovery: true,
             include: [],
             entries: undefined,

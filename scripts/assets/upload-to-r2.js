@@ -37,7 +37,7 @@ const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.c
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 const COMPRESSED_EXTS = new Set(['.ogg', '.webp']);
 const COMPRESSED_DIR_NAME = 'compressed';
-const DATA_EXTS = new Set(['.svg']);
+const DIRECT_ASSET_EXTS = new Set(['.svg']);
 const AUDIO_DIR_NAMES = new Set(['sfx', 'bgm']);
 
 // S3 客户端
@@ -79,7 +79,7 @@ function getAllFiles(dir, fileList = []) {
 // 压缩媒体 + SVG + 音频文件（JSON 配置文件从本地加载，不上传到 CDN）
 function shouldUpload(filePath) {
   const ext = extname(filePath).toLowerCase();
-  if (DATA_EXTS.has(ext)) {
+  if (DIRECT_ASSET_EXTS.has(ext)) {
     return true;
   }
   const parts = filePath.split(sep);
@@ -123,21 +123,10 @@ async function listRemoteObjects(prefix) {
 }
 
 // 静态资源缓存策略：
-// - 图片/音频素材（webp、ogg）内容极少变更（卡牌图集、音效等），
-//   使用长缓存减少 CDN 回源频率，降低冷启动概率。
-// - 浏览器缓存 7 天（max-age），CDN 边缘缓存 30 天（s-maxage）。
-// - 如果素材确实更新了，运行 npm run assets:upload:force 重新上传，
-//   然后在 Cloudflare Dashboard 手动 Purge Cache 即可立即生效。
-const CACHE_CONTROL_MEDIA = 'public, max-age=604800, s-maxage=2592000';
-// JSON/SVG 等数据文件可能更新较频繁，缓存 1 小时
-const CACHE_CONTROL_DATA = 'public, max-age=3600, s-maxage=3600';
-
-/** 根据文件类型返回合适的 Cache-Control */
-function getCacheControl(localPath) {
-  const ext = extname(localPath).toLowerCase();
-  if (DATA_EXTS.has(ext)) return CACHE_CONTROL_DATA;
-  return CACHE_CONTROL_MEDIA;
-}
+// - 运行时 URL 会自动追加 ?v=<content-hash>，内容变更后 URL 立刻变化。
+// - 因此媒体资源（webp、ogg、svg）可以安全使用长期 immutable 缓存。
+// - 如需仅更新对象元数据（例如 Cache-Control），使用 npm run assets:upload:force。
+const CACHE_CONTROL_MEDIA = 'public, max-age=31536000, immutable';
 
 // 上传单个文件
 async function uploadFile(fileContent, remotePath, localPath) {
@@ -148,7 +137,7 @@ async function uploadFile(fileContent, remotePath, localPath) {
     Key: remotePath,
     Body: fileContent,
     ContentType: contentType,
-    CacheControl: getCacheControl(localPath),
+    CacheControl: CACHE_CONTROL_MEDIA,
   });
   
   await s3Client.send(command);

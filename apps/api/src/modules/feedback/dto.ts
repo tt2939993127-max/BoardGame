@@ -145,6 +145,10 @@ export class QueryFeedbackDto {
     @IsOptional()
     @IsEnum(FeedbackType)
     type?: FeedbackType;
+
+    @IsOptional()
+    @IsEnum(FeedbackSeverity)
+    severity?: FeedbackSeverity;
 }
 
 export class FeedbackFilterDto {
@@ -155,6 +159,10 @@ export class FeedbackFilterDto {
     @IsOptional()
     @IsEnum(FeedbackType)
     type?: FeedbackType;
+
+    @IsOptional()
+    @IsEnum(FeedbackSeverity)
+    severity?: FeedbackSeverity;
 }
 
 export class BulkFeedbackIdsDto {

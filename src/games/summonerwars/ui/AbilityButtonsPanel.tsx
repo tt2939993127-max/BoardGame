@@ -16,8 +16,7 @@ import { getUnitAbilities } from '../domain/helpers';
 import { GameButton } from './GameButton';
 import type { AbilityModeState } from './useGameEvents';
 import type { WithdrawModeState } from './modeTypes';
-
-const BOARD_SHELL_REFERENCE_WIDTH = 'var(--mobile-board-shell-design-width, 100vw)';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
 
 interface Props {
   core: SummonerWarsCore;
