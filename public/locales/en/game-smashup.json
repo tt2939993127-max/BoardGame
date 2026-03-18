@@ -95,6 +95,8 @@
     "action_short": "Action",
     "action_global_quota": "Global Quota",
     "action_extra_hint": "Includes extra action quota +{{extra}}",
+    "show_end_turn_controls": "Show end turn button and quota hints",
+    "hide_end_turn_controls": "Hide end turn button and quota hints",
     "close": "Close",
     "reveal_your_hand_shown": "Your hand is being shown",
     "reveal_confirmed": "Confirmed",
