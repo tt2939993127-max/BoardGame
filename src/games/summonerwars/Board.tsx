@@ -86,13 +86,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
-  const mapContainerPadding = '10vw';
+  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
   const mapContainerPaddingBlock = '0px';
-  const mapShadeWidth = '10vw';
-  const activeEventLabelClass = 'text-[0.65vw] px-1.5 py-0.5';
-  const activeEventCardStyle = { width: '4.5vw' };
-  const activeEventNameClass = 'text-[0.6vw] py-0.5 px-1';
-  const activeEventChargeDotStyle = { width: '0.4vw', height: '0.4vw' };
+  const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
+  const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
+  const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
+  const activeEventNameClass = 'text-[11px] py-0.5 px-1';
+  const activeEventChargeDotStyle = {
+    width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
+    height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
+  };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseEndButtonClass = 'absolute right-3 z-20 pointer-events-auto sw-phase-end-button';
