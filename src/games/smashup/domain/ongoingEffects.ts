@@ -114,6 +114,8 @@ export interface TriggerContext {
     triggerMinionUid?: string;
     /** 触发相关的随从 defId */
     triggerMinionDefId?: string;
+    /** 消灭者（仅 onMinionDestroyed 时提供，用于“在你消灭后”类能力判定） */
+    destroyerId?: PlayerId;
     /** 触发事件原因（用于二次分流，如拦截后恢复消灭） */
     reason?: string;
     /** 影响类型（仅 onMinionAffected 时有值） */
@@ -159,6 +161,11 @@ interface TriggerEntry {
     callback: TriggerCallback;
     optional?: boolean;
     phase?: 'replacement' | 'reaction';
+    /**
+     * Global triggers bypass the "source must be in play" witness check.
+     * Use for Special cards that can be played from hand/discard when a condition happens.
+     */
+    global?: boolean;
 }
 
 interface InterceptorEntry {
@@ -204,7 +211,7 @@ export function registerTrigger(
     sourceDefId: string,
     timing: TriggerTiming,
     callback: TriggerCallback,
-    options?: { optional?: boolean; phase?: 'replacement' | 'reaction' }
+    options?: { optional?: boolean; phase?: 'replacement' | 'reaction'; global?: boolean }
 ): void {
     // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
     if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
@@ -214,6 +221,7 @@ export function registerTrigger(
         callback,
         optional: options?.optional,
         phase: options?.phase ?? 'reaction',
+        global: options?.global,
     });
     registerTriggerExecutor(sourceDefId, timing, callback);
 }
@@ -249,7 +257,7 @@ export function collectTriggers(
         if (entry.timing !== timing) continue;
         // Only queue reaction-phase triggers (replacement effects must remain immediate)
         if (entry.phase === 'replacement') continue;
-        const witnessed = isSourceActive(state, entry.sourceDefId);
+        const witnessed = entry.global ? isSourceInHandOrDiscard(state, entry.sourceDefId) : isSourceActive(state, entry.sourceDefId);
         if (!witnessed) continue;
         const located = locateSource(state, entry.sourceDefId);
         // witness rule (base-scoped): for move-related triggers, the source must be on the destination base at trigger time
@@ -270,6 +278,7 @@ export function collectTriggers(
             triggerMinionUid: ctx.triggerMinionUid,
             triggerMinionDefId: ctx.triggerMinionDefId,
             triggerMinionPower: (ctx as any).triggerMinionPower,
+            destroyerId: ctx.destroyerId,
             reason: ctx.reason,
             affectType: ctx.affectType,
             rankings: ctx.rankings,
@@ -742,7 +751,7 @@ export function fireTriggers(
         if (entry.timing !== timing) continue;
         if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
         
-        const isActive = isSourceActive(state, entry.sourceDefId);
+        const isActive = entry.global ? isSourceInHandOrDiscard(state, entry.sourceDefId) : isSourceActive(state, entry.sourceDefId);
         if (!isActive) continue;
         
         const result = entry.callback({ ...fullCtx, matchState });
@@ -756,6 +765,14 @@ export function fireTriggers(
     }
     
     return { events, matchState };
+}
+
+function isSourceInHandOrDiscard(state: SmashUpCore, sourceDefId: string): boolean {
+    for (const p of Object.values(state.players)) {
+        if (p.hand?.some(c => c.defId === sourceDefId)) return true;
+        if (p.discard?.some(c => c.defId === sourceDefId)) return true;
+    }
+    return false;
 }
 
 // ============================================================================

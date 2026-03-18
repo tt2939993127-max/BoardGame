@@ -58,6 +58,7 @@ export function maybeResolveReactionQueue(
         triggerMinionUid: t.triggerMinionUid,
         triggerMinionDefId: t.triggerMinionDefId,
         triggerMinionPower: t.triggerMinionPower,
+        destroyerId: t.destroyerId,
         triggerMinion: t.lkiMinion
           ? {
             uid: t.lkiMinion.uid,
