@@ -1013,7 +1013,8 @@ export function returnMadnessCard(
 export function hasCthulhuExpansionFaction(players: Record<string, { factions: [string, string] }>): boolean {
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(f)) return true;
+            const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
+            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
         }
     }
     return false;
