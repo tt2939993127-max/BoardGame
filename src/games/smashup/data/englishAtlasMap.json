@@ -128,7 +128,7 @@
     "index": 4
   },
   "ninja_seeing_stars": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_3",
     "index": 0
   },
   "ninja_disguise": {
@@ -288,7 +288,7 @@
     "index": 9
   },
   "dino_king_rex_pod": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_2",
     "index": 19
   },
   "dino_laser_triceratops_pod": {
@@ -440,8 +440,8 @@
     "index": 17
   },
   "cthulhu_servitor": {
-    "atlasId": "tts_atlas_52",
-    "index": 10
+    "atlasId": "tts_atlas_15",
+    "index": 12
   },
   "cthulhu_altar": {
     "atlasId": "tts_atlas_15",
@@ -492,8 +492,8 @@
     "index": 17
   },
   "cthulhu_servitor_pod": {
-    "atlasId": "tts_atlas_52",
-    "index": 10
+    "atlasId": "tts_atlas_15",
+    "index": 12
   },
   "cthulhu_altar_pod": {
     "atlasId": "tts_atlas_15",
@@ -636,8 +636,8 @@
     "index": 3
   },
   "elder_thing_begin_the_summoning": {
-    "atlasId": "tts_atlas_52",
-    "index": 1
+    "atlasId": "tts_atlas_13",
+    "index": 0
   },
   "elder_thing_spreading_horror": {
     "atlasId": "tts_atlas_13",
@@ -684,8 +684,8 @@
     "index": 3
   },
   "elder_thing_begin_the_summoning_pod": {
-    "atlasId": "tts_atlas_52",
-    "index": 1
+    "atlasId": "tts_atlas_13",
+    "index": 0
   },
   "elder_thing_spreading_horror_pod": {
     "atlasId": "tts_atlas_13",
@@ -728,8 +728,8 @@
     "index": 5
   },
   "ghost_ghostly_arrival": {
-    "atlasId": "tts_atlas_52",
-    "index": 6
+    "atlasId": "tts_atlas_10",
+    "index": 2
   },
   "ghost_make_contact": {
     "atlasId": "tts_atlas_10",
@@ -772,8 +772,8 @@
     "index": 5
   },
   "ghost_ghostly_arrival_pod": {
-    "atlasId": "tts_atlas_52",
-    "index": 6
+    "atlasId": "tts_atlas_10",
+    "index": 2
   },
   "ghost_make_contact_pod": {
     "atlasId": "tts_atlas_10",
@@ -804,8 +804,8 @@
     "index": 17
   },
   "bear_cavalry_bear_cavalry": {
-    "atlasId": "tts_atlas_204",
-    "index": 17
+    "atlasId": "tts_atlas_9",
+    "index": 15
   },
   "bear_cavalry_cub_scout": {
     "atlasId": "tts_atlas_9",
@@ -852,8 +852,8 @@
     "index": 17
   },
   "bear_cavalry_bear_cavalry_pod": {
-    "atlasId": "tts_atlas_204",
-    "index": 17
+    "atlasId": "tts_atlas_9",
+    "index": 15
   },
   "bear_cavalry_cub_scout_pod": {
     "atlasId": "tts_atlas_9",
@@ -864,8 +864,8 @@
     "index": 0
   },
   "bear_cavalry_bearing_down_pod": {
-    "atlasId": "tts_atlas_204",
-    "index": 13
+    "atlasId": "tts_atlas_9",
+    "index": 4
   },
   "bear_cavalry_bear_necessities_pod": {
     "atlasId": "tts_atlas_9",
@@ -1000,8 +1000,8 @@
     "index": 15
   },
   "killer_plant_sprout": {
-    "atlasId": "tts_atlas_52",
-    "index": 12
+    "atlasId": "tts_atlas_11",
+    "index": 10
   },
   "killer_plant_budding": {
     "atlasId": "tts_atlas_11",
@@ -1048,8 +1048,8 @@
     "index": 15
   },
   "killer_plant_sprout_pod": {
-    "atlasId": "tts_atlas_52",
-    "index": 12
+    "atlasId": "tts_atlas_11",
+    "index": 10
   },
   "killer_plant_budding_pod": {
     "atlasId": "tts_atlas_11",
@@ -1460,7 +1460,7 @@
     "index": 11
   },
   "frankenstein_lab_assistant": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_23",
     "index": 15
   },
   "frankenstein_the_monster": {
@@ -1508,7 +1508,7 @@
     "index": 11
   },
   "frankenstein_lab_assistant_pod": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_23",
     "index": 15
   },
   "frankenstein_the_monster_pod": {
@@ -1568,7 +1568,7 @@
     "index": 19
   },
   "werewolf_full_moon": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_25",
     "index": 3
   },
   "werewolf_frenzy": {
@@ -1616,7 +1616,7 @@
     "index": 19
   },
   "werewolf_full_moon_pod": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_25",
     "index": 3
   },
   "werewolf_frenzy_pod": {
@@ -1739,9 +1739,13 @@
     "atlasId": "tts_atlas_24",
     "index": 3
   },
-  "vampire_summon_wolves_pod": {
-    "atlasId": "tts_atlas_216",
-    "index": 34
+  "vampire_stakeout_pod": {
+    "atlasId": "tts_atlas_24",
+    "index": 5
+  },
+  "vampire_wolf_pact_pod": {
+    "atlasId": "tts_atlas_24",
+    "index": 9
   },
   "giant_ant_worker": {
     "atlasId": "tts_atlas_22",
@@ -1824,7 +1828,7 @@
     "index": 4
   },
   "ninja_seeing_stars_pod": {
-    "atlasId": "tts_atlas_52",
+    "atlasId": "tts_atlas_3",
     "index": 0
   },
   "ninja_disguise_pod": {

@@ -530,6 +530,7 @@ function registerRobotOngoingEffects(): void {
         // “你的 Microbot” → 被消灭随从必须由 Archive 控制者控制
 
         const player = trigCtx.state.players[trigCtx.playerId];
+        // “你的 Microbot” → 被消灭随从必须由 Archive 控制者控制
         if (!player || player.deck.length === 0) return [];
 
         const { drawnUids } = drawCards(player, archiveCount, trigCtx.random);
