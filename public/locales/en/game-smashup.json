@@ -586,7 +586,7 @@
     },
     "elder_thing_elder_thing": {
       "name": "Elder Thing",
-      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players' cards."
+      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. Ongoing: This minion is not affected by other players' cards."
     },
     "elder_thing_shoggoth": {
       "name": "Shoggoth",
@@ -1740,31 +1740,31 @@
     },
     "elder_thing_elder_thing_pod": {
       "name": "Elder Thing",
-      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players' cards."
+      "abilityText": "You must either destroy two of your other minions or place this minion on the bottom of your deck. Ongoing: This minion is not affected by other players' cards."
     },
     "elder_thing_shoggoth_pod": {
       "name": "Shoggoth",
-      "abilityText": "You may only play this card on a base where you have at least 6 power. Each other player may draw a Madness card. Destroy a minion on this base belonging to each player who did not."
+      "abilityText": "Each other player may draw a Madness card. For each other player who does not, you may destroy one of their minions here. Then, if you have less than 12 total power here, draw two Madness cards."
     },
     "elder_thing_mi_go_pod": {
       "name": "Mi-go",
-      "abilityText": "Each other player may draw a Madness card. For each player that does not, draw a card."
+      "abilityText": "Each other player may draw a Madness card. For each other player that does not, you may draw a card. If no other players drew a Madness card, you may place a +1 power counter on a minion."
     },
     "elder_thing_byakhee_pod": {
       "name": "Byakhee",
-      "abilityText": "If another player has a minion on this base, draw a Madness card."
+      "abilityText": "Each other player with a minion here draws a Madness card."
     },
     "elder_thing_power_of_madness_pod": {
       "name": "Power of Madness",
-      "effectText": "Each other player reveals their hand, discards all Madness cards in it, and shuffles their discard pile into their deck."
+      "effectText": "For each other player, name an action and reveal their hand. They must discard all copies of that action and then shuffle their discard pile into their deck."
     },
     "elder_thing_insanity_pod": {
       "name": "Insanity",
-      "effectText": "Each other player draws two Madness cards."
+      "effectText": "Each other player draws two Madness cards. Place this action in the box."
     },
     "elder_thing_dunwich_horror_pod": {
       "name": "Dunwich Horror",
-      "effectText": "Play on a minion. This minion has +5 power. Destroy this minion at the end of the turn."
+      "effectText": "Play on a minion. Ongoing: This minion has +5 power. Special: Before this base scores, this minion's controller must either draw two Madness cards or destroy this minion."
     },
     "elder_thing_begin_the_summoning_pod": {
       "name": "Begin the Summoning",
@@ -1772,15 +1772,15 @@
     },
     "elder_thing_spreading_horror_pod": {
       "name": "Spreading Horror",
-      "effectText": "Each other player discards cards at random until they discard a card that is not a Madness card."
+      "effectText": "Each other player may discard two non-Madness cards. For each other player who does not, you may play a minion of power 3 or less from your discard pile on a different base."
     },
     "elder_thing_the_price_of_power_pod": {
       "name": "The Price of Power",
-      "effectText": "Special: Before a base scores, each other player with a minion here reveals their hand. For each Madness card revealed, one of your minions here gains +2 power until the end of the turn."
+      "effectText": "Each other player reveals their hand. For each Madness card revealed, place a +1 power counter on one of your minions. Special: Play before a base scores. Reveal the hands of all other players with a minion there instead."
     },
     "elder_thing_unfathomable_goals_pod": {
       "name": "Unfathomable Goals",
-      "effectText": "Each other player reveals their hand. Each player who reveals a Madness card must destroy one of their minions."
+      "effectText": "Each other player reveals their hand. If a player reveals at least two Madness cards, play an extra minion. If at least four total Madness cards are revealed, play an extra action."
     },
     "elder_thing_touch_of_madness_pod": {
       "name": "Touch of Madness",
@@ -1812,7 +1812,7 @@
     },
     "frankenstein_grave_situation_pod": {
       "name": "Grave Situation",
-      "effectText": "Play on a base. Ongoing: When one of your minions here would be destroyed, return it to your hand instead of the discard pile."
+      "effectText": "Play on a base. Ongoing: If your minions here would be destroyed, return them to your hand instead."
     },
     "frankenstein_its_alive_pod": {
       "name": "Its Alive",
@@ -2300,23 +2300,23 @@
     },
     "vampire_fledgling_vampire_pod": {
       "name": "Fledgling Vampire",
-      "abilityText": "After you play this minion, if another player has more power here than you, place a +1 power counter on this minion."
+      "abilityText": "If this minion was played from anywhere other than your hand, place a +1 power counter on it. Special: After you destroy another minion, you may bury this card from your hand or discard pile on any base."
     },
     "vampire_heavy_drinker_pod": {
       "name": "Heavy Drinker",
-      "abilityText": "You may destroy one of your minions to place a +1 power counter on this minion."
+      "abilityText": "You may destroy a minion of power 2 or less here or one of your other minions on any base to place two +1 power counters on this minion."
     },
     "vampire_nightstalker_pod": {
       "name": "Nightstalker",
-      "abilityText": "You may destroy a minion of power 2 or less here to place a +1 power counter on this minion."
+      "abilityText": "Talent: If you have destroyed a minion this turn, draw a card and give this minion +2 power until the end of the turn."
     },
     "vampire_the_count_pod": {
       "name": "The Count",
-      "abilityText": "Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
+      "abilityText": "Ongoing: After a minion is destroyed, you may place a +1 power counter on a minion at its base. Talent: Give a minion -1 power until the start of your turn."
     },
     "vampire_dinner_date_pod": {
       "name": "Dinner Date",
-      "effectText": "Place a +1 power counter on one of your minions. Destroy a minion of power 2 or less at the same base."
+      "effectText": "Play on a minion. Place two +1 power counters on one of your minions. Ongoing: This minion has -2 power. If this minion has 0 power, destroy it."
     },
     "vampire_big_gulp_pod": {
       "name": "Big Gulp",
@@ -2328,23 +2328,27 @@
     },
     "vampire_mad_monster_party_pod": {
       "name": "Mad Monster Party",
-      "effectText": "Place a +1 power counter on each of your minions without one."
+      "effectText": "Choose a base and place a +1 power counter on each of your minions there. Special: Play after you destroy a minion. Choose its base."
     },
     "vampire_cull_the_weak_pod": {
       "name": "Cull The Weak",
-      "effectText": "Choose one of your minions. Discard any number of minion cards from your hand. For each card discarded, place a +1 power counter on that minion."
+      "effectText": "Search your deck for up to two minions and discard them. For each minion discarded, place a +1 power counter on a minion."
     },
     "vampire_buffet_pod": {
       "name": "Buffet",
-      "effectText": "Special: After a base scores, if you are the winner, place a +1 power counter on each of your minions."
+      "effectText": "Draw two cards. Special: Play after you destroy a minion."
     },
     "vampire_crack_of_dusk_pod": {
-      "name": "Crack Of Dusk",
+      "name": "Crack of Dusk",
       "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
-    "vampire_summon_wolves_pod": {
-      "name": "Summon Wolves",
-      "effectText": "Play on a base. Ongoing: At the start of your turn, place a +1 power counter on this card. If you have a minion here, this card's power counts toward your total power here."
+    "vampire_stakeout_pod": {
+      "name": "Stakeout",
+      "effectText": "Play on a base. Talent: If another player's power here has decreased this turn, other players cannot play minions of power 3 or more here until the start of your next turn."
+    },
+    "vampire_wolf_pact_pod": {
+      "name": "Wolf Pact",
+      "abilityText": "Fusion. Minion: You may give a minion -1 power until the start of your next turn to place a +1 power counter on another one of your minions here. Action: Shuffle a card from your discard pile into your deck."
     },
     "werewolf_howler_pod": {
       "name": "Howler",

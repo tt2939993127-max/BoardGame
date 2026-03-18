@@ -9,6 +9,7 @@ export const ELDER_THINGS_MINIONS: MinionCardDef[] = [
         nameEn: 'Elder Thing',
         faction: 'elder_things',
         power: 10,
+        abilityTags: ['onPlay', 'ongoing'],
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS2, index: 35 },
     },

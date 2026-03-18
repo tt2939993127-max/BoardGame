@@ -268,12 +268,27 @@ export interface OngoingActionOnBase {
     metadata?: Record<string, unknown>;
 }
 
+/** 埋葬在基地旁的面朝下卡牌（在场上但不可用） */
+export interface BuriedCardOnBase {
+    uid: string;
+    /** 真正的卡牌 defId（对非控制者应隐藏） */
+    defId: string;
+    /** 真正所有者（用于基地离场时弃置到正确弃牌堆） */
+    trueOwnerId: PlayerId;
+    /** 控制者：埋葬该卡的玩家 */
+    controllerId: PlayerId;
+    /** 来源：用于规则/日志调试 */
+    buriedFrom: 'hand' | 'discard' | 'play';
+}
+
 /** 场上的基地 */
 export interface BaseInPlay {
     defId: string;
     minions: MinionOnBase[];
     /** 持续行动卡列表 */
     ongoingActions: OngoingActionOnBase[];
+    /** 埋葬卡列表（面朝下） */
+    buriedCards?: BuriedCardOnBase[];
 }
 
 // ============================================================================
@@ -287,6 +302,8 @@ export interface PlayerState {
     /** 牌库（索引 0 为顶部） */
     deck: CardInstance[];
     discard: CardInstance[];
+    /** 移出游戏（放入盒中）的卡牌 */
+    removedFromGame?: CardInstance[];
     /** 本回合已打出随从数 */
     minionsPlayed: number;
     /** 本回合可打出随从额度（默认 1） */
@@ -430,6 +447,8 @@ export interface TriggerInstance {
     triggerMinionUid?: string;
     triggerMinionDefId?: string;
     triggerMinionPower?: number;
+    /** destroyer (for onMinionDestroyed "after you destroy" checks) */
+    destroyerId?: PlayerId;
     reason?: string;
     affectType?: import('./ongoingEffects').AffectType;
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
@@ -467,6 +486,17 @@ export interface SmashUpCore {
     madnessDeck?: string[];
     /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力判定，并阻止过期移动把它们从弃牌堆拉回场上） */
     turnDestroyedMinions?: { uid: string; defId: string; baseIndex: number; owner: string }[];
+    /** 本回合曾“消灭过随从”的玩家列表（用于 Nightstalker POD 等判定）。TURN_STARTED 时清空。 */
+    destroyedMinionByPlayersThisTurn?: PlayerId[];
+    /**
+     * 本回合各基地上“玩家力量减少”的记录（baseIndex → playerIds[]）。
+     * 主要用于 Stakeout POD 的判定。TURN_STARTED 时清空。
+     */
+    basePowerDecreasedPlayersThisTurn?: Record<number, PlayerId[]>;
+    /**
+     * Stakeout POD 的临时限制：其他玩家不能在指定基地打出力量≥3的随从，直到 ownerId 的下回合开始。
+     */
+    stakeoutPodBlocks?: Array<{ baseIndex: number; ownerId: PlayerId; expiresOnTurnNumber: number }>;
     // （保留扩展字段位于此处）
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];
@@ -683,6 +713,8 @@ export interface MinionPlayedEvent extends GameEvent<'su:minion_played'> {
         fromDiscard?: boolean;
         /** 从牌库打出（而非手牌） */
         fromDeck?: boolean;
+        /** 从埋葬区打出（揭开时使用） */
+        fromBuried?: boolean;
         /** 弃牌堆出牌来源能力 ID（用于每回合限制追踪） */
         discardPlaySourceId?: string;
         /** 是否消耗正常随从额度 */
@@ -699,7 +731,38 @@ export interface ActionPlayedEvent extends GameEvent<'su:action_played'> {
         defId: string;
         /** 是否为额外行动（不消耗行动次数） */
         isExtraAction?: boolean;
+        /** 从埋葬区打出（揭开时使用） */
+        fromBuried?: boolean;
     };
+}
+
+/** 埋葬卡事件：将一张卡面朝下放到基地旁 */
+export interface CardBuriedEvent extends GameEvent<typeof SU_EVENTS.CARD_BURIED> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        baseIndex: number;
+        /** 真正所有者（用于基地离场清算） */
+        trueOwnerId: PlayerId;
+        buriedFrom: 'hand' | 'discard' | 'play';
+        reason: string;
+    };
+}
+
+/** 揭开埋葬卡事件：从埋葬区移除并立即“打出为额外卡” */
+export interface BuriedCardUncoveredEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARD_UNCOVERED> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        baseIndex: number;
+        reason: string;
+    };
+}
+
+/** 基地离场时丢弃其上的所有埋葬卡（翻开弃置，不触发能力） */
+export interface BuriedCardsDiscardedWithBaseEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE> {
+    payload: { baseIndex: number; reason: string };
 }
 
 /** 单个随从的力量 breakdown（用于 ActionLog 展示） */
@@ -861,6 +924,9 @@ export interface LimitModifiedEvent extends GameEvent<'su:limit_modified'> {
 export type SmashUpEvent =
     | MinionPlayedEvent
     | ActionPlayedEvent
+    | CardBuriedEvent
+    | BuriedCardUncoveredEvent
+    | BuriedCardsDiscardedWithBaseEvent
     | BaseScoredEvent
     | VpAwardedEvent
     | CardsDrawnEvent
@@ -886,6 +952,8 @@ export type SmashUpEvent =
     | OngoingDetachedEvent
     | TalentUsedEvent
     | CardRemovedFromDeckEvent
+    | CardRemovedFromGameEvent
+    | StakeoutPodBlockAddedEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
     | CardTransferredEvent
@@ -1047,6 +1115,26 @@ export interface CardRemovedFromDeckEvent extends GameEvent<typeof SU_EVENTS.CAR
         playerId: PlayerId;
         cardUid: string;
         defId: string;
+        reason: string;
+    };
+}
+
+/** 卡牌移出游戏（放入盒中） */
+export interface CardRemovedFromGameEvent extends GameEvent<typeof SU_EVENTS.CARD_REMOVED_FROM_GAME> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        reason: string;
+    };
+}
+
+/** Stakeout POD：添加临时基地打随从限制 */
+export interface StakeoutPodBlockAddedEvent extends GameEvent<typeof SU_EVENTS.STAKEOUT_POD_BLOCK_ADDED> {
+    payload: {
+        baseIndex: number;
+        ownerId: PlayerId;
+        expiresOnTurnNumber: number;
         reason: string;
     };
 }
