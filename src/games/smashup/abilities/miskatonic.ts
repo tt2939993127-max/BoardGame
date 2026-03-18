@@ -524,12 +524,23 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
         const name = def?.name ?? c.defId;
         return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'hand' as const , displayMode: 'card' as const };
     });
-    const interaction = createSimpleChoice(
-        `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
-        '选择要放到牌库底的卡牌（抽等量+1）',
-        [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
-        { sourceId: 'miskatonic_field_trip', targetType: 'hand', multi: { min: 0, max: handCards.length } },
-    );
+    // 基础版与 POD 版共用此逻辑，但结算不同：
+    // - 基础版 handler: 抽等量牌
+    // - POD 版 handler: 抽等量+1
+    // 因此需要根据 defId 选择不同的 sourceId，以便路由到正确的 interactionHandler。
+    const interaction = ctx.defId === 'miskatonic_field_trip_pod'
+        ? createSimpleChoice(
+            `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
+            '选择要放到牌库底的卡牌（抽等量+1）',
+            [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
+            { sourceId: 'miskatonic_field_trip_pod', targetType: 'hand', multi: { min: 0, max: handCards.length } },
+        )
+        : createSimpleChoice(
+            `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
+            '选择要放到牌库底的卡牌（抽等量+1）',
+            [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
+            { sourceId: 'miskatonic_field_trip', targetType: 'hand', multi: { min: 0, max: handCards.length } },
+        );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 

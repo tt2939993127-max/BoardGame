@@ -279,7 +279,7 @@ function tricksterHideoutPodTalent(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '藏身处：选择要交换进来的“打出到基地上”的持续战术（或跳过）',
         options as any[],
-        { sourceId: 'trickster_hideout_pod_swap', targetType: 'hand' },
+        { sourceId: 'trickster_hideout_pod_swap', targetType: 'generic' },
     );
     return {
         events: [],
@@ -400,8 +400,8 @@ export function registerTricksterInteractionHandlers(): void {
         const options = myMinions.map((m, i) => ({
             id: `minion-${i}`,
             label: m.label,
-            value: { minionUid: m.uid, baseIndex: m.baseIndex },
-            _source: 'minion' as const,
+            value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: m.baseIndex },
+            _source: 'field' as const,
             displayMode: 'card' as const,
         }));
 
@@ -557,7 +557,7 @@ export function registerTricksterInteractionHandlers(): void {
             const mDef = getCardDef(m.defId) as MinionCardDef | undefined;
             const name = mDef?.name ?? m.defId;
             const power = getMinionPower(nextState.core, m, ctx.baseIndex);
-            return { id: `m-${i}`, label: `${name} (战斗力 ${power})`, value: { minionUid: m.uid, baseIndex: ctx.baseIndex }, _source: 'minion' as const, displayMode: 'card' as const };
+            return { id: `m-${i}`, label: `${name} (战斗力 ${power})`, value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: ctx.baseIndex }, _source: 'field' as const, displayMode: 'card' as const };
         });
         options.push(createSkipOption() as any);
 
@@ -735,8 +735,8 @@ function tricksterPixiePodOnPlay(ctx: AbilityContext): AbilityResult {
             return {
                 id: `minion-${i}`,
                 label: `${name} (力量 ${power})`,
-                value: { minionUid: m.uid, baseIndex: ctx.baseIndex },
-                _source: 'minion' as const,
+                value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: ctx.baseIndex },
+                _source: 'field' as const,
                 displayMode: 'card' as const,
             };
         });
@@ -1168,8 +1168,8 @@ function registerTricksterPodOngoingEffects(): void {
             if (!trap) continue;
             if (trap.ownerId !== trigCtx.playerId) continue;
             const options = [
-                { id: 'yes', label: '是（本回合该基地 breakpoint -4）', value: { yes: true } },
-                { id: 'no', label: '否', value: { yes: false } },
+                { id: 'yes', label: '是（本回合该基地 breakpoint -4）', value: { yes: true }, displayMode: 'button' as const },
+                { id: 'no', label: '否', value: { yes: false }, displayMode: 'button' as const },
             ];
             const interaction = createSimpleChoice(
                 `trickster_flame_trap_pod_bp_${trigCtx.now}`,

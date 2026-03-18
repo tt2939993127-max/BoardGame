@@ -14,11 +14,14 @@ import {
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
 import {
+    actionLikeNeedsResponseWindowBase,
+    getActionLikeResponseWindowTiming,
     getMaxRemainingGlobalPowerLimitedQuota,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
+    isCardActionLike,
+    isCardMinionLike,
 } from './utils';
-import { isCardActionLike, isCardMinionLike } from './utils';
 
 export function validate(
     state: MatchState<SmashUpCore>,
@@ -217,20 +220,16 @@ export function validate(
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - card def not found');
                     return { valid: false, error: '卡牌定义不存在' };
                 }
-                const rSubtype = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSubtype
-                    : (rDef as ActionCardDef).subtype;
-                if (rSubtype !== 'special') {
+                const responseTiming = getActionLikeResponseWindowTiming(rDef);
+                if (!responseTiming) {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - not special card', {
-                        subtype: rSubtype,
+                        defId: rCard.defId,
                     });
-                    return { valid: false, error: '响应窗口只能打出特殊行动卡' };
+                    return { valid: false, error: '该行动卡不能在响应窗口中打出' };
                 }
                 
-                // 检查 specialTiming 是否匹配窗口类型
-                const cardTiming = (rDef as any).type === 'fusion'
-                    ? ((rDef as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-                    : ((rDef as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
+                // 检查响应窗口时机是否匹配窗口类型
+                const cardTiming = responseTiming;
                 if (responseWindow.windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for meFirst window', {
                         cardTiming,
@@ -248,19 +247,15 @@ export function validate(
 
                 const targetBase = command.payload.targetBaseIndex;
                 console.log('[DEBUG] PLAY_ACTION validation: checking base requirement', {
-                    specialNeedsBase: (rDef as any).type === 'fusion'
-                        ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                        : (rDef as ActionCardDef).specialNeedsBase,
+                    responseNeedsBase: actionLikeNeedsResponseWindowBase(rDef),
                     targetBase,
                 });
                 
-                const needsBase = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                    : (rDef as ActionCardDef).specialNeedsBase;
+                const needsBase = actionLikeNeedsResponseWindowBase(rDef);
                 if (needsBase) {
                     if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
                         console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - needs base but no valid base provided');
-                        return { valid: false, error: '该特殊行动卡需要选择一个达标基地' };
+                        return { valid: false, error: '该行动卡需要选择一个达标基地' };
                     }
                     const targetBaseIndex = targetBase;
                     if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
@@ -295,7 +290,7 @@ export function validate(
                     }
                 } else if (targetBase !== undefined) {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - base provided but not needed');
-                    return { valid: false, error: '该特殊行动卡不需要基地目标' };
+                    return { valid: false, error: '该行动卡不需要基地目标' };
                 }
 
                 console.log('[DEBUG] PLAY_ACTION validation: PASSED (Me First! mode)');

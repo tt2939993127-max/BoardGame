@@ -310,8 +310,8 @@ function bearCavalryGeneralIvanPodTrigger(ctx: TriggerContext): SmashUpEvent[] |
             ivan.controller,
             '伊万将军：是否给对手随从移动到的基地上你的随从+1力量直到回合结束？（每回合限一次）',
             [
-                { id: 'yes', label: '是（给己方随从+1力量）', value: 'yes' as any },
-                { id: 'no', label: '否', value: 'no' as any }
+                { id: 'yes', label: '是（给己方随从+1力量）', value: 'yes' as any, displayMode: 'button' as const },
+                { id: 'no', label: '否', value: 'no' as any, displayMode: 'button' as const }
             ],
             { sourceId: 'bear_cavalry_general_ivan_pod_trigger', targetType: 'generic' }
         );
@@ -553,8 +553,8 @@ function bearCavalryCubScoutPodTrigger(ctx: TriggerContext): SmashUpEvent[] | { 
                 scout.controller,
                 `幼熊斥候：是否消灭 ${getCardDef(movedMinion.defId)?.name ?? movedMinion.defId}？`,
                 [
-                    { id: 'yes', label: '是（消灭并移动己方小随从）', value: 'yes' as any },
-                    { id: 'no', label: '否', value: 'no' as any },
+                    { id: 'yes', label: '是（消灭并移动己方小随从）', value: 'yes' as any, displayMode: 'button' as const },
+                    { id: 'no', label: '否', value: 'no' as any, displayMode: 'button' as const },
                 ],
                 { sourceId: 'bear_cavalry_cub_scout_pod_destroy', targetType: 'generic' },
             );
@@ -1117,7 +1117,7 @@ export function registerBearCavalryInteractionHandlers(): void {
             }
             // POD 版文本为 “you may move”，允许跳过；基础版则必须移动（若有合法目标）
             if (isPod) {
-                moveOptions.unshift({ id: 'skip', label: '跳过（不移动）', value: { minionUid: '__skip__', baseIndex } as any });
+                moveOptions.unshift({ id: 'skip', label: '跳过（不移动）', value: { minionUid: '__skip__', baseIndex } as any, displayMode: 'button' as const });
             }
             const next = createSimpleChoice(
                 `bear_cavalry_commission_move_minion_${timestamp}`, playerId,
@@ -1177,7 +1177,7 @@ export function registerBearCavalryInteractionHandlers(): void {
             return { state, events: [playedEvt] };
         }
         if (isPod) {
-            moveOptions.unshift({ id: 'skip', label: '跳过（不移动）', value: { minionUid: '__skip__', baseIndex } as any });
+            moveOptions.unshift({ id: 'skip', label: '跳过（不移动）', value: { minionUid: '__skip__', baseIndex } as any, displayMode: 'button' as const });
         }
         const next = createSimpleChoice(
             `bear_cavalry_commission_move_minion_${timestamp}`, playerId,
@@ -1503,7 +1503,7 @@ export function registerBearCavalryInteractionHandlers(): void {
             '幼熊斥候：选择一个牌面战力≤3的己方随从移动到本基地（可跳过）',
             [
                 ...buildMinionTargetOptions(candidates, { state: state.core, sourcePlayerId: playerId, effectType: 'move' }),
-                { id: 'skip', label: '跳过', value: 'skip' as any }
+                { id: 'skip', label: '跳过', value: 'skip' as any, displayMode: 'button' as const }
             ],
             { sourceId: 'bear_cavalry_cub_scout_pod_chain_move', targetType: 'minion' }
         );
@@ -1619,7 +1619,8 @@ export function registerBearCavalryInteractionHandlers(): void {
         suppressOptions.push({
             id: 'base',
             label: `[基地] ${baseDef?.name ?? base.defId}`,
-            value: { kind: 'base', baseIndex: toBase },
+            value: { kind: 'base', baseIndex: toBase, baseDefId: base.defId },
+            displayMode: 'card' as const,
         });
 
         for (const m of base.minions) {
@@ -1627,14 +1628,16 @@ export function registerBearCavalryInteractionHandlers(): void {
             suppressOptions.push({
                 id: `minion-${m.uid}`,
                 label: `[随从] ${def?.name ?? m.defId}`,
-                value: { kind: 'minion', minionUid: m.uid, baseIndex: toBase },
+                value: { kind: 'minion', minionUid: m.uid, minionDefId: m.defId, baseIndex: toBase },
+                displayMode: 'card' as const,
             });
             for (const a of m.attachedActions ?? []) {
                 const aDef = getCardDef(a.defId);
                 suppressOptions.push({
                     id: `attached-${a.uid}`,
                     label: `[附着行动] ${aDef?.name ?? a.defId}`,
-                    value: { kind: 'attached', cardUid: a.uid, baseIndex: toBase },
+                    value: { kind: 'attached', cardUid: a.uid, defId: a.defId, baseIndex: toBase },
+                    displayMode: 'card' as const,
                 });
             }
         }
@@ -1644,7 +1647,8 @@ export function registerBearCavalryInteractionHandlers(): void {
             suppressOptions.push({
                 id: `ongoing-${oa.uid}`,
                 label: `[持续行动] ${oDef?.name ?? oa.defId}`,
-                value: { kind: 'ongoing', cardUid: oa.uid, baseIndex: toBase },
+                value: { kind: 'ongoing', cardUid: oa.uid, defId: oa.defId, baseIndex: toBase },
+                displayMode: 'card' as const,
             });
         }
 
@@ -1658,11 +1662,12 @@ export function registerBearCavalryInteractionHandlers(): void {
             suppressOptions.push({
                 id: `titan-${t.titanUid}`,
                 label: `[泰坦] ${tDef?.name ?? t.defId}`,
-                value: { kind: 'titan', titanUid: t.titanUid, baseIndex: toBase, ownerId: pid },
+                value: { kind: 'titan', titanUid: t.titanUid, defId: t.defId, baseIndex: toBase, ownerId: pid },
+                displayMode: 'card' as const,
             });
         }
 
-        suppressOptions.push({ id: 'skip', label: '跳过（不压制）', value: { kind: 'skip' } });
+        suppressOptions.push({ id: 'skip', label: '跳过（不压制）', value: { kind: 'skip' }, displayMode: 'button' as const });
 
         const next = createSimpleChoice(
             `bear_cavalry_bear_rides_you_pod_choose_suppress_${timestamp}`,

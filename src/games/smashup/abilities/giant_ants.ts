@@ -693,7 +693,7 @@ function giantAntGimmeThePrizePod(ctx: AbilityContext): AbilityResult {
         label: m.label,
         displayMode: 'card' as const,
         _source: 'field' as const,
-        value: { minionUid: m.uid, baseIndex: m.baseIndex, defId: m.defId },
+        value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: m.baseIndex, defId: m.defId },
     }));
 
     const interaction = createSimpleChoice(
@@ -1240,10 +1240,10 @@ const handleUnderPressureChooseTarget: IH = (state, playerId, value, interaction
         `giant_ant_under_pressure_choose_amount_${timestamp}`,
         playerId,
         '承受压力：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount } }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, displayMode: 'button' as const }],
         {
             sourceId: 'giant_ant_under_pressure_choose_amount',
-            targetType: 'generic',
+            targetType: 'button',
         },
     );
 
@@ -1378,10 +1378,10 @@ const handleWeAreTheChampionsChooseTarget: IH = (state, playerId, value, interac
         `giant_ant_we_are_the_champions_choose_amount_${timestamp}`,
         playerId,
         '我们乃最强：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount } }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, displayMode: 'button' as const }],
         {
             sourceId: 'giant_ant_we_are_the_champions_choose_amount',
-            targetType: 'generic',
+            targetType: 'button',
         },
     );
 
@@ -1604,6 +1604,7 @@ function giantAntKillerQueenPodTalent(ctx: AbilityContext): AbilityResult {
             value: {
                 action: 'add_counters',
                 minionUid: m.uid,
+                minionDefId: m.defId,
                 baseIndex: m.baseIndex,
                 defId: m.defId,
             },
@@ -1619,7 +1620,7 @@ function giantAntKillerQueenPodTalent(ctx: AbilityContext): AbilityResult {
         options,
         {
             sourceId: 'giant_ant_killer_queen_pod_choose',
-            targetType: 'generic',
+            targetType: 'button',
         },
     );
 
@@ -1655,6 +1656,7 @@ function giantAntWhoWantsToLiveForeverPod(ctx: AbilityContext): AbilityResult {
                 label: def?.name ?? c.defId,
                 value: { cardUid: c.uid, defId: c.defId },
                 _source: 'deck' as const,
+                displayMode: 'card' as const,
             };
         });
 
@@ -1680,7 +1682,7 @@ function giantAntWhoWantsToLiveForeverPod(ctx: AbilityContext): AbilityResult {
         label: m.label,
         displayMode: 'card' as const,
         _source: 'field' as const,
-        value: { minionUid: m.uid, baseIndex: m.baseIndex, defId: m.defId },
+        value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: m.baseIndex, defId: m.defId },
     }));
 
     const interaction = createSimpleChoice(
@@ -1953,6 +1955,7 @@ const handleWWTLFPodDestroy: IH = (state, playerId, value, interactionData, _ran
             label: def?.name ?? c.defId,
             value: { cardUid: c.uid, defId: c.defId },
             _source: 'deck' as const,
+            displayMode: 'card' as const,
         };
     });
 

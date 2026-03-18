@@ -47,7 +47,9 @@ import { GameButton as SmashUpGameButton } from './ui/GameButton';
 import { DeckDiscardZone } from './ui/DeckDiscardZone';
 import { getDiscardPlayOptions } from './domain/discardPlayability';
 import {
+    actionLikeNeedsResponseWindowBase,
     getMaxRemainingGlobalPowerLimitedQuota,
+    isActionLikeRespondableInWindow,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
     isCardActionLike,
@@ -541,24 +543,16 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 }
                 continue;
             }
-            if (card.type !== 'action') {
+            if (!isCardActionLike(card)) {
                 disabled.add(card.uid);
                 continue;
             }
-            const def = getCardDef(card.defId) as ActionCardDef | undefined;
-            if (def?.subtype !== 'special') {
-                // 非 special 卡全部禁用
+            const def = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
+            if (!def) {
                 disabled.add(card.uid);
                 continue;
             }
-            
-            // Special 卡：检查 specialTiming 是否匹配窗口类型
-            const cardTiming = def.specialTiming ?? 'beforeScoring'; // 默认为 beforeScoring
-            if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
-                // meFirst 窗口：禁用非 beforeScoring 卡
-                disabled.add(card.uid);
-            } else if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') {
-                // afterScoring 窗口：禁用非 afterScoring 卡
+            if (!isActionLikeRespondableInWindow(def, windowType)) {
                 disabled.add(card.uid);
             }
         }
@@ -1046,16 +1040,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 return;
             }
             const cardDef = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
-            const subtype = (cardDef as any)?.type === 'fusion'
-                ? (cardDef as FusionCardDef).actionSubtype
-                : (cardDef as ActionCardDef | undefined)?.subtype;
-            if (subtype !== 'special') {
+            if (!cardDef || !isActionLikeRespondableInWindow(cardDef, windowType)) {
                 playDeniedSound();
                 return;
             }
-            const needsBase = (cardDef as any)?.type === 'fusion'
-                ? (cardDef as FusionCardDef).actionSpecialNeedsBase
-                : (cardDef as ActionCardDef | undefined)?.specialNeedsBase;
+            const needsBase = actionLikeNeedsResponseWindowBase(cardDef);
             if (needsBase) {
                 // 需要选基地：进入基地选择模式
                 setMeFirstPendingCard({ cardUid: card.uid, defId: card.defId });

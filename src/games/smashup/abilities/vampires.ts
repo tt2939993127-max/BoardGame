@@ -114,7 +114,7 @@ function registerVampirePodOngoingEffects(): void {
             return {
                 id: `m-${i}`,
                 label: def?.name ?? m.defId,
-                value: { minionUid: m.uid, defId: m.defId, baseIndex },
+                value: { minionUid: m.uid, minionDefId: m.defId, defId: m.defId, baseIndex },
                 _source: 'field' as const,
                 displayMode: 'card' as const,
             };
@@ -234,14 +234,14 @@ function registerVampirePodOngoingEffects(): void {
             ...inHand.map((c, i) => ({
                 id: `hand-${i}`,
                 label: '从手牌埋葬',
-                value: { cardUid: c.uid, from: 'hand' },
+                value: { cardUid: c.uid, defId: c.defId, from: 'hand' },
                 _source: 'hand' as const,
                 displayMode: 'card' as const,
             })),
             ...inDiscard.map((c, i) => ({
                 id: `discard-${i}`,
                 label: '从弃牌堆埋葬',
-                value: { cardUid: c.uid, from: 'discard' },
+                value: { cardUid: c.uid, defId: c.defId, from: 'discard' },
                 _source: 'discard' as const,
                 displayMode: 'card' as const,
             })),
@@ -952,12 +952,13 @@ function vampireHeavyDrinkerPod(ctx: AbilityContext): AbilityResult {
             ...buildMinionTargetOptions(hereTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }).map(o => ({
                 ...o,
                 id: `here-${o.id}`,
-                value: { ...o.value, sourceMinionUid: found.minion.uid, sourceBaseIndex: found.baseIndex },
+                displayMode: 'card' as const,
+                value: { ...o.value, minionDefId: (o.value as any).defId, sourceMinionUid: found.minion.uid, sourceBaseIndex: found.baseIndex },
             })),
             ...otherOwnTargets.map((t, i) => ({
                 id: `own-${i}`,
                 label: `消灭：${t.label}`,
-                value: { minionUid: t.uid, defId: t.defId, baseIndex: t.baseIndex, sourceMinionUid: found.minion.uid, sourceBaseIndex: found.baseIndex },
+                value: { minionUid: t.uid, minionDefId: t.defId, defId: t.defId, baseIndex: t.baseIndex, sourceMinionUid: found.minion.uid, sourceBaseIndex: found.baseIndex },
                 _source: 'field' as const,
                 displayMode: 'card' as const,
             })),
@@ -1097,7 +1098,8 @@ function vampireCullTheWeakPod(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(myMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }) as any,
         { sourceId: 'vampire_cull_the_weak_pod', targetType: 'minion' },
     );
-    (interaction.data as any).continuationContext = { discardedCount: picked.picked.length, deckEvents: picked.events, discardUids: picked.picked.map(c => c.uid) };
+    const deckEvents = picked.events.filter(event => event.type !== SU_EVENTS.CARDS_DRAWN);
+    (interaction.data as any).continuationContext = { discardedCount: picked.picked.length, deckEvents, discardUids: picked.picked.map(c => c.uid) };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -1212,7 +1214,7 @@ const handleWolfPactPodPickDebuffTarget: IH = (state, playerId, value, interacti
         .map((m: any, i: number) => ({
             id: `r-${i}`,
             label: getCardDef(m.defId)?.name ?? m.defId,
-            value: { minionUid: m.uid, defId: m.defId, baseIndex: ctx.wolfBaseIndex, debuffed: v },
+            value: { minionUid: m.uid, minionDefId: m.defId, defId: m.defId, baseIndex: ctx.wolfBaseIndex, debuffed: v },
             _source: 'field' as const,
             displayMode: 'card' as const,
         }));
@@ -1238,7 +1240,7 @@ function vampireWolfPactPodActionOnPlay(ctx: AbilityContext): AbilityResult {
     const options = player.discard.map((c, i) => ({
         id: `c-${i}`,
         label: getCardDef(c.defId)?.name ?? c.defId,
-        value: { cardUid: c.uid },
+        value: { cardUid: c.uid, defId: c.defId },
         _source: 'discard' as const,
         displayMode: 'card' as const,
     }));
