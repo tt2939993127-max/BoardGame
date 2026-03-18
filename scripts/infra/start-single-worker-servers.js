@@ -88,6 +88,7 @@ const gameServer = useTsxRuntime
   : useTsLoaderRuntime
     ? spawnTsLoaderEntry({
         entry: 'server.ts',
+        tsconfig: 'tsconfig.server.json',
         env: gameServerEnv,
       })
     : usePrebuiltRuntime
@@ -118,6 +119,7 @@ const apiServer = useTsxRuntime
   : useTsLoaderRuntime
     ? spawnTsLoaderEntry({
         entry: 'apps/api/src/main.ts',
+        tsconfig: 'apps/api/tsconfig.json',
         env: apiServerEnv,
       })
     : usePrebuiltRuntime

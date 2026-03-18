@@ -208,6 +208,70 @@ describe('Feedback Module (e2e)', () => {
         expect(adminListRes.body.items[0].status).toBe('open');
     });
 
+    it('admin 列表支持严重程度筛选、分页，并返回调试上下文', async () => {
+        const { adminToken, userToken } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '低优先级反馈',
+                type: 'other',
+                severity: 'low',
+                gameName: 'tictactoe',
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '第一个严重问题',
+                type: 'bug',
+                severity: 'critical',
+                gameName: 'smashup',
+                actionLog: '[12:00] P1: cast card',
+                clientContext: {
+                    route: '/play/smashup/match/abc',
+                    mode: 'online',
+                    matchId: 'abc',
+                    playerId: '0',
+                    gameId: 'smashup',
+                },
+                errorContext: {
+                    name: 'TypeError',
+                    message: 'Cannot read properties of undefined',
+                    source: 'react.error_boundary',
+                },
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '第二个严重问题',
+                type: 'bug',
+                severity: 'critical',
+                gameName: 'smashup',
+                actionLog: '[12:05] P1: trigger ability',
+            })
+            .expect(201);
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/feedback?severity=critical&page=2&limit=1')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(listRes.body.total).toBe(2);
+        expect(listRes.body.page).toBe(2);
+        expect(listRes.body.limit).toBe(1);
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0].content).toBe('第一个严重问题');
+        expect(listRes.body.items[0].clientContext?.matchId).toBe('abc');
+        expect(listRes.body.items[0].errorContext?.name).toBe('TypeError');
+    });
+
     it('bug 类型必须附带 actionLog 或 stateSnapshot', async () => {
         const { userToken } = await seedUsers();
 
