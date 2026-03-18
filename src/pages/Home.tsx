@@ -69,7 +69,12 @@ export const Home = () => {
     const { openModal, closeModal } = useModalStack();
     const { warning: toastWarning, error: toastError } = useToast();
     const { t, i18n } = useTranslation(['lobby', 'auth']);
-    const seoT = useMemo(() => i18n.getFixedT('zh-CN', ['lobby', 'common']), [i18n]);
+    const seoT = useMemo(() => {
+        if (typeof i18n?.getFixedT === 'function') {
+            return i18n.getFixedT('zh-CN', ['lobby', 'common']);
+        }
+        return t;
+    }, [i18n, t]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
