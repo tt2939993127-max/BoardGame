@@ -34,5 +34,5 @@
   - `smashup` 全量回归: `140 passed / 9 skipped`
 
 ## 5. 结果
-- 提交: 待提交
+- 提交: `ecf66098f2764b7171455dcab7d1bf17a87764d5`
 - 推送目标: `deathcats4/BoardGame:smashup-faction-fixes-v2`
