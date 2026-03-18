@@ -908,7 +908,7 @@ const dragMap = async (page: Page, dx: number, dy: number) => {
   await page.mouse.up();
 };
 
-const openFabPanel = async (page: Page, panelId: string, mainId = 'chat') => {
+const openFabPanel = async (page: Page, panelId: string, mainId = 'exit') => {
   const panel = page.getByTestId(`fab-panel-${panelId}`);
   if (await panel.isVisible().catch(() => false)) return panel;
 
@@ -948,7 +948,7 @@ const openFabPanel = async (page: Page, panelId: string, mainId = 'chat') => {
   return panel;
 };
 
-const collapseFabMenuToMainButton = async (page: Page, mainId = 'settings') => {
+const collapseFabMenuToMainButton = async (page: Page, mainId = 'exit') => {
   const fabButtons = page.locator('[data-testid="fab-menu"] button');
   const buttonCount = await fabButtons.count();
   const mainButton = page.locator(`[data-fab-id="${mainId}"]`);
@@ -2428,7 +2428,7 @@ test.describe('SummonerWars', () => {
     await expect(phaseDetailPanel).toContainText(/Summon|召唤/i);
 
     await seedMobileActionLog(hostPage);
-    const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'settings');
+    const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
     await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(2);
     const actionLogLayout = await actionLogPanel.evaluate((panel) => {
       const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
