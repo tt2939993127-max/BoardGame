@@ -221,6 +221,7 @@ export const TestMatchRoom: React.FC = () => {
             <SEO
                 title={`${gameConfig.title} - \u6d4b\u8bd5\u6a21\u5f0f`}
                 description={`${gameConfig.title} E2E \u6d4b\u8bd5\u6a21\u5f0f`}
+                noIndex
             />
             <div
                 className="relative w-full game-page-viewport overflow-hidden font-sans"

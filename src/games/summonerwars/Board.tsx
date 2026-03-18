@@ -95,7 +95,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const activeEventChargeDotStyle = { width: '0.4vw', height: '0.4vw' };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseControlsClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
+  const phaseEndButtonClass = 'absolute right-3 z-20 pointer-events-auto sw-phase-end-button';
+  const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
 
@@ -909,7 +910,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-                <div className={phaseControlsClass} data-testid="sw-phase-controls">
+                <div className={phaseEndButtonClass} data-testid="sw-phase-controls">
                   <div className="flex gap-2">
                     {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
                       <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
@@ -926,13 +927,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
-                  <div data-tutorial-id="sw-discard-pile">
-                    <DeckPile
-                      type="discard" count={myDiscardCount} position="right"
-                      topCard={myDiscard[myDiscard.length - 1] ?? null}
-                      onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
-                    />
-                  </div>
+                </div>
+                <div className={discardPileDockClass} data-tutorial-id="sw-discard-pile">
+                  <DeckPile
+                    type="discard" count={myDiscardCount} position="right"
+                    topCard={myDiscard[myDiscard.length - 1] ?? null}
+                    onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                  />
                 </div>
 
                 {/* 右侧：阶段指示器 */}

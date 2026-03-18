@@ -178,7 +178,10 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events,
     // 早期返回必须在所有 hooks 之后
     const isE2EDebug = typeof window !== 'undefined'
         && (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ === true;
+    const isDebugHiddenForEvidence = typeof window !== 'undefined'
+        && (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ === true;
     if (!import.meta.env.DEV && !isE2EDebug) return null;
+    if (isDebugHiddenForEvidence) return null;
     if (!buttonPosition) return null;
 
     const handleArgChange = (moveName: string, value: string) => {
