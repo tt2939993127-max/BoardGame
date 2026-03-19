@@ -8,6 +8,7 @@ import type { MatchState } from '../../../engine/types';
 import { makeBase, makeCard, makeMatchState, makeMinion, makePlayer, makeState } from './helpers';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { reduce } from '../domain/reducer';
+import { fireTriggers } from '../domain/ongoingEffects';
 
 beforeAll(() => {
     clearRegistry();
@@ -197,5 +198,31 @@ describe('Temple of Goju + First Mate 时序测试', () => {
         const nextCore = reduce(core, result.events[0] as any);
         expect(nextCore.bases[1].minions.some(m => m.uid === 'first_mate_1')).toBe(true);
         expect(nextCore.players['0'].discard.some(c => c.uid === 'first_mate_1')).toBe(false);
+    });
+
+    it('场景5: first_mate_pod 在 afterScoring 会创建移动交互', () => {
+        const core = makeState({
+            bases: [
+                makeBase('base_scoring', [makeMinion('mate_pod_1', 'pirate_first_mate_pod', '0', 2)]),
+                makeBase('base_other', []),
+            ],
+            players: { '0': makePlayer('0'), '1': makePlayer('1') },
+        });
+        const ms = makeMatchState(core);
+
+        const result = fireTriggers(core, 'afterScoring', {
+            state: core,
+            matchState: ms,
+            playerId: '0',
+            baseIndex: 0,
+            rankings: [{ playerId: '0', power: 2, vp: 1 }],
+            random: { random: () => 0.5, shuffle: <T>(arr: T[]) => arr, d: () => 1, range: (min: number) => min },
+            now: 2000,
+        });
+
+        expect(result.events.length).toBe(0);
+        const interaction = result.matchState?.sys.interaction.current;
+        expect(interaction).toBeDefined();
+        expect((interaction?.data as any)?.sourceId).toBe('pirate_first_mate_choose_base');
     });
 });
