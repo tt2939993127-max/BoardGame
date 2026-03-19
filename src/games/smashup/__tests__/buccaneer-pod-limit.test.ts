@@ -15,6 +15,7 @@ import { SU_EVENT_TYPES } from '../domain/events';
 import type { MinionMovedEvent, SmashUpCore } from '../domain/types';
 import { moveMinion, destroyMinion } from '../domain/abilityHelpers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { fireTriggers } from '../domain/ongoingEffects';
 
 beforeAll(() => {
     initAllAbilities();
@@ -180,5 +181,34 @@ describe('私掠者 POD 每回合一次移动限制', () => {
         const nextCore = reduce(core, moveEvt);
         expect(nextCore.bases[1].minions.some(m => m.uid === 'bucc1')).toBe(true);
         expect(nextCore.players['0'].discard.some(c => c.uid === 'bucc1')).toBe(false);
+    });
+
+    it('消灭 buccaneer_pod 时会进入 replacement 交互（而不是直接进墓地）', () => {
+        const core = makeState({
+            bases: [
+                makeBase('base_from', [makeMinion('bucc1', 'pirate_buccaneer_pod', '0', 4)]),
+                makeBase('base_to_1', []),
+                makeBase('base_to_2', []),
+            ],
+            players: { '0': makePlayer('0'), '1': makePlayer('1') },
+        });
+        const matchState = makeMatchState(core);
+
+        const result = fireTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            matchState,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'bucc1',
+            triggerMinionDefId: 'pirate_buccaneer_pod',
+            triggerMinion: core.bases[0].minions[0],
+            random: { random: () => 0.5, shuffle: <T>(arr: T[]) => arr, d: () => 1, range: (min: number) => min },
+            now: 7,
+        }, { phase: 'replacement' });
+
+        expect(result.events.length).toBe(0);
+        const interaction = result.matchState?.sys.interaction.current;
+        expect(interaction).toBeDefined();
+        expect((interaction?.data as any)?.sourceId).toBe('pirate_buccaneer_move');
     });
 });
