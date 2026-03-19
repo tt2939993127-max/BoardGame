@@ -228,7 +228,7 @@ export default function AdminFeedbackPage() {
     const { token, user } = useAuth();
     const { success, error } = useToast();
     const { t } = useTranslation('admin');
-    const canManageFeedback = user?.role === 'admin';
+    const canManageFeedback = user?.role === 'admin' || user?.role === 'developer';
 
     const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
     const typeOptions = useMemo(() => buildTypeOptions(t), [t]);
