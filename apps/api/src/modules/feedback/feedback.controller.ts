@@ -40,7 +40,7 @@ export class FeedbackAdminController {
         return this.feedbackService.findAll(query);
     }
 
-    @Roles('admin')
+    @Roles('admin', 'developer')
     @Patch(':id/status')
     async updateStatus(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
         const updated = await this.feedbackService.updateStatus(id, dto.status);
@@ -50,20 +50,20 @@ export class FeedbackAdminController {
         return updated;
     }
 
-    @Roles('admin')
+    @Roles('admin', 'developer')
     @Delete(':id')
     async deleteOne(@Param('id') id: string) {
         const ok = await this.feedbackService.deleteOne(id);
         return { ok };
     }
 
-    @Roles('admin')
+    @Roles('admin', 'developer')
     @Post('bulk-delete')
     async bulkDelete(@Body() body: BulkFeedbackIdsDto) {
         return this.feedbackService.bulkDeleteByIds(body.ids || []);
     }
 
-    @Roles('admin')
+    @Roles('admin', 'developer')
     @Post('bulk-delete-by-filter')
     async bulkDeleteByFilter(@Body() body: FeedbackFilterDto) {
         return this.feedbackService.bulkDeleteByFilter(body);

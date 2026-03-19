@@ -160,10 +160,16 @@ export const TutorialOverlay: React.FC = () => {
                     160,
                     viewportHeight - safeArea.top - safeArea.bottom - compactPanelMargin * 2,
                 );
+                const compactMaxWidth = Math.min(
+                    360,
+                    Math.max(260, viewportWidth - safeArea.left - safeArea.right - compactPanelMargin * 2),
+                );
                 const styles: React.CSSProperties = {
                     position: 'fixed',
-                    left: safeArea.left + compactPanelMargin,
-                    right: safeArea.right + compactPanelMargin,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 'max-content',
+                    maxWidth: compactMaxWidth,
                     zIndex: UI_Z_INDEX.tutorial,
                     maxHeight: availableHeight,
                 };
