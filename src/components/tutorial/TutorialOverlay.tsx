@@ -404,7 +404,7 @@ export const TutorialOverlay: React.FC = () => {
                 {/* 内容卡片 */}
                 <div
                     data-testid="tutorial-overlay-card"
-                    className={`bg-[#fcfbf9] shadow-[0_8px_30px_rgba(67,52,34,0.12)] border border-[#e5e0d0] animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col ${isCompactTutorialLayout ? 'w-[min(82vw,20rem)] max-w-[20rem] rounded-xl p-4' : 'max-w-sm w-72 rounded-sm p-5'}`}
+                    className={`bg-[#fcfbf9] shadow-[0_8px_30px_rgba(67,52,34,0.12)] border border-[#e5e0d0] animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col ${isCompactTutorialLayout ? 'w-72 max-w-[calc(100vw-24px)] rounded-xl p-4' : 'max-w-sm w-72 rounded-sm p-5'}`}
                     style={{ maxHeight: 'inherit' }}
                 >
                     {/* 装饰性边角（右上）*/}
