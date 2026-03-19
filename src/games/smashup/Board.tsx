@@ -122,11 +122,23 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     // 响应式布局配置
     const playerCount = core?.turnOrder.length || 2;
     const layout = getLayoutConfig(playerCount, { isMobileViewport });
-    const mobileEndTurnHintReserve = 92;
+    const topHudScale = layout.topHudScale;
+    const endTurnHudScale = layout.endTurnHudScale;
+    const mobileEndTurnHintReserve = Math.round(92 * endTurnHudScale);
+    const turnTrackerStyle = isMobileViewport && topHudScale !== 1
+        ? { transform: `scale(${topHudScale})`, transformOrigin: 'top left' as const }
+        : undefined;
+    const scoreboardStyle = isMobileViewport && topHudScale !== 1
+        ? { transform: `scale(${topHudScale})`, transformOrigin: 'top right' as const }
+        : undefined;
     const endTurnButtonStyle = isMobileViewport
         ? {
             right: `${Math.max(layout.boardHorizontalPadding, 48) + mobileEndTurnHintReserve}px`,
             bottom: `${layout.floatingActionBottom}px`,
+            ...(endTurnHudScale !== 1 ? {
+                transform: `scale(${endTurnHudScale})`,
+                transformOrigin: 'bottom right' as const,
+            } : {}),
         }
         : undefined;
     const endTurnQuotaBadgeClassName = isMobileViewport
@@ -1296,7 +1308,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                 <div className="relative z-20 flex justify-between items-start pt-6 px-[2vw] pointer-events-none">
 
                     {/* Left: Turn Tracker (Yellow Notepad) */}
-                    <div className="bg-[#fef3c7] text-slate-800 p-3 pt-4 shadow-[2px_3px_5px_rgba(0,0,0,0.2)] -rotate-1 pointer-events-auto min-w-[140px] clip-path-jagged" data-tutorial-id="su-turn-tracker">
+                    <div
+                        className="bg-[#fef3c7] text-slate-800 p-3 pt-4 shadow-[2px_3px_5px_rgba(0,0,0,0.2)] -rotate-1 pointer-events-auto min-w-[140px] clip-path-jagged"
+                        data-tutorial-id="su-turn-tracker"
+                        style={turnTrackerStyle}
+                    >
                         <div className="w-3 h-3 rounded-full bg-red-400 absolute top-1 left-1/2 -translate-x-1/2 opacity-50 shadow-inner" /> {/* Pin */}
                         <motion.div
                             key={`turn-${core.turnNumber}`}
@@ -1322,7 +1338,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     </div>
 
                     {/* Right: Score Sheet + Player Info */}
-                    <div className="bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] pointer-events-auto rounded-sm" data-tutorial-id="su-scoreboard">
+                    <div
+                        className="bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] pointer-events-auto rounded-sm"
+                        data-tutorial-id="su-scoreboard"
+                        style={scoreboardStyle}
+                    >
                         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center mb-2 border-b border-slate-200">{t('ui.score_sheet')}</div>
                         <div className="flex gap-5">
                             {core.turnOrder.map(pid => {

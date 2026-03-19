@@ -3,6 +3,8 @@
 ## 本轮结论
 
 - 本轮验收按项目内移动端规范执行，先拍同场景 `PC` 主态参考图，再对照 `手机横屏` 与 `平板横屏` 主态图，不再只看手机和平板互相比。
+- 本项目这轮 `PC` 对照基线明确为 `1920x1080`，不再使用 `1440x900`、`1600x900` 之类非项目基线分辨率。
+- 本轮手机横屏基线也已统一为 `16:9`，实际使用 `667x375`，不再沿用 `812x375` 这类超宽横屏基线。
 - 这次验证基于真实对局页：
   - `/play/summonerwars?skipInitialization=true&numPlayers=2`
   - 通过 `TestHarness` 注入真实证据状态
@@ -32,6 +34,10 @@ npm run test:e2e:ci:file -- e2e/summonerwars.e2e.ts "移动横屏：长按放大
 
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\00-pc-reference-board.png`
 
+采集分辨率：
+
+- `1920x1080`
+
 我实际看到：
 
 - 棋盘主体在画面中占比明确，是整张图的视觉中心。
@@ -48,11 +54,15 @@ npm run test:e2e:ci:file -- e2e/summonerwars.e2e.ts "移动横屏：长按放大
 
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\10-phone-landscape-board.png`
 
+采集分辨率：
+
+- `667x375`（`16:9` 手机横屏基线）
+
 我实际看到：
 
-- 手机图里的棋盘主体已经明显比上一轮更大，不再是“棋盘很瘦、两边大黑边、底部手牌过度抢画面”的状态。
-- 棋盘、阶段区、`END PHASE`、弃牌堆仍在同一套主画面关系里，没有出现“回合阶段没进等比体系”的旧问题。
-- 手机图相对 PC 仍然会多一点上下裁切，这是短高视口下为了保持主体接近 PC framing 的有意识取舍；但肉眼看过去已经是同一套布局语言，不是另一套小号 UI。
+- 现在手机图已经回到 `16:9` 横屏基线，不再是之前那种超宽横屏采样。
+- 棋盘、阶段区、`END PHASE`、弃牌堆都完整留在视口里，且仍保持和 PC 同一套主画面关系。
+- 手机图和 PC 图仍会因为物理尺寸更小而更紧凑，但现在这种差异来自同一套 `16:9` 关系下的缩放，而不是错误基线导致的画面关系跑偏。
 
 判定：
 
@@ -92,8 +102,8 @@ npm run test:e2e:ci:file -- e2e/summonerwars.e2e.ts "移动横屏：长按放大
 
 - 这一轮真正新增的验收门槛是：移动端必须先对照 `PC` 主态再下结论。
 - 对照 `00-pc-reference-board.png` 与 `10-phone-landscape-board.png` 后，我的判断是：
-  - 手机主态已经回到“和 PC 差不多”的关系
-  - 差异主要体现在短高视口下的 framing 裁切，而不是主体被压扁、阶段区脱离缩放体系、或底部 HUD 另起一套比例
+  - 手机主态已经回到和 `1920x1080` PC 参考图同一套 `16:9` 关系里
+  - 现在看到的是同一套布局在更小屏幕上的正常收缩，不再是错误横屏基线造成的失真
 - 对照 `00-pc-reference-board.png` 与 `20-tablet-landscape-board.png` 后，我的判断是：
   - 平板主态正常
   - 本轮修改没有带来 PC / 平板回归
@@ -102,11 +112,14 @@ npm run test:e2e:ci:file -- e2e/summonerwars.e2e.ts "移动横屏：长按放大
 
 - `D:\gongzuo\webgame\BoardGame\.windsurf\skills\adapt-game-mobile\SKILL.md`
   - 新增硬规则：移动端验收必须对照同场景 `PC` 主态图，且判断标准是“看起来和 PC 差不多”。
+  - 明确本项目默认 `PC` 对照分辨率为 `1920x1080`。
 - `D:\gongzuo\webgame\BoardGame\src\games\summonerwars\Board.tsx`
   - 新增手机横屏默认地图 framing。
   - 保持地图等比、保留拖拽与双指缩放，只调整默认初始视图，不动 PC。
 - `D:\gongzuo\webgame\BoardGame\e2e\summonerwars.e2e.ts`
   - 补拍 `00-pc-reference-board.png`
+  - `PC` 参考视口固定为 `1920x1080`
+  - 手机横屏参考视口固定为 `667x375`
   - 把主态验收改成 `PC -> 手机 -> 平板` 对照
   - 新增主态比例对照断言，不再只检查“元素还在视口里”
 
