@@ -930,7 +930,9 @@ export function registerPirateInteractionHandlers(): void {
         // 引擎层 resolveInteraction 已自动传递延迟事件，这里只需要在最后一个交互时补发
         const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
             { type: string; payload: unknown; timestamp: number }[] | undefined;
-        const hasNextInteraction = state.sys.interaction?.queue && state.sys.interaction.queue.length > 0;
+        const hasNextInteraction =
+            !!state.sys.interaction?.current
+            || (state.sys.interaction?.queue?.length ?? 0) > 0;
         
         if (selected.skip) {
             // 跳过时，如果这是最后一个交互，补发延迟事件
