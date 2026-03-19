@@ -497,7 +497,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: { width: 667, height: 375 },
       isMobile: true,
       hasTouch: true,
     });
@@ -2360,7 +2360,7 @@ test.describe('SummonerWars', () => {
 
     const desktopContext = await browser.newContext({
       baseURL,
-      viewport: { width: 1440, height: 900 },
+      viewport: { width: 1920, height: 1080 },
     });
     await desktopContext.addInitScript(() => {
       (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
@@ -2403,6 +2403,7 @@ test.describe('SummonerWars', () => {
     await setEnglishLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize({ width: 667, height: 375 });
     await openSummonerWarsMobileEvidencePage(hostPage);
     await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
@@ -2420,7 +2421,7 @@ test.describe('SummonerWars', () => {
     expect(Number(initialScaleBadge.opacity)).toBeLessThan(0.05);
 
     const phoneViewport = hostPage.viewportSize();
-    expect(phoneViewport?.width).toBe(812);
+    expect(phoneViewport?.width).toBe(667);
     expect(phoneViewport?.height).toBe(375);
 
     const phoneLayout = await hostPage.evaluate(() => {
