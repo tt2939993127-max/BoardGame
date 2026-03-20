@@ -47,6 +47,7 @@ import type {
     PowerCounterAddedEvent,
     PowerCounterRemovedEvent,
     TempPowerAddedEvent,
+    PermanentPowerAddedEvent,
     CardToDeckBottomEvent,
     SpecialAfterScoringArmedEvent,
 } from './types';
@@ -768,6 +769,7 @@ export function processDestroyTriggers(
             triggerMinionUid: minionUid,
             triggerMinionDefId: minionDefId,
             triggerMinion: minion,
+            destroyerId,
             reason: de.payload.reason,
             random,
             now,
@@ -1303,6 +1305,18 @@ export function processAffectTriggers(
                 if (te.payload.amount < 0) {
                     minionUid = te.payload.minionUid;
                     baseIndex = te.payload.baseIndex;
+                    affectType = 'power_change';
+                    const base = core.bases[baseIndex];
+                    const minion = base?.minions.find(m => m.uid === minionUid);
+                    minionDefId = minion?.defId;
+                }
+                break;
+            }
+            case SU_EVENTS.PERMANENT_POWER_ADDED: {
+                const pe = evt as PermanentPowerAddedEvent;
+                if (pe.payload.amount < 0) {
+                    minionUid = pe.payload.minionUid;
+                    baseIndex = pe.payload.baseIndex;
                     affectType = 'power_change';
                     const base = core.bases[baseIndex];
                     const minion = base?.minions.find(m => m.uid === minionUid);
