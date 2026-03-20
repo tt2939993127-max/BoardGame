@@ -13,7 +13,7 @@ import { registerProtection, registerRestriction, registerTrigger, registerInter
 import type { ProtectionCheckContext, RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
-import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { getInteractionHandler, registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { resolveOnPlay } from '../domain/abilityRegistry';
 import { reduce } from '../domain/reduce';
 import { validateActionPlaySemantics } from '../domain/playLegality';
@@ -51,11 +51,11 @@ export function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const, displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `steampunk_scrap_diving_${ctx.now}`, ctx.playerId,
-        '选择要从弃牌堆取回的行动卡', options as any[], 'steampunk_scrap_diving',
+        '选择要从弃牌堆取回的行动卡', options as any[], { sourceId: 'steampunk_scrap_diving', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -243,12 +243,12 @@ function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'discard' as const, displayMode: 'card' as const };
     });
     const interaction = createSimpleChoice(
         `steampunk_mechanic_${ctx.now}`, ctx.playerId,
         '选择要从弃牌堆打出的行动卡', options as any[],
-        { sourceId: 'steampunk_mechanic', autoCancelOption: true },
+        { sourceId: 'steampunk_mechanic', targetType: 'generic', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -274,7 +274,7 @@ function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
         return { events: [grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now)] };
     }
     const options = myOngoings.map((o, i) => ({
-        id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId }, _source: 'ongoing' as const,
+        id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId }, _source: 'ongoing' as const, displayMode: 'card' as const,
     }));
     const interaction = createSimpleChoice(
         `steampunk_change_of_venue_${ctx.now}`, ctx.playerId,
@@ -313,7 +313,7 @@ function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
 
     // 单候选自动执行，多候选让玩家选择
     return resolveOrPrompt<{ baseIndex: number }>(ctx,
-        candidates.map(c => ({ id: `base-${c.baseIndex}`, label: c.label, value: { baseIndex: c.baseIndex }, _source: 'base' as const })),
+        candidates.map(c => ({ id: `base-${c.baseIndex}`, label: c.label, value: { baseIndex: c.baseIndex, baseDefId: ctx.state.bases[c.baseIndex].defId }, _source: 'base' as const, displayMode: 'card' as const })),
         { id: 'steampunk_captain_ahab', title: '选择要移动到的基地', sourceId: 'steampunk_captain_ahab', targetType: 'base' },
         (value) => ({
             events: [moveMinion(ctx.cardUid, ctx.defId, currentBaseIndex, value.baseIndex, 'steampunk_captain_ahab', ctx.now)],
@@ -468,12 +468,12 @@ export function registerSteampunkInteractionHandlers(): void {
                 .map(({ base, i }) => {
                 const baseDef = getBaseDef(base.defId);
                 const name = baseDef?.name ?? base.defId;
-                return { id: `base-${i}`, label: name, value: { baseIndex: i }, _source: 'base' as const };
+                return { id: `base-${i}`, label: name, value: { baseIndex: i, baseDefId: base.defId }, _source: 'base' as const, displayMode: 'card' as const };
             });
             if (baseOptions.length === 0) return { state, events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)] };
             const interaction = createSimpleChoice(
                 `steampunk_mechanic_target_${timestamp}`, playerId,
-                '选择要将行动卡打出到的基地', baseOptions, 'steampunk_mechanic_target',
+                '选择要将行动卡打出到的基地', baseOptions, { sourceId: 'steampunk_mechanic_target', targetType: 'base' },
             );
             const extended = {
                 ...interaction,
@@ -521,12 +521,12 @@ export function registerSteampunkInteractionHandlers(): void {
             const ongoingTarget = cardDef.ongoingTarget ?? 'base';
             if (ongoingTarget === 'minion') {
                 // 附着到随从的 ongoing 卡：需要选择目标随从
-                const minionOptions: { id: string; label: string; value: { baseIndex: number; minionUid: string } }[] = [];
+                const minionOptions: { id: string; label: string; value: { baseIndex: number; minionUid: string; minionDefId: string } ; displayMode: 'card'; _source: 'field' }[] = [];
                 for (let i = 0; i < state.core.bases.length; i++) {
                     for (const m of state.core.bases[i].minions) {
                         if (m.controller === playerId) {
                             const mDef = getCardDef(m.defId);
-                            minionOptions.push({ id: m.uid, label: mDef?.name ?? m.defId, value: { baseIndex: i, minionUid: m.uid } });
+                            minionOptions.push({ id: m.uid, label: mDef?.name ?? m.defId, value: { baseIndex: i, minionUid: m.uid, minionDefId: m.defId }, _source: 'field' as const, displayMode: 'card' as const });
                         }
                     }
                 }
@@ -536,7 +536,7 @@ export function registerSteampunkInteractionHandlers(): void {
                 }
                 const interaction = createSimpleChoice(
                     `steampunk_cov_target_${timestamp}`, playerId,
-                    '选择要将行动卡附着到的随从', minionOptions, 'steampunk_change_of_venue_target',
+                    '选择要将行动卡附着到的随从', minionOptions, { sourceId: 'steampunk_change_of_venue_choose_minion', targetType: 'minion' },
                 );
                 const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ongoingUid, defId } } };
                 return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
@@ -544,11 +544,11 @@ export function registerSteampunkInteractionHandlers(): void {
             // 附着到基地的 ongoing 卡
             const baseOptions = state.core.bases.map((base, i) => {
                 const baseDef = getBaseDef(base.defId);
-                return { id: `base-${i}`, label: baseDef?.name ?? base.defId, value: { baseIndex: i }, _source: 'base' as const };
+                return { id: `base-${i}`, label: baseDef?.name ?? base.defId, value: { baseIndex: i, baseDefId: base.defId }, _source: 'base' as const, displayMode: 'card' as const };
             });
             const interaction = createSimpleChoice(
                 `steampunk_cov_target_${timestamp}`, playerId,
-                '选择要将行动卡打出到的基地', baseOptions, 'steampunk_change_of_venue_target',
+                '选择要将行动卡附着到的基地', baseOptions, { sourceId: 'steampunk_change_of_venue_choose_base', targetType: 'base' },
             );
             const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ongoingUid, defId } } };
             return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
@@ -617,6 +617,8 @@ export function registerSteampunkInteractionHandlers(): void {
     });
 
     // 集结号角：ongoing 卡选择新附着目标后打出
+    registerInteractionHandler('steampunk_change_of_venue_choose_minion', (state, playerId, value, iData, random, timestamp) => getInteractionHandler('steampunk_change_of_venue_target')!(state, playerId, value, iData, random, timestamp));
+
     registerInteractionHandler('steampunk_change_of_venue_target', (state, playerId, value, iData, random, timestamp) => {
         const { baseIndex, minionUid } = value as { baseIndex: number; minionUid?: string };
         const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string };
@@ -682,3 +684,5 @@ export function registerSteampunkInteractionHandlers(): void {
         return { state, events };
     });
 }
+
+

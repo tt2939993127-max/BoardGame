@@ -13,6 +13,7 @@ import {
     grantExtraMinion,
     destroyMinion,
     getMinionPower,
+    buildBaseTargetOptions,
     buildMinionTargetOptions,
     addPowerCounter,
     revealHand,
@@ -33,7 +34,7 @@ import { drawCards, matchesDefId } from '../domain/utils';
 import { getFactionCards, getCardDef, getBaseDef } from '../data/cards';
 import { registerTrigger, registerProtection } from '../domain/ongoingEffects';
 import type { TriggerContext, ProtectionCheckContext } from '../domain/ongoingEffects';
-import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
+import { getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from '../domain/ongoingModifiers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { isMinionProtectedNonConsumable } from '../domain/ongoingEffects';
@@ -88,7 +89,7 @@ export function registerElderThingAbilities(): void {
     registerAbility('elder_thing_byakhee_pod', 'onPlay', elderThingByakheePod);
 
     registerAbility('elder_thing_begin_the_summoning_pod', 'onPlay', elderThingBeginTheSummoningPod);
-    registerAbility('elder_thing_dunwich_horror_pod', 'onPlay', elderThingDunwichHorrorPodOnPlay);
+    registerAbility('elder_thing_the_price_of_power_pod', 'onPlay', elderThingPriceOfPowerPodOnPlay);
     registerAbility('elder_thing_insanity_pod', 'onPlay', elderThingInsanityPod);
     registerAbility('elder_thing_power_of_madness_pod', 'onPlay', elderThingPowerOfMadnessPod);
     registerAbility('elder_thing_spreading_horror_pod', 'onPlay', elderThingSpreadingHorrorPod);
@@ -1477,6 +1478,34 @@ export function registerElderThingInteractionHandlers(): void {
         return { state, events: [destroyMinion(ctx.minionUid, ctx.minionDefId, ctx.baseIndex, ctx.ownerId, playerId, 'elder_thing_dunwich_horror_pod', timestamp)] };
     });
 
+    registerInteractionHandler('elder_thing_the_price_of_power_pod_choose_base', (state, playerId, value, iData, random, timestamp) => {
+        const { baseIndex } = value as { baseIndex?: number };
+        const continuation = (iData as any)?.continuationContext as {
+            sourceId?: string;
+            perMadnessCounterAmount?: number;
+        } | undefined;
+        if (baseIndex === undefined || !continuation?.sourceId || continuation.perMadnessCounterAmount === undefined) {
+            return { state, events: [] };
+        }
+
+        const result = applyPriceOfPower({
+            state: state.core,
+            matchState: state,
+            playerId,
+            cardUid: '',
+            defId: 'elder_thing_the_price_of_power_pod',
+            baseIndex,
+            random,
+            now: timestamp,
+        }, {
+            sourceId: continuation.sourceId,
+            perMadnessCounterAmount: continuation.perMadnessCounterAmount,
+            baseIndex,
+        });
+
+        return { state: result.matchState ?? state, events: result.events };
+    });
+
     registerInteractionHandler('elder_thing_spreading_horror_pod_opponent', (state, _playerId, value, iData, _random, timestamp) => {
         const { choice } = value as { choice?: 'yes' | 'no' };
         const ctx = (iData as any)?.continuationContext as any;
@@ -1697,12 +1726,41 @@ export function registerElderThingInteractionHandlers(): void {
  * ctx.baseIndex 为计分基地索引（由 Me First! 窗口传入）
  */
 function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
+    return applyPriceOfPower(ctx, {
+        sourceId: 'elder_thing_the_price_of_power',
+        perMadnessCounterAmount: 2,
+    });
+}
+
+function elderThingPriceOfPowerPodOnPlay(ctx: AbilityContext): AbilityResult {
+    // POD：平时可正常打出；若在 Me First! 窗口中打出，则改为 +2 指示物版本。
+    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
+    const perMadnessCounterAmount = windowType === 'meFirst' ? 2 : 1;
+    const resolvedBaseIndex = resolvePriceOfPowerPodBaseIndex(ctx);
+    if (resolvedBaseIndex === undefined) {
+        return promptPriceOfPowerPodChooseBase(ctx, perMadnessCounterAmount);
+    }
+    return applyPriceOfPower(ctx, {
+        sourceId: 'elder_thing_the_price_of_power_pod',
+        perMadnessCounterAmount,
+        baseIndex: resolvedBaseIndex,
+    });
+}
+
+function applyPriceOfPower(
+    ctx: AbilityContext,
+    params: {
+        sourceId: string;
+        perMadnessCounterAmount: number;
+        baseIndex?: number;
+    },
+): AbilityResult {
     const events: SmashUpEvent[] = [];
-    const scoringBaseIndex = ctx.baseIndex;
-    const base = ctx.state.bases[scoringBaseIndex];
+    const baseIndex = params.baseIndex ?? ctx.baseIndex;
+    if (baseIndex === undefined) return { events };
+    const base = ctx.state.bases[baseIndex];
     if (!base) return { events };
 
-    // 收集所有对手手牌用于合并展示（规则："所有有随从在这里的其他玩家展示他们的手牌"）
     const allRevealCards: { uid: string; defId: string }[] = [];
     const revealTargetIds: string[] = [];
     let totalMadness = 0;
@@ -1719,22 +1777,69 @@ function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
         totalMadness += opponent.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length;
     }
 
-    // 合并展示所有对手手牌（一个事件，避免多人覆盖）
     if (allRevealCards.length > 0) {
         const targetIds = revealTargetIds.length === 1 ? revealTargetIds[0] : revealTargetIds;
-        events.push(revealHand(targetIds, 'all', allRevealCards, 'elder_thing_the_price_of_power', ctx.now, ctx.playerId));
+        events.push(revealHand(targetIds, 'all', allRevealCards, params.sourceId, ctx.now, ctx.playerId));
     }
 
     if (totalMadness === 0) return { events };
 
-    // 给己方在该基地的随从轮流 +2 力量
     const myMinions = base.minions.filter(m => m.controller === ctx.playerId);
     if (myMinions.length === 0) return { events };
     for (let i = 0; i < totalMadness; i++) {
         const target = myMinions[i % myMinions.length];
-        events.push(addPowerCounter(target.uid, scoringBaseIndex, 2, 'elder_thing_the_price_of_power', ctx.now));
+        events.push(addPowerCounter(target.uid, baseIndex, params.perMadnessCounterAmount, params.sourceId, ctx.now));
     }
     return { events };
+}
+
+function resolvePriceOfPowerPodBaseIndex(ctx: AbilityContext): number | undefined {
+    if (ctx.baseIndex !== undefined) return ctx.baseIndex;
+    const candidates = getPriceOfPowerPodCandidateBases(ctx);
+    if (candidates.length === 1) {
+        return candidates[0].baseIndex;
+    }
+    return undefined;
+}
+
+function getPriceOfPowerPodCandidateBases(ctx: AbilityContext): Array<{ baseIndex: number; label: string }> {
+    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
+    const candidateIndices = windowType === 'meFirst'
+        ? getScoringEligibleBaseIndices(ctx.state)
+        : ctx.state.bases.map((_, index) => index);
+
+    return candidateIndices
+        .map(baseIndex => {
+            const base = ctx.state.bases[baseIndex];
+            if (!base) return null;
+            const baseDef = getBaseDef(base.defId);
+            return {
+                baseIndex,
+                label: baseDef?.name ?? `基地 ${baseIndex + 1}`,
+            };
+        })
+        .filter((candidate): candidate is { baseIndex: number; label: string } => candidate !== null);
+}
+
+function promptPriceOfPowerPodChooseBase(
+    ctx: AbilityContext,
+    perMadnessCounterAmount: number,
+): AbilityResult {
+    const candidates = getPriceOfPowerPodCandidateBases(ctx);
+    if (candidates.length === 0) return { events: [] };
+
+    const interaction = createSimpleChoice(
+        `elder_thing_the_price_of_power_pod_choose_base_${ctx.now}`,
+        ctx.playerId,
+        '力量的代价：选择一个基地',
+        buildBaseTargetOptions(candidates, ctx.state),
+        { sourceId: 'elder_thing_the_price_of_power_pod_choose_base', targetType: 'base' },
+    );
+    (interaction.data as any).continuationContext = {
+        sourceId: 'elder_thing_the_price_of_power_pod',
+        perMadnessCounterAmount,
+    };
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 

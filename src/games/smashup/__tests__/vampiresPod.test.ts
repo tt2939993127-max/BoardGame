@@ -70,3 +70,67 @@ describe('vampires_pod: Nightstalker POD', () => {
     });
 });
 
+describe('vampires_pod: Cull The Weak POD', () => {
+    it('searches the deck for up to two minions, mills them, then places counters afterward', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'vampire_cull_the_weak_pod', 'action', '0'),
+                    ],
+                    deck: [
+                        makeCard('d1', 'test_minion', 'minion', '0'),
+                        makeCard('d2', 'test_minion_2', 'minion', '0'),
+                        makeCard('d3', 'test_action', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('m1', 'vampire_nightstalker_pod', '0', 4),
+                    makeMinion('m2', 'vampire_fledgling_vampire_pod', '0', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const played = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+            defaultTestRandom,
+        );
+
+        const counterPrompt = getInteractionsFromMS(played.finalState)[0];
+        expect(counterPrompt?.data?.sourceId).toBe('vampire_cull_the_weak_pod');
+        expect(counterPrompt?.data?.options).toHaveLength(2);
+        expect(counterPrompt?.data?.continuationContext?.discardedCount).toBe(2);
+        expect(counterPrompt?.data?.continuationContext?.discardUids).toEqual(['d1', 'd2']);
+
+        const firstTarget = counterPrompt?.data?.options?.find((o: any) => o?.value?.minionUid === 'm1');
+        expect(firstTarget).toBeDefined();
+
+        const afterSearch = runCommand(
+            played.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: firstTarget.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(afterSearch.events.some(e => e.type === SU_EVENTS.CARDS_MILLED)).toBe(true);
+        expect(afterSearch.events.some(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBe(false);
+        expect(afterSearch.finalState.core.players['0'].discard.map(c => c.uid)).toEqual(
+            expect.arrayContaining(['d1', 'd2']),
+        );
+        expect(afterSearch.finalState.core.players['0'].deck.map(c => c.uid)).toEqual(['d3']);
+
+        const afterCounter = runCommand(
+            afterSearch.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: firstTarget.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(getInteractionsFromMS(afterCounter.finalState)).toHaveLength(0);
+        expect(afterCounter.finalState.core.bases[0].minions.find(m => m.uid === 'm1')?.powerCounters).toBe(2);
+    });
+});
