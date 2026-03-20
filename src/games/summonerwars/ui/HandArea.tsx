@@ -18,6 +18,7 @@ import { playDeniedSound } from '../../../lib/audio/useGameAudio';
 import { resolveCardAtlasId } from './cardAtlas';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 import { useTouchLongPress } from '../../../hooks/ui/useTouchLongPress';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
 
 const MagnifyIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className = '', style }) => (
   <svg className={className} style={style} viewBox="0 0 20 20" fill="currentColor">
@@ -71,7 +72,6 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
   return { atlasId, frameIndex: spriteIndex };
 }
 
-const BOARD_SHELL_REFERENCE_WIDTH = 'var(--mobile-board-shell-design-width, 100vw)';
 const CARD_WIDTH_RATIO = 'var(--sw-hand-card-width-ratio, 0.16)';
 const MAGNIFY_BUTTON_OFFSET_RATIO = 0.004;
 const MAGNIFY_BUTTON_SIZE_RATIO = 0.022;

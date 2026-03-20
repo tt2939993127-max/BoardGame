@@ -23,6 +23,7 @@ import { getEffectiveStructureLife, getEffectiveLife } from '../domain/abilityRe
 import { StrengthBoostIndicator } from './StrengthBoostIndicator';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
 
 // ============================================================================
 // 辅助函数
@@ -36,7 +37,6 @@ const BOARD_GRID_Z = {
   attacker: 50,
 } as const;
 
-const BOARD_SHELL_REFERENCE_WIDTH = 'var(--mobile-board-shell-design-width, 100vw)';
 const LIFE_BADGE_STYLE: React.CSSProperties = {
   fontSize: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.01)`,
   paddingInline: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,

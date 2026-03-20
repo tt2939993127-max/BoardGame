@@ -826,9 +826,11 @@ Authorization: Bearer <admin_token>
 **查询参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| limit | number | 否 | 返回条数上限，默认 100 |
+| page | number | 否 | 页码，默认 1 |
+| limit | number | 否 | 每页数量，默认 20，最大 100 |
 | status | string | 否 | 按状态筛选，支持 `open` / `in_progress` / `resolved` / `closed` |
 | type | string | 否 | 按类型筛选，支持 `bug` / `suggestion` / `other` |
+| severity | string | 否 | 按严重程度筛选，支持 `low` / `medium` / `high` / `critical` |
 
 **响应示例**:
 ```json
@@ -841,11 +843,24 @@ Authorization: Bearer <admin_token>
       "severity": "medium",
       "status": "open",
       "gameName": "smashup",
+      "contactInfo": "tester@example.com",
+      "clientContext": {
+        "route": "/play/smashup/match/abc",
+        "mode": "online",
+        "matchId": "abc",
+        "playerId": "0",
+        "gameId": "smashup"
+      },
+      "errorContext": {
+        "name": "TypeError",
+        "message": "Cannot read properties of undefined",
+        "source": "react.error_boundary"
+      },
       "createdAt": "2026-03-14T10:00:00.000Z"
     }
   ],
   "total": 1,
-  "limit": 100,
+  "limit": 20,
   "page": 1
 }
 ```

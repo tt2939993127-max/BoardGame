@@ -22,6 +22,10 @@ const setEnglishLocale = async (context: BrowserContext | Page) => {
 };
 
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
+  if (process.env.PW_SW_USE_REAL_MAP === 'true') {
+    return;
+  }
+
   const mapPlaceholderSvg = [
     '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">',
     '<defs>',
@@ -395,6 +399,8 @@ const injectSummonerWarsMobileEvidenceScene = async (page: Page) => {
 };
 
 const openSummonerWarsMobileEvidencePage = async (page: Page) => {
+  // 该证据页场景依赖 TestHarness 注入状态，因此必须走 /play/:gameId 测试路由，
+  // 不能切到 /tutorial 路由；教程路由当前不会注册 TestHarness。
   await page.goto('/play/summonerwars?skipInitialization=true&numPlayers=2', {
     waitUntil: 'domcontentloaded',
   });
@@ -413,6 +419,48 @@ const openSummonerWarsMobileEvidencePage = async (page: Page) => {
   await expect(page.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
 };
+
+const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
+  const getRect = (element: Element | null) => {
+    if (!(element instanceof HTMLElement)) return null;
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+
+  const mapContent = document.querySelector('[data-testid="sw-map-content"]');
+  const handArea = document.querySelector('[data-testid="sw-hand-area"]');
+  const phaseTracker = document.querySelector('[data-testid="sw-phase-tracker"]');
+  const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]');
+
+  const mapRect = getRect(mapContent);
+  const handRect = getRect(handArea);
+  const trackerRect = getRect(phaseTracker);
+  const endPhaseRect = getRect(endPhaseButton);
+
+  if (!mapRect || !handRect || !trackerRect || !endPhaseRect) {
+    throw new Error('SummonerWars 证据场景关键节点缺失，无法比较 PC/移动端比例');
+  }
+
+  return {
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    mapWidthRatio: mapRect.width / window.innerWidth,
+    mapHeightRatio: mapRect.height / window.innerHeight,
+    handWidthRatio: handRect.width / window.innerWidth,
+    handHeightRatio: handRect.height / window.innerHeight,
+    trackerWidthRatio: trackerRect.width / mapRect.width,
+    trackerHeightRatio: trackerRect.height / mapRect.height,
+    endPhaseWidthRatio: endPhaseRect.width / window.innerWidth,
+    endPhaseHeightRatio: endPhaseRect.height / window.innerHeight,
+  };
+});
 
 const seedMobileActionLog = async (page: Page) => {
   const currentState = await page.evaluate(() => {
@@ -449,7 +497,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: { width: 667, height: 375 },
       isMobile: true,
       hasTouch: true,
     });
@@ -2310,6 +2358,33 @@ test.describe('SummonerWars', () => {
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
+    const desktopContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1920, height: 1080 },
+    });
+    await desktopContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(desktopContext);
+    await mockSummonerWarsMapImage(desktopContext);
+    await setEnglishLocale(desktopContext);
+    await disableAudio(desktopContext);
+    const desktopPage = await desktopContext.newPage();
+    await openSummonerWarsMobileEvidencePage(desktopPage);
+    await waitForSummonerWarsVisualStable(desktopPage);
+    await collapseFabMenuToMainButton(desktopPage);
+    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
+        filename: '00-pc-reference-board.png',
+      }),
+      fullPage: false,
+    });
+    await desktopContext.close();
+
     const hostContext = await browser.newContext({
       baseURL,
       viewport: { width: 812, height: 375 },
@@ -2328,6 +2403,7 @@ test.describe('SummonerWars', () => {
     await setEnglishLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize({ width: 667, height: 375 });
     await openSummonerWarsMobileEvidencePage(hostPage);
     await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
@@ -2338,14 +2414,14 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
 
     const defaultScaleText = await getMapScaleText(hostPage);
-    expect(defaultScaleText).toBe('100%');
+    expect(defaultScaleText).toMatch(/^\d+%$/);
     const initialScaleBadge = await getMapScaleBadgeState(hostPage);
     expect(initialScaleBadge.text).toBe(defaultScaleText);
     expect(initialScaleBadge.ariaHidden).toBe('true');
     expect(Number(initialScaleBadge.opacity)).toBeLessThan(0.05);
 
     const phoneViewport = hostPage.viewportSize();
-    expect(phoneViewport?.width).toBe(812);
+    expect(phoneViewport?.width).toBe(667);
     expect(phoneViewport?.height).toBe(375);
 
     const phoneLayout = await hostPage.evaluate(() => {
@@ -2384,15 +2460,16 @@ test.describe('SummonerWars', () => {
     expect(phoneLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(phoneLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
     expect(phoneLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
-    expect(phoneLayout.contentRect?.left ?? -99999).toBeGreaterThanOrEqual((phoneLayout.containerRect?.left ?? 0) - 1);
-    expect(phoneLayout.contentRect?.right ?? 99999).toBeLessThanOrEqual((phoneLayout.containerRect?.right ?? phoneLayout.innerWidth) + 1);
-    expect(phoneLayout.contentRect?.top ?? -99999).toBeGreaterThanOrEqual((phoneLayout.containerRect?.top ?? 0) - 1);
-    expect(phoneLayout.contentRect?.bottom ?? 99999).toBeLessThanOrEqual((phoneLayout.containerRect?.bottom ?? phoneLayout.innerHeight) + 1);
     expect(phoneLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(0);
     expect(phoneLayout.playerEnergyRect?.height ?? 0).toBeGreaterThan(0);
 
     await waitForSummonerWarsVisualStable(hostPage);
     await collapseFabMenuToMainButton(hostPage);
+    const phoneShellRatios = await getSummonerWarsShellRatios(hostPage);
+    expect(phoneShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.04);
+    expect(phoneShellRatios.handHeightRatio).toBeLessThanOrEqual(desktopShellRatios.handHeightRatio + 0.08);
+    expect(Math.abs(phoneShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.08);
+    expect(Math.abs(phoneShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board', {
         filename: '10-phone-landscape-board.png',
@@ -2537,6 +2614,11 @@ test.describe('SummonerWars', () => {
     expect(tabletStructureBox!.y + tabletStructureBox!.height).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
     expect(tabletLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(phoneLayout.playerEnergyRect?.width ?? 0);
     expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
+    const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
+    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.02);
+    // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
+    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.12);
+    expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
 
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board', {

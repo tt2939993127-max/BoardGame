@@ -33,19 +33,6 @@ interface FeedbackItem {
     createdAt: string;
 }
 
-interface FeedbackAiPayload {
-    feedbackId: string;
-    createdAt: string;
-    type: FeedbackItem['type'];
-    severity: FeedbackItem['severity'];
-    status: FeedbackItem['status'];
-    reporter: string;
-    content: string;
-    gameId: string | null;
-    operationLogs: unknown[];
-    stateSnapshot: unknown | null;
-}
-
 // ── 常量 ──
 
 type StatusOption = { value: FeedbackItem['status']; color: string };
@@ -150,16 +137,6 @@ function StatusSelect({ value, onChange, options }: { value: string; onChange: (
     );
 }
 
-function StatusBadge({ value, options }: { value: string; options: StatusOptionWithLabel[] }) {
-    const current = options.find((option) => option.value === value) ?? options[0];
-
-    return (
-        <span className={cn('inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border', current.color)}>
-            {current.label}
-        </span>
-    );
-}
-
 /** 筛选标签按钮 */
 function FilterTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
@@ -180,10 +157,9 @@ function FilterTab({ active, onClick, children }: { active: boolean; onClick: ()
 // ── 主组件 ──
 
 export default function AdminFeedbackPage() {
-    const { token, user } = useAuth();
+    const { token } = useAuth();
     const { success, error } = useToast();
     const { t } = useTranslation('admin');
-    const canManageFeedback = user?.role === 'admin';
 
     const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
     const typeOptions = useMemo(() => buildTypeOptions(t), [t]);
@@ -197,7 +173,6 @@ export default function AdminFeedbackPage() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    const [lastAiPayload, setLastAiPayload] = useState('');
     const requestIdRef = useRef(0);
 
     // 用于静默轮询（不显示 loading）
@@ -276,11 +251,7 @@ export default function AdminFeedbackPage() {
 
     // ── 操作 ──
 
-    const handleStatusUpdate = useCallback(async (id: string, newStatus: string) => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈');
-            return;
-        }
+    const handleStatusUpdate = async (id: string, newStatus: string) => {
         try {
             const res = await fetch(`${ADMIN_API_URL}/feedback/${id}/status`, {
                 method: 'PATCH',
@@ -293,13 +264,9 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.updateFailed'));
         }
-    }, [canManageFeedback, error, success, t, token]);
+    };
 
-    const handleDelete = useCallback(async (id: string) => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈');
-            return;
-        }
+    const handleDelete = async (id: string) => {
         if (!confirm(t('feedback.confirm.delete'))) return;
         try {
             const res = await fetch(`${ADMIN_API_URL}/feedback/${id}`, {
@@ -313,13 +280,9 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.deleteFailed'));
         }
-    }, [canManageFeedback, error, success, t, token]);
+    };
 
-    const handleBulkDelete = useCallback(async () => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈');
-            return;
-        }
+    const handleBulkDelete = async () => {
         if (selectedIds.size === 0) return;
         if (!confirm(t('feedback.confirm.bulkDelete', { count: selectedIds.size }))) return;
         try {
@@ -335,7 +298,7 @@ export default function AdminFeedbackPage() {
         } catch {
             error(t('feedback.messages.bulkDeleteFailed'));
         }
-    }, [canManageFeedback, error, fetchFeedbacks, selectedIds, success, t, token]);
+    };
 
     const changeFilter = (setter: (v: string) => void, value: string) => {
         setter(value);
@@ -352,11 +315,6 @@ export default function AdminFeedbackPage() {
                 <div className="flex items-center gap-3">
                     <h1 className="text-lg font-bold text-zinc-900">{t('feedback.title')}</h1>
                     <span className="text-xs text-zinc-400">{t('feedback.count', { count: feedbacks.length })}</span>
-                    {!canManageFeedback && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                            只读
-                        </span>
-                    )}
                     <button
                         onClick={() => fetchFeedbacks()}
                         title={t('feedback.refresh')}
@@ -368,7 +326,7 @@ export default function AdminFeedbackPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {canManageFeedback && selectedIds.size > 0 && (
+                    {selectedIds.size > 0 && (
                         <button
                             onClick={handleBulkDelete}
                             className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors"
@@ -413,24 +371,6 @@ export default function AdminFeedbackPage() {
                     })}
                 </div>
             </div>
-            {!canManageFeedback && (
-                <div className="mb-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-500">
-                    开发者可查看和复制反馈内容，改状态与删除仍仅管理员可用。
-                </div>
-            )}
-
-            {/* AI 导出载荷预览（用于自动化读取） */}
-            {lastAiPayload && (
-                <div className="flex-none mb-3" data-testid="feedback-ai-payload-viewer-panel">
-                    <div className="text-xs text-zinc-500 mb-1">AI Payload (Last Copied)</div>
-                    <textarea
-                        readOnly
-                        value={lastAiPayload}
-                        data-testid="feedback-ai-payload-viewer"
-                        className="w-full h-36 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-[11px] font-mono text-zinc-700 leading-relaxed"
-                    />
-                </div>
-            )}
 
             {/* 表格 */}
             <div className="flex-1 overflow-y-auto min-h-0">
@@ -444,17 +384,15 @@ export default function AdminFeedbackPage() {
                     <table className="w-full text-sm">
                         <thead className="sticky top-0 z-10 bg-zinc-50">
                             <tr className="text-left text-xs text-zinc-400 font-medium">
-                                {canManageFeedback && (
-                                    <th className="w-8 py-2 px-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={allSelected}
-                                            onChange={toggleSelectAll}
-                                            className="rounded border-zinc-300"
-                                            aria-label={t('feedback.table.selectAll')}
-                                        />
-                                    </th>
-                                )}
+                                <th className="w-8 py-2 px-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        onChange={toggleSelectAll}
+                                        className="rounded border-zinc-300"
+                                        aria-label={t('feedback.table.selectAll')}
+                                    />
+                                </th>
                                 <th className="w-8 py-2" />
                                 <th className="py-2 px-2">{t('feedback.table.content')}</th>
                                 <th className="py-2 px-2 w-20">{t('feedback.table.type')}</th>
@@ -462,7 +400,7 @@ export default function AdminFeedbackPage() {
                                 <th className="py-2 px-2 w-24">{t('feedback.table.status')}</th>
                                 <th className="py-2 px-2 w-24">{t('feedback.table.submitter')}</th>
                                 <th className="py-2 px-2 w-32">{t('feedback.table.time')}</th>
-                                {canManageFeedback && <th className="py-2 px-2 w-16" />}
+                                <th className="py-2 px-2 w-16" />
                             </tr>
                         </thead>
                         <tbody>
@@ -478,7 +416,6 @@ export default function AdminFeedbackPage() {
                                         item={item}
                                         expanded={expanded}
                                         selected={selectedIds.has(item._id)}
-                                        canManageFeedback={canManageFeedback}
                                         TypeIcon={TypeIcon}
                                         typeOpt={typeOpt}
                                         sevCfg={sevCfg}
@@ -489,7 +426,6 @@ export default function AdminFeedbackPage() {
                                         onStatusUpdate={handleStatusUpdate}
                                         onDelete={handleDelete}
                                         onImageClick={setPreviewImage}
-                                        onAiPayloadCopy={setLastAiPayload}
                                     />
                                 );
                             })}
@@ -508,7 +444,6 @@ interface FeedbackRowProps {
     item: FeedbackItem;
     expanded: boolean;
     selected: boolean;
-    canManageFeedback: boolean;
     TypeIcon: React.ElementType;
     typeOpt: TypeOptionWithLabel | undefined;
     sevCfg: SeverityConfig[FeedbackItem['severity']];
@@ -519,19 +454,16 @@ interface FeedbackRowProps {
     onStatusUpdate: (id: string, status: string) => void;
     onDelete: (id: string) => void;
     onImageClick: (src: string) => void;
-    onAiPayloadCopy: (payloadText: string) => void;
 }
 
 function FeedbackRow({
-    item, expanded, selected, canManageFeedback, TypeIcon, typeOpt, sevCfg, statusOptions, t,
-    onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick, onAiPayloadCopy,
+    item, expanded, selected, TypeIcon, typeOpt, sevCfg, statusOptions, t,
+    onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick,
 }: FeedbackRowProps) {
     return (
         <>
             <tr
                 onClick={onToggleExpand}
-                data-testid="feedback-row"
-                data-feedback-id={item._id}
                 className={cn(
                     'border-b border-zinc-50 cursor-pointer transition-colors group',
                     expanded ? 'bg-indigo-50/40' : 'hover:bg-zinc-50/80',
@@ -539,17 +471,15 @@ function FeedbackRow({
                 )}
             >
                 {/* 选择框 */}
-                {canManageFeedback && (
-                    <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                        <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={onToggleSelect}
-                            className="rounded border-zinc-300"
-                            aria-label={t('feedback.table.selectItem', { id: item._id })}
-                        />
-                    </td>
-                )}
+                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={onToggleSelect}
+                        className="rounded border-zinc-300"
+                        aria-label={t('feedback.table.selectItem', { id: item._id })}
+                    />
+                </td>
 
                 {/* 展开箭头 */}
                 <td className="py-2">
@@ -589,10 +519,7 @@ function FeedbackRow({
 
                 {/* 状态 */}
                 <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                    {canManageFeedback
-                        ? <StatusSelect value={item.status} onChange={(v) => onStatusUpdate(item._id, v)} options={statusOptions} />
-                        : <StatusBadge value={item.status} options={statusOptions} />
-                    }
+                    <StatusSelect value={item.status} onChange={(v) => onStatusUpdate(item._id, v)} options={statusOptions} />
                 </td>
 
                 {/* 提交者 */}
@@ -620,36 +547,34 @@ function FeedbackRow({
                 </td>
 
                 {/* 操作 */}
-                {canManageFeedback && (
-                    <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
-                                className="p-1 rounded hover:bg-zinc-100 transition-colors"
-                                title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
-                            >
-                                {item.status === 'resolved'
-                                    ? <Circle size={14} className="text-zinc-400" />
-                                    : <CheckCircle size={14} className="text-emerald-500" />
-                                }
-                            </button>
-                            <button
-                                onClick={() => onDelete(item._id)}
-                                className="p-1 rounded hover:bg-red-50 transition-colors"
-                                title={t('feedback.actions.delete')}
-                            >
-                                <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
-                            </button>
-                        </div>
-                    </td>
-                )}
+                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
+                            className="p-1 rounded hover:bg-zinc-100 transition-colors"
+                            title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
+                        >
+                            {item.status === 'resolved'
+                                ? <Circle size={14} className="text-zinc-400" />
+                                : <CheckCircle size={14} className="text-emerald-500" />
+                            }
+                        </button>
+                        <button
+                            onClick={() => onDelete(item._id)}
+                            className="p-1 rounded hover:bg-red-50 transition-colors"
+                            title={t('feedback.actions.delete')}
+                        >
+                            <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
+                        </button>
+                    </div>
+                </td>
             </tr>
 
             {/* 展开详情 */}
             <AnimatePresence>
                 {expanded && (
                     <tr>
-                        <td colSpan={canManageFeedback ? 9 : 7} className="p-0">
+                        <td colSpan={9} className="p-0">
                             <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -660,11 +585,8 @@ function FeedbackRow({
                                 <div className="px-10 py-4 bg-zinc-50/50 border-b border-zinc-100">
                                     <FeedbackContent content={item.content} onImageClick={onImageClick} t={t} />
                                     {item.actionLog && (
-                                        <details className="mt-3" data-testid="feedback-action-log-section" data-feedback-id={item._id}>
-                                            <summary
-                                                data-testid="feedback-action-log-toggle"
-                                                className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium"
-                                            >
+                                        <details className="mt-3">
+                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium">
                                                 {t('feedback.actionLog.title')}
                                             </summary>
                                             <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 border border-zinc-200 p-3 text-[11px] text-zinc-600 font-mono whitespace-pre-wrap leading-relaxed">
@@ -673,11 +595,8 @@ function FeedbackRow({
                                         </details>
                                     )}
                                     {item.stateSnapshot && (
-                                        <details className="mt-3" data-testid="feedback-state-snapshot-section" data-feedback-id={item._id}>
-                                            <summary
-                                                data-testid="feedback-state-snapshot-toggle"
-                                                className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium flex items-center gap-2"
-                                            >
+                                        <details className="mt-3">
+                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium flex items-center gap-2">
                                                 <ScrollText size={12} />
                                                 {t('feedback.stateSnapshot.title')}
                                             </summary>
@@ -686,7 +605,6 @@ function FeedbackRow({
                                                     {item.stateSnapshot}
                                                 </pre>
                                                 <button
-                                                    data-testid="feedback-copy-state-json-inline"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
@@ -721,7 +639,7 @@ function FeedbackRow({
                                             </span>
                                         )}
                                         <span>{t('feedback.table.id', { id: item._id })}</span>
-                                        <CopyFeedbackButton item={item} t={t} onAiPayloadCopy={onAiPayloadCopy} />
+                                        <CopyFeedbackButton item={item} t={t} />
                                     </div>
                                 </div>
                             </motion.div>
@@ -735,73 +653,102 @@ function FeedbackRow({
 
 // ── 一键复制按钮 ──
 
-
-function parseOperationLogs(actionLog?: string): unknown[] {
-    if (!actionLog?.trim()) return [];
+/**
+ * 压缩游戏状态为 AI 可读的紧凑格式
+ * 从完整 JSON 提取关键信息，避免复制几千行数据
+ */
+function compressStateSnapshot(stateJson: string): string {
     try {
-        const parsed = JSON.parse(actionLog);
-        if (Array.isArray(parsed)) return parsed;
-        return [parsed];
-    } catch {
-        return actionLog
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean);
+        const state = JSON.parse(stateJson);
+        const lines: string[] = [];
+        
+        lines.push('=== 游戏状态快照（压缩版）===');
+        lines.push(`游戏: ${state.gameId || 'unknown'}`);
+        lines.push(`回合: P${state.core?.currentPlayer ?? '?'} | 阶段: ${state.core?.phase ?? '?'}`);
+        
+        // 玩家状态
+        if (state.core?.players) {
+            lines.push('\n--- 玩家 ---');
+            Object.entries(state.core.players).forEach(([pid, p]: [string, any]) => {
+                const resources = p.resources ? 
+                    Object.entries(p.resources).map(([k, v]) => `${k}:${v}`).join(' ') : 
+                    '';
+                lines.push(`P${pid}: HP=${p.hp ?? '?'} ${resources} | 手牌=${p.hand?.length ?? 0} 牌库=${p.deck?.length ?? 0} 弃牌=${p.discard?.length ?? 0}`);
+            });
+        }
+        
+        // 场上单位
+        if (state.core?.field && state.core.field.length > 0) {
+            lines.push('\n--- 场上 ---');
+            state.core.field.forEach((unit: any, idx: number) => {
+                const tags = unit.tags ? Object.keys(unit.tags).join(',') : '';
+                lines.push(`[${idx}] ${unit.card?.defId ?? '?'} (P${unit.owner}) HP=${unit.hp ?? '?'} ${tags ? `[${tags}]` : ''}`);
+            });
+        }
+        
+        // 交互状态
+        if (state.sys?.interaction?.current) {
+            const int = state.sys.interaction.current;
+            lines.push('\n--- 交互 ---');
+            lines.push(`类型: ${int.type} | 玩家: P${int.playerId}`);
+            lines.push(`选项数: ${int.data?.options?.length ?? 0}`);
+        }
+        
+        // 响应窗口
+        if (state.sys?.responseWindow?.current) {
+            lines.push('\n--- 响应窗口 ---');
+            lines.push(`触发事件: ${state.sys.responseWindow.current.triggerEvent?.type ?? '?'}`);
+        }
+        
+        // 最近事件（增加到 10 条，并显示关键参数）
+        if (state.sys?.eventStream?.entries) {
+            const recent = state.sys.eventStream.entries.slice(-10);
+            if (recent.length > 0) {
+                lines.push('\n--- 最近事件 ---');
+                recent.forEach((e: any) => {
+                    // 提取关键参数（避免完整 payload）
+                    let params = '';
+                    if (e.payload) {
+                        const p = e.payload;
+                        if (p.playerId !== undefined) params += ` P${p.playerId}`;
+                        if (p.targetId !== undefined) params += ` →${p.targetId}`;
+                        if (p.damage !== undefined) params += ` dmg=${p.damage}`;
+                        if (p.amount !== undefined) params += ` amt=${p.amount}`;
+                        if (p.cardDefId) params += ` [${p.cardDefId}]`;
+                        if (p.abilityId) params += ` {${p.abilityId}}`;
+                    }
+                    lines.push(`${e.id}: ${e.type}${params}`);
+                });
+            }
+        }
+        
+        return lines.join('\n');
+    } catch (err) {
+        return `[状态解析失败: ${err instanceof Error ? err.message : '未知错误'}]`;
     }
 }
 
-function parseStateSnapshot(stateSnapshot?: string): unknown | null {
-    if (!stateSnapshot?.trim()) return null;
-    try {
-        return JSON.parse(stateSnapshot);
-    } catch {
-        return { parseError: true, raw: stateSnapshot };
-    }
-}
-
-function inferGameId(stateSnapshot: unknown, fallbackGameName?: string): string | null {
-    if (stateSnapshot && typeof stateSnapshot === 'object' && 'gameId' in stateSnapshot) {
-        const gameId = (stateSnapshot as { gameId?: unknown }).gameId;
-        if (typeof gameId === 'string' && gameId.trim()) return gameId;
-    }
-    return fallbackGameName ?? null;
-}
-
-function buildFeedbackAiPayload(item: FeedbackItem, t: TFunction<'admin'>): FeedbackAiPayload {
-    const parsedSnapshot = parseStateSnapshot(item.stateSnapshot);
-    return {
-        feedbackId: item._id,
-        createdAt: item.createdAt,
-        type: item.type,
-        severity: item.severity,
-        status: item.status,
-        reporter: item.userId?.username || t('feedback.anonymous'),
-        content: extractText(item.content, t),
-        gameId: inferGameId(parsedSnapshot, item.gameName),
-        operationLogs: parseOperationLogs(item.actionLog),
-        stateSnapshot: parsedSnapshot,
-    };
-}
-
-function CopyFeedbackButton({
-    item,
-    t,
-    onAiPayloadCopy,
-}: {
-    item: FeedbackItem;
-    t: TFunction<'admin'>;
-    onAiPayloadCopy: (payloadText: string) => void;
-}) {
+function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
     const [copied, setCopied] = useState(false);
     const [copiedJson, setCopiedJson] = useState(false);
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
-        const payload = buildFeedbackAiPayload(item, t);
-        const payloadText = JSON.stringify(payload, null, 2);
+        const textContent = extractText(item.content, t);
+        const submitter = item.userId?.username || t('feedback.anonymous');
+        const parts = [
+            `【${t(`feedback.type.${item.type}`)}】${t(`feedback.severity.${item.severity}`)}`,
+            item.gameName ? `游戏: ${item.gameName}` : '',
+            `提交者: ${submitter}`,
+            `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
+            '',
+            '--- 反馈内容 ---',
+            textContent,
+            item.actionLog ? `\n--- 操作日志 ---\n${item.actionLog}` : '',
+            item.stateSnapshot ? `\n--- 游戏状态 ---\n${compressStateSnapshot(item.stateSnapshot)}` : '',
+        ].filter(Boolean).join('\n');
 
-        navigator.clipboard.writeText(payloadText).then(() => {
-            onAiPayloadCopy(payloadText);
+        navigator.clipboard.writeText(parts).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         });
@@ -810,7 +757,7 @@ function CopyFeedbackButton({
     const handleCopyJson = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!item.stateSnapshot) return;
-
+        
         navigator.clipboard.writeText(item.stateSnapshot).then(() => {
             setCopiedJson(true);
             setTimeout(() => setCopiedJson(false), 2000);
@@ -818,9 +765,8 @@ function CopyFeedbackButton({
     };
 
     return (
-        <div className="inline-flex items-center gap-1" data-testid="feedback-copy-actions" data-feedback-id={item._id}>
+        <div className="inline-flex items-center gap-1">
             <button
-                data-testid="feedback-copy-ai-payload"
                 onClick={handleCopy}
                 className={cn(
                     'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
@@ -835,7 +781,6 @@ function CopyFeedbackButton({
             </button>
             {item.stateSnapshot && (
                 <button
-                    data-testid="feedback-copy-state-json"
                     onClick={handleCopyJson}
                     className={cn(
                         'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',

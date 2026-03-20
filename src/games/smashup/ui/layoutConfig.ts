@@ -31,6 +31,10 @@ export interface LayoutConfig {
     boardPaddingTop: number;
     /** 主棋盘左右内边距（px） */
     boardHorizontalPadding: number;
+    /** 顶部 HUD 缩放比例 */
+    topHudScale: number;
+    /** 结束回合区缩放比例 */
+    endTurnHudScale: number;
 }
 
 /**
@@ -64,6 +68,8 @@ export function getLayoutConfig(
                 floatingActionBottom: isMobileViewport ? 232 : 280,
                 boardPaddingTop: isMobileViewport ? 28 : 48,
                 boardHorizontalPadding: isMobileViewport ? 28 : 80,
+                topHudScale: isMobileViewport ? 0.92 : 1,
+                endTurnHudScale: isMobileViewport ? 0.9 : 1,
             };
         case 3:
             // 三人局：适度缩放，缩小间距
@@ -80,6 +86,8 @@ export function getLayoutConfig(
                 floatingActionBottom: isMobileViewport ? 214 : 260,
                 boardPaddingTop: isMobileViewport ? 26 : 48,
                 boardHorizontalPadding: isMobileViewport ? 24 : 80,
+                topHudScale: isMobileViewport ? 0.86 : 1,
+                endTurnHudScale: isMobileViewport ? 0.84 : 1,
             };
         case 4:
             // 四人局：紧凑布局，无间距
@@ -96,6 +104,8 @@ export function getLayoutConfig(
                 floatingActionBottom: isMobileViewport ? 196 : 240,
                 boardPaddingTop: isMobileViewport ? 24 : 48,
                 boardHorizontalPadding: isMobileViewport ? 20 : 80,
+                topHudScale: isMobileViewport ? 0.8 : 1,
+                endTurnHudScale: isMobileViewport ? 0.78 : 1,
             };
         default:
             // 理论上不会到达这里（已在上方边界检查处理）
@@ -114,6 +124,8 @@ export function getLayoutConfig(
                 floatingActionBottom: isMobileViewport ? 232 : 280,
                 boardPaddingTop: isMobileViewport ? 20 : 48,
                 boardHorizontalPadding: isMobileViewport ? 28 : 80,
+                topHudScale: isMobileViewport ? 0.92 : 1,
+                endTurnHudScale: isMobileViewport ? 0.9 : 1,
             };
     }
 }

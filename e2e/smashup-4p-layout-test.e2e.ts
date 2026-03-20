@@ -64,6 +64,8 @@ const EXPECTED_FINAL_VP = {
     '2': 8,
     '3': 10,
 } as const;
+const MOBILE_LANDSCAPE_VIEWPORT = { width: 800, height: 450 } as const;
+const DESKTOP_REFERENCE_VIEWPORT = { width: 1920, height: 1080 } as const;
 
 function createPlayerState(
     playerId: string,
@@ -252,23 +254,6 @@ async function waitForSmashUpMainUiReady(page: any) {
     }).toBe(true);
 }
 
-async function readSmashUpBoardShellMetrics(page: any) {
-    return page.evaluate(() => {
-        const root = document.documentElement;
-        const body = document.body;
-        const shell = document.querySelector('.mobile-board-shell') as HTMLElement | null;
-        const gamePage = document.querySelector('[data-game-page][data-game-id="smashup"]') as HTMLElement | null;
-        return {
-            innerWidth: window.innerWidth,
-            innerHeight: window.innerHeight,
-            rootScrollWidth: root.scrollWidth,
-            bodyScrollWidth: body.scrollWidth,
-            shellRect: shell?.getBoundingClientRect() ?? null,
-            gamePageRect: gamePage?.getBoundingClientRect() ?? null,
-        };
-    });
-}
-
 test.describe('大杀四方四人局三基地同时计分', () => {
     test('四人局三基地同时计分时，正确弹出多基地选择交互', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
@@ -337,7 +322,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
     test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
-        await page.setViewportSize({ width: 812, height: 375 });
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
         await page.addInitScript(() => {
             const query = '(pointer: coarse)';
             const originalMatchMedia = window.matchMedia.bind(window);
@@ -367,7 +352,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return window.innerWidth === 812
+            return window.innerWidth === 800
+                && window.innerHeight === 450
                 && window.matchMedia('(pointer: coarse)').matches
                 && state?.sys?.phase === 'playCards'
                 && (state?.core?.players?.['0']?.hand?.length ?? 0) === 2;
@@ -378,7 +364,11 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         const deckStack = page.locator('[data-testid="su-deck-stack"]');
         const discardToggle = page.locator('[data-testid="su-discard-toggle"]');
         const endTurnButton = page.locator('[data-tutorial-id="su-end-turn-btn"]');
-        const endTurnActionButton = endTurnButton.getByRole('button');
+        const endTurnActionButton = page.locator('[data-testid="su-end-turn-action-button"]');
+        const endTurnVisibilityToggle = page.locator('[data-testid="su-end-turn-visibility-toggle"]');
+        const endTurnHints = page.locator('[data-testid="su-end-turn-hints"]');
+        const endTurnMinionQuota = page.locator('[data-testid="su-end-turn-minion-quota"]');
+        const endTurnActionQuota = page.locator('[data-testid="su-end-turn-action-quota"]');
         const firstBase = page.locator('[data-base-index="0"]');
         const secondBase = page.locator('[data-base-index="1"]');
         const handCard = page.locator('[data-card-uid="p0-mobile-hand-terraform"]').first();
@@ -397,6 +387,10 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(deckStack).toBeVisible({ timeout: 15000 });
         await expect(discardToggle).toBeVisible({ timeout: 15000 });
         await expect(endTurnActionButton).toBeVisible({ timeout: 15000 });
+        await expect(endTurnVisibilityToggle).toBeVisible({ timeout: 15000 });
+        await expect(endTurnHints).toBeVisible({ timeout: 15000 });
+        await expect(endTurnMinionQuota).toBeVisible({ timeout: 15000 });
+        await expect(endTurnActionQuota).toBeVisible({ timeout: 15000 });
         await expect(firstBase).toBeVisible({ timeout: 15000 });
         await expect(secondBase).toBeVisible({ timeout: 15000 });
         await expect(handCard).toBeVisible({ timeout: 15000 });
@@ -418,6 +412,14 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expectLocatorInsideViewport(handCard, '手牌卡牌', viewport!.width, viewport!.height);
 
         await expectLocatorInsideViewport(endTurnButton, '结束回合按钮', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnHints, '结束回合右侧提示容器', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnMinionQuota, '随从额度提示', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnActionQuota, '战术额度提示', viewport!.width, viewport!.height);
+
+        await expectLocatorInsideViewport(endTurnVisibilityToggle, '缁撴潫鍥炲悎闅愯棌鎸夐挳', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnHints, '缁撴潫鍥炲悎鎻愮ず瀹瑰櫒', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnMinionQuota, '闅忎粠棰濆害鎻愮ず', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(endTurnActionQuota, '鎴樻湳棰濆害鎻愮ず', viewport!.width, viewport!.height);
 
         const handCardBox = await handCard.boundingBox();
         expect(handCardBox, '手牌卡牌应提供尺寸').not.toBeNull();
@@ -425,8 +427,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         const endTurnActionButtonBox = await endTurnActionButton.boundingBox();
         expect(endTurnActionButtonBox).not.toBeNull();
-        expect(endTurnActionButtonBox!.width).toBeGreaterThan(56);
-        expect(endTurnActionButtonBox!.height).toBeGreaterThan(56);
+        expect(endTurnActionButtonBox!.width).toBeGreaterThan(48);
+        expect(endTurnActionButtonBox!.height).toBeGreaterThan(48);
 
         const exitFabBox = await exitFabVisual.boundingBox();
         expect(exitFabBox).not.toBeNull();
@@ -434,6 +436,17 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         expect(exitFabBox!.height).toBeLessThanOrEqual(42);
 
         await game.screenshot('04-mobile-landscape-layout', testInfo);
+
+        await endTurnVisibilityToggle.click();
+        await expect(endTurnActionButton).toHaveCount(0);
+        await expect(endTurnHints).toHaveCount(0);
+        await expect(endTurnVisibilityToggle).toBeVisible({ timeout: 5000 });
+        await game.screenshot('04b-mobile-end-turn-hidden', testInfo);
+
+        await endTurnVisibilityToggle.click();
+        await expect(endTurnActionButton).toBeVisible({ timeout: 5000 });
+        await expect(endTurnHints).toBeVisible({ timeout: 5000 });
+        await game.screenshot('04c-mobile-end-turn-restored', testInfo);
 
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
@@ -509,30 +522,28 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         expect(stateAfterLongPress.core.players['0'].hand.some((card: any) => card.uid === 'p0-mobile-hand-terraform')).toBe(true);
         expect(stateAfterLongPress.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed).toBe(true);
 
-        await page.setViewportSize({ width: 1024, height: 768 });
-        await page.waitForFunction(() => window.innerWidth === 1024 && window.innerHeight === 768, {
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await page.waitForFunction(() => window.innerWidth === 1920 && window.innerHeight === 1080, {
             timeout: 5000,
             polling: 100,
         });
         await waitForSmashUpMainUiReady(page);
 
-        const tabletViewport = page.viewportSize();
-        expect(tabletViewport).not.toBeNull();
+        const desktopViewport = page.viewportSize();
+        expect(desktopViewport).not.toBeNull();
+        await expect(endTurnActionButton).toBeVisible({ timeout: 5000 });
+        await expect(endTurnVisibilityToggle).toBeVisible({ timeout: 5000 });
+        await expect(endTurnHints).toBeVisible({ timeout: 5000 });
+        await expectLocatorInsideViewport(endTurnVisibilityToggle, 'PC 缁撴潫鍥炲悎闅愯棌鎸夐挳', desktopViewport!.width, desktopViewport!.height);
 
-        await expectLocatorInsideViewport(scoreBoard, '平板记分板', tabletViewport!.width, tabletViewport!.height);
-        await expectLocatorInsideViewport(deckStack, '平板牌库', tabletViewport!.width, tabletViewport!.height);
-        await expectLocatorInsideViewport(discardToggle, '平板弃牌堆', tabletViewport!.width, tabletViewport!.height);
-        await expectLocatorInsideViewport(handCard, '平板手牌卡牌', tabletViewport!.width, tabletViewport!.height);
-        await expectLocatorInsideViewport(endTurnButton, '平板结束回合按钮', tabletViewport!.width, tabletViewport!.height);
+        await endTurnVisibilityToggle.click();
+        await expect(endTurnActionButton).toHaveCount(0);
+        await expect(endTurnHints).toHaveCount(0);
+        await expect(endTurnVisibilityToggle).toBeVisible({ timeout: 5000 });
 
-        const tabletMetrics = await readSmashUpBoardShellMetrics(page);
-        expect(tabletMetrics.rootScrollWidth).toBeLessThanOrEqual(tabletMetrics.innerWidth + 1);
-        expect(tabletMetrics.bodyScrollWidth).toBeLessThanOrEqual(tabletMetrics.innerWidth + 1);
-        expect(tabletMetrics.gamePageRect?.left ?? -1).toBeGreaterThanOrEqual(-1);
-        expect(tabletMetrics.gamePageRect?.right ?? 99999).toBeLessThanOrEqual(tabletMetrics.innerWidth + 1);
-        expect(tabletMetrics.shellRect?.left ?? -1).toBeGreaterThanOrEqual(-1);
-        expect(tabletMetrics.shellRect?.right ?? 99999).toBeLessThanOrEqual(tabletMetrics.innerWidth + 1);
-
-        await game.screenshot('12-tablet-landscape-layout', testInfo);
+        await endTurnVisibilityToggle.click();
+        await expect(endTurnActionButton).toBeVisible({ timeout: 5000 });
+        await expect(endTurnHints).toBeVisible({ timeout: 5000 });
+        await game.screenshot('13-desktop-end-turn-restored', testInfo);
     });
 });

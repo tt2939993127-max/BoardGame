@@ -63,9 +63,11 @@ import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
 import { PathTrailEffect } from './ui/PathTrailEffect';
 import { useMovementTrails } from './ui/useMovementTrails';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -75,17 +77,24 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.32;
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
 }) => {
   const isGameOver = G.sys.gameover;
   const gameMode = useGameMode();
+  const isMobileViewport = useMobileViewport();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
+  const isLandscapeViewport = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+  // 手机横屏高度过短，默认完整塞入整张地图会让主战区比 PC 明显更瘦。
+  // 这里仅调整移动横屏的默认 framing，地图本身仍保持等比，且保留拖拽/双指缩放。
+  const shouldUseMobileLandscapeMapFraming = isMobileViewport && isLandscapeViewport;
+  const mapInitialScale = shouldUseMobileLandscapeMapFraming ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
   const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
   const mapContainerPaddingBlock = '0px';
   const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
@@ -98,7 +107,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseEndButtonClass = 'absolute right-3 z-20 pointer-events-auto sw-phase-end-button';
+  const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
@@ -711,7 +720,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
                   className="w-full h-full flex items-center justify-center"
-                  initialScale={1}
+                  initialScale={mapInitialScale}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
                   panToTarget={mapPanTarget}
