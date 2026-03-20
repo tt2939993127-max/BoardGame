@@ -24,7 +24,7 @@ import { GameButton } from './GameButton';
 /** 胜利分数线（用于终点虚线标记） */
 const VP_WIN_LINE = VP_TO_WIN;
 
-/** 计算玩家的疯狂卡数量 */
+/** 计算玩家的疯狂卡数量（仅用于前端展示；真实结算由领域层完成） */
 function countMadness(player: PlayerState): number {
     let count = 0;
     for (const c of player.hand) if (c.defId === MADNESS_CARD_DEF_ID) count++;

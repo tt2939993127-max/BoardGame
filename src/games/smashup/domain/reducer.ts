@@ -271,7 +271,7 @@ function executeCommand(
                                 playerId: command.playerId,
                                 cardUid: card.uid,
                                 defId: card.defId,
-                                baseIndex: command.payload.targetBaseIndex ?? 0,
+                                baseIndex: command.payload.targetBaseIndex,
                                 targetMinionUid: command.payload.targetMinionUid,
                                 random,
                                 now,
@@ -297,7 +297,7 @@ function executeCommand(
                                     playerId: command.playerId,
                                     cardUid: card.uid,
                                     defId: card.defId,
-                                    baseIndex: command.payload.targetBaseIndex ?? 0,
+                                    baseIndex: command.payload.targetBaseIndex,
                                     targetMinionUid: command.payload.targetMinionUid,
                                     random,
                                     now,
@@ -333,7 +333,7 @@ function executeCommand(
                             playerId: command.playerId,
                             cardUid: card.uid,
                             defId: card.defId,
-                            baseIndex: command.payload.targetBaseIndex ?? 0,
+                            baseIndex: command.payload.targetBaseIndex,
                             targetMinionUid: command.payload.targetMinionUid,
                             random,
                             now,
@@ -709,6 +709,10 @@ export function processDestroyTriggers(
         const currentMS_save = ms ?? state;
         const interactionCountBefore =
             (currentMS_save.sys.interaction.current ? 1 : 0) + currentMS_save.sys.interaction.queue.length;
+        const interactionIdsBefore = new Set<string>([
+            ...(currentMS_save.sys.interaction.current ? [currentMS_save.sys.interaction.current.id] : []),
+            ...currentMS_save.sys.interaction.queue.map(i => i.id),
+        ]);
 
         const saveEvents: SmashUpEvent[] = [];
 
@@ -800,10 +804,26 @@ export function processDestroyTriggers(
                     'giant_ant_drone_prevent_destroy',   // 雄蜂防止消灭
                     'pirate_buccaneer_move',             // 海盗：被消灭时移动到其他基地
                 ];
-                const newInteraction = ms.sys.interaction.current ?? ms.sys.interaction.queue[ms.sys.interaction.queue.length - 1];
-                const sourceId = (newInteraction?.data as any)?.sourceId as string | undefined;
-                const isPreventDestroy = sourceId ? PREVENT_DESTROY_SOURCE_IDS.includes(sourceId) : false;
-                if (isPreventDestroy) {
+
+                // 精确识别本次消灭新增的交互（可能插入到 queue 中、且不一定是 current/队尾）
+                const candidates = [
+                    ...(ms.sys.interaction.current ? [ms.sys.interaction.current] : []),
+                    ...ms.sys.interaction.queue,
+                ].filter(i => !interactionIdsBefore.has(i.id));
+
+                const isPreventDestroyInteraction = (interaction: any): boolean => {
+                    const sourceId = (interaction?.data as any)?.sourceId as string | undefined;
+                    if (!sourceId || !PREVENT_DESTROY_SOURCE_IDS.includes(sourceId)) return false;
+                    const cc = (interaction?.data as any)?.continuationContext;
+                    // 不同防止消灭交互的上下文形态不同，尽量覆盖常见字段
+                    const referencedUid =
+                        (cc?.targetMinionUid as string | undefined)
+                        ?? (cc?.minionUid as string | undefined)
+                        ?? (cc?.cardUid as string | undefined);
+                    return referencedUid ? referencedUid === minionUid : true;
+                };
+
+                if (candidates.some(isPreventDestroyInteraction)) {
                     isPendingSave = true;
                     pendingSaveMinionUids.add(minionUid);
                 }

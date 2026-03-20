@@ -530,15 +530,21 @@ const MinionCard: React.FC<{
     isCoarsePointer: boolean;
 }> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isTutorialTargetAllowed, phase, layout, turnOrder, isCoarsePointer }) => {
     const { t } = useTranslation('game-smashup');
-    const def = getMinionDef(minion.defId);
-    const resolvedName = resolveCardName(def, t) || minion.defId;
-    const resolvedText = resolveCardText(def, t);
+    // 兼容融合卡：Wolf Pact 这类作为随从打出时仍使用融合卡定义的图与文案
+    const minionDef = getMinionDef(minion.defId);
+    const genericDef = minionDef ?? getCardDef(minion.defId);
+    const resolvedName = resolveCardName(genericDef, t) || minion.defId;
+    const resolvedText = resolveCardText(genericDef, t);
     const minionTitle = resolvedText ? `${resolvedName}\n${resolvedText}` : resolvedName;
     const conf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
 
     // 天赋判定：有 talent 标签 + 我方随从 + 轮到我 + 教程允许
     // 巨石阵例外：允许一个随从每回合第 2 次使用天赋（名额未占用时）
-    const hasTalent = def?.abilityTags?.includes('talent') ?? false;
+    const hasTalent =
+        (minionDef?.abilityTags?.includes('talent')) ||
+        (genericDef && genericDef.type === 'fusion'
+            ? (genericDef.minionAbilityTags ?? []).includes('talent')
+            : false);
     const tutorialAllowed = isTutorialTargetAllowed ? isTutorialTargetAllowed(minion.uid) : true;
     const canUseSecondTalentOnStandingStones =
         core.bases[baseIndex]?.defId === 'base_standing_stones' &&
@@ -550,7 +556,11 @@ const MinionCard: React.FC<{
         && (!minion.talentUsed || canUseSecondTalentOnStandingStones);
 
     // 场上随从 special 能力判定（如忍者侍从）
-    const hasSpecial = def?.abilityTags?.includes('special') ?? false;
+    const hasSpecial =
+        (minionDef?.abilityTags?.includes('special')) ||
+        (genericDef && genericDef.type === 'fusion'
+            ? (genericDef.minionAbilityTags ?? []).includes('special')
+            : false);
     const canActivateSpecial = hasSpecial
         && isMyTurn
         && minion.controller === myPlayerId
@@ -689,7 +699,7 @@ const MinionCard: React.FC<{
         >
             <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                 <CardPreview
-                    previewRef={def?.previewRef
+                    previewRef={genericDef?.previewRef
                         ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId, cardUid: minion.uid } }
                         : undefined}
                     className="w-full h-full"

@@ -123,6 +123,14 @@ export interface FusionCardDef {
     actionSpecialNeedsBase?: boolean;
     actionSpecialLimitGroup?: string;
     actionSpecialTiming?: SpecialTiming;
+    /**
+     * 非 special 的行动面是否也可在响应窗口中打出。
+     */
+    actionResponseWindowTiming?: SpecialTiming;
+    /**
+     * 当通过 actionResponseWindowTiming 在响应窗口中打出时，是否需要选择基地。
+     */
+    actionResponseWindowNeedsBase?: boolean;
 }
 
 /** Special 技能触发时机 */
@@ -160,6 +168,14 @@ export interface ActionCardDef {
      * - 'afterScoring': 生成 ARMED 事件，延迟到基地计分后执行
      */
     specialTiming?: SpecialTiming;
+    /**
+     * 非 special 行动卡是否也可在响应窗口中打出。
+     */
+    responseWindowTiming?: SpecialTiming;
+    /**
+     * 当通过 responseWindowTiming 在响应窗口中打出时，是否需要选择基地。
+     */
+    responseWindowNeedsBase?: boolean;
     /**
      * 打出时的音效 key（可选）。
      * 如果指定，优先使用此音效；否则 fallback 到派系默认音效池。

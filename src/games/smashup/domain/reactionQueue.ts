@@ -12,15 +12,19 @@ function getClockwiseOrder(turnOrder: PlayerId[], startingPlayerId: PlayerId): P
   return [...turnOrder.slice(idx), ...turnOrder.slice(0, idx)];
 }
 
-function chooseNextTriggerOwner(
-  core: SmashUpCore,
-  pending: TriggerInstance[],
-): PlayerId {
+function chooseNextTriggerOwner(core: SmashUpCore): PlayerId {
+  const pending = core.triggerQueue ?? [];
   const current = getCurrentPlayerId(core);
-  const mandatory = pending.filter(t => t.mandatory);
-  if (mandatory.length > 0) return current;
-  // optional: clockwise by ownerPlayerId (best effort)
-  const order = getClockwiseOrder(core.turnOrder, current);
+
+  // Wiki: mandatory triggers resolve first, ordered by current player.
+  // We model this by making the current player the decider whenever any pending trigger is mandatory.
+  if (pending.some(t => t.mandatory)) {
+    return current;
+  }
+
+  // Wiki: optional triggers are offered in clockwise order starting from current player.
+  // We approximate this by letting the first player in clockwise order who owns any pending trigger decide.
+  const order = getClockwiseOrder(core.turnOrder ?? [], current);
   for (const pid of order) {
     if (pending.some(t => t.ownerPlayerId === pid)) return pid;
   }
@@ -92,7 +96,7 @@ export function maybeResolveReactionQueue(
   if (state.sys.interaction?.current) return undefined;
 
   // choose who decides ordering at this step
-  const decider = chooseNextTriggerOwner(core, pending);
+  const decider = chooseNextTriggerOwner(core);
 
   // multiple triggers: ask decider to choose next trigger to resolve
   const options = pending
@@ -114,4 +118,3 @@ export function maybeResolveReactionQueue(
   );
   return { state: queueInteraction(state, interaction), events: [] };
 }
-
