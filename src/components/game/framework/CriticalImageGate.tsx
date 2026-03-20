@@ -146,6 +146,20 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
         const hasCriticalImages = (resolved.critical?.length ?? 0) > 0;
 
+        // 空 critical 阶段（如教程 setup）按契约应快速放行：
+        // 不阻塞 Board，也不放行音频，等待后续真正有关键图的阶段再次触发 preload。
+        // 之前这里仍会进入 preloadCriticalImages → then 才 setReady(true)，
+        // 但某些移动端上 effect/重渲染时序会让门禁长期停在 ready=false，
+        // 形成“卡在资源加载界面”的假死。
+        if (!hasCriticalImages) {
+            lastReadyKeyRef.current = runKey;
+            inFlightRef.current = false;
+            setLoadingProgress(undefined);
+            setReady(true);
+            onReady?.();
+            return;
+        }
+
         // 记录本轮 epoch，signal 时传入防止旧轮次的延迟回调覆盖新轮次的 blocked 状态
         // preloadCriticalImages 内部会 resetCriticalImagesSignal() 自增 epoch，
         // 所以必须在调用之后读取

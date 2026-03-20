@@ -215,11 +215,26 @@
     /* 移动设备横屏时，游戏页面基于设计宽度 1280px 进行缩放 */
     /* 召唤师战争有自己的 MapContainer 缩放系统，不使用 CSS 自动缩放 */
     body:has([data-game-page]):not(:has([data-game-id="summonerwars"])) #root {
+        /* 让缩放容器用 viewport 尺寸做布局，避免被 body/html 的内容高度撑大。
+           否则在横屏下 root 可能比 viewport 更高，导致底部露出非游戏底色区域。 */
+        position: fixed;
+        inset: 0;
         transform-origin: top left;
         transform: scale(calc(100vw / 1280));
         width: 1280px;
-        height: calc(100vh / (100vw / 1280));
+        /* 关键：移动端横屏下用 dvh 避免 iOS/Chrome 地址栏导致的 100vh 误差。
+           否则 root 会比真实可视区更矮，底部露出页面底色（常见为羊皮纸米色）。 */
+        height: calc(100dvh / (100vw / 1280));
         overflow: hidden;
+    }
+
+    /* 缩放布局下强制页面背景为黑，避免任何“未覆盖区域”露出羊皮纸底色。 */
+    html:has(body:has([data-game-page]):not(:has([data-game-id="summonerwars"]))) {
+        background: #000;
+    }
+
+    body:has([data-game-page]):not(:has([data-game-id="summonerwars"])) {
+        background: #000;
     }
 }
 

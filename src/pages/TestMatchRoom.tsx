@@ -224,7 +224,7 @@ export const TestMatchRoom: React.FC = () => {
                 description={`${gameConfig.titleKey} E2E 测试模式`}
             />
             <div
-                className="w-full h-full relative overflow-hidden"
+                className="relative w-full h-[100dvh] overflow-hidden font-sans"
                 style={{
                     background: gameConfig.theme?.background || 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
                 } as React.CSSProperties}

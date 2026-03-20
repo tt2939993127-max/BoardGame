@@ -45,6 +45,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const isGameOver = G.sys.gameover;
     const gameMode = useGameMode();
     const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
+    const isOnline = !isLocalMatch;
     const { t, i18n } = useTranslation('game-cardia');
     const toast = useToast();
     const effectiveLocale = i18n.resolvedLanguage ?? i18n.language ?? 'zh-CN';
@@ -107,6 +108,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     // 设备类型检测
     type DeviceType = 
         | 'phone-portrait'      // 手机竖屏
+        | 'tight-landscape'     // 紧凑横屏（手机横屏、低高度）
         | 'phone-landscape'     // 手机横屏
         | 'tablet-portrait'     // 平板竖屏
         | 'tablet-landscape'    // 平板横屏
@@ -117,6 +119,11 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         if (width === 0 || height === 0) return 'desktop';
         
         const isPortrait = height > width;
+        const isTightLandscape = !isPortrait && height <= 430;
+
+        if (isTightLandscape) {
+            return 'tight-landscape';
+        }
         
         if (width < 768) {
             return isPortrait ? 'phone-portrait' : 'phone-landscape';
@@ -139,14 +146,18 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         switch (deviceType) {
             case 'phone-portrait':
                 // 手机竖屏：基于宽度，确保手牌区域不需要过度滚动
-                cardWidth = Math.max(66, Math.min(84, Math.round(width * 0.16)));
-                smallCardWidth = Math.max(52, Math.min(68, Math.round(width * 0.13)));
+                // 目标：减少竖屏上下留白，优先把空间用在“更大的卡牌 + 横滑承载超出数量”。
+                // 经验值：iPhone XR 竖屏宽度 414px，0.22≈91px，手感更接近“可读”。
+                cardWidth = Math.max(82, Math.min(112, Math.round(width * 0.22)));
+                smallCardWidth = Math.max(64, Math.min(88, Math.round(width * 0.175)));
                 break;
                 
+            case 'tight-landscape':
             case 'phone-landscape':
-                // 手机横屏：基于高度，充分利用垂直空间
-                cardWidth = Math.max(62, Math.min(80, Math.round(height * 0.16)));
-                smallCardWidth = Math.max(48, Math.min(64, Math.round(height * 0.125)));
+                // 手机横屏：可视高度非常紧张，必须让卡牌“更扁平”才能完整展示两排（战场+手牌）。
+                // 这里进一步降低卡牌宽度（等比缩放），避免出现上下被裁切。
+                cardWidth = Math.max(54, Math.min(72, Math.round(height * 0.135)));
+                smallCardWidth = Math.max(36, Math.min(50, Math.round(height * 0.092)));
                 break;
                 
             case 'tablet-portrait':
@@ -329,6 +340,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const opponentId = core.playerOrder.find(id => id !== myPlayerId) || core.playerOrder[1];
     const myPlayer = core.players[myPlayerId];
     const opponent = core.players[opponentId];
+    const opponentConnected = matchData?.find(player => String(player.id) === String(opponentId))?.isConnected ?? true;
     
     // 监听交互状态变化
     useEffect(() => {
@@ -551,9 +563,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     ];
 
     const boardStatusCardClass =
-        deviceType === 'phone-landscape'
-            ? 'rounded-lg border border-white/10 bg-black/55 px-2 py-1 text-white backdrop-blur-md'
+        deviceType === 'tight-landscape'
+            ? 'rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-white backdrop-blur-md shadow-lg shadow-black/30'
             : 'rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-white backdrop-blur-md md:px-4';
+
+    const compactPhaseLabel = t(`phases.${phase}`);
+
+    const compactInfoChipClass =
+        'inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] font-medium text-white/90';
 
     return (
         <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
@@ -583,7 +600,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 
                 <div
                     className={
-                        deviceType === 'phone-landscape'
+                        deviceType === 'tight-landscape'
                             ? 'relative flex h-full min-h-0 w-full flex-row gap-1 p-1'
                             : deviceType === 'phone-portrait'
                               ? 'relative flex h-full min-h-0 w-full flex-col gap-1 p-1 pb-[var(--cardia-reserved-bottom)]'
@@ -596,63 +613,103 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 >
                     {/* 对手区域（顶部 / 横屏左栏） */}
                     <div className={
-                        deviceType === 'phone-landscape'
-                            ? 'flex w-[12rem] max-w-[28%] min-w-0 flex-shrink-0 flex-col gap-2'
+                        deviceType === 'tight-landscape'
+                            ? 'flex w-[4.8rem] min-w-[4.8rem] flex-shrink-0 flex-col justify-between gap-2 py-1'
                             : 'flex flex-shrink-0 flex-wrap items-start gap-1.5 sm:gap-3 md:gap-4'
                     }>
                         {/* 对手弃牌堆 */}
                         <div className="flex-shrink-0">
-                            <div className="mb-1 text-center text-[11px] text-gray-300 sm:text-xs">{t('discard')}</div>
+                            <div className="mb-0.5 text-center text-[10px] text-gray-400 sm:text-xs">{t('discard')}</div>
                             <DiscardPile
                                 cards={opponent.discard}
                                 isOpponent={true}
                                 onCardClick={(card) => setMagnifyTarget({ card, core })}
                             />
                         </div>
-                        
-                        {/* 对手信息栏 */}
-                        <div className={
-                            deviceType === 'phone-landscape'
-                                ? 'min-w-0'
-                                : 'min-w-0 flex-1 basis-[16rem]'
-                        }>
-                            <PlayerInfoBar
-                                player={opponent}
-                                isOpponent={true}
-                                totalSignets={opponentSignets}
-                                deviceType={deviceType}
-                            />
-                        </div>
 
-                        <div className={
-                            deviceType === 'phone-landscape'
-                                ? 'grid w-full grid-cols-2 gap-2'
-                                : 'grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-1 md:gap-2'
-                        }>
-                            {boardStatusCards.map((card) => (
-                                <div
-                                    key={card.key}
-                                    className={boardStatusCardClass}
-                                    {...card.containerProps}
-                                >
-                                    <div className={deviceType === 'phone-landscape' ? 'text-[10px] text-gray-300' : 'text-[11px] text-gray-300'}>
-                                        {card.label}
-                                    </div>
-                                    <div className={deviceType === 'phone-landscape' ? 'text-xs font-bold' : 'text-sm font-bold sm:text-base md:text-lg'}>
-                                        {card.value}
-                                    </div>
+                        {deviceType === 'tight-landscape' && (
+                            <div className="flex-shrink-0">
+                                <div className="mb-0.5 text-center text-[10px] text-gray-400 sm:text-xs">{t('discard')}</div>
+                                <DiscardPile
+                                    cards={myPlayer.discard}
+                                    onCardClick={(card) => setMagnifyTarget({ card, core })}
+                                />
+                            </div>
+                        )}
+                        
+                        {deviceType !== 'tight-landscape' && (
+                            <>
+                                <div className="min-w-0 flex-1 basis-[16rem]">
+                                    <PlayerInfoBar
+                                        player={opponent}
+                                        isOpponent={true}
+                                        totalSignets={opponentSignets}
+                                        deviceType={deviceType}
+                                    />
                                 </div>
-                            ))}
-                        </div>
+
+                                <div className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-1 md:gap-2">
+                                    {boardStatusCards.map((card) => (
+                                        <div
+                                            key={card.key}
+                                            className={boardStatusCardClass}
+                                            {...card.containerProps}
+                                        >
+                                            <div className="text-[11px] text-gray-300">
+                                                {card.label}
+                                            </div>
+                                            <div className="text-sm font-bold sm:text-base md:text-lg">
+                                                {card.value}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
 
-                    {deviceType === 'phone-landscape' ? (
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    {deviceType === 'tight-landscape' ? (
+                        <div className="relative flex min-w-0 flex-1 overflow-visible">
+                            <div className="absolute left-2 right-[6.6rem] top-2 z-10 rounded-xl border border-white/10 bg-black/65 px-3 py-2.5 backdrop-blur-md shadow-lg shadow-black/30">
+                                <div className="grid grid-cols-[auto_1fr] items-center gap-3 text-white">
+                                    <div className="flex min-w-0 items-center gap-2.5 whitespace-nowrap">
+                                        <div className="truncate text-[12px] font-bold text-white">{opponent.name}</div>
+                                        <div className="text-[10px] font-semibold text-yellow-400 whitespace-nowrap">🏆 {t('signets')}: {opponentSignets}</div>
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2.5 whitespace-nowrap text-[10px] text-gray-100">
+                                        <div>✋ {t('hand')}: {opponent.hand.length}</div>
+                                        <div>📚 {t('deck')}: {opponent.deck.length}</div>
+                                        <div>🗑️ {t('discard')}: {opponent.discard.length}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="absolute right-2 top-2 z-20 flex w-[5.6rem] flex-col gap-2">
+                                <div
+                                    className="rounded-xl border border-white/10 bg-black/72 px-3 py-2.5 text-white shadow-lg shadow-black/30 backdrop-blur-md"
+                                    data-testid="cardia-phase-indicator"
+                                    data-tutorial-id="cardia-phase-indicator"
+                                >
+                                    <div className="text-[10px] text-gray-300">{t('phase')}</div>
+                                    <div className="mt-1 text-[17px] font-bold leading-tight text-white">{compactPhaseLabel}</div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/72 px-3 py-2.5 text-white shadow-lg shadow-black/30 backdrop-blur-md">
+                                    <div className="text-[10px] text-gray-300">{t('turn')}</div>
+                                    <div data-testid="cardia-turn-number" className="mt-1 text-[18px] font-bold leading-tight text-white">{core.turnNumber}</div>
+                                </div>
+                            </div>
+
+                            {isOnline && !opponentConnected && (
+                                <div className="absolute left-1/2 top-[4.4rem] z-20 -translate-x-1/2 rounded-lg border border-red-500/40 bg-red-900/75 px-3 py-1.5 text-[11px] font-semibold text-red-200 shadow-lg">
+                                    {t('hud.offlineBanner.message', { name: opponent.name, time: '' }).trim()}
+                                </div>
+                            )}
+
                             {/* 中央战场区域 - 遭遇序列 */}
                             <div
                                 data-testid="cardia-battlefield"
                                 data-tutorial-id="cardia-battlefield"
-                                className="relative flex min-h-0 flex-1 items-start justify-center overflow-x-auto overflow-y-visible px-1 pt-0.5"
+                                className="absolute inset-x-0 top-0 bottom-[clamp(7.6rem,27dvh,9.2rem)] flex items-center justify-start overflow-x-auto overflow-y-visible px-3 pt-[4.6rem]"
                             >
                                 <EncounterSequence
                                     myPlayer={myPlayer}
@@ -669,17 +726,9 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             {/* 我的区域（横屏右侧下栏） */}
                             <div
                                 data-testid="cardia-player-zone"
-                                className="flex max-h-[38%] flex-shrink-0 items-end gap-1.5 overflow-hidden"
+                                className="absolute left-2 right-2 bottom-0 flex h-[clamp(7.6rem,27dvh,9.2rem)] items-end overflow-hidden pb-2"
                                 style={playerZoneWrapperStyle}
                             >
-                                <div className="flex-shrink-0">
-                                    <div className="mb-1 text-center text-[11px] text-gray-300 sm:text-xs">{t('discard')}</div>
-                                    <DiscardPile
-                                        cards={myPlayer.discard}
-                                        onCardClick={(card) => setMagnifyTarget({ card, core })}
-                                    />
-                                </div>
-
                                 <div className="min-w-0 flex-1">
                                     <PlayerArea
                                         player={myPlayer}
@@ -895,13 +944,13 @@ interface PlayerInfoBarProps {
     player: any;
     isOpponent: boolean;
     totalSignets: number;
-    deviceType: 'phone-portrait' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
+    deviceType: 'phone-portrait' | 'tight-landscape' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
 }
 
 const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets, deviceType }) => {
     const { t } = useTranslation('game-cardia');
     
-    const isCompact = deviceType === 'phone-landscape' || deviceType === 'phone-portrait';
+    const isCompact = deviceType === 'phone-portrait';
     
     return (
         <div className={isCompact
@@ -948,7 +997,7 @@ interface EncounterSequenceProps {
     core: CardiaCore;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
     onMagnifyCard?: (card: any) => void;
-    deviceType: 'phone-portrait' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
+    deviceType: 'phone-portrait' | 'tight-landscape' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
 }
 
 const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponent, myPlayerId, opponentId, core, setCardRef, onMagnifyCard, deviceType }) => {
@@ -992,14 +1041,14 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
     }
     
     // 根据设备类型调整间距
-    const gapClass = deviceType === 'phone-portrait' || deviceType === 'phone-landscape'
+    const gapClass = deviceType === 'phone-portrait' || deviceType === 'tight-landscape'
         ? 'gap-2'
         : deviceType === 'tablet-portrait' || deviceType === 'tablet-landscape'
         ? 'gap-3'
         : 'gap-4';
     
     return (
-        <div className={`flex w-max snap-x snap-mandatory items-center px-1 sm:px-2 ${gapClass}`}>
+        <div className={`flex w-max snap-x snap-mandatory ${deviceType === 'tight-landscape' ? 'items-start justify-start pl-12 pr-10' : 'items-center'} px-1 sm:px-2 ${gapClass}`}>
             <CardListTransition>
                 {encounters.map((encounter) => (
                     <CardTransition key={encounter.encounterIndex} cardUid={`encounter-${encounter.encounterIndex}`} type="field">
@@ -1035,7 +1084,7 @@ interface EncounterPairProps {
     core: CardiaCore;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
     onMagnifyCard?: (card: any) => void;
-    deviceType: 'phone-portrait' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
+    deviceType: 'phone-portrait' | 'tight-landscape' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
 }
 
 const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPlayerId, opponentId, core, setCardRef, onMagnifyCard, deviceType }) => {
@@ -1075,10 +1124,11 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
     // 只有双方都打出卡牌后才显示 VS 指示器
     const showVS = myCard && opponentCard;
 
-    const battlefieldCardSize = deviceType === 'phone-landscape' ? 'small' : 'normal';
+    const battlefieldCardSize = 'normal';
+    const compactGapClass = deviceType === 'tight-landscape' ? 'gap-0.5' : 'gap-1 sm:gap-2';
     
     return (
-        <div className="relative flex snap-center flex-col items-center gap-1 sm:gap-2">
+        <div className={`relative flex snap-center flex-col items-center ${compactGapClass}`}>
             {/* 对手卡牌 */}
             <div className="relative z-10">
                 {opponentCard ? (
@@ -1141,7 +1191,7 @@ interface PlayerAreaProps {
     totalSignets: number;
     setCardRef: (cardUid: string, element: HTMLElement | null) => void;
     onMagnifyCard?: (card: any) => void;
-    deviceType: 'phone-portrait' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
+    deviceType: 'phone-portrait' | 'tight-landscape' | 'phone-landscape' | 'tablet-portrait' | 'tablet-landscape' | 'desktop';
 }
 
 const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPlay, totalSignets, setCardRef, onMagnifyCard, deviceType }) => {
@@ -1153,33 +1203,94 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
         onPlayCard(cardUid);
     }, [canPlay, onPlayCard]);
     
-    const isCompact = deviceType === 'phone-landscape';
+    const isCompact = deviceType === 'tight-landscape';
+
+    if (isCompact) {
+        return (
+            <div
+                data-testid="cardia-player-area-panel"
+                className="flex h-full min-h-0 items-stretch gap-2 overflow-hidden rounded-xl border border-white/10 bg-black/62 px-4 py-3 backdrop-blur-md"
+            >
+                <div className="flex w-[10.5rem] flex-shrink-0 flex-col justify-between gap-1.5 overflow-hidden">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <div className="truncate text-[14px] font-bold text-white">{player.name}</div>
+                        <div
+                            data-testid="cardia-signet-display"
+                            data-tutorial-id="cardia-signet-display"
+                            className="text-[12px] font-semibold text-yellow-400"
+                        >
+                            🏆 {t('signets')}: {totalSignets}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-100">
+                        <div className="rounded-full border border-white/10 bg-white/8 px-2 py-1">✋ {t('hand')}: {player.hand.length}</div>
+                        <div className="rounded-full border border-white/10 bg-white/8 px-2 py-1">📚 {t('deck')}: {player.deck.length}</div>
+                        <div className="col-span-2 rounded-full border border-white/10 bg-white/8 px-2 py-1">🗑️ {t('discard')}: {player.discard.length}</div>
+                    </div>
+                </div>
+
+                <div
+                    data-testid="cardia-hand-area"
+                    data-tutorial-id="cardia-hand-area"
+                    className="flex min-h-0 flex-1 snap-x snap-mandatory items-end gap-3 overflow-x-auto overflow-y-hidden pr-1"
+                >
+                    <CardListTransition>
+                        {player.hand.map((card: any) => (
+                            <CardTransition key={card.uid} cardUid={card.uid} type="hand">
+                                <div
+                                    data-testid={`card-${card.uid}`}
+                                    role={canPlay ? 'button' : undefined}
+                                    tabIndex={canPlay ? 0 : -1}
+                                    aria-disabled={!canPlay}
+                                    onClick={() => {
+                                        if (!canPlay) return;
+                                        onPlayCard(card.uid);
+                                    }}
+                                    onKeyDown={(event) => handleCardKeyDown(event, card.uid)}
+                                    className={`h-full flex-shrink-0 snap-center ${canPlay ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                                >
+                                    <CardDisplay
+                                        card={card}
+                                        core={core}
+                                        size="normal"
+                                        onRef={(el) => setCardRef(card.uid, el)}
+                                        onMagnify={onMagnifyCard}
+                                        showInfluenceBadge={false}
+                                    />
+                                </div>
+                            </CardTransition>
+                        ))}
+                    </CardListTransition>
+                </div>
+            </div>
+        );
+    }
     
     return (
         <div
             data-testid="cardia-player-area-panel"
             className={isCompact
-                ? 'rounded-lg border border-white/10 bg-black/35 px-2 py-1 backdrop-blur-md'
+                ? 'rounded-lg border border-white/10 bg-black/35 px-2 py-0.5 backdrop-blur-md'
                 : 'rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-md sm:p-3 lg:p-4'}
         >
             <div className={isCompact
-                ? 'mb-1 flex items-center justify-between gap-2'
+                ? 'mb-0.5 flex items-center justify-between gap-2'
                 : 'mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'}
             >
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
-                    <div className={isCompact ? 'truncate text-xs font-bold text-white' : 'truncate text-sm font-bold text-white sm:text-base'}>
+                    <div className={isCompact ? 'truncate text-[11px] font-bold text-white' : 'truncate text-sm font-bold text-white sm:text-base'}>
                         {player.name}
                     </div>
                     <div
                         data-testid="cardia-signet-display"
                         data-tutorial-id="cardia-signet-display"
-                        className={isCompact ? 'text-[11px] text-yellow-400' : 'text-xs text-yellow-400 sm:text-sm'}
+                        className={isCompact ? 'text-[10px] text-yellow-400' : 'text-xs text-yellow-400 sm:text-sm'}
                     >
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
                 <div className={isCompact
-                    ? 'flex flex-wrap items-center justify-end gap-1.5 text-[9px] text-gray-300'
+                    ? 'flex flex-wrap items-center justify-end gap-1 text-[8px] text-gray-300'
                     : 'grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] text-gray-300 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4 sm:text-sm'}
                 >
                     <div>✋ {t('hand')}: {player.hand.length}</div>
@@ -1193,7 +1304,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                 data-testid="cardia-hand-area"
                 data-tutorial-id="cardia-hand-area"
                 className={isCompact
-                    ? 'flex snap-x snap-mandatory gap-1 overflow-x-auto overflow-y-visible pb-0.5 pr-1'
+                    ? 'flex snap-x snap-mandatory gap-1 overflow-x-auto overflow-y-visible pb-0 pr-1'
                     : 'flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-visible pb-1 pr-1'}
             >
                 <CardListTransition>
