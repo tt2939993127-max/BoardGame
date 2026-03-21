@@ -25,7 +25,16 @@
 2. manifest 驱动的 `mobileProfile / mobileLayoutPreset`。
 3. `(pointer: coarse)` 仅用于 hover 替代入口显隐，不可单独用来压缩 PC 尺寸。
 
-### 3. 不接受的做法
+### 3. 平板策略（强制）
+
+- 平板（横屏）默认走 **PC 风格布局**，不以“手机壳等比”作为目标。
+- 移动端适配的主要收敛对象是 **手机横屏**，平板只要求可用性与无遮挡，不要求与手机同一缩放比例。
+- 验收时必须分开看：
+  - 手机：按移动端适配标准验收（缩放、可触达、无遮挡）。
+  - 平板：按 PC 风格一致性验收（结构一致、信息层级一致、交互不退化）。
+- 禁止为了满足手机比例阈值而牺牲平板/PC 结构。
+
+### 4. 不接受的做法
 
 - 不接受全局调小 `clamp(...)` 来“顺带适配”移动端。
 - 不接受把桌面常驻侧栏改成所有视口都生效的抽屉。
@@ -156,7 +165,83 @@ shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
 - 每个支持移动的游戏通常补 1 到 3 条关键移动验收路径即可。
 - 至少覆盖 1 个手机横屏视口和 1 个平板横屏视口。
 - 需要快速构造局面时，优先使用 TestHarness。
-- 运行 `npm run test:e2e:ci -- <测试文件名>`，保留截图并写入 `evidence/`。
+- 运行 E2E 时，单文件/单用例优先使用 `npm run test:e2e:ci:file -- <测试文件名> "<用例名>"`。
+- 需要整文件复跑时，使用 `npm run test:e2e:ci -- <测试文件名>`。
+- 保留截图并写入 `evidence/`。
+
+## 开发期截图补录旁路（非 E2E 替代）
+
+当当前终端被沙箱限制住 `child_process`，导致 Playwright worker 不能启动，但你已经确认“只差新版移动端截图证据”时，可以使用仓库内的补录工具：
+
+```bash
+npm run capture:mobile:evidence -- smashup-tutorial-mobile-landscape
+npm run capture:mobile:evidence -- summonerwars-tutorial-phone-landscape
+npm run capture:mobile:evidence -- smashup-4p-mobile-attached-actions
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-11-hand-magnify-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-12-phase-detail-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-13-action-log-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-20-tablet-landscape-board
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-07-minion-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-08-base-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-09-base-ongoing-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-10-attached-action-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-11-hand-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-12-tablet-landscape
+```
+
+如需避开默认 `6173` 端口冲突，可直接使用 Node 入口并显式指定：
+
+```bash
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-tutorial-mobile-landscape --vitePort 4273
+```
+
+当前预置场景与输出路径：
+
+- `smashup-tutorial-mobile-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-tutorial.e2e\smashup-tutorial-mobile-landscape\tutorial-mobile-landscape.png`
+- `summonerwars-tutorial-phone-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\10-phone-landscape-board.png`
+- `summonerwars-mobile-11-hand-magnify-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\11-phone-hand-magnify-open.png`
+- `summonerwars-mobile-12-phase-detail-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\12-phone-phase-detail-open.png`
+- `summonerwars-mobile-13-action-log-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\13-phone-action-log-open.png`
+- `summonerwars-mobile-20-tablet-landscape-board`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\20-tablet-landscape-board.png`
+- `smashup-4p-mobile-attached-actions`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\05-mobile-single-tap-expands-attached-actions.png`
+- `smashup-4p-mobile-07-minion-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+- `smashup-4p-mobile-08-base-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\08-mobile-base-long-press-magnify.png`
+- `smashup-4p-mobile-09-base-ongoing-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\09-mobile-base-ongoing-long-press-magnify.png`
+- `smashup-4p-mobile-10-attached-action-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\10-mobile-attached-action-long-press-magnify.png`
+- `smashup-4p-mobile-11-hand-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+- `smashup-4p-mobile-12-tablet-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\12-tablet-landscape-layout.png`
+
+实现方式：
+
+- 页面内由 `MobileEvidenceCaptureAgent` 自动等待场景就绪。
+- 就绪后用本地打包的 `html2canvas` 在页面内截取当前游戏页，并直接 `POST` 到同源开发端点 `/__capture/save`。
+- `/__capture/save` 由 `vite-plugins/ready-check.ts` 在 `BG_ENABLE_CAPTURE_SAVE=1` 时开放，只允许写入工作区内路径。
+- `scripts/infra/capture-mobile-evidence.mjs` 负责按场景组装 URL 与输出路径，底层复用 `scripts/infra/capture-mobile-evidence-browser.ps1` 拉起 Vite，并按可用性依次尝试 `chrome-headless-shell --single-process --no-zygote`、系统 Edge/Chrome 的 `cdp-window`、系统 Edge/Chrome 的 `direct-window`。
+- 若当前环境装有 Playwright 自带的 `chrome-headless-shell`，补图脚本会优先用它直接打开目标 URL，尽量绕开“GUI 窗口已起但根本没把页面请求打到本地 Vite”的假成功状态。
+- 如果某一启动方案在 8 秒内完全没有任何 capture phase，上述脚本会自动回退到下一条方案，避免单一路径卡死。
+- 补图模式会自动开启 `BG_CAPTURE_TRACE_REQUESTS=1`，Vite 日志会打印浏览器真实请求链，便于区分：
+  - 浏览器确实打开了页面，但页面脚本/场景失败。
+  - 浏览器根本没有请求本地页面，问题停在浏览器启动或导航层。
+
+限制说明：
+
+- 这条旁路只用于补录 PNG 证据，不替代 Playwright E2E 的断言链。
+- 最终“移动端交互已通过”结论仍必须回到允许 `child_process` 的终端或 CI，重跑正式 E2E。
+- 当前实现不再依赖外部 CDN 拉取 `html2canvas`；若补录仍失败，优先排查页面场景是否真正进入 `capture-ready`，以及 `/__capture/save` 是否收到上传。
+- 若失败日志里只看到 `PowerShell` 对 `/__capture/status` 的轮询，而完全没有任何浏览器对 `/play/...`、`/src/main.tsx`、`/@vite/client`、`/__capture/status` 的请求，说明浏览器压根没真正打到本地页面；此时应优先排查浏览器启动策略，而不是继续怀疑前端页面逻辑。
 
 ## Android first 落地
 
@@ -218,5 +303,11 @@ APP_WEB_ORIGINS=http://localhost,https://localhost,capacitor://localhost
 3. 关键入口（如 Roll / Confirm / 放大入口）位于视口内可点击。
 
 ### 6) 结论证据要求
-- E2E 结论必须附“已人工核对”的截图绝对路径。
+- E2E 结论必须附“已人工核对”的截图完整工作区绝对路径，便于直接复制打开，禁止只给相对路径。
 - 仅有日志或断言通过，不足以判定“移动端布局正常”。
+
+## 基线分辨率补充
+
+- 本项目默认 `PC` 对照分辨率为 `1920x1080`。
+- 本项目默认手机横屏验收分辨率为固定 `16:9`；用户未另行指定时，优先使用 `800x450`。
+- 若用户明确说明“平板按 PC 看”或“这轮不关心平板”，则该轮移动端验收可以不单独补平板横屏档。

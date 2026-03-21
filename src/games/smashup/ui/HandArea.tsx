@@ -164,7 +164,7 @@ const HandCard: React.FC<HandCardProps> = ({
                 {!isOpponentView && (
                     <button
                         data-testid={`su-hand-card-inspect-${card.uid}`}
-                        className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl border-2 border-white/30 z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100' : 'opacity-0'}`}
+                        className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl border-2 border-white/30 z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                         style={{
                             top: compactLayout ? '0.45vw' : '0.3vw',
                             right: compactLayout ? '0.45vw' : '0.3vw',
@@ -234,11 +234,18 @@ export const HandArea: React.FC<Props> = ({
 
     return (
         <div
-            className="absolute left-0 right-0 flex flex-col justify-end items-center pointer-events-none"
+            className="absolute inset-x-0 bottom-0 flex flex-col justify-end items-center pointer-events-none"
             style={{
                 zIndex: UI_Z_INDEX.hud,
-                bottom: compactLayout ? '8px' : '16px',
-                height: compactLayout ? '18vh' : '20vh',
+                ...(compactLayout
+                    ? {
+                        height: '100%',
+                        paddingBottom: '8px',
+                    }
+                    : {
+                        height: '20vh',
+                        bottom: '16px',
+                    }),
             }}
             data-testid="su-hand-area"
         >

@@ -13,7 +13,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameBoardProps } from '../../engine/transport/protocol';
-import type { MatchState } from '../../engine/types';
 import type { SummonerWarsCore } from './domain';
 import { SW_COMMANDS } from './domain';
 import './cursor'; // Register cursor themes
@@ -27,7 +26,6 @@ import { getUndoSnapshotCount } from '../../engine/systems/UndoSystem';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { useEndgame } from '../../hooks/game/useEndgame';
-import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
@@ -65,9 +63,11 @@ import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
 import { PathTrailEffect } from './ui/PathTrailEffect';
 import { useMovementTrails } from './ui/useMovementTrails';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -77,68 +77,40 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.32;
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
 }) => {
   const isGameOver = G.sys.gameover;
   const gameMode = useGameMode();
+  const isMobileViewport = useMobileViewport();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
-  const isMobileViewport = useMobileViewport();
-  const [viewportSize, setViewportSize] = useState(() => ({
-    width: typeof window === 'undefined' ? 0 : window.innerWidth,
-    height: typeof window === 'undefined' ? 0 : window.innerHeight,
-  }));
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-
-    const updateViewportSize = () => {
-      setViewportSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-
-    updateViewportSize();
-    window.addEventListener('resize', updateViewportSize);
-    window.addEventListener('orientationchange', updateViewportSize);
-
-    return () => {
-      window.removeEventListener('resize', updateViewportSize);
-      window.removeEventListener('orientationchange', updateViewportSize);
-    };
-  }, []);
-
-  const isLandscapeMobile = isMobileViewport && viewportSize.width > viewportSize.height;
-  const mapContainerPadding = isLandscapeMobile ? '4vw' : '10vw';
-  const mapShadeWidth = isLandscapeMobile ? '4vw' : '10vw';
-  const activeEventLabelClass = isLandscapeMobile
-    ? 'text-[10px] px-1 py-0.5'
-    : 'text-[0.65vw] px-1.5 py-0.5';
-  const activeEventCardStyle = isLandscapeMobile
-    ? { width: 'clamp(52px, 7.5vw, 72px)' }
-    : { width: '4.5vw' };
-  const activeEventNameClass = isLandscapeMobile ? 'text-[9px] py-0.5 px-1' : 'text-[0.6vw] py-0.5 px-1';
-  const activeEventChargeDotStyle = isLandscapeMobile
-    ? { width: '5px', height: '5px' }
-    : { width: '0.4vw', height: '0.4vw' };
-  const opponentBarClass = isLandscapeMobile
-    ? 'absolute top-2 right-2 pointer-events-auto flex flex-col items-end gap-1.5'
-    : 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
-  const playerBarClass = isLandscapeMobile
-    ? 'absolute left-2 bottom-2 z-20 pointer-events-auto flex flex-col items-start gap-2'
-    : 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseControlsClass = isLandscapeMobile
-    ? 'absolute right-2 bottom-2 z-20 pointer-events-auto flex flex-col items-end gap-2'
-    : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
-  const phaseTrackerClass = isLandscapeMobile
-    ? 'bg-slate-900/50 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6.5rem]'
-    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const isLandscapeViewport = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+  // 手机横屏高度过短，默认完整塞入整张地图会让主战区比 PC 明显更瘦。
+  // 这里仅调整移动横屏的默认 framing，地图本身仍保持等比，且保留拖拽/双指缩放。
+  const shouldUseMobileLandscapeMapFraming = isMobileViewport && isLandscapeViewport;
+  const mapInitialScale = shouldUseMobileLandscapeMapFraming ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
+  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
+  const mapContainerPaddingBlock = '0px';
+  const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
+  const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
+  const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
+  const activeEventNameClass = 'text-[11px] py-0.5 px-1';
+  const activeEventChargeDotStyle = {
+    width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
+    height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
+  };
+  const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
+  const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
+  const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
+  const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
+  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -742,12 +714,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               />
             </div>
           ) : (
-            <div className="flex-1 relative overflow-hidden">
-              {/* 地图层 */}
-              <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+                <div className="relative h-full overflow-hidden">
+                  {/* 地图层 */}
+                  <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
                   className="w-full h-full flex items-center justify-center"
-                  initialScale={1}
+                  initialScale={mapInitialScale}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
                   panToTarget={mapPanTarget}
@@ -756,7 +729,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div className="relative inline-block" style={{ paddingInline: mapContainerPadding }}>
+                  <div
+                    className="relative inline-block"
+                    style={{ paddingInline: mapContainerPadding, paddingBlock: mapContainerPaddingBlock }}
+                  >
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -832,10 +808,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     </div>
                   </div>
                 </MapContainer>
-              </div>
+                  </div>
 
-              {/* UI 层 */}
-              <div className="absolute inset-0 z-20 pointer-events-none">
+                  {/* UI 层 */}
+                  <div className="absolute inset-0 z-20 pointer-events-none">
                 {/* 左侧黑边渐变 */}
                 <div className="absolute inset-y-0 left-0" style={{ width: mapShadeWidth, background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
                 {/* 右侧黑边渐变 */}
@@ -852,11 +828,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
                 {/* 右上：对手名+魔力条 + 持续效果 */}
                 <div className={opponentBarClass} data-testid="sw-opponent-bar">
-                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
-                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-600/20 bg-black/60 px-3 py-2">
+                    <span className="max-w-[9rem] truncate text-sm font-medium text-white text-opacity-100">
                       {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
                     </span>
-                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
+                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" size="normal" />
                   </div>
 
                   {/* 对手持续效果 - 紧贴魔力条下方，竖直向下排列 */}
@@ -934,19 +910,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     </div>
                   )}
 
-                  <div className={`flex items-center bg-black/60 rounded-lg border border-slate-600/20 ${isLandscapeMobile ? 'gap-2 px-2.5 py-1.5' : 'gap-3 px-3 py-2'}`}>
-                    <span className={`${isLandscapeMobile ? 'text-xs' : 'text-sm'} text-white font-medium text-opacity-100 max-w-[9rem] truncate`}>
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-600/20 bg-black/60 px-3 py-2">
+                    <span className="max-w-[9rem] truncate text-sm font-medium text-white text-opacity-100">
                       {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
                     </span>
-                    <EnergyBar current={myMagic} testId="sw-energy-player" />
+                    <EnergyBar current={myMagic} testId="sw-energy-player" size="normal" />
                   </div>
-                  <div data-tutorial-id="sw-deck-draw" className={isLandscapeMobile ? 'mt-3 origin-bottom-left scale-90' : 'mt-8'}>
+                  <div data-tutorial-id="sw-deck-draw" className="mt-8">
                     <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
                   </div>
                 </div>
 
                 {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-                <div className={phaseControlsClass} data-testid="sw-phase-controls">
+                <div className={phaseEndButtonClass} data-testid="sw-phase-controls">
                   <div className="flex gap-2">
                     {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
                       <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
@@ -963,17 +939,17 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
-                  <div data-tutorial-id="sw-discard-pile" className={isLandscapeMobile ? 'origin-bottom-right scale-90' : ''}>
-                    <DeckPile
-                      type="discard" count={myDiscardCount} position="right"
-                      topCard={myDiscard[myDiscard.length - 1] ?? null}
-                      onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
-                    />
-                  </div>
+                </div>
+                <div className={discardPileDockClass} data-tutorial-id="sw-discard-pile">
+                  <DeckPile
+                    type="discard" count={myDiscardCount} position="right"
+                    topCard={myDiscard[myDiscard.length - 1] ?? null}
+                    onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                  />
                 </div>
 
                 {/* 右侧：阶段指示器 */}
-                <div className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-auto ${isLandscapeMobile ? 'right-1.5' : 'right-2'}`} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                <div className={phaseTrackerWrapperClass} data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
                   <PhaseTracker
                     currentPhase={currentPhase}
                     turnNumber={core.turnNumber}
@@ -985,7 +961,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                 {/* 顶部中央：提示横幅 */}
-                <div className={`absolute left-1/2 -translate-x-1/2 pointer-events-auto z-30 ${isLandscapeMobile ? 'top-2' : 'top-3'}`} data-tutorial-id="sw-action-banner">
+                <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2 pointer-events-auto" data-tutorial-id="sw-action-banner">
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}
@@ -1050,27 +1026,28 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   />
                 </div>
 
-                {/* 底部：手牌区 */}
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
-                  <HandArea
-                    cards={myHand}
-                    phase={currentPhase}
-                    isMyTurn={isMyTurn}
-                    currentMagic={myMagic}
-                    selectedCardId={interaction.selectedHandCardId}
-                    selectedCardIds={abilityMode?.step === 'selectCards'
-                      ? interaction.abilitySelectedCardIds
-                      : interaction.selectedCardsForDiscard}
-                    onCardClick={interaction.handleCardClick}
-                    onCardSelect={interaction.handleCardSelect}
-                    onPlayEvent={interaction.handlePlayEvent}
+                  {/* 底部：手牌区 */}
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                    <HandArea
+                      cards={myHand}
+                      phase={currentPhase}
+                      isMyTurn={isMyTurn}
+                      currentMagic={myMagic}
+                      selectedCardId={interaction.selectedHandCardId}
+                      selectedCardIds={abilityMode?.step === 'selectCards'
+                        ? interaction.abilitySelectedCardIds
+                        : interaction.selectedCardsForDiscard}
+                      onCardClick={interaction.handleCardClick}
+                      onCardSelect={interaction.handleCardSelect}
+                      onPlayEvent={interaction.handlePlayEvent}
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
                   />
+                  </div>
                 </div>
-              </div>
+                </div>
 
               {/* 技能卡牌选择器 */}
               {abilityMode && abilityMode.step === 'selectCard' && (

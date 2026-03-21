@@ -58,6 +58,13 @@ src/server/
 - `USE_PERSISTENT_STORAGE`：是否启用 Mongo 持久化存储（`true` 启用）
 - `LOCALES_DIR`：服务端 i18n 目录（默认 `public/locales`）
 
+### `USE_PERSISTENT_STORAGE=false` 的实际行为
+
+- 游戏服务跳过 `connectDB()`，可在无 Mongo 的机器上直接启动
+- `HybridStorage` 退化为纯内存实现，房间只保存在进程内，重启即丢失
+- UGC 动态注册、排行榜查询、对局归档等依赖 Mongo 的能力会自动降级或返回空结果
+- 适用场景：`npm run dev:lite`、E2E 临时起服、本地快速复现 UI / 交互问题
+
 ## 5. 已封装的服务层能力
 
 - **认证/社交服务（NestJS）**

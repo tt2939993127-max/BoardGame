@@ -28,6 +28,7 @@ interface SocketHealthCheckConfig {
      * 连接状态检查函数（可选，默认检查 socket.connected）
      */
     isConnected?: () => boolean;
+    shouldReconnect?: (socket: Socket) => boolean;
 }
 
 class SocketHealthChecker {
@@ -37,7 +38,7 @@ class SocketHealthChecker {
      * 启动健康检查
      */
     start(config: SocketHealthCheckConfig): () => void {
-        const { interval = 30000, name, getSocket, isConnected } = config;
+        const { interval = 30000, name, getSocket, isConnected, shouldReconnect } = config;
         
         // 清理已有的定时器
         this.stop(name);
@@ -46,9 +47,10 @@ class SocketHealthChecker {
             const socket = getSocket();
             if (!socket) return;
             
-            const connected = isConnected ? isConnected() : socket.connected;
+            const connected = socket.connected || (isConnected ? isConnected() : false);
+            const reconnectAllowed = shouldReconnect ? shouldReconnect(socket) : !socket.active;
             
-            if (!connected) {
+            if (!connected && reconnectAllowed) {
                 console.log(`[SocketHealthCheck] ${name} 断开，尝试重连`);
                 try {
                     socket.connect();

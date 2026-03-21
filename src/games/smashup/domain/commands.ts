@@ -14,11 +14,59 @@ import {
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
 import {
+    actionLikeNeedsResponseWindowBase,
+    getActionLikeResponseWindowTiming,
+    canUseBaseLimitedMinionQuota,
+    canUseSameNameMinionQuota,
     getMaxRemainingGlobalPowerLimitedQuota,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
+    isCardActionLike,
+    isCardMinionLike,
 } from './utils';
-import { isCardActionLike, isCardMinionLike } from './utils';
+
+function hasActiveBearNecessitiesPodRestriction(core: SmashUpCore, playerId: string): boolean {
+    for (const base of core.bases) {
+        const hasPlayerMinion = base.minions.some(minion => minion.controller === playerId);
+        if (!hasPlayerMinion) continue;
+        const hasOpponentActivePod = base.ongoingActions.some(ongoing =>
+            ongoing.defId === 'bear_cavalry_bear_necessities_pod'
+            && ongoing.ownerId !== playerId
+            && ongoing.talentUsed === true,
+        );
+        if (hasOpponentActivePod) return true;
+    }
+    return false;
+}
+
+function isExtraMinionPlayAttempt(
+    core: SmashUpCore,
+    playerId: string,
+    baseIndex: number,
+    cardDefId: string,
+    basePower: number,
+    fromDiscard: boolean,
+    consumesNormalLimit: boolean,
+): boolean {
+    const player = core.players[playerId];
+    if (!player) return false;
+    const globalQuotaRemaining = player.minionLimit - player.minionsPlayed;
+    if (fromDiscard && consumesNormalLimit === false) return true;
+    if (player.minionsPlayed >= 1) return true;
+    if (globalQuotaRemaining <= 0) {
+        if (canUseBaseLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+        if (canUseSameNameMinionQuota(player, cardDefId)) return true;
+    }
+    if (mustUseBaseLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+    if (mustUseGlobalPowerLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+    return false;
+}
+
+function isExtraActionPlayAttempt(core: SmashUpCore, playerId: string): boolean {
+    const player = core.players[playerId];
+    if (!player) return false;
+    return player.actionsPlayed >= 1;
+}
 
 export function validate(
     state: MatchState<SmashUpCore>,
@@ -103,6 +151,19 @@ export function validate(
                     return { valid: false, error: '弃牌堆中没有该随从' };
                 }
                 const basePower = getMinionLikePower(discardCard.defId) ?? 0;
+                const blockedByBearNecessitiesPod = hasActiveBearNecessitiesPodRestriction(core, command.playerId)
+                    && isExtraMinionPlayAttempt(
+                        core,
+                        command.playerId,
+                        baseIndex,
+                        discardCard.defId,
+                        basePower,
+                        true,
+                        discardCheck.consumesNormalLimit,
+                    );
+                if (blockedByBearNecessitiesPod) {
+                    return { valid: false, error: '受黑熊口粮POD限制：你不能打出额外牌' };
+                }
                 const usesBaseLimitedMinionQuota = discardCheck.consumesNormalLimit
                     && mustUseBaseLimitedMinionQuota(core, player, baseIndex, discardCard.defId, basePower);
                 if (isOperationRestricted(core, baseIndex, command.playerId, 'play_minion', {
@@ -128,6 +189,19 @@ export function validate(
             const minionDef = getMinionDef(card.defId);
             const fusionDef = getFusionDef(card.defId);
             const basePower = (minionDef?.power ?? fusionDef?.minionPower) ?? 0;
+            const blockedByBearNecessitiesPod = hasActiveBearNecessitiesPodRestriction(core, command.playerId)
+                && isExtraMinionPlayAttempt(
+                    core,
+                    command.playerId,
+                    baseIndex,
+                    card.defId,
+                    basePower,
+                    false,
+                    true,
+                );
+            if (blockedByBearNecessitiesPod) {
+                return { valid: false, error: '受黑熊口粮POD限制：你不能打出额外牌' };
+            }
             const usesBaseLimitedMinionQuota = mustUseBaseLimitedMinionQuota(core, player, baseIndex, card.defId, basePower);
             // 同名额度检查：全局额度用完后，如果只剩同名额度，必须匹配已锁定的 defId
             if (globalQuotaRemaining <= 0 && sameNameRemaining > 0 && baseQuota <= 0) {
@@ -217,20 +291,16 @@ export function validate(
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - card def not found');
                     return { valid: false, error: '卡牌定义不存在' };
                 }
-                const rSubtype = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSubtype
-                    : (rDef as ActionCardDef).subtype;
-                if (rSubtype !== 'special') {
+                const responseTiming = getActionLikeResponseWindowTiming(rDef);
+                if (!responseTiming) {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - not special card', {
-                        subtype: rSubtype,
+                        defId: rCard.defId,
                     });
-                    return { valid: false, error: '响应窗口只能打出特殊行动卡' };
+                    return { valid: false, error: '该行动卡不能在响应窗口中打出' };
                 }
                 
-                // 检查 specialTiming 是否匹配窗口类型
-                const cardTiming = (rDef as any).type === 'fusion'
-                    ? ((rDef as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-                    : ((rDef as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
+                // 检查响应窗口时机是否匹配窗口类型
+                const cardTiming = responseTiming;
                 if (responseWindow.windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for meFirst window', {
                         cardTiming,
@@ -248,19 +318,15 @@ export function validate(
 
                 const targetBase = command.payload.targetBaseIndex;
                 console.log('[DEBUG] PLAY_ACTION validation: checking base requirement', {
-                    specialNeedsBase: (rDef as any).type === 'fusion'
-                        ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                        : (rDef as ActionCardDef).specialNeedsBase,
+                    responseNeedsBase: actionLikeNeedsResponseWindowBase(rDef),
                     targetBase,
                 });
                 
-                const needsBase = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                    : (rDef as ActionCardDef).specialNeedsBase;
+                const needsBase = actionLikeNeedsResponseWindowBase(rDef);
                 if (needsBase) {
                     if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
                         console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - needs base but no valid base provided');
-                        return { valid: false, error: '该特殊行动卡需要选择一个达标基地' };
+                        return { valid: false, error: '该行动卡需要选择一个达标基地' };
                     }
                     const targetBaseIndex = targetBase;
                     if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
@@ -295,7 +361,7 @@ export function validate(
                     }
                 } else if (targetBase !== undefined) {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - base provided but not needed');
-                    return { valid: false, error: '该特殊行动卡不需要基地目标' };
+                    return { valid: false, error: '该行动卡不需要基地目标' };
                 }
 
                 console.log('[DEBUG] PLAY_ACTION validation: PASSED (Me First! mode)');
@@ -310,6 +376,9 @@ export function validate(
             }
             const player = core.players[command.playerId];
             if (!player) return { valid: false, error: '玩家不存在' };
+            if (hasActiveBearNecessitiesPodRestriction(core, command.playerId) && isExtraActionPlayAttempt(core, command.playerId)) {
+                return { valid: false, error: '受黑熊口粮POD限制：你不能打出额外牌' };
+            }
             if (player.actionsPlayed >= player.actionLimit) {
                 return { valid: false, error: '本回合行动额度已用完' };
             }

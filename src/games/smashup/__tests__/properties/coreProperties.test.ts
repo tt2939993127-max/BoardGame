@@ -878,7 +878,7 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 'a-1' },
         } as any);
         expect(r.valid).toBe(false);
-        expect(r.error).toContain('特殊');
+        expect(r.error).toBe('该行动卡不能在响应窗口中打出');
     });
 
     test('非当前响应者不能在 Me First 窗口中打牌', () => {

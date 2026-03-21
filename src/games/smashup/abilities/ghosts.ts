@@ -260,7 +260,7 @@ function ghostTheDeadRise(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `ghost_the_dead_rise_discard_${ctx.now}`, ctx.playerId,
-        '亡者崛起：选择要弃掉的手牌', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[], 'ghost_the_dead_rise_discard',
+        '亡者崛起：选择要弃掉的手牌', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[], { sourceId: 'ghost_the_dead_rise_discard', targetType: 'hand' },
         undefined, { min: 0, max: discardable.length },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -291,7 +291,7 @@ function ghostAcrossTheDivide(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `ghost_across_the_divide_${ctx.now}`, ctx.playerId,
         '越过边界：选择一个卡名（取回所有同名随从）', options as any[],
-        { sourceId: 'ghost_across_the_divide', autoCancelOption: true },
+        { sourceId: 'ghost_across_the_divide', targetType: 'generic', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -362,7 +362,7 @@ export function registerGhostInteractionHandlers(): void {
             `ghost_spirit_discard_${timestamp}`, playerId,
             `选择 ${power} 张手牌弃置来消灭该随从（可跳过）`,
             [...cardOptions, skipOption] as any[],
-            { sourceId: 'ghost_spirit_discard', multi: { min: 0, max: power } },
+            { sourceId: 'ghost_spirit_discard', targetType: 'hand', multi: { min: 0, max: power } },
         );
         return {
             state: queueInteraction(state, {
@@ -452,7 +452,7 @@ export function registerGhostInteractionHandlers(): void {
         });
         const next = createSimpleChoice(
             `ghost_the_dead_rise_play_${timestamp}`, playerId,
-            `选择力量<${discardCount}的随从从弃牌堆打出（可跳过）`, [...options, skipOption] as any[], 'ghost_the_dead_rise_play',
+            `选择力量<${discardCount}的随从从弃牌堆打出（可跳过）`, [...options, skipOption] as any[], { sourceId: 'ghost_the_dead_rise_play', targetType: 'discard_minion' },
         );
         return { state: queueInteraction(state, next), events };
     });
@@ -554,5 +554,7 @@ function ghostMakeContactPod(ctx: AbilityContext): AbilityResult {
     }
     return { events: [] };
 }
+
+
 
 

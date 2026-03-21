@@ -9,7 +9,16 @@ dist-ssr
 *.tsbuildinfo
 .tmp
 .temp
+temp
 *.tmp
+.npm-cache
+.android-sdk
+.android-user
+.gradle-user-home
+.gradle
+.learnings
+evidence
+uploads
 nul
 .DS_Store
 Thumbs.db

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { build, context } from 'esbuild';
+import { pathToFileURL } from 'node:url';
+import { build as nativeBuild, context as nativeContext } from 'esbuild';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { withWindowsHide } from './windows-hide.js';
 
@@ -21,6 +22,7 @@ let child = null;
 let shuttingDown = false;
 let buildVersion = 0;
 let restartQueue = Promise.resolve();
+let wasmEsbuildPromise = null;
 
 function parseArgs(argv) {
     const parsed = {};
@@ -61,6 +63,63 @@ function prefixOutput(prefix, stream, target) {
             buffer = '';
         }
     });
+}
+
+function collectErrorMessages(error) {
+    if (!error) {
+        return [];
+    }
+
+    const messages = [];
+    if (error instanceof Error && error.message) {
+        messages.push(error.message);
+    }
+
+    if (typeof error === 'object' && error && 'errors' in error && Array.isArray(error.errors)) {
+        for (const nested of error.errors) {
+            if (nested && typeof nested === 'object' && 'text' in nested && typeof nested.text === 'string') {
+                messages.push(nested.text);
+            }
+        }
+    }
+
+    return messages;
+}
+
+function isSpawnEpermError(error) {
+    const messages = collectErrorMessages(error);
+    return messages.some((message) => message.includes('spawn EPERM'));
+}
+
+async function loadWasmEsbuild() {
+    if (!wasmEsbuildPromise) {
+        wasmEsbuildPromise = (async () => {
+            const wasm = await import('esbuild-wasm');
+            const wasmPath = path.resolve(repoRoot, 'node_modules', 'esbuild-wasm', 'esbuild.wasm');
+            await wasm.initialize({
+                wasmURL: pathToFileURL(wasmPath).href,
+                worker: false,
+            });
+            return wasm;
+        })();
+    }
+
+    return wasmEsbuildPromise;
+}
+
+async function buildWithFallback(options) {
+    try {
+        return await nativeBuild(options);
+    } catch (error) {
+        const allowWasmFallback = process.env.BG_ESBUILD_WASM_FALLBACK !== 'false';
+        if (!allowWasmFallback || !isSpawnEpermError(error)) {
+            throw error;
+        }
+
+        console.warn(`[bundle-runner] ${label} native esbuild unavailable (spawn EPERM), fallback to esbuild-wasm`);
+        const wasmEsbuild = await loadWasmEsbuild();
+        return wasmEsbuild.build(options);
+    }
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -227,7 +286,7 @@ if (onceMode) {
     currentBuildStartedAt = Date.now();
     console.log(`[bundle-runner] ${label} building ${entry}`);
     try {
-        await build(sharedBuildOptions);
+        await buildWithFallback(sharedBuildOptions);
         console.log(`[bundle-runner] ${label} initial build ready in ${Date.now() - currentBuildStartedAt}ms`);
         await restartRuntime('ready');
     } catch (error) {
@@ -238,7 +297,7 @@ if (onceMode) {
     await new Promise(() => {});
 }
 
-const buildContext = await context({
+const buildContext = await nativeContext({
     ...sharedBuildOptions,
     plugins: [rebuildPlugin],
 });

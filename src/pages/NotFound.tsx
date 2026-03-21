@@ -13,6 +13,7 @@ export const NotFound = () => {
             <SEO
                 title={t('notFound.seoTitle')}
                 description={t('notFound.seoDescription')}
+                noIndex
             />
 
             {/* Background Texture/Effect */}

@@ -13,3 +13,5 @@ interface ImportMeta {
 
 /** 构建时注入的 locale JSON content hash 映射（由 vite-locale-hash 插件生成） */
 declare const __LOCALE_HASHES__: Record<string, string>;
+/** 构建时注入的 public/assets content hash 映射（由 vite-asset-hash 插件生成） */
+declare const __ASSET_HASHES__: Record<string, string>;

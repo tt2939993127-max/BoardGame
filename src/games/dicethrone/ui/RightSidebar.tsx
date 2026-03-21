@@ -183,17 +183,19 @@ export const RightSidebar = ({
         >
             <div className="flex-grow" />
             <div className={`relative w-full flex flex-col items-center ${stackGapClassName}`}>
-                {activeModifiers && activeModifiers.length > 0 && (
-                    <div className={`absolute ${modifierTopClassName} left-1/2 -translate-x-1/2 z-10`}>
-                        <ActiveModifierBadge modifiers={activeModifiers} />
-                    </div>
-                )}
-                {attackModifierBonusDamage && attackModifierBonusDamage > 0 && (
-                    <div className={`absolute ${bonusTopClassName} left-1/2 -translate-x-1/2 z-10`}>
-                        <AttackBonusDamageDisplay bonusDamage={attackModifierBonusDamage} />
-                    </div>
-                )}
                 <div className="relative">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-0">
+                        {activeModifiers && activeModifiers.length > 0 && (
+                            <div className={`absolute ${modifierTopClassName} left-1/2 -translate-x-1/2 z-10 pointer-events-auto`}>
+                                <ActiveModifierBadge modifiers={activeModifiers} />
+                            </div>
+                        )}
+                        {attackModifierBonusDamage && attackModifierBonusDamage > 0 && (
+                            <div className={`absolute ${bonusTopClassName} left-1/2 -translate-x-1/2 z-10 pointer-events-auto`}>
+                                <AttackBonusDamageDisplay bonusDamage={attackModifierBonusDamage} />
+                            </div>
+                        )}
+                    </div>
                     {isDiceMultistep && interactionHint && (
                         <div className={`absolute right-full top-1/2 -translate-y-1/2 ${hintOffsetClassName} z-10 pointer-events-none`}>
                             <div className={hintBubbleClassName}>

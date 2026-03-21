@@ -1228,6 +1228,46 @@ describe('诡术师 ongoing 能力', () => {
             expect((events[0] as any).payload.count).toBe(1);
             expect(events[1].type).toBe(SU_EVENTS.MINION_METADATA_UPDATED);
         });
+
+        test('POD 版不沿用旧版 onMinionAffected 触发', () => {
+            const brownie = makeMinion({ defId: 'trickster_brownie_pod', uid: 'brownie-pod-1', controller: '0', owner: '0' });
+            const base0 = makeBase({ minions: [brownie] });
+            const base1 = makeBase({});
+            const state = makeState([base0, base1]);
+
+            const { events } = fireTriggers(state, 'onMinionAffected', {
+                state,
+                playerId: '1',
+                baseIndex: 1,
+                triggerMinionUid: 'opp-new-m',
+                triggerMinionDefId: 'some_minion',
+                random: dummyRandom,
+                now: 1000,
+            } as any);
+
+            expect(events).toHaveLength(0);
+        });
+
+        test('POD 版应标记消灭者', () => {
+            const base = makeBase({
+                ongoingActions: [{ uid: 'ft-pod-1', defId: 'trickster_flame_trap_pod', ownerId: '0' }],
+            });
+            const state = makeState([base]);
+
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
+                state,
+                playerId: '1',
+                baseIndex: 0,
+                triggerMinionUid: 'new-m',
+                triggerMinionDefId: 'some_minion',
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(2);
+            expect(events[1].type).toBe(SU_EVENTS.MINION_DESTROYED);
+            expect((events[1] as any).payload.destroyerId).toBe('0');
+        });
     });
 
     describe('trickster_block_the_path: 封路', () => {
@@ -1274,6 +1314,17 @@ describe('诡术师 ongoing 能力', () => {
 
             // 玩家 0 的 Hideout 不应该保护玩家 1 的随从
             expect(isMinionProtected(state, enemyMinion, 0, '0', 'action')).toBe(false);
+        });
+
+        test('POD 版不沿用旧版行动牌保护', () => {
+            const myMinion = makeMinion({ defId: 'trickster_a', uid: 't-1', controller: '0' });
+            const base = makeBase({
+                minions: [myMinion],
+                ongoingActions: [{ uid: 'ho-1', defId: 'trickster_hideout_pod', ownerId: '0' }],
+            });
+            const state = makeState([base]);
+
+            expect(isMinionProtected(state, myMinion, 0, '1', 'action')).toBe(false);
         });
     });
 
@@ -1334,6 +1385,22 @@ describe('诡术师 ongoing 能力', () => {
 
             expect(events).toHaveLength(0);
         });
+
+        test('POD 版不在 onTurnStart 自动给额外随从额度', () => {
+            const base = makeBase({
+                ongoingActions: [{ uid: 'em-1', defId: 'trickster_enshrouding_mist_pod', ownerId: '0' }],
+            });
+            const state = makeState([base]);
+
+            const { events } = fireTriggers(state, 'onTurnStart', {
+                state,
+                playerId: '0',
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(0);
+        });
     });
 
     describe('trickster_leprechaun: 小矮妖', () => {
@@ -1360,6 +1427,31 @@ describe('诡术师 ongoing 能力', () => {
             expect(events).toHaveLength(1);
             expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
             expect((events[0] as any).payload.minionUid).toBe('wm-1');
+        });
+
+        test('POD 版应标记消灭者', () => {
+            const leprechaun = makeMinion({
+                defId: 'trickster_leprechaun_pod', uid: 'lp-pod-1', controller: '0', owner: '0', basePower: 4,
+            });
+            const weakMinion = makeMinion({
+                defId: 'weak_minion', uid: 'wm-1', controller: '1', owner: '1', basePower: 2,
+            });
+            const base = makeBase({ minions: [leprechaun, weakMinion] });
+            const state = makeState([base]);
+
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
+                state,
+                playerId: '1',
+                baseIndex: 0,
+                triggerMinionUid: 'wm-1',
+                triggerMinionDefId: 'weak_minion',
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            expect(events).toHaveLength(2);
+            expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
+            expect((events[0] as any).payload.destroyerId).toBe('0');
         });
     });
 
