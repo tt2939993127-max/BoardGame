@@ -216,6 +216,94 @@ describe('After Scoring 响应窗口 - 重新计分功能', () => {
         expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
     });
 
+    it('蚁丘计分后同基地内转移力量且总分不变时，仍应清场并替换基地', () => {
+        const runner = createRunner((ids, random) => {
+            const core = SmashUpDomain.setup(ids, random);
+            const sys = createInitialSystemState(ids, systems, undefined);
+
+            core.factionSelection = undefined;
+            sys.phase = 'playCards';
+
+            core.bases = [
+                {
+                    defId: 'base_the_hill',
+                    minions: [
+                        makeMinion('m1', 'giant_ant_worker', '0', '0', 3, 5),
+                        makeMinion('m2', 'giant_ant_soldier', '0', '0', 2, 0),
+                        makeMinion('m3', 'ninja_shinobi', '1', '1', 5, 8),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_great_library',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ];
+            core.baseDeck = ['base_egg_chamber'];
+
+            core.players['0'].hand = [
+                { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
+            ];
+            core.players['1'].hand = [];
+
+            return { sys, core };
+        });
+
+        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanceResult.success).toBe(true);
+        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
+
+        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
+            playerId: '0',
+            cardUid: 'c1',
+            targetBaseIndex: 0,
+        });
+        expect(playResult.success).toBe(true);
+
+        const sourcePrompt = runner.getState().sys.interaction?.current;
+        expect(sourcePrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
+
+        const chooseSourceResult = runner.resolveInteraction('0', { optionId: 'minion-0' });
+        expect(chooseSourceResult.success).toBe(true);
+
+        const targetPrompt = runner.getState().sys.interaction?.current;
+        expect(targetPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
+        const targetOption = targetPrompt?.data?.options?.find(
+            option => option?.value?.minionUid === 'm2',
+        );
+        expect(targetOption).toBeDefined();
+
+        const chooseTargetResult = runner.resolveInteraction('0', { optionId: targetOption!.id });
+        expect(chooseTargetResult.success).toBe(true);
+
+        const amountPrompt = runner.getState().sys.interaction?.current;
+        expect(amountPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_amount');
+
+        const chooseAmountResult = runner.resolveInteraction('0', {
+            optionId: 'confirm-transfer',
+            mergedValue: { amount: 5, value: 5 },
+        });
+        expect(chooseAmountResult.success).toBe(true);
+
+        const allEvents = [
+            ...advanceResult.events,
+            ...playResult.events,
+            ...chooseSourceResult.events,
+            ...chooseTargetResult.events,
+            ...chooseAmountResult.events,
+        ];
+
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
+        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+
+        const finalState = runner.getState();
+        expect(finalState.sys.responseWindow?.current).toBeUndefined();
+        expect(finalState.core.bases[0].defId).toBe('base_egg_chamber');
+        expect(finalState.core.bases[0].minions).toHaveLength(0);
+    });
+
     it('无力量变化：afterScoring 窗口无人出牌时不重新计分', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
