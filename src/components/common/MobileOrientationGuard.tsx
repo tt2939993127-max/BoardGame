@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
-import { ScreenOrientation } from '@capacitor/screen-orientation';
 import { getGameById, subscribeGameRegistry } from '../../config/games.config';
 import {
     extractGameIdFromPlayPath,
@@ -15,7 +13,59 @@ const getViewport = () => ({
     height: typeof window === 'undefined' ? 0 : window.innerHeight,
 });
 
-const isNativeAppShell = () => Capacitor.isNativePlatform();
+const hasCapacitorRuntime = () => {
+    if (typeof window === 'undefined') return false;
+    const runtime = (window as typeof window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    return typeof runtime?.isNativePlatform === 'function';
+};
+
+type CapacitorCoreModule = {
+    Capacitor: {
+        isNativePlatform(): boolean;
+    };
+};
+
+type ScreenOrientationModule = {
+    ScreenOrientation: {
+        lock(options: { orientation: 'landscape' | 'portrait' }): Promise<void>;
+    };
+};
+
+let capacitorCoreLoader: Promise<CapacitorCoreModule | null> | null = null;
+let screenOrientationLoader: Promise<ScreenOrientationModule | null> | null = null;
+
+const runtimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
+    const importer = new Function('s', 'return import(s)') as (value: string) => Promise<TModule>;
+    return importer(specifier);
+};
+
+const loadCapacitorCore = async (): Promise<CapacitorCoreModule | null> => {
+    if (!capacitorCoreLoader) {
+        capacitorCoreLoader = runtimeImport<CapacitorCoreModule>('@capacitor/core')
+            .then(module => module as CapacitorCoreModule)
+            .catch(() => null);
+    }
+
+    return capacitorCoreLoader;
+};
+
+const loadScreenOrientation = async (): Promise<ScreenOrientationModule | null> => {
+    if (!screenOrientationLoader) {
+        screenOrientationLoader = runtimeImport<ScreenOrientationModule>('@capacitor/screen-orientation')
+            .then(module => module as ScreenOrientationModule)
+            .catch(() => null);
+    }
+
+    return screenOrientationLoader;
+};
+
+const isNativeAppShell = async () => {
+    if (!hasCapacitorRuntime()) {
+        return false;
+    }
+    const capacitorCore = await loadCapacitorCore();
+    return capacitorCore?.Capacitor.isNativePlatform() ?? false;
+};
 
 const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrait'): Promise<boolean> => {
     if (typeof window === 'undefined') return false;
@@ -31,11 +81,16 @@ const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrai
 
 const lockScreenByRoute = async (targetOrientation: 'landscape' | 'portrait'): Promise<boolean> => {
     try {
-        await ScreenOrientation.lock({ orientation: targetOrientation });
-        return true;
+        const screenOrientation = await loadScreenOrientation();
+        if (screenOrientation) {
+            await screenOrientation.ScreenOrientation.lock({ orientation: targetOrientation });
+            return true;
+        }
     } catch {
-        return lockScreenOrientationFallback(targetOrientation);
+        // ignore and fallback below
     }
+
+    return lockScreenOrientationFallback(targetOrientation);
 };
 
 const renderBannerVisual = (bannerKind: GameMobileBannerKind) => {
@@ -100,7 +155,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const [viewport, setViewport] = useState(getViewport);
     const [dismissedBannerKey, setDismissedBannerKey] = useState<string | null>(null);
     const [, forceRegistryVersion] = useState(0);
-    const nativeAppShell = isNativeAppShell();
+    const [nativeAppShell, setNativeAppShell] = useState(false);
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
     const gameConfig = gameId ? getGameById(gameId) : undefined;
@@ -136,6 +191,20 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
         return subscribeGameRegistry(() => {
             forceRegistryVersion((version) => version + 1);
         });
+    }, []);
+
+    useEffect(() => {
+        let disposed = false;
+
+        void isNativeAppShell().then((value) => {
+            if (!disposed) {
+                setNativeAppShell(value);
+            }
+        });
+
+        return () => {
+            disposed = true;
+        };
     }, []);
 
     useEffect(() => {

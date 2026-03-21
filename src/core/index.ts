@@ -4,6 +4,7 @@
 
 export * from './types';
 export * from './ui';
+export * from './WarmPreloadScheduler';
 export {
     // 注册表 API
     registerGameAssets,

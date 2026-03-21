@@ -163,6 +163,18 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
         const hasCriticalImages = (resolved.critical?.length ?? 0) > 0;
 
+        // 空 critical 阶段（如教程 setup）应快速放行：
+        // 不阻塞 Board，也不放行音频，等待后续真正有关键图的阶段再 signal。
+        if (!hasCriticalImages) {
+            lastReadyKeyRef.current = runKey;
+            lastWarmRunKeyRef.current = runKey;
+            inFlightRef.current = false;
+            setLoadingProgress(undefined);
+            setReady(true);
+            onReady?.();
+            return;
+        }
+
         const preloadPromise = preloadCriticalImages(
             gameId,
             currentState,

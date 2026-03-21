@@ -29,6 +29,25 @@ describe('mobile support manifest contract', () => {
         );
     });
 
+    it('cardia declares landscape board-shell support', () => {
+        const game = getGameById('cardia');
+
+        expect(game?.mobileProfile).toBe('landscape-adapted');
+        expect(game?.preferredOrientation).toBe('landscape');
+        expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(
+            getGameMobileBannerKind(
+                {
+                    mobileProfile: game?.mobileProfile,
+                    preferredOrientation: game?.preferredOrientation,
+                    mobileLayoutPreset: game?.mobileLayoutPreset,
+                },
+                375,
+                667,
+            ),
+        ).toBe('rotate-to-landscape');
+    });
+
     it('summonerwars declares landscape board-shell support with board-shell scaling', () => {
         const game = getGameById('summonerwars');
 

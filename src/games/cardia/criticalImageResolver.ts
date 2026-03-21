@@ -21,6 +21,11 @@ function buildDeckCriticalImages(deckVariant: string): string[] {
     ];
 }
 
+function buildDeckWarmImages(deckVariant: string): string[] {
+    void deckVariant;
+    return [];
+}
+
 /**
  * Cardia 关键图片解析器
  *
@@ -44,7 +49,7 @@ export const cardiaCriticalImageResolver: CriticalImageResolver = (gameState): C
 
     return {
         critical: buildDeckCriticalImages(deckVariant),
-        warm: [],
+        warm: buildDeckWarmImages(deckVariant),
         phaseKey: isTutorial ? `tutorial-playing:${deckVariant}` : `playing:${deckVariant}`,
     };
 };
