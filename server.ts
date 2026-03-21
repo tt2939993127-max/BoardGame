@@ -146,6 +146,10 @@ const DEV_CORS_ORIGINS = [
 const CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS;
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
+const SOCKET_IO_SERVER_TRANSPORTS =
+    process.env.SOCKET_IO_ALLOW_POLLING === 'true'
+        ? ['websocket', 'polling']
+        : ['websocket'];
 
 // ============================================================================
 // 归档逻辑
@@ -281,6 +285,7 @@ const httpServer = http.createServer(app.callback());
 // 使用 MessagePack 序列化替代 JSON，减少 20-30% 传输体积
 const io = new IOServer(httpServer, {
     parser: msgpackParser,
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
@@ -1355,6 +1360,7 @@ async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
 const lobbySocketIO = new IOServer(httpServer, {
     parser: msgpackParser,
     path: '/lobby-socket',
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],

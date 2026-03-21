@@ -9,7 +9,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, SOCKET_IO_TRANSPORTS } from './socketConnectionConfig';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {
@@ -207,7 +207,7 @@ class LobbySocketService {
         this.socket = io(GAME_SERVER_URL, {
             parser: msgpackParser,
             path: '/lobby-socket',
-            transports: ['websocket', 'polling'],
+            transports: [...SOCKET_IO_TRANSPORTS],
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,

@@ -4,7 +4,7 @@ import { AUTH_API_URL } from '../config/server';
 import { createScopedLogger } from '../lib/logger';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, SOCKET_IO_TRANSPORTS } from './socketConnectionConfig';
 
 const log = createScopedLogger('SocialSocket');
 
@@ -136,7 +136,7 @@ class SocialSocketService {
                 parser: msgpackParser,
                 path: '/social-socket',
                 auth: { token },
-                transports: ['websocket', 'polling'],
+                transports: [...SOCKET_IO_TRANSPORTS],
                 reconnection: true,
                 reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
                 reconnectionDelay: 1000,
