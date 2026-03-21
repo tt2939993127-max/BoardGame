@@ -63,28 +63,34 @@ export async function createSmashUpRoomViaAPI(page: Page): Promise<string | null
 /** 等待派系选择界面出现 */
 export async function waitForFactionDraft(page: Page, timeout = 60000) {
     console.log('[SmashUp] 开始等待派系选择界面...');
-    
+
     // 等待派系选择界面的标题出现
     await page.waitForSelector('h1', { timeout });
-    
+
     // 等待派系卡牌网格出现
     await page.waitForSelector('.grid > div', { timeout: 5000 });
-    
+
     // 额外等待确保页面稳定
     await page.waitForTimeout(500);
-    
+
     console.log('[SmashUp] ✅ 派系选择界面已就绪');
 }
 
 /** 通过 UI 选择派系（按索引） - 增强版，带重试 */
 export async function selectFaction(page: Page, factionIndex: number, testInfo?: any) {
     console.log(`[SmashUp] 选择派系索引: ${factionIndex}`);
-    
-    // 1. 等待轮到该玩家（检查按钮文本）
+
+    // 1. 先点击派系卡，展开左侧详情面板；确认按钮只有在面板里才会渲染。
+    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') });
+    await expect(factionCards.nth(factionIndex)).toBeVisible({ timeout: 10000 });
+    await factionCards.nth(factionIndex).click();
+    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}`);
+
+    // 2. 等待详情面板中的确认按钮出现。
     const confirmButton = page.getByTestId('faction-confirm-button');
     await confirmButton.waitFor({ state: 'visible', timeout: 10000 });
-    
-    // 等待按钮文本变为"确认选择"（而不是"Wait for your turn"）
+
+    // 3. 等待按钮文本变为"确认选择"（而不是"Wait for your turn"）。
     await page.waitForFunction(
         () => {
             const button = document.querySelector('[data-testid="faction-confirm-button"]');
@@ -98,19 +104,14 @@ export async function selectFaction(page: Page, factionIndex: number, testInfo?:
         console.log(`[SmashUp]    按钮文本: ${buttonText}`);
         throw e;
     });
-    
-    console.log(`[SmashUp] ✅ 轮到该玩家，开始选择派系`);
-    
-    // 2. 点击派系卡牌
-    const factionCards = page.locator('.grid > div').filter({ hasNot: page.locator('.opacity-40') });
-    await factionCards.nth(factionIndex).click();
-    console.log(`[SmashUp] ✅ 已点击派系卡牌 ${factionIndex}`);
-    
-    // 3. 等待按钮可点击（enabled）
+
+    console.log('[SmashUp] ✅ 轮到该玩家，确认按钮可用');
+
+    // 4. 等待按钮可点击（enabled）
     await expect(confirmButton).toBeEnabled({ timeout: 15000 });
     await page.waitForTimeout(300); // 等待动画稳定
-    
-    // 尝试点击，如果失败则重试
+
+    // 5. 尝试点击，如果失败则重试
     let clicked = false;
     for (let i = 0; i < 3; i++) {
         try {
@@ -118,27 +119,27 @@ export async function selectFaction(page: Page, factionIndex: number, testInfo?:
             if (testInfo && i === 0) {
                 await page.screenshot({ path: testInfo.outputPath(`faction-${factionIndex}-before-confirm.png`) });
             }
-            
+
             await confirmButton.click({ timeout: 3000 });
             clicked = true;
             console.log(`[SmashUp] ✅ 已确认选择派系 ${factionIndex}`);
             break;
         } catch (e) {
             console.log(`[SmashUp] ⚠️  点击失败，重试 ${i + 1}/3`);
-            
+
             // 最后一次重试失败时截图
             if (testInfo && i === 2) {
                 await page.screenshot({ path: testInfo.outputPath(`faction-${factionIndex}-confirm-failed.png`) });
             }
-            
+
             await page.waitForTimeout(300);
         }
     }
-    
+
     if (!clicked) {
         throw new Error(`无法点击确认按钮（派系 ${factionIndex}）`);
     }
-    
+
     // 3. 等待弹窗关闭（减少等待时间）
     await page.waitForTimeout(500);
 }
@@ -167,11 +168,11 @@ export async function completeFactionSelection(
     console.log('[SmashUp] 开始派系选择流程（蛇形选秀）...');
     console.log('[SmashUp] Host 派系:', hostFactions);
     console.log('[SmashUp] Guest 派系:', guestFactions);
-    
+
     // 等待双方都看到派系选择界面
     console.log('[SmashUp] 等待 Host 派系选择界面...');
     await waitForFactionDraft(hostPage);
-    
+
     console.log('[SmashUp] 等待 Guest 派系选择界面...');
     await waitForFactionDraft(guestPage);
 
@@ -179,26 +180,26 @@ export async function completeFactionSelection(
     console.log('[SmashUp] 第1轮：Host 选择第1个派系...');
     await selectFaction(hostPage, hostFactions[0], testInfo);
     await hostPage.waitForTimeout(1000); // 等待状态同步
-    
+
     console.log('[SmashUp] 第2轮：Guest 选择第1个派系...');
     await selectFaction(guestPage, guestFactions[0], testInfo);
     await guestPage.waitForTimeout(1000); // 等待状态同步
-    
+
     console.log('[SmashUp] 第3轮：Guest 选择第2个派系...');
     await selectFaction(guestPage, guestFactions[1], testInfo);
     await guestPage.waitForTimeout(1000); // 等待状态同步
-    
+
     console.log('[SmashUp] 第4轮：Host 选择第2个派系...');
     await selectFaction(hostPage, hostFactions[1], testInfo);
     await hostPage.waitForTimeout(1000); // 等待状态同步
-    
+
     console.log('[SmashUp] ✅ 派系选择流程完成');
 }
 
 /** 等待 SmashUp 棋盘 UI 就绪 */
 export async function waitForSmashUpUI(page: Page, timeout = 30000) {
     console.log('[SmashUp] 等待游戏棋盘加载...');
-    
+
     // 先等待派系选择界面消失
     try {
         await page.waitForSelector('h1:has-text("选择派系")', { state: 'hidden', timeout: 5000 });
@@ -206,7 +207,7 @@ export async function waitForSmashUpUI(page: Page, timeout = 30000) {
     } catch (e) {
         console.log('[SmashUp] ⚠️  派系选择界面可能已经关闭或未找到');
     }
-    
+
     // 等待游戏棋盘元素出现（多个选择器，任意一个出现即可）
     try {
         await page.waitForSelector('[data-base-index], [data-testid="debug-panel"], .base-zone, [data-testid="player-hand"]', { timeout });
@@ -227,7 +228,7 @@ export async function waitForSmashUpUI(page: Page, timeout = 30000) {
         console.error('[SmashUp] 页面状态:', JSON.stringify(pageState, null, 2));
         throw e;
     }
-    
+
     await page.waitForTimeout(500);
 }
 
@@ -292,7 +293,7 @@ export async function setupSmashUpOnlineMatch(
     matchId: string;
 } | null> {
     console.log('[SmashUp] 开始创建在线对局...');
-    
+
     // 1. 创建 Host context 和页面
     const hostContext = await browser.newContext({ baseURL });
     await initContext(hostContext, '__su_storage_reset');
@@ -345,10 +346,10 @@ export async function setupSmashUpOnlineMatch(
         return null;
     }
     await seedMatchCredentials(guestContext, GAME_NAME, matchId, '1', guestCredentials);
-    
+
     console.log('[SmashUp] Guest 导航到对局页面...');
     await guestPage.goto(`/play/${GAME_NAME}/match/${matchId}?playerID=1`, { waitUntil: 'domcontentloaded' });
-    
+
     // 6. 等待双方都看到派系选择界面
     console.log('[SmashUp] 等待双方派系选择界面加载...');
     await Promise.all([

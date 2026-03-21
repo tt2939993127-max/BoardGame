@@ -89,17 +89,20 @@ export const waitForHandArea = async (page: Page, timeout = 30000) => {
     await expect(handArea).toBeVisible({ timeout });
 };
 
-
 /**
- * 蛇形选秀完成派系选择
- * pickOrder: 4个派系索引，按蛇形选秀顺序 [P0第一选, P1第一选, P1第二选, P0第二选]
+ * 蛇形选秀完成派系选择。
+ * pickOrder 按蛇形语义传入：
+ * [P0第一选, P1第一选, P1第二选, P0第二选]
  */
 export const completeFactionSelectionLocal = async (page: Page, pickOrder: number[]) => {
     const factionHeading = page.locator('h1').filter({ hasText: /Draft Your Factions|选择你的派系/i });
     if (!await factionHeading.isVisible().catch(() => false)) return;
     const factionCards = page.locator('.grid > div');
     const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-    for (const idx of pickOrder) {
+    if (pickOrder.length !== 4) {
+        throw new Error(`completeFactionSelectionLocal requires 4 factions, received ${pickOrder.length}`);
+    }
+    for (const idx of pickOrder as [number, number, number, number]) {
         await factionCards.nth(idx).click();
         await expect(confirmBtn).toBeVisible({ timeout: 5000 });
         await confirmBtn.click();
@@ -444,13 +447,12 @@ const createSURoomViaAPI = async (page: Page): Promise<string | null> => {
     }
 };
 
-/** 联机模式下通过 UI 点击完成蛇形选秀（两个页面交替选择） */
+/** 联机模式下通过 UI 点击完成蛇形选秀。 */
 const completeFactionSelectionOnline = async (
     hostPage: Page,
     guestPage: Page,
     factionIds: [string, string, string, string], // [P0第一选, P1第一选, P1第二选, P0第二选]
 ) => {
-    // 蛇形选秀：P0选1 → P1选1 → P1选2 → P0选2
     const picks: { page: Page; factionId: string }[] = [
         { page: hostPage, factionId: factionIds[0] },
         { page: guestPage, factionId: factionIds[1] },
@@ -538,7 +540,8 @@ const waitForSUFactionSelection = async (page: Page, timeout = 30000) => {
 /**
  * 创建 smashup 联机对局并完成选秀
  *
- * @param factionIds 蛇形选秀顺序 [P0第一选, P1第一选, P1第二选, P0第二选]
+ * @param factionIds 为兼容旧测试，仍接收旧四步分组语义：
+ * [P0第一选, P1第一选, P1第二选, P0第二选]
  * @returns SUMatchSetup 或 null（服务器不可用时）
  */
 export const setupSUOnlineMatch = async (

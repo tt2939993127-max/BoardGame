@@ -2,7 +2,7 @@
  * 通用卡牌特写队列 Hook
  *
  * 消费 EventStream 事件，维护一个有上限的特写队列。
- * 只显示其他玩家产生的事件，自己的不展示。
+ * 默认只显示其他玩家产生的事件；未提供 currentPlayerId 时不过滤。
  *
  * 面向百游戏设计：
  * - 游戏层通过 triggerEventTypes + extractCard 配置触发条件和数据提取
@@ -34,8 +34,10 @@ export interface SpotlightItem<TData = unknown> {
 export interface UseCardSpotlightQueueConfig<TData = unknown> {
     /** EventStream entries */
     entries: EventStreamEntry[];
-    /** 当前玩家 ID（用于过滤自己的事件） */
-    currentPlayerId: PlayerId;
+    /** 当前玩家 ID（用于过滤自己的事件）；为 null/undefined 时不过滤 */
+    currentPlayerId?: PlayerId | null;
+    /** 是否在 reconcile 后继续消费服务端确认事件 */
+    consumeOnReconcile?: boolean;
     /** 触发特写的事件类型集合 */
     triggerEventTypes: string[];
     /** 从事件中提取卡牌数据；返回 null 表示跳过 */
@@ -64,6 +66,7 @@ export function useCardSpotlightQueue<TData = unknown>(
     const {
         entries,
         currentPlayerId,
+        consumeOnReconcile = false,
         triggerEventTypes,
         extractCard,
         maxQueue = 5,
@@ -77,7 +80,10 @@ export function useCardSpotlightQueue<TData = unknown>(
         triggerSetRef.current = new Set(triggerEventTypes);
     }, [triggerEventTypes]);
 
-    const { consumeNew } = useEventStreamCursor({ entries });
+    const { consumeNew } = useEventStreamCursor({
+        entries,
+        consumeOnReconcile,
+    });
 
     // 消费新事件
     useEffect(() => {
@@ -99,8 +105,8 @@ export function useCardSpotlightQueue<TData = unknown>(
             const extracted = extractCard(entry.event);
             if (!extracted) continue;
 
-            // 只显示其他人的
-            if (extracted.playerId === currentPlayerId) continue;
+            // 仅在存在 viewer/playerId 时过滤“自己”的事件。
+            if (currentPlayerId && extracted.playerId === currentPlayerId) continue;
 
             newItems.push({
                 id: `spotlight-${entry.id}-${Date.now()}`,

@@ -345,6 +345,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             if (!result?.autoContinue) return;
 
             if (!playerIds.includes(result.playerId)) {
+                console.log('[FlowSystem][afterEvents] playerId not in playerIds, skipping autoContinue');
                 return;
             }
 
@@ -365,7 +366,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
                 playerId,
                 payload: undefined,
             };
-            logDev(`[FlowSystem][afterEvents] autoContinue from=${from} playerId=${playerId}`);
+            console.log('[FlowSystem][afterEvents] executing autoContinue from=' + from + ' playerId=' + playerId);
 
             return executePhaseAdvance({
                 state,

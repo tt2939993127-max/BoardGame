@@ -1,4 +1,4 @@
-﻿# 自动化测试
+# 自动化测试
 
 > 本文档是项目唯一的测试规范文档。引擎层审计工具的详细规范见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
 
@@ -19,7 +19,10 @@
 ## 快速开始
 
 ```bash
-# 运行所有测试
+# 默认先跑增量测试（基于 origin/main）
+npm run test:changed
+
+# 明确需要时再跑全量
 npm test
 
 # 运行特定游戏的测试（推荐开发时使用）
@@ -55,27 +58,32 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 ### 开发工作流建议
 
-1. **开发特定游戏时**：只运行该游戏的测试（快速反馈）
+1. **默认先跑增量测试**：只验证相对 `origin/main` 的改动（最快反馈）
+   ```bash
+   npm run test:changed
+   ```
+
+2. **开发特定游戏时**：只运行该游戏的测试（快速反馈）
    ```bash
    npm run test:smashup  # 2-3分钟
    ```
 
-2. **修改核心框架时**：先运行核心测试，再运行游戏测试
+3. **修改核心框架时**：先运行核心测试，再运行游戏测试
    ```bash
    npm run test:core     # 1-2分钟
    ```
 
-3. **提交前**：运行核心游戏测试（排除慢速测试）
+4. **特殊情况再扩大范围**（如引擎层改动、跨游戏联动、用户明确要求）
    ```bash
    npm run test:games:core  # 3-5分钟（排除 property/audit/E2E）
    ```
 
-4. **调试单个测试文件**：最快的方式
+5. **调试单个测试文件**：最快的方式
    ```bash
    npm run test -- myFeature.test.ts  # 10-60秒
    ```
 
-5. **CI/CD 中**：运行完整测试套件
+6. **仅在 CI/明确要求时**：运行完整测试套件
    ```bash
    npm test  # 10-15分钟
    ```
@@ -114,11 +122,11 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 ### 何时运行全量测试
 
-满足任一条件就扩大范围：
+默认先执行 `npm run test:changed`，满足任一条件再扩大范围：
 - 修改 `src/engine/`（含 `primitives/` 与 `systems/`）、`src/core/`、`src/components/game/framework/`
 - 涉及多人联机、状态同步、Undo/Rematch/Prompt 等系统性行为
 - 涉及公共类型/协议
-- 提交前/合并前
+- CI 回归或用户明确要求
 
 ---
 
@@ -245,16 +253,33 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 所有 E2E 测试命令会自动执行以下检查：
 
-**文件编码检查**（`scripts/infra/check-file-encoding.mjs`）：
-- 扫描所有源码文件（`src/**/*.{ts,tsx}`）
-- 检测并自动修复 UTF-8 BOM
-- 检测无效字符（编码错误）
-- 防止 Vite 编译失败
+**文件编码检查**（`npm run check:encoding` / `scripts/infra/check-file-encoding.mjs`）：
+- 扫描 `src/`、`apps/`、`e2e/`、`scripts/`、`docs/` 等文本文件
+- 检测 UTF-8 BOM；需要修复时执行 `npm run check:encoding:fix`
+- 严格拦截“非 UTF-8 字节流”这类真实编码错误
+- 对 replacement character、连续问号占位符、常见乱码片段给出告警
+- 需要把这些告警也当成失败时，使用 `npm run check:encoding:strict`
+
+**PowerShell 乱码处理**：
+- 当前会话如果只是“显示乱码”，先执行：`. .\scripts\infra\enable-utf8.ps1`
+- 这只修复终端显示，不代表文件已损坏
+- 即使切到 UTF-8，也仍然禁止用 `Set-Content` / `Out-File` / `>` / `>>` 写回含中文源码或文档
+
+**子进程能力预检**（`scripts/infra/assert-child-process-support.mjs`）：
+- 主 E2E 命令会先验证当前环境是否允许 `fork` 与 `esbuild` service
+- 若报 `spawn EPERM` / `fork EPERM`，会在进入 Playwright 前直接失败并给出原因
+- 这类错误通常说明当前终端、沙箱或 Runner 禁止 Node 子进程，不是业务代码问题
 
 **环境隔离检查**（`scripts/infra/check-e2e-safety.js`）：
 - 检查测试模式（独立测试环境 vs 使用开发服务器）
 - 检查端口占用情况
 - 给出建议和警告
+
+**截图人工核对（强制）**：
+- UI 修复、样式修复、交互修复完成后，不能只看测试通过、断言通过或证据文档文字说明
+- 必须实际打开截图，确认界面上真的出现了目标元素，且没有出现“旧 UI 还在 / 入口缺失 / 文案缺失 / 数据区为空白”这类肉眼可见问题
+- 如果问题发生在线上或特定环境，必须额外保留该环境的现状截图，禁止只用本地 mock 截图宣布“已修复”
+- 汇报时必须同时说明：看的是哪张截图、截图对应哪个环境、你从截图里确认了什么
 
 #### 2. 服务器就绪检查
 
@@ -275,6 +300,23 @@ webServer: [
   // ...
 ]
 ```
+
+#### 2.1 Isolated 启动链 fail-fast（global-setup）
+
+为避免“子服务已崩溃但 global-setup 仍盲等 URL 超时”的问题，隔离模式启动链现在有以下基建保障：
+
+1. `global-setup` 启动 worker 服务时会将 stdout/stderr 重定向到 bootstrap 日志（不再忽略输出）
+2. 等待 `/games`、`/health`、`/__ready` 期间会持续检测启动进程存活
+3. 若进程提前退出，立即 fail-fast；错误信息会带上日志路径与日志尾部内容
+4. 子服务异常退出会返回非 0 退出码（`start-single-worker-servers.js` / `start-worker-servers.js`）
+
+Bootstrap 日志路径规则：
+
+- 单 worker：`F:\gongzuo\webgame\BoardGame\.tmp\playwright-bootstrap-<scope>-worker-0.log`
+- 多 worker：`F:\gongzuo\webgame\BoardGame\.tmp\playwright-bootstrap-<scope>-worker-<id>.log`
+- `<scope>` 来自 `PW_RUNTIME_SCOPE`（默认 `default`）
+
+当 `npm run test:e2e:ci` 报健康检查超时时，优先看报错中给出的 bootstrap 日志路径和日志尾部，再决定是端口冲突、子进程能力受限还是构建/启动异常。
 
 #### 3. 测试性能优化规范
 
@@ -555,27 +597,38 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 #### 推荐工作流
 
-1. **开发模式**（手动启动服务，推荐）：
+1. **默认隔离模式**（推荐）：
    ```bash
-   # 终端 1：启动所有服务
-   npm run dev
-   
-   # 终端 2：运行测试
+   # 单终端：自动启动测试专用服务（6173 / 20000 / 21000）并执行测试
    npm run test:e2e
    ```
 
-2. **CI 模式**（自动启动服务）：
+2. **开发服务器复用模式**（只在调试测试代码时使用）：
+   ```bash
+   # 终端 1：启动开发服务（5173 / 18000 / 18001）
+   npm run dev
+   
+   # 终端 2：复用开发服务运行测试
+   npm run test:e2e:dev
+   ```
+
+3. **CI 模式**（自动启动测试专用服务）：
    ```bash
    # 单终端：自动启动服务并运行测试
    npm run test:e2e:ci
    ```
 
-3. **清理端口占用**（仅在测试异常退出，且确认没有其他 E2E 正在使用测试端口时）：
+4. **清理端口占用**（仅在测试异常退出，且确认没有其他 E2E 正在使用测试端口时）：
    ```bash
    npm run test:e2e:cleanup
    ```
 
-4. **WSL / 跨平台工作区注意事项**：
+5. **运行环境前置条件**：
+   - Vitest / Playwright / esbuild / E2E 三服务启动链都依赖 Node `child_process`
+   - 如果报错为 `spawn EPERM` / `spawnSync EPERM` / `fork EPERM`，优先判断当前终端或沙箱是否禁止子进程
+   - 这类错误通常不是业务代码问题，应改在本地终端、CI Runner 或允许子进程的环境执行
+
+6. **WSL / 跨平台工作区注意事项**：
    ```bash
    # 如果同一份仓库之前在 Windows 下装过依赖，再切到 WSL 跑 E2E，
    # 必须先重装一遍 Linux 依赖，否则可能缺少 rollup/esbuild 的 Linux 可选包。
@@ -593,27 +646,44 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 1. **检查端口配置**
    - 读取 `.env` 文件确认端口配置：
-     - `VITE_DEV_PORT`（默认 3000）
+     - `VITE_DEV_PORT`（默认 5173，开发环境）
      - `GAME_SERVER_PORT`（默认 18000）
      - `API_SERVER_PORT`（默认 18001）
+   - 单 worker 隔离测试端口固定为：
+     - 前端 `6173`
+     - game-server `20000`
+     - api-server `21000`
 
 2. **检查服务状态**
    ```powershell
-   # 检查端口是否被占用
-   netstat -ano | findstr ":3000"
+   # 开发环境端口
+   netstat -ano | findstr ":5173"
    netstat -ano | findstr ":18000"
    netstat -ano | findstr ":18001"
+
+   # E2E 隔离环境端口
+   netstat -ano | findstr ":6173"
+   netstat -ano | findstr ":20000"
+   netstat -ano | findstr ":21000"
    
    # 或使用 PowerShell
-   Get-NetTCPConnection -LocalPort 3000
+   Get-NetTCPConnection -LocalPort 5173
    Get-NetTCPConnection -LocalPort 18000
    Get-NetTCPConnection -LocalPort 18001
+   Get-NetTCPConnection -LocalPort 6173
+   Get-NetTCPConnection -LocalPort 20000
+   Get-NetTCPConnection -LocalPort 21000
    ```
 
 3. **验证服务可达性**
-   - 前端：访问 `http://localhost:3000`（或 `.env` 中配置的端口）
-   - 游戏服务器：访问 `http://localhost:18000/games`（应返回游戏列表）
-   - API 服务器：访问 `http://localhost:18001/auth/status`（应返回认证状态）
+   - 开发模式：
+     - 前端：`http://localhost:5173`
+     - 游戏服务器：`http://localhost:18000/games`
+     - API 服务器：`http://localhost:18001/health`
+   - 隔离测试模式：
+     - 前端：`http://localhost:6173/__ready`
+     - 游戏服务器：`http://localhost:20000/games`
+     - API 服务器：`http://localhost:21000/health`
 
 4. **验证代理配置**
    - 检查 `vite.config.ts` 中的 `server.proxy` 配置是否与 `.env` 端口一致
@@ -687,8 +757,8 @@ TimeoutError: page.goto: Timeout 30000ms exceeded
 
 **排查步骤**：
 1. 确认前端服务器正在运行（`http://localhost:3000`）
-2. 确认游戏服务器正在运行（`http://localhost:18000/games`）
-3. 确认 API 服务器正在运行（`http://localhost:18001/auth/status`）
+2. 确认游戏服务器正在运行（开发模式 `http://localhost:18000/games`，隔离模式 `http://localhost:20000/games`）
+3. 确认 API 服务器正在运行（开发模式 `http://localhost:18001/health`，隔离模式 `http://localhost:21000/health`）
 4. 检查浏览器控制台是否有错误（使用 `page.on('console', ...)` 监听）
 
 ### E2E 测试选择器多语言支持（强制）
@@ -1024,20 +1094,28 @@ await page.evaluate(() => {
 ### 运行方式
 
 ```bash
-# 开发模式（默认）：使用已运行的服务器
-# 1. 先手动启动服务
+# 开发模式：先启动服务，再指定相关 E2E 文件或 grep
 npm run dev
+npm run test:e2e -- e2e/<相关文件>.e2e.ts
+# 或
+npm run test:e2e -- --grep "<相关用例名>"
 
-# 2. 在另一个终端运行测试
-npm run test:e2e
+# CI 模式：自动启动服务器并运行相关测试
+npm run test:e2e:ci -- e2e/<相关文件>.e2e.ts
 
-# CI 模式：自动启动服务器
-npm run test:e2e:ci
+# 明确需要全量时才使用
+npm run test:e2e:all
+
+# 明确需要全量 CI 时才使用
+npm run test:e2e:ci:all
 ```
 
 **环境变量控制**：
 - `PW_START_SERVERS=true` — 强制启动服务器（CI 模式）
 - 默认（不设置）— 使用已运行的服务器（开发模式）
+- 默认禁止“无目标直接全量跑”`Playwright`，避免本地误触完整 E2E 套件卡死机器
+- 常用项目脚本（如 `npm run test:e2e`、`npm run test:e2e:ci`、`npm run test:e2e:parallel`）会显式强制无头运行，避免终端里残留的 `PW_HEADED` / `PWDEBUG` 导致突然弹出一批浏览器窗口
+- 如需可见浏览器调试，请显式使用 `npx playwright test --headed` 或 `npx playwright test --debug`
 
 ### 端口配置与隔离（重要）
 
@@ -1158,14 +1236,24 @@ npm run clean:ports
 
 ### 截图与附件管理（强制）
 
-1. 使用 `testInfo.outputPath('filename.png')` 生成存放路径
-2. 禁止硬编码路径（如 `e2e/screenshots/...`）
-3. `test-results/` 目录已被 git 忽略，测试产物不应提交
-4. 按需截图，默认配置已开启 `screenshot: 'only-on-failure'`
+1. Playwright 自动产物目录固定为 `test-results/playwright-artifacts/`，仅保留失败用例附件（`preserveOutput: 'failures-only'`）
+2. 显式证据截图统一通过 `game.screenshot()` 或共享工具写入 `test-results/evidence-screenshots/`
+3. `game.screenshot()` 默认按“测试文件/测试用例”分目录，例如 `test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/触控窄视口下放大入口常显且可点击/10-mobile-main-board-state.png`
+4. 同一用例首次截图前会自动清理该用例旧截图，并顺带清理旧的平铺遗留文件，避免新旧图混在一起
+5. `testInfo.outputPath()` 只用于临时附件路径，不是长期证据目录
+6. 禁止把同一张图复制到多个稳定目录；禁止默认自动写入 `evidence/screenshots/`
+7. `test-results/` 目录已被 git 忽略，测试产物不应提交
+8. 在对话、证据说明或交接里汇报截图位置时，直接给工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\...`
 
 ```typescript
 test('Match started', async ({ page }, testInfo) => {
     await page.screenshot({ path: testInfo.outputPath('game-started.png') });
+});
+```
+
+```typescript
+test('Match started', async ({ game }, testInfo) => {
+    await game.screenshot('match-started', testInfo);
 });
 ```
 
@@ -1237,6 +1325,15 @@ npm run test:api
 ```
 
 > 未设置时使用 `mongodb-memory-server` 自动启动临时 MongoDB。
+
+---
+
+## E2E 截图核对补充规范（2026-03）
+
+1. 任何 E2E 结论（通过/失败/已修复）都必须基于“已实际查看截图”的事实，不允许只看日志或断言。
+2. 若用例失败且 `test-results/playwright-artifacts/` 没有截图，必须在结论中明确写出“无截图”并说明原因（如服务未启动、用例未进入页面）。
+3. UI 问题交付时必须同时给出你亲自核对过的截图绝对路径（`F:\...`），并写出从图里确认到的可见结果。
+4. 线上问题必须至少附一张线上环境现状截图；本地修复截图不能替代线上现状截图。
 
 ---
 

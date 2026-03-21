@@ -18,6 +18,7 @@ import {
     readMatchCleanupNotice,
     hasSeenMatchCleanupNotice,
     markMatchCleanupNoticeSeen,
+    isMatchNotFoundError,
     isOwnerActiveMatchSuppressed,
     rejoinMatch,
     getLatestStoredMatchCredentials,
@@ -40,6 +41,8 @@ import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 
+const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
+
 export const Home = () => {
     useGlobalCursor();
     const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -51,6 +54,7 @@ export const Home = () => {
     const [activeMatch, setActiveMatch] = useState<{ matchID: string; gameName: string; players: Array<{ id: number; name?: string; isConnected?: boolean }> } | null>(null);
     const [myMatchRole, setMyMatchRole] = useState<{ playerID: string; credentials?: string; gameName?: string } | null>(null);
     const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -63,13 +67,15 @@ export const Home = () => {
 
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
-    const toast = useToast();
+    const { warning: toastWarning, error: toastError } = useToast();
     const { t } = useTranslation(['lobby', 'auth']);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
+    const missingMatchConfirmRef = useRef<string | null>(null);
+    const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
 
     const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
         paramKey: 'game',
@@ -180,8 +186,8 @@ export const Home = () => {
         if (!notice) return;
         if (hasSeenMatchCleanupNotice(notice)) return;
         markMatchCleanupNoticeSeen(notice);
-        toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
-    }, [toast]);
+        toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    }, [toastWarning]);
 
     useEffect(() => {
         const handleStorageNotice = (event: StorageEvent) => {
@@ -264,7 +270,7 @@ export const Home = () => {
                     })),
                 });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 // 不在这里处理 404，交给 WebSocket 监听统一处理
                 // 只设置一个临时状态，等待 WebSocket 确认
@@ -286,20 +292,92 @@ export const Home = () => {
         enabled: Boolean(activeMatch?.gameName && activeMatch?.matchID),
         requireSeen: false, // 允许立即判断房间是否存在，无需等待"先看到再消失"
     });
+    const activeMatchGameName = activeMatch?.gameName ?? null;
+    const activeMatchId = activeMatch?.matchID ?? null;
 
     useEffect(() => {
-        if (!activeMatch || !lobbyPresence.isMissing) return;
-        const notice = publishMatchCleanupNotice(activeMatch.matchID);
-        if (notice && !hasSeenMatchCleanupNotice(notice)) {
-            markMatchCleanupNoticeSeen(notice);
-            toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        return () => {
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!activeMatchGameName || !activeMatchId || !lobbyPresence.isMissing) {
+            missingMatchConfirmRef.current = null;
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+            return;
         }
-        clearMatchCredentials(activeMatch.matchID);
-        clearOwnerActiveMatch(activeMatch.matchID);
-        setActiveMatch(null);
-        setMyMatchRole(null);
-        setLocalStorageTick((t) => t + 1);
-    }, [activeMatch, lobbyPresence.isMissing, toast]);
+
+        const gameName = activeMatchGameName;
+        const matchID = activeMatchId;
+        if (missingMatchConfirmRef.current === matchID) return;
+        missingMatchConfirmRef.current = matchID;
+        if (missingMatchConfirmRetryTimerRef.current !== null) {
+            window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+            missingMatchConfirmRetryTimerRef.current = null;
+        }
+
+        let cancelled = false;
+
+        void matchApi.getMatch(gameName, matchID)
+            .then(() => {
+                if (cancelled) return;
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+            })
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+                if (!isMatchNotFoundError(error)) {
+                    if (missingMatchConfirmRetryTimerRef.current === null) {
+                        missingMatchConfirmRetryTimerRef.current = window.setTimeout(() => {
+                            missingMatchConfirmRetryTimerRef.current = null;
+                            setMissingMatchConfirmRetryTick((t) => t + 1);
+                        }, MISSING_MATCH_CONFIRM_RETRY_DELAY_MS);
+                    }
+                    return;
+                }
+
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
+                const notice = publishMatchCleanupNotice(matchID);
+                if (notice && !hasSeenMatchCleanupNotice(notice)) {
+                    markMatchCleanupNoticeSeen(notice);
+                    toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                }
+                clearMatchCredentials(matchID);
+                clearOwnerActiveMatch(matchID);
+                setActiveMatch(null);
+                setMyMatchRole(null);
+                setLocalStorageTick((t) => t + 1);
+            });
+
+        return () => {
+            cancelled = true;
+            if (missingMatchConfirmRef.current === matchID) {
+                missingMatchConfirmRef.current = null;
+            }
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+        };
+    }, [activeMatchGameName, activeMatchId, lobbyPresence.isMissing, missingMatchConfirmRetryTick, toastWarning]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
@@ -348,7 +426,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 } else {
@@ -381,7 +459,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 }
@@ -450,12 +528,12 @@ export const Home = () => {
                 : result.error === 'network'
                     ? 'error.destroyNetwork'
                     : 'error.actionFailed';
-            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
+            toastError({ kind: 'i18n', key: errorKey, ns: 'lobby' });
             return;
         }
 
         if (result.cleanedLocal) {
-            toast.warning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
+            toastWarning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
         }
 
         // 成功后后端释放座位，本地状态同步更新
@@ -503,34 +581,14 @@ export const Home = () => {
     }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
 
     return (
-        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
+        <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
             <SEO
                 title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
                 description={t('lobby:home.subtitle')}
             />
-            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
-                {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
-                <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">
-                    {user ? (
-                        <UserMenu onLogout={handleLogout} />
-                    ) : (
-                        <div className="flex items-center gap-6">
-                            <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.login')}
-                                <span className="underline-center" />
-                            </button>
-                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
-                            <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.register')}
-                                <span className="underline-center" />
-                            </button>
-                        </div>
-                    )}
-                    <LanguageSwitcher />
-                </div>
-
+            <header className="w-full relative px-6 md:px-12 pt-[calc(env(safe-area-inset-top)+1.25rem)] md:pt-8 pb-0">
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}
-                <div className="flex flex-col items-center justify-center mb-4">
+                <div className="flex flex-col items-center justify-center mb-1 md:mb-4">
                     {/* 标题行：Logo + H1 */}
                     <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
                         <img
@@ -548,12 +606,32 @@ export const Home = () => {
                         {t('lobby:home.subtitle')}
                     </p>
                 </div>
+
+                {/* 顶级操作区域 - 移动端放在标题下方，桌面端锁定右上角 */}
+                <div className="flex items-center justify-center gap-4 mb-0 md:absolute md:top-8 md:right-12 md:mb-0 md:gap-4 md:justify-end">
+                    {user ? (
+                        <UserMenu onLogout={handleLogout} />
+                    ) : (
+                        <div className="flex items-center gap-6">
+                            <button onClick={() => openAuth('login')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
+                                {t('auth:menu.login')}
+                                <span className="underline-center" />
+                            </button>
+                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
+                            <button onClick={() => openAuth('register')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
+                                {t('auth:menu.register')}
+                                <span className="underline-center" />
+                            </button>
+                        </div>
+                    )}
+                    <LanguageSwitcher />
+                </div>
             </header>
 
             {/* 主内容区域 - 商业级容器限制 */}
-            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-6 md:px-8">
+            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-4 sm:px-6 md:px-8">
                 {/* 分类筛选 */}
-                <nav className="mb-6 w-full">
+                <nav className="mb-4 md:mb-6 w-full">
                     <CategoryPills activeCategory={activeCategory} onSelect={setActiveCategory} />
                 </nav>
 
@@ -565,7 +643,7 @@ export const Home = () => {
 
             {/* 活跃对局指示器 */}
             {activeMatch && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
+                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
                     <div className="bg-parchment-base-text text-parchment-card-bg px-6 py-3 rounded shadow-xl border border-parchment-brown flex items-center gap-4">
                         <div className="flex flex-col">
                             <span className="text-[10px] text-parchment-light-text uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>

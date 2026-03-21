@@ -14,8 +14,16 @@ interface RuntimeRecord {
     pid: number;
 }
 
-const PROCESS_FILE = path.join(process.cwd(), '.tmp', 'playwright-worker-runtime.json');
 const PORT_CLEANUP_TIMEOUT_MS = Number.parseInt(process.env.PW_PORT_CLEANUP_TIMEOUT_MS || '10000', 10);
+
+function getRuntimeScope(): string {
+    const normalized = (process.env.PW_RUNTIME_SCOPE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    return normalized || 'default';
+}
+
+function getProcessFilePath(): string {
+    return path.join(process.cwd(), '.tmp', `playwright-worker-runtime-${getRuntimeScope()}.json`);
+}
 
 function killProcessTree(pid: number): void {
     try {
@@ -43,12 +51,20 @@ export default async function globalTeardown() {
 
     console.log(`\n🧹 清理${workers > 1 ? '多 worker 隔离' : '单 worker'} E2E 服务...\n`);
 
-    if (fs.existsSync(PROCESS_FILE)) {
-        const runtimes = JSON.parse(fs.readFileSync(PROCESS_FILE, 'utf-8')) as RuntimeRecord[];
-        for (const runtime of runtimes) {
-            killProcessTree(runtime.pid);
+    const processFile = getProcessFilePath();
+    if (fs.existsSync(processFile)) {
+        try {
+            const runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
+            for (const runtime of runtimes) {
+                killProcessTree(runtime.pid);
+            }
+        } finally {
+            try {
+                fs.unlinkSync(processFile);
+            } catch {
+                // ignore
+            }
         }
-        fs.unlinkSync(PROCESS_FILE);
     }
 
     if (workers <= 1) {

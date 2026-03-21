@@ -6,6 +6,7 @@ import { FeedbackService } from './feedback.service';
 import { Feedback, FeedbackSchema } from './feedback.schema';
 import { User, UserSchema } from '../auth/schemas/user.schema';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../shared/guards/optional-jwt-auth.guard';
 import { AdminGuard } from '../admin/guards/admin.guard';
 
 @Module({
@@ -16,7 +17,7 @@ import { AdminGuard } from '../admin/guards/admin.guard';
         ]),
     ],
     controllers: [FeedbackController, FeedbackAdminController],
-    providers: [FeedbackService, JwtAuthGuard, AdminGuard, Reflector],
+    providers: [FeedbackService, JwtAuthGuard, OptionalJwtAuthGuard, AdminGuard, Reflector],
     exports: [FeedbackService]
 })
 export class FeedbackModule { }

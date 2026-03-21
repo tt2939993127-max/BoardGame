@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { DebugProvider } from './contexts/DebugContext';
 import { TestHarness } from './engine/testing';
 import { TutorialProvider } from './contexts/TutorialContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';
 import { CursorPreferenceProvider } from './core/cursor/CursorPreferenceContext';
 import { AudioProvider } from './contexts/AudioContext';
@@ -20,9 +20,11 @@ import { LoadingScreen } from './components/system/LoadingScreen';
 import { Toaster } from 'react-hot-toast';
 import { GlobalHUD } from './components/system/GlobalHUD';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
+import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
 import { InteractionGuardProvider } from './components/game/framework';
 import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
+import { installGlobalErrorContextCapture } from './lib/feedback/errorContext';
 
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
@@ -61,6 +63,7 @@ const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayou
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
 const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
+const GameChangelogsPage = React.lazy(() => import('./pages/admin/GameChangelogs'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
 const RoomsPage = React.lazy(() => import('./pages/admin/Rooms'));
 const UgcPackagesPage = React.lazy(() => import('./pages/admin/UgcPackages'));
@@ -72,17 +75,25 @@ const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest
 
 const AppContent = () => {
   const { t } = useTranslation('lobby');
+  const { user } = useAuth();
   
   // Token 自动刷新
   useTokenRefresh();
 
   // 兜底：App 挂载时移除 index.html 的静态占位（LoadingScreen 不出现时的情况）
   useEffect(() => {
+    installGlobalErrorContextCapture();
     const initialLoader = document.getElementById('initial-loader');
     if (initialLoader) {
       initialLoader.remove();
     }
   }, []);
+
+  const renderAdminOnly = (element: React.ReactNode) => (
+    <AdminGuard allowedRoles={['admin']} fallbackPath="/admin/changelogs">
+      {element}
+    </AdminGuard>
+  );
 
   return (
     <CursorPreferenceProvider>
@@ -92,6 +103,7 @@ const AppContent = () => {
             <DebugProvider>
               <TutorialProvider>
                 <BrowserRouter>
+                  <BrowserCompatibilityGate>
                   <MobileOrientationGuard>
                     <Routes>
                     <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
@@ -116,22 +128,30 @@ const AppContent = () => {
 
                     {/* Admin Routes */}
                     <Route path="/admin" element={
-                      <AdminGuard>
+                      <AdminGuard allowedRoles={['admin', 'developer']}>
                         <React.Suspense fallback={<LoadingScreen title={t('matchRoom.admin.dashboard')} />}>
                           <AdminLayout />
                         </React.Suspense>
                       </AdminGuard>
                     }>
-                      <Route index element={<AdminDashboard />} />
-                      <Route path="users" element={<UsersPage />} />
-                      <Route path="users/:id" element={<UserDetailPage />} />
-                      <Route path="matches" element={<MatchesPage />} />
-                      <Route path="rooms" element={<RoomsPage />} />
-                      <Route path="ugc" element={<UgcPackagesPage />} />
-                      <Route path="sponsors" element={<SponsorsPage />} />
-                      <Route path="feedback" element={<FeedbackPage />} />
-                      <Route path="health" element={<SystemHealthPage />} />
-                      <Route path="notifications" element={<NotificationsPage />} />
+                      <Route path="changelogs" element={<GameChangelogsPage />} />
+                      <Route
+                        index
+                        element={
+                          user?.role === 'developer'
+                            ? <Navigate to="changelogs" replace />
+                            : renderAdminOnly(<AdminDashboard />)
+                        }
+                      />
+                      <Route path="users" element={renderAdminOnly(<UsersPage />)} />
+                      <Route path="users/:id" element={renderAdminOnly(<UserDetailPage />)} />
+                      <Route path="matches" element={renderAdminOnly(<MatchesPage />)} />
+                      <Route path="rooms" element={renderAdminOnly(<RoomsPage />)} />
+                      <Route path="ugc" element={renderAdminOnly(<UgcPackagesPage />)} />
+                      <Route path="sponsors" element={renderAdminOnly(<SponsorsPage />)} />
+                      <Route path="feedback" element={renderAdminOnly(<FeedbackPage />)} />
+                      <Route path="health" element={renderAdminOnly(<SystemHealthPage />)} />
+                      <Route path="notifications" element={renderAdminOnly(<NotificationsPage />)} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />
@@ -142,6 +162,7 @@ const AppContent = () => {
                     <Toaster />
                     <EngineNotificationListener />
                   </MobileOrientationGuard>
+                  </BrowserCompatibilityGate>
                 </BrowserRouter>
               </TutorialProvider>
             </DebugProvider>

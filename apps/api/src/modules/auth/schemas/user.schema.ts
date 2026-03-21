@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import bcrypt from 'bcryptjs';
 import type { HydratedDocument } from 'mongoose';
+import { USER_ROLES, type UserRole } from './user-role';
 
 export type UserDocument = HydratedDocument<User> & {
     comparePassword: (candidatePassword: string) => Promise<boolean>;
@@ -50,10 +51,17 @@ export class User {
 
     @Prop({
         type: String,
-        enum: ['user', 'admin'],
+        enum: USER_ROLES,
         default: 'user',
     })
-    role!: 'user' | 'admin';
+    role!: UserRole;
+
+    @Prop({
+        type: [String],
+        default: [],
+    })
+    // 仅对 developer 角色生效，表示该开发者可管理的游戏更新日志范围。
+    developerGameIds!: string[];
 
     @Prop({ type: Boolean, default: false })
     banned!: boolean;

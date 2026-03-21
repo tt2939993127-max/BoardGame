@@ -168,6 +168,8 @@ export interface PendingAttack {
     isUltimate?: boolean;
     preDefenseResolved?: boolean;
     bonusDamage?: number;
+    /** 仅来自攻击修正卡的额外伤害，用于右上角攻击修正 UI，避免混入暴击等其他来源 */
+    attackModifierBonusDamage?: number;
     extraRoll?: {
         value?: number;
         resolved?: boolean;
@@ -378,7 +380,7 @@ export interface HeroState {
     upgradeCardByAbilityId: Record<string, { cardId: string; cpCost: number }>;
     /** 被动能力列表（如教皇税：花费 CP 重掷/抽牌） */
     passiveAbilities?: PassiveAbilityDef[];
-    /** 待处理的攻击修正伤害（在 pendingAttack 创建前累积，创建时转移到 pendingAttack.bonusDamage） */
+    /** 待处理的攻击修正卡伤害（在 pendingAttack 创建前累积，创建时转移到 pendingAttack.attackModifierBonusDamage） */
     pendingBonusDamage?: number;
 }
 

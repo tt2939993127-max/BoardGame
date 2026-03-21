@@ -958,8 +958,14 @@ export function buildLocalizedImageSet(src: string, locale?: string): string {
         console.warn(`[AssetLoader] invalid_src type=${typeof src} value=${String(src)}`);
         return '';
     }
-    const { primary } = getLocalizedImageUrls(src, locale);
-    return `url("${primary.webp}")`;
+    const { primary, fallback } = getLocalizedImageUrls(src, locale);
+    const primaryUrl = primary.webp;
+    const fallbackUrl = fallback.webp;
+    if (primaryUrl && fallbackUrl && fallbackUrl !== primaryUrl) {
+        // CSS 会依次尝试加载多个背景图；primary 失败（404）时会自动回退到 fallback
+        return `url("${primaryUrl}"), url("${fallbackUrl}")`;
+    }
+    return primaryUrl ? `url("${primaryUrl}")` : '';
 }
 
 /**

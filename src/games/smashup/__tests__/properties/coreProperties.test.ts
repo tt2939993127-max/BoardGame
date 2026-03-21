@@ -315,6 +315,36 @@ describe('Property 6: 天赋每回合一次', () => {
         } as any);
         expect(s.bases[0].minions[0].talentUsed).toBe(false);
     });
+
+    test('TURN_STARTED 会清空所有玩家的 minionsPlayedPerBase', () => {
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS], {
+                    minionsPlayed: 2,
+                    minionsPlayedPerBase: { 0: 2 },
+                }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS], {
+                    minionsPlayedPerBase: { 0: 1 },
+                }),
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            bases: [makeBase('b')],
+            baseDeck: [],
+            turnNumber: 1,
+            nextUid: 100,
+        };
+
+        const s = reduce(state, {
+            type: SU_EVENTS.TURN_STARTED,
+            payload: { playerId: '1', turnNumber: 1 },
+            timestamp: Date.now(),
+        } as any);
+
+        expect(s.players['0'].minionsPlayedPerBase).toBeUndefined();
+        expect(s.players['1'].minionsPlayedPerBase).toBeUndefined();
+        expect(s.players['1'].minionsPlayed).toBe(0);
+    });
 });
 
 // ============================================================================

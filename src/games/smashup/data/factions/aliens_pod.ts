@@ -67,7 +67,7 @@ export const ALIEN_POD_ACTIONS: ActionCardDef[] = [
         name: '分解者',
         nameEn: 'Disintegrator',
         faction: 'aliens_pod',
-        count: 1,
+        count: 2,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 29 },
     },
     {
@@ -77,7 +77,7 @@ export const ALIEN_POD_ACTIONS: ActionCardDef[] = [
         name: '光束捕捉',
         nameEn: 'Beam Up',
         faction: 'aliens_pod',
-        count: 1,
+        count: 2,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 30 },
     },
     {
@@ -97,7 +97,7 @@ export const ALIEN_POD_ACTIONS: ActionCardDef[] = [
         name: '麦田怪圈',
         nameEn: 'Crop Circles',
         faction: 'aliens_pod',
-        count: 2,
+        count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 31 },
     },
     {
@@ -129,7 +129,7 @@ export const ALIEN_POD_ACTIONS: ActionCardDef[] = [
         faction: 'aliens_pod',
         abilityTags: ['ongoing'],
         ongoingTarget: 'base',
-        count: 2,
+        count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 32 },
     },
 ];

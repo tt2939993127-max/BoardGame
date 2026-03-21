@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './scripts/infra/e2e-port-config.js';
+import { ensureSharedTestApiToken } from './src/server/testApiToken';
 
 dotenv.config({ quiet: true });
 
@@ -16,8 +17,16 @@ const forceStartServers = process.env.PW_START_SERVERS === 'true';
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = !forceStartServers && !process.env.CI;
-const headedMode = process.env.PW_HEADED === 'true' || process.env.PWDEBUG === '1';
+const headedByEnv = process.env.PW_HEADED === 'true' || process.env.PWDEBUG === '1';
+const headedByCli = process.argv.some(arg => arg === '--headed' || arg === '--debug' || arg === '--ui');
+const headedMode = headedByEnv || headedByCli;
+const allowFullRun = process.env.PW_ALLOW_FULL_RUN === 'true';
+// 每次 Playwright 启动链都分配独立 scope，供 globalSetup/globalTeardown 和端口文件隔离。
+const runtimeScope = process.env.PW_RUNTIME_SCOPE
+    || `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+process.env.PW_RUNTIME_SCOPE = runtimeScope;
 process.env.PW_REUSE_EXISTING_SERVERS = shouldReuseExistingServers ? 'true' : 'false';
+ensureSharedTestApiToken(process.env);
 
 const ports = useDevServers ? DEV_PORTS : SINGLE_WORKER_PORTS;
 
@@ -64,9 +73,47 @@ if (!isMultiWorker) {
 }
 
 const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || String(ports.frontend);
-const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${frontendPort}`;
+// Chromium 在 Windows 上可能优先解析 localhost -> ::1，而测试前端默认只监听 IPv4。
+// 统一固定到 127.0.0.1，避免 page.goto 偶发 ERR_CONNECTION_REFUSED。
+const singleWorkerBaseURL = process.env.VITE_FRONTEND_URL || `http://127.0.0.1:${frontendPort}`;
 const multiWorkerSafeTests = collectFrameworkBackedTests(path.join(process.cwd(), 'e2e'));
 const explicitTestMatch = process.env.PW_TEST_MATCH?.trim();
+
+function hasExplicitPlaywrightTarget(argv: string[]): boolean {
+    const args = argv.filter(arg => arg !== 'test');
+    const targetFlags = new Set(['--grep', '-g', '--test-list']);
+
+    for (let index = 0; index < args.length; index += 1) {
+        const arg = args[index];
+
+        if (targetFlags.has(arg)) {
+            const next = args[index + 1];
+            if (next && !next.startsWith('-')) {
+                return true;
+            }
+            continue;
+        }
+
+        if (
+            arg.startsWith('--grep=') ||
+            arg.startsWith('--test-list=') ||
+            arg === '--last-failed' ||
+            arg.startsWith('--only-changed')
+        ) {
+            return true;
+        }
+
+        if (!arg.startsWith('-')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const hasExplicitTarget = process.env.PW_HAS_EXPLICIT_TARGET === 'true'
+    || Boolean(explicitTestMatch)
+    || hasExplicitPlaywrightTarget(process.argv.slice(2));
 
 const LEGACY_DISCOVERY_BROKEN_TESTS = [
     '**/dicethrone-paladin-vengeance-select-player.e2e.ts',
@@ -83,6 +130,26 @@ if (isMultiWorker) {
     console.log(`⚠️ E2E 测试模式：使用开发服务器（${DEV_PORTS.frontend}/${DEV_PORTS.gameServer}/${DEV_PORTS.apiServer}）`);
 } else {
     console.log(`✅ E2E 测试模式：单 worker（${SINGLE_WORKER_PORTS.frontend}/${SINGLE_WORKER_PORTS.gameServer}/${SINGLE_WORKER_PORTS.apiServer}）`);
+}
+
+if (headedMode) {
+    console.warn('⚠️ Playwright 当前将以可见浏览器模式运行。');
+    if (headedByEnv && !headedByCli) {
+        console.warn('   来源：检测到 PW_HEADED=true 或 PWDEBUG=1。');
+        console.warn('   如果这是误触发，请清理终端环境变量后再运行测试。');
+    }
+}
+
+if (!allowFullRun && !hasExplicitTarget) {
+    throw new Error(
+        [
+            '已阻止无目标的全量 E2E 运行，避免直接跑完整套 Playwright 测试卡死机器。',
+            '请改用以下任一方式：',
+            '1. npm run test:e2e -- e2e/<相关文件>.e2e.ts',
+            '2. npm run test:e2e -- --grep "<相关用例名>"',
+            '3. 需要明确全量时，使用 npm run test:e2e:all',
+        ].join('\n'),
+    );
 }
 
 const testMatch = explicitTestMatch
@@ -104,8 +171,8 @@ export default defineConfig({
     retries: 0,
     workers: configuredWorkers,
     reporter: 'list',
-    outputDir: './test-results',
-    preserveOutput: 'always',
+    outputDir: './test-results/playwright-artifacts',
+    preserveOutput: 'failures-only',
     globalSetup: shouldStartServers ? './e2e/global-setup.ts' : undefined,
     globalTeardown: shouldStartServers ? './e2e/global-teardown.ts' : undefined,
     use: {

@@ -30,6 +30,7 @@
     "recommended_players": "推荐人数"
   },
   "language": {
+    "label": "语言",
     "zhCN": "中文",
     "en": "英文"
   },
@@ -77,6 +78,29 @@
     "note": "我们的抄写员正在重写卷轴，请稍后再来。",
     "backHome": "尝试返回大厅",
     "status": "状态: 503 服务不可用"
+  },
+  "compatibility": {
+    "seoTitle": "浏览器兼容性不足",
+    "seoDescription": "当前浏览器缺少页面所需的现代样式能力，建议切换到最新版 Chrome 或更新系统 WebView 后重试。",
+    "badge": "兼容性提醒",
+    "currentBrowser": "当前识别到的浏览器：{{browser}}",
+    "requiredVersions": "建议最低版本：Chrome 111+、Edge 111+、Safari 16.4+、Firefox 128+",
+    "title": "当前浏览器兼容性不足",
+    "description": "检测到当前环境缺少页面所需的现代 CSS 能力，可能出现样式丢失、布局错位或按钮不可用。这类问题常见于旧版浏览器内核，以及旧版应用内网页。",
+    "reasonTitle": "检测到的缺失能力",
+    "reasonOklch": "不支持 OKLCH 颜色，主题色和部分背景会失真或直接失效。",
+    "reasonTranslate": "不支持独立的 CSS translate 属性，布局和动效位置可能明显错位。",
+    "reasonRegisterProperty": "不支持 CSS.registerProperty，Tailwind 生成的一部分样式变量无法完整工作。",
+    "recommendationTitle": "建议处理方式",
+    "recommendationChrome": "优先使用最新版 Chrome、Edge 或系统更新后的浏览器重新打开当前页面。",
+    "recommendationWebView": "如果你是在 App 内打开网页，请先更新 Android System WebView 或让 App 改为外部浏览器打开。",
+    "recommendationRetry": "更新浏览器或系统组件后，回到这里点“重新检测”。",
+    "continueAnyway": "继续访问（可能异常）",
+    "retry": "重新检测",
+    "backHome": "返回首页",
+    "note": "继续访问只会临时跳过提醒，不会修复兼容问题。",
+    "contextWebView": "检测到应用内 WebView",
+    "contextBrowser": "检测到旧版浏览器内核"
   },
   "game_names": {
     "tictactoe": "井字棋",

@@ -4,10 +4,11 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
+import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 
 interface PhaseConfig {
   id: Exclude<GamePhase, 'factionSelect'>;
@@ -50,7 +51,9 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   className = '',
 }) => {
   const { t } = useTranslation('game-summonerwars');
+  const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
   const phaseCursor: Exclude<GamePhase, 'factionSelect'> = currentPhase === 'factionSelect'
     ? PHASE_ORDER[0]
     : currentPhase;
@@ -71,6 +74,16 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     }
     return phase;
   });
+
+  useEffect(() => {
+    if (!isCoarsePointer) return;
+    setSelectedPhaseId(phaseCursor);
+  }, [isCoarsePointer, phaseCursor]);
+
+  const detailPhaseId = isCoarsePointer ? (selectedPhaseId ?? phaseCursor) : hoveredPhaseId;
+  const detailPhase = detailPhaseId
+    ? phasesWithCount.find(phase => phase.id === detailPhaseId) ?? null
+    : null;
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
@@ -93,18 +106,35 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
               key={phase.id}
               className="relative"
               data-testid={`sw-phase-item-${phase.id}`}
-              onMouseEnter={() => setHoveredPhaseId(phase.id)}
-              onMouseLeave={() => setHoveredPhaseId(null)}
+              onMouseEnter={() => {
+                if (!isCoarsePointer) setHoveredPhaseId(phase.id);
+              }}
+              onMouseLeave={() => {
+                if (!isCoarsePointer) setHoveredPhaseId(null);
+              }}
             >
               <div
+                role={isCoarsePointer ? 'button' : undefined}
+                tabIndex={isCoarsePointer ? 0 : undefined}
+                onClick={() => {
+                  if (isCoarsePointer) setSelectedPhaseId(phase.id);
+                }}
+                onKeyDown={(event) => {
+                  if (!isCoarsePointer) return;
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  setSelectedPhaseId(phase.id);
+                }}
                 className={`
-                  flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all cursor-help
+                  flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all
                   ${isCurrent 
                     ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-500/30' 
                     : isPast 
                       ? 'text-slate-500 bg-slate-800/30' 
                       : 'text-slate-300 bg-slate-800/50 hover:bg-slate-700/50'
                   }
+                  ${isCoarsePointer ? 'cursor-pointer' : 'cursor-help'}
+                  ${isCoarsePointer && selectedPhaseId === phase.id && !isCurrent ? 'ring-1 ring-amber-400/70' : ''}
                 `}
               >
                 <span className={`font-medium ${isPast ? 'line-through' : ''}`}>
@@ -133,16 +163,36 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
               </div>
               
               {/* Tooltip */}
-              <InfoTooltip
-                title={phase.label}
-                content={phase.desc}
-                isVisible={isHovered}
-                position="left"
-              />
+              {!isCoarsePointer && (
+                <InfoTooltip
+                  title={phase.label}
+                  content={phase.desc}
+                  isVisible={isHovered}
+                  position="left"
+                />
+              )}
             </div>
           );
         })}
       </div>
+
+      {isCoarsePointer && detailPhase && (
+        <div
+          className="mt-2 rounded-lg border border-amber-500/30 bg-slate-950/85 px-3 py-2 text-left"
+          data-testid="sw-phase-detail-panel"
+        >
+          <div className="mb-1 text-xs font-bold tracking-wide text-amber-300">
+            {detailPhase.label}
+          </div>
+          <div className="flex flex-col gap-1">
+            {detailPhase.desc.map((line, index) => (
+              <div key={`${detailPhase.id}-${index}`} className="text-[11px] leading-relaxed text-slate-200">
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

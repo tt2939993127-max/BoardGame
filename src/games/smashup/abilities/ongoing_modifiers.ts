@@ -5,12 +5,13 @@
  * （在 initAllAbilities() 中调用）
  */
 
-import { registerPowerModifier, registerOngoingPowerModifier, registerBasePowerModifier } from '../domain/ongoingModifiers';
+import { registerPowerModifier, registerOngoingPowerModifier, registerBasePowerModifier, registerBreakpointModifier } from '../domain/ongoingModifiers';
 import type { PowerModifierContext } from '../domain/ongoingModifiers';
 import type { MinionOnBase, SmashUpCore } from '../domain/types';
 import { getBaseDef } from '../data/cards';
 import { isMicrobot } from '../domain/utils';
 import type { PlayerId } from '../../../engine/types';
+import { registerKillerPlantModifiers as registerKillerPlantAbilitiesModifiers } from './killer_plants';
 
 // ============================================================================
 // 辅助函数
@@ -138,7 +139,7 @@ function registerNinjaModifiers(): void {
 }
 
 // ============================================================================
-// 食人花派系?
+// 食人花派系
 // ============================================================================
 
 function registerKillerPlantModifiers(): void {
@@ -149,6 +150,9 @@ function registerKillerPlantModifiers(): void {
     // 规则："持续：自你的回合开始时，将本基地的爆破点降低到0点。"
     // 实现方式：onTurnStart 触发器产生 BREAKPOINT_MODIFIED 事件（tempBreakpointModifiers，回合结束自动清零）
     // 注册在 killer_plants.ts 的 registerKillerPlantAbilities() 中
+
+    // 注册派系自定义力量修正（Weed Eater POD）
+    registerKillerPlantAbilitiesModifiers();
 }
 
 // ============================================================================
@@ -201,14 +205,27 @@ function registerSteampunkModifiers(): void {
 function registerBearCavalryModifiers(): void {
     // 极地突击队：基地上唯一己方随从时 +2 力量（不可消灭，后者需要 ongoing 保护系统）
     registerPowerModifier('bear_cavalry_polar_commando', (ctx: PowerModifierContext) => {
-        // 处理 POD 版本：检查基础 defId
-        const baseDefId = ctx.minion.defId.replace(/_pod$/, '');
-        if (baseDefId !== 'bear_cavalry_polar_commando') return 0;
+        // POD 版没有该 ongoing 效果（POD 版只有 talent 效果）
+        if (ctx.minion.defId === 'bear_cavalry_polar_commando_pod') return 0;
+        if (ctx.minion.defId !== 'bear_cavalry_polar_commando') return 0;
         const myMinionCount = ctx.base.minions.filter(
             m => m.controller === ctx.minion.controller
         ).length;
         return myMinionCount === 1 ? 2 : 0;
-    }, { handlesPodInternally: true }); // 标记已处理 POD
+    });
+
+    // Bearing Down POD（ongoing 行动卡附着在基地上）：动态调整爆破点
+    // 规则：每个在此基地有随从的玩家 +2 爆破点；如果本回合你曾把对手随从移动到此基地，则改为每个玩家 -2
+    registerBreakpointModifier('bear_cavalry_bearing_down_pod', (ctx) => {
+        const card = ctx.base.ongoingActions.find(a => a.defId === 'bear_cavalry_bearing_down_pod');
+        if (!card) return 0;
+
+        const playersWithMinions = new Set(ctx.base.minions.map(m => m.controller)).size;
+        const movedOpponentHereThisTurn = ctx.state.movedToBasesThisTurn?.[ctx.baseIndex] ?? false;
+
+        const modifier = playersWithMinions * 2;
+        return movedOpponentHereThisTurn ? -modifier : modifier;
+    });
 }
 
 // ============================================================================

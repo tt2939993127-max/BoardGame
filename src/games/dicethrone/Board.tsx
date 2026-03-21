@@ -55,7 +55,7 @@ import { useActiveModifiers } from './hooks/useActiveModifiers';
 import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
 import { playDeniedSound } from '../../lib/audio/useGameAudio';
-import { computeViewModeState } from './ui/viewMode';
+import { computeViewModeState, getResponseViewSuggestionKey, shouldSuggestOpponentViewOnResponseChange } from './ui/viewMode';
 import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
 import { LayoutSaveButton } from './ui/LayoutSaveButton';
 import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
@@ -193,6 +193,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         magnify,
         isMagnifyOpen,
         setMagnifiedImage,
+        setMagnifiedCard,
         setMagnifiedCards,
         closeMagnify,
         modals,
@@ -449,6 +450,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     // 响应窗口状态
     const isResponseWindowOpen = !!rawG.sys.responseWindow?.current;
+    const currentResponderIndex = rawG.sys.responseWindow?.current?.currentResponderIndex;
     const currentResponderId = rawG.sys.responseWindow?.current
         ? rawG.sys.responseWindow.current.responderQueue[rawG.sys.responseWindow.current.currentResponderIndex]
         : undefined;
@@ -465,7 +467,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return () => clearTimeout(timer);
     }, [autoResponseEnabled, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
 
-    const { rollerId, shouldAutoObserve, viewMode, isSelfView, isResponseAutoSwitch } = computeViewModeState({
+    const { rollerId, shouldAutoObserve, viewMode, isSelfView } = computeViewModeState({
         currentPhase,
         pendingAttack: G.pendingAttack,
         activePlayerId: G.activePlayerId,
@@ -476,40 +478,29 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         pendingDamage,
     });
 
-    // 响应窗口视角自动切换
-    const prevResponseWindowRef = React.useRef<boolean>(false);
+    const responseViewSuggestionKey = getResponseViewSuggestionKey({
+        rootPlayerId: rootPid,
+        isResponseWindowOpen,
+        currentResponderId,
+        currentResponderIndex,
+        pendingDamage,
+    });
+    const prevResponseSuggestionKeyRef = React.useRef<string | null>(null);
+
     React.useEffect(() => {
-        const wasOpen = prevResponseWindowRef.current;
-        const isOpen = isResponseWindowOpen;
-        prevResponseWindowRef.current = isOpen;
+        const previousSuggestionKey = prevResponseSuggestionKeyRef.current;
+        prevResponseSuggestionKeyRef.current = responseViewSuggestionKey;
 
-        console.log('[Board] Response window effect:', {
-            wasOpen,
-            isOpen,
-            isResponseAutoSwitch,
+        if (!shouldSuggestOpponentViewOnResponseChange({
+            previousSuggestionKey,
+            currentSuggestionKey: responseViewSuggestionKey,
             autoResponseEnabled,
-            currentResponderId,
-            rootPid,
-            logic: isResponseAutoSwitch ? 'Self is responder → switch to opponent view' : 'Opponent is responder → stay on self view',
-            currentPhase,
-            currentViewMode: viewMode,
-        });
-
-        // 只在显示响应窗口时才切换视角（自动跳过模式不切换）
-        if (!autoResponseEnabled) {
-            console.log('[Board] Auto-skip enabled, not switching view');
+        })) {
             return;
         }
 
-        // 自己响应时切换到对手视角（看对手的骰子/状态）
-        if (isOpen && isResponseAutoSwitch) {
-            console.log('[Board] Switching to opponent view (self is responder, need to see opponent dice)');
-            setViewMode('opponent');
-        }
-        // 注意：
-        // 1. 对手响应时（isOpen && !isResponseAutoSwitch）不做任何操作，保持当前视角（通常是自己视角）
-        // 2. 响应窗口关闭时也不做任何操作，避免干扰正常的视角切换
-    }, [isResponseWindowOpen, isResponseAutoSwitch, autoResponseEnabled, currentResponderId, rootPid, currentPhase, setViewMode, viewMode]);
+        setViewMode('opponent');
+    }, [responseViewSuggestionKey, autoResponseEnabled, setViewMode]);
 
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
@@ -1000,7 +991,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 textClassName="text-[1.5vw] font-bold"
             >
                 <UndoProvider value={{ G: rawG, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
-                    <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">
+                    <div className="relative w-full h-full bg-[#0a0a0c] overflow-hidden font-sans select-none">
                         <DiceThroneCharacterSelection
                             isOpen={true}
                             currentPlayerId={rootPid}
@@ -1023,7 +1014,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // --- 游戏进行阶段：渲染完整棋盘 UI ---
     return (
         <UndoProvider value={{ G: rawG, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
-            <div className="relative w-full h-dvh bg-black overflow-hidden font-sans select-none text-slate-200">
+            <div className="relative w-full h-full bg-black overflow-hidden font-sans select-none text-slate-200">
                 {!isSpectator && (
                     <GameDebugPanel G={rawG} dispatch={dispatch} playerID={playerID}>
                         {/* DiceThrone 专属作弊工具 */}
@@ -1283,7 +1274,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         interaction={diceMultistepInteraction ?? pendingInteraction}
                         dispatch={dispatch}
                         activeModifiers={activeModifiers}
-                        bonusDamage={G.pendingAttack?.bonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage}
+                        attackModifierBonusDamage={
+                            G.pendingAttack?.attackModifierBonusDamage ?? G.players[G.activePlayerId]?.pendingBonusDamage
+                        }
                         passiveAbilityProps={passiveAbilityProps}
                     />
                 </div>
@@ -1337,6 +1330,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                     engineMoves.sellCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');
                                 }}
+                                onMagnifyCard={(card) => setMagnifiedCard(card)}
                                 respondableCardIds={respondableCardIds}
                             />
                         </>
@@ -1400,7 +1394,21 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     // 额外骰子
                     bonusDie={bonusDie}
                     onBonusDieClose={() => {
+                        console.log('[onBonusDieClose] 被调用', {
+                            hasPendingSettlement: !!G.pendingBonusDiceSettlement,
+                            settlementAttackerId: G.pendingBonusDiceSettlement?.attackerId,
+                            rootPid,
+                            isAttacker: G.pendingBonusDiceSettlement?.attackerId === rootPid,
+                        });
+                        
                         handleBonusDieClose();
+                        
+                        // 如果有 pendingBonusDiceSettlement，需要发送 SKIP 命令清除
+                        if (G.pendingBonusDiceSettlement) {
+                            console.log('[onBonusDieClose] 发送 SKIP_BONUS_DICE_REROLL');
+                            engineMoves.skipBonusDiceReroll();
+                        }
+                        
                         // 防御方/观察者关闭 displayOnly 面板时，记录已关闭的 settlement id
                         if (G.pendingBonusDiceSettlement && G.pendingBonusDiceSettlement.attackerId !== rootPid) {
                             setDismissedBonusDiceId(G.pendingBonusDiceSettlement.id);

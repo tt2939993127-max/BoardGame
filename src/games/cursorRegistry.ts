@@ -14,3 +14,4 @@ import './smashup/cursor';
 import './dicethrone/cursor';
 import './summonerwars/cursor';
 import './tictactoe/cursor';
+import './cardia/cursor';

@@ -562,11 +562,11 @@ describe('Moon Elf 状态效果逻辑', () => {
 describe('Moon Elf 自定义动作', () => {
     /**
      * 长弓 II 连击判定 (longbow-bonus-check-4)：
-     * 升级到 LONGBOW_2 后，若骰面有 ≥4 个相同 → 施加缠绕
+     * 升级到 LONGBOW_2 后，若投出 ≥4 个相同符号 → 施加缠绕
      *
      * 测试：投出 [1,1,1,1,5] = 4弓+1足 → 触发 longbow-4-2 (6伤害) + 缠绕
      */
-    it('长弓 II：4个相同骰面 → 施加缠绕', () => {
+    it('长弓 II：4个相同符号 → 施加缠绕', () => {
         // 骰子值：[1,1,1,1,5] 攻击骰(4弓+1足), [1,1,1,1,1] 防御骰
         const random = createQueuedRandom([1, 1, 1, 1, 5, 1, 1, 1, 1, 1]);
         const runner = new GameTestRunner({
@@ -587,7 +587,7 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '长弓II 4个相同触发缠绕',
+            name: '长弓II 4个相同符号触发缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),

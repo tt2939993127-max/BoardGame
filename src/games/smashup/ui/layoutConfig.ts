@@ -21,12 +21,25 @@ export interface LayoutConfig {
     ongoingTopOffset: number;
     /** 手牌区域高度（px） */
     handAreaHeight: number;
+    /** 顶部提示/横幅偏移（px） */
+    hudTopOffset: number;
+    /** 交互浮动操作栏距底部偏移（px） */
+    floatingActionBottom: number;
+    /** 主棋盘顶部内边距（px） */
+    boardPaddingTop: number;
+    /** 主棋盘左右内边距（px） */
+    boardHorizontalPadding: number;
 }
 
 /**
  * 根据玩家数量获取布局配置
  */
-export function getLayoutConfig(playerCount: number): LayoutConfig {
+export function getLayoutConfig(
+    playerCount: number,
+    options: { isMobileViewport?: boolean } = {},
+): LayoutConfig {
+    const { isMobileViewport = false } = options;
+
     // 边界检查：防止无效输入导致无限递归或错误布局
     if (!Number.isFinite(playerCount) || playerCount < 2 || playerCount > 4) {
         console.warn(`[layoutConfig] Invalid playerCount: ${playerCount}, using 2-player layout`);
@@ -44,7 +57,11 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
                 playerColumnGap: 0.5,
                 ongoingCardWidth: 3.8,
                 ongoingTopOffset: 6,
-                handAreaHeight: 220,
+                handAreaHeight: isMobileViewport ? 210 : 220,
+                hudTopOffset: isMobileViewport ? 42 : 72,
+                floatingActionBottom: isMobileViewport ? 232 : 280,
+                boardPaddingTop: isMobileViewport ? 20 : 48,
+                boardHorizontalPadding: isMobileViewport ? 28 : 80,
             };
         case 3:
             // 三人局：适度缩放，缩小间距
@@ -56,7 +73,11 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
                 playerColumnGap: 0.1,
                 ongoingCardWidth: 3.5,
                 ongoingTopOffset: 5.5,
-                handAreaHeight: 200,
+                handAreaHeight: isMobileViewport ? 192 : 200,
+                hudTopOffset: isMobileViewport ? 42 : 72,
+                floatingActionBottom: isMobileViewport ? 214 : 260,
+                boardPaddingTop: isMobileViewport ? 18 : 48,
+                boardHorizontalPadding: isMobileViewport ? 24 : 80,
             };
         case 4:
             // 四人局：紧凑布局，无间距
@@ -68,7 +89,11 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
                 playerColumnGap: 0,
                 ongoingCardWidth: 3,
                 ongoingTopOffset: 5,
-                handAreaHeight: 180,
+                handAreaHeight: isMobileViewport ? 176 : 180,
+                hudTopOffset: isMobileViewport ? 40 : 72,
+                floatingActionBottom: isMobileViewport ? 196 : 240,
+                boardPaddingTop: isMobileViewport ? 16 : 48,
+                boardHorizontalPadding: isMobileViewport ? 20 : 80,
             };
         default:
             // 理论上不会到达这里（已在上方边界检查处理）
@@ -82,7 +107,11 @@ export function getLayoutConfig(playerCount: number): LayoutConfig {
                 playerColumnGap: 0.5,
                 ongoingCardWidth: 3.8,
                 ongoingTopOffset: 6,
-                handAreaHeight: 220,
+                handAreaHeight: isMobileViewport ? 210 : 220,
+                hudTopOffset: isMobileViewport ? 42 : 72,
+                floatingActionBottom: isMobileViewport ? 232 : 280,
+                boardPaddingTop: isMobileViewport ? 20 : 48,
+                boardHorizontalPadding: isMobileViewport ? 28 : 80,
             };
     }
 }

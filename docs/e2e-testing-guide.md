@@ -5,7 +5,7 @@
 | 环境 | 前端 | 游戏服务器 | API 服务器 | 说明 |
 |------|------|-----------|-----------|------|
 | **开发环境** | 3000 | 18000 | 18001 | `npm run dev` |
-| **E2E 测试** | 5173 | 19000 | 19001 | `npm run test:e2e` |
+| **E2E 测试** | 5173 | 19000 | 19001 | `npm run test:e2e -- e2e/<相关文件>.e2e.ts` |
 | **并行测试 Worker 0** | 6000 | 20000 | 20001 | `npm run test:e2e:parallel` |
 | **并行测试 Worker 1** | 6100 | 20100 | 20101 | 每个 worker +100 |
 
@@ -19,7 +19,7 @@
 
 | 模式 | 并行度 | 端口管理 | 清理方式 | 适用场景 |
 |------|--------|----------|----------|----------|
-| **默认模式** | 1 worker | 独立端口（5173, 19000, 19001） | `npm run test:e2e:cleanup` | 日常测试（推荐） |
+| **默认模式** | 1 worker | 独立端口（5173, 19000, 19001） | `npm run test:e2e:cleanup` | 日常定向测试（推荐） |
 | **开发模式** | 1 worker | 共享开发端口（3000, 18000, 18001） | `npm run test:e2e:cleanup -- --dev` | 调试测试代码 |
 | **并行模式** | 多 worker | 独立端口（6000+, 20000+, 20001+） | `node scripts/infra/port-allocator.js <workerId>` | CI/CD、大量测试 |
 
@@ -44,8 +44,14 @@
 适用于日常开发和测试，完全隔离：
 
 ```bash
-# 直接运行，会自动启动独立的测试服务器（端口 5173, 19000, 19001）
-npm run test:e2e
+# 直接运行相关测试文件，会自动启动独立的测试服务器（端口 5173, 19000, 19001）
+npm run test:e2e -- e2e/<相关文件>.e2e.ts
+
+# 或按用例名筛选
+npm run test:e2e -- --grep "<相关用例名>"
+
+# 明确需要全量时，单独使用
+npm run test:e2e:all
 
 # 检查配置和端口占用情况（可选）
 npm run test:e2e:check
@@ -57,7 +63,7 @@ npm run test:e2e:cleanup
 **优点**：
 - 无需手动启动服务器
 - 与开发环境完全隔离（不同端口）
-- 可以同时运行 `npm run dev` 和 `npm run test:e2e`
+- 可以同时运行 `npm run dev` 和定向的 `npm run test:e2e -- ...`
 - 测试失败不影响开发环境
 
 ### 开发模式（调试测试代码）
@@ -69,7 +75,7 @@ npm run test:e2e:cleanup
 npm run dev
 
 # 2. 设置环境变量使用开发服务器（端口 3000, 18000, 18001）
-PW_USE_DEV_SERVERS=true npm run test:e2e
+PW_USE_DEV_SERVERS=true npm run test:e2e -- e2e/<相关文件>.e2e.ts
 ```
 
 **注意**：
@@ -92,11 +98,11 @@ npm run test:e2e:worker 1
 # 终端 3: Worker 2 (端口 6200, 20200, 20201)
 npm run test:e2e:worker 2
 
-# 终端 4: 运行并行测试
-npm run test:e2e:parallel
+# 终端 4: 运行并行测试（指定相关用例）
+npm run test:e2e:parallel -- --grep "<相关用例名>"
 
 # 方式 2：自动启动（需要更多配置）
-PW_WORKERS=3 npm run test:e2e:parallel
+PW_WORKERS=3 npm run test:e2e:parallel -- --grep "<相关用例名>"
 ```
 
 **优点**：
@@ -327,17 +333,20 @@ API_SERVER_PORT=18001
 
 #### 1. 文件编码检查
 
+**命令**：`npm run check:encoding`
+
 **脚本**：`scripts/infra/check-file-encoding.mjs`
 
 **功能**：
-- 自动扫描所有源码文件（`src/**/*.{ts,tsx}`）
-- 检测 UTF-8 BOM（Byte Order Mark）
-- 自动修复 BOM 问题
-- 检测无效字符（编码错误）
+- 自动扫描 `src/`、`apps/`、`e2e/`、`scripts/`、`docs/` 等文本文件
+- 检测 UTF-8 BOM（Byte Order Mark）；需要修复时执行 `npm run check:encoding:fix`
+- 严格拦截非 UTF-8 字节流
+- 对 replacement character、连续问号占位符、常见乱码片段给出告警
+- 需要把告警也当成失败时，可执行：`npm run check:encoding:strict`
 
 **触发时机**：
-- 所有 E2E 测试命令（`test:e2e`、`test:e2e:ci`、`test:e2e:isolated`）
-- 自动运行，无需手动执行
+- 所有主 E2E 测试命令会先执行 `npm run check:encoding`
+- 也可以在修改中文源码/文档后手动单跑
 
 **输出示例**：
 ```
@@ -356,8 +365,12 @@ API_SERVER_PORT=18001
 
 **为什么需要**：
 - UTF-8 BOM 会导致 Vite 编译失败
-- 编码错误会导致服务器启动超时
-- 自动修复避免手动排查
+- 非 UTF-8 字节会导致服务器启动或编译异常
+- “PowerShell 终端显示乱码”和“文件真的被写坏”是两回事，需要工具链帮你区分
+
+**PowerShell 乱码处理**：
+- 仅显示乱码时，先在当前会话点源：`. .\scripts\infra\enable-utf8.ps1`
+- 该脚本只修复显示，不允许替代 `apply_patch` / Node 显式 UTF-8 写回
 
 #### 2. 服务器就绪检查
 
@@ -527,11 +540,12 @@ if (!result.hasInteraction) {
 
 ### 默认模式
 
-1. **日常测试**：直接运行 `npm run test:e2e`，无需手动启动服务器
+1. **日常测试**：运行 `npm run test:e2e -- e2e/<相关文件>.e2e.ts` 或 `npm run test:e2e -- --grep "<相关用例名>"`，无需手动启动服务器
 2. **测试前检查**：运行 `npm run test:e2e:check` 确认隔离状态
 3. **测试后清理**：如果测试异常退出，运行 `npm run test:e2e:cleanup`
-4. **同时开发和测试**：可以同时运行 `npm run dev` 和 `npm run test:e2e`，完全不冲突
-5. **使用 try...finally**：确保测试中的 BrowserContext 总是被关闭
+4. **明确全量**：只在确实需要完整套件时运行 `npm run test:e2e:all`
+5. **同时开发和测试**：可以同时运行 `npm run dev` 和定向的 `npm run test:e2e -- ...`，完全不冲突
+6. **使用 try...finally**：确保测试中的 BrowserContext 总是被关闭
 
 ### 开发模式
 

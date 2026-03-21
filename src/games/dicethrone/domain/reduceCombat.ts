@@ -245,7 +245,7 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
     const { attackerId, defenderId, sourceAbilityId, isDefendable, isUltimate } = event.payload;
     const attackFaceCounts = getFaceCounts(getActiveDice(state));
     const attacker = state.players[attackerId];
-    const queuedBonusDamage = attacker?.pendingBonusDamage ?? 0;
+    const queuedAttackModifierBonusDamage = attacker?.pendingBonusDamage ?? 0;
     const players = attacker?.pendingBonusDamage !== undefined
         ? {
             ...state.players,
@@ -268,7 +268,8 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             damageResolved: false,
             resolvedDamage: 0,
             attackDiceFaceCounts: attackFaceCounts,
-            bonusDamage: queuedBonusDamage,
+            bonusDamage: queuedAttackModifierBonusDamage,
+            attackModifierBonusDamage: queuedAttackModifierBonusDamage,
         },
         lastResolvedAttackDamage: undefined,
     };
@@ -286,7 +287,7 @@ export const handleBonusDamageAdded: EventHandler<Extract<DiceThroneEvent, { typ
     state,
     event
 ) => {
-    const { playerId, amount } = event.payload;
+    const { playerId, amount, sourceCardId } = event.payload;
     if (amount === 0) return state;
 
     if (state.pendingAttack && state.pendingAttack.attackerId === playerId) {
@@ -295,6 +296,9 @@ export const handleBonusDamageAdded: EventHandler<Extract<DiceThroneEvent, { typ
             pendingAttack: {
                 ...state.pendingAttack,
                 bonusDamage: (state.pendingAttack.bonusDamage ?? 0) + amount,
+                attackModifierBonusDamage: sourceCardId
+                    ? (state.pendingAttack.attackModifierBonusDamage ?? 0) + amount
+                    : state.pendingAttack.attackModifierBonusDamage,
             },
         };
     }

@@ -106,11 +106,11 @@ describe('bear_cavalry_general_ivan 保护', () => {
         expect(isMinionProtected(state, ally, 0, '1', 'destroy')).toBe(true);
     });
 
-    it('不保护伊万将军自身', () => {
+    it('伊万将军自身也受保护（符合 FAQ）', () => {
         const ivan = makeMinion('ivan', 'bear_cavalry_general_ivan', '0', 6, { powerModifier: 0 });
         const base = makeBase({ minions: [ivan] });
         const state = makeState({ bases: [base] });
-        expect(isMinionProtected(state, ivan, 0, '1', 'destroy')).toBe(false);
+        expect(isMinionProtected(state, ivan, 0, '1', 'destroy')).toBe(true);
     });
 
     it('不保护对手的随从', () => {
@@ -149,7 +149,8 @@ describe('bear_cavalry_polar_commando 保护', () => {
         const commando = makeMinion('pc', 'bear_cavalry_polar_commando', '0', 4, { powerModifier: 0 });
         const base = makeBase({ minions: [commando] });
         const state = makeState({ bases: [base] });
-        expect(getEffectivePower(state, commando, 0)).toBe(6); // 4 + 2
+        // getEffectivePower 使用卡牌定义中的 printed power（bear_cavalry_polar_commando 为 6），再叠加唯一随从 +2
+        expect(getEffectivePower(state, commando, 0)).toBe(8);
     });
 });
 

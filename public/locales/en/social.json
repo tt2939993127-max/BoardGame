@@ -44,6 +44,7 @@
         "selectFriend": "Select a friend to start chatting"
     },
     "menu": {
+        "notifications": "Notifications",
         "friendsAndChat": "Friends",
         "matchHistory": "Match History"
     },

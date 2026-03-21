@@ -62,7 +62,7 @@ export const ConnectionLoadingScreen = ({
             />
             {timedOut && (
                 <div
-                    className="fixed inset-x-0 bottom-44 flex items-center justify-center gap-4"
+                    className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+11rem)] flex items-center justify-center gap-4"
                     style={{ zIndex: UI_Z_INDEX.loading + 1 }}
                 >
                     <button

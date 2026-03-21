@@ -9,7 +9,7 @@
  * 注意：暂不测试复杂的交互流程，先验证基础功能
  */
 
-import { test } from './framework';
+import { test, expect } from './framework';
 
 test.describe('测试框架试点 - 简化版', () => {
     test('应该能构建场景并通过命令打出卡牌', async ({ page, game }, testInfo) => {
@@ -27,19 +27,11 @@ test.describe('测试框架试点 - 简化版', () => {
         // 1. 导航到游戏
         console.log('📍 步骤 1: 导航到游戏');
         await page.goto('/play/smashup');
-        
-        // 2. 等待游戏完全就绪（优化：合并等待条件，增加轮询间隔）
+
+        // 2. 等待测试工具就绪；具体场景由 setupScene 注入，不依赖默认开局阶段。
         console.log('⏳ 步骤 2: 等待游戏就绪');
         await page.waitForFunction(
-            () => {
-                const harness = (window as any).__BG_TEST_HARNESS__;
-                if (!harness?.state?.isRegistered()) return false;
-                
-                const state = harness.state.get();
-                // 简化条件：只检查关键状态
-                return state?.sys?.phase === 'playCards' &&
-                       state?.core?.players?.['0']?.hand?.length > 0;
-            },
+            () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
             { timeout: 20000, polling: 200 } // 增加轮询间隔到 200ms
         );
         console.log('✅ 游戏已就绪');
@@ -164,5 +156,90 @@ test.describe('测试框架试点 - 简化版', () => {
             timeout: 10000
         });
         console.log('📸 截图已保存: final-state.png');
+    });
+
+    test('本地模式双方打出行动卡都应显示特写', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.goto('/play/smashup');
+        await page.waitForFunction(
+            () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered(),
+            { timeout: 20000, polling: 200 },
+        );
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: ['wizard_mystic_studies'],
+                deck: ['wizard_neophyte', 'wizard_apprentice'],
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayed: 0,
+                minionLimit: 1,
+            },
+            player1: {
+                hand: ['wizard_mystic_studies'],
+                deck: ['wizard_chronomage', 'wizard_archmage'],
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayed: 0,
+                minionLimit: 1,
+            },
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const spotlightCard = page.getByTestId('smashup-action-spotlight-card');
+        const spotlightQueue = page.getByTestId('card-spotlight-queue');
+
+        await game.playCard('wizard_mystic_studies');
+        const p0Debug = await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            return {
+                currentPlayerIndex: state?.core?.currentPlayerIndex,
+                phase: state?.sys?.phase,
+                p0Hand: state?.core?.players?.['0']?.hand?.map((c: any) => c.defId) ?? [],
+                p0Discard: state?.core?.players?.['0']?.discard?.map((c: any) => c.defId) ?? [],
+                eventTypes: (state?.sys?.eventStream?.entries ?? []).slice(-12).map((entry: any) => entry.event?.type),
+                hasQueueRoot: !!document.querySelector('[data-testid="card-spotlight-queue"]'),
+                hasSpotlightCard: !!document.querySelector('[data-testid="smashup-action-spotlight-card"]'),
+            };
+        });
+        console.log('[Spotlight Debug][P0]', JSON.stringify(p0Debug, null, 2));
+        await expect(spotlightCard).toBeVisible({ timeout: 5000 });
+        await expect(spotlightCard).toHaveAttribute('data-card-def-id', 'wizard_mystic_studies');
+        await game.screenshot('action-spotlight-p0', testInfo);
+
+        await spotlightQueue.click({ force: true });
+        await expect(spotlightCard).toBeHidden({ timeout: 5000 });
+
+        await game.advancePhase();
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                currentPlayerIndex: state.core.currentPlayerIndex,
+                phase: state.sys.phase,
+            };
+        }, { timeout: 10000 }).toEqual({
+            currentPlayerIndex: 1,
+            phase: 'playCards',
+        });
+
+        const p1ActionUid = await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            const currentPlayerId = state?.core?.turnOrder?.[state?.core?.currentPlayerIndex ?? -1];
+            const hand = currentPlayerId ? (state?.core?.players?.[currentPlayerId]?.hand ?? []) : [];
+            return hand.find((card: any) => card.defId === 'wizard_mystic_studies')?.uid ?? null;
+        });
+
+        expect(p1ActionUid).toBeTruthy();
+        await expect(page.locator(`[data-card-uid="${p1ActionUid}"]`)).toBeVisible({ timeout: 5000 });
+
+        await game.playCard('wizard_mystic_studies');
+        await expect(spotlightCard).toBeVisible({ timeout: 5000 });
+        await expect(spotlightCard).toHaveAttribute('data-card-def-id', 'wizard_mystic_studies');
+        await game.screenshot('action-spotlight-p1', testInfo);
     });
 });

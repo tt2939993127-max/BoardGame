@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Library, Trash2 } from 'lucide-react';
 import type { CardInstance } from '../domain/types';
-import { getCardDef, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PromptOverlay } from './PromptOverlay';
 import { UI_Z_INDEX } from '../../../core';
@@ -13,6 +12,7 @@ type Props = {
     deckCount: number;
     discard: CardInstance[];
     isMyTurn: boolean;
+    compactLayout?: boolean;
     /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true（仅用于视觉提示） */
     hasPlayableFromDiscard?: boolean;
     /** 是否为 interaction 驱动的弃牌堆选择（僵尸领主等），自动打开面板 */
@@ -31,9 +31,26 @@ type Props = {
     playerID: string | null;
 };
 
-export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, autoOpenPanel, playableCards, selectedUid, onSelectCard, selectHint, onClosePanel, dispatch, playerID }) => {
+export const DeckDiscardZone: React.FC<Props> = ({
+    deckCount,
+    discard,
+    isMyTurn,
+    compactLayout = false,
+    hasPlayableFromDiscard,
+    autoOpenPanel,
+    playableCards,
+    selectedUid,
+    onSelectCard,
+    selectHint,
+    onClosePanel,
+    dispatch,
+    playerID,
+}) => {
     const { t } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
+    const stackWidth = compactLayout ? '8.6vw' : '7.5vw';
+    const labelMinHeight = compactLayout ? '24px' : '20px';
+    const labelFontSize = compactLayout ? '11px' : '10px';
 
     // interaction 驱动的弃牌堆选择（僵尸领主等）：自动打开/关闭面板
     const prevAutoOpen = React.useRef(false);
@@ -50,7 +67,6 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
     // zombie_mall_crawl 等卡牌会先清空弃牌堆（DECK_RESHUFFLED），再放回卡牌（CARDS_DISCARDED）
     // 如果直接读取 discard[discard.length - 1]，在中间状态会得到 undefined
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
-    const topDef = topCard ? getCardDef(topCard.defId) : null;
 
     // 弃牌堆卡牌列表（供 PromptOverlay displayCards 使用）
     // 永远显示全部弃牌堆，可打出的卡牌通过 playableDefIds 高亮
@@ -108,8 +124,8 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
         >
 
             {/* 牌库 - 左侧 */}
-            <div className="flex flex-col items-center pointer-events-auto group">
-                <div className="relative w-[7.5vw] aspect-[0.714]">
+            <div className="flex flex-col items-center pointer-events-auto group" data-testid="su-deck-stack">
+                <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
                     <div className="absolute inset-0 bg-slate-700 rounded-sm border border-slate-600 shadow-sm translate-x-1 -translate-y-1 rotate-1" />
                     <div className="absolute inset-0 bg-slate-800 rounded-sm border-2 border-slate-500 shadow-xl overflow-hidden z-10 transition-transform group-hover:-translate-y-2">
                         <CardPreview previewRef={SMASHUP_CARD_BACK} className="w-full h-full" />
@@ -120,7 +136,10 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
                         </div>
                     </div>
                 </div>
-                <div className="mt-2 h-5 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <div
+                    className="mt-2 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white font-bold uppercase tracking-wider flex items-center gap-1"
+                    style={{ minHeight: labelMinHeight, fontSize: labelFontSize }}
+                >
                     <Library size={10} /> {t('ui.deck')}
                 </div>
             </div>
@@ -128,10 +147,11 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
             {/* 弃牌堆 - 右侧 */}
             <div
                 className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
+                data-testid="su-discard-toggle"
                 data-discard-toggle
                 onClick={() => { if (!autoOpenPanel) setShowDiscard(prev => !prev); }}
             >
-                <div className="relative w-[7.5vw] aspect-[0.714]">
+                <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
                     {hasPlayableFromDiscard && (
                         <div className="absolute -inset-2 rounded-lg z-0 pointer-events-none">
                             <div className="absolute inset-0 rounded-lg bg-amber-400/40 animate-ping" />
@@ -143,7 +163,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
                             <div className="absolute inset-0 bg-white rounded-sm border border-slate-300 shadow-sm -translate-x-1 -translate-y-1 -rotate-1" />
                             <div className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-amber-400 border-2' : 'border-slate-200'}`}>
                                 <CardPreview 
-                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: topCard!.defId } }}
+                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: topCard!.defId, cardUid: topCard!.uid } }}
                                     className="w-full h-full" 
                                 />
                             </div>
@@ -154,7 +174,10 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
                         </div>
                     )}
                 </div>
-                <div className={`mt-2 h-5 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : showDiscard ? 'bg-red-600/80 text-white' : 'bg-black/60 text-white group-hover:text-red-400'}`}>
+                <div
+                    className={`mt-2 backdrop-blur-sm px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : showDiscard ? 'bg-red-600/80 text-white' : 'bg-black/60 text-white group-hover:text-red-400'}`}
+                    style={{ minHeight: labelMinHeight, fontSize: labelFontSize }}
+                >
                     <Trash2 size={10} /> {t('ui.discard')} ({discard.length})
                     {hasPlayableFromDiscard && <span className="text-[9px] ml-1">⚡</span>}
                     {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-yellow-400 text-[9px]">({t('ui.viewing')})</span>}

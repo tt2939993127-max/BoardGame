@@ -30,6 +30,7 @@
     "recommended_players": "Recommended"
   },
   "language": {
+    "label": "Language",
     "zhCN": "Chinese",
     "en": "English"
   },
@@ -77,6 +78,29 @@
     "note": "Our scribes are rewriting the scrolls. Please check back soon.",
     "backHome": "Try returning home",
     "status": "Status: 503 Service Unavailable"
+  },
+  "compatibility": {
+    "seoTitle": "Browser Compatibility Issue",
+    "seoDescription": "This browser is missing modern CSS features required by the app. Please try the latest Chrome or update Android System WebView.",
+    "badge": "Compatibility Notice",
+    "currentBrowser": "Detected browser: {{browser}}",
+    "requiredVersions": "Recommended minimum: Chrome 111+, Edge 111+, Safari 16.4+, Firefox 128+",
+    "title": "This browser is not fully compatible",
+    "description": "We detected that the current environment is missing modern CSS features required by this app. That can cause missing styles, broken layout, or unusable buttons. This commonly happens in older browser engines and older in-app webviews.",
+    "reasonTitle": "Missing capabilities",
+    "reasonOklch": "OKLCH colors are not supported, so theme colors and some backgrounds may fail.",
+    "reasonTranslate": "The standalone CSS translate property is not supported, so layout and motion may shift out of place.",
+    "reasonRegisterProperty": "CSS.registerProperty is not supported, so part of the Tailwind-generated variable styling cannot work correctly.",
+    "recommendationTitle": "Recommended next steps",
+    "recommendationChrome": "Open this page with the latest Chrome, Edge, or another up-to-date browser.",
+    "recommendationWebView": "If this page is opened inside an app, update Android System WebView or open it in an external browser instead.",
+    "recommendationRetry": "After updating the browser or system component, come back and tap “Retry check”.",
+    "continueAnyway": "Continue anyway",
+    "retry": "Retry check",
+    "backHome": "Back home",
+    "note": "Continuing only skips this notice for the current session. It does not fix compatibility.",
+    "contextWebView": "In-app WebView detected",
+    "contextBrowser": "Older browser engine detected"
   },
   "game_names": {
     "tictactoe": "Tic-Tac-Toe",

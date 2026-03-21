@@ -19,6 +19,8 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
 import { getLayoutConfig } from './layoutConfig';
+import { useArmedActivation } from '../../../hooks/ui/useArmedActivation';
+import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
 
 // ============================================================================
 // Base Zone: The "Battlefield"
@@ -56,6 +58,7 @@ export const BaseZone: React.FC<{
     phase?: string;
 }> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
+    const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
     // 响应式布局配置
     const playerCount = turnOrder.length;
@@ -72,8 +75,56 @@ export const BaseZone: React.FC<{
 
     // 获取基地限制信息
     const restrictions = getBaseRestrictions(core, baseIndex);
+    const {
+        isCoarsePointer,
+        showDesktopInspectButton,
+        getTouchInspectProps: getBaseTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockBaseClick,
+    } = useTouchInspectGesture<string, { defId: string }>({
+        enabled: true,
+        onInspect: (_key, payload) => {
+            onViewBase(payload.defId);
+        },
+    });
+    const {
+        getTouchInspectProps: getOngoingTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockOngoingClick,
+    } = useTouchInspectGesture<string, { defId: string }>({
+        enabled: true,
+        onInspect: (_key, payload) => {
+            onViewAction(payload.defId);
+        },
+    });
 
     // 分组
+    React.useEffect(() => {
+        if (expandedMinionUid && !base.minions.some((minion) => minion.uid === expandedMinionUid)) {
+            setExpandedMinionUid(null);
+        }
+    }, [base.minions, expandedMinionUid]);
+
+    const toggleExpandedMinion = useCallback((minionUid: string) => {
+        setExpandedMinionUid((current) => current === minionUid ? null : minionUid);
+    }, []);
+
+    const isActivationKeyValid = useCallback((key: string) => {
+        const isValidMinionKey = base.minions.some((minion) => `minion-${minion.uid}` === key);
+        const isValidAttachedKey = base.minions.some((minion) => minion.attachedActions?.some((action) => `attached-${action.uid}` === key));
+        const isValidBaseOngoingKey = base.ongoingActions?.some((action) => `ongoing-${action.uid}` === key) ?? false;
+
+        return isValidMinionKey || isValidAttachedKey || isValidBaseOngoingKey;
+    }, [base.minions, base.ongoingActions]);
+
+    const {
+        isArmed: isActivationArmed,
+        clearArmed: clearArmedActivation,
+        armOrActivate,
+    } = useArmedActivation<string>({
+        requireArming: isCoarsePointer,
+        isKeyValid: isActivationKeyValid,
+        validationDeps: [base.minions, base.ongoingActions],
+    });
+
     const minionsByController: Record<string, MinionOnBase[]> = {};
     base.minions.forEach(m => {
         if (!minionsByController[m.controller]) minionsByController[m.controller] = [];
@@ -102,6 +153,8 @@ export const BaseZone: React.FC<{
                         // ongoing 行动卡天赋判定
                         const hasOngoingTalent = actionDef?.abilityTags?.includes('talent') ?? false;
                         const canUseOngoingTalent = hasOngoingTalent && !oa.talentUsed && isMyTurn && oa.ownerId === myPlayerId;
+                        const ongoingActivationKey = `ongoing-${oa.uid}`;
+                        const isOngoingActivationArmed = isActivationArmed(ongoingActivationKey);
                         // 交互驱动的行动卡选择
                         const isSelectableOngoing = !!selectableOngoingUids?.has(oa.uid);
                         const isDimmedOngoing = !!selectableOngoingUids && !selectableOngoingUids.has(oa.uid);
@@ -109,14 +162,19 @@ export const BaseZone: React.FC<{
                             <motion.div
                                 key={oa.uid}
                                 data-ongoing-uid={oa.uid}
+                                {...getOngoingTouchInspectProps(`ongoing-${oa.uid}`, { defId: oa.defId })}
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    if (shouldBlockOngoingClick(`ongoing-${oa.uid}`)) return;
                                     if (isSelectableOngoing && onOngoingSelect) {
+                                        clearArmedActivation();
                                         onOngoingSelect(oa.uid);
                                     } else if (canUseOngoingTalent) {
-                                        dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
-                                    } else {
-                                        onViewAction(oa.defId);
+                                        armOrActivate(ongoingActivationKey, {
+                                            onActivate: () => {
+                                                dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: oa.uid, baseIndex });
+                                            },
+                                        });
                                     }
                                 }}
                                 className={`relative aspect-[0.714] bg-white rounded-[0.15vw] shadow-lg cursor-pointer
@@ -125,6 +183,8 @@ export const BaseZone: React.FC<{
                                         ? 'opacity-40 grayscale cursor-not-allowed'
                                         : isSelectableOngoing
                                         ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
+                                        : isOngoingActivationArmed
+                                        ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                                         : canUseOngoingTalent ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : `${pConf.border} ${pConf.shadow}`}`}
                                 style={{ width: `${layout.ongoingCardWidth}vw` }}
                                 initial={{ y: 20, opacity: 0, scale: 0.6 }}
@@ -138,7 +198,7 @@ export const BaseZone: React.FC<{
                                 <div className="w-full h-full overflow-hidden rounded-[0.1vw]">
                                     <CardPreview
                                         previewRef={actionDef?.previewRef
-                                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: oa.defId } }
+                                            ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: oa.defId, cardUid: oa.uid } }
                                             : undefined}
                                         className="w-full h-full"
                                         title={actionTitle}
@@ -176,7 +236,16 @@ export const BaseZone: React.FC<{
 
             {/* --- BASE CARD --- */}
             <div
-                onClick={onClick}
+                onClick={(event) => {
+                    if (shouldBlockBaseClick(`base-${baseIndex}`)) {
+                        event.stopPropagation();
+                        return;
+                    }
+                    setExpandedMinionUid(null);
+                    clearArmedActivation();
+                    onClick();
+                }}
+                {...getBaseTouchInspectProps(`base-${baseIndex}`, { defId: base.defId })}
                 ref={tokenRef}
                 data-base-index={baseIndex}
                 className={`
@@ -187,7 +256,7 @@ export const BaseZone: React.FC<{
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
                         : isDeployMode && !isMinionSelectMode
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
-                        : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-zoom-in'}
+                        : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-pointer'}
                 `}
                 style={{
                     width: `${layout.baseCardWidth}vw`,
@@ -223,14 +292,16 @@ export const BaseZone: React.FC<{
                 )}
 
                 {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
-                <button
-                    onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
-                    className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover/base:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
-                >
-                    <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                    </svg>
-                </button>
+                {showDesktopInspectButton && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
+                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover/base:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                    >
+                        <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                )}
 
                 {/* Power Token */}
                 <div className="absolute -top-[1.5vw] -right-[1.5vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center"
@@ -346,10 +417,17 @@ export const BaseZone: React.FC<{
                                             onViewAction={onViewAction}
                                             selectableOngoingUids={selectableOngoingUids}
                                             onOngoingSelect={onOngoingSelect}
+                                            isExpanded={expandedMinionUid === m.uid}
+                                            onToggleExpanded={toggleExpandedMinion}
+                                            onExpandMinion={setExpandedMinionUid}
+                                            isActivationArmed={isActivationArmed}
+                                            clearArmedActivation={clearArmedActivation}
+                                            armOrActivate={armOrActivate}
                                             isTutorialTargetAllowed={isTutorialTargetAllowed}
                                             phase={phase}
                                             layout={layout}
                                             turnOrder={turnOrder}
+                                            isCoarsePointer={isCoarsePointer}
                                         />
                                     ))}
                                 </div>
@@ -433,6 +511,12 @@ const MinionCard: React.FC<{
     /** 交互驱动的持续行动卡选择：只有这些 UID 的行动卡可被选中 */
     selectableOngoingUids?: Set<string>;
     onOngoingSelect?: (ongoingUid: string) => void;
+    isExpanded?: boolean;
+    onToggleExpanded?: (minionUid: string) => void;
+    onExpandMinion?: React.Dispatch<React.SetStateAction<string | null>>;
+    isActivationArmed: (activationKey: string) => boolean;
+    clearArmedActivation: () => void;
+    armOrActivate: (activationKey: string, callbacks: { onArm?: () => void; onActivate: () => void }) => boolean;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
     /** 当前游戏阶段 */
     phase?: string;
@@ -440,7 +524,8 @@ const MinionCard: React.FC<{
     layout: ReturnType<typeof getLayoutConfig>;
     /** 玩家回合顺序（用于判断是否是最右边玩家） */
     turnOrder: string[];
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isTutorialTargetAllowed, phase, layout, turnOrder }) => {
+    isCoarsePointer: boolean;
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isTutorialTargetAllowed, phase, layout, turnOrder, isCoarsePointer }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -475,6 +560,17 @@ const MinionCard: React.FC<{
 
     // 合并：天赋或 special 都可以激活
     const canActivate = canUseTalent || canActivateSpecial;
+    const hasAttachedActions = Boolean(minion.attachedActions?.length);
+    const isRightmostBase = baseIndex === core.bases.length - 1;
+    const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
+    const isFourPlayerGame = turnOrder.length === 4;
+    const shouldShowAttachedLeft = isRightmostBase && isRightmostPlayer && isFourPlayerGame;
+    const shouldShowAttachedActions = Boolean(selectableOngoingUids) || (isCoarsePointer ? !!isExpanded : false);
+    const attachedActionsPositionClass = shouldShowAttachedLeft
+        ? 'right-full flex-col-reverse pr-[0.6vw]'
+        : 'left-full flex-col pl-[0.6vw]';
+    const minionActivationKey = `minion-${minion.uid}`;
+    const isMinionActivationArmed = isActivationArmed(minionActivationKey);
 
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
@@ -485,22 +581,66 @@ const MinionCard: React.FC<{
         transform: `rotate(${rotation}deg)`,
         width: `${layout.minionCardWidth}vw`,
     };
+    const {
+        showDesktopInspectButton,
+        getTouchInspectProps: getMinionTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockMinionClick,
+    } = useTouchInspectGesture<string, undefined>({
+        enabled: true,
+        onInspect: () => {
+            onView();
+        },
+    });
+    const {
+        getTouchInspectProps: getAttachedTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockAttachedClick,
+    } = useTouchInspectGesture<string, { defId: string }>({
+        enabled: Boolean(minion.attachedActions?.length),
+        onInspect: (_key, payload) => {
+            onViewAction(payload.defId);
+        },
+    });
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        if (shouldBlockMinionClick(`minion-${minion.uid}`)) return;
         // 随从选择模式：点击随从附着 ongoing 行动卡
         if (isMinionSelectMode && onMinionSelect) {
+            clearArmedActivation();
             onMinionSelect(minion.uid, baseIndex);
             return;
         }
+        if (isCoarsePointer) {
+            if (canActivate) {
+                armOrActivate(minionActivationKey, {
+                    onArm: () => {
+                        onExpandMinion?.(minion.uid);
+                    },
+                    onActivate: () => {
+                        onExpandMinion?.(minion.uid);
+                        if (canUseTalent) {
+                            dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
+                        } else if (canActivateSpecial) {
+                            dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { minionUid: minion.uid, baseIndex });
+                        }
+                    },
+                });
+                return;
+            }
+            if (hasAttachedActions) {
+                onToggleExpanded?.(minion.uid);
+                clearArmedActivation();
+                return;
+            }
+        }
         if (canUseTalent) {
+            clearArmedActivation();
             dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
         } else if (canActivateSpecial) {
+            clearArmedActivation();
             dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { minionUid: minion.uid, baseIndex });
-        } else {
-            onView();
         }
-    }, [isMinionSelectMode, onMinionSelect, canUseTalent, canActivateSpecial, dispatch, minion.uid, baseIndex, onView]);
+    }, [isMinionSelectMode, onMinionSelect, clearArmedActivation, isCoarsePointer, canActivate, canUseTalent, canActivateSpecial, dispatch, minion.uid, baseIndex, shouldBlockMinionClick, armOrActivate, onToggleExpanded, onExpandMinion, hasAttachedActions, minionActivationKey]);
 
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
@@ -509,6 +649,10 @@ const MinionCard: React.FC<{
         <motion.div
             data-minion-uid={minion.uid}
             data-minion-def-id={minion.defId}
+            data-expanded={isExpanded ? 'true' : 'false'}
+            data-attached-actions-visible={hasAttachedActions ? (shouldShowAttachedActions ? 'true' : 'false') : 'none'}
+            data-activation-armed={isMinionActivationArmed ? 'true' : 'false'}
+            {...getMinionTouchInspectProps(`minion-${minion.uid}`, undefined)}
             onClick={handleClick}
             className={`
                 relative aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
@@ -520,9 +664,15 @@ const MinionCard: React.FC<{
                     ? 'cursor-pointer border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
                     : isSelectableMinion
                     ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
+                    : isExpanded
+                    ? isMinionActivationArmed
+                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                    : canActivate
+                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                    : 'cursor-pointer border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
                     : canActivate
                     ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
-                    : `cursor-zoom-in ${conf.border} ${conf.shadow}`}
+                    : `cursor-pointer ${conf.border} ${conf.shadow}`}
             `}
             style={style}
             initial={{ scale: 0.3, y: -60, opacity: 0, rotate: -15 }}
@@ -537,7 +687,7 @@ const MinionCard: React.FC<{
             <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                 <CardPreview
                     previewRef={def?.previewRef
-                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId } }
+                        ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId, cardUid: minion.uid } }
                         : undefined}
                     className="w-full h-full"
                     title={minionTitle}
@@ -564,14 +714,16 @@ const MinionCard: React.FC<{
             </div>
 
             {/* 放大镜按钮 - hover 时显示在右上角，z-40 确保不被力量徽章遮挡 */}
-            <button
-                onClick={(e) => { e.stopPropagation(); onView(); }}
-                className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
-            >
-                <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                </svg>
-            </button>
+            {showDesktopInspectButton && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onView(); }}
+                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
+                >
+                    <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            )}
 
             {/* 力量增幅徽章 - 增益绿色/减益红色（左上角），仅有变化时显示 */}
             {(effectivePower !== minion.basePower) && (
@@ -623,29 +775,21 @@ const MinionCard: React.FC<{
             )}
 
             {/* 附着的 ongoing 行动卡 - 角标 + hover 时弹出小卡片 */}
-            {minion.attachedActions && minion.attachedActions.length > 0 && (
+            {hasAttachedActions && (
                 <>
                     <AttachedBadge count={minion.attachedActions.length} />
                     {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
                     {/* 行动卡选择模式下始终显示（不需要 hover） */}
                     {/* 最右侧基地的最右边玩家：显示在左侧；其他：显示在右侧 */}
-                    {(() => {
-                        const isRightmostBase = baseIndex === core.bases.length - 1;
-                        const isRightmostPlayer = pid === turnOrder[turnOrder.length - 1];
-                        const shouldShowLeft = isRightmostBase && isRightmostPlayer;
-                        const positionClass = shouldShowLeft 
-                            ? 'right-full flex-col-reverse pr-[0.6vw]' 
-                            : 'left-full flex-col pl-[0.6vw]';
-                        return (
-                            <div
-                                className={`absolute top-0 flex gap-[0.2vw] ${positionClass}
-                                    ${selectableOngoingUids
-                                        ? 'opacity-100 scale-100 pointer-events-auto'
-                                        : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
-                                    }`}
-                                style={{ zIndex: UI_Z_INDEX.tooltip }}
-                            >
-                                {minion.attachedActions.map((aa) => {
+                    <div
+                        className={`absolute top-0 flex gap-[0.2vw] ${attachedActionsPositionClass}
+                            ${shouldShowAttachedActions
+                                ? 'opacity-100 scale-100 pointer-events-auto'
+                                : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto'
+                            }`}
+                        style={{ zIndex: UI_Z_INDEX.tooltip }}
+                    >
+                        {minion.attachedActions.map((aa) => {
                             const actionDef = getCardDef(aa.defId);
                             const actionName = resolveCardName(actionDef, t) || aa.defId;
                             const actionText = resolveCardText(actionDef, t);
@@ -654,25 +798,36 @@ const MinionCard: React.FC<{
                             const isDimmedAA = !!selectableOngoingUids && !selectableOngoingUids.has(aa.uid);
                             const hasAATalent = actionDef?.abilityTags?.includes('talent') ?? false;
                             const canUseAATalent = hasAATalent && !aa.talentUsed && isMyTurn && aa.ownerId === myPlayerId;
+                            const attachedActivationKey = `attached-${aa.uid}`;
+                            const isAttachedActivationArmed = isActivationArmed(attachedActivationKey);
                             return (
                                 <motion.div
                                     key={aa.uid}
+                                    data-attached-action-uid={aa.uid}
+                                    data-activation-armed={isAttachedActivationArmed ? 'true' : 'false'}
+                                    {...getAttachedTouchInspectProps(`attached-${aa.uid}`, { defId: aa.defId })}
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        if (shouldBlockAttachedClick(`attached-${aa.uid}`)) return;
                                         if (isSelectableAA && onOngoingSelect) {
+                                            clearArmedActivation();
                                             onOngoingSelect(aa.uid);
                                         } else if (canUseAATalent) {
-                                            dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: aa.uid, baseIndex });
-                                        } else {
-                                            onViewAction(aa.defId);
+                                            armOrActivate(attachedActivationKey, {
+                                                onActivate: () => {
+                                                    dispatch(SU_COMMANDS.USE_TALENT, { ongoingCardUid: aa.uid, baseIndex });
+                                                },
+                                            });
                                         }
                                     }}
                                     className={`w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
-                                        hover:scale-[2] ${shouldShowLeft ? 'hover:-translate-x-[0.8vw]' : 'hover:translate-x-[0.8vw]'} transition-transform duration-150
+                                        hover:scale-[2] ${shouldShowAttachedLeft ? 'hover:-translate-x-[0.8vw]' : 'hover:translate-x-[0.8vw]'} transition-transform duration-150
                                         border-[0.08vw] ${isDimmedAA
                                             ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
                                             : isSelectableAA
                                             ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]'
+                                            : isAttachedActivationArmed
+                                            ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.75)]'
                                             : canUseAATalent
                                             ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]'
                                             : 'border-purple-400 ring-1 ring-purple-300/50'
@@ -682,7 +837,7 @@ const MinionCard: React.FC<{
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
                                         <CardPreview
                                             previewRef={actionDef?.previewRef
-                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId, disableHoverOverlay: true } }
+                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: aa.defId, cardUid: aa.uid, disableHoverOverlay: true } }
                                                 : undefined}
                                             className="w-full h-full"
                                             title={actionName}
@@ -692,8 +847,6 @@ const MinionCard: React.FC<{
                             );
                         })}
                     </div>
-                );
-            })()}
                 </>
             )}
         </motion.div>

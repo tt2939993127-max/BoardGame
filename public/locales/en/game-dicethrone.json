@@ -291,6 +291,11 @@
       "evasionAttempt": "Evasion Check",
       "removeDebuff": "Purify"
     },
+    "offensiveRollEndTokenUsed": "Used {{tokenLabel}} ({{effectLabel}})",
+    "offensiveRollEndTokenEffect": {
+      "crit": "+4 damage",
+      "accuracy": "attack becomes undefendable"
+    },
     "cpGained": "Gained {{amount}} CP ({{source}})",
     "cpGainedPlain": "Gained {{amount}} CP",
     "cpSpent": "Spent {{amount}} CP ({{source}})",
@@ -770,7 +775,7 @@
     },
     "fist-technique-3": {
       "name": "Fist Technique III",
-      "description": "Highest-level fist attack; four of a kind inflicts Knockdown.",
+      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown.",
       "effects": {
         "damage4": "Deal 4 damage"
       }
@@ -1189,7 +1194,7 @@
     },
     "longbow-3": {
       "name": "Longbow III",
-      "description": "3/4/5 Bow: deal 5/7/9 damage; 3 of a kind inflicts Entangle",
+      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching symbols are rolled, inflict Entangle",
       "effects": {
         "damage3": "Deal 3 damage",
         "damage5": "Deal 5 damage",
@@ -1209,7 +1214,7 @@
     },
     "longbow-2": {
       "name": "Longbow II",
-      "description": "3/4/5 Bow: deal 4/6/8 damage; 4 of a kind inflicts Entangle",
+      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching symbols are rolled, inflict Entangle",
       "effects": {
         "damage4": "Deal 4 damage",
         "damage6": "Deal 6 damage",
@@ -1652,7 +1657,7 @@
     },
     "steadfast-2": {
       "name": "Steadfast II",
-      "description": "Upgraded defense: higher healing; if three of a kind, remove 1 of your status effects.",
+      "description": "3/4/5 Hearts: heal 5/6/7. Remove 1 of your status effects.",
       "effects": {
         "removeStatus": "Remove 1 of your status effect tokens",
         "heal5": "Heal 5",
@@ -1662,7 +1667,7 @@
     },
     "slap-2": {
       "name": "Slap II",
-      "description": "3/4/5 Sword: deal 5/7/9 damage. If 4 of a kind, deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 5/7/9 damage. 4/5 Swords deal undefendable damage.",
       "effects": {
         "damage5": "Deal 5 damage",
         "damage7Unblockable": "Deal 7 undefendable damage",
@@ -1671,7 +1676,7 @@
     },
     "slap-3": {
       "name": "Slap III",
-      "description": "3/4/5 Sword: deal 6/8/10 damage. If 4 of a kind, deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 6/8/10 damage. 4/5 Swords deal undefendable damage.",
       "effects": {
         "damage6": "Deal 6 damage",
         "damage8Unblockable": "Deal 8 undefendable damage",
@@ -1917,7 +1922,7 @@
     },
     "card-thrust-punch-3": {
       "name": "Thrust Punch III",
-      "description": "2 Fist: 7 damage / 3 Fist: 8 damage / 4 Fist: 9 damage. If 4 of a kind, inflict Stun."
+      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown."
     },
     "card-contemplation-2": {
       "name": "Contemplation II",

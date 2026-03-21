@@ -8,6 +8,7 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/waitForState';
 import { cloneState } from './helpers/summonerwars';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
 const setEnglishLocale = async (context: BrowserContext | Page) => {
   await context.addInitScript(() => {
@@ -402,11 +403,15 @@ const createSummonerWarsRoom = async (page: Page) => {
   }
 
   await expect(createButton).toBeVisible({ timeout: 20000 });
-  await createButton.click();
+  await createButton.evaluate((node) => {
+    (node as HTMLElement | null)?.click();
+  });
   await expect(page.getByRole('heading', { name: /Create Room|创建房间/i })).toBeVisible({ timeout: 10000 });
   const confirmButton = page.getByRole('button', { name: /Confirm|确认/i });
   await expect(confirmButton).toBeEnabled({ timeout: 5000 });
-  await confirmButton.click();
+  await confirmButton.evaluate((node) => {
+    (node as HTMLElement | null)?.click();
+  });
   try {
     await page.waitForURL(/\/play\/summonerwars\/match\//, { timeout: 8000 });
   } catch {
@@ -449,26 +454,60 @@ const waitForSummonerWarsUI = async (page: Page, timeout = 20000) => {
  * 必须在 guest 加入房间后、waitForSummonerWarsUI 之前调用
  */
 const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
-  // 等待双方都看到阵营选择界面
+  const waitForFactionSelectionReady = async (page: Page) => {
+    await page.waitForFunction(() => {
+      const w = window as Window & { __BG_DISPATCH__?: unknown };
+      if (typeof w.__BG_DISPATCH__ === 'function') return true;
+      const heading = document.querySelector('h1, [role="heading"]');
+      const text = heading?.textContent ?? document.body?.innerText ?? '';
+      return /选择你的阵营|Choose Your Faction/i.test(text);
+    }, { timeout: 20000 });
+  };
+
+  await waitForFactionSelectionReady(hostPage);
+  await waitForFactionSelectionReady(guestPage);
+
+  const dispatchCommand = async (page: Page, type: string, payload: unknown) => {
+    return page.evaluate(({ commandType, commandPayload }) => {
+      const w = window as Window & { __BG_DISPATCH__?: (innerType: string, innerPayload: unknown) => void };
+      if (typeof w.__BG_DISPATCH__ !== 'function') {
+        return false;
+      }
+      w.__BG_DISPATCH__(commandType, commandPayload);
+      return true;
+    }, { commandType: type, commandPayload: payload });
+  };
+
+  const usedDispatchHost = await dispatchCommand(hostPage, 'sw:select_faction', { factionId: 'necromancer' });
+  const usedDispatchGuest = await dispatchCommand(guestPage, 'sw:select_faction', { factionId: 'trickster' });
+
+  if (usedDispatchHost && usedDispatchGuest) {
+    await hostPage.waitForTimeout(300);
+    await guestPage.waitForTimeout(300);
+    await dispatchCommand(guestPage, 'sw:player_ready', {});
+    await hostPage.waitForTimeout(300);
+    await dispatchCommand(hostPage, 'sw:host_start_game', {});
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 30000 });
+    await expect(guestPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 30000 });
+    return;
+  }
+
+  // Host 选择第一个阵营
   const selectionHeading = (page: Page) =>
     page.locator('h1').filter({ hasText: /选择你的阵营|Choose your faction/i });
   await expect(selectionHeading(hostPage)).toBeVisible({ timeout: 20000 });
   await expect(selectionHeading(guestPage)).toBeVisible({ timeout: 20000 });
 
-  // Host 选择第一个阵营
   const factionCards = (page: Page) => page.locator('.grid > div');
-  await factionCards(hostPage).nth(0).click();
-  await waitForState(hostPage, async () => {
-    const selectedCount = await hostPage.locator('.grid > div[data-selected="true"]').count();
-    return selectedCount > 0;
-  }, { timeout: 2000, message: '等待派系选择生效' });
+  await factionCards(hostPage).nth(0).evaluate((node) => {
+    (node as HTMLElement | null)?.click();
+  });
 
   // Guest 选择第二个阵营
-  await factionCards(guestPage).nth(1).click();
-  await waitForState(guestPage, async () => {
-    const selectedCount = await guestPage.locator('.grid > div[data-selected="true"]').count();
-    return selectedCount > 0;
-  }, { timeout: 2000, message: '等待派系选择生效' });
+  await factionCards(guestPage).nth(1).evaluate((node) => {
+    (node as HTMLElement | null)?.click();
+  });
+  await expect(guestPage.locator('button').filter({ hasText: /准备|Ready/i })).toBeVisible({ timeout: 5000 });
 
   // Guest 点击准备
   const readyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i });
@@ -1760,6 +1799,175 @@ test.describe('SummonerWars', () => {
 
     await hostContext.close();
     await guestContext.close();
+  });
+
+  test('移动横屏：触屏放大入口与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 812, height: 375 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    await blockAudioRequests(hostContext);
+    await setEnglishLocale(hostContext);
+    await disableAudio(hostContext);
+    const hostPage = await hostContext.newPage();
+    await hostPage.goto('/play/summonerwars/tutorial', { waitUntil: 'domcontentloaded' });
+    await hostPage.waitForLoadState('domcontentloaded');
+    await hostPage.waitForSelector('#root > *', { timeout: 15000 });
+
+    const tutorialCloseButton = hostPage.getByRole('button', { name: /^(Close|关闭)$/i });
+    if (await tutorialCloseButton.isVisible().catch(() => false)) {
+      await tutorialCloseButton.click({ force: true });
+      await expect(tutorialCloseButton).toHaveCount(0, { timeout: 10000 }).catch(() => {});
+    }
+
+    await expect(hostPage.locator('[data-tutorial-step="welcome"]')).toBeVisible({ timeout: 40000 });
+    const tutorialOverviewSteps = [
+      'map-controls',
+      'summoner-intro',
+      'enemy-summoner',
+      'gate-intro',
+      'hand-intro',
+      'card-anatomy',
+      'magic-intro',
+      'phase-intro',
+      'summon-explain',
+      'summon-action',
+    ] as const;
+
+    for (const stepId of tutorialOverviewSteps) {
+      const nextButton = hostPage.getByRole('button', { name: /^Next$/i });
+      await expect(nextButton).toBeVisible({ timeout: 10000 });
+      await nextButton.click();
+      await expect(hostPage.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout: 15000 });
+    }
+
+    await expect(hostPage.locator('[data-tutorial-step="summon-action"] .animate-pulse')).toBeVisible({ timeout: 10000 });
+    await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
+    await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
+
+    await assertHandAreaVisible(hostPage, 'phone-landscape');
+    await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const phoneViewport = hostPage.viewportSize();
+    expect(phoneViewport?.width).toBe(812);
+    expect(phoneViewport?.height).toBe(375);
+
+    const phoneLayout = await hostPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
+      const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
+      const handMagnify = document.querySelector('[data-testid="sw-hand-card-magnify"]') as HTMLElement | null;
+      const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
+      const pageRect = page?.getBoundingClientRect();
+      const endPhaseRect = endPhaseButton?.getBoundingClientRect();
+      const magnifyRect = handMagnify?.getBoundingClientRect();
+      const trackerRect = tracker?.getBoundingClientRect();
+      return {
+        rootScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        pageRect,
+        endPhaseRect,
+        magnifyRect,
+        trackerRect,
+      };
+    });
+
+    expect(phoneLayout.rootScrollWidth).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.bodyScrollWidth).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.pageRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+    expect(phoneLayout.pageRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
+    expect(phoneLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(phoneLayout.magnifyRect?.width ?? 0).toBeGreaterThanOrEqual(24);
+    expect(phoneLayout.magnifyRect?.height ?? 0).toBeGreaterThanOrEqual(24);
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board'),
+      fullPage: false,
+    });
+
+    const handMagnifyButton = hostPage.getByTestId('sw-hand-card-magnify').first();
+    await expect(handMagnifyButton).toBeVisible({ timeout: 5000 });
+    await handMagnifyButton.click();
+    const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
+    await expect.poll(async () => hostPage.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="sw-magnify-overlay"]') as HTMLElement | null;
+      if (!overlay) return 'missing';
+      const styles = window.getComputedStyle(overlay);
+      return `${styles.pointerEvents}:${styles.opacity}`;
+    }), { timeout: 5000 }).toBe('auto:1');
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '11-phone-hand-magnify-open'),
+      fullPage: false,
+    });
+    await magnifyOverlay.locator('button', { hasText: /关闭|Close/i }).click();
+    await expect.poll(async () => hostPage.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="sw-magnify-overlay"]') as HTMLElement | null;
+      if (!overlay) return 'missing';
+      const styles = window.getComputedStyle(overlay);
+      return `${styles.pointerEvents}:${styles.opacity}`;
+    }), { timeout: 5000 }).toBe('none:0');
+
+    await hostPage.getByTestId('sw-phase-item-build').click();
+    const phaseDetailPanel = hostPage.getByTestId('sw-phase-detail-panel');
+    await expect(phaseDetailPanel).toBeVisible({ timeout: 5000 });
+    await expect(phaseDetailPanel).toContainText(/Build|建造/i);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '12-phone-phase-detail-open'),
+      fullPage: false,
+    });
+
+    await hostPage.setViewportSize({ width: 1024, height: 768 });
+    await hostPage.waitForTimeout(400);
+    await assertHandAreaVisible(hostPage, 'tablet-landscape');
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const tabletLayout = await hostPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
+      const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
+      const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
+      const pageRect = page?.getBoundingClientRect();
+      const endPhaseRect = endPhaseButton?.getBoundingClientRect();
+      const trackerRect = tracker?.getBoundingClientRect();
+      return {
+        rootScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        pageRect,
+        endPhaseRect,
+        trackerRect,
+      };
+    });
+
+    expect(tabletLayout.rootScrollWidth).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.bodyScrollWidth).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.pageRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+    expect(tabletLayout.pageRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
+    expect(tabletLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board'),
+      fullPage: false,
+    });
+
+    await hostContext.close();
   });
 
   test('游戏结束：召唤师被摧毁后显示结算界面', async ({ browser }, testInfo) => {

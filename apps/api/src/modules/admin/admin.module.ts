@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { AdminAuditLog, AdminAuditLogSchema } from '../auth/schemas/admin-audit-log.schema';
 import { User, UserSchema } from '../auth/schemas/user.schema';
 import { Friend, FriendSchema } from '../friend/schemas/friend.schema';
 import { Message, MessageSchema } from '../message/schemas/message.schema';
 import { Review, ReviewSchema } from '../review/schemas/review.schema';
 import { AdminController } from './admin.controller';
+import { AdminUserRoleService } from './admin-user-role.service';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './guards/admin.guard';
 import { UgcAsset, UgcAssetSchema } from '../ugc/schemas/ugc-asset.schema';
@@ -19,6 +21,7 @@ import { HybridStorageProvider } from '../../shared/providers/hybrid-storage.pro
     imports: [
         MongooseModule.forFeature([
             { name: User.name, schema: UserSchema },
+            { name: AdminAuditLog.name, schema: AdminAuditLogSchema },
             { name: MatchRecord.name, schema: MatchRecordSchema },
             { name: ROOM_MATCH_MODEL_NAME, schema: RoomMatchSchema },
             { name: Friend.name, schema: FriendSchema },
@@ -29,6 +32,6 @@ import { HybridStorageProvider } from '../../shared/providers/hybrid-storage.pro
         ]),
     ],
     controllers: [AdminController],
-    providers: [AdminService, AdminGuard, JwtAuthGuard, Reflector, HybridStorageProvider],
+    providers: [AdminService, AdminUserRoleService, AdminGuard, JwtAuthGuard, Reflector, HybridStorageProvider],
 })
 export class AdminModule {}

@@ -3,7 +3,9 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Cache } from 'cache-manager';
 import { Types, type Model } from 'mongoose';
+import { serializeDeveloperGameIds } from '../auth/schemas/developer-game-access';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
+import type { UserRole } from '../auth/schemas/user-role';
 import { Friend, type FriendDocument } from '../friend/schemas/friend.schema';
 import { Message, type MessageDocument } from '../message/schemas/message.schema';
 import { Review, type ReviewDocument } from '../review/schemas/review.schema';
@@ -83,7 +85,8 @@ type LeanUser = {
     username: string;
     email?: string;
     emailVerified: boolean;
-    role: 'user' | 'admin';
+    role: UserRole;
+    developerGameIds?: string[];
     banned: boolean;
     bannedAt?: Date | null;
     bannedReason?: string | null;
@@ -106,7 +109,8 @@ type UserListItem = {
     username: string;
     email?: string;
     emailVerified: boolean;
-    role: 'user' | 'admin';
+    role: UserRole;
+    developerGameIds?: string[];
     banned: boolean;
     matchCount: number;
     createdAt: Date;
@@ -119,7 +123,8 @@ type UserDetail = {
         username: string;
         email?: string;
         emailVerified: boolean;
-        role: 'user' | 'admin';
+        role: UserRole;
+        developerGameIds?: string[];
         banned: boolean;
         bannedAt: Date | null;
         bannedReason: string | null;
@@ -761,6 +766,7 @@ export class AdminService implements OnModuleInit {
             email: user.email,
             emailVerified: user.emailVerified,
             role: user.role,
+            developerGameIds: serializeDeveloperGameIds(user.role, user.developerGameIds),
             banned: user.banned,
             matchCount: matchCountMap.get(user._id.toString()) ?? 0,
             createdAt: user.createdAt,
@@ -796,6 +802,7 @@ export class AdminService implements OnModuleInit {
                     email: user.email,
                     emailVerified: user.emailVerified,
                     role: user.role,
+                    developerGameIds: serializeDeveloperGameIds(user.role, user.developerGameIds),
                     banned: user.banned,
                     bannedAt: user.bannedAt ?? null,
                     bannedReason: user.bannedReason ?? null,

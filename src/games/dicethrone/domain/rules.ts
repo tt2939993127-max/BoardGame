@@ -489,6 +489,16 @@ export type CardPlayFailReason =
     | 'requireMinDamageDealt'      // 本回合未造成足够伤害
     | 'noStatusOnBoard';           // 场上没有任何状态效果或 token
 
+const isAttackModifierPlayableForCurrentAttack = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    card: AbilityCard
+): boolean => {
+    if (!card.isAttackModifier) return true;
+    const pendingAttack = state.pendingAttack;
+    return Boolean(pendingAttack && pendingAttack.attackerId === playerId);
+};
+
 /**
  * 从升级卡效果中提取目标技能 ID
  */
@@ -584,6 +594,10 @@ export const checkPlayCard = (
     // 检查 CP
     if (card.cpCost > 0 && playerCp < card.cpCost) {
         return { ok: false, reason: 'notEnoughCp' };
+    }
+
+    if (!isAttackModifierPlayableForCurrentAttack(state, playerId, card)) {
+        return { ok: false, reason: 'wrongPhaseForCard' };
     }
     
     // 检查卡牌的额外打出条件
@@ -819,6 +833,10 @@ export const isCardPlayableInResponseWindow = (
         if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
             return false;
         }
+    }
+
+    if (!isAttackModifierPlayableForCurrentAttack(state, playerId, card)) {
+        return false;
     }
     
     // instant 卡牌可以在任何响应窗口打出，但仍需检查 playCondition
