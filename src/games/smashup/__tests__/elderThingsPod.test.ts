@@ -4,6 +4,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { getEffectivePower } from '../domain/ongoingModifiers';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import { makeCard, makeMatchState, makeMinion, makePlayer, makeState, getInteractionsFromMS } from './helpers';
 import { runCommand, defaultTestRandom } from './testRunner';
@@ -195,55 +196,114 @@ describe('elder_things_pod: Shoggoth POD', () => {
     });
 });
 
-describe('elder_things_pod: Dunwich Horror POD', () => {
-    it('does not add permanent power on play and only grants +5 ongoing power', () => {
+describe('elder_things_pod: The Price of Power POD', () => {
+    it('normal play without target base should prompt to choose a base, then give +1 counters', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'elder_thing_dunwich_horror_pod', 'action', '0')],
+                    hand: [makeCard('a1', 'elder_thing_the_price_of_power_pod', 'action', '0')],
                 }),
-                '1': makePlayer('1'),
+                '1': makePlayer('1', {
+                    hand: [makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '1')],
+                }),
             },
             bases: [
                 {
-                    defId: 'base_a',
-                    minions: [makeMinion('m1', 'robot_microbot', '0', 3)],
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        makeMinion('p0m1', 'test_minion', '0', 3, { powerCounters: 0, powerModifier: 0 }),
+                        makeMinion('p1m1', 'test_enemy', '1', 3, { powerCounters: 0, powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_rhodes_plaza',
+                    minions: [
+                        makeMinion('p0m2', 'test_minion_2', '0', 2, { powerCounters: 0, powerModifier: 0 }),
+                    ],
                     ongoingActions: [],
                 },
             ],
         });
-        const res = runCommand(
+
+        const played = runCommand(
             makeMatchState(core),
-            {
-                type: SU_COMMANDS.PLAY_ACTION,
-                playerId: '0',
-                payload: { cardUid: 'a1', targetBaseIndex: 0, targetMinionUid: 'm1' },
-            },
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
             defaultTestRandom,
         );
 
-        expect(res.events.some(e => e.type === SU_EVENTS.PERMANENT_POWER_ADDED)).toBe(false);
-        const minion = res.finalState.core.bases[0].minions.find(m => m.uid === 'm1');
-        expect(minion).toBeTruthy();
-        expect(getEffectivePower(res.finalState.core, minion!, 0)).toBe(8); // 3 + 5
+        const prompt: any = getInteractionsFromMS(played.finalState)[0]?.data;
+        expect(prompt?.sourceId).toBe('elder_thing_the_price_of_power_pod_choose_base');
+        const baseOpt = prompt?.options?.find((o: any) => o?.value?.baseIndex === 0);
+        expect(baseOpt).toBeDefined();
+
+        const chosen = runCommand(
+            played.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: baseOpt.id } } as any,
+            defaultTestRandom,
+        );
+
+        const powerEvents = chosen.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
+        expect(powerEvents).toHaveLength(1);
+        expect(powerEvents[0]?.payload?.amount).toBe(1);
+        expect(chosen.finalState.core.bases[0].minions.find(m => m.uid === 'p0m1')?.powerCounters).toBe(1);
     });
 
-    it('does not inherit base version end-of-turn auto-destroy trigger', () => {
-        const executor = getTriggerExecutor('onTurnEnd', 'elder_thing_dunwich_horror_pod');
-        expect(executor).toBeDefined();
-
+    it('can be played in meFirst window and should use the stronger +2 version', () => {
         const core = makeState({
-            players: { '0': makePlayer('0'), '1': makePlayer('1') },
-            bases: [{ defId: 'base_a', minions: [makeMinion('m1', 'robot_microbot', '0', 3)], ongoingActions: [] }],
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'elder_thing_the_price_of_power_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    hand: [
+                        makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '1'),
+                        makeCard('mad2', MADNESS_CARD_DEF_ID, 'action', '1'),
+                    ],
+                }),
+            },
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        makeMinion('p0m1', 'test_minion', '0', 3, { powerCounters: 0, powerModifier: 0 }),
+                        makeMinion('p1m1', 'test_enemy', '1', 3, { powerCounters: 0, powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+            scoringEligibleBaseIndices: [0],
         });
-        const out = executor!({ state: core, playerId: '0', now: 1, timing: 'onTurnEnd' } as any);
-        const events = Array.isArray(out) ? out : out.events;
-        expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'scoreBases' as any;
+        (ms.sys as any).responseWindow = {
+            current: {
+                id: 'rw-1',
+                responderQueue: ['0', '1'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+                actionTakenThisRound: false,
+                pendingInteractionId: undefined,
+                windowType: 'meFirst',
+            },
+            history: [],
+        };
+
+        const played = runCommand(
+            ms,
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1', targetBaseIndex: 0 } },
+            defaultTestRandom,
+        );
+
+        const powerEvents = played.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
+        expect(powerEvents).toHaveLength(2);
+        expect(powerEvents.every(e => e.payload.amount === 2)).toBe(true);
+        expect(played.finalState.core.bases[0].minions.find(m => m.uid === 'p0m1')?.powerCounters).toBe(4);
     });
 });
 
 describe('elder_things_pod: The Price of Power POD', () => {
-    it('before scoring only checks players with minions there and grants +1 counters per Madness', () => {
+    it('before scoring only checks players with minions there and grants +2 counters per Madness in meFirst window', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -299,7 +359,7 @@ describe('elder_things_pod: The Price of Power POD', () => {
 
         const counters = res.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
         expect(counters.length).toBe(2);
-        expect(counters.every(e => e.payload.amount === 1)).toBe(true);
+        expect(counters.every(e => e.payload.amount === 2)).toBe(true);
         expect(counters.every(e => e.payload.reason === 'elder_thing_the_price_of_power_pod')).toBe(true);
     });
 });
@@ -353,6 +413,63 @@ describe('elder_things_pod: Spreading Horror POD', () => {
     });
 });
 
+describe('elder_things_pod: Dunwich Horror POD', () => {
+    it('grants only +5 power while attached', () => {
+        const minion = makeMinion('m1', 'test_minion', '0', 3, {
+            attachedActions: [{ uid: 'dh1', defId: 'elder_thing_dunwich_horror_pod', ownerId: '0' }],
+        });
+        const state = makeState({
+            bases: [{ defId: 'base_a', minions: [minion], ongoingActions: [] }],
+        });
+
+        expect(getEffectivePower(state, minion, 0)).toBe(8);
+    });
+
+    it('does not add permanent power on play and only grants +5 ongoing power', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'elder_thing_dunwich_horror_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [makeMinion('m1', 'robot_microbot', '0', 3)],
+                    ongoingActions: [],
+                },
+            ],
+        });
+        const res = runCommand(
+            makeMatchState(core),
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'a1', targetBaseIndex: 0, targetMinionUid: 'm1' },
+            },
+            defaultTestRandom,
+        );
+
+        expect(res.events.some(e => e.type === SU_EVENTS.PERMANENT_POWER_ADDED)).toBe(false);
+        const minion = res.finalState.core.bases[0].minions.find(m => m.uid === 'm1');
+        expect(minion).toBeTruthy();
+        expect(getEffectivePower(res.finalState.core, minion!, 0)).toBe(8); // 3 + 5
+    });
+
+    it('does not inherit base version end-of-turn auto-destroy trigger', () => {
+        const executor = getTriggerExecutor('onTurnEnd', 'elder_thing_dunwich_horror_pod');
+        expect(executor).toBeDefined();
+
+        const core = makeState({
+            players: { '0': makePlayer('0'), '1': makePlayer('1') },
+            bases: [{ defId: 'base_a', minions: [makeMinion('m1', 'robot_microbot', '0', 3)], ongoingActions: [] }],
+        });
+        const out = executor!({ state: core, playerId: '0', now: 1, timing: 'onTurnEnd' } as any);
+        const events = Array.isArray(out) ? out : out.events;
+        expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+    });
+});
 describe('elder_things (base): Elder Thing', () => {
     it('if you cannot destroy two other minions, destroy option disabled and you can put it to deck bottom (FAQ)', () => {
         const core = makeState({

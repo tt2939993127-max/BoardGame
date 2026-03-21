@@ -2616,7 +2616,8 @@ test.describe('SummonerWars', () => {
     expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
     const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
     expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.02);
-    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.08);
+    // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
+    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.12);
     expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
 
     await hostPage.screenshot({

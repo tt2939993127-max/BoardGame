@@ -58,7 +58,12 @@ function appendResolvedActionAbility(
     };
     const result = executor(abilityCtx);
     events.push(...result.events);
-    return { state: result.matchState ?? state, events };
+    return {
+        state: result.matchState
+            ? { ...result.matchState, core: state.core }
+            : state,
+        events,
+    };
 }
 
 /** 这些多管闲事的小鬼（基础版）onPlay：选择一个基地，消灭该基地上任意数量的行动卡（点击式）*/
@@ -859,8 +864,10 @@ export function registerMiskatonicInteractionHandlers(): void {
         // 一次性抽 count 张疯狂卡（传 count 而非循环调用，避免 nextUid 不递增导致重复 UID）
         const madnessEvt = drawMadnessCards(playerId, count, state.core, 'miskatonic_mandatory_reading', timestamp);
         if (madnessEvt) events.push(madnessEvt);
-        // 每抽1张，该随从+2力量（基础版：永久）
-        events.push(addPermanentPower(ctx.minionUid, ctx.baseIndex, count * 2, 'miskatonic_mandatory_reading', timestamp));
+        const actualDrawn = madnessEvt?.payload.count ?? 0;
+        if (actualDrawn > 0) {
+            events.push(addPermanentPower(ctx.minionUid, ctx.baseIndex, actualDrawn * 2, 'miskatonic_mandatory_reading', timestamp));
+        }
         return { state, events };
     });
 
@@ -879,7 +886,10 @@ export function registerMiskatonicInteractionHandlers(): void {
         const events: SmashUpEvent[] = [];
         const madnessEvt = drawMadnessCards(playerId, count, state.core, 'miskatonic_things_best_not_known_pod', timestamp);
         if (madnessEvt) events.push(madnessEvt);
-        events.push(addTempPower(ctx.minionUid, ctx.baseIndex, count * 2, 'miskatonic_things_best_not_known_pod', timestamp));
+        const actualDrawn = madnessEvt?.payload.count ?? 0;
+        if (actualDrawn > 0) {
+            events.push(addTempPower(ctx.minionUid, ctx.baseIndex, actualDrawn * 2, 'miskatonic_things_best_not_known_pod', timestamp));
+        }
         return { state, events };
     });
 

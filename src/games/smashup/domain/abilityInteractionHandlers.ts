@@ -32,11 +32,18 @@ export type InteractionHandler = (
 
 const interactionHandlers = new Map<string, InteractionHandler>();
 
+type InteractionHandlerRegistration =
+    | string
+    | {
+        sourceId: string;
+    };
+
 /** 注册交互处理函数 */
 export function registerInteractionHandler(
-    sourceId: string,
+    source: InteractionHandlerRegistration,
     handler: InteractionHandler
 ): void {
+    const sourceId = typeof source === 'string' ? source : source.sourceId;
     interactionHandlers.set(sourceId, handler);
 }
 

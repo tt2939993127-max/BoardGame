@@ -169,7 +169,7 @@ describe('Feedback Module (e2e)', () => {
         expect(updateRes.body.status).toBe('resolved');
     });
 
-    it('developer 可以查看反馈但不能更新状态', async () => {
+    it('developer 可以查看反馈并更新状态', async () => {
         const { adminToken, developerToken, userToken } = await seedUsers();
 
         const createRes = await request(app.getHttpServer())
@@ -194,18 +194,20 @@ describe('Feedback Module (e2e)', () => {
         expect(listRes.body.items).toHaveLength(1);
         expect(listRes.body.items[0]._id).toBe(feedbackId);
 
-        await request(app.getHttpServer())
+        const updateRes = await request(app.getHttpServer())
             .patch(`/admin/feedback/${feedbackId}/status`)
             .set('Authorization', `Bearer ${developerToken}`)
             .send({ status: 'resolved' })
-            .expect(403);
+            .expect(200);
+
+        expect(updateRes.body.status).toBe('resolved');
 
         const adminListRes = await request(app.getHttpServer())
             .get('/admin/feedback?limit=20')
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200);
 
-        expect(adminListRes.body.items[0].status).toBe('open');
+        expect(adminListRes.body.items[0].status).toBe('resolved');
     });
 
     it('admin 列表支持严重程度筛选、分页，并返回调试上下文', async () => {

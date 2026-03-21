@@ -327,8 +327,24 @@ export function getRegisteredModifierIds(): {
     powerModifierIds: Set<string>;
     breakpointModifierIds: Set<string>;
 } {
+    const powerModifierIds = new Set<string>();
+
+    for (const entry of modifierRegistry) {
+        powerModifierIds.add(entry.sourceDefId);
+        if (entry.handlesPodInternally && !entry.sourceDefId.endsWith('_pod')) {
+            powerModifierIds.add(`${entry.sourceDefId}_pod`);
+        }
+    }
+
+    for (const defId of basePowerModifiers.keys()) {
+        powerModifierIds.add(defId);
+        if (!defId.endsWith('_pod')) {
+            powerModifierIds.add(`${defId}_pod`);
+        }
+    }
+
     return {
-        powerModifierIds: new Set(modifierRegistry.map(e => e.sourceDefId)),
+        powerModifierIds,
         breakpointModifierIds: new Set(breakpointModifierRegistry.map(e => e.sourceDefId)),
     };
 }

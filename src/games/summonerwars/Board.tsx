@@ -107,7 +107,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseEndButtonClass = 'absolute right-3 z-20 pointer-events-auto sw-phase-end-button';
+  const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';

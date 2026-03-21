@@ -37,6 +37,8 @@ export function registerNinjaAbilities(): void {
     registerAbility('ninja_hidden_ninja', 'special', ninjaHiddenNinja);
     // 忍者侍从（special）：基地计分前返回手牌并额外打出一个随从到该基地
     registerAbility('ninja_acolyte', 'special', ninjaAcolyteSpecial);
+    // 忍者侍从 POD（talent）：若本回合尚未打出过随从，则返回手牌并立即在这里额外打出一个随从
+    registerAbility('ninja_acolyte_pod', 'talent', ninjaAcolytePodTalent);
 
     // 注册 ongoing 拦截器（含 beforeScoring 触发器：影舞者、忍者侍从）
     registerNinjaOngoingEffects();
@@ -430,6 +432,65 @@ function ninjaAcolyteSpecial(ctx: AbilityContext): AbilityResult {
         { sourceId: 'ninja_acolyte_play', targetType: 'hand' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } } }) };
+}
+
+function ninjaAcolytePodTalent(ctx: AbilityContext): AbilityResult {
+    const player = ctx.state.players[ctx.playerId];
+    if (player.minionsPlayed > 0) return { events: [] };
+
+    const events: SmashUpEvent[] = [{
+        type: SU_EVENTS.MINION_RETURNED,
+        payload: {
+            minionUid: ctx.cardUid,
+            minionDefId: 'ninja_acolyte_pod',
+            fromBaseIndex: ctx.baseIndex,
+            toPlayerId: ctx.playerId,
+            reason: 'ninja_acolyte_pod',
+        },
+        timestamp: ctx.now,
+    } as MinionReturnedEvent];
+
+    const minionCards = player.hand.filter(c => c.type === 'minion');
+    const acolyteDef = getCardDef('ninja_acolyte_pod') as MinionCardDef | undefined;
+    const allOptions = [
+        ...minionCards.map((c, i) => {
+            const def = getCardDef(c.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? c.defId;
+            const power = def?.power ?? 0;
+            return {
+                id: `hand-${i}`,
+                label: `${name} (力量 ${power})`,
+                value: { cardUid: c.uid, defId: c.defId, power },
+                _source: 'hand' as const,
+                displayMode: 'card' as const,
+            };
+        }),
+        {
+            id: 'hand-self',
+            label: `${acolyteDef?.name ?? '忍者侍从'} (力量 ${acolyteDef?.power ?? 2})`,
+            value: { cardUid: ctx.cardUid, defId: 'ninja_acolyte_pod', power: acolyteDef?.power ?? 2 },
+            _source: 'hand' as const,
+            displayMode: 'card' as const,
+        },
+    ];
+
+    if (allOptions.length === 0) return { events };
+
+    const interaction = createSimpleChoice(
+        `ninja_acolyte_pod_play_${ctx.now}`,
+        ctx.playerId,
+        '选择要打出到该基地的随从（可跳过）',
+        [...allOptions, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
+        { sourceId: 'ninja_acolyte_play', targetType: 'hand' },
+    );
+
+    return {
+        events,
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex } },
+        }),
+    };
 }
 
 // ============================================================================

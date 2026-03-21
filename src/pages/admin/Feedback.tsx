@@ -1,44 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { AnimatePresence, motion } from 'framer-motion';
-import {
-    AlertTriangle,
-    CheckCircle,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    Circle,
-    Contact,
-    Copy,
-    Gamepad2,
-    HelpCircle,
-    Lightbulb,
-    RefreshCw,
-    ScrollText,
-    Trash2,
-} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
 import { ADMIN_API_URL } from '../../config/server';
-import ImageLightbox from '../../components/common/ImageLightbox';
-import { cn } from '../../lib/utils';
+import { useToast } from '../../contexts/ToastContext';
 import {
-    buildFeedbackAiPayload,
-    CopyFeedbackButton,
-    extractEmbeddedImages,
-    extractText,
-    FeedbackContent,
-    type FeedbackItem,
-    formatViewport,
-    parseOperationLogs,
-} from './feedback-shared';
+    CheckCircle, Circle, AlertTriangle, Lightbulb, HelpCircle,
+    Gamepad2, Trash2, ChevronDown, ChevronRight, RefreshCw, Contact,
+    Image as ImageIcon, ScrollText, Copy, Check
+} from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import ImageLightbox from '../../components/common/ImageLightbox';
+
+// ── 类型 ──
+
+interface FeedbackItem {
+    _id: string;
+    userId?: {
+        _id: string;
+        username: string;
+        avatar?: string;
+    };
+    content: string;
+    type: 'bug' | 'suggestion' | 'other';
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    status: 'open' | 'in_progress' | 'resolved' | 'closed';
+    gameName?: string;
+    contactInfo?: string;
+    actionLog?: string;
+    stateSnapshot?: string; // 完整游戏状态 JSON
+    createdAt: string;
+}
+
+// ── 常量 ──
 
 type StatusOption = { value: FeedbackItem['status']; color: string };
 type StatusOptionWithLabel = StatusOption & { label: string };
 type TypeOption = { value: FeedbackItem['type']; icon: React.ElementType; iconColor: string };
 type TypeOptionWithLabel = TypeOption & { label: string };
-type SeverityOption = { value: FeedbackItem['severity']; label: string; dot: string };
+type SeverityConfig = Record<FeedbackItem['severity'], { label: string; dot: string }>;
 
 const STATUS_OPTIONS: StatusOption[] = [
     { value: 'open', color: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -60,9 +61,6 @@ const SEVERITY_DOTS: Record<FeedbackItem['severity'], string> = {
     low: 'bg-green-500',
 };
 
-const POLL_INTERVAL = 30_000;
-const PAGE_SIZE = 20;
-
 const buildStatusOptions = (t: TFunction<'admin'>): StatusOptionWithLabel[] => (
     STATUS_OPTIONS.map((option) => ({
         ...option,
@@ -77,47 +75,38 @@ const buildTypeOptions = (t: TFunction<'admin'>): TypeOptionWithLabel[] => (
     }))
 );
 
-const buildSeverityOptions = (t: TFunction<'admin'>): SeverityOption[] => ([
-    { value: 'critical', label: t('feedback.severity.critical'), dot: SEVERITY_DOTS.critical },
-    { value: 'high', label: t('feedback.severity.high'), dot: SEVERITY_DOTS.high },
-    { value: 'medium', label: t('feedback.severity.medium'), dot: SEVERITY_DOTS.medium },
-    { value: 'low', label: t('feedback.severity.low'), dot: SEVERITY_DOTS.low },
-]);
+const buildSeverityConfig = (t: TFunction<'admin'>): SeverityConfig => ({
+    critical: { label: t('feedback.severity.critical'), dot: SEVERITY_DOTS.critical },
+    high: { label: t('feedback.severity.high'), dot: SEVERITY_DOTS.high },
+    medium: { label: t('feedback.severity.medium'), dot: SEVERITY_DOTS.medium },
+    low: { label: t('feedback.severity.low'), dot: SEVERITY_DOTS.low },
+});
 
-function StatusSelect({
-    value,
-    onChange,
-    options,
-}: {
-    value: string;
-    onChange: (v: string) => void;
-    options: StatusOptionWithLabel[];
-}) {
+const POLL_INTERVAL = 30_000; // 30 秒自动刷新
+
+// ── 辅助组件 ──
+
+/** 内联状态下拉选择器 */
+function StatusSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: StatusOptionWithLabel[] }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
-    const current = options.find((option) => option.value === value) ?? options[0];
+    const current = options.find((s) => s.value === value) ?? options[0];
 
     useEffect(() => {
         if (!open) return;
-        const handleOutsideClick = (event: MouseEvent) => {
-            if (ref.current && !ref.current.contains(event.target as Node)) {
-                setOpen(false);
-            }
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
         };
-        document.addEventListener('mousedown', handleOutsideClick);
-        return () => document.removeEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
     }, [open]);
 
     return (
         <div ref={ref} className="relative">
             <button
-                type="button"
-                onClick={(event) => {
-                    event.stopPropagation();
-                    setOpen((prev) => !prev);
-                }}
+                onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
                 className={cn(
-                    'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors',
+                    'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border transition-colors cursor-pointer',
                     current.color
                 )}
             >
@@ -125,22 +114,21 @@ function StatusSelect({
                 <ChevronDown size={12} className={cn('transition-transform', open && 'rotate-180')} />
             </button>
             {open && (
-                <div className="absolute left-0 top-full z-50 mt-1 min-w-[120px] rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
-                    {options.map((option) => (
+                <div className="absolute z-50 mt-1 left-0 bg-white rounded-lg shadow-lg border border-zinc-200 py-1 min-w-[100px]">
+                    {options.map((opt) => (
                         <button
-                            key={option.value}
-                            type="button"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onChange(option.value);
+                            key={opt.value}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onChange(opt.value);
                                 setOpen(false);
                             }}
                             className={cn(
-                                'w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-zinc-50',
-                                option.value === value ? 'font-semibold text-zinc-900' : 'text-zinc-600'
+                                'w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-50 transition-colors',
+                                opt.value === value ? 'font-semibold text-zinc-900' : 'text-zinc-600'
                             )}
                         >
-                            {option.label}
+                            {opt.label}
                         </button>
                     ))}
                 </div>
@@ -149,32 +137,16 @@ function StatusSelect({
     );
 }
 
-function StatusBadge({ value, options }: { value: string; options: StatusOptionWithLabel[] }) {
-    const current = options.find((option) => option.value === value) ?? options[0];
-
-    return (
-        <span className={cn('inline-flex items-center rounded-lg border px-2 py-1 text-xs font-medium', current.color)}>
-            {current.label}
-        </span>
-    );
-}
-
-function FilterTab({
-    active,
-    onClick,
-    children,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
+/** 筛选标签按钮 */
+function FilterTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
         <button
-            type="button"
             onClick={onClick}
             className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium transition-all',
-                active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700'
+                'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                active
+                    ? 'bg-zinc-900 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
             )}
         >
             {children}
@@ -182,474 +154,299 @@ function FilterTab({
     );
 }
 
-function SummaryCard({
-    label,
-    value,
-    tone,
-}: {
-    label: string;
-    value: number;
-    tone: 'amber' | 'red' | 'emerald' | 'blue';
-}) {
-    const toneClassMap = {
-        amber: 'border-amber-200 bg-amber-50/70 text-amber-700',
-        red: 'border-red-200 bg-red-50/70 text-red-700',
-        emerald: 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
-        blue: 'border-blue-200 bg-blue-50/70 text-blue-700',
-    } as const;
-
-    return (
-        <div className={cn('rounded-2xl border px-4 py-3', toneClassMap[tone])}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">{label}</div>
-            <div className="mt-1 text-2xl font-semibold leading-none">{value}</div>
-            <div className="mt-1 text-xs opacity-75">当前页</div>
-        </div>
-    );
-}
-
-function MetaField({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
-    return (
-        <div className="rounded-xl border border-zinc-200 bg-white/80 px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</div>
-            <div className={cn('mt-1 break-all text-sm text-zinc-700', mono && 'font-mono text-[12px]')}>{value || '无'}</div>
-        </div>
-    );
-}
-
-function MetaBadge({ children }: { children: React.ReactNode }) {
-    return (
-        <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-500">
-            {children}
-        </span>
-    );
-}
+// ── 主组件 ──
 
 export default function AdminFeedbackPage() {
-    const { token, user } = useAuth();
+    const { token } = useAuth();
     const { success, error } = useToast();
     const { t } = useTranslation('admin');
-    const canManageFeedback = user?.role === 'admin';
 
     const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
     const typeOptions = useMemo(() => buildTypeOptions(t), [t]);
-    const severityOptions = useMemo(() => buildSeverityOptions(t), [t]);
+    const severityConfig = useMemo(() => buildSeverityConfig(t), [t]);
 
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<string>('open');
+    const [statusFilter, setStatusFilter] = useState<string>('all');
     const [typeFilter, setTypeFilter] = useState<string>('all');
-    const [severityFilter, setSeverityFilter] = useState<string>('all');
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [totalItems, setTotalItems] = useState(0);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    const [lastAiPayload, setLastAiPayload] = useState('');
     const requestIdRef = useRef(0);
-    const isMountedRef = useRef(true);
 
+    // 用于静默轮询（不显示 loading）
+    const isMountedRef = useRef(true);
     useEffect(() => {
         isMountedRef.current = true;
-        return () => {
-            isMountedRef.current = false;
-        };
+        return () => { isMountedRef.current = false; };
     }, []);
 
     const fetchFeedbacks = useCallback(async (silent = false) => {
         const requestId = ++requestIdRef.current;
         if (!silent) setLoading(true);
         if (silent) setIsPolling(true);
-
         try {
-            const params = new URLSearchParams({
-                page: String(page),
-                limit: String(PAGE_SIZE),
-            });
+            const params = new URLSearchParams({ limit: '100' });
             if (statusFilter !== 'all') params.set('status', statusFilter);
             if (typeFilter !== 'all') params.set('type', typeFilter);
-            if (severityFilter !== 'all') params.set('severity', severityFilter);
 
-            const response = await fetch(`${ADMIN_API_URL}/feedback?${params.toString()}`, {
+            const res = await fetch(`${ADMIN_API_URL}/feedback?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            if (!response.ok) throw new Error('fetch_failed');
-
-            const data = await response.json();
-            if (!isMountedRef.current || requestId !== requestIdRef.current) {
-                return;
-            }
-
-            setFeedbacks(data.items);
-            const nextTotalItems = Number(data.total) || 0;
-            const nextLimit = Number(data.limit) || PAGE_SIZE;
-            const nextTotalPages = Math.max(1, Math.ceil(nextTotalItems / nextLimit));
-            setTotalItems(nextTotalItems);
-            setTotalPages(nextTotalPages);
-
-            const currentServerPage = Number(data.page) || page;
-            if (currentServerPage > nextTotalPages) {
-                setPage(nextTotalPages);
+            if (!res.ok) throw new Error('fetch_failed');
+            const data = await res.json();
+            if (isMountedRef.current && requestId === requestIdRef.current) {
+                setFeedbacks(data.items);
             }
         } catch {
-            if (!silent) {
-                error(t('feedback.messages.fetchFailed'));
-            }
+            if (!silent) error(t('feedback.messages.fetchFailed'));
         } finally {
             if (isMountedRef.current && requestId === requestIdRef.current) {
                 setLoading(false);
                 setIsPolling(false);
             }
         }
-    }, [error, page, severityFilter, statusFilter, t, token, typeFilter]);
+    }, [token, statusFilter, typeFilter, error, t]);
 
+    // 初始加载 + 筛选变更
     useEffect(() => {
         fetchFeedbacks();
     }, [fetchFeedbacks]);
 
+    // 自动轮询
     useEffect(() => {
         const timer = setInterval(() => fetchFeedbacks(true), POLL_INTERVAL);
         return () => clearInterval(timer);
     }, [fetchFeedbacks]);
 
+    // 清理已不存在的选中项
     useEffect(() => {
         setSelectedIds((prev) => {
-            const next = new Set<string>();
-            prev.forEach((id) => {
-                if (feedbacks.some((item) => item._id === id)) {
-                    next.add(id);
-                }
-            });
-            return next.size === prev.size ? prev : next;
+            const ids = new Set<string>();
+            prev.forEach((id) => { if (feedbacks.some((f) => f._id === id)) ids.add(id); });
+            return ids.size === prev.size ? prev : ids;
         });
-
-        if (expandedId && !feedbacks.some((item) => item._id === expandedId)) {
-            setExpandedId(null);
-        }
-    }, [expandedId, feedbacks]);
-
-    const summary = useMemo(() => {
-        return feedbacks.reduce((acc, item) => {
-            if (item.status === 'open' || item.status === 'in_progress') acc.actionable += 1;
-            if (item.severity === 'high' || item.severity === 'critical') acc.highPriority += 1;
-            if (item.actionLog || item.stateSnapshot || item.clientContext || item.errorContext) acc.withContext += 1;
-            if ((item.type === 'bug' || item.errorContext) && (item.actionLog || item.stateSnapshot || item.clientContext)) {
-                acc.forwardable += 1;
-            }
-            return acc;
-        }, { actionable: 0, highPriority: 0, withContext: 0, forwardable: 0 });
     }, [feedbacks]);
+
+    // ── 选择逻辑 ──
+
+    const allSelected = feedbacks.length > 0 && feedbacks.every((f) => selectedIds.has(f._id));
+
+    const toggleSelectAll = () => {
+        if (allSelected) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(feedbacks.map((f) => f._id)));
+        }
+    };
 
     const toggleSelect = (id: string) => {
         setSelectedIds((prev) => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
+            if (next.has(id)) next.delete(id); else next.add(id);
             return next;
         });
     };
 
-    const changeFilter = (setter: (value: string) => void, value: string) => {
-        setter(value);
-        setPage(1);
-        setSelectedIds(new Set());
-        setExpandedId(null);
-    };
+    // ── 操作 ──
 
-    const handleStatusUpdate = useCallback(async (id: string, newStatus: string) => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈。');
-            return;
-        }
-
+    const handleStatusUpdate = async (id: string, newStatus: string) => {
         try {
-            const response = await fetch(`${ADMIN_API_URL}/feedback/${id}/status`, {
+            const res = await fetch(`${ADMIN_API_URL}/feedback/${id}/status`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ status: newStatus }),
             });
-            if (!response.ok) throw new Error('update_failed');
-
-            setFeedbacks((prev) => prev.map((item) => (
-                item._id === id ? { ...item, status: newStatus as FeedbackItem['status'] } : item
-            )));
+            if (!res.ok) throw new Error('update_failed');
+            setFeedbacks((prev) => prev.map((f) => (f._id === id ? { ...f, status: newStatus as FeedbackItem['status'] } : f)));
             success(t('feedback.messages.updateSuccess'));
         } catch {
             error(t('feedback.messages.updateFailed'));
         }
-    }, [canManageFeedback, error, success, t, token]);
+    };
 
-    const handleDelete = useCallback(async (id: string) => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈。');
-            return;
-        }
+    const handleDelete = async (id: string) => {
         if (!confirm(t('feedback.confirm.delete'))) return;
-
         try {
-            const response = await fetch(`${ADMIN_API_URL}/feedback/${id}`, {
+            const res = await fetch(`${ADMIN_API_URL}/feedback/${id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` },
             });
-            if (!response.ok) throw new Error('delete_failed');
-
-            setSelectedIds((prev) => {
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-            });
-            if (feedbacks.length === 1 && page > 1) {
-                setPage((prev) => Math.max(1, prev - 1));
-            } else {
-                fetchFeedbacks();
-            }
+            if (!res.ok) throw new Error('delete_failed');
+            setFeedbacks((prev) => prev.filter((f) => f._id !== id));
+            setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
             success(t('feedback.messages.deleteSuccess'));
         } catch {
             error(t('feedback.messages.deleteFailed'));
         }
-    }, [canManageFeedback, error, feedbacks.length, fetchFeedbacks, page, success, t, token]);
+    };
 
-    const handleBulkDelete = useCallback(async () => {
-        if (!canManageFeedback) {
-            error('开发者当前仅可查看反馈。');
-            return;
-        }
+    const handleBulkDelete = async () => {
         if (selectedIds.size === 0) return;
         if (!confirm(t('feedback.confirm.bulkDelete', { count: selectedIds.size }))) return;
-
         try {
-            const response = await fetch(`${ADMIN_API_URL}/feedback/bulk-delete`, {
+            const res = await fetch(`${ADMIN_API_URL}/feedback/bulk-delete`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ ids: Array.from(selectedIds) }),
             });
-            if (!response.ok) throw new Error('bulk_delete_failed');
-
+            if (!res.ok) throw new Error('bulk_delete_failed');
             success(t('feedback.messages.bulkDeleteSuccess'));
             setSelectedIds(new Set());
-            if (selectedIds.size === feedbacks.length && page > 1) {
-                setPage((prev) => Math.max(1, prev - 1));
-            } else {
-                fetchFeedbacks();
-            }
+            fetchFeedbacks();
         } catch {
             error(t('feedback.messages.bulkDeleteFailed'));
         }
-    }, [canManageFeedback, error, feedbacks.length, fetchFeedbacks, page, selectedIds, success, t, token]);
+    };
 
-    const pageStart = totalItems > 0 ? (page - 1) * PAGE_SIZE + 1 : 0;
-    const pageEnd = totalItems > 0 ? Math.min(page * PAGE_SIZE, totalItems) : 0;
+    const changeFilter = (setter: (v: string) => void, value: string) => {
+        setter(value);
+        setSelectedIds(new Set());
+        setExpandedId(null);
+    };
+
+    // ── 渲染 ──
 
     return (
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1440px] flex-col p-6">
-            <div className="mb-4 flex flex-none items-start justify-between gap-4">
-                <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <h1 className="text-lg font-bold text-zinc-900">{t('feedback.title')}</h1>
-                        <span className="text-xs text-zinc-400">{t('feedback.count', { count: totalItems })}</span>
-                        {!canManageFeedback && (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                                只读
-                            </span>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => fetchFeedbacks()}
-                            title={t('feedback.refresh')}
-                            className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
-                        >
-                            <RefreshCw size={14} className={cn(isPolling && 'animate-spin')} />
-                        </button>
-                        {isPolling && <span className="text-[10px] text-zinc-400">{t('feedback.polling')}</span>}
-                    </div>
-                    <p className="text-sm text-zinc-500">
-                        默认先看待处理反馈，展开后可以直接复制完整分诊包继续转发，不需要手动拼上下文。
-                    </p>
-                </div>
-                {canManageFeedback && selectedIds.size > 0 && (
+        <div className="h-full flex flex-col p-6 w-full max-w-[1400px] mx-auto min-h-0">
+            {/* 顶栏：标题 + 操作 */}
+            <div className="flex items-center justify-between gap-4 flex-none mb-4">
+                <div className="flex items-center gap-3">
+                    <h1 className="text-lg font-bold text-zinc-900">{t('feedback.title')}</h1>
+                    <span className="text-xs text-zinc-400">{t('feedback.count', { count: feedbacks.length })}</span>
                     <button
-                        type="button"
-                        onClick={handleBulkDelete}
-                        className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+                        onClick={() => fetchFeedbacks()}
+                        title={t('feedback.refresh')}
+                        className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors"
                     >
-                        <Trash2 size={12} />
-                        {t('feedback.bulkDelete', { count: selectedIds.size })}
+                        <RefreshCw size={14} className={cn(isPolling && 'animate-spin')} />
                     </button>
-                )}
-            </div>
+                    {isPolling && <span className="text-[10px] text-zinc-400">{t('feedback.polling')}</span>}
+                </div>
 
-            <div className="mb-4 grid flex-none gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard label="待跟进" value={summary.actionable} tone="amber" />
-                <SummaryCard label="高优先级" value={summary.highPriority} tone="red" />
-                <SummaryCard label="带上下文" value={summary.withContext} tone="emerald" />
-                <SummaryCard label="可直接转发" value={summary.forwardable} tone="blue" />
-            </div>
-
-            <div className="mb-3 flex flex-none flex-col gap-3 rounded-2xl border border-zinc-100 bg-white/80 p-4 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-zinc-400">状态</span>
-                    <FilterTab active={statusFilter === 'all'} onClick={() => changeFilter(setStatusFilter, 'all')}>
-                        全部
-                    </FilterTab>
-                    {statusOptions.map((option) => (
-                        <FilterTab
-                            key={option.value}
-                            active={statusFilter === option.value}
-                            onClick={() => changeFilter(setStatusFilter, option.value)}
+                <div className="flex items-center gap-2">
+                    {selectedIds.size > 0 && (
+                        <button
+                            onClick={handleBulkDelete}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors"
                         >
-                            {option.label}
+                            <Trash2 size={12} />
+                            {t('feedback.bulkDelete', { count: selectedIds.size })}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* 筛选栏 */}
+            <div className="flex items-center gap-4 flex-none mb-3 pb-3 border-b border-zinc-100">
+                <div className="flex items-center gap-1">
+                    <span className="text-xs text-zinc-400 mr-1">{t('feedback.filters.status')}</span>
+                    {[{ value: 'all', label: t('feedback.filters.all') }, ...statusOptions].map((opt) => (
+                        <FilterTab
+                            key={opt.value}
+                            active={statusFilter === opt.value}
+                            onClick={() => changeFilter(setStatusFilter, opt.value)}
+                        >
+                            {opt.label}
                         </FilterTab>
                     ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-zinc-400">类型</span>
+                <div className="w-px h-4 bg-zinc-200" />
+                <div className="flex items-center gap-1">
+                    <span className="text-xs text-zinc-400 mr-1">{t('feedback.filters.type')}</span>
                     <FilterTab active={typeFilter === 'all'} onClick={() => changeFilter(setTypeFilter, 'all')}>
-                        全部
+                        {t('feedback.filters.all')}
                     </FilterTab>
-                    {typeOptions.map((option) => {
-                        const Icon = option.icon;
+                    {typeOptions.map((opt) => {
+                        const Icon = opt.icon;
                         return (
-                            <FilterTab
-                                key={option.value}
-                                active={typeFilter === option.value}
-                                onClick={() => changeFilter(setTypeFilter, option.value)}
-                            >
-                                <span className="inline-flex items-center gap-1">
-                                    <Icon size={12} className={option.iconColor} />
-                                    {option.label}
+                            <FilterTab key={opt.value} active={typeFilter === opt.value} onClick={() => changeFilter(setTypeFilter, opt.value)}>
+                                <span className="flex items-center gap-1">
+                                    <Icon size={12} className={opt.iconColor} />
+                                    {opt.label}
                                 </span>
                             </FilterTab>
                         );
                     })}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-zinc-400">严重程度</span>
-                    <FilterTab active={severityFilter === 'all'} onClick={() => changeFilter(setSeverityFilter, 'all')}>
-                        全部
-                    </FilterTab>
-                    {severityOptions.map((option) => (
-                        <FilterTab
-                            key={option.value}
-                            active={severityFilter === option.value}
-                            onClick={() => changeFilter(setSeverityFilter, option.value)}
-                        >
-                            <span className="inline-flex items-center gap-1">
-                                <span className={cn('h-2 w-2 rounded-full', option.dot)} />
-                                {option.label}
-                            </span>
-                        </FilterTab>
-                    ))}
-                </div>
             </div>
 
-            {!canManageFeedback && (
-                <div className="mb-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-500">
-                    开发者可以查看与复制反馈分诊包，但状态更新和删除仍然只有管理员可用。
-                </div>
-            )}
-
-            {lastAiPayload && (
-                <div className="mb-3 flex-none rounded-2xl border border-zinc-900 bg-zinc-950 p-4 text-zinc-50" data-testid="feedback-ai-payload-viewer-panel">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">最近复制的分诊包</div>
-                    <textarea
-                        readOnly
-                        value={lastAiPayload}
-                        data-testid="feedback-ai-payload-viewer"
-                        className="h-40 w-full rounded-xl border border-zinc-800 bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-emerald-200"
-                    />
-                </div>
-            )}
-
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {/* 表格 */}
+            <div className="flex-1 overflow-y-auto min-h-0">
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <RefreshCw className="animate-spin text-zinc-300" size={24} />
                     </div>
                 ) : feedbacks.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white py-20 text-center text-sm text-zinc-400">
-                        {t('feedback.table.empty')}
-                    </div>
+                    <div className="text-center py-20 text-zinc-400 text-sm">{t('feedback.table.empty')}</div>
                 ) : (
-                    <div className="space-y-3">
-                        {feedbacks.map((item) => {
-                            const expanded = expandedId === item._id;
-                            const typeOption = typeOptions.find((option) => option.value === item.type);
-                            const severityOption = severityOptions.find((option) => option.value === item.severity) ?? severityOptions[3];
+                    <table className="w-full text-sm">
+                        <thead className="sticky top-0 z-10 bg-zinc-50">
+                            <tr className="text-left text-xs text-zinc-400 font-medium">
+                                <th className="w-8 py-2 px-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        onChange={toggleSelectAll}
+                                        className="rounded border-zinc-300"
+                                        aria-label={t('feedback.table.selectAll')}
+                                    />
+                                </th>
+                                <th className="w-8 py-2" />
+                                <th className="py-2 px-2">{t('feedback.table.content')}</th>
+                                <th className="py-2 px-2 w-20">{t('feedback.table.type')}</th>
+                                <th className="py-2 px-2 w-16">{t('feedback.table.severity')}</th>
+                                <th className="py-2 px-2 w-24">{t('feedback.table.status')}</th>
+                                <th className="py-2 px-2 w-24">{t('feedback.table.submitter')}</th>
+                                <th className="py-2 px-2 w-32">{t('feedback.table.time')}</th>
+                                <th className="py-2 px-2 w-16" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {feedbacks.map((item) => {
+                                const expanded = expandedId === item._id;
+                                const typeOpt = typeOptions.find((t) => t.value === item.type);
+                                const TypeIcon = typeOpt?.icon ?? HelpCircle;
+                                const sevCfg = severityConfig[item.severity] ?? severityConfig.low;
 
-                            return (
-                                <FeedbackCard
-                                    key={item._id}
-                                    item={item}
-                                    expanded={expanded}
-                                    selected={selectedIds.has(item._id)}
-                                    canManageFeedback={canManageFeedback}
-                                    typeOption={typeOption}
-                                    severityOption={severityOption}
-                                    statusOptions={statusOptions}
-                                    t={t}
-                                    onToggleExpand={() => setExpandedId(expanded ? null : item._id)}
-                                    onToggleSelect={() => toggleSelect(item._id)}
-                                    onStatusUpdate={handleStatusUpdate}
-                                    onDelete={handleDelete}
-                                    onImageClick={setPreviewImage}
-                                    onAiPayloadCopy={setLastAiPayload}
-                                />
-                            );
-                        })}
-                    </div>
+                                return (
+                                    <FeedbackRow
+                                        key={item._id}
+                                        item={item}
+                                        expanded={expanded}
+                                        selected={selectedIds.has(item._id)}
+                                        TypeIcon={TypeIcon}
+                                        typeOpt={typeOpt}
+                                        sevCfg={sevCfg}
+                                        statusOptions={statusOptions}
+                                        t={t}
+                                        onToggleExpand={() => setExpandedId(expanded ? null : item._id)}
+                                        onToggleSelect={() => toggleSelect(item._id)}
+                                        onStatusUpdate={handleStatusUpdate}
+                                        onDelete={handleDelete}
+                                        onImageClick={setPreviewImage}
+                                    />
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 )}
             </div>
-
-            <div className="mt-3 flex flex-none items-center justify-between rounded-2xl border border-zinc-100 bg-zinc-50/70 px-4 py-3">
-                <div className="text-xs text-zinc-500">
-                    {totalItems > 0 ? `第 ${pageStart}-${pageEnd} 条，共 ${totalItems} 条` : '暂无反馈'}
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                        disabled={page <= 1 || loading}
-                        data-testid="feedback-pagination-prev"
-                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        <ChevronLeft size={14} />
-                        上一页
-                    </button>
-                    <span className="text-xs font-medium text-zinc-600" data-testid="feedback-pagination-indicator">
-                        {page} / {totalPages}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                        disabled={page >= totalPages || loading}
-                        data-testid="feedback-pagination-next"
-                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        下一页
-                        <ChevronRight size={14} />
-                    </button>
-                </div>
-            </div>
-
             <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
         </div>
     );
 }
 
-interface FeedbackCardProps {
+// ── 行组件（表格行 + 展开详情） ──
+
+interface FeedbackRowProps {
     item: FeedbackItem;
     expanded: boolean;
     selected: boolean;
-    canManageFeedback: boolean;
-    typeOption: TypeOptionWithLabel | undefined;
-    severityOption: SeverityOption;
+    TypeIcon: React.ElementType;
+    typeOpt: TypeOptionWithLabel | undefined;
+    sevCfg: SeverityConfig[FeedbackItem['severity']];
     statusOptions: StatusOptionWithLabel[];
     t: TFunction<'admin'>;
     onToggleExpand: () => void;
@@ -657,281 +454,437 @@ interface FeedbackCardProps {
     onStatusUpdate: (id: string, status: string) => void;
     onDelete: (id: string) => void;
     onImageClick: (src: string) => void;
-    onAiPayloadCopy: (payloadText: string) => void;
 }
 
-function FeedbackCard({
-    item,
-    expanded,
-    selected,
-    canManageFeedback,
-    typeOption,
-    severityOption,
-    statusOptions,
-    t,
-    onToggleExpand,
-    onToggleSelect,
-    onStatusUpdate,
-    onDelete,
-    onImageClick,
-    onAiPayloadCopy,
-}: FeedbackCardProps) {
-    const TypeIcon = typeOption?.icon ?? HelpCircle;
-    const previewText = extractText(item.content, t);
-    const images = extractEmbeddedImages(item.content);
-    const operationLogs = parseOperationLogs(item.actionLog);
-    const aiPayloadText = JSON.stringify(buildFeedbackAiPayload(item, t), null, 2);
-    const contextGame = item.clientContext?.gameId || item.gameName || null;
-
+function FeedbackRow({
+    item, expanded, selected, TypeIcon, typeOpt, sevCfg, statusOptions, t,
+    onToggleExpand, onToggleSelect, onStatusUpdate, onDelete, onImageClick,
+}: FeedbackRowProps) {
     return (
-        <section
-            data-testid="feedback-row"
-            data-feedback-id={item._id}
-            className={cn(
-                'rounded-2xl border border-zinc-200 bg-white shadow-sm transition-colors',
-                expanded ? 'border-zinc-300' : 'hover:border-zinc-300',
-                selected && 'ring-2 ring-indigo-200'
-            )}
-        >
-            <div className="flex gap-3 p-4">
-                {canManageFeedback && (
-                    <div className="pt-1" onClick={(event) => event.stopPropagation()}>
-                        <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={onToggleSelect}
-                            className="rounded border-zinc-300"
-                            aria-label={t('feedback.table.selectItem', { id: item._id })}
-                        />
-                    </div>
+        <>
+            <tr
+                onClick={onToggleExpand}
+                className={cn(
+                    'border-b border-zinc-50 cursor-pointer transition-colors group',
+                    expanded ? 'bg-indigo-50/40' : 'hover:bg-zinc-50/80',
+                    selected && 'bg-indigo-50/60'
                 )}
-                <button
-                    type="button"
-                    onClick={onToggleExpand}
-                    className="mt-0.5 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
-                >
-                    {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </button>
+            >
+                {/* 选择框 */}
+                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={onToggleSelect}
+                        className="rounded border-zinc-300"
+                        aria-label={t('feedback.table.selectItem', { id: item._id })}
+                    />
+                </td>
 
-                <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-600">
-                                    <TypeIcon size={12} className={typeOption?.iconColor ?? 'text-zinc-400'} />
-                                    {typeOption?.label ?? item.type}
-                                </span>
-                                <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs text-zinc-600">
-                                    <span className={cn('h-2 w-2 rounded-full', severityOption.dot)} />
-                                    {severityOption.label}
-                                </span>
-                                {canManageFeedback ? (
-                                    <div onClick={(event) => event.stopPropagation()}>
-                                        <StatusSelect value={item.status} onChange={(value) => onStatusUpdate(item._id, value)} options={statusOptions} />
-                                    </div>
-                                ) : (
-                                    <StatusBadge value={item.status} options={statusOptions} />
-                                )}
-                                {images.length > 0 && <MetaBadge>截图 {images.length}</MetaBadge>}
-                                {item.actionLog && <MetaBadge>操作日志</MetaBadge>}
-                                {item.stateSnapshot && <MetaBadge>状态快照</MetaBadge>}
-                                {item.errorContext && <MetaBadge>错误上下文</MetaBadge>}
-                            </div>
-                            <p className="mt-3 line-clamp-2 text-base font-medium text-zinc-900">{previewText}</p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {contextGame && (
-                                    <MetaBadge>
-                                        <span className="inline-flex items-center gap-1">
-                                            <Gamepad2 size={12} />
-                                            {contextGame}
-                                        </span>
-                                    </MetaBadge>
-                                )}
-                                {item.clientContext?.route && <MetaBadge>{item.clientContext.route}</MetaBadge>}
-                                {item.clientContext?.matchId && <MetaBadge>对局 {item.clientContext.matchId}</MetaBadge>}
-                                {item.errorContext?.name && <MetaBadge>{item.errorContext.name}</MetaBadge>}
-                                {item.contactInfo && (
-                                    <MetaBadge>
-                                        <span className="inline-flex items-center gap-1">
-                                            <Contact size={12} />
-                                            {item.contactInfo}
-                                        </span>
-                                    </MetaBadge>
-                                )}
-                            </div>
-                        </button>
+                {/* 展开箭头 */}
+                <td className="py-2">
+                    {expanded
+                        ? <ChevronDown size={14} className="text-zinc-400" />
+                        : <ChevronRight size={14} className="text-zinc-300" />
+                    }
+                </td>
 
-                        <div className="flex flex-col items-end gap-2 text-right">
-                            <div className="text-sm font-medium text-zinc-700">{item.userId?.username || t('feedback.anonymous')}</div>
-                            {item.userId?.email && <div className="text-xs text-zinc-400">{item.userId.email}</div>}
-                            <div className="text-xs text-zinc-400 tabular-nums">{formatTime(item.createdAt, t)}</div>
-                            <div className="text-[11px] text-zinc-400">{t('feedback.table.id', { id: item._id })}</div>
-                            {canManageFeedback && (
-                                <div className="flex items-center gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
-                                    <button
-                                        type="button"
-                                        onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
-                                        className="rounded p-1 transition-colors hover:bg-zinc-100"
-                                        title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
-                                    >
-                                        {item.status === 'resolved'
-                                            ? <Circle size={14} className="text-zinc-400" />
-                                            : <CheckCircle size={14} className="text-emerald-500" />}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onDelete(item._id)}
-                                        className="rounded p-1 transition-colors hover:bg-red-50"
-                                        title={t('feedback.actions.delete')}
-                                    >
-                                        <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                {/* 内容摘要 */}
+                <td className="py-2 px-2">
+                    <div className="flex items-center gap-2">
+                        <p className={cn('truncate max-w-[400px]', expanded ? 'text-zinc-900 font-medium' : 'text-zinc-700')}>
+                            {extractText(item.content, t)}
+                        </p>
+                        {hasEmbeddedImage(item.content) && (
+                            <ImageIcon size={14} className="text-zinc-400 flex-shrink-0" />
+                        )}
                     </div>
+                </td>
 
-                    <AnimatePresence initial={false}>
-                        {expanded && (
+                {/* 类型 */}
+                <td className="py-2 px-2">
+                    <span className="inline-flex items-center gap-1 text-xs text-zinc-600">
+                        <TypeIcon size={12} className={typeOpt?.iconColor ?? 'text-zinc-400'} />
+                        {typeOpt?.label ?? item.type}
+                    </span>
+                </td>
+
+                {/* 严重度 */}
+                <td className="py-2 px-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600">
+                        <span className={cn('w-2 h-2 rounded-full', sevCfg.dot)} />
+                        {sevCfg.label}
+                    </span>
+                </td>
+
+                {/* 状态 */}
+                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <StatusSelect value={item.status} onChange={(v) => onStatusUpdate(item._id, v)} options={statusOptions} />
+                </td>
+
+                {/* 提交者 */}
+                <td className="py-2 px-2">
+                    <div className="flex items-center gap-1.5">
+                        {item.userId ? (
+                            <>
+                                <div className="w-5 h-5 rounded-full bg-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-500 overflow-hidden flex-shrink-0">
+                                    {item.userId.avatar
+                                        ? <img src={item.userId.avatar} alt="" className="w-full h-full object-cover" />
+                                        : item.userId.username?.[0]?.toUpperCase()
+                                    }
+                                </div>
+                                <span className="text-xs text-zinc-600 truncate max-w-[80px]">{item.userId.username}</span>
+                            </>
+                        ) : (
+                            <span className="text-xs text-zinc-400 italic">{t('feedback.anonymous')}</span>
+                        )}
+                    </div>
+                </td>
+
+                {/* 时间 */}
+                <td className="py-2 px-2 text-xs text-zinc-400 tabular-nums">
+                    {formatTime(item.createdAt, t)}
+                </td>
+
+                {/* 操作 */}
+                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            onClick={() => onStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
+                            className="p-1 rounded hover:bg-zinc-100 transition-colors"
+                            title={item.status === 'resolved' ? t('feedback.actions.reopen') : t('feedback.actions.resolve')}
+                        >
+                            {item.status === 'resolved'
+                                ? <Circle size={14} className="text-zinc-400" />
+                                : <CheckCircle size={14} className="text-emerald-500" />
+                            }
+                        </button>
+                        <button
+                            onClick={() => onDelete(item._id)}
+                            className="p-1 rounded hover:bg-red-50 transition-colors"
+                            title={t('feedback.actions.delete')}
+                        >
+                            <Trash2 size={14} className="text-zinc-300 hover:text-red-500" />
+                        </button>
+                    </div>
+                </td>
+            </tr>
+
+            {/* 展开详情 */}
+            <AnimatePresence>
+                {expanded && (
+                    <tr>
+                        <td colSpan={9} className="p-0">
                             <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.16 }}
+                                transition={{ duration: 0.15 }}
                                 className="overflow-hidden"
                             >
-                                <div className="mt-4 grid gap-4 border-t border-zinc-100 pt-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-                                    <div className="space-y-4">
-                                        <div className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4">
-                                            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">用户原始反馈</div>
-                                            <FeedbackContent content={item.content} onImageClick={onImageClick} t={t} />
-                                        </div>
-
-                                        {item.actionLog && (
-                                            <details className="rounded-2xl border border-zinc-200 bg-white p-4" data-testid="feedback-action-log-section" data-feedback-id={item._id}>
-                                                <summary
-                                                    data-testid="feedback-action-log-toggle"
-                                                    className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500"
-                                                >
-                                                    操作日志 ({operationLogs.length})
-                                                </summary>
-                                                <pre className="mt-3 max-h-56 overflow-auto rounded-xl border border-zinc-200 bg-zinc-100 p-3 text-[11px] leading-relaxed text-zinc-700">
-                                                    {item.actionLog}
-                                                </pre>
-                                            </details>
-                                        )}
-
-                                        {item.stateSnapshot && (
-                                            <details className="rounded-2xl border border-zinc-200 bg-zinc-950 p-4 text-zinc-50" data-testid="feedback-state-snapshot-section" data-feedback-id={item._id}>
-                                                <summary
-                                                    data-testid="feedback-state-snapshot-toggle"
-                                                    className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400"
-                                                >
-                                                    <span className="inline-flex items-center gap-2">
-                                                        <ScrollText size={12} />
-                                                        状态快照 JSON
-                                                    </span>
-                                                </summary>
-                                                <div className="relative mt-3">
-                                                    <pre className="max-h-72 overflow-auto rounded-xl border border-zinc-800 bg-black/30 p-3 text-[11px] leading-relaxed text-emerald-200">
-                                                        {item.stateSnapshot}
-                                                    </pre>
-                                                    <button
-                                                        type="button"
-                                                        data-testid="feedback-copy-state-json-inline"
-                                                        onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            navigator.clipboard.writeText(item.stateSnapshot!).catch(() => undefined);
-                                                        }}
-                                                        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] text-white transition-colors hover:bg-emerald-500"
-                                                    >
-                                                        <Copy size={10} />
-                                                        复制 JSON
-                                                    </button>
-                                                </div>
-                                            </details>
-                                        )}
-                                    </div>
-
-                                    <aside className="space-y-4">
-                                        <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-                                            <div className="mb-3">
-                                                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">分诊摘要</div>
-                                                <p className="mt-1 text-sm text-zinc-500">展开后直接查看上下文，不必翻日志或手抄字段。</p>
-                                            </div>
-
-                                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                                                <MetaField label="提交者" value={item.userId?.username || t('feedback.anonymous')} />
-                                                <MetaField label="账号邮箱" value={item.userId?.email || null} />
-                                                <MetaField label="联系方式" value={item.contactInfo || null} />
-                                                <MetaField label="游戏" value={contextGame} />
-                                                <MetaField label="页面路由" value={item.clientContext?.route || null} mono />
-                                                <MetaField label="运行模式" value={item.clientContext?.mode || null} />
-                                                <MetaField label="对局 ID" value={item.clientContext?.matchId || null} mono />
-                                                <MetaField label="玩家 ID" value={item.clientContext?.playerId || null} mono />
-                                                <MetaField label="版本" value={item.clientContext?.appVersion || null} mono />
-                                                <MetaField label="视口" value={formatViewport(item.clientContext?.viewport)} />
-                                                <MetaField label="语言" value={item.clientContext?.language || null} />
-                                                <MetaField label="时区" value={item.clientContext?.timezone || null} />
-                                            </div>
-
-                                            {item.errorContext && (
-                                                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/80 p-4" data-testid="feedback-error-context-panel">
-                                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-red-500">错误上下文</div>
-                                                    <div className="mt-3 grid gap-3">
-                                                        <MetaField label="错误类型" value={item.errorContext.name || null} />
-                                                        <MetaField label="错误来源" value={item.errorContext.source || null} />
-                                                        <MetaField label="错误消息" value={item.errorContext.message || null} />
-                                                        {item.errorContext.stack && (
-                                                            <details>
-                                                                <summary className="cursor-pointer text-xs font-medium text-red-500">查看错误堆栈</summary>
-                                                                <pre className="mt-2 max-h-40 overflow-auto rounded-xl border border-red-100 bg-white/80 p-3 text-[11px] leading-relaxed text-zinc-700">
-                                                                    {item.errorContext.stack}
-                                                                </pre>
-                                                            </details>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="rounded-2xl border border-zinc-900 bg-zinc-950 p-4 text-zinc-50">
-                                            <div className="mb-3 flex items-start justify-between gap-3">
-                                                <div>
-                                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">转发给助手</div>
-                                                    <p className="mt-1 text-sm text-zinc-400">这里是当前反馈的真实分诊包，复制后可以直接继续排查。</p>
-                                                </div>
-                                                <CopyFeedbackButton item={item} t={t} onAiPayloadCopy={onAiPayloadCopy} />
-                                            </div>
-                                            <pre className="max-h-72 overflow-auto rounded-xl border border-zinc-800 bg-black/30 p-3 text-[11px] leading-relaxed text-emerald-200" data-testid="feedback-ai-handoff-preview">
-                                                {aiPayloadText}
+                                <div className="px-10 py-4 bg-zinc-50/50 border-b border-zinc-100">
+                                    <FeedbackContent content={item.content} onImageClick={onImageClick} t={t} />
+                                    {item.actionLog && (
+                                        <details className="mt-3">
+                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium">
+                                                {t('feedback.actionLog.title')}
+                                            </summary>
+                                            <pre className="mt-2 max-h-48 overflow-auto rounded bg-zinc-100 border border-zinc-200 p-3 text-[11px] text-zinc-600 font-mono whitespace-pre-wrap leading-relaxed">
+                                                {item.actionLog}
                                             </pre>
-                                        </div>
-                                    </aside>
+                                        </details>
+                                    )}
+                                    {item.stateSnapshot && (
+                                        <details className="mt-3">
+                                            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-700 font-medium flex items-center gap-2">
+                                                <ScrollText size={12} />
+                                                {t('feedback.stateSnapshot.title')}
+                                            </summary>
+                                            <div className="mt-2 relative group">
+                                                <pre className="max-h-64 overflow-auto rounded bg-zinc-900 border border-zinc-700 p-3 text-[11px] text-emerald-400 font-mono whitespace-pre-wrap leading-relaxed">
+                                                    {item.stateSnapshot}
+                                                </pre>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
+                                                            // 临时显示复制成功提示
+                                                            const btn = e.currentTarget;
+                                                            const originalText = btn.textContent;
+                                                            btn.textContent = '✓ ' + t('feedback.stateSnapshot.copied');
+                                                            setTimeout(() => {
+                                                                btn.textContent = originalText;
+                                                            }, 2000);
+                                                        });
+                                                    }}
+                                                    className="absolute top-2 right-2 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+                                                >
+                                                    <Copy size={10} />
+                                                    {t('feedback.stateSnapshot.copy')}
+                                                </button>
+                                            </div>
+                                        </details>
+                                    )}
+                                    <div className="flex items-center gap-4 text-xs text-zinc-400 mt-3">
+                                        {item.gameName && (
+                                            <span className="inline-flex items-center gap-1">
+                                                <Gamepad2 size={12} />
+                                                {item.gameName}
+                                            </span>
+                                        )}
+                                        {item.contactInfo && (
+                                            <span className="inline-flex items-center gap-1">
+                                                <Contact size={12} />
+                                                {item.contactInfo}
+                                            </span>
+                                        )}
+                                        <span>{t('feedback.table.id', { id: item._id })}</span>
+                                        <CopyFeedbackButton item={item} t={t} />
+                                    </div>
                                 </div>
                             </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-            </div>
-        </section>
+                        </td>
+                    </tr>
+                )}
+            </AnimatePresence>
+        </>
     );
 }
 
-function formatTime(iso: string, t: TFunction<'admin'>): string {
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60_000);
+// ── 一键复制按钮 ──
 
+/**
+ * 压缩游戏状态为 AI 可读的紧凑格式
+ * 从完整 JSON 提取关键信息，避免复制几千行数据
+ */
+function compressStateSnapshot(stateJson: string): string {
+    try {
+        const state = JSON.parse(stateJson);
+        const lines: string[] = [];
+        
+        lines.push('=== 游戏状态快照（压缩版）===');
+        lines.push(`游戏: ${state.gameId || 'unknown'}`);
+        lines.push(`回合: P${state.core?.currentPlayer ?? '?'} | 阶段: ${state.core?.phase ?? '?'}`);
+        
+        // 玩家状态
+        if (state.core?.players) {
+            lines.push('\n--- 玩家 ---');
+            Object.entries(state.core.players).forEach(([pid, p]: [string, any]) => {
+                const resources = p.resources ? 
+                    Object.entries(p.resources).map(([k, v]) => `${k}:${v}`).join(' ') : 
+                    '';
+                lines.push(`P${pid}: HP=${p.hp ?? '?'} ${resources} | 手牌=${p.hand?.length ?? 0} 牌库=${p.deck?.length ?? 0} 弃牌=${p.discard?.length ?? 0}`);
+            });
+        }
+        
+        // 场上单位
+        if (state.core?.field && state.core.field.length > 0) {
+            lines.push('\n--- 场上 ---');
+            state.core.field.forEach((unit: any, idx: number) => {
+                const tags = unit.tags ? Object.keys(unit.tags).join(',') : '';
+                lines.push(`[${idx}] ${unit.card?.defId ?? '?'} (P${unit.owner}) HP=${unit.hp ?? '?'} ${tags ? `[${tags}]` : ''}`);
+            });
+        }
+        
+        // 交互状态
+        if (state.sys?.interaction?.current) {
+            const int = state.sys.interaction.current;
+            lines.push('\n--- 交互 ---');
+            lines.push(`类型: ${int.type} | 玩家: P${int.playerId}`);
+            lines.push(`选项数: ${int.data?.options?.length ?? 0}`);
+        }
+        
+        // 响应窗口
+        if (state.sys?.responseWindow?.current) {
+            lines.push('\n--- 响应窗口 ---');
+            lines.push(`触发事件: ${state.sys.responseWindow.current.triggerEvent?.type ?? '?'}`);
+        }
+        
+        // 最近事件（增加到 10 条，并显示关键参数）
+        if (state.sys?.eventStream?.entries) {
+            const recent = state.sys.eventStream.entries.slice(-10);
+            if (recent.length > 0) {
+                lines.push('\n--- 最近事件 ---');
+                recent.forEach((e: any) => {
+                    // 提取关键参数（避免完整 payload）
+                    let params = '';
+                    if (e.payload) {
+                        const p = e.payload;
+                        if (p.playerId !== undefined) params += ` P${p.playerId}`;
+                        if (p.targetId !== undefined) params += ` →${p.targetId}`;
+                        if (p.damage !== undefined) params += ` dmg=${p.damage}`;
+                        if (p.amount !== undefined) params += ` amt=${p.amount}`;
+                        if (p.cardDefId) params += ` [${p.cardDefId}]`;
+                        if (p.abilityId) params += ` {${p.abilityId}}`;
+                    }
+                    lines.push(`${e.id}: ${e.type}${params}`);
+                });
+            }
+        }
+        
+        return lines.join('\n');
+    } catch (err) {
+        return `[状态解析失败: ${err instanceof Error ? err.message : '未知错误'}]`;
+    }
+}
+
+function CopyFeedbackButton({ item, t }: { item: FeedbackItem; t: TFunction<'admin'> }) {
+    const [copied, setCopied] = useState(false);
+    const [copiedJson, setCopiedJson] = useState(false);
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const textContent = extractText(item.content, t);
+        const submitter = item.userId?.username || t('feedback.anonymous');
+        const parts = [
+            `【${t(`feedback.type.${item.type}`)}】${t(`feedback.severity.${item.severity}`)}`,
+            item.gameName ? `游戏: ${item.gameName}` : '',
+            `提交者: ${submitter}`,
+            `时间: ${new Date(item.createdAt).toLocaleString('zh-CN')}`,
+            '',
+            '--- 反馈内容 ---',
+            textContent,
+            item.actionLog ? `\n--- 操作日志 ---\n${item.actionLog}` : '',
+            item.stateSnapshot ? `\n--- 游戏状态 ---\n${compressStateSnapshot(item.stateSnapshot)}` : '',
+        ].filter(Boolean).join('\n');
+
+        navigator.clipboard.writeText(parts).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    const handleCopyJson = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!item.stateSnapshot) return;
+        
+        navigator.clipboard.writeText(item.stateSnapshot).then(() => {
+            setCopiedJson(true);
+            setTimeout(() => setCopiedJson(false), 2000);
+        });
+    };
+
+    return (
+        <div className="inline-flex items-center gap-1">
+            <button
+                onClick={handleCopy}
+                className={cn(
+                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
+                    copied
+                        ? 'text-emerald-600 bg-emerald-50'
+                        : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+                )}
+                title={t('feedback.actions.copyAll')}
+            >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+                {copied ? t('feedback.actions.copied') : t('feedback.actions.copyAll')}
+            </button>
+            {item.stateSnapshot && (
+                <button
+                    onClick={handleCopyJson}
+                    className={cn(
+                        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors',
+                        copiedJson
+                            ? 'text-emerald-600 bg-emerald-50'
+                            : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+                    )}
+                    title="复制完整状态 JSON"
+                >
+                    {copiedJson ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedJson ? '已复制 JSON' : 'JSON'}
+                </button>
+            )}
+        </div>
+    );
+}
+
+// ── 内容解析与渲染 ──
+
+/** 匹配 Markdown 内嵌图片：![alt](data:image/...) */
+const EMBEDDED_IMG_RE = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g;
+
+/** 提取纯文本（去掉内嵌图片的 Markdown） */
+function extractText(content: string, t: TFunction<'admin'>): string {
+    return content.replace(EMBEDDED_IMG_RE, '').trim() || t('feedback.content.onlyImage');
+}
+
+/** 是否包含内嵌图片 */
+function hasEmbeddedImage(content: string): boolean {
+    return EMBEDDED_IMG_RE.test(content);
+}
+
+/** 将 content 中的文本和内嵌图片分别渲染 */
+function FeedbackContent({ content, onImageClick, t }: { content: string; onImageClick: (src: string) => void; t: TFunction<'admin'> }) {
+    // 重置 lastIndex（全局正则需要）
+    EMBEDDED_IMG_RE.lastIndex = 0;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+
+    while ((match = EMBEDDED_IMG_RE.exec(content)) !== null) {
+        // 图片前的文本
+        if (match.index > lastIndex) {
+            const text = content.slice(lastIndex, match.index).trim();
+            if (text) {
+                parts.push(
+                    <p key={key++} className="text-sm text-zinc-800 whitespace-pre-wrap leading-relaxed">
+                        {text}
+                    </p>
+                );
+            }
+        }
+        // 图片 — 点击打开灯箱预览
+        const imgSrc = match[2];
+        parts.push(
+            <button
+                key={key++}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onImageClick(imgSrc); }}
+                className="block text-left"
+            >
+                <img
+                    src={imgSrc}
+                    alt={match[1] || t('feedback.content.screenshotAlt')}
+                    className="max-w-md max-h-64 rounded-lg border border-zinc-200 object-contain bg-white cursor-zoom-in hover:shadow-md transition-shadow"
+                />
+            </button>
+        );
+        lastIndex = match.index + match[0].length;
+    }
+
+    // 剩余文本
+    const remaining = content.slice(lastIndex).trim();
+    if (remaining) {
+        parts.push(
+            <p key={key++} className="text-sm text-zinc-800 whitespace-pre-wrap leading-relaxed">
+                {remaining}
+            </p>
+        );
+    }
+
+    if (parts.length === 0) {
+        parts.push(
+            <p key={0} className="text-sm text-zinc-400 italic">{t('feedback.content.empty')}</p>
+        );
+    }
+
+    return <div className="space-y-3 mb-3">{parts}</div>;
+}
+
+// ── 工具函数 ──
+
+function formatTime(iso: string, t: TFunction<'admin'>): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
     if (diffMin < 1) return t('feedback.time.justNow');
     if (diffMin < 60) return t('feedback.time.minutesAgo', { count: diffMin });
-
     const diffHour = Math.floor(diffMin / 60);
     if (diffHour < 24) return t('feedback.time.hoursAgo', { count: diffHour });
-
     const diffDay = Math.floor(diffHour / 24);
     if (diffDay < 7) return t('feedback.time.daysAgo', { count: diffDay });
-
-    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
