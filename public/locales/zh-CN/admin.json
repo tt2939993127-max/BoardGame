@@ -65,8 +65,15 @@
       "empty": "（无内容）",
       "screenshotAlt": "截图"
     },
+    "detail": {
+      "title": "详情",
+      "emptyTitle": "选择一条反馈查看详情",
+      "emptyDescription": "左侧列表用于高密度浏览，右侧显示完整内容、日志和状态快照。",
+      "game": "游戏",
+      "contact": "联系方式"
+    },
     "actionLog": {
-      "title": "📋 操作日志"
+      "title": "操作日志"
     },
     "stateSnapshot": {
       "title": "状态快照（JSON）",
