@@ -205,4 +205,47 @@ test.describe('Cardia 测试场景API验证', () => {
             await setup.player2Context.close();
         }
     });
+
+    test('标准视口下卡牌尺寸应保持原版大小', async ({ browser }) => {
+        const setup = await setupCardiaTestScenario(browser, {
+            player1: {
+                hand: ['deck_i_card_01'],
+                deck: ['deck_i_card_02'],
+                playedCards: [
+                    { defId: 'deck_i_card_03', signets: 1, encounterIndex: 0 },
+                ],
+            },
+            player2: {
+                hand: ['deck_i_card_04'],
+                deck: ['deck_i_card_05'],
+                playedCards: [
+                    { defId: 'deck_i_card_06', signets: 1, encounterIndex: 0 },
+                ],
+            },
+            phase: 'play',
+        });
+
+        try {
+            const { player1Page } = setup;
+            await player1Page.setViewportSize({ width: 1280, height: 900 });
+            await player1Page.waitForTimeout(800);
+
+            const state = await readCoreState(player1Page);
+            const players = state.players as Record<string, { playedCards: Array<{ uid: string }> }>;
+            const myCardUid = players['0'].playedCards[0].uid;
+
+            const myCard = player1Page.locator(`[data-testid="card-${myCardUid}"]`);
+            await expect(myCard).toBeVisible({ timeout: 10000 });
+
+            const myCardBox = await myCard.boundingBox();
+            expect(myCardBox, '标准视口下卡牌应有边界框').not.toBeNull();
+            expect(myCardBox!.width, '标准视口下卡牌宽度应保持原版').toBeGreaterThanOrEqual(104);
+            expect(myCardBox!.width, '标准视口下卡牌宽度应保持原版').toBeLessThanOrEqual(108);
+            expect(myCardBox!.height, '标准视口下卡牌高度应保持原版').toBeGreaterThanOrEqual(158);
+            expect(myCardBox!.height, '标准视口下卡牌高度应保持原版').toBeLessThanOrEqual(162);
+        } finally {
+            await setup.player1Context.close();
+            await setup.player2Context.close();
+        }
+    });
 });
