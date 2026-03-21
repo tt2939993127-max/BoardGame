@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCriticalImageGateCacheForTests, CriticalImageGate } from '../CriticalImageGate';
 
 const {
@@ -84,6 +84,34 @@ describe('CriticalImageGate', () => {
 
         expect(html).toContain('加载中');
         expect(html).not.toContain('子内容');
+    });
+
+    it('空 critical 阶段会快速放行，不会卡在加载页', async () => {
+        vi.mocked(resolveCriticalImages).mockReturnValue({
+            critical: [],
+            warm: [],
+            phaseKey: 'tutorial-setup',
+        });
+
+        render(
+            <CriticalImageGate
+                enabled={true}
+                gameId="cardia"
+                gameState={{ sys: { tutorial: { active: true, stepIndex: 0 } } }}
+                loadingDescription="加载中"
+            >
+                <div>子内容</div>
+            </CriticalImageGate>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('子内容')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText('加载中')).toBeNull();
+        expect(preloadCriticalImages).not.toHaveBeenCalled();
+        expect(preloadWarmImages).not.toHaveBeenCalled();
+        expect(signalCriticalImagesReady).not.toHaveBeenCalled();
     });
 
     it('同一 runKey 重挂载后不重复显示加载屏', async () => {
@@ -198,6 +226,11 @@ describe('CriticalImageGate', () => {
                 resolvePreload = resolve;
             }),
         );
+        vi.mocked(resolveCriticalImages).mockReturnValue({
+            critical: ['smashup/images/card-back'],
+            warm: [],
+            phaseKey: 'opening-hand',
+        });
 
         render(
             <CriticalImageGate

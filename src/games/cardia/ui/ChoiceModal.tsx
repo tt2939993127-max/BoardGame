@@ -22,34 +22,34 @@ interface Props {
 
 export function ChoiceModal({ title, description, options, onConfirm, onCancel }: Props) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center sm:p-4">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-amber-50 border-4 border-amber-900 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4"
+                className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border-4 border-amber-900 bg-amber-50 p-4 shadow-2xl sm:rounded-lg sm:p-6"
             >
                 {/* 标题 */}
-                <h2 className="text-2xl font-bold text-amber-900 mb-4 text-center">
+                <h2 className="mb-3 text-center text-xl font-bold text-amber-900 sm:mb-4 sm:text-2xl">
                     {title}
                 </h2>
                 
                 {/* 描述 */}
                 {description && (
-                    <p className="text-amber-800 mb-6 text-center">
+                    <p className="mb-5 text-center text-sm text-amber-800 sm:mb-6 sm:text-base">
                         {description}
                     </p>
                 )}
                 
                 {/* 选项列表 */}
-                <div className="space-y-3 mb-6">
+                <div className="mb-5 space-y-3 sm:mb-6">
                     {options.map((option) => (
                         <button
                             key={option.id}
                             onClick={() => onConfirm(option.id)}
-                            className="w-full bg-amber-100 hover:bg-amber-200 border-2 border-amber-700 rounded-lg p-4 text-left transition-colors"
+                            className="w-full rounded-lg border-2 border-amber-700 bg-amber-100 p-3 text-left transition-colors hover:bg-amber-200 sm:p-4"
                         >
-                            <div className="font-bold text-amber-900 mb-1">
+                            <div className="mb-1 font-bold text-amber-900">
                                 {option.label}
                             </div>
                             {option.description && (
@@ -64,7 +64,7 @@ export function ChoiceModal({ title, description, options, onConfirm, onCancel }
                 {/* 取消按钮 */}
                 <button
                     onClick={onCancel}
-                    className="w-full bg-gray-300 hover:bg-gray-400 border-2 border-gray-600 rounded-lg py-2 text-gray-800 font-semibold transition-colors"
+                    className="w-full rounded-lg border-2 border-gray-600 bg-gray-300 py-3 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-400 sm:text-base"
                 >
                     取消
                 </button>
