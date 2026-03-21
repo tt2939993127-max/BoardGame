@@ -598,15 +598,23 @@ export function createResponseWindowSystem<TCore>(
                         
                         // 只有当前响应者的交互才锁定窗口
                         if (interactionPayload.interaction.playerId === currentResponderId) {
+                            const lockedWindow = loopUntilAllPass
+                                ? {
+                                    ...currentWindow,
+                                    pendingInteractionId: interactionPayload.interaction.id,
+                                    actionTakenThisRound: true,
+                                    consecutivePassRounds: 0,
+                                }
+                                : {
+                                    ...currentWindow,
+                                    pendingInteractionId: interactionPayload.interaction.id,
+                                };
                             newState = {
                                 ...newState,
                                 sys: {
                                     ...newState.sys,
                                     responseWindow: {
-                                        current: {
-                                            ...currentWindow,
-                                            pendingInteractionId: interactionPayload.interaction.id,
-                                        },
+                                        current: lockedWindow,
                                     },
                                 },
                             };
