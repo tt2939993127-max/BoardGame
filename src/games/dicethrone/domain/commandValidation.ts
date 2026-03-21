@@ -9,6 +9,7 @@ import type {
     DiceThroneCore,
     DiceThroneCommand,
     TurnPhase,
+    DtResponseWindowType,
     RollDiceCommand,
     ToggleDieLockCommand,
     ConfirmRollCommand,
@@ -48,6 +49,7 @@ import {
     checkPlayCard,
     checkPlayUpgradeCard,
     getAvailableAbilityIds,
+    isCardPlayableInResponseWindow,
 } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
@@ -463,7 +465,8 @@ const validatePlayCard = (
     state: DiceThroneCore,
     cmd: PlayCardCommand,
     playerId: PlayerId,
-    phase: TurnPhase
+    phase: TurnPhase,
+    responseWindowType?: DtResponseWindowType
 ): ValidationResult => {
     const actingPlayerId = playerId;
 
@@ -511,6 +514,16 @@ const validatePlayCard = (
             reason: checkResult.reason,
         });
         return fail(checkResult.reason);
+    }
+
+    if (responseWindowType && !isCardPlayableInResponseWindow(state, actingPlayerId, card, responseWindowType, phase)) {
+        console.warn('[validatePlayCard] 验证失败 - 卡牌不允许在当前响应窗口中打出:', {
+            playerId: actingPlayerId,
+            cardId: card.id,
+            responseWindowType,
+            currentPhase: phase,
+        });
+        return fail('wrongPhaseForCard');
     }
     
     return ok();
@@ -990,7 +1003,8 @@ export const validateCommand = (
     state: DiceThroneCore,
     command: DiceThroneCommand,
     phase: TurnPhase,
-    pendingInteraction?: InteractionDescriptor
+    pendingInteraction?: InteractionDescriptor,
+    responseWindowType?: DtResponseWindowType
 ): ValidationResult => {
     if (command.type.startsWith('SYS_')) {
         return ok();
@@ -1006,7 +1020,7 @@ export const validateCommand = (
     if (isCommandType(command, 'SELL_CARD')) return validateSellCard(state, command, playerId, phase);
     if (isCommandType(command, 'UNDO_SELL_CARD')) return validateUndoSellCard(state, command, playerId, phase);
     if (isCommandType(command, 'REORDER_CARD_TO_END')) return validateReorderCardToEnd(state, command, playerId);
-    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId, phase);
+    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId, phase, responseWindowType);
     if (isCommandType(command, 'PLAY_UPGRADE_CARD')) return validatePlayUpgradeCard(state, command, playerId, phase);
     if (isCommandType(command, 'RESOLVE_CHOICE')) return validateResolveChoice(state, command, playerId);
     if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId, phase);

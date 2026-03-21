@@ -5,7 +5,7 @@
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
 import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType } from './types';
 import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commandValidation';
 import { execute } from './execute';
@@ -102,6 +102,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     validate: (state, command) => {
         const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
         const interaction = state.sys?.interaction?.current;
+        const responseWindowType = state.sys?.responseWindow?.current?.windowType as DtResponseWindowType | undefined;
 
         // dt:card-interaction：data 直接是 PendingInteraction（状态选择类）
         // multistep-choice：骰子类交互，从 meta 构造兼容的 InteractionDescriptor
@@ -122,7 +123,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             }
         }
 
-        return validateCommand(state.core, command, phase, pendingInteraction);
+        return validateCommand(state.core, command, phase, pendingInteraction, responseWindowType);
     },
     execute: (state, command, random) => execute(state, command, random),
     reduce,
