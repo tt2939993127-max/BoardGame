@@ -151,7 +151,7 @@ const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 // 归档逻辑
 // ============================================================================
 
-let storage: MatchStorage;
+const storage: MatchStorage = hybridStorage;
 
 type OwnerMatchLookupStorage = {
     findMatchesByOwnerKey: (ownerKey: string) => Promise<Array<{ matchID: string; gameName: string }>>;
@@ -170,6 +170,10 @@ const archiveMatchResult = async ({
     gameName: string;
     gameover?: { winner?: string | number };
 }) => {
+    if (!USE_PERSISTENT_STORAGE) {
+        return;
+    }
+
     try {
         const existing = await MatchRecord.findOne({ matchID });
         if (existing) return;
@@ -238,12 +242,14 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
         engines.push(engineConfig);
     }
 
-    // UGC 游戏注册
-    const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
-        existingGameIds: manifestGameIds,
-    });
-    ugcEngines.forEach((cfg) => engines.push(cfg));
-    ugcGameIds.forEach((id) => gameIds.push(id));
+    if (USE_PERSISTENT_STORAGE) {
+        // 纯内存模式不依赖 Mongo，跳过 UGC 数据库查询，保证无库也能起服务。
+        const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
+            existingGameIds: manifestGameIds,
+        });
+        ugcEngines.forEach((cfg) => engines.push(cfg));
+        ugcGameIds.forEach((id) => gameIds.push(id));
+    }
 
     return { engines, gameIds };
 };
@@ -252,12 +258,13 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
 // 初始化
 // ============================================================================
 
-await connectDB();
+if (USE_PERSISTENT_STORAGE) {
+    await connectDB();
+} else {
+    logger.info('[GameServer] 当前以纯内存模式启动，跳过 Mongo / UGC / 排行榜归档');
+}
 const { engines: SERVER_ENGINES, gameIds: SERVER_GAME_IDS } = await buildServerEngines();
 registerSupportedGames(SERVER_GAME_IDS);
-
-// 存储层：HybridStorage 直接实现 MatchStorage 接口
-storage = hybridStorage;
 
 // 创建 Koa 应用
 const app = new Koa();
@@ -834,6 +841,11 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
 // GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
+    if (!USE_PERSISTENT_STORAGE) {
+        ctx.body = { leaderboard: [] };
+        return;
+    }
+
     try {
         const records = await MatchRecord.find({ gameName });
         // 用 ownerKey 聚合（新数据），旧数据 fallback 到 name

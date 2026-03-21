@@ -15,6 +15,7 @@ import { resolveCriticalImages } from './CriticalImageResolverRegistry';
 const DEFAULT_ASSETS_BASE_URL = 'https://assets.easyboardgame.top/official';
 const COMPRESSED_SUBDIR = 'compressed';
 const LOCALIZED_ASSETS_SUBDIR = 'i18n';
+const VERSION_PARAM = 'v';
 
 const normalizeAssetsBaseUrl = (value?: string) => {
     if (!value) return null;
@@ -34,6 +35,7 @@ const normalizeAssetsBaseUrl = (value?: string) => {
  * 允许通过 setAssetsBaseUrl 进行覆盖，用于独立资源域名场景。
  */
 let assetsBaseUrl = normalizeAssetsBaseUrl(import.meta.env?.VITE_ASSETS_BASE_URL) ?? DEFAULT_ASSETS_BASE_URL;
+let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
 
 export function setAssetsBaseUrl(value?: string): void {
     assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? DEFAULT_ASSETS_BASE_URL;
@@ -41,6 +43,14 @@ export function setAssetsBaseUrl(value?: string): void {
 
 export function getAssetsBaseUrl(): string {
     return assetsBaseUrl;
+}
+
+/**
+ * 允许测试环境覆盖构建期注入的资源 hash 映射。
+ * 生产运行时不需要调用。
+ */
+export function setAssetHashesForTesting(value?: Record<string, string>): void {
+    assetHashes = value ?? {};
 }
 
 // ============================================================================
@@ -806,18 +816,50 @@ const isSvgSource = (src: string) => /\.svg(\?|#|$)/i.test(src);
 /** 移除扩展名 */
 const stripExtension = (src: string) => {
     if (isPassthroughSource(src)) return src;
-    return src.replace(/\.(webp|png|jpe?g)$/i, '');
+    const { path } = splitUrlParts(src);
+    return path.replace(/\.(webp|png|jpe?g)$/i, '');
 };
 
 const stripAssetsBasePrefix = (normalized: string) => {
-    if (normalized === assetsBaseUrl) return '';
-    if (normalized.startsWith(`${assetsBaseUrl}/`)) {
-        return normalized.slice(assetsBaseUrl.length + 1);
+    const { path } = splitUrlParts(normalized);
+    if (path === assetsBaseUrl) return '';
+    if (path.startsWith(`${assetsBaseUrl}/`)) {
+        return path.slice(assetsBaseUrl.length + 1);
     }
-    if (normalized.startsWith('/assets/')) {
-        return normalized.slice('/assets/'.length);
+    if (path.startsWith('/assets/')) {
+        return path.slice('/assets/'.length);
     }
-    return normalized.replace(/^\/+/, '');
+    return path.replace(/^\/+/, '');
+};
+
+const splitUrlParts = (value: string) => {
+    const hashIndex = value.indexOf('#');
+    const withoutHash = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
+    const hash = hashIndex >= 0 ? value.slice(hashIndex) : '';
+    const queryIndex = withoutHash.indexOf('?');
+    return {
+        path: queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash,
+        query: queryIndex >= 0 ? withoutHash.slice(queryIndex + 1) : '',
+        hash,
+    };
+};
+
+const resolveVersionedAssetUrl = (value: string) => {
+    if (!isString(value) || !value || isPassthroughSource(value)) return value;
+
+    const { path, query, hash } = splitUrlParts(value);
+    const relativeKey = stripAssetsBasePrefix(path);
+    if (!relativeKey) return value;
+
+    const version = assetHashes[relativeKey];
+    if (!version) return value;
+
+    const params = new URLSearchParams(query);
+    if (params.get(VERSION_PARAM) === version) return value;
+    params.set(VERSION_PARAM, version);
+
+    const nextQuery = params.toString();
+    return nextQuery ? `${path}?${nextQuery}${hash}` : `${path}${hash}`;
 };
 
 /**
@@ -828,10 +870,10 @@ export function assetsPath(path: string): string {
     if (!isString(path)) return '';
     if (isPassthroughSource(path)) return path;
     if (!path) return assetsBaseUrl;
-    if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return path;
-    if (path.startsWith('/assets/')) return path;
+    if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return resolveVersionedAssetUrl(path);
+    if (path.startsWith('/assets/')) return resolveVersionedAssetUrl(path);
     const trimmed = path.startsWith('/') ? path.slice(1) : path;
-    return `${assetsBaseUrl}/${trimmed}`;
+    return resolveVersionedAssetUrl(`${assetsBaseUrl}/${trimmed}`);
 }
 
 /**
@@ -850,7 +892,10 @@ export function getOptimizedImageUrls(src: string): ImageUrlSet {
         return { avif: '', webp: '' };
     }
     if (isPassthroughSource(normalized) || isSvgSource(normalized)) {
-        return { avif: normalized, webp: normalized };
+        return {
+            avif: resolveVersionedAssetUrl(normalized),
+            webp: resolveVersionedAssetUrl(normalized),
+        };
     }
     // 压缩图片在 compressed/ 子目录
     const base = stripExtension(normalized);
@@ -860,12 +905,12 @@ export function getOptimizedImageUrls(src: string): ImageUrlSet {
 
     // 防御性检查：如果路径已包含 /compressed/，不再重复插入
     if (dir.endsWith(`/${COMPRESSED_SUBDIR}`) || dir === COMPRESSED_SUBDIR) {
-        const webpUrl = `${base}.webp`;
+        const webpUrl = resolveVersionedAssetUrl(`${base}.webp`);
         return { avif: webpUrl, webp: webpUrl };
     }
 
     const compressedBase = dir ? `${dir}/${COMPRESSED_SUBDIR}/${filename}` : `${COMPRESSED_SUBDIR}/${filename}`;
-    const webpUrl = `${compressedBase}.webp`;
+    const webpUrl = resolveVersionedAssetUrl(`${compressedBase}.webp`);
     return {
         avif: webpUrl,  // 统一使用 webp，avif 收益不大且增加复杂度
         webp: webpUrl,
@@ -885,11 +930,14 @@ export function getOptimizedAudioUrl(src: string, basePath?: string): string {
     const normalized = assetsPath(fullPath);
     if (!normalized) return '';
 
-    const lastSlash = normalized.lastIndexOf('/');
-    const dir = lastSlash >= 0 ? normalized.substring(0, lastSlash) : '';
-    const filename = lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+    const { path } = splitUrlParts(normalized);
+    const lastSlash = path.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? path.substring(0, lastSlash) : '';
+    const filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
 
-    return dir ? `${dir}/${COMPRESSED_SUBDIR}/${filename}` : `${COMPRESSED_SUBDIR}/${filename}`;
+    return resolveVersionedAssetUrl(
+        dir ? `${dir}/${COMPRESSED_SUBDIR}/${filename}` : `${COMPRESSED_SUBDIR}/${filename}`
+    );
 }
 
 /**
@@ -993,7 +1041,7 @@ export function getLocalAssetPath(path: string): string {
     if (!isString(path) || !path) return '/assets';
     if (isPassthroughSource(path)) return path;
     const trimmed = path.startsWith('/') ? path.slice(1) : path;
-    return `/assets/${trimmed}`;
+    return resolveVersionedAssetUrl(`/assets/${trimmed}`);
 }
 
 /**
@@ -1003,12 +1051,12 @@ export function getLocalAssetPath(path: string): string {
 export function getLocalizedLocalAssetPath(path: string, locale?: string): string {
     if (!locale || isPassthroughSource(path)) return getLocalAssetPath(path);
     // 去掉可能的前缀
-    let relative = path;
+    let relative = splitUrlParts(path).path;
     if (relative.startsWith('/assets/')) relative = relative.slice('/assets/'.length);
     if (relative.startsWith(assetsBaseUrl + '/')) relative = relative.slice(assetsBaseUrl.length + 1);
     relative = relative.replace(/^\/+/, '');
     // 幂等性检查
     const localizedPrefix = `${LOCALIZED_ASSETS_SUBDIR}/${locale}/`;
-    if (relative.startsWith(localizedPrefix)) return `/assets/${relative}`;
-    return `/assets/${localizedPrefix}${relative}`;
+    if (relative.startsWith(localizedPrefix)) return resolveVersionedAssetUrl(`/assets/${relative}`);
+    return resolveVersionedAssetUrl(`/assets/${localizedPrefix}${relative}`);
 }

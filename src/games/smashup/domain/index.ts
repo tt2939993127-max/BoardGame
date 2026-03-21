@@ -1305,6 +1305,18 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         let hasSysUpdate = false;
 
         if (to === 'startTurn') {
+            // Safety: afterScoringInitialPowers is only meaningful immediately after closing the afterScoring window.
+            // If it ever leaks across turns, it can cause unintended base clear/replace on later scoreBases exits.
+            if ((currentMatchState.sys as any).afterScoringInitialPowers) {
+                currentMatchState = {
+                    ...currentMatchState,
+                    sys: {
+                        ...currentMatchState.sys,
+                        afterScoringInitialPowers: undefined,
+                    } as any,
+                };
+                hasSysUpdate = true;
+            }
             let nextPlayerId = pid;
             let nextTurnNumber = core.turnNumber;
             if (from === 'endTurn') {
@@ -1371,6 +1383,40 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 } else {
                     hasSysUpdate = true;
                 }
+            }
+
+            // Wiki: Start Turn 时可免费揭开一张自己控制的埋葬卡（可选，且每回合仅一次）
+            const coreForUncover = currentMatchState.core;
+            const buriedChoices: { cardUid: string; baseIndex: number; label: string }[] = [];
+            for (let bi = 0; bi < coreForUncover.bases.length; bi++) {
+                const b = coreForUncover.bases[bi];
+                const buried = (b.buriedCards ?? []).filter(c => c.controllerId === nextPlayerId);
+                for (const bc of buried) {
+                    const def = getCardDef(bc.defId);
+                    buriedChoices.push({
+                        cardUid: bc.uid,
+                        baseIndex: bi,
+                        label: `${def?.name ?? bc.defId} @ ${(getBaseDef(b.defId)?.name ?? `基地 #${bi + 1}`)}`,
+                    });
+                }
+            }
+            if (buriedChoices.length > 0) {
+                const options = buriedChoices.map((c, i) => ({
+                    id: `u-${i}`,
+                    label: c.label,
+                    value: { cardUid: c.cardUid, baseIndex: c.baseIndex },
+                    displayMode: 'button' as const,
+                }));
+                options.push({ id: 'skip', label: '跳过（不揭开）', value: { skip: true }, displayMode: 'button' as const });
+                const interaction = createSimpleChoice(
+                    `bury_uncover_start_turn_${now}`,
+                    nextPlayerId,
+                    '你可以揭开一张你控制的埋葬卡，并立即作为额外卡打出',
+                    options as any[],
+                    { sourceId: 'bury_uncover_start_turn', targetType: 'generic' },
+                );
+                currentMatchState = queueInteraction(currentMatchState, interaction);
+                hasSysUpdate = true;
             }
 
             // 有 sys 变更时返回 PhaseEnterResult，否则返回纯事件数组
@@ -1548,8 +1594,26 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 // playerView：不再隐藏手牌/牌库，直接发送完整数据（不需要防作弊）
 // ============================================================================
 
-function playerView(_state: SmashUpCore, _playerId: PlayerId): Partial<SmashUpCore> {
-    return {};
+function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore> {
+    // 默认不隐藏任何信息（项目内不防作弊），但埋葬卡需要遵循 Wiki：从手牌埋葬默认不公开。
+    // 因此对非控制者隐藏 buriedCards 的 defId 等信息，仅保留“有多少张、由谁控制、在哪个基地”的可见性。
+    const maskedBases = state.bases.map(b => {
+        if (!b.buriedCards || b.buriedCards.length === 0) return b;
+        return {
+            ...b,
+            buriedCards: b.buriedCards.map(c => {
+                if (c.controllerId === playerId) return c;
+                return {
+                    uid: c.uid,
+                    defId: 'buried_unknown',
+                    trueOwnerId: c.controllerId,
+                    controllerId: c.controllerId,
+                    buriedFrom: c.buriedFrom,
+                };
+            }),
+        };
+    });
+    return { bases: maskedBases };
 }
 
 
@@ -1703,12 +1767,11 @@ function postProcessSystemEvents(
             for (const preEvt of prePlayEvents) {
                 tempCore = reduce(tempCore, preEvt);
             }
-            // 【重要】对于从牌库打出的随从（fromDeck: true），必须 reduce 当前 MINION_PLAYED 事件
-            // 确保 onPlay 触发器看到更新后的牌库状态（当前卡已被移除）
-            // 例如：robot_hoverbot 从牌库打出时，onPlay 触发器需要看到新的牌库顶
-            // 对于从手牌打出的随从，state 已经包含了所有事件的 reduce 结果，不需要再 reduce
+            // 【重要】对于从非手牌来源“额外打出”的随从（fromDeck / fromDiscard / fromBuried），
+            // 必须在这里 reduce 当前 MINION_PLAYED 事件，确保 onPlay 触发器能在 core 中找到该随从，
+            // 并读到正确的 metadata.playedFrom（例如翻出埋葬牌时）。
             const payload = event.payload;
-            if (payload.fromDeck) {
+            if (payload.fromDeck || payload.fromDiscard || payload.fromBuried) {
                 tempCore = reduce(tempCore, event);
             }
             

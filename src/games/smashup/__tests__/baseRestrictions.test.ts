@@ -167,6 +167,32 @@ describe('base_the_homeworld: 母星力量限制（全局）', () => {
         expect(r2.valid).toBe(true);
     });
 
+    it('validate：兵蚁 Soldier POD 作为额外随从时应按印刷战斗力1通过', () => {
+        const state = makeState({
+            bases: [makeBase('base_the_homeworld'), makeBase('base_rhodes_plaza')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 1,
+                    minionLimit: 2,
+                    extraMinionPowerMax: 2,
+                    hand: [makeCard('h1', 'giant_ant_soldier_pod', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: { phase: 'playCards' } as any,
+        };
+
+        const result = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 1 },
+        } as any);
+        expect(result.valid).toBe(true);
+    });
+
     it('validate：首次打随从不受 extraMinionPowerMax 限制', () => {
         const state = makeState({
             bases: [makeBase('base_the_homeworld')],

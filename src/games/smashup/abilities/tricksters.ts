@@ -13,11 +13,11 @@ import {
     resolveOrPrompt,
     buildAbilityFeedback,
     createSkipOption,
+    buildStandardDrawEvents,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type {
     CardsDiscardedEvent,
-    CardsDrawnEvent,
     OngoingDetachedEvent,
     SmashUpEvent,
     LimitModifiedEvent,
@@ -26,7 +26,7 @@ import type {
     BreakpointModifiedEvent,
 } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
-import { drawCards, matchesDefId } from '../domain/utils';
+import { matchesDefId } from '../domain/utils';
 import { registerInterceptor, registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -226,6 +226,7 @@ function registerTricksterPodAbilities(): void {
     registerAbility('trickster_enshrouding_mist_pod', 'talent', tricksterEnshroudingMistPodTalent);
     registerAbility('trickster_hideout_pod', 'talent', tricksterHideoutPodTalent);
     registerAbility('trickster_gnome_pod', 'special', tricksterGnomePodSpecial);
+    registerAbility('trickster_gremlin_pod', 'onDestroy', () => ({ events: [] }));
     registerTricksterPodOngoingEffects();
 }
 
@@ -279,7 +280,7 @@ function tricksterHideoutPodTalent(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '藏身处：选择要交换进来的“打出到基地上”的持续战术（或跳过）',
         options as any[],
-        { sourceId: 'trickster_hideout_pod_swap', targetType: 'hand' },
+        { sourceId: 'trickster_hideout_pod_swap', targetType: 'generic' },
     );
     return {
         events: [],
@@ -400,8 +401,8 @@ export function registerTricksterInteractionHandlers(): void {
         const options = myMinions.map((m, i) => ({
             id: `minion-${i}`,
             label: m.label,
-            value: { minionUid: m.uid, baseIndex: m.baseIndex },
-            _source: 'minion' as const,
+            value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: m.baseIndex },
+            _source: 'field' as const,
             displayMode: 'card' as const,
         }));
 
@@ -557,7 +558,7 @@ export function registerTricksterInteractionHandlers(): void {
             const mDef = getCardDef(m.defId) as MinionCardDef | undefined;
             const name = mDef?.name ?? m.defId;
             const power = getMinionPower(nextState.core, m, ctx.baseIndex);
-            return { id: `m-${i}`, label: `${name} (战斗力 ${power})`, value: { minionUid: m.uid, baseIndex: ctx.baseIndex }, _source: 'minion' as const, displayMode: 'card' as const };
+            return { id: `m-${i}`, label: `${name} (战斗力 ${power})`, value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: ctx.baseIndex }, _source: 'field' as const, displayMode: 'card' as const };
         });
         options.push(createSkipOption() as any);
 
@@ -591,17 +592,7 @@ function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
     // ?张牌
-    const player = ctx.state.players[ctx.playerId];
-    if (player && player.deck.length > 0) {
-        const { drawnUids } = drawCards(player, 1, ctx.random);
-        if (drawnUids.length > 0) {
-            events.push({
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId: ctx.playerId, count: 1, cardUids: drawnUids },
-                timestamp: ctx.now,
-            } as CardsDrawnEvent);
-        }
-    }
+    events.push(...buildStandardDrawEvents(ctx.state, ctx.playerId, 1, ctx.random, ctx.now));
 
     // 每个对手随机?张牌
     for (const pid of ctx.state.turnOrder) {
@@ -735,8 +726,8 @@ function tricksterPixiePodOnPlay(ctx: AbilityContext): AbilityResult {
             return {
                 id: `minion-${i}`,
                 label: `${name} (力量 ${power})`,
-                value: { minionUid: m.uid, baseIndex: ctx.baseIndex },
-                _source: 'minion' as const,
+                value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: ctx.baseIndex },
+                _source: 'field' as const,
                 displayMode: 'card' as const,
             };
         });
@@ -979,6 +970,9 @@ function registerTricksterOngoingEffects(): void {
 }
 
 function registerTricksterPodOngoingEffects(): void {
+    registerTrigger('trickster_brownie_pod', 'onMinionAffected', () => []);
+    registerTrigger('trickster_enshrouding_mist_pod', 'onTurnStart', () => []);
+    registerProtection('trickster_hideout_pod', 'action', () => false);
     // Hideout POD：其他玩家不能将随从移动到此基地（用事件拦截器阻止移动）
     registerInterceptor('trickster_hideout_pod', (state, event) => {
         if (event.type !== SU_EVENTS.MINION_MOVED) return undefined;
@@ -1029,6 +1023,7 @@ function registerTricksterPodOngoingEffects(): void {
                     minionDefId: playedMinion.defId,
                     fromBaseIndex: baseIndex,
                     ownerId: trigCtx.playerId,
+                    destroyerId: lep.controller,
                     reason: 'trickster_leprechaun_pod',
                 },
                 timestamp: trigCtx.now,
@@ -1065,13 +1060,9 @@ function registerTricksterPodOngoingEffects(): void {
                 // 抽 1
                 const owner = trigCtx.state.players[ownerId];
                 if (!owner) continue;
-                const { drawnUids } = drawCards(owner, 1, trigCtx.random);
-                if (drawnUids.length === 0) continue;
-                events.push({
-                    type: SU_EVENTS.CARDS_DRAWN,
-                    payload: { playerId: ownerId, count: 1, cardUids: drawnUids },
-                    timestamp: trigCtx.now,
-                } as CardsDrawnEvent);
+                const drawEvents = buildStandardDrawEvents(trigCtx.state, ownerId, 1, trigCtx.random, trigCtx.now);
+                if (drawEvents.length === 0) continue;
+                events.push(...drawEvents);
                 events.push({
                     type: SU_EVENTS.MINION_METADATA_UPDATED,
                     payload: {
@@ -1094,14 +1085,7 @@ function registerTricksterPodOngoingEffects(): void {
         const player = trigCtx.state.players[ownerId];
         if (!player) return [];
         const events: SmashUpEvent[] = [];
-        const { drawnUids } = drawCards(player, 1, trigCtx.random);
-        if (drawnUids.length > 0) {
-            events.push({
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId: ownerId, count: 1, cardUids: drawnUids },
-                timestamp: trigCtx.now,
-            } as CardsDrawnEvent);
-        }
+        events.push(...buildStandardDrawEvents(trigCtx.state, ownerId, 1, trigCtx.random, trigCtx.now));
         for (const pid of trigCtx.state.turnOrder) {
             if (pid === ownerId) continue;
             const opp = trigCtx.state.players[pid];
@@ -1122,13 +1106,7 @@ function registerTricksterPodOngoingEffects(): void {
         const ownerId = trigCtx.triggerMinion?.owner ?? trigCtx.playerId;
         const player = trigCtx.state.players[ownerId];
         if (!player) return [];
-        const { drawnUids } = drawCards(player, 1, trigCtx.random);
-        if (drawnUids.length === 0) return [];
-        return [{
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ownerId, count: 1, cardUids: drawnUids },
-            timestamp: trigCtx.now,
-        } as CardsDrawnEvent];
+        return buildStandardDrawEvents(trigCtx.state, ownerId, 1, trigCtx.random, trigCtx.now);
     });
 
     // Flame Trap POD：对手打出随从到此基地后，先自毁再尝试消灭该随从
@@ -1153,6 +1131,7 @@ function registerTricksterPodOngoingEffects(): void {
                     minionDefId: trigCtx.triggerMinionDefId,
                     fromBaseIndex: bi,
                     ownerId: trigCtx.playerId,
+                    destroyerId: trap.ownerId,
                     reason: 'trickster_flame_trap_pod',
                 },
                 timestamp: trigCtx.now,
@@ -1168,8 +1147,8 @@ function registerTricksterPodOngoingEffects(): void {
             if (!trap) continue;
             if (trap.ownerId !== trigCtx.playerId) continue;
             const options = [
-                { id: 'yes', label: '是（本回合该基地 breakpoint -4）', value: { yes: true } },
-                { id: 'no', label: '否', value: { yes: false } },
+                { id: 'yes', label: '是（本回合该基地 breakpoint -4）', value: { yes: true }, displayMode: 'button' as const },
+                { id: 'no', label: '否', value: { yes: false }, displayMode: 'button' as const },
             ];
             const interaction = createSimpleChoice(
                 `trickster_flame_trap_pod_bp_${trigCtx.now}`,

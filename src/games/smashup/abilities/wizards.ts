@@ -119,7 +119,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
             { id: 'to_hand', label: '放入手牌', value: { action: 'to_hand' }, displayMode: 'button' as const },
             { id: 'play_extra', label: '作为额外行动打出', value: { action: 'play_extra' }, displayMode: 'button' as const },
         ],
-        { sourceId: 'wizard_neophyte', targetType: 'generic', displayCard: { defId: topCard.defId } },
+        { sourceId: 'wizard_neophyte', targetType: 'button', displayCard: { defId: topCard.defId } },
     );
     (interaction.data as { options?: unknown[] }).options = options;
     const extended = {

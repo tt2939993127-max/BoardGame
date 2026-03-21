@@ -256,6 +256,8 @@ SMTP_PASS=xxx
 - **对象存储 key 前缀**：`official/<gameId>/...`
   - 路径对应：`/assets/<gameId>/...` ⇄ `official/<gameId>/...`
 - **可选独立资源域名**：前端可配置 `VITE_ASSETS_BASE_URL`（默认 `/assets`）。
+- **缓存失效机制**：构建时会扫描 `public/assets`，为资源 URL 自动追加 `?v=<content-hash>`。资源内容变化后 URL 会自动变化，因此 R2 上的图片/音频/SVG 可以安全使用长期缓存。
+- **本地 JSON / 图集配置**：仍走本地 `/assets`，但同样会追加 `?v=<content-hash>`，避免本地回退路径拿到旧配置。
 
 ## 资源发布流程（官方）
 
@@ -263,6 +265,7 @@ SMTP_PASS=xxx
 2. 生成清单：`npm run assets:manifest`（输出 `assets-manifest.json`）。
 3. 校验清单：`npm run assets:validate`（缺文件/变体不一致会报错）。
 4. 上传资源与清单到对象存储（路径 `official/<gameId>/...`）。
+5. 如仅修改了对象元数据（例如 `Cache-Control`），使用 `npm run assets:upload:force` 重新上传；常规资源内容更新不需要手动 purge，因为 URL 会随内容 hash 自动变化。
 
 ## UGC 资源前缀预留（未实现）
 

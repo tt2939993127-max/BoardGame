@@ -16,7 +16,7 @@ const HUD_MODAL_NS = 'hud';
 
 export const GlobalHUD = () => {
     const { t } = useTranslation('game');
-    const { unreadTotal, requests } = useSocial();
+    const { unreadTotal, requests, ensureRealtimeConnection } = useSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();
     const { user } = useAuth();
     const location = useLocation();
@@ -147,6 +147,7 @@ export const GlobalHUD = () => {
             ),
             label: t('hud.actions.social'),
             onClick: () => {
+                ensureRealtimeConnection();
                 if (socialModalId) {
                     closeModal(socialModalId);
                     return;

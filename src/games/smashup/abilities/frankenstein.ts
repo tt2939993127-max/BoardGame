@@ -390,9 +390,6 @@ function createBodyShopDistributeInteraction(ctx: AbilityContext, totalCounters:
 
 /** 闪电攻击 onPlay：逐个点击己方随从移除指示物，然后消灭力量≤移除数的随从 */
 function frankensteinBlitzed(ctx: AbilityContext): AbilityResult {
-    const withCounters = buildOwnMinionOptions(ctx, undefined, (m) => (m.powerCounters ?? 0) > 0);
-    if (withCounters.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_power_counters', ctx.now)] };
-
     const blitzedCtx: BlitzedRemoveContext = { removedTotal: 0 };
     const interaction = createBlitzedRemoveInteraction(ctx.matchState, ctx.playerId, blitzedCtx, ctx.now);
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -573,7 +570,6 @@ const handleBlitzedRemove: IH = (state, playerId, value, interactionData, _rando
 
     // 点击"完成移除"
     if (selected.done) {
-        if (context.removedTotal <= 0) return { state, events: [] };
         const targets: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
             for (const mi of state.core.bases[i].minions) {
@@ -719,8 +715,9 @@ function registerFrankensteinOngoingEffects(): void {
         const events: SmashUpEvent[] = [];
         for (let i = 0; i < state.bases.length; i++) {
             for (const m of state.bases[i].minions) {
-                if (m.controller !== playerId) continue;
-                const hasUber = m.attachedActions.some(a => matchesDefId(a.defId, 'frankenstein_uberserum'));
+                // “At the start of your turn” refers to the action's controller (ownerId on attachment),
+                // not the minion's controller.
+                const hasUber = m.attachedActions.some(a => matchesDefId(a.defId, 'frankenstein_uberserum') && a.ownerId === playerId);
                 if (hasUber) {
                     events.push(addPowerCounter(m.uid, i, 1, 'frankenstein_uberserum', now));
                 }

@@ -1,48 +1,40 @@
 /**
  * 召唤师战争 - 地图容器组件
- * 支持拖拽、鼠标滚轮缩放，区分点击和拖拽
- * 支持教程自动平移（panToTarget）
+ * 支持拖拽、滚轮/双指缩放，并兼容教程自动聚焦。
  */
 
-import React, { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
-/** 判定为拖拽的最小移动距离（像素） */
 const DRAG_THRESHOLD = 5;
+const SCALE_EPSILON = 0.02;
+const SCALE_BADGE_HIDE_DELAY_MS = 1200;
 
-const getTouchDistance = (touchA: Touch, touchB: Touch) => {
+interface TouchPoint {
+  clientX: number;
+  clientY: number;
+}
+
+const getTouchDistance = (touchA: TouchPoint, touchB: TouchPoint) => {
   const dx = touchA.clientX - touchB.clientX;
   const dy = touchA.clientY - touchB.clientY;
   return Math.sqrt(dx * dx + dy * dy);
 };
 
 export interface MapContainerProps {
-  /** 子元素（地图内容） */
   children: ReactNode;
-  /** 初始缩放 */
   initialScale?: number;
-  /** 最小缩放 */
   minScale?: number;
-  /** 最大缩放 */
   maxScale?: number;
-  /** 纵向拖拽边界放松比例（相对容器高度） */
   dragBoundsPaddingRatioY?: number;
-  /** 禁用拖拽和缩放（教程非交互步骤时使用） */
   interactionDisabled?: boolean;
-  /** 教程自动平移：传入 data-tutorial-id 值，地图会平滑移动使该元素居中 */
   panToTarget?: string | null;
-  /** 教程自动平移时的缩放倍率（不传则保持当前缩放） */
   panToScale?: number;
-  /** 测试标识（容器） */
   containerTestId?: string;
-  /** 测试标识（地图内容） */
   contentTestId?: string;
-  /** 测试标识（缩放倍率） */
   scaleTestId?: string;
-  /** 额外类名 */
   className?: string;
 }
 
-/** 地图容器（支持拖拽和缩放，区分点击和拖拽） */
 export const MapContainer: React.FC<MapContainerProps> = ({
   children,
   initialScale = 0.6,
@@ -59,38 +51,97 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(initialScale);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  // 平滑过渡标记：panToTarget 触发时启用较长 transition
-  const [isAnimating, setIsAnimating] = useState(false);
 
-  // 拖拽状态 ref
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const positionStartRef = useRef({ x: 0, y: 0 });
   const isPointerDownRef = useRef(false);
   const pinchStartDistanceRef = useRef<number | null>(null);
-  const pinchStartScaleRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef<number | null>(null);
+  const scaleBadgeTimerRef = useRef<number | null>(null);
+  const animationTimerRef = useRef<number | null>(null);
+
+  const [zoomLevel, setZoomLevel] = useState(initialScale);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isScaleBadgeVisible, setIsScaleBadgeVisible] = useState(false);
+
+  const baseScale = containerSize.width > 0
+    && containerSize.height > 0
+    && contentSize.width > 0
+    && contentSize.height > 0
+    ? Math.min(
+      1,
+      Math.min(
+        containerSize.width / contentSize.width,
+        containerSize.height / contentSize.height,
+      ),
+    )
+    : 1;
+  const scale = baseScale * zoomLevel;
+  const isAtDefaultZoom = Math.abs(zoomLevel - initialScale) <= SCALE_EPSILON;
+  const shouldShowScaleBadge = isScaleBadgeVisible || !isAtDefaultZoom;
+
+  const clearScaleBadgeTimer = useCallback(() => {
+    if (scaleBadgeTimerRef.current !== null) {
+      window.clearTimeout(scaleBadgeTimerRef.current);
+      scaleBadgeTimerRef.current = null;
+    }
+  }, []);
+
+  const clearAnimationTimer = useCallback(() => {
+    if (animationTimerRef.current !== null) {
+      window.clearTimeout(animationTimerRef.current);
+      animationTimerRef.current = null;
+    }
+  }, []);
+
+  const revealScaleBadge = useCallback((nextZoomLevel: number) => {
+    clearScaleBadgeTimer();
+    setIsScaleBadgeVisible(true);
+    if (Math.abs(nextZoomLevel - initialScale) <= SCALE_EPSILON) {
+      scaleBadgeTimerRef.current = window.setTimeout(() => {
+        setIsScaleBadgeVisible(false);
+        scaleBadgeTimerRef.current = null;
+      }, SCALE_BADGE_HIDE_DELAY_MS);
+    }
+  }, [clearScaleBadgeTimer, initialScale]);
+
+  const hideScaleBadge = useCallback(() => {
+    clearScaleBadgeTimer();
+    setIsScaleBadgeVisible(false);
+  }, [clearScaleBadgeTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearScaleBadgeTimer();
+      clearAnimationTimer();
+    };
+  }, [clearAnimationTimer, clearScaleBadgeTimer]);
 
   const clampPosition = useCallback((x: number, y: number, nextScale = scale) => {
     if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) {
       return { x, y };
     }
+
     const scaledWidth = contentSize.width * nextScale;
     const scaledHeight = contentSize.height * nextScale;
     const maxOffsetX = Math.max(0, (scaledWidth - containerSize.width) / 2);
     const extraPaddingY = containerSize.height * dragBoundsPaddingRatioY;
     const maxOffsetY = Math.max(0, (scaledHeight - containerSize.height) / 2 + extraPaddingY);
+
     return {
       x: Math.min(maxOffsetX, Math.max(-maxOffsetX, x)),
       y: Math.min(maxOffsetY, Math.max(-maxOffsetY, y)),
     };
-  }, [containerSize, contentSize, scale, dragBoundsPaddingRatioY]);
+  }, [containerSize.height, containerSize.width, contentSize.height, contentSize.width, dragBoundsPaddingRatioY, scale]);
+  const clampedPosition = clampPosition(position.x, position.y, scale);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) return undefined;
+
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
@@ -99,12 +150,14 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         height: entry.contentRect.height,
       });
     });
+
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    if (!contentRef.current) return;
+    if (!contentRef.current) return undefined;
+
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
@@ -113,68 +166,111 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         height: entry.contentRect.height,
       });
     });
+
     observer.observe(contentRef.current);
     return () => observer.disconnect();
   }, []);
 
-  // 鼠标按下（只在容器内触发）
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return; // 只响应左键
-    if (interactionDisabled) return; // 教程非交互步骤时禁止拖拽
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (event.button !== 0 || interactionDisabled) return;
 
     isPointerDownRef.current = true;
-    pointerStartRef.current = { x: e.clientX, y: e.clientY };
-    positionStartRef.current = { x: position.x, y: position.y };
-  }, [position, interactionDisabled]);
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    positionStartRef.current = { x: clampedPosition.x, y: clampedPosition.y };
+  }, [clampedPosition.x, clampedPosition.y, interactionDisabled]);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
     if (interactionDisabled) return;
 
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
       isPointerDownRef.current = true;
       pinchStartDistanceRef.current = null;
-      pinchStartScaleRef.current = null;
+      pinchStartZoomRef.current = null;
       pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
-      positionStartRef.current = { x: position.x, y: position.y };
+      positionStartRef.current = { x: clampedPosition.x, y: clampedPosition.y };
       return;
     }
 
-    if (e.touches.length === 2) {
+    if (event.touches.length === 2) {
       isPointerDownRef.current = false;
       setIsDragging(false);
-      pinchStartDistanceRef.current = getTouchDistance(e.touches[0], e.touches[1]);
-      pinchStartScaleRef.current = scale;
+      pinchStartDistanceRef.current = getTouchDistance(event.touches[0], event.touches[1]);
+      pinchStartZoomRef.current = zoomLevel;
     }
-  }, [interactionDisabled, position, scale]);
+  }, [clampedPosition.x, clampedPosition.y, interactionDisabled, zoomLevel]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((event: React.TouchEvent) => {
     if (interactionDisabled) return;
 
-    if (e.touches.length === 2) {
+    if (event.touches.length === 2) {
       const startDistance = pinchStartDistanceRef.current;
-      const startScale = pinchStartScaleRef.current;
-      if (!startDistance || !startScale) return;
+      const startZoomLevel = pinchStartZoomRef.current;
+      if (!startDistance || !startZoomLevel) return;
 
-      e.preventDefault();
+      event.preventDefault();
+      clearAnimationTimer();
       setIsAnimating(false);
 
-      const distance = getTouchDistance(e.touches[0], e.touches[1]);
-      const nextScale = Math.max(minScale, Math.min(maxScale, startScale * (distance / startDistance)));
-      setScale(nextScale);
-      setPosition(current => clampPosition(current.x, current.y, nextScale));
+      const distance = getTouchDistance(event.touches[0], event.touches[1]);
+      const nextZoomLevel = Math.max(minScale, Math.min(maxScale, startZoomLevel * (distance / startDistance)));
+      revealScaleBadge(nextZoomLevel);
+      setZoomLevel(nextZoomLevel);
+      setPosition((current) => clampPosition(current.x, current.y, baseScale * nextZoomLevel));
       return;
     }
 
-    if (e.touches.length !== 1 || !isPointerDownRef.current) return;
+    if (event.touches.length !== 1 || !isPointerDownRef.current) return;
 
-    const touch = e.touches[0];
+    const touch = event.touches[0];
     const dx = touch.clientX - pointerStartRef.current.x;
     const dy = touch.clientY - pointerStartRef.current.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance > DRAG_THRESHOLD) {
-      e.preventDefault();
+    if (distance <= DRAG_THRESHOLD) return;
+
+    event.preventDefault();
+    clearAnimationTimer();
+    setIsDragging(true);
+    setIsAnimating(false);
+
+    const nextPosition = {
+      x: positionStartRef.current.x + dx,
+      y: positionStartRef.current.y + dy,
+    };
+    setPosition(clampPosition(nextPosition.x, nextPosition.y));
+  }, [baseScale, clampPosition, clearAnimationTimer, interactionDisabled, maxScale, minScale, revealScaleBadge]);
+
+  const handleTouchEnd = useCallback((event: React.TouchEvent) => {
+    if (event.touches.length >= 2) return;
+
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      isPointerDownRef.current = true;
+      pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
+      positionStartRef.current = { ...clampedPosition };
+      pinchStartDistanceRef.current = null;
+      pinchStartZoomRef.current = null;
+      return;
+    }
+
+    isPointerDownRef.current = false;
+    pinchStartDistanceRef.current = null;
+    pinchStartZoomRef.current = null;
+    setIsDragging(false);
+  }, [clampedPosition]);
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (!isPointerDownRef.current) return;
+
+      const dx = event.clientX - pointerStartRef.current.x;
+      const dy = event.clientY - pointerStartRef.current.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance <= DRAG_THRESHOLD) return;
+
+      clearAnimationTimer();
       setIsDragging(true);
       setIsAnimating(false);
 
@@ -183,48 +279,6 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         y: positionStartRef.current.y + dy,
       };
       setPosition(clampPosition(nextPosition.x, nextPosition.y));
-    }
-  }, [clampPosition, interactionDisabled, maxScale, minScale]);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length >= 2) return;
-
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      isPointerDownRef.current = true;
-      pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
-      positionStartRef.current = { ...position };
-      pinchStartDistanceRef.current = null;
-      pinchStartScaleRef.current = null;
-      return;
-    }
-
-    isPointerDownRef.current = false;
-    pinchStartDistanceRef.current = null;
-    pinchStartScaleRef.current = null;
-    setIsDragging(false);
-  }, [position]);
-
-  // 全局鼠标移动和松开（使用 useEffect 注册）
-  useEffect(() => {
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!isPointerDownRef.current) return;
-
-      const dx = e.clientX - pointerStartRef.current.x;
-      const dy = e.clientY - pointerStartRef.current.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // 超过阈值才开始拖拽
-      if (distance > DRAG_THRESHOLD) {
-        setIsDragging(true);
-        setIsAnimating(false);
-
-        const nextPosition = {
-          x: positionStartRef.current.x + dx,
-          y: positionStartRef.current.y + dy,
-        };
-        setPosition(clampPosition(nextPosition.x, nextPosition.y));
-      }
     };
 
     const handleGlobalMouseUp = () => {
@@ -239,106 +293,128 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       window.removeEventListener('mousemove', handleGlobalMouseMove);
       window.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [clampPosition]);
+  }, [clampPosition, clearAnimationTimer]);
 
-  // 滚轮缩放
-  const handleWheel = useCallback((e: WheelEvent) => {
-    if (interactionDisabled) return; // 教程非交互步骤时禁止缩放
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(prev => {
-      const nextScale = Math.max(minScale, Math.min(maxScale, prev + delta));
-      setPosition(current => clampPosition(current.x, current.y, nextScale));
-      return nextScale;
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (interactionDisabled) return;
+
+    event.preventDefault();
+    clearAnimationTimer();
+    setIsAnimating(false);
+
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    setZoomLevel((currentZoomLevel) => {
+      const nextZoomLevel = Math.max(minScale, Math.min(maxScale, currentZoomLevel + delta));
+      revealScaleBadge(nextZoomLevel);
+      setPosition((current) => clampPosition(current.x, current.y, baseScale * nextZoomLevel));
+      return nextZoomLevel;
     });
-  }, [minScale, maxScale, clampPosition, interactionDisabled]);
+  }, [baseScale, clampPosition, clearAnimationTimer, interactionDisabled, maxScale, minScale, revealScaleBadge]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) return undefined;
+
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
   useEffect(() => {
-    setPosition(prev => {
-      const next = clampPosition(prev.x, prev.y);
-      return next.x === prev.x && next.y === prev.y ? prev : next;
-    });
-  }, [clampPosition]);
-
-  // 教程禁用交互时，若没有 panToTarget 则重置地图到默认位置和缩放
-  useEffect(() => {
-    if (interactionDisabled && !panToTarget) {
+    if (!interactionDisabled || panToTarget) return undefined;
+    let frameId: number | null = window.requestAnimationFrame(() => {
+      clearAnimationTimer();
+      hideScaleBadge();
       setIsAnimating(true);
-      setScale(initialScale);
+      setZoomLevel(initialScale);
       setPosition({ x: 0, y: 0 });
-      const timerId = window.setTimeout(() => setIsAnimating(false), 400);
-      return () => window.clearTimeout(timerId);
-    }
-  }, [interactionDisabled, initialScale, panToTarget]);
+      animationTimerRef.current = window.setTimeout(() => {
+        setIsAnimating(false);
+        animationTimerRef.current = null;
+      }, 400);
+      frameId = null;
+    });
 
-  // 教程自动平移：当 panToTarget 变化时，计算目标元素在内容区域中的位置并平移使其居中
-  // 同时支持 panToScale 指定聚焦时的缩放倍率
-  const scaleRef = useRef(scale);
-  scaleRef.current = scale;
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      clearAnimationTimer();
+    };
+  }, [clearAnimationTimer, hideScaleBadge, initialScale, interactionDisabled, panToTarget]);
+
   useEffect(() => {
-    if (!panToTarget || !contentRef.current || !containerRef.current) return;
-    // Wait for container/content to be measured by ResizeObserver before calculating pan position.
-    // Without valid sizes, clampPosition won't clamp and the map can fly off to wrong coordinates.
-    // The effect will re-run when sizes become available (clampPosition dep changes).
-    if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) return;
-    // 延迟一帧确保 DOM 已更新（教程步骤切换后元素可能刚挂载）
+    if (!panToTarget || !contentRef.current || !containerRef.current) return undefined;
+    if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) return undefined;
+
     const rafId = requestAnimationFrame(() => {
-      const el = contentRef.current?.querySelector(`[data-tutorial-id="${panToTarget}"]`);
-      if (!el || !contentRef.current || !containerRef.current) return;
-
       const contentEl = contentRef.current;
-      const contentW = contentEl.offsetWidth;
-      const contentH = contentEl.offsetHeight;
-      if (!contentW || !contentH) return;
+      const containerEl = containerRef.current;
+      const targetEl = contentEl?.querySelector(`[data-tutorial-id="${panToTarget}"]`) as HTMLElement | null;
+      if (!contentEl || !containerEl || !targetEl) return;
 
-      const currentScale = scaleRef.current;
-      const targetScale = panToScale != null
+      const contentWidth = contentEl.offsetWidth;
+      const contentHeight = contentEl.offsetHeight;
+      if (!contentWidth || !contentHeight) return;
+
+      const currentZoomLevel = zoomLevel;
+      const targetZoomLevel = panToScale != null
         ? Math.max(minScale, Math.min(maxScale, panToScale))
-        : currentScale;
+        : currentZoomLevel;
+      const targetScale = baseScale * targetZoomLevel;
 
-      // Reset any scroll offset caused by external scrollIntoView before measuring
-      containerRef.current.scrollTop = 0;
-      containerRef.current.scrollLeft = 0;
+      containerEl.scrollTop = 0;
+      containerEl.scrollLeft = 0;
 
-      // 临时重置 transform 为无偏移状态来测量目标的真实 CSS 布局位置
       const savedTransform = contentEl.style.transform;
       const savedTransition = contentEl.style.transition;
       contentEl.style.transition = 'none';
       contentEl.style.transform = 'translate(0px, 0px) scale(1)';
-      contentEl.getBoundingClientRect(); // 强制回流
+      contentEl.getBoundingClientRect();
 
       const contentRect = contentEl.getBoundingClientRect();
-      const elRect = (el as HTMLElement).getBoundingClientRect();
+      const elementRect = targetEl.getBoundingClientRect();
+      const targetCenterX = (elementRect.left + elementRect.right) / 2 - contentRect.left;
+      const targetCenterY = (elementRect.top + elementRect.bottom) / 2 - contentRect.top;
 
-      const targetCenterX = (elRect.left + elRect.right) / 2 - contentRect.left;
-      const targetCenterY = (elRect.top + elRect.bottom) / 2 - contentRect.top;
-
-      // 恢复原始 transform
       contentEl.style.transform = savedTransform;
-      contentEl.getBoundingClientRect(); // 强制回流
+      contentEl.getBoundingClientRect();
       contentEl.style.transition = savedTransition;
 
-      const contentCenterX = contentW / 2;
-      const contentCenterY = contentH / 2;
+      const contentCenterX = contentWidth / 2;
+      const contentCenterY = contentHeight / 2;
       const targetTx = (contentCenterX - targetCenterX) * targetScale;
       const targetTy = (contentCenterY - targetCenterY) * targetScale;
+      const clampedPosition = clampPosition(targetTx, targetTy, targetScale);
 
-      const clamped = clampPosition(targetTx, targetTy, targetScale);
+      clearAnimationTimer();
       setIsAnimating(true);
-      if (targetScale !== currentScale) setScale(targetScale);
-      setPosition(clamped);
-      const timerId = window.setTimeout(() => setIsAnimating(false), 400);
-      return () => window.clearTimeout(timerId);
+      if (targetZoomLevel !== currentZoomLevel) {
+        revealScaleBadge(targetZoomLevel);
+        setZoomLevel(targetZoomLevel);
+      }
+      setPosition(clampedPosition);
+      animationTimerRef.current = window.setTimeout(() => {
+        setIsAnimating(false);
+        animationTimerRef.current = null;
+      }, 400);
     });
+
     return () => cancelAnimationFrame(rafId);
-  }, [panToTarget, panToScale, minScale, maxScale, clampPosition]);
+  }, [
+    baseScale,
+    clampPosition,
+    clearAnimationTimer,
+    containerSize.height,
+    containerSize.width,
+    contentSize.height,
+    contentSize.width,
+    maxScale,
+    minScale,
+    panToScale,
+    panToTarget,
+    revealScaleBadge,
+    zoomLevel,
+  ]);
 
   return (
     <div
@@ -349,7 +425,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
-      onDragStart={(e) => e.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
       data-testid={containerTestId}
       style={{
         cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
@@ -358,21 +434,20 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         touchAction: interactionDisabled ? 'auto' : 'none',
       }}
     >
-      {/* 左上角缩放倍率显示 */}
       <div
-        className="absolute top-3 left-3 z-20 text-sm font-bold text-white bg-black/70 px-3 py-1.5 rounded-lg border border-white/20 pointer-events-none shadow-lg"
+        className={`absolute top-3 left-3 z-20 rounded-lg border border-white/20 bg-black/70 px-3 py-1.5 text-sm font-bold text-white shadow-lg pointer-events-none transition-opacity duration-200 ${shouldShowScaleBadge ? 'opacity-100' : 'opacity-0'}`}
         data-testid={scaleTestId}
+        aria-hidden={!shouldShowScaleBadge}
       >
-        {Math.round(scale * 100)}%
+        {Math.round(zoomLevel * 100)}%
       </div>
 
-      {/* 地图内容 */}
       <div
         ref={contentRef}
         className="origin-center"
         data-testid={contentTestId}
         style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          transform: `translate(${clampedPosition.x}px, ${clampedPosition.y}px) scale(${scale})`,
           transition: isDragging ? 'none' : isAnimating ? 'transform 350ms ease-out' : 'transform 75ms',
           willChange: 'transform',
           pointerEvents: isDragging ? 'none' : 'auto',

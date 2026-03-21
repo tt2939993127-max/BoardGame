@@ -73,31 +73,54 @@ describe('Feedback Module (e2e)', () => {
         }
     });
 
+    const registerUser = async ({
+        username,
+        email,
+        code,
+        role = 'user',
+    }: {
+        username: string;
+        email: string;
+        code: string;
+        role?: 'user' | 'developer' | 'admin';
+    }) => {
+        await authService.storeEmailCode(email, code);
+        const registerRes = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username, email, code, password: 'pass1234' })
+            .expect(201);
+
+        const token = registerRes.body.token as string;
+        const userId = registerRes.body.user.id as string;
+        if (role !== 'user') {
+            await userModel.updateOne({ _id: userId }, { role });
+        }
+
+        return { token, userId };
+    };
+
     const seedUsers = async () => {
-        const adminEmail = 'admin-feedback@example.com';
-        const adminCode = '123456';
-        await authService.storeEmailCode(adminEmail, adminCode);
-        const adminRegister = await request(app.getHttpServer())
-            .post('/auth/register')
-            .send({ username: 'admin-feedback', email: adminEmail, code: adminCode, password: 'pass1234' })
-            .expect(201);
+        const { token: adminToken, userId: adminId } = await registerUser({
+            username: 'admin-feedback',
+            email: 'admin-feedback@example.com',
+            code: '123456',
+            role: 'admin',
+        });
 
-        const adminToken = adminRegister.body.token as string;
-        const adminId = adminRegister.body.user.id as string;
-        await userModel.updateOne({ _id: adminId }, { role: 'admin' });
+        const { token: developerToken, userId: developerId } = await registerUser({
+            username: 'developer-feedback',
+            email: 'developer-feedback@example.com',
+            code: '112233',
+            role: 'developer',
+        });
 
-        const userEmail = 'player-feedback@example.com';
-        const userCode = '654321';
-        await authService.storeEmailCode(userEmail, userCode);
-        const userRegister = await request(app.getHttpServer())
-            .post('/auth/register')
-            .send({ username: 'player-feedback', email: userEmail, code: userCode, password: 'pass1234' })
-            .expect(201);
+        const { token: userToken, userId } = await registerUser({
+            username: 'player-feedback',
+            email: 'player-feedback@example.com',
+            code: '654321',
+        });
 
-        const userToken = userRegister.body.token as string;
-        const userId = userRegister.body.user.id as string;
-
-        return { adminToken, adminId, userToken, userId };
+        return { adminToken, adminId, developerToken, developerId, userToken, userId };
     };
 
     it('未登录可以匿名提交反馈', async () => {
@@ -144,6 +167,111 @@ describe('Feedback Module (e2e)', () => {
             .expect(200);
 
         expect(updateRes.body.status).toBe('resolved');
+    });
+
+    it('developer 可以查看反馈并更新状态', async () => {
+        const { adminToken, developerToken, userToken } = await seedUsers();
+
+        const createRes = await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: 'developer visible feedback',
+                type: 'bug',
+                severity: 'medium',
+                gameName: 'smashup',
+                actionLog: '[12:30] P1: trigger ability',
+            })
+            .expect(201);
+
+        const feedbackId = createRes.body._id as string;
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/feedback?limit=20')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .expect(200);
+
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0]._id).toBe(feedbackId);
+
+        const updateRes = await request(app.getHttpServer())
+            .patch(`/admin/feedback/${feedbackId}/status`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({ status: 'resolved' })
+            .expect(200);
+
+        expect(updateRes.body.status).toBe('resolved');
+
+        const adminListRes = await request(app.getHttpServer())
+            .get('/admin/feedback?limit=20')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(adminListRes.body.items[0].status).toBe('resolved');
+    });
+
+    it('admin 列表支持严重程度筛选、分页，并返回调试上下文', async () => {
+        const { adminToken, userToken } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '低优先级反馈',
+                type: 'other',
+                severity: 'low',
+                gameName: 'tictactoe',
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '第一个严重问题',
+                type: 'bug',
+                severity: 'critical',
+                gameName: 'smashup',
+                actionLog: '[12:00] P1: cast card',
+                clientContext: {
+                    route: '/play/smashup/match/abc',
+                    mode: 'online',
+                    matchId: 'abc',
+                    playerId: '0',
+                    gameId: 'smashup',
+                },
+                errorContext: {
+                    name: 'TypeError',
+                    message: 'Cannot read properties of undefined',
+                    source: 'react.error_boundary',
+                },
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: '第二个严重问题',
+                type: 'bug',
+                severity: 'critical',
+                gameName: 'smashup',
+                actionLog: '[12:05] P1: trigger ability',
+            })
+            .expect(201);
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/feedback?severity=critical&page=2&limit=1')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(listRes.body.total).toBe(2);
+        expect(listRes.body.page).toBe(2);
+        expect(listRes.body.limit).toBe(1);
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0].content).toBe('第一个严重问题');
+        expect(listRes.body.items[0].clientContext?.matchId).toBe('abc');
+        expect(listRes.body.items[0].errorContext?.name).toBe('TypeError');
     });
 
     it('bug 类型必须附带 actionLog 或 stateSnapshot', async () => {

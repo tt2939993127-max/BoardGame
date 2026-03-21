@@ -7,6 +7,7 @@ import { canAddCard, type DeckDraft } from '../../config/deckValidation';
 import { CardSprite } from '../CardSprite';
 import { MagnifyOverlay } from '../../../../components/common/overlays/MagnifyOverlay';
 import { resolveCardAtlasId, initSpriteAtlases } from '../cardAtlas';
+import { useTouchInspectGesture } from '../../../../hooks/ui/useTouchInspectGesture';
 
 /** 解析卡牌的精灵图配置 */
 function resolveSprite(card: Card): { atlasId: string; frameIndex: number } {
@@ -109,6 +110,7 @@ export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, current
                 onClose={() => setMagnifiedCard(null)}
                 containerClassName="max-h-[85vh] max-w-[90vw]"
                 closeLabel={t('actions.closePreview')}
+                overlayTestId="sw-deckbuilder-card-magnify-overlay"
             >
                 {magnifiedCard && (
                     <CardSprite
@@ -133,6 +135,16 @@ interface CardSectionProps {
 
 const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, onAdd, onMagnify, isSummonerSection }) => {
     const { t } = useTranslation('game-summonerwars');
+    const {
+        showDesktopInspectButton,
+        getTouchInspectProps,
+        shouldBlockInspectClick,
+    } = useTouchInspectGesture<string, Card>({
+        enabled: true,
+        onInspect: (_key, payload) => {
+            onMagnify(payload);
+        },
+    });
     
     return (
         <div className="mb-5">
@@ -150,17 +162,20 @@ const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, on
                     return (
                         <div
                             key={card.id}
+                            data-card-pool-id={card.id}
                             className={`
                                 relative group rounded-lg overflow-hidden border transition-all duration-200
                                 ${isSelectedSummoner ? 'border-amber-400 ring-2 ring-amber-400/50 scale-105 z-10' : ''}
                                 ${isDisabled ? 'opacity-50 grayscale border-white/5' : 'border-white/20 hover:border-amber-400/60 hover:shadow-xl'}
                             `}
+                            {...getTouchInspectProps(`card-${card.id}`, card)}
+                            onClick={() => {
+                                if (shouldBlockInspectClick(`card-${card.id}`)) return;
+                                if (!isDisabled) onAdd(card);
+                            }}
                         >
                             {/* 卡牌精灵图（点击添加/选择） */}
-                            <div
-                                onClick={() => !isDisabled && onAdd(card)}
-                                className={isDisabled ? 'cursor-default' : 'cursor-pointer'}
-                            >
+                            <div className={isDisabled ? 'cursor-default' : 'cursor-pointer'}>
                                 <CardSprite
                                     atlasId={sprite.atlasId}
                                     frameIndex={sprite.frameIndex}
@@ -174,18 +189,21 @@ const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, on
                             </div>
 
                             {/* 放大预览按钮（所有卡牌都可预览，包括禁用状态） */}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onMagnify(card); }}
-                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                                title={t('deckBuilder.magnifyPreview')}
-                            >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="11" cy="11" r="8" />
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                                    <line x1="11" y1="8" x2="11" y2="14" />
-                                    <line x1="8" y1="11" x2="14" y2="11" />
-                                </svg>
-                            </button>
+                            {showDesktopInspectButton && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onMagnify(card); }}
+                                    className="absolute top-1 right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 pointer-events-none transition-opacity hover:bg-black/80 hover:text-white group-hover:opacity-100 group-hover:pointer-events-auto"
+                                    title={t('deckBuilder.magnifyPreview')}
+                                    data-testid={`sw-deckbuilder-card-magnify-${card.id}`}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="11" cy="11" r="8" />
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                        <line x1="11" y1="8" x2="11" y2="14" />
+                                        <line x1="8" y1="11" x2="14" y2="11" />
+                                    </svg>
+                                </button>
+                            )}
                         </div>
                     );
                 })}

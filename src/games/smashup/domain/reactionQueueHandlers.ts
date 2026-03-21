@@ -50,6 +50,7 @@ export function registerReactionQueueInteractionHandlers(): void {
       triggerMinionUid: t.triggerMinionUid,
       triggerMinionDefId: t.triggerMinionDefId,
       triggerMinionPower: (t as any).triggerMinionPower,
+      destroyerId: t.destroyerId,
       triggerMinion: lkiTriggerMinion,
       reason: t.reason,
       affectType: t.affectType,

@@ -16,6 +16,7 @@ import { getUnitAbilities } from '../domain/helpers';
 import { GameButton } from './GameButton';
 import type { AbilityModeState } from './useGameEvents';
 import type { WithdrawModeState } from './modeTypes';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
 
 interface Props {
   core: SummonerWarsCore;
@@ -114,5 +115,12 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
   }
 
   if (buttons.length === 0) return null;
-  return <div className="absolute bottom-[14vw] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-2">{buttons}</div>;
+  return (
+    <div
+      className="absolute left-1/2 z-30 flex -translate-x-1/2 gap-2 pointer-events-auto"
+      style={{ bottom: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.14)` }}
+    >
+      {buttons}
+    </div>
+  );
 };

@@ -47,6 +47,7 @@ import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
 import { collectTriggers, fireTriggers } from './ongoingEffects';
 import { getMinionDef } from '../data/cards';
+import { drawCards } from './utils';
 
 // ============================================================================
 // 交互选项工厂函数
@@ -988,6 +989,35 @@ export function drawMadnessCards(
     };
 }
 
+export function buildStandardDrawEvents(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    count: number,
+    random: RandomFn,
+    now: number,
+): SmashUpEvent[] {
+    if (count <= 0) return [];
+    const player = state.players[playerId];
+    if (!player) return [];
+    const draw = drawCards(player, count, random);
+    const events: SmashUpEvent[] = [];
+    if (draw.reshuffledDeckUids && draw.reshuffledDeckUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: draw.reshuffledDeckUids },
+            timestamp: now,
+        } as DeckReorderedEvent);
+    }
+    if (draw.drawnUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId, count: draw.drawnUids.length, cardUids: draw.drawnUids },
+            timestamp: now,
+        } as CardsDrawnEvent);
+    }
+    return events;
+}
+
 /**
  * 生成返回疯狂卡事件
  * 
@@ -1013,7 +1043,8 @@ export function returnMadnessCard(
 export function hasCthulhuExpansionFaction(players: Record<string, { factions: [string, string] }>): boolean {
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(f)) return true;
+            const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
+            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
         }
     }
     return false;

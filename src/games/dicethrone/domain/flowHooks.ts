@@ -23,7 +23,7 @@ import type {
 } from './types';
 import { STATUS_IDS, TOKEN_IDS } from './ids';
 import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue, getRollerId } from './rules';
-import { resolveAttack, resolveOffensivePreDefenseEffects, resolvePostDamageEffects } from './attack';
+import { resolveAttack, resolveAttackWithSneakImmunityAfterDefense, resolveOffensivePreDefenseEffects, resolvePostDamageEffects } from './attack';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
@@ -676,7 +676,11 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
                 
                 // 直接结算攻击
-                const attackEvents = resolveAttack(core, random, undefined, timestamp);
+                const defender = core.players[core.pendingAttack.defenderId];
+                const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+                const attackEvents = sneakStacks > 0 && !core.pendingAttack.isUltimate
+                    ? resolveAttackWithSneakImmunityAfterDefense(core, random, timestamp)
+                    : resolveAttack(core, random, undefined, timestamp);
                 events.push(...attackEvents);
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');

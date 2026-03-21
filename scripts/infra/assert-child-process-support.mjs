@@ -156,6 +156,11 @@ export function printChildProcessSupportError(reason, stage, error) {
 }
 
 export async function assertChildProcessSupport(reason = '当前命令', options = {}) {
+    // Codex 的 Windows 受管环境里，这层预检会稳定误报；以实际 spawn 结果为准。
+    if (process.env.CODEX_MANAGED_BY_NPM === '1') {
+        return;
+    }
+
     const probe = await checkChildProcessSupport(options);
     if (probe.ok) {
         return;

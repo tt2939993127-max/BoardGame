@@ -1,11 +1,11 @@
 /**
  * 召唤师战争 - 手牌区组件
- * 
+ *
  * 底部展示玩家手牌，支持：
  * - 点击选中卡牌
- * - 悬停上移预览
- * - 精灵图渲染
- * - 放大镜按钮预览卡牌
+ * - 桌面端悬停抬升预览
+ * - 触屏长按放大
+ * - 桌面端保留 hover 放大入口
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
@@ -18,11 +18,15 @@ import { playDeniedSound } from '../../../lib/audio/useGameAudio';
 import { resolveCardAtlasId } from './cardAtlas';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 import { useTouchLongPress } from '../../../hooks/ui/useTouchLongPress';
+import { BOARD_SHELL_REFERENCE_WIDTH } from './layoutConstants';
 
-/** 放大镜图标 */
-const MagnifyIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <svg className={className} viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+const MagnifyIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className = '', style }) => (
+  <svg className={className} style={style} viewBox="0 0 20 20" fill="currentColor">
+    <path
+      fillRule="evenodd"
+      d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+      clipRule="evenodd"
+    />
   </svg>
 );
 
@@ -37,11 +41,11 @@ interface HandAreaProps {
   onCardSelect?: (cardId: string | null) => void;
   onPlayEvent?: (cardId: string) => void;
   onMagnifyCard?: (card: Card) => void;
-  /** 血契召唤步骤2：选择手牌模式（绕过魔力检查） */
+  /** 血契召唤步骤：只允许选择低费单位牌。 */
   bloodSummonSelectingCard?: boolean;
-  /** 技能选卡模式：当前正在为技能选择手牌（弃牌/选择，不是打出），绕过魔力检查 */
+  /** 技能选卡模式：当前正在为技能选择手牌（弃牌/选择，不是打出）。 */
   abilitySelectingCards?: boolean;
-  /** 有交互模式激活（技能选择/事件卡多步骤），阻止打出新事件卡 */
+  /** 有交互模式激活时，阻止再打出新的事件牌。 */
   interactionBusy?: boolean;
   className?: string;
 }
@@ -59,19 +63,19 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
 
   if (spriteIndex === undefined) return null;
 
-  // 传送门使用全局共用图集
   if (spriteAtlas === 'portal') {
     return { atlasId: 'sw:portal', frameIndex: spriteIndex };
   }
 
   const atlasType = (spriteAtlas ?? 'cards') as 'hero' | 'cards';
   const atlasId = resolveCardAtlasId(card as { id: string; faction?: string }, atlasType);
-
   return { atlasId, frameIndex: spriteIndex };
 }
 
-// 卡牌宽度（使用vw单位）
-const CARD_WIDTH_VW = 16; // 16vw
+const CARD_WIDTH_RATIO = 'var(--sw-hand-card-width-ratio, 0.16)';
+const MAGNIFY_BUTTON_OFFSET_RATIO = 0.004;
+const MAGNIFY_BUTTON_SIZE_RATIO = 0.022;
+const MAGNIFY_ICON_SIZE_RATIO = 0.012;
 const LONG_PRESS_DURATION_MS = 420;
 const LONG_PRESS_MOVE_CANCEL_PX = 14;
 const LONG_PRESS_CLICK_BLOCK_MS = 450;
@@ -89,7 +93,7 @@ const HandCard: React.FC<{
   onPointerMove?: React.PointerEventHandler<HTMLDivElement>;
   onPointerUp?: React.PointerEventHandler<HTMLDivElement>;
   onPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
-  showTouchMagnifyButton?: boolean;
+  suppressMagnifyButton?: boolean;
 }> = ({
   card,
   index,
@@ -103,97 +107,115 @@ const HandCard: React.FC<{
   onPointerMove,
   onPointerUp,
   onPointerCancel,
-  showTouchMagnifyButton = false,
+  suppressMagnifyButton = false,
 }) => {
-    const [isHovered, setIsHovered] = useState(false);
-    const spriteConfig = getCardSpriteConfig(card);
+  const [isHovered, setIsHovered] = useState(false);
+  const spriteConfig = getCardSpriteConfig(card);
+  const shouldRenderMagnifyButton = Boolean(onMagnify) && !suppressMagnifyButton;
+  const magnifyButtonSize = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_SIZE_RATIO})`;
+  const magnifyButtonOffset = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_OFFSET_RATIO})`;
+  const magnifyIconSize = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_ICON_SIZE_RATIO})`;
+  const hoverMagnifyButtonStyle: React.CSSProperties = {
+    top: magnifyButtonOffset,
+    right: magnifyButtonOffset,
+    width: magnifyButtonSize,
+    height: magnifyButtonSize,
+  };
+  const magnifyIconStyle: React.CSSProperties = {
+    width: magnifyIconSize,
+    height: magnifyIconSize,
+  };
 
-    // 卡牌间距（使用vw单位，进一步缩小间距）
-    const cardSpacingVw = totalCards > 6 ? -6 : totalCards > 4 ? -5.5 : -5;
+  const cardSpacingRatio = totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05;
 
-    const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
-      e.stopPropagation();
-      onMagnify?.();
-    }, [onMagnify]);
+  const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onMagnify?.();
+  }, [onMagnify]);
+  const handleMagnifyKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopPropagation();
+    onMagnify?.();
+  }, [onMagnify]);
 
-    return (
-      <motion.div
-        className="relative cursor-pointer select-none group"
-        data-card-id={card.id}
-        data-tutorial-id={index === 0 ? 'sw-first-hand-card' : undefined}
-        data-card-type={card.cardType}
-        data-card-name={card.name}
-        data-card-cost={getCardCost(card)}
-        data-selected={isSelected ? 'true' : 'false'}
-        data-can-afford={canAfford ? 'true' : 'false'}
-        data-can-play={canPlay ? 'true' : 'false'}
-        style={{
-          width: `${CARD_WIDTH_VW}vw`,
-          marginLeft: index === 0 ? 0 : `${cardSpacingVw}vw`,
-          zIndex: isSelected ? 100 : isHovered ? 50 : index,
-        }}
-        initial={false}
-        animate={{
-          y: isSelected ? -30 : isHovered ? -20 : 0,
-          scale: isHovered ? 1.08 : 1,
-        }}
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-        onHoverStart={() => setIsHovered(true)}
-        onHoverEnd={() => setIsHovered(false)}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
-        onClick={onClick}
-      >
-        <div
-          className={`
+  return (
+    <motion.div
+      className="relative cursor-pointer select-none group"
+      data-card-id={card.id}
+      data-tutorial-id={index === 0 ? 'sw-first-hand-card' : undefined}
+      data-card-type={card.cardType}
+      data-card-name={card.name}
+      data-card-cost={getCardCost(card)}
+      data-selected={isSelected ? 'true' : 'false'}
+      data-can-afford={canAfford ? 'true' : 'false'}
+      data-can-play={canPlay ? 'true' : 'false'}
+      style={{
+        width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${CARD_WIDTH_RATIO})`,
+        marginLeft: index === 0 ? 0 : `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardSpacingRatio})`,
+        zIndex: isSelected ? 100 : isHovered ? 50 : index,
+      }}
+      initial={false}
+      animate={{
+        y: isSelected ? -30 : isHovered ? -20 : 0,
+        scale: isHovered ? 1.08 : 1,
+      }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onClick={onClick}
+    >
+      <div
+        className={`
           relative w-full rounded-lg overflow-hidden pointer-events-none
           border-2 transition-all duration-150
           ${isSelected
-              ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30'
-              : canPlay
-                ? 'border-green-400/80 hover:border-green-300 shadow-md shadow-green-400/30'
-                : canAfford
-                  ? 'border-slate-500/80 hover:border-slate-400'
-                  : 'border-slate-700/60'
-            }
+            ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30'
+            : canPlay
+              ? 'border-green-400/80 hover:border-green-300 shadow-md shadow-green-400/30'
+              : canAfford
+                ? 'border-slate-500/80 hover:border-slate-400'
+                : 'border-slate-700/60'}
           cursor-pointer
           ${!canAfford ? 'grayscale' : ''}
         `}
+      >
+        {spriteConfig ? (
+          <CardSprite
+            atlasId={spriteConfig.atlasId}
+            frameIndex={spriteConfig.frameIndex}
+            className="w-full pointer-events-none"
+          />
+        ) : (
+          <div className="w-full aspect-[1044/729] bg-gradient-to-b from-slate-700 to-slate-900 flex items-center justify-center">
+            <span className="text-slate-400 text-sm">{card.name}</span>
+          </div>
+        )}
+
+        {isSelected && <div className="absolute inset-0 bg-amber-400/15 pointer-events-none" />}
+      </div>
+
+      {shouldRenderMagnifyButton && (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="放大卡牌"
+          onClick={handleMagnifyClick}
+          onKeyDown={handleMagnifyKeyDown}
+          data-testid="sw-hand-card-magnify"
+          style={hoverMagnifyButtonStyle}
+          className="absolute z-20 flex items-center justify-center rounded-full border border-white/20 bg-black/60 text-white opacity-0 pointer-events-none shadow-lg transition-[opacity,background-color] duration-200 group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80"
         >
-          {spriteConfig ? (
-            <CardSprite
-              atlasId={spriteConfig.atlasId}
-              frameIndex={spriteConfig.frameIndex}
-              className="w-full pointer-events-none"
-            />
-          ) : (
-            <div className="w-full aspect-[1044/729] bg-gradient-to-b from-slate-700 to-slate-900 flex items-center justify-center">
-              <span className="text-slate-400 text-sm">{card.name}</span>
-            </div>
-          )}
-
-          {isSelected && (
-            <div className="absolute inset-0 bg-amber-400/15 pointer-events-none" />
-          )}
-
-          {/* 放大镜按钮 */}
-          <button
-            onClick={handleMagnifyClick}
-            data-testid="sw-hand-card-magnify"
-            className={
-              showTouchMagnifyButton
-                ? 'absolute left-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-white/25 bg-black/75 text-white shadow-lg transition-[background-color] duration-200 hover:bg-amber-500/80 pointer-events-auto'
-                : 'absolute top-[0.3vw] right-[0.3vw] z-20 flex h-[1.8vw] w-[1.8vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 group-hover:opacity-100 hover:bg-amber-500/80 pointer-events-auto'
-            }
-          >
-            <MagnifyIcon className={showTouchMagnifyButton ? 'h-4 w-4' : 'w-[1vw] h-[1vw]'} />
-          </button>
+          <MagnifyIcon style={magnifyIconStyle} />
         </div>
-      </motion.div>
-    );
-  };
+      )}
+    </motion.div>
+  );
+};
 
 export const HandArea: React.FC<HandAreaProps> = ({
   cards,
@@ -229,29 +251,29 @@ export const HandArea: React.FC<HandAreaProps> = ({
     },
   });
 
-  // 追踪新增卡牌（用于发牌动画）
   const prevCardIdsRef = useRef<string[]>([]);
   const [newCardIds, setNewCardIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const currentIds = cards.map(c => c.id);
+    const currentIds = cards.map((card) => card.id);
     const prevIds = prevCardIdsRef.current;
-    const added = currentIds.filter(id => !prevIds.includes(id));
+    const added = currentIds.filter((id) => !prevIds.includes(id));
 
     if (added.length > 0) {
       setNewCardIds(new Set(added));
-      // 动画完成后清除标记
       const timer = setTimeout(() => setNewCardIds(new Set()), 400);
       prevCardIdsRef.current = currentIds;
       return () => clearTimeout(timer);
     }
+
     prevCardIdsRef.current = currentIds;
+    return undefined;
   }, [cards]);
 
   const canPlayCard = useCallback((card: Card): boolean => {
     if (!isMyTurn) return false;
-    // 魔力阶段弃牌不需要检查费用，任何手牌都可以弃
     if (phase === 'magic') return true;
+
     const cost = getCardCost(card);
     if (cost > currentMagic) return false;
     if (phase === 'summon' && card.cardType === 'unit') return true;
@@ -264,87 +286,89 @@ export const HandArea: React.FC<HandAreaProps> = ({
   }, [phase, isMyTurn, currentMagic]);
 
   const handleCardClick = useCallback((cardId: string) => {
-    const card = cards.find(c => c.id === cardId);
+    const card = cards.find((item) => item.id === cardId);
     if (!card) return;
     if (shouldBlockClick(cardId)) return;
 
     const cost = getCardCost(card);
     const canAfford = cost <= currentMagic;
 
-    // 血契召唤选卡模式：点击费用≤2的单位卡直接选中（免费放置，不检查魔力）
     if (bloodSummonSelectingCard) {
       if (card.cardType === 'unit' && cost <= 2) {
         onCardSelect?.(cardId);
       } else {
         playDeniedSound();
-        showToast.warning(t('handArea.bloodSummonOnlyLowCost', { maxCost: 2 }), undefined, { dedupeKey: 'summonerwars.bloodSummon' });
+        showToast.warning(
+          t('handArea.bloodSummonOnlyLowCost', { maxCost: 2 }),
+          undefined,
+          { dedupeKey: 'summonerwars.bloodSummon' },
+        );
       }
       return;
     }
 
-    // 魔力阶段：所有卡牌点击都走 onCardClick（包括事件卡）
-    // 事件卡会在 useCellInteraction 中进入选择模式（打出或弃牌）
-    // 其他卡牌用于弃牌换魔力
     if (phase === 'magic' && isMyTurn) {
       onCardClick?.(cardId);
       return;
     }
 
-    // ✅ 技能选卡模式：正在为技能选择手牌（弃牌/选择，不是打出卡牌）
-    // 弃牌动作不消耗魔力，所以不需要检查卡牌费用
-    // 适用于所有 activationStep: 'selectCards' 的技能（圣光箭、治疗等）
     if (abilitySelectingCards) {
       onCardClick?.(cardId);
       return;
     }
 
-    // 非魔力阶段：检查是否可以支付费用（用于正常召唤/建造/事件卡）
     if (!canAfford) {
       playDeniedSound();
-      showToast.warning(t('handArea.insufficientMagic', { cost, current: currentMagic }), undefined, { dedupeKey: 'summonerwars.insufficientMagic' });
+      showToast.warning(
+        t('handArea.insufficientMagic', { cost, current: currentMagic }),
+        undefined,
+        { dedupeKey: 'summonerwars.insufficientMagic' },
+      );
       return;
     }
 
-    // 事件卡：在对应阶段直接打出
     if (card.cardType === 'event' && isMyTurn) {
-      // 有交互模式激活时（技能选择/事件卡多步骤），阻止打出新事件卡
       if (interactionBusy) {
         playDeniedSound();
-        showToast.warning(t('handArea.interactionBusy', '请先完成当前操作'), undefined, { dedupeKey: 'summonerwars.interactionBusy' });
+        showToast.warning(
+          t('handArea.interactionBusy', '请先完成当前操作'),
+          undefined,
+          { dedupeKey: 'summonerwars.interactionBusy' },
+        );
         return;
       }
+
       const event = card as EventCard;
       if (event.playPhase === phase || event.playPhase === 'any') {
         onPlayEvent?.(cardId);
         return;
-      } else {
-        const phaseLabel = t(`phase.${event.playPhase}`);
-        playDeniedSound();
-        showToast.warning(t('handArea.eventPhaseOnly', { phase: phaseLabel }), undefined, { dedupeKey: 'summonerwars.eventPhase' });
-        return;
       }
+
+      const phaseLabel = t(`phase.${event.playPhase}`);
+      playDeniedSound();
+      showToast.warning(
+        t('handArea.eventPhaseOnly', { phase: phaseLabel }),
+        undefined,
+        { dedupeKey: 'summonerwars.eventPhase' },
+      );
+      return;
     }
 
     if ((phase === 'summon' || phase === 'build') && isMyTurn) {
-      // 如果点击的是已选中的卡牌，直接取消选中（无需检查是否能打出）
       if (selectedCardId === cardId) {
         onCardSelect?.(null);
         return;
       }
-      
-      // 选中新卡牌时才检查是否能打出
+
       const canPlay = canPlayCard(card);
       if (canPlay) {
         onCardSelect?.(cardId);
-      } else {
-        // 提示为什么不能打出
-        if (phase === 'summon' && card.cardType !== 'unit') {
-          playDeniedSound();
-          showToast.warning(t('handArea.onlyUnitInSummon'), undefined, { dedupeKey: 'summonerwars.onlyUnit' });
-        } else if (phase === 'build' && card.cardType !== 'structure') {
-          playDeniedSound();
-          showToast.warning(t('handArea.onlyStructureInBuild'), undefined, { dedupeKey: 'summonerwars.onlyStructure' });
-        }
+      } else if (phase === 'summon' && card.cardType !== 'unit') {
+        playDeniedSound();
+        showToast.warning(t('handArea.onlyUnitInSummon'), undefined, { dedupeKey: 'summonerwars.onlyUnit' });
+      } else if (phase === 'build' && card.cardType !== 'structure') {
+        playDeniedSound();
+        showToast.warning(t('handArea.onlyStructureInBuild'), undefined, { dedupeKey: 'summonerwars.onlyStructure' });
       }
       return;
     }
@@ -356,21 +380,33 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, interactionBusy, showToast, t, shouldBlockClick]);
+  }, [
+    cards,
+    phase,
+    isMyTurn,
+    currentMagic,
+    selectedCardId,
+    onCardClick,
+    onCardSelect,
+    onPlayEvent,
+    canPlayCard,
+    bloodSummonSelectingCard,
+    abilitySelectingCards,
+    interactionBusy,
+    showToast,
+    t,
+    shouldBlockClick,
+  ]);
 
   if (cards.length === 0) {
     return null;
   }
 
   return (
-    <div
-      className={`relative flex items-end justify-center ${className}`}
-      data-testid="sw-hand-area"
-    >
+    <div className={`relative flex items-end justify-center ${className}`} data-testid="sw-hand-area">
       <div className="flex items-end">
         <AnimatePresence>
           {cards.map((card, index) => {
-            // 魔力阶段弃牌时所有卡都"买得起"（不消耗魔力）
             const canAfford = phase === 'magic' ? true : getCardCost(card) <= currentMagic;
             const canPlay = canPlayCard(card);
             const isSelected = selectedCardId === card.id || selectedCardIds.includes(card.id);
@@ -379,7 +415,6 @@ export const HandArea: React.FC<HandAreaProps> = ({
             return (
               <motion.div
                 key={card.id}
-                layout
                 initial={isNew ? { x: -200, y: 50, opacity: 0, scale: 0.7 } : false}
                 animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
@@ -391,15 +426,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
                   totalCards={cards.length}
                   isSelected={isSelected}
                   canAfford={canAfford}
-                canPlay={canPlay}
-                onClick={() => handleCardClick(card.id)}
-                onMagnify={() => onMagnifyCard?.(card)}
-                onPointerDown={(event) => handleTouchLongPressStart(event, card.id, card)}
-                onPointerMove={(event) => handleTouchLongPressMove(event, card.id)}
-                onPointerUp={() => handleTouchLongPressEnd(card.id)}
-                onPointerCancel={() => handleTouchLongPressEnd(card.id)}
-                showTouchMagnifyButton={isCoarsePointer && Boolean(onMagnifyCard)}
-              />
+                  canPlay={canPlay}
+                  onClick={() => handleCardClick(card.id)}
+                  onMagnify={() => onMagnifyCard?.(card)}
+                  onPointerDown={(event) => handleTouchLongPressStart(event, card.id, card)}
+                  onPointerMove={(event) => handleTouchLongPressMove(event, card.id)}
+                  onPointerUp={() => handleTouchLongPressEnd(card.id)}
+                  onPointerCancel={() => handleTouchLongPressEnd(card.id)}
+                  // 触屏下统一走长按放大，不渲染显式按钮，避免遮挡再次点按手牌。
+                  suppressMagnifyButton={isCoarsePointer}
+                />
               </motion.div>
             );
           })}
