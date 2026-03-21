@@ -470,7 +470,6 @@ describe('elder_things_pod: Dunwich Horror POD', () => {
         expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
     });
 });
-
 describe('elder_things (base): Elder Thing', () => {
     it('if you cannot destroy two other minions, destroy option disabled and you can put it to deck bottom (FAQ)', () => {
         const core = makeState({

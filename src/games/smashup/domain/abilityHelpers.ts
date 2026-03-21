@@ -47,6 +47,7 @@ import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
 import { collectTriggers, fireTriggers } from './ongoingEffects';
 import { getMinionDef } from '../data/cards';
+import { drawCards } from './utils';
 
 // ============================================================================
 // 交互选项工厂函数
@@ -986,6 +987,35 @@ export function drawMadnessCards(
         payload: { playerId, count: actualCount, cardUids, reason },
         timestamp: now,
     };
+}
+
+export function buildStandardDrawEvents(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    count: number,
+    random: RandomFn,
+    now: number,
+): SmashUpEvent[] {
+    if (count <= 0) return [];
+    const player = state.players[playerId];
+    if (!player) return [];
+    const draw = drawCards(player, count, random);
+    const events: SmashUpEvent[] = [];
+    if (draw.reshuffledDeckUids && draw.reshuffledDeckUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: draw.reshuffledDeckUids },
+            timestamp: now,
+        } as DeckReorderedEvent);
+    }
+    if (draw.drawnUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId, count: draw.drawnUids.length, cardUids: draw.drawnUids },
+            timestamp: now,
+        } as CardsDrawnEvent);
+    }
+    return events;
 }
 
 /**

@@ -607,9 +607,9 @@ function resolveLiveBaseIndex(
     baseIndex: number | undefined,
     baseDefId?: string,
 ): number | undefined {
-    if (baseDefId) {
+    if (baseDefId !== undefined) {
         const liveIndex = state.bases.findIndex(base => base.defId === baseDefId);
-        if (liveIndex >= 0) return liveIndex;
+        return liveIndex >= 0 ? liveIndex : undefined;
     }
     if (baseIndex !== undefined && state.bases[baseIndex]) {
         return baseIndex;

@@ -513,6 +513,16 @@ export interface SmashUpCore {
      * Stakeout POD 的临时限制：其他玩家不能在指定基地打出力量≥3的随从，直到 ownerId 的下回合开始。
      */
     stakeoutPodBlocks?: Array<{ baseIndex: number; ownerId: PlayerId; expiresOnTurnNumber: number }>;
+    /**
+     * 持续到未来某个 TURN_STARTED 才回退的永久力量修正。
+     * 例如 The Count POD 天赋的“直到你的下回合开始时 -1 力量”。
+     */
+    timedPowerModifiers?: Array<{
+        minionUid: string;
+        amount: number;
+        expiresOnTurnNumber: number;
+        reason: string;
+    }>;
     // （保留扩展字段位于此处）
     /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
     sleepMarkedPlayers?: PlayerId[];

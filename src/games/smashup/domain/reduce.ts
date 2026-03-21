@@ -700,6 +700,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
+            const expiredTimedPowerModifiers = (state.timedPowerModifiers ?? []).filter(
+                modifier => turnNumber >= modifier.expiresOnTurnNumber,
+            );
+            const timedPowerReverts = new Map<string, number>();
+            for (const modifier of expiredTimedPowerModifiers) {
+                timedPowerReverts.set(
+                    modifier.minionUid,
+                    (timedPowerReverts.get(modifier.minionUid) ?? 0) - modifier.amount,
+                );
+            }
 
             // 重置天赋使用状态 + 清零临时力量修正（随从 + ongoing 行动卡）
             const newBases = state.bases.map(base => ({
@@ -707,7 +717,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 minions: base.minions.map(m => ({
                     ...m,
                     powerCounters: m.powerCounters,  // 显式保留力量指示物（独立实体）
-                    powerModifier: m.powerModifier,  // 显式保留永久力量修正
+                    powerModifier: m.powerModifier + (timedPowerReverts.get(m.uid) ?? 0),
                     talentUsed: m.controller === playerId ? false : m.talentUsed,
                     playedThisTurn: m.controller === playerId ? undefined : m.playedThisTurn,
                     tempPowerModifier: 0,
@@ -771,6 +781,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 basePowerDecreasedPlayersThisTurn: undefined,
                 stakeoutPodBlocks: (() => {
                     const remaining = (state.stakeoutPodBlocks ?? []).filter(b => turnNumber < b.expiresOnTurnNumber);
+                    return remaining.length ? remaining : undefined;
+                })(),
+                timedPowerModifiers: (() => {
+                    const remaining = (state.timedPowerModifiers ?? []).filter(
+                        modifier => turnNumber < modifier.expiresOnTurnNumber,
+                    );
                     return remaining.length ? remaining : undefined;
                 })(),
                 // 清空本回合移动追踪

@@ -9,7 +9,6 @@
 import type {
     SmashUpEvent,
     MinionDestroyedEvent,
-    CardsDrawnEvent,
     MinionPlayedEvent,
     PendingPostScoringAction,
 } from './types';
@@ -23,6 +22,7 @@ import {
     buildValidatedMoveEvents,
     buildValidatedDestroyEvents,
     buildValidatedCardToDeckBottomEvents,
+    buildStandardDrawEvents,
 } from './abilityHelpers';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -377,20 +377,7 @@ export function registerExpansionBaseAbilities(): void {
         // 只有附着到随从的行动卡才触发（actionTargetMinionUid 有值）
         if (!ctx.actionTargetMinionUid) return { events: [] };
 
-        const player = ctx.state.players[ctx.playerId];
-        if (!player || player.deck.length === 0) return { events: [] };
-
-        return {
-            events: [{
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: {
-                    playerId: ctx.playerId,
-                    count: 1,
-                    cardUids: [player.deck[0].uid],
-                },
-                timestamp: ctx.now,
-            } as CardsDrawnEvent],
-        };
+        return { events: buildStandardDrawEvents(ctx.state, ctx.playerId, 1, ctx.random, ctx.now) };
     });
 
     // ── 仙灵之环（Fairy Ring）──────────────────────────────────
@@ -473,6 +460,7 @@ export function registerExpansionBaseAbilities(): void {
     registerTrigger('base_house_of_nine_lives', 'onMinionDestroyed', (trigCtx) => {
         const { state, triggerMinionUid, triggerMinionDefId } = trigCtx;
         const baseIndex = trigCtx.baseIndex;
+        if (trigCtx.reason === '九命之屋：玩家选择不拯救') return [];
         if (!triggerMinionUid || !triggerMinionDefId || baseIndex === undefined) return [];
 
         // 找到九命之屋的基地索引
@@ -520,6 +508,7 @@ export function registerExpansionBaseAbilities(): void {
                     fromBaseIndex: baseIndex,
                     houseBaseIndex,
                     ownerId,
+                    destroyerId: trigCtx.destroyerId,
                 },
             },
         });
@@ -888,10 +877,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
             now: timestamp,
         });
         if (events.length === 0) return { state, events };
-        const player = state.core.players[playerId];
-        if (player && player.deck.length > 0) {
-            events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [player.deck[0].uid] }, timestamp } as CardsDrawnEvent);
-        }
+        events.push(...buildStandardDrawEvents(state.core, playerId, 1, _random, timestamp));
         return { state, events };
     });
 
@@ -959,6 +945,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
             fromBaseIndex?: number;
             houseBaseIndex?: number;
             ownerId?: string;
+            destroyerId?: string;
         };
         const ctx = getContinuationContext<{
             minionUid?: string;
@@ -966,12 +953,14 @@ export function registerExpansionBaseInteractionHandlers(): void {
             fromBaseIndex?: number;
             houseBaseIndex?: number;
             ownerId?: string;
+            destroyerId?: string;
         }>(iData);
         const minionUid = selected.minionUid ?? ctx?.minionUid;
         const minionDefId = selected.minionDefId ?? ctx?.minionDefId;
         const fromBaseIndex = selected.fromBaseIndex ?? ctx?.fromBaseIndex;
         const houseBaseIndex = selected.houseBaseIndex ?? ctx?.houseBaseIndex;
         const ownerId = selected.ownerId ?? ctx?.ownerId ?? playerId;
+        const destroyerId = selected.destroyerId ?? ctx?.destroyerId;
 
         if (!minionUid || !minionDefId || fromBaseIndex === undefined) return { state, events: [] };
 
@@ -997,6 +986,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
                     minionDefId,
                     fromBaseIndex,
                     ownerId,
+                    destroyerId,
                     reason: '九命之屋：玩家选择不拯救',
                 },
                 timestamp,
