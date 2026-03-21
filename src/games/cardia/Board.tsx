@@ -29,6 +29,7 @@ import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
+import { CARDIA_CARD_SIZE_STYLE } from './ui/layout';
 
 type Props = GameBoardProps<CardiaCore>;
 
@@ -406,9 +407,9 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     }}
                 />
                 
-                <div className="relative w-full h-full flex flex-col p-4 gap-4">
+                <div className="relative w-full h-full min-h-0 flex flex-col p-3 md:p-4 gap-3 md:gap-4">
                     {/* 对手区域（顶部） */}
-                    <div className="flex-shrink-0 flex items-start gap-4">
+                    <div className="flex-shrink-0 flex items-start gap-3 md:gap-4">
                         {/* 对手弃牌堆 */}
                         <div className="flex-shrink-0">
                             <div className="text-xs text-gray-400 mb-1 text-center">{t('discard')}</div>
@@ -420,7 +421,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         </div>
                         
                         {/* 对手信息栏 */}
-                        <div className="flex-1">
+                        <div className="min-w-0 flex-1">
                             <PlayerInfoBar
                                 player={opponent}
                                 isOpponent={true}
@@ -430,20 +431,20 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         
                         {/* 阶段和回合指示器 */}
                         <div className="flex-shrink-0 flex flex-col gap-2">
-                            <div data-testid="cardia-phase-indicator" data-tutorial-id="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+                            <div data-testid="cardia-phase-indicator" data-tutorial-id="cardia-phase-indicator" className="bg-black/50 backdrop-blur-sm rounded-lg px-3 md:px-4 py-2 text-white">
                                 <div className="text-xs text-gray-400">{t('phase')}</div>
-                                <div className="text-lg font-bold">{t(`phases.${phase}`)}</div>
+                                <div className="text-base md:text-lg font-bold">{t(`phases.${phase}`)}</div>
                             </div>
                             
-                            <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
+                            <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 md:px-4 py-2 text-white">
                                 <div className="text-xs text-gray-400">{t('turn')}</div>
-                                <div data-testid="cardia-turn-number" className="text-lg font-bold">{core.turnNumber}</div>
+                                <div data-testid="cardia-turn-number" className="text-base md:text-lg font-bold">{core.turnNumber}</div>
                             </div>
                         </div>
                     </div>
                     
                     {/* 中央战场区域 - 遭遇序列 */}
-                    <div data-testid="cardia-battlefield" data-tutorial-id="cardia-battlefield" className="flex-1 flex items-center justify-center overflow-x-auto px-4">
+                    <div data-testid="cardia-battlefield" data-tutorial-id="cardia-battlefield" className="flex-1 min-h-0 flex items-center justify-center overflow-x-auto overflow-y-auto px-2 md:px-4 py-2">
                         <EncounterSequence
                             myPlayer={myPlayer}
                             opponent={opponent}
@@ -456,7 +457,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     </div>
                     
                     {/* 我的区域（底部） */}
-                    <div className="flex-shrink-0 flex items-end gap-4">
+                    <div className="flex-shrink-0 flex items-end gap-3 md:gap-4">
                         {/* 我的弃牌堆 */}
                         <div className="flex-shrink-0">
                             <div className="text-xs text-gray-400 mb-1 text-center">{t('discard')}</div>
@@ -467,7 +468,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         </div>
                         
                         {/* 我的手牌和信息 */}
-                        <div className="flex-1">
+                        <div className="min-w-0 flex-1">
                             <PlayerArea
                                 player={myPlayer}
                                 core={core}
@@ -598,15 +599,15 @@ const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets }) =
     const { t } = useTranslation('game-cardia');
     
     return (
-        <div className="bg-black/30 backdrop-blur-sm rounded-lg px-4 py-2">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+        <div className="bg-black/30 backdrop-blur-sm rounded-lg px-3 md:px-4 py-2">
+            <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex items-center gap-3 md:gap-4">
                     <div className="text-white font-bold">{player.name}</div>
                     <div data-testid="cardia-signet-display" data-tutorial-id="cardia-signet-display" className="text-sm text-yellow-400">
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
-                <div className="flex items-center gap-4 text-sm text-gray-400">
+                <div className="flex items-center gap-3 md:gap-4 text-sm text-gray-400">
                     <div>✋ {t('hand')}: {player.hand.length}</div>
                     <div>📚 {t('deck')}: {player.deck.length}</div>
                     <div>🗑️ {t('discard')}: {player.discard.length}</div>
@@ -670,7 +671,7 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
     }
     
     return (
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-3 md:gap-4 items-center py-1">
             <CardListTransition>
                 {encounters.map((encounter, idx) => (
                     <CardTransition key={encounter.encounterIndex} cardUid={`encounter-${encounter.encounterIndex}`} type="field">
@@ -755,7 +756,7 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
     const showVS = myCard && opponentCard;
     
     return (
-        <div className="relative flex flex-col items-center gap-2">
+        <div className="relative flex flex-col items-center gap-1 md:gap-2">
             {/* 对手卡牌 */}
             <div className="relative z-10">
                 {opponentCard ? (
@@ -824,15 +825,15 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
     const { t } = useTranslation('game-cardia');
     
     return (
-        <div className="bg-black/30 backdrop-blur-sm rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-4">
+        <div className="bg-black/30 backdrop-blur-sm rounded-lg p-3 md:p-4">
+            <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="min-w-0 flex items-center gap-3 md:gap-4">
                     <div className="text-white font-bold">{player.name}</div>
                     <div data-testid="cardia-signet-display" data-tutorial-id="cardia-signet-display" className="text-sm text-yellow-400">
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
-                <div className="flex items-center gap-4 text-sm text-gray-400">
+                <div className="flex items-center gap-3 md:gap-4 text-sm text-gray-400">
                     <div>✋ {t('hand')}: {player.hand.length}</div>
                     <div>📚 {t('deck')}: {player.deck.length}</div>
                     <div>🗑️ {t('discard')}: {player.discard.length}</div>
@@ -840,7 +841,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
             </div>
             
             {/* 手牌区 */}
-            <div data-testid="cardia-hand-area" data-tutorial-id="cardia-hand-area" className="flex gap-2 overflow-x-auto">
+            <div data-testid="cardia-hand-area" data-tutorial-id="cardia-hand-area" className="flex gap-2 overflow-x-auto py-1">
                 <CardListTransition>
                     {player.hand.map((card: any) => (
                         <CardTransition key={card.uid} cardUid={card.uid} type="hand">
@@ -893,7 +894,9 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
     const imagePath = resolveCardiaCardImagePath(card);
     
     // 调整卡牌尺寸：缩小到 95%（约 106px × 160px）
-    const sizeClasses = size === 'small' ? 'w-20 h-30' : 'w-[106px] h-[160px]';
+    const cardSizeStyle = size === 'small'
+        ? { width: '5rem', height: '7.5rem' }
+        : CARDIA_CARD_SIZE_STYLE;
     
     // 计算修正标记总和（从 core.modifierTokens 中过滤）
     const modifierTotal = core.modifierTokens
@@ -924,7 +927,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
         <div 
             ref={onRef}
             data-testid={`card-${card.uid}`}
-            className={`relative ${sizeClasses} rounded-lg border-2 border-white/20 shadow-lg overflow-hidden`}
+            className="relative rounded-lg border-2 border-white/20 shadow-lg overflow-hidden"
+            style={cardSizeStyle}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -940,8 +944,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             )}
             
             {/* 影响力显示（左上角） */}
-            <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full w-9 h-9 flex items-center justify-center">
-                <span className="text-white font-bold text-base">{displayInfluence}</span>
+            <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-sm rounded-full w-8 h-8 md:w-9 md:h-9 flex items-center justify-center">
+                <span className="text-white font-bold text-sm md:text-base">{displayInfluence}</span>
             </div>
             
             {/* 放大镜按钮（右上角） */}
@@ -951,12 +955,12 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
                         e.stopPropagation();
                         onMagnify(card);
                     }}
-                    className={`absolute top-1 right-1 w-8 h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full transition-all duration-200 shadow-lg border border-white/20 z-20 ${
+                    className={`absolute top-1 right-1 w-7 h-7 md:w-8 md:h-8 flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full transition-all duration-200 shadow-lg border border-white/20 z-20 ${
                         isHovered ? 'opacity-100' : 'opacity-0'
                     }`}
                     title="查看大图"
                 >
-                    <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                    <svg className="w-4 h-4 md:w-5 md:h-5 fill-current" viewBox="0 0 20 20">
                         <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
                     </svg>
                 </button>
@@ -964,7 +968,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             
             {/* 修正标记显示（右上角，放大镜按钮下方） */}
             {modifierTotal !== 0 && (
-                <div className={`absolute ${onMagnify ? 'top-10' : 'top-1'} right-1 ${
+                <div className={`absolute ${onMagnify ? 'top-9 md:top-10' : 'top-1'} right-1 ${
                     modifierTotal > 0 ? 'bg-green-500' : 'bg-red-500'
                 } text-white font-bold text-xs px-1.5 py-0.5 rounded-full shadow-lg`}>
                     {modifierTotal > 0 ? '+' : ''}{modifierTotal}
@@ -974,8 +978,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             {/* 持续能力标记（右上角，如果没有修正标记则显示在这里） */}
             {card.ongoingMarkers && card.ongoingMarkers.length > 0 && (
                 <div className={`absolute ${
-                    onMagnify && modifierTotal !== 0 ? 'top-[4.5rem]' : 
-                    onMagnify || modifierTotal !== 0 ? 'top-10' : 
+                    onMagnify && modifierTotal !== 0 ? 'top-[4rem] md:top-[4.5rem]' : 
+                    onMagnify || modifierTotal !== 0 ? 'top-9 md:top-10' : 
                     'top-1'
                 } right-1 bg-purple-500 text-white text-xs px-1.5 py-0.5 rounded-full shadow-lg flex items-center gap-0.5`}>
                     <span>🔄</span>
@@ -989,7 +993,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, core, size = 'normal', 
             {card.signets > 0 && (
                 <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5">
                     {Array.from({ length: card.signets }).map((_, i) => (
-                        <div key={i} className="w-4 h-4 bg-yellow-400 rounded-full border border-yellow-600 shadow" />
+                        <div key={i} className="w-3.5 h-3.5 md:w-4 md:h-4 bg-yellow-400 rounded-full border border-yellow-600 shadow" />
                     ))}
                 </div>
             )}
@@ -1023,7 +1027,7 @@ const CardBack: React.FC = () => {
     const [imageError, setImageError] = React.useState(false);
     
     return (
-        <div className="w-[106px] h-[160px] rounded-lg border-2 border-purple-600 shadow-lg overflow-hidden">
+        <div className="rounded-lg border-2 border-purple-600 shadow-lg overflow-hidden" style={CARDIA_CARD_SIZE_STYLE}>
             {!imageError ? (
                 <OptimizedImage
                     src={CARDIA_IMAGE_PATHS.DECK1_BACK}
@@ -1045,7 +1049,7 @@ const CardBack: React.FC = () => {
  */
 const EmptySlot: React.FC = () => {
     return (
-        <div className="w-[106px] h-[160px] border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center text-gray-500">
+        <div className="border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center text-gray-500" style={CARDIA_CARD_SIZE_STYLE}>
             <div className="text-xs">等待中...</div>
         </div>
     );

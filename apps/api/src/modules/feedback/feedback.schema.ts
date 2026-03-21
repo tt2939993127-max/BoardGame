@@ -66,6 +66,9 @@ export class Feedback {
     @Prop({ type: String })
     gameName?: string;
 
+    @Prop({ type: String, lowercase: true, trim: true })
+    gameId?: string;
+
     @Prop({ type: String })
     contactInfo?: string;
 

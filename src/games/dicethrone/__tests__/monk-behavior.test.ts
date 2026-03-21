@@ -122,6 +122,20 @@ describe('僧侣 Custom Action 运行时行为断言', () => {
             expect((token[0] as any).payload.amount).toBe(2);
             expect((token[0] as any).payload.newTotal).toBe(2);
         });
+
+        it('太极已满时再次获得会把事件数量压成实际到账量', () => {
+            const dice = [1, 2, 3, 4, 5].map(v => createMonkDie(v));
+            const state = createState({ dice, taiji: 4, taijiLimit: 4 });
+            const handler = getCustomActionHandler('meditation-taiji')!;
+            const ctx = buildCtx(state, 'meditation-taiji', { targetSelf: true });
+            ctx.targetId = '0' as any;
+            const events = handler(ctx);
+
+            const token = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(token).toHaveLength(1);
+            expect((token[0] as any).payload.amount).toBe(0);
+            expect((token[0] as any).payload.newTotal).toBe(4);
+        });
     });
 
     // ========================================================================

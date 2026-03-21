@@ -313,21 +313,23 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
     state,
     event
 ) => {
-    const { targetId, tokenId, newTotal, amount, sourceAbilityId } = event.payload;
+    const { targetId, tokenId, newTotal, sourceAbilityId } = event.payload;
     const target = state.players[targetId];
     if (!target) return state;
+    const previousAmount = target.tokens[tokenId] ?? 0;
+    const actualGrantedAmount = Math.max(0, newTotal - previousAmount);
 
     // 潜行获得时记录当前回合号（用于自动弃除判定）
     let sneakGainedTurn = state.sneakGainedTurn;
-    if (tokenId === TOKEN_IDS.SNEAK && newTotal > 0) {
+    if (tokenId === TOKEN_IDS.SNEAK && actualGrantedAmount > 0 && newTotal > 0) {
         sneakGainedTurn = { ...(sneakGainedTurn || {}), [targetId]: state.turnNumber };
     }
 
     // 太极获得时累加本回合获得量（用于攻击方加伤限制）
     let taijiGainedThisTurn = state.taijiGainedThisTurn;
-    if (tokenId === TOKEN_IDS.TAIJI && amount > 0) {
+    if (tokenId === TOKEN_IDS.TAIJI && actualGrantedAmount > 0) {
         const currentGained = taijiGainedThisTurn?.[targetId] ?? 0;
-        taijiGainedThisTurn = { ...(taijiGainedThisTurn || {}), [targetId]: currentGained + amount };
+        taijiGainedThisTurn = { ...(taijiGainedThisTurn || {}), [targetId]: currentGained + actualGrantedAmount };
     }
 
     return {

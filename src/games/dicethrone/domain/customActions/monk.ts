@@ -29,9 +29,10 @@ function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: 
     const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
     const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
     const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
+    const grantedAmount = Math.max(0, newTotal - currentAmount);
     return [{
         type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
+        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: grantedAmount, newTotal, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as TokenGrantedEvent];
@@ -45,9 +46,10 @@ function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }:
     const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
     const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
     const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
+    const grantedAmount = Math.max(0, newTotal - currentAmount);
     const events: DiceThroneEvent[] = [{
         type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
+        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: grantedAmount, newTotal, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as TokenGrantedEvent];

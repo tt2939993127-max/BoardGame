@@ -77,6 +77,11 @@ export function extractEmbeddedImages(content: string) {
     }));
 }
 
+export function hasEmbeddedImage(content: string): boolean {
+    EMBEDDED_IMG_RE.lastIndex = 0;
+    return EMBEDDED_IMG_RE.test(content);
+}
+
 export function extractText(content: string, t: TFunction<'admin'>): string {
     return content.replace(EMBEDDED_IMG_RE, '').trim() || t('feedback.content.onlyImage');
 }
@@ -114,11 +119,6 @@ function inferGameId(stateSnapshot: unknown, fallbackGameId?: string, fallbackGa
     if (fallbackGameId?.trim()) return fallbackGameId;
     if (fallbackGameName?.trim()) return fallbackGameName;
     return null;
-}
-
-export function formatViewport(viewport?: FeedbackClientContext['viewport']): string | null {
-    if (!viewport) return null;
-    return `${viewport.width} × ${viewport.height}`;
 }
 
 export function buildFeedbackAiPayload(item: FeedbackItem, t: TFunction<'admin'>): FeedbackAiPayload {
@@ -182,13 +182,15 @@ export function CopyFeedbackButton({
                 data-testid="feedback-copy-ai-payload"
                 onClick={handleCopy}
                 className={cn(
-                    'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors',
-                    copied ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-zinc-200 hover:bg-white/15'
+                    'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors',
+                    copied
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-800'
                 )}
                 title={t('feedback.actions.copyAll')}
             >
                 {copied ? <Check size={12} /> : <Copy size={12} />}
-                {copied ? '已复制' : '复制分诊包'}
+                {copied ? t('feedback.actions.copied') : t('feedback.actions.copyAll')}
             </button>
             {item.stateSnapshot && (
                 <button
@@ -196,13 +198,15 @@ export function CopyFeedbackButton({
                     data-testid="feedback-copy-state-json"
                     onClick={handleCopyJson}
                     className={cn(
-                        'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors',
-                        copiedJson ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-zinc-200 hover:bg-white/15'
+                        'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors',
+                        copiedJson
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-800'
                     )}
-                    title="复制完整状态 JSON"
+                    title={t('feedback.stateSnapshot.copy')}
                 >
                     {copiedJson ? <Check size={12} /> : <Copy size={12} />}
-                    {copiedJson ? '已复制 JSON' : 'JSON'}
+                    {copiedJson ? t('feedback.stateSnapshot.copied') : 'JSON'}
                 </button>
             )}
         </div>
@@ -273,4 +277,27 @@ export function FeedbackContent({
     }
 
     return <div className="space-y-3">{parts}</div>;
+}
+
+export function formatTime(iso: string, t: TFunction<'admin'>): string {
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+
+    if (diffMin < 1) return t('feedback.time.justNow');
+    if (diffMin < 60) return t('feedback.time.minutesAgo', { count: diffMin });
+
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return t('feedback.time.hoursAgo', { count: diffHour });
+
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return t('feedback.time.daysAgo', { count: diffDay });
+
+    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+export function formatAbsoluteTime(iso: string): string {
+    const date = new Date(iso);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }

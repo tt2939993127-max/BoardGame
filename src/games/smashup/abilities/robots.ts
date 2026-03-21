@@ -379,17 +379,12 @@ export function registerRobotInteractionHandlers(): void {
                     baseDefId: state.core.bases[0].defId,
                     power,
                     fromDeck: true,
+                    consumesNormalLimit: false,
                 },
                 timestamp,
             };
 
-            return {
-                state,
-                events: [
-                    grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                    playedEvt,
-                ],
-            };
+            return { state, events: [playedEvt] };
         }
 
         const baseCandidates = state.core.bases.map((b, i) => {
@@ -432,17 +427,12 @@ export function registerRobotInteractionHandlers(): void {
                 baseIndex,
                 power: ctx.power,
                 fromDeck: true,
+                consumesNormalLimit: false,
             },
             timestamp,
         };
 
-        return {
-            state,
-            events: [
-                grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                playedEvt,
-            ],
-        };
+        return { state, events: [playedEvt] };
     });
 }
 

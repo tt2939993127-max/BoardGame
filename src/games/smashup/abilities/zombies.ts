@@ -82,7 +82,8 @@ export function registerZombieAbilities(): void {
         },
     });
 
-    // 它们为你而来（ongoing 行动卡）：持续效果，可从弃牌堆打出随从到此基地（POD版为替代手牌）
+    // 它们为你而来（ongoing 行动卡）：在该基地打随从时，可从弃牌堆而不是手牌打出。
+    // 这不是“额外打出”，而是替代正常随从来源，因此会消耗正常随从额度。
     registerDiscardPlayProvider({
         id: 'zombie_theyre_coming_to_get_you',
         getPlayableCards(core, playerId) {
@@ -90,23 +91,15 @@ export function registerZombieAbilities(): void {
             if (!player) return [];
             // 找到所有附着了此 ongoing 卡的基地
             const allowedBases: number[] = [];
-            // 记录对应基地上提供此能力的具体Ongoing实例，判断它是原版还是POD版
-            const podBases = new Set<number>();
 
             for (let i = 0; i < core.bases.length; i++) {
                 const base = core.bases[i];
                 for (const o of base.ongoingActions) {
                     if (o.ownerId === playerId && (o.defId === 'zombie_theyre_coming_to_get_you' || o.defId === 'zombie_theyre_coming_to_get_you_pod')) {
                         allowedBases.push(i);
-                        if (o.defId === 'zombie_theyre_coming_to_get_you_pod') {
-                            podBases.add(i);
-                        }
                     }
                 }
             }
-            // 修正：原版“They're Coming To Get You”是“Play an extra minion here from your discard pile” -> 额外打出
-            // POD版“They're Coming To Get You_pod”是 “Play a minion here from your discard pile instead of from your hand” -> 消耗正常额度
-
             if (allowedBases.length === 0) return [];
             // 弃牌堆中所有随从都可打出到这些基地
             const minions = player.discard.filter(c => c.type === 'minion');
@@ -114,11 +107,10 @@ export function registerZombieAbilities(): void {
                 const def = getCardDef(card.defId) as MinionCardDef | undefined;
                 const options = [];
                 for (const bIndex of allowedBases) {
-                    const isPod = podBases.has(bIndex);
                     options.push({
                         card,
                         allowedBaseIndices: [bIndex], // 每个基地由于可能额度消耗不同，必须拆分选项
-                        consumesNormalLimit: isPod ? true : false, // POD 版消耗正常随从额度（代替手牌），原版不消耗（额外随从）
+                        consumesNormalLimit: true,
                         sourceId: 'zombie_theyre_coming_to_get_you',
                         defId: card.defId,
                         power: def?.power ?? 0,
@@ -588,7 +580,7 @@ export function registerZombieInteractionHandlers(): void {
         };
     });
 
-    // 它们不断来临：选弃牌堆随从并指定基地后，额外打出该随从
+    // 它们不断来临：选弃牌堆随从并指定基地后，立即从弃牌堆额外打出该随从
     registerInteractionHandler('zombie_they_keep_coming', (state, playerId, value, _iData, _random, timestamp) => {
         const selected = value as { cardUid?: string; baseIndex?: number };
         if (!selected.cardUid || selected.baseIndex === undefined) {
@@ -619,16 +611,14 @@ export function registerZombieInteractionHandlers(): void {
                 baseIndex: selected.baseIndex,
                 power: def?.power ?? 0,
                 fromDiscard: true,
+                consumesNormalLimit: false,
             },
             timestamp,
         };
 
         return {
             state,
-            events: [
-                grantExtraMinion(playerId, 'zombie_they_keep_coming', timestamp),
-                playedEvt,
-            ],
+            events: [playedEvt],
         };
     });
 

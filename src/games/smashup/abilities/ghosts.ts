@@ -469,12 +469,8 @@ export function registerGhostInteractionHandlers(): void {
                 payload: { playerId, cardUid, defId, baseIndex: 0, baseDefId: state.core.bases[0].defId, power, fromDiscard: true },
                 timestamp,
             };
-            return {
-                state, events: [
-                    grantExtraMinion(playerId, 'ghost_the_dead_rise', timestamp),
-                    playedEvt,
-                ]
-            };
+            playedEvt.payload.consumesNormalLimit = false;
+            return { state, events: [playedEvt] };
         }
         // 多个基地时让玩家选择
         const baseCandidates = state.core.bases.map((b, i) => {
@@ -502,15 +498,18 @@ export function registerGhostInteractionHandlers(): void {
         if (!ctx) return undefined;
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power, fromDiscard: true },
+            payload: {
+                playerId,
+                cardUid: ctx.cardUid,
+                defId: ctx.defId,
+                baseIndex,
+                power: ctx.power,
+                fromDiscard: true,
+                consumesNormalLimit: false,
+            },
             timestamp,
         };
-        return {
-            state, events: [
-                grantExtraMinion(playerId, 'ghost_the_dead_rise', timestamp),
-                playedEvt,
-            ]
-        };
+        return { state, events: [playedEvt] };
     });
 
     // 越过边界：选卡名后取回所有同名随从

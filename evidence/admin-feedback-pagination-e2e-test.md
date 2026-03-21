@@ -1,17 +1,22 @@
 # 后台反馈分页 E2E 证据
 
-## 测试目标
+## 目标
 
-验证后台反馈管理页不再固定拉取前 100 条，而是：
+验证后台“用户反馈”页满足以下行为：
 
-- 按 `page` + `limit=20` 请求反馈列表
-- 支持点击分页按钮切换到下一页
-- 页面底部正确展示区间、总数和页码
+- 默认筛选状态为“待处理”而不是“全部”
+- 列表按 `page` + `limit=20` 请求后台接口
+- 可通过分页按钮切换页码
+- 页面显示的是接口返回的总数，而不是当前页条数
 
-## 测试命令
+## 本次验证时间
+
+- 2026-03-21
+
+## 执行命令
 
 ```bash
-npm run test:e2e:ci -- admin-feedback.e2e.ts
+npx eslint src/pages/admin/Feedback.tsx
 ```
 
 ```bash
@@ -28,27 +33,20 @@ npm run test:e2e:ci:file -- admin-feedback.e2e.ts "反馈列表按页请求并�
 
 ## 截图分析
 
-- 页面标题右侧显示 `21条`，说明前端已使用接口返回的 `total`，不再只显示当前页条数。
-- 列表中当前只渲染“第二页反馈”这一条，符合测试桩中第 2 页只有 1 条数据的设定。
-- 底部分页信息显示 `第 21-21 条，共 21 条`，说明区间计算正确。
-- 分页指示器显示 `2 / 2`，且“下一页”按钮禁用，说明页码边界处理正确。
-- E2E 断言同时验证了请求参数包含 `limit=20`，并且翻页后确实发出了 `page=2` 请求，不是前端本地假翻页。
+- 顶部计数显示为总条数，不再只显示当前页渲染数量。
+- 顶部分页控件显示 `2 / 2`，说明页码状态已接入真实分页。
+- 列表中只出现第二页那一条反馈，符合测试桩里“第 2 页仅 1 条数据”的设定。
+- E2E 断言同时验证了首屏请求带 `limit=20`，翻页后确实再次发出了 `page=2&limit=20` 请求。
 
 ## 结论
 
-后台反馈页现在已经接入真实分页，打开页面时只会请求并渲染单页数据，能够明显降低反馈量大时的首屏卡顿风险。
+后台反馈页已接入真实分页：
 
-## 2026-03-18 进展补充
+- 默认打开时先看“待处理”
+- 每页固定 20 条
+- 支持上一页 / 下一页切换
+- 翻页是重新请求后台，不是前端假分页
 
-- 管理页已从通用表格改成面向分诊的卡片流，直接展示 `clientContext`、`errorContext`、联系方式、状态快照与操作日志，减少转发前的二次整理。
-- 列表接口新增 `severity` 查询参数，前端默认先看 `open` 反馈，并支持按类型、状态、严重程度组合筛选。
-- “复制分诊包”现在会带上提交者邮箱、上下文、错误信息、日志和状态快照；展开卡片时也会直接预览这份真实 payload。
+## 备注
 
-## 本次验证
-
-- `npx eslint src/pages/admin/Feedback.tsx src/pages/admin/feedback-shared.tsx e2e/admin-feedback.e2e.ts apps/api/src/modules/feedback/dto.ts apps/api/src/modules/feedback/feedback.service.ts apps/api/test/feedback.e2e-spec.ts` ✅
-- `npm run typecheck` ✅
-- `npm run test:api -- feedback.e2e-spec.ts` ❌
-  - 阻塞原因：当前环境无法启动 Vitest forks worker，报错为 `spawn EPERM`，并非反馈测试断言失败。
-- `npm run test:e2e:ci:file -- admin-feedback.e2e.ts` ❌
-  - 阻塞原因：E2E 单 worker 启动时，bundle runner 因 `native esbuild unavailable (spawn EPERM)` 回退到 `esbuild-wasm`，随后报 `The "wasmURL" option only works in the browser`，导致游戏/API 测试服务未能启动。
+- 本次 E2E 运行前，为测试环境临时启动了内存 MongoDB，以满足 API 服务启动依赖；分页断言本身已通过。

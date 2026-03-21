@@ -78,11 +78,13 @@ describe('Feedback Module (e2e)', () => {
         email,
         code,
         role = 'user',
+        developerGameIds,
     }: {
         username: string;
         email: string;
         code: string;
         role?: 'user' | 'developer' | 'admin';
+        developerGameIds?: string[];
     }) => {
         await authService.storeEmailCode(email, code);
         const registerRes = await request(app.getHttpServer())
@@ -93,7 +95,13 @@ describe('Feedback Module (e2e)', () => {
         const token = registerRes.body.token as string;
         const userId = registerRes.body.user.id as string;
         if (role !== 'user') {
-            await userModel.updateOne({ _id: userId }, { role });
+            await userModel.updateOne(
+                { _id: userId },
+                {
+                    role,
+                    ...(role === 'developer' ? { developerGameIds: developerGameIds ?? [] } : {}),
+                }
+            );
         }
 
         return { token, userId };
@@ -112,6 +120,7 @@ describe('Feedback Module (e2e)', () => {
             email: 'developer-feedback@example.com',
             code: '112233',
             role: 'developer',
+            developerGameIds: ['smashup'],
         });
 
         const { token: userToken, userId } = await registerUser({
@@ -172,7 +181,7 @@ describe('Feedback Module (e2e)', () => {
     it('developer 可以查看反馈并更新状态', async () => {
         const { adminToken, developerToken, userToken } = await seedUsers();
 
-        const createRes = await request(app.getHttpServer())
+        const ownFeedbackRes = await request(app.getHttpServer())
             .post('/feedback')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
@@ -181,10 +190,29 @@ describe('Feedback Module (e2e)', () => {
                 severity: 'medium',
                 gameName: 'smashup',
                 actionLog: '[12:30] P1: trigger ability',
+                clientContext: {
+                    gameId: 'smashup',
+                },
             })
             .expect(201);
 
-        const feedbackId = createRes.body._id as string;
+        const otherFeedbackRes = await request(app.getHttpServer())
+            .post('/feedback')
+            .set('Authorization', `Bearer ${userToken}`)
+            .send({
+                content: 'developer hidden feedback',
+                type: 'bug',
+                severity: 'medium',
+                gameName: 'tictactoe',
+                actionLog: '[12:31] P1: trigger ability',
+                clientContext: {
+                    gameId: 'tictactoe',
+                },
+            })
+            .expect(201);
+
+        const ownFeedbackId = ownFeedbackRes.body._id as string;
+        const otherFeedbackId = otherFeedbackRes.body._id as string;
 
         const listRes = await request(app.getHttpServer())
             .get('/admin/feedback?limit=20')
@@ -192,22 +220,31 @@ describe('Feedback Module (e2e)', () => {
             .expect(200);
 
         expect(listRes.body.items).toHaveLength(1);
-        expect(listRes.body.items[0]._id).toBe(feedbackId);
+        expect(listRes.body.items[0]._id).toBe(ownFeedbackId);
 
         const updateRes = await request(app.getHttpServer())
-            .patch(`/admin/feedback/${feedbackId}/status`)
+            .patch(`/admin/feedback/${ownFeedbackId}/status`)
             .set('Authorization', `Bearer ${developerToken}`)
             .send({ status: 'resolved' })
             .expect(200);
 
         expect(updateRes.body.status).toBe('resolved');
 
+        await request(app.getHttpServer())
+            .patch(`/admin/feedback/${otherFeedbackId}/status`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({ status: 'resolved' })
+            .expect(404);
+
         const adminListRes = await request(app.getHttpServer())
             .get('/admin/feedback?limit=20')
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200);
 
-        expect(adminListRes.body.items[0].status).toBe('resolved');
+        const ownFeedback = adminListRes.body.items.find((item: { _id: string }) => item._id === ownFeedbackId);
+        const otherFeedback = adminListRes.body.items.find((item: { _id: string }) => item._id === otherFeedbackId);
+        expect(ownFeedback?.status).toBe('resolved');
+        expect(otherFeedback?.status).toBe('open');
     });
 
     it('admin 列表支持严重程度筛选、分页，并返回调试上下文', async () => {

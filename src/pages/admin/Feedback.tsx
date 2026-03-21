@@ -29,8 +29,10 @@ import {
     FeedbackContent,
     formatAbsoluteTime,
     formatTime,
+    type FeedbackClientContext,
+    type FeedbackErrorContext,
     hasEmbeddedImage,
-} from './components/FeedbackHelpers';
+} from './feedback-shared';
 import { ADMIN_API_URL } from '../../config/server';
 import { cn } from '../../lib/utils';
 
@@ -40,6 +42,7 @@ interface FeedbackItem {
         _id: string;
         username: string;
         avatar?: string;
+        email?: string;
     };
     content: string;
     type: 'bug' | 'suggestion' | 'other';
@@ -49,7 +52,16 @@ interface FeedbackItem {
     contactInfo?: string;
     actionLog?: string;
     stateSnapshot?: string;
+    clientContext?: FeedbackClientContext;
+    errorContext?: FeedbackErrorContext;
     createdAt: string;
+}
+
+interface FeedbackListResponse {
+    items: FeedbackItem[];
+    total: number;
+    page: number;
+    limit: number;
 }
 
 type StatusOption = { value: FeedbackItem['status']; color: string };
@@ -80,6 +92,7 @@ const SEVERITY_STYLES: Record<FeedbackItem['severity'], { dot: string; tone: str
 };
 
 const POLL_INTERVAL = 30_000;
+const PAGE_SIZE = 20;
 
 const buildStatusOptions = (t: TFunction<'admin'>): StatusOptionWithLabel[] => (
     STATUS_OPTIONS.map((option) => ({
@@ -209,14 +222,16 @@ export default function AdminFeedbackPage() {
     const severityConfig = useMemo(() => buildSeverityConfig(t), [t]);
 
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<string>('open');
     const [typeFilter, setTypeFilter] = useState<string>('all');
+    const [page, setPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeId, setActiveId] = useState<string | null>(null);
-    const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [aiPayloadPreview, setAiPayloadPreview] = useState<string | null>(null);
 
     const requestIdRef = useRef(0);
     const isMountedRef = useRef(true);
@@ -234,7 +249,10 @@ export default function AdminFeedbackPage() {
         if (silent) setIsPolling(true);
 
         try {
-            const params = new URLSearchParams({ limit: '100' });
+            const params = new URLSearchParams({
+                page: String(page),
+                limit: String(PAGE_SIZE),
+            });
             if (statusFilter !== 'all') params.set('status', statusFilter);
             if (typeFilter !== 'all') params.set('type', typeFilter);
 
@@ -243,9 +261,10 @@ export default function AdminFeedbackPage() {
             });
             if (!response.ok) throw new Error('fetch_failed');
 
-            const data = await response.json();
+            const data = await response.json() as FeedbackListResponse;
             if (isMountedRef.current && requestId === requestIdRef.current) {
                 setFeedbacks(data.items);
+                setTotal(data.total ?? 0);
             }
         } catch {
             if (!silent) error(t('feedback.messages.fetchFailed'));
@@ -255,7 +274,7 @@ export default function AdminFeedbackPage() {
                 setIsPolling(false);
             }
         }
-    }, [error, statusFilter, t, token, typeFilter]);
+    }, [error, page, statusFilter, t, token, typeFilter]);
 
     useEffect(() => {
         fetchFeedbacks();
@@ -293,10 +312,8 @@ export default function AdminFeedbackPage() {
     );
 
     useEffect(() => {
-        if (!activeFeedback) {
-            setIsDetailOpen(false);
-        }
-    }, [activeFeedback]);
+        setAiPayloadPreview(null);
+    }, [activeId]);
 
     const allSelected = feedbacks.length > 0 && feedbacks.every((feedback) => selectedIds.has(feedback._id));
 
@@ -348,12 +365,22 @@ export default function AdminFeedbackPage() {
             });
             if (!response.ok) throw new Error('delete_failed');
 
+            const nextTotal = Math.max(0, total - 1);
+            const nextTotalPages = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE));
+            const nextPage = Math.min(page, nextTotalPages);
+
             setFeedbacks((prev) => prev.filter((feedback) => feedback._id !== id));
+            setTotal(nextTotal);
             setSelectedIds((prev) => {
                 const next = new Set(prev);
                 next.delete(id);
                 return next;
             });
+            if (nextPage !== page) {
+                setPage(nextPage);
+            } else {
+                fetchFeedbacks();
+            }
             success(t('feedback.messages.deleteSuccess'));
         } catch {
             error(t('feedback.messages.deleteFailed'));
@@ -377,7 +404,7 @@ export default function AdminFeedbackPage() {
 
             success(t('feedback.messages.bulkDeleteSuccess'));
             setSelectedIds(new Set());
-            fetchFeedbacks();
+            setPage(1);
         } catch {
             error(t('feedback.messages.bulkDeleteFailed'));
         }
@@ -385,19 +412,16 @@ export default function AdminFeedbackPage() {
 
     const changeFilter = (setter: (value: string) => void, value: string) => {
         setter(value);
+        setPage(1);
         setSelectedIds(new Set());
         setActiveId(null);
-        setIsDetailOpen(false);
+        setAiPayloadPreview(null);
     };
 
-    const openDetail = (id: string) => {
-        setActiveId(id);
-        setIsDetailOpen(true);
-    };
-
-    const closeDetail = () => {
-        setIsDetailOpen(false);
-    };
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const pageIndicator = `${page} / ${totalPages}`;
+    const canGoPrev = page > 1;
+    const canGoNext = page < totalPages;
 
     return (
         <div className="mx-auto flex h-full min-h-0 w-full max-w-[1880px] flex-col gap-1 px-2 py-1">
@@ -405,7 +429,7 @@ export default function AdminFeedbackPage() {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h1 className="text-sm font-semibold text-zinc-900">{t('feedback.title')}</h1>
                     <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
-                        {t('feedback.count', { count: feedbacks.length })}
+                        {t('feedback.count', { count: total })}
                     </span>
                     {selectedIds.size > 0 && (
                         <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
@@ -419,6 +443,34 @@ export default function AdminFeedbackPage() {
                         </span>
                     )}
                     <div className="ml-auto flex flex-wrap items-center gap-1">
+                        <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1 py-0.5">
+                            <button
+                                type="button"
+                                data-testid="feedback-pagination-prev"
+                                onClick={() => canGoPrev && setPage((prev) => prev - 1)}
+                                disabled={!canGoPrev}
+                                title={t('feedback.pagination.prev')}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+                            >
+                                <ChevronLeft size={12} />
+                            </button>
+                            <span
+                                data-testid="feedback-pagination-indicator"
+                                className="min-w-[54px] text-center text-[10px] font-medium tabular-nums text-zinc-600"
+                            >
+                                {pageIndicator}
+                            </span>
+                            <button
+                                type="button"
+                                data-testid="feedback-pagination-next"
+                                onClick={() => canGoNext && setPage((prev) => prev + 1)}
+                                disabled={!canGoNext}
+                                title={t('feedback.pagination.next')}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+                            >
+                                <ChevronRight size={12} />
+                            </button>
+                        </div>
                         <button
                             type="button"
                             onClick={() => fetchFeedbacks()}
@@ -546,7 +598,9 @@ export default function AdminFeedbackPage() {
                     )}
                 </section>
                 <FeedbackDetailPanel
+                    key={activeFeedback?._id ?? 'empty'}
                     item={activeFeedback}
+                    aiPayloadPreview={aiPayloadPreview}
                     typeOptions={typeOptions}
                     severityConfig={severityConfig}
                     statusOptions={statusOptions}
@@ -554,6 +608,7 @@ export default function AdminFeedbackPage() {
                     onStatusUpdate={handleStatusUpdate}
                     onDelete={handleDelete}
                     onImageClick={setPreviewImage}
+                    onAiPayloadCopy={setAiPayloadPreview}
                 />
             </div>
 
@@ -596,9 +651,13 @@ function FeedbackRow({
     const hasImage = hasEmbeddedImage(item.content);
     const hasActionLog = Boolean(item.actionLog);
     const hasSnapshot = Boolean(item.stateSnapshot);
+    const route = item.clientContext?.route?.trim() || null;
+    const errorName = item.errorContext?.name?.trim() || null;
 
     return (
         <tr
+            data-testid="feedback-row"
+            data-feedback-id={item._id}
             onClick={onActivate}
             className={cn(
                 'group cursor-pointer border-b border-zinc-100 transition-colors',
@@ -638,6 +697,23 @@ function FeedbackRow({
                             {hasActionLog && <ScrollText size={10} title={t('feedback.actionLog.title')} />}
                             {hasSnapshot && <span title={t('feedback.stateSnapshot.title')}>JSON</span>}
                         </div>
+                        {(route || errorName) && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] leading-4">
+                                {route && (
+                                    <div className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
+                                        {route}
+                                    </div>
+                                )}
+                                {errorName && (
+                                    <div
+                                        data-testid="feedback-error-context-panel"
+                                        className="rounded bg-red-50 px-1.5 py-0.5 text-red-700"
+                                    >
+                                        {errorName}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </td>
@@ -708,6 +784,7 @@ function FeedbackRow({
 
 function FeedbackDetailPanel({
     item,
+    aiPayloadPreview,
     typeOptions,
     severityConfig,
     statusOptions,
@@ -715,8 +792,10 @@ function FeedbackDetailPanel({
     onStatusUpdate,
     onDelete,
     onImageClick,
+    onAiPayloadCopy,
 }: {
     item: FeedbackItem | null;
+    aiPayloadPreview: string | null;
     typeOptions: TypeOptionWithLabel[];
     severityConfig: SeverityConfig;
     statusOptions: StatusOptionWithLabel[];
@@ -724,12 +803,11 @@ function FeedbackDetailPanel({
     onStatusUpdate: (id: string, status: string) => void;
     onDelete: (id: string) => void;
     onImageClick: (src: string) => void;
+    onAiPayloadCopy: (payloadText: string) => void;
 }) {
     const [snapshotCopied, setSnapshotCopied] = useState(false);
-
-    useEffect(() => {
-        setSnapshotCopied(false);
-    }, [item?._id]);
+    const [actionLogExpanded, setActionLogExpanded] = useState(false);
+    const [snapshotExpanded, setSnapshotExpanded] = useState(false);
 
     if (!item) {
         return (
@@ -824,7 +902,7 @@ function FeedbackDetailPanel({
                     )}
                     {item.stateSnapshot && <MetaBadge>JSON</MetaBadge>}
                     <div className="ml-auto">
-                        <CopyFeedbackButton item={item} t={t} />
+                        <CopyFeedbackButton item={item} t={t} onAiPayloadCopy={onAiPayloadCopy} />
                     </div>
                 </div>
             </div>
@@ -897,46 +975,107 @@ function FeedbackDetailPanel({
                                 {item._id}
                             </span>
                         </MetaField>
+
+                        {item.clientContext?.route && (
+                            <MetaField label="Route">
+                                <span className="break-all text-zinc-700">{item.clientContext.route}</span>
+                            </MetaField>
+                        )}
+
+                        {item.errorContext?.name && (
+                            <MetaField label="Error">
+                                <span className="text-zinc-700">{item.errorContext.name}</span>
+                            </MetaField>
+                        )}
                     </div>
                 </section>
 
+                {aiPayloadPreview && (
+                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
+                        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            AI Payload
+                        </p>
+                        <textarea
+                            readOnly
+                            data-testid="feedback-ai-payload-viewer"
+                            value={aiPayloadPreview}
+                            className="min-h-[180px] w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
+                        />
+                    </section>
+                )}
+
                 {item.actionLog && (
-                    <details className="rounded-lg border border-zinc-200 bg-white p-2.5" open>
-                        <summary className="cursor-pointer text-[11px] font-medium text-zinc-500 hover:text-zinc-700">
-                            {t('feedback.actionLog.title')}
-                        </summary>
-                        <pre className="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-100 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-600 whitespace-pre-wrap">
-                            {item.actionLog}
-                        </pre>
-                    </details>
+                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
+                        <button
+                            type="button"
+                            data-testid="feedback-action-log-toggle"
+                            aria-expanded={actionLogExpanded}
+                            onClick={() => setActionLogExpanded((prev) => !prev)}
+                            className="flex w-full items-center justify-between gap-2 text-left text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-700"
+                        >
+                            <span className="inline-flex items-center gap-2">
+                                <ScrollText size={12} />
+                                {t('feedback.actionLog.title')}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400">
+                                {actionLogExpanded ? t('feedback.detail.collapse') : t('feedback.detail.expand')}
+                                <ChevronRight
+                                    size={12}
+                                    className={cn('transition-transform', actionLogExpanded && 'rotate-90')}
+                                />
+                            </span>
+                        </button>
+                        {actionLogExpanded && (
+                            <pre className="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-100 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-600 whitespace-pre-wrap">
+                                {item.actionLog}
+                            </pre>
+                        )}
+                    </section>
                 )}
 
                 {item.stateSnapshot && (
-                    <details className="rounded-lg border border-zinc-200 bg-white p-2.5">
-                        <summary className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-zinc-500 hover:text-zinc-700">
-                            <ScrollText size={12} />
-                            {t('feedback.stateSnapshot.title')}
-                        </summary>
-                        <div className="relative mt-2">
-                            <pre className="max-h-72 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-400 whitespace-pre-wrap">
-                                {item.stateSnapshot}
-                            </pre>
-                            <button
-                                type="button"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
-                                        setSnapshotCopied(true);
-                                        setTimeout(() => setSnapshotCopied(false), 2000);
-                                    });
-                                }}
-                                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] text-white transition-colors hover:bg-emerald-500"
-                            >
-                                {snapshotCopied ? <Check size={10} /> : <Copy size={10} />}
-                                {snapshotCopied ? t('feedback.stateSnapshot.copied') : t('feedback.stateSnapshot.copy')}
-                            </button>
-                        </div>
-                    </details>
+                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
+                        <button
+                            type="button"
+                            data-testid="feedback-state-snapshot-toggle"
+                            aria-expanded={snapshotExpanded}
+                            onClick={() => setSnapshotExpanded((prev) => !prev)}
+                            className="flex w-full items-center justify-between gap-2 text-left text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-700"
+                        >
+                            <span className="inline-flex items-center gap-2">
+                                <ScrollText size={12} />
+                                {t('feedback.stateSnapshot.title')}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400">
+                                {snapshotExpanded ? t('feedback.detail.collapse') : t('feedback.detail.expand')}
+                                <ChevronRight
+                                    size={12}
+                                    className={cn('transition-transform', snapshotExpanded && 'rotate-90')}
+                                />
+                            </span>
+                        </button>
+                        {snapshotExpanded && (
+                            <div className="relative mt-2">
+                                <pre className="max-h-72 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-400 whitespace-pre-wrap">
+                                    {item.stateSnapshot}
+                                </pre>
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
+                                            setSnapshotCopied(true);
+                                            setTimeout(() => setSnapshotCopied(false), 2000);
+                                        });
+                                    }}
+                                    className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] text-white transition-colors hover:bg-emerald-500"
+                                >
+                                    {snapshotCopied ? <Check size={10} /> : <Copy size={10} />}
+                                    {snapshotCopied ? t('feedback.stateSnapshot.copied') : t('feedback.stateSnapshot.copy')}
+                                </button>
+                            </div>
+                        )}
+                    </section>
                 )}
             </div>
         </aside>
