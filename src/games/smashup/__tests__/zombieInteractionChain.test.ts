@@ -814,8 +814,8 @@ describe('zombie_theyre_coming_to_get_you（它们为你而来）弃牌堆出牌
         expect(r1.steps[0]?.success).toBe(false);
     });
 
-    it('不消耗正常随从额度（原版）', () => {
-        // "它们为你而来" 原版 consumesNormalLimit=false，打出后不消耗正常额度（额外随从）
+    it('会消耗正常随从额度（原版）', () => {
+        // “它们为你而来”是“从弃牌堆而不是手牌打出”，不是额外随从
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -835,24 +835,62 @@ describe('zombie_theyre_coming_to_get_you（它们为你而来）弃牌堆出牌
         });
         const state = makeFullMatchState(core);
 
-        // 从弃牌堆打出（不消耗额度）
+        // 从弃牌堆打出（消耗正常额度）
         const r1 = runCommand(state, {
             type: SU_COMMANDS.PLAY_MINION,
             playerId: '0',
             payload: { cardUid: 'disc-m1', baseIndex: 0, fromDiscard: true },
-        }, 'theyre_coming: 不消耗额度');
+        }, 'theyre_coming: 消耗额度');
         expect(r1.steps[0]?.success).toBe(true);
         const p0 = r1.finalState.core.players['0'];
-        expect(p0.minionsPlayed).toBe(0); // 不消耗额度，仍为 0
+        expect(p0.minionsPlayed).toBe(1);
 
-        // 再打手牌随从 → 额度未用，应成功
+        // 再打手牌随从 → 正常额度已用完，应失败
         const r2 = runCommand(r1.finalState, {
             type: SU_COMMANDS.PLAY_MINION,
             playerId: '0',
             payload: { cardUid: 'hand-m1', baseIndex: 0 },
-        }, 'theyre_coming: 额度未用，打手牌');
-        expect(r2.steps[0]?.success).toBe(true);
-        expect(r2.finalState.core.players['0'].minionsPlayed).toBe(1); // 手牌打出消耗额度
+        }, 'theyre_coming: 额度已用，打手牌');
+        expect(r2.steps[0]?.success).toBe(false);
+    });
+
+    it('没有额外随从额度时，第二次从弃牌堆打出会被拒绝', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    discard: [
+                        makeCard('disc-m1', 'pirate_first_mate', '0', 'minion'),
+                        makeCard('disc-m2', 'zombie_walker', '0', 'minion'),
+                    ],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [], [
+                    { uid: 'ongoing1', defId: 'zombie_theyre_coming_to_get_you', ownerId: '0' },
+                ]),
+            ],
+        });
+        const state = makeFullMatchState(core);
+
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'disc-m1', baseIndex: 0, fromDiscard: true },
+        }, 'theyre_coming: 第一次从弃牌堆打出');
+        expect(r1.steps[0]?.success).toBe(true);
+        expect(r1.finalState.core.players['0'].minionsPlayed).toBe(1);
+
+        const r2 = runCommand(r1.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'disc-m2', baseIndex: 0, fromDiscard: true },
+        }, 'theyre_coming: 第二次从弃牌堆打出');
+        expect(r2.steps[0]?.success).toBe(false);
     });
 });
 

@@ -574,7 +574,7 @@ router.post('/games/:name/create', async (ctx) => {
 
             // 删除旧房间并发送 MATCH_ENDED 事件
             if (ownerMatches.length > 0) {
-                gameLogger.info('清理旧房间', {
+                logger.info('cleanup_duplicate_owner_rooms', {
                     ownerKey,
                     ownerType: ownerType ?? 'unknown',
                     count: ownerMatches.length,

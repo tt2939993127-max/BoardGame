@@ -34,6 +34,20 @@ export interface SetupOnlineMatchOptions {
     player2Deck?: string;
 }
 
+function resolveCardiaFrontendBaseURL(page?: Page): string {
+    const contextBaseURL = page?.context()._options?.baseURL;
+    if (contextBaseURL) {
+        return contextBaseURL;
+    }
+
+    if (process.env.VITE_FRONTEND_URL) {
+        return process.env.VITE_FRONTEND_URL;
+    }
+
+    const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || '6173';
+    return `http://127.0.0.1:${frontendPort}`;
+}
+
 /**
  * 设置 Cardia 在线对局
  */
@@ -46,7 +60,7 @@ export const setupOnlineMatch = async (
     
     // 从 page 的 context 获取 baseURL，如果没有则使用默认值
     // 优先使用 context 的 baseURL，否则使用环境变量或默认值
-    const baseURL = page.context()._options?.baseURL || process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL(page);
     
     // 创建 player1 context
     const player1Context = await browser.newContext({ baseURL });
@@ -478,7 +492,7 @@ export const setupCardiaTestScenario = async (
     scenario: CardiaTestScenario
 ): Promise<CardiaMatchSetup> => {
     // 1. 创建基础对局
-    const baseURL = process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL();
     const tempContext = await browser.newContext({ baseURL });
     const tempPage = await tempContext.newPage();
     

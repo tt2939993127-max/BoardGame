@@ -300,6 +300,8 @@ SMTP_PASS=xxx
 
 **本地开发**：直接复制 `.env.example` 即可。
 
+**强制约定**：凡是本地开发脚本、资源脚本或校验脚本会读取的环境变量，新增或修改时必须同步更新 `.env.example`。不能假设“只写进 `.env` 就够了”，也不能依赖“`.env` 缺字段时自动回退到 `.env.example`”，因为只要本机存在 `.env`，很多脚本就会优先读取它；如果 `.env` 里缺少某个字段，脚本可能直接报错。`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 属于这类必须同时维护在 `.env.example` 的变量。
+
 **生产环境（最小配置）**：只需密钥和域名，其余由 `docker-compose.prod.yml` 覆盖。
 
 ```bash

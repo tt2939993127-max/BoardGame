@@ -20,6 +20,7 @@ import { reduce } from '../domain/reducer';
 import { INITIAL_HEALTH, INITIAL_CP, CP_MAX, HAND_LIMIT } from '../domain/types';
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
+import { getUsableTokensForTiming } from '../domain/tokenResponse';
 import type { DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import {
     createRunner, createInitializedState, createSetupWithHand,
@@ -71,6 +72,23 @@ describe('HP 边界', () => {
         const core = getInitCore();
         const result = reduce(core, ev('DAMAGE_DEALT', { targetId: '0', actualDamage: INITIAL_HEALTH }));
         expect(result.players['0'].resources[RESOURCE_IDS.HP]).toBe(0);
+    });
+
+    it('太极满值时再次获得不会污染本回合可增伤数量', () => {
+        const core = getInitCore();
+        core.players['0'].tokens[TOKEN_IDS.TAIJI] = 6;
+        core.players['0'].tokenStackLimits[TOKEN_IDS.TAIJI] = 6;
+
+        const result = reduce(core, ev('TOKEN_GRANTED', {
+            targetId: '0',
+            tokenId: TOKEN_IDS.TAIJI,
+            amount: 2,
+            newTotal: 6,
+        }));
+
+        expect(result.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(6);
+        expect(result.taijiGainedThisTurn?.['0'] ?? 0).toBe(0);
+        expect(getUsableTokensForTiming(result, '0', 'beforeDamageDealt').some(token => token.id === TOKEN_IDS.TAIJI)).toBe(true);
     });
 });
 

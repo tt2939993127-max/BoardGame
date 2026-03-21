@@ -5,6 +5,7 @@ import {
     playCard,
     waitForPhase,
 } from './helpers/cardia';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
 /**
  * 测试新的 setupCardiaTestScenario API
@@ -12,6 +13,8 @@ import {
  * 这个测试验证新API是否能正确工作
  */
 test.describe('Cardia 测试场景API验证', () => {
+    test.describe.configure({ timeout: 120_000 });
+
     test('基础场景：配置手牌和阶段', async ({ browser }) => {
         const setup = await setupCardiaTestScenario(browser, {
             player1: {
@@ -127,6 +130,76 @@ test.describe('Cardia 测试场景API验证', () => {
             
             console.log('✅ 完整场景测试通过');
             
+        } finally {
+            await setup.player1Context.close();
+            await setup.player2Context.close();
+        }
+    });
+    test('窄高视口下顶部对手卡应完整显示在战场内', async ({ browser }, testInfo) => {
+        const setup = await setupCardiaTestScenario(browser, {
+            player1: {
+                hand: ['deck_i_card_01'],
+                deck: ['deck_i_card_02'],
+                playedCards: [
+                    { defId: 'deck_i_card_03', signets: 1, encounterIndex: 0 },
+                ],
+            },
+            player2: {
+                hand: ['deck_i_card_04'],
+                deck: ['deck_i_card_05'],
+                playedCards: [
+                    { defId: 'deck_i_card_06', signets: 1, encounterIndex: 0 },
+                ],
+            },
+            phase: 'play',
+        });
+
+        try {
+            const { player1Page } = setup;
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await player1Page.setViewportSize({ width: 1280, height: 640 });
+            await player1Page.waitForTimeout(800);
+
+            const state = await readCoreState(player1Page);
+            const players = state.players as Record<string, { playedCards: Array<{ uid: string }> }>;
+            const myCardUid = players['0'].playedCards[0].uid;
+            const opponentCardUid = players['1'].playedCards[0].uid;
+
+            const battlefield = player1Page.locator('[data-testid="cardia-battlefield"]');
+            await expect(battlefield).toBeVisible({ timeout: 10000 });
+
+            const myCard = player1Page.locator(`[data-testid="card-${myCardUid}"]`);
+            const opponentCard = player1Page.locator(`[data-testid="card-${opponentCardUid}"]`);
+            await expect(myCard).toBeVisible({ timeout: 10000 });
+            await expect(opponentCard).toBeVisible({ timeout: 10000 });
+
+            const battlefieldBox = await battlefield.boundingBox();
+            const myCardBox = await myCard.boundingBox();
+            const opponentCardBox = await opponentCard.boundingBox();
+
+            expect(battlefieldBox, '战场容器应有边界框').not.toBeNull();
+            expect(myCardBox, '己方卡牌应有边界框').not.toBeNull();
+            expect(opponentCardBox, '对手卡牌应有边界框').not.toBeNull();
+
+            const cardBoxes = [myCardBox!, opponentCardBox!].sort((a, b) => a.y - b.y);
+            const topCardBox = cardBoxes[0];
+            const bottomCardBox = cardBoxes[1];
+
+            expect(topCardBox.y, '顶部卡牌顶部不应超出战场').toBeGreaterThanOrEqual(battlefieldBox!.y - 1);
+            expect(topCardBox.y + topCardBox.height, '顶部卡牌底部应落在战场内').toBeLessThanOrEqual(battlefieldBox!.y + battlefieldBox!.height + 1);
+            expect(bottomCardBox.y, '底部卡牌顶部应落在战场内').toBeGreaterThanOrEqual(battlefieldBox!.y - 1);
+            expect(bottomCardBox.y + bottomCardBox.height, '底部卡牌底部不应超出战场').toBeLessThanOrEqual(battlefieldBox!.y + battlefieldBox!.height + 1);
+
+            const viewport = player1Page.viewportSize();
+            expect(viewport, '视口尺寸应可用').not.toBeNull();
+            expect(topCardBox.y, '顶部卡牌不应被裁到视口外').toBeGreaterThanOrEqual(0);
+            expect(topCardBox.y + topCardBox.height, '顶部卡牌底部不应超出视口').toBeLessThanOrEqual(viewport!.height + 1);
+
+            await player1Page.screenshot({
+                path: getEvidenceScreenshotPath(testInfo, 'cardia-top-row-layout-1280x640'),
+                fullPage: true,
+            });
         } finally {
             await setup.player1Context.close();
             await setup.player2Context.close();
