@@ -6,10 +6,22 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { generateCode, sendPasswordResetEmailWithCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
 import { AuthService } from './auth.service';
+import { serializeDeveloperGameIds } from './schemas/developer-game-access';
 import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, SendResetCodeDto, ResetPasswordDto, VerifyEmailDto, UpdateAvatarDto, UpdateUsernameDto } from './dtos/auth.dto';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/auth';
+
+const serializeBackofficeRole = (user: {
+    role: 'user' | 'developer' | 'admin';
+    developerGameIds?: string[];
+}) => {
+    const developerGameIds = serializeDeveloperGameIds(user.role, user.developerGameIds);
+
+    return developerGameIds !== undefined
+        ? { role: user.role, developerGameIds }
+        : { role: user.role };
+};
 
 @Controller('auth')
 export class AuthController {
@@ -150,7 +162,7 @@ export class AuthController {
                 username: user.username,
                 email: user.email,
                 emailVerified: user.emailVerified,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
             },
             token,
@@ -262,7 +274,7 @@ export class AuthController {
                 username: user.username,
                 email: user.email,
                 emailVerified: user.emailVerified,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
             },
         });
@@ -289,7 +301,7 @@ export class AuthController {
                 emailVerified: user.emailVerified,
                 lastOnline: user.lastOnline ?? null,
                 avatar: user.avatar ?? null,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
                 bannedAt: user.bannedAt ?? null,
                 bannedReason: user.bannedReason ?? null,
@@ -378,7 +390,7 @@ export class AuthController {
                 username: user.username,
                 email: user.email,
                 emailVerified: user.emailVerified,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
             },
         });
@@ -418,7 +430,7 @@ export class AuthController {
                 avatar: user.avatar,
                 email: user.email,
                 emailVerified: user.emailVerified,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
             },
             token,
@@ -449,7 +461,7 @@ export class AuthController {
                 id: user._id.toString(),
                 username: user.username,
                 avatar: user.avatar,
-                role: user.role,
+                ...serializeBackofficeRole(user),
                 banned: user.banned,
             },
         });
@@ -505,7 +517,7 @@ export class AuthController {
                     id: result.user._id.toString(),
                     username: result.user.username,
                     avatar: result.user.avatar,
-                    role: result.user.role,
+                    ...serializeBackofficeRole(result.user),
                     banned: result.user.banned,
                 },
             });

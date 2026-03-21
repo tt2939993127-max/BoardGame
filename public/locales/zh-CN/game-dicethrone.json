@@ -290,6 +290,11 @@
       "evasionAttempt": "闪避判定",
       "removeDebuff": "净化"
     },
+    "offensiveRollEndTokenUsed": "使用 {{tokenLabel}}（{{effectLabel}}）",
+    "offensiveRollEndTokenEffect": {
+      "crit": "+4 伤害",
+      "accuracy": "攻击不可防御"
+    },
     "cpGained": "获得 {{amount}} CP（{{source}}）",
     "cpGainedPlain": "获得 {{amount}} CP",
     "cpSpent": "消耗 {{amount}} CP（{{source}}）",
@@ -651,7 +656,7 @@
     "confirm": "确定结束"
   },
   "abilityChoice": {
-    "title": "选择发动技能",
+    "title": "选择发动变体",
     "description": "该技能有多个变体同时满足条件，请选择要发动的变体：",
     "skip": "不发动技能"
   },
@@ -743,7 +748,7 @@
     },
     "fist-technique-3": {
       "name": "拳术 III",
-      "description": "最高级拳法攻击，4个相同骰子可施加倒地",
+      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒",
       "effects": {
         "damage4": "造成4点伤害"
       }
@@ -1167,7 +1172,7 @@
     },
     "steadfast-2": {
       "name": "百折不挠 II",
-      "description": "升级版防御：提供更高治疗；若三连，可移除1个自身标记",
+      "description": "3/4/5心触发：恢复5/6/7生命，移除1个自身状态效果",
       "effects": {
         "removeStatus": "移除1个自身的状态效果标记",
         "heal5": "恢复5点生命值",
@@ -1177,7 +1182,7 @@
     },
     "slap-2": {
       "name": "重击 II",
-      "description": "3/4/5剑触发：造成5/7/9伤害。若4个相同，造成不可防御伤害",
+      "description": "3/4/5剑触发：造成5/7/9伤害，其中4/5剑造成不可防御伤害",
       "effects": {
         "damage5": "造成5点伤害",
         "damage7Unblockable": "造成7点不可防御伤害",
@@ -1186,7 +1191,7 @@
     },
     "slap-3": {
       "name": "重击 III",
-      "description": "3/4/5剑触发：造成6/8/10伤害。若4个相同，造成不可防御伤害",
+      "description": "3/4/5剑触发：造成6/8/10伤害，其中4/5剑造成不可防御伤害",
       "effects": {
         "damage6": "造成6点伤害",
         "damage8Unblockable": "造成8点不可防御伤害",
@@ -1657,7 +1662,7 @@
     },
     "longbow-3": {
       "name": "长弓 III",
-      "description": "3/4/5弓触发：造成5/7/9伤害，3个相同施加缠绕",
+      "description": "3/4/5弓触发：造成5/7/9伤害，3个及以上相同符号施加缠绕",
       "effects": {
         "damage3": "造成3点伤害",
         "damage5": "造成5点伤害",
@@ -1677,7 +1682,7 @@
     },
     "longbow-2": {
       "name": "长弓 II",
-      "description": "3/4/5弓触发：造成4/6/8伤害，4个相同施加缠绕",
+      "description": "3/4/5弓触发：造成4/6/8伤害，4个及以上相同符号施加缠绕",
       "effects": {
         "damage4": "造成4点伤害",
         "damage6": "造成6点伤害",
@@ -1778,7 +1783,7 @@
     },
     "eclipse-2": {
       "name": "星蚀 II",
-      "description": "包含月蚀与暗月两个变体",
+      "description": "包含星蚀与暗月两个变体",
       "effects": {
         "inflictBlinded": "施加1个致盲标记",
         "inflictEntangle": "施加1个缠绕标记",
@@ -1933,7 +1938,7 @@
     },
     "card-thrust-punch-3": {
       "name": "冲拳 III",
-      "description": "拳拳造成7伤害 / 拳拳掌造成8伤害 / 拳拳掌掌造成9伤害。如果投出4个相同数字，施加倒地。"
+      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒。"
     },
     "card-contemplation-2": {
       "name": "冥想 II",

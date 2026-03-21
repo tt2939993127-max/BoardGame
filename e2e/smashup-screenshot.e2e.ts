@@ -55,7 +55,7 @@ test.describe('Smash Up 手牌截图', () => {
         await guestPage.goto(`/play/smashup/match/${matchId}?playerID=1`, { waitUntil: 'domcontentloaded' });
         await waitForFactionSelection(guestPage);
 
-        // 选派系：P0 → P1 → P1 → P0
+        // 蛇形选秀，保持原本派系归属：P0 = 0 + 3，P1 = 1 + 2
         await selectFactionByIndex(hostPage, 0);
         await selectFactionByIndex(guestPage, 1);
         await selectFactionByIndex(guestPage, 2);

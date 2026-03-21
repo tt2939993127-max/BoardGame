@@ -44,6 +44,7 @@
         "selectFriend": "选择好友开始聊天"
     },
     "menu": {
+        "notifications": "通知",
         "friendsAndChat": "好友",
         "matchHistory": "对局记录"
     },

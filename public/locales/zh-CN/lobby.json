@@ -71,14 +71,30 @@
   "tabs": {
     "lobby": "在线大厅",
     "reviews": "评价",
-    "leaderboard": "排行榜"
+    "leaderboard": "排行榜",
+    "changelog": "更新"
   },
   "leaderboard": {
     "loading": "加载中...",
     "title": "胜场排行",
     "empty": "暂无数据",
     "record": "{{wins}} 胜 / {{matches}} 局",
-    "error": "排行榜加载失败"
+    "error": "排行榜加载失败",
+    "changelogEmpty": "暂无日志"
+  },
+  "changelog": {
+    "loading": "加载更新日志中...",
+    "error": "更新日志加载失败",
+    "pinned": "置顶"
+  },
+  "authorInfo": {
+    "button": "电子化作者：{{author}}",
+    "mobileButton": "电子化作者：{{author}}",
+    "buttonHint": "点击查看电子化作者信息",
+    "title": "电子化作者",
+    "game": "作品：{{game}}",
+    "hint": "当前先展示电子化作者署名，后续如有更完整的作者介绍，会从这里展开。",
+    "close": "关闭"
   },
   "player": {
     "guest": "游客{{id}}"
@@ -166,6 +182,8 @@
     "tutorialTitle": "正在学习 {{game}}",
     "matchTitle": "正在对局 {{game}}",
     "loadingResources": "正在加载对局资源...",
+    "namespaceLoadFailed": "游戏文案加载失败",
+    "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
     "title": {
       "joining": "加入中",

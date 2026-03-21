@@ -22,6 +22,7 @@ import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
 import { hybridStorage } from './src/server/storage/HybridStorage';
+import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
 import { hasOccupiedPlayers } from './src/server/matchOccupancy';
@@ -151,6 +152,14 @@ const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 // ============================================================================
 
 let storage: MatchStorage;
+
+type OwnerMatchLookupStorage = {
+    findMatchesByOwnerKey: (ownerKey: string) => Promise<Array<{ matchID: string; gameName: string }>>;
+};
+
+const supportsOwnerMatchLookup = (value: MatchStorage): value is MatchStorage & OwnerMatchLookupStorage => {
+    return typeof (value as Partial<OwnerMatchLookupStorage>).findMatchesByOwnerKey === 'function';
+};
 
 const archiveMatchResult = async ({
     matchID,
@@ -552,20 +561,10 @@ router.post('/games/:name/create', async (ctx) => {
     // ✅ 单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
     if (ownerKey) {
         try {
-            const allMatchIds = await storage.listMatches();
-            const ownerMatches: Array<{ matchID: string; gameName: string }> = [];
-            
-            // 查找该 ownerKey 的所有房间
-            for (const existingMatchID of allMatchIds) {
-                const { metadata: existingMetadata } = await storage.fetch(existingMatchID, { metadata: true });
-                if (existingMetadata?.setupData?.ownerKey === ownerKey) {
-                    ownerMatches.push({
-                        matchID: existingMatchID,
-                        gameName: existingMetadata.gameName,
-                    });
-                }
-            }
-            
+            const ownerMatches = supportsOwnerMatchLookup(storage)
+                ? await storage.findMatchesByOwnerKey(ownerKey)
+                : [];
+
             // 删除旧房间并发送 MATCH_ENDED 事件
             if (ownerMatches.length > 0) {
                 gameLogger.info('清理旧房间', {
@@ -574,11 +573,11 @@ router.post('/games/:name/create', async (ctx) => {
                     count: ownerMatches.length,
                     matchIds: ownerMatches.map(m => m.matchID),
                 });
-                
-                for (const match of ownerMatches) {
+
+                await Promise.all(ownerMatches.map(async (match) => {
                     await storage.wipe(match.matchID);
                     emitMatchEnded(match.gameName as SupportedGame, match.matchID);
-                }
+                }));
             }
         } catch (err) {
             // 清理失败不应阻止创建新房间，记录日志后继续
@@ -1609,33 +1608,53 @@ lobbySocketIO.on('connection', (socket) => {
 // 服务器启动
 // ============================================================================
 
+const runStartupCleanupInBackground = async () => {
+    const cleanupTasks: StartupCleanupTask[] = [
+        {
+            reason: 'cleanupEmptyMatches:boot',
+            run: () => mongoStorage.cleanupEmptyMatches(),
+            errorMessage: '[MongoStorage] 启动清理空房间失败:',
+        },
+        {
+            reason: 'cleanupEphemeralMatches:boot',
+            run: () => hybridStorage.cleanupEphemeralMatches(),
+            errorMessage: '[MongoStorage] 启动清理临时房间失败:',
+        },
+        {
+            reason: 'cleanupExpiredTtlMatches:boot',
+            run: () => mongoStorage.cleanupExpiredTtlMatches(),
+            errorMessage: '[MongoStorage] 启动清理过期 TTL 房间失败:',
+        },
+        {
+            reason: 'cleanupLegacyMatches:boot',
+            run: () => mongoStorage.cleanupLegacyMatches(0),
+            errorMessage: '[MongoStorage] 启动清理遗留房间失败:',
+        },
+        {
+            reason: 'cleanupDuplicateOwnerMatches:boot',
+            run: () => mongoStorage.cleanupDuplicateOwnerMatches(),
+            errorMessage: '[MongoStorage] 启动清理重复 ownerKey 房间失败:',
+        },
+    ];
+
+    await runStartupCleanupTasks(cleanupTasks, {
+        onDirty: (reason) => {
+            for (const gameName of SUPPORTED_GAMES) {
+                void broadcastLobbySnapshot(gameName, reason);
+            }
+        },
+        onError: (message, error) => {
+            logger.error(message, error);
+        },
+    });
+};
+
 async function startServer() {
+    const bootstrapStartedAt = Date.now();
+
     // 连接存储后端
     if (USE_PERSISTENT_STORAGE) {
         await hybridStorage.connect();
-
-        // 启动时清理损坏/临时/遗留/重复房间
-        try {
-            const cleanedEmpty = await mongoStorage.cleanupEmptyMatches();
-            if (cleanedEmpty > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEmptyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理空房间失败:', err);
-        }
-
-        try {
-            const cleanedEphemeral = await hybridStorage.cleanupEphemeralMatches();
-            if (cleanedEphemeral > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理临时房间失败:', err);
-        }
 
         // 定时清理断线超时的临时房间 + 过期 TTL 房间
         setInterval(async () => {
@@ -1660,39 +1679,6 @@ async function startServer() {
                 logger.error('[MongoStorage] 定时清理过期 TTL 房间失败:', err);
             }
         }, 60 * 1000);
-
-        try {
-            const cleanedExpiredTtl = await mongoStorage.cleanupExpiredTtlMatches();
-            if (cleanedExpiredTtl > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupExpiredTtlMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理过期 TTL 房间失败:', err);
-        }
-
-        try {
-            const cleanedLegacy = await mongoStorage.cleanupLegacyMatches(0);
-            if (cleanedLegacy > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupLegacyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理遗留房间失败:', err);
-        }
-
-        try {
-            const cleanedDuplicate = await mongoStorage.cleanupDuplicateOwnerMatches();
-            if (cleanedDuplicate > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupDuplicateOwnerMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理重复 ownerKey 房间失败:', err);
-        }
     }
 
     // 启动游戏传输层
@@ -1700,10 +1686,22 @@ async function startServer() {
 
     // 启动 HTTP 服务器
     httpServer.listen(GAME_SERVER_PORT, () => {
+        logger.info('[GameServer] 启动完成', {
+            port: GAME_SERVER_PORT,
+            bootstrap_ms: Date.now() - bootstrapStartedAt,
+            registered_engines: SERVER_ENGINES.length,
+            registered_game_ids: SERVER_GAME_IDS.length,
+            use_persistent_storage: USE_PERSISTENT_STORAGE,
+        });
         logger.info(`🎮 游戏服务器运行在 http://localhost:${GAME_SERVER_PORT}`);
         logger.info('📡 大厅广播服务已启动 (namespace: /lobby-socket)');
-        logger.info(`🎯 游戏传输层已启动 (namespace: /game)`);
+        logger.info('🎯 游戏传输层已启动 (namespace: /game)');
         logger.info(`📦 已注册 ${SERVER_ENGINES.length} 个游戏引擎, ${SERVER_GAME_IDS.length} 个游戏 ID`);
+
+        if (USE_PERSISTENT_STORAGE) {
+            // 先对外提供服务，再在后台执行启动清理，避免清理耗时阻塞 ready
+            void runStartupCleanupInBackground();
+        }
     });
 }
 

@@ -181,17 +181,17 @@ test.describe('Smash Up 完整游戏流程', () => {
             await closeBtn.click();
             await hostPage.waitForTimeout(500);
 
-            // ---- 3. P1 选两个派系 ----
-            await selectFactionByIndex(guestPage, 1);
-            await selectFactionByIndex(guestPage, 2);
-
-            // ---- 4. P1 看到 P0 已选的派系被标记为"已占" ----
+            // ---- 3. P1 看到 P0 已选的派系被标记为"已占" ----
             await openFactionCard(guestPage, 0);
             const takenBadge = guestPage.getByText(/Taken by|已被|被.*选/i).first();
             await expect(takenBadge).toBeVisible({ timeout: 10000 });
             const closeBtnGuest = guestPage.locator('.fixed.inset-0.z-\\[100\\] button').first();
             await closeBtnGuest.click();
             await guestPage.waitForTimeout(500);
+
+            // ---- 4. P1 选两个派系 ----
+            await selectFactionByIndex(guestPage, 1);
+            await selectFactionByIndex(guestPage, 2);
 
             // ---- 5. P0 选第二个派系 ----
             await selectFactionByIndex(hostPage, 3);

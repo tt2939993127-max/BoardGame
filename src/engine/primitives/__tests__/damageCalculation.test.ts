@@ -108,6 +108,36 @@ describe('DamageCalculation', () => {
       expect(result.breakdown.steps).toHaveLength(2);
       expect(result.breakdown.steps[1].runningTotal).toBe(10);
     });
+
+    it('关闭 autoCollectBonusDamage 后不应重复收集 pendingAttack.bonusDamage', () => {
+      const state = mockState();
+      state.core.pendingAttack = {
+        attackerId: '0',
+        defenderId: '1',
+        sourceAbilityId: 'test',
+        bonusDamage: 4,
+      };
+
+      const calc = createDamageCalculation({
+        source: { playerId: '0', abilityId: 'test' },
+        target: { playerId: '1' },
+        baseDamage: 5,
+        state,
+        additionalModifiers: [
+          { id: 'explicit-bonus', type: 'flat', value: 4, source: 'attack_modifier' },
+        ],
+        autoCollectTokens: false,
+        autoCollectStatus: false,
+        autoCollectShields: false,
+        autoCollectBonusDamage: false,
+      });
+
+      const result = calc.resolve();
+      expect(result.finalDamage).toBe(9);
+      expect(result.breakdown.steps).toHaveLength(1);
+      expect(result.breakdown.steps[0].sourceId).toBe('attack_modifier');
+      expect(result.breakdown.steps[0].value).toBe(4);
+    });
     
     it('乘法修正在加法后应用', () => {
       const calc = createDamageCalculation({

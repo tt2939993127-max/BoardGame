@@ -930,11 +930,12 @@ useEffect(() => {
 
 > 路径：`src/components/game/framework/CardSpotlightQueue.tsx` + `hooks/useCardSpotlightQueue.ts`
 
-通用框架组件，用于展示其他玩家打出的卡牌特写。基于 EventStream 驱动，支持队列堆叠（有上限），点击任意位置关闭当前特写。
+通用框架组件，用于展示卡牌特写。基于 EventStream 驱动，支持队列堆叠（有上限），点击任意位置关闭当前特写。
 
 ### 核心特性
 
-- **只显示其他玩家**：自动过滤 `currentPlayerId` 产生的事件
+- **默认只显示其他玩家**：提供 `currentPlayerId` 时自动过滤该玩家产生的事件；不提供时显示全部
+- **联机确认可配置**：`consumeOnReconcile` 为 `true` 时，reconcile 后仍消费服务端确认事件，适合“对手出牌特写”这类纯远端驱动展示
 - **队列有上限**：`maxQueue`（默认 5），超出时丢弃最旧的
 - **点击关闭**：点击空白/卡牌即可关闭当前项，不阻塞其他操作
 - **Undo 安全**：检测到 Undo 回退时自动清空队列
@@ -955,7 +956,8 @@ const extractCard = useCallback((event) => {
 // 2. 使用 Hook
 const { queue, dismiss } = useCardSpotlightQueue({
     entries: getEventStreamEntries(G),
-    currentPlayerId: myPid,
+    currentPlayerId: myPid, // 传 null/undefined 可关闭“过滤自己”
+    consumeOnReconcile: true, // 联机对手页需要消费服务端确认事件时开启
     triggerEventTypes: ['su:action_played'],  // 触发特写的事件类型
     extractCard,
     maxQueue: 5,
@@ -980,7 +982,7 @@ const renderCard = useCallback((item) => (
 
 ### 已接入游戏
 
-- **SmashUp**：行动卡打出时展示特写（替代原 FX `ACTION_SHOW` 的 800ms 自动消失）
+- **SmashUp**：行动卡打出时展示特写（在线默认只看对手，本地模式显示双方）
 - **DiceThrone**：待迁移（当前使用游戏层自建的 `CardSpotlightOverlay` + `useCardSpotlight`）
 
 ---

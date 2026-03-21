@@ -5,6 +5,7 @@
  * - base_the_homeworld: 额外出牌时 power>2 被拒，power≤2 通过
  * - base_secret_garden: 同 homeworld 的 extraPlayMinionPowerMax 限制
  * - base_tsars_palace: power≤2 随从被拒
+ * - base_antarctic_base: 每回合每基地最多1个随从（Infiltrate 可忽略）
  * - base_north_pole: 每回合每基地最多1个随从
  * - base_castle_of_ice: 所有随从被拒
  * - base_dread_lookout: 行动卡被拒
@@ -361,6 +362,50 @@ describe('base_tsars_palace: 沙皇宫殿 power≤2 限制', () => {
         });
 
         const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 5 });
+        expect(restricted).toBe(false);
+    });
+
+    it('挂有 Infiltrate 时，自己仍可在 Tsar’s Palace 打出 power≤2 随从（按 FAQ）', () => {
+        const state = makeState({
+            bases: [makeBase('base_tsars_palace', {
+                // 在基地上挂一张由玩家0控制的 Infiltrate（play-on-base 行动）
+                ongoingActions: [{ uid: 'inf-1', defId: 'ninja_infiltrate', ownerId: '0' }],
+            })],
+        });
+
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 2 });
+        expect(restricted).toBe(false);
+    });
+});
+
+// ============================================================================
+// base_antarctic_base: 南极基地 - 每回合每基地最多1个随从（Infiltrate 可忽略）
+// ============================================================================
+
+describe('base_antarctic_base: 南极基地 每回合每基地最多1个随从', () => {
+    it('同一玩家本回合已在该基地打出1个随从后，再打出会被限制', () => {
+        const state = makeState({
+            bases: [makeBase('base_antarctic_base')],
+            players: {
+                '0': makePlayer('0', { minionsPlayedPerBase: { 0: 1 } }),
+                '1': makePlayer('1'),
+            },
+        });
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 3 });
+        expect(restricted).toBe(true);
+    });
+
+    it('若该玩家在此基地有 Infiltrate，则可忽略该限制（按 FAQ）', () => {
+        const state = makeState({
+            bases: [makeBase('base_antarctic_base', {
+                ongoingActions: [{ uid: 'inf-1', defId: 'ninja_infiltrate', ownerId: '0' }],
+            })],
+            players: {
+                '0': makePlayer('0', { minionsPlayedPerBase: { 0: 1 } }),
+                '1': makePlayer('1'),
+            },
+        });
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 3 });
         expect(restricted).toBe(false);
     });
 });

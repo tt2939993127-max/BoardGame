@@ -687,23 +687,31 @@ function registerFrankensteinOngoingEffects(): void {
         return [addPowerCounter(triggerMinionUid, baseIndex, 1, 'frankenstein_german_engineering', now)];
     });
 
-    // 死亡境地 ongoing：己方随从在此被消灭后放回手牌（拦截器）
-    // 注意：这需要 interceptor 而非 trigger，在随从被消灭时替换为回手牌
-    // 简化实现：用 trigger 在消灭后恢复卡牌到手牌
+    // 死亡境地 ongoing：己方随从在此被消灭时，改为回到手牌（replacement）
     registerTrigger('frankenstein_grave_situation', 'onMinionDestroyed', (ctx: TriggerContext) => {
-        const { state, baseIndex, triggerMinionUid, playerId, now } = ctx;
-        if (baseIndex === undefined || !triggerMinionUid) return [];
+        const { state, baseIndex, triggerMinionUid, triggerMinionDefId, playerId, now } = ctx;
+        if (baseIndex === undefined || !triggerMinionUid || !triggerMinionDefId) return [];
         const base = state.bases[baseIndex];
         if (!base) return [];
         const hasGS = base.ongoingActions.some(a => matchesDefId(a.defId, 'frankenstein_grave_situation') && a.ownerId === playerId);
         if (!hasGS) return [];
-        // 将被消灭的随从从弃牌堆恢复到手牌
+
+        // “你的随从” = 你控制的随从
+        const minion = base.minions.find(m => m.uid === triggerMinionUid);
+        if (!minion || minion.controller !== playerId) return [];
+
         return [{
-            type: SU_EVENTS.CARD_RECOVERED_FROM_DISCARD,
-            payload: { playerId, cardUids: [triggerMinionUid], reason: 'frankenstein_grave_situation' },
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: {
+                minionUid: triggerMinionUid,
+                minionDefId: triggerMinionDefId,
+                fromBaseIndex: baseIndex,
+                toPlayerId: minion.owner,
+                reason: 'frankenstein_grave_situation',
+            },
             timestamp: now,
         } as SmashUpEvent];
-    });
+    }, { phase: 'replacement' });
 
     // 身体改造 (uberserum) ongoing：回合开始放指示物 + 不可消灭
     registerTrigger('frankenstein_uberserum', 'onTurnStart', (ctx: TriggerContext) => {

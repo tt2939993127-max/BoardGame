@@ -9,6 +9,12 @@ import React, { useRef, useState, useCallback, useEffect, type ReactNode } from 
 /** 判定为拖拽的最小移动距离（像素） */
 const DRAG_THRESHOLD = 5;
 
+const getTouchDistance = (touchA: Touch, touchB: Touch) => {
+  const dx = touchA.clientX - touchB.clientX;
+  const dy = touchA.clientY - touchB.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
 export interface MapContainerProps {
   /** 子元素（地图内容） */
   children: ReactNode;
@@ -65,6 +71,8 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const positionStartRef = useRef({ x: 0, y: 0 });
   const isPointerDownRef = useRef(false);
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef<number | null>(null);
 
   const clampPosition = useCallback((x: number, y: number, nextScale = scale) => {
     if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) {
@@ -118,6 +126,84 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     pointerStartRef.current = { x: e.clientX, y: e.clientY };
     positionStartRef.current = { x: position.x, y: position.y };
   }, [position, interactionDisabled]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (interactionDisabled) return;
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      isPointerDownRef.current = true;
+      pinchStartDistanceRef.current = null;
+      pinchStartScaleRef.current = null;
+      pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
+      positionStartRef.current = { x: position.x, y: position.y };
+      return;
+    }
+
+    if (e.touches.length === 2) {
+      isPointerDownRef.current = false;
+      setIsDragging(false);
+      pinchStartDistanceRef.current = getTouchDistance(e.touches[0], e.touches[1]);
+      pinchStartScaleRef.current = scale;
+    }
+  }, [interactionDisabled, position, scale]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (interactionDisabled) return;
+
+    if (e.touches.length === 2) {
+      const startDistance = pinchStartDistanceRef.current;
+      const startScale = pinchStartScaleRef.current;
+      if (!startDistance || !startScale) return;
+
+      e.preventDefault();
+      setIsAnimating(false);
+
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      const nextScale = Math.max(minScale, Math.min(maxScale, startScale * (distance / startDistance)));
+      setScale(nextScale);
+      setPosition(current => clampPosition(current.x, current.y, nextScale));
+      return;
+    }
+
+    if (e.touches.length !== 1 || !isPointerDownRef.current) return;
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - pointerStartRef.current.x;
+    const dy = touch.clientY - pointerStartRef.current.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > DRAG_THRESHOLD) {
+      e.preventDefault();
+      setIsDragging(true);
+      setIsAnimating(false);
+
+      const nextPosition = {
+        x: positionStartRef.current.x + dx,
+        y: positionStartRef.current.y + dy,
+      };
+      setPosition(clampPosition(nextPosition.x, nextPosition.y));
+    }
+  }, [clampPosition, interactionDisabled, maxScale, minScale]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length >= 2) return;
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      isPointerDownRef.current = true;
+      pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
+      positionStartRef.current = { ...position };
+      pinchStartDistanceRef.current = null;
+      pinchStartScaleRef.current = null;
+      return;
+    }
+
+    isPointerDownRef.current = false;
+    pinchStartDistanceRef.current = null;
+    pinchStartScaleRef.current = null;
+    setIsDragging(false);
+  }, [position]);
 
   // 全局鼠标移动和松开（使用 useEffect 注册）
   useEffect(() => {
@@ -259,12 +345,17 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       ref={containerRef}
       className={`relative overflow-hidden select-none ${className}`}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       onDragStart={(e) => e.preventDefault()}
       data-testid={containerTestId}
       style={{
         cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        touchAction: interactionDisabled ? 'auto' : 'none',
       }}
     >
       {/* 左上角缩放倍率显示 */}

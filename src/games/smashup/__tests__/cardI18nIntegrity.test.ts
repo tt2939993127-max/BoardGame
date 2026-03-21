@@ -94,6 +94,12 @@ describe('SmashUp 卡牌 i18n 完整性', () => {
     }
     expect(missing, `zh-CN 缺少基地 abilityText: ${missing.join(', ')}`).toEqual([]);
   });
+
+  it('actionLog 的非随从力量修正文案在 zh-CN 和 en 中存在', () => {
+    expect(zhCN.actionLog?.powerModifier?.nonMinion).toBe('非随从力量修正');
+    expect(en.actionLog?.powerModifier?.nonMinion).toBe('Non-minion Power Modifier');
+  });
+
   it('resolveCardText 优先命中 POD 精确 locale key', () => {
     const enTranslator = makeTranslator(en);
 

@@ -4,10 +4,12 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { loadGameImplementation, getGameImplementation } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
+import { getGamePageDataAttributes } from '../games/mobileSupport';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
+import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
-import { CriticalImageGate } from '../components/game/framework';
+import { CriticalImageGate, MobileBoardShell } from '../components/game/framework';
 import { LocalGameProvider, BoardBridge } from '../engine/transport/react';
 import type { GameBoardProps } from '../engine/transport/protocol';
 import type { ComponentType } from 'react';
@@ -15,6 +17,7 @@ import { useToast } from '../contexts/ToastContext';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
+import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 
 // 教程系统正常拦截，不弹 toast
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -24,10 +27,15 @@ export const LocalMatchRoom = () => {
     const { gameId } = useParams();
     const [searchParams] = useSearchParams();
     const { t, i18n } = useTranslation('lobby');
-    const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(false);
     const toast = useToast();
+    const {
+        isGameNamespaceReady,
+        gameNamespaceError,
+        retryGameNamespaceLoad,
+    } = useGameNamespaceReady(gameId, i18n);
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
 
     // 异步加载游戏实现
     const [gameImplReady, setGameImplReady] = useState(false);
@@ -46,14 +54,6 @@ export const LocalMatchRoom = () => {
     // 从地址参数获取种子，如果没有则生成新的
     const seedFromUrl = searchParams.get('seed');
     const gameSeed = seedFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-    useEffect(() => {
-        if (!gameId) return;
-        setIsGameNamespaceReady(false);
-        i18n.loadNamespaces(`game-${gameId}`)
-            .then(() => setIsGameNamespaceReady(true))
-            .catch(() => setIsGameNamespaceReady(true));
-    }, [gameId, i18n]);
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
@@ -94,36 +94,54 @@ export const LocalMatchRoom = () => {
         return <div className="text-white">{t('matchRoom.noGame')}</div>;
     }
 
+    if (gameNamespaceError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameNamespaceError}
+                onRetry={retryGameNamespaceLoad}
+            />
+        );
+    }
+
     if (!isGameNamespaceReady) {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;
     }
 
     return (
-        <div className="relative w-full h-[100dvh] bg-black overflow-hidden font-sans" data-game-page>
+        <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
             <GameHUD mode="local" />
-            <div
-                className="w-full h-full"
-                style={{
-                    '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
-                } as React.CSSProperties}
-            >
-                <GameModeProvider mode="local">
-                    <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
-                    {engineConfig && WrappedBoard ? (
-                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={gameSeed} onCommandRejected={handleCommandRejected}>
-                            <BoardBridge
-                                board={WrappedBoard}
-                                loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
-                            />
-                        </LocalGameProvider>
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white/50">
-                            {t('matchRoom.noClient')}
-                        </div>
-                    )}
-                    </GameCursorProvider>
-                </GameModeProvider>
-            </div>
+            <MobileBoardShell>
+                <div
+                    className="w-full h-full"
+                    style={{
+                        '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                    } as React.CSSProperties}
+                >
+                    <GameModeProvider mode="local">
+                        <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
+                            {engineConfig && WrappedBoard ? (
+                                <LocalGameProvider
+                                    config={engineConfig}
+                                    numPlayers={2}
+                                    seed={gameSeed}
+                                    onCommandRejected={handleCommandRejected}
+                                    followCurrentTurnPlayer
+                                >
+                                    <BoardBridge
+                                        board={WrappedBoard}
+                                        loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                                    />
+                                </LocalGameProvider>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-white/50">
+                                    {t('matchRoom.noClient')}
+                                </div>
+                            )}
+                        </GameCursorProvider>
+                    </GameModeProvider>
+                </div>
+            </MobileBoardShell>
         </div>
     );
 };

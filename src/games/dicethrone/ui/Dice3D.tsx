@@ -1,22 +1,36 @@
-import { buildLocalizedImageSet } from '../../../core';
-import { ASSETS, DICE_BG_SIZE, getDiceSpritePosition } from './assets';
+import React from 'react';
+import { createScopedLogger } from '../../../lib/logger';
+import {
+    DICE_BG_SIZE,
+    getDiceSpritePosition,
+    getDiceSpriteUrls,
+} from './assets';
 
 export interface Dice3DProps {
     /** 骰子值 (1-6) */
     value: number;
-    /** 是否正在投掷动画 */
+    /** 是否正在播放滚动动画 */
     isRolling: boolean;
     /** 骰子大小 (CSS 单位) */
     size?: string;
     /** 语言 */
     locale?: string;
-    /** 动画序号（用于错开动画，可选） */
+    /** 动画序号，用于错峰滚动 */
     index?: number;
-    /** 变体：'default' 用于托盘，'spotlight' 用于特写 */
+    /** 变体：default 用于骰盘，spotlight 用于特写 */
     variant?: 'default' | 'spotlight';
-    /** 骰子资源所属角色（用于图集选择） */
+    /** 角色 ID，用于回退路径和兜底字形 */
     characterId?: string;
+    /** 骰子定义 ID，优先从定义读取 spriteSheet */
+    definitionId?: string;
 }
+
+type SpriteLoadState = 'loading' | 'ready' | 'error';
+interface SpriteState {
+    status: SpriteLoadState;
+    url?: string;
+}
+const dice3DLogger = createScopedLogger('dicethrone:dice3d');
 
 /** 3D 骰子组件 */
 export const Dice3D = ({
@@ -27,6 +41,7 @@ export const Dice3D = ({
     index = 0,
     variant = 'default',
     characterId = 'monk',
+    definitionId,
 }: Dice3DProps) => {
     const translateZ = `calc(${size} / 2)`;
 
@@ -38,6 +53,107 @@ export const Dice3D = ({
         { id: 2, trans: `rotateX(90deg) translateZ(${translateZ})` },
         { id: 5, trans: `rotateX(-90deg) translateZ(${translateZ})` },
     ];
+
+    const spriteUrls = React.useMemo(
+        () => getDiceSpriteUrls(definitionId, characterId, locale),
+        [characterId, definitionId, locale],
+    );
+    const [spriteState, setSpriteState] = React.useState<SpriteState>(() => ({
+        status: spriteUrls.length > 0 ? 'loading' : 'error',
+        url: spriteUrls[0],
+    }));
+
+    React.useEffect(() => {
+        dice3DLogger.debug('sprite-candidates', {
+            definitionId: definitionId ?? null,
+            characterId,
+            locale: locale ?? null,
+            spriteUrls,
+        });
+    }, [characterId, definitionId, locale, spriteUrls]);
+
+    React.useEffect(() => {
+        if (!spriteUrls.length) {
+            dice3DLogger.warn('sprite-candidates-empty', {
+                definitionId: definitionId ?? null,
+                characterId,
+                locale: locale ?? null,
+            });
+            setSpriteState({ status: 'error', url: undefined });
+            return undefined;
+        }
+
+        if (typeof Image === 'undefined') {
+            dice3DLogger.warn('image-constructor-unavailable', {
+                definitionId: definitionId ?? null,
+                characterId,
+                locale: locale ?? null,
+                selectedUrl: spriteUrls[0],
+            });
+            setSpriteState({ status: 'ready', url: spriteUrls[0] });
+            return undefined;
+        }
+
+        setSpriteState({ status: 'loading', url: undefined });
+        let cancelled = false;
+
+        const tryLoad = (index: number) => {
+            if (cancelled) return;
+            if (index >= spriteUrls.length) {
+                dice3DLogger.error('sprite-all-failed', {
+                    definitionId: definitionId ?? null,
+                    characterId,
+                    locale: locale ?? null,
+                    spriteUrls,
+                });
+                setSpriteState({ status: 'error', url: undefined });
+                return;
+            }
+
+            const candidateUrl = spriteUrls[index];
+            dice3DLogger.debug('sprite-probe-start', {
+                index,
+                candidateUrl,
+            });
+            const image = new Image();
+            image.onload = () => {
+                if (!cancelled) {
+                    dice3DLogger.info('sprite-probe-success', {
+                        index,
+                        candidateUrl,
+                        naturalWidth: image.naturalWidth,
+                        naturalHeight: image.naturalHeight,
+                    });
+                    setSpriteState({ status: 'ready', url: candidateUrl });
+                }
+            };
+            image.onerror = () => {
+                if (!cancelled) {
+                    dice3DLogger.warn('sprite-probe-fail', {
+                        index,
+                        candidateUrl,
+                    });
+                    tryLoad(index + 1);
+                }
+            };
+            image.src = candidateUrl;
+        };
+        tryLoad(0);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [characterId, definitionId, locale, spriteUrls]);
+
+    React.useEffect(() => {
+        dice3DLogger.debug('sprite-render-state', {
+            definitionId: definitionId ?? null,
+            characterId,
+            locale: locale ?? null,
+            spriteLoadState: spriteState.status,
+            resolvedSpriteUrl: spriteState.url ?? null,
+        });
+    }, [characterId, definitionId, locale, spriteState.status, spriteState.url]);
 
     const getFinalTransform = (val: number) => {
         switch (val) {
@@ -52,6 +168,8 @@ export const Dice3D = ({
     };
 
     const isSpotlight = variant === 'spotlight';
+    const resolvedSpriteUrl = spriteState.url;
+    const isSpriteReady = spriteState.status === 'ready' && Boolean(resolvedSpriteUrl);
     const animationClass = isSpotlight ? 'animate-dice3d-bonus-tumble' : 'animate-dice3d-tumble';
     const borderRadius = isSpotlight ? 'rounded-[1vw]' : 'rounded-[0.5vw]';
     const borderStyle = isSpotlight ? 'border-2 border-slate-600/50' : 'border border-slate-700/50';
@@ -62,6 +180,11 @@ export const Dice3D = ({
         <div
             className="relative dice3d-perspective"
             style={{ width: size, height: size }}
+            data-testid="dice-3d"
+            data-sprite-ready={isSpriteReady ? 'true' : 'false'}
+            data-definition-id={definitionId ?? ''}
+            data-sprite-candidates={String(spriteUrls.length)}
+            data-sprite-url={resolvedSpriteUrl ?? ''}
         >
             <div
                 className={`relative w-full h-full dice3d-preserve-3d ${isRolling ? animationClass : ''}`}
@@ -69,25 +192,27 @@ export const Dice3D = ({
                     transform: isRolling
                         ? `rotateX(${720 + index * 90}deg) rotateY(${720 + index * 90}deg)`
                         : getFinalTransform(value),
-                    transition: isRolling ? 'none' : `transform ${transitionDuration} ease-out`
+                    transition: isRolling ? 'none' : `transform ${transitionDuration} ease-out`,
                 }}
             >
                 {faces.map((face) => {
                     const { xPos, yPos } = getDiceSpritePosition(face.id);
                     const needsFlip = face.id === 1 || face.id === 6;
                     const faceTransform = needsFlip ? `${face.trans} rotateZ(180deg)` : face.trans;
+
                     return (
                         <div
                             key={face.id}
-                            className={`absolute inset-0 w-full h-full bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner`}
+                            className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner`}
                             style={{
                                 transform: faceTransform,
-                                backgroundImage: buildLocalizedImageSet(ASSETS.DICE_SPRITE(characterId), locale),
-                                backgroundSize: DICE_BG_SIZE,
-                                backgroundPosition: `${xPos}% ${yPos}%`,
+                                backgroundImage: isSpriteReady && resolvedSpriteUrl ? `url("${resolvedSpriteUrl}")` : undefined,
+                                backgroundSize: isSpriteReady ? DICE_BG_SIZE : undefined,
+                                backgroundPosition: isSpriteReady ? `${xPos}% ${yPos}%` : undefined,
                                 boxShadow,
-                                imageRendering: 'auto'
+                                imageRendering: 'auto',
                             }}
+                            data-face-id={face.id}
                         />
                     );
                 })}

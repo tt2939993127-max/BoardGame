@@ -23,6 +23,29 @@ export enum FeedbackStatus {
     CLOSED = 'closed'
 }
 
+export interface FeedbackClientContext {
+    route?: string;
+    mode?: string;
+    matchId?: string;
+    playerId?: string;
+    gameId?: string;
+    appVersion?: string;
+    userAgent?: string;
+    viewport?: {
+        width: number;
+        height: number;
+    };
+    language?: string;
+    timezone?: string;
+}
+
+export interface FeedbackErrorContext {
+    message?: string;
+    name?: string;
+    stack?: string;
+    source?: string;
+}
+
 @Schema({ timestamps: true })
 export class Feedback {
     @Prop({ type: Types.ObjectId, ref: 'User', required: false })
@@ -41,16 +64,23 @@ export class Feedback {
     status!: FeedbackStatus;
 
     @Prop({ type: String })
-    gameName?: string; // Optional, if related to a specific game
+    gameName?: string;
 
     @Prop({ type: String })
-    contactInfo?: string; // Optional contact info if user wants to provide
+    contactInfo?: string;
 
     @Prop({ type: String })
-    actionLog?: string; // 游戏内操作日志快照（提交反馈时自动附带）
+    actionLog?: string;
 
     @Prop({ type: String })
-    stateSnapshot?: string; // 完整游戏状态 JSON（用于精确复现问题）
+    stateSnapshot?: string;
+
+    @Prop({ type: Object })
+    clientContext?: FeedbackClientContext;
+
+    @Prop({ type: Object })
+    errorContext?: FeedbackErrorContext;
 }
 
 export const FeedbackSchema = SchemaFactory.createForClass(Feedback);
+

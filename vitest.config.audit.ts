@@ -1,5 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const workspaceRoot = fileURLToPath(new URL('.', import.meta.url));
+const rootSetupFile = path.resolve(workspaceRoot, 'vitest.setup.ts');
 
 /**
  * 审计测试配置
@@ -12,9 +16,14 @@ import path from 'path';
  * 命令：npm run test:games:audit
  */
 export default defineConfig({
+    server: {
+        fs: {
+            strict: false,
+        },
+    },
     resolve: {
         alias: {
-            '@locales': path.resolve(__dirname, './public/locales'),
+            '@locales': path.resolve(workspaceRoot, 'public/locales'),
         },
     },
     esbuild: {
@@ -38,6 +47,6 @@ export default defineConfig({
             'src/games/**/__tests__/**/*.property.test.{ts,tsx}',
         ],
         testTimeout: 180000,
-        setupFiles: ['./vitest.setup.ts'],
+        setupFiles: [rootSetupFile],
     },
 });

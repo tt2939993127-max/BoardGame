@@ -41,6 +41,7 @@
   - **常规交互**（Hover/Focus）：使用简单 `transition`（150-200ms）
   - **高频交互**（快速点击/连续操作）：仅用颜色/透明度变化，禁止复杂动画
 - **布局稳定性 (Layout)**：动态内容通过 `absolute` 或预留空间实现。**辅助按钮严禁占据核心业务流空间，必须以悬浮 (Overlay) 方式贴边/贴底显示。**
+- **禁止无意义重复信息填充（强制）**：当前上下文已经明确的信息（例如当前 tab、页面标题、区块标题、卡片标题）默认不应在子内容区机械重复，除非该重复能明显提升理解效率。允许重复的场景包括：消歧、跨区块跳读、无障碍提示、风险提示、需要脱离上下文单独成立的卡片/弹窗标题。禁止的场景包括：仅为了“看起来信息更满”而重复标题、在空状态里重复当前 tab 名称、同一视窗内对同一事实做无新增价值的二次强调。示例：tab 已叫“更新”时，空状态写“暂无日志”即可；若是从外部入口打开的独立弹窗，标题写“更新”则是合理重复。
 - **临时/瞬态 UI 不得挤压已有布局（强制）**：攻击修正徽章、buff 提示、倒计时标签等"出现/消失"的临时 UI 元素，必须使用 `absolute`/`fixed` 定位，禁止插入 flex/grid 正常流导致其他元素位移。若需占位，必须在初始布局中预留固定空间（如 `invisible` 占位符）。
 - **Flex 容器可滚动子元素必须加 `min-h-0`（强制）**：在 `flex-col` 容器中，使用 `flex-1 overflow-y-auto` 的子元素**必须同时加 `min-h-0`**。原因：flex 子元素默认 `min-height: auto`（内容撑开），导致 `overflow-y-auto` 不生效，内容被父级 `overflow-hidden` 裁剪而非滚动。同理，`flex-row` 容器中横向滚动的子元素需加 `min-w-0`。
   - ✅ `<div className="flex-1 min-h-0 overflow-y-auto">` — 正确，可滚动
@@ -64,6 +65,9 @@
 | Hook | 用途 | 说明 |
 |------|------|------|
 | `useHorizontalDragScroll` | 横向滚动容器增强 | 滚轮纵向→横向转换 + 鼠标拖拽左右滑动。所有横向卡牌列表/弃牌堆浏览必须使用，禁止手写 wheel 事件监听。返回 `{ ref, dragProps }`，`dragProps` 需展开到容器元素。 |
+| `useTouchLongPress` | mobile long-press interaction | Provides touch long-press trigger, move-cancel, and post-long-press click suppression. Returns pointer handlers, `clearLongPressState`, and `shouldBlockClick`. |
+| `useTouchInspectGesture` | coarse-pointer inspect gesture | Combines coarse-pointer detection with long-press inspect behavior. Use when touch devices need long-press preview while keeping tap for the primary action. |
+| `useArmedActivation` | armed tap-to-activate interaction | Provides "first tap arms, second tap activates" state for touch-first UIs. Use when coarse-pointer devices need explicit selection before firing a primary action. |
 | `useDeferredRender` | 延迟渲染 | 避免首帧闪烁 |
 | `useDelayedBackdropBlur` | 延迟毛玻璃 | 毛玻璃效果延迟启用，避免动画期间性能问题 |
 
@@ -252,4 +256,5 @@ React.useEffect(() => {
     - **场景层 (Scene)**：棋盘、卡片等核心实体，需通过 `anchorPoint` 处理坐标缩放，确保跨平台逻辑一致性。
     - **UI 层 (HUD)**：状态信息、控制面板，执行 Overlay 挂载逻辑。
 - **高度稳定性**：核心游戏区（棋盘/面板）**必须**使用明确高度约束（如 `h-[35vw]`）代替 `h-full`，彻底解耦父级 Flex 依赖。
+- **`MobileBoardShell` 容器约束（强制）**：凡是 manifest 声明 `mobileLayoutPreset: 'board-shell'` 的游戏，Board 根容器必须跟随壳内画布高度，使用 `h-full` / `absolute inset-0` 等容器高度方案；**禁止**在 Board 根容器上写 `h-screen`、`min-h-screen`、`100vh`、`100dvh`。原因：`board-shell` 会在移动横屏下先做整体缩放，若子树继续读取原始视口高度，会导致内容实际渲染高度小于壳高度，出现底部黑边、下半截空白或布局漂移。
 - **相位敏感性**：UI 必须清晰反馈当前"游戏相位"与"操作权限"，通过高亮合规动作 (Valid Actions) 降低认知负荷。

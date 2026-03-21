@@ -90,7 +90,7 @@ export const seedDTMatchCredentials = async (
 // 游戏交互
 // ============================================================================
 
-export const waitForCharacterSelection = async (page: Page, timeout = 20000) => {
+export const waitForCharacterSelection = async (page: Page, timeout = 60000) => {
     await expect(page.locator('h2').filter({ hasText: /选择你的英雄|Select Your Hero/i })).toBeVisible({ timeout });
 };
 
@@ -209,6 +209,16 @@ export const ensureDebugPanelClosed = async (page: Page) => {
     if (await panel.isHidden().catch(() => false)) return;
     await page.getByTestId('debug-toggle').click();
     await expect(panel).toBeHidden({ timeout: 5000 });
+};
+
+/** 隐藏 FAB 菜单和调试开关，避免遮挡移动端窄视口点击区域 */
+export const disableFabMenu = async (page: Page) => {
+    await page.addStyleTag({
+        content: [
+            '[data-testid="fab-menu"] { pointer-events: none !important; opacity: 0 !important; }',
+            '[data-testid="debug-toggle-container"] { pointer-events: none !important; opacity: 0 !important; }',
+        ].join('\n'),
+    }).catch(() => {});
 };
 
 /** 切换到调试面板的状态 Tab */

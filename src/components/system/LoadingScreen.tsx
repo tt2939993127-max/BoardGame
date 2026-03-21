@@ -102,7 +102,7 @@ export const LoadingScreen = ({
                 className={clsx(
                     // 关键：不再用 flex-column 居中承载“动画 + 文本”，避免文本高度变化影响动画视觉中心
                     "relative bg-black overflow-hidden",
-                    fullScreen ? "fixed inset-0 w-screen h-screen" : "relative w-full h-full min-h-[400px]",
+                    fullScreen ? "fixed inset-0 w-screen h-[100dvh]" : "relative w-full h-full min-h-[400px]",
                     className
                 )}
                 style={{ zIndex: UI_Z_INDEX.loading }}
@@ -125,7 +125,7 @@ export const LoadingScreen = ({
                 </div>
 
                 {/* 文本提示区：固定到底部，给容差；不参与垂直居中计算 */}
-                <div className="absolute left-0 right-0 bottom-16 flex flex-col items-center text-center px-6">
+                <div className="absolute left-0 right-0 bottom-[calc(env(safe-area-inset-bottom)+4rem)] flex flex-col items-center text-center px-6">
                     <div className="w-full max-w-sm min-h-[76px] flex flex-col items-center">
                         {title && (
                             <motion.h2
@@ -162,7 +162,7 @@ export const LoadingScreen = ({
                     initial={decorVariants.initial}
                     animate={decorVariants.animate}
                     transition={shouldAnimate ? { delay: 0.5, duration: 1 } : { duration: 0 }}
-                    className="absolute bottom-12 left-1/2 -translate-x-1/2 w-32 h-[1px] bg-gradient-to-r from-transparent via-amber-500 to-transparent"
+                    className="absolute bottom-[calc(env(safe-area-inset-bottom)+3rem)] left-1/2 -translate-x-1/2 w-32 h-[1px] bg-gradient-to-r from-transparent via-amber-500 to-transparent"
                 />
             </motion.div>
         </AnimatePresence>

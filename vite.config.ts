@@ -4,13 +4,59 @@ import path from 'path'
 import localeHashPlugin from './plugins/vite-locale-hash'
 import { readyCheckPlugin } from './vite-plugins/ready-check'
 
+const readCliFlag = (flagName: string): string | undefined => {
+  const prefix = `--${flagName}=`
+  for (let i = 0; i < process.argv.length; i++) {
+    const arg = process.argv[i]
+    if (arg === `--${flagName}`) {
+      const next = process.argv[i + 1]
+      return next && !next.startsWith('-') ? next : undefined
+    }
+
+    if (arg.startsWith(prefix)) {
+      return arg.slice(prefix.length)
+    }
+  }
+
+  return undefined
+}
+
+const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
+  name: 'android-build-meta',
+  apply: 'build' as const,
+  generateBundle() {
+    if (mode !== 'android') return
+
+    this.emitFile({
+      type: 'asset',
+      fileName: 'android-build-meta.json',
+      source: JSON.stringify(
+        {
+          mode,
+          backendUrl,
+          builtAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    })
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const devPort = Number(env.VITE_DEV_PORT) || 5173
+  const cliPort = Number(readCliFlag('port'))
+  const cliHost = readCliFlag('host')
+  const devPort = Number.isFinite(cliPort) && cliPort > 0
+    ? cliPort
+    : Number(env.VITE_DEV_PORT) || 5173
+  const serverHost = cliHost || '0.0.0.0'
+  const hmrHost = cliHost && cliHost !== '0.0.0.0' ? cliHost : 'localhost'
   const gameServerPort = Number(env.GAME_SERVER_PORT) || 18000
   const apiServerPort = Number(env.API_SERVER_PORT) || 18001
   const suppressE2EProxyNoise = env.E2E_PROXY_QUIET === 'true'
+  const backendUrl = env.VITE_BACKEND_URL || ''
 
   const isIgnorableProxyError = (err: Error & NodeJS.ErrnoException) => {
     if (err.code === 'ECONNABORTED') return true
@@ -25,16 +71,17 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      // 屏蔽 public/ 目录 import 警告（@locales alias 内联打包 i18n JSON 的已知副作用）
       {
         name: 'suppress-public-dir-warning',
         enforce: 'pre' as const,
         configResolved(config) {
-          const originalWarn = config.logger.warn;
+          const originalWarn = config.logger.warn
           config.logger.warn = (msg, options) => {
-            if (typeof msg === 'string' && msg.includes('Assets in public directory cannot be imported')) return;
-            originalWarn(msg, options);
-          };
+            if (typeof msg === 'string' && msg.includes('Assets in public directory cannot be imported')) {
+              return
+            }
+            originalWarn(msg, options)
+          }
         },
       },
       {
@@ -42,22 +89,22 @@ export default defineConfig(({ mode }) => {
         enforce: 'pre' as const,
         configResolved(config) {
           if (!suppressE2EProxyNoise) return
-          const originalError = config.logger.error;
+          const originalError = config.logger.error
           config.logger.error = (msg, options) => {
-            if (typeof msg === 'string' && msg.includes('ws proxy error')) return;
-            originalError(msg, options);
-          };
+            if (typeof msg === 'string' && msg.includes('ws proxy error')) return
+            originalError(msg, options)
+          }
         },
       },
       react(),
       localeHashPlugin(),
-      readyCheckPlugin(), // 添加就绪检查插件
+      readyCheckPlugin(),
+      createAndroidBuildMetaPlugin(mode, backendUrl),
     ],
     build: {
       rollupOptions: {
         output: {
           manualChunks: {
-            // 重型第三方库拆分为独立 chunk，支持并行加载和长期缓存
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
             'vendor-motion': ['framer-motion'],
             'vendor-socket': ['socket.io-client'],
@@ -72,8 +119,6 @@ export default defineConfig(({ mode }) => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, './src'),
-        // 允许 src/ 下的代码 import public/locales/ 中的 JSON（i18n 内联打包）
-        // Vite 默认禁止 import public/ 文件，alias 绕过此限制且不产生文件重复
         '@locales': path.resolve(__dirname, './public/locales'),
       },
     },
@@ -81,21 +126,18 @@ export default defineConfig(({ mode }) => {
       entries: ['index.html'],
     },
     server: {
-      host: '0.0.0.0',
+      host: serverHost,
       port: devPort,
       strictPort: true,
-      // HMR 配置：使用轮询模式避免 WebSocket 不稳定
       hmr: {
         protocol: 'ws',
-        host: 'localhost',
+        host: hmrHost,
         port: devPort,
         clientPort: devPort,
       },
-      // 排除测试产物、临时目录和配置文件，避免 E2E/脚本写盘触发开发页抖动。
       watch: {
-        // 使用轮询模式，避免 Windows 原生文件监听器崩溃
         usePolling: true,
-        interval: 1000,  // 轮询间隔 1 秒
+        interval: 1000,
         ignored: [
           '**/test-results/**',
           '**/playwright-report/**',
@@ -104,16 +146,18 @@ export default defineConfig(({ mode }) => {
           '**/tmp/**',
           '**/evidence/**',
           '**/logs/**',
+          '**/android/app/**',
+          '**/android/build/**',
           '**/node_modules/**',
           '**/*.test.*',
           '**/*.spec.*',
           '**/e2e/**',
           '**/.tmp-*',
-          '**/.env',           // 禁止监听 .env 文件，避免环境变量变化触发重启崩溃
-          '**/.env.*',         // 禁止监听 .env.* 文件（.env.local, .env.production 等）
-          '**/playwright.config.*',  // 禁止监听 Playwright 配置文件
-          '**/vitest.config.*',      // 禁止监听 Vitest 配置文件
-          '**/vite.config.*',        // 禁止监听 Vite 配置文件（避免循环重启）
+          '**/.env',
+          '**/.env.*',
+          '**/playwright.config.*',
+          '**/vitest.config.*',
+          '**/vite.config.*',
         ],
       },
       proxy: {
@@ -121,7 +165,6 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${gameServerPort}`,
           changeOrigin: true,
         },
-        // socket.io 传输层（/game namespace 用于游戏状态同步）
         '/socket.io': {
           target: `http://127.0.0.1:${gameServerPort}`,
           changeOrigin: true,
@@ -146,12 +189,16 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
+        '/game-changelogs': {
+          target: `http://127.0.0.1:${apiServerPort}`,
+          changeOrigin: true,
+        },
         '/admin': {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
           bypass: (req) => {
             if (req.headers.accept?.includes('text/html')) {
-              return req.url;
+              return req.url
             }
           },
         },
@@ -181,14 +228,10 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
-        // UGC 上传资源代理（后端 uploads/ 目录）
-        // 注意：public/assets/ 下的静态文件（音频/图片等）由 Vite 直接 serve
-        // 仅代理 UGC 动态上传的资源（uploads/ugc/...）
         '/assets/ugc': {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
-        // 头像上传资源代理
         '/assets/avatars': {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
@@ -197,8 +240,7 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
-
       },
-    }
+    },
   }
 })

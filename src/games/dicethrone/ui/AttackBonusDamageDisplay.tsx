@@ -27,6 +27,7 @@ export const AttackBonusDamageDisplay: React.FC<AttackBonusDamageDisplayProps> =
                 exit={{ opacity: 0, y: -8, scale: 0.9 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="pointer-events-auto"
+                data-testid="attack-modifier-bonus-badge"
             >
                 <div className="flex items-center justify-center gap-[0.4vw] px-[0.8vw] py-[0.3vw] rounded-full bg-gradient-to-r from-red-900/90 to-orange-900/90 border border-red-500/50 shadow-[0_0_1vw_rgba(239,68,68,0.4)] backdrop-blur-sm">
                     <Swords className="w-[0.9vw] h-[0.9vw] text-red-400" />

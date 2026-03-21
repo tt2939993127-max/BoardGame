@@ -264,7 +264,7 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                                     <div className="rounded shadow-xl overflow-hidden ring-2 ring-white/20 hover:ring-amber-400/60 transition-all">
                                         {(def?.previewRef || baseDef?.previewRef) ? (
                                             <CardPreview
-                                                previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId } }}
+                                                previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId, cardUid: card.uid } }}
                                                 className={`${cardWidth} ${cardAspect} bg-slate-900 rounded`}
                                                 alt={name}
                                             />

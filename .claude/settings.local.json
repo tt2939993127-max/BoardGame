@@ -5,7 +5,10 @@
       "WebSearch",
       "WebFetch(domain:www.claudepluginhub.com)",
       "WebFetch(domain:aibit.im)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(gh pr list:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }

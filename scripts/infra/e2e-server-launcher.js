@@ -1,62 +1,51 @@
 import { spawn } from 'child_process';
-import path from 'node:path';
-
-const isWindows = process.platform === 'win32';
-const cmdCommand = isWindows ? 'cmd.exe' : undefined;
-
-export function spawnNodeScript(scriptPath, env) {
-  return spawn(process.execPath, [scriptPath], {
+import { withWindowsHide } from './windows-hide.js';
+export function spawnNodeScript(scriptPath, env, args = []) {
+  return spawn(process.execPath, [scriptPath, ...args], {
     stdio: 'inherit',
     env,
+    ...withWindowsHide({}, env),
+  });
+}
+
+export function spawnBundleRunner({ label, entry, outfile, tsconfig, env, watch = true }) {
+  const runnerArgs = [
+    '--label', label,
+    '--entry', entry,
+    '--outfile', outfile,
+    '--tsconfig', tsconfig,
+  ];
+  if (!watch) {
+    runnerArgs.push('--once', 'true');
+  }
+
+  return spawnNodeScript('scripts/infra/dev-bundle-runner.mjs', env, [
+    ...runnerArgs,
+  ]);
+}
+
+export function spawnTsxEntry({ entry, tsconfig, env }) {
+  return spawn(process.execPath, [
+    'node_modules/tsx/dist/cli.mjs',
+    '--tsconfig',
+    tsconfig,
+    entry,
+  ], {
+    stdio: 'inherit',
+    env,
+    ...withWindowsHide({}, env),
   });
 }
 
 export function spawnNpxCommand(args, env) {
-  if (isWindows) {
-    return spawn(cmdCommand, ['/c', 'npx', ...args], {
-      stdio: 'inherit',
-      env,
-    });
-  }
-
-  return spawn('npx', args, {
+  return spawn(process.execPath, ['node_modules/npm/bin/npm-cli.js', 'exec', '--yes', '--', ...args], {
     stdio: 'inherit',
     env,
-  });
-}
-
-export function spawnTsxScript(args, env) {
-  const tsxCliPath = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  return spawn(process.execPath, [tsxCliPath, ...args], {
-    stdio: 'inherit',
-    env,
-  });
-}
-
-export function spawnApiServer(env) {
-  return spawnTsxScript(['--tsconfig', 'apps/api/tsconfig.json', 'apps/api/src/main.ts'], env);
-}
-
-export function spawnPackageScript(scriptName, env) {
-  if (isWindows) {
-    return spawn('powershell.exe', ['-Command', `npm run ${scriptName}`], {
-      stdio: 'inherit',
-      env,
-    });
-  }
-
-  return spawn('npm', ['run', scriptName], {
-    stdio: 'inherit',
-    env,
+    ...withWindowsHide({}, env),
   });
 }
 
 export function registerExitGuard(child, label, onFailure) {
-  child.on('error', error => {
-    console.error(`${label}启动失败: ${error.message}`);
-    onFailure();
-  });
-
   child.on('exit', code => {
     if (code !== 0 && code !== null) {
       console.error(`${label}异常退出 (code ${code})`);

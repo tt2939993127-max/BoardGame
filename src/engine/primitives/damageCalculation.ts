@@ -97,6 +97,9 @@ export interface DamageCalculationConfig extends DamageContext {
   
   /** 是否自动收集护盾减免（默认 false，护盾由 reducer 统一消耗） */
   autoCollectShields?: boolean;
+
+  /** 是否自动收集 pendingAttack.bonusDamage（默认 true） */
+  autoCollectBonusDamage?: boolean;
   
   /** PassiveTrigger handler（游戏层注入） */
   passiveTriggerHandler?: PassiveTriggerHandler;
@@ -219,7 +222,9 @@ export class DamageCalculation {
     }
     
     // 2.5. 自动收集 pendingAttack.bonusDamage（攻击修正卡）
-    this.collectBonusDamage();
+    if (this.config.autoCollectBonusDamage !== false) {
+      this.collectBonusDamage();
+    }
     
     // 3. 添加游戏层手动指定的修正
     if (this.config.additionalModifiers) {
@@ -437,7 +442,7 @@ export class DamageCalculation {
     const pendingAttack = coreState?.pendingAttack;
     
     if (!pendingAttack || pendingAttack.attackerId !== this.config.source.playerId) return;
-    
+
     const bonusDamage = pendingAttack.bonusDamage ?? 0;
     if (bonusDamage === 0) return;
     

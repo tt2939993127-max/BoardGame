@@ -153,6 +153,27 @@ function respond(state: MatchState<SmashUpCore>, playerId: string, optionId: str
     return runCommand(state, { type: INTERACTION_COMMANDS.RESPOND, playerId, payload: { optionId } }, name);
 }
 
+function respondWithMergedValue(
+    state: MatchState<SmashUpCore>,
+    playerId: string,
+    optionId: string,
+    mergedValue: Record<string, unknown>,
+    name: string,
+) {
+    const choice = asSimpleChoice(state.sys.interaction.current);
+    const selectedOption = choice?.options.find((option: any) => option.id === optionId);
+    const optionValue = selectedOption?.value;
+    const finalMergedValue = optionValue && typeof optionValue === 'object' && !Array.isArray(optionValue)
+        ? { ...(optionValue as Record<string, unknown>), ...mergedValue }
+        : mergedValue;
+
+    return runCommand(
+        state,
+        { type: INTERACTION_COMMANDS.RESPOND, playerId, payload: { optionId, mergedValue: finalMergedValue } },
+        name,
+    );
+}
+
 /** 从 SimpleChoice 中找到匹配条件的选项 ID */
 function findOption(choice: any, predicate: (opt: any) => boolean): string {
     const opt = choice.options.find(predicate);
@@ -1043,6 +1064,8 @@ describe('P2: zombie_outbreak（爆发）授予额度', () => {
                         makeCard('outbreak1', 'zombie_outbreak', '0', 'action'),
                         makeCard('hand-m1', 'pirate_first_mate', '0', 'minion'),
                     ],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
                     factions: ['zombies', 'pirates'] as [string, string],
                 }),
                 '1': makePlayer('1'),
@@ -1117,8 +1140,8 @@ describe('P2: zombie_outbreak（爆发）授予额度', () => {
     });
 });
 
-describe('P2: zombie_they_keep_coming（它们不断来临）授予额度', () => {
-    it('直接授予额度，玩家可通过 PLAY_MINION fromDiscard 打出', () => {
+describe('P2: zombie_they_keep_coming（它们不断来临）弃牌堆直点交互', () => {
+    it('选择弃牌堆随从并指定基地后，额外打出该随从', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1126,6 +1149,8 @@ describe('P2: zombie_they_keep_coming（它们不断来临）授予额度', () =
                     discard: [
                         makeCard('disc-m1', 'pirate_first_mate', '0', 'minion'),
                     ],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
                     factions: ['zombies', 'pirates'] as [string, string],
                 }),
                 '1': makePlayer('1'),
@@ -1138,18 +1163,80 @@ describe('P2: zombie_they_keep_coming（它们不断来临）授予额度', () =
 
         const state = makeFullMatchState(core);
 
-        // 打出 → 直接授予额度
+        // 打出行动卡 → 创建“弃牌堆随从 + 目标基地”交互
         const r1 = runCommand(state, {
             type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
             payload: { cardUid: 'tkc1' },
-        }, 'they_keep_coming: 授予额度');
+        }, 'they_keep_coming: 创建交互');
 
         expect(r1.steps[0]?.success).toBe(true);
-        expect(r1.finalState.sys.interaction.current).toBeUndefined();
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        expect(choice1.sourceId).toBe('zombie_they_keep_coming');
+        expect(choice1.targetType).toBe('discard_minion');
 
-        // 验证：授予了额外随从额度
-        const player = r1.finalState.core.players['0'];
-        expect(player.minionLimit).toBe(2); // 1 (基础) + 1 (额外)
+        const cardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r2 = respondWithMergedValue(
+            r1.finalState,
+            '0',
+            cardOpt,
+            { baseIndex: 1 },
+            'they_keep_coming: 选择弃牌堆随从并指定基地',
+        );
+
+        expect(r2.steps[0]?.success).toBe(true);
+        expect(r2.finalState.sys.interaction.current).toBeUndefined();
+
+        const player = r2.finalState.core.players['0'];
+        expect(player.minionsPlayed).toBe(player.minionLimit);
+        expect(player.discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(r2.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+    });
+
+    it('目标基地被 zombie_overrun 封锁时不应从弃牌堆额外打出随从', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('tkc1', 'zombie_they_keep_coming', '0', 'action')],
+                    discard: [makeCard('disc-m1', 'pirate_first_mate', '0', 'minion')],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                {
+                    ...makeBase('test_base_2'),
+                    ongoingActions: [{
+                        uid: 'overrun-1',
+                        defId: 'zombie_overrun',
+                        ownerId: '1',
+                        talentUsed: false,
+                    }],
+                },
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tkc1' },
+        }, 'they_keep_coming: create interaction for blocked base');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const cardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r2 = respondWithMergedValue(
+            r1.finalState,
+            '0',
+            cardOpt,
+            { baseIndex: 1 },
+            'they_keep_coming: blocked base should reject discard minion play',
+        );
+
+        expect(r2.steps[0]?.success).toBe(true);
+        expect(r2.finalState.core.players['0'].discard.some(c => c.uid === 'disc-m1')).toBe(true);
+        expect(r2.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(false);
     });
 });
 

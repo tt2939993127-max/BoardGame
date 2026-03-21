@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dice Throne Wiki 描述快照数据
  *
  * 数据来源：Dice Throne Season 1 Rerolled 官方 Wiki (https://dice-throne.fandom.com/)

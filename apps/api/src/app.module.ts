@@ -17,6 +17,7 @@ import { CustomDeckModule } from './modules/custom-deck/custom-deck.module';
 import { SponsorModule } from './modules/sponsor/sponsor.module';
 
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { GameChangelogModule } from './modules/game-changelog/game-changelog.module';
 import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
@@ -78,6 +79,7 @@ import { NotificationModule } from './modules/notification/notification.module';
         InviteModule,
         ReviewModule,
         FeedbackModule,
+        GameChangelogModule,
         NotificationModule,
         HealthModule,
         UgcModule,

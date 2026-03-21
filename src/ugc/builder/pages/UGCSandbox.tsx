@@ -245,6 +245,7 @@ export function UGCSandbox() {
                 config={sandboxConfig.engineConfig}
                 numPlayers={previewPlayerCount}
                 seed={`sandbox-${Date.now()}`}
+                followCurrentTurnPlayer
               >
                 <BoardBridge
                   board={sandboxConfig.board}

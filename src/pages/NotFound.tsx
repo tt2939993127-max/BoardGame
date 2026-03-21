@@ -9,7 +9,7 @@ export const NotFound = () => {
     const { t } = useTranslation('common');
 
     return (
-        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)] relative overflow-hidden">
             <SEO
                 title={t('notFound.seoTitle')}
                 description={t('notFound.seoDescription')}

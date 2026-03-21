@@ -49,6 +49,8 @@ describe('AuthService', () => {
         }
     });
 
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     it('应规范化邮箱并支持大小写查找', async () => {
         const user = await authService.createUser('tester', 'pass1234', 'Test@Example.com');
         const found = await authService.findByEmail('  test@example.com ');
@@ -60,6 +62,16 @@ describe('AuthService', () => {
         await authService.storeResetCode(email, '123456');
         const first = await authService.verifyResetCode(email, '123456');
         const second = await authService.verifyResetCode(email, '123456');
+        expect(first).toBe('ok');
+        expect(second).toBe('missing');
+    });
+
+    it('邮箱验证码在内存缓存下不应 300ms 内过期', async () => {
+        const email = 'verify@example.com';
+        await authService.storeEmailCode(email, '123456');
+        await wait(800);
+        const first = await authService.verifyEmailCode(email, '123456');
+        const second = await authService.verifyEmailCode(email, '123456');
         expect(first).toBe('ok');
         expect(second).toBe('missing');
     });

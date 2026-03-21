@@ -1,5 +1,42 @@
 import { test, expect } from './framework';
 
+async function longPressTouch(locator: any, page: any, pointerId: number) {
+    const box = await locator.boundingBox();
+    expect(box, '长按目标应该先可见').not.toBeNull();
+
+    const clientX = box!.x + box!.width / 2;
+    const clientY = box!.y + box!.height / 2;
+
+    await locator.dispatchEvent('pointerdown', {
+        bubbles: true,
+        pointerId,
+        pointerType: 'touch',
+        clientX,
+        clientY,
+    });
+    await page.waitForTimeout(520);
+    await locator.dispatchEvent('pointerup', {
+        bubbles: true,
+        pointerId,
+        pointerType: 'touch',
+        clientX,
+        clientY,
+    });
+}
+
+async function closeMagnifyOverlay(page: any) {
+    const overlay = page.locator('[data-testid="su-card-magnify-overlay"]');
+    await expect(overlay).toBeVisible({ timeout: 5000 });
+    await overlay.getByRole('button').click();
+    await expect(overlay).toHaveCount(0);
+}
+
+async function clickCenter(locator: any, page: any) {
+    const box = await locator.boundingBox();
+    expect(box, '点击目标应该先可见').not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+}
+
 const INITIAL_BASE_IDS = ['base_the_jungle', 'base_dread_lookout', 'base_tsars_palace'] as const;
 const REPLACEMENT_BASE_DECK = [
     'base_central_brain',
@@ -120,6 +157,66 @@ async function selectBaseByDefId(game: any, baseDefId: string) {
     await game.selectOption(option!.id);
 }
 
+function buildFourPlayerMobileScene() {
+    const scene = buildFourPlayerMultiBaseScene();
+
+    return {
+        ...scene,
+        bases: [
+            {
+                ...scene.bases[0],
+                minions: [
+                    {
+                        uid: 'p0-b0-armor-stego',
+                        defId: 'dino_armor_stego_pod',
+                        owner: '0',
+                        controller: '0',
+                        talentUsed: false,
+                        attachedActions: [
+                            { uid: 'p0-b0-armor-stego-upgrade', defId: 'dino_tooth_and_claw_pod', ownerId: '0' },
+                        ],
+                    },
+                    ...scene.bases[0].minions.filter((minion) => minion.controller !== '0'),
+                ],
+                ongoingActions: [
+                    { uid: 'p0-b0-base-ongoing', defId: 'zombie_overrun', ownerId: '0', talentUsed: false },
+                ],
+            },
+            ...scene.bases.slice(1),
+        ],
+        extra: {
+            ...scene.extra,
+            core: {
+                ...scene.extra.core,
+                players: {
+                    ...scene.extra.core.players,
+                    '0': {
+                        ...scene.extra.core.players['0'],
+                        hand: [
+                            { uid: 'p0-mobile-hand-terraform', defId: 'alien_terraform', type: 'action', owner: '0' },
+                            { uid: 'p0-mobile-hand-invader', defId: 'alien_invader', type: 'minion', owner: '0' },
+                        ],
+                    },
+                },
+            },
+        },
+    };
+}
+
+async function expectLocatorInsideViewport(
+    locator: any,
+    name: string,
+    viewportWidth: number,
+    viewportHeight: number,
+) {
+    const box = await locator.boundingBox();
+    expect(box, `${name} 应该有可见的布局盒`).not.toBeNull();
+    expect(box!.x, `${name} 不应超出左边界`).toBeGreaterThanOrEqual(-2);
+    expect(box!.y, `${name} 不应超出上边界`).toBeGreaterThanOrEqual(-2);
+    expect(box!.x + box!.width, `${name} 不应超出右边界`).toBeLessThanOrEqual(viewportWidth + 2);
+    expect(box!.y + box!.height, `${name} 不应超出下边界`).toBeLessThanOrEqual(viewportHeight + 2);
+}
+
 test.describe('大杀四方四人局三基地同时计分', () => {
     test('四人局三基地同时计分时，正确弹出多基地选择交互', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
@@ -183,5 +280,136 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         }
 
         await game.screenshot('03-final-four-player-state', testInfo);
+    });
+
+    test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 812, height: 375 });
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        });
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 812
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards'
+                && (state?.core?.players?.['0']?.hand?.length ?? 0) === 2;
+        }, { timeout: 10000, polling: 200 });
+
+        const scoreBoard = page.locator('[data-tutorial-id="su-scoreboard"]');
+        const handArea = page.locator('[data-testid="su-hand-area"]');
+        const deckStack = page.locator('[data-testid="su-deck-stack"]');
+        const discardToggle = page.locator('[data-testid="su-discard-toggle"]');
+        const firstBase = page.locator('[data-base-index="0"]');
+        const handCard = page.locator('[data-card-uid="p0-mobile-hand-terraform"]').first();
+        const inspectButton = page.locator('[data-testid="su-hand-card-inspect-p0-mobile-hand-terraform"]');
+        const talentMinion = page.locator('[data-minion-uid="p0-b0-armor-stego"]');
+        const baseOngoingCard = page.locator('[data-ongoing-uid="p0-b0-base-ongoing"]');
+        const attachedActionCard = page.locator('[data-attached-action-uid="p0-b0-armor-stego-upgrade"]');
+        const magnifyOverlay = page.locator('[data-testid="su-card-magnify-overlay"]');
+
+        await expect(scoreBoard).toBeVisible({ timeout: 15000 });
+        await expect(handArea).toBeVisible({ timeout: 15000 });
+        await expect(deckStack).toBeVisible({ timeout: 15000 });
+        await expect(discardToggle).toBeVisible({ timeout: 15000 });
+        await expect(firstBase).toBeVisible({ timeout: 15000 });
+        await expect(handCard).toBeVisible({ timeout: 15000 });
+        await expect(inspectButton).toHaveCSS('opacity', '1');
+        await expect(talentMinion).toBeVisible({ timeout: 15000 });
+        await expect(baseOngoingCard).toBeVisible({ timeout: 15000 });
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'false');
+
+        const viewport = page.viewportSize();
+        expect(viewport).not.toBeNull();
+
+        await expectLocatorInsideViewport(scoreBoard, '记分板', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(deckStack, '牌库', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(discardToggle, '弃牌堆', viewport!.width, viewport!.height);
+        await expectLocatorInsideViewport(handCard, '手牌卡牌', viewport!.width, viewport!.height);
+
+        const handCardBox = await handCard.boundingBox();
+        expect(handCardBox, '手牌卡牌应提供尺寸').not.toBeNull();
+        expect(handCardBox!.width, '移动端手牌宽度不应过小').toBeGreaterThan(48);
+
+        await game.screenshot('04-mobile-landscape-layout', testInfo);
+
+        await firstBase.click();
+        await expect(magnifyOverlay).toHaveCount(0);
+
+        await clickCenter(talentMinion, page);
+        await expect(talentMinion).toHaveAttribute('data-expanded', 'true');
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'true');
+        await expect(talentMinion).toHaveAttribute('data-activation-armed', 'true');
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed ?? false;
+        }, { timeout: 5000 }).toBe(false);
+        await expect(magnifyOverlay).toHaveCount(0);
+
+        await game.screenshot('05-mobile-single-tap-expands-attached-actions', testInfo);
+
+        await clickCenter(talentMinion, page);
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed ?? false;
+        }, { timeout: 5000 }).toBe(true);
+        await expect(talentMinion).toHaveAttribute('data-attached-actions-visible', 'true');
+        await expect(talentMinion).toHaveAttribute('data-activation-armed', 'false');
+
+        await game.screenshot('06-mobile-second-tap-uses-talent', testInfo);
+
+        await longPressTouch(talentMinion, page, 1);
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await game.screenshot('07-mobile-minion-long-press-magnify', testInfo);
+        await closeMagnifyOverlay(page);
+
+        await longPressTouch(firstBase, page, 2);
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await game.screenshot('08-mobile-base-long-press-magnify', testInfo);
+        await closeMagnifyOverlay(page);
+
+        await longPressTouch(baseOngoingCard, page, 3);
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await game.screenshot('09-mobile-base-ongoing-long-press-magnify', testInfo);
+        await closeMagnifyOverlay(page);
+
+        await longPressTouch(attachedActionCard, page, 4);
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await game.screenshot('10-mobile-attached-action-long-press-magnify', testInfo);
+        await closeMagnifyOverlay(page);
+
+        await longPressTouch(handCard, page, 5);
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await game.screenshot('11-mobile-hand-long-press-magnify', testInfo);
+        await closeMagnifyOverlay(page);
+
+        const stateAfterLongPress = await game.getState();
+        expect(stateAfterLongPress.core.players['0'].hand.some((card: any) => card.uid === 'p0-mobile-hand-terraform')).toBe(true);
+        expect(stateAfterLongPress.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed).toBe(true);
     });
 });
