@@ -483,6 +483,53 @@ router.get('/games', async (ctx) => {
 });
 
 // POST /games/:name/create — 创建对局
+router.get('/internal/rooms', async (ctx) => {
+    const requestedGame = typeof ctx.query.gameName === 'string'
+        ? normalizeGameName(ctx.query.gameName)
+        : '';
+
+    if (requestedGame) {
+        if (!isSupportedGame(requestedGame)) {
+            ctx.throw(400, `Game ${ctx.query.gameName} not found`);
+        }
+        ctx.body = { items: await getLobbySnapshot(requestedGame) };
+        return;
+    }
+
+    ctx.body = { items: await getLobbySnapshotAll() };
+});
+
+router.delete('/internal/rooms/:matchID', async (ctx) => {
+    const matchID = String(ctx.params.matchID || '').trim();
+    if (!matchID) {
+        ctx.throw(400, 'Missing matchID');
+    }
+
+    const deleted = await destroyLobbyRoom(matchID);
+    ctx.body = { deleted, matchID };
+});
+
+router.post('/internal/rooms/bulk-delete', async (ctx) => {
+    const body = ctx.request.body as { ids?: unknown } | undefined;
+    const ids = Array.isArray(body?.ids)
+        ? body.ids
+            .filter((value): value is string => typeof value === 'string')
+            .map(value => value.trim())
+            .filter(Boolean)
+        : [];
+    const uniqueIds = Array.from(new Set(ids));
+
+    let deleted = 0;
+    for (const matchID of uniqueIds) {
+        const ok = await destroyLobbyRoom(matchID);
+        if (ok) {
+            deleted++;
+        }
+    }
+
+    ctx.body = { requested: uniqueIds.length, deleted };
+});
+
 router.post('/games/:name/create', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
     if (!gameName || !isSupportedGame(gameName)) {
@@ -1265,6 +1312,27 @@ const resolveGameFromMatch = (match: LobbyMatch | null): SupportedGame | null =>
     if (!normalized) return null;
     if (!isSupportedGame(normalized)) return null;
     return normalized;
+};
+
+const destroyLobbyRoom = async (matchID: string): Promise<boolean> => {
+    if (!matchID) return false;
+
+    const match = await fetchLobbyMatch(matchID);
+    const indexed = matchGameIndex.get(matchID) ?? null;
+    const game = indexed || resolveGameFromMatch(match);
+
+    try {
+        await storage.wipe(matchID);
+    } catch (error) {
+        logger.warn(`[LobbyInternal] destroy room failed matchID=${matchID} error=${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+
+    if (game) {
+        emitMatchEnded(game, matchID);
+    }
+
+    return true;
 };
 
 const handleMatchCreated = async (matchID?: string, gameNameFromUrl?: string) => {
