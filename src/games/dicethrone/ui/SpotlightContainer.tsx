@@ -71,6 +71,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     closeClickGuardMs = 180,
 }) => {
     const visibleSinceRef = React.useRef<number>(0);
+    const shouldCaptureBackdropClick = !disableBackdropClose;
 
     React.useEffect(() => {
         if (isVisible) {
@@ -121,13 +122,13 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         <AnimatePresence mode="wait">
             <motion.div
                 key={id}
-                className={`fixed inset-0 flex items-center justify-center ${blockPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ zIndex }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                onClick={(!blockPointerEvents || disableBackdropClose)
+                onClick={!shouldCaptureBackdropClick
                     ? undefined
                     : () => {
                         const guardActive = isCloseClickGuardActive();

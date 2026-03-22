@@ -709,6 +709,24 @@ describe('BonusDieOverlay', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('展示态特写默认支持点空白关闭', () => {
+        const onClose = vi.fn();
+        render(
+            <SpotlightContainer
+                id="bonus-die-backdrop-close"
+                isVisible
+                onClose={onClose}
+                autoCloseDelay={10000}
+                closeClickGuardMs={0}
+            >
+                <button type="button">内容</button>
+            </SpotlightContainer>
+        );
+
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     it('闈炰氦浜掔壒鍐欓粯璁や笉搴旀嫤鎴暣灞忕偣鍑?', () => {
         const html = renderToStaticMarkup(
             <SpotlightContainer
@@ -720,7 +738,7 @@ describe('BonusDieOverlay', () => {
             </SpotlightContainer>
         );
 
-        expect(html).toContain('pointer-events-none');
+        expect(html).toContain('pointer-events-auto');
     });
 
     it('闈炰氦浜掔壒鍐欓粯璁ゆ敮鎸佺偣鍐呭鍏抽棴', async () => {

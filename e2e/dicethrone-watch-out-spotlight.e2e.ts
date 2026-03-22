@@ -169,7 +169,7 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
     expect(afterClickState.lastEventTypes).toContain('BONUS_DIE_ROLLED');
 });
 
-test('bonus die spotlight should not block confirm button interaction', async ({ page, game }, testInfo) => {
+test('bonus die spotlight should close on backdrop click before confirm interaction', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
     await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
@@ -222,6 +222,9 @@ test('bonus die spotlight should not block confirm button interaction', async ({
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
 
+    await page.mouse.click(40, 40);
+    await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+
     const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
     await expect(confirmButton).toBeEnabled({ timeout: 5000 });
     await confirmButton.click();
@@ -231,7 +234,7 @@ test('bonus die spotlight should not block confirm button interaction', async ({
         return state?.core?.rollConfirmed === true;
     }, { timeout: 5000 });
 
-    await game.screenshot('04-bonus-die-spotlight-non-blocking', testInfo);
+    await game.screenshot('04-bonus-die-spotlight-backdrop-close-then-confirm', testInfo);
 });
 
 test('bonus die spotlight should close on content click in display mode', async ({ page, game }, testInfo) => {
