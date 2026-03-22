@@ -37,32 +37,32 @@ export const AbilityButton: React.FC<AbilityButtonProps> = ({
     const abilityDescription = t(`abilities.${shortId}.description`, { defaultValue: '' });
     
     return (
-        <div className="bg-black/70 backdrop-blur-sm rounded-lg p-4 border-2 border-purple-500 shadow-lg max-w-md">
+        <div className="w-[min(92vw,28rem)] rounded-xl border-2 border-purple-500 bg-black/75 p-4 shadow-lg backdrop-blur-md sm:p-5">
             {/* 标题 */}
-            <div className="text-yellow-400 font-bold text-lg mb-2">
+            <div className="mb-2 text-base font-bold text-yellow-400 sm:text-lg">
                 ⚡ {t('abilityActivation')}
             </div>
             
             {/* 能力信息 */}
             <div className="mb-4">
-                <div className="text-white font-semibold text-base mb-1">
+                <div className="mb-1 text-base font-semibold text-white">
                     {abilityName}
                 </div>
                 {abilityDescription && (
-                    <div className="text-gray-300 text-sm leading-relaxed">
+                    <div className="text-sm leading-relaxed text-gray-200">
                         {abilityDescription}
                     </div>
                 )}
             </div>
             
             {/* 操作按钮 */}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                     data-testid="cardia-activate-ability-btn"
                     data-tutorial-id="cardia-activate-ability-btn"
                     onClick={onActivate}
                     disabled={disabled}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                    className="flex-1 rounded-lg bg-purple-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-600 sm:text-base"
                 >
                     {t('activate')}
                 </button>
@@ -70,7 +70,7 @@ export const AbilityButton: React.FC<AbilityButtonProps> = ({
                     data-testid="cardia-skip-ability-btn"
                     onClick={onSkip}
                     disabled={disabled}
-                    className="flex-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                    className="flex-1 rounded-lg bg-gray-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-500 sm:text-base"
                 >
                     {t('skip')}
                 </button>

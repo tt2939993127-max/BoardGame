@@ -108,13 +108,15 @@ export const cardiaAudioConfig: GameAudioConfig = {
             key: BGM_NORMAL_KEY,
             name: 'Tiki Party',
             src: '',
-            volume: 0.5,
+            // Cardia 默认 BGM 静音：仍保留曲目，便于后续在设置中切换/开启。
+            volume: 0,
         },
         {
             key: BGM_BATTLE_KEY,
             name: 'Move Your Feet',
             src: '',
-            volume: 0.5,
+            // Cardia 默认 BGM 静音：仍保留曲目，便于后续在设置中切换/开启。
+            volume: 0,
         },
     ],
     

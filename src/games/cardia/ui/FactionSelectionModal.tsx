@@ -30,27 +30,27 @@ export const FactionSelectionModal: React.FC<FactionSelectionModalProps> = ({
     ];
     
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg border-2 border-purple-500 shadow-2xl max-w-2xl w-full mx-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+            <div className="max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border-2 border-purple-500 bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl sm:rounded-lg">
                 {/* 标题栏 */}
-                <div className="px-6 py-4 border-b border-purple-500/30">
-                    <h2 className="text-2xl font-bold text-yellow-400">{title}</h2>
-                    <p className="text-sm text-gray-400 mt-1">
+                <div className="border-b border-purple-500/30 px-4 py-3 sm:px-6 sm:py-4">
+                    <h2 className="text-xl font-bold text-yellow-400 sm:text-2xl">{title}</h2>
+                    <p className="mt-1 text-sm text-gray-400">
                         {t('selectFaction')}
                     </p>
                 </div>
                 
                 {/* 派系选项 */}
-                <div className="p-6">
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 sm:p-6">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                         {factions.map(faction => (
                             <button
                                 key={faction.id}
                                 onClick={() => onConfirm(faction.id)}
-                                className={`relative bg-gradient-to-br ${faction.color} rounded-lg p-6 border-2 border-white/20 hover:border-yellow-400 hover:scale-105 transition-all shadow-lg`}
+                                className={`relative rounded-xl border-2 border-white/20 bg-gradient-to-br ${faction.color} p-4 shadow-lg transition-all hover:scale-[1.02] hover:border-yellow-400 sm:p-6`}
                             >
-                                <div className="text-6xl mb-3">{faction.icon}</div>
-                                <div className="text-white font-bold text-xl">
+                                <div className="mb-2 text-4xl sm:mb-3 sm:text-6xl">{faction.icon}</div>
+                                <div className="text-base font-bold text-white sm:text-xl">
                                     {t(`factions.${faction.id}`)}
                                 </div>
                             </button>
@@ -59,10 +59,10 @@ export const FactionSelectionModal: React.FC<FactionSelectionModalProps> = ({
                 </div>
                 
                 {/* 取消按钮 */}
-                <div className="px-6 py-4 border-t border-purple-500/30">
+                <div className="border-t border-purple-500/30 px-4 py-3 sm:px-6 sm:py-4">
                     <button
                         onClick={onCancel}
-                        className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+                        className="w-full rounded-lg bg-gray-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 sm:text-base"
                     >
                         {t('cancel')}
                     </button>

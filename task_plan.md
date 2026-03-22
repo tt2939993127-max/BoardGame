@@ -1,14 +1,46 @@
-# Task Plan: Dice Throne 攻击修正持续存在问题排查
+# Task Plan: BoardGame 多线并行调查 / 修复 / 收口
+
+> 当前根目录三件套已切换为 **2026-03-22 多线任务恢复入口**。下次开新会话时，先按本文件的“当前主任务 / 并行子线 / 下一步”继续，不要被后面的历史 Addendum 标题误导。
 
 ## Goal
-- 核对 `dicethrone` 中“攻击修正”在未立即发起攻击时是否会异常持续存在。
-- 完成从规则到实现的调用链检查，确认是规则如此、还是实现缺陷。
-- 若确认是缺陷，则做最小且架构正确的修复，并补充针对性验证。
+- 收口并修复当前 BoardGame 多线问题：线上静态资源 `text/html` 错配、房主被踢/房间被删异常、feedback 未关闭项、E2E 迁移推进、POD 审计/恢复文档核对。
+- 维持“本地执行 + guarded task + 并行 Codex”工作方式；用户新开会话后可直接续跑。
+- 以最小、可验证、可分批提交的方式推进，不把本地验证误报成远端部署完成。
 
 ## Current Phase
-- Phase 1：读取规则与相关规范
+- Phase A：登记当前多线任务并准备跨会话续跑
 
 ## Phases
+
+### Phase A：登记当前多线任务并准备跨会话续跑
+- [x] 读取项目根目录三件套，确认历史上下文
+- [x] 读取当前主进度文件（`evidence/*progress*`、`full-recovery-plan`、`temp/*plan*`）
+- [x] 将 2026-03-22 多线任务写回三件套
+- **Status:** completed
+
+### Phase B：收口并行外包结果
+- [ ] 检查 `temp/open-feedback-tracker.md` 是否已生成并提炼未关闭反馈清单
+- [ ] 检查 `temp/e2e-next-batch-plan.md` 是否已生成并确定下一批 E2E
+- [ ] 检查 `temp/codex-room-assets-findings.md` / `temp/codex-find-planning-with-files.md` 等并行产物
+- **Status:** in_progress
+
+### Phase C：修复线上静态资源错配
+- [ ] 复核 `apps/api/src/main.ts` 中 `/assets` 是否排除在 SPA fallback 外
+- [ ] 验证修复是否能阻止旧 chunk 命中 `200 text/html`
+- [ ] 核对是否存在旧 `index.html` + 新 `dist/assets` 不一致问题
+- **Status:** pending
+
+### Phase D：追查“房主被踢 / 房间被删”根因链
+- [ ] 继续检查 `server.ts` 中 create / join / leave / destroy / storage.wipe / startup cleanup / ghost_connection 等链路
+- [ ] 检查前端 `useMatchStatus` / `MatchRoom` / `Home` / `lobbySocket` / `matchApi` 是否把 chunk 失效或 `Match not found` 混同为“房间被删除”
+- [ ] 基于代码确认仅非对局页自动刷新一次的方案 A 落点
+- **Status:** pending
+
+### Phase E：反馈 / E2E / 审计文档收口
+- [ ] 只跟未关闭 / 待处理 feedback，不做全量历史拉取
+- [ ] 确认 E2E 迁移当前真实 active lanes 与 top 5 next batch
+- [ ] 核对 P0/P1/P3 文档是否存在冲突、过期或误导
+- **Status:** pending
 
 ### Phase 1：读取规则与相关规范
 - [ ] 阅读 `src/games/dicethrone/rule/` 规则文档中的攻击/攻击修正相关描述

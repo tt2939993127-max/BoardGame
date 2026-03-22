@@ -236,6 +236,15 @@ function registerElderThingModifiers(): void {
     // 邓威奇恐怖（ongoing 行动卡附着在随从上）：每张 +5 力量
     registerOngoingPowerModifier('elder_thing_dunwich_horror', 'minion', 'self', 5);
 }
+
+// ============================================================================
+// 吸血鬼派系
+// ============================================================================
+
+function registerVampireModifiers(): void {
+    // Dinner Date POD（ongoing 行动卡附着在随从上）：附着随从 -2 力量
+    registerOngoingPowerModifier('vampire_dinner_date', 'minion', 'self', -2);
+}
 // ============================================================================
 // 基地持续力量修正
 // ============================================================================
@@ -268,5 +277,6 @@ export function registerAllOngoingModifiers(): void {
     registerSteampunkModifiers();
     registerBearCavalryModifiers();
     registerElderThingModifiers();
+    registerVampireModifiers();
     registerWerewolfModifiers();
 }

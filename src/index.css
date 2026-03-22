@@ -231,7 +231,35 @@
     50%       { transform: translateY(-3px); }
 }
 
-/* 绉诲姩绔搷搴斿紡缂╂斁锛堜粎娓告垙椤甸潰锛屾帓闄ゅ彫鍞ゅ笀鎴樹簤锛?*/
+/* 移动端响应式缩放（旧方案，仅保留给未接入 board-shell/map-shell 的游戏） */
+@media (max-width: 1023px) and (orientation: landscape) {
+    /* board-shell / map-shell 游戏已由各自框架容器接管布局，
+       这里的旧 root 缩放只作用于尚未接入新框架的历史页面。 */
+    body:has([data-game-page]):not(:has([data-mobile-layout-preset="board-shell"])):not(:has([data-mobile-layout-preset="map-shell"])) #root {
+        /* 让缩放容器用 viewport 尺寸做布局，避免被 body/html 的内容高度撑大。
+           否则在横屏下 root 可能比 viewport 更高，导致底部露出非游戏底色区域。 */
+        position: fixed;
+        inset: 0;
+        transform-origin: top left;
+        transform: scale(calc(100vw / 1280));
+        width: 1280px;
+        /* 关键：移动端横屏下用 dvh 避免 iOS/Chrome 地址栏导致的 100vh 误差。
+           否则 root 会比真实可视区更矮，底部露出页面底色（常见为羊皮纸米色）。 */
+        height: calc(100dvh / (100vw / 1280));
+        overflow: hidden;
+    }
+
+    /* 缩放布局下强制页面背景为黑，避免任何“未覆盖区域”露出羊皮纸底色。 */
+    html:has(body:has([data-game-page]):not(:has([data-mobile-layout-preset="board-shell"])):not(:has([data-mobile-layout-preset="map-shell"]))) {
+        background: #000;
+    }
+
+    body:has([data-game-page]):not(:has([data-mobile-layout-preset="board-shell"])):not(:has([data-mobile-layout-preset="map-shell"])) {
+        background: #000;
+    }
+}
+
+/* MobileBoardShell：保留 main 分支新增的通用能力 */
 .mobile-board-shell {
     position: relative;
     width: 100%;

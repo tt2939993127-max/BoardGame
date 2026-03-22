@@ -25,6 +25,8 @@ interface DiscardPileProps {
  * - 整体跟随视口高度缩放，避免矮屏裁切顶部区域
  */
 export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _isOpponent = false, onCardClick }) => {
+    // 移动端优先：缩小弃牌堆视觉占用，避免压缩主战场和手牌区域
+    
     if (cards.length === 0) {
         return (
             <div
@@ -42,8 +44,11 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
     const latestCard = displayCards[0];
     const historyCards = displayCards.slice(1);
 
+    
+    // 历史卡片自动压缩，避免在手机和平板上把信息栏顶出屏幕
+
     return (
-        <div>
+        <div className="max-w-full overflow-hidden">
             <div className="relative" style={getCardiaDiscardPileStyle(historyCards.length)}>
                 <CardListTransition>
                     {historyCards.map((card, index) => {
@@ -75,7 +80,7 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
 
                     <CardTransition key={latestCard.uid} cardUid={`discard-latest-${latestCard.uid}`} type="discard" layoutAnimation={false}>
                         <div
-                            className="absolute bottom-0 cursor-pointer hover:scale-105 transition-transform"
+                            className="absolute bottom-0 cursor-pointer transition-transform hover:scale-105"
                             style={{
                                 ...getCardiaDiscardLatestCardStyle(historyCards.length),
                                 zIndex: historyCards.length,
@@ -111,6 +116,12 @@ export const DiscardPile: React.FC<DiscardPileProps> = ({ cards, isOpponent: _is
                         </div>
                     </CardTransition>
                 </CardListTransition>
+
+                {cards.length > 1 && (
+                    <div className="absolute -bottom-2 -right-2 rounded-full border border-gray-800 bg-black/85 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-lg">
+                        {cards.length}
+                    </div>
+                )}
             </div>
         </div>
     );

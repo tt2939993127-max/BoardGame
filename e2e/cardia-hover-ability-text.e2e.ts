@@ -263,4 +263,100 @@ test.describe('Cardia - 卡牌悬浮能力文本', () => {
             await setup.player2Context.close().catch(() => {});
         }
     });
+
+    test('移动端长按时应显示能力覆盖层且放大镜不再常驻遮挡', async ({ browser }, testInfo) => {
+        const setup = await setupCardiaTestScenario(browser, {
+            player1: {
+                hand: ['deck_i_card_02', 'deck_i_card_03'],
+                deck: ['deck_i_card_04', 'deck_i_card_05'],
+            },
+            player2: {
+                hand: ['deck_i_card_06', 'deck_i_card_07'],
+                deck: ['deck_i_card_08', 'deck_i_card_09'],
+            },
+            phase: 'play',
+        });
+
+        const { player1Page } = setup;
+
+        try {
+            await player1Page.setViewportSize({ width: 896, height: 414 });
+            await player1Page.waitForSelector('[data-testid="cardia-phase-indicator"]', { timeout: 15000 });
+            await player1Page.waitForTimeout(600);
+
+            const handArea = player1Page.locator('[data-testid="cardia-hand-area"]');
+            await handArea.waitFor({ state: 'visible', timeout: 5000 });
+
+            const overlay = handArea.locator('[data-testid="ability-overlay"]').first();
+            const magnifyButton = handArea.locator('button[title="查看大图"]').first();
+            const cardSurface = overlay.locator('xpath=..');
+
+            await expect(overlay).toHaveCSS('opacity', '0');
+            await expect(magnifyButton).toHaveCSS('opacity', '0');
+
+            await cardSurface.evaluate((element) => {
+                const target = element as HTMLElement;
+                const rect = target.getBoundingClientRect();
+                const createTouch = () => new Touch({
+                    identifier: 1,
+                    target,
+                    clientX: rect.left + rect.width / 2,
+                    clientY: rect.top + rect.height / 2,
+                    pageX: rect.left + rect.width / 2,
+                    pageY: rect.top + rect.height / 2,
+                    radiusX: 2,
+                    radiusY: 2,
+                    rotationAngle: 0,
+                    force: 1,
+                });
+
+                const touch = createTouch();
+                target.dispatchEvent(new TouchEvent('touchstart', {
+                    bubbles: true,
+                    cancelable: true,
+                    touches: [touch],
+                    targetTouches: [touch],
+                    changedTouches: [touch],
+                }));
+            });
+
+            await player1Page.waitForTimeout(320);
+
+            await cardSurface.evaluate((element) => {
+                const target = element as HTMLElement;
+                const rect = target.getBoundingClientRect();
+                const touch = new Touch({
+                    identifier: 1,
+                    target,
+                    clientX: rect.left + rect.width / 2,
+                    clientY: rect.top + rect.height / 2,
+                    pageX: rect.left + rect.width / 2,
+                    pageY: rect.top + rect.height / 2,
+                    radiusX: 2,
+                    radiusY: 2,
+                    rotationAngle: 0,
+                    force: 0,
+                });
+
+                target.dispatchEvent(new TouchEvent('touchend', {
+                    bubbles: true,
+                    cancelable: true,
+                    touches: [],
+                    targetTouches: [],
+                    changedTouches: [touch],
+                }));
+            });
+
+            await expect(overlay).toHaveCSS('opacity', '1');
+            await expect(magnifyButton).toHaveCSS('opacity', '1');
+
+            await player1Page.screenshot({
+                path: testInfo.outputPath('cardia-mobile-touch-preview.png'),
+                fullPage: false,
+            });
+        } finally {
+            await setup.player1Context.close().catch(() => {});
+            await setup.player2Context.close().catch(() => {});
+        }
+    });
 });
