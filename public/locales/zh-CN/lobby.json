@@ -58,6 +58,7 @@
     "return": "返回当前对局 (#{{id}})"
   },
   "rooms": {
+    "loading": "正在加载房间...",
     "empty": "暂无活跃房间",
     "matchTitle": "对局 #{{id}}",
     "mine": "我的",

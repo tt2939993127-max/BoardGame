@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
+/* @vitest-environment happy-dom */
+import { createElement } from 'react';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../roomActions';
+import { RoomList } from '../RoomList';
+
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({
+        t: (key: string) => key,
+    }),
+}));
 
 const buildStored = (override: Partial<{ matchID: string; playerID: string; credentials: string; gameName: string }> = {}) => ({
     matchID: 'match-1',
@@ -7,6 +17,10 @@ const buildStored = (override: Partial<{ matchID: string; playerID: string; cred
     credentials: 'creds',
     gameName: 'tictactoe',
     ...override,
+});
+
+afterEach(() => {
+    cleanup();
 });
 
 describe('GameDetailsModal join confirm helpers', () => {
@@ -43,5 +57,34 @@ describe('GameDetailsModal join confirm helpers', () => {
             'dicethrone'
         );
         expect(result?.gameName).toBe('summonerwars');
+    });
+});
+
+describe('RoomList lobby loading state', () => {
+    const baseProps = {
+        roomItems: [],
+        activeMatch: null,
+        isActionLoading: false,
+        isLobbyLoading: false,
+        onJoinRoom: vi.fn(),
+        onJoinRequest: vi.fn(),
+        onAction: vi.fn(),
+        onForceExitLocal: vi.fn(),
+        onOpenCreateRoom: vi.fn(),
+        onSpectate: vi.fn(),
+    };
+
+    it('首帧加载期间显示加载态而不是空状态', () => {
+        render(createElement(RoomList, { ...baseProps, isLobbyLoading: true }));
+
+        expect(screen.getByText('rooms.loading')).toBeInTheDocument();
+        expect(screen.queryByText('rooms.empty')).toBeNull();
+    });
+
+    it('加载完成后空列表显示暂无房间', () => {
+        render(createElement(RoomList, baseProps));
+
+        expect(screen.getByText('rooms.empty')).toBeInTheDocument();
+        expect(screen.queryByText('rooms.loading')).toBeNull();
     });
 });

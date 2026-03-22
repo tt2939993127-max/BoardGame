@@ -58,6 +58,7 @@
     "return": "Return to match (#{{id}})"
   },
   "rooms": {
+    "loading": "Loading rooms...",
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",
     "mine": "Mine",
