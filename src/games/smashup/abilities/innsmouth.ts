@@ -186,7 +186,7 @@ function buildReturnToSeaMinionPrompt(
     });
 
     const interaction = createSimpleChoice<ReturnToSeaChoiceValue>(
-        `innsmouth_return_to_the_sea_${ctx.now}`, ctx.playerId,
+        buildReturnToSeaInteractionId(ctx), ctx.playerId,
         '选择要返回的随从', options,
         { sourceId: 'innsmouth_return_to_the_sea', targetType: 'minion', multi: { min: 0, max: sameDefMinions.length } },
     );
@@ -232,6 +232,7 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
             id: `name-${i}`,
             label: `${name} x${minions.length}`,
             value: {
+                cardUid: ctx.cardUid,
                 baseIndex,
                 baseDefId: base.defId,
                 minionDefId,
@@ -241,7 +242,7 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
         };
     });
     const interaction = createSimpleChoice<ReturnToSeaNameChoiceValue>(
-        `innsmouth_return_to_the_sea_${ctx.now}`, ctx.playerId,
+        buildReturnToSeaInteractionId(ctx, 'choose_name'), ctx.playerId,
         '选择要返回手牌的同名随从', options,
         { sourceId: 'innsmouth_return_to_the_sea_choose_name', targetType: 'generic' },
     );
@@ -519,7 +520,7 @@ export function registerInnsmouthInteractionHandlers(): void {
         });
 
         const interaction = createSimpleChoice<ReturnToSeaChoiceValue>(
-            `innsmouth_return_to_the_sea_${timestamp}`, playerId,
+            `innsmouth_return_to_the_sea_choose_${selected.cardUid}_${timestamp}`, playerId,
             '选择要返回手牌的同名随从', options,
             { sourceId: 'innsmouth_return_to_the_sea', targetType: 'minion', multi: { min: 0, max: sameDefMinions.length } },
         );
