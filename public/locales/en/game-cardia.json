@@ -58,6 +58,11 @@
   "validation": {
     "opponent_must_play_first": "Opponent must play first (Diviner ability)"
   },
+  "hud": {
+    "offlineBanner": {
+      "message": "{{name}} is offline{{time}}"
+    }
+  },
   
   "abilities": {
     "mercenary_swordsman": {

@@ -1,5 +1,21 @@
 # Progress Log
 
+## Session: 2026-03-22 多线任务登记 / 新会话续跑入口
+- **Status:** in_progress
+- Actions taken:
+  - 读取项目根目录现有 `task_plan.md` / `findings.md` / `progress.md`，确认三件套已存在，但顶层标题仍停留在旧任务，需要补登记本轮多线收口状态。
+  - 读取并核对项目内主进度文件：`evidence/full-recovery-plan.md`、`evidence/p0-audit-progress.md`、`evidence/p1-restoration-progress.md`、`evidence/smashup-e2e-migration-progress.md`、`temp/feedback-main-branch-resume-plan.md`、`temp/ssh-codex-plan.md`。
+  - 已确认当前主线不止一个：静态资源 fallback 事故、房主被踢/房间被删链路、feedback 未关闭项、E2E 迁移、POD 审计/恢复文档。
+  - 已用 guarded task 启动并行 Codex：
+    - `codex-feedback-open-tracker` → 目标产物 `temp/open-feedback-tracker.md`
+    - `codex-e2e-migration` → 目标产物 `temp/e2e-next-batch-plan.md`
+    - `codex-find-planning-with-files` → 原用于精确定位 plan 技能；在用户给出 GitHub 后已人工确认并安装技能。
+  - 已从 `https://github.com/OthmanAdi/planning-with-files` 安装 `planning-with-files`，并整理到 OpenClaw 可识别目录；workspace commit：`1216e1e` (`skills: install planning-with-files`)。
+  - 已记录用户通用规范：以后说 `plan` 默认指 `planning-with-files`；多任务并行时，新增任务主动委派给 Codex。
+- Next step:
+  - 新会话恢复时，先读本三件套，再检查以下产物是否已落盘：`temp/open-feedback-tracker.md`、`temp/e2e-next-batch-plan.md`、`temp/codex-room-assets-findings.md`。
+  - 然后继续两条核心修复线：`apps/api/src/main.ts` 的 `/assets` SPA fallback 排除是否已真实落盘/验证；`server.ts` + 前端状态链路对“房间已删除”误判的根因与最小修复。
+
 ## Session: 2026-03-10
 
 ### Phase 1：读取规则与相关规范

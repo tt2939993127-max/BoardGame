@@ -6,6 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
+import { resolveOnPlay, resolveSpecial } from '../domain/abilityRegistry';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import type { MatchState } from '../../../engine/types';
@@ -19,7 +20,51 @@ import {
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { getInteractionHandler, registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { reduce } from '../domain/reduce';
 
+
+function resolvePlayedActionExecutor(defId: string) {
+    return resolveSpecial(defId) ?? resolveOnPlay(defId);
+}
+
+function appendResolvedActionAbility(
+    state: MatchState<SmashUpCore>,
+    events: SmashUpEvent[],
+    playerId: string,
+    cardUid: string,
+    defId: string,
+    random: AbilityContext['random'],
+    timestamp: number,
+    baseIndex: number,
+    targetMinionUid?: string,
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
+    const executor = resolvePlayedActionExecutor(defId);
+    if (!executor) return { state, events };
+
+    let simCore = state.core;
+    for (const evt of events) {
+        simCore = reduce(simCore, evt);
+    }
+    const abilityCtx: AbilityContext = {
+        state: simCore,
+        matchState: { ...state, core: simCore },
+        playerId,
+        cardUid,
+        defId,
+        baseIndex,
+        targetMinionUid,
+        random,
+        now: timestamp,
+    };
+    const result = executor(abilityCtx);
+    events.push(...result.events);
+    return {
+        state: result.matchState
+            ? { ...result.matchState, core: state.core }
+            : state,
+        events,
+    };
+}
 
 /** 这些多管闲事的小鬼（基础版）onPlay：选择一个基地，消灭该基地上任意数量的行动卡（点击式）*/
 function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
@@ -613,23 +658,12 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
         const name = def?.name ?? c.defId;
         return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'hand' as const , displayMode: 'card' as const };
     });
-    // 基础版与 POD 版共用此逻辑，但结算不同：
-    // - 基础版 handler: 抽等量牌
-    // - POD 版 handler: 抽等量+1
-    // 因此需要根据 defId 选择不同的 sourceId，以便路由到正确的 interactionHandler。
-    const interaction = ctx.defId === 'miskatonic_field_trip_pod'
-        ? createSimpleChoice(
-            `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
-            '选择要放到牌库底的卡牌（抽等量+1）',
-            [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
-            { sourceId: 'miskatonic_field_trip_pod', targetType: 'hand', multi: { min: 0, max: handCards.length } },
-        )
-        : createSimpleChoice(
-            `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
-            '选择要放到牌库底的卡牌（抽等量+1）',
-            [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
-            { sourceId: 'miskatonic_field_trip', targetType: 'hand', multi: { min: 0, max: handCards.length } },
-        );
+    const interaction = createSimpleChoice(
+        `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
+        '选择要放到牌库底的卡牌（抽等量+1）',
+        [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }] as any[],
+        { sourceId: 'miskatonic_field_trip', targetType: 'hand', multi: { min: 0, max: handCards.length } },
+    );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -830,8 +864,10 @@ export function registerMiskatonicInteractionHandlers(): void {
         // 一次性抽 count 张疯狂卡（传 count 而非循环调用，避免 nextUid 不递增导致重复 UID）
         const madnessEvt = drawMadnessCards(playerId, count, state.core, 'miskatonic_mandatory_reading', timestamp);
         if (madnessEvt) events.push(madnessEvt);
-        // 每抽1张，该随从+2力量（基础版：永久）
-        events.push(addPermanentPower(ctx.minionUid, ctx.baseIndex, count * 2, 'miskatonic_mandatory_reading', timestamp));
+        const actualDrawn = madnessEvt?.payload.count ?? 0;
+        if (actualDrawn > 0) {
+            events.push(addPermanentPower(ctx.minionUid, ctx.baseIndex, actualDrawn * 2, 'miskatonic_mandatory_reading', timestamp));
+        }
         return { state, events };
     });
 
@@ -850,7 +886,10 @@ export function registerMiskatonicInteractionHandlers(): void {
         const events: SmashUpEvent[] = [];
         const madnessEvt = drawMadnessCards(playerId, count, state.core, 'miskatonic_things_best_not_known_pod', timestamp);
         if (madnessEvt) events.push(madnessEvt);
-        events.push(addTempPower(ctx.minionUid, ctx.baseIndex, count * 2, 'miskatonic_things_best_not_known_pod', timestamp));
+        const actualDrawn = madnessEvt?.payload.count ?? 0;
+        if (actualDrawn > 0) {
+            events.push(addTempPower(ctx.minionUid, ctx.baseIndex, actualDrawn * 2, 'miskatonic_things_best_not_known_pod', timestamp));
+        }
         return { state, events };
     });
 
@@ -888,21 +927,19 @@ export function registerMiskatonicInteractionHandlers(): void {
         return { state, events: [] };
     });
 
-    registerInteractionHandler('miskatonic_librarian_pod_play_madness', (state, playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('miskatonic_librarian_pod_play_madness', (state, playerId, value, _iData, random, timestamp) => {
         const selected = (Array.isArray(value) ? value[0] : value) as { cardUid?: string } | undefined;
         const cardUid = selected?.cardUid;
         if (!cardUid) return { state, events: [] };
         const player = state.core.players[playerId];
         const card = player.hand.find(c => c.uid === cardUid);
         if (!card || card.defId !== MADNESS_CARD_DEF_ID) return { state, events: [] };
-        return {
-            state,
-            events: [{
-                type: SU_EVENTS.ACTION_PLAYED,
-                payload: { playerId, cardUid: card.uid, defId: card.defId, isExtraAction: true },
-                timestamp,
-            } as SmashUpEvent],
-        };
+        const events: SmashUpEvent[] = [{
+            type: SU_EVENTS.ACTION_PLAYED,
+            payload: { playerId, cardUid: card.uid, defId: card.defId, isExtraAction: true },
+            timestamp,
+        } as SmashUpEvent];
+        return appendResolvedActionAbility(state, events, playerId, card.uid, card.defId, random, timestamp, 0);
     });
 
     // Those Meddling Kids POD：模式选择
