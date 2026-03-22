@@ -33,7 +33,10 @@ export function registerAlienAbilities(): void {
     registerAbility('alien_supreme_overlord', 'onPlay', alienSupremeOverlord);
     registerAbility('alien_collector', 'onPlay', alienCollector);
     registerAbility('alien_invader', 'onPlay', alienInvader);
-    registerTrigger('alien_scout', 'afterScoring', alienScoutAfterScoring);
+    registerTrigger('alien_scout', 'afterScoring', alienScoutAfterScoring, {
+        perInstance: true,
+        sourceScope: 'triggerBase',
+    });
     // POD 版本会通过 registerPodOngoingAliases() 自动映射，无需手动注册
     // --- 行动卡 ---
     registerAbility('alien_invasion', 'onPlay', alienInvasion);
@@ -211,6 +214,59 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
     });
 
     return { events: [], matchState: ms };
+}
+
+function alienScoutAfterScoringPerInstance(ctx: TriggerContext): SmashUpEvent[] | TriggerResult {
+    if (ctx.baseIndex === undefined) return [];
+    const base = ctx.state.bases[ctx.baseIndex];
+    if (!base) return [];
+
+    const scout = ctx.sourceCardUid
+        ? base.minions.find(m => m.uid === ctx.sourceCardUid)
+        : base.minions.find(m => m.defId === 'alien_scout' || m.defId === 'alien_scout_pod');
+    if (!scout || (scout.defId !== 'alien_scout' && scout.defId !== 'alien_scout_pod')) {
+        return [];
+    }
+
+    if (!ctx.matchState) {
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: {
+                minionUid: scout.uid,
+                minionDefId: scout.defId,
+                fromBaseIndex: ctx.baseIndex,
+                toPlayerId: scout.owner,
+                reason: 'alien_scout',
+                sourcePlayerId: scout.controller,
+            },
+            timestamp: ctx.now,
+        } as MinionReturnedEvent];
+    }
+
+    const interaction = createSimpleChoice(
+        `alien_scout_return_${scout.uid}_${ctx.now}`,
+        scout.controller,
+        '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
+        [
+            {
+                id: 'yes',
+                label: '返回手牌',
+                value: {
+                    returnIt: true,
+                    minionUid: scout.uid,
+                    minionDefId: scout.defId,
+                    owner: scout.owner,
+                    baseIndex: ctx.baseIndex,
+                    baseDefId: base.defId,
+                },
+                displayMode: 'card' as const,
+            },
+            { id: 'no', label: '留在基地', value: { returnIt: false }, displayMode: 'button' as const },
+        ],
+        { sourceId: 'alien_scout_return', targetType: 'minion' },
+    );
+
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
