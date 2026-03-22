@@ -30,6 +30,21 @@ export function matchesDefId(defId: string | undefined | null, baseDefId: string
     return defId === baseDefId || defId === `${baseDefId}_pod`;
 }
 
+export function resolveLiveBaseIndex(
+    state: { bases: Array<{ defId: string }> },
+    baseIndex: number | undefined,
+    baseDefId?: string,
+): number | undefined {
+    if (baseDefId) {
+        const liveIndex = state.bases.findIndex(base => base.defId === baseDefId);
+        if (liveIndex >= 0) return liveIndex;
+    }
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        return baseIndex;
+    }
+    return undefined;
+}
+
 function isFusionDef(defId: string): boolean {
     const def = getCardDef(defId) as FusionCardDef | undefined;
     return def?.type === 'fusion';

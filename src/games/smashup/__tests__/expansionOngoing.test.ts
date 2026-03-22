@@ -1006,6 +1006,85 @@ describe('印斯茅斯 ongoing 能力', () => {
             });
             expect(staleEvents).toHaveLength(0);
         });
+
+        test('名称选择交互在基地索引漂移后仍可按 baseDefId 找回当前基地', () => {
+            const executor = resolveAbility('innsmouth_return_to_the_sea', 'special')!;
+            const localsA = makeMinion({
+                uid: 'inn-1',
+                defId: 'innsmouth_the_locals',
+                controller: '0',
+                owner: '0',
+            });
+            const localsB = makeMinion({
+                uid: 'inn-2',
+                defId: 'innsmouth_the_locals',
+                controller: '0',
+                owner: '0',
+            });
+            const scout = makeMinion({
+                uid: 'scout-1',
+                defId: 'alien_scout',
+                controller: '0',
+                owner: '0',
+            });
+            const filler = makeMinion({
+                uid: 'other-1',
+                defId: 'wizard_neophyte',
+                controller: '1',
+                owner: '1',
+            });
+            const state = makeState([
+                makeBase({ defId: 'base_old', minions: [filler] }),
+                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
+            ]);
+            const ms = { core: state, sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } } } as any;
+
+            const result = executor({
+                state,
+                matchState: ms,
+                playerId: '0',
+                cardUid: 'return-sea',
+                defId: 'innsmouth_return_to_the_sea',
+                baseIndex: 1,
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            const nameInteraction = (result.matchState?.sys as any)?.interaction?.current;
+            expect(nameInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea_choose_name');
+            const localsOption = nameInteraction?.data?.options?.find(
+                (entry: any) => entry.value?.minionDefId === 'innsmouth_the_locals',
+            );
+            expect(localsOption?.value?.baseIndex).toBe(1);
+            expect(localsOption?.value?.baseDefId).toBe('base_scoring');
+
+            const chooseNameHandler = getInteractionHandler('innsmouth_return_to_the_sea_choose_name');
+            expect(chooseNameHandler).toBeDefined();
+
+            const shiftedState = makeState([
+                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
+            ]);
+            const shiftedMatchState = {
+                core: shiftedState,
+                sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } },
+            } as any;
+
+            const shiftedResult = chooseNameHandler!(
+                shiftedMatchState,
+                '0',
+                localsOption.value,
+                undefined,
+                dummyRandom,
+                1001,
+            );
+
+            const followupInteraction = shiftedResult.state.sys.interaction?.current;
+            expect(followupInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
+            expect(followupInteraction?.data?.options).toHaveLength(2);
+            expect(
+                followupInteraction?.data?.options?.every((option: any) => option.value?.baseDefId === 'base_scoring'),
+            ).toBe(true);
+        });
     });
 });
 

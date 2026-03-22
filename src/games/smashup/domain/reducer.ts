@@ -360,6 +360,7 @@ function executeCommand(
                         baseDefId: base.defId,
                         playerId: command.playerId,
                         actionTargetBaseIndex: targetBaseIdx,
+                        actionTargetType: command.payload.targetMinionUid ? 'minion' : 'base',
                         actionTargetMinionUid: command.payload.targetMinionUid,
                         now,
                     };

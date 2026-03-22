@@ -232,6 +232,27 @@ describe('base_the_workshop: 额外行动额度', () => {
         expect((events[0] as any).payload.limitType).toBe('action');
         expect((events[0] as any).payload.delta).toBe(1);
     });
+
+    it('打到工坊随从上的战术不应给予额外战术额度', () => {
+        const ctx: BaseAbilityContext = {
+            state: makeState({
+                bases: [{
+                    defId: 'base_the_workshop',
+                    minions: [makeMinion('m1', '0', 3)],
+                    ongoingActions: [],
+                }],
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_the_workshop',
+            playerId: '0',
+            actionTargetBaseIndex: 0,
+            actionTargetMinionUid: 'm1',
+            now: 1000,
+        };
+
+        const { events } = triggerBaseAbility('base_the_workshop', 'onActionPlayed', ctx);
+        expect(events).toHaveLength(0);
+    });
 });
 
 // ============================================================================

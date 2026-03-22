@@ -709,6 +709,35 @@ describe('BonusDieOverlay', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('闈炰氦浜掔壒鍐欓粯璁や笉搴旀嫤鎴暣灞忕偣鍑?', () => {
+        const html = renderToStaticMarkup(
+            <SpotlightContainer
+                id="bonus-die-non-blocking"
+                isVisible
+                onClose={vi.fn()}
+            >
+                <button type="button">鍐呭</button>
+            </SpotlightContainer>
+        );
+
+        expect(html).toContain('pointer-events-none');
+    });
+
+    it('allowContentPointerEvents=false 时内容区域也应可穿透', () => {
+        const html = renderToStaticMarkup(
+            <SpotlightContainer
+                id="bonus-die-content-click-through"
+                isVisible
+                onClose={vi.fn()}
+                allowContentPointerEvents={false}
+            >
+                <button type="button">内容</button>
+            </SpotlightContainer>
+        );
+
+        expect(html).toContain('relative pointer-events-none');
+    });
+
     it('切到对方视角且处于对方进攻掷骰阶段时，应高亮对方可选技能', () => {
         expect(shouldHighlightOpponentViewAbilities({
             isSelfView: false,

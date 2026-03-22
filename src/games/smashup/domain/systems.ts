@@ -58,6 +58,7 @@ function buildPendingPostScoringActionEvents(
             minionDefId: action.minionDefId,
             fromBaseIndex: action.fromBaseIndex,
             toBaseIndex: action.toBaseIndex,
+            toBaseDefId: action.targetBaseDefId,
             reason: action.reason,
             now: timestamp,
         }));

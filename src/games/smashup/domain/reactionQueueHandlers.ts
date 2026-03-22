@@ -55,6 +55,7 @@ export function registerReactionQueueInteractionHandlers(): void {
       reason: t.reason,
       affectType: t.affectType,
       actionTargetBaseIndex: (t as any).actionTargetBaseIndex,
+      actionTargetType: (t as any).actionTargetType,
       actionTargetMinionUid: (t as any).actionTargetMinionUid,
       random: random as RandomFn,
       now: timestamp,

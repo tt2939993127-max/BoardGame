@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import { createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { initAllAbilities } from '../abilities';
 import { SmashUpDomain } from '../domain';
 import { smashUpSystemsForTest } from '../game';
@@ -346,5 +347,121 @@ describe('After Scoring 响应窗口 - 重新计分功能', () => {
             .length;
 
         expect(scoredCount).toBe(1);
+    });
+
+    it('afterScoring 响应窗口与当前 simple-choice 并存时，仍允许打出响应行动牌', () => {
+        const runner = createRunner((ids, random) => {
+            const core = SmashUpDomain.setup(ids, random);
+            const sys = createInitialSystemState(ids, systems, undefined);
+
+            core.factionSelection = undefined;
+            sys.phase = 'scoreBases';
+
+            core.bases = [
+                {
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('locals-1', 'innsmouth_the_locals', '0', '0', 2, 8),
+                        makeMinion('locals-2', 'innsmouth_the_locals', '0', '0', 2, 0),
+                        makeMinion('enemy-1', 'ninja_shinobi', '1', '1', 2, 8),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_the_hill',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ];
+
+            core.players['0'].hand = [
+                { uid: 'return-sea', defId: 'innsmouth_return_to_the_sea', type: 'action', owner: '0' },
+            ];
+            core.players['1'].hand = [];
+
+            sys.interaction.current = createSimpleChoice(
+                'existing-base-choice',
+                '0',
+                '现有基地选择',
+                [{ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' }],
+                { sourceId: 'base_the_mothership', targetType: 'button' },
+            );
+            sys.responseWindow = {
+                current: {
+                    id: 'after-scoring-window',
+                    responderQueue: ['0', '1'],
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                    windowType: 'afterScoring',
+                    sourceId: 'score-base',
+                    actionTakenThisRound: false,
+                    consecutivePassRounds: 0,
+                },
+            } as any;
+
+            return { sys, core };
+        });
+
+        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
+            playerId: '0',
+            cardUid: 'return-sea',
+            targetBaseIndex: 0,
+        });
+
+        expect(playResult.success, playResult.error).toBe(true);
+    });
+
+    it('最后一个基地在 afterScoring 交互链中打出返回深海后，仍应完成计分与换基地', () => {
+        const runner = createRunner((ids, random) => {
+            const core = SmashUpDomain.setup(ids, random);
+            const sys = createInitialSystemState(ids, systems, undefined);
+
+            core.factionSelection = undefined;
+            sys.phase = 'playCards';
+
+            core.bases = [
+                {
+                    defId: 'base_great_library',
+                    minions: [],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_the_hill',
+                    minions: [],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('locals-1', 'innsmouth_the_locals', '0', '0', 2, 8),
+                        makeMinion('locals-2', 'innsmouth_the_locals', '0', '0', 2, 0),
+                        makeMinion('enemy-1', 'ninja_shinobi', '1', '1', 2, 8),
+                    ],
+                    ongoingActions: [],
+                },
+            ];
+            core.baseDeck = ['base_secret_garden'];
+
+            core.players['0'].hand = [
+                { uid: 'return-sea', defId: 'innsmouth_return_to_the_sea', type: 'action', owner: '0' },
+            ];
+            core.players['1'].hand = [];
+
+            return { sys, core };
+        });
+
+        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+        expect(advanceResult.success).toBe(true);
+        expect(runner.getState().sys.phase).toBe('scoreBases');
+        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
+        expect((runner.getState().sys as any).afterScoringInitialPowers?.baseIndex).toBe(2);
+        expect(runner.getState().sys.interaction?.current?.data?.sourceId).toBe('base_the_mothership');
+
+        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
+            playerId: '0',
+            cardUid: 'return-sea',
+            targetBaseIndex: 2,
+        });
+        expect(playResult.success, playResult.error).toBe(true);
     });
 });

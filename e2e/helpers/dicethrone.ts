@@ -348,6 +348,26 @@ export const waitForBoardReady = async (page: Page, timeout = 30000) => {
 };
 
 /**
+ * 等待教程棋盘就绪
+ * 教程首页先出现的是 tutorial overlay，而不是骰子按钮。
+ */
+export const waitForTutorialBoardReady = async (page: Page, timeout = 30000) => {
+    const loadingIndicator = page.getByText(/Loading match resources/i).first();
+    if (await loadingIndicator.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await loadingIndicator.waitFor({ state: 'hidden', timeout });
+    }
+
+    await page.waitForFunction(
+        () => Boolean(
+            document.querySelector('[data-tutorial-step]')
+            || document.querySelector('[data-tutorial-id="advance-phase-button"]')
+            || document.querySelector('[data-tutorial-id="dice-roll-button"]'),
+        ),
+        { timeout },
+    );
+};
+
+/**
  * 从 URL 获取玩家 ID
  */
 export const getPlayerIdFromUrl = (page: Page): string | null => {

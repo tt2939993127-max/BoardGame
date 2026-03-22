@@ -16,6 +16,7 @@ import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import { resolveOnPlay } from './abilityRegistry';
 import { isMinionProtected, isMinionProtectedNonConsumable, type ProtectionType } from './ongoingEffects';
 import { collectBaseAbilityTriggers } from './baseAbilityQueue';
+import { resolveLiveBaseIndex } from './utils';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -127,11 +128,12 @@ export function moveMinion(
     fromBaseIndex: number,
     toBaseIndex: number,
     reason: string,
-    now: number
+    now: number,
+    toBaseDefId?: string,
 ): MinionMovedEvent {
     return {
         type: SU_EVENTS.MINION_MOVED,
-        payload: { minionUid, minionDefId, fromBaseIndex, toBaseIndex, reason },
+        payload: { minionUid, minionDefId, fromBaseIndex, toBaseIndex, ...(toBaseDefId ? { toBaseDefId } : {}), reason },
         timestamp: now,
     };
 }
@@ -143,6 +145,7 @@ export function buildValidatedMoveEvents(
         minionDefId: string;
         fromBaseIndex: number;
         toBaseIndex: number;
+        toBaseDefId?: string;
         reason: string;
         now: number;
     },
@@ -150,7 +153,8 @@ export function buildValidatedMoveEvents(
     const core = 'core' in state ? state.core : state;
     const sourceBase = core.bases[params.fromBaseIndex];
     if (!sourceBase) return [];
-    const targetBase = core.bases[params.toBaseIndex];
+    const resolvedToBaseIndex = resolveLiveBaseIndex(core, params.toBaseIndex, params.toBaseDefId) ?? params.toBaseIndex;
+    const targetBase = core.bases[resolvedToBaseIndex];
     if (!targetBase) return [];
 
     const minion = sourceBase.minions.find(candidate => candidate.uid === params.minionUid);
@@ -161,9 +165,10 @@ export function buildValidatedMoveEvents(
             params.minionUid,
             minion.defId ?? params.minionDefId,
             params.fromBaseIndex,
-            params.toBaseIndex,
+            resolvedToBaseIndex,
             params.reason,
             params.now,
+            params.toBaseDefId,
         ),
     ];
 }

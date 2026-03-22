@@ -11,6 +11,7 @@ import { setEnglishLocale } from './helpers/common';
 import {
     setupOnlineMatch,
     waitForBoardReady,
+    waitForTutorialBoardReady,
     getPlayerIdFromUrl,
     setPlayerToken,
     applyDiceValues,
@@ -209,7 +210,7 @@ test.describe('DiceThrone E2E', () => {
 
         await setEnglishLocale(page);
         await page.goto('/play/dicethrone/tutorial');
-        await waitForBoardReady(page, 30000);
+        await waitForTutorialBoardReady(page, 60000);
 
         // 教学步骤本地辅助函数
         const getTutorialStepId = async () => page
@@ -234,49 +235,47 @@ test.describe('DiceThrone E2E', () => {
             }
         };
 
-        // 等待教学覆盖层出现
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
         await expect(overlayNextButton).toBeVisible({ timeout: 15000 });
 
-        // 推进到 advance 步骤
-        const advanceStep = page.locator('[data-tutorial-step="advance"]');
-        for (let i = 0; i < 12; i += 1) {
-            if (page.isClosed()) break;
-            if (await advanceStep.isVisible({ timeout: 500 }).catch(() => false)) break;
-            await clickNextOverlayStep();
-            await page.waitForTimeout(200);
-        }
-
-        // 点击 Next Phase 推进到 offensiveRoll
-        await expect(advanceStep).toBeVisible();
-        const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
-        await expect(advanceButton).toBeEnabled();
-        for (let i = 0; i < 6; i += 1) {
+        while (true) {
             const stepId = await getTutorialStepId();
-            if (stepId === 'dice-tray' || stepId === 'dice-roll') break;
-            if (await advanceButton.isEnabled().catch(() => false)) {
-                await advanceButton.click();
-                await page.waitForTimeout(400);
-            } else {
-                await page.waitForTimeout(300);
-            }
-        }
-        // 已在上面的循环中推进到 offensiveRoll
-
-        // 等待骰子步骤
-        const waitForDiceStep = async () => {
-            const deadline = Date.now() + 15000;
-            while (Date.now() < deadline) {
-                const stepId = await getTutorialStepId();
-                if (stepId === 'dice-tray' || stepId === 'dice-roll') return stepId;
-                await page.waitForTimeout(300);
-            }
-            throw new Error('未能到达 dice-tray 或 dice-roll 步骤');
-        };
-        const diceStep = await waitForDiceStep();
-        if (diceStep === 'dice-tray') {
+            if (stepId === 'sell-card-intro') break;
             await clickNextOverlayStep();
-            await waitForTutorialStep(page, 'dice-roll', 15000);
+        }
+
+        await dispatchLocalCommand(page, 'SELL_CARD', { cardId: 'card-deep-thought' });
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-tutorial-step]');
+            return el?.getAttribute('data-tutorial-step') === 'undo-sell-intro';
+        }, { timeout: 5000 });
+
+        await clickNextOverlayStep();
+
+        await dispatchLocalCommand(page, 'UNDO_SELL_CARD', {});
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-tutorial-step]');
+            return el?.getAttribute('data-tutorial-step') === 'advance';
+        }, { timeout: 5000 });
+
+        const advanceStep = page.locator('[data-tutorial-step="advance"]');
+        await expect(advanceStep).toBeVisible({ timeout: 5000 });
+        const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+        await advanceButton.click();
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-tutorial-step]');
+            const stepId = el?.getAttribute('data-tutorial-step');
+            return stepId === 'dice-tray' || stepId === 'dice-roll' || stepId === 'play-six';
+        }, { timeout: 10000 });
+
+        const initialDiceStep = await getTutorialStepId();
+        if (initialDiceStep === 'dice-tray') {
+            await clickNextOverlayStep();
+            await page.waitForFunction(() => {
+                const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+                return stepId === 'dice-roll' || stepId === 'play-six';
+            }, { timeout: 10000 });
         }
 
         // 骰子区域可见
@@ -303,16 +302,22 @@ test.describe('DiceThrone E2E', () => {
         const playSixStep = await waitForPlaySixOrConfirm();
 
         if (playSixStep === 'play-six') {
-            // 打出 card-play-six 卡牌
-            await page.waitForTimeout(300);
-            await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-play-six' });
-            await page.waitForTimeout(1000);
+            const handCard = page.locator('[data-card-id="card-play-six"]').first();
+            await expect(handCard).toBeVisible({ timeout: 10000 });
+            await handCard.click();
 
-            // card-play-six 会创建一个 simple-choice 交互，要求选择骰子并设为 6
-            // 使用 SYS_INTERACTION_RESPOND 直接响应交互（避免教学覆盖层阻挡 UI 点击）
-            // 参考 tutorial-e2e.test.ts line 160-170 的做法
-            await dispatchLocalCommand(page, 'SYS_INTERACTION_RESPOND', { optionId: 'option-0' });
-            await page.waitForTimeout(500);
+            await page.waitForFunction(() => {
+                return document.body.textContent?.includes('Select die to set to 6');
+            }, { timeout: 10000 });
+
+            const firstDieButton = page.locator('[data-testid="die-button-0"]');
+            await expect(firstDieButton).toBeVisible({ timeout: 10000 });
+            await firstDieButton.click();
+
+            await page.waitForFunction(
+                () => document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step') === 'dice-confirm',
+                { timeout: 10000 },
+            );
         }
 
         // 步骤 B3: dice-confirm 确认骰子
@@ -347,14 +352,15 @@ test.describe('DiceThrone E2E', () => {
         const abilitiesStep = await waitForAbilitiesStep();
 
         if (abilitiesStep === 'abilities') {
-            const highlightedSlots = page
-                .locator('[data-ability-slot]')
-                .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
-            const hasSlot = await highlightedSlots.first().isVisible({ timeout: 8000 }).catch(() => false);
-            if (hasSlot) {
-                await highlightedSlots.first().click({ timeout: 3000 }).catch(() => {});
-                await page.waitForTimeout(500);
-            }
+            const ultimateSlot = page.locator('[data-ability-slot="ultimate"]').first();
+            await page.waitForFunction(() => {
+                const el = document.querySelector('[data-ability-slot="ultimate"]') as HTMLElement | null;
+                if (!el) return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }, { timeout: 30000 });
+            await ultimateSlot.evaluate((el: HTMLElement) => el.click());
+            await page.waitForTimeout(500);
         }
 
         // 教学步骤顺序表（与 tutorial.ts 定义一致）
@@ -400,10 +406,18 @@ test.describe('DiceThrone E2E', () => {
             throw new Error(`未能到达 ${targetStep} 步骤（最终步骤=${finalStep}）`);
         };
 
-        // 等待 resolve-attack 步骤
-        await advanceToStep('resolve-attack', 15000);
+        const stepBeforeResolve = await getTutorialStepId();
+        const canResolveImmediately = stepBeforeResolve === 'abilities'
+            && await advanceButton.isEnabled({ timeout: 1000 }).catch(() => false);
+        if (!canResolveImmediately) {
+            await advanceToStep('resolve-attack', 15000);
+        }
         await expect(advanceButton).toBeEnabled({ timeout: 10000 });
-        await advanceButton.click();
+        await advanceButton.click({ force: true });
+        await page.waitForFunction(() => {
+            const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+            return !stepId || stepId !== 'abilities';
+        }, { timeout: 10000 }).catch(() => {});
             
 
         // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======

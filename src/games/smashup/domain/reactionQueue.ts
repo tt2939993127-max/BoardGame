@@ -80,6 +80,7 @@ export function maybeResolveReactionQueue(
         reason: t.reason,
         affectType: t.affectType,
         actionTargetBaseIndex: t.actionTargetBaseIndex,
+        actionTargetType: (t as any).actionTargetType,
         actionTargetMinionUid: t.actionTargetMinionUid,
         random,
         now,

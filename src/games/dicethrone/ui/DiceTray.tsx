@@ -141,7 +141,7 @@ export const DiceTray = ({
     const canSelectMore = currentSelectCount < maxSelectCount;
 
     const handleDieClick = (dieId: number) => {
-        if (isRolling) return;
+        if (isRolling && !isInteractionMode) return;
 
         if (isInteractionMode && !isAnyMode && multistepInteraction) {
             // set / copy / selectDie 模式：点击骰子 = step(select/toggle)

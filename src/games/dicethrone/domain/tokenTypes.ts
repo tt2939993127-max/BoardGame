@@ -267,6 +267,8 @@ export interface ActiveUseConfig {
     timing: ActiveTiming[];
     /** 使用时消耗的数量（默认 1） */
     consumeAmount: number;
+    /** 主动使用时需要额外触发的 custom action */
+    customActionId?: string;
     /** 使用效果 */
     effect: TokenUseEffect;
 }
