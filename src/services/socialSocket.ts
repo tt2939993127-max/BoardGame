@@ -4,7 +4,7 @@ import { AUTH_API_URL } from '../config/server';
 import { createScopedLogger } from '../lib/logger';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS, SOCKET_IO_TRANSPORTS } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from './socketConnectionConfig';
 
 const log = createScopedLogger('SocialSocket');
 
@@ -136,7 +136,7 @@ class SocialSocketService {
                 parser: msgpackParser,
                 path: '/social-socket',
                 auth: { token },
-                transports: [...SOCKET_IO_TRANSPORTS],
+                transports: getSocketIoTransports(),
                 reconnection: true,
                 reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
                 reconnectionDelay: 1000,
@@ -186,7 +186,17 @@ class SocialSocketService {
         });
     }
 
-    disconnect(): void {
+    reconnectWithCurrentSettings(): void {
+        if (!this.token) {
+            return;
+        }
+
+        const token = this.token;
+        this.disconnect(false);
+        this.connect(token);
+    }
+
+    disconnect(clearToken = true): void {
         if (this._cleanupVisibility) {
             this._cleanupVisibility();
             this._cleanupVisibility = null;
@@ -199,7 +209,9 @@ class SocialSocketService {
             this.socket.disconnect();
             this.socket = null;
             this.isConnected = false;
-            this.token = null;
+            if (clearToken) {
+                this.token = null;
+            }
         }
     }
 

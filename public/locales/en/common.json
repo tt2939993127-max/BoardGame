@@ -37,6 +37,16 @@
   "toast": {
     "close": "Close"
   },
+  "socketCompatibility": {
+    "title": "Real-time connection looks unstable",
+    "description": "This network may not support websocket-only connections. You can enable compatibility mode for a steadier connection, though it may be slightly slower.",
+    "enable": "Enable compatibility mode",
+    "enabledTitle": "Compatibility mode enabled",
+    "enabledDescription": "Polling fallback is now allowed for real-time updates. If your network becomes normal again, you can turn it off to recover faster response.",
+    "disable": "Turn compatibility mode off",
+    "disabledTitle": "Compatibility mode disabled",
+    "disabledDescription": "Returned to websocket-only mode and reconnecting now."
+  },
   "rematch": {
     "playAgain": "Play Again",
     "votePlayAgain": "Play Again",

@@ -723,19 +723,22 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('pointer-events-none');
     });
 
-    it('allowContentPointerEvents=false 时内容区域也应可穿透', () => {
-        const html = renderToStaticMarkup(
+    it('闈炰氦浜掔壒鍐欓粯璁ゆ敮鎸佺偣鍐呭鍏抽棴', async () => {
+        const onClose = vi.fn();
+        render(
             <SpotlightContainer
-                id="bonus-die-content-click-through"
+                id="bonus-die-display-close"
                 isVisible
-                onClose={vi.fn()}
-                allowContentPointerEvents={false}
+                onClose={onClose}
+                autoCloseDelay={10000}
+                closeClickGuardMs={0}
             >
-                <button type="button">内容</button>
+                <button type="button" data-testid="display-spotlight-content">关闭</button>
             </SpotlightContainer>
         );
 
-        expect(html).toContain('relative pointer-events-none');
+        fireEvent.click(screen.getByTestId('display-spotlight-content'));
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('切到对方视角且处于对方进攻掷骰阶段时，应高亮对方可选技能', () => {

@@ -129,7 +129,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 disableAutoClose={isInteractive}
                 disableBackdropClose={isInteractive}
                 blockPointerEvents={isInteractive}
-                allowContentPointerEvents={isInteractive}
                 autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
