@@ -773,6 +773,7 @@ export function processDestroyTriggers(
             triggerMinionUid: minionUid,
             triggerMinionDefId: minionDefId,
             triggerMinion: minion,
+            destroyerId,
             reason: de.payload.reason,
             random,
             now,
