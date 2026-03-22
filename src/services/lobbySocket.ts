@@ -9,7 +9,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS, SOCKET_IO_TRANSPORTS } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from './socketConnectionConfig';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {
@@ -207,7 +207,7 @@ class LobbySocketService {
         this.socket = io(GAME_SERVER_URL, {
             parser: msgpackParser,
             path: '/lobby-socket',
-            transports: [...SOCKET_IO_TRANSPORTS],
+            transports: getSocketIoTransports(),
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
@@ -459,11 +459,27 @@ class LobbySocketService {
         });
     }
 
+    reconnectWithCurrentSettings(): void {
+        const owners = [...this.connectionOwners];
+        const shouldReconnect = owners.length > 0 || this.hasAnyLobbySubscribers();
+
+        this.disconnect(false);
+
+        if (!shouldReconnect) {
+            return;
+        }
+
+        owners.forEach((owner) => this.connectionOwners.add(owner));
+        this.connect();
+    }
+
     /**
      * 断开连接
      */
-    disconnect(): void {
-        this.connectionOwners.clear();
+    disconnect(clearOwners = true): void {
+        if (clearOwners) {
+            this.connectionOwners.clear();
+        }
         if (this._cleanupVisibility) {
             this._cleanupVisibility();
             this._cleanupVisibility = null;

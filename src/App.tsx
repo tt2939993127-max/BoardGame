@@ -16,6 +16,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { ModalStackRoot } from './components/system/ModalStackRoot';
 import { ToastViewport } from './components/system/ToastViewport';
 import { EngineNotificationListener } from './components/system/EngineNotificationListener';
+import { SocketCompatibilityToastListener } from './components/system/SocketCompatibilityToastListener';
 import { LoadingScreen } from './components/system/LoadingScreen';
 import { Toaster } from 'react-hot-toast';
 import { GlobalHUD } from './components/system/GlobalHUD';
@@ -178,6 +179,7 @@ const AppContent = () => {
                     <ToastViewport />
                     <Toaster />
                     <EngineNotificationListener />
+                    <SocketCompatibilityToastListener />
                   </MobileOrientationGuard>
                   </BrowserCompatibilityGate>
                 </BrowserRouter>

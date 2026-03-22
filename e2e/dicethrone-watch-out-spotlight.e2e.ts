@@ -234,6 +234,64 @@ test('bonus die spotlight should not block confirm button interaction', async ({
     await game.screenshot('04-bonus-die-spotlight-non-blocking', testInfo);
 });
 
+test('bonus die spotlight should close on content click in display mode', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            hand: ['watch-out'],
+            resources: { CP: 2, HP: 50 },
+        },
+        player1: {
+            resources: { HP: 50 },
+        },
+        currentPlayer: '0',
+        phase: 'offensiveRoll',
+        extra: {
+            selectedCharacters: { '0': 'moon_elf', '1': 'barbarian' },
+            hostStarted: true,
+            rollCount: 1,
+            rollConfirmed: true,
+            dice: [
+                { id: 0, value: 1, isKept: false },
+                { id: 1, value: 2, isKept: false },
+                { id: 2, value: 3, isKept: false },
+                { id: 3, value: 4, isKept: false },
+                { id: 4, value: 5, isKept: false },
+            ],
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                damage: 5,
+                bonusDamage: 0,
+            },
+        },
+    });
+
+    await page.waitForFunction(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
+        return state?.sys?.phase === 'offensiveRoll'
+            && state?.core?.activePlayerId === '0'
+            && state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'watch-out');
+    }, { timeout: 10000 });
+
+    const watchOutCard = page.locator('[data-card-id="watch-out"]').first();
+    await watchOutCard.waitFor({ state: 'visible', timeout: 10000 });
+    await watchOutCard.click();
+
+    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
+
+    await bonusDieOverlay.click();
+    await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+
+    await game.screenshot('05-bonus-die-spotlight-click-close', testInfo);
+});
+
 test('crit bonus damage should not show attack-modifier badge', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
