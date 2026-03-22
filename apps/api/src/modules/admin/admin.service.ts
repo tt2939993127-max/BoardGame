@@ -22,14 +22,14 @@ import logger from '../../../../../server/logger';
 
 const ADMIN_STATS_CACHE_KEY = 'admin:stats';
 const ADMIN_STATS_TREND_CACHE_PREFIX = 'admin:stats:trend:';
-const ADMIN_STATS_TTL_SECONDS = 300; // cache-manager-redis-store 使用 Redis SETEX，单位为�?
+const ADMIN_STATS_TTL_SECONDS = 300; // cache-manager-redis-store ä½¿ç¨ Redis SETEXï¼åä½ä¸ºç§?
 const RECENT_MATCH_LIMIT = 10;
 const DEFAULT_TREND_DAYS = 7;
 const ONLINE_KEY_PREFIX = 'social:online:';
 const UNREAD_KEY_PREFIX = 'social:unread:';
 const UNREAD_TOTAL_KEY_PREFIX = 'social:unread:total:';
 const GAME_SERVER_INTERNAL_TIMEOUT_MS = 3000;
-const DELETED_USER_PLACEHOLDER = '[已删除用户]';
+const DELETED_USER_PLACEHOLDER = '[å·²å é¤ç¨æ·]';
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -360,7 +360,7 @@ export class AdminService implements OnModuleInit {
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) { }
 
-    /** 启动时清�?admin stats 缓存，防�?Redis 中残留永不过期的旧数�?*/
+    /** ???????????????????????? */
     async onModuleInit() {
         await this.invalidateAdminStatsCache();
     }
@@ -601,7 +601,7 @@ export class AdminService implements OnModuleInit {
             this.messageModel.deleteMany({ $or: [{ from: { $in: deletableIds } }, { to: { $in: deletableIds } }] }),
             this.reviewModel.deleteMany({ user: { $in: deletableIds } }),
             this.userModel.deleteMany({ _id: { $in: deletableIds } }),
-            // 脱敏：同时匹�?ownerKey �?name，覆盖新旧数�?
+            // ??????? ownerKey ? name????????
             (usernames.length || ownerKeys.length)
                 ? this.matchRecordModel.updateMany(
                     { $or: [{ 'players.ownerKey': { $in: ownerKeys } }, { 'players.name': { $in: usernames } }] },
@@ -626,7 +626,8 @@ export class AdminService implements OnModuleInit {
     }
 
     async destroyRoom(matchID: string): Promise<boolean> {
-        // 尝试�?HybridStorage 删除（会同时处理 MongoDB 和内存）
+            // ??????? ownerKey ? name????????
+        // ??????????????????????
         const trimmed = matchID.trim();
         if (!trimmed) {
             return false;
@@ -771,7 +772,7 @@ export class AdminService implements OnModuleInit {
             this.messageModel.deleteMany({ $or: [{ from: userId }, { to: userId }] }),
             this.reviewModel.deleteMany({ user: userId }),
             this.userModel.deleteOne({ _id: userId }),
-            // 脱敏：同时匹�?ownerKey �?name，覆盖新旧数�?
+            // Match both ownerKey and name so old records are also anonymized.
             this.matchRecordModel.updateMany(
                 { $or: [{ 'players.ownerKey': ownerKey }, { 'players.name': username }] },
                 {
@@ -946,9 +947,8 @@ export class AdminService implements OnModuleInit {
     }
 
     /**
-     * 构建用户对局数映射�?
-     * 优先�?ownerKey 查询（新数据），兼容旧数�?fallback �?name�?
-     * @param users - { userId, username } 列表
+     * Build a user-to-match-count map.
+     * Prefer ownerKey and fall back to legacy name matching.
      */
     private async buildMatchCountMap(users: Array<{ userId: string; username: string }>) {
         if (!users.length) return new Map<string, number>();
@@ -956,7 +956,8 @@ export class AdminService implements OnModuleInit {
         const ownerKeys = users.map(u => `user:${u.userId}`);
         const usernames = users.map(u => u.username).filter(Boolean);
 
-        // �?ownerKey 查（新数据）+ name 查（旧数据），合并去�?
+        // Aggregate ownerKey and legacy name together for compatibility.
+        // ???? ownerKey ? name????????
         const results = await this.matchRecordModel.aggregate<AggregateCount>([
             {
                 $match: {
@@ -986,14 +987,14 @@ export class AdminService implements OnModuleInit {
             },
         ]);
 
-        // 建立 ownerKey/name �?userId 的反向映�?
+        // å»ºç« ownerKey/name â?userId çååæ å°?
         const keyToUserId = new Map<string, string>();
         for (const u of users) {
             keyToUserId.set(`user:${u.userId}`, u.userId);
             if (u.username) keyToUserId.set(u.username, u.userId);
         }
 
-        // �?userId 聚合
+        // æ?userId èå
         const countMap = new Map<string, number>();
         for (const item of results) {
             const uid = keyToUserId.get(String(item._id));
@@ -1004,7 +1005,7 @@ export class AdminService implements OnModuleInit {
     }
 
     /**
-     * 获取用户战绩统计。优�?ownerKey，兼容旧数据 fallback �?name�?
+     * Get user record stats, preferring ownerKey over legacy name matching.
      */
     private async getUserStats(userId: string, username: string) {
         const ownerKey = `user:${userId}`;
@@ -1058,7 +1059,7 @@ export class AdminService implements OnModuleInit {
     }
 
     /**
-     * 获取用户最近对局。优�?ownerKey，兼容旧数据 fallback �?name�?
+     * Get recent matches for a user, preferring ownerKey over legacy name matching.
      */
     private async getRecentMatches(userId: string, username: string) {
         const ownerKey = `user:${userId}`;
@@ -1075,7 +1076,7 @@ export class AdminService implements OnModuleInit {
             .lean<LeanMatchRecord[]>();
 
         return records.map(record => {
-            // �?ownerKey �?name 匹配当前用户
+            // Match the current player using ownerKey first, then legacy name.
             const current = record.players.find(p => p.ownerKey === ownerKey)
                 ?? record.players.find(p => p.name === username);
             const opponent = record.players.find(p => p !== current);
@@ -1083,7 +1084,7 @@ export class AdminService implements OnModuleInit {
                 matchID: record.matchID,
                 gameName: record.gameName,
                 result: current?.result ?? 'draw',
-                opponent: opponent?.name ?? '未知',
+                opponent: opponent?.name ?? 'æªç¥',
                 endedAt: record.endedAt,
             };
         });
@@ -1096,7 +1097,6 @@ export class AdminService implements OnModuleInit {
         const matchEndedFilter = { endedAt: { $exists: true, $ne: null } };
         const [totalUsers, todayUsers, bannedUsers, totalMatches, todayMatches, gameStats] = await Promise.all([
             this.userModel.countDocuments(),
-            this.userModel.countDocuments({ createdAt: { $gte: todayStart } }),
             this.userModel.countDocuments({ banned: true }),
             this.matchRecordModel.countDocuments(matchEndedFilter),
             this.matchRecordModel.countDocuments({ endedAt: { $gte: todayStart } }),
@@ -1152,7 +1152,7 @@ export class AdminService implements OnModuleInit {
     }
 
     /**
-     * �?MatchMetadata 构建房间列表项（用于 HybridStorage 查询�?
+     * ä»?MatchMetadata æå»ºæ¿é´åè¡¨é¡¹ï¼ç¨äº HybridStorage æ¥è¯¢ï¼?
      */
     private buildRoomListItemFromLobbySnapshot(room: LobbyRoomSnapshot): RoomListItem {
         const ownerType = room.ownerType === 'user' || room.ownerType === 'guest'
@@ -1553,7 +1553,7 @@ export class AdminService implements OnModuleInit {
         await this.removeCacheByPattern(`${ADMIN_STATS_TREND_CACHE_PREFIX}*`);
     }
 
-    // ─── 留存分析 ───────────────────────────────────────────────
+    // âââ çå­åæ âââââââââââââââââââââââââââââââââââââââââââââââ
     async getRetention(): Promise<RetentionData> {
         const cacheKey = 'admin:retention';
         const cached = await this.cacheManager.get<RetentionData>(cacheKey);
@@ -1568,7 +1568,8 @@ export class AdminService implements OnModuleInit {
             { label: '\u0033\u0030\u65e5\u7559\u5b58', offsetDays: 30 },
         ];
 
-        // 计算每个留存周期：取注册日期�?[offsetDays+7, offsetDays] 天前的用户（一周窗口，样本更稳定）
+        // è®¡ç®æ¯ä¸ªçå­å¨æï¼åæ³¨åæ¥æå?[offsetDays+7, offsetDays] å¤©åçç¨æ·ï¼ä¸å¨çªå£ï¼æ ·æ¬æ´ç¨³å®ï¼
+        // Calculate retention over a rolling weekly cohort window.
         const items: RetentionItem[] = await Promise.all(
             periods.map(async ({ label, offsetDays }) => {
                 const windowEnd = new Date(now);
@@ -1602,7 +1603,7 @@ export class AdminService implements OnModuleInit {
         return result;
     }
 
-    // ─── 用户活跃度分�?─────────────────────────────────────────
+    // âââ ç¨æ·æ´»è·åº¦åå±?âââââââââââââââââââââââââââââââââââââââââ
     async getUserActivityTiers(): Promise<ActivityTierData> {
         const cacheKey = 'admin:activity-tiers';
         const cached = await this.cacheManager.get<ActivityTierData>(cacheKey);
@@ -1620,7 +1621,7 @@ export class AdminService implements OnModuleInit {
         const [totalUsers, bannedUsers, activeCount, silentCount] = await Promise.all([
             this.userModel.countDocuments(),
             this.userModel.countDocuments({ banned: true }),
-            // 活跃�? 天内�?lastOnline 或当前在�?
+            // Active: lastOnline within 7 days or currently online.
             this.userModel.countDocuments({
                 banned: { $ne: true },
                 $or: [
@@ -1628,7 +1629,7 @@ export class AdminService implements OnModuleInit {
                     ...(onlineObjectIds.length > 0 ? [{ _id: { $in: onlineObjectIds } }] : []),
                 ],
             }),
-            // 沉默：lastOnline �?7-30 天之�?
+            // æ²é»ï¼lastOnline å?7-30 å¤©ä¹é?
             this.userModel.countDocuments({
                 banned: { $ne: true },
                 lastOnline: { $gte: d30, $lt: d7 },
@@ -1636,7 +1637,7 @@ export class AdminService implements OnModuleInit {
             }),
         ]);
 
-        // 流失 = 总数 - 活跃 - 沉默 - 封禁
+        // æµå¤± = æ»æ° - æ´»è· - æ²é» - å°ç¦
         const churned = Math.max(0, totalUsers - activeCount - silentCount - bannedUsers);
 
         const tiers: ActivityTier[] = [
