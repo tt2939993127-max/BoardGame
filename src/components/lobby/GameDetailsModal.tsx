@@ -65,6 +65,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isLobbyLoading, setIsLobbyLoading] = useState(false);
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<PendingRoomAction | null>(null);
     const [isConfirmingAction, setIsConfirmingAction] = useState(false);
@@ -138,59 +139,67 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
     // 使用 socket 订阅房间列表更新（替代轮询）
     useEffect(() => {
-        if (isOpen) {
-            let storageTimeout: NodeJS.Timeout;
-            const handleStorage = () => {
-                clearTimeout(storageTimeout);
-                storageTimeout = setTimeout(() => {
-                    setLocalStorageTick(t => t + 1);
-                }, 150);
-            };
-            window.addEventListener('storage', handleStorage);
-            const handleOwnerActive = () => handleStorage();
-            window.addEventListener('owner-active-match-changed', handleOwnerActive);
-            window.addEventListener('match-credentials-changed', handleStorage);
-
-            // 订阅大厅更新（仅当前游戏）
-            const unsubscribeMatches = lobbySocket.subscribe(normalizedGameId, (matches: LobbyMatch[]) => {
-                // 转换为房间格式
-                const roomList: Room[] = matches.map(m => ({
-                    matchID: m.matchID,
-                    players: m.players,
-                    totalSeats: m.totalSeats,
-                    gameName: m.gameName,
-                    roomName: m.roomName,
-                    ownerKey: m.ownerKey,
-                    ownerType: m.ownerType,
-                    isLocked: m.isLocked,
-                }));
-                setRooms(roomList);
-            });
-
-            // 订阅连接状态
-            const unsubscribeStatus = lobbySocket.subscribeStatus((status) => {
-                if (status.lastError) {
-                    // 将后端连接问题提示给用户
-                    toast.error(
-                        { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
-                        { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
-                        { dedupeKey: 'lobbySocket.connectError' }
-                    );
-                }
-            });
-
-            // subscribe() 已自动向服务端发送订阅请求并获取快照，无需额外 requestRefresh
-
-            return () => {
-                clearTimeout(storageTimeout);
-                window.removeEventListener('storage', handleStorage);
-                window.removeEventListener('owner-active-match-changed', handleOwnerActive);
-                window.removeEventListener('match-credentials-changed', handleStorage);
-                unsubscribeMatches();
-                unsubscribeStatus();
-            };
+        if (!isOpen) {
+            setIsLobbyLoading(false);
+            return;
         }
-    }, [isOpen, normalizedGameId]);
+
+        let storageTimeout: NodeJS.Timeout;
+        const handleStorage = () => {
+            clearTimeout(storageTimeout);
+            storageTimeout = setTimeout(() => {
+                setLocalStorageTick(t => t + 1);
+            }, 150);
+        };
+
+        setRooms([]);
+        setIsLobbyLoading(true);
+        window.addEventListener('storage', handleStorage);
+        const handleOwnerActive = () => handleStorage();
+        window.addEventListener('owner-active-match-changed', handleOwnerActive);
+        window.addEventListener('match-credentials-changed', handleStorage);
+
+        // 订阅大厅更新（仅当前游戏）
+        const unsubscribeMatches = lobbySocket.subscribe(normalizedGameId, (matches: LobbyMatch[]) => {
+            // 转换为房间格式
+            const roomList: Room[] = matches.map(m => ({
+                matchID: m.matchID,
+                players: m.players,
+                totalSeats: m.totalSeats,
+                gameName: m.gameName,
+                roomName: m.roomName,
+                ownerKey: m.ownerKey,
+                ownerType: m.ownerType,
+                isLocked: m.isLocked,
+            }));
+            setRooms(roomList);
+            setIsLobbyLoading(false);
+        });
+
+        // 订阅连接状态
+        const unsubscribeStatus = lobbySocket.subscribeStatus((status) => {
+            if (status.lastError) {
+                // 将后端连接问题提示给用户
+                toast.error(
+                    { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
+                    { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
+                    { dedupeKey: 'lobbySocket.connectError' }
+                );
+            }
+        });
+
+        // subscribe() 已自动向服务端发送订阅请求并获取快照，无需额外 requestRefresh
+
+        return () => {
+            clearTimeout(storageTimeout);
+            setIsLobbyLoading(false);
+            window.removeEventListener('storage', handleStorage);
+            window.removeEventListener('owner-active-match-changed', handleOwnerActive);
+            window.removeEventListener('match-credentials-changed', handleStorage);
+            unsubscribeMatches();
+            unsubscribeStatus();
+        };
+    }, [isOpen, normalizedGameId, toast]);
 
     // 检测用户当前活跃的房间（本地存有凭证的任意房间，可能跨游戏）
     const myActiveRoomMatchID = useMemo(() => {
@@ -1029,7 +1038,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             <RoomList
                                 roomItems={roomItems}
                                 activeMatch={activeMatch}
-                                isLoading={isLoading}
+                                isActionLoading={isLoading}
+                                isLobbyLoading={isLobbyLoading}
                                 onJoinRoom={handleJoinRoom}
                                 onJoinRequest={handleJoinRequest}
                                 onAction={handleAction}
