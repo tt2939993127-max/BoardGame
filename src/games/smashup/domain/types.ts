@@ -413,6 +413,7 @@ export type PendingPostScoringAction =
         minionDefId: string;
         fromBaseIndex: number;
         toBaseIndex: number;
+        targetBaseDefId: string;
         reason: string;
     };
 
@@ -469,6 +470,7 @@ export interface TriggerInstance {
     affectType?: import('./ongoingEffects').AffectType;
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
     actionTargetBaseIndex?: number;
+    actionTargetType?: 'base' | 'minion';
     actionTargetMinionUid?: string;
 
     /** LKI snapshots captured at queue time */
@@ -1048,6 +1050,8 @@ export interface MinionMovedEvent extends GameEvent<typeof SU_EVENTS.MINION_MOVE
         minionDefId: string;
         fromBaseIndex: number;
         toBaseIndex: number;
+        /** 目标基地 defId（可选）。存在时 reducer 优先按活体基地定位目标索引。 */
+        toBaseDefId?: string;
         reason: string;
     };
 }

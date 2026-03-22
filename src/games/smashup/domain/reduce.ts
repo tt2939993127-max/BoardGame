@@ -48,6 +48,7 @@ import {
     getBestMatchingGlobalPowerLimitedQuota,
     getRemainingGlobalPowerLimitedMinionQuotas,
     getRemainingUnrestrictedGlobalMinionQuota,
+    resolveLiveBaseIndex,
 } from './utils';
 
 // ============================================================================
@@ -130,12 +131,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
         case SU_EVENTS.MINION_PLAYED: {
             const { playerId, cardUid, defId, baseIndex, power, fromDiscard, fromDeck, fromBuried, discardPlaySourceId, consumesNormalLimit } = event.payload;
+            const resolvedBaseIndex = resolveLiveBaseIndex(state, baseIndex, event.payload.baseDefId) ?? baseIndex;
             const player = state.players[playerId];
             const cardInHand = player.hand.some(card => card.uid === cardUid);
             const cardInDiscard = player.discard.some(card => card.uid === cardUid);
             const cardInDeck = player.deck.some(card => card.uid === cardUid);
             const buriedHasCard = fromBuried
-                ? (state.bases[baseIndex]?.buriedCards ?? []).some(c => c.uid === cardUid)
+                ? (state.bases[resolvedBaseIndex]?.buriedCards ?? []).some(c => c.uid === cardUid)
                 : false;
             if (fromBuried && !buriedHasCard) return state;
             if (!fromBuried && ((fromDiscard && !cardInDiscard) || (fromDeck && !cardInDeck) || (!fromDiscard && !fromDeck && !cardInHand))) {
@@ -162,7 +164,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     : undefined,
             };
             const newBases = state.bases.map((base, i) => {
-                if (i !== baseIndex) return base;
+                if (i !== resolvedBaseIndex) return base;
                 const buriedCards = fromBuried
                     ? (base.buriedCards ?? []).filter(c => c.uid !== cardUid)
                     : base.buriedCards;
@@ -175,22 +177,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // consumesNormalLimit=false 时不消耗正常额度（忍者 special 额外打出、弃牌堆额外出牌等）
             const shouldIncrementPlayed = consumesNormalLimit !== false;
             const quotaResolution = (() => {
-                const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
+                const baseQuota = player.baseLimitedMinionQuota?.[resolvedBaseIndex] ?? 0;
                 const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
-                const baseDef = getBaseDef(state.bases[baseIndex]?.defId);
+                const baseDef = getBaseDef(state.bases[resolvedBaseIndex]?.defId);
                 const baseHasPowerRestrictedQuota = baseDef?.restrictions?.some(
                     restriction => restriction.type === 'play_minion'
                         && restriction.condition?.extraPlayMinionPowerMax !== undefined,
                 ) ?? false;
                 const canUseBaseQuota = shouldIncrementPlayed
-                    && canUseBaseLimitedMinionQuota(state, player, baseIndex, defId, power);
+                    && canUseBaseLimitedMinionQuota(state, player, resolvedBaseIndex, defId, power);
                 const canUseSameNameQuota = shouldIncrementPlayed
                     && canUseSameNameMinionQuota(player, defId);
                 const matchingGlobalPowerQuota = shouldIncrementPlayed
                     ? getBestMatchingGlobalPowerLimitedQuota(player, power)
                     : undefined;
                 const useRestrictedBaseQuota = canUseBaseQuota
-                    && (player.baseLimitedSameNameRequired?.[baseIndex] === true || baseHasPowerRestrictedQuota);
+                    && (player.baseLimitedSameNameRequired?.[resolvedBaseIndex] === true || baseHasPowerRestrictedQuota);
                 const useSameNameQuota = !useRestrictedBaseQuota && canUseSameNameQuota;
                 const useGlobalPowerQuota = !useRestrictedBaseQuota
                     && !useSameNameQuota
@@ -213,7 +215,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 if (useRestrictedBaseQuota || useBaseQuota) {
                     newBaseLimitedMinionQuota = {
                         ...player.baseLimitedMinionQuota,
-                        [baseIndex]: baseQuota - 1,
+                        [resolvedBaseIndex]: baseQuota - 1,
                     };
                 } else if (useSameNameQuota) {
                     newSameNameRemaining = sameNameRemaining - 1;
@@ -257,7 +259,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         minionsPlayed: quotaResolution.minionsPlayed,
                         minionsPlayedPerBase: {
                             ...(player.minionsPlayedPerBase ?? {}),
-                            [baseIndex]: ((player.minionsPlayedPerBase ?? {})[baseIndex] ?? 0) + 1,
+                            [resolvedBaseIndex]: ((player.minionsPlayedPerBase ?? {})[resolvedBaseIndex] ?? 0) + 1,
                         },
                         usedDiscardPlayAbilities: newUsedAbilities,
                         baseLimitedMinionQuota: quotaResolution.baseLimitedMinionQuota,
@@ -1136,7 +1138,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.MINION_MOVED: {
-            const { minionUid, fromBaseIndex, toBaseIndex, reason } = (event as MinionMovedEvent).payload as any;
+            const { minionUid, fromBaseIndex, toBaseIndex, toBaseDefId, reason } = (event as MinionMovedEvent).payload as any;
+            const resolvedToBaseIndex = resolveLiveBaseIndex(state, toBaseIndex, toBaseDefId) ?? toBaseIndex;
             const buccaneerPodUsedUids = reason === 'pirate_buccaneer_pod'
                 ? Array.from(new Set([...(state.buccaneerPodUsedUids ?? []), minionUid]))
                 : state.buccaneerPodUsedUids;
@@ -1175,7 +1178,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         newDiscard.splice(idx, 1);
                         const updatedBases = movedMinion
                             ? newBases.map((base, i) => {
-                                if (i !== toBaseIndex) return base;
+                                if (i !== resolvedToBaseIndex) return base;
                                 return { ...base, minions: [...base.minions, movedMinion!] };
                             })
                             : newBases;
@@ -1203,14 +1206,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 const playerMoves = prevMoves[mover] ?? {};
                 const updatedMoves = {
                     ...prevMoves,
-                    [mover]: { ...playerMoves, [toBaseIndex]: (playerMoves[toBaseIndex] ?? 0) + 1 },
+                    [mover]: { ...playerMoves, [resolvedToBaseIndex]: (playerMoves[resolvedToBaseIndex] ?? 0) + 1 },
                 };
 
                 // 你们已经完蛋 POD：追踪“本回合是否把对手随从移动到该基地”
                 const currentPlayerId = state.turnOrder[state.currentPlayerIndex];
                 const movedOpponentMinion = movedMinion.controller !== currentPlayerId;
                 const updatedMovedOpp = movedOpponentMinion
-                    ? { ...(state.movedToBasesThisTurn ?? {}), [toBaseIndex]: true }
+                    ? { ...(state.movedToBasesThisTurn ?? {}), [resolvedToBaseIndex]: true }
                     : state.movedToBasesThisTurn;
 
                 return {
@@ -1220,7 +1223,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     basePowerDecreasedPlayersThisTurn,
                     buccaneerPodUsedUids,
                     bases: newBases.map((base, i) => {
-                        if (i !== toBaseIndex) return base;
+                        if (i !== resolvedToBaseIndex) return base;
                         return { ...base, minions: [...base.minions, movedMinion!] };
                     }),
                 };

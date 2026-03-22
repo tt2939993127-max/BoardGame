@@ -375,7 +375,8 @@ export function registerExpansionBaseAbilities(): void {
     // "在一个玩家打出一张附着行动卡到这里的一个随从上后，该玩家抽一张卡牌?
     registerBaseAbility('base_enchanted_glade', 'onActionPlayed', (ctx) => {
         // 只有附着到随从的行动卡才触发（actionTargetMinionUid 有值）
-        if (!ctx.actionTargetMinionUid) return { events: [] };
+        const actionTargetType = ctx.actionTargetType ?? (ctx.actionTargetMinionUid ? 'minion' : 'base');
+        if (actionTargetType !== 'minion') return { events: [] };
 
         const player = ctx.state.players[ctx.playerId];
         if (!player || player.deck.length === 0) return { events: [] };

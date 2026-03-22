@@ -170,6 +170,40 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalCore?.players['0'].deck).toHaveLength(0);
     });
 
+    it('延迟打出随从时即使旧 baseIndex 漂移，仍应按 baseDefId 落到替换后基地', () => {
+        const state = makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_secret_garden'),
+                makeBase('base_other'),
+            ],
+        });
+
+        const finalCore = reduce(state, {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: {
+                playerId: '0',
+                cardUid: 'dk1',
+                defId: 'alien_collector',
+                baseIndex: 1,
+                baseDefId: 'base_secret_garden',
+                power: 4,
+                fromDeck: true,
+                consumesNormalLimit: false,
+            },
+            timestamp: 2101,
+        } as any);
+
+        expect(finalCore.bases[0].minions.map(minion => minion.uid)).toEqual(['dk1']);
+        expect(finalCore.bases[1].minions).toHaveLength(0);
+        expect(finalCore.players['0'].deck).toHaveLength(0);
+    });
+
     it('base_tortuga: 应先换基地，再把亚军随从移到新基地', () => {
         const system = createSmashUpEventSystem();
         const state = wrapState(makeCore({
@@ -345,7 +379,8 @@ describe('afterScoring 延迟清场回归', () => {
                 minionUid: 'runner',
                 minionDefId: 'd1',
                 fromBaseIndex: 2,
-                toBaseIndex: 0,
+                toBaseIndex: 1,
+                targetBaseDefId: 'base_secret_garden',
                 reason: '托尔图加：亚军移动随从到替换基地',
             }],
         }));

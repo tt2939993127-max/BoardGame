@@ -123,7 +123,11 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             }
         }
 
-        return validateCommand(state.core, command, phase, pendingInteraction, responseWindowType);
+        const effectivePendingInteraction = interaction?.kind === 'dt:card-interaction'
+            ? pendingInteraction
+            : interaction;
+
+        return validateCommand(state.core, command, phase, effectivePendingInteraction as any, responseWindowType);
     },
     execute: (state, command, random) => execute(state, command, random),
     reduce,

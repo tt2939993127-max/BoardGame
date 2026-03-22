@@ -736,6 +736,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
                 minionDefId: 'd1',
                 fromBaseIndex: 1,
                 toBaseIndex: 0,
+                targetBaseDefId: 'base_secret_garden',
                 reason: '托尔图加：亚军移动随从到替换基地',
             },
         ]);

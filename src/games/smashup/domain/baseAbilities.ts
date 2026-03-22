@@ -83,6 +83,8 @@ export interface BaseAbilityContext {
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
     /** onActionPlayed 时：行动卡目标基地 */
     actionTargetBaseIndex?: number;
+    /** onActionPlayed 时：行动卡是打到基地还是打到随从 */
+    actionTargetType?: 'base' | 'minion';
     /** onActionPlayed 时：行动卡目标随从（附着行动卡时有值） */
     actionTargetMinionUid?: string;
     now: number;
@@ -654,6 +656,8 @@ export function registerBaseAbilities(): void {
     // base_the_workshop: 工坊
     // "当一个玩家打出一个战术到这个基地时，该玩家可以额外打出一张战术"
     registerBaseAbility('base_the_workshop', 'onActionPlayed', (ctx) => {
+        const actionTargetType = ctx.actionTargetType ?? (ctx.actionTargetMinionUid ? 'minion' : 'base');
+        if (actionTargetType !== 'base') return { events: [] };
         return {
             events: [{
                 type: SU_EVENTS.LIMIT_MODIFIED,
@@ -1579,12 +1583,19 @@ export function registerBaseInteractionHandlers(): void {
         }
         const deferredEvents = getDeferredPostScoringEvents(iData);
         if (deferredEvents && deferredEvents.length > 0) {
+            const targetBaseDefId = (deferredEvents as Array<{ type: string; payload?: { newBaseDefId?: string } }>).find(
+                event => event.type === SU_EVENTS.BASE_REPLACED,
+            )?.payload?.newBaseDefId ?? state.core.bases[ctx.baseIndex]?.defId;
+            if (!targetBaseDefId) {
+                return { state, events: [] };
+            }
             const pendingAction: PendingPostScoringAction = {
                 kind: 'moveMinionToReplacementBase',
                 minionUid: selected.minionUid!,
                 minionDefId: selected.minionDefId!,
                 fromBaseIndex: selected.fromBaseIndex ?? -1,
                 toBaseIndex: ctx.baseIndex,
+                targetBaseDefId,
                 reason: '托尔图加：亚军移动随从到替换基地',
             };
             return {

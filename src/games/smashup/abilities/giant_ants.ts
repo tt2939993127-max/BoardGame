@@ -22,7 +22,7 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionChecker, TriggerContext } from '../domain/ongoingEffects';
 import { getCardDef } from '../data/cards';
-import { drawCards } from '../domain/utils';
+import { drawCards, resolveLiveBaseIndex } from '../domain/utils';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, DeckReshuffledEvent, MinionDestroyedEvent, SmashUpCore, SmashUpEvent } from '../domain/types';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
@@ -2030,10 +2030,9 @@ const handleWorkerPodReplay: IH = (state, playerId, value, interactionData, _ran
 
     // 计分清场（BASE_CLEARED）会移除基地并导致 baseIndex 变化。
     // 如果传入的 baseIndex 已失效，尝试用 baseDefId 重新定位当前索引。
-    let chosenBaseIndex = selected.baseIndex;
-    if (!state.core.bases[chosenBaseIndex] && selected.baseDefId) {
-        const idx = state.core.bases.findIndex(b => b.defId === selected.baseDefId);
-        if (idx >= 0) chosenBaseIndex = idx;
+    const chosenBaseIndex = resolveLiveBaseIndex(state.core, selected.baseIndex, selected.baseDefId);
+    if (chosenBaseIndex === undefined) {
+        return { state, events: [buildAbilityFeedback(playerId, 'feedback.no_valid_targets', timestamp)] };
     }
 
     // 生成 MINION_PLAYED 事件：从弃牌堆额外打出（触发 onPlay），且不消耗正常随从额度

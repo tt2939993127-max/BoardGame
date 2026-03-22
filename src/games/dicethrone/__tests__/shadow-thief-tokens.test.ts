@@ -115,6 +115,7 @@ describe('暗影刺客 Sneak Attack activeUse', () => {
         expect(sa.activeUse!.effect.type).toBe('modifyDamageDealt');
         // value=0 因为实际伤害由 shadow_thief-sneak-attack-use custom action 掷骰决定
         expect(sa.activeUse!.effect.value).toBe(0);
+        expect(sa.activeUse!.customActionId).toBe('shadow_thief-sneak-attack-use');
     });
 });
 
