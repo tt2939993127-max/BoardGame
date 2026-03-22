@@ -2364,6 +2364,58 @@ describe('frankenstein_igor: 基地结算弃置触发', () => {
 // 吸血鬼 - 自助餐 afterScoring
 // ============================================================================
 
+describe('innsmouth_return_to_the_sea afterScoring per-instance', () => {
+    it('creates one interaction per armed cardUid without merging instances', () => {
+        const scoringBase = makeBase({
+            defId: 'base_crypt',
+            minions: [
+                makeMinion('locals-a', 'innsmouth_the_locals', '0', 2),
+                makeMinion('locals-b', 'innsmouth_the_locals', '0', 2),
+            ],
+        });
+        const state = makeState({
+            bases: [scoringBase, makeBase({ defId: 'base_other' })],
+            pendingAfterScoringSpecials: [
+                {
+                    sourceDefId: 'innsmouth_return_to_the_sea',
+                    playerId: '0',
+                    baseIndex: 0,
+                    cardUid: 'return-sea-1',
+                },
+                {
+                    sourceDefId: 'innsmouth_return_to_the_sea_pod',
+                    playerId: '0',
+                    baseIndex: 0,
+                    cardUid: 'return-sea-2',
+                },
+            ],
+        });
+        const matchState = { core: state, sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } } } as any;
+
+        const result = fireTriggers(state, 'afterScoring', {
+            state,
+            matchState,
+            playerId: '0',
+            baseIndex: 0,
+            rankings: [{ playerId: '0', power: 4, vp: 4 }],
+            random: dummyRandom,
+            now: 200,
+        });
+
+        const current = result.matchState?.sys.interaction?.current;
+        const queue = result.matchState?.sys.interaction?.queue ?? [];
+        const interactionIds = [current?.id, queue[0]?.id].filter((id): id is string => typeof id === 'string');
+
+        expect(current).toBeDefined();
+        expect(queue).toHaveLength(1);
+        expect(current?.id).not.toBe(queue[0]?.id);
+        expect(interactionIds).toHaveLength(2);
+        expect(interactionIds.some(id => id.includes('return-sea-1'))).toBe(true);
+        expect(interactionIds.some(id => id.includes('return-sea-2'))).toBe(true);
+        expect(result.events.filter(e => e.type === SU_EVENTS.SPECIAL_AFTER_SCORING_CONSUMED)).toHaveLength(2);
+    });
+});
+
 describe('vampire_buffet afterScoring', () => {
     it('赢家拥有 buffet 时，所有己方随从获得+1指示物', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 });
