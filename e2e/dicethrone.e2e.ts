@@ -10,7 +10,6 @@ import { TOKEN_IDS, STATUS_IDS } from '../src/games/dicethrone/domain/ids';
 import { setEnglishLocale } from './helpers/common';
 import {
     setupOnlineMatch,
-    waitForBoardReady,
     waitForTutorialBoardReady,
     getPlayerIdFromUrl,
     setPlayerToken,
