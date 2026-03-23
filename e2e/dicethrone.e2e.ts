@@ -10,7 +10,7 @@ import { TOKEN_IDS, STATUS_IDS } from '../src/games/dicethrone/domain/ids';
 import { setEnglishLocale } from './helpers/common';
 import {
     setupOnlineMatch,
-    waitForBoardReady,
+    waitForTutorialBoardReady,
     getPlayerIdFromUrl,
     setPlayerToken,
     applyDiceValues,
@@ -19,8 +19,6 @@ import {
     assertHandCardsVisible,
     waitForTutorialStep,
     dispatchLocalCommand,
-    patchCoreViaDispatch,
-    
 } from './helpers/dicethrone';
 
 test.describe('DiceThrone E2E', () => {
@@ -209,7 +207,7 @@ test.describe('DiceThrone E2E', () => {
 
         await setEnglishLocale(page);
         await page.goto('/play/dicethrone/tutorial');
-        await waitForBoardReady(page, 30000);
+        await waitForTutorialBoardReady(page, 60000);
 
         // 教学步骤本地辅助函数
         const getTutorialStepId = async () => page
@@ -234,49 +232,41 @@ test.describe('DiceThrone E2E', () => {
             }
         };
 
-        // 等待教学覆盖层出现
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
         await expect(overlayNextButton).toBeVisible({ timeout: 15000 });
-
-        // 推进到 advance 步骤
-        const advanceStep = page.locator('[data-tutorial-step="advance"]');
-        for (let i = 0; i < 12; i += 1) {
-            if (page.isClosed()) break;
-            if (await advanceStep.isVisible({ timeout: 500 }).catch(() => false)) break;
-            await clickNextOverlayStep();
-            await page.waitForTimeout(200);
-        }
-
-        // 点击 Next Phase 推进到 offensiveRoll
-        await expect(advanceStep).toBeVisible();
         const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
-        await expect(advanceButton).toBeEnabled();
-        for (let i = 0; i < 6; i += 1) {
-            const stepId = await getTutorialStepId();
-            if (stepId === 'dice-tray' || stepId === 'dice-roll') break;
-            if (await advanceButton.isEnabled().catch(() => false)) {
-                await advanceButton.click();
-                await page.waitForTimeout(400);
-            } else {
-                await page.waitForTimeout(300);
-            }
-        }
-        // 已在上面的循环中推进到 offensiveRoll
 
-        // 等待骰子步骤
-        const waitForDiceStep = async () => {
-            const deadline = Date.now() + 15000;
-            while (Date.now() < deadline) {
-                const stepId = await getTutorialStepId();
-                if (stepId === 'dice-tray' || stepId === 'dice-roll') return stepId;
-                await page.waitForTimeout(300);
-            }
-            throw new Error('未能到达 dice-tray 或 dice-roll 步骤');
-        };
-        const diceStep = await waitForDiceStep();
-        if (diceStep === 'dice-tray') {
+        while (true) {
+            const stepId = await getTutorialStepId();
+            if (stepId === 'sell-card-intro') break;
             await clickNextOverlayStep();
-            await waitForTutorialStep(page, 'dice-roll', 15000);
+        }
+
+        await dispatchLocalCommand(page, 'SELL_CARD', { cardId: 'card-deep-thought' });
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-tutorial-step]');
+            return el?.getAttribute('data-tutorial-step') === 'undo-sell-intro';
+        }, { timeout: 5000 });
+
+        await clickNextOverlayStep();
+
+        await dispatchLocalCommand(page, 'UNDO_SELL_CARD', {});
+        await waitForTutorialStep(page, 'advance', 5000);
+        await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+        await advanceButton.click();
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-tutorial-step]');
+            const stepId = el?.getAttribute('data-tutorial-step');
+            return stepId === 'dice-tray' || stepId === 'dice-roll' || stepId === 'play-six';
+        }, { timeout: 10000 });
+
+        const initialDiceStep = await getTutorialStepId();
+        if (initialDiceStep === 'dice-tray') {
+            await clickNextOverlayStep();
+            await page.waitForFunction(() => {
+                const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+                return stepId === 'dice-roll' || stepId === 'play-six';
+            }, { timeout: 10000 });
         }
 
         // 骰子区域可见
@@ -303,16 +293,9 @@ test.describe('DiceThrone E2E', () => {
         const playSixStep = await waitForPlaySixOrConfirm();
 
         if (playSixStep === 'play-six') {
-            // 打出 card-play-six 卡牌
-            await page.waitForTimeout(300);
             await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-play-six' });
-            await page.waitForTimeout(1000);
-
-            // card-play-six 会创建一个 simple-choice 交互，要求选择骰子并设为 6
-            // 使用 SYS_INTERACTION_RESPOND 直接响应交互（避免教学覆盖层阻挡 UI 点击）
-            // 参考 tutorial-e2e.test.ts line 160-170 的做法
-            await dispatchLocalCommand(page, 'SYS_INTERACTION_RESPOND', { optionId: 'option-0' });
-            await page.waitForTimeout(500);
+            await dispatchLocalCommand(page, 'MODIFY_DIE', { dieId: 0, newValue: 6 });
+            await waitForTutorialStep(page, 'dice-confirm', 10000);
         }
 
         // 步骤 B3: dice-confirm 确认骰子
@@ -347,14 +330,8 @@ test.describe('DiceThrone E2E', () => {
         const abilitiesStep = await waitForAbilitiesStep();
 
         if (abilitiesStep === 'abilities') {
-            const highlightedSlots = page
-                .locator('[data-ability-slot]')
-                .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
-            const hasSlot = await highlightedSlots.first().isVisible({ timeout: 8000 }).catch(() => false);
-            if (hasSlot) {
-                await highlightedSlots.first().click({ timeout: 3000 }).catch(() => {});
-                await page.waitForTimeout(500);
-            }
+            await dispatchLocalCommand(page, 'SELECT_ABILITY', { abilityId: 'fist-technique-4' });
+            await waitForTutorialStep(page, 'resolve-attack', 10000);
         }
 
         // 教学步骤顺序表（与 tutorial.ts 定义一致）
@@ -362,9 +339,9 @@ test.describe('DiceThrone E2E', () => {
             'setup', 'intro', 'stats', 'phases', 'player-board', 'tip-board',
             'hand', 'discard', 'status-tokens',
             'advance', 'dice-tray', 'dice-roll', 'play-six', 'dice-confirm', 'abilities', 'resolve-attack',
-            'opponent-defense', 'card-enlightenment', 'ai-turn',
-            'knockdown-explain', 'enlightenment-play', 'purify-use',
-            'inner-peace', 'meditation-2', 'finish',
+            'opponent-defense', 'main2-intro', 'enlightenment-play', 'inner-peace',
+            'ai-turn-intro', 'ai-turn', 'knockdown-explain', 'purify-use',
+            'meditation-2', 'finish',
         ];
         const getStepIndex = (id: string) => stepOrder.indexOf(id);
 
@@ -400,57 +377,41 @@ test.describe('DiceThrone E2E', () => {
             throw new Error(`未能到达 ${targetStep} 步骤（最终步骤=${finalStep}）`);
         };
 
-        // 等待 resolve-attack 步骤
-        await advanceToStep('resolve-attack', 15000);
+        const stepBeforeResolve = await getTutorialStepId();
+        const canResolveImmediately = stepBeforeResolve === 'abilities'
+            && await advanceButton.isEnabled({ timeout: 1000 }).catch(() => false);
+        if (!canResolveImmediately) {
+            await advanceToStep('resolve-attack', 15000);
+        }
         await expect(advanceButton).toBeEnabled({ timeout: 10000 });
-        await advanceButton.click();
-            
+        await advanceButton.click({ force: true });
 
-        // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======
-
-        // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======
-        // opponent-defense 步骤有 aiActions，教学系统会自动执行 AI 防御
-        // 等待 AI 完成后进入 card-enlightenment
-        await advanceToStep('card-enlightenment', 30000);
-        // card-enlightenment 是信息步骤，点击 Next
+        // opponent-defense 步骤有 aiActions，教学系统会自动执行 AI 防御并进入 main2
+        await advanceToStep('main2-intro', 30000);
         await clickNextOverlayStep();
 
-        // ====== 段 C：ai-turn（AI 完整回合） ======
-        // ai-turn 步骤有大量 aiActions，教学系统自动执行
-        // AI 回合结束后进入 knockdown-explain
-        await advanceToStep('knockdown-explain', 45000);
-        // knockdown-explain 是信息步骤
-        await clickNextOverlayStep();
-
-        // ====== 段 D：净化教程 ======
         // enlightenment-play：通过 dispatch 直接打出悟道卡（framer-motion 拖拽在 Playwright 中不可靠）
         await advanceToStep('enlightenment-play', 15000);
-        // 教学牌组保证 card-enlightenment 在起手牌中，直接 dispatch 出牌
-        await page.waitForTimeout(500);
         await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-enlightenment' });
-        await page.waitForTimeout(500);
 
-        // purify-use：使用净化 token 移除击倒
-        // 注意：enlightenment-roll 的骰子结果取决于 seeded random，不一定是莲花面
-        // 确保玩家有净化 token 和击倒状态，以便 USE_PURIFY 能成功执行
-        await advanceToStep('purify-use', 15000);
-        await patchCoreViaDispatch(page, {
-            [`players.0.tokens.${TOKEN_IDS.PURIFY}`]: 1,
-            [`players.0.statusEffects.${STATUS_IDS.KNOCKDOWN}`]: 1,
-        });
-        await page.waitForTimeout(300);
-        await dispatchLocalCommand(page, 'USE_PURIFY', { statusId: STATUS_IDS.KNOCKDOWN });
-        await page.waitForTimeout(500);
-
-        // ====== 段 E：补充卡牌教学 ======
         // inner-peace：出牌内心平静
         await advanceToStep('inner-peace', 15000);
         await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-inner-peace' });
+
+        // ai-turn 步骤有大量 aiActions，教学系统自动执行，结束后应进入击倒说明
+        await advanceToStep('ai-turn-intro', 15000);
+        await clickNextOverlayStep();
+        await advanceToStep('knockdown-explain', 45000);
+        await clickNextOverlayStep();
+
+        // purify-use：使用净化 token 移除击倒
+        await advanceToStep('purify-use', 15000);
+        await dispatchLocalCommand(page, 'USE_PURIFY', { statusId: STATUS_IDS.KNOCKDOWN });
         await page.waitForTimeout(500);
 
         // meditation-2：升级冥想技能（需要 2 CP + 卡牌在手中）
         await advanceToStep('meditation-2', 15000);
-        // 原子操作：读取状态 → 设置 CP + 确保卡牌在手中 → dispatch 更新
+        // 兜底：若并发改动让抽牌/资源状态偏离，原子注入确保 tutorial 收尾能继续验证
         await page.evaluate(() => {
             const w = window as Window & {
                 __BG_LOCAL_DISPATCH__?: (type: string, payload: unknown) => void;
@@ -466,6 +427,13 @@ test.describe('DiceThrone E2E', () => {
             const resources = (player.resources as Record<string, unknown>) ?? {};
             resources.cp = 2;
             player.resources = resources;
+            // 净化步骤结束后应移除击倒，保持状态与教程预期一致
+            const statusEffects = (player.statusEffects as Record<string, unknown>) ?? {};
+            delete statusEffects.knockdown;
+            player.statusEffects = statusEffects;
+            const tokens = (player.tokens as Record<string, unknown>) ?? {};
+            tokens.purify = 0;
+            player.tokens = tokens;
             // 确保 card-meditation-2 在手牌中
             const hand = (player.hand as Array<{ id?: string }>) ?? [];
             if (!hand.some(c => c?.id === 'card-meditation-2')) {

@@ -102,6 +102,9 @@ function extractTokenCustomActionIds(): string[] {
                 ids.push(a.customActionId);
             }
         }
+        if (def.activeUse?.customActionId) {
+            ids.push(def.activeUse.customActionId);
+        }
     }
     return ids;
 }

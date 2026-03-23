@@ -31,6 +31,7 @@ export function registerBaseAbilityAsQueuedTrigger(
       minionPower: ctx.triggerMinionPower,
       rankings: ctx.rankings,
       actionTargetBaseIndex: ctx.actionTargetBaseIndex,
+      actionTargetType: ctx.actionTargetType,
       actionTargetMinionUid: ctx.actionTargetMinionUid,
       now: ctx.now,
     };
@@ -50,6 +51,7 @@ export function collectBaseAbilityTriggers(params: {
   triggerMinionPower?: number;
   rankings?: { playerId: PlayerId; power: number; vp: number }[];
   actionTargetBaseIndex?: number;
+  actionTargetType?: 'base' | 'minion';
   actionTargetMinionUid?: string;
   now: number;
 }): TriggerQueuedEvent | undefined {
@@ -63,6 +65,7 @@ export function collectBaseAbilityTriggers(params: {
     triggerMinionPower,
     rankings,
     actionTargetBaseIndex,
+    actionTargetType,
     actionTargetMinionUid,
     now,
   } = params;
@@ -91,6 +94,7 @@ export function collectBaseAbilityTriggers(params: {
     triggerMinionPower,
     rankings,
     actionTargetBaseIndex,
+    actionTargetType,
     actionTargetMinionUid,
     lkiBase: { baseIndex, defId: base.defId },
   };
@@ -120,6 +124,7 @@ export function registerExtendedBaseAbilityAsQueuedTrigger(
       minionPower: ctx.triggerMinionPower,
       rankings: ctx.rankings,
       actionTargetBaseIndex: ctx.actionTargetBaseIndex,
+      actionTargetType: ctx.actionTargetType,
       actionTargetMinionUid: ctx.actionTargetMinionUid,
       now: ctx.now,
     };

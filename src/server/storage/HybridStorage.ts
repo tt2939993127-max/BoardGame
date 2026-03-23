@@ -117,34 +117,44 @@ class InMemoryStorage {
 export class HybridStorage implements MatchStorage {
     private readonly mongo: MongoStorage;
     private readonly memory: InMemoryStorage;
+    private readonly persistentEnabled: boolean;
     private readonly matchStorage = new Map<string, StorageTarget>();
-    private readonly guestOwnerIndex = new Map<string, string>();
-    private readonly guestMatchOwner = new Map<string, string>();
+    private readonly memoryOwnerIndex = new Map<string, string>();
+    private readonly memoryMatchOwner = new Map<string, string>();
 
-    constructor(mongo: MongoStorage) {
+    constructor(
+        mongo: MongoStorage,
+        options?: {
+            persistentEnabled?: boolean;
+        },
+    ) {
         this.mongo = mongo;
         this.memory = new InMemoryStorage();
+        this.persistentEnabled = options?.persistentEnabled ?? true;
     }
 
     async connect(): Promise<void> {
+        if (!this.persistentEnabled) {
+            return;
+        }
         await this.mongo.connect();
     }
 
     async createMatch(matchID: string, data: CreateMatchData): Promise<void> {
         const setupData = resolveSetupDataFromCreateMatch(data);
-        const target = resolveStorageTarget(setupData);
+        const target = this.persistentEnabled ? resolveStorageTarget(setupData) : 'memory';
         const ownerKey = setupData.ownerKey;
 
         if (target === 'memory') {
             if (ownerKey) {
-                const existingMatchID = this.guestOwnerIndex.get(ownerKey);
+                const existingMatchID = this.memoryOwnerIndex.get(ownerKey);
                 if (existingMatchID) {
                     this.memory.wipe(existingMatchID);
                     this.matchStorage.delete(existingMatchID);
-                    this.guestMatchOwner.delete(existingMatchID);
+                    this.memoryMatchOwner.delete(existingMatchID);
                 }
-                this.guestOwnerIndex.set(ownerKey, matchID);
-                this.guestMatchOwner.set(matchID, ownerKey);
+                this.memoryOwnerIndex.set(ownerKey, matchID);
+                this.memoryMatchOwner.set(matchID, ownerKey);
             }
             this.matchStorage.set(matchID, 'memory');
             this.memory.createMatch(matchID, data);
@@ -183,6 +193,10 @@ export class HybridStorage implements MatchStorage {
     }
 
     async fetch(matchID: string, opts: FetchOpts): Promise<FetchResult> {
+        if (!this.persistentEnabled) {
+            return this.memory.fetch(matchID, opts);
+        }
+
         const target = this.matchStorage.get(matchID);
         if (target === 'mongo') {
             return await this.mongo.fetch(matchID, opts);
@@ -217,6 +231,10 @@ export class HybridStorage implements MatchStorage {
     }
 
     async listMatches(opts?: ListMatchesOpts): Promise<string[]> {
+        if (!this.persistentEnabled) {
+            return this.memory.listMatches(opts);
+        }
+
         const mongoMatches = await this.mongo.listMatches(opts);
         const memoryMatches = this.memory.listMatches(opts);
         const merged = new Set<string>([...mongoMatches, ...memoryMatches]);
@@ -224,7 +242,9 @@ export class HybridStorage implements MatchStorage {
     }
 
     async cleanupEphemeralMatches(graceMs = DISCONNECT_GRACE_MS): Promise<number> {
-        const cleanedMongo = await this.mongo.cleanupEphemeralMatches();
+        const cleanedMongo = this.persistentEnabled
+            ? await this.mongo.cleanupEphemeralMatches()
+            : 0;
         const now = Date.now();
         let cleanedMemory = 0;
 
@@ -269,17 +289,19 @@ export class HybridStorage implements MatchStorage {
     async findMatchesByOwnerKey(ownerKey: string): Promise<Array<{ matchID: string; gameName: string }>> {
         if (!ownerKey) return [];
 
-        // 游客房间走内存索引，O(1) 命中；索引失效时自动清理脏映射
-        if (ownerKey.startsWith('guest:')) {
-            const matchID = this.guestOwnerIndex.get(ownerKey);
-            if (!matchID) return [];
+        const matchID = this.memoryOwnerIndex.get(ownerKey);
+        if (matchID) {
             const { metadata } = this.memory.fetch(matchID, { metadata: true });
             if (!metadata?.gameName) {
-                this.guestOwnerIndex.delete(ownerKey);
-                this.guestMatchOwner.delete(matchID);
+                this.memoryOwnerIndex.delete(ownerKey);
+                this.memoryMatchOwner.delete(matchID);
                 return [];
             }
             return [{ matchID, gameName: metadata.gameName }];
+        }
+
+        if (!this.persistentEnabled) {
+            return [];
         }
 
         return this.mongo.findMatchesByOwnerKey(ownerKey);
@@ -288,6 +310,15 @@ export class HybridStorage implements MatchStorage {
     private async resolveStorageForMatch(matchID: string): Promise<StorageTarget | null> {
         const cached = this.matchStorage.get(matchID);
         if (cached) return cached;
+
+        if (!this.persistentEnabled) {
+            const memoryCheck = this.memory.fetch(matchID, { metadata: true });
+            if (memoryCheck?.metadata) {
+                this.matchStorage.set(matchID, 'memory');
+                return 'memory';
+            }
+            return null;
+        }
 
         const mongoCheck = await this.mongo.fetch(matchID, { metadata: true });
         if (mongoCheck?.metadata) {
@@ -306,10 +337,10 @@ export class HybridStorage implements MatchStorage {
 
     private wipeMemoryMatch(matchID: string): void {
         this.memory.wipe(matchID);
-        const ownerKey = this.guestMatchOwner.get(matchID);
+        const ownerKey = this.memoryMatchOwner.get(matchID);
         if (ownerKey) {
-            this.guestOwnerIndex.delete(ownerKey);
-            this.guestMatchOwner.delete(matchID);
+            this.memoryOwnerIndex.delete(ownerKey);
+            this.memoryMatchOwner.delete(matchID);
         }
     }
 
@@ -339,4 +370,6 @@ export class HybridStorage implements MatchStorage {
     }
 }
 
-export const hybridStorage = new HybridStorage(mongoStorage);
+export const hybridStorage = new HybridStorage(mongoStorage, {
+    persistentEnabled: process.env.USE_PERSISTENT_STORAGE !== 'false',
+});

@@ -73,6 +73,48 @@ describe('interaction handler regressions', () => {
         expect((destroyEvent as any).payload.minionUid).toBe('m1');
         expect(respondResult.finalState.core.bases[0].minions.some(m => m.uid === 'm1')).toBe(false);
     });
+
+    it('miskatonic_librarian_pod extra mode queues the Madness onPlay interaction', () => {
+        const ms = makeMatchState(makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('librarian', 'miskatonic_librarian_pod', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        }));
+
+        const modeHandler = getInteractionHandler('miskatonic_librarian_pod');
+        expect(modeHandler).toBeDefined();
+        const modeResult = modeHandler!(ms, '0', { mode: 'extra' }, undefined, defaultRandom, 2000);
+        const playMadnessHandler = getInteractionHandler('miskatonic_librarian_pod_play_madness');
+        expect(playMadnessHandler).toBeDefined();
+
+        const playMadnessResult = playMadnessHandler!(
+            modeResult.state ?? ms,
+            '0',
+            { cardUid: 'mad1' },
+            undefined,
+            defaultRandom,
+            2001,
+        );
+
+        const actionPlayed = playMadnessResult.events.find(event => event.type === SU_EVENTS.ACTION_PLAYED) as any;
+        expect(actionPlayed).toBeDefined();
+        expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
+        expect(actionPlayed.payload?.isExtraAction).toBe(true);
+
+        const interaction = playMadnessResult.state.sys.interaction;
+        const queuedInteractions = [
+            ...(interaction.current ? [interaction.current] : []),
+            ...interaction.queue,
+        ];
+        expect(queuedInteractions.some(item => (item.data as any)?.sourceId === 'special_madness')).toBe(true);
+    });
 });
 
 // ============================================================================

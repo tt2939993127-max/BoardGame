@@ -1,7 +1,6 @@
-import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './types';
+import type { PlayerId, RandomFn, ResponseWindowType } from '../../../engine/types';
+import type { ActionCardDef, CardInstance, FusionCardDef, PlayerState, SmashUpCore, MinionOnBase, SpecialTiming } from './types';
 import { getBaseDef, getCardDef, getFactionCards } from '../data/cards';
-import type { FusionCardDef } from './types';
 
 // ============================================================================
 // 玩家显示名
@@ -31,6 +30,21 @@ export function matchesDefId(defId: string | undefined | null, baseDefId: string
     return defId === baseDefId || defId === `${baseDefId}_pod`;
 }
 
+export function resolveLiveBaseIndex(
+    state: { bases: Array<{ defId: string }> },
+    baseIndex: number | undefined,
+    baseDefId?: string,
+): number | undefined {
+    if (baseDefId) {
+        const liveIndex = state.bases.findIndex(base => base.defId === baseDefId);
+        if (liveIndex >= 0) return liveIndex;
+    }
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        return baseIndex;
+    }
+    return undefined;
+}
+
 function isFusionDef(defId: string): boolean {
     const def = getCardDef(defId) as FusionCardDef | undefined;
     return def?.type === 'fusion';
@@ -48,6 +62,51 @@ export function isCardMinionLike(card: CardInstance): boolean {
 
 export function isCardActionLike(card: CardInstance): boolean {
     return card.type === 'action' || (card.type === 'fusion' && isFusionDef(card.defId));
+}
+
+type ActionLikeDef = ActionCardDef | FusionCardDef;
+
+function isFusionActionDef(def: ActionLikeDef): def is FusionCardDef {
+    return def.type === 'fusion';
+}
+
+export function getActionLikeResponseWindowTiming(def: ActionLikeDef): SpecialTiming | undefined {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialTiming ?? 'beforeScoring';
+        }
+        return def.actionResponseWindowTiming;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialTiming ?? 'beforeScoring';
+    }
+    return def.responseWindowTiming;
+}
+
+export function actionLikeNeedsResponseWindowBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialNeedsBase === true;
+        }
+        return def.actionResponseWindowNeedsBase === true;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialNeedsBase === true;
+    }
+    return def.responseWindowNeedsBase === true;
+}
+
+export function isActionLikeRespondableInWindow(
+    def: ActionLikeDef,
+    windowType: ResponseWindowType,
+): boolean {
+    const timing = getActionLikeResponseWindowTiming(def);
+    if (!timing) return false;
+    if (windowType === 'meFirst') return timing === 'beforeScoring';
+    if (windowType === 'afterScoring') return timing === 'afterScoring';
+    return false;
 }
 
 /**

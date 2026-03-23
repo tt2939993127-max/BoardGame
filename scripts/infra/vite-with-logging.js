@@ -1,22 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * Vite 启动包装器 - 捕获崩溃日志
- * 
- * 用途：
- * 1. 捕获 Vite 进程的所有输出（stdout + stderr）
- * 2. 捕获进程退出事件和退出码
- * 3. 捕获未捕获的异常和 Promise 拒绝
- * 4. 将日志写入文件以便排查
+ * Vite 启动包装器。
+ *
+ * 常规环境仍走子进程，便于隔离生命周期并收集日志。
+ * 若当前环境禁止 `spawn`，则自动回退到“当前进程直接跑 Vite”，
+ * 避免包装层自己把 dev server 误拦在门外。
  */
 
 import { spawn } from 'child_process';
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { runViteCli } from './vite-cli-safe.mjs';
 import { withWindowsHide } from './windows-hide.js';
-
-await assertChildProcessSupport('Vite 开发服务器启动');
 
 const logDir = join(process.cwd(), 'logs');
 if (!existsSync(logDir)) {
@@ -32,99 +28,179 @@ function log(message) {
   appendFileSync(logFile, line);
 }
 
+function appendStreamLog(prefix, chunk, encoding) {
+  try {
+    const text = Buffer.isBuffer(chunk)
+      ? chunk.toString(typeof encoding === 'string' ? encoding : undefined)
+      : String(chunk);
+    appendFileSync(logFile, `[${prefix}] ${text}`);
+  } catch {
+    // 写日志失败时不阻塞 Vite 本身。
+  }
+}
+
+function teeProcessWrite(stream, prefix) {
+  const originalWrite = stream.write.bind(stream);
+
+  stream.write = function patchedWrite(chunk, encoding, callback) {
+    appendStreamLog(prefix, chunk, encoding);
+    return originalWrite(chunk, encoding, callback);
+  };
+}
+
+async function runViteInline(reason) {
+  log(`[INLINE] ${reason}`);
+  log('[INLINE] 改为当前进程直接执行 Vite，避免包装层自己的 spawn 被环境拦截');
+
+  teeProcessWrite(process.stdout, 'STDOUT');
+  teeProcessWrite(process.stderr, 'STDERR');
+
+  try {
+    await runViteCli(viteArgs);
+  } catch (error) {
+    const detail = error instanceof Error ? error.stack ?? error.message : String(error);
+    log(`[INLINE-ERROR] ${detail}`);
+    process.exit(1);
+  }
+}
+
+function createViteArgs() {
+  const viteArgs = process.argv.slice(2);
+  const configLoader = process.env.VITE_CONFIG_LOADER?.trim();
+  const hasExplicitConfigLoader = viteArgs.some((arg) => arg === '--configLoader' || arg.startsWith('--configLoader='));
+  const hasExplicitHost = viteArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
+  const hasExplicitPort = viteArgs.some((arg) => arg === '--port' || arg.startsWith('--port='));
+  const configuredPort = process.env.VITE_DEV_PORT?.trim();
+  const configuredHost = process.env.VITE_HOST?.trim() || '127.0.0.1';
+
+  if (configLoader && !hasExplicitConfigLoader) {
+    viteArgs.push('--configLoader', configLoader);
+  }
+
+  if (configuredPort && !hasExplicitHost) {
+    viteArgs.push('--host', configuredHost);
+  }
+
+  if (configuredPort && !hasExplicitPort) {
+    viteArgs.push('--port', configuredPort);
+  }
+
+  return viteArgs;
+}
+
 log('=== Vite 启动包装器 ===');
 log(`日志文件: ${logFile}`);
 log(`Node 版本: ${process.version}`);
 log(`工作目录: ${process.cwd()}`);
 log(`内存限制: ${process.execArgv.join(' ')}`);
 
-// 启动 Vite 进程
-const viteArgs = process.argv.slice(2);
+const viteEntry = 'scripts/infra/vite-cli-safe.mjs';
+const viteArgs = createViteArgs();
+const shouldForceInline = process.env.BG_VITE_FORCE_INLINE === '1' || !process.stdin.isTTY;
+log(`Vite 入口: ${viteEntry}`);
 log(`Vite 参数: ${viteArgs.join(' ')}`);
 
-const vite = spawn(process.execPath, [
-  '--max-old-space-size=4096',
-  'node_modules/vite/bin/vite.js',
-  ...viteArgs
-], withWindowsHide({
-  stdio: ['inherit', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    FORCE_COLOR: '1',
-  },
-}));
+if (shouldForceInline) {
+  const reason = process.env.BG_VITE_FORCE_INLINE === '1'
+    ? 'BG_VITE_FORCE_INLINE=1'
+    : 'stdin is not a TTY';
+  await runViteInline(reason);
+} else {
+  let inlineMode = false;
+  let vite = null;
 
-log(`Vite 进程 PID: ${vite.pid}`);
-
-// 捕获 stdout
-vite.stdout.on('data', (data) => {
-  const message = data.toString();
-  process.stdout.write(message);
-  appendFileSync(logFile, `[STDOUT] ${message}`);
-});
-
-// 捕获 stderr
-vite.stderr.on('data', (data) => {
-  const message = data.toString();
-  process.stderr.write(message);
-  appendFileSync(logFile, `[STDERR] ${message}`);
-});
-
-// 捕获进程错误
-vite.on('error', (error) => {
-  log(`[ERROR] Vite 进程错误: ${error.message}`);
-  log(`[ERROR] 堆栈: ${error.stack}`);
-});
-
-// 捕获进程退出
-vite.on('exit', (code, signal) => {
-  log(`[EXIT] Vite 进程退出`);
-  log(`[EXIT] 退出码: ${code}`);
-  log(`[EXIT] 信号: ${signal}`);
-  
-  if (code !== 0 && code !== null) {
-    log(`[EXIT] 异常退出！退出码: ${code}`);
-    log(`[EXIT] 可能的原因:`);
-    log(`[EXIT] - 内存不足 (OOM)`);
-    log(`[EXIT] - 未捕获的异常`);
-    log(`[EXIT] - 文件监听错误`);
-    log(`[EXIT] - WebSocket 连接问题`);
+  try {
+    vite = spawn(process.execPath, [
+      '--max-old-space-size=4096',
+      viteEntry,
+      ...viteArgs,
+    ], withWindowsHide({
+      stdio: ['inherit', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1',
+      },
+    }));
+  } catch (error) {
+    if (error?.code === 'EPERM' && String(error?.syscall || '').includes('spawn')) {
+      inlineMode = true;
+      await runViteInline(`spawn 被当前环境同步拒绝：${error.message}`);
+    } else {
+      throw error;
+    }
   }
-  
-  process.exit(code || 0);
-});
 
-// 捕获进程关闭
-vite.on('close', (code, signal) => {
-  log(`[CLOSE] Vite 进程关闭`);
-  log(`[CLOSE] 退出码: ${code}`);
-  log(`[CLOSE] 信号: ${signal}`);
-});
+  if (!inlineMode && vite) {
+    log(`Vite 进程 PID: ${vite.pid}`);
 
-// 捕获未捕获的异常
+    vite.stdout?.on('data', (data) => {
+      const message = data.toString();
+      process.stdout.write(message);
+      appendFileSync(logFile, `[STDOUT] ${message}`);
+    });
+
+    vite.stderr?.on('data', (data) => {
+      const message = data.toString();
+      process.stderr.write(message);
+      appendFileSync(logFile, `[STDERR] ${message}`);
+    });
+
+    vite.on('error', async (error) => {
+      log(`[ERROR] Vite 进程错误: ${error.message}`);
+      log(`[ERROR] 堆栈: ${error.stack}`);
+
+      if (error.code === 'EPERM' && String(error.syscall || '').includes('spawn')) {
+        inlineMode = true;
+        await runViteInline(`spawn 被当前环境异步拒绝：${error.message}`);
+        return;
+      }
+
+      process.exit(1);
+    });
+
+    vite.on('exit', (code, signal) => {
+      if (inlineMode) return;
+
+      log('[EXIT] Vite 进程退出');
+      log(`[EXIT] 退出码: ${code}`);
+      log(`[EXIT] 信号: ${signal}`);
+
+      if (code !== 0 && code !== null) {
+        log(`[EXIT] 异常退出，退出码: ${code}`);
+        log('[EXIT] 可能原因: OOM / 未捕获异常 / 文件监听错误 / WebSocket 连接问题');
+      }
+
+      process.exit(code || 0);
+    });
+
+    vite.on('close', (code, signal) => {
+      if (inlineMode) return;
+      log('[CLOSE] Vite 进程关闭');
+      log(`[CLOSE] 退出码: ${code}`);
+      log(`[CLOSE] 信号: ${signal}`);
+    });
+
+    process.on('SIGINT', () => {
+      log('[SIGINT] 收到 SIGINT，准备关闭 Vite');
+      vite.kill('SIGINT');
+    });
+
+    process.on('SIGTERM', () => {
+      log('[SIGTERM] 收到 SIGTERM，准备关闭 Vite');
+      vite.kill('SIGTERM');
+    });
+  }
+}
+
 process.on('uncaughtException', (error) => {
-  log(`[UNCAUGHT] 未捕获的异常: ${error.message}`);
-  log(`[UNCAUGHT] 堆栈: ${error.stack}`);
+  log(`[UNCAUGHT] ${error.message}`);
+  log(`[UNCAUGHT] ${error.stack}`);
   process.exit(1);
 });
 
-// 捕获未处理的 Promise 拒绝
 process.on('unhandledRejection', (reason, promise) => {
-  log(`[UNHANDLED] 未处理的 Promise 拒绝`);
-  log(`[UNHANDLED] 原因: ${reason}`);
+  log(`[UNHANDLED] Promise 拒绝: ${reason}`);
   log(`[UNHANDLED] Promise: ${promise}`);
-});
-
-// 捕获 SIGINT (Ctrl+C)
-process.on('SIGINT', () => {
-  log('[SIGINT] 收到 SIGINT 信号，正在关闭...');
-  vite.kill('SIGINT');
-});
-
-// 捕获 SIGTERM
-process.on('SIGTERM', () => {
-  log('[SIGTERM] 收到 SIGTERM 信号，正在关闭...');
-  vite.kill('SIGTERM');
 });
 
 log('=== Vite 启动完成，开始监听 ===');

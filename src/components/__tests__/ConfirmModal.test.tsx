@@ -135,7 +135,7 @@ describe('UserRoleModal', () => {
 
         expect(html).toContain('max-h-[calc(100vh-2rem)]');
         expect(html).toContain('flex-1 min-h-0 overflow-y-auto');
-        expect(html).toContain('可多选。开发者只能管理这里勾选游戏的更新日志。');
+        expect(html).toContain('可多选。开发者只能管理这里勾选游戏的更新日志，但可查看全部反馈。');
         expect(html).not.toContain('主管理角色，拥有完整后台权限');
     });
 });

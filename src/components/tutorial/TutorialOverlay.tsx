@@ -4,8 +4,57 @@ import { useTutorial } from '../../contexts/TutorialContext';
 import { playSound } from '../../lib/audio/useGameAudio';
 import { AudioManager } from '../../lib/audio/AudioManager';
 import { UI_Z_INDEX } from '../../core';
+import { MOBILE_MAX_VIEWPORT_WIDTH } from '../../games/mobileSupport';
 
 const TUTORIAL_NEXT_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none';
+
+interface SafeAreaInsets {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+}
+
+interface ViewportMetrics {
+    width: number;
+    height: number;
+    safeArea: SafeAreaInsets;
+}
+
+function parseCssPixels(value: string): number {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function readSafeAreaInsets(): SafeAreaInsets {
+    if (typeof window === 'undefined') {
+        return { top: 0, right: 0, bottom: 0, left: 0 };
+    }
+
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    return {
+        top: parseCssPixels(rootStyles.getPropertyValue('--safe-area-top')),
+        right: parseCssPixels(rootStyles.getPropertyValue('--safe-area-right')),
+        bottom: parseCssPixels(rootStyles.getPropertyValue('--safe-area-bottom')),
+        left: parseCssPixels(rootStyles.getPropertyValue('--safe-area-left')),
+    };
+}
+
+function readViewportMetrics(): ViewportMetrics {
+    if (typeof window === 'undefined') {
+        return {
+            width: 0,
+            height: 0,
+            safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+        };
+    }
+
+    return {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        safeArea: readSafeAreaInsets(),
+    };
+}
 
 /** Check if an element is inside an overflow:hidden ancestor (before the viewport root). */
 function hasOverflowHiddenAncestor(el: Element): boolean {
@@ -30,28 +79,41 @@ export const TutorialOverlay: React.FC = () => {
     const hasAutoScrolledRef = useRef(false);
     const [positionedStepId, setPositionedStepId] = useState<string | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
-    const [viewport, setViewport] = useState(() => ({
-        width: typeof window !== 'undefined' ? window.innerWidth : 0,
-        height: typeof window !== 'undefined' ? window.innerHeight : 0,
-    }));
+    const [viewport, setViewport] = useState<ViewportMetrics>(() => readViewportMetrics());
 
     const [tooltipStyles, setTooltipStyles] = useState<{
         style: React.CSSProperties,
         arrowClass: string
     }>({ style: {}, arrowClass: '' });
+    const isMobileViewport = viewport.width > 0 && viewport.width <= MOBILE_MAX_VIEWPORT_WIDTH;
+    const isCompactTutorialLayout = isMobileViewport && viewport.width > viewport.height;
+    const visibleTargetRect = positionedStepId === currentStep?.id ? targetRect : null;
 
     // 响应窗口尺寸变化，确保遮罩与提示框重新计算
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const handleResize = () => {
             setViewport((prev) => {
-                const next = { width: window.innerWidth, height: window.innerHeight };
-                if (prev.width === next.width && prev.height === next.height) return prev;
+                const next = readViewportMetrics();
+                if (
+                    prev.width === next.width
+                    && prev.height === next.height
+                    && prev.safeArea.top === next.safeArea.top
+                    && prev.safeArea.right === next.safeArea.right
+                    && prev.safeArea.bottom === next.safeArea.bottom
+                    && prev.safeArea.left === next.safeArea.left
+                ) {
+                    return prev;
+                }
                 return next;
             });
         };
         window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('orientationchange', handleResize);
+        };
     }, []);
 
     useEffect(() => {
@@ -68,12 +130,11 @@ export const TutorialOverlay: React.FC = () => {
         const position = currentStep.position;
         const viewportWidth = viewport.width || window.innerWidth;
         const viewportHeight = viewport.height || window.innerHeight;
+        const safeArea = viewport.safeArea;
 
         if (lastStepIdRef.current !== stepId) {
             lastStepIdRef.current = stepId;
             hasAutoScrolledRef.current = false;
-            setTargetRect(null);
-            setPositionedStepId(null);
         }
 
         let resizeObserver: ResizeObserver | null = null;
@@ -93,14 +154,48 @@ export const TutorialOverlay: React.FC = () => {
 
             // 2. 计算提示框位置
             const isCenterPosition = position === 'center';
+            if (isCompactTutorialLayout) {
+                const compactPanelMargin = 12;
+                const availableHeight = Math.max(
+                    160,
+                    viewportHeight - safeArea.top - safeArea.bottom - compactPanelMargin * 2,
+                );
+                const compactMaxWidth = Math.min(
+                    360,
+                    Math.max(260, viewportWidth - safeArea.left - safeArea.right - compactPanelMargin * 2),
+                );
+                const styles: React.CSSProperties = {
+                    position: 'fixed',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    maxWidth: compactMaxWidth,
+                    zIndex: UI_Z_INDEX.tutorial,
+                    maxHeight: availableHeight,
+                };
+
+                if (rect && rect.top > viewportHeight * 0.45) {
+                    styles.top = safeArea.top + compactPanelMargin;
+                } else {
+                    styles.bottom = safeArea.bottom + compactPanelMargin;
+                }
+
+                setTooltipStyles({
+                    style: styles,
+                    arrowClass: 'hidden'
+                });
+                setPositionedStepId(stepId);
+                return;
+            }
+
             if (!rect || isCenterPosition) {
                 setTooltipStyles({
                     style: {
                         position: 'fixed',
-                        bottom: '10%',
+                        bottom: safeArea.bottom + 24,
                         left: '50%',
                         transform: 'translateX(-50%)',
                         zIndex: UI_Z_INDEX.tutorial,
+                        maxWidth: Math.max(240, viewportWidth - safeArea.left - safeArea.right - 24),
                     },
                     arrowClass: 'hidden'
                 });
@@ -172,16 +267,19 @@ export const TutorialOverlay: React.FC = () => {
 
             const arrowBase = 'bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0';
             const safeMargin = 8;
+            const minTop = safeArea.top + safeMargin;
+            const maxTop = viewportHeight - tooltipHeight - safeArea.bottom - safeMargin;
+            const minLeft = safeArea.left + safeMargin;
+            const maxLeft = viewportWidth - actualTooltipWidth - safeArea.right - safeMargin;
             // 视口边界约束（上下都限制，防止全屏高亮目标把 tooltip 推到屏幕外）
             if (typeof styles.top === 'number') {
-                const maxTop = viewportHeight - tooltipHeight - safeMargin;
-                styles.top = Math.max(safeMargin, Math.min(styles.top as number, maxTop));
+                styles.top = Math.max(minTop, Math.min(styles.top as number, maxTop));
             }
             if (typeof styles.left === 'number') {
-                styles.left = Math.max(safeMargin, Math.min(styles.left as number, viewportWidth - actualTooltipWidth - safeMargin));
+                styles.left = Math.max(minLeft, Math.min(styles.left as number, maxLeft));
             }
-            const topValue = typeof styles.top === 'number' ? styles.top : safeMargin;
-            styles.maxHeight = viewportHeight - topValue - safeMargin;
+            const topValue = typeof styles.top === 'number' ? styles.top : minTop;
+            styles.maxHeight = viewportHeight - topValue - safeArea.bottom - safeMargin;
 
             setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
             setPositionedStepId(stepId);
@@ -237,7 +335,7 @@ export const TutorialOverlay: React.FC = () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver?.disconnect();
         };
-    }, [currentStep, isActive, viewport.height, viewport.width]);
+    }, [currentStep, isActive, isCompactTutorialLayout, viewport.height, viewport.safeArea, viewport.width]);
 
     if (!isActive || !currentStep) {
         return null;
@@ -252,14 +350,14 @@ export const TutorialOverlay: React.FC = () => {
     const viewportWidth = viewport.width || window.innerWidth;
     const viewportHeight = viewport.height || window.innerHeight;
     let maskPath = `M0 0 h${viewportWidth} v${viewportHeight} h-${viewportWidth} z`;
-    if (targetRect) {
+    if (visibleTargetRect) {
         // 逆时针矩形用于创建挖空效果（偶奇填充规则）
-        const { left, top, right, bottom } = targetRect;
+        const { left, top, right, bottom } = visibleTargetRect;
         const p = 8;
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
     }
 
-    const maskOpacity = currentStep.showMask && targetRect ? 0.6 : 0;
+    const maskOpacity = currentStep.showMask && visibleTargetRect ? 0.6 : 0;
 
     return (
         <div
@@ -274,20 +372,20 @@ export const TutorialOverlay: React.FC = () => {
                     fill={`rgba(0, 0, 0, ${maskOpacity})`}
                     // 当遮罩透明时，允许所有点击穿透
                     // 当遮罩可见时，仍需要允许在“孔洞”区域点击
-                    style={{ pointerEvents: currentStep.showMask && targetRect ? 'auto' : 'none' }}
+                    style={{ pointerEvents: currentStep.showMask && visibleTargetRect ? 'auto' : 'none' }}
                     fillRule="evenodd"
                 />
             </svg>
 
             {/* 目标高亮环（苹果风格蓝色光晕）- 目标存在时始终可见 */}
-            {targetRect && (
+            {visibleTargetRect && (
                 <div
                     className="absolute pointer-events-none"
                     style={{
-                        top: targetRect.top - 4,
-                        left: targetRect.left - 4,
-                        width: targetRect.width + 8,
-                        height: targetRect.height + 8,
+                        top: visibleTargetRect.top - 4,
+                        left: visibleTargetRect.left - 4,
+                        width: visibleTargetRect.width + 8,
+                        height: visibleTargetRect.height + 8,
                         borderRadius: '12px',
                         boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 12px rgba(59, 130, 246, 0.3)',
                     }}
@@ -304,28 +402,36 @@ export const TutorialOverlay: React.FC = () => {
                 <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
 
                 {/* 内容卡片 */}
-                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col" style={{ maxHeight: 'inherit' }}>
+                <div
+                    data-testid="tutorial-overlay-card"
+                    className={`bg-[#fcfbf9] shadow-[0_8px_30px_rgba(67,52,34,0.12)] border border-[#e5e0d0] animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col ${isCompactTutorialLayout ? 'w-72 max-w-[calc(100vw-24px)] rounded-xl p-4' : 'max-w-sm w-72 rounded-sm p-5'}`}
+                    style={{ maxHeight: 'inherit' }}
+                >
                     {/* 装饰性边角（右上）*/}
                     <div className="absolute top-1.5 right-1.5 w-2 h-2 border-t border-r border-[#c0a080] opacity-40" />
 
-                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left overflow-y-auto flex-1 min-h-0 whitespace-pre-line">
+                    <div className={`text-[#433422] font-bold leading-relaxed text-left overflow-y-auto flex-1 min-h-0 whitespace-pre-line ${isCompactTutorialLayout ? 'text-base mb-3' : 'text-lg mb-4'}`}>
                         {t(currentStep.content)}
                     </div>
 
                     {!currentStep.requireAction && (
                         <button
+                            data-testid="tutorial-next-button"
                             onClick={() => {
                                 playSound(TUTORIAL_NEXT_SOUND_KEY);
                                 nextStep('manual');
                             }}
-                            className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto"
+                            className={`touch-target-min w-full bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold uppercase transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto ${isCompactTutorialLayout ? 'py-2.5 text-[13px] tracking-[0.16em] rounded-lg' : 'py-2 text-sm tracking-widest'}`}
                         >
                             {isLastStep ? t('overlay.finish') : t('overlay.next')}
                         </button>
                     )}
 
                     {currentStep.requireAction && (
-                        <div className="flex items-center gap-2 text-sm font-bold text-[#8c7b64] bg-[#f3f0e6]/50 p-2 border border-[#e5e0d0]/50 justify-center italic">
+                        <div
+                            data-testid="tutorial-action-hint"
+                            className={`flex items-center gap-2 font-bold text-[#8c7b64] bg-[#f3f0e6]/50 border border-[#e5e0d0]/50 justify-center italic ${isCompactTutorialLayout ? 'text-xs rounded-lg p-2.5' : 'text-sm p-2'}`}
+                        >
                             <span className="animate-pulse w-2 h-2 rounded-full bg-[#c0a080]"></span>
                             {t('overlay.clickToContinue')}
                         </div>

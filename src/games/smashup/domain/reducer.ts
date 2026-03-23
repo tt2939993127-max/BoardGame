@@ -47,6 +47,7 @@ import type {
     PowerCounterAddedEvent,
     PowerCounterRemovedEvent,
     TempPowerAddedEvent,
+    PermanentPowerAddedEvent,
     CardToDeckBottomEvent,
     SpecialAfterScoringArmedEvent,
 } from './types';
@@ -60,7 +61,7 @@ import { maybeQueueStartingHandMulliganPrompt } from './mulliganHandlers';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
-import { fireTriggers, collectTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
+import { fireTriggers, collectTriggers, hasPlayerTurnRestriction, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { canPlayFromDiscard } from './discardPlayability';
 import { reduce } from './reduce';
@@ -271,7 +272,7 @@ function executeCommand(
                                 playerId: command.playerId,
                                 cardUid: card.uid,
                                 defId: card.defId,
-                                baseIndex: command.payload.targetBaseIndex ?? 0,
+                                baseIndex: command.payload.targetBaseIndex,
                                 targetMinionUid: command.payload.targetMinionUid,
                                 random,
                                 now,
@@ -297,7 +298,7 @@ function executeCommand(
                                     playerId: command.playerId,
                                     cardUid: card.uid,
                                     defId: card.defId,
-                                    baseIndex: command.payload.targetBaseIndex ?? 0,
+                                    baseIndex: command.payload.targetBaseIndex,
                                     targetMinionUid: command.payload.targetMinionUid,
                                     random,
                                     now,
@@ -315,7 +316,7 @@ function executeCommand(
                                 payload: {
                                     sourceDefId: card.defId,
                                     playerId: command.playerId,
-                                    baseIndex: command.payload.targetBaseIndex ?? 0,
+                                    baseIndex: command.payload.targetBaseIndex,
                                     cardUid: card.uid,
                                 },
                                 timestamp: now,
@@ -333,7 +334,7 @@ function executeCommand(
                             playerId: command.playerId,
                             cardUid: card.uid,
                             defId: card.defId,
-                            baseIndex: command.payload.targetBaseIndex ?? 0,
+                            baseIndex: command.payload.targetBaseIndex,
                             targetMinionUid: command.payload.targetMinionUid,
                             random,
                             now,
@@ -360,6 +361,7 @@ function executeCommand(
                         baseDefId: base.defId,
                         playerId: command.playerId,
                         actionTargetBaseIndex: targetBaseIdx,
+                        actionTargetType: command.payload.targetMinionUid ? 'minion' : 'base',
                         actionTargetMinionUid: command.payload.targetMinionUid,
                         now,
                     };
@@ -768,6 +770,7 @@ export function processDestroyTriggers(
             triggerMinionUid: minionUid,
             triggerMinionDefId: minionDefId,
             triggerMinion: minion,
+            destroyerId,
             reason: de.payload.reason,
             random,
             now,
@@ -837,6 +840,7 @@ export function processDestroyTriggers(
                 triggerMinionUid: minionUid,
                 triggerMinionDefId: minionDefId,
                 triggerMinion: minion,
+                destroyerId,
                 reason: de.payload.reason,
                 random,
                 now,
@@ -936,6 +940,9 @@ export function filterProtectedMoveEvents(
         const minion = base?.minions.find(m => m.uid === minionUid);
         if (!minion) { result.push(e); continue; }
         const effectiveSource = me.payload.reason?.startsWith('base_') ? minion.controller : sourcePlayerId;
+        if (hasPlayerTurnRestriction(core, effectiveSource, 'move_minion')) {
+            continue;
+        }
         if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'move')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型（与 filterProtectedDestroyEvents 对齐）
         const actionProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
@@ -1302,6 +1309,18 @@ export function processAffectTriggers(
                 if (te.payload.amount < 0) {
                     minionUid = te.payload.minionUid;
                     baseIndex = te.payload.baseIndex;
+                    affectType = 'power_change';
+                    const base = core.bases[baseIndex];
+                    const minion = base?.minions.find(m => m.uid === minionUid);
+                    minionDefId = minion?.defId;
+                }
+                break;
+            }
+            case SU_EVENTS.PERMANENT_POWER_ADDED: {
+                const pe = evt as PermanentPowerAddedEvent;
+                if (pe.payload.amount < 0) {
+                    minionUid = pe.payload.minionUid;
+                    baseIndex = pe.payload.baseIndex;
                     affectType = 'power_change';
                     const base = core.bases[baseIndex];
                     const minion = base?.minions.find(m => m.uid === minionUid);

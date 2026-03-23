@@ -586,7 +586,7 @@ describe('巫师派系能力', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('wizard_neophyte');
-        expect(current?.data?.targetType).toBe('generic');
+        expect(current?.data?.targetType).toBe('button');
     });
 
     it('wizard_neophyte: 牌库顶不是行动卡时不产生事件', () => {

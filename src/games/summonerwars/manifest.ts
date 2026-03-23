@@ -18,7 +18,7 @@ const entry: GameManifestEntry = {
     fontFamily: { display: 'Bebas Neue' },
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
-    mobileLayoutPreset: 'map-shell',
+    mobileLayoutPreset: 'board-shell',
     shellTargets: ['pwa'],
 };
 

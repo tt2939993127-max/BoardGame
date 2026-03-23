@@ -256,6 +256,8 @@ SMTP_PASS=xxx
 - **对象存储 key 前缀**：`official/<gameId>/...`
   - 路径对应：`/assets/<gameId>/...` ⇄ `official/<gameId>/...`
 - **可选独立资源域名**：前端可配置 `VITE_ASSETS_BASE_URL`（默认 `/assets`）。
+- **缓存失效机制**：构建时会扫描 `public/assets`，为资源 URL 自动追加 `?v=<content-hash>`。资源内容变化后 URL 会自动变化，因此 R2 上的图片/音频/SVG 可以安全使用长期缓存。
+- **本地 JSON / 图集配置**：仍走本地 `/assets`，但同样会追加 `?v=<content-hash>`，避免本地回退路径拿到旧配置。
 
 ## 资源发布流程（官方）
 
@@ -263,6 +265,7 @@ SMTP_PASS=xxx
 2. 生成清单：`npm run assets:manifest`（输出 `assets-manifest.json`）。
 3. 校验清单：`npm run assets:validate`（缺文件/变体不一致会报错）。
 4. 上传资源与清单到对象存储（路径 `official/<gameId>/...`）。
+5. 如仅修改了对象元数据（例如 `Cache-Control`），使用 `npm run assets:upload:force` 重新上传；常规资源内容更新不需要手动 purge，因为 URL 会随内容 hash 自动变化。
 
 ## UGC 资源前缀预留（未实现）
 
@@ -296,6 +299,8 @@ SMTP_PASS=xxx
 | `.env.server` | 生产 .env 生成脚本 | ✘ | ✔ |
 
 **本地开发**：直接复制 `.env.example` 即可。
+
+**强制约定**：凡是本地开发脚本、资源脚本或校验脚本会读取的环境变量，新增或修改时必须同步更新 `.env.example`。不能假设“只写进 `.env` 就够了”，也不能依赖“`.env` 缺字段时自动回退到 `.env.example`”，因为只要本机存在 `.env`，很多脚本就会优先读取它；如果 `.env` 里缺少某个字段，脚本可能直接报错。`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 属于这类必须同时维护在 `.env.example` 的变量。
 
 **生产环境（最小配置）**：只需密钥和域名，其余由 `docker-compose.prod.yml` 覆盖。
 

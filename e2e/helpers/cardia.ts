@@ -33,6 +33,29 @@ export interface SetupOnlineMatchOptions {
     player2Deck?: string;
 }
 
+function resolveCardiaFrontendBaseURL(page?: Page): string {
+    const contextBaseURL = page?.context()._options?.baseURL;
+    if (contextBaseURL) {
+        return contextBaseURL;
+    }
+
+    if (process.env.VITE_FRONTEND_URL) {
+        return process.env.VITE_FRONTEND_URL;
+    }
+
+    const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || '6173';
+    return `http://127.0.0.1:${frontendPort}`;
+}
+
+async function warmCardiaMatchRoute(page: Page, baseURL: string) {
+    const matchRoomModuleUrl = new URL('/src/pages/MatchRoom.tsx', baseURL).toString();
+    const response = await page.request.get(matchRoomModuleUrl);
+
+    if (!response.ok()) {
+        throw new Error(`Failed to warm MatchRoom module: ${response.status()} ${matchRoomModuleUrl}`);
+    }
+}
+
 /**
  * 设置 Cardia 在线对局
  */
@@ -45,7 +68,7 @@ export const setupOnlineMatch = async (
     
     // 从 page 的 context 获取 baseURL，如果没有则使用默认值
     // 优先使用 context 的 baseURL，否则使用环境变量或默认值
-    const baseURL = page.context()._options?.baseURL || process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL(page);
     
     // 创建 player1 context
     const player1Context = await browser.newContext({ baseURL });
@@ -53,10 +76,21 @@ export const setupOnlineMatch = async (
     const player1Page = await player1Context.newPage();
     
     await player1Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    
-    if (!(await ensureGameServerAvailable(player1Page))) {
+
+    let gameServerReady = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (await ensureGameServerAvailable(player1Page)) {
+            gameServerReady = true;
+            break;
+        }
+        await player1Page.waitForTimeout(500);
+    }
+
+    if (!gameServerReady) {
         throw new Error('Game server not available');
     }
+
+    await warmCardiaMatchRoute(player1Page, baseURL);
     
     // 创建房间
     const player1GuestId = `e2e_player1_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -83,6 +117,7 @@ export const setupOnlineMatch = async (
     
     await player2Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
     await player2Page.waitForTimeout(500);
+    await warmCardiaMatchRoute(player2Page, baseURL);
     
     // Player2 加入房间
     const player2GuestId = `e2e_player2_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -477,8 +512,7 @@ export const setupCardiaTestScenario = async (
     scenario: CardiaTestScenario
 ): Promise<CardiaMatchSetup> => {
     // 1. 创建基础对局
-    const baseURL = process.env.VITE_FRONTEND_URL
-        || `http://localhost:${process.env.PW_PORT || process.env.E2E_PORT || '6173'}`;
+    const baseURL = resolveCardiaFrontendBaseURL();
     const tempContext = await browser.newContext({ baseURL });
     const tempPage = await tempContext.newPage();
     

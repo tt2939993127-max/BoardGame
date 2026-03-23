@@ -379,17 +379,12 @@ export function registerRobotInteractionHandlers(): void {
                     baseDefId: state.core.bases[0].defId,
                     power,
                     fromDeck: true,
+                    consumesNormalLimit: false,
                 },
                 timestamp,
             };
 
-            return {
-                state,
-                events: [
-                    grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                    playedEvt,
-                ],
-            };
+            return { state, events: [playedEvt] };
         }
 
         const baseCandidates = state.core.bases.map((b, i) => {
@@ -432,17 +427,12 @@ export function registerRobotInteractionHandlers(): void {
                 baseIndex,
                 power: ctx.power,
                 fromDeck: true,
+                consumesNormalLimit: false,
             },
             timestamp,
         };
 
-        return {
-            state,
-            events: [
-                grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                playedEvt,
-            ],
-        };
+        return { state, events: [playedEvt] };
     });
 }
 
@@ -530,6 +520,7 @@ function registerRobotOngoingEffects(): void {
         // “你的 Microbot” → 被消灭随从必须由 Archive 控制者控制
 
         const player = trigCtx.state.players[trigCtx.playerId];
+        // “你的 Microbot” → 被消灭随从必须由 Archive 控制者控制
         if (!player || player.deck.length === 0) return [];
 
         const { drawnUids } = drawCards(player, archiveCount, trigCtx.random);

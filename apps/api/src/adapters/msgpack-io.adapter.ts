@@ -14,6 +14,10 @@ export class MsgpackIoAdapter extends IoAdapter {
         const opts: ServerOptions = {
             ...options,
             parser: msgpackParser,
+            transports:
+                process.env.SOCKET_IO_ALLOW_POLLING === 'true'
+                    ? ['websocket', 'polling']
+                    : ['websocket'],
         };
         return super.createIOServer(port, opts);
     }

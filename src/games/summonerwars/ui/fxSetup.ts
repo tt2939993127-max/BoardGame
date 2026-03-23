@@ -67,7 +67,9 @@ function scaledCellBox(
 
 function useStableComplete(onComplete: () => void): () => void {
   const ref = useRef(onComplete);
-  ref.current = onComplete;
+  useEffect(() => {
+    ref.current = onComplete;
+  }, [onComplete]);
   return useCallback(() => ref.current(), []);
 }
 

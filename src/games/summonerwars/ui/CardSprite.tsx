@@ -35,13 +35,14 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
   style,
 }) => {
   const source = getSpriteAtlasSource(atlasId);
-  const [loaded, setLoaded] = useState(() => !!source && isImagePreloaded(source.image));
+  const preloaded = !source || isImagePreloaded(source.image);
+  const [loadState, setLoadState] = useState<'loaded' | 'loading'>(preloaded ? 'loaded' : 'loading');
   const imageUrlRef = useRef<string>('');
+  const loaded = preloaded || loadState === 'loaded';
 
   // 预加载图片并监听加载状态
   useEffect(() => {
     if (!source) {
-      setLoaded(true);
       return;
     }
 
@@ -54,21 +55,18 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
 
     imageUrlRef.current = imageUrl;
 
-    // 已预加载，直接标记完成
-    if (isImagePreloaded(imageUrl)) {
-      setLoaded(true);
-      return;
-    }
+    // 已预加载则无需额外订阅 onload
+    if (isImagePreloaded(imageUrl)) return;
 
-    setLoaded(false);
+    queueMicrotask(() => setLoadState('loading'));
 
     const img = new Image();
-    img.onload = () => setLoaded(true);
-    img.onerror = () => setLoaded(true);
+    img.onload = () => setLoadState('loaded');
+    img.onerror = () => setLoadState('loaded');
     img.src = imageUrl;
 
     if (img.complete) {
-      setLoaded(true);
+      queueMicrotask(() => setLoadState('loaded'));
     }
   }, [source, loaded]);
 

@@ -40,10 +40,10 @@ interface ConfirmModalProps {
 }
 
 const baseTheme: Omit<ConfirmModalTheme, 'overlay'> = {
-    panel: 'bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto',
+    panel: 'bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto max-h-[calc(100dvh-2rem)] overflow-y-auto',
     title: 'text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider mb-2',
     description: 'text-parchment-base-text font-bold text-sm sm:text-base mb-5',
-    actions: 'flex items-center justify-center gap-3',
+    actions: 'flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-center gap-3',
     confirmButton: 'px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider bg-parchment-base-text text-parchment-card-bg hover:bg-parchment-brown transition-colors rounded-[4px]',
     cancelButton: 'px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider border border-parchment-card-border/50 text-parchment-base-text bg-parchment-card-bg hover:bg-parchment-base-bg transition-colors rounded-[4px]',
 };
@@ -116,7 +116,13 @@ export const ConfirmModal = ({
             overlayClassName={twMerge(mergedTheme.overlay, overlayClassName)}
             overlayStyle={{ zIndex: UI_Z_INDEX.modalOverlay }}
             containerClassName={twMerge('p-4 sm:p-6', mergedTheme.container, containerClassName)}
-            containerStyle={{ zIndex: UI_Z_INDEX.modalContent }}
+            containerStyle={{
+                zIndex: UI_Z_INDEX.modalContent,
+                paddingTop: 'max(1rem, env(safe-area-inset-top))',
+                paddingRight: 'max(1rem, env(safe-area-inset-right))',
+                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+                paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            }}
         >
             <div
                 className={twMerge(
@@ -141,6 +147,7 @@ export const ConfirmModal = ({
                             onClick={handleCancel}
                             disabled={isSubmitting}
                             className={twMerge(
+                                'touch-target-min',
                                 mergedTheme.cancelButton,
                                 isSubmitting && 'cursor-not-allowed opacity-60 hover:bg-parchment-card-bg',
                                 cancelClassName
@@ -157,6 +164,7 @@ export const ConfirmModal = ({
                         disabled={isSubmitting}
                         aria-busy={isSubmitting}
                         className={twMerge(
+                            'touch-target-min',
                             mergedTheme.confirmButton,
                             isSubmitting && 'cursor-not-allowed opacity-60 hover:bg-parchment-base-text',
                             confirmClassName

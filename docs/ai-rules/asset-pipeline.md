@@ -78,12 +78,14 @@ public/assets/
 - `OptimizedImage` 默认 `locale="zh-CN"`，自动转换路径为 `i18n/zh-CN/dicethrone/images/foo.png`
 - 符号链接使浏览器能正确加载该路径（实际指向 `../../dicethrone/images/foo.png`）
 - 未来英文版上线时，传入 `locale="en"` 即可切换到英文资源
+- 生产构建会为 `public/assets` 中的资源 URL 自动追加 `?v=<content-hash>`，因此不要手动拼接版本参数；内容变更后缓存会自动失效
 
 ### 路径规则（强制）
 
 - `src` 传相对路径（如 `dicethrone/images/foo.png`），**不带** `/assets/` 前缀
 - 内部自动补全 `/assets/` 并转换为 `compressed/foo.webp`
 - **禁止在路径中硬编码 `compressed/` 子目录**（如 `'dicethrone/images/compressed/foo.png'`）
+- **禁止手动拼 `?v=` / 时间戳参数**，统一交给 `AssetLoader` 的内容 hash 机制处理
 - **原因**：`getOptimizedImageUrls()` 会自动插入 `compressed/`，硬编码会导致路径重复（`compressed/compressed/`）
 
 ### 精灵图路径处理规范（强制）

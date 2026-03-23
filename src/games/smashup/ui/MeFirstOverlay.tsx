@@ -10,7 +10,7 @@ import { GameButton } from './GameButton';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore, ActionCardDef, FusionCardDef } from '../domain/types';
 import { getCardDef } from '../data/cards';
-import { isCardActionLike, isCardMinionLike } from '../domain/utils';
+import { isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from '../domain/utils';
 import { UI_Z_INDEX } from '../../../core';
 import { PLAYER_CONFIG } from './playerConfig';
 
@@ -52,31 +52,15 @@ export const MeFirstOverlay: React.FC<{
     const isMyResponse = playerID === currentResponderId;
     const core = G.core;
 
-    // 检查手牌中是否有特殊行动卡或 beforeScoringPlayable 随从
+    // 检查手牌中是否有可在当前响应窗口打出的行动卡或 beforeScoringPlayable 随从
     const myPlayer = playerID ? core.players[playerID] : undefined;
     
     // 根据窗口类型过滤可用卡牌
-    const specialCards = myPlayer?.hand.filter(c => {
+    const responseCards = myPlayer?.hand.filter(c => {
         if (!isCardActionLike(c)) return false;
         const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
         if (!def) return false;
-        const subtype = (def as any).type === 'fusion'
-            ? (def as FusionCardDef).actionSubtype
-            : (def as ActionCardDef).subtype;
-        if (subtype !== 'special') return false;
-        
-        // 检查 specialTiming 是否匹配窗口类型
-        const cardTiming = (def as any).type === 'fusion'
-            ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-            : ((def as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
-        if (responseWindow.windowType === 'meFirst') {
-            // meFirst 窗口：只允许 beforeScoring 卡牌
-            return cardTiming === 'beforeScoring';
-        } else if (responseWindow.windowType === 'afterScoring') {
-            // afterScoring 窗口：只允许 afterScoring 卡牌
-            return cardTiming === 'afterScoring';
-        }
-        return false;
+        return isActionLikeRespondableInWindow(def, responseWindow.windowType);
     }) ?? [];
     
     const beforeScoringMinions = myPlayer?.hand.filter(c => {
@@ -87,7 +71,7 @@ export const MeFirstOverlay: React.FC<{
         return (def as any)?.beforeScoringPlayable === true;
     }) ?? [];
     
-    const hasRespondableCards = specialCards.length > 0 || beforeScoringMinions.length > 0;
+    const hasRespondableCards = responseCards.length > 0 || beforeScoringMinions.length > 0;
     
     // 窗口标题
     const windowTitle = responseWindow.windowType === 'afterScoring' 
@@ -123,14 +107,14 @@ export const MeFirstOverlay: React.FC<{
 
                 {isMyResponse && (
                     <div className="flex flex-col gap-2">
-                        {/* 提示：从手牌中选择特殊行动卡或让过 */}
-                        {specialCards.length > 0 ? (
+                        {/* 提示：从手牌中选择可响应的卡牌或让过 */}
+                        {hasRespondableCards ? (
                             <p className="text-xs text-center text-amber-700/80 font-medium">
-                                {t('ui.me_first_select_from_hand', { defaultValue: '从手牌中选择特殊行动卡打出' })}
+                                {t('ui.me_first_select_from_hand', { defaultValue: '从手牌中选择可响应的卡牌打出' })}
                             </p>
                         ) : (
                             <p className="text-xs text-center text-slate-600 font-medium">
-                                {t('ui.me_first_no_special', { defaultValue: '你没有可打出的特殊行动卡' })}
+                                {t('ui.me_first_no_special', { defaultValue: '你没有可在当前窗口打出的卡牌' })}
                             </p>
                         )}
 

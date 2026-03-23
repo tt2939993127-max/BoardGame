@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
-import { useToast, type Toast, type ToastContent, type ToastTone } from '../../../contexts/ToastContext';
+import { useToast, type Toast, type ToastAction, type ToastContent, type ToastTone } from '../../../contexts/ToastContext';
 import clsx from 'clsx';
 
 const ToneIcons: Record<ToastTone, React.ReactNode> = {
@@ -19,6 +19,11 @@ const ToneStyles: Record<ToastTone, string> = {
     error: 'border-l-4 border-l-[#c53030]',
 };
 
+const ActionStyles: Record<NonNullable<ToastAction['variant']>, string> = {
+    primary: 'border-[#433422] bg-[#433422] text-[#fcfbf9] hover:bg-[#5a4630] hover:border-[#5a4630]',
+    secondary: 'border-[#d9d1bf] bg-[#f5f1e7] text-[#6e5c47] hover:border-[#c8baa1] hover:bg-[#efe6d6] hover:text-[#433422]',
+};
+
 export const ToastItem: React.FC<{ toast: Toast }> = ({ toast }) => {
     const { t } = useTranslation();
     const { dismiss } = useToast();
@@ -28,6 +33,13 @@ export const ToastItem: React.FC<{ toast: Toast }> = ({ toast }) => {
             return content.text;
         }
         return t(content.key, { ns: content.ns, ...content.params });
+    };
+
+    const handleActionClick = (action: ToastAction) => {
+        action.onClick?.();
+        if (action.dismissOnClick !== false) {
+            dismiss(toast.id);
+        }
     };
 
     return (
@@ -54,6 +66,26 @@ export const ToastItem: React.FC<{ toast: Toast }> = ({ toast }) => {
                 <p className="text-xs text-[#8c7b64] leading-relaxed font-serif">
                     {renderContent(toast.message)}
                 </p>
+                {toast.actions?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {toast.actions.map((action, index) => {
+                            const variant = action.variant ?? 'secondary';
+                            return (
+                                <button
+                                    key={action.id ?? `${toast.id}-action-${index}`}
+                                    type="button"
+                                    onClick={() => handleActionClick(action)}
+                                    className={clsx(
+                                        'rounded-sm border px-2.5 py-1 text-[11px] font-semibold tracking-[0.04em] transition-colors cursor-pointer',
+                                        ActionStyles[variant]
+                                    )}
+                                >
+                                    {renderContent(action.label)}
+                                </button>
+                            );
+                        })}
+                    </div>
+                ) : null}
             </div>
 
             <button

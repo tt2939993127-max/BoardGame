@@ -2,10 +2,23 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useRe
 import { generateUUID } from '../lib/uuid';
 
 export type ToastTone = 'success' | 'info' | 'warning' | 'error';
+export type ToastActionVariant = 'primary' | 'secondary';
 
 export type ToastContent =
     | { kind: 'text'; text: string }
     | { kind: 'i18n'; ns?: string; key: string; params?: Record<string, string | number> };
+
+export interface ToastAction {
+    id?: string;
+    label: ToastContent;
+    variant?: ToastActionVariant;
+    dismissOnClick?: boolean;
+    onClick?: () => void;
+}
+
+export interface ToastActionInput extends Omit<ToastAction, 'label'> {
+    label: string | ToastContent;
+}
 
 export interface Toast {
     id: string;
@@ -15,15 +28,22 @@ export interface Toast {
     createdAt: number;
     ttlMs?: number;
     dedupeKey?: string;
+    actions?: ToastAction[];
 }
+
+type ToastInput = Omit<Toast, 'id' | 'createdAt' | 'actions'> & {
+    actions?: ToastActionInput[];
+};
+
+type ToastOptions = Partial<Omit<ToastInput, 'tone' | 'message' | 'title'>>;
 
 interface ToastContextType {
     toasts: Toast[];
-    show: (toast: Omit<Toast, 'id' | 'createdAt'>) => string;
-    success: (message: string | ToastContent, title?: string | ToastContent, options?: Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>) => string;
-    info: (message: string | ToastContent, title?: string | ToastContent, options?: Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>) => string;
-    warning: (message: string | ToastContent, title?: string | ToastContent, options?: Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>) => string;
-    error: (message: string | ToastContent, title?: string | ToastContent, options?: Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>) => string;
+    show: (toast: ToastInput) => string;
+    success: (message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) => string;
+    info: (message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) => string;
+    warning: (message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) => string;
+    error: (message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) => string;
     dismiss: (id: string) => void;
     clear: () => void;
 }
@@ -37,6 +57,18 @@ const DEFAULT_TTL: Record<ToastTone, number> = {
     error: 8000,
 };
 
+const normalizeContent = (content: string | ToastContent): ToastContent => {
+    if (typeof content === 'string') {
+        return { kind: 'text', text: content };
+    }
+    return content;
+};
+
+const normalizeAction = (action: ToastActionInput): ToastAction => ({
+    ...action,
+    label: normalizeContent(action.label),
+});
+
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastsRef = useRef<Toast[]>([]);
@@ -47,11 +79,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, [toasts]);
 
     const dismiss = useCallback((id: string) => {
+        toastsRef.current = toastsRef.current.filter((t) => t.id !== id);
         setToasts((prev) => prev.filter((t) => t.id !== id));
     }, []);
 
-    const show = useCallback((toastInput: Omit<Toast, 'id' | 'createdAt'>) => {
-        const { dedupeKey, tone } = toastInput;
+    const show = useCallback((toastInput: ToastInput) => {
+        const { dedupeKey, tone, actions } = toastInput;
 
         // 去重检查（验证 dedupeKey 非空）
         if (dedupeKey && dedupeKey.trim()) {
@@ -69,11 +102,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         const newToast: Toast = {
             ...toastInput,
+            actions: actions?.map(normalizeAction),
             id,
             createdAt,
             ttlMs,
         };
 
+        // 立即同步 ref，避免同一事件循环内重复 show 时 dedupe 失效。
+        toastsRef.current = [...toastsRef.current, newToast];
         setToasts((prev) => [...prev, newToast]);
 
         if (ttlMs !== Infinity) {
@@ -84,15 +120,6 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         return id;
     }, [dismiss]);
-
-    const normalizeContent = (content: string | ToastContent): ToastContent => {
-        if (typeof content === 'string') {
-            return { kind: 'text', text: content };
-        }
-        return content;
-    };
-
-    type ToastOptions = Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>;
 
     const success = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'success', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
@@ -106,7 +133,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const error = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'error', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
 
-    const clear = useCallback(() => setToasts([]), []);
+    const clear = useCallback(() => {
+        toastsRef.current = [];
+        setToasts([]);
+    }, []);
 
     // useMemo 包裹 Provider value，避免 toasts 变化时所有只调用 show/dismiss 的消费者也重渲染
     const value = useMemo(() => ({

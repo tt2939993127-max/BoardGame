@@ -520,6 +520,64 @@ describe('P0: bear_cavalry_commission（委任）4步链', () => {
         expect(fc.bases[0].minions.find(m => m.uid === 'enemy-m1')).toBeUndefined();
         expect(fc.bases[1].minions.some(m => m.uid === 'enemy-m1')).toBe(true);
     });
+
+    it('随从额度已用完时，委任打出的额外随从会消耗刚授予的额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('comm-pod-1', 'bear_cavalry_commission_pod', '0', 'action'),
+                        makeCard('hand-m1', 'bear_cavalry_cub_scout', '0', 'minion'),
+                    ],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                    factions: ['bear_cavalry', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2', [
+                    makeMinion('enemy-m1', 'test_minion', '1', 3),
+                ]),
+                makeBase('test_base_3'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'comm-pod-1' },
+        }, 'commission pod quota step1');
+        expect(r1.steps[0]?.success).toBe(true);
+        expect(r1.finalState.core.players['0'].minionsPlayed).toBe(1);
+        expect(r1.finalState.core.players['0'].minionLimit).toBe(2);
+
+        const chooseMinion = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const handOpt = findOption(chooseMinion, (o: any) => o.value?.cardUid === 'hand-m1');
+        const r2 = respond(r1.finalState, '0', handOpt, 'commission pod quota step2');
+
+        const chooseBase = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const baseOpt = findOption(chooseBase, (o: any) => o.value?.baseIndex === 1);
+        const r3 = respond(r2.finalState, '0', baseOpt, 'commission pod quota step3');
+
+        const chooseMove = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        const enemyOpt = findOption(chooseMove, (o: any) => o.value?.minionUid === 'enemy-m1');
+        const r4 = respond(r3.finalState, '0', enemyOpt, 'commission pod quota step4');
+
+        const chooseDest = asSimpleChoice(r4.finalState.sys.interaction.current)!;
+        const destOpt = findOption(chooseDest, (o: any) => o.value?.baseIndex === 0);
+        const r5 = respond(r4.finalState, '0', destOpt, 'commission pod quota step5');
+
+        expect(r5.steps[0]?.success).toBe(true);
+        expect(r5.finalState.sys.interaction.current).toBeUndefined();
+        expect(r5.finalState.core.players['0'].minionsPlayed).toBe(2);
+        expect(r5.finalState.core.players['0'].minionLimit).toBe(2);
+        expect(r5.finalState.core.bases[1].minions.some(m => m.uid === 'hand-m1')).toBe(true);
+        expect(r5.finalState.core.bases[0].minions.some(m => m.uid === 'enemy-m1')).toBe(true);
+    });
 });
 
 // ============================================================================
@@ -1189,7 +1247,57 @@ describe('P2: zombie_they_keep_coming（它们不断来临）弃牌堆直点交�
         const player = r2.finalState.core.players['0'];
         expect(player.minionsPlayed).toBe(player.minionLimit);
         expect(player.discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(player.hand.some(c => c.uid === 'disc-m1')).toBe(false);
         expect(r2.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+    });
+
+    it('应立即从弃牌堆打出，而不是回手并授予额外随从额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('tkc1', 'zombie_they_keep_coming', '0', 'action')],
+                    discard: [makeCard('disc-m1', 'pirate_first_mate', '0', 'minion')],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    factions: ['zombies', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tkc1' },
+        }, 'they_keep_coming: create interaction without quota refund');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const cardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r2 = respondWithMergedValue(
+            r1.finalState,
+            '0',
+            cardOpt,
+            { baseIndex: 0 },
+            'they_keep_coming: resolve immediate discard play',
+        );
+
+        expect(r2.steps[0]?.success).toBe(true);
+
+        const player = r2.finalState.core.players['0'];
+        expect(player.hand.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(player.discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(r2.finalState.core.bases[0].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+        expect(player.minionLimit).toBe(1);
+        expect(player.minionsPlayed).toBe(0);
+
+        const limitEvents = r2.steps.flatMap(step => step.events).filter(
+            (event: any) => event.type === SU_EVENTS.LIMIT_MODIFIED,
+        );
+        expect(limitEvents).toHaveLength(0);
     });
 
     it('目标基地被 zombie_overrun 封锁时不应从弃牌堆额外打出随从', () => {
@@ -1333,6 +1441,51 @@ describe('P2: robot_hoverbot（盘旋机器人）2步链', () => {
         expect(fc.bases[1].minions.some(m => m.defId === 'pirate_first_mate')).toBe(true);
         // hoverbot 在 base0
         expect(fc.bases[0].minions.some(m => m.defId === 'robot_hoverbot')).toBe(true);
+    });
+
+    it('应直接从牌库顶额外打出，不额外发放随从额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('hoverbot1', 'robot_hoverbot', '0', 'minion')],
+                    deck: [makeCard('deck-m1', 'pirate_first_mate', '0', 'minion')],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    factions: ['robots', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_MINION, playerId: '0',
+            payload: { cardUid: 'hoverbot1', baseIndex: 0 },
+        }, 'hoverbot immediate extra step1');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const playOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'deck-m1');
+        const r2 = respond(r1.finalState, '0', playOpt, 'hoverbot immediate extra step2');
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const baseOpt = findOption(choice2, (o: any) => o.value?.baseIndex === 1);
+        const r3 = respond(r2.finalState, '0', baseOpt, 'hoverbot immediate extra step3');
+
+        expect(r3.steps[0]?.success).toBe(true);
+
+        const player = r3.finalState.core.players['0'];
+        expect(player.deck.some(c => c.uid === 'deck-m1')).toBe(false);
+        expect(r3.finalState.core.bases[1].minions.some(m => m.uid === 'deck-m1')).toBe(true);
+        expect(player.minionLimit).toBe(1);
+        expect(player.minionsPlayed).toBe(1);
+
+        const limitEvents = r3.steps.flatMap(step => step.events).filter(
+            (event: any) => event.type === SU_EVENTS.LIMIT_MODIFIED,
+        );
+        expect(limitEvents).toHaveLength(0);
     });
 });
 
@@ -1567,6 +1720,63 @@ describe('P1: ghost_the_dead_rise（亡者崛起）3步链', () => {
             expect(choice2.sourceId).toBe('ghost_the_dead_rise_play');
         }
         // 无论是否有后续交互，测试弃牌步骤成功即可
+    });
+
+    it('从弃牌堆额外打出时应直接落场，不额外发放随从额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('tdr1', 'ghost_the_dead_rise', '0', 'action'),
+                        makeCard('dc1', 'pirate_cannon', '0', 'action'),
+                        makeCard('dc2', 'pirate_broadside', '0', 'action'),
+                    ],
+                    discard: [
+                        makeCard('disc-m1', 'giant_ant_worker', '0', 'minion'),
+                    ],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    factions: ['ghosts', 'giant_ants'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tdr1' },
+        }, 'dead_rise immediate extra step1');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const discardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'dc1');
+        const r2 = respond(r1.finalState, '0', discardOpt, 'dead_rise immediate extra step2');
+
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const minionOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r3 = respond(r2.finalState, '0', minionOpt, 'dead_rise immediate extra step3');
+
+        const choice3 = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        const baseOpt = findOption(choice3, (o: any) => o.value?.baseIndex === 1);
+        const r4 = respond(r3.finalState, '0', baseOpt, 'dead_rise immediate extra step4');
+
+        expect(r4.steps[0]?.success).toBe(true);
+
+        const player = r4.finalState.core.players['0'];
+        expect(player.discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(player.hand.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(r4.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+        expect(player.minionLimit).toBe(1);
+        expect(player.minionsPlayed).toBe(0);
+
+        const limitEvents = r4.steps.flatMap(step => step.events).filter(
+            (event: any) => event.type === SU_EVENTS.LIMIT_MODIFIED,
+        );
+        expect(limitEvents).toHaveLength(0);
     });
 });
 
@@ -2497,5 +2707,50 @@ describe('stale move regression: bear cavalry interaction chains', () => {
         expect(handler).toBeDefined();
         const resolved = handler!(makeFullMatchState(staleCore), '0', { baseIndex: 1 }, (chooseBase as any).data, handlerRandom, 3003);
         expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('bear_cavalry_bear_rides_you_pod_choose_base: 压制选项包含新基地上的基地牌与随从牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('bry-pod-1', 'bear_cavalry_bear_rides_you_pod', '0', 'action')],
+                    factions: ['bear_cavalry', 'miskatonic_university'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [makeMinion('my-m1', 'bear_cavalry_cub_scout', '0', 3)]),
+                makeBase('base_central_brain', [makeMinion('enemy-lib', 'miskatonic_librarian', '1', 4)]),
+            ],
+        });
+        const state = makeFullMatchState(core);
+
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'bry-pod-1' },
+        }, 'bear_rides_you_pod step1');
+        const chooseMinion = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const r2 = respond(r1.finalState, '0', findOption(chooseMinion, (o: any) => o.value?.minionUid === 'my-m1'), 'bear_rides_you_pod step2');
+        const chooseBase = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const r3 = respond(r2.finalState, '0', findOption(chooseBase, (o: any) => o.value?.baseIndex === 1), 'bear_rides_you_pod step3');
+
+        expect(r3.steps[0]?.success).toBe(true);
+        const chooseSuppress = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        expect(chooseSuppress.sourceId).toBe('bear_cavalry_bear_rides_you_pod_choose_suppress');
+
+        const baseOption = chooseSuppress.options.find((o: any) => o.value?.kind === 'base');
+        expect(baseOption?.value?.baseDefId).toBe('base_central_brain');
+        expect(baseOption?.displayMode).toBe('card');
+
+        const enemyOption = chooseSuppress.options.find((o: any) => o.value?.kind === 'minion' && o.value?.minionUid === 'enemy-lib');
+        expect(enemyOption?.value?.minionDefId).toBe('miskatonic_librarian');
+        expect(enemyOption?.displayMode).toBe('card');
+
+        const movedMinionOption = chooseSuppress.options.find((o: any) => o.value?.kind === 'minion' && o.value?.minionUid === 'my-m1');
+        expect(movedMinionOption?.value?.minionDefId).toBe('bear_cavalry_cub_scout');
+
+        const skipOption = chooseSuppress.options.find((o: any) => o.value?.kind === 'skip');
+        expect(skipOption?.displayMode).toBe('button');
     });
 });

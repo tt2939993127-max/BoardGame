@@ -12,6 +12,7 @@ import { getBaseDef } from '../data/cards';
 import { isMicrobot } from '../domain/utils';
 import type { PlayerId } from '../../../engine/types';
 import { registerKillerPlantModifiers as registerKillerPlantAbilitiesModifiers } from './killer_plants';
+import { isBaseAbilitySuppressed } from '../domain/ongoingEffects';
 
 // ============================================================================
 // 辅助函数
@@ -236,6 +237,15 @@ function registerElderThingModifiers(): void {
     // 邓威奇恐怖（ongoing 行动卡附着在随从上）：每张 +5 力量
     registerOngoingPowerModifier('elder_thing_dunwich_horror', 'minion', 'self', 5);
 }
+
+// ============================================================================
+// 吸血鬼派系
+// ============================================================================
+
+function registerVampireModifiers(): void {
+    // Dinner Date POD（ongoing 行动卡附着在随从上）：附着随从 -2 力量
+    registerOngoingPowerModifier('vampire_dinner_date', 'minion', 'self', -2);
+}
 // ============================================================================
 // 基地持续力量修正
 // ============================================================================
@@ -243,6 +253,9 @@ function registerElderThingModifiers(): void {
 function registerBaseModifiers(): void {
     // 通用基地持续力量加成：从 BaseCardDef.minionPowerBonus 数据驱动
     registerPowerModifier('base_minionPowerBonus', (ctx: PowerModifierContext) => {
+        if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) {
+            return 0;
+        }
         const baseDef = getBaseDef(ctx.base.defId);
         return baseDef?.minionPowerBonus ?? 0;
     }, { handlesPodInternally: true }); // 标记已处理 POD（通用修正器，不需要 POD 别名）
@@ -268,5 +281,6 @@ export function registerAllOngoingModifiers(): void {
     registerSteampunkModifiers();
     registerBearCavalryModifiers();
     registerElderThingModifiers();
+    registerVampireModifiers();
     registerWerewolfModifiers();
 }

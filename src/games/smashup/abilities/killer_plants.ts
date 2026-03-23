@@ -148,18 +148,15 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                     return {
                         id: `minion-${idx}`,
                         label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`,
-                        value: { cardUid: c.uid, defId: c.defId, displayMode: 'card' },
+                        value: { cardUid: c.uid, defId: c.defId },
                         displayMode: 'card' as const
                     };
                 });
                 options.push({ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const } as any);
                 const interaction = createSimpleChoice(
                     `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
-                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options as any[], 'killer_plant_sprout_search',
+                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options as any[], { sourceId: 'killer_plant_sprout_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
                 );
-                (interaction.data as any).targetType = 'generic';
-                (interaction.data as any).autoRefresh = 'deck';
-                (interaction.data as any).responseValidationMode = 'live';
                 // 传递 sprout 所在基地索引，交互处理器需要用它来锁定目标基地
                 (interaction.data as any).continuationContext = { baseIndex: sproutBaseIndex };
                 matchState = queueInteraction(matchState, interaction);
@@ -254,16 +251,14 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
         return {
             id: `minion-${idx}`,
             label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`,
-            value: { cardUid: c.uid, defId: c.defId, displayMode: 'card' },
+            value: { cardUid: c.uid, defId: c.defId },
             displayMode: 'card' as const
         };
     });
     const interaction = createSimpleChoice(
         `killer_plant_venus_man_trap_search_${ctx.now}`, ctx.playerId,
-        '维纳斯捕食者：从牌库中选择一个力量2或更低的随从打出', options as any[], 'killer_plant_venus_man_trap_search',
+        '维纳斯捕食者：从牌库中选择一个力量2或更低的随从打出', options as any[], { sourceId: 'killer_plant_venus_man_trap_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
     );
-    (interaction.data as any).targetType = 'generic';
-    (interaction.data as any).autoRefresh = 'deck';
     (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -584,3 +579,5 @@ function killerPlantEntangledDestroyTrigger(ctx: TriggerContext): SmashUpEvent[]
     }
     return events;
 }
+
+

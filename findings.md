@@ -1,9 +1,30 @@
-# Findings: Dice Throne 攻击修正持续存在问题
+# Findings: BoardGame 多线并行调查 / 修复 / 收口
+
+## 当前主任务（2026-03-22）
+- 当前已从单点问题切换为 **多线并行收口**：
+  1. 线上静态资源旧 chunk 命中 SPA fallback，返回 `200 text/html`
+  2. 房主未点销毁却被踢出并提示“房间不存在或已被删除”
+  3. feedback 主线只跟未关闭 / 待处理项
+  4. E2E 迁移主线整理下一批
+  5. 核对项目内 progress / plan / evidence 文档，作为跨会话恢复入口
+- 用户已明确：以后说 **plan**，默认指的是 `planning-with-files` 技能，而不是泛指计划文档。
+- `planning-with-files` 已安装到：`C:\Users\zhuagenbao\.openclaw\workspace\skills\planning-with-files\SKILL.md`。
 
 ## 已知事实
+- 线上静态资源故障当前最强信号不是 Host/容器整体宕机，而是旧 `/assets/*.js` 请求被错误回退成 `index.html`，表现为 `200 OK` + `Content-Type: text/html`，进而触发 `Failed to load module script` / `MIME type "text/html"`。
+- 本地已沿 `apps/api/src/main.ts` 确认过一个修复方向：把 `/assets` 排除出 SPA fallback；但是否最终落盘、验证、提交、部署，仍需下一会话复核。
+- `server.ts` 已先修过一个显式错误：重复 owner 清理链路里的 logger 调用曾报 `gameLogger.info is not a function`。
+- “房主被踢 / 房间被删”仍未闭环，需同时查服务端房间生命周期和前端状态误判链。
+- 方案 A 已确定为本次升级自恢复策略：**仅非对局页**在 chunk / dynamic import 失败时自动刷新一次；`MatchRoom` 对局页不做 silent auto reload。
+- feedback 后续默认只跟**未关闭 / 待处理**。
 - 用户反馈：`dicethrone` 中“攻击修正只要不使用攻击就一直在”。
 - 当前任务目标是“检查一下”，优先确认行为是否符合规则，再决定是否需要修复。
 - 本任务涉及游戏机制与状态链路，需要同时核对规则文档与实现。
+
+## 当前并行任务与状态
+- `codex-feedback-open-tracker`：已启动 guarded task，目标产物 `temp/open-feedback-tracker.md`。
+- `codex-e2e-migration`：已启动 guarded task，目标产物 `temp/e2e-next-batch-plan.md`。
+- `codex-find-planning-with-files`：原用于定位 plan 技能；用户后续直接给出 GitHub 地址后已人工安装技能，本任务可视为完成/失效。
 
 ## 已读规范 / 文档
 - `docs/ai-rules/engine-systems.md`

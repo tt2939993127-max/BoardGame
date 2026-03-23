@@ -16,6 +16,7 @@ import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import { resolveOnPlay } from './abilityRegistry';
 import { isMinionProtected, isMinionProtectedNonConsumable, type ProtectionType } from './ongoingEffects';
 import { collectBaseAbilityTriggers } from './baseAbilityQueue';
+import { resolveLiveBaseIndex } from './utils';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -47,6 +48,7 @@ import { getEffectivePower } from './ongoingModifiers';
 import { triggerAllBaseAbilities } from './baseAbilities';
 import { collectTriggers, fireTriggers } from './ongoingEffects';
 import { getMinionDef } from '../data/cards';
+import { drawCards } from './utils';
 
 // ============================================================================
 // 交互选项工厂函数
@@ -127,11 +129,12 @@ export function moveMinion(
     fromBaseIndex: number,
     toBaseIndex: number,
     reason: string,
-    now: number
+    now: number,
+    toBaseDefId?: string,
 ): MinionMovedEvent {
     return {
         type: SU_EVENTS.MINION_MOVED,
-        payload: { minionUid, minionDefId, fromBaseIndex, toBaseIndex, reason },
+        payload: { minionUid, minionDefId, fromBaseIndex, toBaseIndex, ...(toBaseDefId ? { toBaseDefId } : {}), reason },
         timestamp: now,
     };
 }
@@ -143,6 +146,7 @@ export function buildValidatedMoveEvents(
         minionDefId: string;
         fromBaseIndex: number;
         toBaseIndex: number;
+        toBaseDefId?: string;
         reason: string;
         now: number;
     },
@@ -150,7 +154,8 @@ export function buildValidatedMoveEvents(
     const core = 'core' in state ? state.core : state;
     const sourceBase = core.bases[params.fromBaseIndex];
     if (!sourceBase) return [];
-    const targetBase = core.bases[params.toBaseIndex];
+    const resolvedToBaseIndex = resolveLiveBaseIndex(core, params.toBaseIndex, params.toBaseDefId) ?? params.toBaseIndex;
+    const targetBase = core.bases[resolvedToBaseIndex];
     if (!targetBase) return [];
 
     const minion = sourceBase.minions.find(candidate => candidate.uid === params.minionUid);
@@ -161,9 +166,10 @@ export function buildValidatedMoveEvents(
             params.minionUid,
             minion.defId ?? params.minionDefId,
             params.fromBaseIndex,
-            params.toBaseIndex,
+            resolvedToBaseIndex,
             params.reason,
             params.now,
+            params.toBaseDefId,
         ),
     ];
 }
@@ -988,6 +994,35 @@ export function drawMadnessCards(
     };
 }
 
+export function buildStandardDrawEvents(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    count: number,
+    random: RandomFn,
+    now: number,
+): SmashUpEvent[] {
+    if (count <= 0) return [];
+    const player = state.players[playerId];
+    if (!player) return [];
+    const draw = drawCards(player, count, random);
+    const events: SmashUpEvent[] = [];
+    if (draw.reshuffledDeckUids && draw.reshuffledDeckUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: draw.reshuffledDeckUids },
+            timestamp: now,
+        } as DeckReorderedEvent);
+    }
+    if (draw.drawnUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId, count: draw.drawnUids.length, cardUids: draw.drawnUids },
+            timestamp: now,
+        } as CardsDrawnEvent);
+    }
+    return events;
+}
+
 /**
  * 生成返回疯狂卡事件
  * 
@@ -1013,7 +1048,8 @@ export function returnMadnessCard(
 export function hasCthulhuExpansionFaction(players: Record<string, { factions: [string, string] }>): boolean {
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(f)) return true;
+            const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
+            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
         }
     }
     return false;
