@@ -966,13 +966,15 @@ export function fireTriggers(
         if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
         
         const filteredState = getSuppressionFilteredStateForSource(state, entry.sourceDefId);
-        const filteredMatchState = matchState && matchState.core === state
-            ? { ...matchState, core: filteredState }
-            : matchState;
+        const getFilteredMatchState = () => (
+            matchState && matchState.core === state
+                ? { ...matchState, core: filteredState }
+                : matchState
+        );
 
         if (entry.global) {
             if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
-            const result = entry.callback({ ...fullCtx, state: filteredState, matchState: filteredMatchState });
+            const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
             const triggerEvents = Array.isArray(result) ? result : result.events;
             if (triggerEvents.length > 0) {
                 events.push(...triggerEvents);
@@ -986,7 +988,7 @@ export function fireTriggers(
         const locatedSources = locateSources(filteredState, entry.sourceDefId);
         if (locatedSources.length === 0) {
             if (!entry.perInstance && isSourceActive(filteredState, entry.sourceDefId)) {
-                const result = entry.callback({ ...fullCtx, state: filteredState, matchState: filteredMatchState });
+                const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
                 const triggerEvents = Array.isArray(result) ? result : result.events;
                 if (triggerEvents.length > 0) {
                     events.push(...triggerEvents);
@@ -1007,7 +1009,7 @@ export function fireTriggers(
             const result = entry.callback({
                 ...fullCtx,
                 state: filteredState,
-                matchState: filteredMatchState,
+                matchState: getFilteredMatchState(),
                 sourceCardUid: located.uid,
                 sourceBaseIndex: located.baseIndex,
                 sourceControllerId: located.controllerId,
