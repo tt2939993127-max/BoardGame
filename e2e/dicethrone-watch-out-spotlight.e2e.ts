@@ -82,6 +82,129 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     }
 }
 
+async function injectPyromancerAttackModifierScene(
+    page: Page,
+    options: { sourceAbilityId?: string | null },
+): Promise<void> {
+    await page.evaluate(async ({ sourceAbilityId }) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!harness || !state) {
+            throw new Error('TestHarness state not ready');
+        }
+
+        const random = {
+            random: () => 0.5,
+            d: (max: number) => Math.min(max, 1),
+            range: (min: number) => min,
+            shuffle: <T,>(array: T[]) => [...array],
+        };
+        const [{ initHeroState }, { PYROMANCER_CARDS }] = await Promise.all([
+            import('/src/games/dicethrone/domain/characters.ts'),
+            import('/src/games/dicethrone/heroes/pyromancer/cards.ts'),
+        ]);
+        const pyromancerBase = initHeroState('0', 'pyromancer', random as any);
+        const barbarianBase = initHeroState('1', 'barbarian', random as any);
+        const redHot = PYROMANCER_CARDS.find((card: any) => card.id === 'card-red-hot');
+        if (!redHot) {
+            throw new Error('card-red-hot not found');
+        }
+
+        const nextState = {
+            ...state,
+            sys: {
+                ...state.sys,
+                phase: 'offensiveRoll',
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                },
+            },
+            core: {
+                ...state.core,
+                activePlayerId: '0',
+                hostStarted: true,
+                selectedCharacters: {
+                    ...(state.core.selectedCharacters ?? {}),
+                    '0': 'pyromancer',
+                    '1': 'barbarian',
+                },
+                rollCount: 1,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 2, isKept: false, playerId: '0' },
+                    { id: 1, value: 2, isKept: false, playerId: '0' },
+                    { id: 2, value: 3, isKept: false, playerId: '0' },
+                    { id: 3, value: 4, isKept: false, playerId: '0' },
+                    { id: 4, value: 5, isKept: false, playerId: '0' },
+                ],
+                players: {
+                    ...state.core.players,
+                    '0': {
+                        ...pyromancerBase,
+                        hand: [JSON.parse(JSON.stringify(redHot))],
+                        discard: [],
+                        resources: {
+                            ...pyromancerBase.resources,
+                            CP: 2,
+                            HP: 50,
+                        },
+                        tokens: {
+                            ...pyromancerBase.tokens,
+                            fire_mastery: 2,
+                        },
+                        pendingBonusDamage: undefined,
+                    },
+                    '1': {
+                        ...barbarianBase,
+                        resources: {
+                            ...barbarianBase.resources,
+                            HP: 50,
+                        },
+                    },
+                },
+                pendingAttack: sourceAbilityId
+                    ? {
+                        attackerId: '0',
+                        defenderId: '1',
+                        isDefendable: true,
+                        sourceAbilityId,
+                        damage: 5,
+                        bonusDamage: 0,
+                        attackModifierBonusDamage: 0,
+                        damageResolved: false,
+                        resolvedDamage: 0,
+                        preDefenseResolved: false,
+                        offensiveRollEndTokenResolved: false,
+                    }
+                    : null,
+            },
+        };
+
+        harness.state.set(nextState);
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    }, options);
+}
+
+async function waitForPyromancerAttackModifierScene(
+    page: Page,
+    options: { sourceAbilityId?: string | null },
+): Promise<void> {
+    await page.waitForFunction(({ sourceAbilityId }) => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        return state?.sys?.phase === 'offensiveRoll'
+            && state?.core?.hostStarted === true
+            && state?.core?.selectedCharacters?.['0'] === 'pyromancer'
+            && state?.core?.selectedCharacters?.['1'] === 'barbarian'
+            && state?.core?.players?.['0']?.resources?.CP === 2
+            && state?.core?.players?.['0']?.hand?.length === 1
+            && state?.core?.players?.['0']?.hand?.[0]?.id === 'card-red-hot'
+            && (sourceAbilityId
+                ? state?.core?.pendingAttack?.sourceAbilityId === sourceAbilityId
+                : state?.core?.pendingAttack == null);
+    }, options, { timeout: 30000, polling: 200 });
+}
+
 test('self watch out should show bonus die spotlight', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
@@ -379,6 +502,70 @@ test('crit bonus damage should not show attack-modifier badge', async ({ page, g
     expect(uiState.badgeCount).toBe(0);
 
     await game.screenshot('06-crit-no-attack-modifier-badge', testInfo);
+});
+
+test('attack modifier should show the correct timing prompt after invalid play', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+    await injectPyromancerAttackModifierScene(page, { sourceAbilityId: null });
+    await waitForPyromancerAttackModifierScene(page, { sourceAbilityId: null });
+
+    await page.locator('[data-card-id="card-red-hot"]').first().click();
+
+    await page.waitForFunction(() => {
+        const reject = (window as any).__BG_LAST_COMMAND_REJECTED__;
+        return reject?.error === 'attackModifierRequiresSelectedAttack';
+    }, { timeout: 10000, polling: 200 });
+
+    const timingPrompt = page.getByText(/attackModifierRequiresSelectedAttack|select an attack ability before playing this attack modifier/i).first();
+    await expect(timingPrompt).toBeVisible({ timeout: 5000 });
+
+    const rejectState = await page.evaluate(() => ({
+        reject: (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null,
+        hand: (window as any).__BG_TEST_HARNESS__?.state?.get()?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [],
+    }));
+
+    expect(rejectState.reject).toMatchObject({
+        gameId: 'dicethrone',
+        error: 'attackModifierRequiresSelectedAttack',
+        commandType: 'PLAY_CARD',
+    });
+    expect(rejectState.hand).toContain('card-red-hot');
+
+    await game.screenshot('07-attack-modifier-timing-prompt', testInfo);
+});
+
+test('selected attack should show visible attack-modifier ui above the dice tray', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+    await injectPyromancerAttackModifierScene(page, { sourceAbilityId: 'meteor' });
+    await waitForPyromancerAttackModifierScene(page, { sourceAbilityId: 'meteor' });
+    await page.locator('[data-card-id="card-red-hot"]').first().click();
+
+    await page.waitForFunction(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
+        return state?.core?.pendingAttack?.attackModifierBonusDamage === 2;
+    }, { timeout: 10000, polling: 200 });
+
+    const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
+
+    await expect(activeBadge).toBeVisible({ timeout: 5000 });
+    await expect(activeBadge).toContainText('+2', { timeout: 5000 });
+    await expect(page.locator('[data-testid="attack-modifier-bonus-badge"]')).toHaveCount(0);
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    await expectElementInsideViewport(activeBadge, 'active modifier badge', viewport!.width, viewport!.height);
+
+    await game.screenshot('08-attack-modifier-ui-visible', testInfo);
+    await activeBadge.hover();
+    await expect(page.getByText(/modifierActive\.tooltip|must be played after selecting an attack ability|attack modifier/i).first()).toBeVisible({
+        timeout: 5000,
+    });
 });
 
 test('me too copy mode should allow locked source and target dice', async ({ page, game }, testInfo) => {

@@ -111,6 +111,12 @@ export interface TriggerContext {
     /** 完整的 match 状态，用于调用 queueInteraction（触发器需要创建交互时使用） */
     matchState?: MatchState<SmashUpCore>;
     timing: TriggerTiming;
+    /** 具体触发来源的实例 uid；同名来源需要按实例结算时使用 */
+    sourceCardUid?: string;
+    /** 触发来源在触发时所在基地 */
+    sourceBaseIndex?: number;
+    /** 触发来源在触发时的控制者 */
+    sourceControllerId?: PlayerId;
     /** 触发相关的玩家 */
     playerId: PlayerId;
     /** 触发相关的基地索引 */
@@ -168,11 +174,21 @@ interface TriggerEntry {
     callback: TriggerCallback;
     optional?: boolean;
     phase?: 'replacement' | 'reaction';
+    /** true 时按场上每个来源实例单独入队/执行，而不是按 defId 聚合一次 */
+    perInstance?: boolean;
+    /** true 时要求来源必须位于当前触发对应的基地（例如计分基地上的随从） */
+    sourceScope?: 'any' | 'triggerBase';
     /**
      * Global triggers bypass the "source must be in play" witness check.
      * Use for Special cards that can be played from hand/discard when a condition happens.
      */
     global?: boolean;
+}
+
+interface TriggerSourceLocation {
+    uid?: string;
+    baseIndex?: number;
+    controllerId?: PlayerId;
 }
 
 interface InterceptorEntry {
@@ -218,7 +234,13 @@ export function registerTrigger(
     sourceDefId: string,
     timing: TriggerTiming,
     callback: TriggerCallback,
-    options?: { optional?: boolean; phase?: 'replacement' | 'reaction'; global?: boolean }
+    options?: {
+        optional?: boolean;
+        phase?: 'replacement' | 'reaction';
+        global?: boolean;
+        perInstance?: boolean;
+        sourceScope?: 'any' | 'triggerBase';
+    }
 ): void {
     // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
     if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
@@ -228,25 +250,117 @@ export function registerTrigger(
         callback,
         optional: options?.optional,
         phase: options?.phase ?? 'reaction',
+        perInstance: options?.perInstance,
+        sourceScope: options?.sourceScope ?? 'any',
         global: options?.global,
     });
     registerTriggerExecutor(sourceDefId, timing, callback);
 }
 
-function locateSource(state: SmashUpCore, sourceDefId: string): { baseIndex?: number; controllerId?: PlayerId } {
+function locateSources(state: SmashUpCore, sourceDefId: string): TriggerSourceLocation[] {
+    const locations: TriggerSourceLocation[] = [];
     for (let i = 0; i < state.bases.length; i++) {
         const base = state.bases[i];
-        if (base.defId === sourceDefId) return { baseIndex: i };
-        const ongoing = base.ongoingActions.find(o => o.defId === sourceDefId);
-        if (ongoing) return { baseIndex: i, controllerId: ongoing.ownerId };
-        const minion = base.minions.find(m => m.defId === sourceDefId);
-        if (minion) return { baseIndex: i, controllerId: minion.controller };
+        if (base.defId === sourceDefId) locations.push({ baseIndex: i });
+        for (const ongoing of base.ongoingActions.filter(o => o.defId === sourceDefId)) {
+            locations.push({ uid: ongoing.uid, baseIndex: i, controllerId: ongoing.ownerId });
+        }
+        for (const minion of base.minions.filter(m => m.defId === sourceDefId)) {
+            locations.push({ uid: minion.uid, baseIndex: i, controllerId: minion.controller });
+        }
         for (const m of base.minions) {
-            const attached = m.attachedActions?.find(a => a.defId === sourceDefId);
-            if (attached) return { baseIndex: i, controllerId: attached.ownerId };
+            for (const attached of m.attachedActions?.filter(a => a.defId === sourceDefId) ?? []) {
+                locations.push({ uid: attached.uid, baseIndex: i, controllerId: attached.ownerId });
+            }
         }
     }
-    return {};
+    for (const special of state.pendingAfterScoringSpecials ?? []) {
+        if (special.sourceDefId !== sourceDefId) continue;
+        locations.push({
+            uid: special.cardUid,
+            baseIndex: special.baseIndex,
+            controllerId: special.playerId,
+        });
+    }
+    return locations;
+}
+
+function locateSource(state: SmashUpCore, sourceDefId: string): TriggerSourceLocation {
+    return locateSources(state, sourceDefId)[0] ?? {};
+}
+
+function isTriggerSourceEligible(
+    entry: TriggerEntry,
+    timing: TriggerTiming,
+    located: TriggerSourceLocation,
+    triggerBaseIndex: number | undefined,
+): boolean {
+    if (triggerBaseIndex === undefined) return true;
+    if ((timing === 'onMinionMoved' || timing === 'onMinionAffected') && located.baseIndex !== triggerBaseIndex) {
+        return false;
+    }
+    if (entry.sourceScope === 'triggerBase' && located.baseIndex !== triggerBaseIndex) {
+        return false;
+    }
+    return true;
+}
+
+function buildTriggerId(
+    entry: TriggerEntry,
+    timing: TriggerTiming,
+    now: number,
+    order: number,
+    located: TriggerSourceLocation,
+): string {
+    if (entry.perInstance) {
+        return `${timing}:${entry.sourceDefId}:${now}:${order}`;
+    }
+    return `${timing}:${entry.sourceDefId}:${now}:${order}`;
+}
+
+function createTriggerInstance(
+    entry: TriggerEntry,
+    timing: TriggerTiming,
+    now: number,
+    order: number,
+    pid: PlayerId,
+    located: TriggerSourceLocation,
+    ctx: Omit<TriggerContext, 'timing'>,
+): TriggerInstance {
+    return {
+        id: buildTriggerId(entry, timing, now, order, located),
+        timing,
+        sourceDefId: entry.sourceDefId,
+        sourceCardUid: located.uid,
+        sourceControllerId: located.controllerId,
+        sourceBaseIndex: located.baseIndex,
+        mandatory: entry.optional ? false : true,
+        ownerPlayerId: pid,
+        witnessRequirement: 'inPlayAtTriggerTime',
+        witnessed: true,
+        baseIndex: ctx.baseIndex,
+        triggerMinionUid: ctx.triggerMinionUid,
+        triggerMinionDefId: ctx.triggerMinionDefId,
+        triggerMinionPower: (ctx as any).triggerMinionPower,
+        destroyerId: ctx.destroyerId,
+        reason: ctx.reason,
+        affectType: ctx.affectType,
+        rankings: ctx.rankings,
+        lkiMinion: ctx.triggerMinion
+            ? {
+                uid: ctx.triggerMinion.uid,
+                defId: ctx.triggerMinion.defId,
+                owner: ctx.triggerMinion.owner,
+                controller: ctx.triggerMinion.controller,
+                baseIndex: ctx.baseIndex ?? located.baseIndex ?? -1,
+                basePower: ctx.triggerMinion.basePower,
+                powerCounters: ctx.triggerMinion.powerCounters,
+                powerModifier: ctx.triggerMinion.powerModifier,
+                tempPowerModifier: ctx.triggerMinion.tempPowerModifier,
+                attachedActionDefIds: ctx.triggerMinion.attachedActions?.map(a => a.defId) ?? [],
+            }
+            : undefined,
+    };
 }
 
 /** 收集触发器为 TriggerInstance（不立即执行），用于全局反应队列 */
@@ -264,46 +378,31 @@ export function collectTriggers(
         if (entry.timing !== timing) continue;
         // Only queue reaction-phase triggers (replacement effects must remain immediate)
         if (entry.phase === 'replacement') continue;
-        const witnessed = entry.global ? isSourceInHandOrDiscard(state, entry.sourceDefId) : isSourceActive(state, entry.sourceDefId);
-        if (!witnessed) continue;
-        const located = locateSource(state, entry.sourceDefId);
-        // witness rule (base-scoped): for move-related triggers, the source must be on the destination base at trigger time
-        if ((timing === 'onMinionMoved' || timing === 'onMinionAffected') && ctx.baseIndex !== undefined) {
-            if (located.baseIndex !== ctx.baseIndex) continue;
+        if (entry.global) {
+            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
+            continue;
         }
-        triggers.push({
-            id: `${timing}:${entry.sourceDefId}:${now}:${triggers.length}`,
-            timing,
-            sourceDefId: entry.sourceDefId,
-            sourceControllerId: located.controllerId,
-            sourceBaseIndex: located.baseIndex,
-            mandatory: entry.optional ? false : true,
-            ownerPlayerId: pid,
-            witnessRequirement: 'inPlayAtTriggerTime',
-            witnessed: true,
-            baseIndex: ctx.baseIndex,
-            triggerMinionUid: ctx.triggerMinionUid,
-            triggerMinionDefId: ctx.triggerMinionDefId,
-            triggerMinionPower: (ctx as any).triggerMinionPower,
-            destroyerId: ctx.destroyerId,
-            reason: ctx.reason,
-            affectType: ctx.affectType,
-            rankings: ctx.rankings,
-            lkiMinion: ctx.triggerMinion
-                ? {
-                    uid: ctx.triggerMinion.uid,
-                    defId: ctx.triggerMinion.defId,
-                    owner: ctx.triggerMinion.owner,
-                    controller: ctx.triggerMinion.controller,
-                    baseIndex: ctx.baseIndex ?? located.baseIndex ?? -1,
-                    basePower: ctx.triggerMinion.basePower,
-                    powerCounters: ctx.triggerMinion.powerCounters,
-                    powerModifier: ctx.triggerMinion.powerModifier,
-                    tempPowerModifier: ctx.triggerMinion.tempPowerModifier,
-                    attachedActionDefIds: ctx.triggerMinion.attachedActions?.map(a => a.defId) ?? [],
-                }
-                : undefined,
-        });
+
+        const locatedSources = locateSources(state, entry.sourceDefId);
+        if (locatedSources.length === 0) {
+            if (!entry.perInstance && isSourceActive(state, entry.sourceDefId)) {
+                triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
+            }
+            continue;
+        }
+
+        if (entry.perInstance) {
+            for (const located of locatedSources) {
+                if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
+                triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
+            }
+            continue;
+        }
+
+        const located = locatedSources[0];
+        if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
+        triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
     }
 
     if (triggers.length === 0) return undefined;
@@ -343,6 +442,10 @@ export function clearOngoingEffectRegistry(): void {
     baseAbilitySuppressionRegistry.length = 0;
 }
 
+export function hasRegisteredTrigger(sourceDefId: string, timing: TriggerTiming): boolean {
+    return triggerRegistry.some(entry => entry.sourceDefId === sourceDefId && entry.timing === timing);
+}
+
 /**
  * 为所有 POD 版本的卡牌批量注册 trigger/restriction/protection 别名
  * 
@@ -378,6 +481,8 @@ export function registerPodOngoingAliases(): void {
             callback,
             optional: entry.optional,
             phase: entry.phase,
+            perInstance: entry.perInstance,
+            sourceScope: entry.sourceScope,
             global: entry.global,
         });
         mappedCount++;
@@ -388,6 +493,8 @@ export function registerPodOngoingAliases(): void {
         registerTrigger(entry.sourceDefId, entry.timing, entry.callback, {
             optional: entry.optional,
             phase: entry.phase,
+            perInstance: entry.perInstance,
+            sourceScope: entry.sourceScope,
             global: entry.global,
         });
     }
@@ -859,21 +966,59 @@ export function fireTriggers(
         if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
         
         const filteredState = getSuppressionFilteredStateForSource(state, entry.sourceDefId);
-        const isActive = entry.global
-            ? isSourceInHandOrDiscard(state, entry.sourceDefId)
-            : isSourceActive(filteredState, entry.sourceDefId);
-        if (!isActive) continue;
-
         const filteredMatchState = matchState && matchState.core === state
             ? { ...matchState, core: filteredState }
             : matchState;
-        const result = entry.callback({ ...fullCtx, state: filteredState, matchState: filteredMatchState });
-        const triggerEvents = Array.isArray(result) ? result : result.events;
-        if (triggerEvents.length > 0) {
-            events.push(...triggerEvents);
+
+        if (entry.global) {
+            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            const result = entry.callback({ ...fullCtx, state: filteredState, matchState: filteredMatchState });
+            const triggerEvents = Array.isArray(result) ? result : result.events;
+            if (triggerEvents.length > 0) {
+                events.push(...triggerEvents);
+            }
+            if (!Array.isArray(result) && result.matchState) {
+                matchState = result.matchState;
+            }
+            continue;
         }
-        if (!Array.isArray(result) && result.matchState) {
-            matchState = result.matchState;
+
+        const locatedSources = locateSources(filteredState, entry.sourceDefId);
+        if (locatedSources.length === 0) {
+            if (!entry.perInstance && isSourceActive(filteredState, entry.sourceDefId)) {
+                const result = entry.callback({ ...fullCtx, state: filteredState, matchState: filteredMatchState });
+                const triggerEvents = Array.isArray(result) ? result : result.events;
+                if (triggerEvents.length > 0) {
+                    events.push(...triggerEvents);
+                }
+                if (!Array.isArray(result) && result.matchState) {
+                    matchState = result.matchState;
+                }
+            }
+            continue;
+        }
+
+        const sourcesToExecute = entry.perInstance
+            ? locatedSources.filter(located => isTriggerSourceEligible(entry, timing, located, ctx.baseIndex))
+            : [locatedSources[0]].filter(located => isTriggerSourceEligible(entry, timing, located, ctx.baseIndex));
+        if (sourcesToExecute.length === 0) continue;
+
+        for (const located of sourcesToExecute) {
+            const result = entry.callback({
+                ...fullCtx,
+                state: filteredState,
+                matchState: filteredMatchState,
+                sourceCardUid: located.uid,
+                sourceBaseIndex: located.baseIndex,
+                sourceControllerId: located.controllerId,
+            });
+            const triggerEvents = Array.isArray(result) ? result : result.events;
+            if (triggerEvents.length > 0) {
+                events.push(...triggerEvents);
+            }
+            if (!Array.isArray(result) && result.matchState) {
+                matchState = result.matchState;
+            }
         }
     }
     

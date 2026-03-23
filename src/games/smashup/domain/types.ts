@@ -447,6 +447,8 @@ export interface TriggerInstance {
     timing: import('./ongoingEffects').TriggerTiming;
     /** defId of the triggering source (minion/action/base) */
     sourceDefId: string;
+    /** concrete source card uid when the trigger comes from an in-play card instance */
+    sourceCardUid?: string;
     /** who controls the source at trigger time (best-effort) */
     sourceControllerId?: PlayerId;
     /** base index where source is located at trigger time (best-effort) */
@@ -1400,6 +1402,7 @@ export interface SpecialAfterScoringConsumedEvent extends GameEvent<typeof SU_EV
         sourceDefId: string;
         playerId: PlayerId;
         baseIndex: number;
+        cardUid?: string;
     };
 }
 

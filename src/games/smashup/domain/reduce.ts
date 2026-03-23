@@ -594,9 +594,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { triggers } = (event as TriggerQueuedEvent).payload;
             if (!Array.isArray(triggers) || triggers.length === 0) return state;
             const prev = state.triggerQueue ?? [];
+            const seenIds = new Set(prev.map(t => t.id));
+            const deduped = triggers.filter(trigger => {
+                if (!trigger?.id || seenIds.has(trigger.id)) return false;
+                seenIds.add(trigger.id);
+                return true;
+            });
+            if (deduped.length === 0) return state;
             return {
                 ...state,
-                triggerQueue: [...prev, ...triggers],
+                triggerQueue: [...prev, ...deduped],
             };
         }
 
@@ -1706,7 +1713,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newDiscard = player.discard.filter(c => c.uid !== cardUid);
             return {
                 ...state,
-                madnessDeck: [...state.madnessDeck, MADNESS_CARD_DEF_ID],
                 players: {
                     ...state.players,
                     [playerId]: { ...player, hand: newHand, discard: newDiscard },
@@ -1837,9 +1843,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const payload = (event as SpecialAfterScoringArmedEvent).payload;
             const prev = state.pendingAfterScoringSpecials ?? [];
             const exists = prev.some(
-                p => p.sourceDefId === payload.sourceDefId
-                    && p.playerId === payload.playerId
-                    && p.baseIndex === payload.baseIndex,
+                p => payload.cardUid
+                    ? p.cardUid === payload.cardUid
+                    : p.sourceDefId === payload.sourceDefId
+                        && p.playerId === payload.playerId
+                        && p.baseIndex === payload.baseIndex,
             );
             if (exists) return state;
 
@@ -1864,9 +1872,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const payload = (event as SpecialAfterScoringConsumedEvent).payload;
             const prev = state.pendingAfterScoringSpecials ?? [];
             const next = prev.filter(
-                p => !(p.sourceDefId === payload.sourceDefId
-                    && p.playerId === payload.playerId
-                    && p.baseIndex === payload.baseIndex),
+                p => payload.cardUid
+                    ? p.cardUid !== payload.cardUid
+                    : !(p.sourceDefId === payload.sourceDefId
+                        && p.playerId === payload.playerId
+                        && p.baseIndex === payload.baseIndex),
             );
             return {
                 ...state,

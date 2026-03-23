@@ -76,6 +76,20 @@
     "card_placeholder": "Card",
     "me_first_title": "⚡ Me First!",
     "after_scoring_title": "After Scoring Response",
+    "reaction_timing": {
+      "onMinionPlayed": "After minion play",
+      "onActionPlayed": "After action play",
+      "onBaseRevealed": "After base reveal",
+      "onMinionDestroyed": "After minion destruction",
+      "onMinionMoved": "After minion movement",
+      "onMinionAffected": "After minion is affected",
+      "onMinionDiscardedFromBase": "After minion is discarded from base",
+      "onTurnEnd": "At turn end",
+      "onTurnStart": "At turn start",
+      "beforeScoring": "Before scoring",
+      "afterScoring": "After scoring",
+      "unknown": "Triggered"
+    },
     "thinking": "Thinking...",
     "loading": "Loading...",
     "reveal_hand_title": "P{{player}}'s Hand",
@@ -182,7 +196,7 @@
     "cardRecovered": "{{playerId}} recovers {{count}} cards",
     "handShuffledIntoDeck": "Shuffle {{playerId}} hand into deck",
     "madnessDrawn": "{{playerId}} draws {{count}} madness cards",
-    "madnessReturned": "{{playerId}} returns a madness card",
+    "madnessReturned": "{{playerId}} consumes a Madness card",
     "baseDeckReordered": "Base deck reordered",
     "onBase": " → {{base}}",
     "revealHand": "{{playerId}} reveals hand ({{count}} cards)",
@@ -768,7 +782,7 @@
     },
     "special_madness": {
       "name": "Madness",
-      "effectText": "Draw two cards OR return this card to the Madness deck."
+      "effectText": "Draw two cards OR consume this card."
     },
     "miskatonic_professor": {
       "name": "Professor",
@@ -780,7 +794,7 @@
     },
     "miskatonic_psychologist": {
       "name": "Psychologist",
-      "abilityText": "You may return a Madness card from your hand or discard pile to the Madness deck."
+      "abilityText": "You may consume a Madness card from your hand or discard pile."
     },
     "miskatonic_researcher": {
       "name": "Researcher",
@@ -1330,7 +1344,7 @@
     },
     "base_the_asylum": {
       "name": "The Asylum",
-      "abilityText": "After each time a minion is played here, its owner may return a Madness card from their hand to the Madness deck."
+      "abilityText": "After each time a minion is played here, its owner may consume a Madness card from their hand."
     },
     "base_innsmouth_base": {
       "name": "Innsmouth",
@@ -1342,7 +1356,7 @@
     },
     "base_miskatonic_university_base": {
       "name": "Miskatonic University",
-      "abilityText": "After this base scores, the winner may search their hand and discard pile for any number of Madness cards and return them to the Madness deck."
+      "abilityText": "After this base scores, the winner may consume any number of Madness cards from their hand and discard pile."
     },
     "base_plateau_of_leng": {
       "name": "Plateau of Leng",
@@ -2065,7 +2079,7 @@
     },
     "miskatonic_psychologist_pod": {
       "name": "Psychologist",
-      "abilityText": "Return a Madness card from your hand or discard pile to the Madness deck OR draw a Madness card from your discard pile."
+      "abilityText": "Consume a Madness card from your hand or discard pile OR draw a Madness card from your discard pile."
     },
     "miskatonic_researcher_pod": {
       "name": "Researcher",
@@ -2085,7 +2099,7 @@
     },
     "miskatonic_jinkies_pod": {
       "name": "Jinkies!",
-      "effectText": "Return up to two Madness cards from your hand and/or discard pile to the Madness deck."
+      "effectText": "Consume up to two Madness cards from your hand and/or discard pile."
     },
     "miskatonic_thats_so_crazy_pod": {
       "name": "That's So Crazy...",

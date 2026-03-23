@@ -7,9 +7,11 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PromptOverlay } from './PromptOverlay';
 import { UI_Z_INDEX } from '../../../core';
 import { SMASHUP_CARD_BACK } from '../domain/ids';
+import { MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from '../domain/types';
 
 type Props = {
     deckCount: number;
+    madnessSupplyCount?: number;
     discard: CardInstance[];
     isMyTurn: boolean;
     compactLayout?: boolean;
@@ -33,6 +35,7 @@ type Props = {
 
 export const DeckDiscardZone: React.FC<Props> = ({
     deckCount,
+    madnessSupplyCount,
     discard,
     isMyTurn,
     compactLayout = false,
@@ -48,6 +51,9 @@ export const DeckDiscardZone: React.FC<Props> = ({
 }) => {
     const { t } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
+    const clampedMadnessSupplyCount = typeof madnessSupplyCount === 'number'
+        ? Math.max(0, Math.min(MADNESS_DECK_SIZE, madnessSupplyCount))
+        : undefined;
     const stackWidth = compactLayout ? '8.6vw' : '7.5vw';
     const labelMinHeight = compactLayout ? '24px' : '20px';
     const labelFontSize = compactLayout ? '11px' : '10px';
@@ -126,6 +132,26 @@ export const DeckDiscardZone: React.FC<Props> = ({
             {/* 牌库 - 左侧 */}
             <div className="flex flex-col items-center pointer-events-auto group" data-testid="su-deck-stack">
                 <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
+                    {clampedMadnessSupplyCount !== undefined && (
+                        <div
+                            className="pointer-events-none absolute -top-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+                            data-testid="su-madness-supply"
+                            title={`疯狂牌剩余 ${clampedMadnessSupplyCount}`}
+                        >
+                            <div className="h-8 w-[22px] overflow-hidden rounded-[3px]">
+                                <CardPreview
+                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: MADNESS_CARD_DEF_ID, cardUid: 'madness-supply-preview' } }}
+                                    className="h-full w-full"
+                                />
+                            </div>
+                            <span
+                                className="whitespace-nowrap text-[11px] font-black tabular-nums text-fuchsia-100"
+                                data-testid="su-madness-supply-count"
+                            >
+                                x {clampedMadnessSupplyCount}
+                            </span>
+                        </div>
+                    )}
                     <div className="absolute inset-0 bg-slate-700 rounded-sm border border-slate-600 shadow-sm translate-x-1 -translate-y-1 rotate-1" />
                     <div className="absolute inset-0 bg-slate-800 rounded-sm border-2 border-slate-500 shadow-xl overflow-hidden z-10 transition-transform group-hover:-translate-y-2">
                         <CardPreview previewRef={SMASHUP_CARD_BACK} className="w-full h-full" />

@@ -1947,6 +1947,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             {/* NEW: Deck & Discard Zone */}
                             <DeckDiscardZone
                                 deckCount={viewMode === 'opponent' ? opponentPlayer.deck.length : myPlayer.deck.length}
+                                madnessSupplyCount={core.madnessDeck !== undefined ? core.madnessDeck.length : undefined}
                                 discard={viewMode === 'opponent' ? opponentPlayer.discard : myPlayer.discard}
                                 compactLayout={isMobileViewport}
                                 isMyTurn={isMyTurn}

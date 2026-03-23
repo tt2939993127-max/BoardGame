@@ -877,6 +877,7 @@ describe('巨蚁派系能力', () => {
                     sourceDefId: 'giant_ant_we_are_the_champions',
                     playerId: '0',
                     baseIndex: 0,
+                    cardUid: 'champ-1',
                     minionSnapshots: [
                         {
                             uid: 'm1',
