@@ -1,10 +1,13 @@
 import { createContext, useContext, useEffect, useState, useMemo, type ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { generateUUID } from '../lib/uuid';
-import { socialSocket, SOCIAL_EVENTS, type FriendStatusPayload, type FriendRequestPayload, type NewMessagePayload } from '../services/socialSocket';
+import { socialSocket, SOCIAL_EVENTS, scheduleDeferredSocialConnect, type FriendStatusPayload, type FriendRequestPayload, type NewMessagePayload } from '../services/socialSocket';
 import { AUTH_API_URL } from '../config/server';
 import type { FriendUser, FriendRequest, Conversation, Message, SearchUserResult } from '../services/social.types';
 import i18n from '../lib/i18n';
+import { createScopedLogger } from '../lib/logger';
+
+const log = createScopedLogger('SocialContext');
 
 interface SocialContextType {
     friends: FriendUser[];
@@ -12,6 +15,7 @@ interface SocialContextType {
     conversations: Conversation[];
     unreadTotal: number;
     isConnected: boolean;
+    ensureRealtimeConnection: () => void;
 
     refreshFriends: () => Promise<void>;
     refreshRequests: () => Promise<void>;
@@ -107,11 +111,18 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         }
     }, [authenticatedFetch, token, user?.id]);
 
+    const ensureRealtimeConnection = useCallback(() => {
+        if (!token) return;
+        socialSocket.connect(token);
+    }, [token]);
+
     // WebSocket 连接管理：连接生命周期只跟鉴权状态走，避免热更新触发断开
     useEffect(() => {
         if (token) {
-            socialSocket.connect(token);
-            return;
+            const cancelDeferredConnect = scheduleDeferredSocialConnect(() => {
+                socialSocket.connect(token);
+            });
+            return cancelDeferredConnect;
         }
 
         socialSocket.disconnect();
@@ -160,7 +171,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             // 收到好友请求，刷新请求列表
             refreshRequests();
             // 可以加个 Toast 通知
-            console.log('Received friend request:', payload);
+            log.info('friend_request_received', { requestId: payload.requestId, fromUserId: payload.from.id });
         };
 
         const handleNewMessage = (payload: NewMessagePayload) => {
@@ -168,7 +179,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             // 如果当前未打开该会话，增加未读数 (这里简单粗暴先刷新会话列表)
             // 理想做法是乐观更新
             refreshConversations();
-            console.log('Received new message:', payload);
+            log.info('message_received', { messageId: payload.id, fromUserId: payload.from });
         };
 
         const cleanupConnect = socialSocket.on('connect', handleConnect);
@@ -270,6 +281,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         conversations,
         unreadTotal,
         isConnected,
+        ensureRealtimeConnection,
         refreshFriends,
         refreshRequests,
         refreshConversations,
@@ -282,7 +294,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         markAsRead,
         getMessages,
     }), [
-        friends, requests, conversations, unreadTotal, isConnected,
+        friends, requests, conversations, unreadTotal, isConnected, ensureRealtimeConnection,
         refreshFriends, refreshRequests, refreshConversations,
         searchUsers, sendFriendRequest, acceptFriendRequest,
         rejectFriendRequest, deleteFriend, sendMessage, markAsRead, getMessages,

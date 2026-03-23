@@ -68,8 +68,54 @@ export const Home = () => {
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
     const { warning: toastWarning, error: toastError } = useToast();
-    const { t } = useTranslation(['lobby', 'auth']);
+    const { t, i18n } = useTranslation(['lobby', 'auth']);
+    const seoT = useMemo(() => {
+        if (typeof i18n?.getFixedT === 'function') {
+            return i18n.getFixedT('zh-CN', ['lobby', 'common']);
+        }
+        return t;
+    }, [i18n, t]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
+    const localMatchRole = useMemo(() => {
+        const latestCreds = getLatestStoredMatchCredentials();
+        if (latestCreds?.matchID) {
+            const gameName = latestCreds.gameName || 'tictactoe';
+            return {
+                matchID: latestCreds.matchID,
+                playerID: latestCreds.playerID as string,
+                credentials: latestCreds.credentials as string | undefined,
+                gameName: gameName as string,
+            };
+        }
+
+        const ownerActive = getOwnerActiveMatch();
+        const ownerKey = resolveOwnerKey(user?.id, getGuestId());
+        if (ownerActive?.matchID && isOwnerActiveMatchSuppressed(ownerActive.matchID)) {
+            clearOwnerActiveMatch(ownerActive.matchID);
+            return null;
+        }
+
+        if (ownerActive?.matchID && (!ownerActive.ownerKey || ownerActive.ownerKey === ownerKey)) {
+            return {
+                matchID: ownerActive.matchID,
+                playerID: '0',
+                credentials: undefined,
+                gameName: ownerActive.gameName,
+            };
+        }
+
+        return null;
+    }, [localStorageTick, user?.id]);
+    const myMatchRole = useMemo(() => {
+        if (!localMatchRole) {
+            return null;
+        }
+        return {
+            playerID: localMatchRole.playerID,
+            credentials: localMatchRole.credentials,
+            gameName: localMatchRole.gameName,
+        };
+    }, [localMatchRole]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
     const confirmModalIdRef = useRef<string | null>(null);
@@ -204,65 +250,28 @@ export const Home = () => {
 
     useEffect(() => {
         let cancelled = false;
-
-        const findLocalMatch = () => {
-            const latestCreds = getLatestStoredMatchCredentials();
-            if (latestCreds?.matchID) {
-                const gameName = latestCreds.gameName || 'tictactoe';
-                return {
-                    matchID: latestCreds.matchID,
-                    playerID: latestCreds.playerID as string,
-                    credentials: latestCreds.credentials as string | undefined,
-                    gameName: gameName as string,
-                };
-            }
-            const ownerActive = getOwnerActiveMatch();
-            const ownerKey = resolveOwnerKey(user?.id, getGuestId());
-            if (ownerActive?.matchID && isOwnerActiveMatchSuppressed(ownerActive.matchID)) {
-                clearOwnerActiveMatch(ownerActive.matchID);
-                return null;
-            }
-            if (ownerActive?.matchID && (!ownerActive.ownerKey || ownerActive.ownerKey === ownerKey)) {
-                return {
-                    matchID: ownerActive.matchID,
-                    playerID: '0',
-                    credentials: undefined,
-                    gameName: ownerActive.gameName,
-                };
-            }
-            return null;
-        };
         pruneStoredMatchCredentials();
 
-        const local = findLocalMatch();
-        if (!local) {
+        if (!localMatchRole) {
             setActiveMatch(null);
-            setMyMatchRole(null);
             return;
         }
 
-        setMyMatchRole({
-            playerID: local.playerID,
-            credentials: local.credentials,
-            gameName: local.gameName,
-        });
-
-        void matchApi.getMatch(local.gameName, local.matchID)
+        void matchApi.getMatch(localMatchRole.gameName, localMatchRole.matchID)
             .then(match => {
                 if (cancelled) return;
-                const stored = readStoredMatchCredentials(local.matchID);
-                const validation = validateStoredMatchSeat(stored, match.players, local.playerID);
+                const stored = readStoredMatchCredentials(localMatchRole.matchID);
+                const validation = validateStoredMatchSeat(stored, match.players, localMatchRole.playerID);
                 if (validation.shouldClear) {
-                    clearMatchCredentials(local.matchID);
-                    clearOwnerActiveMatch(local.matchID);
+                    clearMatchCredentials(localMatchRole.matchID);
+                    clearOwnerActiveMatch(localMatchRole.matchID);
                     setActiveMatch(null);
-                    setMyMatchRole(null);
                     setLocalStorageTick((t) => t + 1);
                     return;
                 }
                 setActiveMatch({
-                    matchID: local.matchID,
-                    gameName: local.gameName,
+                    matchID: localMatchRole.matchID,
+                    gameName: localMatchRole.gameName,
                     players: match.players.map((p: MatchPlayer) => ({
                         id: p.id,
                         name: p.name,
@@ -275,8 +284,8 @@ export const Home = () => {
                 // 不在这里处理 404，交给 WebSocket 监听统一处理
                 // 只设置一个临时状态，等待 WebSocket 确认
                 setActiveMatch({
-                    matchID: local.matchID,
-                    gameName: local.gameName,
+                    matchID: localMatchRole.matchID,
+                    gameName: localMatchRole.gameName,
                     players: [],
                 });
             });
@@ -284,7 +293,7 @@ export const Home = () => {
         return () => {
             cancelled = true;
         };
-    }, [localStorageTick, user]);
+    }, [localMatchRole]);
 
     const lobbyPresence = useLobbyMatchPresence({
         gameId: activeMatch?.gameName,
@@ -541,7 +550,13 @@ export const Home = () => {
         clearOwnerActiveMatch(pendingAction.matchID);
         setPendingAction(null);
         setLocalStorageTick(t => t + 1);
-    }, [activeMatch, myMatchRole, pendingAction]);
+    }, [
+        activeMatch,
+        myMatchRole,
+        pendingAction,
+        toastError,
+        toastWarning,
+    ]);
 
     const handleCancelAction = useCallback(() => {
         setPendingAction(null);
@@ -583,8 +598,9 @@ export const Home = () => {
     return (
         <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
             <SEO
-                title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
-                description={t('lobby:home.subtitle')}
+                title={activeCategory === 'All' ? undefined : seoT(`common:category.${activeCategory}`)}
+                description={seoT('lobby:home.subtitle')}
+                canonical="https://easyboardgame.top/"
             />
             <header className="w-full relative px-6 md:px-12 pt-[calc(env(safe-area-inset-top)+1.25rem)] md:pt-8 pb-0">
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}

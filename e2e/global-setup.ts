@@ -2,6 +2,7 @@ import { execSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scripts/infra/e2e-port-config.js';
+import { withWindowsHide } from '../scripts/infra/windows-hide.js';
 import {
     allocateAvailablePorts,
     cleanupAllWorkerPortFiles,
@@ -149,7 +150,7 @@ function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord
             },
             detached: true,
             stdio: ['ignore', logFd, logFd],
-            windowsHide: true,
+            ...withWindowsHide({}, process.env),
         });
     } finally {
         fs.closeSync(logFd);

@@ -78,7 +78,7 @@ export const BEAR_CAVALRY_POD_ACTIONS: ActionCardDef[] = [
         name: '黑熊口粮',
         nameEn: 'Bear Necessities',
         faction: 'bear_cavalry_pod',
-        abilityTags: ['onPlay', 'ongoing', 'talent'],
+        abilityTags: ['ongoing', 'talent'],
         count: 1,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS3, index: 14 },
     },

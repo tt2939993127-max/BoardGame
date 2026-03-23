@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
-import { FACTION_METADATA } from './factionMeta';
+import { FACTION_METADATA, getVisibleFactionMetadata } from './factionMeta';
 import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
@@ -35,10 +35,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     // 设置了 locales 字段的阵营只在指定语言界面中出现
     // 例如：原版忍者仅在 zh-CN 显示，POD 版两者都可见
     const locale = i18n.language;
-    const isDev = import.meta.env.DEV;
-    const visibleFactions = FACTION_METADATA.filter(
-        fm => (!fm.locales || fm.locales.includes(locale)) && (!fm.devOnly || isDev)
-    );
+    const visibleFactions = getVisibleFactionMetadata(locale);
 
     const handleConfirmSelect = (factionId: string) => {
         if (!isMyTurn) return;

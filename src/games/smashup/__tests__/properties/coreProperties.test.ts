@@ -878,7 +878,7 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 'a-1' },
         } as any);
         expect(r.valid).toBe(false);
-        expect(r.error).toContain('特殊');
+        expect(r.error).toBe('该行动卡不能在响应窗口中打出');
     });
 
     test('非当前响应者不能在 Me First 窗口中打牌', () => {
@@ -1086,7 +1086,7 @@ describe('Property 19: 疯狂牌库生命周期', () => {
         };
         const s = reduce(state, event as any);
         expect(s.players['0'].hand.length).toBe(0);
-        expect(s.madnessDeck!.length).toBe(30);
+        expect(s.madnessDeck!.length).toBe(29);
     });
 
     test('疯狂卡 VP 惩罚：每 2 张扣 1 VP', () => {

@@ -30,7 +30,7 @@ import { registerGhostAbilities } from '../abilities/ghosts';
 import { registerSteampunkAbilities, registerSteampunkInteractionHandlers } from '../abilities/steampunks';
 import { registerKillerPlantAbilities, registerKillerPlantInteractionHandlers } from '../abilities/killer_plants';
 import { registerInnsmouthAbilities, registerInnsmouthInteractionHandlers } from '../abilities/innsmouth';
-import { registerMiskatonicAbilities } from '../abilities/miskatonic';
+import { registerMiskatonicAbilities, registerMiskatonicInteractionHandlers } from '../abilities/miskatonic';
 
 // ============================================================================
 // 测试辅助
@@ -932,7 +932,7 @@ describe('印斯茅斯 ongoing 能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('交互响应会保留原基地索引，且目标失效时不再重复回手', () => {
+        test('真实行动牌触发路径会先选同名组，再返回所选随从', () => {
             const executor = resolveAbility('innsmouth_return_to_the_sea', 'special')!;
             const triggerMinion = makeMinion({
                 uid: 'inn-1',
@@ -959,25 +959,39 @@ describe('印斯茅斯 ongoing 能力', () => {
                 state,
                 matchState: ms,
                 playerId: '0',
-                cardUid: 'inn-1',
+                cardUid: 'return-action-1',
                 defId: 'innsmouth_return_to_the_sea',
                 baseIndex: 0,
                 random: dummyRandom,
                 now: 1000,
             });
 
-            const interaction = (result.matchState?.sys as any)?.interaction?.current;
-            expect(interaction?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
-            const firstOption = interaction?.data?.options?.find((entry: any) => entry.value?.minionUid === 'inn-1');
-            expect(firstOption?.value?.baseIndex).toBe(0);
+            const chooseGroup = (result.matchState?.sys as any)?.interaction?.current;
+            expect(chooseGroup?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
+            const firstGroup = chooseGroup?.data?.options?.find((entry: any) => entry.value?.minionDefId === 'innsmouth_the_locals');
+            expect(firstGroup?.value?.baseIndex).toBe(0);
 
             const handler = getInteractionHandler('innsmouth_return_to_the_sea');
             expect(handler).toBeDefined();
 
+            const chooseMinionResult = handler!(
+                result.matchState as any,
+                '0',
+                firstGroup.value,
+                undefined,
+                dummyRandom,
+                1001,
+            );
+            const chooseMinion = (chooseMinionResult?.state?.sys as any)?.interaction?.queue?.[0]
+                ?? (chooseMinionResult?.state?.sys as any)?.interaction?.current;
+            expect(chooseMinion?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
+            const firstMinion = chooseMinion?.data?.options?.find((entry: any) => entry.value?.minionUid === 'inn-1');
+            expect(firstMinion?.value?.baseIndex).toBe(0);
+
             const liveEvents = callHandler(handler!, {
                 state,
                 playerId: '0',
-                selectedValue: [firstOption.value],
+                selectedValue: [firstMinion.value],
                 random: dummyRandom,
                 now: 1001,
             });
@@ -1000,11 +1014,90 @@ describe('印斯茅斯 ongoing 能力', () => {
             const staleEvents = callHandler(handler!, {
                 state: staleState,
                 playerId: '0',
-                selectedValue: [firstOption.value],
+                selectedValue: [firstMinion.value],
                 random: dummyRandom,
                 now: 1002,
             });
             expect(staleEvents).toHaveLength(0);
+        });
+
+        test('名称选择交互在基地索引漂移后仍可按 baseDefId 找回当前基地', () => {
+            const executor = resolveAbility('innsmouth_return_to_the_sea', 'special')!;
+            const localsA = makeMinion({
+                uid: 'inn-1',
+                defId: 'innsmouth_the_locals',
+                controller: '0',
+                owner: '0',
+            });
+            const localsB = makeMinion({
+                uid: 'inn-2',
+                defId: 'innsmouth_the_locals',
+                controller: '0',
+                owner: '0',
+            });
+            const scout = makeMinion({
+                uid: 'scout-1',
+                defId: 'alien_scout',
+                controller: '0',
+                owner: '0',
+            });
+            const filler = makeMinion({
+                uid: 'other-1',
+                defId: 'wizard_neophyte',
+                controller: '1',
+                owner: '1',
+            });
+            const state = makeState([
+                makeBase({ defId: 'base_old', minions: [filler] }),
+                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
+            ]);
+            const ms = { core: state, sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } } } as any;
+
+            const result = executor({
+                state,
+                matchState: ms,
+                playerId: '0',
+                cardUid: 'return-sea',
+                defId: 'innsmouth_return_to_the_sea',
+                baseIndex: 1,
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            const nameInteraction = (result.matchState?.sys as any)?.interaction?.current;
+            expect(nameInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea_choose_name');
+            const localsOption = nameInteraction?.data?.options?.find(
+                (entry: any) => entry.value?.minionDefId === 'innsmouth_the_locals',
+            );
+            expect(localsOption?.value?.baseIndex).toBe(1);
+            expect(localsOption?.value?.baseDefId).toBe('base_scoring');
+
+            const chooseNameHandler = getInteractionHandler('innsmouth_return_to_the_sea_choose_name');
+            expect(chooseNameHandler).toBeDefined();
+
+            const shiftedState = makeState([
+                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
+            ]);
+            const shiftedMatchState = {
+                core: shiftedState,
+                sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } },
+            } as any;
+
+            const shiftedResult = chooseNameHandler!(
+                shiftedMatchState,
+                '0',
+                localsOption.value,
+                undefined,
+                dummyRandom,
+                1001,
+            );
+
+            const followupInteraction = shiftedResult.state.sys.interaction?.current;
+            expect(followupInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
+            expect(followupInteraction?.data?.options).toHaveLength(2);
+            expect(
+                followupInteraction?.data?.options?.every((option: any) => option.value?.baseDefId === 'base_scoring'),
+            ).toBe(true);
         });
     });
 });
@@ -1017,7 +1110,9 @@ describe('米斯卡塔尼克 新增能力', () => {
     beforeEach(() => {
         clearOngoingEffectRegistry();
         clearRegistry();
+        clearInteractionHandlers();
         registerMiskatonicAbilities();
+        registerMiskatonicInteractionHandlers();
     });
 
     describe('miskatonic_researcher: 研究员', () => {
@@ -1114,6 +1209,207 @@ describe('米斯卡塔尼克 新增能力', () => {
             // 只有 h1 这一张普通牌（skip 选项不算）
             const cardOptions = options.filter((o: any) => o.value?.cardUid);
             expect(cardOptions.length).toBe(1);
+        });
+    });
+
+    describe('miskatonic_pod: pod rule regression', () => {
+        test('researcher pod creates pod interaction', () => {
+            const base = makeBase({ minions: [makeMinion({ uid: 'm-1', defId: 'test_minion', controller: '0' })] });
+            const state = makeState([base], {
+                madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
+            });
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const executor = resolveAbility('miskatonic_researcher_pod', 'onPlay')!;
+            const result = executor({
+                state,
+                matchState: ms,
+                playerId: '0',
+                cardUid: 'res-pod-1',
+                defId: 'miskatonic_researcher_pod',
+                baseIndex: 0,
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            const current = (result.matchState?.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('miskatonic_researcher_pod');
+        });
+
+        test('researcher pod draw flow leads to minion pick and +1 counter', () => {
+            const base = makeBase({ minions: [makeMinion({ uid: 'm-1', defId: 'test_minion', controller: '0' })] });
+            const state = makeState([base], {
+                madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
+            });
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const step1 = getInteractionHandler('miskatonic_researcher_pod');
+            expect(step1).toBeDefined();
+            const step1Result = step1!(ms, '0', { draw: true }, undefined, dummyRandom, 1001);
+            const chooseMinion = (step1Result.state?.sys as any)?.interaction?.current;
+            expect(chooseMinion).toBeDefined();
+            expect(chooseMinion?.data?.sourceId).toBe('miskatonic_researcher_pod_choose_minion');
+
+            const step2 = getInteractionHandler('miskatonic_researcher_pod_choose_minion');
+            expect(step2).toBeDefined();
+            const events = callHandler(step2!, {
+                state,
+                playerId: '0',
+                selectedValue: { minionUid: 'm-1', baseIndex: 0 },
+                random: dummyRandom,
+                now: 1002,
+            });
+
+            expect(events.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
+            expect(events.some(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED)).toBe(true);
+        });
+
+        test('field trip pod options include Madness cards', () => {
+            const base = makeBase();
+            const stateWithMadness = makeState([base], {
+                players: {
+                    '0': {
+                        id: '0', vp: 0,
+                        hand: [
+                            makeCard('h1', 'test_minion_a', 'minion', '0', SMASHUP_FACTION_IDS.GHOSTS),
+                            { uid: 'mad1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' } as any,
+                        ],
+                        deck: [makeCard('d1', 'deck_action_1', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS)],
+                        discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.STEAMPUNKS] as [string, string],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS] as [string, string],
+                    },
+                },
+            });
+            const ms = { core: stateWithMadness, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const executor = resolveAbility('miskatonic_field_trip_pod', 'onPlay')!;
+            const result = executor({
+                state: stateWithMadness,
+                matchState: ms,
+                playerId: '0',
+                cardUid: 'ft-pod-1',
+                defId: 'miskatonic_field_trip_pod',
+                baseIndex: 0,
+                random: dummyRandom,
+                now: 1000,
+            });
+
+            const current = (result.matchState?.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('miskatonic_field_trip_pod');
+            const options = current?.data?.options ?? [];
+            const madnessOptions = options.filter((o: any) => o.value?.defId === MADNESS_CARD_DEF_ID);
+            expect(madnessOptions.length).toBeGreaterThan(0);
+        });
+
+        test('field trip pod draws 1 even when selecting no cards', () => {
+            const base = makeBase();
+            const state = makeState([base], {
+                players: {
+                    '0': {
+                        id: '0', vp: 0,
+                        hand: [makeCard('h1', 'test_minion_a', 'minion', '0', SMASHUP_FACTION_IDS.GHOSTS)],
+                        deck: [makeCard('d1', 'deck_action_1', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS)],
+                        discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.STEAMPUNKS] as [string, string],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS] as [string, string],
+                    },
+                },
+            });
+            const handler = getInteractionHandler('miskatonic_field_trip_pod');
+            expect(handler).toBeDefined();
+
+            const events = callHandler(handler!, {
+                state,
+                playerId: '0',
+                selectedValue: { skip: true },
+                random: dummyRandom,
+                now: 1003,
+            });
+            const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN) as any;
+            expect(drawEvt).toBeDefined();
+            expect(drawEvt.payload?.count).toBe(1);
+        });
+
+        test('things best not known pod grants temporary power, not permanent power', () => {
+            const target = makeMinion({ uid: 'target-1', defId: 'test_minion', controller: '0' });
+            const base = makeBase({ minions: [target] });
+            const state = makeState([base], {
+                madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
+            });
+            const handler = getInteractionHandler('miskatonic_things_best_not_known_pod_draw');
+            expect(handler).toBeDefined();
+
+            const events = callHandler(handler!, {
+                state,
+                playerId: '0',
+                selectedValue: { count: 2, minionUid: 'target-1', baseIndex: 0 },
+                random: dummyRandom,
+                now: 1004,
+            });
+
+            expect(events.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
+            expect(events.some(e => e.type === SU_EVENTS.TEMP_POWER_ADDED)).toBe(true);
+            expect(events.some(e => e.type === SU_EVENTS.PERMANENT_POWER_ADDED)).toBe(false);
+        });
+
+        test('librarian pod extra mode only plays Madness and marks extra action', () => {
+            const base = makeBase();
+            const state = makeState([base], {
+                players: {
+                    '0': {
+                        id: '0', vp: 0,
+                        hand: [
+                            { uid: 'mad1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' } as any,
+                            makeCard('h1', 'test_action_a', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS),
+                        ],
+                        deck: [],
+                        discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.STEAMPUNKS] as [string, string],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS] as [string, string],
+                    },
+                },
+            });
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+
+            const modeHandler = getInteractionHandler('miskatonic_librarian_pod');
+            expect(modeHandler).toBeDefined();
+            const modeResult = modeHandler!(ms, '0', { mode: 'extra' }, undefined, dummyRandom, 1005);
+            const chooseMadness = (modeResult.state?.sys as any)?.interaction?.current;
+            expect(chooseMadness).toBeDefined();
+            expect(chooseMadness?.data?.sourceId).toBe('miskatonic_librarian_pod_play_madness');
+
+            const playMadnessHandler = getInteractionHandler('miskatonic_librarian_pod_play_madness');
+            expect(playMadnessHandler).toBeDefined();
+            const events = callHandler(playMadnessHandler!, {
+                state,
+                playerId: '0',
+                selectedValue: { cardUid: 'mad1' },
+                random: dummyRandom,
+                now: 1006,
+            });
+
+            const actionPlayed = events.find(e => e.type === SU_EVENTS.ACTION_PLAYED) as any;
+            expect(actionPlayed).toBeDefined();
+            expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
+            expect(actionPlayed.payload?.isExtraAction).toBe(true);
         });
     });
 });

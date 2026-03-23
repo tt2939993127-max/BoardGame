@@ -634,13 +634,14 @@ function resolveEffectAction(
             const maxStacks = getTokenStackLimit(state, targetId, tokenId);
             const amountToAdd = action.value ?? 1;
             const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
+            const grantedAmount = Math.max(0, newTotal - currentAmount);
 
             const tokenEvent: TokenGrantedEvent = {
                 type: 'TOKEN_GRANTED',
                 payload: {
                     targetId,
                     tokenId,
-                    amount: amountToAdd,
+                    amount: grantedAmount,
                     newTotal,
                     sourceAbilityId,
                 },
@@ -951,13 +952,14 @@ function resolveConditionalEffect(
         const currentAmount = targetPlayer?.tokens[tokenId] ?? 0;
         const maxStacks = getTokenStackLimit(state, actualTargetId, tokenId);
         const newTotal = Math.min(currentAmount + value, maxStacks);
+        const grantedAmount = Math.max(0, newTotal - currentAmount);
 
         const tokenEvent: TokenGrantedEvent = {
             type: 'TOKEN_GRANTED',
             payload: {
                 targetId: actualTargetId,
                 tokenId,
-                amount: value,
+                amount: grantedAmount,
                 newTotal,
                 sourceAbilityId,
             },
@@ -978,9 +980,10 @@ function resolveConditionalEffect(
             const cur = tp?.tokens[tokenGrant.tokenId] ?? 0;
             const max = getTokenStackLimit(state, actualTarget, tokenGrant.tokenId);
             const nt = Math.min(cur + tokenGrant.value, max);
+            const grantedAmount = Math.max(0, nt - cur);
             events.push({
                 type: 'TOKEN_GRANTED',
-                payload: { targetId: actualTarget, tokenId: tokenGrant.tokenId, amount: tokenGrant.value, newTotal: nt, sourceAbilityId },
+                payload: { targetId: actualTarget, tokenId: tokenGrant.tokenId, amount: grantedAmount, newTotal: nt, sourceAbilityId },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
                 sfxKey,

@@ -146,12 +146,16 @@ const DEV_CORS_ORIGINS = [
 const CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS;
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
+const SOCKET_IO_SERVER_TRANSPORTS =
+    process.env.SOCKET_IO_ALLOW_POLLING === 'true'
+        ? ['websocket', 'polling']
+        : ['websocket'];
 
 // ============================================================================
 // 归档逻辑
 // ============================================================================
 
-let storage: MatchStorage;
+const storage: MatchStorage = hybridStorage;
 
 type OwnerMatchLookupStorage = {
     findMatchesByOwnerKey: (ownerKey: string) => Promise<Array<{ matchID: string; gameName: string }>>;
@@ -170,6 +174,10 @@ const archiveMatchResult = async ({
     gameName: string;
     gameover?: { winner?: string | number };
 }) => {
+    if (!USE_PERSISTENT_STORAGE) {
+        return;
+    }
+
     try {
         const existing = await MatchRecord.findOne({ matchID });
         if (existing) return;
@@ -238,12 +246,14 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
         engines.push(engineConfig);
     }
 
-    // UGC 游戏注册
-    const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
-        existingGameIds: manifestGameIds,
-    });
-    ugcEngines.forEach((cfg) => engines.push(cfg));
-    ugcGameIds.forEach((id) => gameIds.push(id));
+    if (USE_PERSISTENT_STORAGE) {
+        // 纯内存模式不依赖 Mongo，跳过 UGC 数据库查询，保证无库也能起服务。
+        const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
+            existingGameIds: manifestGameIds,
+        });
+        ugcEngines.forEach((cfg) => engines.push(cfg));
+        ugcGameIds.forEach((id) => gameIds.push(id));
+    }
 
     return { engines, gameIds };
 };
@@ -252,12 +262,13 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
 // 初始化
 // ============================================================================
 
-await connectDB();
+if (USE_PERSISTENT_STORAGE) {
+    await connectDB();
+} else {
+    logger.info('[GameServer] 当前以纯内存模式启动，跳过 Mongo / UGC / 排行榜归档');
+}
 const { engines: SERVER_ENGINES, gameIds: SERVER_GAME_IDS } = await buildServerEngines();
 registerSupportedGames(SERVER_GAME_IDS);
-
-// 存储层：HybridStorage 直接实现 MatchStorage 接口
-storage = hybridStorage;
 
 // 创建 Koa 应用
 const app = new Koa();
@@ -274,6 +285,7 @@ const httpServer = http.createServer(app.callback());
 // 使用 MessagePack 序列化替代 JSON，减少 20-30% 传输体积
 const io = new IOServer(httpServer, {
     parser: msgpackParser,
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
@@ -471,6 +483,53 @@ router.get('/games', async (ctx) => {
 });
 
 // POST /games/:name/create — 创建对局
+router.get('/internal/rooms', async (ctx) => {
+    const requestedGame = typeof ctx.query.gameName === 'string'
+        ? normalizeGameName(ctx.query.gameName)
+        : '';
+
+    if (requestedGame) {
+        if (!isSupportedGame(requestedGame)) {
+            ctx.throw(400, `Game ${ctx.query.gameName} not found`);
+        }
+        ctx.body = { items: await getLobbySnapshot(requestedGame) };
+        return;
+    }
+
+    ctx.body = { items: await getLobbySnapshotAll() };
+});
+
+router.delete('/internal/rooms/:matchID', async (ctx) => {
+    const matchID = String(ctx.params.matchID || '').trim();
+    if (!matchID) {
+        ctx.throw(400, 'Missing matchID');
+    }
+
+    const deleted = await destroyLobbyRoom(matchID);
+    ctx.body = { deleted, matchID };
+});
+
+router.post('/internal/rooms/bulk-delete', async (ctx) => {
+    const body = ctx.request.body as { ids?: unknown } | undefined;
+    const ids = Array.isArray(body?.ids)
+        ? body.ids
+            .filter((value): value is string => typeof value === 'string')
+            .map(value => value.trim())
+            .filter(Boolean)
+        : [];
+    const uniqueIds = Array.from(new Set(ids));
+
+    let deleted = 0;
+    for (const matchID of uniqueIds) {
+        const ok = await destroyLobbyRoom(matchID);
+        if (ok) {
+            deleted++;
+        }
+    }
+
+    ctx.body = { requested: uniqueIds.length, deleted };
+});
+
 router.post('/games/:name/create', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
     if (!gameName || !isSupportedGame(gameName)) {
@@ -567,7 +626,7 @@ router.post('/games/:name/create', async (ctx) => {
 
             // 删除旧房间并发送 MATCH_ENDED 事件
             if (ownerMatches.length > 0) {
-                gameLogger.info('清理旧房间', {
+                logger.info('cleanup_duplicate_owner_rooms', {
                     ownerKey,
                     ownerType: ownerType ?? 'unknown',
                     count: ownerMatches.length,
@@ -834,6 +893,11 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
 // GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
+    if (!USE_PERSISTENT_STORAGE) {
+        ctx.body = { leaderboard: [] };
+        return;
+    }
+
     try {
         const records = await MatchRecord.find({ gameName });
         // 用 ownerKey 聚合（新数据），旧数据 fallback 到 name
@@ -1250,6 +1314,27 @@ const resolveGameFromMatch = (match: LobbyMatch | null): SupportedGame | null =>
     return normalized;
 };
 
+const destroyLobbyRoom = async (matchID: string): Promise<boolean> => {
+    if (!matchID) return false;
+
+    const match = await fetchLobbyMatch(matchID);
+    const indexed = matchGameIndex.get(matchID) ?? null;
+    const game = indexed || resolveGameFromMatch(match);
+
+    try {
+        await storage.wipe(matchID);
+    } catch (error) {
+        logger.warn(`[LobbyInternal] destroy room failed matchID=${matchID} error=${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+
+    if (game) {
+        emitMatchEnded(game, matchID);
+    }
+
+    return true;
+};
+
 const handleMatchCreated = async (matchID?: string, gameNameFromUrl?: string) => {
     const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
     if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
@@ -1343,6 +1428,7 @@ async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
 const lobbySocketIO = new IOServer(httpServer, {
     parser: msgpackParser,
     path: '/lobby-socket',
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],

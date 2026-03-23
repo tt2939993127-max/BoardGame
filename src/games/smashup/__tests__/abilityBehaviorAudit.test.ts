@@ -28,7 +28,7 @@ import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { getRegisteredOngoingEffectIds } from '../domain/ongoingEffects';
 import { getRegisteredModifierIds } from '../domain/ongoingModifiers';
 import type { CardDef, ActionCardDef, MinionCardDef } from '../domain/types';
-import { FACTION_METADATA } from '../ui/factionMeta';
+import { FACTION_METADATA, getVisibleFactionMetadata } from '../ui/factionMeta';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 // ============================================================================
@@ -85,6 +85,7 @@ function buildEntities(): AuditableEntity[] {
 function collectAllRegisteredIds(): Set<string> {
     const { protectionIds, restrictionIds, triggerIds, interceptorIds, baseAbilitySuppressionIds } = getRegisteredOngoingEffectIds();
     const { powerModifierIds, breakpointModifierIds } = getRegisteredModifierIds();
+    const abilityKeys = getRegisteredAbilityKeys();
     const all = new Set<string>();
     for (const id of protectionIds) all.add(id);
     for (const id of restrictionIds) all.add(id);
@@ -93,6 +94,7 @@ function collectAllRegisteredIds(): Set<string> {
     for (const id of baseAbilitySuppressionIds) all.add(id);
     for (const id of powerModifierIds) all.add(id);
     for (const id of breakpointModifierIds) all.add(id);
+    for (const key of abilityKeys) all.add(key.split('::')[0]);
     return all;
 }
 
@@ -151,6 +153,26 @@ describe('SmashUp 能力行为审计', () => {
             }
 
             expect(violations, '以下 POD 阵营存在直接接入缺口').toEqual([]);
+        });
+
+        it('POD 阵营在中英文派系选择列表里都可见', () => {
+            const podFactionIds = collectPodFactionIdsFromDataFiles();
+            const zhVisibleIds = new Set(getVisibleFactionMetadata('zh-CN').map((meta) => meta.id));
+            const enVisibleIds = new Set(getVisibleFactionMetadata('en').map((meta) => meta.id));
+
+            for (const factionId of podFactionIds) {
+                expect(zhVisibleIds.has(factionId), `zh-CN 缺少 ${factionId}`).toBe(true);
+                expect(enVisibleIds.has(factionId), `en 缺少 ${factionId}`).toBe(true);
+            }
+
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES)).toBe(false);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES_POD)).toBe(true);
+        });
+
+        it('tricksters_pod 牌组总数保持 20 张', () => {
+            const total = getFactionCards(SMASHUP_FACTION_IDS.TRICKSTERS_POD as any)
+                .reduce((sum, def) => sum + def.count, 0);
+            expect(total).toBe(20);
         });
     });
 
@@ -228,12 +250,16 @@ describe('SmashUp 能力行为审计', () => {
         });
 
         it('描述含"不受影响"的持续卡必须有 protection 注册', () => {
+            const interceptorBasedWhitelist = new Set([
+                'steampunk_steam_queen_pod',
+            ]);
             const entities = buildEntities();
             const { protectionIds } = getRegisteredOngoingEffectIds();
             const violations: string[] = [];
             for (const e of entities) {
                 if (!e.descriptionText.includes('持续')) continue;
                 if (!/不.*受.*影响|不会受到.*影响/.test(e.descriptionText)) continue;
+                if (interceptorBasedWhitelist.has(e.id)) continue;
                 if (!protectionIds.has(e.id)) {
                     violations.push(`[${e.id}]（${e.name}）缺少 protection 注册`);
                 }
@@ -282,12 +308,16 @@ describe('SmashUp 能力行为审计', () => {
         });
 
         it('描述含"随从移动到...消灭"的持续卡必须有 onMinionMoved 触发器', () => {
+            const falsePositiveWhitelist = new Set([
+                'trickster_hideout_pod',
+            ]);
             const entities = buildEntities();
             const { triggerIds } = getRegisteredOngoingEffectIds();
             const violations: string[] = [];
             for (const e of entities) {
                 if (!e.descriptionText.includes('持续')) continue;
                 if (!/随从移动到.*消灭|移动到这里.*消灭/.test(e.descriptionText)) continue;
+                if (falsePositiveWhitelist.has(e.id)) continue;
                 if (!triggerIds.get(e.id)?.includes('onMinionMoved')) {
                     violations.push(`[${e.id}]（${e.name}）缺少 onMinionMoved 触发器`);
                 }
@@ -299,6 +329,7 @@ describe('SmashUp 能力行为审计', () => {
             // 以下随从的"随从被消灭后"指的是其他随从被消灭（通过 onMinionDestroyed trigger），而非自身 onDestroy
             const triggerBasedWhitelist = new Set([
                 'vampire_the_count', // onMinionDestroyed 触发放指示物（对手随从被消灭）
+                'vampire_the_count_pod', // 同上，POD 版是持续触发而非自身 onDestroy
             ]);
             const entities = buildEntities();
             const abilityKeys = getRegisteredAbilityKeys();
@@ -347,6 +378,7 @@ describe('SmashUp 能力行为审计', () => {
             'miskatonic_lost_knowledge',  // 通往超凡的门：天赋效果由 abilityRegistry 处理（talent）
             'werewolf_leader_of_the_pack', // 狼群领袖：ongoing(minion)+talent 由 abilityRegistry 处理
             'werewolf_moontouched',       // 月之触：ongoing(minion)+talent 由 abilityRegistry 处理
+            'zombie_theyre_coming_to_get_you_pod', // 通过弃牌堆出牌提供器实现，不走 ongoing 注册表
         ]);
 
         it('所有 ongoing 行动卡都有对应的效果注册', () => {

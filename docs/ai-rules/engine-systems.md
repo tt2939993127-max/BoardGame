@@ -645,6 +645,8 @@ interface SimpleChoiceConfig {
 5. **卡牌选项必须声明 `displayMode: 'card'`（强制）**。`PromptOption` 新增 `displayMode?: 'card' | 'button'` 字段，用于显式声明 UI 渲染模式。使用 `buildMinionTargetOptions()` 构建的选项已自动设置。手动构建卡牌选项时必须显式添加 `displayMode: 'card'`。UI 层对未设置 `displayMode` 的选项 fallback 到 `extractDefId` 猜测（向后兼容，但新代码禁止依赖此 fallback）。
 6. **选项代表卡牌时，`option.value` 必须包含 `defId` 字段**。UI 层从 `defId` 查找卡牌预览图。缺少 `defId` → 即使 `displayMode: 'card'` 也无法展示预览图。
 7. **配置对象形式中 `multi` 必须嵌套**：`{ sourceId, multi: { min, max } }` ✅，`{ sourceId, min, max }` ❌（`min`/`max` 作为顶层字段会被忽略）。
+8. **可能跨 `BASE_CLEARED` / `BASE_REPLACED` / 基地移除后再解决的交互，禁止只传 `baseIndex`**。如果 handler 在交互解决时还需要重新定位基地，必须同时携带稳定标识（如 `baseDefId`），并在 handler 中先按稳定标识解析活体基地，再 fallback 到仍有效的 `baseIndex`。`baseIndex` 只是当时快照位置，不是跨时序稳定标识。
+9. **`responseWindow` 与 `simple-choice` 可以并存，命令放行权必须归 `ResponseWindowSystem`**。当 `state.sys.interaction.current.kind === 'simple-choice'` 且同时存在活动 `state.sys.responseWindow.current` 时，`SimpleChoiceSystem` 不能一刀切拦截同玩家的普通非 `SYS_` 命令；此时命令是否合法必须交给 `ResponseWindowSystem` 裁决。只有在没有活动响应窗口时，`SimpleChoiceSystem` 才负责阻塞“请先完成当前选择”类普通命令。
 
 ### PromptOption.displayMode（渲染模式声明）
 
@@ -686,6 +688,17 @@ options.map(c => ({ id: c.instanceId, label: c.name, value: { instanceId: c.inst
 // ❌ 卡牌选项未声明 displayMode（依赖 UI 层猜测，新代码禁止）
 options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.defId } }))
 
+// ❌ 交互会跨基地清场/换基地，但只保存 baseIndex（基地列表收缩后会漂移）
+createSimpleChoice(id, pid, title, opts, {
+    sourceId: 'ability_id',
+    targetType: 'minion',
+})
+
+// ❌ simple-choice 与 responseWindow 并存时，由 SimpleChoiceSystem 直接拦截所有普通命令
+if (state.sys.interaction.current?.kind === 'simple-choice') {
+    return { valid: false, error: '请先完成当前选择' };
+}
+
 // ✅ 位置参数形式 + multi
 createSimpleChoice(id, pid, title, opts, sourceId, undefined, { min: 0, max: opts.length })
 
@@ -700,6 +713,21 @@ createSimpleChoice(id, pid, '选择一个随从', minionOptions, { sourceId: 'ab
 
 // ✅ 卡牌选项：displayMode + defId
 options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const }))
+
+// ✅ 交互会跨基地清场/换基地：同时带 baseIndex + baseDefId，handler 里优先按稳定标识回找
+createSimpleChoice(id, pid, '选择一个随从', minionOptions, {
+    sourceId: 'ability_id',
+    targetType: 'minion',
+})
+// option.value: { minionUid, baseIndex, baseDefId, ... }
+
+// ✅ simple-choice 与 responseWindow 并存时，让 ResponseWindowSystem 决定是否允许出响应牌
+if (
+    state.sys.interaction.current?.kind === 'simple-choice' &&
+    state.sys.responseWindow?.current
+) {
+    return validateByResponseWindow(...);
+}
 ```
 
 ---
@@ -1491,6 +1519,27 @@ else if (modifiers && modifiers.length > 0) {
 - 单元测试：`src/engine/primitives/__tests__/damageCalculation.test.ts`
 - 集成测试：`src/games/dicethrone/domain/__tests__/damage-pipeline-migration.test.ts`
 - 迁移示例：`src/games/dicethrone/domain/customActions/pyromancer.ts`
+
+---
+
+## DiceThrone Token ActiveUse Custom Action（强制）
+
+当 `TokenDef.activeUse` 的真实效果依赖 custom action，而不是 `effect.value` 本身时，必须显式声明 `activeUse.customActionId`。
+
+```ts
+activeUse: {
+  timing: ['beforeDamageDealt'],
+  consumeAmount: 1,
+  customActionId: 'shadow_thief-sneak-attack-use',
+  effect: { type: 'modifyDamageDealt', value: 0 },
+}
+```
+
+- 禁止在执行层根据 `tokenId`、当前持有者英雄、前缀拼接等隐式规则去“猜” custom action。
+- 原因：token 可以被转移、共享、复制；持有者不一定等于 token 的原始语义来源。靠持有者英雄推断会导致 token 被消耗，但 custom action 没触发。
+- 执行层规则：优先读取 `activeUse.customActionId`；只有旧定义未声明时，才允许走兼容性兜底。
+- 审计重点：`TokenDef.passiveTrigger.actions[].customActionId` 和 `TokenDef.activeUse.customActionId` 都必须纳入引用链检查与注册表校验。
+- 特别注意：`effect.value === 0` 不等于“没有效果”。如果真实效果在 custom action 里，必须显式建模，不能把语义埋在命名推断里。
 
 ---
 

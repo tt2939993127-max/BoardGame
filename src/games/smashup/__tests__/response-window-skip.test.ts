@@ -331,4 +331,89 @@ describe('响应窗口跳过逻辑', () => {
         expect(state4.sys.responseWindow?.current).toBeDefined();
         expect(state4.sys.responseWindow?.current?.currentResponderIndex).toBe(1);
     });
+    it('tail responder interaction should not close response window early', () => {
+        const runner = new GameTestRunner<SmashUpCore, any, any>({
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+            playerIds: ['0', '1'],
+            random: {
+                random: () => 0.5,
+                d: (max) => Math.ceil(max / 2),
+                range: (min, max) => Math.floor((min + max) / 2),
+                shuffle: (arr) => [...arr],
+            },
+            setup: (playerIds: PlayerId[], random: RandomFn): MatchState<SmashUpCore> => {
+                const core = SmashUpDomain.setup(playerIds, random);
+                const sys = createInitialSystemState(playerIds, smashUpSystemsForTest, undefined);
+
+                core.factionSelection = undefined;
+                sys.phase = 'scoreBases';
+
+                core.bases[0] = {
+                    defId: 'base_the_mothership',
+                    minions: Array.from({ length: 5 }, (_, i) => ({
+                        uid: `fake-${i}`,
+                        defId: 'test_minion',
+                        owner: '0' as const,
+                        controller: '0' as const,
+                        basePower: 5,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        powerCounters: 0,
+                        attachedActions: [],
+                        talentUsed: false,
+                    })),
+                    ongoingActions: [],
+                };
+
+                core.players['0'].hand = [
+                    { uid: 'card-p0', defId: 'pirate_full_sail', type: 'action', owner: '0' },
+                ];
+                core.players['1'].hand = [
+                    { uid: 'card-p1-special', defId: 'ninja_hidden_ninja', type: 'action', owner: '1' },
+                    { uid: 'card-p1-minion', defId: 'ninja_shinobi', type: 'minion', owner: '1' },
+                ];
+
+                sys.responseWindow = {
+                    current: {
+                        id: 'tail-responder-window',
+                        responderQueue: ['0', '1'],
+                        currentResponderIndex: 1,
+                        passedPlayers: ['0'],
+                        windowType: 'meFirst',
+                        sourceId: 'test',
+                        actionTakenThisRound: false,
+                        consecutivePassRounds: 0,
+                    },
+                };
+
+                return { core, sys };
+            },
+        });
+
+        const playResult = runner.dispatch('su:play_action', {
+            playerId: '1',
+            cardUid: 'card-p1-special',
+            targetBaseIndex: 0,
+        });
+
+        expect(playResult.success).toBe(true);
+
+        const stateAfterPlay = runner.getState();
+        expect(stateAfterPlay.sys.interaction?.current?.data?.sourceId).toBe('ninja_hidden_ninja');
+        expect(stateAfterPlay.sys.responseWindow?.current?.pendingInteractionId).toBeTruthy();
+
+        const playOption = stateAfterPlay.sys.interaction!.current!.data.options.find(
+            (option: any) => option.value?.cardUid === 'card-p1-minion',
+        );
+        expect(playOption).toBeDefined();
+
+        const resolveResult = runner.resolveInteraction('1', { optionId: playOption!.id });
+
+        expect(resolveResult.success).toBe(true);
+        expect(resolveResult.finalState.sys.interaction?.current).toBeUndefined();
+        expect(resolveResult.finalState.sys.responseWindow?.current).toBeDefined();
+        expect(resolveResult.finalState.sys.responseWindow?.current?.pendingInteractionId).toBeUndefined();
+        expect(resolveResult.finalState.sys.responseWindow?.current?.currentResponderIndex).toBe(0);
+    });
 });

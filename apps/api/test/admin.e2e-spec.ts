@@ -958,76 +958,140 @@ describe('Game changelog access (e2e)', () => {
     });
 });
 
-describe('AdminService.getRooms 容错', () => {
-    it('跳过异常房间并容忍旧 ownerKey 脏数据', async () => {
+describe('AdminService.getRooms compatibility', () => {
+    it('merges live room snapshots with persisted fallback data', async () => {
         const validOwnerId = new Types.ObjectId().toString();
         const ownerLean = vi.fn().mockResolvedValue([
             { _id: new Types.ObjectId(validOwnerId), username: 'owner-user' },
         ]);
         const ownerSelect = vi.fn().mockReturnValue({ lean: ownerLean });
         const userFind = vi.fn().mockReturnValue({ select: ownerSelect });
+        const roomMatchLean = vi.fn().mockResolvedValue([
+            {
+                matchID: 'legacy-room',
+                gameName: 'tictactoe',
+                metadata: {
+                    players: { '0': { name: 'legacy-player' } },
+                    setupData: {
+                        roomName: 'legacy-room',
+                        ownerKey: { legacy: true } as unknown as string,
+                    },
+                },
+                state: null,
+                createdAt: new Date('2026-03-20T10:00:00.000Z'),
+                updatedAt: new Date('2026-03-20T10:30:00.000Z'),
+            },
+        ]);
+        const roomMatchSelect = vi.fn().mockReturnValue({ lean: roomMatchLean });
+        const roomMatchFind = vi.fn().mockReturnValue({ select: roomMatchSelect });
         const cacheManager = {
             get: vi.fn(),
             set: vi.fn(),
             del: vi.fn(),
         };
         const now = Date.now();
-        const hybridStorage = {
-            listMatches: vi.fn().mockResolvedValue(['boom-room', 'legacy-room', 'good-room']),
-            fetch: vi.fn().mockImplementation(async (matchID: string) => {
-                if (matchID === 'boom-room') {
-                    throw new Error('broken metadata');
-                }
-                if (matchID === 'legacy-room') {
-                    return {
-                        metadata: {
+        const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    items: [
+                        {
+                            matchID: 'good-room',
                             gameName: 'tictactoe',
-                            players: { '0': { name: 'legacy-player' } },
-                            setupData: {
-                                roomName: 'legacy-room',
-                                ownerKey: { legacy: true } as unknown as string,
-                            },
-                            createdAt: now - 2000,
-                            updatedAt: now - 1000,
-                        },
-                    };
-                }
-                return {
-                    metadata: {
-                        gameName: 'tictactoe',
-                        players: { '0': { name: 'good-player', isConnected: true } },
-                        setupData: {
+                            players: [{ id: 0, name: 'good-player', isConnected: true }],
                             roomName: 'good-room',
                             ownerKey: `user:${validOwnerId}`,
                             ownerType: 'user',
+                            isLocked: false,
+                            createdAt: now - 5000,
+                            updatedAt: now,
                         },
-                        createdAt: now - 5000,
-                        updatedAt: now,
-                    },
-                };
-            }),
-        };
-
-        const service = new AdminService(
-            { find: userFind } as unknown as Model<UserDocument>,
-            {} as Model<FriendDocument>,
-            {} as Model<MessageDocument>,
-            {} as Model<ReviewDocument>,
-            {} as Model<MatchRecordDocument>,
-            {} as Model<RoomMatchDocument>,
-            {} as Model<UgcPackageDocument>,
-            {} as Model<UgcAssetDocument>,
-            cacheManager as unknown as Cache,
-            hybridStorage as never,
+                    ],
+                }),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                },
+            ),
         );
 
-        const result = await service.getRooms({ page: 1, limit: 10 } as never);
+        try {
+            const service = new AdminService(
+                { find: userFind } as unknown as Model<UserDocument>,
+                {} as Model<FriendDocument>,
+                {} as Model<MessageDocument>,
+                {} as Model<ReviewDocument>,
+                {} as Model<MatchRecordDocument>,
+                { find: roomMatchFind } as unknown as Model<RoomMatchDocument>,
+                {} as Model<UgcPackageDocument>,
+                {} as Model<UgcAssetDocument>,
+                cacheManager as unknown as Cache,
+            );
 
-        expect(result.total).toBe(2);
-        expect(result.items.map(item => item.matchID)).toEqual(['good-room', 'legacy-room']);
-        expect(result.items[0].ownerName).toBe('owner-user');
-        expect(result.items[1].ownerName).toBeUndefined();
-        expect(userFind).toHaveBeenCalledTimes(1);
-        expect(hybridStorage.fetch).toHaveBeenCalledTimes(3);
+            const result = await service.getRooms({ page: 1, limit: 10 } as never);
+
+            expect(result.total).toBe(2);
+            expect(result.items.map(item => item.matchID)).toEqual(['good-room', 'legacy-room']);
+            expect(result.items[0].ownerName).toBe('owner-user');
+            expect(result.items[1].ownerName).toBeUndefined();
+            expect(userFind).toHaveBeenCalledTimes(1);
+            expect(roomMatchFind).toHaveBeenCalledWith({});
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+            expect(String(fetchSpy.mock.calls[0]?.[0] ?? '')).toContain('/internal/rooms');
+        } finally {
+            fetchSpy.mockRestore();
+        }
+    });
+
+    it('falls back to persisted room records when game-server is unavailable', async () => {
+        const cacheManager = {
+            get: vi.fn(),
+            set: vi.fn(),
+            del: vi.fn(),
+        };
+        const roomMatchLean = vi.fn().mockResolvedValue([
+            {
+                matchID: 'mongo-room',
+                gameName: 'smashup',
+                metadata: {
+                    players: {
+                        '0': { name: 'mongo-player', isConnected: false },
+                    },
+                    setupData: {
+                        roomName: 'mongo fallback room',
+                    },
+                },
+                state: null,
+                createdAt: new Date('2026-03-20T10:00:00.000Z'),
+                updatedAt: new Date('2026-03-20T11:00:00.000Z'),
+            },
+        ]);
+        const roomMatchSelect = vi.fn().mockReturnValue({ lean: roomMatchLean });
+        const roomMatchFind = vi.fn().mockReturnValue({ select: roomMatchSelect });
+        const userLean = vi.fn().mockResolvedValue([]);
+        const userSelect = vi.fn().mockReturnValue({ lean: userLean });
+        const userFind = vi.fn().mockReturnValue({ select: userSelect });
+        const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED'));
+
+        try {
+            const service = new AdminService(
+                { find: userFind } as unknown as Model<UserDocument>,
+                {} as Model<FriendDocument>,
+                {} as Model<MessageDocument>,
+                {} as Model<ReviewDocument>,
+                {} as Model<MatchRecordDocument>,
+                { find: roomMatchFind } as unknown as Model<RoomMatchDocument>,
+                {} as Model<UgcPackageDocument>,
+                {} as Model<UgcAssetDocument>,
+                cacheManager as unknown as Cache,
+            );
+
+            const result = await service.getRooms({ page: 1, limit: 10 } as never);
+
+            expect(result.total).toBe(1);
+            expect(result.items.map(item => item.matchID)).toEqual(['mongo-room']);
+            expect(roomMatchFind).toHaveBeenCalledWith({});
+        } finally {
+            fetchSpy.mockRestore();
+        }
     });
 });

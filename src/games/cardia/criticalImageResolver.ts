@@ -28,6 +28,11 @@ function buildDeckWarmImages(deckVariant: string): string[] {
     ];
 }
 
+function buildDeckWarmImages(deckVariant: string): string[] {
+    void deckVariant;
+    return [];
+}
+
 /**
  * Cardia 关键图片解析器
  *

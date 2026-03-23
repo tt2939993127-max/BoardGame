@@ -83,6 +83,11 @@ async function hideDebugChrome(page: Page) {
   });
 }
 
+async function waitForHomeReady(page: Page) {
+  await page.goto('/');
+  await expect(page.locator('body')).toBeVisible();
+  await expect(page.locator('text=/cardia/i').first()).toBeVisible({ timeout: 10000 });
+}
 async function expectResponsiveLayoutStable(page: Page, options?: { requireBattlefieldCards?: boolean }) {
   const requireBattlefieldCards = options?.requireBattlefieldCards ?? true;
 
@@ -212,10 +217,9 @@ async function expectBattlefieldNotObscured(page: Page) {
 test.describe('Cardia 烟雾测试', () => {
   test('应该能够访问游戏列表页面', async ({ page }) => {
     // 访问首页
-    await page.goto('/');
+    await waitForHomeReady(page);
     
     // 等待页面加载
-    await page.waitForLoadState('networkidle');
     
     // 验证页面标题或关键元素存在
     const title = await page.title();
@@ -225,8 +229,7 @@ test.describe('Cardia 烟雾测试', () => {
   });
 
   test('应该能够看到 Cardia 游戏', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForHomeReady(page);
     
     // 查找 Cardia 游戏卡片或链接
     const cardiaElement = page.locator('text=/cardia/i').first();
@@ -241,15 +244,14 @@ test.describe('Cardia 烟雾测试', () => {
   });
 
   test('应该能够创建 Cardia 游戏房间', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForHomeReady(page);
     
     // 点击 Cardia 游戏
     const cardiaLink = page.locator('text=/cardia/i').first();
     await cardiaLink.click();
     
     // 等待导航完成
-    await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL(/cardia/i, { timeout: 10000 });
     
     // 验证 URL 包含 cardia
     const url = page.url();

@@ -425,7 +425,8 @@
   },
   "modifierActive": {
     "label": "攻击修正",
-    "tooltip": "已激活的攻击修正卡，效果将在伤害结算时触发"
+    "shortLabel": "修正",
+    "tooltip": "已激活的攻击修正牌。此类牌需在选择攻击技能后打出，效果会在本次攻击的伤害结算时触发"
   },
   "attackBonus": {
     "label": "+{{damage}} 伤害"
@@ -582,6 +583,7 @@
     "ability_not_available": "该技能当前不可用",
     "die_not_found": "找不到骰子",
     "cannot_advance_phase": "无法推进阶段",
+    "attackModifierRequiresSelectedAttack": "请先选择一个攻击技能，再打出此攻击修正牌",
     "wrongPhaseForCard": "此卡需要在特定阶段打出",
     "requireOwnTurn": "此卡只能在自己回合打出",
     "requireOpponentTurn": "此卡只能在对手回合打出",

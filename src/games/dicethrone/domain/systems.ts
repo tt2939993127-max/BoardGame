@@ -564,6 +564,42 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 }
             }
 
+            const currentAfterStepTracking = newState.sys.interaction.current;
+            if (currentAfterStepTracking?.kind === 'multistep-choice') {
+                const data = currentAfterStepTracking.data as MultistepChoiceData & {
+                    completedDieIds?: number[];
+                    meta?: { dtType?: string };
+                };
+                const isDiceInteraction = data.meta?.dtType === 'modifyDie' || data.meta?.dtType === 'selectDie';
+                if (isDiceInteraction) {
+                    const touchedDieIds = Array.from(new Set(
+                        events
+                            .filter(e => e.type === 'DIE_MODIFIED' || e.type === 'DIE_REROLLED')
+                            .map(e => {
+                                const dieId = (e.payload as { dieId?: unknown } | undefined)?.dieId;
+                                return typeof dieId === 'number' ? dieId : null;
+                            })
+                            .filter((dieId): dieId is number => dieId !== null)
+                    ));
+                    if (touchedDieIds.length > 0) {
+                        const completedDieIds = Array.from(new Set([...(data.completedDieIds ?? []), ...touchedDieIds]));
+                        newState = {
+                            ...newState,
+                            sys: {
+                                ...newState.sys,
+                                interaction: {
+                                    ...newState.sys.interaction,
+                                    current: {
+                                        ...currentAfterStepTracking,
+                                        data: { ...data, completedDieIds },
+                                    },
+                                },
+                            },
+                        };
+                    }
+                }
+            }
+
             if (newState !== state || nextEvents.length > 0) {
                 return {
                     state: newState,

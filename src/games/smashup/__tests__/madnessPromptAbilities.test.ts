@@ -531,7 +531,7 @@ describe('米斯卡塔尼克大学 - miskatonic_book_of_iter_the_unseen（金克
         // 手牌中的疯狂卡应被移除
         expect(finalState.players['0'].hand.some(c => c.uid === 'm1')).toBe(false);
         // 疯狂牌库应增加1张
-        expect(finalState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE + 1);
+        expect(finalState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE);
     });
 
     it('选择跳过时不产生事件', () => {

@@ -108,6 +108,7 @@ npm run dev
 #### 方式二：无 Docker（纯内存模式，适合快速体验）
 
 无需安装 Docker 和 MongoDB，对局数据存在内存中，重启后丢失。
+该模式会自动跳过排行榜归档、UGC 动态注册等依赖 Mongo 的能力。
 
 ```bash
 npm run dev:lite

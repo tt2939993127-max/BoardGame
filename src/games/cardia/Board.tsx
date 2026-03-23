@@ -30,6 +30,7 @@ import { CARDIA_EVENTS } from './domain/events';
 import { exposeDebugTools } from './debug';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
+import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
 
 type Props = GameBoardProps<CardiaCore>;
@@ -599,7 +600,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 />
                 
                 <div
-                    className={
+                    className={`cardia-board-shell cardia-main-stack ${
                         deviceType === 'tight-landscape'
                             ? 'relative flex h-full min-h-0 w-full flex-row gap-1 p-1'
                             : deviceType === 'phone-portrait'
@@ -609,14 +610,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                                 : deviceType === 'tablet-landscape'
                                   ? 'relative flex h-full min-h-0 w-full flex-col gap-2 p-2 pb-[var(--cardia-reserved-bottom)] lg:gap-3 lg:p-3 lg:pb-3'
                                 : 'relative flex h-full min-h-0 w-full flex-col gap-4 p-4'
-                    }
+                    }`}
                 >
                     {/* 对手区域（顶部 / 横屏左栏） */}
-                    <div className={
+                    <div className={`cardia-top-row ${
                         deviceType === 'tight-landscape'
                             ? 'flex w-[4.8rem] min-w-[4.8rem] flex-shrink-0 flex-col justify-between gap-2 py-1'
                             : 'flex flex-shrink-0 flex-wrap items-start gap-1.5 sm:gap-3 md:gap-4'
-                    }>
+                    }`}>
                         {/* 对手弃牌堆 */}
                         <div className="flex-shrink-0">
                             <div className="mb-0.5 text-center text-[10px] text-gray-400 sm:text-xs">{t('discard')}</div>
@@ -709,7 +710,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             <div
                                 data-testid="cardia-battlefield"
                                 data-tutorial-id="cardia-battlefield"
-                                className="absolute inset-x-0 top-0 bottom-[clamp(7.6rem,27dvh,9.2rem)] flex items-center justify-start overflow-x-auto overflow-y-visible px-3 pt-[4.6rem]"
+                                className="cardia-battlefield absolute inset-x-0 top-0 bottom-[clamp(7.6rem,27dvh,9.2rem)] flex items-center justify-start overflow-x-auto overflow-y-visible px-3 pt-[4.6rem]"
                             >
                                 <EncounterSequence
                                     myPlayer={myPlayer}
@@ -760,7 +761,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             <div
                                 data-testid="cardia-battlefield"
                                 data-tutorial-id="cardia-battlefield"
-                                className={
+                                className={`cardia-battlefield ${
                                     deviceType === 'phone-portrait'
                                         ? 'relative flex min-h-[7.5rem] flex-1 items-center justify-start overflow-x-auto overflow-y-visible px-1 py-0.5 pr-10'
                                         : deviceType === 'tablet-portrait'
@@ -768,7 +769,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                                         : deviceType === 'tablet-landscape'
                                           ? 'relative flex min-h-[10rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-3 py-1'
                                         : 'relative flex min-h-[12rem] flex-1 items-center justify-center overflow-x-auto overflow-y-visible px-4 py-2'
-                                }
+                                }`}
                             >
                                 <EncounterSequence
                                     myPlayer={myPlayer}
@@ -795,7 +796,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             {/* 我的区域（底部） */}
                             <div
                                 data-testid="cardia-player-zone"
-                                className={
+                                className={`cardia-bottom-row ${
                                     deviceType === 'phone-portrait'
                                         ? 'absolute inset-x-1 bottom-1 z-10 flex items-end gap-1.5'
                                         : deviceType === 'tablet-portrait'
@@ -803,7 +804,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                                         : deviceType === 'tablet-landscape'
                                           ? 'flex flex-shrink-0 items-end gap-3 lg:gap-4'
                                         : 'flex flex-shrink-0 items-end gap-4'
-                                }
+                                }`}
                                 style={playerZoneWrapperStyle}
                             >
                         {/* 我的弃牌堆 */}
@@ -953,13 +954,13 @@ const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets, dev
     const isCompact = deviceType === 'phone-portrait';
     
     return (
-        <div className={isCompact
+        <div className={`cardia-info-bar ${isCompact
             ? 'rounded-lg border border-white/10 bg-black/35 px-2 py-1 backdrop-blur-md'
-            : 'rounded-lg border border-white/10 bg-black/35 px-2.5 py-2 backdrop-blur-md sm:px-3 sm:py-2.5 lg:px-4'}
+            : 'rounded-lg border border-white/10 bg-black/35 px-2.5 py-2 backdrop-blur-md sm:px-3 sm:py-2.5 lg:px-4'}`}
         >
-            <div className={isCompact
+            <div className={`cardia-info-row ${isCompact
                 ? 'flex items-center justify-between gap-2'
-                : 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between'}
+                : 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between'}`}
             >
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
                     <div className={isCompact ? 'truncate text-xs font-bold text-white' : 'truncate text-sm font-bold text-white sm:text-base'}>
@@ -973,9 +974,9 @@ const PlayerInfoBar: React.FC<PlayerInfoBarProps> = ({ player, totalSignets, dev
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
-                <div className={isCompact
+                <div className={`cardia-info-meta ${isCompact
                     ? 'flex flex-wrap items-center justify-end gap-1.5 text-[9px] text-gray-300'
-                    : 'grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] text-gray-300 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4 sm:text-sm'}
+                    : 'grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] text-gray-300 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4 sm:text-sm'}`}
                 >
                     <div>✋ {t('hand')}: {player.hand.length}</div>
                     <div>📚 {t('deck')}: {player.deck.length}</div>
@@ -1048,7 +1049,7 @@ const EncounterSequence: React.FC<EncounterSequenceProps> = ({ myPlayer, opponen
         : 'gap-4';
     
     return (
-        <div className={`flex w-max snap-x snap-mandatory ${deviceType === 'tight-landscape' ? 'items-start justify-start pl-12 pr-10' : 'items-center'} px-1 sm:px-2 ${gapClass}`}>
+        <div className={`cardia-encounter-sequence flex w-max snap-x snap-mandatory ${deviceType === 'tight-landscape' ? 'items-start justify-start pl-12 pr-10' : 'items-center'} px-1 sm:px-2 ${gapClass}`}>
             <CardListTransition>
                 {encounters.map((encounter) => (
                     <CardTransition key={encounter.encounterIndex} cardUid={`encounter-${encounter.encounterIndex}`} type="field">
@@ -1128,7 +1129,7 @@ const EncounterPair: React.FC<EncounterPairProps> = ({ encounter, isLatest, myPl
     const compactGapClass = deviceType === 'tight-landscape' ? 'gap-0.5' : 'gap-1 sm:gap-2';
     
     return (
-        <div className={`relative flex snap-center flex-col items-center ${compactGapClass}`}>
+        <div className={`cardia-encounter-pair relative flex snap-center flex-col items-center ${compactGapClass}`}>
             {/* 对手卡牌 */}
             <div className="relative z-10">
                 {opponentCard ? (
@@ -1269,13 +1270,13 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
     return (
         <div
             data-testid="cardia-player-area-panel"
-            className={isCompact
+            className={`cardia-player-area ${isCompact
                 ? 'rounded-lg border border-white/10 bg-black/35 px-2 py-0.5 backdrop-blur-md'
-                : 'rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-md sm:p-3 lg:p-4'}
+                : 'rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-md sm:p-3 lg:p-4'}`}
         >
-            <div className={isCompact
+            <div className={`cardia-player-header ${isCompact
                 ? 'mb-0.5 flex items-center justify-between gap-2'
-                : 'mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'}
+                : 'mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'}`}
             >
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
                     <div className={isCompact ? 'truncate text-[11px] font-bold text-white' : 'truncate text-sm font-bold text-white sm:text-base'}>
@@ -1289,9 +1290,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                         🏆 {t('signets')}: {totalSignets}
                     </div>
                 </div>
-                <div className={isCompact
+                <div className={`cardia-player-meta ${isCompact
                     ? 'flex flex-wrap items-center justify-end gap-1 text-[8px] text-gray-300'
-                    : 'grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] text-gray-300 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4 sm:text-sm'}
+                    : 'grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] text-gray-300 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4 sm:text-sm'}`}
                 >
                     <div>✋ {t('hand')}: {player.hand.length}</div>
                     <div>📚 {t('deck')}: {player.deck.length}</div>
@@ -1475,8 +1476,8 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
             
             {/* 影响力显示（左上角） */}
             {showInfluenceBadge && (
-                <div className="absolute left-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 backdrop-blur-sm sm:h-9 sm:w-9">
-                    <span className="text-sm font-bold text-white sm:text-base">{displayInfluence}</span>
+                <div className="cardia-card-badge absolute left-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 backdrop-blur-sm sm:h-9 sm:w-9">
+                    <span className="cardia-card-badge-text text-sm font-bold text-white sm:text-base">{displayInfluence}</span>
                 </div>
             )}
 
@@ -1488,13 +1489,13 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
                         event.preventDefault();
                         onMagnify(card);
                     }}
-                    className={`absolute z-20 flex items-center justify-center rounded-full border border-white/20 bg-black/75 text-white shadow-lg transition-all duration-200 hover:bg-amber-500/80 ${magnifyButtonSize.position} ${magnifyButtonSize.button} ${
+                    className={`cardia-magnify-button absolute z-20 flex items-center justify-center rounded-full border border-white/20 bg-black/75 text-white shadow-lg transition-all duration-200 hover:bg-amber-500/80 ${magnifyButtonSize.position} ${magnifyButtonSize.button} ${
                         isTouchDevice ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
                     }`}
                     title="查看大图"
                     type="button"
                 >
-                    <svg className={`fill-current ${magnifyButtonSize.icon}`} viewBox="0 0 20 20">
+                    <svg className={`cardia-magnify-icon fill-current ${magnifyButtonSize.icon}`} viewBox="0 0 20 20">
                         <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
                     </svg>
                 </button>
@@ -1502,7 +1503,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
             
             {/* 修正标记显示（右上角） */}
             {modifierTotal !== 0 && (
-                <div className={`absolute top-1 right-1 ${
+                <div className={`cardia-modifier-badge absolute top-1 right-1 ${
                     modifierTotal > 0 ? 'bg-green-500' : 'bg-red-500'
                 } rounded-full px-1 py-0.5 text-[10px] font-bold text-white shadow-lg sm:px-1.5 sm:text-xs`}>
                     {modifierTotal > 0 ? '+' : ''}{modifierTotal}
@@ -1511,7 +1512,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
             
             {/* 持续能力标记（右上角，如果没有修正标记则显示在这里） */}
             {card.ongoingMarkers && card.ongoingMarkers.length > 0 && (
-                <div className={`absolute ${modifierTotal !== 0 ? 'top-10' : 'top-1'} right-1 flex items-center gap-0.5 rounded-full bg-purple-500 px-1 py-0.5 text-[10px] text-white shadow-lg sm:px-1.5 sm:text-xs`}>
+                <div className={`absolute ${modifierTotal !== 0 ? 'cardia-ongoing-badge--offset top-10' : 'top-1'} right-1 flex items-center gap-0.5 rounded-full bg-purple-500 px-1 py-0.5 text-[10px] text-white shadow-lg sm:px-1.5 sm:text-xs`}>
                     <span>🔄</span>
                     {card.ongoingMarkers.length > 1 && (
                         <span className="font-bold">×{card.ongoingMarkers.length}</span>
@@ -1523,7 +1524,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
             {card.signets > 0 && (
                 <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5">
                     {Array.from({ length: card.signets }).map((_, i) => (
-                        <div key={i} className="h-3 w-3 rounded-full border border-yellow-600 bg-yellow-400 shadow sm:h-4 sm:w-4" />
+                        <div key={i} className="cardia-signet-dot h-3 w-3 rounded-full border border-yellow-600 bg-yellow-400 shadow sm:h-4 sm:w-4" />
                     ))}
                 </div>
             )}

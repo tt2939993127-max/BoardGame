@@ -4,11 +4,13 @@
  */
 
 import type { ValidationResult, PlayerId } from '../../../engine/types';
+import type { InteractionDescriptor as EngineInteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type {
     InteractionDescriptor,
     DiceThroneCore,
     DiceThroneCommand,
     TurnPhase,
+    DtResponseWindowType,
     RollDiceCommand,
     ToggleDieLockCommand,
     ConfirmRollCommand,
@@ -48,6 +50,7 @@ import {
     checkPlayCard,
     checkPlayUpgradeCard,
     getAvailableAbilityIds,
+    isCardPlayableInResponseWindow,
 } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
@@ -60,11 +63,39 @@ import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
 const ok = (): ValidationResult => ({ valid: true });
 const fail = (error: string): ValidationResult => ({ valid: false, error });
 const SELECTABLE_CHARACTER_ID_SET = new Set<string>(DICETHRONE_CHARACTER_CATALOG.map(character => character.id));
+type PendingInteractionLike = InteractionDescriptor | EngineInteractionDescriptor;
+
+type DiceInteractionMeta = {
+    dtType?: string;
+    selectCount?: number;
+};
+
+type MultistepInteractionData = {
+    meta?: DiceInteractionMeta;
+    completedDieIds?: number[];
+};
 
 const isCommandType = <TType extends DiceThroneCommand['type']>(
     command: DiceThroneCommand,
     type: TType
 ): command is Extract<DiceThroneCommand, { type: TType }> => command.type === type;
+
+const isEngineInteractionDescriptor = (
+    interaction: PendingInteractionLike
+): interaction is EngineInteractionDescriptor<MultistepInteractionData> =>
+    'kind' in interaction && 'data' in interaction;
+
+const getMultistepInteractionData = (
+    pendingInteraction: PendingInteractionLike | undefined
+): MultistepInteractionData | null => {
+    if (!pendingInteraction || !isEngineInteractionDescriptor(pendingInteraction)) {
+        return null;
+    }
+    if (pendingInteraction.kind !== 'multistep-choice') {
+        return null;
+    }
+    return (pendingInteraction.data ?? {}) as MultistepInteractionData;
+};
 
 /**
  * 验证掷骰命令
@@ -463,7 +494,8 @@ const validatePlayCard = (
     state: DiceThroneCore,
     cmd: PlayCardCommand,
     playerId: PlayerId,
-    phase: TurnPhase
+    phase: TurnPhase,
+    responseWindowType?: DtResponseWindowType
 ): ValidationResult => {
     const actingPlayerId = playerId;
 
@@ -511,6 +543,16 @@ const validatePlayCard = (
             reason: checkResult.reason,
         });
         return fail(checkResult.reason);
+    }
+
+    if (responseWindowType && !isCardPlayableInResponseWindow(state, actingPlayerId, card, responseWindowType, phase)) {
+        console.warn('[validatePlayCard] 验证失败 - 卡牌不允许在当前响应窗口中打出:', {
+            playerId: actingPlayerId,
+            cardId: card.id,
+            responseWindowType,
+            currentPhase: phase,
+        });
+        return fail('wrongPhaseForCard');
     }
     
     return ok();
@@ -661,6 +703,77 @@ const validateRerollDie = (
 /**
  * 验证移除状态效果命令
  */
+const validateModifyDieStrict = (
+    state: DiceThroneCore,
+    cmd: ModifyDieCommand,
+    playerId: PlayerId,
+    pendingInteraction?: PendingInteractionLike
+): ValidationResult => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+
+    const interactionData = getMultistepInteractionData(pendingInteraction);
+    const isLegacyModifyInteraction = !interactionData && pendingInteraction.type === 'modifyDie';
+    if (!interactionData && !isLegacyModifyInteraction) {
+        return fail('invalid_modify_die_interaction');
+    }
+
+    const completedDieIds = interactionData?.completedDieIds ?? [];
+    const selectCount = interactionData?.meta?.selectCount ?? pendingInteraction.selectCount ?? 1;
+    const isAlreadyModifiedDie = completedDieIds.includes(cmd.payload.dieId);
+    if (!isAlreadyModifiedDie && completedDieIds.length >= selectCount) {
+        return fail('modify_die_limit_reached');
+    }
+
+    const die = state.dice.find(d => d.id === cmd.payload.dieId);
+    if (!die) {
+        return fail('die_not_found');
+    }
+    if (cmd.payload.newValue < 1 || cmd.payload.newValue > 6) {
+        return fail('invalid_die_value');
+    }
+    return ok();
+};
+
+const validateRerollDieStrict = (
+    state: DiceThroneCore,
+    cmd: RerollDieCommand,
+    playerId: PlayerId,
+    pendingInteraction?: PendingInteractionLike
+): ValidationResult => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+
+    const interactionData = getMultistepInteractionData(pendingInteraction);
+    const legacyInteractionType = (pendingInteraction as { type?: string }).type;
+    const isLegacyRerollInteraction = !interactionData
+        && (legacyInteractionType === 'selectDie' || legacyInteractionType === 'rerollDie');
+    if (!interactionData && !isLegacyRerollInteraction) {
+        return fail('invalid_reroll_die_interaction');
+    }
+
+    const completedDieIds = interactionData?.completedDieIds ?? [];
+    const selectCount = interactionData?.meta?.selectCount ?? pendingInteraction.selectCount ?? 1;
+    const isAlreadyRerolledDie = completedDieIds.includes(cmd.payload.dieId);
+    if (!isAlreadyRerolledDie && completedDieIds.length >= selectCount) {
+        return fail('reroll_die_limit_reached');
+    }
+
+    const die = state.dice.find(d => d.id === cmd.payload.dieId);
+    if (!die) {
+        return fail('die_not_found');
+    }
+    return ok();
+};
+
 const validateRemoveStatus = (
     _state: DiceThroneCore,
     _cmd: RemoveStatusCommand,
@@ -990,7 +1103,8 @@ export const validateCommand = (
     state: DiceThroneCore,
     command: DiceThroneCommand,
     phase: TurnPhase,
-    pendingInteraction?: InteractionDescriptor
+    pendingInteraction?: PendingInteractionLike,
+    responseWindowType?: DtResponseWindowType
 ): ValidationResult => {
     if (command.type.startsWith('SYS_')) {
         return ok();
@@ -1006,7 +1120,7 @@ export const validateCommand = (
     if (isCommandType(command, 'SELL_CARD')) return validateSellCard(state, command, playerId, phase);
     if (isCommandType(command, 'UNDO_SELL_CARD')) return validateUndoSellCard(state, command, playerId, phase);
     if (isCommandType(command, 'REORDER_CARD_TO_END')) return validateReorderCardToEnd(state, command, playerId);
-    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId, phase);
+    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId, phase, responseWindowType);
     if (isCommandType(command, 'PLAY_UPGRADE_CARD')) return validatePlayUpgradeCard(state, command, playerId, phase);
     if (isCommandType(command, 'RESOLVE_CHOICE')) return validateResolveChoice(state, command, playerId);
     if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId, phase);
@@ -1014,8 +1128,8 @@ export const validateCommand = (
     if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId, phase);
     if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId, phase);
     if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
-    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId, pendingInteraction);
-    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDieStrict(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDieStrict(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId, pendingInteraction);

@@ -476,6 +476,7 @@ export type CardPlayFailReason =
     | 'notEnoughCp'                // CP 不足
     | 'unknownCardTiming'          // 未知卡牌时机
     | 'wrongPhaseForCard'          // 卡牌需要特定阶段（进攻/防御）
+    | 'attackModifierRequiresSelectedAttack' // 攻击修正牌需要先选定攻击技能
     | 'requireOwnTurn'             // 卡牌需要在自己回合打出
     | 'requireOpponentTurn'        // 卡牌需要在对手回合打出
     | 'requireIsRoller'            // 卡牌需要是当前投掷方
@@ -489,14 +490,20 @@ export type CardPlayFailReason =
     | 'requireMinDamageDealt'      // 本回合未造成足够伤害
     | 'noStatusOnBoard';           // 场上没有任何状态效果或 token
 
-const isAttackModifierPlayableForCurrentAttack = (
+const getAttackModifierPlayFailureReason = (
     state: DiceThroneCore,
     playerId: PlayerId,
     card: AbilityCard
-): boolean => {
-    if (!card.isAttackModifier) return true;
+): CardPlayFailReason | null => {
+    if (!card.isAttackModifier) return null;
     const pendingAttack = state.pendingAttack;
-    return Boolean(pendingAttack && pendingAttack.attackerId === playerId);
+    if (!pendingAttack?.sourceAbilityId) {
+        return 'attackModifierRequiresSelectedAttack';
+    }
+    if (pendingAttack.attackerId !== playerId) {
+        return 'wrongPhaseForCard';
+    }
+    return null;
 };
 
 /**
@@ -596,8 +603,9 @@ export const checkPlayCard = (
         return { ok: false, reason: 'notEnoughCp' };
     }
 
-    if (!isAttackModifierPlayableForCurrentAttack(state, playerId, card)) {
-        return { ok: false, reason: 'wrongPhaseForCard' };
+    const attackModifierFailureReason = getAttackModifierPlayFailureReason(state, playerId, card);
+    if (attackModifierFailureReason) {
+        return { ok: false, reason: attackModifierFailureReason };
     }
     
     // 检查卡牌的额外打出条件
@@ -835,7 +843,7 @@ export const isCardPlayableInResponseWindow = (
         }
     }
 
-    if (!isAttackModifierPlayableForCurrentAttack(state, playerId, card)) {
+    if (getAttackModifierPlayFailureReason(state, playerId, card)) {
         return false;
     }
     

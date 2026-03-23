@@ -1,38 +1,59 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
-import { useEffect, Suspense } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import {
+    Activity,
+    Bell,
+    ChevronRight,
+    DoorOpen,
+    Gamepad2,
+    Heart,
+    LayoutDashboard,
+    LogOut,
+    MessageSquareWarning,
+    Package,
+    ScrollText,
+    Users,
+} from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useModalStack } from '../../../contexts/ModalStackContext';
-import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen, Activity, Package, Heart, Bell, ScrollText } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { motion } from 'framer-motion';
+
+type NavItem = {
+    icon: typeof LayoutDashboard;
+    label: string;
+    path: string;
+};
+
+const DEVELOPER_NAV_ITEMS: NavItem[] = [
+    { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
+    { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
+];
+
+const ADMIN_NAV_ITEMS: NavItem[] = [
+    { icon: LayoutDashboard, label: '概览', path: '/admin' },
+    { icon: Users, label: '用户管理', path: '/admin/users' },
+    { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
+    { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
+    { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
+    { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
+    { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
+    { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
+    { icon: Bell, label: '系统通知', path: '/admin/notifications' },
+    { icon: Activity, label: '系统健康', path: '/admin/health' },
+];
 
 export default function AdminLayout() {
     const { user, logout } = useAuth();
     const location = useLocation();
     const { closeAll } = useModalStack();
 
-    // 进入管理后台时，清理所有可能残留的弹窗 (如：从游戏页跳转过来时遗留的聊天窗口)
     useEffect(() => {
         closeAll();
     }, [closeAll]);
 
     const isDeveloper = user?.role === 'developer';
-    const navItems = isDeveloper
-        ? [
-            { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
-        ]
-        : [
-            { icon: LayoutDashboard, label: '概览', path: '/admin' },
-            { icon: Users, label: '用户管理', path: '/admin/users' },
-            { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
-            { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
-            { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
-            { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
-            { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
-            { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
-            { icon: Bell, label: '系统通知', path: '/admin/notifications' },
-            { icon: Activity, label: '系统健康', path: '/admin/health' },
-        ];
+    const navItems = isDeveloper ? DEVELOPER_NAV_ITEMS : ADMIN_NAV_ITEMS;
     const roleLabel = user?.role === 'admin'
         ? '管理员'
         : user?.role === 'developer'
@@ -45,26 +66,25 @@ export default function AdminLayout() {
     };
 
     return (
-        <div className="h-screen w-full bg-zinc-50 flex font-sans text-zinc-900 overflow-hidden">
-            {/* 侧边栏 */}
-            <aside className="w-72 bg-zinc-950 text-zinc-400 flex-shrink-0 flex flex-col shadow-xl z-20">
-                <div className="p-6 flex-shrink-0">
+        <div className="h-screen w-full overflow-hidden bg-zinc-50 font-sans text-zinc-900 flex">
+            <aside className="z-20 flex w-72 flex-shrink-0 flex-col bg-zinc-950 text-zinc-400 shadow-xl">
+                <div className="flex-shrink-0 p-6">
                     <div className="flex items-center gap-3 px-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                            <span className="text-white font-bold text-lg">A</span>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
+                            <span className="text-lg font-bold text-white">A</span>
                         </div>
                         <div>
-                            <h1 className="text-sm font-bold text-white tracking-wide">
+                            <h1 className="text-sm font-bold tracking-wide text-white">
                                 {isDeveloper ? 'CONTENT PANEL' : 'ADMIN PANEL'}
                             </h1>
-                            <p className="text-[10px] uppercase tracking-wider font-semibold opacity-60">
-                                {isDeveloper ? 'Game Changelog Studio' : 'BoardGame Platform'}
+                            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                                {isDeveloper ? 'Creator Workspace' : 'BoardGame Platform'}
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+                <div className="custom-scrollbar flex-1 space-y-1 overflow-y-auto px-4 py-4">
                     <div className="px-4 pb-2">
                         <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Menu</p>
                     </div>
@@ -75,19 +95,25 @@ export default function AdminLayout() {
                                 key={item.path}
                                 to={item.path}
                                 className={cn(
-                                    "group relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                                    active ? "text-white" : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                                    'group relative flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200',
+                                    active ? 'text-white' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100'
                                 )}
                             >
                                 {active && (
                                     <motion.div
                                         layoutId="sidebar-active"
-                                        className="absolute inset-0 bg-indigo-600/10 border border-indigo-500/20 rounded-xl"
+                                        className="absolute inset-0 rounded-xl border border-indigo-500/20 bg-indigo-600/10"
                                         initial={false}
-                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                                     />
                                 )}
-                                <item.icon size={20} className={cn("relative z-10 transition-colors", active ? "text-indigo-400" : "text-zinc-500 group-hover:text-zinc-300")} />
+                                <item.icon
+                                    size={20}
+                                    className={cn(
+                                        'relative z-10 transition-colors',
+                                        active ? 'text-indigo-400' : 'text-zinc-500 group-hover:text-zinc-300'
+                                    )}
+                                />
                                 <span className="relative z-10 font-medium">{item.label}</span>
                                 {active && <ChevronRight size={16} className="relative z-10 ml-auto text-indigo-400 opacity-80" />}
                             </Link>
@@ -95,42 +121,41 @@ export default function AdminLayout() {
                     })}
                 </div>
 
-                <div className="p-4 mt-auto">
-                    <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800/50">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-zinc-700 overflow-hidden flex-shrink-0">
+                <div className="mt-auto p-4">
+                    <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/50 p-4">
+                        <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-zinc-700 bg-zinc-800">
                                 {user?.avatar ? (
-                                    <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                                    <img src={user.avatar} alt={user.username} className="h-full w-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold bg-zinc-800">
+                                    <div className="flex h-full w-full items-center justify-center bg-zinc-800 font-bold text-zinc-400">
                                         {user?.username?.[0]?.toUpperCase()}
                                     </div>
                                 )}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold text-white truncate">{user?.username}</p>
-                                <p className="text-xs text-zinc-500 truncate">{roleLabel}</p>
+                                <p className="truncate text-sm font-bold text-white">{user?.username}</p>
+                                <p className="truncate text-xs text-zinc-500">{roleLabel}</p>
                             </div>
                         </div>
                         <button
                             onClick={logout}
-                            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-lg transition-colors border border-transparent hover:border-red-400/20"
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-red-400/10 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:border-red-400/20 hover:bg-red-400/20"
                         >
                             <LogOut size={14} />
                             退出登录
                         </button>
                     </div>
                     <div className="mt-4 text-center">
-                        <Link to="/" className="text-xs text-zinc-600 hover:text-indigo-400 transition-colors">
+                        <Link to="/" className="text-xs text-zinc-600 transition-colors hover:text-indigo-400">
                             返回主站首页 &rarr;
                         </Link>
                     </div>
                 </div>
             </aside>
 
-            {/* 主内容区 */}
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-zinc-50">
-                <Suspense fallback={<div className="flex h-full items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>}>
+            <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-50">
+                <Suspense fallback={<div className="flex h-full items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div></div>}>
                     <Outlet />
                 </Suspense>
             </main>

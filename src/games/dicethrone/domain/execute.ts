@@ -505,9 +505,10 @@ export function execute(
                     } as DiceThroneEvent);
                     // 给目标玩家添加 token
                     const toTokens = toPlayer.tokens[statusId] ?? 0;
+                    const newTotal = toTokens + fromTokens;
                     events.push({
                         type: 'TOKEN_GRANTED',
-                        payload: { targetId: toPlayerId, tokenId: statusId, amount: fromTokens, newTotal: toTokens + fromTokens },
+                        payload: { targetId: toPlayerId, tokenId: statusId, amount: Math.max(0, newTotal - toTokens), newTotal },
                         sourceCommandType: command.type,
                         timestamp,
                     } as DiceThroneEvent);
@@ -531,9 +532,10 @@ export function execute(
                     const currentAmount = targetPlayer.tokens[tokenId] ?? 0;
                     const maxStacks = getTokenStackLimit(state, targetPlayerId, tokenId);
                     const newTotal = Math.min(currentAmount + amount, maxStacks);
+                    const grantedAmount = Math.max(0, newTotal - currentAmount);
                     events.push({
                         type: 'TOKEN_GRANTED',
-                        payload: { targetId: targetPlayerId, tokenId, amount, newTotal },
+                        payload: { targetId: targetPlayerId, tokenId, amount: grantedAmount, newTotal },
                         sourceCommandType: command.type,
                         timestamp,
                     } as DiceThroneEvent);

@@ -709,6 +709,56 @@ describe('BonusDieOverlay', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('展示态特写默认支持点空白关闭', () => {
+        const onClose = vi.fn();
+        render(
+            <SpotlightContainer
+                id="bonus-die-backdrop-close"
+                isVisible
+                onClose={onClose}
+                autoCloseDelay={10000}
+                closeClickGuardMs={0}
+            >
+                <button type="button">内容</button>
+            </SpotlightContainer>
+        );
+
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('闈炰氦浜掔壒鍐欓粯璁や笉搴旀嫤鎴暣灞忕偣鍑?', () => {
+        const html = renderToStaticMarkup(
+            <SpotlightContainer
+                id="bonus-die-non-blocking"
+                isVisible
+                onClose={vi.fn()}
+            >
+                <button type="button">鍐呭</button>
+            </SpotlightContainer>
+        );
+
+        expect(html).toContain('pointer-events-auto');
+    });
+
+    it('闈炰氦浜掔壒鍐欓粯璁ゆ敮鎸佺偣鍐呭鍏抽棴', async () => {
+        const onClose = vi.fn();
+        render(
+            <SpotlightContainer
+                id="bonus-die-display-close"
+                isVisible
+                onClose={onClose}
+                autoCloseDelay={10000}
+                closeClickGuardMs={0}
+            >
+                <button type="button" data-testid="display-spotlight-content">关闭</button>
+            </SpotlightContainer>
+        );
+
+        fireEvent.click(screen.getByTestId('display-spotlight-content'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     it('切到对方视角且处于对方进攻掷骰阶段时，应高亮对方可选技能', () => {
         expect(shouldHighlightOpponentViewAbilities({
             isSelfView: false,

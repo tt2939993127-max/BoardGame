@@ -104,7 +104,7 @@ async function bootstrap() {
             },
         }));
 
-        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors|notifications|game-changelogs)(\/|$)/;
+        const spaExclude = /^\/(assets|auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors|notifications|game-changelogs)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (/^\/admin\/changelogs\/?$/.test(req.path)) {
                 res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

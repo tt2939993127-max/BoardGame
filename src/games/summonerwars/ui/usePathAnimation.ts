@@ -4,7 +4,7 @@
  * 用于单位沿路径移动的动画（支持践踏等技能）
  */
 
-import { useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import type { CellCoord } from '../domain/types';
 import type { GridConfig } from '../../../core/ui/board-layout.types';
 import { cellToNormalizedBounds } from '../../../core/ui/board-hit-test';
@@ -31,28 +31,13 @@ interface PathAnimationOptions {
  */
 export function usePathAnimation(options: PathAnimationOptions) {
   const { currentPosition, unitId } = options;
-  
-  // 追踪上一次的位置
-  const prevPositionRef = useRef<CellCoord | null>(null);
-  const prevUnitIdRef = useRef<string | null>(null);
-  
-  useEffect(() => {
-    // 单位 ID 变化说明是新单位，重置追踪
-    if (prevUnitIdRef.current !== unitId) {
-      prevPositionRef.current = currentPosition;
-      prevUnitIdRef.current = unitId;
-      return;
-    }
-    
-    // 更新位置追踪
-    prevPositionRef.current = currentPosition;
-  }, [currentPosition, unitId]);
+  const prevPosition = useMemo<CellCoord>(() => currentPosition, [currentPosition, unitId]);
   
   // 当前版本：始终使用 layout 动画
   // 未来可以在这里添加路径动画逻辑
   return {
     needsPathAnimation: false,
-    prevPosition: prevPositionRef.current,
+    prevPosition,
   };
 }
 

@@ -180,6 +180,54 @@ describe('Sneak Attack USE_TOKEN 端到端', () => {
         expect(useTokenStep.events).toContain('TOKEN_USED');
         expect(useTokenStep.events).toContain('BONUS_DIE_ROLLED');
     });
+
+    it('transferred sneak_attack still triggers original custom action', () => {
+        const queuedRandom = createQueuedRandom([4]);
+        const baseSetup = createNoResponseSetupWithEmptyHand();
+
+        const runner = createRunner(queuedRandom);
+        const result = runner.run({
+            name: 'transferred-sneak-attack-still-triggers-original-custom-action',
+            commands: [
+                cmd('USE_TOKEN', '0', { tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1 }),
+            ],
+            setup: (playerIds, random) => {
+                const state = baseSetup(playerIds, random);
+                state.core.players['0'].characterId = 'barbarian';
+                state.core.players['1'].characterId = 'shadow_thief';
+                state.core.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK] = 1;
+                state.core.pendingDamage = {
+                    id: 'pd-transferred-sneak-attack',
+                    sourcePlayerId: '0',
+                    targetPlayerId: '1',
+                    originalDamage: 8,
+                    currentDamage: 8,
+                    sourceAbilityId: 'slap-3',
+                    responseType: 'beforeDamageDealt',
+                    responderId: '0',
+                } as any;
+                state.core.pendingAttack = {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'slap-3',
+                    isUltimate: false,
+                    damage: 8,
+                    bonusDamage: 0,
+                    preDefenseResolved: false,
+                    damageResolved: false,
+                    attackFaceCounts: {},
+                } as any;
+                return state;
+            },
+        });
+
+        const useTokenStep = result.steps[0];
+        expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK]).toBe(0);
+        expect(useTokenStep.events).toContain('TOKEN_USED');
+        expect(useTokenStep.events).toContain('BONUS_DIE_ROLLED');
+        expect(result.finalState.core.pendingAttack?.damage).toBe(12);
+    });
 });
 
 // ============================================================================

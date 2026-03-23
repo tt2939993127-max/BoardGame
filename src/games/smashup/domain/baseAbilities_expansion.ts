@@ -9,7 +9,6 @@
 import type {
     SmashUpEvent,
     MinionDestroyedEvent,
-    CardsDrawnEvent,
     MinionPlayedEvent,
     PendingPostScoringAction,
 } from './types';
@@ -23,6 +22,7 @@ import {
     buildValidatedMoveEvents,
     buildValidatedDestroyEvents,
     buildValidatedCardToDeckBottomEvents,
+    buildStandardDrawEvents,
 } from './abilityHelpers';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -195,7 +195,7 @@ export function registerExpansionBaseAbilities(): void {
         if (ctx.matchState) {
             const interaction = createSimpleChoice(
                 `base_miskatonic_university_base_${winnerId}_${ctx.now}`, winnerId,
-                `密大基地：你有 ${totalCount} 张疯狂卡可以返回到疯狂牌库`, options,
+                `密大基地：你有 ${totalCount} 张疯狂卡可以消耗`, options,
                 { sourceId: 'base_miskatonic_university_base', targetType: 'button' },
             );
             ctx.matchState = queueInteraction(ctx.matchState, interaction);
@@ -375,22 +375,10 @@ export function registerExpansionBaseAbilities(): void {
     // "在一个玩家打出一张附着行动卡到这里的一个随从上后，该玩家抽一张卡牌?
     registerBaseAbility('base_enchanted_glade', 'onActionPlayed', (ctx) => {
         // 只有附着到随从的行动卡才触发（actionTargetMinionUid 有值）
-        if (!ctx.actionTargetMinionUid) return { events: [] };
+        const actionTargetType = ctx.actionTargetType ?? (ctx.actionTargetMinionUid ? 'minion' : 'base');
+        if (actionTargetType !== 'minion') return { events: [] };
 
-        const player = ctx.state.players[ctx.playerId];
-        if (!player || player.deck.length === 0) return { events: [] };
-
-        return {
-            events: [{
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: {
-                    playerId: ctx.playerId,
-                    count: 1,
-                    cardUids: [player.deck[0].uid],
-                },
-                timestamp: ctx.now,
-            } as CardsDrawnEvent],
-        };
+        return { events: buildStandardDrawEvents(ctx.state, ctx.playerId, 1, ctx.random, ctx.now) };
     });
 
     // ── 仙灵之环（Fairy Ring）──────────────────────────────────
@@ -473,6 +461,7 @@ export function registerExpansionBaseAbilities(): void {
     registerTrigger('base_house_of_nine_lives', 'onMinionDestroyed', (trigCtx) => {
         const { state, triggerMinionUid, triggerMinionDefId } = trigCtx;
         const baseIndex = trigCtx.baseIndex;
+        if (trigCtx.reason === '九命之屋：玩家选择不拯救') return [];
         if (!triggerMinionUid || !triggerMinionDefId || baseIndex === undefined) return [];
 
         // 找到九命之屋的基地索引
@@ -520,6 +509,7 @@ export function registerExpansionBaseAbilities(): void {
                     fromBaseIndex: baseIndex,
                     houseBaseIndex,
                     ownerId,
+                    destroyerId: trigCtx.destroyerId,
                 },
             },
         });
@@ -707,7 +697,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
         const madnessCard = madnessCards.find(c => c.defId === MADNESS_CARD_DEF_ID);
         
         if (!madnessCard) return { state, events: [] };
-        return { state, events: [returnMadnessCard(playerId, madnessCard.uid, '疯人院：返回疯狂卡', timestamp)] };
+        return { state, events: [returnMadnessCard(playerId, madnessCard.uid, '疯人院：消耗疯狂卡', timestamp)] };
     });
 
     // 印斯茅斯基地第一步：选择玩家后，创建第二步交互（选择卡牌）
@@ -783,16 +773,16 @@ export function registerExpansionBaseInteractionHandlers(): void {
             const handMadness = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
             const discardMadness = player.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
             for (const card of handMadness) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
             }
             for (const card of discardMadness) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
             }
         } else {
             const madnessCards = selected.source === 'hand' ? player.hand : player.discard;
             const toReturn = madnessCards.filter(c => c.defId === MADNESS_CARD_DEF_ID).slice(0, selected.count);
             for (const card of toReturn) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：返回疯狂卡', timestamp));
+                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
             }
         }
         
@@ -888,10 +878,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
             now: timestamp,
         });
         if (events.length === 0) return { state, events };
-        const player = state.core.players[playerId];
-        if (player && player.deck.length > 0) {
-            events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [player.deck[0].uid] }, timestamp } as CardsDrawnEvent);
-        }
+        events.push(...buildStandardDrawEvents(state.core, playerId, 1, _random, timestamp));
         return { state, events };
     });
 
@@ -959,6 +946,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
             fromBaseIndex?: number;
             houseBaseIndex?: number;
             ownerId?: string;
+            destroyerId?: string;
         };
         const ctx = getContinuationContext<{
             minionUid?: string;
@@ -966,12 +954,14 @@ export function registerExpansionBaseInteractionHandlers(): void {
             fromBaseIndex?: number;
             houseBaseIndex?: number;
             ownerId?: string;
+            destroyerId?: string;
         }>(iData);
         const minionUid = selected.minionUid ?? ctx?.minionUid;
         const minionDefId = selected.minionDefId ?? ctx?.minionDefId;
         const fromBaseIndex = selected.fromBaseIndex ?? ctx?.fromBaseIndex;
         const houseBaseIndex = selected.houseBaseIndex ?? ctx?.houseBaseIndex;
         const ownerId = selected.ownerId ?? ctx?.ownerId ?? playerId;
+        const destroyerId = selected.destroyerId ?? ctx?.destroyerId;
 
         if (!minionUid || !minionDefId || fromBaseIndex === undefined) return { state, events: [] };
 
@@ -997,6 +987,7 @@ export function registerExpansionBaseInteractionHandlers(): void {
                     minionDefId,
                     fromBaseIndex,
                     ownerId,
+                    destroyerId,
                     reason: '九命之屋：玩家选择不拯救',
                 },
                 timestamp,

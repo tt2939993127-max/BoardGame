@@ -4,6 +4,8 @@ import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { PulseGlow } from '../common/animations/PulseGlow';
 import { UI_Z_INDEX } from '../../core';
+import { MOBILE_MAX_VIEWPORT_WIDTH } from '../../games/mobileSupport';
+import { logger } from '../../lib/logger';
 
 export interface FabAction {
     id: string;
@@ -62,12 +64,12 @@ export const FabMenu = ({
     
     useEffect(() => {
         const updateSizes = () => {
-            const mobile = window.innerWidth < 1024;
+            const mobile = window.innerWidth <= MOBILE_MAX_VIEWPORT_WIDTH;
             setIsMobileViewport(mobile);
             setSafeAreaInsets(getSafeAreaInsets());
             setButtonSize(mobile ? 44 : 48);
-            setButtonGap(mobile ? 10 : 12);
-            setEdgePadding(mobile ? 14 : 32);
+            setButtonGap(mobile ? 8 : 12);
+            setEdgePadding(mobile ? 12 : 32);
         };
         updateSizes();
         window.addEventListener('resize', updateSizes);
@@ -81,7 +83,6 @@ export const FabMenu = ({
     const [fabPosition, setFabPosition] = useState<{ left: number; top: number } | null>(null);
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
-    const [isListAnimating, setIsListAnimating] = useState(false);
     const didDragRef = useRef(false);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -128,7 +129,8 @@ export const FabMenu = ({
 
     // 加载保存的位置（支持百分比格式，兼容旧绝对坐标）
     useEffect(() => {
-        try {
+        const frameId = window.requestAnimationFrame(() => {
+            try {
             const saved = localStorage.getItem('hud_fab_position');
             if (saved) {
                 const parsed = JSON.parse(saved);
@@ -178,9 +180,12 @@ export const FabMenu = ({
             const next = clampPosition(base);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
-        } catch (e) {
-            console.error(e);
+        } catch (error) {
+            logger.error('FabMenu: 加载悬浮球位置失败', { error });
         }
+        });
+
+        return () => window.cancelAnimationFrame(frameId);
     }, [clampPosition, getAlignmentForPosition, getInitialPosition]);
 
     const handleDragEnd = (_: any, info: any) => {
@@ -206,12 +211,6 @@ export const FabMenu = ({
         didDragRef.current = true;
         setIsDragging(true);
     };
-
-    const handleListExitComplete = useCallback(() => {
-        if (!isOpen) {
-            setIsListAnimating(false);
-        }
-    }, [isOpen]);
 
     const handlePointerDownCapture = () => {
         didDragRef.current = false;
@@ -291,8 +290,8 @@ export const FabMenu = ({
                         return;
                     }
                 }
-            } catch (e) {
-                console.error(e);
+            } catch (error) {
+                logger.error('FabMenu: 处理窗口缩放失败', { error });
             }
             // 降级：直接 clamp 当前位置
             const next = clampPosition(fabPosition);
@@ -302,12 +301,6 @@ export const FabMenu = ({
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, [clampPosition, fabPosition, getAlignmentForPosition]);
-
-    useEffect(() => {
-        if (isOpen) {
-            setIsListAnimating(true);
-        }
-    }, [isOpen]);
 
     useEffect(() => {
         if (prevActiveItemIdRef.current === activeItemId) return;
@@ -330,8 +323,6 @@ export const FabMenu = ({
     const satellitesToRender = isButtonBottom ? [...items.slice(1)].reverse() : items.slice(1);
 
     // 水平对齐
-    const alignClass = alignment.h === 'right' ? 'items-start' : 'items-end';
-
     if (!fabPosition) return null;
 
     const hasAnyNotification = items.some((item) => item.active);
@@ -357,8 +348,11 @@ export const FabMenu = ({
                     isActive={activeItemId === items[0].id && isOpen}
                     alignment={alignment}
                     isDark={isDark}
+                    fabPosition={fabPosition}
                     buttonSize={buttonSize}
                     buttonGap={buttonGap}
+                    edgePadding={edgePadding}
+                    safeAreaInsets={safeAreaInsets}
                     isMobileViewport={isMobileViewport}
                 />
                 <MenuButton
@@ -386,11 +380,13 @@ export const FabMenu = ({
                 alignment={alignment}
                 isDark={isDark}
                 tooltipPortalRoot={tooltipPortalRoot}
-                onExitComplete={handleListExitComplete}
                 glowColor={glowColor}
                 isDragging={isDragging}
+                fabPosition={fabPosition}
                 buttonSize={buttonSize}
                 buttonGap={buttonGap}
+                edgePadding={edgePadding}
+                safeAreaInsets={safeAreaInsets}
                 isMobileViewport={isMobileViewport}
             />
         </motion.div>
@@ -405,11 +401,13 @@ const SatelliteList = ({
     alignment,
     isDark,
     tooltipPortalRoot,
-    onExitComplete,
     glowColor,
     isDragging,
+    fabPosition,
     buttonSize,
     buttonGap,
+    edgePadding,
+    safeAreaInsets,
     isMobileViewport,
 }: any) => {
     const isButtonBottom = alignment.v === 'bottom';
@@ -418,7 +416,7 @@ const SatelliteList = ({
     const offset = buttonSize + buttonGap;
 
     return (
-        <AnimatePresence onExitComplete={onExitComplete}>
+        <AnimatePresence>
             {isOpen && (
                 <motion.div
                     className={`absolute left-0 flex ${flexDirection} ${alignItems}`}
@@ -441,8 +439,11 @@ const SatelliteList = ({
                                 isActive={activeId === item.id}
                                 alignment={alignment}
                                 isDark={isDark}
+                                fabPosition={fabPosition}
                                 buttonSize={buttonSize}
                                 buttonGap={buttonGap}
+                                edgePadding={edgePadding}
+                                safeAreaInsets={safeAreaInsets}
                                 isMobileViewport={isMobileViewport}
                             />
                             <MenuButton
@@ -467,13 +468,31 @@ const SatelliteList = ({
     );
 };
 
-const Panel = ({ item, isActive, alignment, isDark, buttonSize, buttonGap, isMobileViewport }: any) => {
+const Panel = ({
+    item,
+    isActive,
+    alignment,
+    isDark,
+    fabPosition,
+    buttonSize,
+    buttonGap,
+    edgePadding,
+    safeAreaInsets,
+    isMobileViewport,
+}: any) => {
     const verticalClass = alignment.v === 'top' ? 'top-0' : 'bottom-0';
     const panelOffset = buttonSize + buttonGap;
-    const panelWidth = isMobileViewport ? 228 : 300;
-    const panelMaxWidth = isMobileViewport
-        ? `min(${panelWidth}px, calc(82vw - ${panelOffset}px))`
-        : `min(${panelWidth}px, calc(90vw - ${panelOffset}px))`;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const panelWidth = isMobileViewport ? 260 : 300;
+    const availableWidth = alignment.h === 'right'
+        ? viewportWidth - (fabPosition?.left ?? 0) - panelOffset - safeAreaInsets.right - edgePadding
+        : (fabPosition?.left ?? 0) - buttonGap - safeAreaInsets.left - edgePadding;
+    const availableHeight = alignment.v === 'top'
+        ? viewportHeight - (fabPosition?.top ?? 0) - safeAreaInsets.bottom - edgePadding
+        : (fabPosition?.top ?? 0) + buttonSize - safeAreaInsets.top - edgePadding;
+    const panelMaxWidth = `${Math.max(132, Math.floor(availableWidth))}px`;
+    const panelMaxHeight = `${Math.max(144, Math.floor(availableHeight))}px`;
 
     return (
         <AnimatePresence>
@@ -490,14 +509,16 @@ const Panel = ({ item, isActive, alignment, isDark, buttonSize, buttonGap, isMob
 
                         ${verticalClass}
 
-                        max-h-[80vh] overflow-y-auto custom-scrollbar
+                        overflow-y-auto overflow-x-hidden custom-scrollbar
                     `}
                     style={{
                         width: panelWidth,
                         maxWidth: panelMaxWidth,
+                        maxHeight: panelMaxHeight,
                         [alignment.h === 'right' ? 'left' : 'right']: panelOffset,
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
+                    data-testid={`fab-panel-${item.id}`}
                 >
                     <div className="mb-2 truncate border-b border-white/10 pb-2 text-[10px] font-bold uppercase tracking-wider opacity-70">
                         {item.label}
@@ -511,10 +532,11 @@ const Panel = ({ item, isActive, alignment, isDark, buttonSize, buttonGap, isMob
 
 const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging, buttonSize, isMobileViewport }: any) => {
     const [isHovered, setIsHovered] = useState(false);
-    const showTooltip = isHovered && !isDragging && !(isActive && item.content);
-    const showPreview = Boolean(item.preview) && !isDragging && !isActive;
+    const showTooltip = !isMobileViewport && isHovered && !isDragging && !(isActive && item.content);
+    const showPreview = !isMobileViewport && Boolean(item.preview) && !isDragging && !isActive;
     const buttonRef = useRef<HTMLButtonElement>(null);
     const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
+    const visualButtonSize = isMobileViewport ? Math.max(buttonSize - 4, 40) : buttonSize;
 
     const updateTooltipRect = useCallback(() => {
         if (!buttonRef.current) return;
@@ -580,10 +602,8 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                 data-fab-id={item.id}
                 className={`
                     relative flex items-center justify-center
-                    rounded-full backdrop-blur-md border
-                    ${activeStyle}
-                    ${item.color || ''}
-                    transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105
+                    bg-transparent border-0 p-0
+                    transition-transform duration-300 hover:scale-105
                     cursor-pointer
                     z-20
                 `}
@@ -603,6 +623,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                     initial={{ opacity: 0, x: tooltipSide === 'right' ? 10 : -10, scale: 0.9 }}
                                     animate={{ opacity: 1, x: 0, scale: 1 }}
                                     exit={{ opacity: 0, x: tooltipSide === 'right' ? 10 : -10, scale: 0.9 }}
+                                    data-testid={`fab-tooltip-${item.id}`}
                                     className={`
                                         pointer-events-none overflow-hidden text-ellipsis whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold
                                         ${isDark ? 'bg-black text-white border border-white/20 shadow-lg shadow-black/50' : 'bg-white text-[#433422] border border-[#d3ccba] shadow-xl'}
@@ -632,6 +653,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                     initial={{ opacity: 0, x: previewSide === 'right' ? 8 : -8 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: previewSide === 'right' ? 8 : -8 }}
+                                    data-testid={`fab-preview-${item.id}`}
                                     className={`
                                         pointer-events-none px-3 py-2 rounded-lg text-xs font-medium
                                         overflow-hidden text-ellipsis whitespace-nowrap
@@ -659,11 +681,27 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                     tooltipPortalRoot
                 )}
 
+                {/* 移动端保留 44px 命中区，但缩小视觉圆球，避免遮挡主棋盘。 */}
                 <div
-                    className="flex h-full w-full items-center justify-center"
-                    style={{ transform: isMobileViewport ? 'scale(0.92)' : undefined }}
+                    data-fab-visual-id={item.id}
+                    className={`
+                        pointer-events-none flex items-center justify-center
+                        rounded-full backdrop-blur-md border
+                        ${activeStyle}
+                        ${item.color || ''}
+                        shadow-lg transition-shadow duration-300 hover:shadow-xl
+                    `}
+                    style={{
+                        width: visualButtonSize,
+                        height: visualButtonSize,
+                    }}
                 >
-                    {item.icon}
+                    <div
+                        className="flex h-full w-full items-center justify-center"
+                        style={{ transform: isMobileViewport ? 'scale(0.92)' : undefined }}
+                    >
+                        {item.icon}
+                    </div>
                 </div>
             </motion.button>
         </PulseGlow>
