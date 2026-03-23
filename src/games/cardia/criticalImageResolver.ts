@@ -21,16 +21,12 @@ function buildDeckCriticalImages(deckVariant: string): string[] {
 }
 
 function buildDeckWarmImages(deckVariant: string): string[] {
+    void deckVariant;
     return [
         ...getCardiaLocationPaths(),
         // 预留：未来可把非首屏卡图/装饰图放入 warm。
         // Deck 卡图目前仍作为 critical，保证对局开始即刻可见。
     ];
-}
-
-function buildDeckWarmImages(deckVariant: string): string[] {
-    void deckVariant;
-    return [];
 }
 
 /**
