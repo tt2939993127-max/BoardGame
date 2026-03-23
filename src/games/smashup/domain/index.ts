@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 澶ф潃鍥涙柟 (Smash Up) - 棰嗗煙鍐呮牳缁勮
  *
  * 鑱岃矗锛歴etup 鍒濆鍖栥€丗lowSystem 閽╁瓙銆乸layerView銆乮sGameOver
