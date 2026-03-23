@@ -188,8 +188,12 @@ async function cleanPorts() {
     cleanResidualDevProcesses();
 
     const portsFreed = await waitForPortsFree(ports, 1500);
-    if (!portsFreed) {
+    const strictPortCleanup = process.env.DEV_STRICT_PORT_CLEANUP === 'true';
+    if (!portsFreed && strictPortCleanup) {
         throw new Error(`以下端口仍被占用且当前进程无权清理: ${ports.join(', ')}。请先手动结束占用进程后再启动。`);
+    }
+    if (!portsFreed) {
+        console.warn(`[Dev] 以下端口仍可能被占用，继续启动并交由后续启动流程自行报错: ${ports.join(', ')}`);
     }
 }
 
