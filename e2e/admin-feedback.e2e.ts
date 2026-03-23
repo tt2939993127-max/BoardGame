@@ -203,6 +203,11 @@ test.describe('后台反馈管理 E2E', () => {
             errorContext: { name?: string } | null;
             operationLogs: unknown[];
             stateSnapshot: { gameId?: string } | null;
+            stateSnapshotJson: string | null;
+        };
+        const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+        const clipboardPayload = JSON.parse(clipboardText) as {
+            stateSnapshotJson: string | null;
         };
 
         expect(payload.feedbackId).toBe('feedback_001');
@@ -213,6 +218,8 @@ test.describe('后台反馈管理 E2E', () => {
         expect(Array.isArray(payload.operationLogs)).toBeTruthy();
         expect(payload.operationLogs).toHaveLength(2);
         expect(payload.stateSnapshot?.gameId).toBe('smashup');
+        expect(payload.stateSnapshotJson).toBe(feedbackItem.stateSnapshot);
+        expect(clipboardPayload.stateSnapshotJson).toBe(feedbackItem.stateSnapshot);
 
         await page.screenshot({
             path: 'test-results/admin-feedback-ai-payload.png',

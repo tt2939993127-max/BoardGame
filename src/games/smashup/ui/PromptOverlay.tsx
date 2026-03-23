@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { logger } from '@/lib/logger';
+import { logger } from '../../../lib/logger';
 import { GameButton } from './GameButton';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -81,9 +81,20 @@ function extractContextPreview(prompt: any): CardPreviewRef | undefined {
 
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
 export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
-    return text.replace(/cards\.[\w-]+\.\w+/gi, key => {
-        const lowerKey = key.toLowerCase();
-        const resolved = t(lowerKey, { defaultValue: '' });
+    return text.replace(/cards\.[\w-]+\.\w+|ui\.reaction_timing\.[\w-]+/gi, key => {
+        if (/^cards\./i.test(key)) {
+            const match = /^cards\.([\w-]+)\.(\w+)$/i.exec(key);
+            const defId = match?.[1];
+            const field = match?.[2]?.toLowerCase();
+            const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
+
+            if (def && field === 'name') {
+                const resolvedName = resolveCardName(def, (localeKey: string) => t(localeKey, { defaultValue: localeKey }));
+                return resolvedName || key;
+            }
+        }
+
+        const resolved = t(key, { defaultValue: '' });
         return resolved || key;
     });
 }

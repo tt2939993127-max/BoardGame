@@ -66,6 +66,7 @@ export interface FeedbackAiPayload {
     errorContext: FeedbackErrorContext | null;
     operationLogs: unknown[];
     stateSnapshot: unknown | null;
+    stateSnapshotJson: string | null;
 }
 
 const EMBEDDED_IMG_RE = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g;
@@ -140,6 +141,7 @@ export function buildFeedbackAiPayload(item: FeedbackItem, t: TFunction<'admin'>
         errorContext: item.errorContext ?? null,
         operationLogs: parseOperationLogs(item.actionLog),
         stateSnapshot: parsedSnapshot,
+        stateSnapshotJson: item.stateSnapshot ?? null,
     };
 }
 

@@ -33,10 +33,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 > 以下子文档包含各专项的完整规范与示例。**当任务涉及对应领域时，必须先阅读相关子文档再动手**，不得跳过。
 > **项目内 skill 位置（强制）**：`BoardGame` 的项目专用 skill 一律放在 `./.windsurf/skills/`。凡是只服务本项目的流程、验收、审查规则，都按这个目录维护。
+> **通用规范定义（强制）**：根 `AGENTS.md` 与 `docs/ai-rules/` 默认是“所有游戏通用规范”，只能约束流程、方法、验证和文档要求，不能把某个游戏当前任务里的局部字段命名、卡牌结构或专用抓取源直接写成全局默认。游戏专属口径必须落到该游戏自己的 `rule/` 文档或专项规范里。
+> **根规范作用域标注（强制）**：根 `AGENTS.md` 允许出现游戏专属条目，但标题或正文必须显式写明适用游戏/模块/触发条件；只要条目里出现具体游戏名、具体抓取源、具体字段结构，就不得再被解释成“所有游戏默认规则”。
 
 - `docs/ai-rules/golden-rules.md` — **遇到 React 渲染错误/白屏/函数未定义/高频交互卡顿时必读**。含 React Hooks 示例、白屏排查流程、Vite SSR、高频交互/拖拽规范。
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
+- `docs/ai-rules/data-entry.md` — **根据图片/规则书/Wiki/截图录入业务数据时必读**。含通用规范定义、权威来源优先级、Markdown 核对契约、零猜测 OCR、图片索引录入、先文档后实现流程。
 - `docs/audio/add-audio.md` — **从外部导入新音效素材到项目时必读**。含素材整理→目录结构→压缩（wav→ogg）→生成 registry→中文友好名→清单→浏览器验证→代码接入的全链路流程。配套工具文档见 `docs/tools.md`、音频使用规范见 `docs/audio/audio-usage.md`、语义目录见 `docs/audio/audio-catalog.md`。
 - `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、传输层架构（`GameBoardProps`/`GameTransportServer`）、游戏结束检测（`sys.gameover`）、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、`createSimpleChoice` API 使用规范（两种调用约定、multi 参数位置、`PromptOption.displayMode` 渲染模式声明、选项 defId 要求）、领域建模前置审查。
 - `docs/ai-rules/undo-auto-advance.md` — **了解撤回后自动推进问题时必读**。含问题根源、引擎层通用解决方案（FlowSystem.afterEvents 统一检查 restoredRandomCursor）、测试要求。**引擎层已统一处理，游戏层无需额外代码。**
@@ -171,7 +174,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **并发 AI 工作区前提（强制）**：默认假设用户始终有其他 AI 在同一工作区运行，工作区在任意时刻都可能新增、修改、删除文件。禁止把“工作区干净”当作前置条件；看到陌生改动时，默认视为并发写入，除非用户明确要求，否则不得擅自回滚、清空、暂存、隐藏或覆盖这些改动。
 - **Git stash 使用规范（强制）**：未经用户明确许可，禁止为了推进 `pull`、`rebase`、`push`、校验、测试或“清理工作区”而自行执行 `git stash`、`git stash pop`、`git stash apply`、`git stash drop`。若确需处理既有 stash，必须先向用户说明来源、影响范围和恢复方案，再执行。
 - **Git 变更回退与暂存规范（强制）**：所有 Git 回滚命令必须先说明原因并获得用户明确许可。**修复 bug 时必须使用编辑工具（strReplace/editCode/fsWrite）修改代码，无视 token 和时间消耗，禁止用 git restore/git checkout 等 git 命令恢复文件后再修改**。可以用 `git diff` 查看差异来辅助定位问题，但修复必须通过编辑工具完成。
-- **Git 合并冲突处理规范（强制）**：执行 `git merge` 前必须先阅读 `docs/git-merge-checklist.md` 并执行预检查。核心原则：使用 `--no-commit --no-ff` 预览、逐文件检查冲突、合并后运行测试验证。
+- **Git 合并冲突处理规范（强制）**：执行 `git merge` 前必须先阅读 `docs/git-merge-checklist.md` 并执行预检查。核心原则：使用 `--no-commit --no-ff` 预览、逐文件检查冲突、合并后运行测试验证。**凡是解决过冲突并生成 merge commit，提交后必须运行 `npm run merge:audit:strict -- HEAD` 做单边覆盖审计；若输出出现“完全等于父1/父2”，必须逐文件说明理由，否则不得继续 push/merge。**
 - **--no-verify 使用规范（强制）**：
   - **严格禁止**：ESLint errors、测试失败、业务逻辑代码、React 组件、游戏逻辑代码
   - **允许使用**（同时满足）：仅修改文档/配置/样式、仅有 warnings 无 errors、不涉及逻辑变更
@@ -219,13 +222,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - 测试必须实际运行并通过：单文件/单用例优先用 `npm run test:e2e:ci:file -- <测试文件名> "<用例名>"`；整文件复跑用 `npm run test:e2e:ci -- <测试文件名>`
   - 必须用 MCP 查看测试截图：优先看 `test-results/evidence-screenshots/`；如果是失败排障，再看 `test-results/playwright-artifacts/`
   - 向用户汇报测试产物路径时，必须给出工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\...`，不要只写相对目录
+  - 证据文档里每一张被引用的截图，也必须单独写出可复制的工作区绝对路径；禁止只嵌入 Markdown 图片、只给相对链接，或只写“见 test-results/evidence-screenshots/”
   - 用户上传的截图直接从对话中查看（不用 MCP）
   - 测试失败必须修复：加日志、检查代码、审查调用链，可修改测试/增加游戏模式/重构框架
   - 证据文档必须包含截图分析：创建 `evidence/` 文档，嵌入截图并详细分析内容
   - 用户只需看截图即可验证：截图必须清晰展示游戏状态、UI 元素、测试结果
 - **E2E 测试必须使用 TestHarness（强制）**：E2E 测试中涉及随机性或需要快速构造测试场景时，必须使用 `TestHarness` 测试工具集。详见下文「验证测试 → E2E 测试环境依赖」章节和 `docs/automated-testing.md`。
 - **单文件行数限制（强制）**：单个源码文件不得超过 1000 行，超过必须拆分。
-- **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。**图片文字辨识零猜测原则（强制）**：任何文字（名称、描述、数值、关键词）只要有一点看不清或不确定，必须立即停止当前数据录入工作，向用户说明哪些位置无法辨认，并索要更清晰的图片。禁止根据上下文、常识或英文原版"猜测"看不清的中文文字。已猜测录入的数据视为缺陷，必须重新核对。
+- **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。具体流程、来源优先级、图片索引处理和“先文档后实现”要求统一以 `docs/ai-rules/data-entry.md` 为准。**图片文字辨识零猜测原则（强制）**：任何文字（名称、描述、数值、关键词）只要有一点看不清或不确定，必须立即停止当前数据录入工作，向用户说明哪些位置无法辨认，并索要更清晰的图片。禁止根据上下文、常识或英文原版"猜测"看不清的中文文字。已猜测录入的数据视为缺陷，必须重新核对。
 - **框架复用优先（强制）**：禁止为特定游戏实现无法复用的系统。三层模型：`/core/ui/` 契约层 → `/components/game/framework/` 骨架层 → `/games/<gameId>/` 游戏层。新增组件/Hook 前必须搜索已有实现。详见 `docs/ai-rules/engine-systems.md`。
 - **README 编写规范（强制）**：README.md 是面向普通用户的文档，必须保持简洁。只包含：项目介绍、快速开始、基本命令、文档链接。**禁止在 README 中添加**：详细的技术架构说明、端口配置表格、测试模式对比、故障排查步骤、开发工具使用说明、测试覆盖统计表等开发者专用内容。这些内容应放在 `docs/` 下的专门文档中（如 `docs/automated-testing.md`、`docs/architecture.md`），README 只需提供链接指向这些文档。**核心原则**：用户看 README 应该能在 5 分钟内理解项目并运行起来，不应被大量技术细节淹没。
 - **文档同步交付（强制）**：代码变更涉及以下任一场景时，必须在同一次交付中同步更新相关文档（`docs/` 下对应文件、`AGENTS.md` 子文档、游戏 `rule/*.md`），不得拆到后续任务：

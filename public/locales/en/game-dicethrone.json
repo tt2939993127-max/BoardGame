@@ -410,7 +410,8 @@
   },
   "modifierActive": {
     "label": "Attack Modifier",
-    "tooltip": "Active attack modifier card, effect triggers during damage resolution"
+    "shortLabel": "Mod",
+    "tooltip": "Active attack modifier card. These cards must be played after selecting an attack ability, and their effects resolve during this attack's damage step"
   },
   "attackBonus": {
     "label": "+{{damage}} Damage"
@@ -567,6 +568,7 @@
     "ability_not_available": "This ability is not available",
     "die_not_found": "Die not found",
     "cannot_advance_phase": "Cannot advance phase",
+    "attackModifierRequiresSelectedAttack": "Select an attack ability before playing this attack modifier",
     "wrongPhaseForCard": "This card requires a specific phase",
     "requireOwnTurn": "This card can only be played on your turn",
     "requireOpponentTurn": "This card can only be played on opponent's turn",

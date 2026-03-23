@@ -77,7 +77,9 @@ export function registerCthulhuAbilities(): void {
     // 深化目标：回合结束时条件获VP
     registerTrigger('cthulhu_furthering_the_cause', 'onTurnEnd', cthulhuFurtheringTheCauseTrigger);
     // 天选之人：基地计分前抽疑狂卡?2力量
-    registerTrigger('cthulhu_chosen', 'beforeScoring', cthulhuChosenBeforeScoring);
+    registerTrigger('cthulhu_chosen', 'beforeScoring', cthulhuChosenBeforeScoringPerInstance, {
+        perInstance: true,
+    });
     // 完成仪式：回合开始时清场并换基地
     registerTrigger('cthulhu_complete_the_ritual', 'onTurnStart', cthulhuCompleteTheRitualTrigger);
 }
@@ -402,6 +404,62 @@ function cthulhuChosenBeforeScoring(ctx: TriggerContext): TriggerResult {
     return { events: [], matchState: ms };
 }
 
+function cthulhuChosenBeforeScoringPerInstance(ctx: TriggerContext): TriggerResult {
+    const locatedChosen = ctx.sourceCardUid
+        ? ctx.state.bases
+            .flatMap((base, baseIndex) => base.minions.map(minion => ({ minion, baseIndex })))
+            .find(entry => entry.minion.uid === ctx.sourceCardUid)
+        : ctx.state.bases
+            .flatMap((base, baseIndex) => base.minions.map(minion => ({ minion, baseIndex })))
+            .find(entry => matchesDefId(entry.minion.defId, 'cthulhu_chosen'));
+
+    if (!locatedChosen) return { events: [] };
+
+    const chosen = locatedChosen.minion;
+    const chosenBaseIndex = locatedChosen.baseIndex;
+
+    if (!ctx.matchState) {
+        const events: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(chosen.controller, 1, ctx.state, 'cthulhu_chosen', ctx.now);
+        if (madnessEvt) events.push(madnessEvt);
+        events.push(addTempPower(chosen.uid, chosenBaseIndex, 2, 'cthulhu_chosen', ctx.now));
+        return { events };
+    }
+
+    const interaction = createSimpleChoice(
+        `cthulhu_chosen_confirm_${chosen.uid}_${ctx.now}`,
+        chosen.controller,
+        '天选之人：是否抽一张疯狂牌来获得 +2 力量？',
+        [
+            {
+                id: 'yes',
+                label: '是（抽疯狂牌，+2 力量）',
+                value: {
+                    activate: true,
+                    uid: chosen.uid,
+                    minionUid: chosen.uid,
+                    defId: chosen.defId,
+                    minionDefId: chosen.defId,
+                    baseIndex: chosenBaseIndex,
+                    controller: chosen.controller,
+                },
+                displayMode: 'button' as const,
+                baseDefId: ctx.state.bases[chosenBaseIndex]?.defId,
+            },
+            {
+                id: 'no',
+                label: '否（不触发）',
+                value: { activate: false },
+                displayMode: 'button' as const,
+                baseDefId: ctx.state.bases[chosenBaseIndex]?.defId,
+            },
+        ],
+        { sourceId: 'cthulhu_chosen_confirm', targetType: 'minion' }
+    );
+
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
 // ============================================================================
 // ongoing 效果触发器?
 // ============================================================================
@@ -473,6 +531,9 @@ function madnessOnPlay(ctx: AbilityContext): AbilityResult {
         `special_madness_${ctx.now}`, ctx.playerId,
         '疯狂卡：选择一个效果', options,
         { sourceId: 'special_madness', targetType: 'button' },
+    );
+    interaction.data.options = interaction.data.options.map(option =>
+        option.id === 'return' ? { ...option, label: '消耗这张疯狂牌' } : option,
     );
     return {
         events: [],
