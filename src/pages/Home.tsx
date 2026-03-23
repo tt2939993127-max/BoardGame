@@ -69,6 +69,8 @@ export const Home = () => {
     const { openModal, closeModal } = useModalStack();
     const { warning: toastWarning, error: toastError } = useToast();
     const { t, i18n } = useTranslation(['lobby', 'auth']);
+    const getGuestId = () => getOrCreateGuestId();
+    const getGuestName = () => resolveGuestName(t, getGuestId());
     const seoT = useMemo(() => {
         if (typeof i18n?.getFixedT === 'function') {
             return i18n.getFixedT('zh-CN', ['lobby', 'common']);
@@ -106,16 +108,6 @@ export const Home = () => {
 
         return null;
     }, [localStorageTick, user?.id]);
-    const myMatchRole = useMemo(() => {
-        if (!localMatchRole) {
-            return null;
-        }
-        return {
-            playerID: localMatchRole.playerID,
-            credentials: localMatchRole.credentials,
-            gameName: localMatchRole.gameName,
-        };
-    }, [localMatchRole]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
     const confirmModalIdRef = useRef<string | null>(null);
@@ -178,9 +170,6 @@ export const Home = () => {
         }
         setSearchParams({ game: id });
     };
-
-    const getGuestId = () => getOrCreateGuestId();
-    const getGuestName = () => resolveGuestName(t, getGuestId());
 
     const handleLogout = () => {
         logout();
@@ -253,7 +242,11 @@ export const Home = () => {
         pruneStoredMatchCredentials();
 
         if (!localMatchRole) {
-            setActiveMatch(null);
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setActiveMatch(null);
+                }
+            });
             return;
         }
 
