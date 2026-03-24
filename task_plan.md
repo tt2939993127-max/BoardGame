@@ -85,6 +85,8 @@
 | 先查规则再查代码 | 先确认期望行为，避免按错误假设修代码 |
 | 先做全链路检查再决定是否修复 | 遵守 bug 排查规范，避免盲改 |
 | 使用项目根目录计划文件持续记录 | 便于中断恢复与审计 |
+| BoardGame 主 Plan 继续留在仓库根 `task_plan.md` | `planning-with-files` 原始设计要求 planning files 位于 project directory；迁到 agent workspace 会混淆项目计划与 agent memory |
+| `temp/*plan*` / `*resume*` / `*progress*` / `*tracker*` 仅作为专项或历史材料 | 满足“Plan with Files 产出只能放一处”，避免出现第二正式入口 |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
