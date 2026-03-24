@@ -30,6 +30,11 @@
 - Next step:
   - 把 feedback / E2E 两条线中仍然有效、值得长期保留的结论提炼进 `task_plan.md`，减少后续会话继续从 `temp/*plan*` 进入的诱因。
   - 视需要再做一轮命名/归档清理建议（优先处理最像第二主 Plan 的文件名）。
+- Update:
+  - 已把 feedback / E2E 两条线的有效结论摘要并回 `task_plan.md`：feedback 当前重点已从“继续修代码”转为“关闭后台状态”；E2E 当前主战场明确为 SmashUp 收尾，top 5 next batch 已写入主 Plan。
+  - 已把 temp 文件的最小处置规则写入 `task_plan.md`：`open-feedback-tracker.md` / `e2e-next-batch-plan.md` 降级为专项记录；`feedback-main-branch-resume-plan.md` / `main-e2e-single-progress.md` / `ssh-codex-plan.md` / `reboot-resume-plan.md` 降级为待清理历史材料。
+- Next step:
+  - 如老板认可当前口径，下一步可直接进入“清理命名最像第二主 Plan 的 temp 文件”或转回业务主线（静态资源 fallback / 房间被删链路）继续收口。
 
 ## Session: 2026-03-10
 
