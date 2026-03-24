@@ -40,14 +40,14 @@
 - 保留但降级为专项记录：
   - `temp/open-feedback-tracker.md`
   - `temp/e2e-next-batch-plan.md`
-- 保留待清理的历史材料：
+- 已清理的历史材料：
   - `temp/feedback-main-branch-resume-plan.md`
   - `temp/main-e2e-single-progress.md`
   - `temp/ssh-codex-plan.md`
   - `temp/reboot-resume-plan.md`
 - 规则：
   - 后续若 temp 文档里的结论仍有效，先摘要回写根目录三件套；
-  - 摘要回写完成后，历史 temp 文档应优先删除，或至少不再用 `*-plan.md` 这类会伪装成主入口的命名继续扩写。
+  - 摘要回写完成后，历史 temp 文档应优先删除，避免继续用 `*-plan.md` / `*-progress.md` / `*-resume-plan.md` 这类会伪装成主入口的命名扩写。
 
 ### Phase C：修复线上静态资源错配
 - [ ] 复核 `apps/api/src/main.ts` 中 `/assets` 是否排除在 SPA fallback 外

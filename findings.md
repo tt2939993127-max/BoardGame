@@ -43,8 +43,8 @@
 | `progress.md` | 配套记录 | 会话执行日志、验证、handoff | 继续保留；不得表述成第二份 plan |
 | `temp/open-feedback-tracker.md` | 专项配套记录 | feedback 未关闭项盘点 | 内容应摘要并回写主 Plan，不得充当主入口 |
 | `temp/e2e-next-batch-plan.md` | 专项配套记录 | E2E 下一批候选与排序 | 内容应摘要并回写主 Plan，不得充当主入口 |
-| `temp/feedback-main-branch-resume-plan.md` | 历史临时材料 | feedback 主分支收口历史 handoff | 已基本降级为历史材料，可保留待清理 |
-| `temp/main-e2e-single-progress.md` | 历史临时材料 | 单次 E2E 试跑记录 | 已基本降级为历史材料，可保留待清理 |
+| `temp/feedback-main-branch-resume-plan.md` | 历史临时材料 | feedback 主分支收口历史 handoff | 2026-03-24 已删除；有效结论已回写根目录三件套 |
+| `temp/main-e2e-single-progress.md` | 历史临时材料 | 单次 E2E 试跑记录 | 2026-03-24 已删除；有效结论已回写根目录三件套 |
 | `docs/smashup-e2e-migration-plan.md` | 领域历史文档 | SmashUp E2E 曾经的专题计划 | 不属于当前唯一主 Plan；若与现状冲突，应视为历史/专题文档 |
 | `docs/bugs/feedback-rate-limit-todo.md` | 领域 backlog 文档 | feedback 速率限制待办 | 属于专题 backlog，不属于主 Plan |
 
@@ -54,7 +54,7 @@
   1. 只承认 `task_plan.md` 是当前正式入口；
   2. `findings.md` / `progress.md` 只写配套信息，不重复维护完整任务拆解；
   3. `temp/*plan*` / `*resume*` / `*progress*` / `*tracker*` 只作为专项临时材料或历史材料，不能再被当作“当前任务从哪继续”的入口。
-- 目前最大风险不是 `task_plan.md` 放错位置，而是 `temp/e2e-next-batch-plan.md`、`temp/feedback-main-branch-resume-plan.md`、`temp/ssh-codex-plan.md` 这类命名会持续制造“第二主计划”错觉；后续应逐步把仍有效的结论摘要回写到根目录三件套，再将这些文件降级为历史材料或清理。
+- 目前最大风险不是 `task_plan.md` 放错位置，而是 temp 下带 `plan/progress/resume` 命名的文件容易持续制造“第二主计划”错觉；其中 `temp/feedback-main-branch-resume-plan.md`、`temp/main-e2e-single-progress.md`、`temp/ssh-codex-plan.md`、`temp/reboot-resume-plan.md` 已于 2026-03-24 清理，后续应继续避免新增同类命名入口。
 
 ## 已读规范 / 文档
 - `docs/ai-rules/engine-systems.md`
