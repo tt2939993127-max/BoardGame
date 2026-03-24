@@ -16,6 +16,21 @@
   - 新会话恢复时，先读本三件套，再检查以下产物是否已落盘：`temp/open-feedback-tracker.md`、`temp/e2e-next-batch-plan.md`、`temp/codex-room-assets-findings.md`。
   - 然后继续两条核心修复线：`apps/api/src/main.ts` 的 `/assets` SPA fallback 排除是否已真实落盘/验证；`server.ts` + 前端状态链路对“房间已删除”误判的根因与最小修复。
 
+## Session: 2026-03-24 Plan with Files 唯一落点收口
+- **Status:** in_progress
+- Actions taken:
+  - 复读 `task_plan.md` / `findings.md` / `progress.md`，确认根目录三件套当前仍被定义为唯一正式入口 + 配套记录。
+  - 读取 `temp/open-feedback-tracker.md`、`temp/e2e-next-batch-plan.md`、`temp/feedback-main-branch-resume-plan.md`、`temp/main-e2e-single-progress.md`、`docs/smashup-e2e-migration-plan.md`、`docs/bugs/feedback-rate-limit-todo.md`，核对 feedback / E2E 相关材料的真实角色。
+  - 读取 `planning-with-files` 技能原始说明，确认该技能明确要求 planning files 放在 **project directory**，不是 agent workspace。
+  - 扫描 `temp/` 下带 `plan/progress/resume/tracker` 命名的文件，确认当前最容易制造“第二主 Plan”错觉的是：`temp/e2e-next-batch-plan.md`、`temp/feedback-main-branch-resume-plan.md`、`temp/ssh-codex-plan.md`、`temp/main-e2e-single-progress.md`、`temp/open-feedback-tracker.md`。
+  - 已将本轮分级判断直接写回 `findings.md`，避免再另起一份说明文档。
+- Interim conclusion:
+  - 对 **BoardGame 项目任务** 而言，主 Plan 继续放在仓库根 `task_plan.md` 更符合 `planning-with-files` 原始设计，也更符合“项目计划 ≠ agent memory”的边界。
+  - 当前结构并未必然违反“Plan with Files 产出只能放一处”，但需要把 temp 下仍有效的专项结论逐步摘要回写到根目录三件套，并把这些 temp 文件降级为配套/历史材料。
+- Next step:
+  - 把 feedback / E2E 两条线中仍然有效、值得长期保留的结论提炼进 `task_plan.md`，减少后续会话继续从 `temp/*plan*` 进入的诱因。
+  - 视需要再做一轮命名/归档清理建议（优先处理最像第二主 Plan 的文件名）。
+
 ## Session: 2026-03-10
 
 ### Phase 1：读取规则与相关规范

@@ -27,6 +27,35 @@
 - `codex-e2e-migration`：已启动 guarded task，目标产物 `temp/e2e-next-batch-plan.md`。
 - `codex-find-planning-with-files`：原用于定位 plan 技能；用户后续直接给出 GitHub 地址后已人工安装技能，本任务可视为完成/失效。
 
+## Plan with Files 唯一落点核对（2026-03-24）
+- 直接依据 `planning-with-files` 技能原始说明核对：该技能明确要求 **planning files go in your project directory**，并把 `task_plan.md` / `findings.md` / `progress.md` 视为项目目录内的持久工作记忆，而不是 agent workspace 文件。
+- 因此，若当前要讨论的是 **BoardGame 项目任务** 的唯一正式 Plan 落点，那么根目录 `task_plan.md` 与技能原始设计是对齐的；把主 Plan 迁到 agent workspace，反而会把“项目任务计划”和“agent 自身记忆”混在一起，削弱跨会话恢复与仓库内审计能力。
+- 需要严格区分的不是“项目根 vs agent workspace 都可放主 Plan”，而是：
+  - **项目任务计划** → `D:\gongzuo\webgame\BoardGame\task_plan.md`
+  - **项目任务研究/会话记录** → `findings.md` / `progress.md`
+  - **agent 自身记忆** → agent workspace 下的 memory/ 等目录，不能写回项目仓库
+- 当前仓库内和本任务最相关的分级可收敛为：
+
+| 路径 | 分级 | 角色 | 处理建议 |
+| --- | --- | --- | --- |
+| `task_plan.md` | 正式入口 | BoardGame 当前唯一正式 Plan | 保持唯一入口，不迁到 agent workspace |
+| `findings.md` | 配套记录 | 研究发现、规则、判断依据 | 继续保留；不得表述成第二份 plan |
+| `progress.md` | 配套记录 | 会话执行日志、验证、handoff | 继续保留；不得表述成第二份 plan |
+| `temp/open-feedback-tracker.md` | 专项配套记录 | feedback 未关闭项盘点 | 内容应摘要并回写主 Plan，不得充当主入口 |
+| `temp/e2e-next-batch-plan.md` | 专项配套记录 | E2E 下一批候选与排序 | 内容应摘要并回写主 Plan，不得充当主入口 |
+| `temp/feedback-main-branch-resume-plan.md` | 历史临时材料 | feedback 主分支收口历史 handoff | 已基本降级为历史材料，可保留待清理 |
+| `temp/main-e2e-single-progress.md` | 历史临时材料 | 单次 E2E 试跑记录 | 已基本降级为历史材料，可保留待清理 |
+| `docs/smashup-e2e-migration-plan.md` | 领域历史文档 | SmashUp E2E 曾经的专题计划 | 不属于当前唯一主 Plan；若与现状冲突，应视为历史/专题文档 |
+| `docs/bugs/feedback-rate-limit-todo.md` | 领域 backlog 文档 | feedback 速率限制待办 | 属于专题 backlog，不属于主 Plan |
+
+## 对老板新规的符合性判断（2026-03-24）
+- **结论：当前结构在原则上可符合新规，但存在“视觉上像多份 plan”的风险。**
+- 真正符合新规的前提是：
+  1. 只承认 `task_plan.md` 是当前正式入口；
+  2. `findings.md` / `progress.md` 只写配套信息，不重复维护完整任务拆解；
+  3. `temp/*plan*` / `*resume*` / `*progress*` / `*tracker*` 只作为专项临时材料或历史材料，不能再被当作“当前任务从哪继续”的入口。
+- 目前最大风险不是 `task_plan.md` 放错位置，而是 `temp/e2e-next-batch-plan.md`、`temp/feedback-main-branch-resume-plan.md`、`temp/ssh-codex-plan.md` 这类命名会持续制造“第二主计划”错觉；后续应逐步把仍有效的结论摘要回写到根目录三件套，再将这些文件降级为历史材料或清理。
+
 ## 已读规范 / 文档
 - `docs/ai-rules/engine-systems.md`
 - `src/games/dicethrone/rule/王权骰铸规则.md`
