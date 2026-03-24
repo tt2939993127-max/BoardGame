@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 test.describe('SmashUp Image Loading', () => {
     test.use({ 
         baseURL: process.env.VITE_FRONTEND_URL
-            || `http://localhost:${process.env.PW_PORT || process.env.E2E_PORT || '6173'}`,
+            || `http://localhost:${process.env.PW_PORT || process.env.E2E_PORT || '6174'}`, 
         // 增加超时时间，因为图片加载可能较慢
         timeout: 60000
     });

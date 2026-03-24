@@ -123,6 +123,20 @@ const doPlayAction = async (page: Page) => {
     }
 };
 
+const doUseTalent = async (page: Page) => {
+    await waitForTutorialStep(page, 'useTalent', 15000);
+    await waitForActionPrompt(page);
+    await page.waitForTimeout(500);
+
+    // 基地区随从容器本身负责 onClick -> dispatch USE_TALENT
+    const baseArea = page.locator('[data-tutorial-id="su-base-area"]');
+    await expect(baseArea).toBeVisible({ timeout: 5000 });
+    const librarianMinion = baseArea.locator('[data-minion-def-id="miskatonic_librarian"]');
+    await expect(librarianMinion.first()).toBeVisible({ timeout: 10000 });
+    await librarianMinion.first().click({ force: true });
+    await page.waitForTimeout(800);
+};
+
 const doEndPlayCards = async (page: Page) => {
     await waitForTutorialStep(page, 'endPlayCards', 15000);
     await waitForActionPrompt(page);
@@ -183,6 +197,7 @@ test.describe('Smash Up Tutorial E2E', () => {
         await skipIntroSteps(page);
         await doPlayMinion(page);
         await doPlayAction(page);
+        await doUseTalent(page);
         await doEndPlayCards(page);
         await waitForTutorialStep(page, 'baseScoring', 15000);
     });
@@ -203,6 +218,7 @@ test.describe('Smash Up Tutorial E2E', () => {
 
         await doPlayMinion(page);
         await doPlayAction(page);
+        await doUseTalent(page);
         await doEndPlayCards(page);
 
         await waitForTutorialStep(page, 'baseScoring', 15000);
@@ -225,10 +241,8 @@ test.describe('Smash Up Tutorial E2E', () => {
         await waitForTutorialStep(page, 'endDraw', 10000);
         await clickNext(page);
 
-        await waitForTutorialStep(page, 'talentIntro', 40000);
-        await clickNext(page);
-
-        await waitForTutorialStep(page, 'turnCycle', 10000);
+        // opponentTurn 含 aiActions，TutorialOverlay 在该步不会渲染；直接等待自动推进后的 turnCycle
+        await waitForTutorialStep(page, 'turnCycle', 40000);
         await clickNext(page);
 
         await waitForTutorialStep(page, 'summary', 10000);
@@ -265,7 +279,7 @@ test.describe('Smash Up Tutorial E2E', () => {
         await expect(card.first()).toBeVisible({ timeout: 15000 });
         await card.first().click();
 
-        const tutorialBtn = page.getByRole('button', { name: /^Tutorial$/i });
+        const tutorialBtn = page.getByRole('button', { name: /Tutorial/i });
         await expect(tutorialBtn).toBeVisible({ timeout: 10000 });
         await tutorialBtn.click();
 
