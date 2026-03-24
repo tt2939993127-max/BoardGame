@@ -35,6 +35,11 @@
   - 已把 temp 文件的最小处置规则写入 `task_plan.md`：`open-feedback-tracker.md` / `e2e-next-batch-plan.md` 降级为专项记录；`feedback-main-branch-resume-plan.md` / `main-e2e-single-progress.md` / `ssh-codex-plan.md` / `reboot-resume-plan.md` 降级为待清理历史材料。
 - Next step:
   - 如老板认可当前口径，下一步可直接进入“清理命名最像第二主 Plan 的 temp 文件”或转回业务主线（静态资源 fallback / 房间被删链路）继续收口。
+- Update:
+  - 已确认 `temp/feedback-main-branch-resume-plan.md`、`temp/main-e2e-single-progress.md`、`temp/ssh-codex-plan.md`、`temp/reboot-resume-plan.md` 仅剩根目录三件套在引用，无其他活跃引用。
+  - 已删除上述 4 份历史 temp 文件，减少“第二主 Plan / 第二进度入口”错觉。
+- Next step:
+  - 当前 temp 下仍保留的与本任务最相关专项记录只剩 `temp/open-feedback-tracker.md` 与 `temp/e2e-next-batch-plan.md`；后续若它们内容继续沉淀进主 Plan，可再评估是否重命名为更不易误解的专项 notes 文件。
 
 ## Session: 2026-03-10
 
