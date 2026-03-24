@@ -27,11 +27,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 #### plan 术语定义（强制）
 
-- **当用户说 `plan` 时，默认指项目内唯一的总计划文件，不是泛指任何计划文档，也不是 `planning-with-files` 技能本身。**
-- **当前唯一总 plan：`task_plan.md`（仓库根目录）**。
-- `findings.md` / `progress.md` 是总 plan 的配套事实与进度记录，**不是 plan 本体**。
-- `temp/*plan*`、`*resume*`、`*progress*` 这类文件只能视为临时材料、历史产物或子线证据，**不得与总 plan 并列解释**。
-- **禁止一边维护总 plan，一边再新建第二份正式 plan。** 若有新子任务、新发现、新 blocker，必须回填到唯一总 plan，而不是另起临时 plan。
+- **当用户说 `plan` 时，默认指 `planning-with-files` 这套规划工作方式 / 效果，不是泛指任何临时计划文档。**
+- 在本项目中，这套效果的**唯一正式落点**是仓库根目录 `task_plan.md`。
+- `findings.md` / `progress.md` 是总 plan 的配套事实与进度记录，**不是第二份 plan**。
+- `temp/*plan*`、`*resume*`、`*progress*` 这类文件只能视为临时材料、历史产物或子线证据，**不得替代或并列于总 plan**。
+- **禁止出现“名义上用了 planning-with-files，实际上又并行维护多份正式 plan”的情况。** 若有新子任务、新发现、新 blocker，必须回填到 `task_plan.md`，而不是另起正式 plan。
 - 若现有文档命名与上述语义冲突，解释优先级以本节为准。
 
 - **默认禁用**：除非用户**明确要求**使用规划流程、规划文件、`planning-with-files`、`task_plan.md`、`findings.md`、`progress.md`，否则**禁止主动启用**这套流程。
