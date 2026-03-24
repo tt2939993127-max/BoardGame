@@ -7,9 +7,9 @@
   3. feedback 主线只跟未关闭 / 待处理项
   4. E2E 迁移主线整理下一批
   5. 核对项目内 progress / plan / evidence 文档，作为跨会话恢复入口
-- 用户已明确：以后说 **plan**，默认指的是 `planning-with-files` 这套规划工作方式 / 效果，不是泛指任意临时计划文档。
-- 在本项目内，这套效果的唯一正式落点是仓库根目录 `task_plan.md`；`findings.md` / `progress.md` 仅作为配套事实与进度记录。
-- 约束：不能只“有这个技能”，却实际并行维护多份正式 plan；所有新发现/子任务都必须回填到 `task_plan.md`。
+- 用户已明确：以后说 **plan**，默认指的是 `planning-with-files` 这套规划工作方式 / 效果。
+- 用户的硬约束是：**Plan with Files 产出的正式计划文档只能放在一处**；当前唯一允许位置是仓库根目录 `task_plan.md`。
+- `findings.md` / `progress.md` 只做配套记录；`temp/*plan*` 一律不再作为当前正式计划入口。
 
 ## 已知事实
 - 线上静态资源故障当前最强信号不是 Host/容器整体宕机，而是旧 `/assets/*.js` 请求被错误回退成 `index.html`，表现为 `200 OK` + `Content-Type: text/html`，进而触发 `Failed to load module script` / `MIME type "text/html"`。

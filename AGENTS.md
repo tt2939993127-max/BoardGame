@@ -25,14 +25,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 规划与交接文件（强制）
 
-#### plan 术语定义（强制）
+#### plan / Plan with Files 术语定义（强制）
 
-- **当用户说 `plan` 时，默认指 `planning-with-files` 这套规划工作方式 / 效果，不是泛指任何临时计划文档。**
-- 在本项目中，这套效果的**唯一正式落点**是仓库根目录 `task_plan.md`。
-- `findings.md` / `progress.md` 是总 plan 的配套事实与进度记录，**不是第二份 plan**。
-- `temp/*plan*`、`*resume*`、`*progress*` 这类文件只能视为临时材料、历史产物或子线证据，**不得替代或并列于总 plan**。
-- **禁止出现“名义上用了 planning-with-files，实际上又并行维护多份正式 plan”的情况。** 若有新子任务、新发现、新 blocker，必须回填到 `task_plan.md`，而不是另起正式 plan。
-- 若现有文档命名与上述语义冲突，解释优先级以本节为准。
+- **当用户说 `plan` 时，默认指 `planning-with-files` 这套规划工作方式 / 效果。**
+- **Plan with Files 产出的正式计划文档只能放在一处：仓库根目录 `task_plan.md`。**
+- `findings.md` / `progress.md` 仅允许记录事实与进度，**不得承载第二份 plan**。
+- `temp/` 目录下禁止再放新的正式 plan、resume plan、progress plan；历史遗留文件只按临时材料/旧产物看待，**不得继续作为当前正式计划入口**。
+- **禁止凭个人理解把 plan 分散到多个位置。** 只要属于 Plan with Files 这套流程的新任务、新子任务、新 blocker、新结论，都必须回填到 `task_plan.md`。
+- 若未来需要调整唯一落点，必须先更新本节规范，再改执行位置；在此之前一律以 `task_plan.md` 为准。
 
 - **默认禁用**：除非用户**明确要求**使用规划流程、规划文件、`planning-with-files`、`task_plan.md`、`findings.md`、`progress.md`，否则**禁止主动启用**这套流程。
 - **复杂任务也不自动启用**：即使任务较复杂、预计跨窗口继续、或工具调用较多，若用户没有明确指定，也不要自行创建或维护上述规划/交接文件。
