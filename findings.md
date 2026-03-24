@@ -7,8 +7,9 @@
   3. feedback 主线只跟未关闭 / 待处理项
   4. E2E 迁移主线整理下一批
   5. 核对项目内 progress / plan / evidence 文档，作为跨会话恢复入口
-- 用户已明确：以后说 **plan**，默认指的是 `planning-with-files` 技能，而不是泛指计划文档。
-- `planning-with-files` 已安装到：`C:\Users\zhuagenbao\.openclaw\workspace\skills\planning-with-files\SKILL.md`。
+- 用户已明确：以后说 **plan**，默认指的是项目内**唯一总计划文件**，不是泛指任意计划文档，也不是 `planning-with-files` 技能本身。
+- 当前唯一总 plan 为仓库根目录 `task_plan.md`；`findings.md` / `progress.md` 仅作为配套事实与进度记录。
+- `planning-with-files` 只是可选方法/技能，不等于 plan 语义本身。
 
 ## 已知事实
 - 线上静态资源故障当前最强信号不是 Host/容器整体宕机，而是旧 `/assets/*.js` 请求被错误回退成 `index.html`，表现为 `200 OK` + `Content-Type: text/html`，进而触发 `Failed to load module script` / `MIME type "text/html"`。

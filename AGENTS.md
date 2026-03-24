@@ -25,6 +25,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 规划与交接文件（强制）
 
+#### plan 术语定义（强制）
+
+- **当用户说 `plan` 时，默认指项目内唯一的总计划文件，不是泛指任何计划文档，也不是 `planning-with-files` 技能本身。**
+- **当前唯一总 plan：`task_plan.md`（仓库根目录）**。
+- `findings.md` / `progress.md` 是总 plan 的配套事实与进度记录，**不是 plan 本体**。
+- `temp/*plan*`、`*resume*`、`*progress*` 这类文件只能视为临时材料、历史产物或子线证据，**不得与总 plan 并列解释**。
+- **禁止一边维护总 plan，一边再新建第二份正式 plan。** 若有新子任务、新发现、新 blocker，必须回填到唯一总 plan，而不是另起临时 plan。
+- 若现有文档命名与上述语义冲突，解释优先级以本节为准。
+
 - **默认禁用**：除非用户**明确要求**使用规划流程、规划文件、`planning-with-files`、`task_plan.md`、`findings.md`、`progress.md`，否则**禁止主动启用**这套流程。
 - **复杂任务也不自动启用**：即使任务较复杂、预计跨窗口继续、或工具调用较多，若用户没有明确指定，也不要自行创建或维护上述规划/交接文件。
 - **用户一旦明确要求停用**：必须立即停止继续维护这套规划文件；后续进度直接在对话中汇报，除非用户再次明确要求恢复。
