@@ -11,7 +11,7 @@
     - `codex-e2e-migration` → 目标产物 `temp/e2e-next-batch-plan.md`
     - `codex-find-planning-with-files` → 原用于精确定位 plan 技能；在用户给出 GitHub 后已人工确认并安装技能。
   - 已从 `https://github.com/OthmanAdi/planning-with-files` 安装 `planning-with-files`，并整理到 OpenClaw 可识别目录；workspace commit：`1216e1e` (`skills: install planning-with-files`)。
-  - 已纠正规范：以后说 `plan` 默认指项目内唯一总计划文件 `task_plan.md`，不是 `planning-with-files` 技能；多任务并行时，新增任务主动委派给 Codex。
+  - 已纠正规范：以后说 `plan` 默认指 `planning-with-files` 这套规划工作方式 / 效果；在本项目里的唯一正式落点是 `task_plan.md`，不得再并行维护第二份正式 plan；多任务并行时，新增任务主动委派给 Codex。
 - Next step:
   - 新会话恢复时，先读本三件套，再检查以下产物是否已落盘：`temp/open-feedback-tracker.md`、`temp/e2e-next-batch-plan.md`、`temp/codex-room-assets-findings.md`。
   - 然后继续两条核心修复线：`apps/api/src/main.ts` 的 `/assets` SPA fallback 排除是否已真实落盘/验证；`server.ts` + 前端状态链路对“房间已删除”误判的根因与最小修复。
