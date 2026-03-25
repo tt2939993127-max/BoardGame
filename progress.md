@@ -41,6 +41,22 @@
 - Next step:
   - 当前 temp 下仍保留的与本任务最相关专项记录只剩 `temp/open-feedback-tracker.md` 与 `temp/e2e-next-batch-plan.md`；后续若它们内容继续沉淀进主 Plan，可再评估是否重命名为更不易误解的专项 notes 文件。
 
+## Session: 2026-03-25 并行 AI 下的 E2E 共享端口止血
+- **Status:** in_progress
+- Actions taken:
+  - 复核 `cleanup_test_connections.js`、`start-single-worker-servers.js`、longtask guard 注册表、当前 worktree 与 codex 进程，确认 BoardGame 当前并非单 AI 单测试运行环境，存在并行 worktree / codex / guarded task。
+  - 识别风险：默认 `npm run test:e2e:cleanup` 会直接清理共享 single-worker E2E 端口 `6174/20000/21000`，在并行 AI 场景下可能误伤其他测试运行。
+  - 已修改 `scripts/infra/cleanup_test_connections.js`：默认安全模式下不再自动清理共享 single-worker E2E 端口；必须显式 `--e2e --shared` 或 `BG_E2E_ALLOW_SHARED_CLEANUP=1` 才允许清理。
+  - 已修改 `scripts/infra/start-single-worker-servers.js`：当共享固定端口已被占用时，明确提示这是共享 single-worker 模式，不应默认假设独占测试环境。
+  - 已在 agent 规则中补充 BoardGame E2E shared-port rule，明确多 AI / 多 worktree 并行时优先使用隔离 worker / 分配端口，而不是共享 single-worker 清理。
+  - 已验证：`npm run test:e2e:cleanup` 现在默认只提示安全模式，不再实际清理共享 E2E 端口；相关脚本通过 `node --check` 语法检查。
+- Interim conclusion:
+  - 这轮止血后，“一条 cleanup 命令误杀其他 AI 的 single-worker E2E”这个默认坑已被移除。
+  - 但 `framework-pilot-ninja-infiltrate.e2e.ts` 当前仍未进入业务判定，最新 blocker 仍是 single-worker 启动链 / ready 链路不稳定，而不是业务断言已确认失败。
+- Next step:
+  - 提交本轮规范 + 框架止血改动。
+  - 然后继续 E2E 主线，优先改用更隔离的运行方式来复核 ninja / wizard，而不是再次依赖共享 single-worker 清理。
+
 ## Session: 2026-03-10
 
 ### Phase 1：读取规则与相关规范
@@ -207,3 +223,24 @@
   - 直接运行 esbuild 打包 `server.ts`，确认不再出现 `duplicate-object-key` warning
 - Notes:
   - 当前终端环境会拦截 Node 内部 `child_process.spawn`，因此 `smoke:startup` 在这里会假失败；本轮改用直接 bundle 作为验证手段
+## Session: 2026-03-25 跨游戏 AI 骨架收尾
+- **Status:** completed
+- Actions taken:
+  - 补齐跨游戏 AI 基础设施的剩余接线：`manifest.ai`、本地 seat controller、训练采集 `legalActions`、本地 AI runner 去重。
+  - 为 `dicethrone` 新增 `src/games/dicethrone/ai.ts`，实现首个 game runtime、baseline local policy、以及 setup/phase/response/interaction 的最小 legal action 生成。
+  - 在 `src/games/dicethrone/game.ts` 注册 runtime。
+  - 在现有测试文件 `src/games/dicethrone/__tests__/basic-commands-coverage.test.ts` 中补充 AI 断言，没有新建测试文件。
+  - 修正 `src/engine/transport/server.ts` 的 manifest barrel 引用，避免测试环境 import 失败。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| Manifest 生成 | `node scripts/game/generate_game_manifests.js` | 生成成功 | unchanged / success | ✓ |
+| TypeScript 类型检查 | `npm run typecheck` | 通过 | 通过 | ✓ |
+| 训练采集 + 服务端 + DiceThrone AI | `npx vitest run src/engine/transport/__tests__/trainingData.test.ts src/engine/transport/__tests__/server.test.ts src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --maxWorkers=1` | 相关回归通过 | `26 passed` | ✓ |
+
+### Error Log
+| Timestamp | Error | Attempt | Resolution |
+|-----------|-------|---------|------------|
+| 2026-03-25 | `server.test.ts` 因 `server.ts` 误引 `../../games` 导致 Vite import 失败 | 1 | 改为显式引用 `../../games/manifest` |
+| 2026-03-25 | `DICETHRONE_CHARACTER_CATALOG is not iterable` | 1 | 改为从 `./domain/types` 直接导入运行时值 |
