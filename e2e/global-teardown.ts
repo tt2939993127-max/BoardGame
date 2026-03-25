@@ -8,6 +8,7 @@ import {
     cleanupWorkerPorts,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
+import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
 
 interface RuntimeRecord {
     workerId: number;
@@ -71,6 +72,7 @@ export default async function globalTeardown() {
         cleanupPorts(singleWorkerPorts, 'Single Worker');
         await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
         cleanupAllWorkerPortFiles();
+        removeRuntime(getRuntimeScope());
         return;
     }
 
@@ -79,4 +81,5 @@ export default async function globalTeardown() {
     }
 
     cleanupAllWorkerPortFiles();
+    removeRuntime(getRuntimeScope());
 }
