@@ -50,11 +50,41 @@ async function openWizardPortalScene(
     });
 }
 
-async function selectInteractionOptionByDefId(game: any, defId: string): Promise<void> {
+async function getInteractionOptionByDefId(game: any, defId: string): Promise<any> {
     const options = await game.getInteractionOptions();
     const option = options.find((entry: any) => entry?.value?.defId === defId);
     expect(option, `交互中未找到 defId=${defId} 的选项`).toBeTruthy();
-    await game.selectOption(option.id);
+    return option;
+}
+
+async function respondCurrentInteraction(game: any, payload: { optionId?: string; optionIds?: string[] }): Promise<void> {
+    await (game as any).page.evaluate((responsePayload) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        const interaction = state?.sys?.interaction?.current;
+        if (!interaction) throw new Error('No current interaction');
+        harness.command.dispatch({
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: interaction.playerId,
+            payload: responsePayload,
+        });
+    }, payload);
+    await (game as any).page.waitForTimeout(300);
+}
+
+async function selectInteractionOptionByDefId(game: any, defId: string): Promise<void> {
+    const option = await getInteractionOptionByDefId(game, defId);
+    await respondCurrentInteraction(game, { optionId: option.id });
+}
+
+async function confirmCurrentMultiSelection(game: any, defIds: string[]): Promise<void> {
+    const options = await game.getInteractionOptions();
+    const optionIds = defIds.map((defId) => {
+        const option = options.find((entry: any) => entry?.value?.defId === defId);
+        expect(option, `交互中未找到 defId=${defId} 的选项`).toBeTruthy();
+        return option.id;
+    });
+    await respondCurrentInteraction(game, { optionIds });
 }
 
 async function waitForNoInteraction(game: any): Promise<void> {
@@ -77,9 +107,7 @@ test.describe('SmashUp Wizard Portal', () => {
         expect(pickState.sys.interaction.current.data.multi).toEqual({ min: 0, max: 2 });
         await game.screenshot('01-portal-pick-single', testInfo);
 
-        await selectInteractionOptionByDefId(game, 'alien_invader');
-        await game.confirm();
-
+        await confirmCurrentMultiSelection(game, ['alien_invader']);
         await game.waitForInteraction('wizard_portal_order');
         await selectInteractionOptionByDefId(game, 'pirate_cannon');
         await game.waitForInteraction('wizard_portal_order');
@@ -109,8 +137,7 @@ test.describe('SmashUp Wizard Portal', () => {
         await game.waitForInteraction('wizard_portal_pick');
         await game.screenshot('03-portal-pick-skip', testInfo);
 
-        await game.confirm();
-
+        await confirmCurrentMultiSelection(game, []);
         await game.waitForInteraction('wizard_portal_order');
         await selectInteractionOptionByDefId(game, 'alien_invader');
         await game.waitForInteraction('wizard_portal_order');
@@ -145,10 +172,7 @@ test.describe('SmashUp Wizard Portal', () => {
         expect(pickOptions.filter((option: any) => option.value?.defId).length).toBe(2);
         await game.screenshot('05-portal-pick-multi', testInfo);
 
-        await selectInteractionOptionByDefId(game, 'alien_invader');
-        await selectInteractionOptionByDefId(game, 'wizard_apprentice');
-        await game.confirm();
-
+        await confirmCurrentMultiSelection(game, ['alien_invader', 'wizard_apprentice']);
         await game.waitForInteraction('wizard_portal_order');
         await selectInteractionOptionByDefId(game, 'pirate_shanghai');
         await waitForNoInteraction(game);
