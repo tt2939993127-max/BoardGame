@@ -80,6 +80,7 @@
     "test:e2e:parallel": "node scripts/infra/run-e2e-command.mjs parallel",
     "test:e2e:worker": "npm run check:child-process:e2e && node scripts/infra/start-worker-servers.js",
     "test:e2e:check": "node scripts/infra/check-e2e-safety.js",
+    "test:e2e:list": "node scripts/infra/list-e2e-runtimes.mjs",
     "capture:mobile:evidence": "node scripts/infra/capture-mobile-evidence.mjs",
     "init:admin": "npx tsx scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
