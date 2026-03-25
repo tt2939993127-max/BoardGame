@@ -1,4 +1,15 @@
 /**
+ * Experimental / historical state-injection spike.
+ *
+ * Former path: `e2e/smashup-wizard-portal-state-injection.e2e.ts`
+ * Status: experimental harness demo; not authoritative coverage for
+ * wizard_portal behavior and intentionally excluded from Playwright
+ * `*.e2e.ts` discovery.
+ *
+ * Canonical coverage now lives in: `e2e/smashup-wizard-portal.e2e.ts`
+ */
+
+/**
  * 传送门交互测试 - 跳过派系选择（简化版）
  * 
  * 测试目标：验证跳过派系选择功能是否正常工作
