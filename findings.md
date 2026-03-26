@@ -8,6 +8,14 @@
 - 这轮最直接的验收信号不是“面板自己不滚了”，而是：exit fab sheet 展开时 `html/body` 的 `overflow-y` 为 `hidden`、`overscroll-behavior-y` 为 `none`，且 document/body 不再出现横向溢出。
 - 已完成最小有效验证：`npm run typecheck` 通过；`smashup-4p-layout-test.e2e.ts` 中“移动端横屏应保持四人局布局可用，并支持手牌长按看牌”通过（1 passed）。
 
+## 新发现（2026-03-26，尾巴收口复核）
+- `temp/open-feedback-tracker.md` 仍有独立价值，但它的有效结论已经很明确：fb2 / fb3 / fb4 / fb5 代码层都已修复，后续主动作应转到后台关闭状态，不必继续把它当代码待办。
+- `temp/e2e-next-batch-plan.md` 仍有独立价值，但角色应固定为 SmashUp 收尾专项记录；它支持“当前主战场仍是 SmashUp 收尾，不要扩大战线”这一结论，而不是新的主 Plan。
+- `temp/codex-room-assets-findings.md` 的有效结论已被当前主线吸收：`apps/api/src/main.ts` 里 `/assets` 已排除出 SPA fallback，`src/main.tsx` 已存在 stale chunk 一次性自动刷新；但“缺失 chunk 真实不再返回 HTML”与生产层验证仍未完成。
+- `temp/codex-find-planning-with-files.md` 已无继续存在的必要：技能已人工安装，且该文件当前并不存在；它应视为已完成/失效，而不是待检查项。
+- POD 文档线当前不是“全部还能当真”：`p1-restoration-progress.md` 已是完成态，`p3-audit-progress.md` 明显落后于 `p3-audit-complete.md`，而 `p0` 相关文档内部仍存在“进度稿 / 最终稿 / 需要恢复清单”并存的冲突，不能整体宣称已完全收口。
+- “房主被删房”这条线的状态也应从“纯未知”改成“根因已基本锁定，但修复未落地”：服务端 duplicate-owner cleanup 仍然过于激进，前端则仍会把 chunk 失效后的 404 最终折叠成“房间不存在或已被删除”。
+
 ## 新发现（2026-03-26，board-shell 横屏共享壳）
 - 老板提供的截图暴露的是共性问题：底部滚动条与底部手牌/卡牌区域被裁剪，不是单游戏局部样式瑕疵。
 - 这类问题的共同点是：涉及 `mobileLayoutPreset: 'board-shell'` 的横屏移动端游戏，而不是只发生在某一个 `Board.tsx`。
