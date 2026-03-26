@@ -453,6 +453,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         const exitFabVisual = page.locator('[data-fab-visual-id="exit"]').first();
         const exitFabPanel = page.locator('[data-testid="fab-panel-exit"]');
         const exitFabSheet = page.locator('[data-testid="fab-sheet-exit"]');
+        const exitFabSheetBackdrop = page.locator('[data-testid="fab-sheet-backdrop-exit"]');
         const exitFabTooltip = page.locator('[data-testid="fab-tooltip-exit"]');
 
         await expect(scoreBoard).toBeVisible({ timeout: 15000 });
@@ -543,7 +544,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             await expectLocatorInsideViewport(panelButton, `exit fab panel button ${index + 1}`, viewport!.width, viewport!.height);
         }
         await game.screenshot('04a-mobile-exit-fab-panel', testInfo);
-        await exitFabButton.click();
+        await exitFabSheetBackdrop.click();
         await expect(exitFabPanel).toHaveCount(0);
         await expect(exitFabSheet).toHaveCount(0);
         await expect(exitFabTooltip).toHaveCount(0);
