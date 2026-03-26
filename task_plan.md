@@ -1,5 +1,45 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-26）：移动端 exit fab sheet 页面滚动锁收口
+
+### Goal
+- 修复移动端横屏下 exit fab sheet 打开后页面仍可继续滚动、可能带出全局滚动条/滚动穿透的问题。
+- 保持 exit fab 面板首屏可用，不依赖页面级滚动补救。
+- 为后续类似移动端 sheet / modal 提供可复用的文档滚动锁能力。
+
+### Result
+- [x] 在 `src/components/system/FabMenu.tsx` 接入 `useRuntimeViewport()`，统一使用运行时 viewport / safe-area 数据，不再混用裸 `window.innerWidth/innerHeight`。
+- [x] 新增 `src/hooks/ui/useDocumentScrollLock.ts`，在移动端 `sheet` 型面板展开时锁住 `html/body` 的 `overflow` 与 `overscroll-behavior`。
+- [x] `FabMenu` 仅在 `isOpen + mobile + mobilePanelVariant === 'sheet' + 有内容` 时启用页面滚动锁，避免误伤桌面端或普通 tooltip/panel。
+- [x] 补强 `e2e/smashup-4p-layout-test.e2e.ts`：新增 document/body 横向溢出断言，以及 exit fab sheet 展开时 `html/body` 滚动锁断言。
+- [x] 更新 `evidence/mobile-exit-fab-sheet-e2e-test.md`，把“页面级滚动已锁住”写入验收证据。
+- [x] 验证通过：`npm run typecheck`、`npm run test:e2e:ci:file -- smashup-4p-layout-test.e2e.ts "移动端横屏应保持四人局布局可用，并支持手牌长按看牌"`。
+
+### Next Step
+- 将本轮本地改动与记录一并提交 / 推送，避免继续以 dirty worktree 形态悬挂。
+- 后续若再引入移动端底部 sheet / 全屏 modal，优先复用 `useDocumentScrollLock`，不要各处重复手写 `overflow: hidden`。
+
+## Addendum（2026-03-26）：跨游戏 board-shell 横屏滚动条 / 裁剪修复
+
+### Goal
+- 修复移动端横屏下共用 `board-shell` 游戏（至少 SmashUp / DiceThrone / SummonerWars / Cardia）底部/横向滚动条与底部卡牌区域被裁剪的问题。
+- 以共享壳层修复为主，不做单游戏各自打补丁。
+- 完成代码提交、推送、镜像构建；部署改为等待下一个“早上”时间窗。
+
+### Result
+- [x] 确认问题属于 `MatchRoom/LocalMatchRoom -> MobileBoardShell -> board-shell` 共性链路，而不是单游戏独有。
+- [x] 在 `src/components/game/framework/MobileBoardShell.tsx` 增加 `mobile-board-shell__content` 约束层。
+- [x] 在 `src/index.css` 为共享壳补充统一裁剪约束，并在 `landscape-adapted board-shell` 下显式 `padding: 0`，避免 safe-area padding 再次缩小游戏画布。
+- [x] 补充共享壳回归测试：`src/components/game/framework/__tests__/MobileBoardShell.test.tsx`。
+- [x] 验证通过：`src/components/game/framework/__tests__/MobileBoardShell.test.tsx`、`src/games/__tests__/mobileSupport.test.ts`。
+- [x] 本地提交并正常通过 pre-push 门禁后推送：`608b5937 fix(ui): remove shared board-shell overflow padding`。
+- [x] GitHub `Build & Push Docker Images` 已成功：run `23594673252`。
+- [ ] 生产部署：已因超过时间窗被老板叫停，等待下一次“早上”再执行。
+
+### Next Step
+- 下个会话若继续这条线，先确认线上当前运行 revision 仍停留在旧版本（最后已确认是 `c51e0c01...`），然后只在早上时间窗执行远端 `bash scripts/deploy/deploy-image.sh update`。
+- 部署前继续保持 preflight：远端连通/权限、远端项目路径与 revision、当前运行镜像 revision 三项缺一不可。
+
 ## Addendum（2026-03-26）：跨游戏 AI 评分框架首轮收口
 
 ### Goal

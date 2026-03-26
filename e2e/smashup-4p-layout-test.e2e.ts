@@ -494,6 +494,21 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expectLocatorInsideViewport(endTurnHints, '缁撴潫鍥炲悎鎻愮ず瀹瑰櫒', viewport!.width, viewport!.height);
         await expectLocatorInsideViewport(endTurnMinionQuota, '闅忎粠棰濆害鎻愮ず', viewport!.width, viewport!.height);
         await expectLocatorInsideViewport(endTurnActionQuota, '鎴樻湳棰濆害鎻愮ず', viewport!.width, viewport!.height);
+        const mobileLandscapeDocumentMetrics = await page.evaluate(() => ({
+            viewportWidth: window.innerWidth,
+            documentClientWidth: document.documentElement.clientWidth,
+            documentScrollWidth: document.documentElement.scrollWidth,
+            bodyClientWidth: document.body.clientWidth,
+            bodyScrollWidth: document.body.scrollWidth,
+        }));
+        expect(
+            mobileLandscapeDocumentMetrics.documentScrollWidth,
+            '手机横屏时 documentElement 不应出现全局横向溢出',
+        ).toBeLessThanOrEqual(mobileLandscapeDocumentMetrics.documentClientWidth + 1);
+        expect(
+            mobileLandscapeDocumentMetrics.bodyScrollWidth,
+            '手机横屏时 body 不应出现全局横向溢出',
+        ).toBeLessThanOrEqual(mobileLandscapeDocumentMetrics.bodyClientWidth + 1);
 
         const handCardBox = await handCard.boundingBox();
         expect(handCardBox, '手牌卡牌应提供尺寸').not.toBeNull();
@@ -526,6 +541,16 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
         await expect(exitFabSheet).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
+        const exitFabDocumentMetrics = await page.evaluate(() => ({
+            htmlOverflowY: window.getComputedStyle(document.documentElement).overflowY,
+            bodyOverflowY: window.getComputedStyle(document.body).overflowY,
+            htmlOverscrollBehaviorY: window.getComputedStyle(document.documentElement).overscrollBehaviorY,
+            bodyOverscrollBehaviorY: window.getComputedStyle(document.body).overscrollBehaviorY,
+        }));
+        expect(exitFabDocumentMetrics.htmlOverflowY, 'exit fab sheet 打开时 html 不应继续可滚动').toBe('hidden');
+        expect(exitFabDocumentMetrics.bodyOverflowY, 'exit fab sheet 打开时 body 不应继续可滚动').toBe('hidden');
+        expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
+        expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
         const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
