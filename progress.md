@@ -18,6 +18,22 @@
 - Next step:
   - 将本轮代码与文档记录一起提交 / 推送，避免这组改动继续以 dirty worktree 形式悬挂。
 
+## Session: 2026-03-26 尾巴清仓 / 主 Plan 收口
+- **Status:** completed
+- Actions taken:
+  - 重新核对 `temp/open-feedback-tracker.md`、`temp/e2e-next-batch-plan.md`、`temp/codex-room-assets-findings.md` 与根目录三件套，确认哪些尾巴已经可以直接收口，哪些只是口径没更新。
+  - 确认 feedback 线的 open tracker 已不再是代码待办，主动作应转为后台关闭状态；E2E 线当前仍以 SmashUp 收尾为主，不扩大战线。
+  - 确认 `temp/codex-room-assets-findings.md` 的有效结论已被主线吸收：`apps/api/src/main.ts` 中 `/assets` 已排除出 SPA fallback；`src/main.tsx` 已存在 stale chunk 一次性自动刷新；但生产层真实返回值和部署后行为仍未完成验证。
+  - 确认“房间不存在/已被删除”链路已从“未知”推进到“根因基本锁定”：服务端 duplicate-owner cleanup 仍是无条件删旧房；前端 `Home/MatchRoom/useMatchStatus` 仍会把 404 最终收敛成 deleted-room 体验。
+  - 复查 POD 文档尾巴：`p1-restoration-progress.md` 为完成态，`p3-audit-progress.md` 已落后于 `p3-audit-complete.md`，`p0` 文档线仍存在内部冲突，因此不能把整个 POD 文档群一次性宣称全部收完。
+  - 更新 `task_plan.md`：关闭 Phase B，收口 Phase E，把 Phase C / D 改成更准确的 in_progress，并把 2026-03-10 的 Dice Throne 历史 Phase 从当前主任务区降级为 archived history。
+- Validation:
+  - `apps/api/src/main.ts` 复读确认 `spaExclude` 已包含 `/assets`
+  - `src/main.tsx` 复读确认 stale chunk reload 逻辑已存在
+  - `server.ts` 复读确认 duplicate-owner cleanup 仍为无条件 `storage.wipe + emitMatchEnded`
+- Next step:
+  - 若今晚继续推进，优先处理的只剩两条硬问题：生产层 `/assets` 返回值真实验证，以及 duplicate-owner cleanup 防误删修复。
+
 ## Session: 2026-03-26 board-shell 横屏滚动条 / 裁剪修复
 - **Status:** in_progress
 - Actions taken:

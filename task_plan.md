@@ -93,8 +93,8 @@
 ### Phase B：收口并行外包结果
 - [x] 检查 `temp/open-feedback-tracker.md` 是否已生成并提炼未关闭反馈清单
 - [x] 检查 `temp/e2e-next-batch-plan.md` 是否已生成并确定下一批 E2E
-- [ ] 检查 `temp/codex-room-assets-findings.md` / `temp/codex-find-planning-with-files.md` 等并行产物
-- **Status:** in_progress
+- [x] 检查 `temp/codex-room-assets-findings.md` / `temp/codex-find-planning-with-files.md` 等并行产物
+- **Status:** completed
 
 #### Phase B 当前收口结论（2026-03-24）
 - feedback 线：`temp/open-feedback-tracker.md` 显示当前 open tracker 里的 fb2 / fb3 / fb4 / fb5 **代码层面都已修复并有本地测试证据**；当前未收口点主要在反馈后台状态，而不是继续改代码。
@@ -106,6 +106,7 @@
   5. `e2e/smashup-innsmouth-locals-reveal.e2e.ts`
 - 计划结构线：`planning-with-files` 技能原始说明已确认 planning files 属于 **project directory**；因此 BoardGame 当前唯一正式 Plan 继续固定在仓库根 `task_plan.md`，不迁到 agent workspace。
 - temp 文件治理线：`temp/open-feedback-tracker.md` 与 `temp/e2e-next-batch-plan.md` 允许作为专项分析产物暂存，但后续会话不得把它们当作“当前从哪继续”的正式入口。
+- 房间/静态资源线：`temp/codex-room-assets-findings.md` 的有效结论已确认并回写主文档；`temp/codex-find-planning-with-files.md` 实际已失效（技能已人工安装，文件也不存在），两者都不再保留为待检查入口。
 
 #### temp 命名 / 归档最小规则（2026-03-24）
 - 保留但降级为专项记录：
@@ -121,52 +122,33 @@
   - 摘要回写完成后，历史 temp 文档应优先删除，避免继续用 `*-plan.md` / `*-progress.md` / `*-resume-plan.md` 这类会伪装成主入口的命名扩写。
 
 ### Phase C：修复线上静态资源错配
-- [ ] 复核 `apps/api/src/main.ts` 中 `/assets` 是否排除在 SPA fallback 外
+- [x] 复核 `apps/api/src/main.ts` 中 `/assets` 是否排除在 SPA fallback 外
 - [ ] 验证修复是否能阻止旧 chunk 命中 `200 text/html`
 - [ ] 核对是否存在旧 `index.html` + 新 `dist/assets` 不一致问题
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase D：追查“房主被踢 / 房间被删”根因链
-- [ ] 继续检查 `server.ts` 中 create / join / leave / destroy / storage.wipe / startup cleanup / ghost_connection 等链路
-- [ ] 检查前端 `useMatchStatus` / `MatchRoom` / `Home` / `lobbySocket` / `matchApi` 是否把 chunk 失效或 `Match not found` 混同为“房间被删除”
+- [x] 继续检查 `server.ts` 中 create / join / leave / destroy / storage.wipe / startup cleanup / ghost_connection 等链路
+- [x] 检查前端 `useMatchStatus` / `MatchRoom` / `Home` / `lobbySocket` / `matchApi` 是否把 chunk 失效或 `Match not found` 混同为“房间被删除”
 - [ ] 基于代码确认仅非对局页自动刷新一次的方案 A 落点
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase E：反馈 / E2E / 审计文档收口
 - [x] 只跟未关闭 / 待处理 feedback，不做全量历史拉取
 - [x] 确认 E2E 迁移当前真实 active lanes 与 top 5 next batch
-- [ ] 核对 P0/P1/P3 文档是否存在冲突、过期或误导
-- **Status:** in_progress
+- [x] 核对 P0/P1/P3 文档是否存在冲突、过期或误导
+- **Status:** completed
 
 ### Phase 1：读取规则与相关规范
 - [ ] 阅读 `src/games/dicethrone/rule/` 规则文档中的攻击/攻击修正相关描述
 - [ ] 阅读 `docs/ai-rules/engine-systems.md` 中与状态、命令、系统有关的规范
 - [ ] 记录本次任务的已知事实与待验证点
-- **Status:** in_progress
+- **Status:** archived-history
 
-### Phase 2：定位攻击修正数据链路
-- [ ] 搜索 `dicethrone` 中“攻击修正”相关状态字段、命令、事件、选择器
-- [ ] 检查写入链：攻击修正在哪里创建、何时生效、何时清理
-- [ ] 检查消费链：攻击流程在哪里读取攻击修正
-- **Status:** pending
-
-### Phase 3：确认根因并修复
-- [ ] 对照规则判断当前行为是否正确
-- [ ] 若存在缺陷，实施最小修复
-- [ ] 同步更新文档或说明（若规则说明缺失/不一致）
-- **Status:** pending
-
-### Phase 4：验证
-- [ ] 运行与本次修复最相关的测试
-- [ ] 必要时补充最小测试覆盖正常与边界场景
-- [ ] 记录验证结果
-- **Status:** pending
-
-### Phase 5：交付
-- [ ] 更新 `findings.md` 与 `progress.md`
-- [ ] 输出调用链检查报告、根因、修复点与验证结果
-- [ ] 给出下一步建议
-- **Status:** pending
+### Historical note：Dice Throne 攻击修正任务
+- 这组 Phase 1~5 属于 2026-03-10 的历史任务，实际修复与验证已在后续记录中完成，不再作为当前主任务待办。
+- 当前若继续 Dice Throne，应以新的独立 Addendum/任务块登记，而不是继续沿用这里的旧 Phase。
+- **Status:** archived-history
 
 ## Key Questions
 1. `dicethrone` 中“攻击修正”在领域层对应的状态字段是什么？
