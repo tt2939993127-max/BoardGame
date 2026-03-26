@@ -51,6 +51,7 @@ import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -123,6 +124,7 @@ export const MatchRoom = () => {
     const { user } = useAuth();
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
     const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
@@ -948,8 +950,8 @@ export const MatchRoom = () => {
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
             <SEO
                 title={isTutorialRoute
-                    ? t('matchRoom.tutorialTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })
-                    : t('matchRoom.matchTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })}
+                    ? t('matchRoom.tutorialTitle', { game: gameDisplayName })
+                    : t('matchRoom.matchTitle', { game: gameDisplayName })}
                 ogType="game"
                 noIndex
             />

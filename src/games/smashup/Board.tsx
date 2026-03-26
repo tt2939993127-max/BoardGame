@@ -1260,7 +1260,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     }
 
     // EARLY RETURN: Faction Selection
-    if (phase === 'factionSelect') {
+    if (phase === 'factionSelect' && core.factionSelection) {
         return (
             <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: false }}>
                 <TutorialSelectionGate

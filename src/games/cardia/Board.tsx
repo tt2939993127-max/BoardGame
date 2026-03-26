@@ -32,6 +32,7 @@ import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
 import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<CardiaCore>;
 
@@ -81,30 +82,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     // 动画状态
     const animations = useAbilityAnimations();
 
-    const [viewportSize, setViewportSize] = useState(() => ({
-        width: typeof window !== 'undefined' ? window.innerWidth : 0,
-        height: typeof window !== 'undefined' ? window.innerHeight : 0,
-    }));
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const syncViewportSize = () => {
-            setViewportSize({
-                width: window.innerWidth,
-                height: window.innerHeight,
-            });
-        };
-
-        syncViewportSize();
-        window.addEventListener('resize', syncViewportSize);
-        window.addEventListener('orientationchange', syncViewportSize);
-
-        return () => {
-            window.removeEventListener('resize', syncViewportSize);
-            window.removeEventListener('orientationchange', syncViewportSize);
-        };
-    }, []);
+    const viewportSize = useRuntimeViewport();
 
     // 设备类型检测
     type DeviceType = 

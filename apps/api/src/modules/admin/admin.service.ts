@@ -436,6 +436,7 @@ export class AdminService implements OnModuleInit {
 
         const dailyUsers = this.buildDailySeries(rangeDays, startDate, userDailyRaw);
         const dailyMatches = this.buildDailySeries(rangeDays, startDate, matchDailyRaw);
+        const normalizedGameStats = Array.isArray(gameStats) ? gameStats : [];
 
         const trend: AdminStatsTrend = {
             days: rangeDays,
@@ -443,7 +444,7 @@ export class AdminService implements OnModuleInit {
             endDate: endDate.toISOString(),
             dailyUsers,
             dailyMatches,
-            games: gameStats.map(item => ({
+            games: normalizedGameStats.map(item => ({
                 name: String(item._id),
                 count: Number(item.count || 0),
             })),
@@ -1097,6 +1098,7 @@ export class AdminService implements OnModuleInit {
         const matchEndedFilter = { endedAt: { $exists: true, $ne: null } };
         const [totalUsers, todayUsers, bannedUsers, totalMatches, todayMatches, gameStats] = await Promise.all([
             this.userModel.countDocuments(),
+            this.userModel.countDocuments({ createdAt: { $gte: todayStart } }),
             this.userModel.countDocuments({ banned: true }),
             this.matchRecordModel.countDocuments(matchEndedFilter),
             this.matchRecordModel.countDocuments({ endedAt: { $gte: todayStart } }),
@@ -1107,13 +1109,15 @@ export class AdminService implements OnModuleInit {
             ]),
         ]);
 
+        const normalizedGameStats = Array.isArray(gameStats) ? gameStats : [];
+
         const stats: AdminStatsBase = {
             totalUsers,
             todayUsers,
             bannedUsers,
             totalMatches,
             todayMatches,
-            games: gameStats.map(item => ({
+            games: normalizedGameStats.map(item => ({
                 name: String(item._id),
                 count: Number(item.count || 0),
             })),

@@ -155,12 +155,15 @@ function buildTricksterGnomePodOptions(
     state: SmashUpCore,
     baseIndex: number,
     sourcePlayerId: string,
+    gnomeUid: string,
 ) {
     const base = state.bases[baseIndex];
     if (!base) return [createSkipOption()];
 
     const destroyThreshold = base.minions.length + countTitansOnBase(state, baseIndex);
-    const targets = base.minions.filter(m => getMinionPower(state, m, baseIndex) < destroyThreshold);
+    const targets = base.minions.filter(
+        m => m.uid !== gnomeUid && getMinionPower(state, m, baseIndex) < destroyThreshold,
+    );
     const options = targets.map(target => {
         const def = getCardDef(target.defId) as MinionCardDef | undefined;
         const power = getMinionPower(state, target, baseIndex);
@@ -192,7 +195,7 @@ function createTricksterGnomePodInteraction(
         return null;
     }
 
-    const options = buildTricksterGnomePodOptions(state, pending.baseIndex, pending.controller);
+    const options = buildTricksterGnomePodOptions(state, pending.baseIndex, pending.controller, pending.gnomeUid);
     if (options.length === 1 && (options[0].value as any)?.skip) {
         return null;
     }
@@ -217,7 +220,12 @@ function createTricksterGnomePodInteraction(
         if (!nextBase?.minions.some(m => m.uid === continuation.gnomeUid && m.defId === 'trickster_gnome_pod')) {
             return [createSkipOption()];
         }
-        return buildTricksterGnomePodOptions(nextState.core, continuation.baseIndex, continuation.controller);
+        return buildTricksterGnomePodOptions(
+            nextState.core,
+            continuation.baseIndex,
+            continuation.controller,
+            continuation.gnomeUid,
+        );
     };
     return interaction;
 }
@@ -507,10 +515,12 @@ export function registerTricksterInteractionHandlers(): void {
     registerInteractionHandler('trickster_gnome_pod', (state, playerId, value, iData, _random, timestamp) => {
         const continuation = iData?.continuationContext as {
             baseIndex?: number;
+            gnomeUid?: string;
             remaining?: TricksterGnomePodPending[];
         } | undefined;
         const baseIndex = (value as { baseIndex?: number } | undefined)?.baseIndex ?? continuation?.baseIndex;
         const selectedUid = (value as { minionUid?: string } | undefined)?.minionUid;
+        const currentGnomeUid = continuation?.gnomeUid;
         const events: SmashUpEvent[] = [];
 
         if (!(value as any)?.skip && selectedUid && baseIndex !== undefined) {
@@ -521,7 +531,7 @@ export function registerTricksterInteractionHandlers(): void {
             }
         }
 
-        const remaining = (continuation?.remaining ?? []).filter(entry => entry.gnomeUid !== selectedUid);
+        const remaining = (continuation?.remaining ?? []).filter(entry => entry.gnomeUid !== currentGnomeUid);
         const nextState = queueNextTricksterGnomePodInteraction(state, remaining, timestamp);
         return { state: nextState ?? state, events };
     });
@@ -1449,7 +1459,7 @@ function registerTricksterPodOngoingEffects(): void {
         const options = combos.map((c, i) => ({
             id: `combo-${i}`,
             label: c.label,
-            value: { blocked },
+            value: { blocked: c.blocked },
         }));
         const interaction = createSimpleChoice(
             `trickster_block_the_path_pod_${ctx.now}`,

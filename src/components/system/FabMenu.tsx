@@ -480,19 +480,39 @@ const Panel = ({
     safeAreaInsets,
     isMobileViewport,
 }: any) => {
-    const verticalClass = alignment.v === 'top' ? 'top-0' : 'bottom-0';
     const panelOffset = buttonSize + buttonGap;
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
     const panelWidth = isMobileViewport ? 260 : 300;
-    const availableWidth = alignment.h === 'right'
-        ? viewportWidth - (fabPosition?.left ?? 0) - panelOffset - safeAreaInsets.right - edgePadding
-        : (fabPosition?.left ?? 0) - buttonGap - safeAreaInsets.left - edgePadding;
-    const availableHeight = alignment.v === 'top'
-        ? viewportHeight - (fabPosition?.top ?? 0) - safeAreaInsets.bottom - edgePadding
-        : (fabPosition?.top ?? 0) + buttonSize - safeAreaInsets.top - edgePadding;
-    const panelMaxWidth = `${Math.max(132, Math.floor(availableWidth))}px`;
-    const panelMaxHeight = `${Math.max(144, Math.floor(availableHeight))}px`;
+    const spaceRight = Math.max(
+        0,
+        Math.floor(viewportWidth - (fabPosition?.left ?? 0) - panelOffset - safeAreaInsets.right - edgePadding),
+    );
+    const spaceLeft = Math.max(
+        0,
+        Math.floor((fabPosition?.left ?? 0) - buttonGap - safeAreaInsets.left - edgePadding),
+    );
+    const spaceBelow = Math.max(
+        0,
+        Math.floor(viewportHeight - (fabPosition?.top ?? 0) - safeAreaInsets.bottom - edgePadding),
+    );
+    const spaceAbove = Math.max(
+        0,
+        Math.floor((fabPosition?.top ?? 0) + buttonSize - safeAreaInsets.top - edgePadding),
+    );
+
+    const horizontalPlacement: FabAlignment['h'] = isMobileViewport
+        ? (spaceRight >= spaceLeft ? 'right' : 'left')
+        : alignment.h;
+    const verticalPlacement: FabAlignment['v'] = isMobileViewport
+        ? (spaceBelow >= spaceAbove ? 'top' : 'bottom')
+        : alignment.v;
+    const verticalClass = verticalPlacement === 'top' ? 'top-0' : 'bottom-0';
+    const safeAvailableWidth = horizontalPlacement === 'right' ? spaceRight : spaceLeft;
+    const safeAvailableHeight = verticalPlacement === 'top' ? spaceBelow : spaceAbove;
+    const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
+    const panelMaxWidth = safeAvailableWidth > 0 ? `${safeAvailableWidth}px` : undefined;
+    const panelMaxHeight = safeAvailableHeight > 0 ? `${safeAvailableHeight}px` : undefined;
 
     return (
         <AnimatePresence>
@@ -512,10 +532,11 @@ const Panel = ({
                         overflow-y-auto overflow-x-hidden custom-scrollbar
                     `}
                     style={{
-                        width: panelWidth,
+                        width: resolvedPanelWidth,
                         maxWidth: panelMaxWidth,
                         maxHeight: panelMaxHeight,
-                        [alignment.h === 'right' ? 'left' : 'right']: panelOffset,
+                        minWidth: 0,
+                        [horizontalPlacement === 'right' ? 'left' : 'right']: panelOffset,
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     data-testid={`fab-panel-${item.id}`}

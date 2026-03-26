@@ -109,6 +109,8 @@ export interface FlowHooks<TCore = unknown> {
         to: string;
         command: Command;
         random: RandomFn;
+        /** onPhaseExit 产生的事件（尚未 reduce 进 core） */
+        exitEvents?: GameEvent[];
     }): GameEvent[] | PhaseEnterResult | void;
 
     /** 用于 SYS_PHASE_CHANGED 事件的 activePlayerId（可选） */
@@ -270,7 +272,7 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
         timestamp,
     };
 
-    const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random });
+    const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random, exitEvents });
     let enterEvents: GameEvent[] = [];
     let enterUpdatedState: MatchState<TCore> | undefined;
 

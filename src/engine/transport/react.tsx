@@ -48,6 +48,7 @@ import { refreshInteractionOptions } from '../systems/InteractionSystem';
 import type { LatencyOptimizationConfig } from './latency/types';
 import { createOptimisticEngine, filterPlayedEvents, type OptimisticEngine as OptimisticEngineType } from './latency/optimisticEngine';
 import { resolveFollowCurrentTurnPlayerId } from './followCurrentTurnPlayer';
+import { resolveNextAiAction, type AiSeatController } from '../ai';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -478,6 +479,8 @@ export interface LocalGameProviderProps {
     children: ReactNode;
     /** 命令被拒绝时的回调（验证失败） */
     onCommandRejected?: (commandType: string, error: string) => void;
+    /** 座位控制器：human / local-ai / remote-ai */
+    seatControllers?: Record<string, AiSeatController>;
     /**
      * 当前玩家 ID（可选）。
      * 设置后会将 playerId 传给 Board（Board 知道"我是谁"）。
@@ -500,6 +503,7 @@ export function LocalGameProvider({
     seed,
     children,
     onCommandRejected,
+    seatControllers = {},
     playerId: localPlayerId,
     followCurrentTurnPlayer = false,
 }: LocalGameProviderProps) {
@@ -516,6 +520,7 @@ export function LocalGameProvider({
 
     const randomRef = useRef<RandomFn>(createSeededRandom(seed));
     const onCommandRejectedRef = useRef(onCommandRejected);
+    const lastAiAttemptKeyRef = useRef<string | null>(null);
     onCommandRejectedRef.current = onCommandRejected;
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
@@ -746,6 +751,55 @@ export function LocalGameProvider({
             return refreshedState;
         });
     }, [config, playerIds]);
+
+    useEffect(() => {
+        const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+        if (!hasAiSeat) {
+            lastAiAttemptKeyRef.current = null;
+            return;
+        }
+
+        let cancelled = false;
+
+        const runAiTurn = async () => {
+            const resolution = await resolveNextAiAction({
+                engineConfig: config,
+                state,
+                matchId: `local:${config.gameId}:${seed}`,
+                seatControllers,
+            });
+
+            if (cancelled) return;
+
+            if (!resolution) {
+                lastAiAttemptKeyRef.current = null;
+                return;
+            }
+
+            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+                return;
+            }
+
+            lastAiAttemptKeyRef.current = resolution.attemptKey;
+
+            for (const command of resolution.action.commands) {
+                const normalizedPayload = command.payload && typeof command.payload === 'object'
+                    ? command.payload as Record<string, unknown>
+                    : {};
+                dispatch(command.type, {
+                    ...normalizedPayload,
+                    __tutorialPlayerId: resolution.playerId,
+                    __tutorialAiCommand: true,
+                });
+            }
+        };
+
+        void runAiTurn();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [config, dispatch, seatControllers, seed, state]);
 
     const reset = useCallback(() => {
         randomRef.current = createSeededRandom(seed);
