@@ -1,5 +1,22 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-26，移动端 exit fab sheet 滚动锁）
+- 当前未收口的本地改动不是部署尾巴，而是另一条独立 UI 修复线：移动端横屏下 exit fab sheet 打开后，页面级滚动没有被真正锁住。
+- 仅把 exit fab 面板改成底部 sheet 还不够；若 `html/body` 仍允许滚动/overscroll，用户仍可能看到页面级滚动条或继续把底层页面拖动起来。
+- `FabMenu` 之前混用了裸 `window.innerWidth/innerHeight` 与 safe-area 读取；改成统一走 `useRuntimeViewport()` 后，悬浮球位置、对齐和 resize 重算会更稳定，也更适合移动端运行时 viewport 变化。
+- 新增的 `useDocumentScrollLock()` 做了引用计数与样式快照恢复，适合作为可复用基础能力，而不是把 `overflow: hidden` 散落在每个面板组件里。
+- 这轮最直接的验收信号不是“面板自己不滚了”，而是：exit fab sheet 展开时 `html/body` 的 `overflow-y` 为 `hidden`、`overscroll-behavior-y` 为 `none`，且 document/body 不再出现横向溢出。
+- 已完成最小有效验证：`npm run typecheck` 通过；`smashup-4p-layout-test.e2e.ts` 中“移动端横屏应保持四人局布局可用，并支持手牌长按看牌”通过（1 passed）。
+
+## 新发现（2026-03-26，board-shell 横屏共享壳）
+- 老板提供的截图暴露的是共性问题：底部滚动条与底部手牌/卡牌区域被裁剪，不是单游戏局部样式瑕疵。
+- 这类问题的共同点是：涉及 `mobileLayoutPreset: 'board-shell'` 的横屏移动端游戏，而不是只发生在某一个 `Board.tsx`。
+- 根因锁定在共享壳层：横屏 `board-shell` 仍吃统一 safe-area padding，导致缩放后的实际游戏画布再次被压缩；配合缺少统一裁剪约束，就会表现为滚动条与底部内容被切掉。
+- 最小正确修复不该去每个游戏单独改高度/间距，而应修 `MobileBoardShell + src/index.css` 的共享约束。
+- 已验证共享回归：`MobileBoardShell` 单测通过，`mobileSupport` 支持矩阵测试通过，说明修复没有破坏 board-shell 游戏声明链路。
+- 本轮代码已推送到 `main`，提交为 `608b5937`；镜像构建已成功，但生产部署被老板明确叫停，因为已经过了允许部署的时间窗。
+- 新的明确偏好：生产部署只在“早上”执行；晚上即使镜像已好，也不要继续部署。
+
 ## 新发现（2026-03-26，第二轮）
 - 当前工作区存在并发回退：此前已经设计/实现过的 `engine/ai`、训练采集文件和部分游戏 AI runtime 并不都还在树上，继续开发前必须先确认“当前文件系统状态”，不能假设上一轮完成的代码仍然存在。
 - 已恢复的当前态能力包括：统一 AI runner、远程 provider 超时/异常/非法动作 fallback、井字棋 AI runtime、训练数据 raw JSONL 采集层。

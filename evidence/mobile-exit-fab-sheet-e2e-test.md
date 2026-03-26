@@ -35,6 +35,7 @@ npm run test:e2e:ci:file -- smashup-4p-layout-test.e2e.ts "移动端横屏应保
 - `Back to Lobby` 按钮完整落在首屏视口内，按钮文案与副文案都没有被裁掉。
 - 背景加了遮罩，但按钮本身仍保持首屏可点击；测试同时校验了按钮可见、可用、位于视口内。
 - 面板自身没有依赖内部滚动：测试断言了 `scrollHeight <= clientHeight` 与 `scrollWidth <= clientWidth`。
+- 页面本身也被锁住：测试会校验 `html/body` 的 `overflow-y` 为 `hidden`、`overscroll-behavior-y` 为 `none`，避免继续出现页面级滚动条。
 
 ## 结论
 

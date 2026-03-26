@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { PulseGlow } from '../common/animations/PulseGlow';
 import { UI_Z_INDEX } from '../../core';
 import { MOBILE_MAX_VIEWPORT_WIDTH } from '../../games/mobileSupport';
+import { useDocumentScrollLock } from '../../hooks/ui/useDocumentScrollLock';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import { logger } from '../../lib/logger';
 
 export interface FabAction {
@@ -34,25 +36,6 @@ export interface FabAction {
     mobilePanelVariant?: 'popover' | 'sheet';
 }
 
-const parseCssPixels = (value: string) => {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const getSafeAreaInsets = (): SafeAreaInsets => {
-    if (typeof window === 'undefined') {
-        return { top: 0, right: 0, bottom: 0, left: 0 };
-    }
-
-    const styles = window.getComputedStyle(document.documentElement);
-    return {
-        top: parseCssPixels(styles.getPropertyValue('--safe-area-top')),
-        right: parseCssPixels(styles.getPropertyValue('--safe-area-right')),
-        bottom: parseCssPixels(styles.getPropertyValue('--safe-area-bottom')),
-        left: parseCssPixels(styles.getPropertyValue('--safe-area-left')),
-    };
-};
-
 export const FabMenu = ({
     items,
     position: initialPosition = 'bottom-right',
@@ -60,25 +43,14 @@ export const FabMenu = ({
     zIndex = UI_Z_INDEX.hud,
 }: FabMenuProps) => {
     // 响应式尺寸
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
-    const [buttonSize, setButtonSize] = useState(48);
-    const [buttonGap, setButtonGap] = useState(12);
-    const [edgePadding, setEdgePadding] = useState(32);
-    const [safeAreaInsets, setSafeAreaInsets] = useState<SafeAreaInsets>(() => getSafeAreaInsets());
-    
-    useEffect(() => {
-        const updateSizes = () => {
-            const mobile = window.innerWidth <= MOBILE_MAX_VIEWPORT_WIDTH;
-            setIsMobileViewport(mobile);
-            setSafeAreaInsets(getSafeAreaInsets());
-            setButtonSize(mobile ? 44 : 48);
-            setButtonGap(mobile ? 8 : 12);
-            setEdgePadding(mobile ? 12 : 32);
-        };
-        updateSizes();
-        window.addEventListener('resize', updateSizes);
-        return () => window.removeEventListener('resize', updateSizes);
-    }, []);
+    const viewport = useRuntimeViewport();
+    const viewportWidth = viewport.width;
+    const viewportHeight = viewport.height;
+    const safeAreaInsets: SafeAreaInsets = viewport.safeArea;
+    const isMobileViewport = viewportWidth > 0 && viewportWidth <= MOBILE_MAX_VIEWPORT_WIDTH;
+    const buttonSize = isMobileViewport ? 44 : 48;
+    const buttonGap = isMobileViewport ? 8 : 12;
+    const edgePadding = isMobileViewport ? 12 : 32;
     
     const [isOpen, setIsOpen] = useState(false);
     const [activeItemId, setActiveItemId] = useState<string | null>(null);
@@ -96,43 +68,61 @@ export const FabMenu = ({
         if (typeof document === 'undefined') return null;
         return document.getElementById('modal-root') ?? document.body;
     }, []);
+    const activeItem = useMemo(
+        () => items.find((item) => item.id === activeItemId) ?? null,
+        [activeItemId, items],
+    );
+    const shouldLockDocumentScroll = isOpen
+        && isMobileViewport
+        && activeItem?.mobilePanelVariant === 'sheet'
+        && Boolean(activeItem.content);
+    useDocumentScrollLock(shouldLockDocumentScroll);
 
     const clampPosition = useCallback((target: { left: number; top: number }) => {
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return target;
+        }
         const minLeft = edgePadding + safeAreaInsets.left;
         const minTop = edgePadding + safeAreaInsets.top;
-        const maxLeft = Math.max(minLeft, window.innerWidth - buttonSize - edgePadding - safeAreaInsets.right);
-        const maxTop = Math.max(minTop, window.innerHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
+        const maxLeft = Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         return {
             left: Math.min(Math.max(target.left, minLeft), maxLeft),
             top: Math.min(Math.max(target.top, minTop), maxTop),
         };
-    }, [buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top]);
+    }, [buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
 
     const getAlignmentForPosition = useCallback((target: { left: number; top: number }): FabAlignment => {
-        const centerY = window.innerHeight / 2;
-        const centerX = window.innerWidth / 2;
+        const centerY = viewportHeight / 2;
+        const centerX = viewportWidth / 2;
         const anchorX = target.left + buttonSize / 2;
         const anchorY = target.top + buttonSize / 2;
         const v: FabAlignment['v'] = anchorY < centerY ? 'top' : 'bottom';
         const h: FabAlignment['h'] = anchorX < centerX ? 'right' : 'left';
         return { v, h };
-    }, [buttonSize]);
+    }, [buttonSize, viewportHeight, viewportWidth]);
 
     const getInitialPosition = useCallback(() => {
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return { left: 0, top: 0 };
+        }
         const minLeft = edgePadding + safeAreaInsets.left;
         const minTop = edgePadding + safeAreaInsets.top;
-        const maxLeft = Math.max(minLeft, window.innerWidth - buttonSize - edgePadding - safeAreaInsets.right);
-        const maxTop = Math.max(minTop, window.innerHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
+        const maxLeft = Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         // 默认位置往内偏移，不贴边
         const DEFAULT_INSET = Math.max(buttonSize, 48);
         if (initialPosition === 'bottom-right') return { left: maxLeft - DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
         if (initialPosition === 'bottom-left') return { left: minLeft + DEFAULT_INSET, top: maxTop - DEFAULT_INSET };
         if (initialPosition === 'top-right') return { left: maxLeft - DEFAULT_INSET, top: minTop + DEFAULT_INSET };
         return { left: minLeft + DEFAULT_INSET, top: minTop + DEFAULT_INSET };
-    }, [initialPosition, buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top]);
+    }, [buttonSize, edgePadding, initialPosition, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
 
     // 加载保存的位置（支持百分比格式，兼容旧绝对坐标）
     useEffect(() => {
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return undefined;
+        }
         const frameId = window.requestAnimationFrame(() => {
             try {
             const saved = localStorage.getItem('hud_fab_position');
@@ -143,15 +133,15 @@ export const FabMenu = ({
                 // 检测是否为百分比格式
                 if ('leftPercent' in parsed && 'topPercent' in parsed) {
                     next = {
-                        left: parsed.leftPercent * window.innerWidth,
-                        top: parsed.topPercent * window.innerHeight,
+                        left: parsed.leftPercent * viewportWidth,
+                        top: parsed.topPercent * viewportHeight,
                     };
                 } else {
                     // 旧格式：绝对坐标，转换为百分比后保存
                     next = parsed;
                     const percent = {
-                        leftPercent: next.left / window.innerWidth,
-                        topPercent: next.top / window.innerHeight,
+                        leftPercent: next.left / viewportWidth,
+                        topPercent: next.top / viewportHeight,
                     };
                     localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 }
@@ -171,8 +161,8 @@ export const FabMenu = ({
                     top: base.top + (parsed.y ?? 0),
                 });
                 const percent = {
-                    leftPercent: next.left / window.innerWidth,
-                    topPercent: next.top / window.innerHeight,
+                    leftPercent: next.left / viewportWidth,
+                    topPercent: next.top / viewportHeight,
                 };
                 localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 localStorage.removeItem('hud_fab_offset');
@@ -190,10 +180,10 @@ export const FabMenu = ({
         });
 
         return () => window.cancelAnimationFrame(frameId);
-    }, [clampPosition, getAlignmentForPosition, getInitialPosition]);
+    }, [clampPosition, getAlignmentForPosition, getInitialPosition, viewportHeight, viewportWidth]);
 
     const handleDragEnd = (_: any, info: any) => {
-        if (!fabPosition) return;
+        if (!fabPosition || viewportWidth <= 0 || viewportHeight <= 0) return;
         setIsDragging(false);
         const next = clampPosition({
             left: fabPosition.left + info.offset.x,
@@ -202,8 +192,8 @@ export const FabMenu = ({
         setFabPosition(next);
         // 保存为百分比格式
         const percent = {
-            leftPercent: next.left / window.innerWidth,
-            topPercent: next.top / window.innerHeight,
+            leftPercent: next.left / viewportWidth,
+            topPercent: next.top / viewportHeight,
         };
         localStorage.setItem('hud_fab_position', JSON.stringify(percent));
         dragX.set(0);
@@ -277,7 +267,7 @@ export const FabMenu = ({
     }, [isOpen]);
 
     useEffect(() => {
-        if (!fabPosition) return;
+        if (!fabPosition || viewportWidth <= 0 || viewportHeight <= 0) return;
         const handleResize = () => {
             // 从 localStorage 读取百分比，按新尺寸重新计算
             try {
@@ -286,8 +276,8 @@ export const FabMenu = ({
                     const parsed = JSON.parse(saved);
                     if ('leftPercent' in parsed && 'topPercent' in parsed) {
                         const next = clampPosition({
-                            left: parsed.leftPercent * window.innerWidth,
-                            top: parsed.topPercent * window.innerHeight,
+                            left: parsed.leftPercent * viewportWidth,
+                            top: parsed.topPercent * viewportHeight,
                         });
                         setFabPosition(next);
                         setAlignment(getAlignmentForPosition(next));
@@ -304,7 +294,7 @@ export const FabMenu = ({
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, [clampPosition, fabPosition, getAlignmentForPosition]);
+    }, [clampPosition, fabPosition, getAlignmentForPosition, viewportHeight, viewportWidth]);
 
     useEffect(() => {
         if (prevActiveItemIdRef.current === activeItemId) return;
@@ -358,6 +348,8 @@ export const FabMenu = ({
                     edgePadding={edgePadding}
                     safeAreaInsets={safeAreaInsets}
                     isMobileViewport={isMobileViewport}
+                    viewportWidth={viewportWidth}
+                    viewportHeight={viewportHeight}
                     tooltipPortalRoot={tooltipPortalRoot}
                     onRequestClose={() => {
                         setIsOpen(false);
@@ -377,6 +369,7 @@ export const FabMenu = ({
                     isDragging={isDragging}
                     buttonSize={buttonSize}
                     isMobileViewport={isMobileViewport}
+                    viewportWidth={viewportWidth}
                 />
             </div>
 
@@ -397,6 +390,8 @@ export const FabMenu = ({
                 edgePadding={edgePadding}
                 safeAreaInsets={safeAreaInsets}
                 isMobileViewport={isMobileViewport}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
             />
         </motion.div>
     );
@@ -418,6 +413,8 @@ const SatelliteList = ({
     edgePadding,
     safeAreaInsets,
     isMobileViewport,
+    viewportWidth,
+    viewportHeight,
 }: any) => {
     const isButtonBottom = alignment.v === 'bottom';
     const flexDirection = isButtonBottom ? 'flex-col-reverse' : 'flex-col';
@@ -454,6 +451,8 @@ const SatelliteList = ({
                                 edgePadding={edgePadding}
                                 safeAreaInsets={safeAreaInsets}
                                 isMobileViewport={isMobileViewport}
+                                viewportWidth={viewportWidth}
+                                viewportHeight={viewportHeight}
                                 tooltipPortalRoot={tooltipPortalRoot}
                                 onRequestClose={() => onItemClick(item)}
                             />
@@ -470,6 +469,7 @@ const SatelliteList = ({
                                 isDragging={isDragging}
                                 buttonSize={buttonSize}
                                 isMobileViewport={isMobileViewport}
+                                viewportWidth={viewportWidth}
                             />
                         </div>
                     ))}
@@ -490,12 +490,12 @@ const Panel = ({
     edgePadding,
     safeAreaInsets,
     isMobileViewport,
+    viewportWidth,
+    viewportHeight,
     tooltipPortalRoot,
     onRequestClose,
 }: any) => {
     const panelOffset = buttonSize + buttonGap;
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
     const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
     const panelWidth = isMobileViewport ? 260 : 300;
     const spaceRight = Math.max(
@@ -638,7 +638,7 @@ const Panel = ({
     );
 };
 
-const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging, buttonSize, isMobileViewport }: any) => {
+const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging, buttonSize, isMobileViewport, viewportWidth }: any) => {
     const [isHovered, setIsHovered] = useState(false);
     const showTooltip = !isMobileViewport && isHovered && !isDragging && !(isActive && item.content);
     const showPreview = !isMobileViewport && Boolean(item.preview) && !isDragging && !isActive;
@@ -743,7 +743,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             ? tooltipRect.right + gap
                                             : undefined,
                                         right: tooltipSide === 'left'
-                                            ? window.innerWidth - tooltipRect.left + gap
+                                            ? viewportWidth - tooltipRect.left + gap
                                             : undefined,
                                         transform: `translate(${tooltipSide === 'right' ? '0' : '-100%'}, -50%)`,
                                         zIndex: UI_Z_INDEX.tooltip,
@@ -774,7 +774,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             ? tooltipRect.right + gap
                                             : undefined,
                                         right: previewSide === 'left'
-                                            ? window.innerWidth - tooltipRect.left + gap
+                                            ? viewportWidth - tooltipRect.left + gap
                                             : undefined,
                                         transform: `translate(${previewSide === 'right' ? '0' : '-100%'}, -50%)`,
                                         zIndex: UI_Z_INDEX.tooltip,

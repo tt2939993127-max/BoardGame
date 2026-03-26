@@ -1,5 +1,49 @@
 # Progress Log
 
+## Session: 2026-03-26 移动端 exit fab sheet 页面滚动锁收口
+- **Status:** in_progress
+- Actions taken:
+  - 复查当前 `git status`，确认除了早上部署待执行外，仓库里还挂着一组未提交的移动端 exit fab sheet / 页面滚动锁改动。
+  - 读取 `FabMenu.tsx` 与新建的 `useDocumentScrollLock.ts`，确认这条线的真实目标是“sheet 展开时锁住页面级滚动”，而不只是调整面板样式。
+  - 在 `FabMenu` 中接入 `useRuntimeViewport()`，统一使用运行时 viewport / safe-area 数据参与位置计算、resize 重算与移动端判断。
+  - 新增 `useDocumentScrollLock()`，在移动端 `sheet` 型面板展开时锁住 `html/body` 的 `overflow` 与 `overscroll-behavior`，关闭时按快照恢复。
+  - 补强 `e2e/smashup-4p-layout-test.e2e.ts`：新增 document/body 横向溢出断言，以及 exit fab sheet 展开时 document scroll lock 断言。
+  - 更新 `evidence/mobile-exit-fab-sheet-e2e-test.md`，把“页面本身已锁住，不再靠页面滚动补救”写入证据说明。
+  - 运行最小相关验证：
+    - `npm run typecheck`
+    - `npm run test:e2e:ci:file -- smashup-4p-layout-test.e2e.ts "移动端横屏应保持四人局布局可用，并支持手牌长按看牌"`
+- Validation:
+  - `npm run typecheck` → passed
+  - `npm run test:e2e:ci:file -- smashup-4p-layout-test.e2e.ts "移动端横屏应保持四人局布局可用，并支持手牌长按看牌"` → `1 passed`
+- Next step:
+  - 将本轮代码与文档记录一起提交 / 推送，避免这组改动继续以 dirty worktree 形式悬挂。
+
+## Session: 2026-03-26 board-shell 横屏滚动条 / 裁剪修复
+- **Status:** in_progress
+- Actions taken:
+  - 先按项目根 `AGENTS.md` 与 `docs/ai-rules/ui-ux.md` 复核规则，把问题按“共性壳层 bug”而不是“单游戏补丁”来定位。
+  - 沿 `MatchRoom / LocalMatchRoom / MobileBoardShell / src/index.css / 各游戏 Board 根容器` 排查，确认 `board-shell` 横屏共享壳还在吃统一 safe-area padding。
+  - 在 `src/components/game/framework/MobileBoardShell.tsx` 增加 `mobile-board-shell__content` 包裹层；在 `src/index.css` 为共享壳加统一裁剪约束，并对 `landscape-adapted board-shell` 显式 `padding: 0`。
+  - 补充共享壳回归测试 `src/components/game/framework/__tests__/MobileBoardShell.test.tsx`。
+  - 运行最小相关验证：
+    - `npx vitest run src/components/game/framework/__tests__/MobileBoardShell.test.tsx --maxWorkers=1`
+    - `npx vitest run src/games/__tests__/mobileSupport.test.ts src/components/game/framework/__tests__/MobileBoardShell.test.tsx --maxWorkers=1`
+  - 本地提交：`608b5937 fix(ui): remove shared board-shell overflow padding`。
+  - 正常执行 `git push origin main`，pre-push 门禁实际通过（typecheck / eslint / i18n / changed tests 均完成）。
+  - GitHub 镜像构建成功：`Build & Push Docker Images` run `23594673252`。
+  - 已做远端 preflight，确认服务器路径 `/home/admin/BoardGame`，且部署前线上运行 revision 仍是 `c51e0c01975b6765d7f72b4d28896070084a65c5`。
+  - 曾启动远端 `bash scripts/deploy/deploy-image.sh update`，但在镜像拉取阶段被老板明确叫停；已立即停止继续部署，不把它算作已部署完成。
+- Validation:
+  - `src/components/game/framework/__tests__/MobileBoardShell.test.tsx` → passed
+  - `src/games/__tests__/mobileSupport.test.ts` → passed
+  - `git push origin main` pre-push changed quality gate → passed
+  - `Build & Push Docker Images` run `23594673252` → success
+- Next step:
+  - 新会话若继续这条线，只在早上时间窗执行生产部署。
+  - 部署前重新做远端 preflight，并确认当前运行 revision 是否仍落后于 `608b5937`。
+  - 部署命令继续固定为：`bash scripts/deploy/deploy-image.sh update`。
+
+
 ## Session: 2026-03-26 远程 AI fallback 与训练采集恢复
 - **Status:** completed
 - Actions taken:
