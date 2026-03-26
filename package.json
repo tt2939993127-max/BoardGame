@@ -60,7 +60,7 @@
     "test:games:core:full": "cross-env NODE_OPTIONS=--max-old-space-size=8192 node scripts/infra/vitest-cli-safe.mjs run src/games --config vitest.config.core.ts --configLoader native --pool threads --no-file-parallelism --maxWorkers 1 --testTimeout 300000 --hookTimeout 300000",
     "test:games:audit": "node scripts/infra/vitest-cli-safe.mjs run src/games --config vitest.config.audit.ts --configLoader native",
     "test:changed": "node scripts/infra/vitest-cli-safe.mjs run --changed origin/main --configLoader native -- src/games",
-    "test:api": "node scripts/infra/vitest-cli-safe.mjs run apps/api --configLoader native",
+    "test:api": "node scripts/infra/vitest-cli-safe.mjs run apps/api --config vitest.config.api.ts --configLoader native --pool threads --no-file-parallelism --maxWorkers 1",
     "test:api:docker": "cross-env MONGO_URI=mongodb://localhost:27017/boardgame npm run test:api",
     "check:encoding": "node scripts/infra/check-file-encoding.mjs",
     "check:encoding:fix": "node scripts/infra/check-file-encoding.mjs --fix-bom",
