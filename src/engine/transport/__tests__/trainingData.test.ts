@@ -113,7 +113,7 @@ describe('trainingData', () => {
         });
     });
 
-    it('JSONL recorder 应将样本按游戏和日期落盘', async () => {
+    it('JSONL recorder 应将样本按版本、游戏和日期落盘', async () => {
         const baseDir = await mkdtemp(path.join(os.tmpdir(), 'bg-training-data-'));
         tempDirs.push(baseDir);
 
@@ -134,7 +134,7 @@ describe('trainingData', () => {
 
         await recorder.recordDecisionSample(sample);
 
-        const filePath = path.join(baseDir, 'tictactoe', '2026-03-25.jsonl');
+        const filePath = path.join(baseDir, 'raw', 'v1', 'tictactoe', '2026-03-25.jsonl');
         const content = await readFile(filePath, 'utf8');
         const lines = content.trim().split('\n');
 
@@ -149,6 +149,59 @@ describe('trainingData', () => {
         });
     });
 
+    it('recorder 应按保留策略将过期 raw 日志归档到 archive 目录', async () => {
+        const baseDir = await mkdtemp(path.join(os.tmpdir(), 'bg-training-data-'));
+        tempDirs.push(baseDir);
+
+        const recorder = new JsonlTrainingDataRecorder({
+            baseDir,
+            retentionDays: 7,
+            now: () => new Date('2026-03-26T08:00:00.000Z'),
+        });
+
+        const oldSample = buildTrainingDecisionSample({
+            rulesVersion: 'test-rules-v1',
+            gameId: 'dicethrone',
+            matchId: 'match-old',
+            playerId: '0',
+            stateIdBefore: 1,
+            stateIdAfter: 2,
+            commandType: 'PLAY_CARD',
+            payload: { cardId: 'upgrade-1' },
+            preState: { core: {}, sys: {} },
+            postState: { core: {}, sys: {} },
+            capturedAt: Date.UTC(2026, 2, 10, 9, 0, 0),
+        });
+        const recentSample = buildTrainingDecisionSample({
+            rulesVersion: 'test-rules-v1',
+            gameId: 'dicethrone',
+            matchId: 'match-recent',
+            playerId: '0',
+            stateIdBefore: 2,
+            stateIdAfter: 3,
+            commandType: 'ADVANCE_PHASE',
+            payload: null,
+            preState: { core: {}, sys: {} },
+            postState: { core: {}, sys: {} },
+            capturedAt: Date.UTC(2026, 2, 24, 9, 0, 0),
+        });
+
+        await recorder.recordDecisionSample(oldSample);
+        await recorder.recordDecisionSample(recentSample);
+
+        const archivedPath = path.join(baseDir, 'archive', 'v1', 'dicethrone', '2026-03-10.jsonl');
+        const recentPath = path.join(baseDir, 'raw', 'v1', 'dicethrone', '2026-03-24.jsonl');
+        const archivedContent = await readFile(archivedPath, 'utf8');
+        const recentContent = await readFile(recentPath, 'utf8');
+
+        expect(JSON.parse(archivedContent.trim())).toMatchObject({
+            matchId: 'match-old',
+        });
+        expect(JSON.parse(recentContent.trim())).toMatchObject({
+            matchId: 'match-recent',
+        });
+    });
+
     it('env helper 默认仅 production 开启，显式开关可覆盖', () => {
         expect(createTrainingDataRecorderFromEnv({})).toBeUndefined();
         expect(createTrainingDataRecorderFromEnv({
@@ -160,6 +213,11 @@ describe('trainingData', () => {
         expect(createTrainingDataRecorderFromEnv({
             NODE_ENV: 'development',
             ENABLE_TRAINING_DATA_CAPTURE: 'true',
+        })).toBeInstanceOf(JsonlTrainingDataRecorder);
+        expect(createTrainingDataRecorderFromEnv({
+            NODE_ENV: 'production',
+            TRAINING_DATA_DIR: 'custom-root',
+            TRAINING_DATA_RETENTION_DAYS: '14',
         })).toBeInstanceOf(JsonlTrainingDataRecorder);
         expect(createTrainingDataRecorderFromEnv({
             NODE_ENV: 'production',

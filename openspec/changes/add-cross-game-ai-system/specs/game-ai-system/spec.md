@@ -55,6 +55,18 @@
 - **THEN** 系统 MUST 记录一条结构化训练样本
 - **AND** 样本 MUST 包含规则版本、命令、决策前后状态、交互上下文、响应窗口和 `legalActions`
 
+#### Scenario: 训练样本按 schema 版本隔离到 raw 目录
+- **GIVEN** recorder 接收到某个 `schemaVersion` 的训练样本
+- **WHEN** 系统准备把样本写入本地文件存储
+- **THEN** 系统 MUST 把样本写入按 `raw/v{schemaVersion}/{gameId}/{day}.jsonl` 分层的目录
+- **AND** 不得把不同 schema 版本的样本混写到同一个日志文件
+
+#### Scenario: 过期 raw 样本归档到 archive 目录
+- **GIVEN** 本地训练数据采集启用了保留天数策略
+- **WHEN** recorder 在新的一天执行样本写入或归档检查
+- **THEN** 系统 MUST 将超过保留窗口的 raw 日志移动到对应的 `archive/v{schemaVersion}/{gameId}/` 目录
+- **AND** 同一天内仍在保留窗口内的 raw 日志 MUST 继续保留在 raw 目录
+
 #### Scenario: 训练采集失败不影响对局
 - **GIVEN** recorder、文件系统或外部存储发生异常
 - **WHEN** 系统尝试写入训练样本

@@ -571,3 +571,23 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 
 ### Next Step
 - 如果继续推进下一段，应补 AstrBot HTTP 协议文档与线上配置说明，并决定后续是否把在线对局也接到服务端 AI 调度，而不只是在本地房间使用 provider。
+## Addendum (2026-03-26): 训练数据治理收口
+
+### Goal
+- 完成 `add-cross-game-ai-system` 剩余的 `3.1`，把训练样本从“仅能写 JSONL”升级到“按 schema 版本隔离、raw/archive 分层、带保留期归档”的可治理形态。
+
+### Result
+- [x] `server/trainingDataRecorder.ts` 改为写入 `raw/v{schemaVersion}/{gameId}/{day}.jsonl`
+- [x] 增加 `archive/v{schemaVersion}/{gameId}/` 归档目录和 `retentionDays` 保留策略
+- [x] `createTrainingDataRecorderFromEnv(...)` 新增 `TRAINING_DATA_RAW_DIR`、`TRAINING_DATA_ARCHIVE_DIR`、`TRAINING_DATA_RETENTION_DAYS`
+- [x] `src/engine/transport/__tests__/trainingData.test.ts` 补充版本落盘和过期归档回归
+- [x] `openspec/changes/add-cross-game-ai-system/tasks.md` 的 `3.1` 已完成
+
+### Validation
+- `npx eslint server/trainingDataRecorder.ts src/engine/transport/trainingData.ts src/engine/transport/__tests__/trainingData.test.ts`
+- `npx vitest run src/engine/transport/__tests__/trainingData.test.ts --maxWorkers=1`
+- `npm run typecheck`
+- `openspec validate add-cross-game-ai-system --strict --no-interactive`
+
+### Next Step
+- AI 主线实现已收口，下一步只剩检查工作区并按最小范围提交 / push；AstrBot 实网接入继续保持后置。

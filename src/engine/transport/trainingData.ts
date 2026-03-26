@@ -6,7 +6,7 @@ export type TrainingInteractionSnapshot = NonNullable<ReturnType<typeof extractA
 export type TrainingResponseWindowSnapshot = NonNullable<ReturnType<typeof extractAiResponseWindowSnapshot>>;
 
 export interface TrainingDecisionSample {
-    schemaVersion: 1;
+    schemaVersion: number;
     source: 'online';
     capturedAt: number;
     rulesVersion: string | null;

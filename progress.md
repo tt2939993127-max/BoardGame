@@ -443,3 +443,19 @@
   - `npm run typecheck`
 - Next step:
   - 如继续推进，可把 AstrBot HTTP 请求/响应样式写成项目文档，并决定在线房间是否也要迁到服务端 AI 调度。
+## Session: 2026-03-26 训练数据治理收口
+- **Status:** completed
+- Actions taken:
+  - 将 `server/trainingDataRecorder.ts` 从单层 `baseDir/<gameId>/<day>.jsonl` 升级为 `raw/v{schemaVersion}/{gameId}/{day}.jsonl`
+  - 增加 `archiveExpiredRawFiles()`，按 `retentionDays` 把过期 raw 日志迁入 `archive/v{schemaVersion}/{gameId}/`
+  - 保留 `TRAINING_DATA_DIR` 兼容入口，同时补充 `TRAINING_DATA_RAW_DIR`、`TRAINING_DATA_ARCHIVE_DIR`、`TRAINING_DATA_RETENTION_DAYS`
+  - 放宽 `TrainingDecisionSample.schemaVersion` 为数值型，为未来 schema 升级预留路径隔离能力
+  - 在现有 `src/engine/transport/__tests__/trainingData.test.ts` 中补上版本目录和归档回归，不新建测试文件
+  - 回填 OpenSpec，完成 `add-cross-game-ai-system` 的 `3.1`
+- Validation:
+  - `npx eslint server/trainingDataRecorder.ts src/engine/transport/trainingData.ts src/engine/transport/__tests__/trainingData.test.ts`
+  - `npx vitest run src/engine/transport/__tests__/trainingData.test.ts --maxWorkers=1`
+  - `npm run typecheck`
+  - `openspec validate add-cross-game-ai-system --strict --no-interactive`
+- Next step:
+  - 检查当前工作区是否只剩本条 AI 主线改动；若是，则做最小范围 commit 和 push。
