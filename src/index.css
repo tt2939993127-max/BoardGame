@@ -100,6 +100,14 @@
     min-height: var(--runtime-viewport-height, 100dvh);
     height: 100vh;
     height: var(--runtime-viewport-height, 100dvh);
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+#modal-root {
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 /* 娓告垙涓撳睘瀛椾綋锛歮anifest.fontFamily 閫氳繃 MatchRoom/LocalMatchRoom 娉ㄥ叆涓?CSS 鍙橀噺锛?
@@ -235,6 +243,18 @@
 
 /* 移动端响应式缩放（旧方案，仅保留给未接入 board-shell/map-shell 的游戏） */
 @media (max-width: 1023px) and (orientation: landscape) {
+    html:has([data-game-page]),
+    body:has([data-game-page]) {
+        overflow-x: hidden;
+        overscroll-behavior-x: none;
+    }
+
+    body:has([data-game-page]) #root,
+    body:has([data-game-page]) #modal-root,
+    body:has([data-game-page]) .game-page-viewport {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
     /* board-shell / map-shell 游戏已由各自框架容器接管布局，
        这里的旧 root 缩放只作用于尚未接入新框架的历史页面。 */
     body:has([data-game-page]):not(:has([data-mobile-layout-preset="board-shell"])):not(:has([data-mobile-layout-preset="map-shell"])) #root {
