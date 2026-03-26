@@ -535,7 +535,7 @@ const Panel = ({
 
     if (isMobileSheetPanel) {
         const sheetHorizontalMargin = 12;
-        const sheetBottomOffset = safeAreaInsets.bottom + 12;
+        const sheetBottomOffset = safeAreaInsets.bottom + 4;
         const availableSheetWidth = Math.max(
             0,
             viewportWidth - safeAreaInsets.left - safeAreaInsets.right - (sheetHorizontalMargin * 2),
@@ -562,9 +562,9 @@ const Panel = ({
                     data-testid={`fab-sheet-backdrop-${item.id}`}
                 />
                 <motion.div
-                    initial={{ opacity: 0, y: 24 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.16 }}
                     className="fixed"
                     style={{
                         left: resolvedSheetLeft,
