@@ -550,3 +550,24 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 
 ### Status
 - completed
+## Addendum（2026-03-26）：AstrBot provider 契约与远程 AI 闭环
+
+### Goal
+- 在现有跨游戏 AI 骨架上补齐远程 provider 闭环，让 `remote-ai` 座位真正具备可运行的 timeout / retry / fallback 行为。
+- 以 `astrbot` 作为默认远程 provider 注册入口，但继续保持 provider 契约通用，不把实现写死到单一游戏。
+
+### Result
+- [x] 扩展 `AiSeatController`，为 `remote-ai` 增加 `timeoutMs` 与 `retryCount` 运行时参数
+- [x] 重构 `src/engine/ai/localRunner.ts`，统一 `local-ai / remote-ai / remote-ai-fallback` 决策链
+- [x] 新增 `src/engine/ai/providers/astrbot.ts` 与 `src/engine/ai/providers/index.ts`
+- [x] 默认注册 `astrbot` provider，endpoint / 鉴权 / 默认 timeout / 默认 retry 改走环境配置，不进入 seat query
+- [x] 在现有 `src/games/tictactoe/__tests__/flow.test.ts` 中补充“重试后成功采用远程结果”回归
+- [x] 回填 `openspec/changes/add-cross-game-ai-system/tasks.md` 的 `3.2`
+
+### Validation
+- `npx vitest run src/games/tictactoe/__tests__/flow.test.ts --maxWorkers=1`
+- `npx vitest run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --maxWorkers=1`
+- `npm run typecheck`
+
+### Next Step
+- 如果继续推进下一段，应补 AstrBot HTTP 协议文档与线上配置说明，并决定后续是否把在线对局也接到服务端 AI 调度，而不只是在本地房间使用 provider。

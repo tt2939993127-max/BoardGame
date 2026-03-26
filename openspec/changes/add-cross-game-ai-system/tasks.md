@@ -14,6 +14,6 @@
 
 ## 3. 后续未完成事项
 - [ ] 3.1 设计训练数据清理、归档和 schema 升级策略
-- [ ] 3.2 明确 AstrBot 接入方式、鉴权、超时、重试和 fallback 策略
+- [x] 3.2 明确 AstrBot 接入方式、鉴权、超时、重试和 fallback 策略
 - [x] 3.3 约束远程 AI 不得绕过 `legalActions` 与引擎 validate
 - [x] 3.4 补充测试：训练采集、provider 超时、非法动作回退

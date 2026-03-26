@@ -380,6 +380,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         const exitFabButton = page.locator('[data-fab-id="exit"]').first();
         const exitFabVisual = page.locator('[data-fab-visual-id="exit"]').first();
         const exitFabPanel = page.locator('[data-testid="fab-panel-exit"]');
+        const exitFabSheet = page.locator('[data-testid="fab-sheet-exit"]');
         const exitFabTooltip = page.locator('[data-testid="fab-tooltip-exit"]');
 
         await expect(scoreBoard).toBeVisible({ timeout: 15000 });
@@ -450,15 +451,29 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+        await expect(exitFabSheet).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
         const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
         }));
         expect(exitFabPanelMetrics.scrollWidth, 'exit fab panel 不应出现横向内容溢出').toBeLessThanOrEqual(exitFabPanelMetrics.clientWidth + 1);
+        expect(exitFabPanelMetrics.scrollHeight, 'exit fab panel should not rely on internal scrolling').toBeLessThanOrEqual(exitFabPanelMetrics.clientHeight + 1);
+        const exitFabPanelButtons = exitFabPanel.locator('button');
+        const exitFabPanelButtonCount = await exitFabPanelButtons.count();
+        expect(exitFabPanelButtonCount, 'exit fab panel should expose at least one action button').toBeGreaterThan(0);
+        for (let index = 0; index < exitFabPanelButtonCount; index += 1) {
+            const panelButton = exitFabPanelButtons.nth(index);
+            await expect(panelButton).toBeVisible();
+            await expect(panelButton).toBeEnabled();
+            await expectLocatorInsideViewport(panelButton, `exit fab panel button ${index + 1}`, viewport!.width, viewport!.height);
+        }
         await game.screenshot('04a-mobile-exit-fab-panel', testInfo);
         await exitFabButton.click();
         await expect(exitFabPanel).toHaveCount(0);
+        await expect(exitFabSheet).toHaveCount(0);
         await expect(exitFabTooltip).toHaveCount(0);
         await page.mouse.move(12, 12);
         await expect(exitFabTooltip).toHaveCount(0);
