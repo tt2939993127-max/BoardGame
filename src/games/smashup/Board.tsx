@@ -114,10 +114,10 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const currentPid = core ? getCurrentPlayerId(core) : '0';
     const playerID = rawPlayerID;
     const isMyTurn = playerID === currentPid;
-    // 观战模式下默认显示玩家 0 的视角
-    const myPlayer = playerID && core ? core.players[playerID] : (core ? core.players['0'] : undefined);
-    const isGameOver = G?.sys.gameover;
     const rootPid = playerID || '0';
+    // 观战模式下默认显示玩家 0 的视角
+    const myPlayer = core ? core.players[rootPid] : undefined;
+    const isGameOver = G?.sys.gameover;
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
     const isMobileViewport = useMobileViewport();
     
@@ -181,7 +181,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     }, []);
     
     // 对手玩家数据
-    const opponentPid = core.turnOrder.find(pid => pid !== playerID) || '1';
+    const opponentPid = core.turnOrder.find(pid => pid !== rootPid) || '1';
     const opponentPlayer = core.players[opponentPid];
     
     // 根据视角模式选择显示的玩家数据
@@ -774,13 +774,17 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         );
     }, [t]);
 
-    // 能力反馈 toast（搜索失败等提示）
+    // 能力反馈 toast：失败提示，以及成功获得额外出牌额度的明确反馈。
     useEffect(() => {
         if (gameEvents.feedbacks.length === 0) return;
         for (const fb of gameEvents.feedbacks) {
-            // 只显示给当前玩家的反馈
             if (fb.playerId === playerID) {
-                toast(t(fb.messageKey, { defaultValue: '牌库中未找到符合条件的卡牌，已重洗牌库', ...fb.messageParams }));
+                const defaultMessage = fb.messageKey === 'ui.extra_minion_granted'
+                    ? '获得{{count}}次额外随从机会'
+                    : fb.messageKey === 'ui.extra_action_granted'
+                    ? '获得{{count}}次额外行动机会'
+                    : '牌库中未找到符合条件的卡牌，已重洗牌库';
+                toast(t(fb.messageKey, { defaultValue: defaultMessage, ...fb.messageParams }));
             }
             gameEvents.removeFeedback(fb.id);
         }
