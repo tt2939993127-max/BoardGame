@@ -7,6 +7,7 @@
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from './e2e-port-config.js';
 import { cleanupPorts } from './port-allocator.js';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { listActiveRuntimes } from './e2e-runtime-registry.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

@@ -27,7 +27,7 @@ async function gotoLobbyWithRetry(page: Page): Promise<void> {
     }
 }
 
-const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围盒';
+const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 
 test.describe('Lobby E2E', () => {
     test.describe.configure({ timeout: 90000 });
@@ -60,12 +60,40 @@ test.describe('Lobby E2E', () => {
         await expect(page).toHaveURL(/game=tictactoe/);
 
         await expect(page.getByRole('button', { name: /Create Room/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Local/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Single Device/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Play AI/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /Tutorial/i })).toBeVisible();
 
         await page.getByRole('button', { name: /Leaderboard/i }).click();
         await expect(page.getByRole('heading', { name: /Top Wins/i, level: 4 })).toBeVisible({ timeout: 10000 });
         await expect(page.getByText(/Loading/i)).toHaveCount(0, { timeout: 10000 });
+    });
+
+    test('Tic-Tac-Toe 对战AI入口会直接进入本地逻辑 AI 对局', async ({ page, game }, testInfo) => {
+        await page.addInitScript(() => {
+            (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ = true;
+        });
+
+        await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
+        await expect(page).toHaveURL(/game=tictactoe/);
+
+        const aiSupport = page.getByTestId('game-details-ai-support');
+        await expect(aiSupport).toBeVisible();
+        await expect(aiSupport.getByText(/Local AI/i)).toBeVisible();
+
+        await page.getByRole('button', { name: /Play AI/i }).click();
+
+        await expect(page).toHaveURL(/\/play\/tictactoe\/local/);
+        await expect(page.getByTestId('debug-toggle')).toBeVisible({ timeout: 15000 });
+
+        await page.getByTestId('debug-toggle').click();
+        await expect(page.getByTestId('debug-panel')).toBeVisible();
+
+        await page.getByTestId('debug-tab-controls').click();
+        await expect(page.getByTestId('debug-ai-support')).toBeVisible();
+        await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Local AI/i);
+
+        await game.screenshot('lobby-tictactoe-local-ai-config-debug', testInfo);
     });
 
     test(MOBILE_AUTHOR_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {

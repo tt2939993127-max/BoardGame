@@ -32,6 +32,7 @@ import type { GameEngineConfig } from './src/engine/transport/server';
 import type { MatchMetadata, MatchStorage } from './src/engine/transport/storage';
 import { resolveMatchStatus } from './src/engine/transport/storage';
 import logger, { gameLogger } from './server/logger';
+import { createTrainingDataRecorderFromEnv } from './server/trainingDataRecorder';
 import { requestLogger, errorHandler } from './server/middleware/logging';
 
 // ============================================================================
@@ -307,10 +308,14 @@ const io = new IOServer(httpServer, {
 });
 
 // 创建游戏传输服务器
+const trainingDataRecorder = createTrainingDataRecorderFromEnv(process.env);
+
 const gameTransport = new GameTransportServer({
     io,
     storage,
     games: SERVER_ENGINES,
+    trainingDataRecorder,
+    rulesVersion: process.env.npm_package_version ?? null,
     offlineGraceMs: 300000, // 5 分钟：给断线玩家充足的重连时间
     authenticate: async (matchID, playerID, credentials, metadata) => {
         if (!credentials) return false;

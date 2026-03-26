@@ -20,6 +20,11 @@ const entry: GameManifestEntry = {
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
     shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    ai: {
+        capture: true,
+        localAi: true,
+        remoteAi: true,
+    },
 };
 
 export const DICETHRONE_MANIFEST: GameManifestEntry = entry;

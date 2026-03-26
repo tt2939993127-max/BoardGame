@@ -50,6 +50,8 @@ import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
 import { ASSETS } from './ui/assets';
+import { registerGameAiRuntime } from '../../engine/ai';
+import { diceThroneAiRuntime } from './ai';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -1058,3 +1060,5 @@ registerCriticalImageResolver('dicethrone', diceThroneCriticalImageResolver);
 
 // 导出类型（兼容）
 export type { DiceThroneCore } from './domain';
+
+registerGameAiRuntime(diceThroneAiRuntime);

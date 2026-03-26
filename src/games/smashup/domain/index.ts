@@ -1297,8 +1297,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return [];
     },
 
-    onPhaseEnter({ state, from, to, random, command }): GameEvent[] | PhaseEnterResult {
-        const core = state.core;
+    onPhaseEnter({ state, from, to, random, command, exitEvents }): GameEvent[] | PhaseEnterResult {
+        let core = state.core;
         const pid = getCurrentPlayerId(core);
         const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
         const events: GameEvent[] = [];
@@ -1463,6 +1463,12 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         }
 
         if (to === 'draw') {
+            if (from === 'scoreBases' && exitEvents && exitEvents.length > 0) {
+                core = exitEvents.reduce(
+                    (currentCore, event) => reduce(currentCore, event as SmashUpEvent),
+                    core,
+                );
+            }
             const player = core.players[pid];
             if (player) {
                 const { drawnUids, reshuffledDeckUids } = drawCards(player, DRAW_PER_TURN, random);
@@ -1492,6 +1498,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
         const phase = state.sys.phase as GamePhase;
+
+        if (phase === 'factionSelect' && !core.factionSelection) {
+            return { autoContinue: true, playerId: pid };
+        }
 
         // 閫氱敤瀹堝崼锛氫换浣曢樁娈垫湁寰呭鐞嗙殑 Interaction 鏃堕兘涓嶈嚜鍔ㄦ帹杩?
         // 锛堝熀鍦拌兘鍔涘鎷夎幈鑰?onTurnStart銆佹墭灏斿浘鍔?afterScoring 绛夊彲鑳藉湪浠绘剰闃舵鍒涘缓 Interaction锛?

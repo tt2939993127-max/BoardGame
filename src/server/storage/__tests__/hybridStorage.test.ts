@@ -38,7 +38,7 @@ const buildCreateData = (setupOverrides?: Record<string, unknown>): CreateMatchD
 
 // MongoDB 内存服务器在某些环境下启动很慢（>60s），暂时跳过测试
 // 如需运行这些测试，请移除下面的 .skip
-describe.skip('HybridStorage 行为', () => {
+describe('HybridStorage 行为', () => {
     let mongo: MongoMemoryServer;
     let hybrid: HybridStorage;
 
