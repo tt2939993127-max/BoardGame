@@ -451,6 +451,11 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
+        const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+        }));
+        expect(exitFabPanelMetrics.scrollWidth, 'exit fab panel 不应出现横向内容溢出').toBeLessThanOrEqual(exitFabPanelMetrics.clientWidth + 1);
         await game.screenshot('04a-mobile-exit-fab-panel', testInfo);
         await exitFabButton.click();
         await expect(exitFabPanel).toHaveCount(0);

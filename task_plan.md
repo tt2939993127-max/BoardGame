@@ -1,5 +1,36 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-26）：跨游戏 AI 评分框架首轮收口
+
+### Goal
+- 在现有 `add-cross-game-ai-system` OpenSpec change 上完成通用本地 AI 评分框架设计收口，并把 Dice Throne 作为首个复杂桌游落地对象。
+
+### Result
+- [x] 将 spec / proposal / design 统一收口为“`legalActions -> scorer/heuristic -> 可叠加搜索`”路线，不再把行为树当默认总方案
+- [x] 在 `src/engine/ai/` 增加通用评分 helper，支持 scorer 汇总、稳定选优、reasoning summary 与调试评分元数据
+- [x] 将 `src/games/dicethrone/ai.ts` 的 baseline local policy 改为评分式决策，实现 setup / roll / card / interaction / bonus die / status / tempo 多维打分
+- [x] 在现有 `src/games/dicethrone/__tests__/basic-commands-coverage.test.ts` 中补充回归断言，验证 main1 会优先打出可用升级牌而不是直接 `advance-phase`
+- [x] 完成验证：`npm run typecheck`、`npx vitest run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --maxWorkers=1`、`openspec validate add-cross-game-ai-system --strict --no-interactive`
+
+### Next Step
+- 继续 Phase 3.x：训练数据清理/归档策略、AstrBot/remote provider 接口约束、非法动作 fallback 与 provider timeout 测试。
+
+## Addendum（2026-03-26）：远程 AI fallback 与训练采集恢复
+
+### Goal
+- 在当前并发改动后的真实工作区上，恢复通用 AI runner、远程 provider fallback 与训练采集 raw log 层，重新拿回一个可继续迭代的 AI 基线。
+
+### Result
+- [x] 重建 `src/engine/ai/`，恢复统一 AI 类型、seat controller、context、registry、playerView、评分 helper 与通用 runner
+- [x] runner 支持 `remote-ai` provider 的超时、重试、非法动作拒绝与 fallback 到本地 policy
+- [x] `LocalGameProvider` 与 `LocalMatchRoom` 重新接回 seat controller 参数解析
+- [x] 恢复 `tictactoe` AI runtime，并用现有测试文件覆盖本地制胜、远程非法动作回退、远程异常回退、远程超时回退
+- [x] 恢复 `src/engine/transport/trainingData.ts` 与 `server/trainingDataRecorder.ts`，并在现有 transport 测试文件中补齐训练快照与 JSONL 落盘断言
+- [ ] Dice Throne AI runtime 在当前工作区中重新落回
+
+### Next Step
+- 先把 Dice Throne AI runtime 接回当前树，再设计 AstrBot 的鉴权、请求/响应格式和 provider 注册方式。
+
 > 当前根目录三件套已切换为 **2026-03-22 多线任务恢复入口**。下次开新会话时，先按本文件的“当前主任务 / 并行子线 / 下一步”继续，不要被后面的历史 Addendum 标题误导。
 > 术语约束：当用户说 **plan** 时，默认指的是 `planning-with-files` 这套规划工作方式 / 效果；而这套流程产出的正式计划文档唯一落点就是本文件 `task_plan.md`。`findings.md` / `progress.md` 是配套记录，不是第二份 plan；`temp/*plan*` 只算历史临时材料，不得继续作为当前正式计划入口。
 
@@ -173,6 +204,92 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 ### Status
 - completed
 
+---
+
+## Addendum（2026-03-25）：大厅模式入口改成教程 / 单机 / 对战AI
+
+### Goal
+- 把游戏详情页里偏技术化的本地入口改成更面向用户的模式入口，先让产品语义清楚，再继续讨论 AI 策略层设计。
+- 确保 `单机模式` 与 `对战AI` 的行为明确区分，不再因为默认 seat controller 让用户误入 AI 对局。
+
+### Result
+- [x] `GameDetailsModal` 入口改成竖排三类模式：`教程模式`、`单机模式`、`对战AI`
+- [x] `单机模式` 显式传 `seatControllers['1']=human`，覆盖支持 local AI 游戏的默认 seat 推导
+- [x] `对战AI` 直接进入本地逻辑 AI 对局，不再经过 `LocalMatchConfigModal`
+- [x] 中英文本地化文案已同步到 `public/locales/en/lobby.json` 与 `public/locales/zh-CN/lobby.json`
+- [x] `e2e/lobby.e2e.ts` 已改为验证新入口与 AI 直达链路
+- [x] 证据文档已改写为新产品口径
+
+### Validation
+- `npm run typecheck`
+- `npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1`
+- `npm run test:e2e:ci:file -- lobby.e2e.ts "Game details modal opens and shows actions"`
+- `npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 对战AI入口会直接进入本地逻辑 AI 对局"`
+
+### Decision Notes
+- 这轮只收口“入口产品形态”，不把 baseline 逻辑 AI 误包装成最终策略方案。
+- 当前 `legalActions -> decide(context)` 框架仍保持中立，后续讨论行为树、utility、搜索都不需要推翻入口实现。
+
+---
+
+## Addendum（2026-03-25）：跨游戏 AI 产品入口收口
+
+### Goal
+- 完成跨游戏 AI 第一阶段的产品入口收口，让大厅、房间、本地配置与调试面板都能展示和消费通用 AI 能力。
+- 以 `tictactoe` 为验证对象，补齐本地对战配置链路的单测、E2E 与证据文档。
+
+### Result
+- [x] 新增通用 seat controller 工具，统一解析/序列化 `players`、`seat0/seat1/...` query 参数
+- [x] 大厅游戏卡片与详情弹窗接入 AI 支持展示
+- [x] 新增本地对战配置弹窗，支持本地人数与 `human / local-ai / remote-ai` 座位配置
+- [x] 本地房间页接入统一 seat controller 解析，调试面板接入 AI 支持与当前座位控制器展示
+- [x] 补齐 `lobby` / `game` 中英文 locale
+- [x] 在现有测试文件中补齐 seat controller、search params、AI pill 回归测试
+- [x] 在现有 `e2e/lobby.e2e.ts` 中补齐大厅到本地 AI 页的链路验证
+- [x] 补充证据文档 `evidence/lobby-ai-local-config-e2e.md`
+
+### Validation
+- `npm run typecheck`
+- `npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1`
+- `npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 本地对战配置会暴露 AI 支持和 seat controller"`
+
+### Status
+- completed
+
+### Next
+- 继续完成 `2.3`：训练数据清理、归档与 schema 升级策略
+- 继续完成 `4.2 / 4.3`：AstrBot / Remote provider 的鉴权、超时、fallback 与 `legalActions` 约束
+- 继续完成 `5.3` 中尚未覆盖的 provider timeout / 非法动作回退测试
+
+---
+
+## Addendum（2026-03-25）：跨游戏 AI 骨架 + DiceThrone 首个落地
+
+### Goal
+- 完成跨游戏 AI 骨架第一阶段收口：显式 `manifest.ai`、训练采集 `legalActions`、本地房间 seat controller、本地逻辑 AI runner。
+- 以 `dicethrone` 作为首个接入对象，提供可运行的 legal action 生成与 baseline 本地策略。
+
+### Result
+- [x] 所有 manifest 已显式声明 `ai.capture / localAi / remoteAi`，生成脚本同步校验必填。
+- [x] 训练采集样本已写入 `legalActions`，并复用通用 AI snapshot 提取。
+- [x] 本地房间支持 `seat0/seat1/...` 控制 human / local-ai / remote-ai，占位边界已打通。
+- [x] `LocalGameProvider` 已接入本地 AI 自动出招，并用 `attemptKey` 防重复状态死循环。
+- [x] 服务端命令归一化已兼容 `__internalPlayerId / __internalAiCommand` 与旧 tutorial 私有字段。
+- [x] `dicethrone` 已新增 AI runtime：覆盖 setup、推进阶段、掷骰/确认、选技能、响应跳过、奖励骰、净化、被动能力，以及 simple-choice / multistep-choice 的最小闭环。
+- [x] `dicethrone` 已注册 runtime，并在现有测试文件中补充 AI 相关断言。
+
+### Validation
+- `node scripts/game/generate_game_manifests.js`
+- `npm run typecheck`
+- `npx vitest run src/engine/transport/__tests__/trainingData.test.ts src/engine/transport/__tests__/server.test.ts src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --maxWorkers=1`
+
+### Status
+- completed
+
+### Next
+- 下一阶段可在现有 remote provider 边界上接 AstrBot / 大模型 provider。
+- 其他游戏当前已具备统一 AI 接口和采集开关，但尚未实现各自 runtime。
+
 ### Result（2026-03-11 更新）
 - [x] 回归分析完成：确认 `dev:frontend:wait`（2026-03-09）放大了后端慢启动体感；API 主启动文件近期未见同等级别逻辑扩张。
 - [x] 低风险优化完成：API Sentry 改为后台惰性初始化；game-server 启动清理改为监听后后台执行；`dev` 改为分阶段编排；启动命令去除 `npx`。
@@ -276,6 +393,160 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 - [x] 已删除后半段重复的 `base_great_library`
 - [x] Python 扫描确认重复 key 数量为 `0`
 - [x] 直接运行 esbuild 打包 `server.ts`，日志中不再出现 `duplicate-object-key`
+
+### Status
+- completed
+## Addendum（2026-03-25）：OpenSpec 收口更新
+
+### Goal
+- 继续清理 `openspec/changes/` 中已经按实际实现完成的 change，并把明显被后续方案取代的 change 判定为 stale 后清理目录
+- 按用户要求仅以“实施实际进度”为准，不以验证项是否补齐作为归档阻塞
+- 完成本轮后，把结论回填到 `task_plan.md`、`findings.md`、`progress.md`
+
+### Result
+- [x] 归档 `add-user-settings-persistence`
+- [x] 归档 `add-game-changelog-and-author-info`
+- [x] 将 `update-mobile-first-adaptive` 判定为 stale change 并清理目录
+- [x] 同步更新正式 spec：
+  - `openspec/specs/manage-user-settings/spec.md`
+  - `openspec/specs/game-changelog-management/spec.md`
+  - `openspec/specs/game-details-content/spec.md`
+  - `openspec/specs/game-registry/spec.md`
+- [x] 回填本轮收口进度到规划文件
+
+### Current Active Changes
+- `add-cross-game-ai-system`
+- `implement-domain-core-and-systems`
+- `add-ai-pr-review-merge-automation`
+- `add-pc-first-mobile-adaptation-framework`
+- `add-ugc-layout-alignment`
+- `add-ugc-rule-execution-framework`
+- `add-ugc-runtime-and-audio-pipeline`
+- `refactor-engine-primitives`
+- `refactor-multistep-interaction`
+- `ugc-builder-v2`
+- `add-dicethrone-2v2-team-mode`
+- `add-refresh-token-auth`
+- `add-ugc-client-runtime-adapter`
+
+### Decision Notes
+- `add-user-settings-persistence` 归档前已把文档口径改成真实实现：登录后应用远端设置，但不覆盖游客本地缓存；登出时恢复游客本地偏好
+- `add-game-changelog-and-author-info` 归档前已把文档口径改成真实实现：作者信息来自 `manifest.authorName`，前台是独立“更新”标签，不是旧提案中的 `author.tsx` 动态模块或“排行榜内双栏”
+- `update-mobile-first-adaptive` 已被当前 PC-first 移动端方案口径取代，因此按 stale 清理，不再保留为 active change
+- `add-refresh-token-auth` 仍不应归档：虽然已有 refresh token 流程与定时刷新，但 spec 里的“401 自动刷新并单飞重试请求”尚未全面落地
+
+### Status
+- completed
+## Addendum（2026-03-25）：OpenSpec active changes 收口进展
+
+### Goal
+- 继续按“只看实施实际进度，不以验证项为阻塞”收口 `openspec/changes` 里的 active changes。
+- 对已实现但文档过时的 change，先把 proposal / design / tasks / spec delta 改成真实现状，再归档。
+- 对明显未完成的 change，保留 active，不误归档。
+
+### 本轮已完成
+- [x] 归档 `add-pc-first-mobile-adaptation-framework`
+- [x] 归档 `implement-domain-core-and-systems`
+- [x] 归档 `refactor-engine-primitives`
+- [x] 清理 `refactor-engine-primitives` 归档后残留的正式 spec 旧口径：
+  - `openspec/specs/engine-primitives/spec.md`
+  - `openspec/specs/dice-system/spec.md`
+
+### 当前剩余 active changes
+- [ ] `add-cross-game-ai-system`
+- [ ] `add-ai-pr-review-merge-automation`
+- [ ] `add-ugc-layout-alignment`
+- [ ] `add-ugc-rule-execution-framework`
+- [ ] `add-ugc-runtime-and-audio-pipeline`
+- [ ] `refactor-multistep-interaction`
+- [ ] `ugc-builder-v2`
+- [ ] `add-dicethrone-2v2-team-mode`
+- [ ] `add-refresh-token-auth`
+- [ ] `add-ugc-client-runtime-adapter`
+
+### 当前判断
+- `add-cross-game-ai-system`：不要归档。已完成训练采集、本地 AI、seat controller、lobby/local room 接入；远程 provider 真正执行链、AstrBot 接入、provider timeout/非法动作回退等仍未完成。
+- `add-refresh-token-auth`：不要归档。refresh token 与定时刷新已做，但 spec 里的 401 自动刷新 + 单飞重试链路未完整落地。
+- `refactor-engine-primitives`：已按真实现状收口。正式口径改为“保留 `systems/` 运行时层，同时新增并广泛落地 `engine/primitives/` 纯函数原语层”，不再错误声称删除 `systems/`。
+
+### Next
+- 优先检查 `refactor-multistep-interaction` 是否属于“实现已完成但 spec 落后”的归档候选。
+- 若不成立，再继续筛 UGC 系列中哪些是 stale、被后续方案覆盖、或仅部分落地不应归档。
+## Addendum（2026-03-25）：OpenSpec active changes 继续收口
+
+### Goal
+- 继续按“只看实施实际进度，不以验证项为阻塞”收口剩余 active changes。
+- 优先处理 UGC 相关 change：已实现则改口径后归档；方向被现实实现取代则判定 stale 并清理目录；仅部分落地则保留 active。
+
+### Result
+- [x] 归档 `add-ugc-layout-alignment`
+- [x] 归档 `add-ugc-client-runtime-adapter`
+- [x] 判定 `add-ugc-rule-execution-framework` 为 stale change 并清理目录
+- [x] 判定 `ugc-builder-v2` 为 stale change 并清理目录
+- [x] 复核 `add-ugc-runtime-and-audio-pipeline` 为“仅部分落地，暂不归档”
+- [x] 同步回填本轮结论到 `task_plan.md`、`findings.md`、`progress.md`
+
+### Current Active Changes
+- `add-cross-game-ai-system`
+- `add-ai-pr-review-merge-automation`
+- `add-ugc-runtime-and-audio-pipeline`
+- `add-dicethrone-2v2-team-mode`
+- `add-refresh-token-auth`
+
+### Decision Notes
+- `add-ugc-layout-alignment`
+  - 真实实现已经落地：`anchor/pivot/offset` 布局模型、旧草稿迁移、对齐/分布工具栏、网格/边缘/中心吸附、参考线、`uiLayout` 偏好持久化、`resolveLayoutRect` 统一布局解析、Runtime 复用 `PreviewCanvas`
+- `add-ugc-client-runtime-adapter`
+  - 真实实现已经落地：客户端 manifest loader、`UGC_ASSET_BASE_URL`、`createUgcClientGame` / `createUgcDraftGame`、`createUgcRemoteHostBoard`、`MatchRoom` 的 UGC 在线加载分支、包内 view 缺失时回退内置 runtime view
+- `add-ugc-runtime-and-audio-pipeline`
+  - 已落地部分：UGC 包 API、发布态列表/manifest、zip 包上传、动态注册、资源压缩器、published UGC registry 接入
+  - 未落地关键点：UGC tutorial 真正接入 `/tutorial` 流程；`PLAY_SFX` 只停留在 SDK/bridge 协议层，宿主未形成实际播放闭环
+  - 结论：保留 active，不归档
+- `add-ugc-rule-execution-framework`
+  - 口径要求“无手动代码编辑器、仅外部 AI 粘贴导入、只保留基础规则执行框架”
+  - 现实实现是 `UnifiedBuilder + rulesCode/renderCode/layoutCode + sandbox/runtime` 的混合路线，方向已偏离该提案
+  - 结论：stale，清理目录
+- `ugc-builder-v2`
+  - 口径要求分层 `GameBundle` / `SandboxAPI` / 去掉手写代码入口
+  - 现实实现并未转向该架构，且与当前 Builder 主线冲突
+  - 结论：stale，清理目录
+
+### Status
+- in_progress
+
+## Addendum（2026-03-25）：OpenSpec active changes 最终核对补充
+
+### Goal
+- 继续核对剩余 active changes 是否已经按“实际实施进度”达到可归档状态。
+- 重点补完此前尚未定性的 `add-ai-pr-review-merge-automation` 与 `add-dicethrone-2v2-team-mode`。
+- 复核 `add-refresh-token-auth` 是否已形成 spec 要求的 401 自动刷新 + 单飞重试闭环。
+
+### Result
+- [x] 判定 `add-ai-pr-review-merge-automation` 当前不应归档，保留 active
+- [x] 判定 `add-dicethrone-2v2-team-mode` 当前不应归档，保留 active
+- [x] 复核 `add-refresh-token-auth` 后，继续维持“未完成，不归档”的判断
+- [x] 同步把本轮结论回填到 `task_plan.md`、`findings.md`、`progress.md`
+
+### Current Active Changes
+- `add-cross-game-ai-system`
+- `add-ai-pr-review-merge-automation`
+- `add-ugc-runtime-and-audio-pipeline`
+- `add-dicethrone-2v2-team-mode`
+- `add-refresh-token-auth`
+
+### Decision Notes
+- `add-ai-pr-review-merge-automation`
+  - 当前仓库仅存在 `quality-gate.yml`，没有新增 AI PR review workflow、auto-merge workflow、`workflow_run` 联动、PR comment/check summary 回写实现。
+  - `.windsurf/skills/github-pr-review-merge/SKILL.md` 只说明有人机协作流程，不等于仓库级 GitHub 自动化已落地。
+  - 结论：proposal/spec 已创建，但实施基本未开始，保留 active。
+- `add-dicethrone-2v2-team-mode`
+  - 已有少量预埋：规则文档已写 2v2，`src/games/dicethrone/domain/rules.ts` 有 `isTeamMode/getTeamId/getOpponents/getLeftOpponentId/getRightOpponentId` 等 helper，`state.teamIdByPlayerId` / `seatingOrder` 也已有类型入口。
+  - 但主链未落地：`src/games/dicethrone/manifest.ts` 仍是 `playerOptions: [2]`，`src/games/dicethrone/game.ts` 仍是 `minPlayers: 2` / `maxPlayers: 2`，未见 Targeting Roll phase、4 人建房/入座、共享体力、2v2 顶部三窗、目标选择面板等实现。
+  - 结论：属于局部预埋 + 主链未做，保留 active。
+- `add-refresh-token-auth`
+  - 后端 refresh token、`/auth/refresh`、rotate/revoke 已存在；前端也有 `useTokenRefresh()` 的定时刷新。
+  - 但大量前端请求仍是各自 `fetch(... Authorization: Bearer ...)`，例如 `src/api/review.ts`、`src/api/user-settings.ts`、`src/contexts/SocialContext.tsx`、多个 `src/pages/admin/*.tsx`；`src/services/matchApi.ts` 遇到 401 仍是直接清本地 token。
+  - 结论：没有统一 401 自动 refresh + 单飞 retry 请求层闭环，继续保留 active。
 
 ### Status
 - completed

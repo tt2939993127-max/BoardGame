@@ -312,6 +312,43 @@ describe('井字棋 AI', () => {
         });
     });
 
+    it('远程 AI 重试后返回合法动作时应直接采用远程结果', async () => {
+        let attemptCount = 0;
+
+        registerRemoteAiProvider({
+            id: 'test-retry-success',
+            decide: async () => {
+                attemptCount += 1;
+                if (attemptCount === 1) {
+                    throw new Error('provider_failed_once');
+                }
+                return { actionId: 'click-cell:2' };
+            },
+        });
+
+        const state = createAiTestState({
+            cells: ['0', '0', null, '1', '1', null, null, null, null],
+            currentPlayer: '0',
+            playerIds: ['0', '1'],
+        });
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:tictactoe-remote-retry-success',
+            seatControllers: {
+                '0': { type: 'remote-ai', providerId: 'test-retry-success', fallbackPolicyId: 'baseline', retryCount: 1 },
+            },
+        });
+
+        expect(attemptCount).toBe(2);
+        expect(resolution?.source).toBe('remote-ai');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: 'CLICK_CELL',
+            payload: { cellId: 2 },
+        });
+    });
+
     it('远程 AI 超时时应回退到本地策略', async () => {
         registerRemoteAiProvider({
             id: 'test-timeout',
