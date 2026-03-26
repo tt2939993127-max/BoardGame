@@ -500,6 +500,9 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             documentScrollWidth: document.documentElement.scrollWidth,
             bodyClientWidth: document.body.clientWidth,
             bodyScrollWidth: document.body.scrollWidth,
+            htmlOverflowX: window.getComputedStyle(document.documentElement).overflowX,
+            bodyOverflowX: window.getComputedStyle(document.body).overflowX,
+            rootOverflowX: window.getComputedStyle(document.getElementById('root')!).overflowX,
         }));
         expect(
             mobileLandscapeDocumentMetrics.documentScrollWidth,
@@ -509,6 +512,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             mobileLandscapeDocumentMetrics.bodyScrollWidth,
             '手机横屏时 body 不应出现全局横向溢出',
         ).toBeLessThanOrEqual(mobileLandscapeDocumentMetrics.bodyClientWidth + 1);
+        expect(mobileLandscapeDocumentMetrics.htmlOverflowX, '手机横屏时 html 应禁用横向滚动').toBe('hidden');
+        expect(mobileLandscapeDocumentMetrics.bodyOverflowX, '手机横屏时 body 应禁用横向滚动').toBe('hidden');
 
         const handCardBox = await handCard.boundingBox();
         expect(handCardBox, '手牌卡牌应提供尺寸').not.toBeNull();
