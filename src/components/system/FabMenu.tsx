@@ -30,6 +30,10 @@ interface FabMenuProps {
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
 
+export interface FabAction {
+    mobilePanelVariant?: 'popover' | 'sheet';
+}
+
 const parseCssPixels = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -354,6 +358,11 @@ export const FabMenu = ({
                     edgePadding={edgePadding}
                     safeAreaInsets={safeAreaInsets}
                     isMobileViewport={isMobileViewport}
+                    tooltipPortalRoot={tooltipPortalRoot}
+                    onRequestClose={() => {
+                        setIsOpen(false);
+                        setActiveItemId(null);
+                    }}
                 />
                 <MenuButton
                     item={items[0]}
@@ -445,6 +454,8 @@ const SatelliteList = ({
                                 edgePadding={edgePadding}
                                 safeAreaInsets={safeAreaInsets}
                                 isMobileViewport={isMobileViewport}
+                                tooltipPortalRoot={tooltipPortalRoot}
+                                onRequestClose={() => onItemClick(item)}
                             />
                             <MenuButton
                                 item={item}
@@ -479,10 +490,13 @@ const Panel = ({
     edgePadding,
     safeAreaInsets,
     isMobileViewport,
+    tooltipPortalRoot,
+    onRequestClose,
 }: any) => {
     const panelOffset = buttonSize + buttonGap;
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
     const panelWidth = isMobileViewport ? 260 : 300;
     const spaceRight = Math.max(
         0,
@@ -513,6 +527,78 @@ const Panel = ({
     const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
     const panelMaxWidth = safeAvailableWidth > 0 ? `${safeAvailableWidth}px` : undefined;
     const panelMaxHeight = safeAvailableHeight > 0 ? `${safeAvailableHeight}px` : undefined;
+    const panelHeading = (
+        <div className="mb-2 truncate border-b border-white/10 pb-2 text-[10px] font-bold uppercase tracking-wider opacity-70">
+            {item.label}
+        </div>
+    );
+
+    if (isMobileSheetPanel) {
+        const sheetHorizontalMargin = 12;
+        const sheetBottomOffset = safeAreaInsets.bottom + 12;
+        const availableSheetWidth = Math.max(
+            0,
+            viewportWidth - safeAreaInsets.left - safeAreaInsets.right - (sheetHorizontalMargin * 2),
+        );
+        const resolvedSheetWidth = Math.min(availableSheetWidth, 420);
+
+        if (!isActive || !item.content || !tooltipPortalRoot) {
+            return null;
+        }
+
+        return createPortal(
+            <>
+                <div
+                    className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
+                    style={{ zIndex: UI_Z_INDEX.modalOverlay }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onRequestClose?.();
+                    }}
+                    data-testid={`fab-sheet-backdrop-${item.id}`}
+                />
+                <motion.div
+                    initial={{ opacity: 0, y: 24 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    className="fixed left-1/2"
+                    style={{
+                        bottom: sheetBottomOffset,
+                        width: resolvedSheetWidth > 0 ? resolvedSheetWidth : undefined,
+                        maxWidth: `calc(100vw - ${safeAreaInsets.left + safeAreaInsets.right + (sheetHorizontalMargin * 2)}px)`,
+                        transform: 'translateX(-50%)',
+                        zIndex: UI_Z_INDEX.modalContent,
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={item.label}
+                    data-testid={`fab-sheet-${item.id}`}
+                >
+                    <div
+                        className={`
+                            overflow-hidden rounded-[22px] border shadow-2xl
+                            ${isDark
+                                ? 'border-white/10 bg-black/95 text-white shadow-black/70'
+                                : 'border-[#d3ccba] bg-[#fcfbf9]/98 text-[#433422] shadow-[#433422]/20'}
+                        `}
+                        data-testid={`fab-panel-${item.id}`}
+                    >
+                        <div className="px-4 pt-4">
+                            <div className="truncate border-b border-white/10 pb-2 text-[11px] font-bold uppercase tracking-[0.22em] opacity-70">
+                                {item.label}
+                            </div>
+                        </div>
+                        <div className="px-3 pb-3 pt-3">
+                            {item.content}
+                        </div>
+                    </div>
+                </motion.div>
+            </>,
+            tooltipPortalRoot,
+        );
+    }
 
     return (
         <AnimatePresence>
@@ -541,9 +627,7 @@ const Panel = ({
                     onPointerDown={(e) => e.stopPropagation()}
                     data-testid={`fab-panel-${item.id}`}
                 >
-                    <div className="mb-2 truncate border-b border-white/10 pb-2 text-[10px] font-bold uppercase tracking-wider opacity-70">
-                        {item.label}
-                    </div>
+                    {panelHeading}
                     {item.content}
                 </motion.div>
             )}

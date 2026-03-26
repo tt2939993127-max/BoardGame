@@ -427,3 +427,19 @@
 
 ### Evidence
 - `D:\gongzuo\webgame\BoardGame\evidence\lobby-ai-local-config-e2e.md`
+## Session: 2026-03-26 AstrBot provider 契约与远程 AI 闭环
+- **Status:** completed
+- Actions taken:
+  - 扩展 `AiSeatController` 的 `remote-ai` 契约，补入 `timeoutMs` 与 `retryCount`
+  - 重写 `src/engine/ai/localRunner.ts`，统一本地 AI、远程 provider、超时、重试与 fallback 入口
+  - 新增 `src/engine/ai/providers/astrbot.ts`，约定默认 AstrBot HTTP 请求结构为 `schemaVersion + provider + context`
+  - 新增 `src/engine/ai/providers/index.ts`，并在 `src/engine/ai/index.ts` 中做默认 provider 注册
+  - 保持鉴权信息不进入 seat query，AstrBot endpoint / apiKey / 默认 timeout / 默认 retry 改走环境配置
+  - 在现有 `src/games/tictactoe/__tests__/flow.test.ts` 中补入“重试后成功采用远程结果”测试
+  - 回填 `openspec/changes/add-cross-game-ai-system/tasks.md`，将 `3.2` 标记完成
+- Validation:
+  - `npx vitest run src/games/tictactoe/__tests__/flow.test.ts --maxWorkers=1`
+  - `npx vitest run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --maxWorkers=1`
+  - `npm run typecheck`
+- Next step:
+  - 如继续推进，可把 AstrBot HTTP 请求/响应样式写成项目文档，并决定在线房间是否也要迁到服务端 AI 调度。

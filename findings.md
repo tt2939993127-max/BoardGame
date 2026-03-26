@@ -468,3 +468,15 @@
     - 多个 `src/pages/admin/*.tsx`
   - `src/services/matchApi.ts` 遇到 401 仍是直接清本地 token，不是 refresh 后重试。
 - 结论：refresh token 已上线，但 spec 里的统一请求层自动续签闭环并未全面落地，不能归档。
+## 新发现（2026-03-26，AstrBot provider 闭环）
+- 当前工作区在 AI 这条线上存在“测试口径比实现更完整”的漂移：`tictactoe` 测试已经假定存在 `remote-ai` 的 `timeout / retry / fallback / source` 语义，但原始 `localRunner` 只覆盖 `local-ai`。
+- 远程 provider 的正确边界不应把鉴权信息塞进 `seat0=remote-ai:...` 这种 query 参数里；更合理的做法是：
+  - seat controller 只保留 provider 选择与运行时调参（如 `providerId / timeoutMs / retryCount / fallbackPolicyId`）
+  - endpoint / apiKey / 默认 timeout / 默认 retry 由 provider 注册层读取环境配置
+- AstrBot 默认 provider 现已按通用 HTTP provider 方式接入，发送的是结构化 `AiDecisionContext`，而不是拼 prompt 字符串后把返回结果直接当命令执行。
+- 远程 AI 的 fallback 仍然坚持统一门控：
+  - provider 返回非法 actionId -> 不执行，回退到本地 policy 或首个合法动作
+  - provider 抛错 -> 不阻塞对局，回退
+  - provider 超时 -> 不无限等待，回退
+  - provider 重试成功 -> 直接采用远程结果，但仍只允许命中 `legalActions`
+- 这轮实现后，`LocalGameProvider` 终于和 `tictactoe`/`dicethrone` 测试口径重新对齐：统一入口为 `resolveNextAiAction(...)`，而不再是“React 侧假定有远程 AI，Runner 侧实际上没有”。
