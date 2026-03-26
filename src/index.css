@@ -277,6 +277,16 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
+}
+
+.mobile-board-shell__content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .mobile-board-shell__top-rail,
@@ -332,6 +342,7 @@
         width: var(--mobile-board-shell-design-width);
         height: calc(var(--runtime-viewport-height, 100dvh) / var(--mobile-board-shell-scale));
         max-width: none;
+        padding: 0;
     }
 
     [data-game-page][data-game-id="dicethrone"][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
