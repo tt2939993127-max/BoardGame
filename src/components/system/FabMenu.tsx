@@ -541,6 +541,10 @@ const Panel = ({
             viewportWidth - safeAreaInsets.left - safeAreaInsets.right - (sheetHorizontalMargin * 2),
         );
         const resolvedSheetWidth = Math.min(availableSheetWidth, 420);
+        const resolvedSheetLeft = Math.max(
+            safeAreaInsets.left + sheetHorizontalMargin,
+            (viewportWidth - resolvedSheetWidth) / 2,
+        );
 
         if (!isActive || !item.content || !tooltipPortalRoot) {
             return null;
@@ -561,12 +565,11 @@ const Panel = ({
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                    className="fixed left-1/2"
+                    className="fixed"
                     style={{
+                        left: resolvedSheetLeft,
                         bottom: sheetBottomOffset,
                         width: resolvedSheetWidth > 0 ? resolvedSheetWidth : undefined,
-                        maxWidth: `calc(100vw - ${safeAreaInsets.left + safeAreaInsets.right + (sheetHorizontalMargin * 2)}px)`,
-                        transform: 'translateX(-50%)',
                         zIndex: UI_Z_INDEX.modalContent,
                     }}
                     onPointerDown={(event) => event.stopPropagation()}
