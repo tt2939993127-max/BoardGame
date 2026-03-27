@@ -21,6 +21,7 @@ import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitP
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
+import { LocalMatchConfigModal } from './LocalMatchConfigModal';
 import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
 
@@ -63,6 +64,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
+    const supportsAiSeatConfig = Boolean(gameManifest?.ai && (gameManifest.ai.localAi || gameManifest.ai.remoteAi));
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -89,6 +91,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
     const [passwordModalConfig, setPasswordModalConfig] = useState<{ matchID: string; gameName: string } | null>(null);
     const [showAuthorInfoModal, setShowAuthorInfoModal] = useState(false);
+    const [showLocalMatchConfig, setShowLocalMatchConfig] = useState(false);
 
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, getGuestId());
@@ -137,6 +140,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         if (!isOpen) return;
         pruneStoredMatchCredentials();
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setShowLocalMatchConfig(false);
+        }
     }, [isOpen]);
 
     // 使用 socket 订阅房间列表更新（替代轮询）
@@ -253,9 +262,23 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         navigate(`/play/${gameId}/tutorial`);
     };
 
-    const handleLocalPlay = () => {
+    const navigateToLocalPlay = (search?: URLSearchParams) => {
+        const query = search?.toString();
         onNavigate?.();
-        navigate(`/play/${gameId}/local`);
+        navigate(`/play/${gameId}/local${query ? `?${query}` : ''}`);
+    };
+
+    const handleLocalPlay = () => {
+        if (gameManifest && supportsAiSeatConfig) {
+            setShowLocalMatchConfig(true);
+            return;
+        }
+        navigateToLocalPlay();
+    };
+
+    const handleConfirmLocalMatch = (search: URLSearchParams) => {
+        setShowLocalMatchConfig(false);
+        navigateToLocalPlay(search);
     };
 
     // 打开创建房间弹窗
@@ -1078,6 +1101,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     onConfirm={handleCreateRoom}
                     gameManifest={gameManifest}
                     isLoading={isLoading}
+                />
+            )}
+
+            {gameManifest && allowLocalMode && (
+                <LocalMatchConfigModal
+                    isOpen={showLocalMatchConfig}
+                    onClose={() => setShowLocalMatchConfig(false)}
+                    onConfirm={handleConfirmLocalMatch}
+                    gameManifest={gameManifest}
                 />
             )}
 

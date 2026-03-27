@@ -10,7 +10,7 @@ const entry: GameManifestEntry = {
     playersKey: 'games.dicethrone.players',
     icon: '🎲',
     thumbnailPath: 'dicethrone/thumbnails/fengm',
-    allowLocalMode: false,
+    allowLocalMode: true,
     playerOptions: [2],
     tags: ['dice_driven', 'combat'],
     bestPlayers: [2],

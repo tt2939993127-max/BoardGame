@@ -1,5 +1,14 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-27，Dice Throne 本地 AI 入口）
+- 跨游戏 AI 主线当前并不是“框架还没做完”，而是已经完成到可运行状态；真实缺口转移到了用户入口层。
+- `LocalMatchConfigModal`、seat controller、`LocalMatchRoom`、Dice Throne 评分式本地 AI、远程 provider 契约和训练采集都已存在，说明“本地 AI 能不能跑”这个问题实际上已经解决。
+- 真正导致用户在详情页看不到“对战 AI / 单机模式”的原因有两个：
+  - `src/games/dicethrone/manifest.ts` 仍写着 `allowLocalMode: false`，直接把本地入口隐藏掉了。
+  - `src/components/lobby/GameDetailsModal.tsx` 的“本地游玩”此前仍是直接跳 `/local`，没有接已经做好的 `LocalMatchConfigModal`。
+- 因此这条线的最小正确修复不是继续写 AI 逻辑，也不是提前接 AstrBot，而是把“现有 AI 能力”真正暴露给用户。
+- 当前补齐后，Dice Throne 的本地入口已经与通用 AI 框架接通；后续再做 AstrBot 或更多游戏 AI 时，可以沿用同一套详情页 -> 座位配置 -> 本地房间链路。
+
 ## 新发现（2026-03-27，移动端顶层容器锚定）
 - 当前未提交改动的真实主线是“游戏容器内的加载/连接中遮罩误用 viewport 锚定”，而不是新的玩法或领域逻辑改动。
 - `LoadingScreen` 之前只有“全页 fixed”与“普通 relative”两种布局语义，不足以表达“占满当前游戏容器，但不要逃逸到整个页面视口”的第三种场景；新增 `anchor=\"container\"` 后，这个语义才被显式建模出来。
