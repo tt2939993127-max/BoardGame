@@ -32,10 +32,12 @@ export type DieFace =
     | 'palm'
     | 'taiji'
     | 'lotus'
+    | 'katana'
     | 'sword'
     | 'helm'
     | 'heart'
     | 'pray'
+    | 'rising_sun'
     | 'strength'
     | 'fire'
     | 'fiery_soul'
@@ -47,7 +49,10 @@ export type DieFace =
     | 'dagger'
     | 'bag'
     | 'card'
-    | 'shadow';
+    | 'shadow'
+    | 'bullet'
+    | 'dash'
+    | 'bullseye';
 
 // ============================================================================
 // 角色编目
@@ -60,6 +65,8 @@ export const IMPLEMENTED_DICETHRONE_CHARACTER_IDS = [
     'shadow_thief',
     'moon_elf',
     'paladin',
+    'gunslinger',
+    'samurai',
 ] as const;
 
 export type SelectableCharacterId = (typeof IMPLEMENTED_DICETHRONE_CHARACTER_IDS)[number];
@@ -77,6 +84,8 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
+    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
+    { id: 'samurai', nameKey: 'characters.samurai' },
 ];
 
 /**
@@ -167,6 +176,7 @@ export interface PendingAttack {
     defenseAbilityId?: string;
     isUltimate?: boolean;
     preDefenseResolved?: boolean;
+    defenseResolved?: boolean;
     bonusDamage?: number;
     /** 仅来自攻击修正卡的额外伤害，用于右上角攻击修正 UI，避免混入暴击等其他来源 */
     attackModifierBonusDamage?: number;
@@ -287,6 +297,8 @@ export interface PendingDamage {
         sourceId?: string;
         sourceName?: string;
     }>;
+    /** 当前响应窗口内各 token 已累计消耗的数量 */
+    tokenUsageTotals?: Record<string, number>;
 }
 
 /**
@@ -349,6 +361,10 @@ export interface PendingBonusDiceSettlement {
     displayOnly?: boolean;
     /** 是否显示总伤害（默认重投模式下为 true，displayOnly 下为 false） */
     showTotal?: boolean;
+    /** 结算模式：默认直接造成伤害；attackBonus 表示把结果加入当前攻击的 bonusDamage */
+    resolutionMode?: 'damage' | 'attackBonus' | 'none';
+    /** attackBonus 模式下的换算规则 */
+    attackBonusScale?: 'raw' | 'halfUp';
 }
 
 export interface HeroState {

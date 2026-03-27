@@ -225,6 +225,26 @@
       "description": [
         "生命值降到0时，移除此标记并将生命值回到1。此标记无法被任何方式移除、转移、偷取。不叠加。"
       ]
+    },
+    "honor": {
+      "name": "Honor",
+      "description": [
+        "Before your attack deals damage, spend 1 Honor to increase damage by 1."
+      ]
+    },
+    "shame": {
+      "name": "Shame",
+      "description": [
+        "When you calculate attack damage, remove 1 Shame to reduce that attack's damage by 1."
+      ]
+    },
+    "samurai_retribution": {
+      "name": "Back Strike",
+      "description": [
+        "When taking attack damage, spend 1 Back Strike and roll 1 die.",
+        "Deal half the result, rounded up, back to the attacker.",
+        "This does not reduce the damage you take."
+      ]
     }
   },
   "actionLog": {
@@ -258,7 +278,8 @@
       "ability": "{{abilityName}}",
       "unknown": "未知来源",
       "shieldReduction": "护盾减伤",
-      "attackModifier": "攻击修正"
+      "attackModifier": "攻击修正",
+      "backStrike": "Back Strike"
     },
     "damageOriginal": "（原始 {{amount}}）",
     "damageModifiers": "（原始 {{original}}，{{modifiers}}）",
@@ -293,7 +314,8 @@
     "offensiveRollEndTokenUsed": "使用 {{tokenLabel}}（{{effectLabel}}）",
     "offensiveRollEndTokenEffect": {
       "crit": "+4 伤害",
-      "accuracy": "攻击不可防御"
+      "accuracy": "攻击不可防御",
+      "loaded": "奖励骰加伤"
     },
     "cpGained": "获得 {{amount}} CP（{{source}}）",
     "cpGainedPlain": "获得 {{amount}} CP",
@@ -346,7 +368,9 @@
     "pyromancer": "烈火术士",
     "shadow_thief": "暗影刺客",
     "moon_elf": "月精灵",
-    "paladin": "圣骑士"
+    "paladin": "圣骑士",
+    "gunslinger": "枪手",
+    "samurai": "Samurai"
   },
   "characters": {
     "monk": "僧侣",
@@ -354,7 +378,9 @@
     "pyromancer": "烈火术士",
     "shadow_thief": "暗影刺客",
     "moon_elf": "月精灵",
-    "paladin": "圣骑士"
+    "paladin": "圣骑士",
+    "gunslinger": "枪手",
+    "samurai": "Samurai"
   },
   "selection": {
     "title": "选择你的英雄",
@@ -454,7 +480,13 @@
       "dagger": "匕首",
       "bag": "背包",
       "card": "卡牌",
-      "shadow": "暗影"
+      "shadow": "暗影",
+      "bullet": "子弹",
+      "dash": "冲刺",
+      "bullseye": "靶心",
+      "katana": "Katana",
+      "helm": "Helm",
+      "rising_sun": "Rising Sun"
     }
   },
   "bonusDie": {
@@ -472,6 +504,12 @@
       "thunderStrikeReroll": "重掷得 {{value}}",
       "thunderStrike2Die": "雷击投掷：{{value}}",
       "thunderStrike2Reroll": "重掷得 {{value}}",
+      "gunslingerLoadedDie": "装填投掷：{{value}}",
+      "gunslingerLoadedReroll": "装填重掷：{{value}}",
+      "gunslingerHighNoonBullet": "子弹：造成 2 点伤害",
+      "gunslingerHighNoonDash": "靴刺：施加击倒",
+      "gunslingerHighNoonBullseye": "准心：施加赏金",
+      "gunslingerEatMyLeadDie": "吃我的铅弹！投掷：{{value}}",
       "barbarianSuppress": "压制投掷：{{value}}",
       "energeticStrength": "星！治疗 2 并施加脑震荡",
       "energeticOther": "抽 1 张牌",
@@ -548,7 +586,11 @@
       "absolution.heart": "心: 护盾 5",
       "absolution.pray": "祈祷: 护盾 2 + 2 CP",
       "godsGrace.pray": "祈祷: 获得 4 CP",
-      "infernalEmbrace.fire": "烈焰: 获得 2 烈焰精通"
+      "infernalEmbrace.fire": "烈焰: 获得 2 烈焰精通",
+      "samuraiBackStrikeDie": "反击投掷：{{value}}",
+      "samuraiRighteousnessKatana": "武士刀：+2 伤害",
+      "samuraiRighteousnessHelm": "头盔：施加 2 层耻辱",
+      "samuraiRighteousnessRisingSun": "旭日：获得 1 个反击指示物"
     },
     "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
     "noTokenToReroll": "没有{{token}}标记可用于重掷",
@@ -660,7 +702,11 @@
   "abilityChoice": {
     "title": "选择发动变体",
     "description": "该技能有多个变体同时满足条件，请选择要发动的变体：",
-    "skip": "不发动技能"
+    "skip": "不发动技能",
+    "faceLabel": {
+      "katana": "Katana",
+      "rising_sun": "Rising Sun"
+    }
   },
   "choices": {
     "title": "技能结算选择",
@@ -679,6 +725,11 @@
       "confirmSpend": "花费 {{count}} CP",
       "sliderHint": "花费 {{value}} CP → 获得 {{value}} 火焰专精",
       "skip": "不花费"
+    },
+    "gunslingerDuel": {
+      "title": "对决获胜：请选择结算效果",
+      "deal3": "造成 3 点不可防御伤害",
+      "preventHalf": "抵挡 1/2 进攻伤害"
     },
     "critOrAccuracy": "选择获得暴击或精准标记"
   },
@@ -1859,6 +1910,78 @@
       "description": "防御掷骰阶段，投掷5颗骰子。根据结果获得太极标记，并可能获得闪避或净化标记。每有[拳]造成3点伤害。",
       "taijiByResult": "根据结果获得太极标记",
       "damageByFist": "每有[拳]造成3点伤害"
+    },
+    "katana-slice": {
+      "name": "Katana Slice",
+      "description": "3/4/5 Katana: deal 5/6/7 damage."
+    },
+    "katana-slice-2": {
+      "name": "Katana Slice II",
+      "description": "3/4/5 Katana: deal 6/7/8 damage. If at least 4 dice show the same pip value, inflict 1 Shame."
+    },
+    "katana-slice-3": {
+      "name": "Katana Slice III",
+      "description": "3/4/5 Katana: deal 6/7/8 damage. If at least 3 dice show the same pip value, inflict 1 Shame."
+    },
+    "wakizashi": {
+      "name": "Wakizashi",
+      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike and deal 3 undefendable damage."
+    },
+    "wakizashi-2": {
+      "name": "Wakizashi II",
+      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike and deal 4 undefendable damage."
+    },
+    "wakizashi-3": {
+      "name": "Wakizashi III",
+      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike, inflict 1 Shame, and deal 4 undefendable damage."
+    },
+    "bushido": {
+      "name": "Bushido",
+      "description": "Passive. If you are the starting player, gain 1 Honor. At end of turn, if you rolled fewer than 3 times during Offensive Roll, gain 1 Honor."
+    },
+    "solemnity": {
+      "name": "Solemnity",
+      "description": "2 Katana + 3 Helm: inflict 1 Shame and deal 7 damage."
+    },
+    "solemnity-2": {
+      "name": "Solemnity II",
+      "description": "2 Katana + 3 Helm: inflict 2 Shame and deal 8 damage."
+    },
+    "budo": {
+      "name": "Budo",
+      "description": "Small Straight: gain 1 Honor and deal 6 damage."
+    },
+    "budo-2": {
+      "name": "Budo II",
+      "description": "Small Straight: gain 1 Honor and deal 8 damage."
+    },
+    "samurai-slot-06": {
+      "name": "Heart of Hagakure",
+      "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 1 Shame, then deal 5 undefendable damage."
+    },
+    "samurai-slot-06-2": {
+      "name": "Heart of Hagakure II",
+      "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 2 Shame, then deal 7 undefendable damage."
+    },
+    "masamune": {
+      "name": "Masamune",
+      "description": "Large Straight: deal 7 damage, then roll 5 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
+    },
+    "masamune-2": {
+      "name": "Masamune II",
+      "description": "Large Straight: deal 7 damage, then roll 5 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
+    },
+    "stand-tall": {
+      "name": "Stand Tall",
+      "description": "Defensive Roll: roll 3 dice. Each Katana deals 1 undefendable damage, each Helm prevents 1 damage, each Rising Sun prevents 2 damage. If you roll no Helm or Rising Sun, gain 1 Shame."
+    },
+    "stand-tall-2": {
+      "name": "Stand Tall II",
+      "description": "Defensive Roll: roll 4 dice. Each Katana deals 1 undefendable damage, each Helm prevents 1 damage, each Rising Sun prevents 2 damage."
+    },
+    "samurai-ultimate": {
+      "name": "Shogun!",
+      "description": "Gain 1 Honor, inflict 2 Shame, then deal 13 undefendable damage."
     }
   },
   "cards": {
@@ -1909,6 +2032,74 @@
     "card-play-six": {
       "name": "玩得六啊！",
       "description": "将你1颗骰子的数值改至6。"
+    },
+    "upgrade-revolver-2": {
+      "name": "左轮手枪 II",
+      "description": "升级你的左轮手枪。3/4/5 个子弹分别造成 4/5/6 点伤害。若至少有 4 颗骰子点数相同，则施加击倒。"
+    },
+    "upgrade-bounty-hunter-2": {
+      "name": "赏金猎人 II",
+      "description": "升级你的赏金猎人。施加 1 个赏金，并造成 2 点不可防御伤害。"
+    },
+    "upgrade-showdown-2": {
+      "name": "摊到牌面 II",
+      "description": "升级你的摊到牌面。双方各掷 1 颗骰子；若你的结果不小于对手，造成 8 点伤害，否则造成 6 点伤害。"
+    },
+    "upgrade-showdown-3": {
+      "name": "摊到牌面 III",
+      "description": "升级你的摊到牌面。双方各掷 1 颗骰子；若你的结果不小于对手，造成 9 点伤害，否则造成 6 点伤害。"
+    },
+    "upgrade-fan-the-hammer-2": {
+      "name": "左轮速射 II",
+      "description": "升级你的左轮速射。获得 2 个闪避，并造成 8 点伤害。"
+    },
+    "card-pistol-whip": {
+      "name": "枪托鞭打",
+      "description": "获得 1 个闪避。对手获得击倒，然后造成 1 点伤害。"
+    },
+    "upgrade-take-cover-2": {
+      "name": "掩护射击 II",
+      "description": "升级你的掩护射击。获得 1 个闪避，并造成 6 点伤害。"
+    },
+    "card-mark-the-target": {
+      "name": "标记目标",
+      "description": "获得 2 个闪避。对手获得 1 个赏金。"
+    },
+    "upgrade-deadeye-2": {
+      "name": "死亡之眼 II",
+      "description": "升级你的死亡之眼。施加击倒，并造成 8 点不可防御伤害。"
+    },
+    "card-the-law": {
+      "name": "执法者",
+      "description": "获得 1 个闪避。至多 2 位目标玩家获得赏金与击倒。当前 1v1 对局中按唯一对手结算。"
+    },
+    "upgrade-duel-2": {
+      "name": "对决 II",
+      "description": "升级你的对决。防御掷骰：你与攻击方各掷 1 颗骰子；若你的结果大于或等于攻击方，可选择造成 3 点不可防御伤害，或抵挡 1/2 进攻伤害；否则造成 1 点不可防御伤害。"
+    },
+    "upgrade-quick-draw": {
+      "name": "快速拔枪 II",
+      "description": "升级你的快速拔枪。维持阶段开始时获得 1 个装填；每当你花费装填时，可以将该投掷重掷 1 次。"
+    },
+    "card-wanted": {
+      "name": "通缉逮捕！",
+      "description": "选择 1 位玩家，使其获得 1 个赏金。当前 1v1 对局中按唯一对手结算。"
+    },
+    "card-spin-the-chamber": {
+      "name": "转轮上膛！",
+      "description": "获得 1 个装填。"
+    },
+    "card-high-noon": {
+      "name": "正午时分！",
+      "description": "掷 1 颗骰子：子弹造成 2 点伤害；靴刺施加击倒；准心施加赏金。"
+    },
+    "card-wild-west": {
+      "name": "荒野西部！",
+      "description": "本次攻击总伤害值 +1。卡面中的“掷 1 骰并可支付装填重掷”条款暂未单独建成交互。"
+    },
+    "card-eat-my-lead": {
+      "name": "吃我的铅弹！",
+      "description": "额外掷 5 颗骰子。每个子弹令本次攻击伤害 +1；若加值大于 4，再施加击倒。"
     },
     "card-meditation-2": {
       "name": "清修 II",
@@ -2319,6 +2510,62 @@
     "card-tithes-2": {
       "name": "教会税 II",
       "description": "升级教皇税：抽牌消耗降为2CP，进攻阶段激活含🙏技能时获得1CP。"
+    },
+    "upgrade-katana-slice-2": {
+      "name": "Katana Slice II",
+      "description": "Upgrade Katana Slice to Level II."
+    },
+    "upgrade-katana-slice-3": {
+      "name": "Katana Slice III",
+      "description": "Upgrade Katana Slice to Level III."
+    },
+    "upgrade-wakizashi-2": {
+      "name": "Wakizashi II",
+      "description": "Upgrade Wakizashi to Level II."
+    },
+    "upgrade-wakizashi-3": {
+      "name": "Wakizashi III",
+      "description": "Upgrade Wakizashi to Level III."
+    },
+    "upgrade-solemnity-2": {
+      "name": "Solemnity II",
+      "description": "Upgrade Solemnity to Level II."
+    },
+    "upgrade-budo-2": {
+      "name": "Budo II",
+      "description": "Upgrade Budo to Level II."
+    },
+    "upgrade-masamune-2": {
+      "name": "Masamune II",
+      "description": "Upgrade Masamune to Level II."
+    },
+    "upgrade-slot-06-2": {
+      "name": "Heart of Hagakure II",
+      "description": "Upgrade Heart of Hagakure to Level II."
+    },
+    "upgrade-stand-tall-2": {
+      "name": "Stand Tall II",
+      "description": "Upgrade Stand Tall to Level II."
+    },
+    "card-samurai-honor": {
+      "name": "Samurai Honor!",
+      "description": "Gain 2 Honor."
+    },
+    "card-you-should-be-ashamed": {
+      "name": "You Should Be Ashamed!",
+      "description": "Choose an opponent. That opponent gains 2 Shame."
+    },
+    "card-no-retreat": {
+      "name": "No Retreat!",
+      "description": "Gain 1 Back Strike."
+    },
+    "card-righteousness": {
+      "name": "舍生取义！",
+      "description": "掷 1 颗骰子并获得该骰面的效果：武士刀 +2 伤害；头盔使对手获得 2 层耻辱；旭日使你获得 1 个反击指示物。"
+    },
+    "card-zanshin": {
+      "name": "残心！",
+      "description": "额外掷 5 颗骰子。每个武士刀使本次攻击伤害 +1，每个头盔施加 1 层耻辱，每个旭日使你获得 1 个反击。"
     }
   },
   "passive": {

@@ -147,6 +147,39 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 ### Status
 - completed
 
+---
+
+## Addendum（2026-03-25）：Dice Throne 枪手规范与 `枪林弹雨！` 收尾
+
+### Goal
+- 先把 `dicethrone` 图片录入规范改成“汉化图为主真相源、先切图再录入、Wiki 仅对照”的口径。
+- 为枪手建立可审计的真相源表、切图索引、Wiki 对照和冲突待裁定表。
+- 收尾 `fill-em-with-lead`（`枪林弹雨！`）的装填奖励骰重掷分支，并修正相关通用结算链路。
+
+### Result
+- [x] 更新 `docs/ai-rules/data-entry.md`，明确汉化图可作为主真相源、必须先切图到可读再录入、技能条目必须记录触发条件/时机、录入范围覆盖提示板/atlas/json/图标/资源引用、Wiki 只做对照。
+- [x] 更新 `src/games/dicethrone/rule/枪手真相源表.md` 与 `src/games/dicethrone/rule/枪手录入核对.md`，补齐汉化图主表、切图索引、Wiki 对照登记和冲突待裁定表。
+- [x] 新增 `scripts/assets/extract-dicethrone-gunslinger-crops.mjs` 并生成枪手角色板/提示板裁图。
+- [x] 完成 `fill-em-with-lead` 主实现、`loaded` 奖励骰重掷接线、`bounty` 进入伤害计算。
+- [x] 修复通用 bug：`onOffensiveRollEnd` Token 选择原本会先走通用 `+value`，再走自定义消耗；对 `loaded` 这种上限大于 1 的 Token 会导致“看似未消耗”。现已在 reducer 中跳过这类通用增量。
+- [x] 补充动作日志映射：`loaded` 现在也能输出进攻骰结束 Token 使用日志。
+
+### Validation
+- `npm run typecheck`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/thunder-strike.test.ts src/games/dicethrone/__tests__/customaction-category-consistency.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/crit-token-custom-action-damage.test.ts src/games/dicethrone/__tests__/crit-token-transfer-bug.test.ts src/games/dicethrone/__tests__/crit-token-transfer-full-flow.test.ts src/games/dicethrone/__tests__/actionLogFormat.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/ability-customaction-audit.test.ts --config vitest.config.audit.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/engine/primitives/__tests__/damageCalculation.test.ts --configLoader native`
+
+### Remaining
+- [ ] 枪手 `ability-cards.webp` 逐张切图与逐卡录入尚未完成。
+- [ ] Wiki 对照冲突表仍保留 `装填弹药` 使用时机差异，等待用户最终裁定。
+- [ ] `samurai` 尚未开始，本轮未推进。
+
+### Status
+- completed
+
 ### Result（2026-03-11 更新）
 - [x] 回归分析完成：确认 `dev:frontend:wait`（2026-03-09）放大了后端慢启动体感；API 主启动文件近期未见同等级别逻辑扩张。
 - [x] 低风险优化完成：API Sentry 改为后台惰性初始化；game-server 启动清理改为监听后后台执行；`dev` 改为分阶段编排；启动命令去除 `npx`。
@@ -253,3 +286,357 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 
 ### Status
 - completed
+
+## Addendum（2026-03-25）：Dice Throne 枪手卡图逐卡裁图与合同表
+### Goal
+- 把 `ability-cards.webp` 从“整页已收集”推进到“可审计逐卡裁图 + 合同表”。
+- 锁定枪手卡图真实 atlas 顺序，避免后续继续误用通用顺序。
+
+### Result
+- [x] `scripts/assets/extract-dicethrone-gunslinger-crops.mjs` 已扩展为同时输出：
+  - `slot-00` ~ `slot-31` 逐格裁图
+  - `fan-the-hammer-2 / pistol-whip / take-cover-2 / mark-the-target / deadeye-2 / the-law` 六张分裂位单卡裁图
+  - `hero-portrait-extra.webp` 右下角额外人物立绘裁图
+- [x] 新增 `src/games/dicethrone/rule/枪手卡牌录入核对.md`，登记：
+  - 卡图布局真相表
+  - 18 张通用牌顺序映射
+  - 枪手专属卡逐卡录入合同表
+  - 空白格与额外立绘登记
+- [x] `src/games/dicethrone/rule/枪手真相源表.md` / `src/games/dicethrone/rule/枪手录入核对.md` 已回填卡图裁图现状与新发现。
+
+### Key Finding
+- 枪手 `ability-cards.webp` 不能安全复用现有 `COMMON_CARDS` 的默认 atlas 顺序。
+- 当前可确认的事实是：
+  - 前 `18` 格是通用牌
+  - 后续是枪手专属卡区
+  - `slot-22 / slot-23 / slot-24` 为上下叠放区域，必须额外拆图
+  - `slot-32` 为空白
+  - 原图右下角还有一张非卡牌人物立绘
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 武士防御回归修正
+### Goal
+- 修掉 `stand-tall` 在真实 `defensiveRoll` 上下文里把反打目标取反的问题。
+- 让武士新增回归测试、token 响应测试和 custom action 审计重新收敛到全绿状态。
+- 不误报未完成项，继续保留 `honor` / `Masamune II` / `slot-30~31` 的明确欠账。
+
+### Result
+- [x] 修正 `src/games/dicethrone/domain/customActions/samurai.ts` 中 `stand-tall` 的原始进攻方读取逻辑，改为基于防御上下文的 `ctx.defenderId`。
+- [x] 跑通 `src/games/dicethrone/__tests__/cross-hero.test.ts`，确认“武士 昂首无畏 防御时可反打 1 点并抵消 3 点进攻伤害”恢复通过。
+- [x] 跑通 `src/games/dicethrone/__tests__/token-execution.test.ts` 与 `src/games/dicethrone/__tests__/ability-customaction-audit.test.ts`。
+- [x] 清理 `src/games/dicethrone/__tests__/token-execution.test.ts` 的旧 ESLint warning。
+
+### Remaining
+- [ ] 实现 `honor` 的完整规则：`1 -> +1` 或 `2 -> +3`。
+- [ ] 核定 `Masamune II` 与基础版的最终差异，不再继续共用同一套运行时效果。
+- [ ] 接入 `slot-30` / `slot-31` 两张武士攻击修正牌。
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 枪手主阶段卡与动作层不可防御收口
+
+### Goal
+- 修复动作层 `unblockable` 已定义但未参与伤害结算门控的缺口。
+- 继续补枪手主阶段行动卡与升级卡的最小运行时回归。
+
+### Result
+- [x] 在 `src/games/dicethrone/domain/effects.ts` 接通 `EffectAction.unblockable`：标记为不可防御的动作伤害现在跳过 Token 响应窗口。
+- [x] 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 为 `card-pistol-whip` 的 1 点伤害补上 `unblockable: true`。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 5 条枪手回归：
+  - `card-pistol-whip` 不触发 `protect`
+  - `card-mark-the-target`
+  - `card-spin-the-chamber`
+  - `card-wanted`
+  - `upgrade-bounty-hunter-2`
+
+### Validation
+- `npx eslint src/games/dicethrone/domain/effects.ts src/games/dicethrone/heroes/gunslinger/cards.ts src/games/dicethrone/__tests__/cross-hero.test.ts`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+
+### Remaining
+- [ ] `card-the-law` 的“至多 2 位目标玩家”交互仍未实现，仅支持当前 1v1 兼容路径。
+- [ ] 继续补枪手剩余升级卡与主阶段卡的运行时覆盖。
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 枪手卡牌回归与 `the-law` TODO 固化
+
+### Goal
+- 把 `card-the-law` 的“至多 2 位目标玩家”缺口固化成显式 TODO，避免后续误判为已完整支持。
+- 为已接入的枪手主阶段卡牌与升级卡补最小运行时回归，锁定当前真实行为。
+- 同步更新枪手卡牌录入核对文档，清理已经过期的“待代码落地”状态。
+
+### Result
+- [x] 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 给 `card-the-law` 补上显式 TODO，注明当前仅 1v1 单目标兼容。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 3 条枪手卡牌回归：
+  - `card-the-law`：当前 1v1 下对唯一对手施加 `bounty + knockdown`，自己获得 `evasive`
+  - `card-high-noon`：`dash` 分支只施加 `knockdown`，不造成伤害
+  - `upgrade-revolver-2`：出牌后正确替换技能定义并记录 `abilityLevels.revolver = 2`
+- [x] 更新 `src/games/dicethrone/rule/枪手卡牌录入核对.md`：
+  - 已实现项统一改为“已落地”
+  - `card-the-law` 明确改为“部分落地”，多目标交互保留 TODO
+
+### Validation
+- `npx eslint src/games/dicethrone/heroes/gunslinger/cards.ts src/games/dicethrone/__tests__/cross-hero.test.ts`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+
+### Remaining
+- [ ] `card-the-law` 的“至多 2 位目标玩家”交互仍未实现，仅支持当前 1v1 兼容路径。
+- [ ] 继续补枪手剩余卡牌级回归，优先主阶段行动牌与升级卡的运行时覆盖。
+- [ ] 继续维持中文图主真相源 / Wiki 仅对照 / 冲突单独登记的口径。
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 枪手卡牌回归与 `the-law` TODO 固化
+
+### Goal
+- 把 `card-the-law` 的“至多 2 位目标玩家”缺口固化成显式 TODO，避免后续误判为已完整支持。
+- 为已接入的枪手主阶段卡牌与升级卡补最小运行时回归，锁定当前真实行为。
+- 同步更新枪手卡牌录入核对文档，清理已经过期的“待代码落地”状态。
+
+### Result
+- [x] 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 给 `card-the-law` 补上显式 TODO，注明当前仅 1v1 单目标兼容。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 3 条枪手卡牌回归：
+  - `card-the-law`：当前 1v1 下对唯一对手施加 `bounty + knockdown`，自己获得 `evasive`
+  - `card-high-noon`：`dash` 分支只施加 `knockdown`，不造成伤害
+  - `upgrade-revolver-2`：出牌后正确替换技能定义并记录 `abilityLevels.revolver = 2`
+- [x] 更新 `src/games/dicethrone/rule/枪手卡牌录入核对.md`：
+  - 已实现项统一改为“已落地”
+  - `card-the-law` 明确改为“部分落地”，多目标交互保留 TODO
+
+### Validation
+- `npx eslint src/games/dicethrone/heroes/gunslinger/cards.ts src/games/dicethrone/__tests__/cross-hero.test.ts`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+
+### Remaining
+- [ ] `card-the-law` 的“至多 2 位目标玩家”交互仍未实现，仅支持当前 1v1 兼容路径。
+- [ ] 继续补枪手剩余卡牌级回归，优先主阶段行动牌与升级卡的运行时覆盖。
+- [ ] 继续维持中文图主真相源 / Wiki 仅对照 / 冲突单独登记的口径。
+
+### Status
+- in_progress
+
+### Remaining
+- [ ] 依据 `枪手卡牌录入核对.md` 把枪手正式卡组数据接入 `src/games/dicethrone/heroes/gunslinger/cards.ts`
+- [ ] 校正枪手卡图运行时 atlas / previewRef 顺序
+- [ ] 继续核定卡牌效果是否需要新增 custom action / multi-target 支持
+
+### Next Step（2026-03-25 晚）
+- [ ] 先补 `gunslinger/abilities.ts` 的升级能力导出，避免 `cards.ts` 继续用临时占位
+- [ ] 再改 `gunslinger/cards.ts`：
+  - 自定义枪手通用牌 atlas 映射
+  - 接入 14 张枪手专属卡
+  - `the-law` 先按 1v1 单目标实现，并显式保留“至多 2 位目标玩家”未完成记录
+- [ ] 同步补 `public/locales/zh-CN/game-dicethrone.json` 与 `public/locales/en/game-dicethrone.json` 的枪手卡牌文案键
+- [ ] 完成后跑最小相关测试并回填三件套
+---
+
+## Addendum（2026-03-25 深夜）：Dice Throne 枪手 `wild-west` 与 custom action 收口
+
+### Goal
+- 修掉枪手 `custom action categories` 与真实事件产出不一致导致的审计失败。
+- 把 `wild-west` 从“临时只加 1 伤害”推进到更接近卡面：掷 1 骰，可花 1 个 `loaded` 重掷 1 次，但骰值只展示，不并入伤害。
+
+### Result
+- [x] 修正 `gunslinger-showdown-bonus`、`gunslinger-card-wild-west`、`gunslinger-card-eat-my-lead` 的 `categories`，重新与实际事件类型对齐。
+- [x] 在 `src/games/dicethrone/domain/core-types.ts`、`src/games/dicethrone/domain/effects.ts`、`src/games/dicethrone/domain/executeTokens.ts` 增加奖励骰 `resolutionMode: 'none'`，用于“允许重掷交互，但不追加伤害/状态结算”的场景。
+- [x] 重写 `src/games/dicethrone/domain/customActions/gunslinger.ts` 中的 `wild-west`：
+  - 固定给当前攻击 `+1`
+  - 额外掷 1 骰
+  - 若有 `loaded`，可为该骰支付 1 个 `loaded` 重掷 1 次
+  - 奖励骰仅展示，不再把骰值错误并入伤害
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 补枪手回归用例，锁定 `wild-west` 的新行为。
+
+### Validation
+- `npm run typecheck`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/ability-customaction-audit.test.ts --config vitest.config.audit.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/customaction-category-consistency.test.ts --configLoader native`
+
+### Remaining
+- [ ] `the-law` 仍只做了 1v1 单目标兼容，多目标交互缺口未补。
+- [ ] `loaded / 装填弹药` 的中文提示板与 Wiki 时机冲突仍只登记，未裁定。
+- [ ] 继续补枪手卡牌级回归，优先覆盖剩余升级卡与未锁定的主阶段行动牌。
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 枪手卡牌回归与 `the-law` TODO 固化
+
+### Goal
+- 把 `card-the-law` 的“至多 2 位目标玩家”缺口固化成显式 TODO，避免后续误判为已完整支持。
+- 为已接入的枪手主阶段卡牌与升级卡补最小运行时回归，锁定当前真实行为。
+- 同步更新枪手卡牌录入核对文档，清理已经过期的“待代码落地”状态。
+
+### Result
+- [x] 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 给 `card-the-law` 补上显式 TODO，注明当前仅 1v1 单目标兼容。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 3 条枪手卡牌回归：
+  - `card-the-law`：当前 1v1 下对唯一对手施加 `bounty + knockdown`，自己获得 `evasive`
+  - `card-high-noon`：`dash` 分支只施加 `knockdown`，不造成伤害
+  - `upgrade-revolver-2`：出牌后正确替换技能定义并记录 `abilityLevels.revolver = 2`
+- [x] 更新 `src/games/dicethrone/rule/枪手卡牌录入核对.md`：
+  - 已实现项统一改为“已落地”
+  - `card-the-law` 明确改为“部分落地”，多目标交互保留 TODO
+
+### Validation
+- `npx eslint src/games/dicethrone/heroes/gunslinger/cards.ts src/games/dicethrone/__tests__/cross-hero.test.ts`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+
+### Remaining
+- [ ] `card-the-law` 的“至多 2 位目标玩家”交互仍未实现，仅支持当前 1v1 兼容路径。
+- [ ] 继续补枪手剩余卡牌级回归，优先主阶段行动牌与升级卡的运行时覆盖。
+- [ ] 继续维持中文图主真相源 / Wiki 仅对照 / 冲突单独登记的口径。
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 枪手 `high-noon` 三分支与剩余升级卡回归补齐
+
+### Goal
+- 把 `card-high-noon` 剩余未锁定的 `bullet / bullseye` 分支补成运行时回归。
+- 把枪手剩余升级卡从“已录入”推进到“出牌后会真实替换技能定义”的运行时覆盖。
+- 用 `plan with files` 固化当前真实进度，收窄剩余缺口。
+
+### Result
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `card-high-noon` 两条回归：
+  - `bullet`：造成 `2` 点伤害且不触发 `protect`
+  - `bullseye`：施加 `bounty`
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 7 条枪手升级卡回归：
+  - `upgrade-showdown-2`
+  - `upgrade-showdown-3`
+  - `upgrade-fan-the-hammer-2`
+  - `upgrade-take-cover-2`
+  - `upgrade-deadeye-2`
+  - `upgrade-duel-2`
+  - `upgrade-quick-draw`
+- [x] 新增回归统一锁定两件事：
+  - `abilityLevels` 会被正确写入升级后的等级
+  - 玩家技能定义会被替换成对应升级版对象，而不只是静态数据存在
+- [x] 额外补上 `upgrade-quick-draw` 的真实交互回归：
+  - 出牌后使用 `loaded`
+  - 进入一次可重掷奖励骰结算
+  - 重掷后正确回到 `defensiveRoll`
+- [x] 更新 `findings.md` 与 `progress.md`，回填本轮发现与验证结果。
+
+### Validation
+- `npx eslint src/games/dicethrone/__tests__/cross-hero.test.ts`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native`
+
+### Remaining
+- [ ] `card-the-law` 的“至多 2 位目标玩家”交互仍未实现，仅支持当前 1v1 兼容路径。
+- [ ] 中文提示板与 Wiki 的 `loaded` 时机冲突仍待用户最终裁定。
+
+### Status
+- in_progress
+---
+
+## Addendum（2026-03-26）：Dice Throne 武士真相源文档与资源迁移启动
+### Goal
+- 将武士汉化图从主仓库补入当前工作树，建立可持续录入的本地图像基线。
+- 先完成 `rule/` 下的武士真相源文档包，再进入代码实现。
+- 把 `status-icons-atlas` 的资源缺口补成可运行的派生资源，避免后续 `tokens.ts` 被卡住。
+
+### Result
+- [x] 从 `D:\gongzuo\webgame\BoardGame\public\assets\i18n\zh-CN\dicethrone\images\samurai\` 复制武士汉化图到当前工作树。
+- [x] 新增 `scripts/assets/extract-dicethrone-samurai-crops.mjs`，统一生成角色板、提示板和卡图裁图。
+- [x] 新增 `src/games/dicethrone/rule/武士真相源表.md`。
+- [x] 新增 `src/games/dicethrone/rule/武士录入核对.md`。
+- [x] 新增 `src/games/dicethrone/rule/武士卡牌录入核对.md`。
+- [x] 跑通武士裁图脚本，生成 `player-board / tip / ability-cards` 的全量裁图。
+- [x] 用 `荣誉 / 耻辱 / 反击` 三张独立 icon 派生生成 `compressed/status-icons-atlas.webp`，并新增 `status-icons-atlas.json`。
+
+### Remaining
+- [ ] 继续放大核对 `dice-legend`，确认武士骰面 `1~4` 的准确映射后再写 `diceConfig.ts`。
+- [ ] 明确 `slot-02` 与 `slot-06` 的最终中文名，不能直接用 wiki 英文反写。
+- [ ] 处理 `反击` 英文同名 `Retribution` 与圣骑士既有 token 语义冲突，给出唯一代码命名裁决。
+- [ ] 基于文档结论继续落地 `tokens.ts / abilities.ts / cards.ts`。
+
+### Status
+- in_progress
+
+---
+
+## Addendum��2026-03-27����Dice Throne ��ʿ Honor ���������տ�
+### Goal
+- ����ʿ `Honor` �ӡ�ֻ֧�� `1 -> +1`���ƽ���ͼ����������`1 -> +1 / 2 -> +3`��
+- ������ʿר��Ӳ�������У����ǰѷ����� token ���ĳ���ͨ������㡣
+- ����С�ع���֤ȷ�ϴ����ۼ�����û���ƻ����� token ��Ӧ����
+
+### Result
+- [x] �� `src/games/dicethrone/domain/tokenTypes.ts` ����ͨ��������ĵ�λ������֧�ŷ����� token ���ġ�
+- [x] �� `src/games/dicethrone/domain/tokenResponse.ts` �� `commandValidation.ts` ���ͬһ��Ӧ���ڵ��ۼ�����У�顣
+- [x] ���� `src/games/dicethrone/heroes/samurai/tokens.ts` ����ʽ���� `honor` �� `allowedConsumeAmounts: [1, 2]` �� `valueByAmount: {1: 1, 2: 3}`��
+- [x] �޸� `src/games/dicethrone/ui/TokenResponseModal.tsx` �Ļ��ַ���/�� JSX��ʹ��ǰ������ť UI ���¿��á�
+- [x] �� `src/games/dicethrone/__tests__/token-execution.test.ts` �� `Honor` �ع飬����ͨ token / ���� / ��Ӣ����֤��
+
+### Remaining
+- [ ] �����˶� `Masamune II` ����ʵ�������졣
+- [ ] �������� `slot-30` �� `slot-31` ������ʿ���������ơ�
+- [ ] �����������������ȣ��������Ƿ�� `Honor` ����˫����ť UI����ǰ������ȷ�� blocker��
+
+### Status
+- in_progress
+
+---
+
+## Addendum（2026-03-27）：Dice Throne 武士 `slot-31 / 残心` 最小闭环
+### Goal
+- 在不猜测 `slot-30` 与 `Masamune II` 细节的前提下，先把证据已充分的 `slot-31 / 残心` 接入代码与回归。
+- 明确记录 `slot-31` 的费用裁决来源，避免后续会话把 `2CP` 误读成无依据硬写。
+
+### Result
+- [x] 在 `src/games/dicethrone/heroes/samurai/cards.ts` 新增 `card-zanshin`，并接入 `slot-31.webp` 预览图。
+- [x] 将 `card-zanshin` 建模为 `timing: 'roll'` 的攻击修正牌，并复用 `samurai-masamune` 的 5 骰结算。
+- [x] 将 `slot-31` 的费用暂定为 `2CP`，并在代码中写明“费用区模板比对”这一证据来源。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 增加 `card-zanshin` 的跨英雄回归并跑通。
+- [x] 回填 `rule/`、`progress.md`、`findings.md` 的阶段结论，关闭“`slot-31` 待实现”这条欠账。
+
+### Remaining
+- [ ] 继续核定 `slot-30 / 舍生取义` 的完整效果与费用。
+- [ ] 继续核定 `Masamune II` 的真实升级差异。
+
+### Status
+- in_progress
+## Addendum 2026-03-27 slot-31 minimal closure
+### Goal
+- implement slot-31 without guessing slot-30 or Masamune II details.
+### Result
+- [x] add card-zanshin in cards.ts
+- [x] set cost to 2CP with evidence note
+- [x] reuse samurai-masamune custom action
+- [x] add cross-hero regression
+### Remaining
+- [ ] audit slot-30
+- [ ] audit Masamune II
+### Status
+- in_progress
+## Addendum（2026-03-27）：Dice Throne 武士 `slot-30 / 舍生取义` 已接入
+### Goal
+- 在不等待 `Masamune II` 结论的前提下，先落地证据已足够的 `slot-30`，并补齐最小回归。
+### Result
+- [x] 在 `src/games/dicethrone/heroes/samurai/cards.ts` 接入 `card-righteousness`，建模为 `timing: 'roll'` 的攻击修正牌。
+- [x] 在 `src/games/dicethrone/domain/customActions/samurai.ts` 新增 `samurai-card-righteousness`，结算为：`katana -> +2 伤害`、`helm -> 2 shame`、`rising_sun -> 1 samurai_retribution`。
+- [x] 在 `public/locales/zh-CN/game-dicethrone.json` 与 `public/locales/en/game-dicethrone.json` 补齐 `card-righteousness` 与对应 bonus-die 文案。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 补 `katana / helm` 两条回归，并修复既有的左轮升级乱码断言。
+- [x] 依据费用区模板比对，将 `cpCost` 暂定为 `2CP`，并在代码中保留证据说明。
+### Remaining
+- [ ] 继续核定 `Masamune II` 的真实升级差异。
+### Status
+- in_progress
