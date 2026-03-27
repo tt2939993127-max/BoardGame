@@ -839,6 +839,9 @@ test('samurai righteousness should resolve a valid branch against monk', async (
         sourceAbilityId: 'katana-slice-3',
     });
 
+    await page.evaluate(() => {
+        (window as any).__BG_TEST_HARNESS__?.dice?.setValues?.([1]);
+    });
     await page.locator('[data-card-id="card-righteousness"]').first().click();
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
@@ -874,7 +877,7 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     expect(stateAfterPlay.effectKey).toBe('bonusDie.effect.samuraiRighteousnessKatana');
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
-    await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|\+2\s*伤害/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|Katana:\s*\+2 damage|\+2\s*(伤害|damage)/i, { timeout: 5000 });
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
     await expect(activeBadge).toContainText('+2', { timeout: 5000 });
     expect(stateAfterPlay.attackModifierBonusDamage).toBe(2);
@@ -968,6 +971,7 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
     await expect(activeBadge).toContainText('+2', { timeout: 5000 });
 
+    await page.waitForTimeout(900);
     await game.screenshot('10-samurai-zanshin-vs-paladin', testInfo);
 });
 

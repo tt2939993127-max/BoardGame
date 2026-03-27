@@ -1002,7 +1002,9 @@ export function fireTriggers(
 
         const sourcesToExecute = entry.perInstance
             ? locatedSources.filter(located => isTriggerSourceEligible(entry, timing, located, ctx.baseIndex))
-            : [locatedSources[0]].filter(located => isTriggerSourceEligible(entry, timing, located, ctx.baseIndex));
+            : [selectSpecificSourceLocation(locatedSources, ctx)].filter(located => (
+                located !== undefined && isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)
+            ));
         if (sourcesToExecute.length === 0) continue;
 
         for (const located of sourcesToExecute) {
@@ -1023,7 +1025,111 @@ export function fireTriggers(
             }
         }
     }
-    
+
+    return { events, matchState };
+}
+
+function selectSpecificSourceLocation(
+    locatedSources: TriggerSourceLocation[],
+    ctx: Omit<TriggerContext, 'timing'>,
+): TriggerSourceLocation | undefined {
+    const preferredUid = ctx.sourceCardUid ?? ctx.triggerMinionUid;
+    if (preferredUid) {
+        const matched = locatedSources.find(located => located.uid === preferredUid);
+        if (matched) {
+            return matched;
+        }
+    }
+    return locatedSources[0];
+}
+
+/**
+ * 仅触发指定来源 defId 的触发器。
+ *
+ * 用于“同一 Start Turn 窗口中新进场的卡牌需要立刻补触发”这类场景，
+ * 避免重新扫描全部 onTurnStart 来源。
+ */
+export function fireTriggerForSource(
+    state: SmashUpCore,
+    sourceDefId: string,
+    timing: TriggerTiming,
+    ctx: Omit<TriggerContext, 'timing'>,
+    options?: { phase?: 'replacement' | 'reaction' }
+): TriggerResult {
+    if (triggerRegistry.length === 0) {
+        return { events: [] };
+    }
+
+    const events: SmashUpEvent[] = [];
+    let matchState = ctx.matchState;
+    const fullCtx: TriggerContext = { ...ctx, timing };
+
+    for (const entry of triggerRegistry) {
+        if (entry.sourceDefId !== sourceDefId) continue;
+        if (entry.timing !== timing) continue;
+        if (options?.phase && (entry.phase ?? 'reaction') !== options.phase) continue;
+
+        const filteredState = getSuppressionFilteredStateForSource(state, entry.sourceDefId);
+        const getFilteredMatchState = () => (
+            matchState && matchState.core === state
+                ? { ...matchState, core: filteredState }
+                : matchState
+        );
+
+        if (entry.global) {
+            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
+            const triggerEvents = Array.isArray(result) ? result : result.events;
+            if (triggerEvents.length > 0) {
+                events.push(...triggerEvents);
+            }
+            if (!Array.isArray(result) && result.matchState) {
+                matchState = result.matchState;
+            }
+            continue;
+        }
+
+        const locatedSources = locateSources(filteredState, entry.sourceDefId);
+        if (locatedSources.length === 0) {
+            if (!entry.perInstance && isSourceActive(filteredState, entry.sourceDefId)) {
+                const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
+                const triggerEvents = Array.isArray(result) ? result : result.events;
+                if (triggerEvents.length > 0) {
+                    events.push(...triggerEvents);
+                }
+                if (!Array.isArray(result) && result.matchState) {
+                    matchState = result.matchState;
+                }
+            }
+            continue;
+        }
+
+        const sourcesToExecute = entry.perInstance
+            ? locatedSources.filter(located => isTriggerSourceEligible(entry, timing, located, ctx.baseIndex))
+            : [selectSpecificSourceLocation(locatedSources, ctx)].filter(located => (
+                located !== undefined && isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)
+            ));
+        if (sourcesToExecute.length === 0) continue;
+
+        for (const located of sourcesToExecute) {
+            const result = entry.callback({
+                ...fullCtx,
+                state: filteredState,
+                matchState: getFilteredMatchState(),
+                sourceCardUid: located.uid,
+                sourceBaseIndex: located.baseIndex,
+                sourceControllerId: located.controllerId,
+            });
+            const triggerEvents = Array.isArray(result) ? result : result.events;
+            if (triggerEvents.length > 0) {
+                events.push(...triggerEvents);
+            }
+            if (!Array.isArray(result) && result.matchState) {
+                matchState = result.matchState;
+            }
+        }
+    }
+
     return { events, matchState };
 }
 

@@ -15,6 +15,11 @@ const entry: GameManifestEntry = {
     bestPlayers: [3],
     tags: ['card_driven', 'casual'],
     allowLocalMode: false,
+    ai: {
+        capture: true,
+        localAi: false,
+        remoteAi: false,
+    },
     cursorTheme: 'smashup-popart',
     fontFamily: { display: 'Bangers' },
     mobileProfile: 'landscape-adapted',

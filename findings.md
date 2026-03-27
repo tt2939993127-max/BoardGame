@@ -1,5 +1,21 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## Merge Note（2026-03-27）
+- 本文件在同步 `origin/main` 时保留当前 worktree 的任务现场作为主记录。
+- `origin/main` 在 2026-03-25~2026-03-26 新增的 OpenSpec、移动端、AI 与大厅入口历史结论，已转存到本次合并冲突汇报文档，避免本文件继续膨胀成并行主线入口。
+
+## 新发现（2026-03-27）：武士跨角色 E2E / Masamune II 审计
+- `Masamune II` 当前仍是唯一真实未闭环点。已核对代码定义、OCR 图证、现有规则文档裁决，但升级差异数字仍然不足以安全裁决，因此本轮不改实现，只保留为审计 blocker。
+- `Righteousness` / `Zanshin` 之前在 E2E 中不稳定，根因不是武士逻辑，而是测试基础设施缺口：
+  - `LocalGameProvider` 直接使用 `createSeededRandom(seed)`。
+  - `TestHarness.dice.setValues()` 只改了 `RandomInjector` 队列，却没有真正接到 `executePipeline()` 使用的随机源。
+  - 结果是本地 E2E 里 `random.d(6)` 无法被稳定控制，导致武士奖励骰分支看起来像“随机失控”。
+- 本轮已在 `src/engine/transport/react.tsx` 补齐测试环境随机桥接：本地 provider 在测试模式下改为使用 `TestHarness.random.wrap(...)` 派生 `random()` / `d()` / `range()` / `shuffle()`。
+- 在此基础上，`e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增并跑通两条武士跨角色 E2E：
+  - `samurai righteousness should resolve a valid branch against monk`
+  - `samurai zanshin should settle 5 bonus dice and synchronize effects against paladin`
+- 两条用例都已生成显式证据截图，并完成人工审查；证据文档见 `evidence/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`。
+
 ## 当前主任务（2026-03-22）
 - 当前已从单点问题切换为 **多线并行收口**：
   1. 线上静态资源旧 chunk 命中 SPA fallback，返回 `200 text/html`
@@ -428,26 +444,26 @@
 
 ---
 
-## Addendum��2026-03-27����Dice Throne ��ʿ Honor �������������տ�
+## Addendum��2026-03-27����Dice Throne ��ʿ Honor �������������տ�
 
-### �½���
-- `Honor` ��������ʿר��Ӳ�������⣬����ͨ��ͨ�� token ������չ��أ�
+### �½���
+- `Honor` ��������ʿר��Ӳ�������⣬����ͨ��ͨ�� token ������չ��أ�
   - `TokenUseEffect.valueByAmount`
   - `ActiveUseConfig.allowedConsumeAmounts`
   - `PendingDamage.tokenUsageTotals`
-- ���׻�������֤֧�����ֺϷ�·����
-  - һ������ `2` �� `Honor`��ֱ�ӵõ� `+3`
-  - ��ͬһ��Ӧ�����������θ����� `1` �㣬��һ�θ� `+1`���ڶ���ֻ����ֵ `+2`���ܼ���Ϊ `+3`
-- ͬһ��Ӧ���ڴﵽ�ۼ� `2` ��󣬼�ʹ������ϻ��ж��� `Honor`��`getUsableTokensForTiming()` Ҳ����������`validateCommand()` Ҳ��ܾ������μ���ʹ�á�
+- ���׻�������֤֧�����ֺϷ�·����
+  - һ������ `2` �� `Honor`��ֱ�ӵõ� `+3`
+  - ��ͬһ��Ӧ�����������θ����� `1` �㣬��һ�θ� `+1`���ڶ���ֻ����ֵ `+2`���ܼ���Ϊ `+3`
+- ͬһ��Ӧ���ڴﵽ�ۼ� `2` ��󣬼�ʹ������ϻ��ж��� `Honor`��`getUsableTokensForTiming()` Ҳ����������`validateCommand()` Ҳ��ܾ������μ���ʹ�á�
 
-### �������
-- �޸��� `src/games/dicethrone/heroes/samurai/tokens.ts` �Ļ�ע�ͺ��ظ� `effect`��
-- �޸��� `src/games/dicethrone/ui/TokenResponseModal.tsx` �Ļ��ַ����ͻ� JSX���ָ������ȶ� lint ��״̬��
-- �� `src/games/dicethrone/__tests__/token-execution.test.ts` ������ `Honor` ��ֱ���������������Ļع顣
+### �������
+- �޸��� `src/games/dicethrone/heroes/samurai/tokens.ts` �Ļ�ע�ͺ��ظ� `effect`��
+- �޸��� `src/games/dicethrone/ui/TokenResponseModal.tsx` �Ļ��ַ����ͻ� JSX���ָ������ȶ� lint ��״̬��
+- �� `src/games/dicethrone/__tests__/token-execution.test.ts` ������ `Honor` ��ֱ���������������Ļع顣
 
-### �Ա�����ȱ��
-- `Masamune II` ����������δ���պ˶���
-- `slot-30` / `slot-31` ������ʿ�����������Դ����롣
+### �Ա�����ȱ��
+- `Masamune II` ����������δ���պ˶���
+- `slot-30` / `slot-31` ������ʿ�����������Դ����롣
 
 ---
 

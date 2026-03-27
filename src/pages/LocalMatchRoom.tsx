@@ -16,6 +16,10 @@ import type { ComponentType } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
+import {
+    resolveLocalMatchPlayerCount,
+    resolveSeatControllersFromSearchParams,
+} from '../engine/ai';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 
@@ -54,6 +58,15 @@ export const LocalMatchRoom = () => {
     // 从地址参数获取种子，如果没有则生成新的
     const seedFromUrl = searchParams.get('seed');
     const gameSeed = seedFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const localPlayerCount = resolveLocalMatchPlayerCount(searchParams.get('players'), gameConfig?.playerOptions);
+    const seatControllers = useMemo(
+        () => resolveSeatControllersFromSearchParams({
+            numPlayers: localPlayerCount,
+            searchParams,
+            aiSupport: gameConfig?.ai,
+        }),
+        [gameConfig?.ai, localPlayerCount, searchParams],
+    );
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
@@ -123,9 +136,10 @@ export const LocalMatchRoom = () => {
                             {engineConfig && WrappedBoard ? (
                                 <LocalGameProvider
                                     config={engineConfig}
-                                    numPlayers={2}
+                                    numPlayers={localPlayerCount}
                                     seed={gameSeed}
                                     onCommandRejected={handleCommandRejected}
+                                    seatControllers={seatControllers}
                                     followCurrentTurnPlayer
                                 >
                                     <BoardBridge

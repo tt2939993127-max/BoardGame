@@ -599,6 +599,7 @@ export const GameHUD = ({
         id: 'exit',
         icon: <LogOut size={20} />,
         label: t('hud.actions.exit'),
+        mobilePanelVariant: 'sheet',
         content: (
             <div className="space-y-3">
                 {/* 本地模式：只显示返回大厅 */}
@@ -612,7 +613,7 @@ export const GameHUD = ({
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 transition-all font-bold text-xs"
                     >
                         <LogOut size={16} />
-                        <div className="flex flex-col items-start">
+                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                             <span>{t('hud.actions.backToLobby')}</span>
                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.backToLobbyHint')}</span>
                         </div>
@@ -633,7 +634,7 @@ export const GameHUD = ({
                                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all font-bold text-xs"
                                     >
                                         <Trash2 size={16} />
-                                        <div className="flex flex-col items-start">
+                                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                             <span>{t('hud.actions.destroy')}</span>
                                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.destroyHint')}</span>
                                         </div>
@@ -648,7 +649,7 @@ export const GameHUD = ({
                                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all font-bold text-xs"
                                     >
                                         <LogOut size={16} />
-                                        <div className="flex flex-col items-start">
+                                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                             <span>{t('hud.actions.leaveRoom')}</span>
                                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.leaveRoomHint')}</span>
                                         </div>
@@ -665,7 +666,7 @@ export const GameHUD = ({
                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all font-bold text-xs"
                                 >
                                     <LogOut size={16} />
-                                    <div className="flex flex-col items-start">
+                                    <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                         <span>{t('hud.actions.tempLeave')}</span>
                                         <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.tempLeaveHint')}</span>
                                     </div>
@@ -681,7 +682,7 @@ export const GameHUD = ({
                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 transition-all font-bold text-xs"
                             >
                                 <LogOut size={16} />
-                                <div className="flex flex-col items-start">
+                                <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                     <span>{t('hud.actions.forceExit')}</span>
                                     <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.forceExitHint')}</span>
                                 </div>
