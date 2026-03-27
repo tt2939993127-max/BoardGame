@@ -24,6 +24,7 @@ import type {
     DeckReshuffledEvent,
     MinionPlayedEvent,
     MinionPowerBreakdown,
+    MinionOnBase,
 } from './types';
 import {
     PHASE_ORDER,
@@ -36,7 +37,7 @@ import {
     getCurrentPlayerId,
 } from './types';
 import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getEffectivePowerBreakdown, getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from './ongoingModifiers';
-import { collectTriggers, fireTriggers, hasRegisteredTrigger, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
+import { collectTriggers, fireTriggerForSource, fireTriggers, hasRegisteredTrigger, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
@@ -781,6 +782,127 @@ export function registerMultiBaseScoringInteractionHandler(): void {
     });
 }
 
+function applyEventsForStartTurnSimulation(
+    core: SmashUpCore,
+    events: SmashUpEvent[],
+): SmashUpCore {
+    let nextCore = core;
+    for (const event of events) {
+        const intercepted = domainInterceptEvent(nextCore, event);
+        if (intercepted === null) continue;
+
+        const appliedEvents = Array.isArray(intercepted) ? intercepted : [intercepted];
+        for (const appliedEvent of appliedEvents) {
+            nextCore = reduce(nextCore, appliedEvent);
+        }
+    }
+    return nextCore;
+}
+
+function findMinionOnBaseByUid(
+    core: SmashUpCore,
+    minionUid: string,
+): { baseIndex: number; minion: MinionOnBase } | undefined {
+    for (let baseIndex = 0; baseIndex < core.bases.length; baseIndex++) {
+        const minion = core.bases[baseIndex].minions.find(entry => entry.uid === minionUid);
+        if (minion) {
+            return { baseIndex, minion };
+        }
+    }
+    return undefined;
+}
+
+function processImmediateStartTurnMinionTriggers(
+    startTurnCore: SmashUpCore,
+    events: SmashUpEvent[],
+    currentPlayerId: PlayerId,
+    random: RandomFn,
+    matchState?: MatchState<SmashUpCore>,
+    processedPlayedUids: Set<string> = new Set(),
+): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
+    const finalEvents: SmashUpEvent[] = [];
+    let simulatedCore = startTurnCore;
+    let currentMatchState = matchState ? { ...matchState, core: startTurnCore } : undefined;
+
+    for (const event of events) {
+        finalEvents.push(event);
+        simulatedCore = applyEventsForStartTurnSimulation(simulatedCore, [event]);
+        if (currentMatchState) {
+            currentMatchState = { ...currentMatchState, core: simulatedCore };
+        }
+
+        if (event.type === SU_EVENTS.MINION_RETURNED) {
+            const returnedEvent = event as MinionReturnedEvent;
+            processedPlayedUids.delete(returnedEvent.payload.minionUid);
+            continue;
+        }
+
+        if (event.type !== SU_EVENTS.MINION_PLAYED) continue;
+
+        const playedEvent = event as MinionPlayedEvent;
+        if (playedEvent.payload.playerId !== currentPlayerId) continue;
+        if (processedPlayedUids.has(playedEvent.payload.cardUid)) continue;
+        processedPlayedUids.add(playedEvent.payload.cardUid);
+
+        const playedMinion = findMinionOnBaseByUid(simulatedCore, playedEvent.payload.cardUid);
+        if (!playedMinion || playedMinion.minion.controller !== currentPlayerId) continue;
+
+        const immediateResult = fireTriggerForSource(
+            simulatedCore,
+            playedEvent.payload.defId,
+            'onTurnStart',
+            {
+                state: simulatedCore,
+                matchState: currentMatchState,
+                playerId: currentPlayerId,
+                baseIndex: playedMinion.baseIndex,
+                triggerMinion: playedMinion.minion,
+                triggerMinionUid: playedMinion.minion.uid,
+                triggerMinionDefId: playedMinion.minion.defId,
+                random,
+                now: event.timestamp,
+            },
+        );
+
+        if (immediateResult.matchState) {
+            currentMatchState = { ...immediateResult.matchState, core: simulatedCore };
+        }
+        if (immediateResult.events.length === 0) continue;
+
+        const processedImmediate = postProcessSystemEvents(
+            simulatedCore,
+            immediateResult.events,
+            random,
+            currentMatchState,
+            { skipImmediateStartTurnMinionTriggers: true },
+        );
+        const processedImmediateMatchState = processedImmediate.matchState
+            ? { ...processedImmediate.matchState, core: simulatedCore }
+            : currentMatchState;
+
+        const recursiveResult = processImmediateStartTurnMinionTriggers(
+            simulatedCore,
+            processedImmediate.events,
+            currentPlayerId,
+            random,
+            processedImmediateMatchState,
+            processedPlayedUids,
+        );
+
+        finalEvents.push(...recursiveResult.events);
+        simulatedCore = applyEventsForStartTurnSimulation(simulatedCore, recursiveResult.events);
+        if (recursiveResult.matchState) {
+            currentMatchState = { ...recursiveResult.matchState, core: simulatedCore };
+        } else if (currentMatchState) {
+            currentMatchState = { ...currentMatchState, core: simulatedCore };
+        }
+    }
+
+    return currentMatchState
+        ? { events: finalEvents, matchState: currentMatchState }
+        : { events: finalEvents };
+}
+
 // ============================================================================
 // Setup
 // ============================================================================
@@ -1328,6 +1450,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     nextTurnNumber = core.turnNumber + 1;
                 }
             }
+            currentMatchState = {
+                ...currentMatchState,
+                sys: {
+                    ...currentMatchState.sys,
+                    _smashupStartTurnWindowActive: true,
+                } as any,
+            };
+            hasSysUpdate = true;
             const turnStarted: TurnStartedEvent = {
                 type: SU_EVENTS.TURN_STARTED,
                 payload: {
@@ -1337,54 +1467,58 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 timestamp: now,
             };
             events.push(turnStarted);
+            const startTurnCore = reduce(core, turnStarted);
+            currentMatchState = { ...currentMatchState, core: startTurnCore };
+
+            const startTurnTriggeredEvents: SmashUpEvent[] = [];
 
             // 瑙﹀彂鍩哄湴 onTurnStart 鑳藉姏锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
-            for (let bi = 0; bi < core.bases.length; bi++) {
-                const b = core.bases[bi];
-                if (!b) continue;
-                if (!hasBaseAbility(b.defId, 'onTurnStart')) continue;
-                const queuedBase = collectBaseAbilityTriggers({
-                    core,
-                    timing: 'onTurnStart',
-                    ownerPlayerId: nextPlayerId,
-                    baseIndex: bi,
-                    now,
-                });
-                if (queuedBase) {
-                    events.push(queuedBase as unknown as SmashUpEvent);
-                    const coreForQueue = reduce(core, queuedBase as unknown as SmashUpEvent);
-                    currentMatchState = { ...currentMatchState, core: coreForQueue };
-                    const rq = maybeResolveReactionQueue(currentMatchState, random, now);
-                    if (rq) {
-                        events.push(...rq.events);
-                        currentMatchState = rq.state;
-                        hasSysUpdate = true;
-                    } else {
-                        hasSysUpdate = true;
-                    }
-                }
+            const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState);
+            startTurnTriggeredEvents.push(...baseResult.events);
+            if (baseResult.matchState) {
+                hasSysUpdate = hasSysUpdate || baseResult.matchState.sys !== currentMatchState.sys;
+                currentMatchState = { ...baseResult.matchState, core: startTurnCore };
             }
 
             // 瑙﹀彂 ongoing 鏁堟灉 onTurnStart锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
-            const queuedTurnStart = collectTriggers(core, 'onTurnStart', {
-                state: core,
+            const onTurnStartEvents = fireTriggers(startTurnCore, 'onTurnStart', {
+                state: startTurnCore,
                 matchState: currentMatchState,
                 playerId: nextPlayerId,
                 random,
                 now,
             });
-            if (queuedTurnStart) {
-                events.push(queuedTurnStart);
-                const coreForQueue = reduce(core, queuedTurnStart as unknown as SmashUpEvent);
-                currentMatchState = { ...currentMatchState, core: coreForQueue };
-                const rq = maybeResolveReactionQueue(currentMatchState, random, now);
-                if (rq) {
-                    events.push(...rq.events);
-                    currentMatchState = rq.state;
-                    hasSysUpdate = true;
-                } else {
-                    hasSysUpdate = true;
+            startTurnTriggeredEvents.push(...onTurnStartEvents.events);
+            if (onTurnStartEvents.matchState) {
+                hasSysUpdate = hasSysUpdate || onTurnStartEvents.matchState.sys !== currentMatchState.sys;
+                currentMatchState = { ...onTurnStartEvents.matchState, core: startTurnCore };
+            }
+
+            if (startTurnTriggeredEvents.length > 0) {
+                const processedStartTurn = postProcessSystemEvents(
+                    startTurnCore,
+                    startTurnTriggeredEvents,
+                    random,
+                    currentMatchState,
+                );
+                if (processedStartTurn.matchState) {
+                    hasSysUpdate = hasSysUpdate || processedStartTurn.matchState.sys !== currentMatchState.sys;
+                    currentMatchState = { ...processedStartTurn.matchState, core: startTurnCore };
                 }
+
+                const immediateStartTurn = processImmediateStartTurnMinionTriggers(
+                    startTurnCore,
+                    processedStartTurn.events,
+                    nextPlayerId,
+                    random,
+                    currentMatchState,
+                );
+                if (immediateStartTurn.matchState) {
+                    hasSysUpdate = hasSysUpdate || immediateStartTurn.matchState.sys !== currentMatchState.sys;
+                    currentMatchState = immediateStartTurn.matchState;
+                }
+
+                events.push(...immediateStartTurn.events);
             }
 
             // Wiki: Start Turn 鏃跺彲鍏嶈垂鎻紑涓€寮犺嚜宸辨帶鍒剁殑鍩嬭懍鍗★紙鍙€夛紝涓旀瘡鍥炲悎浠呬竴娆★級
@@ -1705,7 +1839,8 @@ function postProcessSystemEvents(
     state: SmashUpCore,
     events: SmashUpEvent[],
     random: RandomFn,
-    matchState?: MatchState<SmashUpCore>
+    matchState?: MatchState<SmashUpCore>,
+    options?: { skipImmediateStartTurnMinionTriggers?: boolean },
 ): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
     // 鎻愬彇鏃堕棿鎴筹紙鍙栫涓€涓簨浠剁殑 timestamp锛?
     const now = events.length > 0 && typeof events[0].timestamp === 'number' ? events[0].timestamp : 0;
@@ -1844,7 +1979,7 @@ function postProcessSystemEvents(
         finalDerived = afterDerivedAffect.events;
     }
 
-    const combined = [...afterAffect.events, ...finalDerived];
+    let combined = [...afterAffect.events, ...finalDerived];
 
     // === Global reaction queue resolution (Wiki simultaneous ordering) ===
     // Important: TRIGGER_QUEUED/CONSUMED are domain events; they are not reduced into ms.core yet at this stage.
@@ -1858,11 +1993,37 @@ function postProcessSystemEvents(
     const msForQueue = coreForQueue === ms.core ? ms : { ...ms, core: coreForQueue };
 
     const rq = maybeResolveReactionQueue(msForQueue, random, now);
+    let finalEvents = rq ? [...combined, ...rq.events] : combined;
     if (rq) {
-        return { events: [...combined, ...rq.events], matchState: rq.state };
+        ms = rq.state;
     }
 
-    return { events: combined, matchState: ms };
+    const startTurnWindowActive = ms.sys.phase === 'startTurn' || Boolean((ms.sys as any)._smashupStartTurnWindowActive);
+    if (!options?.skipImmediateStartTurnMinionTriggers && startTurnWindowActive) {
+        const immediate = processImmediateStartTurnMinionTriggers(
+            state,
+            finalEvents,
+            pid,
+            random,
+            ms,
+        );
+        finalEvents = immediate.events;
+        if (immediate.matchState) {
+            ms = immediate.matchState;
+        }
+    }
+
+    if ((ms.sys as any)._smashupStartTurnWindowActive && ms.sys.phase !== 'startTurn' && !ms.sys.interaction?.current) {
+        ms = {
+            ...ms,
+            sys: {
+                ...ms.sys,
+                _smashupStartTurnWindowActive: undefined,
+            } as any,
+        };
+    }
+
+    return { events: finalEvents, matchState: ms };
 }
 
 // ============================================================================
