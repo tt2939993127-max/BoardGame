@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { getCardDef as getSmashUpCardDef, getBaseDef } from '../../src/games/smashup/data/cards';
 import { CHARACTER_DATA_MAP, initHeroState } from '../../src/games/dicethrone/domain/characters';
+import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import type { AbilityCard, SelectableCharacterId } from '../../src/games/dicethrone/types';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath, sanitizeEvidencePathSegment } from './evidenceScreenshots';
 
@@ -215,6 +216,23 @@ function normalizeDiceThroneCardEntry(
     return createFallbackDiceThroneCard(entry);
 }
 
+function normalizeDiceThroneResources(resources: Record<string, number> | undefined): Record<string, number> | undefined {
+    if (!resources) return resources;
+
+    const normalizedEntries = Object.entries(resources).map(([key, value]) => {
+        switch (key) {
+            case 'CP':
+                return [RESOURCE_IDS.CP, value] as const;
+            case 'HP':
+                return [RESOURCE_IDS.HP, value] as const;
+            default:
+                return [key, value] as const;
+        }
+    });
+
+    return Object.fromEntries(normalizedEntries);
+}
+
 function normalizeDiceThronePlayerConfig(
     playerConfig: DiceThronePlayerConfig | undefined,
     playerId: '0' | '1',
@@ -227,6 +245,7 @@ function normalizeDiceThronePlayerConfig(
 
     return {
         ...playerConfig,
+        resources: normalizeDiceThroneResources(playerConfig.resources),
         hand: playerConfig.hand?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
         deck: playerConfig.deck?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
         discard: playerConfig.discard?.map((entry) => normalizeDiceThroneCardEntry(entry, cardCatalog)),
