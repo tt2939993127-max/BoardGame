@@ -53,7 +53,8 @@ const waitForActionPrompt = async (page: Page, timeout = 15000) => {
 
 const navigateToTutorial = async (page: Page) => {
     await page.goto('/play/smashup/tutorial', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-game-page][data-game-id="smashup"]', { timeout: 15000 });
+    // 冷启动时教程页会串行加载较长的前端模块链，15 秒在 E2E 环境下会偶发误杀。
+    await page.waitForSelector('[data-game-page][data-game-id="smashup"]', { timeout: 30000 });
 };
 
 const readTutorialViewportMetrics = async (page: Page) => page.evaluate(() => {
@@ -67,6 +68,8 @@ const readTutorialViewportMetrics = async (page: Page) => page.evaluate(() => {
         innerHeight: window.innerHeight,
         rootScrollWidth: root.scrollWidth,
         bodyScrollWidth: body.scrollWidth,
+        runtimeViewportWidth: getComputedStyle(root).getPropertyValue('--runtime-viewport-width').trim(),
+        runtimeViewportHeight: getComputedStyle(root).getPropertyValue('--runtime-viewport-height').trim(),
         shellRect: shell?.getBoundingClientRect() ?? null,
         overlayRect: overlay?.getBoundingClientRect() ?? null,
         nextButtonRect: nextButton?.getBoundingClientRect() ?? null,
@@ -339,6 +342,41 @@ test.describe('Smash Up Tutorial E2E', () => {
         await page.screenshot({
             path: getEvidenceScreenshotPath(testInfo, 'tutorial-mobile-landscape', {
                 filename: 'tutorial-mobile-landscape.png',
+            }),
+            fullPage: false,
+        });
+    });
+
+    test('手机从竖屏旋转到横屏后教程画布不应塌成黑屏', async ({ page }, testInfo) => {
+        test.setTimeout(60000);
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await page.setViewportSize({ width: 375, height: 812 });
+        await setEnglishLocale(page);
+        await disableAudio(page);
+        await navigateToTutorial(page);
+
+        await waitForTutorialStep(page, 'welcome', 40000);
+        await expect(page.getByRole('button', { name: /^Next$/i })).toBeVisible({ timeout: 10000 });
+
+        await page.setViewportSize({ width: 812, height: 375 });
+        await page.waitForTimeout(800);
+
+        const metrics = await readTutorialViewportMetrics(page);
+        expect(metrics.runtimeViewportWidth).toBeTruthy();
+        expect(metrics.runtimeViewportHeight).toBeTruthy();
+        expect(metrics.shellRect?.width ?? 0).toBeGreaterThan(300);
+        expect(metrics.shellRect?.height ?? 0).toBeGreaterThan(200);
+        expect(metrics.overlayRect?.width ?? 0).toBeGreaterThan(120);
+        expect(metrics.overlayRect?.height ?? 0).toBeGreaterThan(80);
+        expect(metrics.nextButtonRect?.width ?? 0).toBeGreaterThan(60);
+        expect(metrics.nextButtonRect?.height ?? 0).toBeGreaterThan(24);
+        expect(metrics.overlayRect?.bottom ?? 99999).toBeLessThanOrEqual(metrics.innerHeight + 1);
+        await expect(page.locator('.mobile-board-shell')).toBeVisible();
+        await expect(page.getByRole('button', { name: /^Next$/i })).toBeVisible();
+
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'tutorial-rotate-to-landscape', {
+                filename: 'tutorial-rotate-to-landscape.png',
             }),
             fullPage: false,
         });

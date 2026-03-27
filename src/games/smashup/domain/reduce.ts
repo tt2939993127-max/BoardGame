@@ -917,23 +917,26 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.DECK_RESHUFFLED: {
             const { playerId, deckUids } = event.payload;
             const player = state.players[playerId];
-            // 合并牌库和弃牌堆中的所有卡牌，按 deckUids 排序
+            // 兼容“先抽旧牌库顶部，再把弃牌堆洗回牌库”的同批次场景：
+            // deckUids 只描述被重洗进去的部分，旧牌库里尚未被后续 CARDS_DRAWN 消耗的牌必须暂时保留。
             const allCards = [...player.deck, ...player.discard];
             const cardMap = new Map(allCards.map(card => [card.uid, card]));
-            const reshuffledDeck = deckUids
+            const deckUidSet = new Set(deckUids);
+            const referencedCards = deckUids
                 .map(uid => cardMap.get(uid))
                 .filter((card): card is CardInstance => card !== undefined);
-            
-            // 检查 deckUids 是否包含弃牌堆的卡：如果包含，说明是合并洗牌，清空弃牌堆；否则保持弃牌堆不变
-            const deckUidSet = new Set(deckUids);
-            const discardMerged = player.discard.some(c => deckUidSet.has(c.uid));
-            const newDiscard = discardMerged ? [] : player.discard;
+            const preservedDeck = player.deck.filter(card => !deckUidSet.has(card.uid));
+            const newDiscard = player.discard.filter(card => !deckUidSet.has(card.uid));
             
             return {
                 ...state,
                 players: {
                     ...state.players,
-                    [playerId]: { ...player, deck: reshuffledDeck, discard: newDiscard },
+                    [playerId]: {
+                        ...player,
+                        deck: [...preservedDeck, ...referencedCards],
+                        discard: newDiscard,
+                    },
                 },
             };
         }

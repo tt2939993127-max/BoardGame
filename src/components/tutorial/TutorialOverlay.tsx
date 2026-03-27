@@ -5,56 +5,9 @@ import { playSound } from '../../lib/audio/useGameAudio';
 import { AudioManager } from '../../lib/audio/AudioManager';
 import { UI_Z_INDEX } from '../../core';
 import { MOBILE_MAX_VIEWPORT_WIDTH } from '../../games/mobileSupport';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 const TUTORIAL_NEXT_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none';
-
-interface SafeAreaInsets {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
-}
-
-interface ViewportMetrics {
-    width: number;
-    height: number;
-    safeArea: SafeAreaInsets;
-}
-
-function parseCssPixels(value: string): number {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function readSafeAreaInsets(): SafeAreaInsets {
-    if (typeof window === 'undefined') {
-        return { top: 0, right: 0, bottom: 0, left: 0 };
-    }
-
-    const rootStyles = window.getComputedStyle(document.documentElement);
-    return {
-        top: parseCssPixels(rootStyles.getPropertyValue('--safe-area-top')),
-        right: parseCssPixels(rootStyles.getPropertyValue('--safe-area-right')),
-        bottom: parseCssPixels(rootStyles.getPropertyValue('--safe-area-bottom')),
-        left: parseCssPixels(rootStyles.getPropertyValue('--safe-area-left')),
-    };
-}
-
-function readViewportMetrics(): ViewportMetrics {
-    if (typeof window === 'undefined') {
-        return {
-            width: 0,
-            height: 0,
-            safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
-        };
-    }
-
-    return {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        safeArea: readSafeAreaInsets(),
-    };
-}
 
 /** Check if an element is inside an overflow:hidden ancestor (before the viewport root). */
 function hasOverflowHiddenAncestor(el: Element): boolean {
@@ -79,7 +32,7 @@ export const TutorialOverlay: React.FC = () => {
     const hasAutoScrolledRef = useRef(false);
     const [positionedStepId, setPositionedStepId] = useState<string | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
-    const [viewport, setViewport] = useState<ViewportMetrics>(() => readViewportMetrics());
+    const viewport = useRuntimeViewport();
 
     const [tooltipStyles, setTooltipStyles] = useState<{
         style: React.CSSProperties,
@@ -88,33 +41,12 @@ export const TutorialOverlay: React.FC = () => {
     const isMobileViewport = viewport.width > 0 && viewport.width <= MOBILE_MAX_VIEWPORT_WIDTH;
     const isCompactTutorialLayout = isMobileViewport && viewport.width > viewport.height;
     const visibleTargetRect = positionedStepId === currentStep?.id ? targetRect : null;
-
-    // 响应窗口尺寸变化，确保遮罩与提示框重新计算
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const handleResize = () => {
-            setViewport((prev) => {
-                const next = readViewportMetrics();
-                if (
-                    prev.width === next.width
-                    && prev.height === next.height
-                    && prev.safeArea.top === next.safeArea.top
-                    && prev.safeArea.right === next.safeArea.right
-                    && prev.safeArea.bottom === next.safeArea.bottom
-                    && prev.safeArea.left === next.safeArea.left
-                ) {
-                    return prev;
-                }
-                return next;
-            });
-        };
-        window.addEventListener('resize', handleResize);
-        window.addEventListener('orientationchange', handleResize);
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('orientationchange', handleResize);
-        };
-    }, []);
+    const rootViewportWidth = viewport.width > 0
+        ? viewport.width
+        : (typeof document !== 'undefined' ? document.documentElement.clientWidth : 0);
+    const rootViewportHeight = viewport.height > 0
+        ? viewport.height
+        : (typeof document !== 'undefined' ? document.documentElement.clientHeight : 0);
 
     useEffect(() => {
         if (!isActive) return;
@@ -128,8 +60,8 @@ export const TutorialOverlay: React.FC = () => {
         const stepId = currentStep.id;
         const highlightTarget = currentStep.highlightTarget;
         const position = currentStep.position;
-        const viewportWidth = viewport.width || window.innerWidth;
-        const viewportHeight = viewport.height || window.innerHeight;
+        const viewportWidth = rootViewportWidth;
+        const viewportHeight = rootViewportHeight;
         const safeArea = viewport.safeArea;
 
         if (lastStepIdRef.current !== stepId) {
@@ -347,8 +279,8 @@ export const TutorialOverlay: React.FC = () => {
     }
 
     // 矢量路径用于带孔洞的遮罩
-    const viewportWidth = viewport.width || window.innerWidth;
-    const viewportHeight = viewport.height || window.innerHeight;
+    const viewportWidth = rootViewportWidth;
+    const viewportHeight = rootViewportHeight;
     let maskPath = `M0 0 h${viewportWidth} v${viewportHeight} h-${viewportWidth} z`;
     if (visibleTargetRect) {
         // 逆时针矩形用于创建挖空效果（偶奇填充规则）

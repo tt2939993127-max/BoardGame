@@ -1,5 +1,26 @@
 # Progress Log
 
+## Merge Noteï¼ˆ2026-03-27ï¼‰
+- æœ¬æ–‡ä»¶åœ¨åŒæ­¥ `origin/main` æ—¶ç»§ç»­ä»¥å½“å‰æ­¦å£« / æžªæ‰‹å®¡è®¡ worktree çš„æ‰§è¡Œæ—¥å¿—ä¸ºä¸»ã€‚
+- ä¸»åˆ†æ”¯æ–°å¢žçš„åŽ†å²è¿›åº¦æ¡ç›®å·²åœ¨åˆå¹¶å†²çªæ±‡æŠ¥ä¸­å•ç‹¬æ‘˜è¦ä¿å­˜ï¼Œä¸ä¸Žå½“å‰ä»»åŠ¡æ—¥å¿—ç›´æŽ¥æ··å†™ã€‚
+
+## Session: 2026-03-27 æ­¦å£«è·¨è§’è‰² E2E / Masamune II å®¡è®¡
+- **Status:** in_progress
+- Actions taken:
+  - å¯¹ `Masamune II` ç»§ç»­æ‰§è¡Œâ€œåªåšè¯æ®é“¾ã€ä¸ç¡¬æ”¹å®žçŽ°â€çš„ç­–ç•¥ï¼Œå¤æ ¸äº†ä»£ç å®šä¹‰ã€OCR å›¾è¯ä¸ŽçŽ°æœ‰è§„åˆ™æ–‡æ¡£ã€‚
+  - ç»“è®ºä»æ˜¯ï¼šå‡çº§å·®å¼‚æ•°å­—æ— æ³•å®‰å…¨è£å†³ï¼Œ`Masamune II` ä¿æŒä¸ºæ˜¾å¼ blockerã€‚
+  - åœ¨ `e2e/dicethrone-watch-out-spotlight.e2e.ts` ä¸­è¡¥å…¥ä¸¤æ¡æ­¦å£«è·¨è§’è‰² E2Eï¼Œä¸æ–°å»ºæµ‹è¯•æ–‡ä»¶ã€‚
+  - é‡æ–°å®šä½ E2E ä¸ç¨³å®šæ ¹å› ï¼Œç¡®è®¤é—®é¢˜ä¸åœ¨æ­¦å£«ä¸šåŠ¡é€»è¾‘ï¼Œè€Œåœ¨ `LocalGameProvider` æ²¡æœ‰æ¶ˆè´¹ `TestHarness.random/dice` æ³¨å…¥ã€‚
+  - åœ¨ `src/engine/transport/react.tsx` å¢žåŠ æµ‹è¯•çŽ¯å¢ƒéšæœºæ¡¥æŽ¥ï¼Œè®© `TestHarness.dice.setValues()` èƒ½çœŸå®žæŽ§åˆ¶ `executePipeline()` ä¸­çš„ `random.d(6)`ã€‚
+  - è·‘é€šä¸¤æ¡ E2Eï¼š
+    - `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai righteousness should resolve a valid branch against monk"`
+    - `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai zanshin should settle 5 bonus dice and synchronize effects against paladin"`
+  - äººå·¥å®¡æŸ¥ä¸¤å¼ æ˜¾å¼è¯æ®æˆªå›¾ï¼Œå¹¶è¡¥å……è¯æ®æ–‡æ¡£ `evidence/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`ã€‚
+- Next step:
+  - ç»“æŸå½“å‰ `origin/main` åˆå¹¶æµç¨‹ï¼Œç”Ÿæˆ merge commitã€‚
+  - æŒ‰è§„èŒƒæ‰§è¡Œ `npm run merge:audit:strict -- HEAD`ã€‚
+  - å¦‚æ— æ–°å¢ž blockerï¼Œå†å†³å®šæ˜¯å¦ç»§ç»­æŽ¨è¿›æ­¦å£«/æžªæ‰‹å®¡è®¡çš„ä¸‹ä¸€è½®å®žçŽ°å˜æ›´ã€‚
+
 ## Session: 2026-03-22 å¤šçº¿ä»»åŠ¡ç™»è®° / æ–°ä¼šè¯ç»­è·‘å…¥å£
 - **Status:** in_progress
 - Actions taken:
@@ -34,6 +55,8 @@
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
+| æ­¦å£«è·¨è§’è‰² E2Eï¼šRighteousness | `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai righteousness should resolve a valid branch against monk"` | å›ºå®šå‘½ä¸­ `Katana` åˆ†æ”¯å¹¶å±•ç¤º `+2 damage` | é€šè¿‡ | âœ… |
+| æ­¦å£«è·¨è§’è‰² E2Eï¼šZanshin | `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai zanshin should settle 5 bonus dice and synchronize effects against paladin"` | 5 éª° display-only settlement + `+2 damage / 1 shame / 2 back strike` | é€šè¿‡ | âœ… |
 | æš‚æ—  | - | - | - | - |
 
 ## Error Log
@@ -375,27 +398,27 @@
 - `Masamune II` ä»æŒ‰åŸºç¡€ç‰ˆé€»è¾‘è¿è¡Œï¼Œå‡çº§å·®å¼‚å°šæœªæœ€ç»ˆæ ¸å®šã€‚
 - `slot-30` / `slot-31` ä¸¤å¼ æ­¦å£«æ”»å‡»ä¿®æ­£ç‰Œä»æœªæŽ¥å…¥ã€‚
 
-## Session: 2026-03-27 Dice Throne ÎäÊ¿ Honor ÍêÕû¹æÔòÊÕ¿Ú
+## Session: 2026-03-27 Dice Throne ï¿½ï¿½Ê¿ Honor ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¿ï¿½
 - **Status:** in_progress
 - Actions taken:
-  - ÔÚ `src/games/dicethrone/domain/tokenTypes.ts` Ôö¼ÓÍ¨ÓÃ token µµÎ»ÄÜÁ¦£º`allowedConsumeAmounts` µÄ×î´ó´°¿Ú¶ÁÈ¡¡¢`valueByAmount` µÄ·ÇÏßÐÔÈ¡Öµ¸¨Öú¡£
-  - ÔÚ `src/games/dicethrone/domain/tokenResponse.ts`¡¢`commandValidation.ts` ÖÐ²¹ÆëÍ¬Ò»ÏìÓ¦´°¿ÚµÄÀÛ¼ÆÏûºÄÐ£Ñé£¬Ö§³Ö `honor` µÄ `1 -> +1 / 2 -> +3`¡£
-  - ÇåÀí `src/games/dicethrone/heroes/samurai/tokens.ts` µÄ»µ×¢ÊÍÓëÖØ¸´ `effect`£¬°Ñ `honor` ÕýÊ½¶¨ÒåÎª¿ÉÏûºÄ `1` »ò `2`¡£
-  - ÖØÐ´ `src/games/dicethrone/ui/TokenResponseModal.tsx`£¬ÐÞ¸´»µ×Ö·û´®/»µ JSX£¬²¢±£³Öµ±Ç° UI ¼ÌÐø×ßµ¥µµ°´Å¥¡£
-  - ÔÚ `src/games/dicethrone/__tests__/token-execution.test.ts` ÐÂÔö `honor` »Ø¹é£¬¸²¸ÇÒ»´ÎÏûºÄ `2`¡¢Á¬ÐøÁ½´Î¸÷ÏûºÄ `1`¡¢µÚÈý´Î±»´°¿ÚÉÏÏÞ¾Ü¾ø¡£
+  - ï¿½ï¿½ `src/games/dicethrone/domain/tokenTypes.ts` ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ token ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`allowedConsumeAmounts` ï¿½ï¿½ï¿½ï¿½ó´°¿Ú¶ï¿½È¡ï¿½ï¿½`valueByAmount` ï¿½Ä·ï¿½ï¿½ï¿½ï¿½ï¿½È¡Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+  - ï¿½ï¿½ `src/games/dicethrone/domain/tokenResponse.ts`ï¿½ï¿½`commandValidation.ts` ï¿½Ð²ï¿½ï¿½ï¿½Í¬Ò»ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½Úµï¿½ï¿½Û¼ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½é£¬Ö§ï¿½ï¿½ `honor` ï¿½ï¿½ `1 -> +1 / 2 -> +3`ï¿½ï¿½
+  - ï¿½ï¿½ï¿½ï¿½ `src/games/dicethrone/heroes/samurai/tokens.ts` ï¿½Ä»ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½ `effect`ï¿½ï¿½ï¿½ï¿½ `honor` ï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ `1` ï¿½ï¿½ `2`ï¿½ï¿½
+  - ï¿½ï¿½Ð´ `src/games/dicethrone/ui/TokenResponseModal.tsx`ï¿½ï¿½ï¿½Þ¸ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½/ï¿½ï¿½ JSXï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½Ç° UI ï¿½ï¿½ï¿½ï¿½ï¿½ßµï¿½ï¿½ï¿½ï¿½ï¿½Å¥ï¿½ï¿½
+  - ï¿½ï¿½ `src/games/dicethrone/__tests__/token-execution.test.ts` ï¿½ï¿½ï¿½ï¿½ `honor` ï¿½Ø¹é£¬ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ `2`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¸ï¿½ï¿½ï¿½ï¿½ï¿½ `1`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ¾Ü¾ï¿½ï¿½ï¿½
 
 ### Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
-| Token Ö´ÐÐ»Ø¹é | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/token-execution.test.ts --configLoader native` | `honor` ÐÂ¾ÉÖ´ÐÐÂ·¾¶È«²¿Í¨¹ý | `55 passed` | ? |
-| Token ÏìÓ¦´°¿Ú»Ø¹é | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/token-response-window.test.ts --configLoader native` | ÏìÓ¦´°¿ÚÎ´±»ÐÂÀÛ¼ÆÂß¼­ÆÆ»µ | `8 passed` | ? |
-| ÎäÊ¿¿çÓ¢ÐÛ»Ø¹é | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native` | ÎäÊ¿Óë¼ÈÓÐÓ¢ÐÛ½»»¥±£³ÖÍ¨¹ý | `41 passed` | ? |
-| ESLint ÔöÁ¿¼ì²é | `npx eslint src/games/dicethrone/domain/tokenTypes.ts src/games/dicethrone/domain/tokenResponse.ts src/games/dicethrone/domain/commandValidation.ts src/games/dicethrone/heroes/samurai/tokens.ts src/games/dicethrone/ui/TokenResponseModal.tsx src/games/dicethrone/__tests__/token-execution.test.ts` | ÎÞ error | ½öÊ£ `commandValidation.ts` ¼ÈÓÐ warning | ? |
+| Token Ö´ï¿½Ð»Ø¹ï¿½ | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/token-execution.test.ts --configLoader native` | `honor` ï¿½Â¾ï¿½Ö´ï¿½ï¿½Â·ï¿½ï¿½È«ï¿½ï¿½Í¨ï¿½ï¿½ | `55 passed` | ? |
+| Token ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½Ú»Ø¹ï¿½ | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/token-response-window.test.ts --configLoader native` | ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½Û¼ï¿½ï¿½ß¼ï¿½ï¿½Æ»ï¿½ | `8 passed` | ? |
+| ï¿½ï¿½Ê¿ï¿½ï¿½Ó¢ï¿½Û»Ø¹ï¿½ | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native` | ï¿½ï¿½Ê¿ï¿½ï¿½ï¿½ï¿½ï¿½Ó¢ï¿½Û½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ | `41 passed` | ? |
+| ESLint ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ | `npx eslint src/games/dicethrone/domain/tokenTypes.ts src/games/dicethrone/domain/tokenResponse.ts src/games/dicethrone/domain/commandValidation.ts src/games/dicethrone/heroes/samurai/tokens.ts src/games/dicethrone/ui/TokenResponseModal.tsx src/games/dicethrone/__tests__/token-execution.test.ts` | ï¿½ï¿½ error | ï¿½ï¿½Ê£ `commandValidation.ts` ï¿½ï¿½ï¿½ï¿½ warning | ? |
 
 ### Open Items
-- `Masamune II` ÈÔ°´»ù´¡°æÂß¼­ÔËÐÐ£¬Éý¼¶²îÒìÉÐÎ´×îÖÕºË¶¨¡£
-- `slot-30` / `slot-31` Á½ÕÅÎäÊ¿¹¥»÷ÐÞÕýÅÆÈÔÎ´½ÓÈë¡£
-- ÈçÐèÌáÉý½»»¥ÇåÎú¶È£¬¿ÉºóÐøÔÙÆÀ¹À `Honor` µÄË«µµ°´Å¥ UI£¬µ«Õâ²»ÊÇ¹æÔòÕýÈ·ÐÔµÄ×èÈûÏî¡£
+- `Masamune II` ï¿½Ô°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½ï¿½ÕºË¶ï¿½ï¿½ï¿½
+- `slot-30` / `slot-31` ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½ï¿½ë¡£
+- ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È£ï¿½ï¿½Éºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ `Honor` ï¿½ï¿½Ë«ï¿½ï¿½ï¿½ï¿½Å¥ UIï¿½ï¿½ï¿½ï¿½ï¿½â²»ï¿½Ç¹ï¿½ï¿½ï¿½ï¿½ï¿½È·ï¿½Ôµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î¡£
 
 ## Session: 2026-03-27 Dice Throne æ­¦å£« slot-31 æ®‹å¿ƒæŽ¥å…¥
 - **Status:** in_progress

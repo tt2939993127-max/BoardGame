@@ -2753,4 +2753,51 @@ describe('stale move regression: bear cavalry interaction chains', () => {
         const skipOption = chooseSuppress.options.find((o: any) => o.value?.kind === 'skip');
         expect(skipOption?.displayMode).toBe('button');
     });
+
+    it('trickster_block_the_path_pod: 打到基地后应创建派系选择交互，并把选择写入持续战术元数据', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('block-1', 'trickster_block_the_path_pod', '0', 'action')],
+                    factions: ['tricksters_pod', 'innsmouth_pod'] as [string, string],
+                }),
+                '1': makePlayer('1', {
+                    factions: ['killer_plants_pod', 'aliens_pod'] as [string, string],
+                }),
+            },
+            bases: [
+                makeBase('base_the_homeworld'),
+                makeBase('base_the_jungle'),
+            ],
+        });
+        const state = makeFullMatchState(core);
+
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'block-1', targetBaseIndex: 0 },
+        }, 'block_the_path_pod step1');
+
+        expect(r1.steps[0]?.success).toBe(true);
+
+        const choice = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        expect(choice.sourceId).toBe('trickster_block_the_path_pod');
+        const comboOptions = choice.options.filter((o: any) => o.value?.blocked?.['1']);
+        expect(comboOptions).toHaveLength(2);
+
+        const blockedFactions = comboOptions.map((o: any) => o.value?.blocked?.['1']).sort();
+        expect(blockedFactions).toEqual(['aliens_pod', 'killer_plants_pod'].sort());
+
+        const ongoingBeforeResolve = r1.finalState.core.bases[0].ongoingActions.find((o: any) => o.uid === 'block-1');
+        expect(ongoingBeforeResolve?.defId).toBe('trickster_block_the_path_pod');
+
+        const selectedOption = comboOptions[0];
+        const r2 = respond(r1.finalState, '0', selectedOption.id, 'block_the_path_pod step2');
+
+        expect(r2.steps[0]?.success).toBe(true);
+        expect(r2.finalState.sys.interaction.current).toBeUndefined();
+
+        const ongoingAfterResolve = r2.finalState.core.bases[0].ongoingActions.find((o: any) => o.uid === 'block-1');
+        expect(ongoingAfterResolve?.metadata?.blockedFactionsByPlayer).toEqual(selectedOption.value.blocked);
+    });
 });

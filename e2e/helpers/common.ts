@@ -333,10 +333,13 @@ export const injectDirectGameServerUrl = async (context: BrowserContext) => {
  * 注入 __E2E_SKIP_IMAGE_GATE__，跳过 CriticalImageGate 图片预加载门禁。
  * E2E 测试不需要等待图片预加载完成。
  */
-export const injectSkipImageGate = async (context: BrowserContext) => {
-    await context.addInitScript(() => {
-        (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
-    });
+export const injectSkipImageGate = async (
+    context: BrowserContext,
+    enabled = true,
+) => {
+    await context.addInitScript((shouldSkip) => {
+        (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = shouldSkip;
+    }, enabled);
 };
 
 /**
@@ -361,14 +364,14 @@ export const waitForTestHarness = async (page: Page, timeout = 5000) => {
 /** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 拦截 CDN + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器 + 跳过图片门禁） */
 export const initContext = async (
     context: BrowserContext,
-    opts?: { storageKey?: string; skipTutorial?: boolean },
+    opts?: { storageKey?: string; skipTutorial?: boolean; skipImageGate?: boolean },
 ) => {
     await enableTestMode(context); // 启用测试模式
     await blockAudioRequests(context);
     await blockCdnRequests(context);
     await blockLobbySocket(context);
     await injectDirectGameServerUrl(context);
-    await injectSkipImageGate(context);
+    await injectSkipImageGate(context, opts?.skipImageGate ?? true);
     await setEnglishLocale(context);
     await resetMatchStorage(context, opts?.storageKey);
     if (opts?.skipTutorial !== false) await disableTutorial(context);

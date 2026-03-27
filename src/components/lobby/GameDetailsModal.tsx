@@ -21,7 +21,7 @@ import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitP
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
-import { resolveGameAuthorName } from './gameDetailsContent';
+import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
 
 
@@ -56,6 +56,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const confirmJoinModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
+    const gameDisplayName = resolveGameDisplayName(gameManifest ?? { id: gameId, titleKey }, t, gameId);
+    const gameDescription = resolveGameDescription(gameManifest ?? { descriptionKey }, t, descriptionKey);
     const gameAuthorName = resolveGameAuthorName(gameManifest);
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
@@ -878,7 +880,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             {/* 标题 - 固定在顶部 */}
                             <div className="mb-4 flex w-full shrink-0 items-baseline justify-between gap-3 md:mb-0 md:block">
                                 <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl">
-                                    {t(titleKey)}
+                                    {gameDisplayName}
                                 </h2>
                                 <button
                                     type="button"
@@ -900,7 +902,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 className="hidden md:block flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-parchment-card-border/30 scrollbar-track-transparent pr-1 mb-3 md:mb-6 min-h-0"
                             >
                                 <p className="text-[11px] md:text-sm text-parchment-light-text leading-relaxed italic">
-                                    {t(descriptionKey)}
+                                    {gameDescription}
                                 </p>
                             </div>
 
@@ -1111,7 +1113,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             </button>
                         </div>
                         <div className="mt-4 rounded-[6px] border border-parchment-card-border/20 bg-parchment-base-bg/40 px-3 py-2 text-sm">
-                            {t('authorInfo.game', { game: t(titleKey) })}
+                            {t('authorInfo.game', { game: gameDisplayName })}
                         </div>
                         <p className="mt-3 text-sm leading-6 text-parchment-light-text">
                             {t('authorInfo.hint')}

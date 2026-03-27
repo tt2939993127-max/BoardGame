@@ -331,6 +331,21 @@
       "errorUnsupported": "此游戏不支持状态赋值",
       "errorInvalidJson": "JSON 格式错误"
     },
+    "ai": {
+      "section": "AI",
+      "supportTitle": "支持能力",
+      "seatControllers": "座位控制器",
+      "none": "当前没有配置座位控制器",
+      "human": "真人",
+      "local": "本地 AI",
+      "remote": "远程 AI",
+      "policy": "策略：{{value}}",
+      "provider": "Provider：{{value}}",
+      "modes": {
+        "local": "本地对战",
+        "online": "联机对战"
+      }
+    },
     "reset": {
       "button": "🔄 重置游戏",
       "newRoom": "🆕 创建新房间",

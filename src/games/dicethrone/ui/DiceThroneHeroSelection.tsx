@@ -131,7 +131,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 h-full flex bg-[#050510] overflow-hidden select-none text-white font-sans"
+            data-testid="character-selection-overlay"
+            className="absolute inset-0 flex h-full w-full max-h-full max-w-full overflow-hidden bg-[#050510] select-none text-white font-sans"
             style={{ zIndex: UI_Z_INDEX.overlay }}
         >
             {/* 动态氛围背景（铺满整个 overlay） */}

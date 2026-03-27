@@ -171,5 +171,6 @@ export {
     SAMURAI_DICE_FACE_IDS,
     DICETHRONE_CARD_ATLAS_IDS,
     DICETHRONE_STATUS_ATLAS_IDS,
+    DICETHRONE_COMMANDS,
 } from './ids';
 export { RESOURCE_IDS } from './resources';

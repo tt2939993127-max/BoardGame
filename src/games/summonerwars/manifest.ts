@@ -14,6 +14,11 @@ const entry: GameManifestEntry = {
     playerOptions: [2],
     tags: ['tactical', 'card_driven', 'dice_driven'],
     bestPlayers: [2],
+    ai: {
+        capture: true,
+        localAi: false,
+        remoteAi: false,
+    },
     cursorTheme: 'summonerwars-ethereal',
     fontFamily: { display: 'Bebas Neue' },
     mobileProfile: 'landscape-adapted',
