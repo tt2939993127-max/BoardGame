@@ -1,5 +1,28 @@
 # Progress Log
 
+## Session: 2026-03-27 移动端顶层容器锚定与 LoadingScreen 回归
+- **Status:** completed
+- Actions taken:
+  - 读取当前未提交改动，确认这轮真实主线不是 SmashUp Titans，而是一组移动端顶层容器 / LoadingScreen 锚定修复。
+  - 复核 `LoadingScreen`、`ConnectionLoadingScreen`、`CriticalImageGate`、`TutorialSelectionGate`、`MatchRoom`、`LocalMatchRoom`、`TestMatchRoom`、`SmashUp Board` 的 diff，确认目标是把游戏容器内的加载层从 `viewport` 锚定改成 `container` 锚定。
+  - 读取并人工查看证据截图：
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\mobile-character-selection\character-selection-mobile-landscape.png`
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\add-critical-image-preloading\critical-image-gate-loading.png`
+  - 人工观察确认：Dice Throne 手机横屏选角层未再撑出视口；SmashUp LoadingScreen 保持在容器内部居中，没有被整页 fixed 拉偏。
+  - 运行最小相关验证：
+    - `npm run typecheck`
+    - `npx vitest run src/components/game/framework/__tests__/CriticalImageGate.test.tsx src/components/game/framework/__tests__/TutorialSelectionGate.test.tsx --maxWorkers=1`
+    - `npm run test:e2e:ci:file -- character-selection.e2e.ts "手机横屏下选角界面不应出现顶层横向滚动"`
+    - `npm run test:e2e:ci:file -- smashup-image-loading.e2e.ts "进入本地对局时先显示 LoadingScreen，再进入派系选择界面"`
+  - 更新 `evidence/mobile-top-layer-container-anchor-e2e-test.md`，补充绝对路径与人工观察结论。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/components/game/framework/__tests__/CriticalImageGate.test.tsx src/components/game/framework/__tests__/TutorialSelectionGate.test.tsx --maxWorkers=1` → `9 passed`
+  - `npm run test:e2e:ci:file -- character-selection.e2e.ts "手机横屏下选角界面不应出现顶层横向滚动"` → `1 passed`
+  - `npm run test:e2e:ci:file -- smashup-image-loading.e2e.ts "进入本地对局时先显示 LoadingScreen，再进入派系选择界面"` → `1 passed`
+- Next step:
+  - 将当前容器锚定改动与 evidence 一并提交，避免这轮 UI 修复继续悬挂在工作区。
+
 ## Session: 2026-03-26 移动端 exit fab sheet 页面滚动锁收口
 - **Status:** in_progress
 - Actions taken:

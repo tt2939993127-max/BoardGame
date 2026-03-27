@@ -1,5 +1,15 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-27，移动端顶层容器锚定）
+- 当前未提交改动的真实主线是“游戏容器内的加载/连接中遮罩误用 viewport 锚定”，而不是新的玩法或领域逻辑改动。
+- `LoadingScreen` 之前只有“全页 fixed”与“普通 relative”两种布局语义，不足以表达“占满当前游戏容器，但不要逃逸到整个页面视口”的第三种场景；新增 `anchor=\"container\"` 后，这个语义才被显式建模出来。
+- 这次修复的关键不在单个页面，而在一组共同入口：`CriticalImageGate`、`TutorialSelectionGate`、`BoardBridge.loading`、`ConnectionLoadingScreen`、以及游戏板本身的防御性 loading fallback。
+- 人工查看证据图后可以确认两个核心结果：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\mobile-character-selection\character-selection-mobile-landscape.png` 中，Dice Throne 选角层被约束在横屏容器内，没有再把页面向右撑出。
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\add-critical-image-preloading\critical-image-gate-loading.png` 中，SmashUp LoadingScreen 的法阵和文案都位于容器视觉中心，没有被顶层 fixed 层拉偏。
+- 这轮验证说明 `anchor=\"container\"` 没有破坏原有加载链路：SmashUp 仍能从 LoadingScreen 正常过渡到派系选择界面。
+- 后续若再遇到“游戏内某个 loading/遮罩把整个页面盖住、导致移动端顶层容器溢出或定位异常”的问题，应优先检查是否误用了 `viewport` 锚定，而不是直接继续调外层 CSS。
+
 ## 新发现（2026-03-26，移动端 exit fab sheet 滚动锁）
 - 当前未收口的本地改动不是部署尾巴，而是另一条独立 UI 修复线：移动端横屏下 exit fab sheet 打开后，页面级滚动没有被真正锁住。
 - 仅把 exit fab 面板改成底部 sheet 还不够；若 `html/body` 仍允许滚动/overscroll，用户仍可能看到页面级滚动条或继续把底层页面拖动起来。
