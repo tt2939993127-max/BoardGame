@@ -1,5 +1,25 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-27）：移动端顶层容器锚定与 LoadingScreen 回归收口
+
+### Goal
+- 修复手机横屏下部分顶层遮罩仍按 `viewport` 锚定，导致选角层/加载层把页面顶层容器撑出视口的问题。
+- 保持游戏内 `LoadingScreen`、`ConnectionLoadingScreen`、关键资源预加载门禁与教程门禁在 board/container 内居中显示，不再误用全页 fixed 覆盖。
+- 用最小相关单测与 E2E 证明：选角页无横向溢出，SmashUp 进入本地对局时 LoadingScreen 仍能正常出现并过渡。
+
+### Result
+- [x] `src/components/system/LoadingScreen.tsx` 新增 `anchor: 'viewport' | 'container'`，根据锚定方式切换 `fixed` / `absolute` 布局。
+- [x] `src/components/system/ConnectionLoadingScreen.tsx` 同步支持 `anchor`，超时按钮区在容器锚定时改为 `absolute`，避免继续挂到整页视口。
+- [x] `CriticalImageGate`、`TutorialSelectionGate`、`MatchRoom`、`LocalMatchRoom`、`TestMatchRoom`、`SmashUp Board` 等游戏容器内加载入口统一切到 `anchor=\"container\"`。
+- [x] 补强 `CriticalImageGate` / `TutorialSelectionGate` 组件测试，覆盖容器锚定行为。
+- [x] 补强 `e2e/character-selection.e2e.ts`，验证手机横屏下 `documentElement` / `body` / `#root` / 页面容器 / 选角层都未超出视口，并落证据截图。
+- [x] 更新 `evidence/mobile-top-layer-container-anchor-e2e-test.md`，登记绝对路径与人工看图结论。
+- [x] 验证通过：`npm run typecheck`、`npx vitest run src/components/game/framework/__tests__/CriticalImageGate.test.tsx src/components/game/framework/__tests__/TutorialSelectionGate.test.tsx --maxWorkers=1`、`npm run test:e2e:ci:file -- character-selection.e2e.ts "手机横屏下选角界面不应出现顶层横向滚动"`、`npm run test:e2e:ci:file -- smashup-image-loading.e2e.ts "进入本地对局时先显示 LoadingScreen，再进入派系选择界面"`。
+
+### Next Step
+- 将这组容器锚定改动与 evidence 一并提交，避免继续以未登记的 dirty worktree 形态悬挂。
+- 后续若再新增游戏内加载/连接中遮罩，默认先判断是否属于 board/container 内部过渡；属于则优先用 `anchor=\"container\"`，不要回到全页 `fixed`。
+
 ## Addendum（2026-03-26）：移动端 exit fab sheet 页面滚动锁收口
 
 ### Goal

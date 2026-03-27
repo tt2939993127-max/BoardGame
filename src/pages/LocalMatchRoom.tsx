@@ -144,7 +144,7 @@ export const LocalMatchRoom = () => {
                                 >
                                     <BoardBridge
                                         board={WrappedBoard}
-                                        loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                                        loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
                                     />
                                 </LocalGameProvider>
                             ) : (

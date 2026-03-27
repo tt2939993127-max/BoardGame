@@ -289,11 +289,11 @@ export const TestMatchRoom: React.FC = () => {
                                     <GameHUD gameId={gameId} mode="test" />
                                     <BoardBridge
                                         board={WrappedBoard}
-                                        loading={<LoadingScreen title={gameConfig ? `\u6b63\u5728\u52a0\u8f7d ${gameConfig.title}...` : '\u6b63\u5728\u52a0\u8f7d...'} />}
+                                        loading={<LoadingScreen anchor="container" title={gameConfig ? `\u6b63\u5728\u52a0\u8f7d ${gameConfig.title}...` : '\u6b63\u5728\u52a0\u8f7d...'} />}
                                     />
                                 </LocalGameProvider>
                             ) : (
-                                <LoadingScreen title={gameConfig ? `\u6b63\u5728\u52a0\u8f7d ${gameConfig.title}...` : '\u6b63\u5728\u52a0\u8f7d...'} />
+                                <LoadingScreen anchor="container" title={gameConfig ? `\u6b63\u5728\u52a0\u8f7d ${gameConfig.title}...` : '\u6b63\u5728\u52a0\u8f7d...'} />
                             )}
                         </MobileBoardShell>
                     </GameCursorProvider>

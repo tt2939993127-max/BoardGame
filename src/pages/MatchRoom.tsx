@@ -992,13 +992,13 @@ export const MatchRoom = () => {
                         {isTutorialRoute ? (
                             <GameModeProvider mode="tutorial">
                                 {!gameImplReady ? (
-                                    <LoadingScreen fullScreen={false} title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                    <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
                                 ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                     <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                         <TutorialDispatchBridge>
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
+                                                loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
                                             />
                                         </TutorialDispatchBridge>
                                     </LocalGameProvider>
@@ -1010,7 +1010,7 @@ export const MatchRoom = () => {
                             </GameModeProvider>
                         ) : (
                             isUgcGame && ugcLoading ? (
-                                <LoadingScreen fullScreen={false} description={t('matchRoom.ugc.loading')} />
+                                <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
                             ) : isUgcGame && ugcError ? (
                                 <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
                                     {t('matchRoom.ugc.loadFailed', { error: ugcError })}
@@ -1031,7 +1031,7 @@ export const MatchRoom = () => {
                                         >
                                             <BoardBridge
                                                 board={ugcBoard}
-                                                loading={<ConnectionLoadingScreen title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
+                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
@@ -1054,7 +1054,7 @@ export const MatchRoom = () => {
                                         >
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<ConnectionLoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
+                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
