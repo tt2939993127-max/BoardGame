@@ -6,6 +6,7 @@ import {
     cleanupAllWorkerPortFiles,
     cleanupPorts,
     cleanupWorkerPorts,
+    loadWorkerPorts,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
 
@@ -43,7 +44,7 @@ export default async function globalTeardown() {
     const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
     const forceStartServers = process.env.PW_START_SERVERS === 'true';
     const shouldStartServers = forceStartServers || !useDevServers;
-    const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+    const defaultSingleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 
     if (!shouldStartServers) {
         return;
@@ -68,6 +69,7 @@ export default async function globalTeardown() {
     }
 
     if (workers <= 1) {
+        const singleWorkerPorts = loadWorkerPorts(0) ?? defaultSingleWorkerPorts;
         cleanupPorts(singleWorkerPorts, 'Single Worker');
         await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
         cleanupAllWorkerPortFiles();

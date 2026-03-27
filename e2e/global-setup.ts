@@ -7,6 +7,7 @@ import {
     cleanupAllWorkerPortFiles,
     cleanupPorts,
     cleanupWorkerPorts,
+    loadWorkerPorts,
     saveWorkerPorts,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
@@ -30,7 +31,7 @@ const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const forceStartServers = process.env.PW_START_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = process.env.PW_REUSE_EXISTING_SERVERS === 'true';
-const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+const defaultSingleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 
 function getRuntimeScope(): string {
     const normalized = (process.env.PW_RUNTIME_SCOPE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -124,7 +125,12 @@ async function waitForUrl(runtime: RuntimeRecord, url: string, timeoutMs = SERVI
     );
 }
 
+function getSingleWorkerPorts() {
+    return loadWorkerPorts(0) ?? defaultSingleWorkerPorts;
+}
+
 async function cleanupSingleWorkerPorts(): Promise<void> {
+    const singleWorkerPorts = getSingleWorkerPorts();
     cleanupPorts(singleWorkerPorts, 'Single Worker');
 
     const released = await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
@@ -165,7 +171,7 @@ function spawnDetachedServer(script: string, args: string[] = []): RuntimeRecord
         workerId,
         pid: child.pid,
         logFile,
-        ports: singleWorkerPorts,
+        ports: getSingleWorkerPorts(),
     };
 }
 
@@ -214,6 +220,7 @@ export default async function globalSetup() {
     fs.mkdirSync(TMP_DIR, { recursive: true });
 
     if (workers <= 1) {
+        const singleWorkerPorts = getSingleWorkerPorts();
         const urls = [
             `http://127.0.0.1:${singleWorkerPorts.gameServer}/games`,
             `http://127.0.0.1:${singleWorkerPorts.apiServer}/health`,

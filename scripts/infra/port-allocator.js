@@ -29,9 +29,27 @@ function getWindowsNetstatLines() {
   }
 }
 
+function getWindowsTcpConnectionPids(port) {
+  try {
+    const command = [
+      'powershell',
+      '-NoProfile',
+      '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique`,
+    ].join(' ');
+    const result = execSync(command, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return result
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => /^\d+$/.test(line) && line !== '0');
+  } catch {
+    return [];
+  }
+}
+
 function parseWindowsPortPids(port) {
-  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i');
-  const pids = new Set();
+  const pids = new Set(getWindowsTcpConnectionPids(port));
+  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+\\S+\\s+(\\d+)\\s*$`, 'i');
 
   for (const line of getWindowsNetstatLines()) {
     const match = line.match(portPattern);
@@ -119,13 +137,19 @@ async function findAvailablePort(startPort) {
   throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${PORT_SCAN_RANGE}`);
 }
 
+export async function allocateAvailablePortSet(preferredPorts) {
+  const values = normalizePortsInput(preferredPorts);
+  const [frontend, gameServer, apiServer] = values;
+  return {
+    frontend: await findAvailablePort(Number(frontend)),
+    gameServer: await findAvailablePort(Number(gameServer)),
+    apiServer: await findAvailablePort(Number(apiServer)),
+  };
+}
+
 export async function allocateAvailablePorts(workerId) {
   const preferred = allocatePorts(workerId);
-  return {
-    frontend: await findAvailablePort(preferred.frontend),
-    gameServer: await findAvailablePort(preferred.gameServer),
-    apiServer: await findAvailablePort(preferred.apiServer),
-  };
+  return allocateAvailablePortSet(preferred);
 }
 
 export function getPortPids(port) {

@@ -4,14 +4,15 @@
 
 import path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './e2e-port-config.js';
-import { isPortInUse } from './port-allocator.js';
+import { allocateAvailablePortSet, isPortInUse, loadWorkerPorts, saveWorkerPorts } from './port-allocator.js';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { registerExitGuard, spawnBundleRunner, spawnNodeScript, spawnTsxEntry } from './e2e-server-launcher.js';
 
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const bundleWatchEnabled = process.env.PW_SERVER_WATCH !== 'false';
 const useTsxRuntime = process.env.PW_SERVER_RUNTIME === 'tsx';
-const ports = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+const ports = loadWorkerPorts(0)
+    ?? (useDevServers ? DEV_SERVER_PORTS : await allocateAvailablePortSet(E2E_SINGLE_WORKER_PORTS));
 
 await assertChildProcessSupport('单 worker E2E 服务启动', { probeEsbuild: true });
 
@@ -27,6 +28,10 @@ const busyPorts = Object.entries(ports)
 if (busyPorts.length > 0) {
     console.error(`以下端口已被占用: ${busyPorts.join(', ')}`);
     process.exit(1);
+}
+
+if (!useDevServers) {
+    saveWorkerPorts(0, ports);
 }
 
 const frontend = spawnNodeScript('scripts/infra/vite-with-logging.js', {
