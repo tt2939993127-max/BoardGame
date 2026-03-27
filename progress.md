@@ -1,5 +1,20 @@
 # Progress Log
 
+## Session: 2026-03-27 Dice Throne 本地 AI 入口补齐
+- **Status:** completed
+- Actions taken:
+  - 重新核对当前并发工作区、`git log` 与 `openspec/changes/add-cross-game-ai-system/tasks.md`，确认跨游戏 AI 主线本身已完成，AstrBot 实网接入仍处于后置状态。
+  - 复查 `src/engine/ai/`、`src/games/dicethrone/ai.ts`、`src/engine/transport/trainingData.ts`、`server/trainingDataRecorder.ts`，确认 AI runtime、远程 provider 契约和训练采集都已落地，不需要重复施工。
+  - 发现真实缺口在用户入口：`LocalMatchConfigModal` 已存在但未被 `GameDetailsModal` 使用，且 `src/games/dicethrone/manifest.ts` 仍关闭 `allowLocalMode`。
+  - 在 `src/components/lobby/GameDetailsModal.tsx` 接入 `LocalMatchConfigModal`，让支持 AI 的游戏点击“本地游玩”时先进入座位配置，再导航到本地房间。
+  - 打开 `src/games/dicethrone/manifest.ts` 的 `allowLocalMode`，使 Dice Throne 详情页真正显示本地 / 对战 AI 入口。
+  - 在现有 `src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts` 中补充回归测试，验证“先弹配置，再进入本地房间”。
+- Validation:
+  - `npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1` → `13 passed`
+  - `npm run typecheck` → passed
+- Next step:
+  - 若继续 AI 主线，下一步应转向更多游戏的本地策略实现或 AstrBot 协议文档，而不是立刻做远程实网接入。
+
 ## Session: 2026-03-27 移动端顶层容器锚定与 LoadingScreen 回归
 - **Status:** completed
 - Actions taken:

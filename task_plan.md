@@ -1,5 +1,23 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-27）：Dice Throne 本地 AI 入口补齐
+
+### Goal
+- 在不继续推进 AstrBot 实网接入的前提下，确认跨游戏 AI 主线的真实完成度，并把 Dice Throne 的本地 AI 用户入口补齐到游戏详情页可用状态。
+- 避免出现“AI 框架已完成，但详情页仍进不去本地 AI 模式”的半成品状态。
+
+### Result
+- [x] 复核当前并发工作区状态，确认 `add-cross-game-ai-system` OpenSpec tasks 已全部完成，工作区没有新的 AI 未提交改动。
+- [x] 确认真实缺口不在 AI runtime，而在入口链路：`LocalMatchConfigModal` 已存在但未接入 `GameDetailsModal`，且 `dicethrone` 仍配置 `allowLocalMode: false`。
+- [x] 在 `src/components/lobby/GameDetailsModal.tsx` 接入 `LocalMatchConfigModal`：支持 AI 的游戏点击“本地游玩”时先打开本地对战设置，而不是直接跳转。
+- [x] 将 `src/games/dicethrone/manifest.ts` 的 `allowLocalMode` 打开，使 Dice Throne 详情页实际展示本地 / 对战 AI 入口。
+- [x] 在现有 `src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts` 中补充回归：验证支持 AI 的本地模式先弹配置，再在确认后进入 `/play/dicethrone/local`。
+- [x] 验证通过：`npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1`、`npm run typecheck`。
+
+### Next Step
+- 若继续 AI 线，优先做的是更多游戏的本地逻辑策略接入或 AstrBot 协议文档收口，而不是现在就做实网接入。
+- 当前这条 Dice Throne 入口链路已收口，可与后续提交一起入库。
+
 ## Addendum（2026-03-27）：移动端顶层容器锚定与 LoadingScreen 回归收口
 
 ### Goal
