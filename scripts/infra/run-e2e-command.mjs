@@ -287,6 +287,7 @@ function createModeEnv(mode) {
             });
         case 'ci':
             return createEnv({
+                CI: 'true',
                 NODE_OPTIONS: '--max-old-space-size=4096',
                 PW_SERVER_WATCH: 'false',
             });
