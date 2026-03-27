@@ -243,6 +243,16 @@
 
 /* 移动端响应式缩放（旧方案，仅保留给未接入 board-shell/map-shell 的游戏） */
 @media (max-width: 1023px) and (orientation: landscape) {
+    .game-page-viewport {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        max-width: 100vw;
+        min-width: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
     html:has([data-game-page]),
     body:has([data-game-page]) {
         overflow-x: hidden;
