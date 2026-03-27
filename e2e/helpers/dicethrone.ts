@@ -5,14 +5,6 @@
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
     getGameServerBaseURL,
-    blockAudioRequests,
-    setEnglishLocale,
-    resetMatchStorage,
-    disableTutorial,
-    disableAudio,
-    dismissViteOverlay,
-    waitForHomeGameList,
-    dismissLobbyConfirmIfNeeded,
     ensureGameServerAvailable,
     initContext,
 } from './common';
@@ -310,7 +302,7 @@ export const applyDiceValues = async (page: Page, values: number[]) => {
         throw new Error('No dice found in state');
     }
     // 更新骰子值
-    state.dice = state.dice.map((die: any, i: number) => ({
+    state.dice = state.dice.map((die: { value?: number } & Record<string, unknown>, i: number) => ({
         ...die,
         value: values[i] ?? die.value,
         symbol: values[i] ?? die.value, // 简化处理，实际应该根据 definitionId 查找 face
@@ -457,3 +449,87 @@ export const closeDebugPanelIfOpen = async (page: Page) => {
  * 设置在线对局（旧版兼容函数）
  */
 export const setupOnlineMatch = setupDTOnlineMatch;
+
+// ============================================================================
+// TestHarness 新版稳定 helper
+// ============================================================================
+
+export const waitForDiceThroneHarness = async (page: Page, timeout = 10000) => {
+    await page.waitForFunction(
+        () => {
+            const harness = (window as Window).__BG_TEST_HARNESS__;
+            return harness?.state?.isRegistered?.() === true
+                && harness?.command?.isRegistered?.() === true;
+        },
+        { timeout, polling: 200 },
+    );
+};
+
+export const readDiceThroneHarnessState = async <T = unknown>(page: Page): Promise<T> => {
+    await waitForDiceThroneHarness(page);
+    return page.evaluate(() => (window as Window).__BG_TEST_HARNESS__!.state.get()) as Promise<T>;
+};
+
+export const patchDiceThroneHarnessState = async (page: Page, patch: unknown) => {
+    await waitForDiceThroneHarness(page);
+    await page.evaluate((nextPatch) => {
+        (window as Window).__BG_TEST_HARNESS__!.state.patch(nextPatch);
+    }, patch);
+};
+
+export const dispatchDiceThroneCommand = async (
+    page: Page,
+    command: {
+        type: string;
+        playerId: string;
+        payload?: Record<string, unknown>;
+    },
+) => {
+    await waitForDiceThroneHarness(page);
+    await page.evaluate(async (nextCommand) => {
+        await (window as Window).__BG_TEST_HARNESS__!.command.dispatch(nextCommand);
+    }, command);
+};
+
+export const setDiceThroneDiceValues = async (page: Page, values: number[]) => {
+    await waitForDiceThroneHarness(page);
+    await page.evaluate((nextValues) => {
+        (window as Window).__BG_TEST_HARNESS__!.dice.setValues(nextValues);
+    }, values);
+};
+
+export const waitForDiceThronePhase = async (page: Page, phase: string, timeout = 10000) => {
+    await page.waitForFunction(
+        (expectedPhase) => (window as Window).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.phase === expectedPhase,
+        phase,
+        { timeout, polling: 200 },
+    );
+};
+
+export const getDiceThroneUi = (page: Page) => {
+    const abilitySlots = page.locator('[data-ability-slot]');
+    return {
+        handArea: page.getByTestId('hand-area'),
+        rollButton: page.locator('[data-tutorial-id="dice-roll-button"]'),
+        confirmButton: page.locator('[data-tutorial-id="dice-confirm-button"]'),
+        advancePhaseButton: page.locator('[data-tutorial-id="advance-phase-button"]'),
+        abilitySlots,
+        highlightedAbilitySlots: abilitySlots.filter({
+            has: page.locator('div.animate-pulse[class*="border-"]'),
+        }),
+        dieButton: (id: number) => page.getByTestId(`die-button-${id}`),
+    };
+};
+
+export const selectFirstHighlightedAbility = async (page: Page) => {
+    const { highlightedAbilitySlots } = getDiceThroneUi(page);
+    await expect(highlightedAbilitySlots.first()).toBeVisible({ timeout: 10000 });
+    await highlightedAbilitySlots.first().click();
+};
+
+export const resolveSelectedAttack = async (page: Page) => {
+    const resolveAttackButton = page.getByRole('button', { name: /Resolve Attack|结算攻击/i });
+    await expect(resolveAttackButton).toBeVisible({ timeout: 10000 });
+    await expect(resolveAttackButton).toBeEnabled({ timeout: 10000 });
+    await resolveAttackButton.click();
+};
