@@ -52,6 +52,7 @@ import {
     getAvailableAbilityIds,
     isCardPlayableInResponseWindow,
 } from './rules';
+import { getMaxTokenUseAmount, getTokenUseOptions } from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
@@ -881,6 +882,21 @@ const validateUseToken = (
     }
 
     if (cmd.payload.amount <= 0) {
+        return fail('invalid_amount');
+    }
+
+    if (cmd.payload.amount > currentAmount) {
+        return fail('not_enough_token');
+    }
+
+    const allowedAmounts = getTokenUseOptions(tokenDef, currentAmount);
+    if (!allowedAmounts.includes(cmd.payload.amount)) {
+        return fail('invalid_amount');
+    }
+
+    const maxWindowUsage = getMaxTokenUseAmount(tokenDef);
+    const usedInWindow = state.pendingDamage.tokenUsageTotals?.[cmd.payload.tokenId] ?? 0;
+    if (usedInWindow + cmd.payload.amount > maxWindowUsage) {
         return fail('invalid_amount');
     }
 

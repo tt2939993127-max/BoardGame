@@ -79,6 +79,26 @@ export const handleAttackPreDefenseResolved: EventHandler<Extract<DiceThroneEven
 };
 
 /**
+ * 处理防御方效果结算事件
+ */
+export const handleAttackDefenseResolved: EventHandler<Extract<DiceThroneEvent, { type: 'ATTACK_DEFENSE_RESOLVED' }>> = (
+    state,
+    event
+) => {
+    const { attackerId, defenderId, defenseAbilityId } = event.payload;
+    if (!state.pendingAttack) return state;
+
+    const pa = state.pendingAttack;
+    const matches = pa.attackerId === attackerId
+        && pa.defenderId === defenderId
+        && (!defenseAbilityId || pa.defenseAbilityId === defenseAbilityId);
+
+    return matches
+        ? { ...state, pendingAttack: { ...pa, defenseResolved: true } }
+        : state;
+};
+
+/**
  * 处理伤害事件
  * 注意：伤害先经过护盾抵消，剩余伤害再扣血
  */
@@ -474,6 +494,10 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
         // 获取 Token 名称用于显示
         const tokenDef = state.tokenDefinitions?.find(t => t.id === tokenId);
         const tokenName = tokenDef?.name || tokenId;
+        const tokenUsageTotals = {
+            ...(state.pendingDamage.tokenUsageTotals ?? {}),
+            [tokenId]: (state.pendingDamage.tokenUsageTotals?.[tokenId] ?? 0) + amount,
+        };
         
         if (effectType === 'damageBoost' && damageModifier) {
             const modifiers = [...(state.pendingDamage.modifiers || [])];
@@ -487,6 +511,7 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
                 ...state.pendingDamage, 
                 currentDamage: state.pendingDamage.currentDamage + damageModifier,
                 modifiers,
+                tokenUsageTotals,
             };
         } else if (effectType === 'damageReduction' && damageModifier) {
             const modifiers = [...(state.pendingDamage.modifiers || [])];
@@ -500,14 +525,17 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
                 ...state.pendingDamage, 
                 currentDamage: Math.max(0, state.pendingDamage.currentDamage + damageModifier),
                 modifiers,
+                tokenUsageTotals,
             };
         } else if (effectType === 'evasionAttempt') {
             if (evasionRoll?.success) {
-                pendingDamage = { ...state.pendingDamage, currentDamage: 0, isFullyEvaded: true, lastEvasionRoll: evasionRoll };
+                pendingDamage = { ...state.pendingDamage, currentDamage: 0, isFullyEvaded: true, lastEvasionRoll: evasionRoll, tokenUsageTotals };
             } else if (evasionRoll) {
                 // 闪避失败：显式设置 isFullyEvaded: false
-                pendingDamage = { ...state.pendingDamage, isFullyEvaded: false, lastEvasionRoll: evasionRoll };
+                pendingDamage = { ...state.pendingDamage, isFullyEvaded: false, lastEvasionRoll: evasionRoll, tokenUsageTotals };
             }
+        } else {
+            pendingDamage = { ...state.pendingDamage, tokenUsageTotals };
         }
     }
 

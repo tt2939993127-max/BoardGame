@@ -104,6 +104,31 @@ registerChoiceEffectHandler('use-accuracy', ({ state, playerId }) => {
 });
 
 /**
+ * 装填 (Loaded) — 攻击掷骰阶段结束时使用，消耗 1 个装填并进入奖励骰结算。
+ */
+registerChoiceEffectHandler('use-loaded', ({ state, playerId }) => {
+    const player = state.players[playerId];
+    if (!player || !state.pendingAttack) return undefined;
+
+    const currentLoaded = player.tokens[TOKEN_IDS.LOADED] ?? 0;
+    if (currentLoaded <= 0) return undefined;
+
+    return {
+        players: {
+            ...state.players,
+            [playerId]: {
+                ...player,
+                tokens: { ...player.tokens, [TOKEN_IDS.LOADED]: currentLoaded - 1 },
+            },
+        },
+        pendingAttack: {
+            ...state.pendingAttack,
+            offensiveRollEndTokenResolved: true,
+        },
+    };
+});
+
+/**
  * 跳过 — 不使用任何 Token，标记 Token 选择已完成
  */
 registerChoiceEffectHandler('skip', ({ state }) => {

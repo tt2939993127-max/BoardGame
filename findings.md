@@ -201,3 +201,287 @@
 - 删除后重新扫描，重复 key 数量为 `0`
 - 直接执行 esbuild 打包 `server.ts`，未再出现 `duplicate-object-key` / `base_great_library` warning
 - 当前终端环境会拦截 Node 内部 `child_process.spawn`，因此这里不用 `smoke:startup` 作为最终验证，而改用直接 bundle 验证
+
+---
+
+## Addendum（2026-03-25）：Dice Throne 枪手
+
+### 规范与真相源
+- `docs/ai-rules/data-entry.md` 已切换到本轮要求的口径：
+  - 汉化图片可作为主真相源
+  - 必须先切图，再录入
+  - Wiki 仅作对照，不是真相源
+  - 每个技能都必须记录触发条件/时机
+  - 录入范围必须覆盖技能、提示板、atlas/json、图标和资源引用
+- 枪手规则文档已补成“可审计录入包”：
+  - `src/games/dicethrone/rule/枪手真相源表.md`
+  - `src/games/dicethrone/rule/枪手录入核对.md`
+
+### 图片与对照
+- 已新增裁图脚本：`scripts/assets/extract-dicethrone-gunslinger-crops.mjs`
+- 已生成枪手角色板与提示板的关键裁图，足够支撑当前 `枪林弹雨！`、`quick-draw`、`loaded / bounty / knockdown / evasive` 等条目核对。
+- 当前仍有待裁定冲突：
+  - `装填弹药` 的使用时机，汉化提示板与 Wiki `Gunslinger Status Effects` 口径不完全一致；已登记到冲突表，未擅自裁决。
+
+### 代码链路发现
+- `fill-em-with-lead` 已接入：
+  - 终极技本体
+  - `loaded` 奖励骰
+  - 奖励骰一次重掷
+  - 重掷结果按“一半向上取整”并入当前攻击 bonus damage
+  - `bounty` 对伤害计算与 CP follow-up 的影响
+- 本轮发现并修复了一个通用缺陷：
+  - `offensiveRollEnd` Token 选择事件会带 `tokenId + value`
+  - reducer 原先先按通用选择逻辑做 `+value`
+  - 再由 `use-crit / use-accuracy / use-loaded` 等自定义 effect 扣除
+  - `crit` / `accuracy` 因堆叠上限是 1，问题被上限掩盖
+  - `loaded` 堆叠上限是 2，因此暴露成“选择使用后最终仍剩 1”
+- 修复策略：
+  - 对 `activeUse.timing` 含 `onOffensiveRollEnd` 且 `customId` 形如 `use-*` 的 Token，跳过 reducer 的通用 token 增量，改由 choice effect 负责真实消耗。
+
+### 已确认结论
+- `枪林弹雨！` 现在的最终伤害链路正确：
+  - base 10
+  - `bounty` +1
+  - `loaded` 奖励骰重掷后按半数向上取整 +3
+  - 最终合计 14
+- `loaded` 现在会被正确消耗，不再因为通用选择链路的 `+1` 抵消。
+- 动作日志已补上 `loaded` 的 `offensiveRollEndTokenEffect` 文案映射。
+
+## Addendum（2026-03-25）：枪手卡图逐卡录入发现
+- `ability-cards.webp` 实际尺寸为 `6740 x 7372`，不是 `ability-cards-common.atlas.json` 的原始尺寸；必须按比例缩放后裁图。
+- 枪手卡图前 `18` 格可与通用牌一一对应，但顺序是：
+  - `slot-00 transfer-status`
+  - `slot-01 what-status`
+  - `slot-02 one-throw-fortune`
+  - `slot-03 get-away`
+  - `slot-04 super-double`
+  - `slot-05 double`
+  - `slot-06 bye-bye`
+  - `slot-07 flick`
+  - `slot-08 boss-generous`
+  - `slot-09 next-time`
+  - `slot-10 unexpected`
+  - `slot-11 worthy-of-me`
+  - `slot-12 surprise`
+  - `slot-13 me-too`
+  - `slot-14 i-can-again`
+  - `slot-15 give-hand`
+  - `slot-16 just-this`
+  - `slot-17 play-six`
+- `slot-18` 之后是枪手专属区，但其中 `slot-22 / slot-23 / slot-24` 不是单卡单格，而是上下叠放两张卡，已额外拆出：
+  - `fan-the-hammer-2`
+  - `pistol-whip`
+  - `take-cover-2`
+  - `mark-the-target`
+  - `deadeye-2`
+  - `the-law`
+- `slot-32` 为空白，不是正式卡位。
+- 原图右下角的枪手人物图不是卡牌，但属于图片收集信息，已裁出 `hero-portrait-extra.webp` 并登记。
+- 当前最重要的实现风险不是 OCR，而是“atlas 顺序假设错误”。如果直接把枪手专属卡照搬到旧 `previewRef.index` 约定里，UI 预览会错卡。
+
+## Addendum（2026-03-25 晚）：继续实施前的代码边界确认
+- `src/games/dicethrone/heroes/gunslinger/cards.ts` 现在仍只做 `injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER)`，尚未接入任何枪手专属卡。
+- `src/games/dicethrone/domain/commonCards.ts` 的默认通用牌 atlas 顺序是：
+  - 专属卡 `index 0-14`
+  - 通用牌 `index 15-32`
+  - 这与枪手汉化卡图的真实顺序不一致；枪手必须走独立映射，不能继续复用默认 `COMMON_ATLAS_INDEX`。
+- `src/games/dicethrone/domain/core-types.ts` 已有足够的卡牌表达能力：
+  - `AbilityCard.previewRef`
+  - `AbilityCard.playCondition`
+  - `AbilityCard.isAttackModifier`
+  - 因此枪手正式卡组不需要扩 schema，可以直接落地。
+- `src/games/dicethrone/domain/tokenTypes.ts` 的 `rollDie` 条件效果已支持：
+  - `bonusDamage`
+  - `grantStatus`
+  - `grantToken`
+  - `cp`
+  - `drawCard`
+  - `effectKey`
+  - 所以 `high-noon` 可以不走 custom action，直接用 `rollDie` 建模。
+- 多目标选择仍是当前唯一明确能力缺口：
+  - `paladin` 的 `handleConsecrate` / `handleVengeanceSelectPlayer` 证明单目标 `selectPlayer` + `tokenGrantConfigs` 已成熟可复用。
+  - 但现有交互层仍是单选玩家；`the-law` 卡面“至多 2 位目标玩家”不能在本轮被完整实现。
+  - 在当前 1v1 下可先实现为单目标，并继续把缺口保留在规则/进度记录里，不能宣称已完整支持。
+
+## Addendum（2026-03-25 深夜）：枪手 `wild-west` 可用原语边界
+- 现有 bonus dice 原语之前只有两种结算去向：
+  - `damage`：把总值直接打到目标
+  - `attackBonus`：把总值换算后并入当前攻击 `bonusDamage`
+- 枪手 `wild-west` 需要的是第三种语义：
+  - 有真实 1 骰展示
+  - 有 `loaded` 时可重掷 1 次
+  - 但骰值本身不参与伤害计算
+- 这轮已确认最小正确扩展是新增 `resolutionMode: 'none'`，让 settlement 仍能走交互与 `BONUS_DICE_SETTLED` 清理链，但不再落额外伤害。
+- 因而 `wild-west` 现在不需要再维持“只做 +1 的临时降级实现”，可以直接用通用 `createBonusDiceWithReroll(...)` 落地。
+- 同时确认了一点：`gunslinger-card-wild-west` 的语义分类不该有 `damage`，但应该有 `dice`，因为它真实产出 `BONUS_DIE_ROLLED / BONUS_DICE_REROLL_REQUESTED`。
+
+---
+
+## Addendum（2026-03-26）：枪手卡牌运行时状态核对
+
+### 新结论
+- `card-the-law` 当前不是“未实现”，而是“已按 1v1 单目标兼容实现，但多目标未完成”。
+- `card-high-noon` 的 `rollDie` 分支现在能正确把 `dash` 结果施加到对手 `knockdown`，没有串到自己身上。
+- `upgrade-revolver-2` 的 `replaceAbility` 已经不是静态数据存在而已，运行时出牌后会真实替换玩家技能定义，并把 `abilityLevels.revolver` 写成 `2`。
+- `枪手卡牌录入核对.md` 中大量“待代码落地”已经过期；如果不改，会继续误导后续录入/审计判断。
+
+### 仍保留的缺口
+- `card-the-law` 原卡面是“至多 2 位目标玩家”，当前交互层只有单目标玩家流，因此只能在 1v1 对局中兼容为唯一对手。
+- 这不是数据录入问题，而是明确的交互能力缺口；已经在代码里加了显式 TODO，不应再被当作“遗漏备注”。
+
+---
+
+## Addendum（2026-03-26）：动作层 `unblockable` 消费缺口
+
+### 新结论
+- `EffectAction` 早就定义了 `unblockable?: boolean`，但 `resolveEffectAction()` 里的伤害路径此前没有消费它。
+- 这会让卡牌动作层写明“不可防御伤害”的效果，仍错误地进入 `shouldOpenTokenResponse()`，从而给 `protect` 一类减伤 Token 留出响应窗口。
+- 这不是枪手独有的建模问题，而是动作层伤害语义的通用缺口；本轮先按最小范围修到可用。
+
+### 本轮落地
+- 在 `src/games/dicethrone/domain/effects.ts` 中，`action.unblockable === true` 的动作伤害现在会跳过 Token 响应窗口。
+- 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 中，`card-pistol-whip` 的 1 点伤害已显式标记为 `unblockable: true`。
+- 回归验证显示：圣骑士带 `protect` 时，枪手 `pistol-whip` 仍会造成 1 点伤害，且不会消耗 `protect`。
+
+---
+
+## Addendum（2026-03-26）：枪手 `high-noon` 三分支与剩余升级卡回归补齐
+
+### 新结论
+- `card-high-noon` 的三个骰面分支现在都已被运行时锁定：
+  - `bullet`：造成 `2` 点伤害，且不会触发 `protect`
+  - `dash`：只对对手施加 `knockdown`
+  - `bullseye`：只对对手施加 `bounty`
+- `high-noon` 的 `bullet` 分支虽然没有走 `EffectAction.unblockable` 字段，但当前 `rollDie -> accumulatedBonusDamage` 这条链路本身不会打开 Token 响应窗口，因此实际行为与汉化卡面一致。
+- 枪手剩余未覆盖的升级卡替换路径已基本补齐：
+  - `upgrade-showdown-2`
+  - `upgrade-showdown-3`
+  - `upgrade-fan-the-hammer-2`
+  - `upgrade-take-cover-2`
+  - `upgrade-deadeye-2`
+  - `upgrade-duel-2`
+  - `upgrade-quick-draw`
+- 这些升级卡当前都能在运行时正确写入 `abilityLevels`，并把玩家技能定义替换成对应升级版对象，不再只是静态数据存在。
+
+### 继续确认
+- `upgrade-quick-draw` 不只是“替换成升级被动定义”：
+  - 出牌后，`loaded` 的通用使用会真正进入一次可重掷的奖励骰结算
+  - 重掷完成后会正确回到 `defensiveRoll`
+  - 本次回归中，初始掷出 `6`、重掷为 `2`，最终只为当前攻击提供 `+1`
+
+### 仍保留的缺口
+- `card-the-law` 仍只支持当前 `1v1` 唯一对手兼容路径，多目标交互未做。
+---
+
+## Addendum（2026-03-26）：Dice Throne 武士真相源启动发现
+- 当前工作树最初没有 `public/assets/i18n/zh-CN/dicethrone/images/samurai/`，但主仓库 `BoardGame/public/.../samurai/` 已存在汉化压缩图与 3 张独立状态 icon。
+- 本轮已将以下主真相源复制进当前工作树：
+  - `compressed/player-board.webp`
+  - `compressed/tip.webp`
+  - `compressed/ability-cards.webp`
+  - `compressed/dice.webp`
+  - `icons/compressed/荣誉.webp`
+  - `icons/compressed/耻辱.webp`
+  - `icons/compressed/反击.webp`
+- 武士提示板 OCR 已稳定读出：
+  - `耻辱`：在骰攻击段计算攻击伤害时移除 1 枚，令该次攻击伤害力 `-1`
+  - `荣誉`：花费 `1` 枚令攻击伤害 `+1`，或花费 `2` 枚令攻击伤害 `+3`
+  - `反击`：被攻击时可花费 1 枚并掷 1 颗骰，对对手造成其结果一半（无条件进位）的攻击修正伤害
+- 武士角色板 OCR 已稳定确认以下能力名或效果链：
+  - `武士道`
+  - `肃穆之仪`
+  - `武道`
+  - `正宗`
+  - `昂首无畏`
+  - `征夷大将军！`
+  - `slot-02`、`slot-06` 中文名仍不稳定，不能硬写定论
+- 武士卡图 OCR 已稳定确认：
+  - 前 `18` 格为通用卡
+  - `slot-18` ~ `slot-31` 为武士专属与升级卡
+  - `slot-32` ~ `slot-39` 当前为空白格
+- 当前已确认一个明确实现风险：
+  - Samurai Status Effects 页把 `反击` 英文写作 `Retribution`
+  - 但项目里 `TOKEN_IDS.RETRIBUTION` 已被圣骑士占用，且语义不同
+  - 因此武士后续不能复用圣骑士 token id，必须给出独立命名裁决
+- 本轮已补齐派生资源：
+  - `public/assets/i18n/zh-CN/dicethrone/images/samurai/compressed/status-icons-atlas.webp`
+  - `public/assets/i18n/zh-CN/dicethrone/images/samurai/status-icons-atlas.json`
+
+---
+
+## Addendum（2026-03-26）：Dice Throne 武士 `stand-tall` 防御目标取反
+### 新结论
+- `src/games/dicethrone/domain/attack.ts` 在结算防御技时，会把防御方作为 `EffectContext.attackerId` 传入，这是当前效果系统的既有约定，不是 bug。
+- `src/games/dicethrone/domain/customActions/samurai.ts` 里的 `handleStandTall()` 之前错误地把 `ctx.attackerId` 当成原始进攻方，导致 `katana` 分支的 1 点反打实际打回了武士自己。
+- 这个 bug 会把最终血量伪装成“只减了 2 点、没有反打”，因为自伤 1 点会把正确的 3 点减伤表象冲掉，容易误判成护盾计算问题。
+
+### 本轮落地
+- 已把 `handleStandTall()` 中的原始进攻方改为读取 `ctx.defenderId`。
+- 武士回归现在稳定验证：`1 katana + 1 helm + 1 rising_sun` 会对原攻击者造成 1 点伤害，并为武士提供 3 点减伤。
+- 顺手清理了 `src/games/dicethrone/__tests__/token-execution.test.ts` 中既有的 unused 变量 warning，避免本轮验证结果带噪音。
+
+### 仍保留的缺口
+- `honor` 仍只支持 `1 -> +1`，未实现图上 `2 -> +3`。
+- `Masamune II` 升级差异仍未最终核定。
+- `slot-30` / `slot-31` 两张武士攻击修正牌仍待接入。
+
+---
+
+## Addendum��2026-03-27����Dice Throne ��ʿ Honor �������������տ�
+
+### �½���
+- `Honor` ��������ʿר��Ӳ�������⣬����ͨ��ͨ�� token ������չ��أ�
+  - `TokenUseEffect.valueByAmount`
+  - `ActiveUseConfig.allowedConsumeAmounts`
+  - `PendingDamage.tokenUsageTotals`
+- ���׻�������֤֧�����ֺϷ�·����
+  - һ������ `2` �� `Honor`��ֱ�ӵõ� `+3`
+  - ��ͬһ��Ӧ�����������θ����� `1` �㣬��һ�θ� `+1`���ڶ���ֻ����ֵ `+2`���ܼ���Ϊ `+3`
+- ͬһ��Ӧ���ڴﵽ�ۼ� `2` ��󣬼�ʹ������ϻ��ж��� `Honor`��`getUsableTokensForTiming()` Ҳ����������`validateCommand()` Ҳ��ܾ������μ���ʹ�á�
+
+### �������
+- �޸��� `src/games/dicethrone/heroes/samurai/tokens.ts` �Ļ�ע�ͺ��ظ� `effect`��
+- �޸��� `src/games/dicethrone/ui/TokenResponseModal.tsx` �Ļ��ַ����ͻ� JSX���ָ������ȶ� lint ��״̬��
+- �� `src/games/dicethrone/__tests__/token-execution.test.ts` ������ `Honor` ��ֱ���������������Ļع顣
+
+### �Ա�����ȱ��
+- `Masamune II` ����������δ���պ˶���
+- `slot-30` / `slot-31` ������ʿ�����������Դ����롣
+
+---
+
+## Addendum（2026-03-27）：Dice Throne 武士 `slot-31 / 残心` 已闭环
+
+### 新结论
+- `slot-31` 的证据强度已经足够落地，不需要继续等待更高分辨率素材：
+  - 本地裁图可稳定确认它是攻击修正牌 `残心！`
+  - 核心语义稳定指向“额外掷 5 颗骰子，然后按武士骰面结算”
+  - 该后半段与 `Masamune` 的 5 骰结算同构，可直接复用既有 custom action
+- `slot-31` 当前费用落地为 `2CP`，依据是右上角费用区模板比对；这是带证据的临时裁决，不是 OCR 猜值。
+
+### 本轮落地
+- 在 `src/games/dicethrone/heroes/samurai/cards.ts` 新增 `card-zanshin`。
+- 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 增加 `card-zanshin` 的跨英雄回归。
+- 回填本地化卡名：
+  - `public/locales/zh-CN/game-dicethrone.json`
+  - `public/locales/en/game-dicethrone.json`
+
+### 仍保留的缺口
+- `slot-30 / 舍生取义` 仍只有高层摘要，完整效果与费用都不足以安全落地。
+- `Masamune II` 升级差异仍未最终核定，不能因为 `slot-31` 已接入就顺手视为完成。
+## Addendum 2026-03-27 slot-31 evidence
+- slot-31 has enough local-image evidence to implement now.
+- core meaning is stable: roll 5 extra dice, then resolve by samurai faces.
+- current 2CP cost is a documented evidence-based judgment, not a guess.
+- slot-30 and Masamune II are still unresolved.
+---
+
+## Addendum（2026-03-27）：Dice Throne 武士 slot-30 证据裁决
+- `slot-30 / 舍生取义` 当前已经具备足够的本地图证，可先落地，不需要继续等待额外 OCR 才能编码。
+- 主体语义已经稳定收敛为：掷 `1` 颗骰子并按武士骰面结算。
+  - `katana`：`+2` 伤害
+  - `helm`：对对手施加 `2 shame`
+  - `rising_sun`：获得 `1 samurai_retribution`
+- `cpCost` 目前落地为 `2CP`；该值来自左上费用区模板比对，属于有证据的暂定裁决，不是无依据猜测。
+- `slot-30` 与 `slot-31` 现均已接入；武士当前真正剩余的规则缺口收缩为 `Masamune II` 升级差异未最终核定。
