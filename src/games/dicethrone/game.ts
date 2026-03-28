@@ -1003,6 +1003,7 @@ const COMMAND_TYPES = [
     // 选角相关
     'SELECT_CHARACTER',
     'HOST_START_GAME',
+    'MOVE_SEAT',
     'PLAYER_READY',
     'PLAYER_UNREADY',
     // Token 响应系统
@@ -1034,7 +1035,7 @@ const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 2,
+    maxPlayers: 4,
     commandTypes: COMMAND_TYPES,
 };
 

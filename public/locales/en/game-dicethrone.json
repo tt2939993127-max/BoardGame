@@ -587,6 +587,10 @@
     "defense_ability_not_selected": "Must select a defense ability before rolling",
     "invalid_character": "Invalid character selection",
     "character_not_selected": "Please select a character first",
+    "game_already_started": "The match has already started, so seating and ready state can no longer be changed",
+    "not_team_mode": "The current match is not in 2v2 mode",
+    "invalid_seat_target": "Invalid empty seat target",
+    "seat_not_changed": "Please choose a different empty slot",
     "roll_not_confirmed": "Please confirm the roll result first",
     "no_pending_attack": "No pending attack to defend against",
     "deck_empty": "Deck and discard pile are both empty",
@@ -713,7 +717,9 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "self": "Self",
-    "opponent": "Opponent"
+    "opponent": "Opponent",
+    "ally": "Ally",
+    "enemy": "Enemy"
   },
   "interaction": {
     "waitingOpponent": "Waiting for opponent...",
@@ -2365,7 +2371,21 @@
     "cancelReady": "Cancel Ready",
     "readyWaiting": "Waiting for other players...",
     "readyProgress": "Ready Progress",
-    "you": "You"
+    "you": "You",
+    "seating": {
+      "title": "2v2 Seating",
+      "hostTip": "Click a player first, then click an empty slot to move them. Swapping seats is not allowed.",
+      "readOnly": "Only the host can edit seating. Other players can view it only.",
+      "moveHint": "{{player}} selected. Click an empty slot to finish the move.",
+      "occupied": "That position is already occupied. Seat swapping is not supported.",
+      "emptySlot": "Empty",
+      "currentSlot": "Current slot",
+      "cancel": "Cancel",
+      "seatNumber": "Seat {{seat}}",
+      "teamA": "Team A",
+      "teamB": "Team B",
+      "targetOptionDisabled": "Unavailable"
+    }
   },
   "endgame": {
     "ariaHero": "Hero: {{hero}}",

@@ -192,6 +192,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 if (dtEvent.type === 'CHOICE_REQUESTED') {
                     const payload = (dtEvent as ChoiceRequestedEvent).payload;
                     const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
+                    const isResolvedTargetingChoice = payload.sourceAbilityId === 'targeting-roll'
+                        && newState.core.pendingAttack?.targetingSelectionResolved === true;
+                    if (isResolvedTargetingChoice) {
+                        continue;
+                    }
                     
                     // 将 DiceThrone 的选择选项转换为 PromptOption
                     const promptOptions: PromptOption<{
@@ -200,6 +205,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         value: number;
                         customId?: string;
                         labelKey?: string;
+                        disabled?: boolean;
                     }>[] = payload.options.map((opt, index) => {
                         const label = opt.labelKey
                             ?? (opt.tokenId ? `tokens.${opt.tokenId}.name`
@@ -209,6 +215,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             id: `option-${index}`,
                             label,
                             value: opt,
+                            disabled: opt.disabled,
                         };
                     });
                     
