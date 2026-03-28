@@ -90,6 +90,7 @@ const DT_NS = 'game-dicethrone';
 const OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS: Partial<Record<string, string>> = {
     [TOKEN_IDS.CRIT]: 'actionLog.offensiveRollEndTokenEffect.crit',
     [TOKEN_IDS.ACCURACY]: 'actionLog.offensiveRollEndTokenEffect.accuracy',
+    [TOKEN_IDS.LOADED]: 'actionLog.offensiveRollEndTokenEffect.loaded',
 };
 
 function getOffensiveRollEndTokenEffectKey(
@@ -108,6 +109,7 @@ const dtDamageSourceResolver: DamageSourceResolver = {
             case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true, ns: DT_NS };
             case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true, ns: DT_NS };
             case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true, ns: DT_NS };
+            case 'samurai-back-strike-reflect': return { label: 'actionLog.damageSource.backStrike', isI18n: true, ns: DT_NS };
         }
         return null;
     },

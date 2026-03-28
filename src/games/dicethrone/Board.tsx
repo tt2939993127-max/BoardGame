@@ -837,13 +837,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
         const selected = (() => {
             if (interaction.type === 'selectPlayer') {
-                return localInteraction.selectedPlayer
-                    ? [localInteraction.selectedPlayer]
+                return localInteraction.selectedPlayers.length > 0
+                    ? localInteraction.selectedPlayers
                     : (interaction.selected ?? []);
             }
             if (interaction.type === 'selectTargetStatus' && interaction.transferConfig?.statusId) {
-                return localInteraction.selectedPlayer
-                    ? [localInteraction.selectedPlayer]
+                return localInteraction.selectedPlayers.length > 0
+                    ? localInteraction.selectedPlayers
                     : (interaction.selected ?? []);
             }
             if (interaction.type === 'selectStatus' || interaction.type === 'selectTargetStatus') {
@@ -861,7 +861,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     }, [
         pendingInteraction,
         isStatusInteraction,
-        localInteraction.selectedPlayer,
+        localInteraction.selectedPlayers,
         localInteraction.selectedStatus,
     ]);
 
@@ -879,34 +879,24 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
             }
         } else if (activeInteraction.type === 'selectPlayer') {
             // 根据交互意图决定操作
-            if (localInteraction.selectedPlayer) {
-                const tokenConfigs = activeInteraction.tokenGrantConfigs ?? (
-                    activeInteraction.tokenGrantConfig
-                        ? [activeInteraction.tokenGrantConfig]
-                        : null
-                );
-                if (tokenConfigs) {
-                    // 授予 token（祝圣、复仇等）
-                    engineMoves.grantTokens(localInteraction.selectedPlayer, tokenConfigs);
-                } else {
-                    // 移除玩家所有状态
-                    engineMoves.removeStatus(localInteraction.selectedPlayer);
-                }
+            if (localInteraction.selectedPlayers.length > 0) {
+                engineMoves.resolveInteraction(localInteraction.selectedPlayers);
             }
         } else if (activeInteraction.type === 'selectTargetStatus') {
             // 转移状态
             const transferConfig = activeInteraction.transferConfig;
-            if (transferConfig?.sourcePlayerId && transferConfig?.statusId && localInteraction.selectedPlayer) {
+            const selectedPlayerId = localInteraction.selectedPlayers[0];
+            if (transferConfig?.sourcePlayerId && transferConfig?.statusId && selectedPlayerId) {
                 engineMoves.transferStatus(
                     transferConfig.sourcePlayerId,
-                    localInteraction.selectedPlayer,
+                    selectedPlayerId,
                     transferConfig.statusId
                 );
             } else {
                 return;
             }
         }
-        // REMOVE_STATUS 和 TRANSFER_STATUS 命令会自动生成 INTERACTION_COMPLETED 事件清理交互
+        // 交互命令执行后，systems.ts 会在状态/指示物事件到达时自动清理当前交互
     };
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
