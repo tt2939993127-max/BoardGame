@@ -132,6 +132,49 @@ describe('InteractionOverlay', () => {
             expect(screen.getByTestId('dt-status-owner-1')).toHaveTextContent('对手');
         });
 
+        it('4人模式下 self-only 状态交互仍只展示自己', () => {
+            const fourPlayerMockPlayers: Record<PlayerId, HeroState> = {
+                ...mockPlayers,
+                '2': {
+                    characterId: 'paladin',
+                    resources: { hp: 40, cp: 2 },
+                    statusEffects: { shock: 1 },
+                    tokens: {},
+                    hand: [],
+                    discard: [],
+                    deck: [],
+                    abilityLevels: {},
+                } as HeroState,
+                '3': {
+                    characterId: 'pyromancer',
+                    resources: { hp: 35, cp: 4 },
+                    statusEffects: {},
+                    tokens: { burn: 2 } as any,
+                    hand: [],
+                    discard: [],
+                    deck: [],
+                    abilityLevels: {},
+                } as HeroState,
+            };
+
+            render(
+                <InteractionOverlay
+                    interaction={selectStatusInteraction}
+                    players={fourPlayerMockPlayers}
+                    currentPlayerId="0"
+                    playerNames={fourPlayerNames}
+                    seatingOrder={fourPlayerOrder}
+                    teamIdByPlayerId={fourPlayerTeams}
+                    {...mockHandlers}
+                />
+            );
+
+            expect(screen.getByTestId('dt-status-owner-0')).toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-1')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-2')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-3')).not.toBeInTheDocument();
+        });
+
         it('should disable confirm button when nothing selected', () => {
             render(
                 <InteractionOverlay

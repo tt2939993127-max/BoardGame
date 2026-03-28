@@ -1058,3 +1058,75 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 - `main` 已成功吸收 DiceThrone 四人模式 Batch 1 专项，且这次不是“强行合进去再看 CI”，而是在本地合并态完成了类型、i18n、OpenSpec、Vitest、E2E 和 merge audit 全套确认。
 - 这轮额外修掉了一个此前被环境噪音掩盖的真实测试缺口：2 人 `Transfer Status` 用例的游戏服端口硬编码。
 
+## Session: 2026-03-28 DiceThrone Batch 2 审计启动
+- **Status:** completed
+- Actions taken:
+  - 回看 `update-dicethrone-4p-player-target-interactions` 的 delta / tasks / evidence / 三件套，确认 Batch 1 已完整收口且当前边界明确，不应继续往同一个 completed change 里混写下一批范围。
+  - 重新盘点 DiceThrone 当前所有会发 `INTERACTION_REQUESTED` 的现役入口，确认真正尚未拿到 4 人现役证据的，不再是 `selectPlayer/selectStatus/selectTargetStatus` 那组玩家目标 handler，而是 `modifyDie/selectDie` 这组多步骰子交互。
+  - 将 Batch 2 候选范围聚焦到：
+    - `modify-die-to-6`
+    - `modify-die-copy`
+    - `modify-die-any-1`
+    - `modify-die-any-2`
+    - `modify-die-adjust-1`
+    - `reroll-opponent-die-1`
+    - `reroll-die-2`
+    - `reroll-die-5`
+    - `shadow_thief-shadow-manipulation`
+  - 复核 `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts`，确认它们仍是旧专项口径，既未沿用当前在线 E2E 三板斧，也还保留 `browser` fixture 与未定义 `page` 变量混用的问题，不能继续充当 Batch 2 在线证据。
+  - 新建 OpenSpec change `update-dicethrone-4p-interactions-batch-2`，把 Batch 2 从 Batch 1 已完成 change 中拆开，避免 completed 边界被冲淡。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| OpenSpec 活跃 change 清单 | `openspec list` | 确认 Batch 1 当前处于 completed，便于决定是否新开 change | `update-dicethrone-4p-player-target-interactions ✓ Complete` | ✅ |
+| Batch 1 delta 复核 | `openspec show update-dicethrone-4p-player-target-interactions --json --deltas-only` | 确认现有 requirement 只覆盖 4 组 Batch 1 能力 | `4 deltas` | ✅ |
+| 现役交互入口盘点 | `rg -n "INTERACTION_REQUESTED|selectPlayer|selectStatus|selectTargetStatus|modifyDie|selectDie|targetOpponentDice" src/games/dicethrone e2e` | 找出 Batch 2 应接手的剩余交互家族 | 已定位到多步骰子交互与旧 dice E2E 文件 | ✅ |
+
+### Next Step
+- 先按新 change 的 `Audit` 清单继续做 Batch 2 审计：验证 4 人 / 2v2 下 multistep-choice 是否只需要补回现代化测试与在线证据，还是已经暴露出必须显式建模 `diceOwner` / 观察视角的共享缺口。
+
+## Session: 2026-03-28 DiceThrone Batch 2 玩家目标范围再校正
+- **Status:** in_progress
+- Actions taken:
+  - 通过本地检索与并行子 agent 交叉复核，确认 Batch 1 已基本吃完当前活跃的显式多人玩家目标 handler；若继续沿当前主线推进，真正剩余的不是更多 `selectPlayer/selectStatus/selectTargetStatus` 卡名，而是 self-only 与 enemy-set 这两类共享语义。
+  - 确认 `remove-status-self` 是唯一仍未纳入专项的直接同类入口：它走共享 `selectStatus` 交互，但当前只被 `flow.test.ts` 浅锁为“会创建仅限自身的交互”。
+  - 确认 `allOpponents` 当前存在明显的 2 人近似实现：`src/games/dicethrone/domain/effects.ts` 与 `src/games/dicethrone/domain/customActions/pyromancer.ts` 直接使用 `Object.keys(state.players).filter(id => id !== attackerId)`，在 4 人 / 2v2 下会把队友也算进“所有对手”。
+  - 将 `update-dicethrone-4p-interactions-batch-2` 从“多步骰子交互 Batch 2”纠正为“玩家目标交互 Batch 2”：聚焦 `Steadfast II`、`Meteor`、`Meteor II`、`Ultimate Inferno`，并把 `Soul Burn` 登记为规则审计候选。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 新 change 严格校验 | `openspec validate update-dicethrone-4p-interactions-batch-2 --strict --no-interactive` | 改写后的 Batch 2 proposal / design / tasks / spec 仍满足 OpenSpec 格式 | 待本轮收尾执行 | ⏳ |
+
+### Next Step
+- 先按新 change 的 `Audit` 清单确认 `allOpponents` 与 `Soul Burn` 的真实规则口径，再决定本批实现是否只需修共享目标集合解析，还是还要补 `Soul Burn` 这一条广播伤害路径。
+
+## Session: 2026-03-28 DiceThrone Batch 2 self-only / enemy-set 收口
+- **Status:** completed
+- Actions taken:
+  - 在 `src/games/dicethrone/domain/effects.ts` 中将 `allOpponents` 从“所有非自己玩家”收口为 `getOpponents(state, attackerId)`，统一改回团队感知的敌方集合解析。
+  - 完成 `Soul Burn` 规则审计并做出裁决：`src/games/dicethrone/domain/customActions/pyromancer.ts` 不再广播到所有非自己玩家，而是只命中当前 `defender` / 目标玩家。
+  - 同步修正 `public/locales/zh-CN/game-dicethrone.json`、`public/locales/en/game-dicethrone.json` 与 `src/games/dicethrone/README_ASSETS.md`，避免本地旧文案继续把 `Soul Burn` 写成“所有对手”。
+  - 复核并通过现有 Batch 2 规则回归：`remove-status-self`、`Meteor`、`Meteor II`、`Ultimate Inferno`、`Soul Burn` 的 4 人语义已由 `rule-consistency.test.ts` 锁住。
+  - 在 `e2e/dicethrone-simple-start.e2e.ts` 新增在线 4 人 `Meteor` 用例，证明 `allOpponents` 在真实 2v2 联机结算下只命中敌队共享生命，不误伤队友。
+  - 顺手修掉 `simple-start` 整文件里 2 人 `Transfer Status` 目标页权威态抢跑问题，补上 guest 页追平等待后，整文件重新回到 `13 passed`。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| TypeScript 类型检查 | `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false` | 本轮 Batch 2 代码与 E2E 改动无类型错误 | 无输出 | ✅ |
+| OpenSpec 严格校验 | `openspec validate update-dicethrone-4p-interactions-batch-2 --strict --no-interactive` | Batch 2 proposal / design / tasks / spec 仍有效 | `valid` | ✅ |
+| Batch 2 规则与行为回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts src/games/dicethrone/__tests__/pyromancer-behavior.test.ts src/games/dicethrone/__tests__/pyromancer-coverage.test.ts --configLoader native` | self-only / enemy-set / Soul Burn 相关回归通过 | `85 passed` | ✅ |
+| `Meteor` 单条在线证据 | `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"` | 在线 2v2 结算只命中敌队，不误伤 ally | `1 passed` | ✅ |
+| `simple-start` 主回归整文件 E2E | `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` | 新增 `Meteor` 用例后主回归仍全绿 | `13 passed` | ✅ |
+
+### Evidence
+| Artifact | Absolute Path | Notes |
+|----------|---------------|-------|
+| 4 人 `Meteor` enemy-set 在线截图 | `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-allOpponents-Meteor-collateral-only-hits-enemies-in-2v2\11-four-player-meteor-all-opponents-resolution.png` | 自审确认敌队共享生命降到 `44`，队友 `P3` 仍为 `50` |
+
+### Conclusion
+- Batch 2 当前主线已经从“范围再校正”推进到真实完成态：`remove-status-self` 的 self-only 约束和 `allOpponents` 的 enemy-set 语义都已拿到规则回归，`allOpponents` 还额外拿到了在线 4 人证据。
+- `Soul Burn` 不再悬空：本轮已确认它应该是当前目标/defender 伤害，而不是“所有对手”广播。
+

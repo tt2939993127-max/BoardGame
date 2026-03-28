@@ -7,6 +7,7 @@
 - 4 人 2v2 战斗链路：顶部三窗、Targeting Roll 自动/手动选目标、目标面板显示与关闭、同队响应过滤、团队胜负 UI。
 - 2 人多人目标交互链路：`Transfer Status` 第二阶段锁定来源卡 + 真实目标卡。
 - 4 人多人目标交互链路：`Transfer Status` 在线双阶段交互、`Consecrate` 的任意玩家多 token 授予、`Vengeance II` 的任意玩家授 `Retribution`、`remove-status-1` 与 `remove-all-status` 的在线移除链路。
+- 4 人 enemy-set / `allOpponents` 链路：`Meteor` 的真实联机结算只命中敌队共享生命，不会误伤队友。
 
 ## 执行命令
 - `node D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
@@ -17,6 +18,7 @@
 - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`
 - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player remove single status: remove-status-1 can remove enemy token with stable owner metadata"`
 - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player remove all status: remove-all-status blocks empty targets and clears enemy removable effects"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`
 - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player 2v2 flow: response queue excludes teammate and defense chain reaches team victory UI"`
 - `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
 
@@ -43,6 +45,8 @@
   `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-remove-single-status-remove-status-1-can-remove-enemy-token-with-stable-owner-metadata\08-four-player-remove-single-status-selection.png`
 - 4 人 `remove-all-status` 目标选择：
   `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-remove-all-status-remove-all-status-blocks-empty-targets-and-clears-enemy-removable-effects\09-four-player-remove-all-status-selection.png`
+- 4 人 `Meteor` enemy-set 结算：
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-allOpponents-Meteor-collateral-only-hits-enemies-in-2v2\11-four-player-meteor-all-opponents-resolution.png`
 
 ## 截图分析
 - `01` 证明 2 人联机主链路未被 4 人 / 2v2 改动破坏，host 已进入正式棋盘并可见掷骰区。
@@ -56,10 +60,12 @@
 - `10` 证明 4 人 `Vengeance II` 已从“规则层可通过”推进到真实在线闭环：该技能在 4 人 / 2v2 下不会误进 `targetingRoll`，而是停在玩家选择交互；同一用例最终断言队友 `P3` 获得 `Retribution`，证明“无单一敌方目标、无伤害、但仍需交互”的共享攻击流程已经兼容多人链路。
 - `08` 证明 4 人 `remove-status-1` 已拿到在线证据：第一阶段仍按四宫格展示状态拥有者，host 选择敌方 `P2` 的 `Crit` 后，host 页与目标页最终都同步为 `crit=0`。
 - `09` 证明 4 人 `remove-all-status` 已拿到在线证据：空目标会被禁用并显示 `无状态`，而敌方 `P2` 的可移除 `burn/crit` 会在确认后被全部清空；目标页需要等待权威态广播追平后再断言，不能只读 host 页。
+- `11` 证明 `allOpponents` 的共享修复已经进入真实联机链路：炎术士在 4 人 / 2v2 下触发 `Meteor` 后，敌队共享生命从 `50` 一次性降到 `44`，而队友 `P3` 仍保持 `50`，说明 collateral 已按真实敌方集合结算，没有再把 ally 算进“所有对手”。
 
 ## 自动化结果
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`：`12 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`：`13 passed`
 - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`：`1 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`：`1 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`：`31 passed`
 - `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts`：`9 passed`
 - 覆盖用例：
@@ -74,6 +80,7 @@
   - `Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata`
   - `Online 4-player remove single status: remove-status-1 can remove enemy token with stable owner metadata`
   - `Online 4-player remove all status: remove-all-status blocks empty targets and clears enemy removable effects`
+  - `Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2`
   - `Online 4-player 2v2 flow: response queue excludes teammate and defense chain reaches team victory UI`
 
 ## 结论
@@ -84,4 +91,5 @@
 - `Consecrate` 也已经升级为 4 人在线版本，能真实证明“任意玩家多 token 授予”不再是 2 人专用路径。
 - `Vengeance II` 也已经升级为 4 人在线版本，能真实证明“无单一敌方目标、无伤害、但仍需玩家交互”的授 token 技能不会在多人模式下被共享攻击流程吞掉。
 - `remove-status-1` 与 `remove-all-status` 也已拿到 4 人在线证据，说明“任意玩家移除状态/移除全部可移除状态”不再只停留在规则层或组件层。
+- `Meteor` 现在也已拿到 4 人在线证据，说明 `allOpponents` 的团队感知目标集合不再只停留在规则回归层，而是已在真实联机 2v2 结算中闭环。
 - `Transfer Status` 的第二阶段 UI 现已回到更符合语义的四宫格：来源玩家不是被隐藏或改写成摘要，而是作为锁定来源卡保留在 4 人布局中。
