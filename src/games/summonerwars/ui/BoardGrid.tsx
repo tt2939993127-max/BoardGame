@@ -766,9 +766,7 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
 
   // 追踪新出现的单位用于播放召唤动画
   const prevUnitIdsRef = React.useRef<Set<string>>(new Set());
-  const [newUnitIds, setNewUnitIds] = React.useState<Set<string>>(new Set());
-
-  React.useEffect(() => {
+  const newUnitIds = React.useMemo(() => {
     const current = new Set<string>();
     core.board.forEach(row => row.forEach(cell => {
       if (cell.unit) current.add(cell.unit.instanceId);
@@ -777,8 +775,7 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
 
     if (prevUnitIdsRef.current.size === 0) {
       prevUnitIdsRef.current = current;
-      setNewUnitIds(new Set());
-      return;
+      return new Set<string>();
     }
 
     const added = new Set<string>();
@@ -787,7 +784,7 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
     });
 
     prevUnitIdsRef.current = current;
-    setNewUnitIds(added);
+    return added;
   }, [core.board]);
 
   return (

@@ -4,7 +4,7 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
@@ -58,6 +58,10 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     ? PHASE_ORDER[0]
     : currentPhase;
 
+  useEffect(() => {
+    setSelectedPhaseId(null);
+  }, [currentPhase, isCoarsePointer]);
+
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
     label: t(`phase.${phaseId}`),
@@ -109,7 +113,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
               }}
             >
               <div
-                key={`${String(isCoarsePointer)}-${currentPhase}-${phase.id}`}
+                key={`${String(isCoarsePointer)}-${phase.id}`}
                 role={isCoarsePointer ? 'button' : undefined}
                 tabIndex={isCoarsePointer ? 0 : undefined}
                 onClick={() => {
