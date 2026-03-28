@@ -1,7 +1,7 @@
 import { createBonusDiceWithReroll, createDisplayOnlySettlement, registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { registerChoiceResolvedEventHandler } from '../choiceResolvedEvents';
 import { GUNSLINGER_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
-import { getPlayerDieFace, getTokenStackLimit } from '../rules';
+import { getOpponents, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
 import type { PendingInteraction } from '../core-types';
@@ -302,7 +302,7 @@ function createKnockdownEvent(
 }
 
 function handleTheLaw({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const opponentIds = Object.keys(state.players).filter(playerId => playerId !== attackerId);
+    const opponentIds = getOpponents(state, attackerId);
 
     if (opponentIds.length <= 1) {
         const targetId = opponentIds[0];

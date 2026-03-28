@@ -552,6 +552,85 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['2'].statusEffects.knockdown).toBe(1);
         });
 
+        it('the law should only target enemies in 4-player team mode', () => {
+            const theLawCard = GUNSLINGER_CARDS.find(card => card.id === 'card-the-law');
+            expect(theLawCard).toBeDefined();
+
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+
+            let state = createInitializedStateWithCharacters(
+                playerIds,
+                fixedRandom,
+                { '0': 'gunslinger', '1': 'monk', '2': 'samurai', '3': 'paladin' }
+            );
+            state.core.players['0'].resources.cp = 2;
+            state.core.players['0'].hand = [{ ...theLawCard! }];
+            state.core.players['0'].deck = [];
+
+            expect(state.core.teamIdByPlayerId).toEqual({
+                '0': 'A',
+                '1': 'B',
+                '2': 'A',
+                '3': 'B',
+            });
+
+            const playResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'PLAY_CARD',
+                    playerId: '0',
+                    payload: { cardId: 'card-the-law' },
+                    timestamp: 1,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds
+            );
+            expect(playResult.success).toBe(true);
+            if (!playResult.success) {
+                return;
+            }
+
+            state = playResult.state as MatchState<DiceThroneCore>;
+            const interaction = state.sys.interaction.current as {
+                data?: { targetPlayerIds?: PlayerId[] };
+            } | undefined;
+
+            expect(interaction?.data?.targetPlayerIds).toEqual(['1', '3']);
+            expect(interaction?.data?.targetPlayerIds).not.toContain('2');
+
+            const resolveResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'RESOLVE_INTERACTION',
+                    playerId: '0',
+                    payload: { selectedPlayerIds: ['1', '3'] },
+                    timestamp: 2,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds
+            );
+            expect(resolveResult.success).toBe(true);
+            if (!resolveResult.success) {
+                return;
+            }
+
+            const finalState = resolveResult.state as MatchState<DiceThroneCore>;
+            expect(finalState.sys.interaction.current).toBeFalsy();
+            expect(finalState.core.players['0'].tokens.evasive).toBe(1);
+            expect(finalState.core.players['1'].tokens.bounty).toBe(1);
+            expect(finalState.core.players['1'].statusEffects.knockdown).toBe(1);
+            expect(finalState.core.players['3'].tokens.bounty).toBe(1);
+            expect(finalState.core.players['3'].statusEffects.knockdown).toBe(1);
+            expect(finalState.core.players['2'].tokens.bounty ?? 0).toBe(0);
+            expect(finalState.core.players['2'].statusEffects.knockdown ?? 0).toBe(0);
+        });
+
         it('pistol whip undefendable damage should not trigger protect', () => {
             const pistolWhipCard = GUNSLINGER_CARDS.find(card => card.id === 'card-pistol-whip');
             expect(pistolWhipCard).toBeDefined();

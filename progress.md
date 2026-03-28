@@ -794,3 +794,23 @@
 
 ### Open Items
 - 武士 token response 当前关键链路已同时完成“注入场景真实点击”和“整局入口真实点击”两层验证；剩余若继续扩面，应优先补其他尚未覆盖真实入口的交互，而不是重复堆同质用例。
+
+## Session: 2026-03-28 Dice Throne 枪手 The Law 四人 2v2 适配
+
+- **Status:** completed
+- Actions taken:
+  - 审计 `src/games/dicethrone/domain/customActions/gunslinger.ts` 后确认：`handleTheLaw` 之前按“所有非自己玩家”构造候选目标，`2v2` 下会错误包含队友。
+  - 将 `The Law` 的候选目标筛选改为复用 `getOpponents(state, attackerId)`，让 4 人团队模式下只暴露敌方玩家。
+  - 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，覆盖交互目标过滤与最终结算。
+  - 在 `e2e/dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例 `Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both`，验证从手牌点击后只出现两名敌方目标，并且确认后只有敌方拿到 `bounty + knockdown`。
+  - 在 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md` 追加四人 2v2 的截图证据与结论。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| The Law 领域回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts -t "the law can select up to two target players in multiplayer|the law should only target enemies in 4-player team mode" --configLoader native` | `3` 人多人 + `4` 人 `2v2` 都通过 | `2 passed` | ✅ |
+| The Law 四人 E2E | `npm run test:e2e:ci:file -- dicethrone-simple-start.e2e.ts "Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both"` | 从手牌点击后只显示敌方并正确双目标结算 | `1 passed` | ✅ |
+| The Law 既有真实入口回归 | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The Law (多目标交互|从手牌真实打出)"` | `1v1 / 3` 人既有链路不回退 | `4 passed` | ✅ |
+
+### Open Items
+- 当前最实锤的 `The Law` 四人适配缺口已关闭；若继续扩四人面，应优先审计其他仍可能错误包含队友/敌方的多目标牌或技能。

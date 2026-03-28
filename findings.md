@@ -664,3 +664,18 @@
   - 当前共享 `afterRollConfirmed` 门禁仍保留“仅 `opponent/any` 骰子卡可开响应窗口”的旧口径；
   - 因此这轮没有把 `shadow-manipulation` 强行推进成在线 direct-dice 出牌路径，也没有把“所有 self-only 骰子卡都应在响应窗可打”写成既定规则；
   - 现阶段能确定的结论仅是：其共享 multistep 元数据与 4 人骰池归属语义已经被专项回归锁住。
+
+## Addendum（2026-03-28）：枪手 The Law 四人 2v2 真实缺口与裁决
+
+- 这轮新的四人适配审计里，`The Law` 暴露出的不是“测试没写到”，而是实现层真实缺口：
+  - `src/games/dicethrone/domain/customActions/gunslinger.ts` 的 `handleTheLaw` 原本使用
+    `Object.keys(state.players).filter(playerId => playerId !== attackerId)`；
+  - 这在 `4` 人 `2v2` 模式下会把队友也放入 `targetPlayerIds`，与团队规则不一致。
+- 正确裁决不是在 UI 层硬过滤，也不是只补单测，而是直接复用团队规则函数：
+  - 候选目标改为 `getOpponents(state, attackerId)`，让 `The Law` 与其他团队模式目标筛选保持统一来源。
+- 本轮新增验证证明修正已生效：
+  - 领域层：`cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，断言交互只暴露 `['1', '3']`，不包含队友 `2`。
+  - E2E：`dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例，从手牌点击 `The Law` 后只出现敌方目标卡，确认后也只对两名敌方施加 `bounty + knockdown`。
+  - 回归：既有 `1v1 / 3` 人 `The Law` 真实点击链路重新跑通，说明这次修正没有把旧多人场景一起带坏。
+- 因此，当前关于 `The Law` 的阶段性结论应更新为：
+  - `1v1` 直结算、`3` 人多人多目标、`4` 人 `2v2` 敌我过滤与真实点击结算，三条链都已闭环。
