@@ -1093,6 +1093,7 @@ completed
 - [x] 已生成冲突汇报文档 `evidence/merge-conflict-feat-dicethrone-4p-team-mode-2026-03-28.md`。
 - [x] 合并态下额外修复了 2 人 `Transfer Status` 用例的游戏服端口硬编码问题，避免 isolated E2E 假 `skip`。
 - [x] 已在 `main` 生成 merge commit `f188d523`，并通过 `merge:audit:strict`。
+- [x] 已推送 `origin/main`，远端主分支完成吸收本轮四人模式专题。
 
 ### Validation
 - `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`

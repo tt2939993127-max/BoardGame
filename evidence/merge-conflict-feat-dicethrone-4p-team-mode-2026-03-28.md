@@ -78,4 +78,4 @@
 ## 5. 结果
 - 提交：`f188d523` `merge: 合并王权骰铸四人模式 Batch 1 专项`
 - merge audit：`npm run merge:audit:strict -- HEAD` 结果为 `11 mixed / 0 single-side`
-- 推送：下一步推送到 `origin/main`
+- 推送：已推送到 `origin/main`（远端接收 commit `83b0ab0b` 为当前 `main` 头部）
