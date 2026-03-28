@@ -1898,7 +1898,21 @@ function postProcessSystemEvents(
     }
     
     for (const event of afterAffect.events) {
-        if (event.type === SU_EVENTS.MINION_PLAYED) {
+        if (event.type === SU_EVENTS.CARDS_DISCARDED) {
+            const discardEvt = event as { type: string; payload: { playerId: PlayerId; cardUids: string[] }; timestamp: number };
+            const tempCore = prePlayEvents.reduce((acc, preEvt) => reduce(acc, preEvt), state);
+            const queued = collectTriggers(tempCore, 'onCardsDiscarded', {
+                state: tempCore,
+                matchState: ms,
+                playerId: discardEvt.payload.playerId,
+                random,
+                now: event.timestamp,
+            });
+            if (queued) {
+                derivedEvents.push(queued);
+            }
+            prePlayEvents.push(event);
+        } else if (event.type === SU_EVENTS.MINION_PLAYED) {
             const playedEvt = event as MinionPlayedEvent;
             
             // 鍘婚噸妫€鏌ワ細鏋勯€犱簨浠跺敮涓€鏍囪瘑锛圡INION: + cardUid + baseIndex锛?

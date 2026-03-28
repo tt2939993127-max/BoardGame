@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
+import { SMASHUP_CARD_BACK } from '../domain/ids';
 import { getTotalEffectivePowerOnBase, getEffectivePower, getEffectivePowerBreakdown, getEffectiveBreakpoint, getOngoingCardPowerContribution, getBasePowerModifiers } from '../domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { isSpecialLimitBlocked } from '../domain/abilityHelpers';
@@ -372,6 +373,7 @@ export const BaseZone: React.FC<{
                 )}
             </div>
 
+
             {/* --- PLAYER COLUMNS CONTAINER --- */}
             <div 
                 className="flex items-start justify-center w-full pt-[0.5vw]"
@@ -397,9 +399,49 @@ export const BaseZone: React.FC<{
                             style={{ minWidth: `${layout.minionCardWidth}vw` }}
                         >
 
-                            {/* --- MINIONS --- */}
-                            {minions.length > 0 ? (
+                            {/* --- MINIONS + BURIED CARDS --- */}
+                            {minions.length > 0 || (base.buriedCards?.some((buried) => buried.controllerId === pid) ?? false) ? (
                                 <div className="flex flex-col items-center isolate z-10 hover:z-[100]">
+                                    {(() => {
+                                        const buriedCards = (base.buriedCards ?? []).filter((buried) => buried.controllerId === pid);
+                                        return buriedCards.length > 0 ? (
+                                            <div
+                                                className="flex flex-col items-center"
+                                                data-buried-count={buriedCards.length}
+                                            >
+                                                {buriedCards.map((buried, index) => {
+                                                    const buriedDef = buried.defId === 'buried_unknown' ? undefined : getCardDef(buried.defId);
+                                                    const buriedTitle = buriedDef
+                                                        ? `${resolveCardName(buriedDef, t) || buried.defId}\n${resolveCardText(buriedDef, t) || ''}`.trim()
+                                                        : `${t('ui.card_placeholder')} · P${parseInt(buried.controllerId, 10) + 1}`;
+                                                    return (
+                                                        <button
+                                                            key={buried.uid}
+                                                            type="button"
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                if (!buriedDef) return;
+                                                                if (buriedDef.type === 'minion') {
+                                                                    onViewMinion(buried.defId);
+                                                                    return;
+                                                                }
+                                                                onViewAction(buried.defId);
+                                                            }}
+                                                            title={buriedTitle}
+                                                            className="relative aspect-[0.714] overflow-hidden rounded-[0.18vw] border-[0.12vw] border-slate-500 shadow-md bg-slate-800 transition-transform cursor-pointer"
+                                                            style={{
+                                                                width: `${Math.max(layout.minionCardWidth * 0.92, 2.6)}vw`,
+                                                                marginBottom: index === buriedCards.length - 1 ? '-1.2vw' : '-2.15vw',
+                                                                transform: `rotate(${(index % 2 === 0 ? -1 : 1) * 1.5}deg)`,
+                                                            }}
+                                                        >
+                                                            <CardPreview previewRef={SMASHUP_CARD_BACK} className="w-full h-full" title={buriedTitle} />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : null;
+                                    })()}
                                     {minions.map((m, i) => (
                                         <MinionCard
                                             key={m.uid}
@@ -436,7 +478,7 @@ export const BaseZone: React.FC<{
                                 </div>
                             ) : (
                                 /* Empty Placeholder for Layout Stability */
-                                <div 
+                                <div
                                     className={`h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}
                                     style={{ width: `${layout.minionCardWidth}vw` }}
                                 >
