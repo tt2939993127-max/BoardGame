@@ -443,6 +443,87 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalCore?.bases[2].minions).toHaveLength(0);
     });
 
+    it('海盗湾最后一步若随从已暂离来源基地但仍处于延迟清场链，应继续发出移动事件', () => {
+        const system = createSmashUpEventSystem();
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    discard: [makeCard('archmage', 'wizard_archmage_pod', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_pirate_cove'),
+                makeBase('base_the_jungle'),
+                makeBase('base_tortuga', {
+                    minions: [makeMinion('mate', '1', 2, 'pirate_first_mate_pod')],
+                }),
+            ],
+            baseDeck: ['base_tar_pits_pod'],
+        }));
+
+        const result = system.afterEvents?.({
+            state,
+            random: undefined as any,
+            events: [{
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: 'i-pirate-cove-step-2',
+                    playerId: '0',
+                    optionId: 'base-0',
+                    value: { baseIndex: 1, baseDefId: 'base_the_jungle' },
+                    sourceId: 'base_pirate_cove_choose_base',
+                    interactionData: {
+                        sourceId: 'base_pirate_cove_choose_base',
+                        continuationContext: {
+                            minionUid: 'archmage',
+                            minionDefId: 'wizard_archmage_pod',
+                            fromBaseIndex: 0,
+                            _deferredPostScoringEvents: [
+                                {
+                                    type: SU_EVENTS.BASE_CLEARED,
+                                    payload: { baseIndex: 0, baseDefId: 'base_pirate_cove_pod' },
+                                    timestamp: 2400,
+                                },
+                                {
+                                    type: SU_EVENTS.BASE_REPLACED,
+                                    payload: {
+                                        baseIndex: 0,
+                                        oldBaseDefId: 'base_pirate_cove_pod',
+                                        newBaseDefId: 'base_tar_pits_pod',
+                                    },
+                                    timestamp: 2400,
+                                },
+                            ],
+                        },
+                    },
+                },
+                timestamp: 2400,
+            } as any],
+        });
+
+        const emittedEvents = result?.events as SmashUpEvent[] | undefined;
+        expect(emittedEvents?.map(event => event.type)).toEqual([
+            SU_EVENTS.MINION_MOVED,
+            SU_EVENTS.BASE_CLEARED,
+            SU_EVENTS.BASE_REPLACED,
+        ]);
+        expect(emittedEvents?.[0]).toMatchObject({
+            type: SU_EVENTS.MINION_MOVED,
+            payload: {
+                minionUid: 'archmage',
+                fromBaseIndex: 0,
+                toBaseIndex: 1,
+                reason: '海盗湾：移动随从到其他基地',
+            },
+        });
+
+        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
+        expect(finalCore?.bases[0].defId).toBe('base_tar_pits_pod');
+        expect(finalCore?.bases[1].minions.map(minion => minion.uid)).toEqual(['archmage']);
+        expect(finalCore?.players['0'].discard.some(card => card.uid === 'archmage')).toBe(false);
+    });
+
     it('scoreBases 因 afterScoring 响应窗口 halt 时应保留 scoredBaseIndices', () => {
         const state = wrapState(makeCore({
             players: {
