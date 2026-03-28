@@ -96,14 +96,12 @@ log(`内存限制: ${process.execArgv.join(' ')}`);
 
 const viteEntry = 'scripts/infra/vite-cli-safe.mjs';
 const viteArgs = createViteArgs();
-const shouldForceInline = process.env.BG_VITE_FORCE_INLINE === '1' || !process.stdin.isTTY;
+const shouldForceInline = process.env.BG_VITE_FORCE_INLINE === '1';
 log(`Vite 入口: ${viteEntry}`);
 log(`Vite 参数: ${viteArgs.join(' ')}`);
 
 if (shouldForceInline) {
-  const reason = process.env.BG_VITE_FORCE_INLINE === '1'
-    ? 'BG_VITE_FORCE_INLINE=1'
-    : 'stdin is not a TTY';
+  const reason = 'BG_VITE_FORCE_INLINE=1';
   await runViteInline(reason);
 } else {
   let inlineMode = false;

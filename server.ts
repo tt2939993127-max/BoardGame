@@ -25,7 +25,7 @@ import { hybridStorage } from './src/server/storage/HybridStorage';
 import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
-import { hasOccupiedPlayers } from './src/server/matchOccupancy';
+import { areAllSeatsOccupied, hasOccupiedPlayers, isSupportedPlayerCount } from './src/server/matchOccupancy';
 import {
     decideDuplicateOwnerRoomAction,
     DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
@@ -553,13 +553,15 @@ router.post('/games/:name/create', async (ctx) => {
         ctx.throw(404, `Game ${ctx.params.name} not found`);
     }
 
-    const gameEngine = SERVER_ENGINES.find((engine) => normalizeGameName(engine.gameId) === gameName);
+    const gameEntry = GAME_SERVER_MANIFEST.find((entry) => normalizeGameName(entry.manifest.id) === gameName);
+    const gameEngine = gameEntry?.engineConfig;
 
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
     const minPlayers = gameEngine?.minPlayers ?? 2;
     const maxPlayers = gameEngine?.maxPlayers ?? 2;
-    if (isNaN(numPlayers) || numPlayers < minPlayers || numPlayers > maxPlayers) {
+    const playerOptions = gameEntry?.manifest.playerOptions;
+    if (!isSupportedPlayerCount(numPlayers, minPlayers, maxPlayers, playerOptions)) {
         ctx.throw(400, 'Invalid numPlayers');
     }
 
@@ -804,8 +806,7 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
 
     // 状态机：所有座位都有玩家时，从 waiting → playing
     if (metadata.status === 'waiting' || !metadata.status) {
-        const allSeated = Object.values(metadata.players).every(p => p.name || p.credentials);
-        if (allSeated) {
+        if (areAllSeatsOccupied(metadata.players)) {
             metadata.status = 'playing';
         }
     }
