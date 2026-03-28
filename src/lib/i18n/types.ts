@@ -1,6 +1,8 @@
 import { I18N_NAMESPACES } from './namespaces';
 
-const isAndroidRuntimeBuild = import.meta.env.MODE === 'android';
+export const I18N_RUNTIME_MODE = typeof import.meta !== 'undefined' ? import.meta.env?.MODE : undefined;
+
+const isAndroidRuntimeBuild = I18N_RUNTIME_MODE === 'android';
 
 export const SUPPORTED_LANGUAGES = ['zh-CN', 'en'] as const;
 
