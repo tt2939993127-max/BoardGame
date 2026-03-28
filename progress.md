@@ -650,3 +650,22 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 ### Conclusion
 - `update-dicethrone-4p-player-target-interactions` 当前 Batch 1 口径已经重新落回真实完成态，不再停留在“文档写 completed、但本地命令起不来”。
 - `Consecrate` 串跑时的最后一个不稳定点已收口为测试层等待问题，而不是业务逻辑回退；修正后 `simple-start` 重新回到 `12 passed`。
+
+## Session: 2026-03-28 DiceThrone simple-start 主回归基础设施收敛
+- **Status:** completed
+- Actions taken:
+  - 明确 `e2e/dicethrone-simple-start.e2e.ts` 的定位：这是 DiceThrone 当前在用的主回归 E2E 文件，不是“新角色”或新功能入口。
+  - 在 `e2e/helpers/common.ts` 中将 `ensureGameServerAvailable()` 改为轮询 `GET /games`，避免再用创建测试房间作为可用性探针，并把等待上限提高到 `15000ms`。
+  - 在 `e2e/helpers/dicethrone.ts` 中为 `createDTRoomViaAPI`、`claimDTSeatViaAPI`、`joinDTMatchViaAPI` 补入瞬时网络重试，覆盖 `ECONNREFUSED`、`ECONNRESET`、`ETIMEDOUT`、`socket hang up`、`fetch failed` 以及 `408/425/429/5xx`。
+  - 将 setup 重试与失败上下文写入 `temp/dicethrone-setup-debug.log`，为后续若再出现 `skip` 提供可审计的定位依据。
+  - 先执行 `npm run test:e2e:cleanup` 清端口，再用默认脚本复跑 `simple-start` 整文件，确认修复后的真实结果，而不是只看单用例恢复。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| E2E 测试环境清理 | `npm run test:e2e:cleanup` | 清空 `6174/20000/21000` 测试端口占用 | 清理完成，三个端口均空闲 | ✅ |
+| simple-start 主回归整文件 E2E | `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` | 现役 12 条在线链路恢复稳定通过 | `12 passed` | ✅ |
+
+### Conclusion
+- 当前 `simple-start` 的主回归口径已重新恢复为默认脚本可直接拿到 `12 passed`，说明这轮修复有效收敛了 setup / 联机 helper 层的瞬时抖动。
+- 这次收口属于测试基础设施韧性补强，不应被记成业务功能新增；后续若再出现 `skip`，应优先查看 `temp/dicethrone-setup-debug.log` 与 bootstrap 日志，而不是先怀疑 DiceThrone 规则链路回退。

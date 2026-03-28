@@ -408,3 +408,16 @@
   - 单独复跑同一 targeting roll 用例也直接走到 `setupDTOnlineMatchWithPlayers()` 返回 `null`；
   - 调试日志已记录 `game_server_unavailable`、`apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:20000`，另一次整文件复跑则在 global setup 阶段出现 Vite 前端进程异常退出。
 - 因此本轮可以下的代码结论是：旧专项 E2E 收敛本身已完成，且新 `status-interaction-complete` 套件稳定可跑；`simple-start` 的 residual risk 仍然是既有 E2E 基础设施抖动，不是本轮删除/重写旧专项文件造成的行为变化。
+
+## 2026-03-28 DiceThrone simple-start 基础设施抖动收敛发现
+
+- `simple-start` 不是“新角色”或“新功能”，而是当前 DiceThrone 在用的主回归 E2E 文件；它的问题如果不澄清，后续很容易把一次测试基础设施修复误记成业务能力新增。
+- 先前 `setupDTOnlineMatchWithPlayers()` 偶发返回 `null`，表面上会把测试退化成 `skip`，但根因并不总是游戏逻辑失败，而是 setup 探针与网络层过于脆弱：
+  - 旧版 `ensureGameServerAvailable()` 用创建房间当健康检查，本身就会把瞬时连接抖动放大成“服务器不可用”；
+  - 房间创建 / claim-seat / join 这几步缺少小范围重试，遇到 `ECONNREFUSED`、`ECONNRESET`、`ETIMEDOUT`、`socket hang up`、`fetch failed` 或 `408/425/429/5xx` 时会直接短路。
+- 这轮最小正确修复不是改业务断言，也不是把 `skip` 改成硬失败，而是把 setup 层做成更接近真实联机环境的韧性实现：
+  - 用只读的 `GET /games` 轮询代替创建房间探针；
+  - 将 server available timeout 提高到 `15000ms`；
+  - 对 create / claim-seat / join 增加瞬时网络重试；
+  - 把重试与失败上下文写入 `temp/dicethrone-setup-debug.log`，让后续排障有可审计落点。
+- 修复后最关键的事实不是单用例恢复，而是默认整文件脚本 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 已重新拿到 `12 passed`；这说明当前 `simple-start` 的残余问题不再表现为稳定可复现的 setup 回退。
