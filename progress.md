@@ -1041,6 +1041,7 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
   - 合并态验证时发现 2 人 `Transfer Status` 在线用例仍把 `gameServerBaseURL` 硬编码到 `20000`，导致 isolated single-run 下稳定假 `skip`；已改为使用 `workerPorts.gameServer`。
   - 生成 merge commit `f188d523`：`merge: 合并王权骰铸四人模式 Batch 1 专项`。
   - 执行 `npm run merge:audit:strict -- HEAD`，11 个冲突文件全部为 `混合结果`，无单边覆盖。
+  - 已将 `main` 推送到 `origin`，远端当前头部为 `83b0ab0b`，本轮“上传 + 合并主分支”已完成闭环。
 
 ### Test Results
 | Test | Input | Expected | Actual | Status |
