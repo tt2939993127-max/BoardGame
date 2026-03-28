@@ -63,16 +63,22 @@ const readTutorialViewportMetrics = async (page: Page) => page.evaluate(() => {
     const shell = document.querySelector('.mobile-board-shell') as HTMLElement | null;
     const overlay = document.querySelector('[data-testid="tutorial-overlay-card"]') as HTMLElement | null;
     const nextButton = document.querySelector('[data-testid="tutorial-next-button"]') as HTMLElement | null;
+    const overlayRect = overlay?.getBoundingClientRect() ?? null;
+    const nextButtonRect = nextButton?.getBoundingClientRect() ?? null;
+    const innerWidth = window.innerWidth;
+    const innerHeight = window.innerHeight;
     return {
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
+        innerWidth,
+        innerHeight,
         rootScrollWidth: root.scrollWidth,
         bodyScrollWidth: body.scrollWidth,
         runtimeViewportWidth: getComputedStyle(root).getPropertyValue('--runtime-viewport-width').trim(),
         runtimeViewportHeight: getComputedStyle(root).getPropertyValue('--runtime-viewport-height').trim(),
         shellRect: shell?.getBoundingClientRect() ?? null,
-        overlayRect: overlay?.getBoundingClientRect() ?? null,
-        nextButtonRect: nextButton?.getBoundingClientRect() ?? null,
+        overlayRect,
+        nextButtonRect,
+        overlayWidthRatio: overlayRect ? overlayRect.width / innerWidth : null,
+        overlayHeightRatio: overlayRect ? overlayRect.height / innerHeight : null,
     };
 });
 
@@ -335,6 +341,8 @@ test.describe('Smash Up Tutorial E2E', () => {
         expect(metrics.overlayRect?.left ?? -1).toBeGreaterThanOrEqual(0);
         expect(metrics.overlayRect?.right ?? 99999).toBeLessThanOrEqual(metrics.innerWidth + 1);
         expect(metrics.overlayRect?.bottom ?? 99999).toBeLessThanOrEqual(metrics.innerHeight + 1);
+        expect(metrics.overlayWidthRatio ?? 99999).toBeLessThanOrEqual(0.46);
+        expect(metrics.overlayHeightRatio ?? 99999).toBeLessThanOrEqual(0.74);
         expect(metrics.nextButtonRect?.left ?? -1).toBeGreaterThanOrEqual(0);
         expect(metrics.nextButtonRect?.right ?? 99999).toBeLessThanOrEqual(metrics.innerWidth + 1);
         expect(metrics.nextButtonRect?.bottom ?? 99999).toBeLessThanOrEqual(metrics.innerHeight + 1);
