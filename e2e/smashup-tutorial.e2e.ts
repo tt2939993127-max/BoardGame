@@ -341,8 +341,8 @@ test.describe('Smash Up Tutorial E2E', () => {
         expect(metrics.overlayRect?.left ?? -1).toBeGreaterThanOrEqual(0);
         expect(metrics.overlayRect?.right ?? 99999).toBeLessThanOrEqual(metrics.innerWidth + 1);
         expect(metrics.overlayRect?.bottom ?? 99999).toBeLessThanOrEqual(metrics.innerHeight + 1);
-        expect(metrics.overlayWidthRatio ?? 99999).toBeLessThanOrEqual(0.46);
-        expect(metrics.overlayHeightRatio ?? 99999).toBeLessThanOrEqual(0.74);
+        expect(metrics.overlayWidthRatio ?? 99999).toBeLessThanOrEqual(0.4);
+        expect(metrics.overlayHeightRatio ?? 99999).toBeLessThanOrEqual(0.64);
         expect(metrics.nextButtonRect?.left ?? -1).toBeGreaterThanOrEqual(0);
         expect(metrics.nextButtonRect?.right ?? 99999).toBeLessThanOrEqual(metrics.innerWidth + 1);
         expect(metrics.nextButtonRect?.bottom ?? 99999).toBeLessThanOrEqual(metrics.innerHeight + 1);
