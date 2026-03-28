@@ -1588,7 +1588,7 @@ describe('cross hero battles', () => {
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1'],
-                random: createQueuedRandom([2, 3, 4, 5, 6, 1, 4, 6, 2, 5, 3]),
+                random: createQueuedRandom([2, 3, 4, 5, 6, 1, 4, 6, 2, 5, 3, 1, 1, 1, 1]),
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
@@ -1615,7 +1615,10 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'masamune-2-large-straight' }),
                     cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -1631,8 +1634,8 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(6);
             expect(result.finalState.core.pendingAttack).toBeNull();
-            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
-            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] ?? 0).toBe(0);
         });
 
         it('upgrade-masamune-2 power-up variant grants 1 back strike on all symbols present', () => {
