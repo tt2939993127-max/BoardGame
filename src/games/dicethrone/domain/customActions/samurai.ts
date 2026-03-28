@@ -160,13 +160,18 @@ function handleKatanaSliceThreshold3(ctx: CustomActionContext): DiceThroneEvent[
     return handleKatanaSliceThreshold(ctx, 3);
 }
 
-function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
     const defenderId = ctx.defenderId;
     if (!defenderId) return [];
 
-    const dice = Array.from({ length: 5 }, (_, index) => {
+    const params = action.params as { diceCount?: number } | undefined;
+    const diceCount = Number.isInteger(params?.diceCount) && (params?.diceCount ?? 0) > 0
+        ? (params?.diceCount as number)
+        : 5;
+
+    const dice = Array.from({ length: diceCount }, (_, index) => {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? FACE.KATANA;
         return { index, value, face };

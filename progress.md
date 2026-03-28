@@ -464,3 +464,139 @@
 ### Open Items
 - `slot-30` 当前 `cpCost = 2` 仍属于带证据的暂定裁决；若后续拿到更清晰费用图，应同步回改。
 - 当前武士线剩余真正阻塞项已收缩为 `Masamune II` 升级差异核定。
+## Session: 2026-03-27 Dice Throne 武士 Masamune II 变体闭环
+- **Status:** in_progress
+- Actions taken:
+  - 在 `src/games/dicethrone/heroes/samurai/abilities.ts` 将 `Masamune II` 拆成 `masamune-2-large-straight` 与 `masamune-2-power-up` 两个变体。
+  - 在 `src/games/dicethrone/domain/customActions/samurai.ts` 让 `samurai-masamune` 支持从 `action.params.diceCount` 读取额外掷骰数，升级版按 `6` 颗骰结算。
+  - 修正 `power-up` 分支结算时机为 `preDefense`，避免被攻击结算链漏掉。
+  - 在双语 locale 中补齐 `Masamune II` 与 `power-up` 文案。
+  - 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `Masamune II` 的大顺分支与全符号分支回归。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 武士跨英雄回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native` | `Masamune II` 两个变体与既有跨英雄用例全部通过 | `46 passed` | ✅ |
+| ESLint 增量检查 | `npx eslint src/games/dicethrone/heroes/samurai/abilities.ts src/games/dicethrone/domain/customActions/samurai.ts src/games/dicethrone/__tests__/cross-hero.test.ts` | 无 error | 通过 | ✅ |
+
+### Open Items
+- `Masamune II` 的新增分支已核定效果，但原始中文牌面名称仍待更清晰图证。
+- 武士线剩余待核不再包括升级卡中文名，主要只剩 `masamune-2-power-up` 是否存在独立官方印刷标题。
+
+## Session: 2026-03-27 Dice Throne 武士中文名与资源链收口
+
+- **Status:** in_progress
+- Actions taken:
+  - 将 `public/locales/zh-CN/game-dicethrone.json` 中武士角色名、能力名、升级卡名、行动牌名与对应描述对齐到中文图片真相源。
+  - 重新核对 `public/assets/i18n/zh-CN/dicethrone/assets-manifest.json`，确认武士图片与裁图已正式登记进资源清单。
+  - 复查 `npm run assets:check` 输出，确认当前远端差异不在武士资源。
+  - 在武士核对文档与计划文件中追加“旧 pending 已过时”的结论，避免继续误导后续录入。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 武士资源清单登记 | `rg -n "images/samurai" public/assets/i18n/zh-CN/dicethrone/assets-manifest.json` | manifest 中存在武士资源条目 | 已命中压缩图、裁图、icon、atlas 条目 | ✅ |
+| 远端差异归属 | `npm run assets:check` | 武士不再出现在新增/变更列表 | 剩余差异为 `gunslinger/compressed/status-icons-atlas.webp` | ✅ |
+
+### Open Items
+- `masamune-2-power-up` 仍是内部变体名，不是独立卡牌中文名；若后续拿到更清晰原图，可再裁定是否存在官方印刷标题。
+
+## Session: 2026-03-28 Dice Throne 枪手 The Law 多目标交互闭环
+
+- **Status:** in_progress
+- Actions taken:
+  - 在 `src/games/dicethrone/domain/customActions/gunslinger.ts` 为 `card-the-law` 补上正式 custom action：`1v1` 下直通唯一对手，`3+` 人局进入“至多 2 名目标玩家”交互。
+  - 在 `src/games/dicethrone/domain/commands.ts`、`commandValidation.ts`、`execute.ts` 增补 `RESOLVE_INTERACTION` 选择结算命令，用单次命令原子化结算多名玩家的 `bounty + knockdown`。
+  - 在 `src/games/dicethrone/hooks/useInteractionState.ts`、`src/games/dicethrone/Board.tsx`、`src/games/dicethrone/ui/resolveMoves.ts` 把旧的单玩家本地交互状态收口为多选玩家数组，避免 UI 仍卡死在单选。
+  - 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 把枪手跨英雄初始化扩成可支持 3 人局，并补 `The Law` 的多人回归。
+  - 在 `src/games/dicethrone/rule/枪手卡牌录入核对.md` 将 `card-the-law` 从“部分落地”改为“已落地”。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| locale JSON 解析 | `node -e "JSON.parse(...zh-CN...); JSON.parse(...en...)"` | 双语 locale 可解析 | `json ok` | ✅ |
+| 依赖环境 | `npx eslint ...` / `node scripts/infra/vitest-cli-safe.mjs ...` | 可跑静态检查与 Vitest | 当前 worktree 缺少 `node_modules`，命令未能启动 | ⚠️ |
+
+### Open Items
+- 当前剩余阻塞不在逻辑实现，而在该 worktree 缺少前端测试依赖；需在有依赖的环境里补跑 `eslint` 与 `cross-hero.test.ts`。
+
+## Session: 2026-03-28 Dice Throne 枪手 The Law 审计 + Spec + E2E 收口
+
+- **Status:** in_progress
+- Actions taken:
+  - 对 `The Law` 的实现链做了一轮正式审计，确认缺口集中在规范和验证，不在领域执行链本身。
+  - 在 `openspec/specs/interaction-system/spec.md` 增补 `dt:card-interaction` 下 `selectPlayer + selectCount > 1` 的多目标选择契约。
+  - 在 `src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx` 增补多目标玩家选择 UI 回归。
+  - 在 `e2e/dicethrone-watch-out-spotlight.e2e.ts` 增补两条基于 `GameTestContext` / TestHarness 的 `The Law` 多目标交互 E2E。
+  - 新增 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md`，登记命令、断言和截图证据。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| OpenSpec 校验 | `openspec validate interaction-system --strict --no-interactive` | 新契约合法 | `Specification 'interaction-system' is valid` | ✅ |
+| UI 单测 + 领域回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx src/games/dicethrone/__tests__/cross-hero.test.ts --configLoader native` | 新增 UI 多选断言与既有 cross-hero 通过 | `65 passed` | ✅ |
+| 定向 E2E | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The Law 多目标交互"` | 两条新交互用例通过 | `2 passed` | ✅ |
+
+### Open Items
+- 与枪手 `The Law` 多目标交互直接相关的审计、spec、UI 回归、E2E 已完成；当前无新增阻塞项。
+
+## Session: 2026-03-28 Dice Throne 武士 Token Response 真实点击收口
+
+- **Status:** in_progress
+- Actions taken:
+  - 在 `e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增武士 token 响应场景注入 helper，并补两条真实点击 E2E：
+    - `samurai honor token should accumulate to +3 after two real clicks`
+    - `samurai retribution token should retaliate through real click flow`
+  - 新增 `openspec/specs/dicethrone-token-response/spec.md`，把“同一响应窗口内的非线性 token 累计消耗”与“零修正值 + custom action token”写成当前真相规范。
+  - 新增 `evidence/dicethrone-samurai-token-response-e2e-test.md`，登记命令、断言与截图证据。
+  - 将武士两张攻击修正牌与枪手 `The Law` 一并纳入本轮关键交互合并回归，避免只验证 token 子链。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| OpenSpec 校验 | `openspec validate dicethrone-token-response --strict --no-interactive` | 新 spec 合法 | `Specification 'dicethrone-token-response' is valid` | ✅ |
+| 武士 token 响应 E2E | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "samurai (honor token|retribution token)"` | `Honor` 与 `Back Strike` 真实点击通过 | `2 passed` | ✅ |
+| 关键交互合并回归 | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "samurai|枪手 The Law 多目标交互"` | 枪手/武士本轮关键交互真实点击通过 | `6 passed, 2 skipped` | ✅ |
+
+### Open Items
+- 本轮已改过的关键交互已完成真实点击验证；当前无新增实现阻塞项。
+
+## Session: 2026-03-28 Dice Throne 枪手 The Law 从手牌打出验证
+
+- **Status:** in_progress
+- Actions taken:
+  - 在 `e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增 `injectGunslingerTheLawPlayScene` / `waitForGunslingerTheLawPlayScene`，把 `The Law` 的验证入口从“交互态注入”推进到“手牌点击打出”。
+  - 新增两条真实点击 E2E：
+    - `should resolve immediately in 1v1 after clicking the hand card`
+    - `should open multi-target interaction after playing from hand in 3-player scene`
+  - 将手牌打出链路并入 `samurai|枪手 The Law` 的合并回归，确认不是单独跑才通过。
+  - 在 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md` 追加手牌打出截图与结论。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| The Law 手牌打出 E2E | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The Law 从手牌真实打出"` | `1v1` 直结算 + `3` 人局多目标交互都通过 | `2 passed` | ✅ |
+| 枪手/武士合并回归 | `npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "samurai|枪手 The Law"` | 本轮关键交互一并通过 | `8 passed, 2 skipped` | ✅ |
+
+### Open Items
+- 枪手 `The Law` 当前已不只是在“交互已出现时可点”，而是从手牌点击打出到最终结算整条链路都已真实跑通。
+
+## Session: 2026-03-28 Dice Throne 武士 Token Response 真实整局入口验证
+
+- **Status:** in_progress
+- Actions taken:
+  - 在 `e2e/dicethrone-token-response-window.e2e.ts` 把武士 `Honor / Back Strike` 的验证入口推进到真实整局攻击流程，不再停在注入 `pendingDamage` 后读状态。
+  - 修正 `Back Strike` 用例里攻击方响应层的脆弱等待：删除不稳定的 `waitForFunction`，改为点击真实 `PASS` 后再等待 `Resolve Attack`。
+  - 在 `e2e/helpers/dicethrone.ts` 修正 `maybePassResponse` 的按钮匹配方式，避免因过严的角色名匹配漏点 `PASS`。
+  - 将 `Back Strike` 的断言改成基于运行时真实状态：攻击者掉血按 `ceil(backStrikeRoll / 2)` 计算，防御者掉血按 `pendingDamage - damageShields` 计算。
+
+### Verification
+| Check | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| Token response spec 校验 | `openspec validate dicethrone-token-response --strict --no-interactive` | spec 合法 | `Specification 'dicethrone-token-response' is valid` | ✅ |
+| Back Strike 单条真实入口 | `npm run test:e2e:ci:file -- dicethrone-token-response-window.e2e.ts "samurai back strike should open from real attack flow and retaliate on click"` | 从整局真实流程打开防御方响应窗并完成点击反打 | `1 passed` | ✅ |
+| Honor + Back Strike 合并真实入口 | `npm run test:e2e:ci:file -- dicethrone-token-response-window.e2e.ts "Token 响应窗口真实入口"` | 两条真实整局入口一并通过 | `2 passed` | ✅ |
+| E2E/helper 定向 lint | `npx eslint e2e/dicethrone-token-response-window.e2e.ts e2e/helpers/dicethrone.ts` | 无 error | `0 error, 8 warnings（均为 helper 历史未用导入）` | ✅ |
+
+### Open Items
+- 武士 token response 当前关键链路已同时完成“注入场景真实点击”和“整局入口真实点击”两层验证；剩余若继续扩面，应优先补其他尚未覆盖真实入口的交互，而不是重复堆同质用例。

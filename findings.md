@@ -501,3 +501,89 @@
   - `rising_sun`：获得 `1 samurai_retribution`
 - `cpCost` 目前落地为 `2CP`；该值来自左上费用区模板比对，属于有证据的暂定裁决，不是无依据猜测。
 - `slot-30` 与 `slot-31` 现均已接入；武士当前真正剩余的规则缺口收缩为 `Masamune II` 升级差异未最终核定。
+---
+
+## Addendum（2026-03-27）：Dice Throne 武士 `Masamune II` 差异已核定
+- 法语 Wiki 与本地 `slot-24` 放大图共同支持以下结论：
+  - `Masamune II` 的大顺分支会把额外掷骰数从 `5` 提升到 `6`
+  - 它新增一个全符号分支，当前代码名为 `power-up`，效果为获得 `1` 个 `反击`
+- 实现侧关键发现：
+  - 新分支如果挂在 `immediate` 时机会被攻击结算链漏掉，必须放在 `preDefense`
+  - `samurai-masamune` 无需新造第二套 handler，只要读取 `action.params.diceCount` 即可复用基础版逻辑
+- 当前不再把 `Masamune II` 记为“未核定主阻塞项”；它已进入代码、locale、回归三段闭环。
+- 仍保留的文档诚实边界：
+  - 原始中文牌面是否把 `power-up` 翻成“蓄势”或其他名称，当前证据还不够，不能硬写成最终印刷口径。
+
+## Addendum（2026-03-27）：武士闭环边界重新裁定
+
+- 这轮重新核对后，先前“武士仍缺最终中文名 / 资源链未闭环”的判断已不成立。
+- 已确认事实：
+  - 武士资源已进入 `public/assets/i18n/zh-CN/dicethrone/assets-manifest.json`。
+  - `assets:check` 当前剩余远端差异不在武士，而在枪手资源。
+  - 武士角色板与 `slot-20` ~ `slot-31` 的中文名已足够从本地图像闭合，并已回写到 `zh-CN` locale。
+- 后续若再讨论“武士没闭环”，必须明确区分是“规则实现缺口”还是“历史文档残留旧 pending”，不能再把两者混成一件事。
+
+## Addendum（2026-03-28）：枪手 `The Law` 缺口已关闭
+
+- 先前“枪手尚未完成”的唯一硬缺口是 `card-the-law` 的“至多 2 位目标玩家”交互，而不是资源或中文名问题。
+- 本轮已完成的收口：
+  - `card-the-law` 不再靠 `1v1` 特判硬撑，已接成正式 custom action。
+  - `selectPlayer` 本地交互状态不再只记录单个玩家，而是按 `selectCount` 支持多选。
+  - 交互确认不再依赖多次命令串行发送，而是通过 `RESOLVE_INTERACTION` 单次结算多目标的 `bounty + knockdown`，避免首个事件就把交互提前 resolve。
+- 因此，当前“两个角色都完成了吗”的答案已经从“武士完成、枪手未完成”变成“枪手与武士都已完成到当前规则闭环口径”。
+- 当前仍需诚实保留的唯一非实现阻塞：
+  - 该 worktree 没有安装 `node_modules`，所以这轮无法在本地把 `eslint` / `vitest` 真跑完；这是环境缺口，不是枪手规则缺口。
+
+## Addendum（2026-03-28）：枪手 The Law 审计与端到端验证完成
+
+- 审计范围：
+  - `src/games/dicethrone/heroes/gunslinger/cards.ts`
+  - `src/games/dicethrone/domain/customActions/gunslinger.ts`
+  - `src/games/dicethrone/domain/commandValidation.ts`
+  - `src/games/dicethrone/domain/execute.ts`
+  - `src/games/dicethrone/hooks/useInteractionState.ts`
+  - `src/games/dicethrone/Board.tsx`
+- 审计裁决：
+  - 未发现 `The Law` 在领域链上的新增 correctness bug；卡牌定义、交互请求、命令校验、单次结算与交互清理链条是一致的。
+  - 真正缺口是契约与验证层，而不是实现层：
+    - `openspec/specs/interaction-system/spec.md` 之前没有覆盖 `selectPlayer` 多目标语义；
+    - `src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx` 之前没有覆盖 `selectCount > 1` 的玩家多选；
+    - E2E 之前没有覆盖枪手 `The Law` 的新交互类型。
+- 上述三类缺口本轮均已补齐，因此这里需要推翻上一条附录末尾“缺少 node_modules、无法本地验证”的阶段性结论。该结论只对应当时环境，不代表现在的 worktree 状态。
+
+## Addendum（2026-03-28）：武士 Token Response 真实点击验证完成
+
+- 这轮新增/改过的武士 token 响应关键交互，已经不再只是单元测试或状态注入：
+  - `Honor`：在攻击方响应窗口里真实点击两次，最终把总伤害从 `4` 推到 `7`，并在同一窗口内阻止第三次继续使用。
+  - `Back Strike / samurai_retribution`：在防御方响应窗口里真实点击，确认 token 消耗、额外掷骰反打、原伤害照常结算三段同时成立。
+- 这条验证顺手暴露了一个测试层教训：
+  - E2E 里读取资源值必须使用运行时真实键 `hp / cp`，不能误用展示语义里的 `HP / CP`。
+  - `Honor` 结算后的真实事件尾部是两次 `TOKEN_USED`，而不是旧预期里的 `TOKEN_CONSUMED`；后者不能再作为该链路的断言锚点。
+- 规范层也已补齐：
+  - 新增 `openspec/specs/dicethrone-token-response/spec.md`，把“同一响应窗口的累计消耗映射”和“零修正 token 触发 custom action”写入当前真相。
+- 因此，当前枪手/武士这轮真正改过的关键交互，已经完成“审计 -> spec -> 真实点击 E2E”三段闭环，不再停留在表面可见或注入后读状态。
+
+## Addendum（2026-03-28）：枪手 The Law 已补到“从手牌点击打出”
+
+- 这轮继续向前收口后，`The Law` 的 E2E 不再只覆盖“交互框出来以后怎么选人”。
+- 新增事实：
+  - `1v1` 场景下，从手牌点击 `card-the-law` 会直接完成：
+    - 自己获得 `1 evasive`
+    - 唯一对手获得 `1 bounty + 1 knockdown`
+    - 不再进入多目标交互
+  - `3` 人场景下，从手牌点击 `card-the-law` 会先进入多目标交互，再由一次确认原子化结算两名目标。
+- 这条验证把一个常见假阳性风险补掉了：
+- 之前即便“多目标交互本身能点”，也还不能证明 `PLAY_CARD -> custom action -> interaction requested` 这段真实入口没有断。
+- 现在这段入口已经由真实点击 E2E 覆盖，不再依赖对 `sys.interaction.current` 的预先注入。
+
+## Addendum（2026-03-28）：武士 Back Strike 真实入口失败根因与裁决
+
+- 这轮 `Back Strike` 的最后一条 E2E 没卡在实现，而是连续暴露了两层测试问题：
+  - 第一层是 UI 时序：测试原本用 `waitForFunction` 轮询“`PASS` 或 `Resolve Attack` 任一可点”，但实际页面上的 `PASS` 按钮可访问名称不稳定，导致 helper 没有真的点掉响应提示，`Resolve Attack` 继续处于 disabled。
+  - 第二层是状态语义：测试把 `pendingDamage.currentDamage` 误当成防御方最终扣血值，忽略了防御技留下的 `damageShields` 会在最终 `DAMAGE_DEALT` 时再抵扣。
+- 已落实的修正：
+  - `e2e/helpers/dicethrone.ts` 的 `maybePassResponse` 现在改为同时按 ARIA role 与按钮文本宽松匹配 `PASS`，命中可见实例后直接点击，避免 UI 文本与 DOM 顺序波动导致漏点。
+  - `e2e/dicethrone-token-response-window.e2e.ts` 的 `Back Strike` 断言改为：
+    - 攻击者掉血 = `ceil(backStrikeRoll / 2)`
+    - 防御者掉血 = `pendingDamage.currentDamage - damageShields 总值`
+- 这说明当前 `samurai_retribution` 的领域实现与真实 UI 链是一致的；之前失败是 E2E 把“窗口中的中间状态”误当成“最终结算结果”。

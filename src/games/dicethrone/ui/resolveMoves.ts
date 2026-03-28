@@ -24,6 +24,7 @@ export type DiceThroneMoveMap = {
     removeStatus: (targetPlayerId: string, statusId?: string) => void;
     transferStatus: (fromPlayerId: string, toPlayerId: string, statusId: string) => void;
     grantTokens: (targetPlayerId: string, tokens: Array<{ tokenId: string; amount: number }>) => void;
+    resolveInteraction: (selectedPlayerIds: string[]) => void;
     // confirmInteraction: (interactionId: string, selectedDiceIds?: number[], selectedPlayerId?: string) => void; // @deprecated - 使用 InteractionSystem
     // cancelInteraction: () => void; // @deprecated - 使用 InteractionSystem
     // Token 响应相关
@@ -65,6 +66,7 @@ export const resolveMoves = (
     removeStatus: (targetPlayerId, statusId) => dispatch('REMOVE_STATUS', { targetPlayerId, statusId }),
     transferStatus: (fromPlayerId, toPlayerId, statusId) => dispatch('TRANSFER_STATUS', { fromPlayerId, toPlayerId, statusId }),
     grantTokens: (targetPlayerId, tokens) => dispatch('GRANT_TOKENS', { targetPlayerId, tokens }),
+    resolveInteraction: (selectedPlayerIds) => dispatch('RESOLVE_INTERACTION', { selectedPlayerIds }),
     // confirmInteraction: (interactionId, selectedDiceIds, selectedPlayerId) => dispatch('CONFIRM_INTERACTION', { interactionId, selectedDiceIds, selectedPlayerId }),
     // cancelInteraction: () => dispatch('CANCEL_INTERACTION', {}),
     // Token 响应

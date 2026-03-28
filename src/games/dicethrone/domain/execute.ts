@@ -31,6 +31,7 @@ import {
 import { findPlayerAbility, playerAbilityHasDamage } from './abilityLookup';
 import { applyEvents } from './utils';
 import { reduce } from './reducer';
+import type { InteractionDescriptor as PendingInteraction } from './core-types';
 
 import { DICETHRONE_COMMANDS } from './ids';
 import { CHARACTER_DATA_MAP } from './characters';
@@ -47,6 +48,18 @@ import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 const resolveTimestamp = (command?: DiceThroneCommand): number => {
     return typeof command?.timestamp === 'number' ? command.timestamp : 0;
+};
+
+const resolveStatusNewTotal = (
+    state: DiceThroneCore,
+    targetPlayerId: PlayerId,
+    statusId: string,
+    amount: number,
+): number => {
+    const currentStacks = state.players[targetPlayerId]?.statusEffects[statusId] ?? 0;
+    const def = state.tokenDefinitions.find(entry => entry.id === statusId);
+    const maxStacks = def?.stackLimit || 99;
+    return Math.min(currentStacks + amount, maxStacks);
 };
 
 /**
@@ -540,6 +553,98 @@ export function execute(
                         timestamp,
                     } as DiceThroneEvent);
                 }
+            }
+            break;
+        }
+
+        case 'RESOLVE_INTERACTION': {
+            const currentInteraction = matchState.sys?.interaction?.current;
+            if (currentInteraction?.kind !== 'dt:card-interaction') {
+                break;
+            }
+
+            const interaction = currentInteraction.data as PendingInteraction;
+            if (interaction.type !== 'selectPlayer') {
+                break;
+            }
+
+            const { selectedPlayerIds = [] } = command.payload as { selectedPlayerIds?: PlayerId[] };
+            const targetPlayerIds = interaction.targetPlayerIds ?? Object.keys(state.players);
+            const resolvedPlayerIds = Array.from(new Set(
+                selectedPlayerIds.filter(playerId => targetPlayerIds.includes(playerId))
+            ));
+
+            if (resolvedPlayerIds.length === 0) {
+                break;
+            }
+
+            const tokenConfigs = interaction.tokenGrantConfigs ?? (
+                interaction.tokenGrantConfig ? [interaction.tokenGrantConfig] : []
+            );
+            const statusConfigs = interaction.statusGrantConfigs ?? (
+                interaction.statusGrantConfig ? [interaction.statusGrantConfig] : []
+            );
+
+            for (const [playerIndex, targetPlayerId] of resolvedPlayerIds.entries()) {
+                if (!state.players[targetPlayerId]) continue;
+
+                if (tokenConfigs.length > 0 || statusConfigs.length > 0) {
+                    for (const [configIndex, tokenConfig] of tokenConfigs.entries()) {
+                        const currentAmount = state.players[targetPlayerId]?.tokens[tokenConfig.tokenId] ?? 0;
+                        const maxStacks = getTokenStackLimit(state, targetPlayerId, tokenConfig.tokenId);
+                        const newTotal = Math.min(currentAmount + tokenConfig.amount, maxStacks);
+                        const grantedAmount = Math.max(0, newTotal - currentAmount);
+                        events.push({
+                            type: 'TOKEN_GRANTED',
+                            payload: {
+                                targetId: targetPlayerId,
+                                tokenId: tokenConfig.tokenId,
+                                amount: grantedAmount,
+                                newTotal,
+                                sourceAbilityId: interaction.sourceCardId,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp: timestamp + playerIndex * 10 + configIndex,
+                        } as DiceThroneEvent);
+                    }
+
+                    for (const [configIndex, statusConfig] of statusConfigs.entries()) {
+                        events.push({
+                            type: 'STATUS_APPLIED',
+                            payload: {
+                                targetId: targetPlayerId,
+                                statusId: statusConfig.statusId,
+                                stacks: statusConfig.amount,
+                                newTotal: resolveStatusNewTotal(state, targetPlayerId, statusConfig.statusId, statusConfig.amount),
+                                sourceAbilityId: interaction.sourceCardId,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp: timestamp + playerIndex * 10 + tokenConfigs.length + configIndex,
+                        } as DiceThroneEvent);
+                    }
+                    continue;
+                }
+
+                const targetPlayer = state.players[targetPlayerId];
+                Object.entries(targetPlayer.statusEffects).forEach(([statusId, stacks], statusIndex) => {
+                    if (stacks <= 0) return;
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: targetPlayerId, statusId, stacks },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + playerIndex * 100 + statusIndex,
+                    } as StatusRemovedEvent);
+                });
+
+                Object.entries(targetPlayer.tokens).forEach(([tokenId, amount], tokenIndex) => {
+                    if (amount <= 0) return;
+                    events.push({
+                        type: 'TOKEN_CONSUMED',
+                        payload: { playerId: targetPlayerId, tokenId, amount, newTotal: 0 },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + playerIndex * 100 + 50 + tokenIndex,
+                    } as DiceThroneEvent);
+                });
             }
             break;
         }

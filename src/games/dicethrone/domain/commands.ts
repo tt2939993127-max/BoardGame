@@ -170,6 +170,13 @@ export interface ConfirmInteractionCommand extends Command<'CONFIRM_INTERACTION'
     };
 }
 
+/** 结算旧式卡牌交互命令（用于 selectPlayer 等直接点击交互） */
+export interface ResolveInteractionCommand extends Command<'RESOLVE_INTERACTION'> {
+    payload: {
+        selectedPlayerIds?: PlayerId[];
+    };
+}
+
 /** 取消交互命令（已废弃 - 迁移到 InteractionSystem 的 CANCEL 命令） */
 export interface CancelInteractionCommand extends Command<'CANCEL_INTERACTION'> {
     payload: Record<string, never>;
@@ -262,6 +269,7 @@ export type DiceThroneCommand =
     | RerollDieCommand
     | RemoveStatusCommand
     | TransferStatusCommand
+    | ResolveInteractionCommand
     // | ConfirmInteractionCommand  // 已废弃 - 使用 InteractionSystem
     // | CancelInteractionCommand   // 已废弃 - 使用 InteractionSystem
     | UseTokenCommand

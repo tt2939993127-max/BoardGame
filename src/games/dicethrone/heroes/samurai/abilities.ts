@@ -282,13 +282,29 @@ export const MASAMUNE_2: AbilityDef = {
     name: abilityText('masamune-2', 'name'),
     type: 'offensive',
     description: abilityText('masamune-2', 'description'),
-    trigger: { type: 'largeStraight' },
-    effects: [
-        damage(7, '造成 7 点伤害。'),
-        custom(
-            'samurai-masamune',
-            '掷 5 颗骰子：每个武士刀造成 1 点伤害；每个头盔造成 1 层耻辱；每个旭日获得 1 个反击指示物。',
-        ),
+    variants: [
+        {
+            id: 'masamune-2-large-straight',
+            trigger: { type: 'largeStraight' },
+            effects: [
+                damage(7, '造成 7 点伤害。'),
+                custom(
+                    'samurai-masamune',
+                    '掷 6 颗骰子：每个武士刀造成 1 点伤害；每个头盔造成 1 层耻辱；每个旭日获得 1 个反击指示物。',
+                    'withDamage',
+                    { diceCount: 6 },
+                ),
+            ],
+            priority: 2,
+        },
+        {
+            id: 'masamune-2-power-up',
+            trigger: { type: 'allSymbolsPresent', symbols: [FACE.KATANA, FACE.HELM, FACE.RISING_SUN] },
+            effects: [
+                grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。', 'preDefense'),
+            ],
+            priority: 1,
+        },
     ],
 };
 

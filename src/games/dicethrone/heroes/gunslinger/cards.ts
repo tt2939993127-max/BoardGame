@@ -201,12 +201,9 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-the-law', 'description'),
         previewRef: cropPreview('the-law.webp'),
-        // TODO(dicethrone/gunslinger/the-law): 补齐“至多 2 位目标玩家”交互。
-        // 当前交互层仍只有单目标玩家流，因此在现有 1v1 对局里先按唯一对手兼容实现。
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
-            grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。'),
-            grantStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。'),
+            custom('gunslinger-card-the-law', '选择至多 2 位目标玩家。每名目标玩家获得 1 个赏金并受到 1 层击倒。'),
         ],
     },
     {
