@@ -187,7 +187,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
 
         const handlePointerDown = (event: PointerEvent) => {
             const target = event.target as HTMLElement | null;
-            if (target?.closest('[data-testid="cardia-hand-area"]')) return;
+            if (target?.closest('[data-hand-card-shell]')) return;
             setFocusedHandCardUid(null);
         };
 
@@ -677,6 +677,13 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
 
     const compactPhaseLabel = t(`phases.${phase}`);
     const focusedHandCard = myPlayer.hand.find((card: any) => card.uid === focusedHandCardUid) ?? null;
+    const tightLandscapeSidebarWidth = React.useMemo(() => {
+        if (deviceType !== 'tight-landscape') return CARDIA_TIGHT_LANDSCAPE_SIDEBAR_WIDTH;
+
+        const tightDiscardWidth = Math.max(0, myPlayer.discard.length - 1) * 30 + 88;
+        const minSidebarWidthPx = 8.4 * 16;
+        return `${Math.max(minSidebarWidthPx, tightDiscardWidth)}px`;
+    }, [deviceType, myPlayer.discard.length]);
 
     const compactInfoChipClass =
         'inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] font-medium text-white/90';
@@ -720,7 +727,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                                 : 'relative flex h-full min-h-0 w-full flex-col gap-4 p-4'
                     }`}
                     style={deviceType === 'tight-landscape'
-                        ? ({ '--cardia-tight-sidebar-width': CARDIA_TIGHT_LANDSCAPE_SIDEBAR_WIDTH } as React.CSSProperties)
+                        ? ({ '--cardia-tight-sidebar-width': tightLandscapeSidebarWidth } as React.CSSProperties)
                         : undefined}
                 >
                     {/* 对手区域（顶部 / 横屏左栏） */}
@@ -743,19 +750,19 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                         </div>
 
                         {deviceType === 'tight-landscape' && (
-                            <div className="flex flex-shrink-0 flex-col items-stretch self-start">
-                                <div className="mb-0.5 text-center text-[10px] text-gray-400 sm:text-xs">{t('discard')}</div>
+                            <div className="flex flex-shrink-0 flex-col items-stretch self-end">
+                                <div className="mb-0.5 text-center text-[10px] text-gray-300">{t('discard')}</div>
                                 <DiscardPile
-                                cards={myPlayer.discard}
-                                onCardClick={handleBattlefieldCardPress}
-                                onCardHover={handleBattlefieldCardEnter}
-                                onCardHoverMove={handleBattlefieldCardMove}
-                                onCardLeave={handleBattlefieldCardLeave}
-                                setCardRef={setCardRef}
-                            />
+                                    cards={myPlayer.discard}
+                                    onCardClick={handleBattlefieldCardPress}
+                                    onCardHover={handleBattlefieldCardEnter}
+                                    onCardHoverMove={handleBattlefieldCardMove}
+                                    onCardLeave={handleBattlefieldCardLeave}
+                                    setCardRef={setCardRef}
+                                />
                             </div>
                         )}
-                        
+
                         {deviceType !== 'tight-landscape' && (
                             <>
                                 <div className="min-w-0 flex-1 basis-[16rem]">
@@ -834,7 +841,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             {/* 我的区域（横屏右侧下栏） */}
                             <div
                                 data-testid="cardia-player-zone"
-                                className={`mt-0.5 flex h-[clamp(8.9rem,31dvh,10.6rem)] items-end overflow-visible pb-1 ${focusedHandCardUid ? 'relative z-[260]' : ''}`}
+                                className={`mt-0.5 flex h-[clamp(8.9rem,31dvh,10.6rem)] items-end gap-2 overflow-visible pb-1 ${focusedHandCardUid ? 'relative z-[260]' : ''}`}
                                 style={playerZoneWrapperStyle}
                             >
                                 <div className="min-w-0 flex-1">
@@ -1513,7 +1520,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                 >
                     <div
                         data-testid={showExpandedFan ? 'cardia-hand-center-overlay' : undefined}
-                        className={`flex min-h-0 flex-1 items-end justify-center overflow-visible ${showExpandedFan ? 'fixed inset-0 z-[520] items-center justify-center pointer-events-none' : ''}`}
+                        className={`flex min-h-0 flex-1 items-end justify-start overflow-visible ${showExpandedFan ? 'fixed inset-0 z-[520] items-center justify-center pointer-events-none' : ''}`}
                     >
                         {showExpandedFan && (
                             <div
@@ -1525,8 +1532,8 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                             />
                         )}
                         <div
-                            className="relative z-[520] flex items-end justify-center overflow-visible pointer-events-auto"
-                            style={{ transform: `scale(${handGroupScale})`, transformOrigin: 'center bottom' }}
+                            className="relative z-[520] flex items-end justify-start overflow-visible pointer-events-auto"
+                            style={{ transform: `scale(${handGroupScale})`, transformOrigin: 'left bottom' }}
                         >
                             <CardListTransition>
                                 {player.hand.map((card: any, index: number) => (
