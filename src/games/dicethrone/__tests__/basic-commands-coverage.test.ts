@@ -485,7 +485,7 @@ describe('AI legal actions', () => {
         expect(state.sys.phase).toBe('main2');
     });
 
-    it('本地 AI 在太极响应窗口应连续执行到跳过响应，而不是在重复 token 动作上卡住', async () => {
+    it('本地 AI 在太极响应窗口应执行一次 token 后跳过响应，并正确关闭窗口', async () => {
         const random = createQueuedRandom([1, 1]);
         let state = createHeroMatchup('monk', 'monk')(['0', '1'], random);
         state.core.players['0'].tokens.taiji = 2;
@@ -511,7 +511,7 @@ describe('AI legal actions', () => {
 
         const executedKinds: string[] = [];
         const attemptKeys: string[] = [];
-        for (let step = 0; step < 3; step += 1) {
+        for (let step = 0; step < 2; step += 1) {
             const resolution = await resolveNextLocalAiAction({
                 engineConfig,
                 state,
@@ -536,10 +536,22 @@ describe('AI legal actions', () => {
             }
         }
 
-        expect(executedKinds).toEqual(['token-response', 'token-response', 'skip-token-response']);
-        expect(new Set(attemptKeys).size).toBe(3);
-        expect(state.core.players['0'].tokens.taiji).toBe(0);
+        expect(executedKinds).toEqual(['token-response', 'skip-token-response']);
+        expect(new Set(attemptKeys).size).toBe(2);
+        expect(state.core.players['0'].tokens.taiji).toBe(1);
         expect(state.core.pendingDamage).toBeUndefined();
+        expect(state.sys.responseWindow?.current).toBeUndefined();
+
+        const next = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(next?.action.kind).toBe('advance-phase');
     });
 
     it('本地 AI 在 offensiveRoll 有低点骰时应优先使用教皇税重掷，并在重掷后继续决策', async () => {
