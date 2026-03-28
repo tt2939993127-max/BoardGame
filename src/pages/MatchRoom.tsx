@@ -296,6 +296,7 @@ export const MatchRoom = () => {
     const [forceExitModalId, setForceExitModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
     const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [tutorialBoardBootstrapComplete, setTutorialBoardBootstrapComplete] = useState(false);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
@@ -663,6 +664,20 @@ export const MatchRoom = () => {
     }, [isTutorialRoute, isActive, navigate]);
 
     useEffect(() => {
+        if (!isTutorialRoute) {
+            setTutorialBoardBootstrapComplete(false);
+            return;
+        }
+        setTutorialBoardBootstrapComplete(false);
+    }, [gameId, isTutorialRoute]);
+
+    useEffect(() => {
+        if (!isTutorialRoute) return;
+        if (!isActive) return;
+        setTutorialBoardBootstrapComplete(true);
+    }, [isTutorialRoute, isActive]);
+
+    useEffect(() => {
         // 关键约束：教程提示层只允许在 /tutorial 路由出现。
         // 否则如果某个联机对局状态中残留了 sys.tutorial.active=true（例如历史教程状态被持久化），
         // 就会在联机模式下误弹出教程提示。
@@ -1002,10 +1017,14 @@ export const MatchRoom = () => {
                                 ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                     <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                         <TutorialDispatchBridge>
-                                            <BoardBridge
-                                                board={WrappedBoard}
-                                                loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
-                                            />
+                                            {tutorialBoardBootstrapComplete ? (
+                                                <BoardBridge
+                                                    board={WrappedBoard}
+                                                    loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
+                                                />
+                                            ) : (
+                                                <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                            )}
                                         </TutorialDispatchBridge>
                                     </LocalGameProvider>
                                 ) : (

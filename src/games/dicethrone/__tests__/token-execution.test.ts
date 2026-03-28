@@ -1055,6 +1055,8 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             name: 'daze可防御攻击',
             commands: [
                 cmd('ADVANCE_PHASE', '0'), // offensiveRoll exit → 可防御 → 进入 defensiveRoll
+                cmd('ROLL_DICE', '1'),
+                cmd('CONFIRM_ROLL', '1'),
                 cmd('ADVANCE_PHASE', '1'), // defensiveRoll exit → 攻击结算 → daze 触发 → override offensiveRoll
             ],
             setup: (playerIds, random) => {

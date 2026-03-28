@@ -279,4 +279,71 @@ describe('CriticalImageGate', () => {
             expect(enqueueWarmPreload).toHaveBeenCalledWith(['warm:image'], 'zh-CN', 'smashup');
         });
     });
+
+    it('旧 runKey 的 preload 完成后，不会提前放行新 runKey', async () => {
+        const resolvers: Array<(paths: string[]) => void> = [];
+        vi.mocked(preloadCriticalImages).mockImplementation(
+            () => new Promise<string[]>((resolve) => {
+                resolvers.push(resolve);
+            }),
+        );
+        vi.mocked(resolveCriticalImages).mockImplementation((_gameId, state) => {
+            const phase = (state as { phase: string }).phase;
+            return {
+                critical: [`critical:${phase}`],
+                warm: [`warm:${phase}`],
+                phaseKey: phase,
+            };
+        });
+
+        const view = render(
+            <CriticalImageGate
+                enabled={true}
+                gameId="dicethrone"
+                gameState={{ phase: 'setup' }}
+                locale="zh-CN"
+                playerID="0"
+                loadingDescription="加载中"
+            >
+                <div>子内容</div>
+            </CriticalImageGate>,
+        );
+
+        await waitFor(() => {
+            expect(preloadCriticalImages).toHaveBeenCalledTimes(1);
+        });
+
+        view.rerender(
+            <CriticalImageGate
+                enabled={true}
+                gameId="dicethrone"
+                gameState={{ phase: 'playing' }}
+                locale="zh-CN"
+                playerID="0"
+                loadingDescription="加载中"
+            >
+                <div>子内容</div>
+            </CriticalImageGate>,
+        );
+
+        expect(screen.getByText('加载中')).toBeInTheDocument();
+
+        resolvers[0]?.(['warm:setup']);
+
+        await waitFor(() => {
+            expect(preloadCriticalImages).toHaveBeenCalledTimes(2);
+        });
+
+        expect(screen.getByText('加载中')).toBeInTheDocument();
+        expect(screen.queryByText('子内容')).toBeNull();
+        expect(enqueueWarmPreload).not.toHaveBeenCalledWith(['warm:setup'], 'zh-CN', 'dicethrone');
+
+        resolvers[1]?.(['warm:playing']);
+
+        await waitFor(() => {
+            expect(screen.getByText('子内容')).toBeInTheDocument();
+        });
+
+        expect(enqueueWarmPreload).toHaveBeenCalledWith(['warm:playing'], 'zh-CN', 'dicethrone');
+    });
 });
