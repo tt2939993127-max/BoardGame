@@ -10,9 +10,7 @@ const ATLAS_IDS = [
 test('大杀四方卡牌图集应完成注册', async ({ page, game }) => {
     test.setTimeout(60000);
 
-    await game.openTestGame('smashup', {
-        skipInitialization: true,
-    });
+    await game.openTestGame('smashup', { skipInitialization: true }, 20000);
 
     await expect.poll(async () => {
         return await page.evaluate(async (atlasIds) => {

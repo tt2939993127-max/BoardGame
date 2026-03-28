@@ -1,10 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './framework';
-import type { GameTestContext } from './framework';
+import { test, expect, type GameTestContext } from './framework';
 import { getCardDef } from '../src/games/smashup/data/cards';
 
 const ALIEN_CARD_IDS = ['alien_probe', 'alien_terraform', 'alien_crop_circles'] as const;
 const BASES = ['base_the_homeworld', 'base_the_mothership'] as const;
+const SMASHUP_OPEN_TIMEOUT_MS = 20_000;
+const HAND_VISIBLE_TIMEOUT_MS = 10_000;
+const CARD_VISIBLE_TIMEOUT_MS = 5_000;
+const TITLE_POLL_TIMEOUT_MS = 5_000;
 
 const ALIEN_CARDS = ALIEN_CARD_IDS.map((defId) => {
     const def = getCardDef(defId);
@@ -33,7 +36,7 @@ function resolveDisplayedTitle(titleInfo: { rootTitle: string | null; nestedTitl
 }
 
 async function openAlienHandScene(game: GameTestContext, page: Page): Promise<void> {
-    await game.openTestGame('smashup', {}, 20000);
+    await game.openTestGame('smashup', {}, SMASHUP_OPEN_TIMEOUT_MS);
     await game.setupScene({
         gameId: 'smashup',
         player0: {
@@ -59,7 +62,7 @@ async function openAlienHandScene(game: GameTestContext, page: Page): Promise<vo
         phase: 'playCards',
     });
 
-    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: HAND_VISIBLE_TIMEOUT_MS });
     await expect.poll(async () => {
         const player = await game.getPlayerState('0');
         return player?.hand?.map((card: { defId: string }) => card.defId) ?? [];
@@ -76,11 +79,11 @@ test.describe('SmashUp alien card names', () => {
             const handCard = player.hand.find((entry: { defId: string; uid: string }) => entry.defId === card.defId);
             expect(handCard, `Card missing from hand: ${card.defId}`).toBeTruthy();
             const cardLocator = page.locator(`[data-card-uid="${handCard.uid}"]`);
-            await expect(cardLocator).toBeVisible({ timeout: 5000 });
+            await expect(cardLocator).toBeVisible({ timeout: CARD_VISIBLE_TIMEOUT_MS });
 
             await expect.poll(
                 async () => resolveDisplayedTitle(await readCardTitleInfo(page, handCard.uid)),
-                { timeout: 5000 },
+                { timeout: TITLE_POLL_TIMEOUT_MS },
             ).toBe(card.name);
 
             const titleInfo = await readCardTitleInfo(page, handCard.uid);

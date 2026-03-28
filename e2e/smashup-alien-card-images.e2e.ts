@@ -1,6 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './framework';
-import type { GameTestContext } from './framework';
+import { test, expect, type GameTestContext } from './framework';
 import { computeSpriteStyle, generateUniformAtlasConfig } from '../src/engine/primitives/spriteAtlas';
 import { getCardDef } from '../src/games/smashup/data/cards';
 import { SMASHUP_ATLAS_DEFINITIONS } from '../src/games/smashup/domain/atlasCatalog';
@@ -8,6 +7,10 @@ import { SMASHUP_ATLAS_IDS } from '../src/games/smashup/domain/ids';
 
 const ALIEN_CARD_IDS = ['alien_probe', 'alien_terraform', 'alien_crop_circles'] as const;
 const BASES = ['base_the_homeworld', 'base_the_mothership'] as const;
+const SMASHUP_OPEN_TIMEOUT_MS = 20_000;
+const HAND_VISIBLE_TIMEOUT_MS = 10_000;
+const CARD_VISIBLE_TIMEOUT_MS = 5_000;
+const STYLE_POLL_TIMEOUT_MS = 5_000;
 
 const cards1Atlas = SMASHUP_ATLAS_DEFINITIONS.find((atlas) => atlas.id === SMASHUP_ATLAS_IDS.CARDS1);
 if (!cards1Atlas) {
@@ -73,7 +76,7 @@ async function readRenderedAtlasStyle(page: Page, cardUid: string): Promise<{
 }
 
 async function openAlienHandScene(game: GameTestContext, page: Page): Promise<void> {
-    await game.openTestGame('smashup', {}, 20000);
+    await game.openTestGame('smashup', {}, SMASHUP_OPEN_TIMEOUT_MS);
     await game.setupScene({
         gameId: 'smashup',
         player0: {
@@ -99,7 +102,7 @@ async function openAlienHandScene(game: GameTestContext, page: Page): Promise<vo
         phase: 'playCards',
     });
 
-    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: HAND_VISIBLE_TIMEOUT_MS });
     await expect.poll(async () => {
         const player = await game.getPlayerState('0');
         return player?.hand?.map((card: { defId: string }) => card.defId) ?? [];
@@ -116,12 +119,12 @@ test.describe('SmashUp alien card images', () => {
             const handCard = player.hand.find((entry: { defId: string; uid: string }) => entry.defId === card.defId);
             expect(handCard, `Card missing from hand: ${card.defId}`).toBeTruthy();
             const cardLocator = page.locator(`[data-card-uid="${handCard.uid}"]`);
-            await expect(cardLocator).toBeVisible({ timeout: 5000 });
+            await expect(cardLocator).toBeVisible({ timeout: CARD_VISIBLE_TIMEOUT_MS });
 
             await expect.poll(
                 () => readRenderedAtlasStyle(page, handCard.uid),
                 {
-                    timeout: 5000,
+                    timeout: STYLE_POLL_TIMEOUT_MS,
                 },
             ).not.toBeNull();
 

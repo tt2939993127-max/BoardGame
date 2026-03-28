@@ -1,10 +1,12 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './framework';
-import type { GameTestContext } from './framework';
+import { test, expect, type GameTestContext } from './framework';
 import { getCardDef } from '../src/games/smashup/data/cards';
 
 const ALIEN_CARD_IDS = ['alien_terraform', 'alien_probe', 'alien_crop_circles'] as const;
 const BASES = ['base_the_homeworld', 'base_the_mothership'] as const;
+const SMASHUP_OPEN_TIMEOUT_MS = 20_000;
+const HAND_VISIBLE_TIMEOUT_MS = 10_000;
+const CARD_VISIBLE_TIMEOUT_MS = 5_000;
 
 const ALIEN_CARDS = ALIEN_CARD_IDS.map((defId) => {
     const def = getCardDef(defId);
@@ -24,7 +26,7 @@ interface DispatchCommandHarness {
 }
 
 async function openAlienDeckScene(game: GameTestContext, page: Page): Promise<void> {
-    await game.openTestGame('smashup', {}, 20000);
+    await game.openTestGame('smashup', {}, SMASHUP_OPEN_TIMEOUT_MS);
     await game.setupScene({
         gameId: 'smashup',
         player0: {
@@ -50,7 +52,7 @@ async function openAlienDeckScene(game: GameTestContext, page: Page): Promise<vo
         phase: 'playCards',
     });
 
-    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: HAND_VISIBLE_TIMEOUT_MS });
     await expect.poll(async () => {
         const player = await game.getPlayerState('0');
         return player?.deck?.map((card: { defId: string }) => card.defId) ?? [];
@@ -106,10 +108,11 @@ test.describe('SmashUp alien card dispatch', () => {
             });
 
             const currentPlayer = await game.getPlayerState('0');
-            expect(
-                currentPlayer.hand.some((entry: { defId: string }) => entry.defId === card.defId),
-                `Card missing from hand after dispatch: ${card.defId}`,
-            ).toBe(true);
+            const dispatchedCard = currentPlayer.hand.find((entry: { defId: string; uid: string }) => entry.defId === card.defId);
+            expect(dispatchedCard, `Card missing from hand after dispatch: ${card.defId}`).toBeTruthy();
+            await expect(page.locator(`[data-card-uid="${dispatchedCard.uid}"]`)).toBeVisible({
+                timeout: CARD_VISIBLE_TIMEOUT_MS,
+            });
         }
 
         await game.screenshot('alien-card-dispatch-final', testInfo);
