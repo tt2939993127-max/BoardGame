@@ -232,6 +232,8 @@ export interface InteractionDescriptor {
         tokenId: string;
         amount: number;
     }>;
+    /** 当前被操作的骰池归属玩家 */
+    diceOwnerId?: PlayerId;
     targetOpponentDice?: boolean;
     /** 为 true 时，UI 只允许选择已有状态效果/token 的玩家（如"移除所有状态"） */
     requiresTargetWithStatus?: boolean;

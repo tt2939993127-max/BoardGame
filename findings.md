@@ -955,3 +955,80 @@
   - 然后优先升级炎术士 `Pyro Blast` / `Magma Armor` 为 4 人规则回归与在线证据；
   - 再继续扫 `Fiery Combo` / `Burn Down` / `Ignite` / `Get Fired Up` / `Red Hot` 等仍只有 2 人或局部测试的家族。
 
+## 2026-03-28 DiceThrone Batch 3 旧 E2E 退役与 Shadow Manipulation 复核
+
+- `shadow_thief-shadow-manipulation` 这条并不是例外实现，它直接复用与通用骰子卡同一套 `modifyDie` 多步交互元数据：
+  - `src/games/dicethrone/domain/customActions/shadow_thief.ts:177-182` 仍写入 `type: 'modifyDie'` 与 `targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state)`；
+  - 因而它同样受 `targetOpponentDice:boolean` 压缩语义影响，不应被误判成“只要单独补一条暗影盗贼用例就能绕开共享 blocker”。
+- 旧 `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 现在不只是“口径老”，而是文件本身就不适合作为现役证据：
+  - 两个文件都以 `async ({ browser }, testInfo)` 或 `async ({ browser })` 开头建房，但正文后续大量直接调用未定义的 `page` 变量，例如 `e2e/dicethrone-die-modification.e2e.ts` 在首条用例里从 `const advanceButton = page.getByRole(...)` 开始，`e2e/dicethrone-die-reroll.e2e.ts` 也同样在 `waitForGameBoard(hostPage)` 后直接访问 `page.getByTestId(...)`。
+  - 这说明它们并未按现役 Playwright 口径收敛，也不是“只差补四人断言”；继续修补这些旧文件只会把过时测试继续包成证据。
+- 因此 Batch 3 的 1.3 当前已经可以明确裁决：
+  - 旧 `dicethrone-die-modification.e2e.ts` / `dicethrone-die-reroll.e2e.ts` 的可复用价值主要只剩“曾覆盖哪些交互族”这份清单；
+  - 真正应保留的现役测试资产，是 `flow.test.ts`、`response-window-interaction-lock.test.ts`、`flick-response-debug.test.ts`、`card-flick-locked-dice.test.ts` 这些仍在当前共享实现上有约束力的规则/UI 回归；
+  - 在线证据应改在现役 `dicethrone-simple-start.e2e.ts` 或等价主回归文件中重建，而不是继续维护旧专项文件。
+
+## 2026-03-28 DiceThrone Batch 3 Audit 阶段收口结论
+
+- Batch 3 的 Audit 任务 1.1-1.3 到当前可以视为完成，核心判断已经足够稳定：
+  - 共享入口已确认：通用 `modifyDie` / `selectDie` 与 `shadow_thief-shadow-manipulation` 共用同一套 `multistep-choice + targetOpponentDice` 元数据；
+  - 2 人压缩语义已确认：`resolveTargetOpponentDice()`、`getContextualOpponentId()`、`getResponderQueue()`、`currentResponderId`、响应视角切换都还在默认“当前 roller vs 单一 opponent”；
+  - 现役/历史测试边界已确认：可复用的是当前规则/UI 回归，旧两份 dice E2E 只保留历史清单价值。
+- 当前实现里，“队友可改骰”不是完全没有痕迹，而是被三层口径撕裂：
+  - 验证层 `validatePlayCard()` 并不会要求玩家必须在 `responderQueue` 里；它只校验手牌、阶段、CP 与 `isCardPlayableInResponseWindow()` 的目标语义，见 `src/games/dicethrone/domain/commandValidation.ts:599-665`。
+  - 但响应窗口系统 `ResponseWindowSystem.beforeCommand()` 对非豁免命令仍强制 `command.playerId === currentResponderId`，而 `PLAY_CARD` 又不在 `responderExemptCommands` 里，见 `src/engine/systems/ResponseWindowSystem.ts:395-420`、`src/engine/systems/ResponseWindowSystem.ts:512-531`、`src/games/dicethrone/game.ts:948-964`。
+  - 前端 `Board.tsx` / `viewMode.ts` 又把自动切视角、可见技能、可高亮响应卡、自动 pass 等逻辑都绑在 `currentResponderId === rootPid` 上，见 `src/games/dicethrone/Board.tsx:140-172`、`src/games/dicethrone/Board.tsx:585-661`、`src/games/dicethrone/Board.tsx:688-717`、`src/games/dicethrone/ui/viewMode.ts:48-126`。
+- 所以 Batch 3 真正要修的不是“把一个 if 改松”，而是三层口径统一：
+  - 规则/验证层允许的 allied dice interference，
+  - 响应系统实际放行的命令门禁，
+  - 前端把谁视为“当前可观察、可操作响应者”的视角与高亮逻辑。
+- 这也意味着下一步最正确的实现前置裁决是：
+  - 要么引入“合法改骰玩家”这类共享路由/豁免语义，让队友不进 `responderQueue` 但仍能合法出改骰牌；
+  - 要么同步回修 2v2 spec，不再保留“队友可改骰”的描述。
+
+## 2026-03-28 DiceThrone Batch 3 响应语义裁决与第一段共享收口
+
+- 用户已明确裁决：“响应是一种敌对操作，就像自己不响应自己一样”，“队友不用响应”。当前权威口径应收紧为：
+  - `response` 只代表敌对侧动作；
+  - 同队玩家不进入 `responderQueue`；
+  - 同队玩家若在合法掷骰窗口持有可作用于当前骰池的改骰牌，可以直接出牌，但这不算 response。
+- 因而 Batch 3 的正确实现不是把队友塞进 `responderQueue`，而是在共享响应窗口层提供一条受限的“非队列 direct dice actor”放行路径。
+- 当前共享层已按该口径完成第一段收口：
+  - `ResponseWindowSystem.beforeCommand()` 新增 `allowNonResponderCommand` 钩子；
+  - `game.ts` 只在 `afterRollConfirmed + PLAY_CARD + isDirectDiceInterferenceActor(...) + isCardPlayableInResponseWindow(...)` 同时成立时放行非当前响应者；
+  - 其余普通命令仍继续锁给 `currentResponderId`，没有把“队友 direct dice”扩大成泛化的非响应者特权。
+- 新规则回归已实锤这条边界：
+  - 4 人 / 2v2 下防御方确认骰面后，攻击方队友仍不在 `responderQueue`；
+  - 但攻击方队友打出 `card-flick` 可以成功创建 `modifyDie` 交互并进入弃牌堆。
+- 这轮收口后，Batch 3 仍未完成的真实缺口变得更明确了：
+  - `targetOpponentDice:boolean` 的显式骰池归属元数据替换尚未做；
+  - `shadow_thief-shadow-manipulation` 的 4 人专项回归尚未补；
+  - 现役在线 E2E 证据还未迁到 `dicethrone-simple-start.e2e.ts`。
+
+## 2026-03-28 DiceThrone Batch 3 direct-dice 在线证据与 helper 修正
+
+- Batch 3 的第一条现役 4 人在线证据已经补到 `e2e/dicethrone-simple-start.e2e.ts`：
+  - 新用例 `Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction` 已通过；
+  - 对应截图为 `test-results/evidence-screenshots/dicethrone-simple-start.e2e/Online-4-player-direct-dice-ally-teammate-stays-out-of-responder-queue-but-can-still-open-modify-interaction/12-four-player-direct-dice-ally-interaction.png`。
+- 这条在线证据锁住了两个同时成立的事实：
+  - 防守方确认骰面后，攻击方队友 `P2` 仍不进入 `responderQueue`；
+  - 但 `P2` 仍可直接打出 `card-surprise`，并在自己页打开 `modifyDie` 交互。
+- 为了让这条 isolated-port E2E 稳定可跑，本轮还顺手修复了测试基础设施的真实 bug：
+  - `e2e/helpers/state-injection.ts` 原来错误读取 `__FORCE_GAME_SERVER_URL__` 作为 `/test/*` API 基址；
+  - 单 worker 显式目标模式下注入的其实是 `__FORCE_API_SERVER_URL__`，因此原实现会把状态注入请求错打到 game server；
+  - 修正后，`applyOnlineMatchState()` / `getMatchState()` 已能稳定走 `apiServer` 端口。
+
+## 2026-03-28 DiceThrone Batch 3 元数据模型与 Shadow 专项回归收口
+
+- `diceOwnerId` 这轮已经从“想法”变成共享事实：
+  - `PendingInteraction`、通用 `modifyDie/selectDie` custom action、`shadow_thief-shadow-manipulation`、事件系统透传、测试注入 helper、AI meta 与 `RightSidebar`/`DiceTray` 提示类型现在都显式携带 `diceOwnerId`。
+  - 这意味着 Batch 3 的 2.1 可以视为完成：共享层不再只能靠 `targetOpponentDice:boolean` 猜“当前骰池归属”。
+- 代表性回归也补齐到位了：
+  - 通用入口：`flow.test.ts` 已锁住 4 人 / 2v2 下“队友不进 `responderQueue`，但可直接打出 `card-flick`”，并断言 `meta.diceOwnerId === '3'`；
+  - UI 入口：`active-modifiers-undo.test.ts` 新增 `RightSidebar` 静态渲染断言，确认 `selectDie + diceOwnerId=同队玩家` 会落到 `interaction.hint_select_ally`；
+  - Shadow 入口：`shadow_thief-behavior.test.ts` 新增 4 人 handler 级用例，确认 `shadow_thief-shadow-manipulation` 在有 `Sneak` 时会产出 `selectCount=2`、`diceOwnerId='3'`、`targetOpponentDice=false` 的交互元数据。
+- 同时也确认了一条不应被误写成“已裁决”的边界：
+  - 当前共享 `afterRollConfirmed` 门禁仍保留“仅 `opponent/any` 骰子卡可开响应窗口”的旧口径；
+  - 因此这轮没有把 `shadow-manipulation` 强行推进成在线 direct-dice 出牌路径，也没有把“所有 self-only 骰子卡都应在响应窗可打”写成既定规则；
+  - 现阶段能确定的结论仅是：其共享 multistep 元数据与 4 人骰池归属语义已经被专项回归锁住。
+
