@@ -1,5 +1,26 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-28，大厅单机模式 / 对战AI 入口口径回归）
+- 当前工作树曾出现一类典型漂移：计划文档里已经把大厅入口定义成 `单机模式 / 对战AI / 教程模式`，但实际 `GameDetailsModal` 又退回成单个“本地同屏”入口，说明 AI 产品口径不能只看历史 plan，必须回到当前 UI 实装核对。
+- 对支持本地 AI 的游戏，`单机模式` 与 `对战AI` 的差异不应该只停留在按钮文案；必须落实到默认 seat controller。否则用户即使点的是“本地/单机”，运行时仍可能被默认 `seat1=local-ai` 偷偷带进 AI 对局。
+- 本地房间 HUD 也需要消费同一份 seat controller 事实来源。否则大厅入口已经区分清楚，进局后顶部信息又显示“本地同屏”，产品语义会再次混乱。
+- `lobby.e2e.ts` 里单纯等待导航成功不足以证明大厅 ready；这轮复现表明更稳的做法是“导航重试 + 首屏核心内容可见”双门禁，否则会出现与业务无关的启动假失败。
+
+## 新发现（2026-03-28，召唤师战争本地 AI 首轮接入）
+- 召唤师战争比 Smash Up 更适合作为下一步 AI 试点，因为它是双人、阶段清晰、且领域层已经有现成的战棋 helper 可直接复用；真正缺的不是规则能力，而是把这些 helper 统一封成 `legalActions`。
+- 这类战棋桌游的第一版本地 AI 不需要先处理所有技能和事件卡。最小正确闭环是：setup 可行动、基础回合可走、非法命令被 validate 挡住、在无更优动作时能自然结束阶段。
+- `summonerwars` 的 AI phase 判定不能机械依赖测试夹具里的 `sys.phase`。在已开局状态下，`core.phase` 才是更稳的真实来源；否则 AI 会误判到默认分支，只会 `END_PHASE`。
+- 召唤师战争接入后再次验证了通用 AI 主线的设计方向是对的：同一套 `seatControllers -> visibleState -> legalActions -> scored local policy` 契约可以直接复用到战棋类游戏，而不需要另起一套“战棋 AI 框架”。
+- 当前首轮 baseline 仍刻意留白了事件卡目标选择、beforeAttack 技能链和复杂多步交互，这不是框架缺陷，而是范围控制。后续增强应继续沿同一 runtime 增补 scorer 与 action builder，而不是推翻成行为树。
+
+## 新发现（2026-03-28，Smash Up 本地 AI 接入）
+- 大杀四方接 AI 的真正难点不是 4 人模式本身，而是动作空间和目标空间很宽；通用框架层已经天然支持多座位 seat controller，2/3/4 人并不是结构性障碍。
+- 对 Smash Up 这类桌游，第一版最稳的接法不是行为树，而是“广枚举候选命令 + validate 过滤 + 评分式决策”。这样能先保证 AI 不乱发非法命令，再逐步增强策略质量。
+- 首轮 legal actions 不需要一上来就覆盖每个高阶组合搜索，但必须覆盖基础回合骨架：派系选择、随从/行动打出、响应窗口、交互选择、弃牌、天赋、special、阶段推进。缺这条骨架，AI 会在多人局里自然卡死。
+- Smash Up 的多人局适配现在已经证实是自然的：4 人 setup 下当前行动位能正常生成派系选择动作，非当前行动位不会误生成动作；这说明 runtime 与 turn order 的接线是正确的。
+- 这轮真正让产品可见的是 `manifest` 层的放开，而不是 AI 文件本身：只要 `allowLocalMode` 和 `ai.localAi` 不打开，已有 runtime 再完整，用户在详情页里也进不到这条链路。
+- 当前工作区里仍有并发中的 `src/games/smashup/abilities/bear_cavalry.ts` 与 `src/games/smashup/__tests__/feedback-high-ground-destroyer.test.ts`，与本轮 AI 首轮接入无关；继续推进时必须保持边界，不要把两条线混提。
+
 ## 新发现（2026-03-27，Dice Throne 本地 AI 入口）
 - 跨游戏 AI 主线当前并不是“框架还没做完”，而是已经完成到可运行状态；真实缺口转移到了用户入口层。
 - `LocalMatchConfigModal`、seat controller、`LocalMatchRoom`、Dice Throne 评分式本地 AI、远程 provider 契约和训练采集都已存在，说明“本地 AI 能不能跑”这个问题实际上已经解决。
