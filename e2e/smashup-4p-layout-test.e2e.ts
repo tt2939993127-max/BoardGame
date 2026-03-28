@@ -203,6 +203,33 @@ function buildFourPlayerMobileScene() {
     };
 }
 
+function buildFactionSelectionMobileScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'factionSelect' as const,
+        extra: {
+            core: {
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                turnNumber: 1,
+                nextUid: 1000,
+                players: {
+                    '0': createPlayerState('0', 0, ['aliens', 'pirates']),
+                    '1': createPlayerState('1', 0, ['ninjas', 'dinosaurs']),
+                },
+                factionSelection: {
+                    takenFactions: [],
+                    playerSelections: {
+                        '0': [],
+                        '1': [],
+                    },
+                },
+            },
+        },
+    };
+}
+
 async function expectLocatorInsideViewport(
     locator: any,
     name: string,
@@ -398,5 +425,68 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         const stateAfterLongPress = await game.getState();
         expect(stateAfterLongPress.core.players['0'].hand.some((card: any) => card.uid === 'p0-mobile-hand-terraform')).toBe(true);
         expect(stateAfterLongPress.core.bases[0].minions.find((minion: any) => minion.uid === 'p0-b0-armor-stego')?.talentUsed).toBe(true);
+    });
+});
+
+test.describe('大杀四方移动端派系选择布局', () => {
+    test('横屏移动端打开派系详情时应完整显示并可滚动查看全部卡牌', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await page.setViewportSize({ width: 852, height: 393 });
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => { },
+                    removeListener: () => { },
+                    addEventListener: () => { },
+                    removeEventListener: () => { },
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildFactionSelectionMobileScene());
+
+        const factionSelect = page.locator('[data-tutorial-id="su-faction-select"]');
+        const factionHeading = page.getByText(/Draft Your Factions|选择你的派系/i);
+        const aliensCard = factionSelect.getByText(/Aliens|外星人/i).first();
+        const rotateBanner = page.getByText(/建议旋转至横屏|建议切换为竖屏/i);
+
+        await expect(factionHeading).toBeVisible({ timeout: 15000 });
+        await expect(rotateBanner).toHaveCount(0);
+        await expect(aliensCard).toBeVisible({ timeout: 10000 });
+        await aliensCard.click();
+
+        const confirmButton = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
+        const previewCards = factionSelect.locator('.cursor-zoom-in');
+        const previewSection = previewCards.first().locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
+
+        await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        const previewCardCount = await previewCards.count();
+        expect(previewCardCount).toBeGreaterThan(8);
+        await expect(previewSection).toBeVisible({ timeout: 10000 });
+
+        const scrollMetrics = await previewSection.evaluate((node) => ({
+            scrollHeight: node.scrollHeight,
+            clientHeight: node.clientHeight,
+        }));
+        expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+
+        await page.waitForTimeout(250);
+        await game.screenshot('11-mobile-landscape-faction-detail-top', testInfo);
+
+        await previewCards.last().scrollIntoViewIfNeeded();
+        await expect(previewCards.last()).toBeVisible({ timeout: 5000 });
+
+        await game.screenshot('12-mobile-landscape-faction-detail-bottom', testInfo);
     });
 });
