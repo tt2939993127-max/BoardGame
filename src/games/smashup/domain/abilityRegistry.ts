@@ -6,7 +6,7 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import type { SmashUpCore, SmashUpEvent, AbilityTag } from './types';
+import type { SmashUpCore, SmashUpEvent, AbilityTag, ActiveDuel } from './types';
 
 // ============================================================================
 // 能力执行上下文与结果
@@ -24,6 +24,8 @@ export interface AbilityContext {
     baseIndex: number;
     /** 行动卡目标随从 */
     targetMinionUid?: string;
+    /** 当前决斗上下文（仅 duel 内核触发的卡牌结算时提供） */
+    duel?: ActiveDuel;
     random: RandomFn;
     now: number;
 }
@@ -85,6 +87,11 @@ export function resolveSpecial(defId: string): AbilityExecutor | undefined {
 /** 快捷：解析 onDestroy 能力 */
 export function resolveOnDestroy(defId: string): AbilityExecutor | undefined {
     return resolveAbility(defId, 'onDestroy');
+}
+
+/** 快捷：解析 onUncover 能力 */
+export function resolveOnUncover(defId: string): AbilityExecutor | undefined {
+    return resolveAbility(defId, 'onUncover');
 }
 
 /** 检查某 defId 是否注册了指定 tag 的能力 */

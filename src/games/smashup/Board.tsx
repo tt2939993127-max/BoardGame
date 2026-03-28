@@ -118,6 +118,18 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     // 观战模式下默认显示玩家 0 的视角
     const myPlayer = core ? core.players[rootPid] : undefined;
     const isGameOver = G?.sys.gameover;
+    const activeDuelBanner = useMemo(() => {
+        const duel = core?.activeDuel;
+        if (!duel) return null;
+        const challenger = core.bases.flatMap(base => base.minions).find(minion => minion.uid === duel.challengerMinionUid);
+        const challenged = core.bases.flatMap(base => base.minions).find(minion => minion.uid === duel.challengedMinionUid);
+        const challengerName = challenger ? resolveCardName(getCardDef(challenger.defId), t) ?? challenger.defId : t('ui.card_placeholder');
+        const challengedName = challenged ? resolveCardName(getCardDef(challenged.defId), t) ?? challenged.defId : t('ui.card_placeholder');
+        return {
+            title: `${challengerName} VS ${challengedName}`,
+            subtitle: t('ui.duel_in_progress', { defaultValue: '决斗进行中：先处理 Pinkerton / 决斗牌 / Deputy，再结算胜负' }),
+        };
+    }, [core, t]);
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
     const isMobileViewport = useMobileViewport();
     
@@ -1869,6 +1881,22 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                             <span className="font-black text-base uppercase tracking-tight">
                                 {t('ui.discard_desc', { count: discardCount })}（{discardSelection.size}/{discardCount}）
                             </span>
+                        </div>
+                    </motion.div>
+                )}
+
+                {activeDuelBanner && (
+                    <motion.div
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className={topFloatingBannerClassName}
+                        style={{
+                            top: `${layout.hudTopOffset + (myPlayer && needDiscard ? (isMobileViewport ? 44 : 52) : 0)}px`,
+                        }}
+                    >
+                        <div className="bg-amber-950/92 text-amber-50 px-5 py-2 rounded border-2 border-amber-400 shadow-lg max-w-[min(92vw,680px)]">
+                            <div className="font-black text-sm tracking-tight text-center">{activeDuelBanner.title}</div>
+                            <div className="text-[11px] md:text-xs text-amber-100/90 text-center mt-0.5">{activeDuelBanner.subtitle}</div>
                         </div>
                     </motion.div>
                 )}

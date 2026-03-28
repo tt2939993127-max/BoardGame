@@ -92,6 +92,9 @@ export type EventInterceptor = (
 export type TriggerTiming =
     | 'onMinionPlayed'     // 随从入场时
     | 'onActionPlayed'     // 行动卡打出时（用于基地能力队列化）
+    | 'onCardsDiscarded'   // 手牌弃置时
+    | 'onCardBuried'       // 卡牌被埋葬时
+    | 'onBuriedCardUncovered' // 埋葬牌被翻开时
     | 'onBaseRevealed'     // 基地翻出/替换后入场（扩展基地触发）
     | 'onMinionDestroyed'  // 随从被消灭时
     | 'onMinionMoved'      // 随从被移动时
@@ -135,6 +138,14 @@ export interface TriggerContext {
     affectType?: AffectType;
     /** 基地计分排名（仅 afterScoring 时有值） */
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    /** 埋葬/翻开相关卡牌 UID */
+    buriedCardUid?: string;
+    /** 埋葬/翻开相关卡牌 defId */
+    buriedCardDefId?: string;
+    /** 埋葬/翻开相关卡牌控制者 */
+    buriedCardControllerId?: PlayerId;
+    /** 埋葬来源 */
+    buriedFrom?: 'hand' | 'discard' | 'play' | 'deck';
     random: RandomFn;
     now: number;
 }
@@ -346,6 +357,10 @@ function createTriggerInstance(
         reason: ctx.reason,
         affectType: ctx.affectType,
         rankings: ctx.rankings,
+        buriedCardUid: (ctx as any).buriedCardUid,
+        buriedCardDefId: (ctx as any).buriedCardDefId,
+        buriedCardControllerId: (ctx as any).buriedCardControllerId,
+        buriedFrom: (ctx as any).buriedFrom,
         lkiMinion: ctx.triggerMinion
             ? {
                 uid: ctx.triggerMinion.uid,

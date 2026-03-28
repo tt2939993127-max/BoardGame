@@ -165,6 +165,25 @@ describe('派系选择系统', () => {
             // P1 选了 pirates + ninjas
             expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS]);
         });
+
+        it('新接入派系也能正常构建 40 张牌库', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Oops 四派系牌库构建',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.SAMURAI } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.VIKINGS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS } },
+                ],
+            });
+
+            expect(result.steps.every(step => step.success)).toBe(true);
+            for (const pid of PLAYER_IDS) {
+                const player = result.finalState.core.players[pid];
+                expect(player.hand.length + player.deck.length).toBe(40);
+            }
+        });
     });
 
     // Property 3: 选择完成后初始化
@@ -236,6 +255,27 @@ describe('派系选择系统', () => {
                 expect(allowed.has(id)).toBe(true);
             }
         });
+
+        it('Oops 四派系返回对应的 8 张基地', () => {
+            const baseIds = getBaseDefIdsForFactions([
+                SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+                SMASHUP_FACTION_IDS.COWBOYS,
+                SMASHUP_FACTION_IDS.SAMURAI,
+                SMASHUP_FACTION_IDS.VIKINGS,
+            ]);
+
+            expect(baseIds).toEqual(expect.arrayContaining([
+                'base_saloon',
+                'base_so_so_corral',
+                'base_pyramids',
+                'base_star_portal',
+                'base_shoguns_palace',
+                'base_sakura_garden',
+                'base_drakkar',
+                'base_longhouse',
+            ]));
+        });
+
         it('POD factions 使用对应的 POD 基地池', () => {
             const baseIds = getBaseDefIdsForFactions([
                 SMASHUP_FACTION_IDS.WIZARDS_POD,

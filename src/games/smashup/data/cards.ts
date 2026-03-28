@@ -42,6 +42,10 @@ import { VAMPIRE_POD_CARDS } from './factions/vampires_pod';
 import { GIANT_ANT_CARDS } from './factions/giant-ants';
 import { GIANT_ANT_CARDS as GIANT_ANT_POD_CARDS } from './factions/giant-ants_pod';
 import { NINJA_POD_CARDS } from './factions/ninjas_pod';
+import { ANCIENT_EGYPTIANS_CARDS } from './factions/ancient_egyptians';
+import { COWBOYS_CARDS } from './factions/cowboys';
+import { SAMURAI_CARDS } from './factions/samurai';
+import { VIKINGS_CARDS } from './factions/vikings';
 
 // ============================================================================
 // 注册表
@@ -74,6 +78,7 @@ function registerBases(bases: BaseCardDef[]): void {
 // 初始化注册
 const POD_SUFFIX = '_pod';
 const BASES_PER_FACTION = 2;
+const KNOWN_FACTION_IDS = new Set(Object.values(SMASHUP_FACTION_IDS));
 
 function isPodVariantId(id: string): boolean {
     return id.endsWith(POD_SUFFIX);
@@ -93,10 +98,12 @@ function cloneBaseRestrictions(restrictions: BaseCardDef['restrictions']): BaseC
 
 function cloneBaseAsPodSkeleton(base: BaseCardDef): BaseCardDef | undefined {
     if (!base.faction || isPodVariantId(base.id)) return undefined;
+    const podFactionId = toPodId(base.faction);
+    if (!KNOWN_FACTION_IDS.has(podFactionId)) return undefined;
     return {
         ...base,
         id: toPodId(base.id),
-        faction: toPodId(base.faction) as BaseCardDef['faction'],
+        faction: podFactionId as BaseCardDef['faction'],
         restrictions: cloneBaseRestrictions(base.restrictions),
     };
 }
@@ -152,6 +159,10 @@ registerCards(VAMPIRE_CARDS);
 registerCards(VAMPIRE_POD_CARDS);
 registerCards(GIANT_ANT_CARDS);
 registerCards(GIANT_ANT_POD_CARDS);
+registerCards(ANCIENT_EGYPTIANS_CARDS);
+registerCards(COWBOYS_CARDS);
+registerCards(SAMURAI_CARDS);
+registerCards(VIKINGS_CARDS);
 // POD 版本阵营（最新英文 POD 版本）
 registerCards(NINJA_POD_CARDS);
 
@@ -477,6 +488,85 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
     },
 ];
 registerBases(BASE_CARDS_PRETTY_PRETTY);
+
+// ============================================================================
+// 扩展基地 (Oops, You Did It Again)
+// ============================================================================
+export const BASE_CARDS_OOPS_YOU_DID_IT_AGAIN: BaseCardDef[] = [
+    {
+        id: 'base_saloon',
+        name: '酒馆',
+        nameEn: 'Saloon',
+        breakpoint: 20,
+        vpAwards: [3, 2, 1],
+        faction: SMASHUP_FACTION_IDS.COWBOYS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 0 },
+    },
+    {
+        id: 'base_so_so_corral',
+        name: '小镇',
+        nameEn: 'So-So Corral',
+        breakpoint: 19,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.COWBOYS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 1 },
+    },
+    {
+        id: 'base_pyramids',
+        name: '金字塔',
+        nameEn: 'Pyramids',
+        breakpoint: 21,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 2 },
+    },
+    {
+        id: 'base_star_portal',
+        name: '星界之门',
+        nameEn: 'Star Portal',
+        breakpoint: 17,
+        vpAwards: [3, 1, 1],
+        faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 3 },
+    },
+    {
+        id: 'base_shoguns_palace',
+        name: '天守阁',
+        nameEn: "Shogun's Palace",
+        breakpoint: 23,
+        vpAwards: [4, 3, 1],
+        faction: SMASHUP_FACTION_IDS.SAMURAI,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 4 },
+    },
+    {
+        id: 'base_sakura_garden',
+        name: '樱花花园',
+        nameEn: 'Sakura Garden',
+        breakpoint: 18,
+        vpAwards: [3, 2, 1],
+        faction: SMASHUP_FACTION_IDS.SAMURAI,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 5 },
+    },
+    {
+        id: 'base_drakkar',
+        name: '德拉卡尔号',
+        nameEn: 'Drakkar',
+        breakpoint: 21,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.VIKINGS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 6 },
+    },
+    {
+        id: 'base_longhouse',
+        name: '长屋',
+        nameEn: 'Longhouse',
+        breakpoint: 25,
+        vpAwards: [5, 3, 2],
+        faction: SMASHUP_FACTION_IDS.VIKINGS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 7 },
+    },
+];
+registerBases(BASE_CARDS_OOPS_YOU_DID_IT_AGAIN);
 
 // ============================================================================
 // 扩展基地 (Set 4 - Mixed including Cthulhu)

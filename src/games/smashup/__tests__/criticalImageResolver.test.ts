@@ -103,6 +103,20 @@ describe('smashUpCriticalImageResolver', () => {
         expect(result.warm).toEqual([]);
     });
 
+    it('新接入的 Oops 四派系会命中新卡图与新基地图集', () => {
+        const result = smashUpCriticalImageResolver(
+            makePlayingState({
+                '0': ['ancient_egyptians', 'cowboys'],
+                '1': ['samurai', 'vikings'],
+            }),
+            undefined,
+            '0',
+        );
+
+        expect(result.critical).toContain('smashup/cards/aiji');
+        expect(result.critical).toContain('smashup/base/aiji_base');
+    });
+
     it('教程 playing 阶段仍只加载已选派系对应图集', () => {
         const result = smashUpCriticalImageResolver(
             makePlayingState(

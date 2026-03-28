@@ -37,11 +37,16 @@ import { registerFrankensteinAbilities, registerFrankensteinInteractionHandlers 
 import { registerWerewolfAbilities, registerWerewolfInteractionHandlers } from './werewolves';
 import { registerVampireAbilities, registerVampireInteractionHandlers } from './vampires';
 import { registerGiantAntAbilities, registerGiantAntInteractionHandlers } from './giant_ants';
+import { registerAncientEgyptiansAbilities, registerAncientEgyptiansInteractionHandlers } from './ancient_egyptians';
+import { registerCowboysAbilities, registerCowboysInteractionHandlers } from './cowboys';
+import { registerSamuraiAbilities, registerSamuraiInteractionHandlers } from './samurai';
+import { registerVikingsAbilities, registerVikingsInteractionHandlers } from './vikings';
 import { registerBuryInteractionHandlers } from '../domain/bury';
 import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
 import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
 import { registerMulliganInteractionHandlers } from '../domain/mulliganHandlers';
+import { registerDuelInteractionHandlers } from '../domain/duel';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry, registerPodPowerModifierAliases } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain/ongoingEffects';
@@ -93,6 +98,7 @@ export function initAllAbilities(): void {
     registerReactionQueueInteractionHandlers();
     registerMulliganInteractionHandlers();
     registerBuryInteractionHandlers();
+    registerDuelInteractionHandlers();
 
     // 扩展派系
     registerGhostAbilities();
@@ -123,6 +129,14 @@ export function initAllAbilities(): void {
     registerVampireInteractionHandlers();
     registerGiantAntAbilities();
     registerGiantAntInteractionHandlers();
+    registerAncientEgyptiansAbilities();
+    registerAncientEgyptiansInteractionHandlers();
+    registerCowboysAbilities();
+    registerCowboysInteractionHandlers();
+    registerSamuraiAbilities();
+    registerSamuraiInteractionHandlers();
+    registerVikingsAbilities();
+    registerVikingsInteractionHandlers();
 
     // 持续力量修正
     registerAllOngoingModifiers();
