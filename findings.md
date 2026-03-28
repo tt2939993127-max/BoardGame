@@ -1,5 +1,13 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-28，Smash Up 本地 AI 接入）
+- 大杀四方接 AI 的真正难点不是 4 人模式本身，而是动作空间和目标空间很宽；通用框架层已经天然支持多座位 seat controller，2/3/4 人并不是结构性障碍。
+- 对 Smash Up 这类桌游，第一版最稳的接法不是行为树，而是“广枚举候选命令 + validate 过滤 + 评分式决策”。这样能先保证 AI 不乱发非法命令，再逐步增强策略质量。
+- 首轮 legal actions 不需要一上来就覆盖每个高阶组合搜索，但必须覆盖基础回合骨架：派系选择、随从/行动打出、响应窗口、交互选择、弃牌、天赋、special、阶段推进。缺这条骨架，AI 会在多人局里自然卡死。
+- Smash Up 的多人局适配现在已经证实是自然的：4 人 setup 下当前行动位能正常生成派系选择动作，非当前行动位不会误生成动作；这说明 runtime 与 turn order 的接线是正确的。
+- 这轮真正让产品可见的是 `manifest` 层的放开，而不是 AI 文件本身：只要 `allowLocalMode` 和 `ai.localAi` 不打开，已有 runtime 再完整，用户在详情页里也进不到这条链路。
+- 当前工作区里仍有并发中的 `src/games/smashup/abilities/bear_cavalry.ts` 与 `src/games/smashup/__tests__/feedback-high-ground-destroyer.test.ts`，与本轮 AI 首轮接入无关；继续推进时必须保持边界，不要把两条线混提。
+
 ## 新发现（2026-03-27，Dice Throne 本地 AI 入口）
 - 跨游戏 AI 主线当前并不是“框架还没做完”，而是已经完成到可运行状态；真实缺口转移到了用户入口层。
 - `LocalMatchConfigModal`、seat controller、`LocalMatchRoom`、Dice Throne 评分式本地 AI、远程 provider 契约和训练采集都已存在，说明“本地 AI 能不能跑”这个问题实际上已经解决。

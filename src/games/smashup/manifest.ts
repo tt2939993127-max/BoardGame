@@ -14,10 +14,10 @@ const entry: GameManifestEntry = {
     /** 最佳游玩人数：3 人 */
     bestPlayers: [3],
     tags: ['card_driven', 'casual'],
-    allowLocalMode: false,
+    allowLocalMode: true,
     ai: {
         capture: true,
-        localAi: false,
+        localAi: true,
         remoteAi: false,
     },
     cursorTheme: 'smashup-popart',

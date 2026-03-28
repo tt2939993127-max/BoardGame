@@ -1,5 +1,22 @@
 # Progress Log
 
+## Session: 2026-03-28 Smash Up 本地 AI 首轮接入
+- **Status:** completed
+- Actions taken:
+  - 复核 `openspec/changes/add-cross-game-ai-system/tasks.md` 与当前 AI 目录，确认跨游戏 AI 骨架已经完成，继续推进应落到下一个游戏 runtime，而不是重复补框架。
+  - 读取 `docs/ai-rules/engine-systems.md`、`docs/testing-best-practices.md` 和 `src/games/smashup/rule/大杀四方规则.md`，把本轮范围收敛为“Smash Up 本地逻辑 AI 首轮接入”。
+  - 新增 `src/games/smashup/ai.ts`：基于当前可见状态枚举合法候选动作，并用 `validate` 过滤；覆盖派系选择、出牌、响应、交互、弃牌、天赋、special 与阶段推进。
+  - 在同一文件里接入评分式 baseline policy，默认优先交互与响应，再优先打随从抢节奏，之后才补行动/天赋，最后才推进阶段。
+  - 在 `src/games/smashup/game.ts` 注册 `smashUpAiRuntime`，并把 `src/games/smashup/manifest.ts` 调整为 `allowLocalMode: true`、`ai.localAi: true`，使大杀四方详情页可实际进入本地 AI 模式。
+  - 在现有 `src/games/smashup/__tests__/smashup.smoke.test.ts` 中补两条回归：四人局派系选择 legal actions 可生成；baseline 在基础出牌场景优先打出随从。
+  - 运行 `node scripts/game/generate_game_manifests.js`，确认 manifest 改动没有产生未同步的派生产物。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/games/smashup/__tests__/smashup.smoke.test.ts --maxWorkers=1` → `9 passed`
+  - `node scripts/game/generate_game_manifests.js` → generated files unchanged
+- Next step:
+  - 继续 AI 主线时，优先增强 Smash Up 的多人局评分策略与关键交互权重；当前这轮不继续推进 AstrBot 实网接入。
+
 ## Session: 2026-03-27 Dice Throne 本地 AI 入口补齐
 - **Status:** completed
 - Actions taken:

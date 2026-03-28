@@ -1,5 +1,23 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-28）：Smash Up 本地 AI 首轮接入
+
+### Goal
+- 在不继续推进 AstrBot 实网接入的前提下，把大杀四方接到现有跨游戏 AI 主线里，先拿到“本地逻辑 AI 可进局、可走基础回合、4 人座位自然支持”的第一版。
+- 保持这轮范围收敛在通用 AI runtime 复用、Smash Up legal actions 枚举、baseline 决策和本地入口开放，不碰当前工作区里并发中的 `bear_cavalry` bug 修复。
+
+### Result
+- [x] 新增 `src/games/smashup/ai.ts`，把 Smash Up 接到统一 `legalActions -> scored local policy` 框架，覆盖 `factionSelect`、`playCards`、`scoreBases`、`draw`、响应窗口与基础交互选择。
+- [x] 基于当前可见状态枚举本地 AI 候选动作：派系选择、打出随从、打出行动、弃牌至上限、发动天赋、激活 special、阶段推进；复杂目标组合先走“广枚举 + validate 过滤”的保守路线。
+- [x] 落一版桌游友好的 baseline scorer：优先交互与响应、优先打随从抢节奏、再补行动与天赋，只有在阶段内无更优动作时才推进阶段。
+- [x] 在 `src/games/smashup/game.ts` 注册 `smashUpAiRuntime`，并把 `src/games/smashup/manifest.ts` 打开到 `allowLocalMode: true` / `ai.localAi: true`，让大杀四方在产品入口层真正暴露本地 AI。
+- [x] 在现有 `src/games/smashup/__tests__/smashup.smoke.test.ts` 补回归：验证 4 人局派系选择 legal actions 可生成，以及 baseline 在基础出牌阶段优先打随从。
+- [x] 验证通过：`npm run typecheck`、`npx vitest run src/games/smashup/__tests__/smashup.smoke.test.ts --maxWorkers=1`、`node scripts/game/generate_game_manifests.js`。
+
+### Next Step
+- 若继续 AI 主线，下一步最正确的是补 Smash Up 的第二层策略：围绕基地压力、VP 竞争、多玩家顺时针关系和高价值交互做更细的评分，而不是先上行为树。
+- 远程 AI / AstrBot 仍保持后置；等 Smash Up 与更多游戏的本地策略稳定后，再考虑把远程 provider 向在线房间迁移。
+
 ## Addendum（2026-03-27）：Dice Throne 本地 AI 入口补齐
 
 ### Goal
