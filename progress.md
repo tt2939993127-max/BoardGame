@@ -693,7 +693,19 @@
 
 ### Conclusion
 - Batch 3 的 `2.1/2.3` 当前都可以视为完成：共享元数据模型已显式表达骰池归属，通用入口、UI 提示和 `shadow_thief-shadow-manipulation` 都已拿到现役回归。
-- 但“self-only 骰子卡是否应在 `afterRollConfirmed` 对当前敌方骰池开放”仍不是本轮已裁决事实；现有仓库证据只足够支持元数据与 direct-dice 边界，不足以直接改写那条共享门禁。
+- 后续用户已补充明确裁决：没写“可改队友”的 `self-only` 骰子卡，一律不能改队友，只能改自己；因此这里不再保留“是否对当前敌方/队友骰池开放”的开放问题。
+
+## Session: 2026-03-28 DiceThrone Batch 3 self-only 骰子卡边界裁决
+- **Status:** completed
+- Actions taken:
+  - 记录用户最新明确口径：凡是规则或卡面没有明确写“可以改队友骰子”的牌，都不能改队友，只能改自己。
+  - 将该裁决回填到四人专项事实层，明确 `self-only` 不会因为共享响应窗口、当前骰池归属或 2v2 队友关系被自动扩张到队友骰池。
+  - 同步收紧对 `afterRollConfirmed` 的解释：当前门禁继续排斥 `target='self'` 骰子卡，这不再属于“待裁决边界”，而是与用户裁决一致的现行口径。
+
+### Conclusion
+- 4 人 / 2v2 下“队友 direct-dice”与“self-only”现在被正式分开：
+  - 原本就允许作用于当前骰池 / 对手骰池 / 任意骰池的牌，仍可走合法 direct-dice 路径；
+  - 没有明确写可改队友的 `self-only` 牌，继续只能改自己。
 
 ## Session: 2026-03-28 Dice Throne 枪手 The Law 多目标交互闭环
 
