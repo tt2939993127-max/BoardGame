@@ -332,7 +332,7 @@ export const DiceActions = ({
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const actionTokens = DESKTOP_DICE_ACTION_TOKENS;
-    const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
+    const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'targetingRoll' || currentPhase === 'defensiveRoll';
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);
 

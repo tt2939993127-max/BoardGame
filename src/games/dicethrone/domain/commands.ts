@@ -106,6 +106,16 @@ export interface HostStartGameCommand extends Command<'HOST_START_GAME'> {
     payload: Record<string, never>;
 }
 
+/** 2v2 站位移动命令 */
+export interface MoveSeatCommand extends Command<'MOVE_SEAT'> {
+    payload: {
+        /** 被移动的玩家 */
+        playerId: PlayerId;
+        /** 移除该玩家后，插入到新的目标下标 */
+        targetSeatIndex: number;
+    };
+}
+
 /** 玩家准备命令 */
 export interface PlayerReadyCommand extends Command<'PLAYER_READY'> {
     payload: Record<string, never>;
@@ -255,6 +265,7 @@ export type DiceThroneCommand =
     | AdvancePhaseCommand
     | SelectCharacterCommand
     | HostStartGameCommand
+    | MoveSeatCommand
     | PlayerReadyCommand
     | PlayerUnreadyCommand
     | ResponsePassCommand

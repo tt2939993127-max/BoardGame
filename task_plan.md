@@ -9,6 +9,14 @@
 - 以最小、可验证、可分批提交的方式推进，不把本地验证误报成远端部署完成。
 
 ## Current Phase
+## Latest Update (2026-03-26)
+- Dice Throne 4人 / 2v2 攻击目标已完成“延后到 targetingRoll 再解析”的收口，OpenSpec `1.8` 已回填为 completed。
+- 已修复 `targetingRoll -> defensiveRoll` 时唯一防御技能自动选择丢失的问题，避免进入防御阶段后报 `defense_ability_not_selected`。
+- 已更新 4 人模式卡牌目标回归口径：测试先真实完成 `targetingRoll -> defensiveRoll`，不再依赖旧的“预写 defenderId”契约。
+- 已补齐 2v2 队伍交替回合顺序：`getPlayerOrder/getNextPlayerId` 现在按“起始玩家所在队两手 → 敌队两手”轮转，同时 `Board.tsx` 顶部三窗继续使用 `getSeatingOrder`，避免 UI 顺序被 turn order 误带动。
+- 已完成 OpenSpec 未勾选项审计并回填：`1.2`、`1.5`、`1.6`、`1.7`、`1.9`、`1.10`、`1.11`、`1.12`、`1.18` 已改为 completed；新增 4 人在线座位面板 E2E 后，`2.4` 也已完成。
+- 当前仍待补的主要验证项是 `2.5-2.9`：目标交互、顶部三窗、目标面板、完整 2v2 主链路、同队响应窗口过滤。
+- 当前验证结果：`flow.test.ts + rule-consistency.test.ts + boundaryEdgeCases.test.ts` 共 `149 passed`，`tsc --noEmit` 无输出。
 - Phase A：登记当前多线任务并准备跨会话续跑
 
 ## Phases
@@ -250,6 +258,414 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 - [x] 已删除后半段重复的 `base_great_library`
 - [x] Python 扫描确认重复 key 数量为 `0`
 - [x] 直接运行 esbuild 打包 `server.ts`，日志中不再出现 `duplicate-object-key`
+
+### Status
+- completed
+
+## Addendum: 2026-03-25 Dice Throne 4 人/2v2 targetingRoll 目标选择收尾
+
+### Goal
+- 修复 4 人/2v2 模式下 `targetingRoll` 掷出 `5/6` 后，目标选择会重复创建交互并停留在 `targetingRoll` 的问题。
+- 核对当前实现与测试口径，确认选择目标后的正确推进行为。
+
+### Result
+- [x] 在 `src/games/dicethrone/domain/core-types.ts` 的 `PendingAttack` 上补充 `targetingSelectionResolved`，为目标选择建立稳定的“已完成”标记。
+- [x] 在 `src/games/dicethrone/domain/choiceEffects.ts` 中，`select-target:*` 选择后同时写回 `defenderId`、清理 `targetingSelectionPending`，并设置 `targetingSelectionResolved = true`。
+- [x] 在 `src/games/dicethrone/domain/reducer.ts` 与 `src/games/dicethrone/domain/systems.ts` 中，为 `targeting-roll` 的 `CHOICE_REQUESTED` 增加幂等保护；若目标选择已完成，则忽略重复请求。
+- [x] 在 `src/games/dicethrone/domain/flowHooks.ts` 中封住历史残留的 5/6 旧分支，确保选择目标后同一条命令链自动推进到 `defensiveRoll`。
+- [x] 更新 `src/games/dicethrone/__tests__/flow.test.ts`，将测试口径改为“选择目标后直接进入 `defensiveRoll`”。
+
+### Validation
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts -t "4 人模式 targetingRoll" --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`
+- `node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- 结果：`109 passed`，`tsc` 无输出。
+
+### Status
+- completed
+
+## Addendum: 2026-03-28 DiceThrone 旧专项 E2E 收敛
+
+### Goal
+- 收敛 DiceThrone 玩家目标交互的旧专项 E2E 债务，避免 `simple-start` 已经拿到 12 条在线证据，但旧文件仍停留在 `No tests found`、旧 selector、旧流程口径。
+- 保留一份仍有独立价值的共享交互 UI 契约 E2E，退役明显过时且与现役覆盖重复的旧专项文件。
+
+### Plan
+- [x] 盘点 `dicethrone-status-interaction-complete.e2e.ts`、`dicethrone-status-removal.e2e.ts`、`dicethrone-status-interaction-cancel.e2e.ts`、`dicethrone-paladin-vengeance-select-player.e2e.ts` 的真实状态与保留价值。
+- [x] 将 `dicethrone-status-interaction-complete.e2e.ts` 升级为现役可运行的共享交互契约 E2E，并对齐当前 `dt-*` 选择器与 `sys.interaction.current` 包装结构。
+- [x] 正式退役 `dicethrone-status-removal.e2e.ts`、`dicethrone-status-interaction-cancel.e2e.ts`、`dicethrone-paladin-vengeance-select-player.e2e.ts`，同步清理 `playwright.config.ts` 中对应的 legacy ignore。
+- [x] 串行复跑 `dicethrone-status-interaction-complete.e2e.ts` 与 `dicethrone-simple-start.e2e.ts`，确认新套件已稳定通过；`simple-start` 则出现环境级 `skip / Vite 异常退出`，已登记为 runner 噪音而非代码回归。
+
+### Validation
+- `npm run test:e2e:ci:file -- e2e/dicethrone-status-interaction-complete.e2e.ts`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player targeting roll: auto targets and choice owners stay correct in 2v2"`
+
+### Status
+- completed
+
+## Addendum: 2026-03-27 DiceThrone 联机导航重试与四宫格在线证据恢复
+
+### Goal
+- 修掉把联机 E2E 伪装成 `skip` 的真 blocker，并补回四宫格版本 `Transfer Status` 的在线证据。
+- 确认 `setupDTOnlineMatchWithPlayers()` 返回 `null` 时，问题究竟在接口、导航还是角色页等待。
+
+### Result
+- [x] 手动探针已确认 `/games/dicethrone/create`、`/claim-seat`、`/join` 正常，服务端不是本轮 skip 根因。
+- [x] 已复现并定位 `page.goto(/play/dicethrone/match/...) -> net::ERR_INSUFFICIENT_RESOURCES`，这才是 helper 吞错后导致 `skip` 的真实来源。
+- [x] `e2e/helpers/dicethrone.ts` 已为联机 match 页跳转加入瞬时错误重试。
+- [x] 4 人 `Transfer Status` 单用例重新恢复为 `1 passed`。
+- [x] 整份 `e2e/dicethrone-simple-start.e2e.ts` 已恢复为 `8 passed`。
+- [x] 最新 `06-four-player-transfer-token-target-selection.png` 已确认四宫格在线结构成立。
+
+### Validation
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
+- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 4 人目标交互四宫格修正
+
+### Goal
+- 按用户反馈把 `Transfer Status` 第二阶段从“来源摘要 + 3 目标卡”改成更一致的四宫格。
+- 保持“先选一个玩家，再选另一个玩家”的统一语义，不再把第一个玩家降格成异类说明块。
+
+### Result
+- [x] `InteractionOverlay.tsx` 已改为第二阶段四宫格：来源玩家保留在原位，作为锁定禁用卡显示。
+- [x] 来源卡新增稳定标识 `dt-transfer-source-locked-<pid>`，其余目标卡继续使用 `dt-transfer-target-<pid>`。
+- [x] `InteractionOverlay.test.tsx` 已更新为“四宫格 + 来源锁定”的结构断言。
+- [x] TypeScript 与组件测试已通过。
+- [ ] 新的在线四宫格截图尚未补到。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`：本轮结果为 `skipped`
+- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`：本轮结果为 `8 skipped`
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 4 人目标交互 UI 精简
+
+### Goal
+- 处理用户对 4 人目标交互 UI 的直接反馈：去掉重复选中框，解决第二阶段像“六个方框”的视觉噪音。
+- 在不改动目标选择语义的前提下，仅重构 `InteractionOverlay` 的信息层级与卡片呈现。
+
+### Result
+- [x] `selectTargetStatus` 第二阶段已改为“来源摘要 + 目标卡片”结构，不再保留第一阶段整排来源卡。
+- [x] 已选目标不再外挂额外勾选框，统一只保留卡片自身高亮。
+- [x] `InteractionOverlay` 里重复的友敌样式分支已抽到单一映射函数，便于后续继续收口多人交互 UI。
+- [x] 组件测试已补上结构断言，防止后续把第一阶段卡片重新带回第二阶段。
+- [x] 在线 4 人 `Transfer Status` 回归已通过，并复核最新截图符合“3 个目标卡”的视觉预期。
+
+### Validation
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx --configLoader native`
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 面向多人能力审计边界
+
+### Goal
+- 在 Batch 1 已补完 `Transfer Status` 与 `Consecrate` 在线证据后，收敛剩余“面向多人目标”能力的优先级，避免继续把精力花在更简单路径上。
+
+### Result
+- [x] 已确认当前高风险玩家目标入口主要集中在 `paladin-vengeance-select-player`、`paladin-consecrate`、`remove-status-1`、`remove-all-status`、`transfer-status`。
+- [x] 更复杂的 `transfer-status` 与 `paladin-consecrate` 已有 4 人在线证据。
+- [x] 当前决策：`remove-status-1/remove-all-status` 这类更简单移除交互暂不优先补在线 E2E。
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 4 人任意玩家授 token 在线证据补强
+
+### Goal
+- 在 Batch 1 已完成的基础上，再补一条更强的在线证据，证明“任意玩家授 token”不是只停留在规则层和通用验证层。
+- 以 `Consecrate` 作为代表性多人能力，覆盖 `tokenGrantConfigs` 多 token 授予。
+
+### Result
+- [x] 新增在线 4 人 `Consecrate` 用例，host 可把 `Protect/Retribution/Crit/Accuracy` 同时授予队友。
+- [x] 补充 `rule-consistency.test.ts` 中 `GRANT_TOKENS + tokenGrantConfigs` 的正向 4 人验证。
+- [x] 更新证据文档与截图，当前 `dicethrone-simple-start.e2e.ts` 已扩展为 `8 passed`。
+
+### Validation
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player grant tokens: Consecrate can grant four tokens to ally with stable target metadata"`
+- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 4 人玩家目标交互 Batch 1 收口
+
+### Goal
+- 收口 OpenSpec `update-dicethrone-4p-player-target-interactions` 的 Batch 1：任意玩家授 token、任意玩家移除状态、状态 / 可移除 token 转移。
+- 先补共享验证层与 4 人玩家选择 UI，再用 1 条代表性在线 E2E 把 `Transfer Status` 升级到 4 人版本。
+
+### Result
+- [x] `commandValidation.ts` 已收紧 `GRANT_TOKENS` 候选目标校验，并修正 `TRANSFER_STATUS` 为兼容真实在线双阶段 UI。
+- [x] `InteractionOverlay.tsx` 已为 4 人玩家卡片与状态 / token 徽章输出稳定 `data-testid` / `data-team-tone` 元信息。
+- [x] 组件测试与规则测试已补齐：既覆盖 4 人敌我标识，也覆盖 `TRANSFER_STATUS` 在 `selectStatus` 权威态下的真实在线验证路径。
+- [x] 在线 E2E 已新增 4 人 `Transfer Status` 用例：敌方 `Crit` token 可转给队友，第二阶段来源玩家被排除，host 与队友页权威状态一致。
+- [x] OpenSpec `update-dicethrone-4p-player-target-interactions/tasks.md` 已全部回填为 completed。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
+- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-26 DiceThrone 4 人玩家目标交互专项审计
+
+### Goal
+- 在 2v2 核心规则收口后，单独审计并补齐“面向玩家目标”的多人能力与交互。
+- 采用新的 OpenSpec change 分批推进，避免继续污染已完成的 `add-dicethrone-2v2-team-mode`。
+
+### Batch Strategy
+- Batch 1：任意玩家授 token、任意玩家移除状态、状态 / 可移除 token 转移。
+- Batch 2：其余基于 `selectPlayer` / `targetPlayerIds` 的多人技能与卡牌。
+- Batch 3：需要额外 UI/动画/特殊交互语义的长尾能力。
+
+### Current Findings
+- `customActions/common.ts` 与 `customActions/paladin.ts` 已经把多名玩家候选扩为 `Object.keys(state.players)`，说明共享入口并非完全 2 人写死。
+- `InteractionOverlay.test.tsx` 与 `dicethrone-paladin-vengeance-select-player.e2e.ts` 仍主要按 `['0','1']` 与“自己/对手”两选项口径验证，不能证明 4 人版本正确。
+- `validateGrantTokens` / `validateTransferStatus` 目前只校验“存在 pendingInteraction + playerId 匹配”，验证层过宽，需要纳入第一批高风险收口。
+
+### Active Change
+- `update-dicethrone-4p-player-target-interactions`
+
+### Status
+- in_progress
+
+## Addendum: 2026-03-25 Dice Throne 4人/2v2 targetingRoll 目标选择收尾（格式修正）
+
+### Goal
+修复 4 人/2v2 模式下 `targetingRoll` 掷出 `5/6` 后，目标选择会重复创建交互并停留在 `targetingRoll` 的问题；同时确认选择目标后的正确推进口径。
+
+### Result
+本轮收尾补上了 `pendingAttack.targetingSelectionResolved`，并在 `choiceEffects.ts`、`reducer.ts`、`systems.ts`、`flowHooks.ts` 上把目标选择完成态和重复 `CHOICE_REQUESTED` 的幂等保护接完整。`flow.test.ts` 也已同步改为“选择目标后直接进入 `defensiveRoll`”。
+
+### Validation
+已执行 `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts -t "4 人模式 targetingRoll" --configLoader native`、`node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`、`node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`。结果为 `109 passed`，`tsc` 无输出。
+
+### Status
+completed
+
+## Addendum: 2026-03-27 DiceThrone 2 人 Transfer Status 在线证据补齐
+
+### Goal
+- 确认共享 `InteractionOverlay` 改成“四宫格 + 锁定来源卡”后，2 人 `Transfer Status` 也同步吃到同一套 UI。
+- 为 2 人联机场景补一条现役在线 E2E，不再只靠共享组件测试推断。
+
+### Result
+- [x] 已确认 2 人与 4 人共用 `selectTargetStatus` 第二阶段渲染，2 人也会显示 `dt-transfer-source-locked-*` + `dt-transfer-target-*`。
+- [x] 已在 `e2e/dicethrone-simple-start.e2e.ts` 中新增 2 人 `Transfer Status` 在线用例。
+- [x] 直接 Playwright 探针已确认 `setupDTOnlineMatch()` 在当前服务环境下可以成功返回房间，不是 helper 完全失效。
+- [ ] 现役 Playwright 运行链路里的 `skip` 根因尚未彻底收口。
+- [ ] 2 人在线单用例通过与证据截图待补。
+
+### Validation
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx --configLoader native`
+- `node --import tsx -` 直接探针 `setupDTOnlineMatch()` 返回成功房间
+
+### Status
+- in_progress
+
+## Addendum: 2026-03-25 Dice Throne 4人/2v2 站位移动闭环与规范回填
+
+### Goal
+- 在已打通 `targetingRoll` 目标选择链路的基础上，补齐 4 人/2v2 开局前站位移动的最小可用闭环。
+- 将本轮实现结果同步回 OpenSpec `tasks.md` 与 plan-with-files 三件套，避免实现进度只停留在代码层。
+
+### Result
+- [x] 在领域层新增 `MOVE_SEAT` 命令与 `SEATING_MOVED` 事件，使用“移除玩家后按目标下标插入”的插入式站位模型更新 `seatingOrder`。
+- [x] 补齐站位校验：仅允许 `setup` 阶段、仅 4 人 team mode、仅房主操作、开始后锁定、目标下标必须合法、禁止移动到原位。
+- [x] 在 `SEATING_MOVED` reducer 中基于新 `seatingOrder` 重建 `teamIdByPlayerId`，确保左右对手与队伍归属随站位同步更新。
+- [x] 在选角界面右下区域接入站位面板：默认显示当前顺序，房主可“先选玩家，再点空位”，点已有玩家会给出本地提示，非房主只读。
+- [x] 顺手把此前 UI 已调用但领域层未打通的 `PLAYER_UNREADY` 完整接通。
+- [x] 同步更新 OpenSpec：已勾选 `1.3`、`1.4`、`1.13`、`2.1`、`2.2`。
+- [ ] 手动走查类验证项（`2.4+`）仍未完成，本轮不冒进误勾。
+
+### Validation
+- `node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts src/games/dicethrone/__tests__/boundaryEdgeCases.test.ts --configLoader native`
+- `openspec validate add-dicethrone-2v2-team-mode --strict --no-interactive`
+
+### Status
+completed
+## Addendum: 2026-03-25 Dice Throne 4人/2v2 验证补跑与收尾清理
+
+### Goal
+- 复核当前 worktree 中未提交的 Dice Throne 4 人/2v2 改动是否已达到可提交状态。
+- 清理 `targetingRoll` 收尾中残留的明显死代码，避免把无效分支带入后续提交。
+
+### Result
+- [x] 核对 `src/games/dicethrone/domain/flowHooks.ts`，确认 `targetingRoll` 的 5/6 分支里残留了一段 `if (true) { ... } else { ... }` 的死代码。
+- [x] 删除上述死代码，仅保留“目标已由选择交互写回后继续后续攻击流程”的真实路径。
+- [x] 重新执行 `node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`，结果无输出。
+- [ ] 在当前受限终端内重跑 Vitest 相关回归。
+
+### Validation
+- `node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+
+### Blocker
+- 当前 Codex Windows 受限终端会在 Vitest 启动 worker / esbuild transform 时触发 `spawn EPERM`，默认 forks worker 与 `--pool threads --no-file-parallelism --maxWorkers 1` 两条路径都无法完成测试初始化，因此这轮无法在此环境内补跑 `flow.test.ts` / `rule-consistency.test.ts` / `boundaryEdgeCases.test.ts`。
+- Git 也因仓库 owner SID 与当前用户 SID 不同触发 `dubious ownership`；当前用 `git -c safe.directory=D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode ...` 绕过，未修改全局配置（`C:/Users/zhuagenbao/.gitconfig` 无写权限）。
+
+### Status
+in_progress
+
+## Addendum: 2026-03-25 Dice Throne 4人/2v2 验证 blocker 解除与整套回归
+
+### Goal
+确认当前 worktree 中的 Dice Throne 4 人/2v2 改动已经脱离此前误报的 Vitest `spawn EPERM` blocker，并补齐可提交级别的验证结论。
+
+### Result
+已重新跑通 4 人/2v2 `targetingRoll` 的 3 个核心回归、`tsc --noEmit`，以及整套 `npm run test:dicethrone`。当前结论是这批改动在本机环境可以正常执行 Vitest，不存在此前记录里的持续性测试阻塞。
+
+### Validation
+`node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts src/games/dicethrone/__tests__/boundaryEdgeCases.test.ts --configLoader native` 通过，结果为 `142 passed`。`node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false` 无输出。`npm run test:dicethrone` 通过，结果为 `96 passed file suites`、`1076 passed`、`3 skipped`。
+
+### Status
+completed
+## Addendum（2026-03-25）：DiceThrone 四人房服务端 / E2E 闭环
+
+> 当前 worktree：`D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode`
+> 下次继续时优先看这一节，不要先跳回下面历史任务。
+
+### 当前目标
+- 收口 DiceThrone 四人 / 2v2 模式中与服务端建房、占座、加入、开局验证相关的实现与文档。
+- 维护 OpenSpec `add-dicethrone-2v2-team-mode` 与 `planning-with-files` 三件套的最新状态。
+
+### 本轮已完成
+- [x] 重整 `e2e/helpers/dicethrone.ts`，清掉坏正则、乱码导致的语法错误与 `return` 后死代码。
+- [x] 重写 `e2e/dicethrone-simple-start.e2e.ts`，补齐 2 人与 4 人简单开局场景。
+- [x] 收紧服务端人数校验：有 `playerOptions` 时优先按白名单校验，DiceThrone 不再错误接受 3 人房。
+- [x] 抽出 `areAllSeatsOccupied()` 统一 waiting -> playing 判定，并补 `src/server/__tests__/matchOccupancy.test.ts`。
+- [x] 跑通 `node D:\gongzuo\webgame\BoardGame\node_modules\typescript\lib\tsc.js --noEmit --pretty false`。
+- [x] 跑通 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player room: create claim-seat join and start successfully"`。
+- [x] 跑通 `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`。
+- [x] 回填 OpenSpec `1.17` / `2.3`，并整理 `tasks.md` 格式。
+
+### 当前判断
+- 服务端 4 人房的 `create -> claim-seat(host) -> join(guest1/2/3) -> status=playing` 闭环已被自动化验证覆盖。
+- 当前 blocker 已从“E2E helper 语法损坏”转为“剩余 2v2 规则/战斗逻辑项尚未完成”。
+
+### 下一步
+- 继续检查并推进 OpenSpec 仍未勾选的 `1.5-1.12`、`1.18`。
+- 若要继续收口 UI / 交互链路，优先补 `2.4-2.9` 对应的手动走查或更细的 E2E。
+
+---
+## Addendum: 2026-03-26 DiceThrone 4 人 / 2v2 E2E 收口
+
+### Goal
+- 收口 OpenSpec `add-dicethrone-2v2-team-mode` 剩余验证项 `2.5-2.9`。
+- 以现有 `e2e/dicethrone-simple-start.e2e.ts` 为唯一测试文件补齐 4 人 2v2 的目标交互、顶部三窗、目标面板、同队响应过滤、团队胜负 UI 证据。
+
+### Result
+- [x] 在线 4 人顶部三窗链路已通过 E2E 断言，验证 `dt-top-header-1/2/3` 的 `data-team-tone` 与 `data-player-id`。
+- [x] `Targeting Roll` 四个分支已通过 E2E 断言：`1/2` 自动锁左敌，`3/4` 自动锁右敌，`5` 由防守队选择，`6` 由进攻方选择。
+- [x] 目标面板截图时机已前移到面板可见时，证据截图真实展示 3 个纵向目标项。
+- [x] 同队响应过滤改为走稳定的“防守方确认掷骰后”链路，E2E 断言响应队列仅为 `['0']`，不会包含同队玩家 `2`。
+- [x] 2v2 主链路已通过 E2E 断言收口到团队胜负 UI，host 端显示 `Victory`，敌方端显示 `Defeat`。
+- [x] OpenSpec `2.5-2.9` 已回填为 completed。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player 2v2 flow: response queue excludes teammate and defense chain reaches team victory UI"`
+- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-27 DiceThrone 2 人联机 setup 顺序 / 直连游戏服修复
+
+### Goal
+- 把 2 人 `Transfer Status` 在线用例从“共享 UI 已改，但 Playwright 仍走 skip”推进到真实在线通过。
+- 在不新建测试文件的前提下，补回 2 人第二阶段锁定来源卡的在线证据，并确认 helper 修复没有带坏 4 人主链路。
+
+### Result
+- [x] 修正 `setupDTOnlineMatchWithPlayers()` 的联机时序：host 不再在房间未满员时提前等待选角页，而是等所有玩家都进入 match 页后再统一等待角色选择 UI。
+- [x] `initContext()` 已支持显式 `gameServerBaseURL` override，DiceThrone 在线 helper 创建的浏览器上下文现在会把 `__FORCE_GAME_SERVER_URL__` 正确注入到 `20000`，不再出现 API 走 `20000`、浏览器页却连回 `18000` 的分叉。
+- [x] `/test/*` 状态注入 helper 已改为优先跟随当前页面实际生效的 `__FORCE_GAME_SERVER_URL__`，避免 `get-state/inject-state` 继续打到错误端口。
+- [x] 2 人 `Transfer Status` 用例已补齐真实双阶段：先点第一阶段 `dt-status-effect-1-crit`，再断言第二阶段 `dt-transfer-source-locked-1` 与 `dt-transfer-target-0`。
+- [x] 2 人第二阶段在线截图已补充到证据文档。
+- [x] 已跑通显式 `6174/20000/21000` 环境下的 `dicethrone-simple-start.e2e.ts` 全文件回归，结果 `9 passed`。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts --grep "Online 2-player transfer token: transfer phase keeps locked source card and target card"`
+- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts --grep "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
+- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-27 DiceThrone remove-status 在线证据补齐
+
+### Goal
+- 把 `remove-status-1` 与 `remove-all-status` 从“已有规则层/组件层覆盖”推进到真实 4 人在线证据。
+- 用默认 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 口径证明 `dicethrone-simple-start.e2e.ts` 已扩展为完整的 11 条在线回归。
+
+### Result
+- [x] `remove-status-1` 用例已在 4 人在线场景中断言敌方 `Crit` 被清掉，且目标页权威态同步追平。
+- [x] `remove-all-status` 用例已在 4 人在线场景中断言空目标禁用、敌方 `burn/crit` 被整组清空，且目标页权威态同步追平。
+- [x] 证据文档已补入 `08-four-player-remove-single-status-selection.png` 与 `09-four-player-remove-all-status-selection.png`。
+- [x] 默认整文件脚本已复跑为 `11 passed`，当前 `dicethrone-simple-start.e2e.ts` 覆盖 2 人 / 4 人 / 2v2 / 玩家目标交互主链路。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-27 DiceThrone 玩家目标交互 Batch 1 spec 纠偏
+
+### Goal
+- 把 `update-dicethrone-4p-player-target-interactions` 的 spec 从“单一总括 requirement”纠正为真实的 Batch 1 requirement 集，避免把本轮范围误读成“所有多人玩家目标交互已全量审计”。
+- 将 `Vengeance II` 这轮共享攻击流程修复与 4 人在线证据正式纳入 OpenSpec 与三件套。
+
+### Result
+- [x] `spec.md` 已拆成 4 个 Batch 1 requirement：任意玩家授 token、任意玩家移除状态、状态 / 可移除 token 转移、无单一敌方目标的无伤害技能流程兼容。
+- [x] `tasks.md` 已回填 Batch 1 的真实实现与验证边界，明确纳入 `Transfer Status`、`Consecrate`、`Vengeance II`、`remove-status-1`、`remove-all-status`。
+- [x] `evidence/dicethrone-simple-start-e2e-test.md` 已补入 4 人 `Vengeance II` 截图与分析，并将默认整文件覆盖更新为 12 条在线用例。
+- [x] `findings.md` 已记录用户指出的 spec 边界问题，以及 `Vengeance II` 根因位于共享攻击流程而非单卡脚本。
+- [x] 已重新执行 OpenSpec / 规则回归 / 简单开局整文件 E2E，最终结果分别为 `valid`、`31 passed`、`12 passed`。
+- [x] 已修复当前 worktree 残缺的 `node_modules` 入口文件问题；`typescript` / `vitest` / `dotenv` / `playwright` 相关验证脚本恢复可执行。
+
+### Validation
+- `openspec validate update-dicethrone-4p-player-target-interactions --strict --no-interactive`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
+
+## Addendum: 2026-03-28 DiceThrone Batch 1 最终复核收口
+
+### Goal
+- 把 `update-dicethrone-4p-player-target-interactions` 从“文档与代码都已写完”推进到“当前 worktree 下验证命令也真实可执行且全绿”。
+- 收口 `Consecrate` 串跑时 ally 页权威态慢半拍导致的最后一个 E2E 抢跑问题。
+
+### Result
+- [x] 当前 worktree 的依赖树已恢复到可执行状态，`typescript` / `vitest` / `dotenv` / `playwright` 相关入口不再缺失。
+- [x] `scripts/infra/vitest-cli-safe.mjs` 已兼容新版 Vitest 包结构，规则回归命令恢复可执行。
+- [x] `Consecrate` 用例已补齐 ally 页 token 追平等待，串跑时不再因多页广播慢半拍而误报失败。
+- [x] 已重新执行 `tsc`、OpenSpec、规则回归与 `simple-start` 整文件 E2E，最终结果分别为：无输出、`valid`、`31 passed`、`12 passed`。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `openspec validate update-dicethrone-4p-player-target-interactions --strict --no-interactive`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
 
 ### Status
 - completed

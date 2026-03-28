@@ -40,7 +40,9 @@ export type DiceThroneMoveMap = {
     // 选角相关
     selectCharacter: (characterId: string) => void;
     hostStartGame: () => void;
+    moveSeat: (playerId: string, targetSeatIndex: number) => void;
     playerReady: () => void;
+    playerUnready: () => void;
 };
 
 /**
@@ -81,5 +83,7 @@ export const resolveMoves = (
         dispatch('USE_PASSIVE_ABILITY', { passiveId, actionIndex, targetDieId }),
     selectCharacter: (characterId) => dispatch('SELECT_CHARACTER', { characterId }),
     hostStartGame: () => dispatch('HOST_START_GAME', {}),
+    moveSeat: (playerId, targetSeatIndex) => dispatch('MOVE_SEAT', { playerId, targetSeatIndex }),
     playerReady: () => dispatch('PLAYER_READY', {}),
+    playerUnready: () => dispatch('PLAYER_UNREADY', {}),
 });
