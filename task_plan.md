@@ -1,5 +1,21 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-28）：大厅单机模式 / 对战AI 入口口径回归修正
+
+### Goal
+- 修正当前工作树里大厅详情页与本地房间 HUD 的产品语义漂移，恢复 `单机模式`、`对战AI`、`教程模式` 的明确分流，不再把 AI 对局继续叫成“本地同屏”。
+- 保持这轮只处理入口口径、默认 seat controller 和相关验证，不扩展到新的 AI 策略实现。
+
+### Result
+- [x] `src/components/lobby/GameDetailsModal.tsx` 对支持 AI 的游戏改成双入口：`单机模式` 显式写入全 human 的本地 seat controller，`对战AI` 直达默认本地逻辑 AI 对局。
+- [x] `src/pages/LocalMatchRoom.tsx` 与 `src/components/game/framework/widgets/GameHUD.tsx` 接通本地 seat controller 结果，纯真人本地局显示 `单机模式`，存在 AI 座位时显示 `对战AI`。
+- [x] 中英文大厅 / 游戏 HUD 文案去掉 `本地同屏` 的用户口径残留，统一为 `单机模式` / `对战AI`。
+- [x] 在现有 `src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts` 与 `e2e/lobby.e2e.ts` 中补回归，并把 lobby E2E 首屏 ready 逻辑收敛为 `ensureLobbyReady(...)`，减少启动抖动导致的假失败。
+- [x] 验证通过：`npm run typecheck`、`npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1`、`npm run test:e2e:ci:file -- lobby.e2e.ts "Game details modal opens and shows actions"`、`npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 对战AI入口会直接进入本地逻辑 AI 对局"`、`npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 单机模式入口不会把第二个座位交给 AI"`。
+
+### Next Step
+- 若继续 AI 主线，最正确的下一步仍是补各游戏 runtime 的第二层策略，而不是再回头改入口命名；这条入口语义线已经重新和当前实现对齐。
+
 ## Addendum（2026-03-28）：召唤师战争本地 AI 首轮接入
 
 ### Goal
