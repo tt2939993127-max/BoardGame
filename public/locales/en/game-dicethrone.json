@@ -2372,6 +2372,7 @@
     "readyWaiting": "Waiting for other players...",
     "readyProgress": "Ready Progress",
     "you": "You",
+    "targetOptionDisabled": "Unavailable",
     "seating": {
       "title": "2v2 Seating",
       "hostTip": "Click a player first, then click an empty slot to move them. Swapping seats is not allowed.",
@@ -2383,8 +2384,7 @@
       "cancel": "Cancel",
       "seatNumber": "Seat {{seat}}",
       "teamA": "Team A",
-      "teamB": "Team B",
-      "targetOptionDisabled": "Unavailable"
+      "teamB": "Team B"
     }
   },
   "endgame": {

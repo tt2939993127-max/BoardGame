@@ -371,6 +371,7 @@
     "readyWaiting": "等待其他玩家...",
     "readyProgress": "准备进度",
     "you": "你",
+    "targetOptionDisabled": "不可选",
     "seating": {
       "title": "2v2 站位",
       "hostTip": "点击任意玩家头像，再点击空位完成移动。不支持交换位。",
@@ -382,8 +383,7 @@
       "cancel": "取消",
       "seatNumber": "{{seat}}号位",
       "teamA": "A 队",
-      "teamB": "B 队",
-      "targetOptionDisabled": "不可选"
+      "teamB": "B 队"
     }
   },
   "imageAlt": {
