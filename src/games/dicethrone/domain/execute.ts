@@ -20,13 +20,19 @@ import type {
     StatusRemovedEvent,
     CharacterSelectedEvent,
     HostStartedEvent,
+    SeatingMovedEvent,
     PlayerReadyEvent,
+    PlayerUnreadyEvent,
 } from './types';
 import {
     getRollerId,
+    getDefaultOpponentId,
+    getContextualOpponentId,
     getNextPlayerId,
     getResponderQueue,
     getTokenStackLimit,
+    getSeatingOrder,
+    isTeamMode,
 } from './rules';
 import { findPlayerAbility, playerAbilityHasDamage } from './abilityLookup';
 import { applyEvents } from './utils';
@@ -178,6 +184,36 @@ export function execute(
             break;
         }
 
+        case 'MOVE_SEAT': {
+            const movingPlayerId = command.payload.playerId;
+            const seatingOrder = getSeatingOrder(state);
+            const sourceSeatIndex = seatingOrder.indexOf(movingPlayerId);
+            if (sourceSeatIndex === -1) {
+                break;
+            }
+
+            const remainingPlayers = seatingOrder.filter((pid) => pid !== movingPlayerId);
+            const nextSeatingOrder = [
+                ...remainingPlayers.slice(0, command.payload.targetSeatIndex),
+                movingPlayerId,
+                ...remainingPlayers.slice(command.payload.targetSeatIndex),
+            ];
+
+            const seatingMovedEvent: SeatingMovedEvent = {
+                type: 'SEATING_MOVED',
+                payload: {
+                    playerId: movingPlayerId,
+                    sourceSeatIndex,
+                    targetSeatIndex: command.payload.targetSeatIndex,
+                    seatingOrder: nextSeatingOrder,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatingMovedEvent);
+            break;
+        }
+
         case 'PLAYER_READY': {
             const readyEvent: PlayerReadyEvent = {
                 type: 'PLAYER_READY',
@@ -188,6 +224,19 @@ export function execute(
                 timestamp,
             };
             events.push(readyEvent);
+            break;
+        }
+
+        case 'PLAYER_UNREADY': {
+            const unreadyEvent: PlayerUnreadyEvent = {
+                type: 'PLAYER_UNREADY',
+                payload: {
+                    playerId: command.playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(unreadyEvent);
             break;
         }
 
@@ -225,8 +274,7 @@ export function execute(
             // 关键：必须用 ROLL_CONFIRMED 事件应用后的状态来检查响应窗口
             // 否则 rollConfirmed 仍为 false，requireRollConfirmed 的卡牌（如抬一手）会被过滤掉
             const stateAfterConfirm = applyEvents(state, [event] as DiceThroneEvent[], reduce);
-            const playerIds = Object.keys(state.players);
-            const opponentId = playerIds.find(pid => pid !== rollerId) || rollerId;
+            const opponentId = getContextualOpponentId(stateAfterConfirm, rollerId) ?? rollerId;
             const responderQueue = getResponderQueue(stateAfterConfirm, 'afterRollConfirmed', opponentId, undefined, rollerId, phase);
             if (responderQueue.length > 0 && getAutoResponseEnabled()) {
                 const windowId = `afterRollConfirmed-${timestamp}`;
@@ -278,7 +326,9 @@ export function execute(
                 events.push(abilityActivatedEvent);
                 
                 // 2. 再发起放击事件
-                const defenderId = getNextPlayerId(state);
+                const defenderId = isTeamMode(state)
+                    ? undefined
+                    : (getDefaultOpponentId(state, state.activePlayerId) ?? getNextPlayerId(state));
                 const isDefendable = isDefendableAttack(state, state.activePlayerId, abilityId);
                 
                 // 检查是否为终极技能

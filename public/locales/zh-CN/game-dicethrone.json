@@ -396,7 +396,21 @@
     "cancelReady": "取消准备",
     "readyWaiting": "等待其他玩家...",
     "readyProgress": "准备进度",
-    "you": "你"
+    "you": "你",
+    "targetOptionDisabled": "不可选",
+    "seating": {
+      "title": "2v2 站位",
+      "hostTip": "点击任意玩家头像，再点击空位完成移动。不支持交换位。",
+      "readOnly": "仅房主可调整站位，其他玩家只读查看。",
+      "moveHint": "已选中 {{player}}，点击空位完成移动。",
+      "occupied": "该位置已有玩家，不支持交换位。",
+      "emptySlot": "空位",
+      "currentSlot": "当前位置",
+      "cancel": "取消",
+      "seatNumber": "{{seat}}号位",
+      "teamA": "A 队",
+      "teamB": "B 队"
+    }
   },
   "imageAlt": {
     "deck": "牌堆",
@@ -644,6 +658,10 @@
     "defense_ability_not_selected": "需要先选择防御技能才能掷骰",
     "invalid_character": "无效的角色选择",
     "character_not_selected": "请先选择角色",
+    "game_already_started": "对局已经开始，不能再调整站位或准备状态",
+    "not_team_mode": "当前不是 2v2 模式",
+    "invalid_seat_target": "目标空位无效",
+    "seat_not_changed": "请选择新的空位",
     "roll_not_confirmed": "请先确认投掷结果",
     "no_pending_attack": "没有待防御的攻击",
     "deck_empty": "牌库和弃牌堆均为空",
@@ -737,7 +755,9 @@
     "cancel": "取消",
     "confirm": "确认",
     "self": "自己",
-    "opponent": "对手"
+    "opponent": "对手",
+    "ally": "队友",
+    "enemy": "敌方"
   },
   "interaction": {
     "waitingOpponent": "等待对手操作...",
@@ -909,10 +929,10 @@
     },
     "soul-burn": {
       "name": "灵魂燃烧",
-      "description": "获得2x[火魂]层火焰精通，并对所有对手造成1x[火魂]点伤害",
+      "description": "获得2x[火魂]层火焰精通，并对目标玩家造成1x[火魂]点伤害",
       "effects": {
         "fm": "获得2层火焰精通",
-        "damage": "对所有对手造成等同于火魂骰面数量的伤害"
+        "damage": "对目标玩家造成等同于火魂骰面数量的伤害"
       }
     },
     "fiery-combo": {
@@ -1327,7 +1347,7 @@
       "description": "2火魂: 获得2×[火魂数]FM，造成[火魂数]伤害。3火魂额外施加灼烧。炙热之魂(2岩浆+2火魂): FM上限+1，获得5FM，施加倒地。",
       "effects": {
         "fm": "获得2×火魂骰面数量的火焰精通",
-        "damage": "对所有对手造成等同于火魂骰面数量的伤害"
+        "damage": "对目标玩家造成等同于火魂骰面数量的伤害"
       }
     },
     "soul-burn-3": {
@@ -1335,7 +1355,7 @@
       "effects": {
         "fm": "获得2×火魂骰面数量的火焰精通",
         "inflictBurn": "施加1个燃烧标记",
-        "damage": "对所有对手造成等同于火魂骰面数量的伤害"
+        "damage": "对目标玩家造成等同于火魂骰面数量的伤害"
       }
     },
     "blazing-soul": {

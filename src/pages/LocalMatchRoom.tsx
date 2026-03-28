@@ -67,6 +67,10 @@ export const LocalMatchRoom = () => {
         }),
         [gameConfig?.ai, localPlayerCount, searchParams],
     );
+    const hasAiSeat = useMemo(
+        () => Object.values(seatControllers).some((controller) => controller.type !== 'human'),
+        [seatControllers],
+    );
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
@@ -123,7 +127,7 @@ export const LocalMatchRoom = () => {
 
     return (
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
-            <GameHUD mode="local" />
+            <GameHUD mode="local" localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
             <MobileBoardShell>
                 <div
                     className="w-full h-full"
@@ -144,7 +148,7 @@ export const LocalMatchRoom = () => {
                                 >
                                     <BoardBridge
                                         board={WrappedBoard}
-                                        loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                                        loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
                                     />
                                 </LocalGameProvider>
                             ) : (

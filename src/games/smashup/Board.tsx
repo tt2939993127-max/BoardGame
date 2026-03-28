@@ -1248,7 +1248,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
     // 等待状态就绪
     if (!G || !core) {
-        return <LoadingScreen title={t('ui.loading', { defaultValue: '加载中...' })} />;
+        return <LoadingScreen anchor="container" title={t('ui.loading', { defaultValue: '加载中...' })} />;
     }
 
     // 防御性检查：HMR 或 client 重建时 core 可能不完整
@@ -1256,6 +1256,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         return (
             <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: false }}>
                 <LoadingScreen
+                    anchor="container"
                     description={t('ui.loading', { defaultValue: '加载中...' })}
                     className="bg-[#3e2723]"
                 />

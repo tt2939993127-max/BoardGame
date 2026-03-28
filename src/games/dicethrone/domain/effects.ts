@@ -10,7 +10,7 @@ import type { EffectAction, RollDieConditionalEffect, RollDieDefaultEffect } fro
 export type { RollDieConditionalEffect, RollDieDefaultEffect };
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { getActiveDice, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from './rules';
+import { getActiveDice, getFaceCounts, getOpponents, getPlayerDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
 import type {
     DiceThroneCore,
@@ -450,11 +450,11 @@ function resolveEffectAction(
 
     switch (action.type) {
         case 'damage': {
-            // target: 'all' → 对所有玩家（含自己）; 'allOpponents' → 除自己外所有玩家
+            // target: 'all' → 对所有玩家（含自己）; 'allOpponents' → 当前玩家的真实敌方集合
             const damageTargets = action.target === 'all'
                 ? Object.keys(state.players)
                 : action.target === 'allOpponents'
-                    ? Object.keys(state.players).filter(id => id !== attackerId)
+                    ? getOpponents(state, attackerId)
                     : [targetId];
 
             for (const dmgTargetId of damageTargets) {

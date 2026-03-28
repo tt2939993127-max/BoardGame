@@ -5,7 +5,7 @@
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
 import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType, TeamId } from './types';
 import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commandValidation';
 import { execute } from './execute';
@@ -27,6 +27,8 @@ import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
 import { paladinResourceDefinitions } from '../heroes/paladin/resourceConfig';
 import { gunslingerDiceDefinition } from '../heroes/gunslinger/diceConfig';
 import { samuraiDiceDefinition } from '../heroes/samurai/diceConfig';
+import { INITIAL_HEALTH } from './types';
+import { buildTeamIdByPlayerIdFromSeatingOrder, getTeamIdByPlayerIdMap, isTeamMode } from './rules';
 
 // 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
 registerDiceThroneConditions();
@@ -83,8 +85,20 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             readyPlayers[pid] = false;
         }
 
+        const isFourPlayerTeamMode = playerIds.length === 4;
+        const seatingOrder = isFourPlayerTeamMode ? [...playerIds] : undefined;
+        const teamIdByPlayerId = isFourPlayerTeamMode && seatingOrder
+            ? buildTeamIdByPlayerIdFromSeatingOrder(seatingOrder)
+            : undefined;
+        const teamHealth = isFourPlayerTeamMode
+            ? { A: INITIAL_HEALTH, B: INITIAL_HEALTH }
+            : undefined;
+
         return {
             players,
+            seatingOrder,
+            teamIdByPlayerId,
+            teamHealth,
             selectedCharacters,
             readyPlayers,
             hostPlayerId: playerIds[0],
@@ -140,6 +154,33 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         // 在 setup 阶段不进行胜负判定，避免血量未初始化导致误判
         if (!state.hostStarted) return undefined;
+
+        if (isTeamMode(state)) {
+            const teamIdByPlayerId = getTeamIdByPlayerIdMap(state);
+            const healthByTeam: Record<TeamId, number> = {
+                A: state.teamHealth?.A ?? INITIAL_HEALTH,
+                B: state.teamHealth?.B ?? INITIAL_HEALTH,
+            };
+
+            (Object.keys(state.players) as PlayerId[]).forEach((playerId) => {
+                const teamId = teamIdByPlayerId[playerId];
+                if (!teamId) return;
+                const hp = state.players[playerId]?.resources[RESOURCE_IDS.HP] ?? healthByTeam[teamId];
+                healthByTeam[teamId] = Math.min(healthByTeam[teamId], hp);
+            });
+
+            const teamADefeated = healthByTeam.A <= 0;
+            const teamBDefeated = healthByTeam.B <= 0;
+
+            if (!teamADefeated && !teamBDefeated) return undefined;
+            if (teamADefeated && teamBDefeated) return { draw: true };
+
+            const winnerTeamId: TeamId = teamADefeated ? 'B' : 'A';
+            const winner = (Object.keys(state.players) as PlayerId[]).find(
+                (playerId) => teamIdByPlayerId[playerId] === winnerTeamId
+            );
+            return winner ? { winner } : { draw: true };
+        }
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);

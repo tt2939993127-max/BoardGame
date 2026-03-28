@@ -14,6 +14,7 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
+import { buildLocalMatchSearchParams } from '../../engine/ai';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
@@ -63,6 +64,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
+    const supportsAiSeatConfig = Boolean(gameManifest?.ai && (gameManifest.ai.localAi || gameManifest.ai.remoteAi));
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -253,9 +255,33 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         navigate(`/play/${gameId}/tutorial`);
     };
 
-    const handleLocalPlay = () => {
+    const navigateToLocalPlay = (search?: URLSearchParams) => {
+        const query = search?.toString();
         onNavigate?.();
-        navigate(`/play/${gameId}/local`);
+        navigate(`/play/${gameId}/local${query ? `?${query}` : ''}`);
+    };
+
+    const handleSingleDevicePlay = () => {
+        if (!gameManifest) {
+            navigateToLocalPlay();
+            return;
+        }
+
+        const defaultPlayerCount = gameManifest.playerOptions?.[0] ?? 2;
+        const seatControllers = Object.fromEntries(
+            Array.from({ length: defaultPlayerCount }, (_, index) => [String(index), { type: 'human' as const }]),
+        );
+        const search = buildLocalMatchSearchParams({
+            numPlayers: defaultPlayerCount,
+            playerOptions: gameManifest.playerOptions,
+            aiSupport: gameManifest.ai,
+            seatControllers,
+        });
+        navigateToLocalPlay(search);
+    };
+
+    const handlePlayAi = () => {
+        navigateToLocalPlay();
     };
 
     // 打开创建房间弹窗
@@ -947,20 +973,29 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             </div>
 
                             {/* 操作按钮 - 固定在底部 */}
-                            <div className="mt-1 shrink-0 w-full flex flex-row gap-2 md:mt-0 md:flex-col">
+                            <div className="mt-1 grid shrink-0 w-full gap-2 md:mt-0 md:grid-cols-1">
                                 {allowLocalMode && (
                                     <button
                                         type="button"
-                                        onClick={handleLocalPlay}
-                                        className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
+                                        onClick={handleSingleDevicePlay}
+                                        className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                                     >
-                                        {t('actions.localPlay')}
+                                        {t('actions.singleDevice')}
+                                    </button>
+                                )}
+                                {allowLocalMode && supportsAiSeatConfig && (
+                                    <button
+                                        type="button"
+                                        onClick={handlePlayAi}
+                                        className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
+                                    >
+                                        {t('actions.playAi')}
                                     </button>
                                 )}
                                 <button
                                     type="button"
                                     onClick={handleTutorial}
-                                    className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
+                                    className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                                 >
                                     {t('actions.tutorial')}
                                 </button>
