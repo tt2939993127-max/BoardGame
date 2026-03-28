@@ -207,6 +207,40 @@ describe('响应窗口交互锁定：骰子重掷类（selectDie）', () => {
 });
 
 describe('响应窗口交互锁定：取消交互', () => {
+    it('交互锁定期间 RESPONSE_PASS 应被拒绝，且不得提前清掉窗口或交互', () => {
+        const random = createQueuedRandom([3, 3, 3, 3, 3]);
+        const runner = createRunner(random, true);
+
+        const setupResult = runner.run({
+            name: '弹一手在响应窗口中打出并创建交互',
+            setup: createSetupWithHand(['card-flick'], {
+                playerId: '1',
+                cp: 10,
+                mutate: (core) => {
+                    core.players['0'].hand = [];
+                    core.players['0'].deck = [];
+                    core.players['1'].deck = [];
+                },
+            }),
+            commands: [
+                ...advanceTo('offensiveRoll'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('PLAY_CARD', '1', { cardId: 'card-flick' }),
+            ],
+        });
+
+        assertWindowLockedWithInteraction(setupResult.finalState, 'multistep-choice', '1');
+        runner.setState(setupResult.finalState);
+
+        const blockedPass = runner.dispatch('RESPONSE_PASS', { playerId: '1' });
+
+        expect(blockedPass.success).toBe(false);
+        expect(blockedPass.error).toBe('交互处理中，无法跳过响应');
+        expect(blockedPass.finalState.sys.interaction?.current?.kind).toBe('multistep-choice');
+        expect(blockedPass.finalState.sys.responseWindow?.current?.pendingInteractionId).toBeDefined();
+    });
+
     it('取消弹一手交互后，卡牌返回手牌', () => {
         const random = createQueuedRandom([3, 3, 3, 3, 3]);
         const runner = createRunner(random, true);
