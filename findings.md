@@ -758,3 +758,54 @@
   - `findings.md` / `progress.md` / `task_plan.md`：纯 append-only 记录冲突，必须按时间线保留两侧历史。
 - `npm run merge:audit:strict -- HEAD` 的结果为 11 个冲突文件全部 `混合结果`，`完全等于父1/父2` 都是 `0`；说明这次 merge 没有把任何冲突文件静默吃成单边结果。
 
+## 2026-03-28 DiceThrone Batch 2 范围校正发现
+
+- 按当前代码检索，Batch 1 已基本覆盖全部活跃的多人玩家目标交互发起点：
+  - `src/games/dicethrone/domain/customActions/common.ts`：`remove-status-1`、`remove-all-status`、`transfer-status`
+  - `src/games/dicethrone/domain/customActions/paladin.ts`：`paladin-vengeance-select-player`、`paladin-consecrate`
+  - `remove-status-self` 仅限自身目标，不属于新的 4 人多人目标风险面
+- 因此如果继续把 Batch 2 描述成“再补几条 `selectPlayer/selectStatus/selectTargetStatus` 用例”，本质上只是在给同一组共享 handler 换卡名重测，不是在扩展新的风险面。
+- 当前真正还没有拿到现役 OpenSpec / E2E 证据的交互家族，是 `modifyDie` / `selectDie` 这组多步骰子交互：
+  - `src/games/dicethrone/domain/customActions/common.ts` 中 8 条通用卡牌路径会发 `INTERACTION_REQUESTED`
+  - `src/games/dicethrone/domain/customActions/shadow_thief.ts` 的 `shadow_thief-shadow-manipulation` 也会走同一套 multistep dice interaction
+- 这组交互的残余风险不在 2 人 happy path，而在 4 人 / 2v2 场景下的共享 UI / 视角假设：
+  - `Board.tsx`、`RightSidebar.tsx`、`DiceTray.tsx` 仍以单一 `opponent` / `targetOpponentDice:boolean` 为核心语义
+  - 现有规则回归更多只锁住“当前 roller 的骰池可操作”，还没有 4 人现役在线证据证明这套 UI 在顶栏三窗 / 2v2 响应链路里不会漂移
+- `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 不能被当成 Batch 2 的现役证据：
+  - 仍是旧专项写法，未沿用当前在线 E2E 三板斧
+  - 文件里混用了 `browser` fixture 与未定义的 `page` 变量，说明至少没有经过现役链路收敛
+  - 也没有把 4 人 / 2v2 作为默认审计口径
+- 所以最正确的 Batch 2 不是继续追加到 `update-dicethrone-4p-player-target-interactions`，而是新开 change，把范围明确切到“4 人 / 2v2 多步骰子交互与响应窗口交互兼容”。这样既保住 Batch 1 已完成边界，也避免把下一个真实问题伪装成“同一专题还没测完”。
+
+## 2026-03-28 DiceThrone Batch 2 玩家目标范围再校正
+
+- 并行盘点后确认，若严格沿当前对话的“4 人玩家目标交互专项”主线继续推进，Batch 2 不应整体切到多步骰子交互；那属于相邻交互家族，不是本轮最直接的剩余玩家目标风险。
+- Batch 1 之后，显式 `selectPlayer/selectStatus/selectTargetStatus` 入口里真正还未被专项吃掉的，只剩 `remove-status-self` 这条 self-only 分支：
+  - 交互创建点在 `src/games/dicethrone/domain/customActions/common.ts` 的 `handleRemoveSelfStatus`
+  - 业务入口在 `src/games/dicethrone/heroes/barbarian/abilities.ts` 的 `Steadfast II`
+  - 当前只有 `flow.test.ts` 的浅层断言，尚无 4 人专项规则回归或在线证据
+- 这轮更高风险的共享根因是 enemy-set 语义，而不是再换几张卡重跑同类 UI：
+  - `src/games/dicethrone/domain/effects.ts` 里 `allOpponents` 当前直接写成 `Object.keys(state.players).filter(id => id !== attackerId)`，这在 2v2 下会把 ally 一起算进“所有对手”
+  - `src/games/dicethrone/domain/customActions/pyromancer.ts` 的 `resolveSoulBurnDamage` 也在用同样的“所有非自己玩家”广播口径
+- 因此当前最正确的 Batch 2 收口不是“更多玩家选择卡片”，而是：
+  - `remove-status-self` 这条 self-only 交互分支
+  - `Meteor` / `Meteor II` / `Ultimate Inferno` 代表的 `allOpponents` 对手集合语义
+  - `Soul Burn` 作为规则审计候选，先确认真实目标集合，再决定是否在本批实现
+- 这也解释了为什么不能把 `update-dicethrone-4p-interactions-batch-2` 继续写成“多步骰子交互 Batch 2”：
+  - 那会偏离本对话主线
+  - 也会把“玩家目标交互还剩什么”与“下一批相邻交互家族是什么”混成一件事
+
+## 2026-03-28 DiceThrone Batch 2 共享目标集合与 Soul Burn 审计结论
+
+- `allOpponents` 的共享根因已经实锤：`src/games/dicethrone/domain/effects.ts` 之前把它解析成“所有非自己玩家”，在 4 人 / 2v2 下会把 ally 一并纳入；正确口径必须走 `getOpponents(state, attackerId)` 的团队感知敌方集合。
+- `Meteor` / `Meteor II` / `Ultimate Inferno` 这三条都属于同一类 `allOpponents` 风险入口；本轮不再各自堆特判，而是统一依赖共享修复，并用 `rule-consistency.test.ts` + 在线 `Meteor` 证据一起锁住。
+- `Soul Burn` 的冲突这轮已经裁决，不再继续挂成 open question：
+  - 技能定义与升级变体都写的是 `target: 'opponent'`；
+  - `wikiSnapshots.ts` 的描述也更接近单体当前目标，而不是 AoE；
+  - 先前把它实现成“所有非自己玩家”只是本地语义漂移，不是可靠规则来源。
+- 因此 `src/games/dicethrone/domain/customActions/pyromancer.ts` 已收回为“只命中当前 defender/目标玩家”，并同步修正中英文文案与内部说明文档，避免后续再被本地旧文本带回“所有对手”口径。
+- 4 人在线 `Meteor` 截图进一步确认了 2v2 下的真实表现应该按“敌队共享生命”理解：
+  - 敌队共享生命从 `50` 降到 `44`；
+  - 队友 `P3` 仍保持 `50`；
+  - 这说明 online 结算已经只命中真实敌方集合，没有再把 ally 算进 `allOpponents`。
+

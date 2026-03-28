@@ -1452,10 +1452,10 @@
     },
     "soul-burn": {
       "name": "Soul Burn",
-      "description": "Gain Fire Mastery equal to 2× Fire Soul faces and deal 1× Fire Soul damage to all opponents.",
+      "description": "Gain Fire Mastery equal to 2× Fire Soul faces and deal 1× Fire Soul damage to the target player.",
       "effects": {
         "fm": "Gain 2 Fire Mastery",
-        "damage": "Deal damage equal to the number of Fire Soul faces to all opponents"
+        "damage": "Deal damage equal to the number of Fire Soul faces to the target player"
       }
     },
     "fiery-combo": {
@@ -1763,14 +1763,14 @@
       "description": "2 Fire Soul: Gain 2×[souls] FM, deal [souls] damage. 3 Fire Soul: also inflict Burn. Blazing Soul (2 Magma + 2 Fire Soul): FM cap +1, gain 5 FM, inflict Knockdown.",
       "effects": {
         "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
-        "damage": "Deal damage equal to Fire Soul face count to all opponents"
+        "damage": "Deal damage equal to Fire Soul face count to the target player"
       }
     },
     "soul-burn-3": {
       "effects": {
         "fm": "Gain Fire Mastery equal to 2× Fire Soul faces",
         "inflictBurn": "Inflict 1 Burn token",
-        "damage": "Deal damage equal to Fire Soul face count to all opponents"
+        "damage": "Deal damage equal to Fire Soul face count to the target player"
       }
     },
     "blazing-soul": {

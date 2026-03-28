@@ -12,6 +12,7 @@ import { waitForTestHarness } from './helpers/common';
 import { getMatchState, injectMatchState } from './helpers/state-injection';
 import { COMMON_CARDS } from '../src/games/dicethrone/domain/commonCards';
 import { PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
+import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
 import { getAvailableAbilityIds } from '../src/games/dicethrone/domain/rules';
 import { registerDiceThroneConditions } from '../src/games/dicethrone/conditions';
 import { VENGEANCE_2 } from '../src/games/dicethrone/heroes/paladin/abilities';
@@ -511,6 +512,48 @@ const buildFourPlayerRemoveAllStatusState = (state: any) => {
     return next;
 };
 
+const buildFourPlayerMeteorAllOpponentsState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'offensiveRoll';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = {
+        attackerId: '0',
+        defenderId: '1',
+        targetingSelectionPending: false,
+        targetingSelectionResolved: true,
+        isDefendable: false,
+        damage: 4,
+        sourceAbilityId: 'meteor',
+        defenseAbilityId: undefined,
+        preDefenseResolved: false,
+        bonusDamage: 0,
+        attackModifierBonusDamage: 0,
+        damageResolved: false,
+        resolvedDamage: 0,
+        offensiveRollEndTokenResolved: false,
+        bonusDiceResolved: false,
+    };
+    next.core.selectedAbilityId = 'meteor';
+    next.core.rollConfirmed = true;
+    next.core.rollCount = 1;
+    next.core.rollLimit = 1;
+    next.core.rollDiceCount = 5;
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.FIRE_MASTERY]: 0,
+    };
+    for (const pid of ['0', '1', '2', '3']) {
+        next.core.players[pid].resources = {
+            ...(next.core.players[pid].resources ?? {}),
+            [RESOURCE_IDS.HP]: 50,
+        };
+    }
+
+    return next;
+};
+
 test.describe('DiceThrone Simple Start', () => {
     test('Online match: Can start a game successfully', async ({ browser }, testInfo) => {
         test.setTimeout(60000);
@@ -586,6 +629,11 @@ test.describe('DiceThrone Simple Start', () => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
             return !state?.sys?.interaction?.current
                 && (state?.core?.players?.['0']?.tokens?.crit ?? 0) === 1
+                && (state?.core?.players?.['1']?.tokens?.crit ?? 0) === 0;
+        }, undefined, { timeout: 10000 });
+        await guestPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return (state?.core?.players?.['0']?.tokens?.crit ?? 0) === 1
                 && (state?.core?.players?.['1']?.tokens?.crit ?? 0) === 0;
         }, undefined, { timeout: 10000 });
 
@@ -1154,6 +1202,60 @@ test.describe('DiceThrone Simple Start', () => {
         expect(targetState.core.players['1'].statusEffects.burn ?? 0).toBe(0);
         expect(targetState.core.players['1'].tokens[TOKEN_IDS.CRIT] ?? 0).toBe(0);
         expect(hostState.sys.interaction?.current).toBeUndefined();
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2', async ({ browser }, testInfo) => {
+        test.setTimeout(150000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatchWithPlayers(browser, baseURL, {
+            numPlayers: 4,
+            gameServerBaseURL: getGameServerBaseURL(),
+        });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或四人房间创建失败');
+            return;
+        }
+
+        const { hostPage, matchId, players } = setup;
+        const allyPage = players[2].page;
+        const enemyCaptainPage = players[3].page;
+
+        await selectCharacter(players[0].page, 'pyromancer');
+        await selectCharacter(players[1].page, 'barbarian');
+        await selectCharacter(players[2].page, 'monk');
+        await selectCharacter(players[3].page, 'paladin');
+        await readyMultiplePlayersAndStartGame(hostPage, players.slice(1).map((player) => player.page));
+
+        await waitForGameBoard(hostPage);
+        await waitForHarnessPages(players.map((player) => player.page));
+
+        await applyOnlineMatchState(matchId, hostPage, buildFourPlayerMeteorAllOpponentsState);
+        await waitForPhase(hostPage, 'offensiveRoll');
+
+        await dispatchHarnessCommand(hostPage, 'ADVANCE_PHASE', '0');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const players = state?.core?.players ?? {};
+            return (players['1']?.resources?.hp ?? 0) === 44
+                && (players['2']?.resources?.hp ?? 0) === 50
+                && (players['3']?.resources?.hp ?? 0) === 44;
+        }, undefined, { timeout: 10000 });
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '11-four-player-meteor-all-opponents-resolution');
+
+        const hostState = await readHarnessState<any>(hostPage);
+        const allyState = await readHarnessState<any>(allyPage);
+        const enemyCaptainState = await readHarnessState<any>(enemyCaptainPage);
+
+        expect(hostState.core.players['1'].resources[RESOURCE_IDS.HP] ?? 0).toBe(44);
+        expect(hostState.core.players['2'].resources[RESOURCE_IDS.HP] ?? 0).toBe(50);
+        expect(hostState.core.players['3'].resources[RESOURCE_IDS.HP] ?? 0).toBe(44);
+        expect(allyState.core.players['2'].resources[RESOURCE_IDS.HP] ?? 0).toBe(50);
+        expect(enemyCaptainState.core.players['3'].resources[RESOURCE_IDS.HP] ?? 0).toBe(44);
 
         await cleanupDTMatch(setup);
     });
