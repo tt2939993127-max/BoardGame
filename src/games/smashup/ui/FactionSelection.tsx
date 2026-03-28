@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
@@ -23,6 +23,28 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     const selectionState = core.factionSelection;
     const [focusedFactionId, setFocusedFactionId] = useState<string | null>(null);
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' } | null>(null);
+    const [viewportSize, setViewportSize] = useState(() => ({
+        width: typeof window === 'undefined' ? 1440 : window.innerWidth,
+        height: typeof window === 'undefined' ? 900 : window.innerHeight,
+    }));
+
+    useEffect(() => {
+        const updateViewportSize = () => {
+            setViewportSize({
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        };
+
+        updateViewportSize();
+        window.addEventListener('resize', updateViewportSize);
+        window.addEventListener('orientationchange', updateViewportSize);
+
+        return () => {
+            window.removeEventListener('resize', updateViewportSize);
+            window.removeEventListener('orientationchange', updateViewportSize);
+        };
+    }, []);
 
     if (!selectionState) return null;
 
@@ -36,6 +58,19 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     // 例如：原版忍者仅在 zh-CN 显示，POD 版两者都可见
     const locale = i18n.language;
     const visibleFactions = getVisibleFactionMetadata(locale);
+
+    const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
+    const modalDesignWidth = 1120;
+    const modalDesignHeight = 760;
+    const modalPadding = isMobileLandscape ? 16 : 32;
+    const mobileLandscapeScale = isMobileLandscape
+        ? Math.min(
+            (viewportSize.width - modalPadding * 2) / modalDesignWidth,
+            (viewportSize.height - modalPadding * 2) / modalDesignHeight,
+            1,
+        )
+        : 1;
+    const useScaledLandscapeModal = isMobileLandscape && mobileLandscapeScale < 0.98;
 
     const handleConfirmSelect = (factionId: string) => {
         if (!isMyTurn) return;
@@ -205,7 +240,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
             <AnimatePresence>
                 {focusedFactionId && (
                     <div
-                        className="fixed inset-0 flex items-center justify-center p-4 md:p-8"
+                        className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 md:p-8"
                         style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                     >
                         {/* Backdrop */}
@@ -218,26 +253,60 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                         />
 
                         {/* Modal Content - Rulebook/Clipboard style */}
-                        <motion.div
-                            layoutId={focusedFactionId}
-                            className="relative w-full max-w-5xl h-[85vh] bg-[#fdfdfd] border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.6)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged"
-                            style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
-                            initial={{ scale: 0.9, opacity: 0, rotate: -2 }}
-                            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                            exit={{ scale: 0.9, opacity: 0, rotate: 2 }}
+                        <div
+                            className="relative flex items-center justify-center"
+                            style={useScaledLandscapeModal
+                                ? {
+                                    width: modalDesignWidth * mobileLandscapeScale,
+                                    height: modalDesignHeight * mobileLandscapeScale,
+                                }
+                                : {
+                                    width: '100%',
+                                    maxWidth: '80rem',
+                                    height: isMobileLandscape ? '100%' : undefined,
+                                }}
                         >
+                            <div
+                                className="relative"
+                                style={useScaledLandscapeModal
+                                    ? {
+                                        width: modalDesignWidth,
+                                        height: modalDesignHeight,
+                                        transform: `scale(${mobileLandscapeScale})`,
+                                        transformOrigin: 'center center',
+                                    }
+                                    : {
+                                        width: '100%',
+                                        height: '100%',
+                                    }}
+                            >
+                            <motion.div
+                                layoutId={focusedFactionId}
+                                className="relative w-full max-w-5xl h-[92dvh] md:h-[85vh] min-h-0 bg-[#fdfdfd] border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.6)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged"
+                                style={useScaledLandscapeModal
+                                    ? {
+                                        width: modalDesignWidth,
+                                        maxWidth: 'none',
+                                        height: modalDesignHeight,
+                                        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
+                                    }
+                                    : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
+                                initial={{ scale: 0.9, opacity: 0, rotate: -2 }}
+                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, rotate: 2 }}
+                            >
                             {/* Tape effect on top */}
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-white/60 z-50 -translate-y-4" />
                             {/* Close Button */}
                             <button
                                 onClick={() => setFocusedFactionId(null)}
-                                className="absolute top-4 right-4 z-50 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-colors"
+                                className="absolute top-3 right-3 md:top-4 md:right-4 z-50 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-colors"
                             >
                                 <X size={24} />
                             </button>
 
                             {/* Left Panel: Info & Action - Clipboard header style */}
-                            <div className="w-full md:w-1/3 bg-white/80 p-6 md:p-8 flex flex-col border-r-2 border-dashed border-slate-300 relative overflow-hidden">
+                            <div className="w-full md:w-1/3 max-h-[42dvh] md:max-h-none min-h-0 shrink-0 bg-white/80 p-4 sm:p-5 md:p-4 lg:p-8 flex flex-col border-b-2 md:border-b-0 md:border-r-2 border-dashed border-slate-300 relative overflow-y-auto">
                                 {/* Ambient Background */}
                                 <div
                                     className="absolute top-0 right-0 w-full h-full opacity-5 pointer-events-none blur-3xl saturate-200"
@@ -261,9 +330,9 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                     <Layers size={16} />
                                                     <span className="text-xs font-black uppercase tracking-widest">{t('ui.faction_details')}</span>
                                                 </div>
-                                                <h2 className="text-4xl font-black text-slate-900 mb-4 uppercase tracking-tighter italic">{t(meta.nameKey)}</h2>
+                                                <h2 className="text-3xl md:text-3xl lg:text-4xl font-black text-slate-900 mb-3 lg:mb-4 uppercase tracking-tighter italic">{t(meta.nameKey)}</h2>
 
-                                                <div className="flex gap-2 mb-6">
+                                                <div className="flex gap-2 mb-4 lg:mb-6">
                                                     <div className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-800 border border-slate-200 shadow-sm">
                                                         {t('ui.minion_count', { count: cards.filter(c => c.type === 'minion').length })}
                                                     </div>
@@ -272,19 +341,19 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                     </div>
                                                 </div>
 
-                                                <p className="text-slate-600 leading-relaxed mb-8 font-medium">
+                                                <p className="text-sm md:text-sm lg:text-base text-slate-600 leading-relaxed mb-4 lg:mb-8 font-medium">
                                                     {t(meta.descriptionKey)}
                                                 </p>
                                             </div>
 
-                                            <div className="mt-auto relative z-10">
+                                            <div className="mt-4 lg:mt-auto relative z-10">
                                                 {isSelectedByMe ? (
-                                                    <div className="w-full py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
+                                                    <div className="w-full py-3 lg:py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
                                                         <Check size={20} strokeWidth={3} />
                                                         {t('ui.selected')}
                                                     </div>
                                                 ) : isTaken ? (
-                                                    <div className="w-full py-4 bg-slate-200 rounded text-slate-500 font-black text-center cursor-not-allowed uppercase shadow-inner">
+                                                    <div className="w-full py-3 lg:py-4 bg-slate-200 rounded text-slate-500 font-black text-center cursor-not-allowed uppercase shadow-inner">
                                                         {t('ui.taken_by_other')}
                                                     </div>
                                                 ) : (
@@ -292,7 +361,8 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                         onClick={() => handleConfirmSelect(meta.id)}
                                                         disabled={!canSelect}
                                                         variant="primary"
-                                                        size="lg"
+                                                        size="md"
+                                                        className="md:text-base lg:text-xl md:py-3 lg:py-4"
                                                         fullWidth
                                                         data-testid="faction-confirm-button"
                                                     >
@@ -308,16 +378,15 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             </div>
 
                             {/* Right Panel: Card Grid - Rulebook content style */}
-                            <div className="flex-1 bg-white/50 overflow-y-auto p-4 md:p-8 custom-scrollbar">
-                                <h3 className="text-slate-400 text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <div className="flex-1 min-h-0 bg-white/50 overflow-y-auto p-3 sm:p-4 md:p-8 custom-scrollbar">
+                                <h3 className="text-slate-400 text-sm font-black uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2">
                                     <Search size={14} strokeWidth={3} />
                                     <span>{t('ui.preview_cards')}</span>
                                 </h3>
 
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                                     {(() => {
                                         const cards = getFactionCards(focusedFactionId);
-                                        const meta = FACTION_METADATA.find(f => f.id === focusedFactionId);
                                         return cards.map((card, cidx) => (
                                             <div
                                                 key={card.id}
@@ -359,6 +428,8 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 </div>
                             </div>
                         </motion.div>
+                        </div>
+                        </div>
                     </div>
                 )}
             </AnimatePresence>
