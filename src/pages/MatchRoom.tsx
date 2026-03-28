@@ -51,6 +51,7 @@ import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -129,6 +130,7 @@ export const MatchRoom = () => {
     const { user } = useAuth();
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
     const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
@@ -954,8 +956,8 @@ export const MatchRoom = () => {
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
             <SEO
                 title={isTutorialRoute
-                    ? t('matchRoom.tutorialTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })
-                    : t('matchRoom.matchTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })}
+                    ? t('matchRoom.tutorialTitle', { game: gameDisplayName })
+                    : t('matchRoom.matchTitle', { game: gameDisplayName })}
                 ogType="game"
                 noIndex
             />
@@ -996,13 +998,13 @@ export const MatchRoom = () => {
                         {isTutorialRoute ? (
                             <GameModeProvider mode="tutorial">
                                 {!gameImplReady ? (
-                                    <LoadingScreen fullScreen={false} title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                    <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
                                 ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                     <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                         <TutorialDispatchBridge>
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
+                                                loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
                                             />
                                         </TutorialDispatchBridge>
                                     </LocalGameProvider>
@@ -1014,7 +1016,7 @@ export const MatchRoom = () => {
                             </GameModeProvider>
                         ) : (
                             isUgcGame && ugcLoading ? (
-                                <LoadingScreen fullScreen={false} description={t('matchRoom.ugc.loading')} />
+                                <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
                             ) : isUgcGame && ugcError ? (
                                 <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
                                     {t('matchRoom.ugc.loadFailed', { error: ugcError })}
@@ -1035,7 +1037,7 @@ export const MatchRoom = () => {
                                         >
                                             <BoardBridge
                                                 board={ugcBoard}
-                                                loading={<ConnectionLoadingScreen title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
+                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
@@ -1058,7 +1060,7 @@ export const MatchRoom = () => {
                                         >
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<ConnectionLoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
+                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>

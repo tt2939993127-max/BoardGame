@@ -44,6 +44,26 @@ export function getChoiceEffectHandler(customId: string): ChoiceEffectHandler | 
     return choiceEffectHandlers.get(customId);
 }
 
+export function resolveChoiceEffect(context: ChoiceEffectContext): Partial<DiceThroneCore> | undefined {
+    if (context.customId.startsWith('select-target:')) {
+        const defenderId = context.customId.slice('select-target:'.length);
+        if (!defenderId || !context.state.pendingAttack || !context.state.players[defenderId]) {
+            return undefined;
+        }
+        return {
+            pendingAttack: {
+                ...context.state.pendingAttack,
+                defenderId,
+                targetingSelectionPending: false,
+                targetingSelectionResolved: true,
+            },
+        };
+    }
+
+    const handler = getChoiceEffectHandler(context.customId);
+    return handler?.(context);
+}
+
 // ============================================================================
 // 攻击掷骰阶段结束时 Token 使用处理器
 // ============================================================================
