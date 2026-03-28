@@ -77,7 +77,7 @@ test.describe('Lobby E2E', () => {
         await expect(page).toHaveURL(/game=tictactoe/);
 
         await expect(page.getByRole('button', { name: /Create Room/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Single Device/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Single Device/i })).toHaveCount(0);
         await expect(page.getByRole('button', { name: /Play AI/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /Tutorial/i })).toBeVisible();
 
@@ -93,6 +93,7 @@ test.describe('Lobby E2E', () => {
 
         await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
+        await expect(page.getByRole('button', { name: /Single Device/i })).toHaveCount(0);
 
         await page.getByRole('button', { name: /Play AI/i }).click();
 
@@ -107,29 +108,6 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Local AI/i);
 
         await game.screenshot('lobby-tictactoe-local-ai-config-debug', testInfo);
-    });
-
-    test('Tic-Tac-Toe 单机模式入口不会把第二个座位交给 AI', async ({ page, game }, testInfo) => {
-        await page.addInitScript(() => {
-            (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ = true;
-        });
-
-        await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
-        await expect(page).toHaveURL(/game=tictactoe/);
-
-        await page.getByRole('button', { name: /Single Device/i }).click();
-
-        await expect(page).toHaveURL(/\/play\/tictactoe\/local(\?seat1=human)?$/);
-        await expect(page.getByTestId('debug-toggle')).toBeVisible({ timeout: 15000 });
-
-        await page.getByTestId('debug-toggle').click();
-        await expect(page.getByTestId('debug-panel')).toBeVisible();
-
-        await page.getByTestId('debug-tab-controls').click();
-        await expect(page.getByTestId('debug-ai-support')).toBeVisible();
-        await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Human/i);
-
-        await game.screenshot('lobby-tictactoe-single-device-human-seat-debug', testInfo);
     });
 
     test(MOBILE_AUTHOR_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {

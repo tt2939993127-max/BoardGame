@@ -8,6 +8,7 @@ import {
     cleanupPorts,
     cleanupWorkerPorts,
     loadWorkerPorts,
+    releaseReservedPortsForScope,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
 import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
@@ -15,6 +16,12 @@ import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
 interface RuntimeRecord {
     workerId: number;
     pid: number;
+    reusedExistingServers?: boolean;
+    ports?: {
+        frontend: number;
+        gameServer: number;
+        apiServer: number;
+    };
 }
 
 const PORT_CLEANUP_TIMEOUT_MS = Number.parseInt(process.env.PW_PORT_CLEANUP_TIMEOUT_MS || '10000', 10);
@@ -55,11 +62,16 @@ export default async function globalTeardown() {
     console.log(`\n🧹 清理${workers > 1 ? '多 worker 隔离' : '单 worker'} E2E 服务...\n`);
 
     const processFile = getProcessFilePath();
+    let runtimes: RuntimeRecord[] = [];
+    let reusedExistingServers = false;
     if (fs.existsSync(processFile)) {
         try {
-            const runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
+            runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
+            reusedExistingServers = runtimes.length > 0 && runtimes.every(runtime => runtime.reusedExistingServers === true);
             for (const runtime of runtimes) {
-                killProcessTree(runtime.pid);
+                if (!runtime.reusedExistingServers && Number.isInteger(runtime.pid) && runtime.pid > 0) {
+                    killProcessTree(runtime.pid);
+                }
             }
         } finally {
             try {
@@ -71,25 +83,44 @@ export default async function globalTeardown() {
     }
 
     if (workers <= 1) {
-        cleanupPorts(singleWorkerPorts, 'Single Worker');
-        await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
+        const ownedSingleWorkerPorts = runtimes[0]?.ports ?? singleWorkerPorts;
+        if (!reusedExistingServers) {
+            cleanupPorts(ownedSingleWorkerPorts, 'Single Worker');
+            await waitForPortsFree(toPortArray(ownedSingleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
+        } else {
+            console.log('♻️ 本次运行复用了现有单 worker E2E 服务，teardown 不会停止共享服务。');
+        }
         cleanupAllWorkerPortFiles();
+        releaseReservedPortsForScope(getRuntimeScope());
         removeRuntime(getRuntimeScope());
         return;
     }
 
-    for (let workerIndex = 0; workerIndex < workers; workerIndex++) {
-        cleanupWorkerPorts(workerIndex);
+    const recordedWorkerPorts = runtimes
+        .map(runtime => runtime.ports)
+        .filter((ports): ports is NonNullable<RuntimeRecord['ports']> => Boolean(ports));
+
+    if (recordedWorkerPorts.length > 0) {
+        for (const ports of recordedWorkerPorts) {
+            cleanupPorts(ports, 'Worker Runtime');
+        }
+    } else {
+        for (let workerIndex = 0; workerIndex < workers; workerIndex++) {
+            cleanupWorkerPorts(workerIndex);
+        }
     }
 
-    const multiWorkerPorts = Array.from({ length: workers }, (_, workerIndex) => (
-        loadWorkerPorts(workerIndex) ?? allocatePorts(workerIndex)
-    )).flatMap(ports => toPortArray(ports));
+    const multiWorkerPorts = (recordedWorkerPorts.length > 0
+        ? recordedWorkerPorts
+        : Array.from({ length: workers }, (_, workerIndex) => (
+            loadWorkerPorts(workerIndex) ?? allocatePorts(workerIndex)
+        ))).flatMap(ports => toPortArray(ports));
     const released = await waitForPortsFree(multiWorkerPorts, PORT_CLEANUP_TIMEOUT_MS);
     if (!released) {
         console.warn(`⚠️ 多 worker E2E 端口释放超时: ${multiWorkerPorts.join(', ')}`);
     }
 
     cleanupAllWorkerPortFiles();
+    releaseReservedPortsForScope(getRuntimeScope());
     removeRuntime(getRuntimeScope());
 }

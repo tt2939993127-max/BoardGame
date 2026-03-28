@@ -4,19 +4,25 @@ import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scripts/infra/e2e-port-config.js';
 import { withWindowsHide } from '../scripts/infra/windows-hide.js';
 import {
-    allocateAvailablePorts,
     cleanupAllWorkerPortFiles,
-    cleanupPorts,
-    cleanupWorkerPorts,
+    reserveAvailablePorts,
+    reservePorts,
     saveWorkerPorts,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
-import { upsertRuntime } from '../scripts/infra/e2e-runtime-registry.js';
+import {
+    describeRuntimeConflict,
+    findRuntimesByPorts,
+    getWorktreeRoot,
+    pruneStaleRuntimes,
+    upsertRuntime,
+} from '../scripts/infra/e2e-runtime-registry.js';
 
 interface RuntimeRecord {
     workerId: number;
     pid: number;
     logFile: string;
+    reusedExistingServers?: boolean;
     ports: {
         frontend: number;
         gameServer: number;
@@ -128,11 +134,20 @@ async function waitForUrl(runtime: RuntimeRecord, url: string, timeoutMs = SERVI
 }
 
 async function cleanupSingleWorkerPorts(): Promise<void> {
-    cleanupPorts(singleWorkerPorts, 'Single Worker');
+    const conflicts = findRuntimesByPorts(singleWorkerPorts);
+    if (conflicts.length > 0) {
+        throw new Error(describeRuntimeConflict(conflicts));
+    }
 
     const released = await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
     if (!released) {
-        throw new Error(`单 worker E2E 端口释放超时: ${toPortArray(singleWorkerPorts).join(', ')}`);
+        throw new Error(
+            [
+                `单 worker E2E 端口被未知进程占用: ${toPortArray(singleWorkerPorts).join(', ')}`,
+                '已拒绝盲目清理这些共享端口，避免误杀其他 AI / worktree / 手工调试进程。',
+                '请先运行 `npm run test:e2e:list` 定位 owner，或改用 isolated 端口。',
+            ].join('\n'),
+        );
     }
 }
 
@@ -180,7 +195,9 @@ function registerSingleWorkerRuntime(record: RuntimeRecord, mode: 'shared-single
         workers: 1,
         target: process.env.PW_TEST_TARGET || '',
         ports: record.ports,
+        ownerPids: Number.isInteger(record.pid) && record.pid > 0 ? [record.pid] : [],
         pids: Number.isInteger(record.pid) && record.pid > 0 ? [record.pid] : [],
+        bootstrapLogFiles: record.logFile ? [record.logFile] : [],
         reusedExistingServers,
         createdAt: new Date().toISOString(),
     });
@@ -208,7 +225,9 @@ function cleanupRecordedRuntimes(): void {
     try {
         const runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
         for (const runtime of runtimes) {
-            killProcessTree(runtime.pid);
+            if (!runtime.reusedExistingServers && Number.isInteger(runtime.pid) && runtime.pid > 0) {
+                killProcessTree(runtime.pid);
+            }
         }
     } catch {
         // ignore
@@ -223,12 +242,14 @@ function cleanupRecordedRuntimes(): void {
 
 export default async function globalSetup() {
     const workers = Number.parseInt(process.env.PW_WORKERS || '1', 10);
+    const currentWorktreeRoot = getWorktreeRoot();
 
     if (!shouldStartServers) {
         return;
     }
 
     fs.mkdirSync(TMP_DIR, { recursive: true });
+    pruneStaleRuntimes(process.cwd(), { killOrphans: true, logger: console });
 
     if (workers <= 1) {
         const urls = [
@@ -237,23 +258,48 @@ export default async function globalSetup() {
             `http://127.0.0.1:${singleWorkerPorts.frontend}/__ready`,
         ];
         const singleWorkerMode = process.env.PW_ISOLATE_PORTS === 'true' ? 'isolated-single' : 'shared-single';
+        const conflictingRuntimes = findRuntimesByPorts(singleWorkerPorts);
+        const foreignRuntimes = conflictingRuntimes.filter(runtime => runtime.worktreeRoot !== currentWorktreeRoot);
+        const localRuntimes = conflictingRuntimes.filter(runtime => runtime.worktreeRoot === currentWorktreeRoot);
 
         if (shouldReuseExistingServers) {
             const ready = await Promise.all(urls.map(isUrlReady));
             if (ready.every(Boolean)) {
+                if (foreignRuntimes.length > 0) {
+                    throw new Error(describeRuntimeConflict(conflictingRuntimes));
+                }
+
+                if (localRuntimes.length === 0) {
+                    throw new Error(
+                        [
+                            '检测到单 worker E2E 端口已就绪，但共享 runtime registry 中没有当前 worktree 的 owner。',
+                            '已拒绝盲目复用未知来源的共享服务，避免误连到其他 AI / worktree 的测试环境。',
+                            '请先运行 `npm run test:e2e:list` 确认 owner，或改用 isolated 端口。',
+                        ].join('\n'),
+                    );
+                }
+
                 console.log('\n♻️ 复用现有单 worker E2E 服务\n');
-                registerSingleWorkerRuntime({
+                fs.writeFileSync(getProcessFilePath(), JSON.stringify([{
                     workerId: 0,
                     pid: Number.NaN,
                     logFile: '',
                     ports: singleWorkerPorts,
-                }, singleWorkerMode, true);
+                    reusedExistingServers: true,
+                }], null, 2));
                 return;
             }
         }
 
         cleanupRecordedRuntimes();
         await cleanupSingleWorkerPorts();
+        if (singleWorkerMode === 'isolated-single') {
+            await reservePorts(0, singleWorkerPorts, {
+                scope: getRuntimeScope(),
+                ownerPid: process.pid,
+                target: process.env.PW_TEST_TARGET || '',
+            });
+        }
 
         const runtime = spawnDetachedServer('scripts/infra/start-single-worker-servers.js', [], singleWorkerPorts);
         fs.writeFileSync(getProcessFilePath(), JSON.stringify([runtime], null, 2));
@@ -271,9 +317,11 @@ export default async function globalSetup() {
     console.log(`\n🚀 启动 ${workers} 个并行 worker 的隔离服务...\n`);
 
     for (let workerId = 0; workerId < workers; workerId++) {
-        cleanupWorkerPorts(workerId);
-
-        const ports = await allocateAvailablePorts(workerId);
+        const ports = await reserveAvailablePorts(workerId, {
+            scope: getRuntimeScope(),
+            ownerPid: process.pid,
+            target: process.env.PW_TEST_TARGET || '',
+        });
         saveWorkerPorts(workerId, ports);
 
         const runtime = spawnDetachedServer('scripts/infra/start-worker-servers.js', [String(workerId)]);
@@ -296,7 +344,9 @@ export default async function globalSetup() {
         workers,
         target: process.env.PW_TEST_TARGET || '',
         ports: runtimes.map(runtime => runtime.ports),
+        ownerPids: runtimes.map(runtime => runtime.pid),
         pids: runtimes.map(runtime => runtime.pid),
+        bootstrapLogFiles: runtimes.map(runtime => runtime.logFile),
         createdAt: new Date().toISOString(),
     });
 

@@ -6,7 +6,7 @@ import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { runEncodingCheck } from './check-file-encoding.mjs';
 import { runE2ESafetyCheck } from './check-e2e-safety.js';
 import { cleanupTestConnections } from './cleanup_test_connections.js';
-import { allocateAvailablePorts } from './port-allocator.js';
+import { reserveAvailablePorts } from './port-allocator.js';
 
 const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
 const runtimeNode = process.env.PW_NODE_BINARY || process.execPath;
@@ -118,6 +118,9 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         ...createModeEnv(mode),
         ...envOverrides,
     };
+    modeEnv.PW_RUNTIME_SCOPE = modeEnv.PW_RUNTIME_SCOPE
+        || process.env.PW_RUNTIME_SCOPE
+        || `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const explicitTargetPath = getExplicitTargetPath(extraArgs);
     if (hasExplicitPlaywrightTarget(extraArgs)) {
@@ -137,7 +140,11 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
     );
 
     if (shouldPreferIsolatedPorts) {
-        const ports = await allocateAvailablePorts(0);
+        const ports = await reserveAvailablePorts(0, {
+            scope: modeEnv.PW_RUNTIME_SCOPE,
+            ownerPid: process.pid,
+            target: explicitTargetPath,
+        });
         modeEnv.PW_ISOLATE_PORTS = 'true';
         modeEnv.PW_PORT = String(ports.frontend);
         modeEnv.PW_GAME_SERVER_PORT = String(ports.gameServer);

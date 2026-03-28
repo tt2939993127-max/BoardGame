@@ -190,33 +190,45 @@ const buildInteractionActions = (
 
 const buildSetupActions = (state: DiceThroneState, playerId: PlayerId): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
+    const selectedCharacter = state.core.selectedCharacters[playerId];
+    const hasSelectedCharacter = typeof selectedCharacter === 'string' && selectedCharacter !== 'unselected';
+    const isHost = playerId === state.core.hostPlayerId;
+    const isReady = state.core.readyPlayers[playerId] === true;
 
-    for (const character of DICETHRONE_CHARACTER_CATALOG) {
+    if (!hasSelectedCharacter) {
+        for (const character of DICETHRONE_CHARACTER_CATALOG) {
+            appendAction(actions, state, playerId, {
+                actionId: createAiLegalActionId('setup', 'select-character', character.id),
+                kind: 'setup-select-character',
+                label: `选择角色 ${character.id}`,
+                commands: [{
+                    type: 'SELECT_CHARACTER',
+                    payload: { characterId: character.id },
+                }],
+                metadata: { characterId: character.id },
+            });
+        }
+
+        return actions;
+    }
+
+    if (!isHost && !isReady) {
         appendAction(actions, state, playerId, {
-            actionId: createAiLegalActionId('setup', 'select-character', character.id),
-            kind: 'setup-select-character',
-            label: `选择角色 ${character.id}`,
-            commands: [{
-                type: 'SELECT_CHARACTER',
-                payload: { characterId: character.id },
-            }],
-            metadata: { characterId: character.id },
+            actionId: createAiLegalActionId('setup', 'player-ready'),
+            kind: 'setup-ready',
+            label: '准备完成',
+            commands: [{ type: 'PLAYER_READY', payload: {} }],
         });
     }
 
-    appendAction(actions, state, playerId, {
-        actionId: createAiLegalActionId('setup', 'player-ready'),
-        kind: 'setup-ready',
-        label: '准备完成',
-        commands: [{ type: 'PLAYER_READY', payload: {} }],
-    });
-
-    appendAction(actions, state, playerId, {
-        actionId: createAiLegalActionId('setup', 'host-start'),
-        kind: 'setup-host-start',
-        label: '开始对局',
-        commands: [{ type: 'HOST_START_GAME', payload: {} }],
-    });
+    if (isHost) {
+        appendAction(actions, state, playerId, {
+            actionId: createAiLegalActionId('setup', 'host-start'),
+            kind: 'setup-host-start',
+            label: '开始对局',
+            commands: [{ type: 'HOST_START_GAME', payload: {} }],
+        });
+    }
 
     return actions;
 };
