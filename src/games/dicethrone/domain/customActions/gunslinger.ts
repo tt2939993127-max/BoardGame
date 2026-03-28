@@ -601,6 +601,34 @@ export function registerGunslingerCustomActions(): void {
     registerCustomActionHandler('gunslinger-card-high-noon-resolve', handleHighNoonResolve, {
         categories: ['card', 'token', 'status', 'damage', 'dice'],
     });
+    registerCustomActionHandler('gunslinger-card-pistol-whip', handlePistolWhip, {
+        categories: ['card', 'status', 'damage'],
+        requiresInteraction: true,
+    });
+    registerCustomActionHandler('gunslinger-card-pistol-whip-resolve', handlePistolWhipResolve, {
+        categories: ['card', 'status', 'damage'],
+    });
+    registerCustomActionHandler('gunslinger-card-mark-the-target', handleMarkTheTarget, {
+        categories: ['card', 'token'],
+        requiresInteraction: true,
+    });
+    registerCustomActionHandler('gunslinger-card-mark-the-target-resolve', handleMarkTheTargetResolve, {
+        categories: ['card', 'token'],
+    });
+    registerCustomActionHandler('gunslinger-card-wanted', handleWanted, {
+        categories: ['card', 'token'],
+        requiresInteraction: true,
+    });
+    registerCustomActionHandler('gunslinger-card-wanted-resolve', handleWantedResolve, {
+        categories: ['card', 'token'],
+    });
+    registerCustomActionHandler('gunslinger-card-high-noon', handleHighNoon, {
+        categories: ['card', 'token', 'status', 'damage', 'dice'],
+        requiresInteraction: true,
+    });
+    registerCustomActionHandler('gunslinger-card-high-noon-resolve', handleHighNoonResolve, {
+        categories: ['card', 'token', 'status', 'damage', 'dice'],
+    });
     registerCustomActionHandler('gunslinger-card-the-law', handleTheLaw, {
         categories: ['card', 'token', 'status'],
         requiresInteraction: true,

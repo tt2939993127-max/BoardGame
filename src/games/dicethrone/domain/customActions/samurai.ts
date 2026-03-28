@@ -385,4 +385,11 @@ export function registerSamuraiCustomActions(): void {
     registerCustomActionHandler('samurai-card-you-should-be-ashamed-resolve', handleYouShouldBeAshamedResolve, {
         categories: ['card', 'token'],
     });
+    registerCustomActionHandler('samurai-card-you-should-be-ashamed', handleYouShouldBeAshamed, {
+        categories: ['card', 'token'],
+        requiresInteraction: true,
+    });
+    registerCustomActionHandler('samurai-card-you-should-be-ashamed-resolve', handleYouShouldBeAshamedResolve, {
+        categories: ['card', 'token'],
+    });
 }
