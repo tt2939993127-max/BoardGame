@@ -1,5 +1,24 @@
 # Task Plan: BoardGame 多线并行调查 / 修复 / 收口
 
+## Addendum（2026-03-28）：召唤师战争本地 AI 首轮接入
+
+### Goal
+- 沿用现有跨游戏 AI runtime，把召唤师战争接成第二个真正可运行的战术类本地 AI 试点，优先拿到“选角可走、基础回合可走、不会乱发非法命令”的 baseline。
+- 保持范围只落在 `summonerwars` 自己：legal actions 枚举、评分式本地策略、manifest / game 接线，以及现有测试文件中的最小回归。
+
+### Result
+- [x] 新增 `src/games/summonerwars/ai.ts`，把召唤师战争接到统一 `legalActions -> scored local policy` 框架，覆盖 `setup`、`summon`、`move`、`build`、`attack`、`magic`、`draw` 与基础交互。
+- [x] setup 阶段按真实规则建模为 AI 可行动阶段：房主可选阵营并在条件满足后开始游戏，非房主在选完阵营后可 ready。
+- [x] 基于现有领域 helper 枚举主要合法动作：召唤、移动、建造、攻击、无目标主动技能、弃牌换魔力、阶段推进；复杂事件与多目标技能这轮不强求覆盖。
+- [x] 落一版评分式 baseline：优先处理交互，选角优先稳定阵营，战斗内优先召唤与高价值攻击，再做移动施压，只有当前阶段没有更高收益动作时才结束阶段。
+- [x] 在 `src/games/summonerwars/game.ts` 注册 `summonerWarsAiRuntime`，并将 `src/games/summonerwars/manifest.ts` 打开到 `allowLocalMode: true` / `ai.localAi: true`，使召唤师战争可以进入本地 AI 模式。
+- [x] 在现有 `src/games/summonerwars/__tests__/flow.test.ts` 中补回归：验证 setup 阶段 AI 会为房主选择阵营，召唤阶段 AI 会选合法召唤而不是直接结束阶段。
+- [x] 验证通过：`npm run typecheck`、`npx vitest run src/games/summonerwars/__tests__/flow.test.ts --maxWorkers=1`、`node scripts/game/generate_game_manifests.js`。
+
+### Next Step
+- 若继续 AI 主线，下一步最正确的是补召唤师战争的第二层策略：事件卡目标选择、关键 activated / beforeAttack 技能、以及更强的移动压制评分，而不是现在就转去远程 AI。
+- 当前这轮已经把召唤师战争接进了通用本地 AI 主链；AstrBot / remote provider 仍保持后置。
+
 ## Addendum（2026-03-28）：Smash Up 本地 AI 首轮接入
 
 ### Goal
