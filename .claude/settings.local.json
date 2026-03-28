@@ -23,7 +23,11 @@
       "Bash(ANDROID_WEBVIEW_MODE=remote ANDROID_REMOTE_WEB_URL=https://example.com node \"/mnt/d/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
       "Bash(ANDROID_WEBVIEW_MODE=embedded VITE_BACKEND_URL=https://example.com node \"D:/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
       "Bash(ANDROID_WEBVIEW_MODE=remote ANDROID_REMOTE_WEB_URL=https://example.com node \"D:/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
-      "mcp__zai-mcp-server__ui_diff_check"
+      "mcp__zai-mcp-server__ui_diff_check",
+      "Bash(npm exec:*)",
+      "Bash(npm install:*)",
+      "Bash(ANDROID_WEBVIEW_MODE=embedded npm run mobile:android:doctor)",
+      "Bash(git:*)"
     ]
   }
 }
