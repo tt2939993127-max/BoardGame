@@ -65,3 +65,33 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
   - `1v1` 直结算；
   - `3+` 人局进入多目标交互；
   - 交互确认后原子化结算多名玩家的 `bounty + knockdown`。
+
+## Addendum（2026-03-28）：四人 2v2 敌我过滤已补齐
+
+- 这轮新发现的真实缺口不在“多目标本身”，而在 `2v2` 团队模式：
+  - `handleTheLaw` 之前按“所有非自己玩家”构造候选目标，会把队友也放进 `targetPlayerIds`。
+- 已落实修正：
+  - `src/games/dicethrone/domain/customActions/gunslinger.ts` 改为复用 `getOpponents(state, attackerId)`，只保留敌方目标。
+  - `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，断言交互只暴露 `['1', '3']`，并验证结算只命中两名敌方。
+  - `e2e/dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例：
+    - `Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both`
+- 执行命令：
+  ```bash
+  node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts -t "the law can select up to two target players in multiplayer|the law should only target enemies in 4-player team mode" --configLoader native
+  npm run test:e2e:ci:file -- dicethrone-simple-start.e2e.ts "Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both"
+  npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The Law (多目标交互|从手牌真实打出)"
+  ```
+- 结果：
+  - `Vitest`: `2 passed`
+  - `4 人 E2E`: `1 passed`
+  - `既有 The Law E2E 回归`: `4 passed`
+- 新增截图：
+  1. 四人 2v2 下，真实从手牌点击后只出现两名敌方目标：
+     [10-four-player-the-law-enemy-only-selection.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\10-four-player-the-law-enemy-only-selection.png)
+  2. 四人 2v2 下，确认后仅两名敌方拿到 `bounty + knockdown`：
+     [11-four-player-the-law-resolved-on-enemies.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\11-four-player-the-law-resolved-on-enemies.png)
+- 裁决：
+  - `The Law` 现在已经同时覆盖：
+    - `1v1` 直结算；
+    - `3` 人局多目标；
+    - `4` 人 `2v2` 敌我过滤 + 真实点击结算。

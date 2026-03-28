@@ -338,6 +338,24 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 ### Status
 - in_progress
 
+## Addendum（2026-03-28）：枪手 The Law 四人 2v2 适配
+
+### Goal
+- 修正 `The Law` 在 `4` 人 `2v2` 下把队友错误当成可选目标的问题，并补齐领域层与真实点击回归。
+
+### Result
+- [x] 在 `src/games/dicethrone/domain/customActions/gunslinger.ts` 将 `handleTheLaw` 的候选目标从“所有非自己玩家”改为 `getOpponents(state, attackerId)`。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，断言 `targetPlayerIds` 只包含敌方 `['1', '3']`，并验证最终结算不命中队友。
+- [x] 在 `e2e/dicethrone-simple-start.e2e.ts` 新增 `Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both`，覆盖四人联机、从手牌真实点击、敌方双目标确认与最终结算。
+- [x] 复跑既有 `The Law` 真实点击链路，确认 `1v1 / 3` 人场景未回退。
+- [x] 在 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md` 追加四人 `2v2` 截图证据。
+
+### Remaining
+- [ ] 若继续扩大四人适配覆盖面，下一批优先筛查其他使用“多目标玩家选择”或“allOpponents”语义的牌/技能，确认是否也错误包含队友。
+
+### Status
+- in_progress
+
 ## Addendum（2026-03-28）：枪手 The Law 审计与端到端验证
 
 ### Goal
