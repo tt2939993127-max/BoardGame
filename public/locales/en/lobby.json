@@ -41,7 +41,7 @@
     "reconnect": "Reconnect",
     "reconnectEnter": "Rejoin",
     "join": "Join",
-    "localPlay": "Local",
+    "localPlay": "Single Device",
     "singleDevice": "Single Device",
     "playAi": "Play AI",
     "tutorial": "Tutorial",

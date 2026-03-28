@@ -23,6 +23,7 @@ export type TurnPhase =
     | 'income'
     | 'main1'
     | 'offensiveRoll'
+    | 'targetingRoll'
     | 'defensiveRoll'
     | 'main2'
     | 'discard';
@@ -71,6 +72,7 @@ export const IMPLEMENTED_DICETHRONE_CHARACTER_IDS = [
 
 export type SelectableCharacterId = (typeof IMPLEMENTED_DICETHRONE_CHARACTER_IDS)[number];
 export type CharacterId = 'unselected' | SelectableCharacterId;
+export type TeamId = 'A' | 'B';
 
 export interface CharacterDefinition {
     id: SelectableCharacterId;
@@ -112,7 +114,7 @@ export interface Die {
  */
 export interface CardPlayCondition {
     /** 必须在指定阶段（更细粒度，区分进攻/防御） */
-    phase?: 'offensiveRoll' | 'defensiveRoll';
+    phase?: 'offensiveRoll' | 'targetingRoll' | 'defensiveRoll';
     /** 必须是自己的回合（activePlayer） */
     requireOwnTurn?: boolean;
     /** 必须是对手的回合（非 activePlayer） */
@@ -169,7 +171,10 @@ export interface AbilityCard {
 
 export interface PendingAttack {
     attackerId: PlayerId;
-    defenderId: PlayerId;
+    defenderId?: PlayerId;
+    /** 2v2 目标掷骰 5/6 分支等待玩家确认目标时为 true */
+    targetingSelectionPending?: boolean;
+    targetingSelectionResolved?: boolean;
     isDefendable: boolean;
     damage?: number;
     sourceAbilityId?: string;
@@ -417,6 +422,12 @@ export interface HeroState {
  */
 export interface DiceThroneCore {
     players: Record<PlayerId, HeroState>;
+    /** 2v2 模式下的环桌座位顺序，用于分队与回合顺序推导 */
+    seatingOrder?: PlayerId[];
+    /** 2v2 模式下按座位推导后的队伍归属 */
+    teamIdByPlayerId?: Record<PlayerId, TeamId>;
+    /** 2v2 模式下的共享体力；同队成员 HP 需要与该值保持同步 */
+    teamHealth?: Record<TeamId, number>;
     /** 玩家选角状态（未选时为 unselected） */
     selectedCharacters: Record<PlayerId, CharacterId>;
     /** 玩家准备状态（选角后点击准备） */
@@ -492,6 +503,7 @@ export const PHASE_ORDER: TurnPhase[] = [
     'income',
     'main1',
     'offensiveRoll',
+    'targetingRoll',
     'defensiveRoll',
     'main2',
     'discard',

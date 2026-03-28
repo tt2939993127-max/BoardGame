@@ -1885,12 +1885,14 @@ test.describe('枪手 The Law 多目标交互', () => {
         await disableFabMenu(page);
 
         const confirmButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).last();
+        const targetOne = page.getByTestId('dt-player-target-1');
+        const targetTwo = page.getByTestId('dt-player-target-2');
 
-        await expect(page.getByText('僧侣-A')).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText('圣骑士-B')).toBeVisible({ timeout: 5000 });
+        await expect(targetOne).toBeVisible({ timeout: 5000 });
+        await expect(targetTwo).toBeVisible({ timeout: 5000 });
         await expect(confirmButton).toBeDisabled();
 
-        await page.getByText('僧侣-A').click();
+        await targetOne.click();
         await expect(confirmButton).toBeEnabled();
         await game.screenshot('14-the-law-single-target-selected', testInfo);
 
@@ -1923,9 +1925,11 @@ test.describe('枪手 The Law 多目标交互', () => {
         await disableFabMenu(page);
 
         const confirmButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).last();
+        const targetOne = page.getByTestId('dt-player-target-1');
+        const targetTwo = page.getByTestId('dt-player-target-2');
 
-        await page.getByText('僧侣-A').click();
-        await page.getByText('圣骑士-B').click();
+        await targetOne.click();
+        await targetTwo.click();
         await expect(confirmButton).toBeEnabled();
         await game.screenshot('15-the-law-two-targets-selected', testInfo);
 
@@ -1995,6 +1999,8 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
 
         const theLawCard = page.locator('[data-card-id="card-the-law"]').first();
         const confirmButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).last();
+        const targetOne = page.getByTestId('dt-player-target-1');
+        const targetTwo = page.getByTestId('dt-player-target-2');
 
         await expect(theLawCard).toBeVisible({ timeout: 5000 });
         await theLawCard.click();
@@ -2006,12 +2012,12 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
-        await expect(page.getByText('僧侣-A')).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText('圣骑士-B')).toBeVisible({ timeout: 5000 });
+        await expect(targetOne).toBeVisible({ timeout: 5000 });
+        await expect(targetTwo).toBeVisible({ timeout: 5000 });
         await expect(confirmButton).toBeDisabled();
 
-        await page.getByText('僧侣-A').click();
-        await page.getByText('圣骑士-B').click();
+        await targetOne.click();
+        await targetTwo.click();
         await expect(confirmButton).toBeEnabled();
         await game.screenshot('24-the-law-from-hand-3p-selected-targets', testInfo);
 
