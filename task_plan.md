@@ -1198,6 +1198,12 @@ completed
   - `execute.ts` / `rules.ts` 的 `afterRollConfirmed -> responderQueue` 仍排除队友；
   - `ResponseWindowSystem.beforeCommand()` 仍要求 `command.playerId === currentResponderId`；
   - `common.ts` + `RightSidebar.tsx` + `DiceTray.tsx` 仍以 `targetOpponentDice:boolean` 压缩骰池归属语义。
+- [x] 已确认 `shadow_thief-shadow-manipulation` 也直接复用 `modifyDie + targetOpponentDice` 共享模型，不存在“暗影盗贼单独一条 happy path 就能绕开 Batch 3 blocker”的情况。
+- [x] 已确认旧 `e2e/dicethrone-die-modification.e2e.ts` / `e2e/dicethrone-die-reroll.e2e.ts` 应降级为历史材料，而不是继续作为 Batch 3 现役在线证据入口。
+- [x] 已确认 Batch 3 Audit 阶段可收口：
+  - `validatePlayCard()` 仅负责合法窗口/目标语义；
+  - `ResponseWindowSystem.beforeCommand()` 与 `game.ts` 的系统配置实际把 `PLAY_CARD` 锁给 `currentResponderId`；
+  - `Board.tsx` / `viewMode.ts` 又把观察与响应 UI 也绑在同一身份上。
 - [ ] 下一步先落 Batch 3 P0 的语义裁决与共享实现，再把炎术士 P1 升级成 4 人规则回归与在线证据。
 
 ### Validation
@@ -1233,6 +1239,51 @@ completed
 
 ### Status
 - in_progress
+
+## Addendum: 2026-03-28 DiceThrone Batch 3 响应=敌对操作裁决落地
+
+### Goal
+- 将用户最新裁决落到共享实现：`response` 是敌对操作，队友不应被当作 responder；但队友若持有可作用于当前骰池的改骰牌，仍应能直接出牌。
+- 先收口 Batch 3 的第一段共享 blocker，不把范围误夸成“多步骰子交互已全部做完”。
+
+### Result
+- [x] 已将 `response` 与“同队 direct dice interference”分流：队友继续不进入 `responderQueue`，但在 `afterRollConfirmed` 下可通过受限白名单直接打出合法改骰牌。
+- [x] 已在 `ResponseWindowSystem` / `game.ts` / `Board.tsx` / `viewMode.ts` 统一第一段共享语义，不再要求队友伪装成当前 responder 才能出改骰牌。
+- [x] 已在 `flow.test.ts` 补上 4 人 / 2v2 规则回归，锁住“队友不进响应队列，但能直接打出 `card-flick`”。
+- [x] 已修正 `isCardPlayableInResponseWindow()` 调用处的错误类型 cast，避免继续把响应窗口类型混成 `TurnPhase`。
+- [x] 已在 `e2e/dicethrone-simple-start.e2e.ts` 补上现役 4 人在线 direct-dice 证据，并确认 `simple-start` 整文件 `14 passed`。
+- [x] 已修复 `e2e/helpers/state-injection.ts` 误用 game server URL 的 helper bug，恢复 isolated-port `/test/*` 注入稳定性。
+- [ ] `targetOpponentDice:boolean` 的显式骰池归属元数据替换尚未完成。
+- [ ] `shadow_thief-shadow-manipulation` 的 4 人专项回归与现役在线 E2E 证据尚未补齐。
+
+### Validation
+- `openspec validate update-dicethrone-4p-interactions-batch-3 --strict --no-interactive`
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts src/games/dicethrone/__tests__/flick-response-debug.test.ts --configLoader native`
+
+### Status
+- in_progress
+
+## Addendum: 2026-03-28 DiceThrone Batch 3 元数据模型与 Shadow 回归收口
+
+### Goal
+- 完成 Batch 3 剩余的共享模型与代表性回归收口：把 `targetOpponentDice:boolean` 升级为显式骰池归属元数据，并补齐 `shadow_thief-shadow-manipulation` 的 4 人专项证据。
+- 在不误改仓库现有规则口径的前提下，确认哪些是已完成事实，哪些仍只是待裁决的共享行为。
+
+### Result
+- [x] 已将 `diceOwnerId` 打通到通用 `modifyDie/selectDie`、`shadow_thief-shadow-manipulation`、事件系统、AI meta、测试注入 helper 与 `RightSidebar`/`DiceTray` 提示类型。
+- [x] 已补通用 4 人 direct-dice 回归，继续锁住“队友不进 `responderQueue`，但交互 meta 明确指向当前 defender 骰池”。
+- [x] 已补 UI 回归，确认 `selectDie + diceOwnerId=同队玩家` 会显示 `interaction.hint_select_ally`。
+- [x] 已补 `shadow_thief-shadow-manipulation` 的 4 人 / 2v2 handler 级专项，锁住 `Sneak -> selectCount=2` 与 `diceOwnerId='3'`。
+- [x] 已确认当前共享 `afterRollConfirmed` 门禁仍将 `target='self'` 的骰子卡排除在响应窗外；本轮未把这条未裁决边界硬改成既定规则。
+
+### Validation
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/active-modifiers-undo.test.ts src/games/dicethrone/__tests__/flick-response-debug.test.ts src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts src/games/dicethrone/__tests__/shadow_thief-behavior.test.ts --configLoader native`
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `openspec validate update-dicethrone-4p-interactions-batch-3 --strict --no-interactive`
+
+### Status
+- completed
 
 ## Addendum: 2026-03-28 DiceThrone 四人模式分支上传与主分支合并
 
