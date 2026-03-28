@@ -540,7 +540,9 @@ describe('AI legal actions', () => {
         expect(new Set(attemptKeys).size).toBe(2);
         expect(state.core.players['0'].tokens.taiji).toBe(1);
         expect(state.core.pendingDamage).toBeUndefined();
+        expect(state.sys.interaction.current).toBeUndefined();
         expect(state.sys.responseWindow?.current).toBeUndefined();
+        expect(state.core.activePlayerId).toBe('0');
 
         const next = await resolveNextLocalAiAction({
             engineConfig,
@@ -551,6 +553,7 @@ describe('AI legal actions', () => {
             },
         });
 
+        expect(next?.playerId).toBe('0');
         expect(next?.action.kind).toBe('advance-phase');
     });
 
