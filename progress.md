@@ -1,5 +1,60 @@
 # Progress Log
 
+## Session: 2026-03-28 大厅单机模式 / 对战AI 入口口径回归
+- **Status:** completed
+- Actions taken:
+  - 复核当前 AI 工作树与根目录三件套，确认这条线的真实未收口点不是新 AI runtime，而是大厅详情页与本地房间 HUD 对 `本地同屏 / 单机模式 / 对战AI` 的口径重新漂移。
+  - 在 `src/components/lobby/GameDetailsModal.tsx` 把支持 AI 的本地入口改回双分流：`单机模式` 显式构造全 human 的本地 seat controller，`对战AI` 直达默认本地逻辑 AI 对局，不再复用单个“本地同屏”按钮。
+  - 在 `src/pages/LocalMatchRoom.tsx` 与 `src/components/game/framework/widgets/GameHUD.tsx` 接通本地 seat controller 结果，让进局后的 HUD 文案跟随真实对局类型切换为 `单机模式` 或 `对战AI`。
+  - 更新中英文 `lobby/game` locale，清掉用户可见的 `本地同屏` 残留口径。
+  - 重写 `src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts` 的入口断言，并在现有 `e2e/lobby.e2e.ts` 里补 `单机模式` 不误进 AI 的回归。
+  - 处理一处现有 E2E 稳定性问题：把 lobby 首屏准备逻辑从“只等导航成功”提升为 `ensureLobbyReady(...)`，用“导航重试 + Tic-Tac-Toe 卡片可见”做双门禁，避免启动抖动导致 AI 用例假失败。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts --maxWorkers=1` → `13 passed`
+  - `npm run test:e2e:ci:file -- lobby.e2e.ts "Game details modal opens and shows actions"` → `1 passed`
+  - `npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 对战AI入口会直接进入本地逻辑 AI 对局"` → `1 passed`
+  - `npm run test:e2e:ci:file -- lobby.e2e.ts "Tic-Tac-Toe 单机模式入口不会把第二个座位交给 AI"` → `1 passed`
+- Evidence:
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\lobby.e2e\Tic-Tac-Toe-对战AI入口会直接进入本地逻辑-AI-对局\lobby-tictactoe-local-ai-config-debug.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\lobby.e2e\Tic-Tac-Toe-单机模式入口不会把第二个座位交给-AI\lobby-tictactoe-single-device-human-seat-debug.png`
+- Next step:
+  - 入口口径这条线已重新对齐；继续 AI 主线时，优先回到各游戏 runtime 的策略增强，而不是再扩展新的模式命名分支。
+
+## Session: 2026-03-28 召唤师战争本地 AI 首轮接入
+- **Status:** completed
+- Actions taken:
+  - 复核 `summonerwars` 当前领域入口与规则文档，确认这条线最适合先做双人本地逻辑 AI，而不是先切多人或远程 AI。
+  - 新增 `src/games/summonerwars/ai.ts`：沿用统一 `legalActions` / scorer policy 框架，覆盖 setup、召唤、移动、建造、攻击、魔力与抽牌阶段，并接入基础 simple-choice / multistep 交互出口。
+  - 枚举主要合法动作时优先复用现有 helper：`getValidSummonPositions`、`getValidMoveTargetsEnhanced`、`getValidAttackTargetsEnhanced`、`getValidBuildPositions`、`getActivatableAbilities`、`canActivateAbility`，避免重复手写战棋规则。
+  - 在同一文件里落一版评分式 baseline：选角优先稳定阵营，战斗内优先召唤、高价值攻击和前压移动；只有当前阶段无更优动作时才 `END_PHASE`。
+  - 在 `src/games/summonerwars/game.ts` 注册 `summonerWarsAiRuntime`，并把 `src/games/summonerwars/manifest.ts` 调整为 `allowLocalMode: true`、`ai.localAi: true`。
+  - 在现有 `src/games/summonerwars/__tests__/flow.test.ts` 中补两条回归：setup 阶段 AI 选阵营；开局召唤阶段 AI 选合法召唤而不是直接过阶段。
+  - 调试过程中确认一个实现要点：`summonerwars` 在已开局后应以 `core.phase` 作为 AI 判定主来源；若机械读取测试夹具中的 `sys.phase`，AI 会退化成只会 `END_PHASE`。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/games/summonerwars/__tests__/flow.test.ts --maxWorkers=1` → `27 passed`
+  - `node scripts/game/generate_game_manifests.js` → generated files unchanged
+- Next step:
+  - 继续 AI 主线时，优先增强召唤师战争的事件卡目标选择和关键技能处理；当前这轮先停在“合法可运行 baseline”。
+
+## Session: 2026-03-28 Smash Up 本地 AI 首轮接入
+- **Status:** completed
+- Actions taken:
+  - 复核 `openspec/changes/add-cross-game-ai-system/tasks.md` 与当前 AI 目录，确认跨游戏 AI 骨架已经完成，继续推进应落到下一个游戏 runtime，而不是重复补框架。
+  - 读取 `docs/ai-rules/engine-systems.md`、`docs/testing-best-practices.md` 和 `src/games/smashup/rule/大杀四方规则.md`，把本轮范围收敛为“Smash Up 本地逻辑 AI 首轮接入”。
+  - 新增 `src/games/smashup/ai.ts`：基于当前可见状态枚举合法候选动作，并用 `validate` 过滤；覆盖派系选择、出牌、响应、交互、弃牌、天赋、special 与阶段推进。
+  - 在同一文件里接入评分式 baseline policy，默认优先交互与响应，再优先打随从抢节奏，之后才补行动/天赋，最后才推进阶段。
+  - 在 `src/games/smashup/game.ts` 注册 `smashUpAiRuntime`，并把 `src/games/smashup/manifest.ts` 调整为 `allowLocalMode: true`、`ai.localAi: true`，使大杀四方详情页可实际进入本地 AI 模式。
+  - 在现有 `src/games/smashup/__tests__/smashup.smoke.test.ts` 中补两条回归：四人局派系选择 legal actions 可生成；baseline 在基础出牌场景优先打出随从。
+  - 运行 `node scripts/game/generate_game_manifests.js`，确认 manifest 改动没有产生未同步的派生产物。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/games/smashup/__tests__/smashup.smoke.test.ts --maxWorkers=1` → `9 passed`
+  - `node scripts/game/generate_game_manifests.js` → generated files unchanged
+- Next step:
+  - 继续 AI 主线时，优先增强 Smash Up 的多人局评分策略与关键交互权重；当前这轮不继续推进 AstrBot 实网接入。
+
 ## Session: 2026-03-27 Dice Throne 本地 AI 入口补齐
 - **Status:** completed
 - Actions taken:
@@ -943,6 +998,32 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 
 ### Next Step
 - 若继续推进玩家目标交互专项，应进入 Batch 2，继续盘点尚未纳入 Batch 1 的其余英雄/卡牌入口，而不是再把 Batch 1 说成“全量多人能力审计完成”。
+
+## Session: 2026-03-28 DiceThrone 合并后续审计与炎术士/B3 复核
+- **Status:** completed
+- Actions taken:
+  - 复核远端主分支状态，确认四人专题已不再停留在 feature 分支；当前 `git ls-remote origin refs/heads/main` 返回 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8`。
+  - 继续按“多人能力审计”而非“是否已 merge”推进，重新核对炎术士全部多角色语义入口，区分已拿到 4 人专项证据的家族与仍只有 2 人/局部测试的家族。
+  - 重新下钻 Batch 3 P0 的共享路由与 UI 元数据消费点，确认 blocker 不只是旧 E2E 失效，而是 `afterRollConfirmed -> responderQueue -> currentResponderId` 与 `targetOpponentDice:boolean` 的双重 2 人压缩语义。
+  - 将本轮结论同步回三件套，明确下一步优先级应是 Batch 3 P0 裁决 + 炎术士 `Pyro Blast` / `Magma Armor` 四人专项，而不是继续口头泛化“火法一堆都差不多”。
+
+### Audit Summary
+| Topic | Evidence | Conclusion |
+|------|-------|----------|
+| 远端主分支状态 | `git ls-remote origin refs/heads/main` | `origin/main` 已前进到 `5a4099e0`，四人专题已进入主线 |
+| 炎术士已收口家族 | `rule-consistency.test.ts:722-801` + `dicethrone-simple-start.e2e.ts:1209-1260` | `Soul Burn`、`Meteor` / `Meteor II` / `Ultimate Inferno` 已有 4 人专项证据 |
+| 炎术士未收口 P1 | `abilities.ts:122-145` / `386-425`、`customActions/pyromancer.ts:312-345` / `460-495`、`pyromancer-behavior.test.ts`、`sneak-vs-pyro-blast.test.ts` | `Pyro Blast` / `Magma Armor` 仍主要停留在 2 人或局部测试，缺 4 人专项 |
+| Batch 3 路由 blocker | `execute.ts:245-279`、`rules.ts:1261-1295`、`ResponseWindowSystem.ts:512-531`、`flow.test.ts:612-675` | 队友既未进入 `responderQueue`，又会被 `currentResponderId` 门禁拦住，当前实现与 2v2 spec 的“队友可改骰”口径未闭环 |
+| Batch 3 元数据 blocker | `common.ts:43-56`、`RightSidebar.tsx:136-173`、`DiceTray.tsx:16-33` | `targetOpponentDice:boolean` 仍在压缩“当前骰池归属/观察视角”，不是纯命名问题 |
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 远端主分支确认 | `git ls-remote origin refs/heads/main` | 确认四人专题已进主线 | 返回 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8` | ✅ |
+
+### Next Step
+- 先对 Batch 3 P0 做语义裁决与共享层实现，不再让“队友可改骰”停留在 spec 文案。
+- 然后优先把炎术士 `Pyro Blast` / `Magma Armor` 升级成 4 人规则回归与在线证据。
 
 ## Session: 2026-03-28 DiceThrone 旧专项 E2E 收敛启动
 - **Status:** in_progress

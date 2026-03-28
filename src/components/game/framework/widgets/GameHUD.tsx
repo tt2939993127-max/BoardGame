@@ -42,6 +42,7 @@ interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
     matchId?: string;
     gameId?: string;
+    localModeLabel?: string;
     isHost?: boolean;
     credentials?: string;
     myPlayerId?: string | null;
@@ -94,6 +95,7 @@ export const GameHUD = ({
     mode,
     matchId,
     gameId: _gameId,
+    localModeLabel,
     isHost,
     credentials,
     myPlayerId,
@@ -538,7 +540,7 @@ export const GameHUD = ({
                         <div className="flex items-center gap-2 mb-2">
                             <Monitor size={14} className="text-neon-blue" />
                             <span className="text-neon-blue font-bold text-xs uppercase tracking-wider">
-                                {t('hud.mode.local')}
+                                {localModeLabel ?? t('hud.mode.local')}
                             </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
