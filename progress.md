@@ -999,6 +999,32 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 ### Next Step
 - 若继续推进玩家目标交互专项，应进入 Batch 2，继续盘点尚未纳入 Batch 1 的其余英雄/卡牌入口，而不是再把 Batch 1 说成“全量多人能力审计完成”。
 
+## Session: 2026-03-28 DiceThrone 合并后续审计与炎术士/B3 复核
+- **Status:** completed
+- Actions taken:
+  - 复核远端主分支状态，确认四人专题已不再停留在 feature 分支；当前 `git ls-remote origin refs/heads/main` 返回 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8`。
+  - 继续按“多人能力审计”而非“是否已 merge”推进，重新核对炎术士全部多角色语义入口，区分已拿到 4 人专项证据的家族与仍只有 2 人/局部测试的家族。
+  - 重新下钻 Batch 3 P0 的共享路由与 UI 元数据消费点，确认 blocker 不只是旧 E2E 失效，而是 `afterRollConfirmed -> responderQueue -> currentResponderId` 与 `targetOpponentDice:boolean` 的双重 2 人压缩语义。
+  - 将本轮结论同步回三件套，明确下一步优先级应是 Batch 3 P0 裁决 + 炎术士 `Pyro Blast` / `Magma Armor` 四人专项，而不是继续口头泛化“火法一堆都差不多”。
+
+### Audit Summary
+| Topic | Evidence | Conclusion |
+|------|-------|----------|
+| 远端主分支状态 | `git ls-remote origin refs/heads/main` | `origin/main` 已前进到 `5a4099e0`，四人专题已进入主线 |
+| 炎术士已收口家族 | `rule-consistency.test.ts:722-801` + `dicethrone-simple-start.e2e.ts:1209-1260` | `Soul Burn`、`Meteor` / `Meteor II` / `Ultimate Inferno` 已有 4 人专项证据 |
+| 炎术士未收口 P1 | `abilities.ts:122-145` / `386-425`、`customActions/pyromancer.ts:312-345` / `460-495`、`pyromancer-behavior.test.ts`、`sneak-vs-pyro-blast.test.ts` | `Pyro Blast` / `Magma Armor` 仍主要停留在 2 人或局部测试，缺 4 人专项 |
+| Batch 3 路由 blocker | `execute.ts:245-279`、`rules.ts:1261-1295`、`ResponseWindowSystem.ts:512-531`、`flow.test.ts:612-675` | 队友既未进入 `responderQueue`，又会被 `currentResponderId` 门禁拦住，当前实现与 2v2 spec 的“队友可改骰”口径未闭环 |
+| Batch 3 元数据 blocker | `common.ts:43-56`、`RightSidebar.tsx:136-173`、`DiceTray.tsx:16-33` | `targetOpponentDice:boolean` 仍在压缩“当前骰池归属/观察视角”，不是纯命名问题 |
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 远端主分支确认 | `git ls-remote origin refs/heads/main` | 确认四人专题已进主线 | 返回 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8` | ✅ |
+
+### Next Step
+- 先对 Batch 3 P0 做语义裁决与共享层实现，不再让“队友可改骰”停留在 spec 文案。
+- 然后优先把炎术士 `Pyro Blast` / `Magma Armor` 升级成 4 人规则回归与在线证据。
+
 ## Session: 2026-03-28 DiceThrone 旧专项 E2E 收敛启动
 - **Status:** in_progress
 - Actions taken:

@@ -930,3 +930,28 @@
   - 若产品决定收紧口径，只保留当前攻击方本人在该窗口响应，则应反向修 spec / 规则文档，而不是继续保留“队友可改骰”的描述。
 - 下一步真正需要裁决的不是“要不要补一条 E2E”，而是“合法 allied dice interference 在 `afterRollConfirmed` 到底走响应队列、还是走非队列豁免路径”，否则继续给旧 `targetOpponentDice` 打补丁没有意义。
 
+## 2026-03-28 DiceThrone 合并后续审计：炎术士与 Batch 3 现役缺口
+
+- 这轮四人专题已经不再停留在 feature 分支。当前远端 `origin/main` 已前进到 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8`，因此“先上传合并到主分支”这一收尾条件已经满足；后续工作应直接按主线继续做多人能力审计，而不是再回头确认是否已 merge。
+- 炎术士当前不能说“都审完了”，更准确的分层是：
+  - 已拿到 4 人 / 2v2 专项证据：`Soul Burn`、`Meteor` / `Meteor II` / `Ultimate Inferno`。对应入口在 `src/games/dicethrone/heroes/pyromancer/abilities.ts:73-87`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:105-119`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:198-210`，共享回归在 `src/games/dicethrone/__tests__/rule-consistency.test.ts:722-801`。
+  - 仍只有 2 人 / 局部行为测试，没有 4 人专项证据：`Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`、`Magma Armor I/II/III`、`Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down` / `Burn Down II`、`Ignite` / `Ignite II`、`Get Fired Up` / `Red Hot`、`Blazing Soul` / `Meteor Shower`。
+- 炎术士里优先级最高的未收口家族仍是 `Pyro Blast` 与 `Magma Armor`：
+  - `Pyro Blast` 基础版把 bonus roll 直接声明成 `rollDie target='opponent'`，而 II/III 级走 `customActionId: 'pyro-blast-2-roll'/'pyro-blast-3-roll'`，两条实现都把结算目标硬绑到 `ctx.ctx.defenderId`，见 `src/games/dicethrone/heroes/pyromancer/abilities.ts:122-145`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:386-425`、`src/games/dicethrone/domain/customActions/pyromancer.ts:460-495`。现有测试主要是 2 人行为/潜行回归，见 `src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:779-886` 与 `src/games/dicethrone/__tests__/sneak-vs-pyro-blast.test.ts:1-203`，还没有 4 人 `defender` 语义专项。
+  - `Magma Armor` 明确依赖“防御上下文里 `attackerId=防御者`、`defenderId=原攻击者`”这套角色翻转，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:312-345` 与 `src/games/dicethrone/domain/customActions/pyromancer.ts:397-425`。现有覆盖也只是 2 人本地 defense context 构造，见 `src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:472-560`，没有 4 人 / 2v2 防御专项回归或在线证据。
+- 炎术士 P2 家族目前更多是“有局部实现测试，但没有升级为四人口径审计”：
+  - `Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down`、`Ignite` 都在 `custom action target='self'` 下改用 `ctx.ctx.defenderId` 找真实目标，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:98-126`、`src/games/dicethrone/domain/customActions/pyromancer.ts:222-251`、`src/games/dicethrone/domain/customActions/pyromancer.ts:269-298`；但现有主要仍是 `pyromancer-behavior.test.ts` 这类 2 人 handler 级断言。
+  - `Get Fired Up` / `Red Hot` 当前已有自己侧 bonus die / bonus damage 的本地测试与 UI 特写测试，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:509-538`、`src/games/dicethrone/domain/customActions/pyromancer.ts:579-592`、`src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:735-773`、`src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx:626-686`；但这些仍不是 4 人攻击链或响应窗口专项。
+- Batch 3 P0 的 blocker 这轮进一步实锤为“共享响应窗口路由 + 交互元数据仍带 2 人压缩语义”：
+  - `execute.ts` 在 `CONFIRM_ROLL` 后用 `getContextualOpponentId(..., rollerId)` 作为 `triggerId`，再调用 `getResponderQueue(..., opponentId, ..., rollerId, phase)`，见 `src/games/dicethrone/domain/execute.ts:245-279`。
+  - `getResponderQueue()` 在 team mode 下显式排除 `triggerId` 的同队玩家，见 `src/games/dicethrone/domain/rules.ts:1261-1295`；现役 4 人回归也锁住了防御方确认骰面后 `responderQueue === ['0']`，见 `src/games/dicethrone/__tests__/flow.test.ts:612-675`。
+  - 与此同时，`ResponseWindowSystem.beforeCommand()` 又把非豁免命令强制收敛到 `currentResponderId`，见 `src/engine/systems/ResponseWindowSystem.ts:512-531`。这意味着 2v2 spec 中“队友可在合法掷骰窗口干预骰面，但队友不进同队响应队列”的口径，当前实现并没有闭环。
+- Batch 3 的另一条共享缺口不是单纯文案，而是数据模型：
+  - `resolveTargetOpponentDice()` 仍把 `target='select'` 压缩成 `attackerId !== rollerId` 的布尔值，见 `src/games/dicethrone/domain/customActions/common.ts:43-56`。
+  - `RightSidebar` 与 `DiceTray` 继续消费 `targetOpponentDice:boolean`，并把 `selectDie` 提示直接切成 `interaction.hint_select_opponent` vs `interaction.hint_select`，见 `src/games/dicethrone/ui/RightSidebar.tsx:136-173`、`src/games/dicethrone/ui/DiceTray.tsx:16-33`。
+  - 因此当前共享层表达的不是“当前骰池归属 / 观察视角”，而只是“是不是对手骰子”；这与 Batch 3 spec 要求的显式语义模型仍不一致。
+- 结论上，下一步不能口头说“火法已经差不多”或“多人能力都审完了”。更准确的推进顺序应是：
+  - 先裁决并收口 Batch 3 P0：队友干预骰面到底走新的共享响应路由，还是同步回修 2v2 spec/规则文档；
+  - 然后优先升级炎术士 `Pyro Blast` / `Magma Armor` 为 4 人规则回归与在线证据；
+  - 再继续扫 `Fiery Combo` / `Burn Down` / `Ignite` / `Get Fired Up` / `Red Hot` 等仍只有 2 人或局部测试的家族。
+
