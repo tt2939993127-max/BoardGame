@@ -17,10 +17,11 @@ import type { PlayerId } from '../../../../engine/types';
 // Mock i18next
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
-        t: (key: string, params?: Record<string, unknown>) => {
+        t: (key: string, _params?: Record<string, unknown>) => {
             const translations: Record<string, string> = {
                 'interaction.selectStatusToRemove': '选择要移除的状态效果',
                 'interaction.selectPlayerToRemoveAllStatus': '选择玩家',
+                'interaction.gunslingerTheLaw': '选择至多 2 位目标玩家',
                 'interaction.selectStatusToTransfer': '选择要移除的状态效果',
                 'interaction.transferSelectTarget': '选择目标玩家',
                 'interaction.noStatus': '无状态',
@@ -130,6 +131,49 @@ describe('InteractionOverlay', () => {
 
             expect(screen.getByTestId('dt-status-owner-0')).toHaveTextContent('自己');
             expect(screen.getByTestId('dt-status-owner-1')).toHaveTextContent('对手');
+        });
+
+        it('4人模式下 self-only 状态交互仍只展示自己', () => {
+            const fourPlayerMockPlayers: Record<PlayerId, HeroState> = {
+                ...mockPlayers,
+                '2': {
+                    characterId: 'paladin',
+                    resources: { hp: 40, cp: 2 },
+                    statusEffects: { shock: 1 },
+                    tokens: {},
+                    hand: [],
+                    discard: [],
+                    deck: [],
+                    abilityLevels: {},
+                } as HeroState,
+                '3': {
+                    characterId: 'pyromancer',
+                    resources: { hp: 35, cp: 4 },
+                    statusEffects: {},
+                    tokens: { burn: 2 } as any,
+                    hand: [],
+                    discard: [],
+                    deck: [],
+                    abilityLevels: {},
+                } as HeroState,
+            };
+
+            render(
+                <InteractionOverlay
+                    interaction={selectStatusInteraction}
+                    players={fourPlayerMockPlayers}
+                    currentPlayerId="0"
+                    playerNames={fourPlayerNames}
+                    seatingOrder={fourPlayerOrder}
+                    teamIdByPlayerId={fourPlayerTeams}
+                    {...mockHandlers}
+                />
+            );
+
+            expect(screen.getByTestId('dt-status-owner-0')).toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-1')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-2')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('dt-status-owner-3')).not.toBeInTheDocument();
         });
 
         it('should disable confirm button when nothing selected', () => {
@@ -249,6 +293,73 @@ describe('InteractionOverlay', () => {
 
             const confirmButton = screen.getByText('确认');
             expect(confirmButton).toBeEnabled();
+        });
+
+        it('should allow confirming multi-target player interaction after selecting one target', () => {
+            const multiplayerPlayers = {
+                ...mockPlayers,
+                '1': { ...mockPlayers['1'], nickname: '僧侣' } as HeroState,
+                '2': {
+                    ...mockPlayers['1'],
+                    characterId: 'paladin',
+                    nickname: '圣骑士',
+                    statusEffects: { knockdown: 0 },
+                } as HeroState,
+            };
+
+            render(
+                <InteractionOverlay
+                    interaction={{
+                        ...selectPlayerInteraction,
+                        titleKey: 'interaction.gunslingerTheLaw',
+                        selectCount: 2,
+                        targetPlayerIds: ['1', '2'],
+                        selected: ['1'],
+                    }}
+                    players={multiplayerPlayers}
+                    currentPlayerId="0"
+                    {...mockHandlers}
+                />
+            );
+
+            expect(screen.getByText('选择至多 2 位目标玩家')).toBeInTheDocument();
+            expect(screen.getByTestId('dt-player-target-1')).toBeInTheDocument();
+            expect(screen.getByTestId('dt-player-target-2')).toBeInTheDocument();
+            expect(screen.getByText('确认')).toBeEnabled();
+        });
+
+        it('should emit player selection callback for each clicked target in multi-target mode', () => {
+            const multiplayerPlayers = {
+                ...mockPlayers,
+                '1': { ...mockPlayers['1'], nickname: '僧侣' } as HeroState,
+                '2': {
+                    ...mockPlayers['1'],
+                    characterId: 'paladin',
+                    nickname: '圣骑士',
+                    statusEffects: { knockdown: 0 },
+                } as HeroState,
+            };
+
+            render(
+                <InteractionOverlay
+                    interaction={{
+                        ...selectPlayerInteraction,
+                        titleKey: 'interaction.gunslingerTheLaw',
+                        selectCount: 2,
+                        targetPlayerIds: ['1', '2'],
+                        selected: [],
+                    }}
+                    players={multiplayerPlayers}
+                    currentPlayerId="0"
+                    {...mockHandlers}
+                />
+            );
+
+            fireEvent.click(screen.getByTestId('dt-player-target-1'));
+            fireEvent.click(screen.getByTestId('dt-player-target-2'));
+
+            expect(mockHandlers.onSelectPlayer).toHaveBeenNthCalledWith(1, '1');
+            expect(mockHandlers.onSelectPlayer).toHaveBeenNthCalledWith(2, '2');
         });
     });
 
@@ -472,7 +583,7 @@ describe('InteractionOverlay', () => {
         });
 
         it('should prevent backdrop close', () => {
-            const { container } = render(
+            const { container: _container } = render(
                 <InteractionOverlay
                     interaction={interaction}
                     players={mockPlayers}

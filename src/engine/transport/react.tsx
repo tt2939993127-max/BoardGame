@@ -497,6 +497,44 @@ export interface LocalGameProviderProps {
     followCurrentTurnPlayer?: boolean;
 }
 
+function createLocalProviderRandom(seed: string): RandomFn {
+    const base = createSeededRandom(seed);
+
+    if (!isTestEnvironment()) {
+        return base;
+    }
+
+    TestHarness.init();
+    const harness = TestHarness.getInstance();
+    const nextRandom = harness.random.wrap(() => base.random());
+    let cursor = 0;
+
+    return {
+        random: () => {
+            cursor += 1;
+            return nextRandom();
+        },
+        d: (max: number) => {
+            cursor += 1;
+            return Math.floor(nextRandom() * max) + 1;
+        },
+        range: (min: number, max: number) => {
+            cursor += 1;
+            return Math.floor(nextRandom() * (max - min + 1)) + min;
+        },
+        shuffle: <T,>(array: T[]): T[] => {
+            const result = [...array];
+            for (let i = result.length - 1; i > 0; i--) {
+                cursor += 1;
+                const j = Math.floor(nextRandom() * (i + 1));
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+            return result;
+        },
+        getCursor: () => cursor,
+    };
+}
+
 export function LocalGameProvider({
     config,
     numPlayers,
@@ -518,7 +556,7 @@ export function LocalGameProvider({
         [numPlayers],
     );
 
-    const randomRef = useRef<RandomFn>(createSeededRandom(seed));
+    const randomRef = useRef<RandomFn>(createLocalProviderRandom(seed));
     const onCommandRejectedRef = useRef(onCommandRejected);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
     onCommandRejectedRef.current = onCommandRejected;
@@ -802,7 +840,7 @@ export function LocalGameProvider({
     }, [config, dispatch, seatControllers, seed, state]);
 
     const reset = useCallback(() => {
-        randomRef.current = createSeededRandom(seed);
+        randomRef.current = createLocalProviderRandom(seed);
         const random = randomRef.current;
         const core = config.domain.setup(playerIds, random);
         const sys = createInitialSystemState(

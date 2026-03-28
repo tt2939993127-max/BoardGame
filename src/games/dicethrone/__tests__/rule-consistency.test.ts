@@ -18,9 +18,11 @@ import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { getNextPhase, canAdvancePhase, getPlayerOrder, getNextPlayerId, getTokenStackLimit } from '../domain/rules';
 import { validateCommand } from '../domain/commandValidation';
+import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { resolveOffensivePreDefenseEffects } from '../domain/attack';
 import { shouldOpenTokenResponse } from '../domain/tokenResponse';
 import { VENGEANCE_2 } from '../heroes/paladin/abilities';
+import { METEOR_2, PYROMANCER_ABILITIES } from '../heroes/pyromancer/abilities';
 import {
     createRunner,
     fixedRandom,
@@ -467,6 +469,19 @@ describe('Property 9: 4 人玩家目标交互验证', () => {
         ...overrides,
     } as DiceThroneCore);
 
+    const createFourPlayerEffectContext = (
+        state: DiceThroneCore,
+        overrides: Partial<EffectContext> = {}
+    ): EffectContext => ({
+        attackerId: '0',
+        defenderId: '1',
+        sourceAbilityId: 'batch2-test',
+        state,
+        damageDealt: 0,
+        timestamp: 123,
+        ...overrides,
+    });
+
     it('GRANT_TOKENS 只允许命中交互候选集中的玩家', () => {
         const core = createFourPlayerCore();
         const result = validateCommand(
@@ -490,6 +505,41 @@ describe('Property 9: 4 人玩家目标交互验证', () => {
                 selected: [],
                 targetPlayerIds: ['0', '2'],
                 tokenGrantConfig: { tokenId: TOKEN_IDS.RETRIBUTION, amount: 1 },
+            },
+        );
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('invalid_target_player');
+    });
+
+    it('REMOVE_STATUS 在 self-only selectStatus 交互下拒绝其他玩家', () => {
+        const core = createFourPlayerCore({
+            players: {
+                '0': { resources: {}, statusEffects: { poison: 1 }, tokens: {} } as any,
+                '1': { resources: {}, statusEffects: { burn: 1 }, tokens: {} } as any,
+                '2': { resources: {}, statusEffects: {}, tokens: {} } as any,
+                '3': { resources: {}, statusEffects: {}, tokens: {} } as any,
+            },
+        });
+        const result = validateCommand(
+            core,
+            {
+                type: 'REMOVE_STATUS',
+                playerId: '0',
+                payload: {
+                    targetPlayerId: '1',
+                    statusId: STATUS_IDS.BURN,
+                },
+            } as any,
+            'main2',
+            {
+                id: 'remove-status-self',
+                playerId: '0',
+                sourceCardId: 'steadfast-2',
+                type: 'selectStatus',
+                titleKey: 'interaction.selectStatusToRemove',
+                selectCount: 1,
+                selected: [],
+                targetPlayerIds: ['0'],
             },
         );
         expect(result.valid).toBe(false);
@@ -667,6 +717,97 @@ describe('Property 9: 4 人玩家目标交互验证', () => {
             },
         );
         expect(result.valid).toBe(true);
+    });
+
+    it('Meteor 的 collateral 在 4 人 / 2v2 下只命中敌方集合', () => {
+        const core = createFourPlayerCore();
+        const meteor = PYROMANCER_ABILITIES.find((ability) => ability.id === 'meteor');
+        const collateralEffect = meteor?.effects[2];
+        expect(collateralEffect).toBeDefined();
+
+        const events = resolveEffectsToEvents(
+            [collateralEffect!],
+            'withDamage',
+            createFourPlayerEffectContext(core, { sourceAbilityId: 'meteor' }),
+        );
+
+        const damageTargets = events
+            .filter((event) => event.type === 'DAMAGE_DEALT')
+            .map((event: any) => event.payload.targetId);
+
+        expect(damageTargets).toEqual(['1', '3']);
+        expect(damageTargets).not.toContain('2');
+    });
+
+    it('Meteor II 的 collateral 在 4 人 / 2v2 下只命中敌方集合', () => {
+        const core = createFourPlayerCore();
+        const collateralEffect = METEOR_2.variants?.find((variant) => variant.id === 'meteor-2')?.effects[2];
+        expect(collateralEffect).toBeDefined();
+
+        const events = resolveEffectsToEvents(
+            [collateralEffect!],
+            'withDamage',
+            createFourPlayerEffectContext(core, { sourceAbilityId: 'meteor-2' }),
+        );
+
+        const damageTargets = events
+            .filter((event) => event.type === 'DAMAGE_DEALT')
+            .map((event: any) => event.payload.targetId);
+
+        expect(damageTargets).toEqual(['1', '3']);
+        expect(damageTargets).not.toContain('2');
+    });
+
+    it('Ultimate Inferno 的 collateral 在 4 人 / 2v2 下只命中敌方集合', () => {
+        const core = createFourPlayerCore();
+        const ultimateInferno = PYROMANCER_ABILITIES.find((ability) => ability.id === 'ultimate-inferno');
+        const collateralEffect = ultimateInferno?.effects[4];
+        expect(collateralEffect).toBeDefined();
+
+        const events = resolveEffectsToEvents(
+            [collateralEffect!],
+            'withDamage',
+            createFourPlayerEffectContext(core, { sourceAbilityId: 'ultimate-inferno' }),
+        );
+
+        const damageTargets = events
+            .filter((event) => event.type === 'DAMAGE_DEALT')
+            .map((event: any) => event.payload.targetId);
+
+        expect(damageTargets).toEqual(['1', '3']);
+        expect(damageTargets).not.toContain('2');
+    });
+
+    it('Soul Burn 在 4 人 / 2v2 下只命中当前 defender', () => {
+        const core = createFourPlayerCore({
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'soul-burn',
+                attackDiceFaceCounts: {
+                    [TOKEN_IDS.FIRE_MASTERY]: 0,
+                    [STATUS_IDS.BURN]: 0,
+                    fiery_soul: 2,
+                } as any,
+            } as any,
+        });
+        const soulBurn = PYROMANCER_ABILITIES.find((ability) => ability.id === 'soul-burn');
+        const damageEffect = soulBurn?.effects[1];
+        expect(damageEffect).toBeDefined();
+
+        const events = resolveEffectsToEvents(
+            [damageEffect!],
+            'withDamage',
+            createFourPlayerEffectContext(core, { sourceAbilityId: 'soul-burn' }),
+        );
+
+        const damageTargets = events
+            .filter((event) => event.type === 'DAMAGE_DEALT')
+            .map((event: any) => event.payload.targetId);
+
+        expect(damageTargets).toEqual(['1']);
+        expect(damageTargets).not.toContain('2');
+        expect(damageTargets).not.toContain('3');
     });
 
     it('REMOVE_STATUS 在 requiresTargetWithStatus=true 时拒绝空目标', () => {

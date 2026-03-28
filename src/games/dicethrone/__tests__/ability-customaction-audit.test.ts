@@ -30,16 +30,18 @@ import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 import { SHADOW_THIEF_CARDS } from '../heroes/shadow_thief/cards';
 import { MOON_ELF_CARDS } from '../heroes/moon_elf/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
+import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import { COMMON_CARDS } from '../domain/commonCards';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 
 const HEROES: SelectableCharacterId[] = [
-    'monk', 'barbarian', 'paladin', 'pyromancer', 'moon_elf', 'shadow_thief',
+    'monk', 'barbarian', 'paladin', 'pyromancer', 'moon_elf', 'shadow_thief', 'gunslinger', 'samurai',
 ];
 
 const ALL_CARDS: AbilityCard[] = [
     ...MONK_CARDS, ...BARBARIAN_CARDS, ...PYROMANCER_CARDS,
-    ...SHADOW_THIEF_CARDS, ...MOON_ELF_CARDS, ...PALADIN_CARDS,
+    ...SHADOW_THIEF_CARDS, ...MOON_ELF_CARDS, ...PALADIN_CARDS, ...GUNSLINGER_CARDS, ...SAMURAI_CARDS,
     ...COMMON_CARDS,
 ];
 
@@ -233,6 +235,12 @@ describe('CustomAction 覆盖完整性审计', () => {
         'shadow_thief-cornucopia-discard', // 聚宝盆旧版 handler（向后兼容）
         // 僧侣（通用状态移除，由卡牌系统直接调用）
         'remove-status-self',
+        // 通过 selectPlayer interaction 的 resolveCustomActionId 间接进入
+        'gunslinger-card-pistol-whip-resolve',
+        'gunslinger-card-mark-the-target-resolve',
+        'gunslinger-card-wanted-resolve',
+        'gunslinger-card-high-noon-resolve',
+        'samurai-card-you-should-be-ashamed-resolve',
     ]);
 
     it('所有注册的 customAction 都被声明式引用或在已知非声明式列表中', () => {

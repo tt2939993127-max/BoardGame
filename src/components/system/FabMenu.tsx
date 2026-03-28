@@ -31,6 +31,8 @@ interface FabMenuProps {
 
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
+const FAB_EDGE_PEEK_SIZE_MOBILE = 18;
+const FAB_EDGE_PEEK_SIZE_DESKTOP = 20;
 
 export interface FabAction {
     mobilePanelVariant?: 'popover' | 'sheet';
@@ -51,6 +53,7 @@ export const FabMenu = ({
     const buttonSize = isMobileViewport ? 44 : 48;
     const buttonGap = isMobileViewport ? 8 : 12;
     const edgePadding = isMobileViewport ? 12 : 32;
+    const edgePeekSize = isMobileViewport ? FAB_EDGE_PEEK_SIZE_MOBILE : FAB_EDGE_PEEK_SIZE_DESKTOP;
     
     const [isOpen, setIsOpen] = useState(false);
     const [activeItemId, setActiveItemId] = useState<string | null>(null);
@@ -78,19 +81,27 @@ export const FabMenu = ({
         && Boolean(activeItem.content);
     useDocumentScrollLock(shouldLockDocumentScroll);
 
-    const clampPosition = useCallback((target: { left: number; top: number }) => {
+    const clampPosition = useCallback((target: { left: number; top: number }, allowOverflow = true) => {
         if (viewportWidth <= 0 || viewportHeight <= 0) {
             return target;
         }
-        const minLeft = edgePadding + safeAreaInsets.left;
-        const minTop = edgePadding + safeAreaInsets.top;
-        const maxLeft = Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
-        const maxTop = Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
+        const minLeft = allowOverflow
+            ? edgePeekSize - buttonSize
+            : edgePadding + safeAreaInsets.left;
+        const minTop = allowOverflow
+            ? edgePeekSize - buttonSize
+            : edgePadding + safeAreaInsets.top;
+        const maxLeft = allowOverflow
+            ? Math.max(minLeft, viewportWidth - edgePeekSize)
+            : Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = allowOverflow
+            ? Math.max(minTop, viewportHeight - edgePeekSize)
+            : Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         return {
             left: Math.min(Math.max(target.left, minLeft), maxLeft),
             top: Math.min(Math.max(target.top, minTop), maxTop),
         };
-    }, [buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
+    }, [buttonSize, edgePadding, edgePeekSize, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
 
     const getAlignmentForPosition = useCallback((target: { left: number; top: number }): FabAlignment => {
         const centerY = viewportHeight / 2;
@@ -146,7 +157,7 @@ export const FabMenu = ({
                     localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 }
                 
-                next = clampPosition(next);
+                next = clampPosition(next, true);
                 setFabPosition(next);
                 setAlignment(getAlignmentForPosition(next));
                 return;
@@ -159,7 +170,7 @@ export const FabMenu = ({
                 const next = clampPosition({
                     left: base.left + (parsed.x ?? 0),
                     top: base.top + (parsed.y ?? 0),
-                });
+                }, true);
                 const percent = {
                     leftPercent: next.left / viewportWidth,
                     topPercent: next.top / viewportHeight,
@@ -171,7 +182,7 @@ export const FabMenu = ({
                 return;
             }
 
-            const next = clampPosition(base);
+            const next = clampPosition(base, false);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
         } catch (error) {
@@ -188,7 +199,7 @@ export const FabMenu = ({
         const next = clampPosition({
             left: fabPosition.left + info.offset.x,
             top: fabPosition.top + info.offset.y,
-        });
+        }, true);
         setFabPosition(next);
         // 保存为百分比格式
         const percent = {
@@ -278,7 +289,7 @@ export const FabMenu = ({
                         const next = clampPosition({
                             left: parsed.leftPercent * viewportWidth,
                             top: parsed.topPercent * viewportHeight,
-                        });
+                        }, true);
                         setFabPosition(next);
                         setAlignment(getAlignmentForPosition(next));
                         return;
@@ -288,7 +299,7 @@ export const FabMenu = ({
                 logger.error('FabMenu: 处理窗口缩放失败', { error });
             }
             // 降级：直接 clamp 当前位置
-            const next = clampPosition(fabPosition);
+            const next = clampPosition(fabPosition, true);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
         };
@@ -311,7 +322,6 @@ export const FabMenu = ({
 
         prevActiveItemIdRef.current = activeItemId;
     }, [activeItemId, items]);
-
     // 列表顺序
     const isButtonBottom = alignment.v === 'bottom';
     const satellitesToRender = isButtonBottom ? [...items.slice(1)].reverse() : items.slice(1);

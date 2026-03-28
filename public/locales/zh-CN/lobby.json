@@ -41,7 +41,7 @@
     "reconnectEnter": "重连进入",
     "join": "加入",
     "spectate": "观战",
-    "localPlay": "本地同屏",
+    "localPlay": "单机模式",
     "singleDevice": "单机模式",
     "playAi": "对战AI",
     "tutorial": "教程模式",
@@ -293,7 +293,12 @@
       "3days": "3 天",
       "7days": "7 天"
     },
-    "retentionHint": "保存期内可重连，过期自动清理"
+    "retentionHint": "保存期内可重连，过期自动清理",
+    "multiSelectPlaceholder": "选择扩展",
+    "multiSelectButton": "已选 {{count}} 项",
+    "multiSelectSelected": "已启用 {{count}} 项",
+    "multiSelectNone": "未启用",
+    "removeSelectedOption": "取消 {{label}}"
   },
   "socket": {
     "invalidGameId": "非法 gameId，已忽略订阅: {{value}}",

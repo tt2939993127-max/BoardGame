@@ -18,7 +18,7 @@ import { initHeroState, createCharacterDice } from './characters';
 import { registerChoiceEffectHandler, resolveChoiceEffect } from './choiceEffects';
 import { removeCard } from './utils';
 import {
-    handlePreventDamage, handleAttackPreDefenseResolved, handleDamageDealt,
+    handlePreventDamage, handleAttackPreDefenseResolved, handleAttackDefenseResolved, handleDamageDealt,
     handleHealApplied, handleAttackInitiated, handleBonusDamageAdded, handleAttackResolved,
     handleAttackMadeUndefendable, handleExtraAttackTriggered,
     handleDamageShieldGranted, handleDamagePrevented,
@@ -176,8 +176,9 @@ const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     event
 ) => {
     const isDisplayOnly = !!(event.payload as { displayOnly?: boolean })?.displayOnly;
-    // 非 displayOnly 时，标记 pendingAttack.bonusDiceResolved
-    const pendingAttack = !isDisplayOnly && state.pendingAttack
+    const isAttackBonusSettlement = state.pendingBonusDiceSettlement?.resolutionMode === 'attackBonus';
+    // 仅“独立伤害型”奖励骰才标记 bonusDiceResolved。
+    const pendingAttack = !isDisplayOnly && !isAttackBonusSettlement && state.pendingAttack
         ? { ...state.pendingAttack, bonusDiceResolved: true }
         : state.pendingAttack;
     return { ...state, pendingBonusDiceSettlement: undefined, pendingAttack };
@@ -461,7 +462,17 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
     const player = state.players[playerId];
     if (player) {
         let playerUpdates: Partial<HeroState> = {};
-        if (tokenId) {
+        const tokenActiveUseTiming = tokenId
+            ? state.tokenDefinitions.find(def => def.id === tokenId)?.activeUse?.timing
+            : undefined;
+        const shouldSkipGenericTokenDelta = tokenId
+            && customId?.startsWith('use-')
+            && (
+                tokenActiveUseTiming === 'onOffensiveRollEnd'
+                || (Array.isArray(tokenActiveUseTiming) && tokenActiveUseTiming.includes('onOffensiveRollEnd'))
+            );
+
+        if (tokenId && !shouldSkipGenericTokenDelta) {
             const maxStacks = getTokenStackLimit(state, playerId, tokenId);
             const currentAmount = player.tokens[tokenId] || 0;
             const nextAmount = Math.max(0, Math.min(currentAmount + value, maxStacks));
@@ -842,6 +853,8 @@ export const reduce = (
             return handleBonusDamageAdded(state, event);
         case 'ATTACK_PRE_DEFENSE_RESOLVED':
             return handleAttackPreDefenseResolved(state, event);
+        case 'ATTACK_DEFENSE_RESOLVED':
+            return handleAttackDefenseResolved(state, event);
         case 'ATTACK_RESOLVED':
             return handleAttackResolved(state, event);
         case 'ATTACK_MADE_UNDEFENDABLE':

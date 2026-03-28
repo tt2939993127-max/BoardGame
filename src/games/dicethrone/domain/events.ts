@@ -99,6 +99,7 @@ export const DT_EVENTS = defineEvents({
   ATTACK_INITIATED: { audio: 'immediate', sound: ATTACK_INITIATE_KEY },
   BONUS_DAMAGE_ADDED: 'silent',
   ATTACK_PRE_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
+  ATTACK_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
   ATTACK_MADE_UNDEFENDABLE: { audio: 'immediate', sound: ATTACK_UNDEFENDABLE_KEY },
   
   DAMAGE_SHIELD_GRANTED: { audio: 'immediate', sound: SHIELD_GRANT_KEY },
@@ -289,6 +290,8 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         modifiers?: DamageModifier[];
         /** 伤害计算明细（新管线格式，优先使用）*/
         breakdown?: DamageBreakdown;
+        /** 是否为不可防御伤害（custom action 后处理据此跳过 Token 响应） */
+        unblockable?: boolean;
         /** 跳过护盾消耗（用于 HP 重置类效果，如神圣祝福将 HP 设为 1） */
         bypassShields?: boolean;
         /** 护盾消耗记录（reducer 回填，用于 ActionLog 展示护盾减伤信息） */
@@ -514,6 +517,15 @@ export interface AttackPreDefenseResolvedEvent extends GameEvent<'ATTACK_PRE_DEF
         attackerId: PlayerId;
         defenderId?: PlayerId;
         sourceAbilityId?: string;
+    };
+}
+
+/** 防御方效果结算事件 */
+export interface AttackDefenseResolvedEvent extends GameEvent<'ATTACK_DEFENSE_RESOLVED'> {
+    payload: {
+        attackerId: PlayerId;
+        defenderId: PlayerId;
+        defenseAbilityId?: string;
     };
 }
 
@@ -839,6 +851,7 @@ export type DiceThroneEvent =
     | AttackInitiatedEvent
     | BonusDamageAddedEvent
     | AttackPreDefenseResolvedEvent
+    | AttackDefenseResolvedEvent
     | AttackResolvedEvent
     | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
