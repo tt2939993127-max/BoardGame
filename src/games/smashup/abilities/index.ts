@@ -41,6 +41,7 @@ import { registerAncientEgyptiansAbilities, registerAncientEgyptiansInteractionH
 import { registerCowboysAbilities, registerCowboysInteractionHandlers } from './cowboys';
 import { registerSamuraiAbilities, registerSamuraiInteractionHandlers } from './samurai';
 import { registerVikingsAbilities, registerVikingsInteractionHandlers } from './vikings';
+import { registerTitanAbilities, registerTitanInteractionHandlers } from './titans';
 import { registerBuryInteractionHandlers } from '../domain/bury';
 import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
@@ -53,6 +54,7 @@ import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain
 import { clearDiscardPlayProviders } from '../domain/discardPlayability';
 import { clearRegistry, registerPodAbilityAliases } from '../domain/abilityRegistry';
 import { clearInteractionHandlers, registerPodInteractionAliases } from '../domain/abilityInteractionHandlers';
+import { clearTitanAbilityValidators } from '../domain/titanAbilityValidators';
 
 let initialized = false;
 
@@ -68,6 +70,7 @@ export function initAllAbilities(): void {
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     clearDiscardPlayProviders();
+    clearTitanAbilityValidators();
 
     // 基础?8 派系
     registerAlienAbilities();
@@ -137,6 +140,8 @@ export function initAllAbilities(): void {
     registerSamuraiInteractionHandlers();
     registerVikingsAbilities();
     registerVikingsInteractionHandlers();
+    registerTitanAbilities();
+    registerTitanInteractionHandlers();
 
     // 持续力量修正
     registerAllOngoingModifiers();
@@ -159,4 +164,5 @@ export function resetAbilityInit(): void {
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     clearDiscardPlayProviders();
+    clearTitanAbilityValidators();
 }

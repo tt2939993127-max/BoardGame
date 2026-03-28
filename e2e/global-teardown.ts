@@ -3,9 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scripts/infra/e2e-port-config.js';
 import {
+    allocatePorts,
     cleanupAllWorkerPortFiles,
     cleanupPorts,
     cleanupWorkerPorts,
+    loadWorkerPorts,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
 import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
@@ -78,6 +80,14 @@ export default async function globalTeardown() {
 
     for (let workerIndex = 0; workerIndex < workers; workerIndex++) {
         cleanupWorkerPorts(workerIndex);
+    }
+
+    const multiWorkerPorts = Array.from({ length: workers }, (_, workerIndex) => (
+        loadWorkerPorts(workerIndex) ?? allocatePorts(workerIndex)
+    )).flatMap(ports => toPortArray(ports));
+    const released = await waitForPortsFree(multiWorkerPorts, PORT_CLEANUP_TIMEOUT_MS);
+    if (!released) {
+        console.warn(`⚠️ 多 worker E2E 端口释放超时: ${multiWorkerPorts.join(', ')}`);
     }
 
     cleanupAllWorkerPortFiles();

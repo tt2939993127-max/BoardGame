@@ -30,7 +30,7 @@
   },
   "hud": {
     "mode": {
-      "local": "Local",
+      "local": "Single Device",
       "tutorial": "Tutorial",
       "online": "Online Room"
     },
@@ -47,8 +47,8 @@
       "offline": "Offline",
       "empty": "Empty",
       "searching": "Searching",
-      "localTitle": "Local Match",
-      "localDescription": "Take turns on this device.",
+      "localTitle": "Single Device",
+      "localDescription": "Take turns on the same screen.",
       "tutorialTitle": "Tutorial Mode",
       "tutorialDescription": "Follow the guidance to learn the rules."
     },

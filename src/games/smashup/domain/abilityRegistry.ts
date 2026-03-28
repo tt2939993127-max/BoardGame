@@ -26,6 +26,8 @@ export interface AbilityContext {
     targetMinionUid?: string;
     /** 当前决斗上下文（仅 duel 内核触发的卡牌结算时提供） */
     duel?: ActiveDuel;
+    /** 行动卡结算时，牌离手后的手牌数。外部来源打行动时由调用方显式传入。 */
+    handSizeAfterPlay?: number;
     random: RandomFn;
     now: number;
 }
@@ -92,6 +94,11 @@ export function resolveOnDestroy(defId: string): AbilityExecutor | undefined {
 /** 快捷：解析 onUncover 能力 */
 export function resolveOnUncover(defId: string): AbilityExecutor | undefined {
     return resolveAbility(defId, 'onUncover');
+}
+
+/** 快捷：解析在场主动 ongoing 能力 */
+export function resolveOngoingActivation(defId: string): AbilityExecutor | undefined {
+    return resolveAbility(defId, 'ongoingActivation');
 }
 
 /** 检查某 defId 是否注册了指定 tag 的能力 */

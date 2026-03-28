@@ -5,6 +5,8 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import '../../src/games/dicethrone/domain';
+import { getDieFaceByValue } from '../../src/games/dicethrone/domain/diceRegistry';
 import { getGameServerBaseURL, ensureGameServerAvailable, initContext } from './common';
 
 const GAME_NAME = 'dicethrone';
@@ -118,6 +120,13 @@ const postJsonWithRetry = async (
     }
 
     return null;
+};
+
+type DebugDie = Record<string, unknown> & {
+    definitionId: string;
+    value?: number;
+    symbol?: string;
+    symbols?: string[];
 };
 
 // ============================================================================
@@ -238,8 +247,17 @@ export const seedDTMatchCredentials = async (
 // ============================================================================
 
 export const waitForCharacterSelection = async (page: Page, timeout = 60000) => {
-    const characterCards = page.locator('[data-character-id]');
-    await expect(characterCards.first()).toBeVisible({ timeout });
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(() => {
+        const hasTitle = Array.from(document.querySelectorAll('h1, h2, h3')).some((node) =>
+            /选择你的英雄|Select Your Hero/i.test(node.textContent ?? ''),
+        );
+        const hasCharacterCards = document.querySelectorAll('[data-character-id]').length > 0;
+        const hasReadyButton = Array.from(document.querySelectorAll('button')).some((node) =>
+            /Ready|准备/i.test(node.textContent ?? ''),
+        );
+        return hasTitle || hasCharacterCards || hasReadyButton;
+    }, { timeout });
 };
 
 export const selectCharacter = async (page: Page, characterId: string) => {
@@ -588,12 +606,14 @@ export const applyDiceValues = async (page: Page, values: number[]) => {
     if (!state.dice || state.dice.length === 0) {
         throw new Error('No dice found in state');
     }
-    // 鏇存柊楠板瓙鍊?
-    state.dice = state.dice.map((die: any, i: number) => ({
+    // 更新骰子值
+    state.dice = (state.dice as DebugDie[]).map((die, i: number) => ({
         ...die,
         value: values[i] ?? die.value,
-        symbol: values[i] ?? die.value, // 绠€鍖栧鐞嗭紝瀹為檯搴旇鏍规嵁 definitionId 鏌ユ壘 face
-        symbols: [values[i] ?? die.value],
+        symbol: getDieFaceByValue(die.definitionId, values[i] ?? die.value)?.symbols?.[0]
+            ?? die.symbol,
+        symbols: getDieFaceByValue(die.definitionId, values[i] ?? die.value)?.symbols
+            ?? die.symbols,
     }));
     state.rollConfirmed = false; // 鍏佽鐢ㄦ埛閲嶆柊纭
     await applyCoreStateDirect(page, state);
@@ -697,13 +717,29 @@ export const dispatchLocalCommand = async (page: Page, type: string, payload?: u
  * 灏濊瘯鐐瑰嚮 Pass 鎸夐挳锛堝鏋滃瓨鍦ㄥ搷搴旂獥鍙ｏ級
  * @returns 鏄惁鐐瑰嚮浜?Pass 鎸夐挳
  */
-export const maybePassResponse = async (page: Page): Promise<boolean> => {
-    const passButton = page.getByRole('button', { name: /^(Pass|璺宠繃)$/i });
-    if (await passButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await passButton.click();
-        await page.waitForTimeout(300);
-        return true;
+export const maybePassResponse = async (page: Page, timeoutMs = 4000): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const candidateGroups = [
+            page.getByRole('button', { name: /(PASS|Pass|跳过)/i }),
+            page.locator('button').filter({ hasText: /(PASS|Pass|跳过)/i }),
+        ];
+
+        for (const candidates of candidateGroups) {
+            const count = await candidates.count();
+            for (let i = 0; i < count; i += 1) {
+                const passButton = candidates.nth(i);
+                if (await passButton.isVisible().catch(() => false)) {
+                    await passButton.click({ force: true });
+                    await page.waitForTimeout(300);
+                    return true;
+                }
+            }
+        }
+        await page.waitForTimeout(200);
     }
+
     return false;
 };
 

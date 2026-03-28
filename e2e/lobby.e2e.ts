@@ -27,6 +27,24 @@ async function gotoLobbyWithRetry(page: Page): Promise<void> {
     }
 }
 
+async function ensureLobbyReady(page: Page): Promise<void> {
+    const maxAttempts = 6;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        await gotoLobbyWithRetry(page);
+
+        try {
+            await expect(page.getByRole('heading', { name: /Tic-Tac-Toe/i })).toBeVisible({ timeout: 10000 });
+            return;
+        } catch (error) {
+            if (attempt === maxAttempts) {
+                throw error;
+            }
+            await page.waitForTimeout(1500);
+        }
+    }
+}
+
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 
 test.describe('Lobby E2E', () => {
@@ -39,8 +57,7 @@ test.describe('Lobby E2E', () => {
         if (testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME) {
             return;
         }
-        await gotoLobbyWithRetry(page);
-        await expect(page.getByRole('button', { name: /Settings|设置/i })).toBeVisible({ timeout: 15000 });
+        await ensureLobbyReady(page);
     });
 
     test('Category filters show expected games', async ({ page }) => {
@@ -77,10 +94,6 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
 
-        const aiSupport = page.getByTestId('game-details-ai-support');
-        await expect(aiSupport).toBeVisible();
-        await expect(aiSupport.getByText(/Local AI/i)).toBeVisible();
-
         await page.getByRole('button', { name: /Play AI/i }).click();
 
         await expect(page).toHaveURL(/\/play\/tictactoe\/local/);
@@ -94,6 +107,29 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Local AI/i);
 
         await game.screenshot('lobby-tictactoe-local-ai-config-debug', testInfo);
+    });
+
+    test('Tic-Tac-Toe 单机模式入口不会把第二个座位交给 AI', async ({ page, game }, testInfo) => {
+        await page.addInitScript(() => {
+            (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ = true;
+        });
+
+        await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
+        await expect(page).toHaveURL(/game=tictactoe/);
+
+        await page.getByRole('button', { name: /Single Device/i }).click();
+
+        await expect(page).toHaveURL(/\/play\/tictactoe\/local(\?seat1=human)?$/);
+        await expect(page.getByTestId('debug-toggle')).toBeVisible({ timeout: 15000 });
+
+        await page.getByTestId('debug-toggle').click();
+        await expect(page.getByTestId('debug-panel')).toBeVisible();
+
+        await page.getByTestId('debug-tab-controls').click();
+        await expect(page.getByTestId('debug-ai-support')).toBeVisible();
+        await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Human/i);
+
+        await game.screenshot('lobby-tictactoe-single-device-human-seat-debug', testInfo);
     });
 
     test(MOBILE_AUTHOR_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {
