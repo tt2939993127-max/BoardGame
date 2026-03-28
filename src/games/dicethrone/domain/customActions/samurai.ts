@@ -298,11 +298,11 @@ export function registerSamuraiCustomActions(): void {
         categories: ['token', 'damage', 'dice', 'defense'],
     });
     registerCustomActionHandler('samurai-stand-tall', handleStandTallBase, {
-        categories: ['damage', 'defense', 'token'],
+        categories: ['defense', 'token'],
         phases: ['defensiveRoll'],
     });
     registerCustomActionHandler('samurai-stand-tall-2', handleStandTall2, {
-        categories: ['damage', 'defense', 'token'],
+        categories: ['defense', 'token'],
         phases: ['defensiveRoll'],
     });
     registerCustomActionHandler('samurai-katana-slice-threshold-4', handleKatanaSliceThreshold4, {
@@ -312,9 +312,9 @@ export function registerSamuraiCustomActions(): void {
         categories: ['status', 'dice', 'token'],
     });
     registerCustomActionHandler('samurai-masamune', handleMasamune, {
-        categories: ['damage', 'dice', 'token', 'status'],
+        categories: ['dice', 'token', 'status'],
     });
     registerCustomActionHandler('samurai-card-righteousness', handleRighteousness, {
-        categories: ['card', 'damage', 'dice', 'token', 'status'],
+        categories: ['card', 'dice', 'token', 'status'],
     });
 }
