@@ -83,6 +83,7 @@
     "card_placeholder": "Card",
     "me_first_title": "⚡ Me First!",
     "after_scoring_title": "After Scoring Response",
+    "duel_in_progress": "Duel in progress: resolve Pinkerton / duel cards / Deputy before deciding the winner",
     "reaction_timing": {
       "onMinionPlayed": "After minion play",
       "onActionPlayed": "After action play",

@@ -83,6 +83,7 @@
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
     "after_scoring_title": "计分后响应",
+    "duel_in_progress": "决斗进行中：先处理 Pinkerton / 决斗牌 / Deputy，再结算胜负",
     "reaction_timing": {
       "onMinionPlayed": "随从打出后",
       "onActionPlayed": "行动打出后",
