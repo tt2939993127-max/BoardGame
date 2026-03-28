@@ -1,193 +1,203 @@
 /**
- * 反馈2：通过"制高点"消灭随从没有加分
+ * 回归：制高点在 onMinionMoved 触发时必须把 destroyerId 透传为制高点拥有者。
  *
- * 测试场景：
- * 1. 玩家拥有"制高点"（bear_cavalry_high_ground）行动卡在某个基地
- * 2. 对手的随从移动到该基地
- * 3. "制高点"消灭该随从
- * 4. 如果消灭者在拉莱耶（base_rlyeh）基地上，应获得1VP
- *
- * Bug根因：
- * bear_cavalry.ts中bearCavalryHighGroundTrigger调用destroyMinion时，
- * destroyerId传的是undefined，应传ongoing.ownerId
+ * 说明：
+ * - 当前引擎分层下，MINION_MOVED 事件不会直接在 reducer 内自动触发 onMinionMoved。
+ * - 拉莱耶（base_rlyeh）的 1VP 只在“拉莱耶自身造成消灭”时触发，不适用于制高点。
+ * - 因此这里验证的是：触发器产出的 MINION_DESTROYED 是否带上正确 destroyerId，
+ *   以及把移动事件与后续触发事件顺序归约后，最终状态是否正确。
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { initAllAbilities } from '../abilities';
-import { reduce } from '../domain/reducer';
-import type { SmashUpCore, SmashUpEvent } from '../domain/types';
-import { makeMatchState } from './helpers';
+import { fireTriggers } from '../domain/ongoingEffects';
+import type { SmashUpCore, MinionDestroyedEvent, SmashUpEvent } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
+import { applyEvents, makeMatchState } from './helpers';
 
-describe('反馈2：制高点消灭随从后，destroyer应被正确设置', () => {
+function createState(params: {
+    baseDefId: string;
+    highGroundDefId: string;
+    movedMinionDefId: string;
+    player0Factions: [string, string];
+    player1Factions: [string, string];
+}): SmashUpCore {
+    return {
+        players: {
+            '0': {
+                id: '0',
+                vp: 0,
+                hand: [],
+                deck: [],
+                discard: [],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                factions: params.player0Factions,
+            },
+            '1': {
+                id: '1',
+                vp: 0,
+                hand: [],
+                deck: [],
+                discard: [],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                factions: params.player1Factions,
+            },
+        },
+        bases: [
+            {
+                defId: params.baseDefId,
+                minions: [
+                    {
+                        uid: 'm0',
+                        defId: 'bear_cavalry',
+                        controller: '0',
+                        owner: '0',
+                        basePower: 5,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: [
+                    {
+                        uid: 'hg1',
+                        defId: params.highGroundDefId,
+                        ownerId: '0',
+                        cardUid: 'hg1',
+                    },
+                ],
+            },
+            {
+                defId: 'base_the_jungle',
+                minions: [
+                    {
+                        uid: 'm1',
+                        defId: params.movedMinionDefId,
+                        controller: '1',
+                        owner: '1',
+                        basePower: 3,
+                        powerCounters: 0,
+                        powerModifier: 0,
+                        tempPowerModifier: 0,
+                        talentUsed: false,
+                        attachedActions: [],
+                    },
+                ],
+                ongoingActions: [],
+            },
+        ],
+        turnOrder: ['0', '1'],
+        currentPlayerIndex: 0,
+        baseDeck: [],
+        turnNumber: 1,
+        nextUid: 100,
+    } as any;
+}
+
+function createMoveEvent(minionDefId: string): SmashUpEvent {
+    return {
+        type: SU_EVENTS.MINION_MOVED,
+        payload: {
+            minionUid: 'm1',
+            minionDefId,
+            fromBaseIndex: 1,
+            toBaseIndex: 0,
+            reason: 'test_move',
+        },
+        timestamp: 1000,
+    };
+}
+
+describe('反馈2：制高点消灭随从时 destroyerId 应正确透传', () => {
     beforeAll(() => {
         initAllAbilities();
     });
 
-    it('基础版制高点：消灭移动到基地的对手随从时，destroyerId应为制高点拥有者', () => {
-        // 初始状态：
-        // - 基地0：制高点（ongoing，玩家0拥有），玩家0的随从
-        // - 基地1：玩家1的随从
-        // 动作：玩家1的随从移动到基地0
-        // 预期：制高点消灭该随从，destroyerId为玩家0
-        const core: SmashUpCore = {
-            players: {
-                '0': {
-                    id: '0', vp: 0, hand: [], deck: [], discard: [],
-                    minionsPlayed: 0, minionLimit: 1,
-                    actionsPlayed: 1, actionLimit: 1,
-                    factions: ['bear_cavalry', 'minions_of_cthulhu'],
-                },
-                '1': {
-                    id: '1', vp: 0, hand: [], deck: [], discard: [],
-                    minionsPlayed: 0, minionLimit: 1,
-                    actionsPlayed: 0, actionLimit: 1,
-                    factions: ['robots', 'pirates'],
-                },
-            },
-            bases: [
-                {
-                    defId: 'base_rlyeh',  // 拉莱耶：消灭随从获得1VP
-                    minions: [
-                        {
-                            uid: 'm0', defId: 'bear_cavalry', controller: '0', owner: '0',
-                            basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0,
-                            talentUsed: false, attachedActions: [],
-                        },
-                    ],
-                    ongoingActions: [
-                        {
-                            uid: 'hg1', defId: 'bear_cavalry_high_ground',
-                            ownerId: '0', cardUid: 'hg1',
-                        },
-                    ],
-                },
-                {
-                    defId: 'base_the_jungle',
-                    minions: [
-                        {
-                            uid: 'm1', defId: 'robot_zapbot', controller: '1', owner: '1',
-                            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0,
-                            talentUsed: false, attachedActions: [],
-                        },
-                    ],
-                    ongoingActions: [],
-                },
-            ],
-            turnOrder: ['0', '1'],
-            currentPlayerIndex: 0,
-            baseDeck: [],
-            turnNumber: 1,
-            nextUid: 100,
-        } as any;
+    it('基础版制高点：触发消灭时 destroyerId 为制高点拥有者，且不会错误触发拉莱耶加分', () => {
+        const state = createState({
+            baseDefId: 'base_rlyeh',
+            highGroundDefId: 'bear_cavalry_high_ground',
+            movedMinionDefId: 'robot_zapbot',
+            player0Factions: ['bear_cavalry', 'minions_of_cthulhu'],
+            player1Factions: ['robots', 'pirates'],
+        });
+        const moveEvent = createMoveEvent('robot_zapbot');
 
-        // 随从移动事件
-        const moveEvent: SmashUpEvent = {
-            type: SU_EVENTS.MINION_MOVED,
-            payload: {
-                minionUid: 'm1',
-                minionDefId: 'robot_zapbot',
-                fromBaseIndex: 1,
-                toBaseIndex: 0,
-                reason: 'test_move',
-            },
-            timestamp: 1000,
-        };
+        const triggerResult = fireTriggers(state, 'onMinionMoved', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '1',
+            baseIndex: 0,
+            triggerMinionUid: 'm1',
+            triggerMinionDefId: 'robot_zapbot',
+            random: { random: () => 0.5, shuffle: <T>(items: T[]) => [...items], d: () => 1, range: (min: number) => min },
+            now: 1000,
+        });
 
-        const matchState = makeMatchState(core);
-        const result = reduce(matchState.core, moveEvent);
+        expect(triggerResult.events).toHaveLength(1);
+        expect(triggerResult.events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
 
-        // 验证：随从被消灭
-        expect(result.bases[0].minions.length).toBe(1); // 只剩玩家0的随从
-        expect(result.bases[0].minions[0].uid).toBe('m0');
-        expect(result.bases[1].minions.length).toBe(0);
+        const destroyEvent = triggerResult.events[0] as MinionDestroyedEvent;
+        expect(destroyEvent.payload.minionUid).toBe('m1');
+        expect(destroyEvent.payload.fromBaseIndex).toBe(0);
+        expect(destroyEvent.payload.destroyerId).toBe('0');
 
-        // 验证：destroyerId正确设置（通过拉莱耶的VP奖励验证）
-        // 如果destroyerId为undefined，拉莱耶不会触发VP奖励
-        // 如果destroyerId为玩家0，拉莱耶会给玩家0加1VP
-        const player0Vp = result.players['0'].vp;
-        const player1Vp = result.players['1'].vp;
+        const next = applyEvents(state, [moveEvent, ...triggerResult.events]);
 
-        // 拉莱耶应给玩家0（制高点拥有者）加1VP
-        expect(player0Vp).toBe(1);
-        expect(player1Vp).toBe(0);
-
-        // 验证：日志中destroyerId存在
-        const destroyEvent = (matchState.core as any).turnDestroyedMinions?.find((r: any) => r.uid === 'm1');
-        expect(destroyEvent).toBeDefined();
-        expect(destroyEvent.destroyerId).toBe('0');
+        expect(next.bases[0].minions.map(minion => minion.uid)).toEqual(['m0']);
+        expect(next.bases[1].minions).toHaveLength(0);
+        expect(next.players['0'].vp).toBe(0);
+        expect(next.players['1'].vp).toBe(0);
+        expect(next.turnDestroyedMinions).toEqual([
+            { uid: 'm1', defId: 'robot_zapbot', baseIndex: 0, owner: '1' },
+        ]);
+        expect(next.destroyedMinionByPlayersThisTurn).toEqual(['0']);
     });
 
-    it('POD版制高点：消灭移动到基地的对手随从时，destroyerId应为制高点拥有者', () => {
-        // POD版应该已经正确，这个测试确保没有回归
-        const core: SmashUpCore = {
-            players: {
-                '0': {
-                    id: '0', vp: 0, hand: [], deck: [], discard: [],
-                    minionsPlayed: 0, minionLimit: 1,
-                    actionsPlayed: 1, actionLimit: 1,
-                    factions: ['bear_cavalry_pod', 'minions_of_cthulhu_pod'],
-                },
-                '1': {
-                    id: '1', vp: 0, hand: [], deck: [], discard: [],
-                    minionsPlayed: 0, minionLimit: 1,
-                    actionsPlayed: 0, actionLimit: 1,
-                    factions: ['robots_pod', 'pirates_pod'],
-                },
-            },
-            bases: [
-                {
-                    defId: 'base_rlyeh_pod',
-                    minions: [
-                        {
-                            uid: 'm0', defId: 'bear_cavalry_pod', controller: '0', owner: '0',
-                            basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0,
-                            talentUsed: false, attachedActions: [],
-                        },
-                    ],
-                    ongoingActions: [
-                        {
-                            uid: 'hg1', defId: 'bear_cavalry_high_ground_pod',
-                            ownerId: '0', cardUid: 'hg1',
-                        },
-                    ],
-                },
-                {
-                    defId: 'base_the_jungle_pod',
-                    minions: [
-                        {
-                            uid: 'm1', defId: 'robot_zapbot_pod', controller: '1', owner: '1',
-                            basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0,
-                            talentUsed: false, attachedActions: [],
-                        },
-                    ],
-                    ongoingActions: [],
-                },
-            ],
-            turnOrder: ['0', '1'],
-            currentPlayerIndex: 0,
-            baseDeck: [],
-            turnNumber: 1,
-            nextUid: 100,
-        } as any;
+    it('POD 版制高点：自动执行消灭分支时 destroyerId 仍为制高点拥有者', () => {
+        const state = createState({
+            baseDefId: 'base_rlyeh',
+            highGroundDefId: 'bear_cavalry_high_ground_pod',
+            movedMinionDefId: 'robot_zapbot_pod',
+            player0Factions: ['bear_cavalry_pod', 'minions_of_cthulhu_pod'],
+            player1Factions: ['robots_pod', 'pirates_pod'],
+        });
+        const moveEvent = createMoveEvent('robot_zapbot_pod');
 
-        const moveEvent: SmashUpEvent = {
-            type: SU_EVENTS.MINION_MOVED,
-            payload: {
-                minionUid: 'm1',
-                minionDefId: 'robot_zapbot_pod',
-                fromBaseIndex: 1,
-                toBaseIndex: 0,
-                reason: 'test_move',
-            },
-            timestamp: 1000,
-        };
+        const triggerResult = fireTriggers(state, 'onMinionMoved', {
+            state,
+            playerId: '1',
+            baseIndex: 0,
+            triggerMinionUid: 'm1',
+            triggerMinionDefId: 'robot_zapbot_pod',
+            random: { random: () => 0.5, shuffle: <T>(items: T[]) => [...items], d: () => 1, range: (min: number) => min },
+            now: 1000,
+        });
 
-        const matchState = makeMatchState(core);
-        const result = reduce(matchState.core, moveEvent);
+        expect(triggerResult.events.map(event => event.type)).toEqual([
+            SU_EVENTS.ONGOING_DETACHED,
+            SU_EVENTS.MINION_DESTROYED,
+        ]);
 
-        // POD版应正确给予VP
-        expect(result.players['0'].vp).toBe(1);
-        expect(result.players['1'].vp).toBe(0);
+        const destroyEvent = triggerResult.events[1] as MinionDestroyedEvent;
+        expect(destroyEvent.payload.minionUid).toBe('m1');
+        expect(destroyEvent.payload.fromBaseIndex).toBe(0);
+        expect(destroyEvent.payload.destroyerId).toBe('0');
+
+        const next = applyEvents(state, [moveEvent, ...triggerResult.events]);
+
+        expect(next.bases[0].ongoingActions).toHaveLength(0);
+        expect(next.bases[0].minions.map(minion => minion.uid)).toEqual(['m0']);
+        expect(next.bases[1].minions).toHaveLength(0);
+        expect(next.players['0'].vp).toBe(0);
+        expect(next.destroyedMinionByPlayersThisTurn).toEqual(['0']);
     });
 });
