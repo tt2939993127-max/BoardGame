@@ -1,5 +1,12 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
+## 新发现（2026-03-28，召唤师战争本地 AI 首轮接入）
+- 召唤师战争比 Smash Up 更适合作为下一步 AI 试点，因为它是双人、阶段清晰、且领域层已经有现成的战棋 helper 可直接复用；真正缺的不是规则能力，而是把这些 helper 统一封成 `legalActions`。
+- 这类战棋桌游的第一版本地 AI 不需要先处理所有技能和事件卡。最小正确闭环是：setup 可行动、基础回合可走、非法命令被 validate 挡住、在无更优动作时能自然结束阶段。
+- `summonerwars` 的 AI phase 判定不能机械依赖测试夹具里的 `sys.phase`。在已开局状态下，`core.phase` 才是更稳的真实来源；否则 AI 会误判到默认分支，只会 `END_PHASE`。
+- 召唤师战争接入后再次验证了通用 AI 主线的设计方向是对的：同一套 `seatControllers -> visibleState -> legalActions -> scored local policy` 契约可以直接复用到战棋类游戏，而不需要另起一套“战棋 AI 框架”。
+- 当前首轮 baseline 仍刻意留白了事件卡目标选择、beforeAttack 技能链和复杂多步交互，这不是框架缺陷，而是范围控制。后续增强应继续沿同一 runtime 增补 scorer 与 action builder，而不是推翻成行为树。
+
 ## 新发现（2026-03-28，Smash Up 本地 AI 接入）
 - 大杀四方接 AI 的真正难点不是 4 人模式本身，而是动作空间和目标空间很宽；通用框架层已经天然支持多座位 seat controller，2/3/4 人并不是结构性障碍。
 - 对 Smash Up 这类桌游，第一版最稳的接法不是行为树，而是“广枚举候选命令 + validate 过滤 + 评分式决策”。这样能先保证 AI 不乱发非法命令，再逐步增强策略质量。

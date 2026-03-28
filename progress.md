@@ -1,5 +1,22 @@
 # Progress Log
 
+## Session: 2026-03-28 召唤师战争本地 AI 首轮接入
+- **Status:** completed
+- Actions taken:
+  - 复核 `summonerwars` 当前领域入口与规则文档，确认这条线最适合先做双人本地逻辑 AI，而不是先切多人或远程 AI。
+  - 新增 `src/games/summonerwars/ai.ts`：沿用统一 `legalActions` / scorer policy 框架，覆盖 setup、召唤、移动、建造、攻击、魔力与抽牌阶段，并接入基础 simple-choice / multistep 交互出口。
+  - 枚举主要合法动作时优先复用现有 helper：`getValidSummonPositions`、`getValidMoveTargetsEnhanced`、`getValidAttackTargetsEnhanced`、`getValidBuildPositions`、`getActivatableAbilities`、`canActivateAbility`，避免重复手写战棋规则。
+  - 在同一文件里落一版评分式 baseline：选角优先稳定阵营，战斗内优先召唤、高价值攻击和前压移动；只有当前阶段无更优动作时才 `END_PHASE`。
+  - 在 `src/games/summonerwars/game.ts` 注册 `summonerWarsAiRuntime`，并把 `src/games/summonerwars/manifest.ts` 调整为 `allowLocalMode: true`、`ai.localAi: true`。
+  - 在现有 `src/games/summonerwars/__tests__/flow.test.ts` 中补两条回归：setup 阶段 AI 选阵营；开局召唤阶段 AI 选合法召唤而不是直接过阶段。
+  - 调试过程中确认一个实现要点：`summonerwars` 在已开局后应以 `core.phase` 作为 AI 判定主来源；若机械读取测试夹具中的 `sys.phase`，AI 会退化成只会 `END_PHASE`。
+- Validation:
+  - `npm run typecheck` → passed
+  - `npx vitest run src/games/summonerwars/__tests__/flow.test.ts --maxWorkers=1` → `27 passed`
+  - `node scripts/game/generate_game_manifests.js` → generated files unchanged
+- Next step:
+  - 继续 AI 主线时，优先增强召唤师战争的事件卡目标选择和关键技能处理；当前这轮先停在“合法可运行 baseline”。
+
 ## Session: 2026-03-28 Smash Up 本地 AI 首轮接入
 - **Status:** completed
 - Actions taken:

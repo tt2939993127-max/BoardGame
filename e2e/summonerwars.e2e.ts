@@ -1,8 +1,8 @@
 /**
  * 召唤师战争 E2E 测试
  * 
- * 注意：召唤师战争没有本地模式（allowLocalMode: false）
- * 完整游戏UI测试需要后端服务运行
+ * 当前文件同时覆盖在线房间与本地测试路由场景；
+ * 涉及真实多人流时仍需要后端服务运行。
  */
 
 import { test, expect } from './framework';
@@ -915,6 +915,78 @@ const longPressTouch = async (locator: Locator, durationMs = 620, pointerId = 1)
     pointerId,
     isPrimary: true,
     buttons: 0,
+  });
+};
+
+const getFabStoredPosition = async (page: Page) => (
+  page.evaluate(() => {
+    const raw = localStorage.getItem('hud_fab_position');
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as { leftPercent: number; topPercent: number };
+  })
+);
+
+const touchDragElement = async (
+  locator: Locator,
+  {
+    holdMs = 0,
+    deltaX,
+    deltaY,
+    steps = 8,
+    pointerId = 41,
+  }: {
+    holdMs?: number;
+    deltaX: number;
+    deltaY: number;
+    steps?: number;
+    pointerId?: number;
+  },
+) => {
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error('无法获取 FAB 按钮位置');
+  }
+
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  const page = locator.page();
+
+  await locator.dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    buttons: 1,
+    clientX: startX,
+    clientY: startY,
+  });
+
+  if (holdMs > 0) {
+    await page.waitForTimeout(holdMs);
+  }
+
+  for (let step = 1; step <= steps; step += 1) {
+    const nextX = startX + (deltaX * step) / steps;
+    const nextY = startY + (deltaY * step) / steps;
+    await locator.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId,
+      isPrimary: true,
+      buttons: 1,
+      clientX: nextX,
+      clientY: nextY,
+    });
+    await page.waitForTimeout(16);
+  }
+
+  await locator.dispatchEvent('pointerup', {
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    buttons: 0,
+    clientX: startX + deltaX,
+    clientY: startY + deltaY,
   });
 };
 
@@ -2623,6 +2695,91 @@ test.describe('SummonerWars', () => {
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board', {
         filename: '20-tablet-landscape-board.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+  });
+
+  test('移动横屏：悬浮球短触摸不误拖，长按后仍可拖动且不阻塞结束阶段按钮', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 812, height: 375 },
+      isMobile: true,
+      hasTouch: true,
+    });
+
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setEnglishLocale(hostContext);
+    await disableAudio(hostContext);
+
+    const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize({ width: 667, height: 375 });
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await waitForSummonerWarsVisualStable(hostPage);
+
+    const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+    await expect(exitFab).toBeVisible({ timeout: 5000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const beforeBox = await exitFab.boundingBox();
+    expect(beforeBox).not.toBeNull();
+
+    await touchDragElement(exitFab, {
+      holdMs: 80,
+      deltaX: -160,
+      deltaY: -120,
+      pointerId: 51,
+    });
+    await hostPage.waitForTimeout(180);
+
+    const shortTouchBox = await exitFab.boundingBox();
+    expect(shortTouchBox).not.toBeNull();
+    expect(Math.abs((shortTouchBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeLessThan(8);
+    expect(Math.abs((shortTouchBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeLessThan(8);
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-short-touch-stays-put', {
+        filename: '30-mobile-fab-short-touch-stays-put.png',
+      }),
+      fullPage: false,
+    });
+
+    await touchDragElement(exitFab, {
+      holdMs: 360,
+      deltaX: -160,
+      deltaY: -120,
+      pointerId: 52,
+    });
+    await hostPage.waitForTimeout(220);
+
+    const longPressBox = await exitFab.boundingBox();
+    const longPressPosition = await getFabStoredPosition(hostPage);
+    expect(longPressBox).not.toBeNull();
+    expect(longPressPosition).not.toBeNull();
+    expect(Math.abs((longPressBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(40);
+    expect(Math.abs((longPressBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeGreaterThan(40);
+
+    const phaseBeforeAdvance = await getCurrentPhase(hostPage);
+    const phaseAfterAdvance = await advancePhase(hostPage, phaseBeforeAdvance);
+    expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-long-press-drag-and-end-phase-clickable', {
+        filename: '31-mobile-fab-long-press-drag-and-end-phase-clickable.png',
       }),
       fullPage: false,
     });
