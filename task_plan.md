@@ -1080,6 +1080,81 @@ completed
 ### Status
 - completed
 
+## Addendum: 2026-03-28 DiceThrone 全量多人语义审计矩阵
+
+### Goal
+- 将当前对话范围从“Batch 3 继续推进”正式提升为“所有在 2 人以上会发生语义变化的技能 / token / 卡牌设计都要审计”，避免继续用单个英雄或单个 change 代表全量完成度。
+- 先产出覆盖矩阵，明确哪些家族已经拿到 4 人 / 2v2 规则或在线证据，哪些仍只是共享实现存在但缺专项审计。
+
+### Result
+- [x] 已将当前四人专项拆成 3 类完成态家族：
+  - Batch 1：`Transfer Status`、`Consecrate`、`Vengeance II`、`remove-status-1`、`remove-all-status`、无默认 `defender` 的无伤害交互链。
+  - Batch 2：`remove-status-self`、`Meteor` / `Meteor II` / `Ultimate Inferno` 的 `allOpponents`、`Soul Burn`。
+  - Batch 3 当前已固定边界但尚未实现：通用 `modifyDie` / `selectDie` 与 `shadow_thief-shadow-manipulation`。
+- [x] 已确认当前仍未完成全量多人审计，剩余高风险家族至少包括：
+  - P0：通用骰子交互与响应窗口共享层：`modify-die-to-6`、`modify-die-copy`、`modify-die-any-1`、`modify-die-any-2`、`modify-die-adjust-1`、`reroll-opponent-die-1`、`reroll-die-2`、`reroll-die-5`、`shadow_thief-shadow-manipulation`、`afterRollConfirmed` 队友干预路径。
+  - P1：炎术士 `Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`、`Magma Armor I/II/III`。
+  - P2：炎术士 `Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down` / `Burn Down II`、`Ignite` / `Ignite II`、`Get Fired Up`、`Red Hot`、`Blazing Soul`、`Meteor Shower`。
+  - P3：其余明确依赖 `defenderId` 或防御视角翻转、但尚未拿到 4 人专项证据的家族，如 `paladin-holy-defense*`、`moon_elf-exploding-arrow*` / `moon_elf-elusive-step*`、`shadow-defense*` / `fearless-riposte*` / `shadow-dance*`、`barbarian-suppress*` / `thick-skin*`、`meditation*` / `thunder-strike*`。
+- [x] 已将“已审完成”和“仅有 2 人/共享行为测试、但无 4 人专项证据”明确分层，避免再把“有测试”误报成“多人审计完成”。
+- [ ] 下一步先从 P0/P1 开始逐批收口，而不是继续泛化地说“四人模式已审完”。
+
+### Validation
+- `rg -n "selectPlayer|selectStatus|selectTargetStatus|allOpponents|targetOpponentDice|modifyDie|selectDie|responseWindow|afterRollConfirmed" src/games/dicethrone e2e openspec`
+- `rg -n "Pyro Blast|Fiery Combo|Hot Streak|Burn Down|Ignite|Magma Armor|Get Fired Up|Red Hot|Blazing Soul|Meteor Shower" src/games/dicethrone/__tests__ src/games/dicethrone/heroes src/games/dicethrone/domain/customActions e2e`
+- `rg -n "ctx\\.defenderId|ctx\\.ctx\\.defenderId|防御上下文|原攻击者" src/games/dicethrone/domain/customActions`
+
+### Status
+- in_progress
+
+## Addendum: 2026-03-28 DiceThrone Batch 3 P0 路由裁决
+
+### Goal
+- 将 Batch 3 的 P0 从“旧 dice E2E 失效 + `targetOpponentDice` 文案不准”继续收紧到真实共享 blocker，明确是不是已经存在与 2v2 规则冲突的响应窗口路由。
+
+### Result
+- [x] 已确认 P0 不只是 UI 文案问题。`execute.ts` + `getResponderQueue()` + `ResponseWindowSystem` 当前共同形成了“trigger-side 单一响应者”路由。
+- [x] 已确认现役回归 `flow.test.ts` 已锁住其中一条关键行为：防御方确认骰面后，响应窗口只归当前攻击方本人，攻击方队友不会进入 `responderQueue`。
+- [x] 已将 Batch 3 的 open question 收紧为明确裁决题：
+  - 若规则口径要求队友可在该窗口强化队友输出，则共享层必须新增 allied dice interference 路由；
+  - 若产品口径决定不允许，则必须同步回写 spec / 规则文档，不能再保留“队友可改骰”的宽口径描述。
+- [ ] 下一步基于上述裁决，决定实现走“队友进入专用响应路由”还是“对队友开放非队列豁免命令”。
+
+### Validation
+- `Get-Content src/games/dicethrone/domain/execute.ts`
+- `Get-Content src/games/dicethrone/domain/rules.ts`
+- `Get-Content src/engine/systems/ResponseWindowSystem.ts`
+- `Get-Content src/games/dicethrone/__tests__/flow.test.ts`
+
+### Status
+- in_progress
+
+## Addendum: 2026-03-28 DiceThrone 4 人多步骰子交互 Batch 3 启动
+
+### Goal
+- 在四人专项里继续推进 Batch 3，范围聚焦 `modifyDie` / `selectDie` 多步骰子交互与 `shadow_thief-shadow-manipulation`，不回头重写已完成的玩家目标交互 Batch 1/2。
+- 先用独立 OpenSpec change 和三件套固定“剩余风险到底是什么”，避免继续把旧 dice E2E 或 2 人语义当成现役收口。
+
+### Result
+- [x] 已确认四人专项还没“全审计完”；当前剩余现役交互家族是 `modifyDie` / `selectDie` 与 `shadow_thief-shadow-manipulation`。
+- [x] 已确认旧 `dicethrone-die-modification.e2e.ts` / `dicethrone-die-reroll.e2e.ts` 不能继续充当现役 4 人在线证据。
+- [x] 已确认共享层存在真实审计点，而不只是测试缺口：
+  - `targetOpponentDice:boolean` 仍在承担骰池归属语义；
+  - `afterRollConfirmed` 仍偏向单一 opponent / responderQueue 视角。
+- [x] 已新建 OpenSpec change `update-dicethrone-4p-interactions-batch-3`，将 Batch 3 与 Batch 1/2 正式拆分。
+- [x] 已复核炎术士整组多角色语义入口，确认 `Soul Burn` / `Meteor` 家族已完成，但 `Pyro Blast`、`Magma Armor`、`Get Fired Up` 等仍未拿到四人专项证据。
+- [ ] 下一步进入 Batch 3 正式收口：决定是否需要显式建模“当前骰池归属 / 观察视角”，并补齐规则/UI 回归与 4 人在线证据。
+
+### Validation
+- `openspec list`
+- `Get-Content src/games/dicethrone/rule/王权骰铸规则.md`
+- `Get-Content openspec/changes/add-dicethrone-2v2-team-mode/specs/dicethrone-team-mode/spec.md`
+- `rg -n "modifyDie|selectDie|targetOpponentDice|shadow-manipulation|afterRollConfirmed|getResponderQueue" src/games/dicethrone e2e openspec`
+- `openspec validate update-dicethrone-4p-interactions-batch-3 --strict --no-interactive`
+
+### Status
+- in_progress
+
 ## Addendum: 2026-03-28 DiceThrone 四人模式分支上传与主分支合并
 
 ### Goal
