@@ -246,6 +246,15 @@ function registerVampireModifiers(): void {
     // Dinner Date POD（ongoing 行动卡附着在随从上）：附着随从 -2 力量
     registerOngoingPowerModifier('vampire_dinner_date', 'minion', 'self', -2);
 }
+
+function registerAncientEgyptiansModifiers(): void {
+    registerPowerModifier('ancient_egyptians_priest_of_anubis', (ctx: PowerModifierContext) => {
+        if (!matchesDefId(ctx.minion, 'ancient_egyptians_priest_of_anubis')) return 0;
+        return (ctx.base.buriedCards?.length ?? 0) > 0 ? 2 : 0;
+    }, { handlesPodInternally: true });
+
+    registerOngoingPowerModifier('ancient_egyptians_ancient_curse', 'minion', 'self', -2);
+}
 // ============================================================================
 // 基地持续力量修正
 // ============================================================================
@@ -282,5 +291,6 @@ export function registerAllOngoingModifiers(): void {
     registerBearCavalryModifiers();
     registerElderThingModifiers();
     registerVampireModifiers();
+    registerAncientEgyptiansModifiers();
     registerWerewolfModifiers();
 }

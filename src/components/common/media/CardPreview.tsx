@@ -1,6 +1,6 @@
 import { useState, useEffect, useReducer, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { buildLocalizedImageSet, getLocalizedImageUrls, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
+import { getLocalizedImageUrls, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
 import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { OptimizedImage } from './OptimizedImage';
 import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
@@ -154,6 +154,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         : [];
     const checkKey = checkUrls.join('|');
     const shimmerTimeoutMs = 4000;
+    const [activeUrl, setActiveUrl] = useState(() => checkUrls.find((url) => isImagePreloaded(url)) ?? checkUrls[0] ?? '');
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
     // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer
@@ -168,20 +169,28 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             setLoaded(true);
         }
         return onImageReady((url) => {
-            if (url === webp) {
+            if (url === webp || checkUrls.includes(url)) {
+                setActiveUrl(url);
                 setLoaded(true);
                 bumpTick();
             }
         });
-    }, [source?.image, effectiveLocale]);
+    }, [source?.image, effectiveLocale, checkKey]);
+
+    useEffect(() => {
+        setActiveUrl(checkUrls.find((url) => isImagePreloaded(url)) ?? checkUrls[0] ?? '');
+    }, [checkKey]);
 
     useEffect(() => {
         // 如果已预加载，直接标记为已加载
-        if (source && isImagePreloaded(source.image, effectiveLocale)) {
+        const preloadedUrl = checkUrls.find((url) => isImagePreloaded(url));
+        if (preloadedUrl) {
+            setActiveUrl(preloadedUrl);
             setLoaded(true);
             return;
         }
         if (checkUrls.length === 0) {
+            setActiveUrl('');
             setLoaded(true);
             return;
         }
@@ -209,7 +218,8 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             const img = new Image();
             img.onload = () => {
                 // 注册到统一缓存，供其他组件复用
-                if (source) markImageLoaded(source.image, effectiveLocale, img);
+                markImageLoaded(url, undefined, img);
+                setActiveUrl(url);
                 markReady();
             };
             img.onerror = () => {
@@ -244,11 +254,12 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             img.onload = () => {
                 if (cancelled) return;
                 // 注册到预加载缓存，使 getCardAtlasSource 下次能解析成功
-                markImageLoaded(lazy.image, effectiveLocale, img);
+                markImageLoaded(url, undefined, img);
                 // 重新尝试获取 source（此时缓存已有图片，懒解析应成功）
                 const newSource = getCardAtlasSource(atlasId, effectiveLocale);
                 if (newSource && !cancelled) {
                     setResolvedSource(newSource);
+                    setActiveUrl(url);
                     setLoaded(true);
                 }
             };
@@ -276,7 +287,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     }
 
     const atlasStyle = computeSpriteStyle(index, source.config);
-    const backgroundImage = buildLocalizedImageSet(source.image, effectiveLocale);
+    const backgroundImage = activeUrl ? `url("${activeUrl}")` : '';
 
     return (
         <div

@@ -35,6 +35,7 @@ import type {
     TriggerQueuedEvent,
     TriggerConsumedEvent,
     MinionOnBase,
+    CardType,
     CardInstance,
     BaseInPlay,
     ActionCardDef,
@@ -540,25 +541,115 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const player = state.players[playerId];
             const existsInHand = player.hand.some(c => c.uid === cardUid);
             const existsInDiscard = player.discard.some(c => c.uid === cardUid);
-            const existsInDeck = player.deck.some(c => c.uid === cardUid);
             const newHand = buriedFrom === 'hand' ? player.hand.filter(c => c.uid !== cardUid) : player.hand;
             const newDiscard = buriedFrom === 'discard' ? player.discard.filter(c => c.uid === cardUid ? false : true) : player.discard;
-            const newDeck = buriedFrom === 'play' ? player.deck : player.deck; // play->buried handled later
+            const newDeck = buriedFrom === 'deck' ? player.deck.filter(c => c.uid !== cardUid) : player.deck;
+            let updatedPlayers = {
+                ...state.players,
+                [playerId]: { ...player, hand: newHand, discard: newDiscard, deck: newDeck },
+            };
+            let updatedBases = state.bases;
             if (buriedFrom === 'hand' && !existsInHand) return state;
             if (buriedFrom === 'discard' && !existsInDiscard) return state;
-            if (buriedFrom === 'play' && !existsInDeck) { /* allow no-op for now */ }
+            if (buriedFrom === 'deck' && !player.deck.some(c => c.uid === cardUid)) return state;
+            if (buriedFrom === 'play') {
+                const discardOwner = updatedPlayers[playerId];
+                const discardIndex = discardOwner.discard.findIndex(card => card.uid === cardUid);
+                if (discardIndex >= 0) {
+                    updatedPlayers = {
+                        ...updatedPlayers,
+                        [playerId]: {
+                            ...discardOwner,
+                            discard: discardOwner.discard.filter(card => card.uid !== cardUid),
+                        },
+                    };
+                }
+
+                updatedBases = state.bases.map((base) => {
+                    const minion = base.minions.find(entry => entry.uid === cardUid);
+                    if (minion) {
+                        let detachedPlayers = updatedPlayers;
+                        for (const attached of minion.attachedActions ?? []) {
+                            const attachedOwner = detachedPlayers[attached.ownerId];
+                            if (!attachedOwner) continue;
+                            detachedPlayers = {
+                                ...detachedPlayers,
+                                [attached.ownerId]: {
+                                    ...attachedOwner,
+                                    discard: [
+                                        ...attachedOwner.discard,
+                                        { uid: attached.uid, defId: attached.defId, type: 'action', owner: attached.ownerId },
+                                    ],
+                                },
+                            };
+                        }
+                        updatedPlayers = detachedPlayers;
+                        return {
+                            ...base,
+                            minions: base.minions.filter(entry => entry.uid !== cardUid),
+                        };
+                    }
+
+                    const ongoing = base.ongoingActions.find(entry => entry.uid === cardUid);
+                    if (ongoing) {
+                        return {
+                            ...base,
+                            ongoingActions: base.ongoingActions.filter(entry => entry.uid !== cardUid),
+                        };
+                    }
+
+                    let attachedRemoved = false;
+                    const minions = base.minions.map((entry) => {
+                        const hasAttached = entry.attachedActions?.some(action => action.uid === cardUid) ?? false;
+                        if (!hasAttached) return entry;
+                        attachedRemoved = true;
+                        return {
+                            ...entry,
+                            attachedActions: entry.attachedActions.filter(action => action.uid !== cardUid),
+                        };
+                    });
+                    return attachedRemoved ? { ...base, minions } : base;
+                });
+            }
             const buriedEntry = { uid: cardUid, defId, trueOwnerId, controllerId: playerId, buriedFrom } as any;
-            const newBases = state.bases.map((b, i) => i !== baseIndex ? b : ({
+            const newBases = updatedBases.map((b, i) => i !== baseIndex ? b : ({
                 ...b,
                 buriedCards: [...(b.buriedCards ?? []), buriedEntry],
             }));
             return {
                 ...state,
+                players: updatedPlayers,
+                bases: newBases,
+            };
+        }
+
+        case SU_EVENTS.BURIED_CARD_UNCOVERED: {
+            const { cardUid, baseIndex, discardWithoutPlay } = event.payload as any;
+            if (!discardWithoutPlay) return state;
+            const base = state.bases[baseIndex];
+            const buried = (base?.buriedCards ?? []).find((card) => card.uid === cardUid);
+            if (!base || !buried) return state;
+            const owner = state.players[buried.trueOwnerId];
+            if (!owner) return state;
+            const returned: CardInstance = {
+                uid: buried.uid,
+                defId: buried.defId,
+                type: (getCardDef(buried.defId)?.type === 'minion' ? 'minion' : 'action') as any,
+                owner: buried.trueOwnerId,
+            };
+            return {
+                ...state,
                 players: {
                     ...state.players,
-                    [playerId]: { ...player, hand: newHand, discard: newDiscard, deck: newDeck },
+                    [buried.trueOwnerId]: {
+                        ...owner,
+                        discard: [...owner.discard, returned],
+                    },
                 },
-                bases: newBases,
+                bases: state.bases.map((entry, index) => index !== baseIndex ? entry : ({
+                    ...entry,
+                    buriedCards: (entry.buriedCards ?? []).filter((card) => card.uid !== cardUid),
+                })),
             };
         }
 
@@ -1114,6 +1205,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
                 turnUsedOngoingUids: undefined,
+                activeDuel: undefined,
                 sleepMarkedPlayers: state.sleepMarkedPlayers,
                 playerRestrictionsUntilTurnStart: remainingPlayerRestrictions?.length
                     ? remainingPlayerRestrictions
@@ -1130,6 +1222,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 currentPlayerIndex: nextPlayerIndex,
                 sleepMarkedPlayers: remainingSleepMarked?.length ? remainingSleepMarked : undefined,
                 titanOngoingSuppressedUntilTurnEnd: undefined,
+                activeDuel: undefined,
             };
         }
 
@@ -1979,6 +2072,26 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const fromHand = removeCard(fromPlayer.hand);
             const fromDeck = removeCard(fromPlayer.deck);
             const fromDiscard = removeCard(fromPlayer.discard);
+            let newBases = state.bases;
+
+            if (!found) {
+                newBases = state.bases.map(base => {
+                    const buried = (base.buriedCards ?? []).find(card => card.uid === cardUid);
+                    if (!buried) return base;
+                    if (!found) {
+                        found = {
+                            uid: buried.uid,
+                            defId: buried.defId,
+                            type: (getCardDef(buried.defId)?.type ?? 'minion') as CardType,
+                            owner: buried.trueOwnerId,
+                        };
+                    }
+                    return {
+                        ...base,
+                        buriedCards: (base.buriedCards ?? []).filter(card => card.uid !== cardUid),
+                    };
+                });
+            }
 
             if (!found) return state;
 
@@ -1992,6 +2105,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
             return {
                 ...state,
+                bases: newBases,
                 players: {
                     ...state.players,
                     [fromPlayerId]: {
