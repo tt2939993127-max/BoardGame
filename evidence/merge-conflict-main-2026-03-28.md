@@ -59,5 +59,5 @@
   - 结果：`157 passed`
 
 ## Finalization
-- merge commit: `pending`
+- merge commit: `f1332f5ff94d5b3331564b012c159e6cc9940828`
 - push target: `origin/main`
