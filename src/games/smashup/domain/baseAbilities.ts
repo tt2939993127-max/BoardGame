@@ -40,6 +40,7 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
 import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
+import { resolveLiveBaseIndex } from './utils';
 
 // ============================================================================
 // 类型定义
@@ -1700,9 +1701,29 @@ export function registerBaseInteractionHandlers(): void {
 
     // 海盗湾：第二步——选择目标基地后执行移动
     registerInteractionHandler('base_pirate_cove_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
-        const { baseIndex: targetBase } = value as { baseIndex: number };
+        const { baseIndex: targetBase, baseDefId } = value as { baseIndex: number; baseDefId?: string };
         const ctx = getContinuationContext<{ minionUid: string; minionDefId: string; fromBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
+
+        const deferredEvents = getDeferredPostScoringEvents(iData);
+        if (deferredEvents && deferredEvents.length > 0) {
+            const resolvedTargetBase = resolveLiveBaseIndex(state.core, targetBase, baseDefId) ?? targetBase;
+            const events: SmashUpEvent[] = [
+                {
+                    type: SU_EVENTS.MINION_MOVED,
+                    payload: {
+                        minionUid: ctx.minionUid,
+                        minionDefId: ctx.minionDefId,
+                        fromBaseIndex: ctx.fromBaseIndex,
+                        toBaseIndex: resolvedTargetBase,
+                        reason: '海盗湾：移动随从到其他基地',
+                    },
+                    timestamp,
+                },
+            ];
+            return { state, events };
+        }
+
         return {
             state,
             events: buildValidatedMoveEvents(state, {
@@ -1710,6 +1731,7 @@ export function registerBaseInteractionHandlers(): void {
                 minionDefId: ctx.minionDefId,
                 fromBaseIndex: ctx.fromBaseIndex,
                 toBaseIndex: targetBase,
+                toBaseDefId: baseDefId,
                 reason: '海盗湾：移动随从到其他基地',
                 now: timestamp,
             }),
