@@ -265,20 +265,18 @@ describe('GameDetailsModal local AI entry', () => {
         thumbnail: createElement('div'),
     };
 
-    it('支持 AI 的本地模式先打开配置弹窗，而不是直接跳转', () => {
+    it('支持 AI 的游戏会区分单机模式和对战AI入口', () => {
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByText('actions.localPlay'));
+        fireEvent.click(screen.getByText('actions.singleDevice'));
 
-        expect(screen.getByTestId('local-match-config-modal')).toBeInTheDocument();
-        expect(navigateMock).not.toHaveBeenCalled();
+        expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/local?seat1=human');
     });
 
-    it('确认本地对战设置后进入本地房间', () => {
+    it('对战AI入口会直接进入本地 AI 对局', () => {
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByText('actions.localPlay'));
-        fireEvent.click(screen.getByText('ai.startLocal'));
+        fireEvent.click(screen.getByText('actions.playAi'));
 
         expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/local');
     });
