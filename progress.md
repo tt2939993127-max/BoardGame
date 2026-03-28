@@ -1025,3 +1025,35 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 - 当前 `simple-start` 的主回归口径已重新恢复为默认脚本可直接拿到 `12 passed`，说明这轮修复有效收敛了 setup / 联机 helper 层的瞬时抖动。
 - 这次收口属于测试基础设施韧性补强，不应被记成业务功能新增；后续若再出现 `skip`，应优先查看 `temp/dicethrone-setup-debug.log` 与 bootstrap 日志，而不是先怀疑 DiceThrone 规则链路回退。
 
+## Session: 2026-03-28 DiceThrone 四人模式分支上传与主分支合并
+- **Status:** completed
+- Actions taken:
+  - 修正 pre-push 唯一阻塞项：把 `public/locales/*/game-dicethrone.json` 中误放在 `selection.seating` 下的 `targetOptionDisabled` 提升到根级 `selection.targetOptionDisabled`，恢复 `ChoiceModal.tsx` 文案校验通过。
+  - 先将专题分支 `feat/dicethrone-4p-team-mode` 上传到 `origin`，确认三笔提交链都已进入远端分支。
+  - 合并前按 `docs/git-merge-checklist.md` 执行预检，确认 `main...feat/dicethrone-4p-team-mode` 为 `34 behind / 3 ahead`，不能快进，必须走显式 merge。
+  - 处理 6 个真实冲突文件，并新增冲突汇报文档 `evidence/merge-conflict-feat-dicethrone-4p-team-mode-2026-03-28.md`：
+    - `e2e/helpers/common.ts`
+    - `server.ts`
+    - `src/games/dicethrone/manifest.ts`
+    - `findings.md`
+    - `progress.md`
+    - `task_plan.md`
+  - 合并态验证时发现 2 人 `Transfer Status` 在线用例仍把 `gameServerBaseURL` 硬编码到 `20000`，导致 isolated single-run 下稳定假 `skip`；已改为使用 `workerPorts.gameServer`。
+  - 生成 merge commit `f188d523`：`merge: 合并王权骰铸四人模式 Batch 1 专项`。
+  - 执行 `npm run merge:audit:strict -- HEAD`，11 个冲突文件全部为 `混合结果`，无单边覆盖。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| TypeScript 类型检查 | `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false` | 合并态无类型错误 | 无输出 | ✅ |
+| i18n 校验 | `npm run i18n:check` | `selection.targetOptionDisabled` 不再缺失 | 通过，仅余既有 warnings | ✅ |
+| OpenSpec 严格校验 | `openspec validate update-dicethrone-4p-player-target-interactions --strict --no-interactive` | 专题 spec 仍有效 | `valid` | ✅ |
+| DiceThrone / server 关键回归 | `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/boundaryEdgeCases.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts src/server/__tests__/matchOccupancy.test.ts src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx --configLoader native` | 合并态不回退四人模式与房间占座逻辑 | `180 passed` | ✅ |
+| 2 人 transfer token 单用例 | `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 2-player transfer token: transfer phase keeps locked source card and target card"` | 修正端口硬编码后恢复真实在线断言 | `1 passed` | ✅ |
+| simple-start 主回归整文件 E2E | `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` | 12 条在线链路在合并态仍全绿 | `12 passed` | ✅ |
+| 冲突单边覆盖审计 | `npm run merge:audit:strict -- HEAD` | 无冲突文件等于单边父提交 | `11 mixed / 0 single-side` | ✅ |
+
+### Conclusion
+- `main` 已成功吸收 DiceThrone 四人模式 Batch 1 专项，且这次不是“强行合进去再看 CI”，而是在本地合并态完成了类型、i18n、OpenSpec、Vitest、E2E 和 merge audit 全套确认。
+- 这轮额外修掉了一个此前被环境噪音掩盖的真实测试缺口：2 人 `Transfer Status` 用例的游戏服端口硬编码。
+

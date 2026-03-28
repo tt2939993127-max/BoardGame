@@ -747,3 +747,14 @@
   - 把重试与失败上下文写入 `temp/dicethrone-setup-debug.log`，让后续排障有可审计落点。
 - 修复后最关键的事实不是单用例恢复，而是默认整文件脚本 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 已重新拿到 `12 passed`；这说明当前 `simple-start` 的残余问题不再表现为稳定可复现的 setup 回退。
 
+## 2026-03-28 DiceThrone 主分支合并前最终发现
+
+- 2 人 `Transfer Status` 那条在线用例最后一个真实问题不是业务逻辑，也不是 helper 抖动，而是测试自身把 `gameServerBaseURL` 硬编码成了 `http://127.0.0.1:20000`。
+- 在 `run-e2e-single` 的 isolated 口径下，worker 实际游戏服端口是 `workerPorts.gameServer`；因此这条用例会稳定走到 `setupDTOnlineMatch()` 返回 `null`，再被包装成 `test.skip(...)`，看起来像“环境又抖了”。
+- 最小正确修复是把该用例改成跟 `workerPorts.gameServer` 走，而不是继续扩大 helper 重试或把整文件结果解释成“偶发 skip 可接受”。
+- 这次合并到 `main` 的冲突并不集中在 DiceThrone 领域逻辑本身，而是 3 类典型并发追加：
+  - `e2e/helpers/common.ts`：两侧都在扩展 `initContext()` 能力，属于互补改动；
+  - `server.ts` / `manifest.ts`：主分支已有房间占座与 AI 能力，专题分支带来 4 人入口，必须做语义合并，不能单边取值；
+  - `findings.md` / `progress.md` / `task_plan.md`：纯 append-only 记录冲突，必须按时间线保留两侧历史。
+- `npm run merge:audit:strict -- HEAD` 的结果为 11 个冲突文件全部 `混合结果`，`完全等于父1/父2` 都是 `0`；说明这次 merge 没有把任何冲突文件静默吃成单边结果。
+
