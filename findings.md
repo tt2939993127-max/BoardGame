@@ -1,82 +1,20 @@
 # Findings: BoardGame 多线并行调查 / 修复 / 收口
 
-## 新发现（2026-03-28，大厅单机模式 / 对战AI 入口口径回归）
-- 当前工作树曾出现一类典型漂移：计划文档里已经把大厅入口定义成 `单机模式 / 对战AI / 教程模式`，但实际 `GameDetailsModal` 又退回成单个“本地同屏”入口，说明 AI 产品口径不能只看历史 plan，必须回到当前 UI 实装核对。
-- 对支持本地 AI 的游戏，`单机模式` 与 `对战AI` 的差异不应该只停留在按钮文案；必须落实到默认 seat controller。否则用户即使点的是“本地/单机”，运行时仍可能被默认 `seat1=local-ai` 偷偷带进 AI 对局。
-- 本地房间 HUD 也需要消费同一份 seat controller 事实来源。否则大厅入口已经区分清楚，进局后顶部信息又显示“本地同屏”，产品语义会再次混乱。
-- `lobby.e2e.ts` 里单纯等待导航成功不足以证明大厅 ready；这轮复现表明更稳的做法是“导航重试 + 首屏核心内容可见”双门禁，否则会出现与业务无关的启动假失败。
+## Merge Note（2026-03-27）
+- 本文件在同步 `origin/main` 时保留当前 worktree 的任务现场作为主记录。
+- `origin/main` 在 2026-03-25~2026-03-26 新增的 OpenSpec、移动端、AI 与大厅入口历史结论，已转存到本次合并冲突汇报文档，避免本文件继续膨胀成并行主线入口。
 
-## 新发现（2026-03-28，召唤师战争本地 AI 首轮接入）
-- 召唤师战争比 Smash Up 更适合作为下一步 AI 试点，因为它是双人、阶段清晰、且领域层已经有现成的战棋 helper 可直接复用；真正缺的不是规则能力，而是把这些 helper 统一封成 `legalActions`。
-- 这类战棋桌游的第一版本地 AI 不需要先处理所有技能和事件卡。最小正确闭环是：setup 可行动、基础回合可走、非法命令被 validate 挡住、在无更优动作时能自然结束阶段。
-- `summonerwars` 的 AI phase 判定不能机械依赖测试夹具里的 `sys.phase`。在已开局状态下，`core.phase` 才是更稳的真实来源；否则 AI 会误判到默认分支，只会 `END_PHASE`。
-- 召唤师战争接入后再次验证了通用 AI 主线的设计方向是对的：同一套 `seatControllers -> visibleState -> legalActions -> scored local policy` 契约可以直接复用到战棋类游戏，而不需要另起一套“战棋 AI 框架”。
-- 当前首轮 baseline 仍刻意留白了事件卡目标选择、beforeAttack 技能链和复杂多步交互，这不是框架缺陷，而是范围控制。后续增强应继续沿同一 runtime 增补 scorer 与 action builder，而不是推翻成行为树。
-
-## 新发现（2026-03-28，Smash Up 本地 AI 接入）
-- 大杀四方接 AI 的真正难点不是 4 人模式本身，而是动作空间和目标空间很宽；通用框架层已经天然支持多座位 seat controller，2/3/4 人并不是结构性障碍。
-- 对 Smash Up 这类桌游，第一版最稳的接法不是行为树，而是“广枚举候选命令 + validate 过滤 + 评分式决策”。这样能先保证 AI 不乱发非法命令，再逐步增强策略质量。
-- 首轮 legal actions 不需要一上来就覆盖每个高阶组合搜索，但必须覆盖基础回合骨架：派系选择、随从/行动打出、响应窗口、交互选择、弃牌、天赋、special、阶段推进。缺这条骨架，AI 会在多人局里自然卡死。
-- Smash Up 的多人局适配现在已经证实是自然的：4 人 setup 下当前行动位能正常生成派系选择动作，非当前行动位不会误生成动作；这说明 runtime 与 turn order 的接线是正确的。
-- 这轮真正让产品可见的是 `manifest` 层的放开，而不是 AI 文件本身：只要 `allowLocalMode` 和 `ai.localAi` 不打开，已有 runtime 再完整，用户在详情页里也进不到这条链路。
-- 当前工作区里仍有并发中的 `src/games/smashup/abilities/bear_cavalry.ts` 与 `src/games/smashup/__tests__/feedback-high-ground-destroyer.test.ts`，与本轮 AI 首轮接入无关；继续推进时必须保持边界，不要把两条线混提。
-
-## 新发现（2026-03-27，Dice Throne 本地 AI 入口）
-- 跨游戏 AI 主线当前并不是“框架还没做完”，而是已经完成到可运行状态；真实缺口转移到了用户入口层。
-- `LocalMatchConfigModal`、seat controller、`LocalMatchRoom`、Dice Throne 评分式本地 AI、远程 provider 契约和训练采集都已存在，说明“本地 AI 能不能跑”这个问题实际上已经解决。
-- 真正导致用户在详情页看不到“对战 AI / 单机模式”的原因有两个：
-  - `src/games/dicethrone/manifest.ts` 仍写着 `allowLocalMode: false`，直接把本地入口隐藏掉了。
-  - `src/components/lobby/GameDetailsModal.tsx` 的“本地游玩”此前仍是直接跳 `/local`，没有接已经做好的 `LocalMatchConfigModal`。
-- 因此这条线的最小正确修复不是继续写 AI 逻辑，也不是提前接 AstrBot，而是把“现有 AI 能力”真正暴露给用户。
-- 当前补齐后，Dice Throne 的本地入口已经与通用 AI 框架接通；后续再做 AstrBot 或更多游戏 AI 时，可以沿用同一套详情页 -> 座位配置 -> 本地房间链路。
-
-## 新发现（2026-03-27，移动端顶层容器锚定）
-- 当前未提交改动的真实主线是“游戏容器内的加载/连接中遮罩误用 viewport 锚定”，而不是新的玩法或领域逻辑改动。
-- `LoadingScreen` 之前只有“全页 fixed”与“普通 relative”两种布局语义，不足以表达“占满当前游戏容器，但不要逃逸到整个页面视口”的第三种场景；新增 `anchor=\"container\"` 后，这个语义才被显式建模出来。
-- 这次修复的关键不在单个页面，而在一组共同入口：`CriticalImageGate`、`TutorialSelectionGate`、`BoardBridge.loading`、`ConnectionLoadingScreen`、以及游戏板本身的防御性 loading fallback。
-- 人工查看证据图后可以确认两个核心结果：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\mobile-character-selection\character-selection-mobile-landscape.png` 中，Dice Throne 选角层被约束在横屏容器内，没有再把页面向右撑出。
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\add-critical-image-preloading\critical-image-gate-loading.png` 中，SmashUp LoadingScreen 的法阵和文案都位于容器视觉中心，没有被顶层 fixed 层拉偏。
-- 这轮验证说明 `anchor=\"container\"` 没有破坏原有加载链路：SmashUp 仍能从 LoadingScreen 正常过渡到派系选择界面。
-- 后续若再遇到“游戏内某个 loading/遮罩把整个页面盖住、导致移动端顶层容器溢出或定位异常”的问题，应优先检查是否误用了 `viewport` 锚定，而不是直接继续调外层 CSS。
-
-## 新发现（2026-03-26，移动端 exit fab sheet 滚动锁）
-- 当前未收口的本地改动不是部署尾巴，而是另一条独立 UI 修复线：移动端横屏下 exit fab sheet 打开后，页面级滚动没有被真正锁住。
-- 仅把 exit fab 面板改成底部 sheet 还不够；若 `html/body` 仍允许滚动/overscroll，用户仍可能看到页面级滚动条或继续把底层页面拖动起来。
-- `FabMenu` 之前混用了裸 `window.innerWidth/innerHeight` 与 safe-area 读取；改成统一走 `useRuntimeViewport()` 后，悬浮球位置、对齐和 resize 重算会更稳定，也更适合移动端运行时 viewport 变化。
-- 新增的 `useDocumentScrollLock()` 做了引用计数与样式快照恢复，适合作为可复用基础能力，而不是把 `overflow: hidden` 散落在每个面板组件里。
-- 这轮最直接的验收信号不是“面板自己不滚了”，而是：exit fab sheet 展开时 `html/body` 的 `overflow-y` 为 `hidden`、`overscroll-behavior-y` 为 `none`，且 document/body 不再出现横向溢出。
-- 已完成最小有效验证：`npm run typecheck` 通过；`smashup-4p-layout-test.e2e.ts` 中“移动端横屏应保持四人局布局可用，并支持手牌长按看牌”通过（1 passed）。
-
-## 新发现（2026-03-26，尾巴收口复核）
-- `temp/open-feedback-tracker.md` 仍有独立价值，但它的有效结论已经很明确：fb2 / fb3 / fb4 / fb5 代码层都已修复，后续主动作应转到后台关闭状态，不必继续把它当代码待办。
-- `temp/e2e-next-batch-plan.md` 仍有独立价值，但角色应固定为 SmashUp 收尾专项记录；它支持“当前主战场仍是 SmashUp 收尾，不要扩大战线”这一结论，而不是新的主 Plan。
-- `temp/codex-room-assets-findings.md` 的有效结论已被当前主线吸收：`apps/api/src/main.ts` 里 `/assets` 已排除出 SPA fallback，`src/main.tsx` 已存在 stale chunk 一次性自动刷新；但“缺失 chunk 真实不再返回 HTML”与生产层验证仍未完成。
-- `temp/codex-find-planning-with-files.md` 已无继续存在的必要：技能已人工安装，且该文件当前并不存在；它应视为已完成/失效，而不是待检查项。
-- POD 文档线当前不是“全部还能当真”：`p1-restoration-progress.md` 已是完成态，`p3-audit-progress.md` 明显落后于 `p3-audit-complete.md`，而 `p0` 相关文档内部仍存在“进度稿 / 最终稿 / 需要恢复清单”并存的冲突，不能整体宣称已完全收口。
-- “房主被删房”这条线的状态也应从“纯未知”改成“根因已基本锁定，但修复未落地”：服务端 duplicate-owner cleanup 仍然过于激进，前端则仍会把 chunk 失效后的 404 最终折叠成“房间不存在或已被删除”。
-
-## 新发现（2026-03-26，board-shell 横屏共享壳）
-- 老板提供的截图暴露的是共性问题：底部滚动条与底部手牌/卡牌区域被裁剪，不是单游戏局部样式瑕疵。
-- 这类问题的共同点是：涉及 `mobileLayoutPreset: 'board-shell'` 的横屏移动端游戏，而不是只发生在某一个 `Board.tsx`。
-- 根因锁定在共享壳层：横屏 `board-shell` 仍吃统一 safe-area padding，导致缩放后的实际游戏画布再次被压缩；配合缺少统一裁剪约束，就会表现为滚动条与底部内容被切掉。
-- 最小正确修复不该去每个游戏单独改高度/间距，而应修 `MobileBoardShell + src/index.css` 的共享约束。
-- 已验证共享回归：`MobileBoardShell` 单测通过，`mobileSupport` 支持矩阵测试通过，说明修复没有破坏 board-shell 游戏声明链路。
-- 本轮代码已推送到 `main`，提交为 `608b5937`；镜像构建已成功，但生产部署被老板明确叫停，因为已经过了允许部署的时间窗。
-- 新的明确偏好：生产部署只在“早上”执行；晚上即使镜像已好，也不要继续部署。
-
-## 新发现（2026-03-26，第二轮）
-- 当前工作区存在并发回退：此前已经设计/实现过的 `engine/ai`、训练采集文件和部分游戏 AI runtime 并不都还在树上，继续开发前必须先确认“当前文件系统状态”，不能假设上一轮完成的代码仍然存在。
-- 已恢复的当前态能力包括：统一 AI runner、远程 provider 超时/异常/非法动作 fallback、井字棋 AI runtime、训练数据 raw JSONL 采集层。
-- 当前树里 Dice Throne AI runtime 仍未恢复，因此 OpenSpec 历史完成记录与当前工作区状态暂时不完全一致；后续继续时要以“当前树可运行状态”为准，而不是只看历史记录。
-- 训练采集仍然适合先走 raw log / JSONL 层；等 AstrBot provider 稳定后，再讨论是否补 Mongo 索引层或离线清洗层。
-
-## 新发现（2026-03-26）
-- 对桌游场景，默认 AI 路线已经收敛为：`legalActions` 枚举之后做启发式评分，再按需要叠加搜索；行为树不再作为通用默认方案。
-- 当前通用本地 AI 框架已经具备跨游戏复用的最小闭环：统一上下文、统一动作表示、统一评分 helper、统一本地 runner。
-- Dice Throne 已经从“动作 kind 优先级硬编码”迁移到“多 scorer 评分式 baseline”，说明该框架足以承载复杂于 Tic-Tac-Toe 的桌游对象。
-- 训练采集链路与本地逻辑 AI 现在是解耦的：本地 AI 先用规则与评分跑通，训练样本继续作为后续 remote AI / 模型微调的数据基础。
-- 下一阶段最值得做的不是继续堆 Dice Throne 特例逻辑，而是补 remote provider 约束与数据治理，避免后续 AstrBot 接入时绕过 `legalActions` / validate。
+## 新发现（2026-03-27）：武士跨角色 E2E / Masamune II 审计
+- `Masamune II` 当前仍是唯一真实未闭环点。已核对代码定义、OCR 图证、现有规则文档裁决，但升级差异数字仍然不足以安全裁决，因此本轮不改实现，只保留为审计 blocker。
+- `Righteousness` / `Zanshin` 之前在 E2E 中不稳定，根因不是武士逻辑，而是测试基础设施缺口：
+  - `LocalGameProvider` 直接使用 `createSeededRandom(seed)`。
+  - `TestHarness.dice.setValues()` 只改了 `RandomInjector` 队列，却没有真正接到 `executePipeline()` 使用的随机源。
+  - 结果是本地 E2E 里 `random.d(6)` 无法被稳定控制，导致武士奖励骰分支看起来像“随机失控”。
+- 本轮已在 `src/engine/transport/react.tsx` 补齐测试环境随机桥接：本地 provider 在测试模式下改为使用 `TestHarness.random.wrap(...)` 派生 `random()` / `d()` / `range()` / `shuffle()`。
+- 在此基础上，`e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增并跑通两条武士跨角色 E2E：
+  - `samurai righteousness should resolve a valid branch against monk`
+  - `samurai zanshin should settle 5 bonus dice and synchronize effects against paladin`
+- 两条用例都已生成显式证据截图，并完成人工审查；证据文档见 `evidence/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`。
 
 ## 当前主任务（2026-03-22）
 - 当前已从单点问题切换为 **多线并行收口**：
@@ -104,35 +42,6 @@
 - `codex-feedback-open-tracker`：已启动 guarded task，目标产物 `temp/open-feedback-tracker.md`。
 - `codex-e2e-migration`：已启动 guarded task，目标产物 `temp/e2e-next-batch-plan.md`。
 - `codex-find-planning-with-files`：原用于定位 plan 技能；用户后续直接给出 GitHub 地址后已人工安装技能，本任务可视为完成/失效。
-
-## Plan with Files 唯一落点核对（2026-03-24）
-- 直接依据 `planning-with-files` 技能原始说明核对：该技能明确要求 **planning files go in your project directory**，并把 `task_plan.md` / `findings.md` / `progress.md` 视为项目目录内的持久工作记忆，而不是 agent workspace 文件。
-- 因此，若当前要讨论的是 **BoardGame 项目任务** 的唯一正式 Plan 落点，那么根目录 `task_plan.md` 与技能原始设计是对齐的；把主 Plan 迁到 agent workspace，反而会把“项目任务计划”和“agent 自身记忆”混在一起，削弱跨会话恢复与仓库内审计能力。
-- 需要严格区分的不是“项目根 vs agent workspace 都可放主 Plan”，而是：
-  - **项目任务计划** → `D:\gongzuo\webgame\BoardGame\task_plan.md`
-  - **项目任务研究/会话记录** → `findings.md` / `progress.md`
-  - **agent 自身记忆** → agent workspace 下的 memory/ 等目录，不能写回项目仓库
-- 当前仓库内和本任务最相关的分级可收敛为：
-
-| 路径 | 分级 | 角色 | 处理建议 |
-| --- | --- | --- | --- |
-| `task_plan.md` | 正式入口 | BoardGame 当前唯一正式 Plan | 保持唯一入口，不迁到 agent workspace |
-| `findings.md` | 配套记录 | 研究发现、规则、判断依据 | 继续保留；不得表述成第二份 plan |
-| `progress.md` | 配套记录 | 会话执行日志、验证、handoff | 继续保留；不得表述成第二份 plan |
-| `temp/open-feedback-tracker.md` | 专项配套记录 | feedback 未关闭项盘点 | 内容应摘要并回写主 Plan，不得充当主入口 |
-| `temp/e2e-next-batch-plan.md` | 专项配套记录 | E2E 下一批候选与排序 | 内容应摘要并回写主 Plan，不得充当主入口 |
-| `temp/feedback-main-branch-resume-plan.md` | 历史临时材料 | feedback 主分支收口历史 handoff | 2026-03-24 已删除；有效结论已回写根目录三件套 |
-| `temp/main-e2e-single-progress.md` | 历史临时材料 | 单次 E2E 试跑记录 | 2026-03-24 已删除；有效结论已回写根目录三件套 |
-| `docs/smashup-e2e-migration-plan.md` | 领域历史文档 | SmashUp E2E 曾经的专题计划 | 不属于当前唯一主 Plan；若与现状冲突，应视为历史/专题文档 |
-| `docs/bugs/feedback-rate-limit-todo.md` | 领域 backlog 文档 | feedback 速率限制待办 | 属于专题 backlog，不属于主 Plan |
-
-## 对老板新规的符合性判断（2026-03-24）
-- **结论：当前结构在原则上可符合新规，但存在“视觉上像多份 plan”的风险。**
-- 真正符合新规的前提是：
-  1. 只承认 `task_plan.md` 是当前正式入口；
-  2. `findings.md` / `progress.md` 只写配套信息，不重复维护完整任务拆解；
-  3. `temp/*plan*` / `*resume*` / `*progress*` / `*tracker*` 只作为专项临时材料或历史材料，不能再被当作“当前任务从哪继续”的入口。
-- 目前最大风险不是 `task_plan.md` 放错位置，而是 temp 下带 `plan/progress/resume` 命名的文件容易持续制造“第二主计划”错觉；其中 `temp/feedback-main-branch-resume-plan.md`、`temp/main-e2e-single-progress.md`、`temp/ssh-codex-plan.md`、`temp/reboot-resume-plan.md` 已于 2026-03-24 清理，后续应继续避免新增同类命名入口。
 
 ## 已读规范 / 文档
 - `docs/ai-rules/engine-systems.md`
@@ -308,650 +217,475 @@
 - 删除后重新扫描，重复 key 数量为 `0`
 - 直接执行 esbuild 打包 `server.ts`，未再出现 `duplicate-object-key` / `base_great_library` warning
 - 当前终端环境会拦截 Node 内部 `child_process.spawn`，因此这里不用 `smoke:startup` 作为最终验证，而改用直接 bundle 验证
-## Session: 2026-03-25 跨游戏 AI 骨架收尾
-- **Status:** completed
-- 关键发现：
-  - `manifest.ai` 必须显式声明并纳入生成脚本校验，否则跨游戏 AI 能力会退回到隐式约定，后续扩展不可审计。
-  - 训练采集与后续模型接入可以共用一套结构：`playerView` 后可见状态 + `interaction/responseWindow` snapshot + `legalActions`。
-  - 本地 AI 运行时需要状态级去重；`attemptKey` 以玩家、阶段、交互和 legal action 集合做指纹，足以挡住第一层重复尝试。
-  - `dicethrone` 首个落地的关键不在“做强”，而在“做通”。
-  - 最小闭环覆盖 setup、阶段推进、掷骰、确认、选技能、响应跳过、奖励骰和基础交互后，逻辑 AI 已可持续推进对局。
-  - 新增运行时代码时，`DICETHRONE_CHARACTER_CATALOG` 需要从 `./domain/types` 直接取值；`./domain` barrel 并未导出它。
-  - 服务端 manifest 查询应走 `src/games/manifest.ts` barrel，而不是不存在的 `../../games`。
-- 本轮核心落点：
-  - `src/games/dicethrone/ai.ts`：新增 runtime、legal action 构建、baseline policy
-  - `src/games/dicethrone/game.ts`：注册 runtime
-  - `src/engine/transport/server.ts`：修正 manifest 引用并完成采集链路接入
-  - `src/games/dicethrone/__tests__/basic-commands-coverage.test.ts`：在现有测试文件补 AI 断言
-## 2026-03-25 OpenSpec 收口补充发现
-
-### `add-user-settings-persistence` 已实现，可归档
-- 后端已存在完整用户设置模块：
-  - `apps/api/src/modules/user-settings/user-settings.controller.ts`
-  - `apps/api/src/modules/user-settings/user-settings.service.ts`
-  - `apps/api/src/modules/user-settings/schemas/user-audio-settings.schema.ts`
-- 前端已接入登录同步与首登迁移：
-  - `src/api/user-settings.ts`
-  - `src/contexts/AudioContext.tsx`
-  - `src/lib/audio/AudioManager.ts`
-- 关键实现口径：
-  - 登录后读取远端设置并应用到当前会话
-  - 若服务器无记录，则把本地偏好迁移到服务器
-  - 远端 apply 使用 `persist=false`，不会覆盖游客本地缓存
-  - 登出时通过 `restoreLocalSettings()` 恢复游客本地偏好
-- 测试已覆盖：
-  - `apps/api/test/user-settings.e2e-spec.ts`
-  - `src/api/__tests__/user-settings.test.ts`
-
-### `add-game-changelog-and-author-info` 已实现，但原 change 文档过时
-- 后端已实现游戏更新日志模块与公开/后台接口：
-  - `apps/api/src/modules/game-changelog/`
-  - `GET /game-changelogs/:gameId`
-  - `admin/game-changelogs` CRUD
-- 后台已实现 `user / developer / admin` 与 `developerGameIds`：
-  - `apps/api/src/modules/auth/schemas/user.schema.ts`
-  - `apps/api/src/modules/admin/admin-user-role.service.ts`
-  - `src/pages/admin/Users.tsx`
-  - `src/pages/admin/UserDetail.tsx`
-  - `src/pages/admin/components/UserRoleModal.tsx`
-  - `src/pages/admin/GameChangelogs.tsx`
-- 前台已实现作者入口与独立更新标签：
-  - `src/components/lobby/GameDetailsModal.tsx`
-  - `src/components/lobby/GameDetailsChangelogSection.tsx`
-  - `src/components/lobby/gameDetailsContent.ts`
-- 关键现实口径：
-  - 作者信息来自 `manifest.authorName`
-  - 未声明时回退为“佚名”
-  - 作者弹窗是通用说明，不是旧提案里的 `author.tsx` 动态内容注入
-  - 更新日志位于独立“更新”标签，不是旧提案里的“排行榜内双栏并排”
-- 测试已覆盖：
-  - `apps/api/test/game-changelog.service.test.ts`
-  - `apps/api/test/admin.e2e-spec.ts`
-  - `src/components/lobby/__tests__/gameDetailsContent.test.ts`
-
-### `update-mobile-first-adaptive` 应判定为 stale change
-- 该 change 的目标是“mobile-first”
-- 现行项目口径和后续 change 已转为“PC 优先、移动端条件覆盖”：
-  - `.windsurf/skills/adapt-game-mobile/SKILL.md`
-  - `openspec/changes/add-pc-first-mobile-adaptation-framework/`
-- 因此它不是“继续实现即可归档”，而是已经被后续方案方向性替代，适合直接清理目录
-
-### 当前仍不要误归档
-- `add-refresh-token-auth`
-  - 已有 refresh token 与定时刷新
-  - 但 spec 里的“401 自动刷新并单飞重试请求”尚未全面落地
-  - 典型缺口仍是前端若干调用链未统一做 401 refresh + retry
-## 2026-03-25 跨游戏 AI 产品入口收口补充发现
-- 当前第一阶段已经形成稳定的通用产品链路：`manifest.ai -> lobby 展示 -> 本地对战配置 -> local room seat controller -> debug panel 展示`。
-- `seat controller` 的通用 query 方案已经固定为：
-  - `players`
-  - `seat0 / seat1 / ...`
-  - 值支持 `human`、`local-ai[:policyId[:fallbackPolicyId]]`、`remote-ai:providerId[:fallbackPolicyId]`
-- `tictactoe` 适合作为第一条产品验证链路，因为本地 AI 默认值简单，E2E 可稳定验证 `P1 -> Local AI`。
-- 本轮新增测试后，已覆盖：
-  - 默认 `seat1=local-ai`
-  - 显式 `seat1=human` 覆盖默认
-  - `buildLocalMatchSearchParams(...)` 输出 `players / seat1 / seat2`
-  - `AiSupportPills` 只渲染 enabled capability
-- 当前仍未完成的不是产品入口，而是远程 provider 规则：
-  - AstrBot 接入鉴权和超时边界
-  - provider 返回非法动作时的回退与约束
-  - 训练数据生命周期治理
-- 本轮证据已经落到：
-  - `D:\gongzuo\webgame\BoardGame\evidence\lobby-ai-local-config-e2e.md`
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\lobby.e2e\Tic-Tac-Toe-本地对战配置会暴露-AI-支持和-seat-controller\lobby-tictactoe-local-ai-config-debug.png`
-## Addendum（2026-03-25）：OpenSpec 收口事实更新
-
-### 本轮新增已归档
-- `add-pc-first-mobile-adaptation-framework`
-  - 真实现状是 manifest 驱动的 PC-first mobile support，已包含移动端元数据、方向提示、通用 shell、board shell 缩放兜底。
-- `implement-domain-core-and-systems`
-  - 真实现状是 `MatchState = { sys, core }`、`DomainCore`、pipeline + systems 生命周期均已落地；旧 change 混入的 `boardgameio-adapter` / `ugc-optional` 不应跟着归档。
-- `refactor-engine-primitives`
-  - 真实现状不是“删除 systems 层”，而是新增并广泛使用 `src/engine/primitives/`。
-  - `src/engine/systems/` 仍然存在并承载 Flow / Interaction / Undo / ResponseWindow / ActionLog 等运行时系统。
-  - primitives 已至少包含：
-    - `expression` / `condition` / `target` / `effects`
-    - `zones` / `dice` / `resources`
-    - `ability` / `abilityConstraints` / `tags` / `modifier` / `attribute`
-    - `damageCalculation` / `actionRegistry` / `grid` / `uiHints`
-    - `spriteAtlas` / `actionLogHelpers` / `mulligan` / `visual`
-  - DiceThrone / SummonerWars / SmashUp / Cardia 均已有 primitives 落地引用。
-
-### 本轮新增正式 spec 修正
-- `openspec/specs/engine-primitives/spec.md`
-  - 已去掉 archive 生成后的占位 Purpose，改为真实职责描述。
-- `openspec/specs/dice-system/spec.md`
-  - 已去掉旧的 singleton / 全局注册口径。
-  - 当前正式口径改为：
-    - 游戏显式提供 `DiceDefinition`
-    - 引擎通过 `createDie` / `rollDie` / `rollDice` / `calculateDiceStats` / `checkSymbolsTrigger` / `checkTotalTrigger` 消费
-
-### 仍不能误归档
-- `add-cross-game-ai-system`
-  - 已完成：manifest.ai / seat controller / 本地 AI runner / 训练数据 `legalActions` / lobby 与 local room 的 AI 支持入口。
-  - 未完成：Remote provider 真正执行链、AstrBot 接入、provider timeout / fallback / 非法动作回退闭环。
-- `add-refresh-token-auth`
-  - 已完成：refresh token 存在，且有定时刷新。
-  - 未完成：spec 要求的 401 自动刷新并单飞重试请求链路未确认全面落地。
-## Addendum（2026-03-25）：OpenSpec 收口事实继续更新
-
-### 新增已归档
-- `add-ugc-layout-alignment`
-  - `src/ugc/utils/layout.ts` 已提供 `resolveLayoutRect`、`resolveAnchorFromPosition`、`migrateLayoutComponents`
-  - `src/ugc/builder/ui/SceneCanvas.tsx` 已使用锚点模型、支持网格/边缘/中心吸附和参考线
-  - `src/ugc/builder/pages/UnifiedBuilder.tsx` 已提供对齐/分布工具栏与 `uiLayout` 持久化
-  - `src/ugc/builder/ui/RenderPreview.tsx` 与 `src/ugc/runtime/UGCRuntimeView.tsx` 共享布局渲染路径
-- `add-ugc-client-runtime-adapter`
-  - `src/ugc/client/loader.ts` 已解析 manifest、入口 URL、`commandTypes` 与玩家人数范围
-  - `src/ugc/client/game.ts` 已提供 `createUgcClientGame()` / `createUgcDraftGame()`
-  - `src/ugc/client/board.tsx` 已提供 `createUgcRemoteHostBoard()`，缺省回退 `/dev/ugc/runtime-view`
-  - `src/pages/MatchRoom.tsx` 已存在 `isUgc` 分支，提供 loading / error / board 三态
-
-### 新增明确不能归档
-- `add-ugc-runtime-and-audio-pipeline`
-  - 已有：`apps/api/src/modules/ugc/ugc.controller.ts` / `ugc.service.ts` 的 package、publish、manifest、asset 上传链路
-  - 已有：`src/server/ugcRegistration.ts` 的 published UGC 动态注册
-  - 已有：`src/ugc/server/compression/imageCompressor.ts` / `audioCompressor.ts`
-  - 未有：UGC tutorial 接入 `MatchRoom` 的 `/play/:gameId/tutorial` 真正加载 UGC tutorial manifest
-  - 未有：`PLAY_SFX` 到宿主实际音频播放的闭环；`onPlaySfx` 仅存在于 `src/ugc/runtime/hostBridge.ts` 配置接口，当前 UGC board/host 未接入实际播放器
-
-### 新增 stale change 判定
-- `add-ugc-rule-execution-framework`
-  - 提案要求“无手动代码编辑器、仅外部 AI 粘贴导入”
-  - 现实实现保留 `rulesCode`、render code、property hooks、sandbox 预览，主线已不是该提案方向
-- `ugc-builder-v2`
-  - 提案要求分层 `GameBundle` / `SandboxAPI` / 去掉手写代码入口
-  - 现实实现未转向该架构，且与当前 `UnifiedBuilder` 主线冲突
-
-### 当前 active changes（2026-03-25 本轮收口后）
-- `add-cross-game-ai-system`
-- `add-ai-pr-review-merge-automation`
-- `add-ugc-runtime-and-audio-pipeline`
-- `add-dicethrone-2v2-team-mode`
-- `add-refresh-token-auth`
-
-## Addendum（2026-03-25）：大厅模式入口产品化收口
-- 当前用户质疑点是合理的：不能在还没讨论清楚策略层之前，就把“AI 已经定案”传达给用户。
-- 因此入口层应该先表达“模式”，而不是表达“配置器”：
-  - `教程模式`：学习 / 演示
-  - `单机模式`：本地双人或多人同屏，不涉及 AI
-  - `对战AI`：直达本地逻辑 AI
-- `单机模式` 必须显式覆盖 `seat1=human`。否则在支持 `localAi` 的游戏里，默认 seat 推导会把第二个座位变成 `local-ai`，这和“单机模式”的用户预期冲突。
-- `对战AI` 改成直达后，当前产品语义更准确：
-  - 入口层面已经清楚区分“本地真人对战”和“本地逻辑 AI 对战”
-  - 运行层面仍然只是 baseline 逻辑 AI，不代表策略范式已经定成行为树
-- 现有 AI 框架的真实抽象仍然是 `legalActions -> decide(context)`：
-  - 这更像一个通用决策接口
-  - 上层可以接规则优先级、utility scoring、搜索、MCTS，甚至后续再包一层行为树
-  - 所以当前入口改动不会锁死后续策略演进方向
-
-## Addendum（2026-03-25）：OpenSpec 收口事实最终补充
-
-### `add-ai-pr-review-merge-automation` 目前只有变更文档，没有仓库级自动化落地
-- `openspec/changes/add-ai-pr-review-merge-automation/tasks.md` 12 个实现项全部未勾选。
-- `.github/workflows/` 目前只有：
-  - `android-release-build.yml`
-  - `docker-publish.yml`
-  - `quality-gate.yml`
-- 全仓搜索未见：
-  - AI PR review workflow
-  - auto-merge workflow
-  - `workflow_run` merge gate
-  - `pull_request_target` / `issue_comment` 驱动的 PR 自动审查实现
-  - 原始 PR comment / check summary 的自动回写实现
-- `.windsurf/skills/github-pr-review-merge/SKILL.md` 只是项目内 skill 说明，不是 GitHub Actions / bot 自动化实现。
-- 结论：该 change 尚未进入实施阶段，应继续保留 active。
-
-### `add-dicethrone-2v2-team-mode` 有局部预埋，但远未达到归档条件
-- 已存在的局部预埋：
-  - `src/games/dicethrone/rule/王权骰铸规则.md` 已补入 2v2 / Targeting Roll 规则文档。
-  - `src/games/dicethrone/domain/rules.ts` 已有 `isTeamMode`、`getTeamId`、`areTeammates`、`getTeammateId`、`getOpponents`、`getLeftOpponentId`、`getRightOpponentId`。
-  - `src/games/dicethrone/domain/core-types.ts` / `types` 侧已有 `teamIdByPlayerId`、`seatingOrder` 相关入口痕迹。
-- 未落地的主链能力：
-  - `src/games/dicethrone/manifest.ts` 仍为 `playerOptions: [2]`
-  - `src/games/dicethrone/game.ts` 仍为 `minPlayers: 2` / `maxPlayers: 2`
-  - 未见 4 人建房与 4 座位入座链路
-  - 未见共享体力结算主链
-  - 未见 2v2 `Targeting Roll` phase 接入
-  - 未见顶部三窗、目标选择面板、站位面板等 UI 主链
-  - 大量攻击/防御/效果代码仍按单一 `defenderId` + 双人假设运作
-- 结论：这是“少量底层 helper 预埋 + 产品主链未做”，必须继续保留 active。
-
-### `add-refresh-token-auth` 仍缺统一 401 自动刷新 + 单飞重试闭环
-- 已完成部分：
-  - `apps/api/src/modules/auth/auth.controller.ts` 已有 refresh/logout 接口与 refresh cookie 下发。
-  - `apps/api/src/modules/auth/auth.service.ts` 已有 refresh issue / rotate / revoke。
-  - `src/hooks/useTokenRefresh.ts` 已有定时刷新与页面恢复可见时刷新。
-- 缺口仍然明确：
-  - 全仓仍有大量业务请求直接手写 `fetch` + `Authorization: Bearer ${token}`
-  - 例如：
-    - `src/api/review.ts`
-    - `src/api/user-settings.ts`
-    - `src/contexts/SocialContext.tsx`
-    - `src/core/cursor/cursorPreference.ts`
-    - 多个 `src/pages/admin/*.tsx`
-  - `src/services/matchApi.ts` 遇到 401 仍是直接清本地 token，不是 refresh 后重试。
-- 结论：refresh token 已上线，但 spec 里的统一请求层自动续签闭环并未全面落地，不能归档。
-## 新发现（2026-03-26，AstrBot provider 闭环）
-- 当前工作区在 AI 这条线上存在“测试口径比实现更完整”的漂移：`tictactoe` 测试已经假定存在 `remote-ai` 的 `timeout / retry / fallback / source` 语义，但原始 `localRunner` 只覆盖 `local-ai`。
-- 远程 provider 的正确边界不应把鉴权信息塞进 `seat0=remote-ai:...` 这种 query 参数里；更合理的做法是：
-  - seat controller 只保留 provider 选择与运行时调参（如 `providerId / timeoutMs / retryCount / fallbackPolicyId`）
-  - endpoint / apiKey / 默认 timeout / 默认 retry 由 provider 注册层读取环境配置
-- AstrBot 默认 provider 现已按通用 HTTP provider 方式接入，发送的是结构化 `AiDecisionContext`，而不是拼 prompt 字符串后把返回结果直接当命令执行。
-- 远程 AI 的 fallback 仍然坚持统一门控：
-  - provider 返回非法 actionId -> 不执行，回退到本地 policy 或首个合法动作
-  - provider 抛错 -> 不阻塞对局，回退
-  - provider 超时 -> 不无限等待，回退
-  - provider 重试成功 -> 直接采用远程结果，但仍只允许命中 `legalActions`
-- 这轮实现后，`LocalGameProvider` 终于和 `tictactoe`/`dicethrone` 测试口径重新对齐：统一入口为 `resolveNextAiAction(...)`，而不再是“React 侧假定有远程 AI，Runner 侧实际上没有”。
-## 新发现（2026-03-26，训练数据治理）
-- 当前训练样本最合适的第一阶段治理方式不是直接进 Mongo，而是保留 JSONL raw log，但把目录结构升级为“`raw/archive + schemaVersion`”三层隔离。
-- `schemaVersion` 只要出现在样本本身，就应该直接参与路径分层；这样未来出现 v2/v3 样本时，不需要迁移旧日志，也不会把不同版本混写到同一文件。
-- 对低活跃站点，raw 保留期默认 30 天即可，过期后迁入 archive 目录，比一开始就做数据库清洗管线更轻、更稳，也更符合当前用户量。
-- 归档策略不需要额外守护进程也能落地：在 recorder 的日常写入路径上做“每天最多一次”的归档检查，就足以把治理成本控制在很低水平。
-- 这条链路完成后，后续无论是做离线清洗、抽样评估、微调数据准备，还是接 AstrBot/远程 AI，都可以直接消费同一批版本化日志，不需要再回头补采集。
-
-## 2026-03-25 Dice Throne 4 人/2v2 targetingRoll 收尾发现
-
-- 根因不是 `customId` 或 payload 丢失，而是目标选择完成后缺少稳定的“已完成”标记，同时 `src/games/dicethrone/domain/flowHooks.ts` 里还残留了一段旧的 5/6 分支，会再次发出 `CHOICE_REQUESTED`。
-- 仅把 `targetingSelectionPending` 改回 `false` 不足以阻止同一条命令链里的重复选择；需要一个能跨 reducer、system、effect 共享的幂等信号，因此新增 `pendingAttack.targetingSelectionResolved`。
-- 4 人/2v2 模式下，`targetingRoll` 掷出 `5/6` 的正确行为是：玩家完成目标选择后应直接进入 `defensiveRoll`，不需要再手动 `ADVANCE_PHASE`。
-- 直接检查 flow hook 事件链时，选择目标后应看到 `SYS_INTERACTION_RESOLVED`、`CHOICE_RESOLVED(select-target:1)`、`ATTACK_PRE_DEFENSE_RESOLVED`、`SYS_PHASE_CHANGED { from: 'targetingRoll', to: 'defensiveRoll' }`，说明推进链路本来就应该在响应命令内完成。
-- `src/games/dicethrone/__tests__/flow.test.ts` 的断言口径已同步为“目标选择后自动推进”，避免后续又把手动 `ADVANCE_PHASE` 误当成正确行为。
-
-## 2026-03-25 Dice Throne 4人/2v2 targetingRoll 收尾发现（格式修正）
-
-本次卡在 `targetingRoll` 的根因不是 `customId` 或 payload 丢失，而是目标选择完成后缺少稳定的“已完成”标记，同时 `src/games/dicethrone/domain/flowHooks.ts` 里还残留了一段旧的 5/6 分支，会再次发出 `CHOICE_REQUESTED`。
-
-仅把 `targetingSelectionPending` 改回 `false` 不足以阻止同一条命令链里的重复选择，因此需要一个能跨 reducer、system、effect 共享的幂等信号；这也是新增 `pendingAttack.targetingSelectionResolved` 的原因。
-
-4 人/2v2 模式下，`targetingRoll` 掷出 `5/6` 的正确行为是：玩家完成目标选择后直接进入 `defensiveRoll`，不需要再手动 `ADVANCE_PHASE`。`flow.test.ts` 的断言口径也已与此对齐。
-## 2026-03-25 Dice Throne 4人/2v2 验证补跑发现
-
-- 当前受限终端可以完成 `tsc`，但无法在 Vitest 初始化阶段启动 worker / esbuild service；默认 forks worker 报 `spawn EPERM`，改成 `--pool threads --no-file-parallelism --maxWorkers 1` 后，仍在 `vite:esbuild` 处理 `vitest.setup.ts` 时触发同样的 `spawn EPERM`。
-- 这说明当前 blocker 是终端对子进程 / esbuild service 的限制，不是这批 DiceThrone 4 人改动自身的编译错误；至少静态类型检查仍为绿色。
-- `src/games/dicethrone/domain/flowHooks.ts` 的 `targetingRoll` 5/6 分支里残留了一个 `if (true) { ... } else { ... }` 的死代码块，本轮已清理，只保留真实执行路径。
-- 当前 Git 命令也受 `dubious ownership` 影响，但可通过 `git -c safe.directory=D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode ...` 在单命令级绕过；由于 `C:/Users/zhuagenbao/.gitconfig` 无写权限，不能持久写入 `safe.directory`。
-
-## 2026-03-25 Dice Throne 4人/2v2 站位移动闭环发现
-
-- 4 人 team mode 的站位调整不需要新增“空座位槽”状态；对当前 `seatingOrder` 采用“移除玩家后按目标下标重新插入”的模型，就能直接支撑“先点玩家，再点空位”的 UI 交互。
-- 站位调整真正需要守住的边界是：`setup` 阶段、4 人 team mode、房主权限、开局后锁定、目标下标合法、禁止移动到原位。把这些统一放进领域校验后，前端只负责交互引导，不需要各处散落判断。
-- `SEATING_MOVED` 事件直接携带完整 `seatingOrder` 比“只传 source/target 再让 reducer 重算”更稳，因为 reducer 可以据此一次性重建 `teamIdByPlayerId`，避免座位、队伍、左右对手三套派生关系短暂失步。
-- 这轮最小 UI 接法不是重做整个选角页，而是在右下既有红框区加一个站位面板。这样既满足 spec，也降低了与并发改动冲突的概率。
-- `PLAYER_UNREADY` 此前已经在 `Board.tsx` 被 UI 调用，但 `resolveMoves`、领域执行、事件与 reducer 没有全链路接通；这属于典型的“入口已存在、领域没闭环”的历史缺口，这轮已顺手补齐。
-## Addendum（2026-03-25）：DiceThrone 四人房服务端 / E2E 闭环发现
-
-- 当前真正的阻塞不是业务逻辑，而是 `e2e/helpers/dicethrone.ts` 曾被坏正则和不可达旧代码污染，导致 Playwright 在解析阶段直接报 `Unterminated regular expression`。
-- `initContext()` 已统一注入英文 locale，所以 `waitForCharacterSelection()` 只匹配 `Select Your Hero` 即可稳定工作。
-- 4 人联机 setup 采用 `create -> claim-seat(host) -> join(guest1/2/3)` 即可覆盖本次服务端关键链路；不需要为每个 guest 再走一次 `claim-seat` 才能验证 4 座 metadata 与 `playing` 状态流转。
-- E2E 断言确认：`GET /games/dicethrone/:matchId` 在 4 个 seat 全部占用后返回 `players=[0,1,2,3]`、每个 seat 都带 `name`、`status === 'playing'`。
-- 实际截图确认 4 人房顶部存在 3 个他人窗口，且已进入主阶段并显示投骰区，说明不是“接口绿了但 UI 还卡在准备页”。
-- 新发现的服务端缺口是：`/games/:name/create` 原本只按 `minPlayers/maxPlayers` 校验，DiceThrone 会错误放行 3 人房。现在已改为优先按 manifest `playerOptions` 白名单校验，`[2,4]` 不再接受 `3`。
-- 证据文档已新增：`evidence/dicethrone-simple-start-e2e-test.md`。
 
 ---
 
-## 2026-03-26 Dice Throne 4人/2v2 回合顺序与 OpenSpec 审计发现
+## Addendum（2026-03-25）：Dice Throne 枪手
 
-- `getPlayerOrder/getNextPlayerId` 之前仍按 `seatingOrder` 顺时针轮转，这与 OpenSpec 要求的“起始玩家所在队连走两手，再切到敌队两手”不一致；`flow.test.ts` 里原先期待 `0→1→2→3` 其实把旧错误行为固化成了测试。
-- 2v2 回合顺序和 4 人 UI 排布不能共用同一个顺序函数。`Board.tsx` 顶部三窗如果继续依赖 `getPlayerOrder`，修正 turn order 后会把观察顺序也一起改掉，因此要把 UI 继续绑定到 `getSeatingOrder`。
-- 现有实现与测试已足够支撑这些 OpenSpec 项为已完成：`1.2`（队伍状态模型）、`1.6/1.7`（Targeting Roll 与目标选择）、`1.9`（共享体力伤害/治疗/上限）、`1.10`（同队响应过滤与队友干预边界）、`1.11`（队伍胜负判定）、`1.12`（`playerView` 与 4 人 Board 映射）、`1.18`（规则/边界/服务端/E2E 覆盖）。
-- 本轮补上 `startingPlayerId='1'` 的 turn-order 规则测试后，可以确认 2v2 顺序不是写死在默认 host=0 场景上。
-- 4 人选角页的站位面板已可以直接被在线 E2E 稳定选择：使用 `2v2 Seating` 标题 + `Seat n` / `Empty` / `Team A/B` 文案即可覆盖“默认站位展示 → 点击空位移动 → 点击已占位拒绝”这一整条真实 UI 链路，不必额外改组件结构或新增测试专用入口。
+### 规范与真相源
+- `docs/ai-rules/data-entry.md` 已切换到本轮要求的口径：
+  - 汉化图片可作为主真相源
+  - 必须先切图，再录入
+  - Wiki 仅作对照，不是真相源
+  - 每个技能都必须记录触发条件/时机
+  - 录入范围必须覆盖技能、提示板、atlas/json、图标和资源引用
+- 枪手规则文档已补成“可审计录入包”：
+  - `src/games/dicethrone/rule/枪手真相源表.md`
+  - `src/games/dicethrone/rule/枪手录入核对.md`
 
-## 2026-03-26 DiceThrone 4 人 / 2v2 E2E 收口发现
+### 图片与对照
+- 已新增裁图脚本：`scripts/assets/extract-dicethrone-gunslinger-crops.mjs`
+- 已生成枪手角色板与提示板的关键裁图，足够支撑当前 `枪林弹雨！`、`quick-draw`、`loaded / bounty / knockdown / evasive` 等条目核对。
+- 当前仍有待裁定冲突：
+  - `装填弹药` 的使用时机，汉化提示板与 Wiki `Gunslinger Status Effects` 口径不完全一致；已登记到冲突表，未擅自裁决。
 
-- 旧的“进攻方确认掷骰后只应出现敌方响应者”假设不稳定，根因不是在线注入接口，而是 `CONFIRM_ROLL` 在 `offensiveRoll` 下会使用 `getContextualOpponentId()` 选择当前语境对手；在 4 人座位顺序 `0,1,2,3` 下，玩家 `0` 的默认语境对手优先落到左侧敌人 `3`，不是 `1`。
-- 因此要稳定验证“队友不响应队友”，应走“防守方确认掷骰后”的链路：当 `pendingAttack.attackerId='0'`、`defenderId='3'` 时，防守方 `3` 确认掷骰后，语境对手稳定是 `0`，此时同队玩家 `2` 会被正确排除在响应队列外。
-- 在线 `/test/get-state` 返回的是权威状态，但响应窗口是否打开仍严格依赖真实前置条件；仅补 `rollCount` 和手牌不够，还必须补齐可操作骰子，否则 `requireDiceExists` 会把响应卡全部过滤掉。
-- 目标面板证据截图必须在面板可见时截取；若等点击后再截，虽然断言仍能通过，但截图会落在后续防守阶段，不能直接作为 `2.7` 的可视证据。
-- 现有 `e2e/dicethrone-simple-start.e2e.ts` 已足够覆盖 OpenSpec `2.5-2.9`，不需要再新建 E2E 文件；关键是把状态构造函数改成“显式稳定场景”，避免依赖在线对局里的动态抽牌结果。
+### 代码链路发现
+- `fill-em-with-lead` 已接入：
+  - 终极技本体
+  - `loaded` 奖励骰
+  - 奖励骰一次重掷
+  - 重掷结果按“一半向上取整”并入当前攻击 bonus damage
+  - `bounty` 对伤害计算与 CP follow-up 的影响
+- 本轮发现并修复了一个通用缺陷：
+  - `offensiveRollEnd` Token 选择事件会带 `tokenId + value`
+  - reducer 原先先按通用选择逻辑做 `+value`
+  - 再由 `use-crit / use-accuracy / use-loaded` 等自定义 effect 扣除
+  - `crit` / `accuracy` 因堆叠上限是 1，问题被上限掩盖
+  - `loaded` 堆叠上限是 2，因此暴露成“选择使用后最终仍剩 1”
+- 修复策略：
+  - 对 `activeUse.timing` 含 `onOffensiveRollEnd` 且 `customId` 形如 `use-*` 的 Token，跳过 reducer 的通用 token 增量，改由 choice effect 负责真实消耗。
 
-## 2026-03-26 DiceThrone 4 人玩家目标交互专项审计发现
+### 已确认结论
+- `枪林弹雨！` 现在的最终伤害链路正确：
+  - base 10
+  - `bounty` +1
+  - `loaded` 奖励骰重掷后按半数向上取整 +3
+  - 最终合计 14
+- `loaded` 现在会被正确消耗，不再因为通用选择链路的 `+1` 抵消。
+- 动作日志已补上 `loaded` 的 `offensiveRollEndTokenEffect` 文案映射。
 
-- 这次收口完成的是 2v2 核心规则闭环，不等于“所有面向玩家目标的技能/卡牌都已做 4 人审计”。多人能力兼容需要独立切一轮。
-- `customActions/common.ts` 里的“移除 1 个状态 / 移除所有状态 / 转移状态”与 `customActions/paladin.ts` 里的 `Vengeance II`、`Consecrate`，都已经把候选目标扩成 `Object.keys(state.players)`；说明领域入口具备 4 人潜力，但这不代表验证和 UI 已完整跟上。
-- `InteractionOverlay.tsx` 当前在 4 人玩家选择卡片里仍以 `self/opponent` 为主语义，组件测试也主要按 `['0','1']` 写断言；在 4 人下，这种口径不足以证明多个敌/友候选都能被稳定区分与正确点击。
-- `validateGrantTokens` 与 `validateTransferStatus` 目前仅校验“存在 pendingInteraction 且 playerId 匹配”，没有进一步核对目标玩家是否在 `targetPlayerIds` 中、转移目标是否与来源玩家不同，属于共享验证层缺口。
-- `TRANSFER_STATUS` 执行层本身已经同时支持状态与 token 的转移，并且会拦截 `removable: false` 的 token；因此第一批重点不是重写 execute，而是把验证、交互与 4 人 E2E 补齐到和执行层能力一致。
-- 现有 `dicethrone-paladin-vengeance-select-player.e2e.ts` 仍是 2 人版本，只证明了“自己/对手”二选一，不足以作为 4 人“任意玩家授 token”的证据。
+## Addendum（2026-03-25）：枪手卡图逐卡录入发现
+- `ability-cards.webp` 实际尺寸为 `6740 x 7372`，不是 `ability-cards-common.atlas.json` 的原始尺寸；必须按比例缩放后裁图。
+- 枪手卡图前 `18` 格可与通用牌一一对应，但顺序是：
+  - `slot-00 transfer-status`
+  - `slot-01 what-status`
+  - `slot-02 one-throw-fortune`
+  - `slot-03 get-away`
+  - `slot-04 super-double`
+  - `slot-05 double`
+  - `slot-06 bye-bye`
+  - `slot-07 flick`
+  - `slot-08 boss-generous`
+  - `slot-09 next-time`
+  - `slot-10 unexpected`
+  - `slot-11 worthy-of-me`
+  - `slot-12 surprise`
+  - `slot-13 me-too`
+  - `slot-14 i-can-again`
+  - `slot-15 give-hand`
+  - `slot-16 just-this`
+  - `slot-17 play-six`
+- `slot-18` 之后是枪手专属区，但其中 `slot-22 / slot-23 / slot-24` 不是单卡单格，而是上下叠放两张卡，已额外拆出：
+  - `fan-the-hammer-2`
+  - `pistol-whip`
+  - `take-cover-2`
+  - `mark-the-target`
+  - `deadeye-2`
+  - `the-law`
+- `slot-32` 为空白，不是正式卡位。
+- 原图右下角的枪手人物图不是卡牌，但属于图片收集信息，已裁出 `hero-portrait-extra.webp` 并登记。
+- 当前最重要的实现风险不是 OCR，而是“atlas 顺序假设错误”。如果直接把枪手专属卡照搬到旧 `previewRef.index` 约定里，UI 预览会错卡。
 
-## 2026-03-26 DiceThrone 4 人玩家目标交互 Batch 1 收口发现
+## Addendum（2026-03-25 晚）：继续实施前的代码边界确认
+- `src/games/dicethrone/heroes/gunslinger/cards.ts` 现在仍只做 `injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER)`，尚未接入任何枪手专属卡。
+- `src/games/dicethrone/domain/commonCards.ts` 的默认通用牌 atlas 顺序是：
+  - 专属卡 `index 0-14`
+  - 通用牌 `index 15-32`
+  - 这与枪手汉化卡图的真实顺序不一致；枪手必须走独立映射，不能继续复用默认 `COMMON_ATLAS_INDEX`。
+- `src/games/dicethrone/domain/core-types.ts` 已有足够的卡牌表达能力：
+  - `AbilityCard.previewRef`
+  - `AbilityCard.playCondition`
+  - `AbilityCard.isAttackModifier`
+  - 因此枪手正式卡组不需要扩 schema，可以直接落地。
+- `src/games/dicethrone/domain/tokenTypes.ts` 的 `rollDie` 条件效果已支持：
+  - `bonusDamage`
+  - `grantStatus`
+  - `grantToken`
+  - `cp`
+  - `drawCard`
+  - `effectKey`
+  - 所以 `high-noon` 可以不走 custom action，直接用 `rollDie` 建模。
+- 多目标选择仍是当前唯一明确能力缺口：
+  - `paladin` 的 `handleConsecrate` / `handleVengeanceSelectPlayer` 证明单目标 `selectPlayer` + `tokenGrantConfigs` 已成熟可复用。
+  - 但现有交互层仍是单选玩家；`the-law` 卡面“至多 2 位目标玩家”不能在本轮被完整实现。
+  - 在当前 1v1 下可先实现为单目标，并继续把缺口保留在规则/进度记录里，不能宣称已完整支持。
 
-- `TRANSFER_STATUS` 的真实在线 blocker 不在 execute，而在验证层与 UI 双阶段建模错位：`Board.tsx` 只在本地把交互从 `selectStatus` 推演成 `selectTargetStatus`，服务端权威态仍停在 `selectStatus + transferConfig:{}`；若 `validateTransferStatus` 只接受 `selectTargetStatus`，在线点击确认后会被验证层拒绝。
-- 正确做法不是放松成“任何 transfer 命令都放行”，而是兼容两种合法权威态：
-  - `selectTargetStatus`：继续严格校验 `sourcePlayerId/statusId` 与交互上下文完全匹配。
-  - `selectStatus + transferConfig:{}`：允许从命令 payload 读取 `fromPlayerId/statusId`，但仍必须校验来源玩家在候选集内、来源上真实存在该状态或 token、目标在候选集内且不等于来源。
-- 4 人状态 / 可移除 token 交互要想稳定 E2E，不能只给玩家卡片加 test id；第一阶段的可点击状态徽章也必须有稳定 selector。为 `SelectableEffectsContainer` 增加 `getItemTestId()` 后，`InteractionOverlay` 才能输出 `dt-status-effect-<pid>-<effectId>` 这类稳定入口。
-- `Transfer Status` 是 Batch 1 最有代表性的在线链路，因为它同时覆盖“来源玩家选择、第二阶段目标候选、来源玩家排除、友敌标识、权威状态广播”五个风险点；单独跑通这一条，比继续扩 2 人 `Vengeance` 旧 E2E 更能说明 4 人兼容已开始收口。
+## Addendum（2026-03-25 深夜）：枪手 `wild-west` 可用原语边界
+- 现有 bonus dice 原语之前只有两种结算去向：
+  - `damage`：把总值直接打到目标
+  - `attackBonus`：把总值换算后并入当前攻击 `bonusDamage`
+- 枪手 `wild-west` 需要的是第三种语义：
+  - 有真实 1 骰展示
+  - 有 `loaded` 时可重掷 1 次
+  - 但骰值本身不参与伤害计算
+- 这轮已确认最小正确扩展是新增 `resolutionMode: 'none'`，让 settlement 仍能走交互与 `BONUS_DICE_SETTLED` 清理链，但不再落额外伤害。
+- 因而 `wild-west` 现在不需要再维持“只做 +1 的临时降级实现”，可以直接用通用 `createBonusDiceWithReroll(...)` 落地。
+- 同时确认了一点：`gunslinger-card-wild-west` 的语义分类不该有 `damage`，但应该有 `dice`，因为它真实产出 `BONUS_DIE_ROLLED / BONUS_DICE_REROLL_REQUESTED`。
 
-## 2026-03-26 DiceThrone 4 人授 token 在线证据补强发现
+---
 
-- 只靠 `GRANT_TOKENS` 的规则层测试还不足以证明“任意玩家授 token”真的完成 4 人兼容；因为最容易漏的是 `tokenGrantConfigs` 多 token 路径，以及在线玩家选择面板是否还能稳定区分多个敌/友候选。
-- `Consecrate` 比 `Vengeance II` 更适合作为第二条在线证据：它一次授予 `Protect/Retribution/Crit/Accuracy` 四个 token，能同时覆盖 `tokenGrantConfigs`、`selectPlayer`、多玩家候选渲染和权威状态同步。
-- 实测表明 `Board.tsx -> engineMoves.grantTokens()` 这一段在 4 人下已经能把 ally 目标稳定带到服务端，并由 `execute.ts` 正确生成四个 `TOKEN_GRANTED` 事件；这说明当前 `selectPlayer + tokenGrantConfigs` 主链路已经具备在线可验证性。
+## Addendum（2026-03-26）：枪手卡牌运行时状态核对
 
-## 2026-03-26 DiceThrone 面向多人能力审计边界更新
+### 新结论
+- `card-the-law` 当前不是“未实现”，而是“已按 1v1 单目标兼容实现，但多目标未完成”。
+- `card-high-noon` 的 `rollDie` 分支现在能正确把 `dash` 结果施加到对手 `knockdown`，没有串到自己身上。
+- `upgrade-revolver-2` 的 `replaceAbility` 已经不是静态数据存在而已，运行时出牌后会真实替换玩家技能定义，并把 `abilityLevels.revolver` 写成 `2`。
+- `枪手卡牌录入核对.md` 中大量“待代码落地”已经过期；如果不改，会继续误导后续录入/审计判断。
 
-- 按当前代码检索，真正属于“面向玩家目标”的多人高风险入口主要集中在：
-  - `customActions/paladin.ts`：`paladin-vengeance-select-player`、`paladin-consecrate`
-  - `customActions/common.ts`：`remove-status-1`、`remove-all-status`、`transfer-status`
-- 其中更复杂、风险更高的两类已经拿到 4 人在线证据：
-  - `transfer-status`：双阶段状态 / token 转移
-  - `paladin-consecrate`：任意玩家多 token 授予
-- `remove-status-1` / `remove-all-status` 仍属于玩家目标交互，但复杂度低于已收口的 `Transfer Status`；按当前决策，不再优先补它们的在线 E2E，把时间留给后续更复杂或更高风险的多人交互。
+### 仍保留的缺口
+- `card-the-law` 原卡面是“至多 2 位目标玩家”，当前交互层只有单目标玩家流，因此只能在 1v1 对局中兼容为唯一对手。
+- 这不是数据录入问题，而是明确的交互能力缺口；已经在代码里加了显式 TODO，不应再被当作“遗漏备注”。
 
-## 2026-03-26 DiceThrone 4 人目标交互 UI 精简发现
+---
 
-- 用户指出的“为什么选中还额外多一个框、为什么四人会像有六个框”是对的，根因在 `InteractionOverlay.tsx` 的 `selectTargetStatus` 第二阶段：它同时渲染了第一阶段的来源状态卡和第二阶段的目标玩家卡，视觉上把“来源展示”和“目标选择”叠在了一个 modal 里。
-- 正确收口不是再给卡片加更多提示，而是减少并行信息：第二阶段只保留一个紧凑的来源摘要块，再显示真实可选目标卡片。来源玩家继续整排保留会让 4 人场景从“3 个目标”膨胀成“1 排来源 + 1 排目标”的 6 框感知。
-- 已选目标的外挂勾选块也属于重复信号。卡片自身边框高亮已经足够表达“当前选中”，再在卡片外侧加一个独立小框只会制造“多了一层框”的噪音。
-- 在线截图 `06-four-player-transfer-token-target-selection.png` 复核后确认，新版第二阶段已收口为“1 个来源摘要 + 3 张候选目标卡”，符合用户对 4 人目标选择密度和层级的直觉预期。
+## Addendum（2026-03-26）：动作层 `unblockable` 消费缺口
 
-## 2026-03-26 DiceThrone 4 人目标交互四宫格修正发现
+### 新结论
+- `EffectAction` 早就定义了 `unblockable?: boolean`，但 `resolveEffectAction()` 里的伤害路径此前没有消费它。
+- 这会让卡牌动作层写明“不可防御伤害”的效果，仍错误地进入 `shouldOpenTokenResponse()`，从而给 `protect` 一类减伤 Token 留出响应窗口。
+- 这不是枪手独有的建模问题，而是动作层伤害语义的通用缺口；本轮先按最小范围修到可用。
 
-- 用户继续指出“既然本质是先选一个再选另一个，就不该把来源做成异类摘要块，而应保持四宫格”是对的；上一版把来源卡降成摘要，虽然去掉了 6 框，但也把原本统一的玩家选择语义拆坏了。
-- 更正确的结构是：第二阶段仍展示同一组 4 个玩家卡，其中来源玩家保留在原位，但转为 `locked/disabled` 态；其余 3 张仍是可点击目标。这样用户看到的仍是“四人里先选一个，再选另一个”，而不是“先选一个，再读一段说明，再选另一个”。
-- 因此 `selectTargetStatus` 第二阶段现已改为四宫格：来源玩家卡使用 `dt-transfer-source-locked-<pid>`，保留座位/敌我/被转移 token 信息，但不可点击；另外 3 张继续使用 `dt-transfer-target-<pid>`。
-- 这次在线 E2E 包装器整份 `dicethrone-simple-start.e2e.ts` 都走成了 `skip`，说明当前没拿到新的在线证据；所以这轮只能确认组件层和类型层已经改对，不能把它表述成“新截图已复核完成”。
+### 本轮落地
+- 在 `src/games/dicethrone/domain/effects.ts` 中，`action.unblockable === true` 的动作伤害现在会跳过 Token 响应窗口。
+- 在 `src/games/dicethrone/heroes/gunslinger/cards.ts` 中，`card-pistol-whip` 的 1 点伤害已显式标记为 `unblockable: true`。
+- 回归验证显示：圣骑士带 `protect` 时，枪手 `pistol-whip` 仍会造成 1 点伤害，且不会消耗 `protect`。
 
-## 2026-03-27 DiceThrone 联机 E2E 跳过根因修复
+---
 
-- 导致 `setupDTOnlineMatchWithPlayers()` 返回 `null` 的真实原因不是“游戏服务器不可用”，而是浏览器偶发在 `page.goto(/play/dicethrone/match/...)` 阶段抛出 `net::ERR_INSUFFICIENT_RESOURCES`；因为 helper 直接吞掉异常并返回 `null`，测试表面上才会退化成 `skip`。
-- 手工 API 探针已确认 `/games/dicethrone/create`、`/claim-seat`、`/join` 都能正常返回；也就是说联机链路的服务端并没有坏，问题集中在前端 match 页导航的瞬时资源错误。
-- 最小正确修复不是改业务断言，也不是把 `skip` 改成硬失败，而是在 `e2e/helpers/dicethrone.ts` 为联机 match 页导航增加小范围重试，专门兜住 `ERR_INSUFFICIENT_RESOURCES`、`ERR_ABORTED`、`NS_BINDING_ABORTED` 这类瞬时错误。
-- 修复后，4 人 `Transfer Status` 单用例重新恢复为 `1 passed`，整份 `e2e/dicethrone-simple-start.e2e.ts` 也恢复为 `8 passed`；同时新截图确认第二阶段确实是“四宫格 + 锁定来源卡”，不是只靠测试选择器蒙混过关。
+## Addendum（2026-03-26）：枪手 `high-noon` 三分支与剩余升级卡回归补齐
 
-## 2026-03-27 DiceThrone 2 人 Transfer Status 进度确认
+### 新结论
+- `card-high-noon` 的三个骰面分支现在都已被运行时锁定：
+  - `bullet`：造成 `2` 点伤害，且不会触发 `protect`
+  - `dash`：只对对手施加 `knockdown`
+  - `bullseye`：只对对手施加 `bounty`
+- `high-noon` 的 `bullet` 分支虽然没有走 `EffectAction.unblockable` 字段，但当前 `rollDie -> accumulatedBonusDamage` 这条链路本身不会打开 Token 响应窗口，因此实际行为与汉化卡面一致。
+- 枪手剩余未覆盖的升级卡替换路径已基本补齐：
+  - `upgrade-showdown-2`
+  - `upgrade-showdown-3`
+  - `upgrade-fan-the-hammer-2`
+  - `upgrade-take-cover-2`
+  - `upgrade-deadeye-2`
+  - `upgrade-duel-2`
+  - `upgrade-quick-draw`
+- 这些升级卡当前都能在运行时正确写入 `abilityLevels`，并把玩家技能定义替换成对应升级版对象，不再只是静态数据存在。
 
-- 2 人转移没有被漏掉；因为 `selectTargetStatus` 第二阶段现在是共享组件逻辑，2 人也会显示来源锁定卡 `dt-transfer-source-locked-*` 和真实目标卡 `dt-transfer-target-*`。
-- 新增到 `e2e/dicethrone-simple-start.e2e.ts` 的 2 人在线用例，已经把 UI 结构断言和 token 转移结果都写进去了；当前缺的不是测试设计，而是把它从 `skip` 推到真实执行。
-- 直接 `tsx + Playwright` 探针已证明 `setupDTOnlineMatch()` 在同一组端口服务下可以成功返回 `OK <matchId>`；因此现有 `skip` 更像是项目 Playwright 运行链路里的目标/环境口径问题，而不是 2 人联机 helper 或 `Transfer Status` 业务本身损坏。
+### 继续确认
+- `upgrade-quick-draw` 不只是“替换成升级被动定义”：
+  - 出牌后，`loaded` 的通用使用会真正进入一次可重掷的奖励骰结算
+  - 重掷完成后会正确回到 `defensiveRoll`
+  - 本次回归中，初始掷出 `6`、重掷为 `2`，最终只为当前攻击提供 `+1`
 
-## 2026-03-27 DiceThrone 2 人联机 setup 真正 blocker 收口
+### 仍保留的缺口
+- `card-the-law` 仍只支持当前 `1v1` 唯一对手兼容路径，多目标交互未做。
+---
 
-- 2 人联机 helper 的第一个真 blocker 不是选角组件改坏，而是时序错位：host 在只有自己占座时就提前等待角色选择页，但真实页面此时只会显示 `Waiting for opponent...`。正确顺序必须是“所有玩家进入 match 页后，再统一等待选角 UI”。
-- 第二个真 blocker 不是 `/create` / `/join` API，而是“同一条测试链路分叉到了两个游戏服端口”：
-  - API helper 显式打到了 `http://127.0.0.1:20000`
-  - 浏览器页里的 `__FORCE_GAME_SERVER_URL__` 却仍被 `initContext()` 按旧环境注成了 `18000`
-  - `/test/get-state` / `/test/inject-state` 也继续跟着旧默认口径打到 `18000`
-  这会表现为：房间能创建、凭证能拿到，但 match 页一直 `CONNECTING / Loading match resources...`，或者状态注入直接 `ECONNREFUSED 127.0.0.1:18000`。
-- 因此最小正确修复不是继续堆选择器等待，也不是把用例改回本地 `/test` 场景，而是把同一个 `gameServerBaseURL` override 贯穿到：
-  - `initContext()` 注入的 `__FORCE_GAME_SERVER_URL__`
-  - DiceThrone 在线 helper 的上下文创建
-  - `/test/*` 状态注入 helper
-  只有这样浏览器 WebSocket、API 调房、状态注入三条链路才会重新指向同一台游戏服。
-- 2 人 `Transfer Status` 在线用例自身也有一个测试设计缺口：它一开始直接断言第二阶段 `dt-transfer-source-locked-1`，但真实流程必须先在第一阶段点击 `dt-status-effect-1-crit` 才会进入第二阶段。这不是业务 bug，而是测试漏走了一步用户操作。
-- 在显式 `6174/20000/21000` 环境下，`dicethrone-simple-start.e2e.ts` 已拿到 `9 passed` 的有效在线结果；但连续多次直接 CLI 复跑时仍偶发整份 `skip`。当前判断这是 Playwright runner / 本机环境的瞬时不稳定，不是本轮修复的代码回退。
+## Addendum（2026-03-26）：Dice Throne 武士真相源启动发现
+- 当前工作树最初没有 `public/assets/i18n/zh-CN/dicethrone/images/samurai/`，但主仓库 `BoardGame/public/.../samurai/` 已存在汉化压缩图与 3 张独立状态 icon。
+- 本轮已将以下主真相源复制进当前工作树：
+  - `compressed/player-board.webp`
+  - `compressed/tip.webp`
+  - `compressed/ability-cards.webp`
+  - `compressed/dice.webp`
+  - `icons/compressed/荣誉.webp`
+  - `icons/compressed/耻辱.webp`
+  - `icons/compressed/反击.webp`
+- 武士提示板 OCR 已稳定读出：
+  - `耻辱`：在骰攻击段计算攻击伤害时移除 1 枚，令该次攻击伤害力 `-1`
+  - `荣誉`：花费 `1` 枚令攻击伤害 `+1`，或花费 `2` 枚令攻击伤害 `+3`
+  - `反击`：被攻击时可花费 1 枚并掷 1 颗骰，对对手造成其结果一半（无条件进位）的攻击修正伤害
+- 武士角色板 OCR 已稳定确认以下能力名或效果链：
+  - `武士道`
+  - `肃穆之仪`
+  - `武道`
+  - `正宗`
+  - `昂首无畏`
+  - `征夷大将军！`
+  - `slot-02`、`slot-06` 中文名仍不稳定，不能硬写定论
+- 武士卡图 OCR 已稳定确认：
+  - 前 `18` 格为通用卡
+  - `slot-18` ~ `slot-31` 为武士专属与升级卡
+  - `slot-32` ~ `slot-39` 当前为空白格
+- 当前已确认一个明确实现风险：
+  - Samurai Status Effects 页把 `反击` 英文写作 `Retribution`
+  - 但项目里 `TOKEN_IDS.RETRIBUTION` 已被圣骑士占用，且语义不同
+  - 因此武士后续不能复用圣骑士 token id，必须给出独立命名裁决
+- 本轮已补齐派生资源：
+  - `public/assets/i18n/zh-CN/dicethrone/images/samurai/compressed/status-icons-atlas.webp`
+  - `public/assets/i18n/zh-CN/dicethrone/images/samurai/status-icons-atlas.json`
 
-## 2026-03-27 DiceThrone remove-status 在线证据与默认脚本回归
+---
 
-- 当前默认 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 口径已经能直接拿到 `11 passed`，不再需要手工先写显式 `6174/20000/21000` 环境变量才能证明多人目标交互成立。
-- `remove-status-1` / `remove-all-status` 真正容易误判的点不在 host 页执行，而在目标页权威态同步：host 页往往会先看到 `crit/burn` 被清空，但目标页广播会慢半拍。如果只在 host 页断言，很容易把测试写成“假绿”。
-- 对这两类移除交互，最小正确修复不是改领域逻辑，而是在 E2E 中显式等待目标页 `__BG_TEST_HARNESS__` 状态追平后再断言。这样既不放宽业务约束，也避免把多页广播时序误报成规则 bug。
-- 到这一步，玩家目标交互第一批三类高风险链路都已拿到 4 人在线证据：
-  - `transfer-status`
-  - `paladin-consecrate`
-  - `remove-status-1` / `remove-all-status`
+## Addendum（2026-03-26）：Dice Throne 武士 `stand-tall` 防御目标取反
+### 新结论
+- `src/games/dicethrone/domain/attack.ts` 在结算防御技时，会把防御方作为 `EffectContext.attackerId` 传入，这是当前效果系统的既有约定，不是 bug。
+- `src/games/dicethrone/domain/customActions/samurai.ts` 里的 `handleStandTall()` 之前错误地把 `ctx.attackerId` 当成原始进攻方，导致 `katana` 分支的 1 点反打实际打回了武士自己。
+- 这个 bug 会把最终血量伪装成“只减了 2 点、没有反打”，因为自伤 1 点会把正确的 3 点减伤表象冲掉，容易误判成护盾计算问题。
 
-## 2026-03-27 DiceThrone Vengeance II 与 Batch 1 spec 边界校正
+### 本轮落地
+- 已把 `handleStandTall()` 中的原始进攻方改为读取 `ctx.defenderId`。
+- 武士回归现在稳定验证：`1 katana + 1 helm + 1 rising_sun` 会对原攻击者造成 1 点伤害，并为武士提供 3 点减伤。
+- 顺手清理了 `src/games/dicethrone/__tests__/token-execution.test.ts` 中既有的 unused 变量 warning，避免本轮验证结果带噪音。
 
-- 用户指出“spec 不止这个”是对的。当前 `proposal/design/tasks` 已按 Batch 1 写清范围，但原 `spec.md` 仍只有一个总括 requirement，容易被误读成“所有 4 人玩家目标交互都已审计完成”。
-- 更准确的 spec 结构应把 Batch 1 拆成明确 requirement：`任意玩家授 token`、`任意玩家移除状态`、`状态/可移除 token 转移`、`无单一敌方目标的无伤害技能流程兼容`。这样才能把“本轮已收口哪些共享根因”和“尚未纳入的后续批次”分开。
-- `Vengeance II` 在 4 人 / 2v2 下最初不弹玩家选择，根因不是 E2E 断言或 abilityId 写错，而是共享攻击流程不支持“无默认 defender、无伤害、但仍会触发玩家交互与 postDamage”的技能。
-- 这条共享层缺口具体表现为：
-  - `preDefense` 在 `defenderId` 为空时被错误短路；
-  - 4 人模式下无脑进入 `targetingRoll`；
-  - `INTERACTION_REQUESTED` 没被当成阻塞事件，导致 phase 提前推进；
-  - 无 `defenderId` 的攻击没能完整跑完 `withDamage/postDamage`，使后续资源结果丢失。
-- 正确修复不是给 `Vengeance II` 单独开特判，而是把共享攻击流程收紧到“按攻击真实语义推进”：
-  - 无单一敌方目标的无伤害技能不再误进 `targetingRoll`；
-  - `INTERACTION_REQUESTED` 会阻塞流程，等待玩家完成交互；
-  - 无 `defenderId` 的攻击也能完成 `postDamage` 结算。
-- `rule-consistency.test.ts` 新增/调整的回归已经覆盖这类共享根因，而不是只锁一条 UI 路径：
-  - 4 人模式下有真实单一敌方目标的攻击仍进入 `targetingRoll`；
-  - 无单一敌方目标的无伤害技能不会误进 `targetingRoll`；
-  - 无默认 `defender` 的 4 人无伤害技能仍会发出 `INTERACTION_REQUESTED` 并继续后续结算。
-- `Vengeance II` 现在已经拿到真实 4 人在线证据，说明 Batch 1 中“任意玩家授 token”这一类不再只靠 `Consecrate` 代表；同时也证明共享攻击流程已不再把这类技能吞掉。
-- 到当前版本，Batch 1 已拿到 4 人在线证据的代表性入口是：
-  - `transfer-status`
-  - `paladin-consecrate`
-  - `paladin-vengeance-select-player` / `Vengeance II`
-  - `remove-status-1`
-  - `remove-all-status`
-- 这轮还确认了一个测试层陷阱：E2E 文件如果直接从 `domain/rules.ts` 调 `getAvailableAbilityIds()` 做 Node 侧调试，而没有显式调用 `registerDiceThroneConditions()`，会因为 `diceSet/allSymbolsPresent` 未注册而误报“技能不可用”。浏览器端通过 `domain/index.ts` 会自动注册条件，但测试进程不会。
+### 仍保留的缺口
+- `honor` 仍只支持 `1 -> +1`，未实现图上 `2 -> +3`。
+- `Masamune II` 升级差异仍未最终核定。
+- `slot-30` / `slot-31` 两张武士攻击修正牌仍待接入。
 
-## 2026-03-28 DiceThrone worktree 依赖树残缺导致的验证假失败
+---
 
-- 本轮最后的真实 blocker 不是业务逻辑，而是 `BoardGame-wt-dicethrone-4p-team-mode/node_modules` 里多个关键包只剩局部目录，缺了包根入口文件；直接表现为 `tsc.js`、`vitest.mjs`、`dotenv/config`、`playwright/cli.js` 等路径解析失败。
-- 这种失败会把“验证命令起不来”伪装成“代码又坏了”，但根因与 DiceThrone 4 人玩家目标交互无关；修复前应先区分是测试环境损坏，还是业务回归。
-- 在当前 worktree 里，最直接可行的恢复方式是重新执行一次 `npm install`，把锁文件对应的缺失入口补回；补完后，`openspec validate`、`rule-consistency.test.ts`、`dicethrone-simple-start.e2e.ts` 已分别恢复为 `valid`、`31 passed`、`12 passed`。
+## Addendum��2026-03-27����Dice Throne ��ʿ Honor �������������տ�
 
-## 2026-03-28 DiceThrone Consecrate 多页同步等待补正
+### �½���
+- `Honor` ��������ʿר��Ӳ�������⣬����ͨ��ͨ�� token ������չ��أ�
+  - `TokenUseEffect.valueByAmount`
+  - `ActiveUseConfig.allowedConsumeAmounts`
+  - `PendingDamage.tokenUsageTotals`
+- ���׻�������֤֧�����ֺϷ�·����
+  - һ������ `2` �� `Honor`��ֱ�ӵõ� `+3`
+  - ��ͬһ��Ӧ�����������θ����� `1` �㣬��һ�θ� `+1`���ڶ���ֻ����ֵ `+2`���ܼ���Ϊ `+3`
+- ͬһ��Ӧ���ڴﵽ�ۼ� `2` ��󣬼�ʹ������ϻ��ж��� `Honor`��`getUsableTokensForTiming()` Ҳ����������`validateCommand()` Ҳ��ܾ������μ���ʹ�á�
 
-- `Consecrate` 单用例本身是绿的，整文件串跑时真正失败的不是授 token 逻辑，而是 ally 页权威态比 host 页慢半拍，导致测试在 `readHarnessState(allyPage)` 时抢跑。
-- 这类失败和前面的 `remove-status-1` / `remove-all-status` 属于同一类多页广播时序问题；最小正确修复仍然是 E2E 补显式等待，而不是去动领域逻辑。
-- 现已在 `Consecrate` 用例中补上 `allyPage.waitForFunction()`，要求队友页的 `Protect / Retribution / Crit / Accuracy` 四个 token 都追平后再读 harness state。
-- 补完后，`dicethrone-simple-start.e2e.ts` 默认整文件回归重新稳定为 `12 passed`，因此此前旧专项收敛阶段记录的 `11 passed, 1 skipped` 已被新的有效结果覆盖。
+### �������
+- �޸��� `src/games/dicethrone/heroes/samurai/tokens.ts` �Ļ�ע�ͺ��ظ� `effect`��
+- �޸��� `src/games/dicethrone/ui/TokenResponseModal.tsx` �Ļ��ַ����ͻ� JSX���ָ������ȶ� lint ��״̬��
+- �� `src/games/dicethrone/__tests__/token-execution.test.ts` ������ `Honor` ��ֱ���������������Ļع顣
 
-## 2026-03-28 DiceThrone 旧专项 E2E 收敛审计
+### �Ա�����ȱ��
+- `Masamune II` ����������δ���պ˶���
+- `slot-30` / `slot-31` ������ʿ�����������Դ����롣
 
-- `dicethrone-status-interaction-complete.e2e.ts` 仍有独立价值，因为它对应的是共享交互层 UI 契约：`selectStatus`、`selectPlayer`、`selectTargetStatus` 的按钮可用性、禁用态和第二阶段卡片结构。这些断言不应继续散落在已偏业务化的旧文件里。
-- `dicethrone-status-removal.e2e.ts` 已经不是“待修一下就能用”的状态，而是同时依赖旧页面结构、旧英雄入口、旧 `hero-card/status-area/target-selector` 选择器。继续修它，本质上是在重写一份与 `simple-start` 高度重复的文件。
-- `dicethrone-status-interaction-cancel.e2e.ts` 与 `status-interaction-complete` 在测试主题上高度重复，只是旧版把“取消按钮”拆成了单独文件；保留它只会制造重复维护点。
-- `dicethrone-paladin-vengeance-select-player.e2e.ts` 已经被当前 4 人 `Vengeance II` 在线证据实质取代，而且它本身还保留 2 人 self/opponent 旧语义、重复函数定义与过时的 `+4 CP` 绑定断言，不适合作为现役专项继续存在。
-- 因此这轮最正确的收敛方案是：
-  - 保留并现代化 `dicethrone-status-interaction-complete.e2e.ts`
-  - 退役 `dicethrone-status-removal.e2e.ts`
-  - 退役 `dicethrone-status-interaction-cancel.e2e.ts`
-  - 退役 `dicethrone-paladin-vengeance-select-player.e2e.ts`
-  - 同步清理 `playwright.config.ts` 里的对应 legacy ignore
-- `Board.tsx` 当前并不会直接读取裸 `InteractionDescriptor`；状态交互弹窗的真实入口是 `sys.interaction.current.kind === 'dt:card-interaction'`，再从 `data` 解包出 `InteractionDescriptor`。因此任何 harness 级 E2E 若直接往 `current` 塞裸对象，页面上不会出现交互弹窗。
-- 这轮 `simple-start` 的异常不是收敛改动带来的功能回退，而是 runner / 服务启动层噪音：
-  - 一次整文件回归结果为 `11 passed, 1 skipped`，唯一跳过的是 `targeting roll` 用例；
-  - 单独复跑同一 targeting roll 用例也直接走到 `setupDTOnlineMatchWithPlayers()` 返回 `null`；
-  - 调试日志已记录 `game_server_unavailable`、`apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:20000`，另一次整文件复跑则在 global setup 阶段出现 Vite 前端进程异常退出。
-- 因此本轮可以下的代码结论是：旧专项 E2E 收敛本身已完成，且新 `status-interaction-complete` 套件稳定可跑；`simple-start` 的 residual risk 仍然是既有 E2E 基础设施抖动，不是本轮删除/重写旧专项文件造成的行为变化。
+---
 
-## 2026-03-28 DiceThrone simple-start 基础设施抖动收敛发现
+## Addendum（2026-03-27）：Dice Throne 武士 `slot-31 / 残心` 已闭环
 
-- `simple-start` 不是“新角色”或“新功能”，而是当前 DiceThrone 在用的主回归 E2E 文件；它的问题如果不澄清，后续很容易把一次测试基础设施修复误记成业务能力新增。
-- 先前 `setupDTOnlineMatchWithPlayers()` 偶发返回 `null`，表面上会把测试退化成 `skip`，但根因并不总是游戏逻辑失败，而是 setup 探针与网络层过于脆弱：
-  - 旧版 `ensureGameServerAvailable()` 用创建房间当健康检查，本身就会把瞬时连接抖动放大成“服务器不可用”；
-  - 房间创建 / claim-seat / join 这几步缺少小范围重试，遇到 `ECONNREFUSED`、`ECONNRESET`、`ETIMEDOUT`、`socket hang up`、`fetch failed` 或 `408/425/429/5xx` 时会直接短路。
-- 这轮最小正确修复不是改业务断言，也不是把 `skip` 改成硬失败，而是把 setup 层做成更接近真实联机环境的韧性实现：
-  - 用只读的 `GET /games` 轮询代替创建房间探针；
-  - 将 server available timeout 提高到 `15000ms`；
-  - 对 create / claim-seat / join 增加瞬时网络重试；
-  - 把重试与失败上下文写入 `temp/dicethrone-setup-debug.log`，让后续排障有可审计落点。
-- 修复后最关键的事实不是单用例恢复，而是默认整文件脚本 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 已重新拿到 `12 passed`；这说明当前 `simple-start` 的残余问题不再表现为稳定可复现的 setup 回退。
+### 新结论
+- `slot-31` 的证据强度已经足够落地，不需要继续等待更高分辨率素材：
+  - 本地裁图可稳定确认它是攻击修正牌 `残心！`
+  - 核心语义稳定指向“额外掷 5 颗骰子，然后按武士骰面结算”
+  - 该后半段与 `Masamune` 的 5 骰结算同构，可直接复用既有 custom action
+- `slot-31` 当前费用落地为 `2CP`，依据是右上角费用区模板比对；这是带证据的临时裁决，不是 OCR 猜值。
 
-## 2026-03-28 DiceThrone 主分支合并前最终发现
+### 本轮落地
+- 在 `src/games/dicethrone/heroes/samurai/cards.ts` 新增 `card-zanshin`。
+- 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 增加 `card-zanshin` 的跨英雄回归。
+- 回填本地化卡名：
+  - `public/locales/zh-CN/game-dicethrone.json`
+  - `public/locales/en/game-dicethrone.json`
 
-- 2 人 `Transfer Status` 那条在线用例最后一个真实问题不是业务逻辑，也不是 helper 抖动，而是测试自身把 `gameServerBaseURL` 硬编码成了 `http://127.0.0.1:20000`。
-- 在 `run-e2e-single` 的 isolated 口径下，worker 实际游戏服端口是 `workerPorts.gameServer`；因此这条用例会稳定走到 `setupDTOnlineMatch()` 返回 `null`，再被包装成 `test.skip(...)`，看起来像“环境又抖了”。
-- 最小正确修复是把该用例改成跟 `workerPorts.gameServer` 走，而不是继续扩大 helper 重试或把整文件结果解释成“偶发 skip 可接受”。
-- 这次合并到 `main` 的冲突并不集中在 DiceThrone 领域逻辑本身，而是 3 类典型并发追加：
-  - `e2e/helpers/common.ts`：两侧都在扩展 `initContext()` 能力，属于互补改动；
-  - `server.ts` / `manifest.ts`：主分支已有房间占座与 AI 能力，专题分支带来 4 人入口，必须做语义合并，不能单边取值；
-  - `findings.md` / `progress.md` / `task_plan.md`：纯 append-only 记录冲突，必须按时间线保留两侧历史。
-- `npm run merge:audit:strict -- HEAD` 的结果为 11 个冲突文件全部 `混合结果`，`完全等于父1/父2` 都是 `0`；说明这次 merge 没有把任何冲突文件静默吃成单边结果。
+### 仍保留的缺口
+- `slot-30 / 舍生取义` 仍只有高层摘要，完整效果与费用都不足以安全落地。
+- `Masamune II` 升级差异仍未最终核定，不能因为 `slot-31` 已接入就顺手视为完成。
+## Addendum 2026-03-27 slot-31 evidence
+- slot-31 has enough local-image evidence to implement now.
+- core meaning is stable: roll 5 extra dice, then resolve by samurai faces.
+- current 2CP cost is a documented evidence-based judgment, not a guess.
+- slot-30 and Masamune II are still unresolved.
+---
 
-## 2026-03-28 DiceThrone Batch 2 范围校正发现
+## Addendum（2026-03-27）：Dice Throne 武士 slot-30 证据裁决
+- `slot-30 / 舍生取义` 当前已经具备足够的本地图证，可先落地，不需要继续等待额外 OCR 才能编码。
+- 主体语义已经稳定收敛为：掷 `1` 颗骰子并按武士骰面结算。
+  - `katana`：`+2` 伤害
+  - `helm`：对对手施加 `2 shame`
+  - `rising_sun`：获得 `1 samurai_retribution`
+- `cpCost` 目前落地为 `2CP`；该值来自左上费用区模板比对，属于有证据的暂定裁决，不是无依据猜测。
+- `slot-30` 与 `slot-31` 现均已接入；武士当前真正剩余的规则缺口收缩为 `Masamune II` 升级差异未最终核定。
+---
 
-- 按当前代码检索，Batch 1 已基本覆盖全部活跃的多人玩家目标交互发起点：
-  - `src/games/dicethrone/domain/customActions/common.ts`：`remove-status-1`、`remove-all-status`、`transfer-status`
-  - `src/games/dicethrone/domain/customActions/paladin.ts`：`paladin-vengeance-select-player`、`paladin-consecrate`
-  - `remove-status-self` 仅限自身目标，不属于新的 4 人多人目标风险面
-- 因此如果继续把 Batch 2 描述成“再补几条 `selectPlayer/selectStatus/selectTargetStatus` 用例”，本质上只是在给同一组共享 handler 换卡名重测，不是在扩展新的风险面。
-- 当前真正还没有拿到现役 OpenSpec / E2E 证据的交互家族，是 `modifyDie` / `selectDie` 这组多步骰子交互：
-  - `src/games/dicethrone/domain/customActions/common.ts` 中 8 条通用卡牌路径会发 `INTERACTION_REQUESTED`
-  - `src/games/dicethrone/domain/customActions/shadow_thief.ts` 的 `shadow_thief-shadow-manipulation` 也会走同一套 multistep dice interaction
-- 这组交互的残余风险不在 2 人 happy path，而在 4 人 / 2v2 场景下的共享 UI / 视角假设：
-  - `Board.tsx`、`RightSidebar.tsx`、`DiceTray.tsx` 仍以单一 `opponent` / `targetOpponentDice:boolean` 为核心语义
-  - 现有规则回归更多只锁住“当前 roller 的骰池可操作”，还没有 4 人现役在线证据证明这套 UI 在顶栏三窗 / 2v2 响应链路里不会漂移
-- `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 不能被当成 Batch 2 的现役证据：
-  - 仍是旧专项写法，未沿用当前在线 E2E 三板斧
-  - 文件里混用了 `browser` fixture 与未定义的 `page` 变量，说明至少没有经过现役链路收敛
-  - 也没有把 4 人 / 2v2 作为默认审计口径
-- 所以最正确的 Batch 2 不是继续追加到 `update-dicethrone-4p-player-target-interactions`，而是新开 change，把范围明确切到“4 人 / 2v2 多步骰子交互与响应窗口交互兼容”。这样既保住 Batch 1 已完成边界，也避免把下一个真实问题伪装成“同一专题还没测完”。
+## Addendum（2026-03-27）：Dice Throne 武士 `Masamune II` 差异已核定
+- 法语 Wiki 与本地 `slot-24` 放大图共同支持以下结论：
+  - `Masamune II` 的大顺分支会把额外掷骰数从 `5` 提升到 `6`
+  - 它新增一个全符号分支，当前代码名为 `power-up`，效果为获得 `1` 个 `反击`
+- 实现侧关键发现：
+  - 新分支如果挂在 `immediate` 时机会被攻击结算链漏掉，必须放在 `preDefense`
+  - `samurai-masamune` 无需新造第二套 handler，只要读取 `action.params.diceCount` 即可复用基础版逻辑
+- 当前不再把 `Masamune II` 记为“未核定主阻塞项”；它已进入代码、locale、回归三段闭环。
+- 仍保留的文档诚实边界：
+  - 原始中文牌面是否把 `power-up` 翻成“蓄势”或其他名称，当前证据还不够，不能硬写成最终印刷口径。
 
-## 2026-03-28 DiceThrone Batch 2 玩家目标范围再校正
+## Addendum（2026-03-27）：武士闭环边界重新裁定
 
-- 并行盘点后确认，若严格沿当前对话的“4 人玩家目标交互专项”主线继续推进，Batch 2 不应整体切到多步骰子交互；那属于相邻交互家族，不是本轮最直接的剩余玩家目标风险。
-- Batch 1 之后，显式 `selectPlayer/selectStatus/selectTargetStatus` 入口里真正还未被专项吃掉的，只剩 `remove-status-self` 这条 self-only 分支：
-  - 交互创建点在 `src/games/dicethrone/domain/customActions/common.ts` 的 `handleRemoveSelfStatus`
-  - 业务入口在 `src/games/dicethrone/heroes/barbarian/abilities.ts` 的 `Steadfast II`
-  - 当前只有 `flow.test.ts` 的浅层断言，尚无 4 人专项规则回归或在线证据
-- 这轮更高风险的共享根因是 enemy-set 语义，而不是再换几张卡重跑同类 UI：
-  - `src/games/dicethrone/domain/effects.ts` 里 `allOpponents` 当前直接写成 `Object.keys(state.players).filter(id => id !== attackerId)`，这在 2v2 下会把 ally 一起算进“所有对手”
-  - `src/games/dicethrone/domain/customActions/pyromancer.ts` 的 `resolveSoulBurnDamage` 也在用同样的“所有非自己玩家”广播口径
-- 因此当前最正确的 Batch 2 收口不是“更多玩家选择卡片”，而是：
-  - `remove-status-self` 这条 self-only 交互分支
-  - `Meteor` / `Meteor II` / `Ultimate Inferno` 代表的 `allOpponents` 对手集合语义
-  - `Soul Burn` 作为规则审计候选，先确认真实目标集合，再决定是否在本批实现
-- 这也解释了为什么不能把 `update-dicethrone-4p-interactions-batch-2` 继续写成“多步骰子交互 Batch 2”：
-  - 那会偏离本对话主线
-  - 也会把“玩家目标交互还剩什么”与“下一批相邻交互家族是什么”混成一件事
+- 这轮重新核对后，先前“武士仍缺最终中文名 / 资源链未闭环”的判断已不成立。
+- 已确认事实：
+  - 武士资源已进入 `public/assets/i18n/zh-CN/dicethrone/assets-manifest.json`。
+  - `assets:check` 当前剩余远端差异不在武士，而在枪手资源。
+  - 武士角色板与 `slot-20` ~ `slot-31` 的中文名已足够从本地图像闭合，并已回写到 `zh-CN` locale。
+- 后续若再讨论“武士没闭环”，必须明确区分是“规则实现缺口”还是“历史文档残留旧 pending”，不能再把两者混成一件事。
 
-## 2026-03-28 DiceThrone Batch 2 共享目标集合与 Soul Burn 审计结论
+## Addendum（2026-03-28）：枪手 `The Law` 缺口已关闭
 
-- `allOpponents` 的共享根因已经实锤：`src/games/dicethrone/domain/effects.ts` 之前把它解析成“所有非自己玩家”，在 4 人 / 2v2 下会把 ally 一并纳入；正确口径必须走 `getOpponents(state, attackerId)` 的团队感知敌方集合。
-- `Meteor` / `Meteor II` / `Ultimate Inferno` 这三条都属于同一类 `allOpponents` 风险入口；本轮不再各自堆特判，而是统一依赖共享修复，并用 `rule-consistency.test.ts` + 在线 `Meteor` 证据一起锁住。
-- `Soul Burn` 的冲突这轮已经裁决，不再继续挂成 open question：
-  - 技能定义与升级变体都写的是 `target: 'opponent'`；
-  - `wikiSnapshots.ts` 的描述也更接近单体当前目标，而不是 AoE；
-  - 先前把它实现成“所有非自己玩家”只是本地语义漂移，不是可靠规则来源。
-- 因此 `src/games/dicethrone/domain/customActions/pyromancer.ts` 已收回为“只命中当前 defender/目标玩家”，并同步修正中英文文案与内部说明文档，避免后续再被本地旧文本带回“所有对手”口径。
-- 4 人在线 `Meteor` 截图进一步确认了 2v2 下的真实表现应该按“敌队共享生命”理解：
-  - 敌队共享生命从 `50` 降到 `44`；
-  - 队友 `P3` 仍保持 `50`；
-  - 这说明 online 结算已经只命中真实敌方集合，没有再把 ally 算进 `allOpponents`。
+- 先前“枪手尚未完成”的唯一硬缺口是 `card-the-law` 的“至多 2 位目标玩家”交互，而不是资源或中文名问题。
+- 本轮已完成的收口：
+  - `card-the-law` 不再靠 `1v1` 特判硬撑，已接成正式 custom action。
+  - `selectPlayer` 本地交互状态不再只记录单个玩家，而是按 `selectCount` 支持多选。
+  - 交互确认不再依赖多次命令串行发送，而是通过 `RESOLVE_INTERACTION` 单次结算多目标的 `bounty + knockdown`，避免首个事件就把交互提前 resolve。
+- 因此，当前“两个角色都完成了吗”的答案已经从“武士完成、枪手未完成”变成“枪手与武士都已完成到当前规则闭环口径”。
+- 当前仍需诚实保留的唯一非实现阻塞：
+  - 该 worktree 没有安装 `node_modules`，所以这轮无法在本地把 `eslint` / `vitest` 真跑完；这是环境缺口，不是枪手规则缺口。
 
-## 2026-03-28 DiceThrone Batch 3 多步骰子交互审计结论
+## Addendum（2026-03-28）：枪手 The Law 审计与端到端验证完成
 
-- 四人专项当前还没有“全审计完”。Batch 1/2 已完成的只是玩家目标交互；剩余现役高风险家族是 `modifyDie` / `selectDie` 多步骰子交互，以及共用同一路径的 `shadow_thief-shadow-manipulation`。
-- 旧 `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 不能再被当成现役证据：
-  - 文件仍混用 `browser` fixture 与未定义的 `page` 变量；
-  - 没沿用当前在线 E2E 三板斧；
-  - 没把 4 人 / 2v2 作为默认审计口径。
-- 这批风险不只是“缺在线证据”，还包括共享语义压缩：
-  - `src/games/dicethrone/domain/customActions/common.ts` 的 `resolveTargetOpponentDice()` 仍把 `target: 'select'` 简化为 `attackerId !== rollerId` 的布尔值；
-  - `src/games/dicethrone/domain/systems.ts`、`src/games/dicethrone/ui/DiceTray.tsx`、`src/games/dicethrone/ui/RightSidebar.tsx` 继续透传并消费 `targetOpponentDice:boolean`；
-  - 本地化 `interaction.hint_select_opponent` 也直接把这类交互文案写成“选择对手的骰子”。
-- 这说明当前共享层把“当前不是自己的骰子”压缩成了“对手骰子”。在 4 人 / 2v2 下，这已经不是可靠的领域语义，至少需要继续审计“当前骰池归属 / 观察视角”是否应显式建模。
-- 规则层还存在第二个必须继续核对的边界：`src/games/dicethrone/domain/rules.ts` 与 `src/games/dicethrone/domain/execute.ts` 的 `afterRollConfirmed` 路径，当前仍按“非 rollerId 的对手”打开骰子响应窗口；但 `src/games/dicethrone/rule/王权骰铸规则.md` 与 `add-dicethrone-2v2-team-mode` spec 已明确写了“队友可在合法掷骰窗口干预骰面，同时队友不进入同队响应队列”。
-- 进一步下钻后确认，这里暂时不能直接判成“队友被逻辑拦死”：
-  - `validatePlayCard()` 当前只看 `responseWindowType` + `isCardPlayableInResponseWindow()`；
-  - `isCardPlayableInResponseWindow()` 在 `afterRollConfirmed` 下实际校验的是“非 rollerId + 目标语义合法”，并不要求玩家必须位于 `responderQueue`。
-- 因此 Batch 3 当前更准确的 open question 不是“队友能不能打出合法改骰卡”，而是：
-  - 队友这条合法路径在真实 UI / 在线链路里是否可发现、可完成；
-  - `responderQueue` 的 opponent-only 提示是否会与“队友可改骰”形成体验割裂；
-  - 共享交互元数据与文案是否仍把队友干预错误描述成“对手骰子”。
-- 因此 Batch 3 的最正确方向不是继续给旧 dice E2E 打补丁，而是新开 change，正式审计并收口：
-  - 当前骰池归属语义是否需要显式元数据，而不是 `targetOpponentDice:boolean`
-  - 合法掷骰干预窗口与同队响应队列边界是否仍被单一 opponent 视角污染
-  - `shadow_thief-shadow-manipulation` 在 4 人 / 2v2 下的双骰多步语义是否已被真实页面证明
+- 审计范围：
+  - `src/games/dicethrone/heroes/gunslinger/cards.ts`
+  - `src/games/dicethrone/domain/customActions/gunslinger.ts`
+  - `src/games/dicethrone/domain/commandValidation.ts`
+  - `src/games/dicethrone/domain/execute.ts`
+  - `src/games/dicethrone/hooks/useInteractionState.ts`
+  - `src/games/dicethrone/Board.tsx`
+- 审计裁决：
+  - 未发现 `The Law` 在领域链上的新增 correctness bug；卡牌定义、交互请求、命令校验、单次结算与交互清理链条是一致的。
+  - 真正缺口是契约与验证层，而不是实现层：
+    - `openspec/specs/interaction-system/spec.md` 之前没有覆盖 `selectPlayer` 多目标语义；
+    - `src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx` 之前没有覆盖 `selectCount > 1` 的玩家多选；
+    - E2E 之前没有覆盖枪手 `The Law` 的新交互类型。
+- 上述三类缺口本轮均已补齐，因此这里需要推翻上一条附录末尾“缺少 node_modules、无法本地验证”的阶段性结论。该结论只对应当时环境，不代表现在的 worktree 状态。
 
-## 2026-03-28 DiceThrone 炎术士多角色交互覆盖盘点
+## Addendum（2026-03-28）：武士 Token Response 真实点击验证完成
 
-- 目前不能把“炎术士一堆”都说成已完成四人审计；准确说法是：炎术士里最明显的多人目标家族已经收口，但仍有一批 `attacker / defender / roller / response window` 共享语义入口还没有四人口径的专项证据。
-- 已被 Batch 2 明确覆盖的炎术士多人目标入口：
-  - `Soul Burn`：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `73-88` + [`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `67-87`
-  - `Meteor` / `Meteor II` / `Ultimate Inferno` 的 `allOpponents` collateral：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `105-119`、`349-383`、`198-210`
-  - 对应四人规则回归已在 [`src/games/dicethrone/__tests__/rule-consistency.test.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/__tests__/rule-consistency.test.ts) `722-801`，在线证据已在 [`e2e/dicethrone-simple-start.e2e.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/e2e/dicethrone-simple-start.e2e.ts) `1209-1260`。
-- 仍未拿到四人专项证据、但属于炎术士“多角色共享语义”入口的能力：
-  - `Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`
-    - 入口：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `122-145`、`386-420`
-    - 执行：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `460-499`
-    - 现状：只有 2 人行为/潜行回归，没有 4 人 `defender` 口径专项证据。
-  - `Fiery Combo` / `Hot Streak II` / `Burn Down` / `Ignite`
-    - 执行都走 `custom target='self' + ctx.ctx.defenderId`：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `98-172`、`222-309`
-    - 现状：有行为测试，但没有四人 `targetingRoll/defender` 专项回归或在线证据。
-  - `Magma Armor I/II/III`
-    - 入口与执行：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `185-212`；[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `328-446`
-    - 风险不在多目标，而在“防御者视角下原攻击者=defenderId”的共享角色映射，当前没有四人专项覆盖。
-  - `Get Fired Up` / `Red Hot`
-    - 执行：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `509-592`
-    - 现状：更偏攻击修正/bonusDamage/bonusDie 语义，E2E 主要是 spotlight / overlay，不是四人链路审计。
-- 风险排序上，炎术士下一批最值得优先进专项的是：
-  - `Pyro Blast II/III`：因为同时依赖 `defender`、bonus die、额外状态/伤害写回
-  - `Magma Armor`：因为依赖防御视角下 attacker/defender 角色翻转
-  - `Get Fired Up`：因为依赖当前攻击链的 bonus die 与目标写回
-- `Fireball` 本身虽然属于对手目标，但它没有额外的多角色共享语义，当前不应和上面这几组混在同一优先级里。
+- 这轮新增/改过的武士 token 响应关键交互，已经不再只是单元测试或状态注入：
+  - `Honor`：在攻击方响应窗口里真实点击两次，最终把总伤害从 `4` 推到 `7`，并在同一窗口内阻止第三次继续使用。
+  - `Back Strike / samurai_retribution`：在防御方响应窗口里真实点击，确认 token 消耗、额外掷骰反打、原伤害照常结算三段同时成立。
+- 这条验证顺手暴露了一个测试层教训：
+  - E2E 里读取资源值必须使用运行时真实键 `hp / cp`，不能误用展示语义里的 `HP / CP`。
+  - `Honor` 结算后的真实事件尾部是两次 `TOKEN_USED`，而不是旧预期里的 `TOKEN_CONSUMED`；后者不能再作为该链路的断言锚点。
+- 规范层也已补齐：
+  - 新增 `openspec/specs/dicethrone-token-response/spec.md`，把“同一响应窗口的累计消耗映射”和“零修正 token 触发 custom action”写入当前真相。
+- 因此，当前枪手/武士这轮真正改过的关键交互，已经完成“审计 -> spec -> 真实点击 E2E”三段闭环，不再停留在表面可见或注入后读状态。
 
-## 2026-03-28 DiceThrone 全量多人语义审计矩阵结论
+## Addendum（2026-03-28）：枪手 The Law 已补到“从手牌点击打出”
 
-- 现在不能说“所有技能、token、卡牌设计在两人以上都审完了”。更准确的口径是：Batch 1/2 已收口多人玩家目标交互，Batch 3 已建好 change 并确认了共享骰子窗口风险，但全量多人语义审计仍在进行中。
-- 已明确拿到 4 人 / 2v2 专项规则或在线证据的家族：
-  - `Transfer Status`、`Consecrate`、`Vengeance II`、`remove-status-1`、`remove-all-status`
-  - `remove-status-self`
-  - `Meteor` / `Meteor II` / `Ultimate Inferno`
-  - `Soul Burn`
-  - “无默认 defender 的无伤害技能”共享攻击流程
-  - “同队不进入响应队列”的当前在线主链路边界
-- 当前最真实的 P0 空白不是又冒出一个新的玩家目标弹窗，而是共享骰子交互层还残留 2 人压缩语义：
-  - `src/games/dicethrone/domain/customActions/common.ts` 用 `targetOpponentDice:boolean` 表达骰池归属；
-  - `src/games/dicethrone/domain/execute.ts` / `rules.ts` 的 `afterRollConfirmed` 仍围绕单一 opponent / responderQueue 视角；
-  - 这条共享层会影响所有 `modifyDie/selectDie` 通用卡，以及 `shadow_thief-shadow-manipulation`。
-- 炎术士当前仍是最大的“未审完”集中区，但要分层看：
-  - P1：`Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`
-  - P1：`Magma Armor I/II/III`
-  - P2：`Fiery Combo` / `Hot Streak II` / `Incinerate`
-  - P2：`Burn Down` / `Burn Down II`
-  - P2：`Ignite` / `Ignite II`
-  - P2：`Get Fired Up` / `Red Hot`
-  - P2：`Blazing Soul` / `Meteor Shower`
-- 更广义地看，除了火法之外，代码里还有一整批“共享角色映射已显式写进 custom action，但尚无 4 人专项证据”的家族，当前不能假装它们已被全量审计：
-  - 圣骑士：`holy-defense` / `holy-defense-2` / `holy-defense-3`
-  - 月精灵：`exploding-arrow` / `exploding-arrow-2` / `exploding-arrow-3`、`elusive-step` / `elusive-step-2`
-  - 暗影盗贼：`shadow-defense` / `shadow-defense-2`、`fearless-riposte` / `fearless-riposte-2`、`shadow-dance` / `shadow-dance-2`、`damage-half-cp` / `damage-full-cp`
-  - 狂战士：`barbarian-suppress-roll` / `barbarian-suppress-2-roll`、`thick-skin` / `thick-skin-2`
-  - 武僧：`meditation` / `meditation-2` / `meditation-3`、`thunder-strike` / `thunder-strike-2`
-- 上述家族并不一定已经有逻辑错误；当前更准确的风险分级是：
-  - “已确认错误并已修复”；
-  - “共享实现已知高风险、但未拿到 4 人专项证据”；
-  - “只有 2 人/局部行为测试，尚未升级为四人口径审计”。
-- 因此后续推进必须按矩阵分批，而不是继续用“火法的一堆”或“多人模式都差不多”这种口径笼统描述完成度。
+- 这轮继续向前收口后，`The Law` 的 E2E 不再只覆盖“交互框出来以后怎么选人”。
+- 新增事实：
+  - `1v1` 场景下，从手牌点击 `card-the-law` 会直接完成：
+    - 自己获得 `1 evasive`
+    - 唯一对手获得 `1 bounty + 1 knockdown`
+    - 不再进入多目标交互
+  - `3` 人场景下，从手牌点击 `card-the-law` 会先进入多目标交互，再由一次确认原子化结算两名目标。
+- 这条验证把一个常见假阳性风险补掉了：
+- 之前即便“多目标交互本身能点”，也还不能证明 `PLAY_CARD -> custom action -> interaction requested` 这段真实入口没有断。
+- 现在这段入口已经由真实点击 E2E 覆盖，不再依赖对 `sys.interaction.current` 的预先注入。
 
-## 2026-03-28 DiceThrone Batch 3 P0 精确 blocker
+## Addendum（2026-03-28）：武士 Back Strike 真实入口失败根因与裁决
 
-- `targetOpponentDice:boolean` 的问题不只是命名和提示文案。继续下钻 `src/games/dicethrone/domain/execute.ts`、`src/games/dicethrone/domain/rules.ts` 与 `src/engine/systems/ResponseWindowSystem.ts` 后，当前 P0 已可更精确描述为“共享响应窗口路由仍按 trigger-side 单一响应者视角工作”。
-- 具体证据链是：
-  - `execute.ts` 在 `CONFIRM_ROLL` 后用 `getContextualOpponentId(stateAfterConfirm, rollerId)` 作为 `triggerId` 打开 `afterRollConfirmed`；
-  - `getResponderQueue()` 会排除 `triggerId` 的同队玩家；
-  - `ResponseWindowSystem.beforeCommand()` 又强制只有 `currentResponderId` 才能打出 `PLAY_CARD`。
-- 这意味着当前代码不只是“没有证明”攻击方队友能在防御方确认骰面后帮队友压低敌方骰子，而是已有现役回归明确锁住了相反行为：
-  - `src/games/dicethrone/__tests__/flow.test.ts` 里“4 人模式下防御掷骰确认后的响应窗口只归当前攻击方”断言 `responderQueue === ['0']`，攻击方队友 `P2` 被排除。
-- 因而 Batch 3 的 P0 已经不能再笼统写成“也许只差在线证据”。更准确地说：
-  - 若 2v2 规则口径坚持“可以强化队友输出”，那当前共享响应窗口/队列模型就存在真实语义冲突；
-  - 若产品决定收紧口径，只保留当前攻击方本人在该窗口响应，则应反向修 spec / 规则文档，而不是继续保留“队友可改骰”的描述。
-- 下一步真正需要裁决的不是“要不要补一条 E2E”，而是“合法 allied dice interference 在 `afterRollConfirmed` 到底走响应队列、还是走非队列豁免路径”，否则继续给旧 `targetOpponentDice` 打补丁没有意义。
+- 这轮 `Back Strike` 的最后一条 E2E 没卡在实现，而是连续暴露了两层测试问题：
+  - 第一层是 UI 时序：测试原本用 `waitForFunction` 轮询“`PASS` 或 `Resolve Attack` 任一可点”，但实际页面上的 `PASS` 按钮可访问名称不稳定，导致 helper 没有真的点掉响应提示，`Resolve Attack` 继续处于 disabled。
+  - 第二层是状态语义：测试把 `pendingDamage.currentDamage` 误当成防御方最终扣血值，忽略了防御技留下的 `damageShields` 会在最终 `DAMAGE_DEALT` 时再抵扣。
+- 已落实的修正：
+  - `e2e/helpers/dicethrone.ts` 的 `maybePassResponse` 现在改为同时按 ARIA role 与按钮文本宽松匹配 `PASS`，命中可见实例后直接点击，避免 UI 文本与 DOM 顺序波动导致漏点。
+  - `e2e/dicethrone-token-response-window.e2e.ts` 的 `Back Strike` 断言改为：
+    - 攻击者掉血 = `ceil(backStrikeRoll / 2)`
+    - 防御者掉血 = `pendingDamage.currentDamage - damageShields 总值`
+- 这说明当前 `samurai_retribution` 的领域实现与真实 UI 链是一致的；之前失败是 E2E 把“窗口中的中间状态”误当成“最终结算结果”。
 
-## 2026-03-28 DiceThrone 合并后续审计：炎术士与 Batch 3 现役缺口
+## 2026-03-28 DiceThrone Batch 3 旧 E2E 退役与 Shadow Manipulation 复核
 
-- 这轮四人专题已经不再停留在 feature 分支。当前远端 `origin/main` 已前进到 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8`，因此“先上传合并到主分支”这一收尾条件已经满足；后续工作应直接按主线继续做多人能力审计，而不是再回头确认是否已 merge。
-- 炎术士当前不能说“都审完了”，更准确的分层是：
-  - 已拿到 4 人 / 2v2 专项证据：`Soul Burn`、`Meteor` / `Meteor II` / `Ultimate Inferno`。对应入口在 `src/games/dicethrone/heroes/pyromancer/abilities.ts:73-87`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:105-119`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:198-210`，共享回归在 `src/games/dicethrone/__tests__/rule-consistency.test.ts:722-801`。
-  - 仍只有 2 人 / 局部行为测试，没有 4 人专项证据：`Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`、`Magma Armor I/II/III`、`Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down` / `Burn Down II`、`Ignite` / `Ignite II`、`Get Fired Up` / `Red Hot`、`Blazing Soul` / `Meteor Shower`。
-- 炎术士里优先级最高的未收口家族仍是 `Pyro Blast` 与 `Magma Armor`：
-  - `Pyro Blast` 基础版把 bonus roll 直接声明成 `rollDie target='opponent'`，而 II/III 级走 `customActionId: 'pyro-blast-2-roll'/'pyro-blast-3-roll'`，两条实现都把结算目标硬绑到 `ctx.ctx.defenderId`，见 `src/games/dicethrone/heroes/pyromancer/abilities.ts:122-145`、`src/games/dicethrone/heroes/pyromancer/abilities.ts:386-425`、`src/games/dicethrone/domain/customActions/pyromancer.ts:460-495`。现有测试主要是 2 人行为/潜行回归，见 `src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:779-886` 与 `src/games/dicethrone/__tests__/sneak-vs-pyro-blast.test.ts:1-203`，还没有 4 人 `defender` 语义专项。
-  - `Magma Armor` 明确依赖“防御上下文里 `attackerId=防御者`、`defenderId=原攻击者`”这套角色翻转，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:312-345` 与 `src/games/dicethrone/domain/customActions/pyromancer.ts:397-425`。现有覆盖也只是 2 人本地 defense context 构造，见 `src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:472-560`，没有 4 人 / 2v2 防御专项回归或在线证据。
-- 炎术士 P2 家族目前更多是“有局部实现测试，但没有升级为四人口径审计”：
-  - `Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down`、`Ignite` 都在 `custom action target='self'` 下改用 `ctx.ctx.defenderId` 找真实目标，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:98-126`、`src/games/dicethrone/domain/customActions/pyromancer.ts:222-251`、`src/games/dicethrone/domain/customActions/pyromancer.ts:269-298`；但现有主要仍是 `pyromancer-behavior.test.ts` 这类 2 人 handler 级断言。
-  - `Get Fired Up` / `Red Hot` 当前已有自己侧 bonus die / bonus damage 的本地测试与 UI 特写测试，见 `src/games/dicethrone/domain/customActions/pyromancer.ts:509-538`、`src/games/dicethrone/domain/customActions/pyromancer.ts:579-592`、`src/games/dicethrone/__tests__/pyromancer-behavior.test.ts:735-773`、`src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx:626-686`；但这些仍不是 4 人攻击链或响应窗口专项。
-- Batch 3 P0 的 blocker 这轮进一步实锤为“共享响应窗口路由 + 交互元数据仍带 2 人压缩语义”：
-  - `execute.ts` 在 `CONFIRM_ROLL` 后用 `getContextualOpponentId(..., rollerId)` 作为 `triggerId`，再调用 `getResponderQueue(..., opponentId, ..., rollerId, phase)`，见 `src/games/dicethrone/domain/execute.ts:245-279`。
-  - `getResponderQueue()` 在 team mode 下显式排除 `triggerId` 的同队玩家，见 `src/games/dicethrone/domain/rules.ts:1261-1295`；现役 4 人回归也锁住了防御方确认骰面后 `responderQueue === ['0']`，见 `src/games/dicethrone/__tests__/flow.test.ts:612-675`。
-  - 与此同时，`ResponseWindowSystem.beforeCommand()` 又把非豁免命令强制收敛到 `currentResponderId`，见 `src/engine/systems/ResponseWindowSystem.ts:512-531`。这意味着 2v2 spec 中“队友可在合法掷骰窗口干预骰面，但队友不进同队响应队列”的口径，当前实现并没有闭环。
-- Batch 3 的另一条共享缺口不是单纯文案，而是数据模型：
-  - `resolveTargetOpponentDice()` 仍把 `target='select'` 压缩成 `attackerId !== rollerId` 的布尔值，见 `src/games/dicethrone/domain/customActions/common.ts:43-56`。
-  - `RightSidebar` 与 `DiceTray` 继续消费 `targetOpponentDice:boolean`，并把 `selectDie` 提示直接切成 `interaction.hint_select_opponent` vs `interaction.hint_select`，见 `src/games/dicethrone/ui/RightSidebar.tsx:136-173`、`src/games/dicethrone/ui/DiceTray.tsx:16-33`。
-  - 因此当前共享层表达的不是“当前骰池归属 / 观察视角”，而只是“是不是对手骰子”；这与 Batch 3 spec 要求的显式语义模型仍不一致。
-- 结论上，下一步不能口头说“火法已经差不多”或“多人能力都审完了”。更准确的推进顺序应是：
-  - 先裁决并收口 Batch 3 P0：队友干预骰面到底走新的共享响应路由，还是同步回修 2v2 spec/规则文档；
-  - 然后优先升级炎术士 `Pyro Blast` / `Magma Armor` 为 4 人规则回归与在线证据；
-  - 再继续扫 `Fiery Combo` / `Burn Down` / `Ignite` / `Get Fired Up` / `Red Hot` 等仍只有 2 人或局部测试的家族。
+- `shadow_thief-shadow-manipulation` 这条并不是例外实现，它直接复用与通用骰子卡同一套 `modifyDie` 多步交互元数据：
+  - `src/games/dicethrone/domain/customActions/shadow_thief.ts:177-182` 仍写入 `type: 'modifyDie'` 与 `targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state)`；
+  - 因而它同样受 `targetOpponentDice:boolean` 压缩语义影响，不应被误判成“只要单独补一条暗影盗贼用例就能绕开共享 blocker”。
+- 旧 `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 现在不只是“口径老”，而是文件本身就不适合作为现役证据：
+  - 两个文件都以 `async ({ browser }, testInfo)` 或 `async ({ browser })` 开头建房，但正文后续大量直接调用未定义的 `page` 变量，例如 `e2e/dicethrone-die-modification.e2e.ts` 在首条用例里从 `const advanceButton = page.getByRole(...)` 开始，`e2e/dicethrone-die-reroll.e2e.ts` 也同样在 `waitForGameBoard(hostPage)` 后直接访问 `page.getByTestId(...)`。
+  - 这说明它们并未按现役 Playwright 口径收敛，也不是“只差补四人断言”；继续修补这些旧文件只会把过时测试继续包成证据。
+- 因此 Batch 3 的 1.3 当前已经可以明确裁决：
+  - 旧 `dicethrone-die-modification.e2e.ts` / `dicethrone-die-reroll.e2e.ts` 的可复用价值主要只剩“曾覆盖哪些交互族”这份清单；
+  - 真正应保留的现役测试资产，是 `flow.test.ts`、`response-window-interaction-lock.test.ts`、`flick-response-debug.test.ts`、`card-flick-locked-dice.test.ts` 这些仍在当前共享实现上有约束力的规则/UI 回归；
+  - 在线证据应改在现役 `dicethrone-simple-start.e2e.ts` 或等价主回归文件中重建，而不是继续维护旧专项文件。
 
+## 2026-03-28 DiceThrone Batch 3 Audit 阶段收口结论
+
+- Batch 3 的 Audit 任务 1.1-1.3 到当前可以视为完成，核心判断已经足够稳定：
+  - 共享入口已确认：通用 `modifyDie` / `selectDie` 与 `shadow_thief-shadow-manipulation` 共用同一套 `multistep-choice + targetOpponentDice` 元数据；
+  - 2 人压缩语义已确认：`resolveTargetOpponentDice()`、`getContextualOpponentId()`、`getResponderQueue()`、`currentResponderId`、响应视角切换都还在默认“当前 roller vs 单一 opponent”；
+  - 现役/历史测试边界已确认：可复用的是当前规则/UI 回归，旧两份 dice E2E 只保留历史清单价值。
+- 当前实现里，“队友可改骰”不是完全没有痕迹，而是被三层口径撕裂：
+  - 验证层 `validatePlayCard()` 并不会要求玩家必须在 `responderQueue` 里；它只校验手牌、阶段、CP 与 `isCardPlayableInResponseWindow()` 的目标语义，见 `src/games/dicethrone/domain/commandValidation.ts:599-665`。
+  - 但响应窗口系统 `ResponseWindowSystem.beforeCommand()` 对非豁免命令仍强制 `command.playerId === currentResponderId`，而 `PLAY_CARD` 又不在 `responderExemptCommands` 里，见 `src/engine/systems/ResponseWindowSystem.ts:395-420`、`src/engine/systems/ResponseWindowSystem.ts:512-531`、`src/games/dicethrone/game.ts:948-964`。
+  - 前端 `Board.tsx` / `viewMode.ts` 又把自动切视角、可见技能、可高亮响应卡、自动 pass 等逻辑都绑在 `currentResponderId === rootPid` 上，见 `src/games/dicethrone/Board.tsx:140-172`、`src/games/dicethrone/Board.tsx:585-661`、`src/games/dicethrone/Board.tsx:688-717`、`src/games/dicethrone/ui/viewMode.ts:48-126`。
+- 所以 Batch 3 真正要修的不是“把一个 if 改松”，而是三层口径统一：
+  - 规则/验证层允许的 allied dice interference，
+  - 响应系统实际放行的命令门禁，
+  - 前端把谁视为“当前可观察、可操作响应者”的视角与高亮逻辑。
+- 这也意味着下一步最正确的实现前置裁决是：
+  - 要么引入“合法改骰玩家”这类共享路由/豁免语义，让队友不进 `responderQueue` 但仍能合法出改骰牌；
+  - 要么同步回修 2v2 spec，不再保留“队友可改骰”的描述。
+
+## 2026-03-28 DiceThrone Batch 3 响应语义裁决与第一段共享收口
+
+- 用户已明确裁决：“响应是一种敌对操作，就像自己不响应自己一样”，“队友不用响应”。当前权威口径应收紧为：
+  - `response` 只代表敌对侧动作；
+  - 同队玩家不进入 `responderQueue`；
+  - 同队玩家若在合法掷骰窗口持有可作用于当前骰池的改骰牌，可以直接出牌，但这不算 response。
+- 因而 Batch 3 的正确实现不是把队友塞进 `responderQueue`，而是在共享响应窗口层提供一条受限的“非队列 direct dice actor”放行路径。
+- 当前共享层已按该口径完成第一段收口：
+  - `ResponseWindowSystem.beforeCommand()` 新增 `allowNonResponderCommand` 钩子；
+  - `game.ts` 只在 `afterRollConfirmed + PLAY_CARD + isDirectDiceInterferenceActor(...) + isCardPlayableInResponseWindow(...)` 同时成立时放行非当前响应者；
+  - 其余普通命令仍继续锁给 `currentResponderId`，没有把“队友 direct dice”扩大成泛化的非响应者特权。
+- 新规则回归已实锤这条边界：
+  - 4 人 / 2v2 下防御方确认骰面后，攻击方队友仍不在 `responderQueue`；
+  - 但攻击方队友打出 `card-flick` 可以成功创建 `modifyDie` 交互并进入弃牌堆。
+- 这轮收口后，Batch 3 仍未完成的真实缺口变得更明确了：
+  - `targetOpponentDice:boolean` 的显式骰池归属元数据替换尚未做；
+  - `shadow_thief-shadow-manipulation` 的 4 人专项回归尚未补；
+  - 现役在线 E2E 证据还未迁到 `dicethrone-simple-start.e2e.ts`。
+
+## 2026-03-28 DiceThrone Batch 3 direct-dice 在线证据与 helper 修正
+
+- Batch 3 的第一条现役 4 人在线证据已经补到 `e2e/dicethrone-simple-start.e2e.ts`：
+  - 新用例 `Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction` 已通过；
+  - 对应截图为 `test-results/evidence-screenshots/dicethrone-simple-start.e2e/Online-4-player-direct-dice-ally-teammate-stays-out-of-responder-queue-but-can-still-open-modify-interaction/12-four-player-direct-dice-ally-interaction.png`。
+- 这条在线证据锁住了两个同时成立的事实：
+  - 防守方确认骰面后，攻击方队友 `P2` 仍不进入 `responderQueue`；
+  - 但 `P2` 仍可直接打出 `card-surprise`，并在自己页打开 `modifyDie` 交互。
+- 为了让这条 isolated-port E2E 稳定可跑，本轮还顺手修复了测试基础设施的真实 bug：
+  - `e2e/helpers/state-injection.ts` 原来错误读取 `__FORCE_GAME_SERVER_URL__` 作为 `/test/*` API 基址；
+  - 单 worker 显式目标模式下注入的其实是 `__FORCE_API_SERVER_URL__`，因此原实现会把状态注入请求错打到 game server；
+  - 修正后，`applyOnlineMatchState()` / `getMatchState()` 已能稳定走 `apiServer` 端口。
+
+## 2026-03-28 DiceThrone Batch 3 元数据模型与 Shadow 专项回归收口
+
+- `diceOwnerId` 这轮已经从“想法”变成共享事实：
+  - `PendingInteraction`、通用 `modifyDie/selectDie` custom action、`shadow_thief-shadow-manipulation`、事件系统透传、测试注入 helper、AI meta 与 `RightSidebar`/`DiceTray` 提示类型现在都显式携带 `diceOwnerId`。
+  - 这意味着 Batch 3 的 2.1 可以视为完成：共享层不再只能靠 `targetOpponentDice:boolean` 猜“当前骰池归属”。
+- 代表性回归也补齐到位了：
+  - 通用入口：`flow.test.ts` 已锁住 4 人 / 2v2 下“队友不进 `responderQueue`，但可直接打出 `card-flick`”，并断言 `meta.diceOwnerId === '3'`；
+  - UI 入口：`active-modifiers-undo.test.ts` 新增 `RightSidebar` 静态渲染断言，确认 `selectDie + diceOwnerId=同队玩家` 会落到 `interaction.hint_select_ally`；
+  - Shadow 入口：`shadow_thief-behavior.test.ts` 新增 4 人 handler 级用例，确认 `shadow_thief-shadow-manipulation` 在有 `Sneak` 时会产出 `selectCount=2`、`diceOwnerId='3'`、`targetOpponentDice=false` 的交互元数据。
+- 同时也确认了一条不应被误写成“已裁决”的边界：
+  - 当前共享 `afterRollConfirmed` 门禁仍保留“仅 `opponent/any` 骰子卡可开响应窗口”的旧口径；
+  - 因此这轮没有把 `shadow-manipulation` 强行推进成在线 direct-dice 出牌路径，也没有把“所有 self-only 骰子卡都应在响应窗可打”写成既定规则；
+  - 现阶段能确定的结论仅是：其共享 multistep 元数据与 4 人骰池归属语义已经被专项回归锁住。
+
+## 2026-03-28 DiceThrone Batch 3 self-only 骰子卡边界裁决
+
+- 用户已明确裁决：凡是规则或卡面**没有明确写“可以改队友骰子”**的，就**不能改队友**，只能改自己。
+- 因而 4 人 / 2v2 下的最终口径应收紧为：
+  - `self-only` 骰子卡只允许作用于出牌者自己的骰池；
+  - 不因“当前存在共享响应窗口”或“当前正在操作别人的骰池”而自动扩张到队友骰池；
+  - `队友 direct-dice` 只适用于原本就允许作用于当前骰池、对手骰池或任意骰池的牌，不能把 `self-only` 一并放开。
+- 这也意味着当前共享 `afterRollConfirmed` 门禁继续排斥 `target='self'` 的骰子卡，不再把它视为待裁决边界。
+- 若后续继续扩审，应以这条裁决为前提：先问“卡面有没有明确写可改队友”，没有就按只能改自己处理。
+
+## Addendum（2026-03-28）：枪手 The Law 四人 2v2 真实缺口与裁决
+
+- 这轮新的四人适配审计里，`The Law` 暴露出的不是“测试没写到”，而是实现层真实缺口：
+  - `src/games/dicethrone/domain/customActions/gunslinger.ts` 的 `handleTheLaw` 原本使用
+    `Object.keys(state.players).filter(playerId => playerId !== attackerId)`；
+  - 这在 `4` 人 `2v2` 模式下会把队友也放入 `targetPlayerIds`，与团队规则不一致。
+- 正确裁决不是在 UI 层硬过滤，也不是只补单测，而是直接复用团队规则函数：
+  - 候选目标改为 `getOpponents(state, attackerId)`，让 `The Law` 与其他团队模式目标筛选保持统一来源。
+- 本轮新增验证证明修正已生效：
+  - 领域层：`cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，断言交互只暴露 `['1', '3']`，不包含队友 `2`。
+  - E2E：`dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例，从手牌点击 `The Law` 后只出现敌方目标卡，确认后也只对两名敌方施加 `bounty + knockdown`。
+  - 回归：既有 `1v1 / 3` 人 `The Law` 真实点击链路重新跑通，说明这次修正没有把旧多人场景一起带坏。
+- 因此，当前关于 `The Law` 的阶段性结论应更新为：
+  - `1v1` 直结算、`3` 人多人多目标、`4` 人 `2v2` 敌我过滤与真实点击结算，三条链都已闭环。

@@ -15,6 +15,7 @@ import { PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain
 import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
 import { getAvailableAbilityIds } from '../src/games/dicethrone/domain/rules';
 import { registerDiceThroneConditions } from '../src/games/dicethrone/conditions';
+import { GUNSLINGER_CARDS } from '../src/games/dicethrone/heroes/gunslinger/cards';
 import { VENGEANCE_2 } from '../src/games/dicethrone/heroes/paladin/abilities';
 import { PALADIN_CARDS } from '../src/games/dicethrone/heroes/paladin/cards';
 import {
@@ -39,6 +40,8 @@ const REMOVE_ALL_STATUS_CARD_ID = 'card-what-status';
 const REMOVE_ALL_STATUS_CARD = COMMON_CARDS.find((card) => card.id === REMOVE_ALL_STATUS_CARD_ID);
 const TRANSFER_STATUS_CARD_ID = 'card-transfer-status';
 const TRANSFER_STATUS_CARD = COMMON_CARDS.find((card) => card.id === TRANSFER_STATUS_CARD_ID);
+const THE_LAW_CARD_ID = 'card-the-law';
+const THE_LAW_CARD = GUNSLINGER_CARDS.find((card) => card.id === THE_LAW_CARD_ID);
 const CONSECRATE_CARD_ID = 'card-consecrate';
 const CONSECRATE_CARD = PALADIN_CARDS.find((card) => card.id === CONSECRATE_CARD_ID);
 const PALADIN_VENGEANCE_2_CARD_ID = 'card-vengeance-2';
@@ -349,6 +352,40 @@ const buildFourPlayerTransferTokenState = (state: any) => {
         ...(next.core.players['3'].tokens ?? {}),
         [TOKEN_IDS.CRIT]: 0,
     };
+    return next;
+};
+
+const buildFourPlayerTheLawState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const theLawCard = THE_LAW_CARD;
+    if (!theLawCard) {
+        throw new Error(`未找到稳定枪手卡 ${THE_LAW_CARD_ID}，无法构造 4 人 The Law 场景`);
+    }
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'main1';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = null;
+    next.core.selectedAbilityId = undefined;
+    next.core.rollConfirmed = false;
+    next.core.players['0'].hand = [{ ...structuredClone(theLawCard) }];
+    next.core.players['0'].resources.cp = Math.max(next.core.players['0'].resources.cp ?? 0, 2);
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.EVASIVE]: 0,
+    };
+
+    for (const pid of ['1', '2', '3']) {
+        next.core.players[pid].tokens = {
+            ...(next.core.players[pid].tokens ?? {}),
+            [TOKEN_IDS.BOUNTY]: 0,
+        };
+        next.core.players[pid].statusEffects = {
+            ...(next.core.players[pid].statusEffects ?? {}),
+            knockdown: 0,
+        };
+    }
+
     return next;
 };
 
@@ -1003,6 +1040,107 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
+    test('Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both', async ({ browser }, testInfo) => {
+        test.setTimeout(150000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatchWithPlayers(browser, baseURL, {
+            numPlayers: 4,
+            gameServerBaseURL: getGameServerBaseURL(),
+        });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或四人房间创建失败');
+            return;
+        }
+
+        const { hostPage, matchId, players } = setup;
+        const allyPage = players[2].page;
+        const enemyCaptainPage = players[3].page;
+
+        await selectCharacter(players[0].page, 'gunslinger');
+        await selectCharacter(players[1].page, 'barbarian');
+        await selectCharacter(players[2].page, 'samurai');
+        await selectCharacter(players[3].page, 'paladin');
+        await readyMultiplePlayersAndStartGame(hostPage, players.slice(1).map((player) => player.page));
+
+        await waitForGameBoard(hostPage);
+        await waitForHarnessPages(players.map((player) => player.page));
+
+        await applyOnlineMatchState(matchId, hostPage, buildFourPlayerTheLawState);
+        await waitForPhase(hostPage, 'main1');
+
+        const theLawCard = hostPage.locator('[data-card-id="card-the-law"]').first();
+        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
+        const enemyOne = hostPage.getByTestId('dt-player-target-1');
+        const allyTarget = hostPage.getByTestId('dt-player-target-2');
+        const enemyTwo = hostPage.getByTestId('dt-player-target-3');
+
+        await expect(theLawCard).toBeVisible({ timeout: 5000 });
+        await theLawCard.click();
+
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const current = state?.sys?.interaction?.current?.data;
+            const targetPlayerIds = current?.targetPlayerIds ?? [];
+            return current?.sourceCardId === 'card-the-law'
+                && targetPlayerIds.length === 2
+                && targetPlayerIds.includes('1')
+                && targetPlayerIds.includes('3')
+                && !targetPlayerIds.includes('2')
+                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+                && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
+        }, undefined, { timeout: 10000, polling: 200 });
+
+        await expect(enemyOne).toHaveAttribute('data-team-tone', 'enemy');
+        await expect(enemyTwo).toHaveAttribute('data-team-tone', 'enemy');
+        await expect(allyTarget).toHaveCount(0);
+        await expect(confirmButton).toBeDisabled();
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '10-four-player-the-law-enemy-only-selection');
+
+        await enemyOne.click();
+        await enemyTwo.click();
+        await expect(confirmButton).toBeEnabled();
+        await confirmButton.click();
+
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return !state?.sys?.interaction?.current
+                && (state?.core?.players?.['1']?.tokens?.bounty ?? 0) === 1
+                && (state?.core?.players?.['1']?.statusEffects?.knockdown ?? 0) === 1
+                && (state?.core?.players?.['2']?.tokens?.bounty ?? 0) === 0
+                && (state?.core?.players?.['2']?.statusEffects?.knockdown ?? 0) === 0
+                && (state?.core?.players?.['3']?.tokens?.bounty ?? 0) === 1
+                && (state?.core?.players?.['3']?.statusEffects?.knockdown ?? 0) === 1;
+        }, undefined, { timeout: 10000, polling: 200 });
+        await enemyCaptainPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return (state?.core?.players?.['3']?.tokens?.bounty ?? 0) === 1
+                && (state?.core?.players?.['3']?.statusEffects?.knockdown ?? 0) === 1;
+        }, undefined, { timeout: 10000, polling: 200 });
+
+        await saveEvidenceScreenshot(hostPage, testInfo, '11-four-player-the-law-resolved-on-enemies');
+
+        const hostState = await readHarnessState<any>(hostPage);
+        const allyState = await readHarnessState<any>(allyPage);
+        const enemyCaptainState = await readHarnessState<any>(enemyCaptainPage);
+        expect(hostState.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(1);
+        expect(hostState.core.players['1'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(1);
+        expect(hostState.core.players['1'].statusEffects.knockdown ?? 0).toBe(1);
+        expect(hostState.core.players['2'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(0);
+        expect(hostState.core.players['2'].statusEffects.knockdown ?? 0).toBe(0);
+        expect(hostState.core.players['3'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(1);
+        expect(hostState.core.players['3'].statusEffects.knockdown ?? 0).toBe(1);
+        expect(hostState.sys.interaction?.current).toBeUndefined();
+        expect(allyState.core.players['2'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(0);
+        expect(allyState.core.players['2'].statusEffects.knockdown ?? 0).toBe(0);
+        expect(enemyCaptainState.core.players['3'].tokens[TOKEN_IDS.BOUNTY] ?? 0).toBe(1);
+        expect(enemyCaptainState.core.players['3'].statusEffects.knockdown ?? 0).toBe(1);
+
+        await cleanupDTMatch(setup);
+    });
+
     test('Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -1334,6 +1472,75 @@ test.describe('DiceThrone Simple Start', () => {
 
         await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(hostPage, testInfo, '05-four-player-team-victory-ui');
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatchWithPlayers(browser, baseURL, {
+            numPlayers: 4,
+            gameServerBaseURL: getGameServerBaseURL(),
+        });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或四人房间创建失败');
+            return;
+        }
+
+        const { hostPage, matchId, players } = setup;
+        const allyPage = players[2].page;
+        const defenderCaptainPage = players[3].page;
+
+        await selectCharacter(players[0].page, 'monk');
+        await selectCharacter(players[1].page, 'barbarian');
+        await selectCharacter(players[2].page, 'pyromancer');
+        await selectCharacter(players[3].page, 'paladin');
+        await readyMultiplePlayersAndStartGame(hostPage, players.slice(1).map((player) => player.page));
+
+        await waitForGameBoard(hostPage);
+        await waitForHarnessPages(players.map((player) => player.page));
+
+        await applyOnlineMatchState(matchId, hostPage, buildDefensiveResponseWindowTriggerState);
+        await waitForPhase(hostPage, 'defensiveRoll');
+
+        await dispatchHarnessCommand(defenderCaptainPage, 'CONFIRM_ROLL', '3');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const queue = state?.sys?.responseWindow?.current?.responderQueue ?? [];
+            return state?.sys?.phase === 'defensiveRoll' && queue.length === 1 && queue[0] === '0';
+        }, { timeout: 10000 });
+
+        const queuedState = await readHarnessState<any>(hostPage);
+        expect(queuedState.sys.responseWindow?.current?.responderQueue).toEqual(['0']);
+        expect(queuedState.sys.responseWindow?.current?.responderQueue).not.toContain('2');
+
+        await dispatchHarnessCommand(allyPage, 'PLAY_CARD', '2', { cardId: RESPONSE_WINDOW_CARD_ID });
+
+        await allyPage.waitForFunction((responseWindowCardId: string) => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const queue = state?.sys?.responseWindow?.current?.responderQueue ?? [];
+            const interaction = state?.sys?.interaction?.current;
+            const allyDiscard = state?.core?.players?.['2']?.discard ?? [];
+            return interaction?.playerId === '2'
+                && interaction?.kind === 'multistep-choice'
+                && queue.length === 1
+                && queue[0] === '0'
+                && !queue.includes('2')
+                && allyDiscard.some((card: any) => card.id === responseWindowCardId);
+        }, RESPONSE_WINDOW_CARD_ID, { timeout: 10000 });
+        await expect(allyPage.getByRole('button', { name: /Confirm|确认/i }).last()).toBeVisible({ timeout: 10000 });
+
+        const allyState = await readHarnessState<any>(allyPage);
+        expect(allyState.sys.responseWindow?.current?.responderQueue).toEqual(['0']);
+        expect(allyState.sys.responseWindow?.current?.responderQueue).not.toContain('2');
+        expect(allyState.sys.interaction.current?.playerId).toBe('2');
+        expect(allyState.sys.interaction.current?.kind).toBe('multistep-choice');
+        expect(allyState.core.players['2'].discard.some((card: any) => card.id === RESPONSE_WINDOW_CARD_ID)).toBe(true);
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(allyPage, testInfo, '12-four-player-direct-dice-ally-interaction');
 
         await cleanupDTMatch(setup);
     });
