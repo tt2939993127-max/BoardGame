@@ -9,6 +9,7 @@ import {
     signalCriticalImagesReady,
 } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
+import { warmPreloadScheduler } from './warmPreloadScheduler';
 
 const criticalImageGateWindow = typeof window !== 'undefined'
     ? window as Window & {
@@ -70,6 +71,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         };
 
         document.addEventListener('visibilitychange', onVisibilityChange);
+        onVisibilityChange();
         return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     }, []);
 

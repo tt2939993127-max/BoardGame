@@ -49,7 +49,7 @@ describe('useGameAudio', () => {
       feedbackResolver: () => null,
     };
 
-    renderHook(() => useGameAudio({ config, gameId: 'cardia', G: {}, ctx: {} }));
+    const { rerender } = renderHook(() => useGameAudio({ config, gameId: 'cardia', G: {}, ctx: {} }));
 
     await waitFor(() => {
       expect(mockUseAudio.setPlaylist).toHaveBeenCalledWith(config.bgm);
@@ -58,5 +58,12 @@ describe('useGameAudio', () => {
     expect(mockUseAudio.playBgm).not.toHaveBeenCalled();
     expect(mockUseAudio.stopBgm).toHaveBeenCalled();
     expect(mockUseAudio.setActiveBgmContext).not.toHaveBeenCalled();
+
+    const stopCallsAfterMount = mockUseAudio.stopBgm.mock.calls.length;
+    rerender();
+
+    await waitFor(() => {
+      expect(mockUseAudio.stopBgm.mock.calls.length).toBe(stopCallsAfterMount);
+    });
   });
 });
