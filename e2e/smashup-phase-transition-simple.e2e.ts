@@ -403,6 +403,9 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
                 { uid: 'draw-3', defId: 'robot_warbot', type: 'minion' },
             ],
             discard: [],
+            field: [
+                { uid: 'guard-1', defId: 'robot_microbot_alpha', baseIndex: 0, owner: '0', controller: '0', power: 1 },
+            ],
             minionsPlayed: 0,
             minionLimit: 1,
             actionsPlayed: 0,
