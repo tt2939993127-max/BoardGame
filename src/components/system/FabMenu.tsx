@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
-import { motion, AnimatePresence, useDragControls, useMotionValue } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { PulseGlow } from '../common/animations/PulseGlow';
 import { UI_Z_INDEX } from '../../core';
 import { MOBILE_MAX_VIEWPORT_WIDTH } from '../../games/mobileSupport';
-import { useCoarsePointer } from '../../hooks/ui/useCoarsePointer';
 import { useDocumentScrollLock } from '../../hooks/ui/useDocumentScrollLock';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import { logger } from '../../lib/logger';
@@ -33,10 +31,8 @@ interface FabMenuProps {
 
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
-
-const FAB_TOUCH_DRAG_HOLD_MS = 260;
-const FAB_TOUCH_DRAG_MOVE_CANCEL_PX = 12;
-const FAB_DRAG_TRIGGER_SELECTOR = '[data-fab-drag-trigger="true"]';
+const FAB_EDGE_PEEK_SIZE_MOBILE = 18;
+const FAB_EDGE_PEEK_SIZE_DESKTOP = 20;
 
 export interface FabAction {
     mobilePanelVariant?: 'popover' | 'sheet';
@@ -50,34 +46,24 @@ export const FabMenu = ({
 }: FabMenuProps) => {
     // 响应式尺寸
     const viewport = useRuntimeViewport();
-    const isCoarsePointer = useCoarsePointer();
     const viewportWidth = viewport.width;
     const viewportHeight = viewport.height;
     const safeAreaInsets: SafeAreaInsets = viewport.safeArea;
     const isMobileViewport = viewportWidth > 0 && viewportWidth <= MOBILE_MAX_VIEWPORT_WIDTH;
-    const hasTouchInput = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
-    const requiresTouchHoldToDrag = isMobileViewport && (isCoarsePointer || hasTouchInput);
     const buttonSize = isMobileViewport ? 44 : 48;
     const buttonGap = isMobileViewport ? 8 : 12;
     const edgePadding = isMobileViewport ? 12 : 32;
+    const edgePeekSize = isMobileViewport ? FAB_EDGE_PEEK_SIZE_MOBILE : FAB_EDGE_PEEK_SIZE_DESKTOP;
     
     const [isOpen, setIsOpen] = useState(false);
     const [activeItemId, setActiveItemId] = useState<string | null>(null);
     const prevActiveItemIdRef = useRef<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [fabPosition, setFabPosition] = useState<{ left: number; top: number } | null>(null);
-    const dragControls = useDragControls();
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
     const didDragRef = useRef(false);
     const [isDragging, setIsDragging] = useState(false);
-    const touchDragTimerRef = useRef<number | null>(null);
-    const pendingTouchDragRef = useRef<{
-        pointerId: number;
-        startX: number;
-        startY: number;
-        nativeEvent: PointerEvent;
-    } | null>(null);
 
     // 动态对齐状态
     const [alignment, setAlignment] = useState<FabAlignment>({ v: 'bottom', h: 'right' });
@@ -95,27 +81,27 @@ export const FabMenu = ({
         && Boolean(activeItem.content);
     useDocumentScrollLock(shouldLockDocumentScroll);
 
-    const clearPendingTouchDrag = useCallback(() => {
-        if (touchDragTimerRef.current !== null) {
-            window.clearTimeout(touchDragTimerRef.current);
-            touchDragTimerRef.current = null;
-        }
-        pendingTouchDragRef.current = null;
-    }, []);
-
-    const clampPosition = useCallback((target: { left: number; top: number }) => {
+    const clampPosition = useCallback((target: { left: number; top: number }, allowOverflow = true) => {
         if (viewportWidth <= 0 || viewportHeight <= 0) {
             return target;
         }
-        const minLeft = edgePadding + safeAreaInsets.left;
-        const minTop = edgePadding + safeAreaInsets.top;
-        const maxLeft = Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
-        const maxTop = Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
+        const minLeft = allowOverflow
+            ? edgePeekSize - buttonSize
+            : edgePadding + safeAreaInsets.left;
+        const minTop = allowOverflow
+            ? edgePeekSize - buttonSize
+            : edgePadding + safeAreaInsets.top;
+        const maxLeft = allowOverflow
+            ? Math.max(minLeft, viewportWidth - edgePeekSize)
+            : Math.max(minLeft, viewportWidth - buttonSize - edgePadding - safeAreaInsets.right);
+        const maxTop = allowOverflow
+            ? Math.max(minTop, viewportHeight - edgePeekSize)
+            : Math.max(minTop, viewportHeight - buttonSize - edgePadding - safeAreaInsets.bottom);
         return {
             left: Math.min(Math.max(target.left, minLeft), maxLeft),
             top: Math.min(Math.max(target.top, minTop), maxTop),
         };
-    }, [buttonSize, edgePadding, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
+    }, [buttonSize, edgePadding, edgePeekSize, safeAreaInsets.bottom, safeAreaInsets.left, safeAreaInsets.right, safeAreaInsets.top, viewportHeight, viewportWidth]);
 
     const getAlignmentForPosition = useCallback((target: { left: number; top: number }): FabAlignment => {
         const centerY = viewportHeight / 2;
@@ -171,7 +157,7 @@ export const FabMenu = ({
                     localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 }
                 
-                next = clampPosition(next);
+                next = clampPosition(next, true);
                 setFabPosition(next);
                 setAlignment(getAlignmentForPosition(next));
                 return;
@@ -184,7 +170,7 @@ export const FabMenu = ({
                 const next = clampPosition({
                     left: base.left + (parsed.x ?? 0),
                     top: base.top + (parsed.y ?? 0),
-                });
+                }, true);
                 const percent = {
                     leftPercent: next.left / viewportWidth,
                     topPercent: next.top / viewportHeight,
@@ -196,7 +182,7 @@ export const FabMenu = ({
                 return;
             }
 
-            const next = clampPosition(base);
+            const next = clampPosition(base, false);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
         } catch (error) {
@@ -213,7 +199,7 @@ export const FabMenu = ({
         const next = clampPosition({
             left: fabPosition.left + info.offset.x,
             top: fabPosition.top + info.offset.y,
-        });
+        }, true);
         setFabPosition(next);
         // 保存为百分比格式
         const percent = {
@@ -227,70 +213,13 @@ export const FabMenu = ({
     };
 
     const handleDragStart = () => {
-        clearPendingTouchDrag();
         didDragRef.current = true;
         setIsDragging(true);
     };
 
-    const handlePointerDownCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const handlePointerDownCapture = () => {
         didDragRef.current = false;
-        clearPendingTouchDrag();
-
-        if (!requiresTouchHoldToDrag || event.pointerType === 'mouse') {
-            return;
-        }
-
-        const target = event.target;
-        if (!(target instanceof HTMLElement) || !target.closest(FAB_DRAG_TRIGGER_SELECTOR)) {
-            return;
-        }
-
-        pendingTouchDragRef.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            nativeEvent: event.nativeEvent,
-        };
-
-        touchDragTimerRef.current = window.setTimeout(() => {
-            const pending = pendingTouchDragRef.current;
-            if (!pending) {
-                return;
-            }
-
-            didDragRef.current = true;
-            try {
-                dragControls.start(pending.nativeEvent, { snapToCursor: false });
-            } catch (error) {
-                logger.warn('FabMenu: 移动端长按拖拽启动失败', { error });
-            } finally {
-                clearPendingTouchDrag();
-            }
-        }, FAB_TOUCH_DRAG_HOLD_MS);
-    }, [clearPendingTouchDrag, dragControls, requiresTouchHoldToDrag]);
-
-    const handlePointerMoveCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-        if (!requiresTouchHoldToDrag || event.pointerType === 'mouse') {
-            return;
-        }
-
-        const pending = pendingTouchDragRef.current;
-        if (!pending || pending.pointerId !== event.pointerId) {
-            return;
-        }
-
-        const movedX = Math.abs(event.clientX - pending.startX);
-        const movedY = Math.abs(event.clientY - pending.startY);
-        if (movedX > FAB_TOUCH_DRAG_MOVE_CANCEL_PX || movedY > FAB_TOUCH_DRAG_MOVE_CANCEL_PX) {
-            clearPendingTouchDrag();
-        }
-    }, [clearPendingTouchDrag, requiresTouchHoldToDrag]);
-
-    const handlePointerReleaseCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-        if (event.pointerType !== 'mouse') {
-            clearPendingTouchDrag();
-        }
-    }, [clearPendingTouchDrag]);
+    };
 
     const handleMainClick = () => {
         if (didDragRef.current) {
@@ -360,7 +289,7 @@ export const FabMenu = ({
                         const next = clampPosition({
                             left: parsed.leftPercent * viewportWidth,
                             top: parsed.topPercent * viewportHeight,
-                        });
+                        }, true);
                         setFabPosition(next);
                         setAlignment(getAlignmentForPosition(next));
                         return;
@@ -370,7 +299,7 @@ export const FabMenu = ({
                 logger.error('FabMenu: 处理窗口缩放失败', { error });
             }
             // 降级：直接 clamp 当前位置
-            const next = clampPosition(fabPosition);
+            const next = clampPosition(fabPosition, true);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
         };
@@ -393,9 +322,6 @@ export const FabMenu = ({
 
         prevActiveItemIdRef.current = activeItemId;
     }, [activeItemId, items]);
-
-    useEffect(() => clearPendingTouchDrag, [clearPendingTouchDrag]);
-
     // 列表顺序
     const isButtonBottom = alignment.v === 'bottom';
     const satellitesToRender = isButtonBottom ? [...items.slice(1)].reverse() : items.slice(1);
@@ -412,23 +338,11 @@ export const FabMenu = ({
             ref={containerRef}
             className="fixed font-sans"
             drag
-            dragControls={dragControls}
-            dragListener={!requiresTouchHoldToDrag}
             dragMomentum={false}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onPointerDownCapture={handlePointerDownCapture}
-            onPointerMoveCapture={handlePointerMoveCapture}
-            onPointerUpCapture={handlePointerReleaseCapture}
-            onPointerCancelCapture={handlePointerReleaseCapture}
-            style={{
-                left: fabPosition.left,
-                top: fabPosition.top,
-                x: dragX,
-                y: dragY,
-                zIndex,
-                touchAction: requiresTouchHoldToDrag ? 'manipulation' : undefined,
-            }}
+            style={{ left: fabPosition.left, top: fabPosition.top, x: dragX, y: dragY, zIndex }}
             data-testid="fab-menu"
         >
             {/* 主球：锚点，位置固定 */}
@@ -804,7 +718,6 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label={item.label}
                 data-fab-id={item.id}
-                data-fab-drag-trigger="true"
                 className={`
                     relative flex items-center justify-center
                     bg-transparent border-0 p-0

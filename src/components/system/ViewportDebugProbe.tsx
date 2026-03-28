@@ -15,6 +15,18 @@ interface OverflowElementSnapshot {
     height: number;
 }
 
+interface HorizontalScrollContainerSnapshot {
+    tag: string;
+    id: string;
+    className: string;
+    overflowX: string;
+    clientWidth: number;
+    scrollWidth: number;
+    left: number;
+    right: number;
+    bottom: number;
+}
+
 interface ViewportDebugSnapshot {
     innerWidth: number;
     innerHeight: number;
@@ -27,9 +39,11 @@ interface ViewportDebugSnapshot {
     bodyScrollWidth: number;
     bodyScrollHeight: number;
     overflowElements: OverflowElementSnapshot[];
+    horizontalScrollContainers: HorizontalScrollContainerSnapshot[];
 }
 
 const MAX_OVERFLOW_ITEMS = 5;
+const MAX_SCROLL_CONTAINER_ITEMS = 5;
 const UPDATE_INTERVAL_MS = 700;
 
 const readOverflowElements = (): OverflowElementSnapshot[] => {
@@ -76,6 +90,44 @@ const readOverflowElements = (): OverflowElementSnapshot[] => {
         .slice(0, MAX_OVERFLOW_ITEMS);
 };
 
+const readHorizontalScrollContainers = (): HorizontalScrollContainerSnapshot[] => {
+    if (typeof window === 'undefined') {
+        return [];
+    }
+
+    return Array.from(document.querySelectorAll<HTMLElement>('*'))
+        .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            const isVisible = rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+
+            if (!isVisible) {
+                return null;
+            }
+
+            const hasHorizontalScroll = element.scrollWidth - element.clientWidth > 4;
+            const allowsHorizontalScroll = style.overflowX === 'auto' || style.overflowX === 'scroll' || style.overflowX === 'overlay';
+
+            if (!hasHorizontalScroll || !allowsHorizontalScroll) {
+                return null;
+            }
+
+            return {
+                tag: element.tagName.toLowerCase(),
+                id: element.id,
+                className: typeof element.className === 'string' ? element.className.slice(0, 80) : '',
+                overflowX: style.overflowX,
+                clientWidth: Math.round(element.clientWidth),
+                scrollWidth: Math.round(element.scrollWidth),
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                bottom: Math.round(rect.bottom),
+            };
+        })
+        .filter((item): item is HorizontalScrollContainerSnapshot => item !== null)
+        .slice(0, MAX_SCROLL_CONTAINER_ITEMS);
+};
+
 const readSnapshot = (): ViewportDebugSnapshot => {
     if (typeof window === 'undefined') {
         return {
@@ -90,6 +142,7 @@ const readSnapshot = (): ViewportDebugSnapshot => {
             bodyScrollWidth: 0,
             bodyScrollHeight: 0,
             overflowElements: [],
+            horizontalScrollContainers: [],
         };
     }
 
@@ -105,6 +158,7 @@ const readSnapshot = (): ViewportDebugSnapshot => {
         bodyScrollWidth: Math.round(document.body.scrollWidth),
         bodyScrollHeight: Math.round(document.body.scrollHeight),
         overflowElements: readOverflowElements(),
+        horizontalScrollContainers: readHorizontalScrollContainers(),
     };
 };
 
@@ -184,6 +238,8 @@ export function ViewportDebugProbe() {
                 <span>{snapshot.bodyScrollWidth} x {snapshot.bodyScrollHeight}</span>
                 <span className="text-amber-300/70">越界元素</span>
                 <span>{snapshot.overflowElements.length}</span>
+                <span className="text-amber-300/70">横向容器</span>
+                <span>{snapshot.horizontalScrollContainers.length}</span>
             </div>
 
             {snapshot.overflowElements.length > 0 ? (
@@ -197,6 +253,23 @@ export function ViewportDebugProbe() {
                             </div>
                             <div className="text-[10px] text-amber-100/75">
                                 {item.position} | L{item.left} R{item.right} T{item.top} B{item.bottom} | {item.width}x{item.height}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {snapshot.horizontalScrollContainers.length > 0 ? (
+                <div className="mt-2 border-t border-amber-400/20 pt-2">
+                    {snapshot.horizontalScrollContainers.map((item, index) => (
+                        <div key={`${item.tag}-${item.id}-scroll-${index}`} className="mb-1 rounded bg-white/5 px-2 py-1">
+                            <div className="truncate text-amber-200">
+                                {item.tag}
+                                {item.id ? `#${item.id}` : ''}
+                                {item.className ? `.${item.className}` : ''}
+                            </div>
+                            <div className="text-[10px] text-amber-100/75">
+                                overflow-x:{item.overflowX} | {item.clientWidth}/{item.scrollWidth} | L{item.left} R{item.right} B{item.bottom}
                             </div>
                         </div>
                     ))}
