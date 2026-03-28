@@ -2,7 +2,7 @@ import i18n from 'i18next';
 import Backend from 'i18next-http-backend';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
-import { DEFAULT_LANGUAGE, I18N_NAMESPACES, SUPPORTED_LANGUAGES, normalizeI18nLanguage } from './types';
+import { DEFAULT_LANGUAGE, I18N_NAMESPACES, RUNTIME_SUPPORTED_LANGUAGES, normalizeI18nLanguage } from './types';
 import { zhCNBundled } from './zh-CN-bundled';
 
 // 构建时注入的 locale JSON content hash 映射
@@ -30,7 +30,7 @@ export const i18nInitPromise = i18n
     .use(initReactI18next)
     .init({
         fallbackLng: DEFAULT_LANGUAGE,
-        supportedLngs: [...SUPPORTED_LANGUAGES],
+        supportedLngs: [...RUNTIME_SUPPORTED_LANGUAGES],
         defaultNS: 'common',
         ns: [...I18N_NAMESPACES],
         // 中文核心 namespace 内联打包，零网络请求

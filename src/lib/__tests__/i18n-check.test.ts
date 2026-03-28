@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createScopedLogger } from '../logger';
-import { normalizeI18nLanguage } from '../i18n/types';
+import { normalizeI18nLanguage, LANGUAGE_OPTIONS, RUNTIME_SUPPORTED_LANGUAGES } from '../i18n/types';
 import { parseNamespaceLiteral, collectReferencesFromContent } from '../../../scripts/verify/i18n-check';
 import {
     collectImplicitCandidateFiles,
@@ -13,12 +13,26 @@ afterEach(() => {
 
 describe('i18n language normalization', () => {
     it('maps browser variants to supported locales', () => {
-        expect(normalizeI18nLanguage('en-US')).toBe('en');
-        expect(normalizeI18nLanguage('en-GB')).toBe('en');
+        expect(normalizeI18nLanguage('en-US')).toBe(import.meta.env.MODE === 'android' ? 'zh-CN' : 'en');
+        expect(normalizeI18nLanguage('en-GB')).toBe(import.meta.env.MODE === 'android' ? 'zh-CN' : 'en');
         expect(normalizeI18nLanguage('zh')).toBe('zh-CN');
         expect(normalizeI18nLanguage('zh-TW')).toBe('zh-CN');
         expect(normalizeI18nLanguage(undefined)).toBe('zh-CN');
         expect(normalizeI18nLanguage('fr-FR')).toBe('zh-CN');
+    });
+
+    it('keeps runtime language options aligned with the current build mode', () => {
+        if (import.meta.env.MODE === 'android') {
+            expect(RUNTIME_SUPPORTED_LANGUAGES).toEqual(['zh-CN']);
+            expect(LANGUAGE_OPTIONS).toEqual([{ code: 'zh-CN', label: '中文' }]);
+            return;
+        }
+
+        expect(RUNTIME_SUPPORTED_LANGUAGES).toEqual(['zh-CN', 'en']);
+        expect(LANGUAGE_OPTIONS).toEqual([
+            { code: 'zh-CN', label: '中文' },
+            { code: 'en', label: 'English' },
+        ]);
     });
 });
 

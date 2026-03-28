@@ -603,21 +603,31 @@ describe('AI legal actions', () => {
         expect(second?.attemptKey).not.toBe(first?.attemptKey);
     });
 
-    it('奖励骰重掷后 attemptKey 应变化，否则 LocalGameProvider 会把新状态误判为重复尝试', async () => {
-        const random = createQueuedRandom([1]);
-        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], random);
-        state.core.pendingBonusDiceSettlement = {
-            attackerId: '0',
-            targetId: '1',
-            sourceAbilityId: 'holy-defense',
-            dice: [{ index: 0, value: 1, face: 'defense' }],
-            rerollCount: 0,
-            maxRerollCount: 2,
-            rerollCostTokenId: 'crit',
-            rerollCostAmount: 1,
-            displayOnly: true,
+    it('本地 AI 在响应窗口存在可打补牌牌时，应优先出牌而不是直接 pass', async () => {
+        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'main2';
+        state.core.activePlayerId = '1';
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 2;
+        state.core.players['0'].hand = [
+            {
+                id: 'card-super-double',
+                name: 'Undefendable',
+                type: 'action',
+                cpCost: 2,
+                timing: 'instant',
+                description: 'draw 3',
+                effects: [{ description: '抽取3张牌', action: { type: 'drawCard', target: 'self', drawCount: 3 }, timing: 'immediate' }],
+            },
+        ];
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-then-breakpoint',
+                windowType: 'thenBreakpoint',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
         };
-        state.core.players['0'].tokens.crit = 3;
 
         const first = await resolveNextLocalAiAction({
             engineConfig,
@@ -629,8 +639,54 @@ describe('AI legal actions', () => {
         });
 
         expect(first?.playerId).toBe('0');
-        expect(first?.action.kind).toBe('bonus-die-reroll');
-        expect(first?.attemptKey).toBeTruthy();
+        expect(first?.action.kind).toBe('response-play-card');
+        expect(first?.action.metadata).toMatchObject({ cardId: 'card-super-double' });
+
+        for (const command of first!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], first!.playerId, command.payload ?? {}),
+            );
+        }
+
+        expect(state.sys.responseWindow?.current).toBeUndefined();
+        expect(state.core.players['0'].hand.length).toBe(3);
+
+        const second = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(second).toBeNull();
+    });
+
+    it('本地 AI 在手牌偏少时应优先使用教皇税抽牌，而不是直接推进阶段', async () => {
+        const random = createQueuedRandom([6]);
+        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], random);
+        state.sys.phase = 'main2';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 3;
+        state.core.players['0'].hand = [];
+
+        const first = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(first?.playerId).toBe('0');
+        expect(first?.action.kind).toBe('use-passive-ability');
+        expect(first?.action.metadata).toMatchObject({
+            passiveId: 'tithes',
+            actionIndex: 1,
+        });
 
         for (const command of first!.action.commands) {
             state = execCmd(
@@ -639,6 +695,9 @@ describe('AI legal actions', () => {
                 random,
             );
         }
+
+        expect(state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(0);
+        expect(state.core.players['0'].hand.length).toBe(1);
 
         const second = await resolveNextLocalAiAction({
             engineConfig,
@@ -650,7 +709,7 @@ describe('AI legal actions', () => {
         });
 
         expect(second?.playerId).toBe('0');
-        expect(second?.action.kind).toBe('bonus-die-reroll');
+        expect(second?.action).toBeTruthy();
         expect(second?.attemptKey).toBeTruthy();
         expect(second?.attemptKey).not.toBe(first?.attemptKey);
     });

@@ -712,10 +712,31 @@ const cardValueScorer: LocalAiActionScorer = {
             };
         }
 
-        if (action.kind === 'play-card') {
+        const drawCount = card.effects?.reduce((sum, effect) => {
+            if (effect.action?.type !== 'drawCard') return sum;
+            return sum + (effect.action.drawCount ?? effect.action.value ?? 0);
+        }, 0) ?? 0;
+
+        if (action.kind === 'play-card' || action.kind === 'response-play-card') {
+            let score = 35 + card.cpCost * 10 + (card.isAttackModifier ? 30 : 0);
+            let reason = card.isAttackModifier
+                ? `攻击修正牌 ${cardId} 具有即时收益`
+                : `行动牌 ${cardId} 可带来额外收益`;
+
+            if (drawCount > 0) {
+                const handSize = state.core.players[context.playerId]?.hand.length ?? 0;
+                score += Math.max(0, drawCount * 18 - handSize * 4);
+                reason = `补牌牌 ${cardId} 在手牌偏少时收益更高`;
+            }
+
+            if (action.kind === 'response-play-card') {
+                score += 15;
+                reason = `${reason}（响应窗口）`;
+            }
+
             return {
-                score: 35 + card.cpCost * 10 + (card.isAttackModifier ? 30 : 0),
-                reason: card.isAttackModifier ? `攻击修正牌 ${cardId} 具有即时收益` : `行动牌 ${cardId} 可带来额外收益`,
+                score,
+                reason,
             };
         }
 
@@ -854,9 +875,10 @@ const passiveValueScorer: LocalAiActionScorer = {
 
         if (passiveAction.type === 'drawCard') {
             const handSize = state.core.players[context.playerId]?.hand.length ?? 0;
+            const responseWindowActive = !!state.sys.responseWindow?.current;
             return {
-                score: Math.max(0, 30 - handSize * 5),
-                reason: '在手牌偏少时优先补牌',
+                score: Math.max(0, 120 - handSize * 20) + (responseWindowActive ? 15 : 0),
+                reason: responseWindowActive ? '响应窗口内手牌偏少时优先补牌' : '手牌偏少时优先补牌',
             };
         }
 

@@ -408,7 +408,16 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // ---- TOKEN_RESPONSE_CLOSED → resolve ----
                 if (dtEvent.type === 'TOKEN_RESPONSE_CLOSED') {
                     console.log('[DT-EventSystem] TOKEN_RESPONSE_CLOSED，resolve 交互');
-                    newState = resolveInteraction(newState);
+                    const resolvedState = resolveInteraction(newState);
+                    newState = {
+                        ...resolvedState,
+                        sys: {
+                            ...resolvedState.sys,
+                            responseWindow: {
+                                current: undefined,
+                            },
+                        },
+                    };
                 }
 
                 // ---- BONUS_DICE_REROLL_REQUESTED → queue dt:bonus-dice ----
