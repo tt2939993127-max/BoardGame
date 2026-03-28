@@ -403,9 +403,6 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
                 { uid: 'draw-3', defId: 'robot_warbot', type: 'minion' },
             ],
             discard: [],
-            field: [
-                { uid: 'guard-1', defId: 'robot_microbot_alpha', baseIndex: 0, owner: '0', controller: '0', power: 1 },
-            ],
             minionsPlayed: 0,
             minionLimit: 1,
             actionsPlayed: 0,
@@ -435,7 +432,18 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
                 bases: [
                     {
                         defId: 'base_pyramids',
-                        minions: [],
+                        minions: [
+                            {
+                                uid: 'guard-1',
+                                defId: 'robot_microbot_alpha',
+                                owner: '0',
+                                controller: '0',
+                                basePower: 1,
+                                counters: 0,
+                                talentUsed: false,
+                                attachedActions: [],
+                            },
+                        ],
                         ongoingActions: [],
                         buriedCards: [
                             {
