@@ -25,15 +25,21 @@ const getCompactTutorialPanelMetrics = (
         160,
         viewportHeight - safeArea.top - safeArea.bottom - edgeInset * 2,
     );
-    const minWidth = Math.min(260, safeWidth);
-    const maxWidth = Math.min(352, safeWidth);
-    const preferredWidth = Math.round(viewportWidth * 0.44);
-    const panelWidth = clampNumber(preferredWidth, minWidth, maxWidth);
-    const minHeight = Math.min(220, safeHeight);
-    const panelMaxHeight = clampNumber(Math.round(viewportHeight * 0.72), minHeight, safeHeight);
+    const panelScale = clampNumber(viewportHeight / 440, 0.82, 0.94);
+    const visualWidth = clampNumber(Math.round(viewportWidth * 0.36), 260, 300);
+    const visualMaxHeight = clampNumber(Math.round(viewportHeight * 0.62), 210, safeHeight - 8);
+    const panelWidth = Math.min(
+        Math.round(visualWidth / panelScale),
+        Math.floor(safeWidth / panelScale),
+    );
+    const panelMaxHeight = Math.min(
+        Math.round(visualMaxHeight / panelScale),
+        Math.floor(safeHeight / panelScale),
+    );
 
     return {
         edgeInset,
+        panelScale,
         panelWidth,
         panelMaxHeight,
     };
@@ -121,7 +127,7 @@ export const TutorialOverlay: React.FC = () => {
                 const styles: React.CSSProperties = {
                     position: 'fixed',
                     left: '50%',
-                    transform: 'translateX(-50%)',
+                    transform: `translateX(-50%) scale(${compactPanel.panelScale})`,
                     width: compactPanel.panelWidth,
                     maxWidth: compactPanel.panelWidth,
                     zIndex: UI_Z_INDEX.tutorial,
@@ -130,8 +136,10 @@ export const TutorialOverlay: React.FC = () => {
 
                 if (rect && rect.top > viewportHeight * 0.45) {
                     styles.top = safeArea.top + compactPanel.edgeInset;
+                    styles.transformOrigin = 'top center';
                 } else {
                     styles.bottom = safeArea.bottom + compactPanel.edgeInset;
+                    styles.transformOrigin = 'bottom center';
                 }
 
                 setTooltipStyles({
