@@ -439,9 +439,25 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
     }
 
     if (phase === 'offensiveRoll' || phase === 'defensiveRoll') {
-        const abilityIds = phase === 'defensiveRoll'
-            ? getDefensiveAbilityIds(state.core, playerId)
-            : getAvailableAbilityIds(state.core, playerId, phase);
+        const abilityIds = (() => {
+            if (phase === 'offensiveRoll') {
+                return getAvailableAbilityIds(state.core, playerId, phase);
+            }
+
+            const selectedDefenseAbilityId = state.core.pendingAttack?.defenseAbilityId;
+            if (state.core.rollCount === 0) {
+                // 防御阶段掷骰前允许手动切换防御技能，但本地 AI 不应在已选定后反复切换，
+                // 否则会持续偏向高分的 select-ability，卡死在 defensiveRoll。
+                if (selectedDefenseAbilityId) {
+                    return [];
+                }
+                return getDefensiveAbilityIds(state.core, playerId);
+            }
+
+            return getAvailableAbilityIds(state.core, playerId, phase).filter(
+                (abilityId) => abilityId !== selectedDefenseAbilityId,
+            );
+        })();
         for (const abilityId of abilityIds) {
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('ability', abilityId),
@@ -803,6 +819,51 @@ const bonusDieScorer: LocalAiActionScorer = {
     },
 };
 
+const passiveValueScorer: LocalAiActionScorer = {
+    id: 'passive-value',
+    score(context, action) {
+        if (action.kind !== 'use-passive-ability') return null;
+
+        const passiveId = typeof action.metadata?.passiveId === 'string'
+            ? action.metadata.passiveId
+            : null;
+        const actionIndex = typeof action.metadata?.actionIndex === 'number'
+            ? action.metadata.actionIndex
+            : null;
+        if (!passiveId || actionIndex === null) return null;
+
+        const state = context.visibleState as DiceThroneState;
+        const passive = getPlayerPassiveAbilities(state.core, context.playerId).find((item) => item.id === passiveId);
+        const passiveAction = passive?.actions[actionIndex];
+        if (!passiveAction) return null;
+
+        if (passiveAction.type === 'rerollDie') {
+            const targetDieId = typeof action.metadata?.targetDieId === 'number'
+                ? action.metadata.targetDieId
+                : null;
+            const die = targetDieId !== null
+                ? state.core.dice.find((item) => item.id === targetDieId)
+                : null;
+            if (!die) return null;
+
+            return {
+                score: (4 - die.value) * 30,
+                reason: `优先重掷较低点数的骰子 ${die.value}`,
+            };
+        }
+
+        if (passiveAction.type === 'drawCard') {
+            const handSize = state.core.players[context.playerId]?.hand.length ?? 0;
+            return {
+                score: Math.max(0, 30 - handSize * 5),
+                reason: '在手牌偏少时优先补牌',
+            };
+        }
+
+        return null;
+    },
+};
+
 const statusScorer: LocalAiActionScorer = {
     id: 'status-priority',
     score(context, action) {
@@ -865,6 +926,7 @@ const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     cardValueScorer,
     interactionValueScorer,
     bonusDieScorer,
+    passiveValueScorer,
     statusScorer,
     phaseTempoScorer,
 ];

@@ -269,9 +269,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 break;
         }
 
+        const cardHeight = Math.round((cardWidth * 160) / 106);
+        const smallCardHeight = Math.round((smallCardWidth * 160) / 106);
+
         return {
             '--cardia-card-width': `${cardWidth}px`,
+            '--cardia-card-height': `${cardHeight}px`,
             '--cardia-small-card-width': `${smallCardWidth}px`,
+            '--cardia-small-card-height': `${smallCardHeight}px`,
         } as React.CSSProperties;
     }, [deviceType, viewportSize]);
 
@@ -288,7 +293,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                   : 'auto';
         const compactPlayerZoneHeight =
             deviceType === 'tight-landscape'
-                ? 'clamp(4.8rem, 22dvh, 5.6rem)'
+                ? 'calc(var(--cardia-small-card-height) + 2.875rem)'
                 : 'auto';
 
         const reservedBottom =
@@ -1470,9 +1475,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
         return (
             <div
                 data-testid="cardia-player-area-panel"
-                className="flex h-full min-h-0 items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-black/62 px-4 py-3 backdrop-blur-md"
+                className="flex h-full min-h-0 items-stretch gap-1.5 overflow-visible rounded-[0.9rem] border border-white/10 bg-black/62 px-2.5 py-1.5 backdrop-blur-md"
             >
-                <div className="flex w-[7.5rem] flex-shrink-0 flex-col justify-between gap-1 overflow-hidden">
+                <div className="flex w-[6.5rem] flex-shrink-0 flex-col justify-between gap-1 overflow-hidden">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
                         <div className="truncate text-[14px] font-bold text-white">{player.name}</div>
                         <div

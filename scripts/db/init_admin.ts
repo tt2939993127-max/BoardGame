@@ -15,6 +15,11 @@ const readArg = (name: string): string | null => {
             return argv[i + 1];
         }
     }
+    const npmConfigKey = `npm_config_${name.replace(/-/g, '_')}`;
+    const npmConfigValue = process.env[npmConfigKey];
+    if (npmConfigValue) {
+        return npmConfigValue;
+    }
     return null;
 };
 
