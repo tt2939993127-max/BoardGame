@@ -48,7 +48,7 @@ export type ActionSubtype = 'standard' | 'ongoing' | 'special';
 export type FactionId = string;
 
 /** 能力标签 */
-export type AbilityTag = 'onPlay' | 'ongoing' | 'special' | 'talent' | 'extra' | 'onDestroy' | 'ongoingActivation';
+export type AbilityTag = 'onPlay' | 'ongoing' | 'special' | 'talent' | 'extra' | 'onDestroy' | 'onUncover' | 'ongoingActivation';
 
 /**
  * 卡牌打出约束（数据驱动）。
@@ -328,7 +328,7 @@ export interface BuriedCardOnBase {
     /** 控制者：埋葬该卡的玩家 */
     controllerId: PlayerId;
     /** 来源：用于规则/日志调试 */
-    buriedFrom: 'hand' | 'discard' | 'play';
+    buriedFrom: 'hand' | 'discard' | 'play' | 'deck';
 }
 
 /** 场上的基地 */
@@ -540,10 +540,34 @@ export interface TriggerInstance {
     actionTargetBaseIndex?: number;
     actionTargetType?: 'base' | 'minion';
     actionTargetMinionUid?: string;
+    buriedCardUid?: string;
+    buriedCardDefId?: string;
+    buriedCardControllerId?: PlayerId;
+    buriedFrom?: 'hand' | 'discard' | 'play' | 'deck';
 
     /** LKI snapshots captured at queue time */
     lkiMinion?: MinionLkiSnapshot;
     lkiBase?: BaseLkiSnapshot;
+}
+
+export type DuelOutcomeKind =
+    | 'destroy_loser'
+    | 'vp_to_winner'
+    | 'draw2_to_winner'
+    | 'high_noon'
+    | 'run_em_off';
+
+export interface ActiveDuel {
+    id: string;
+    baseIndex: number;
+    sourceId: string;
+    sourcePlayerId: PlayerId;
+    challengerPlayerId: PlayerId;
+    challengerMinionUid: string;
+    challengedPlayerId: PlayerId;
+    challengedMinionUid: string;
+    outcome: DuelOutcomeKind;
+    destroyReason?: string;
 }
 
 export interface SmashUpCore {
@@ -703,6 +727,8 @@ export interface SmashUpCore {
 
     /** 全局触发队列：用于按 Wiki 规则统一“同时触发”的反应排序与 witness/LKI */
     triggerQueue?: TriggerInstance[];
+    /** 当前进行中的决斗。用于官方 Oops duel 流程期间的全局门控与 UI 展示。 */
+    activeDuel?: ActiveDuel;
 }
 
 export interface FactionSelectionState {
@@ -966,7 +992,7 @@ export interface CardBuriedEvent extends GameEvent<typeof SU_EVENTS.CARD_BURIED>
         baseIndex: number;
         /** 真正所有者（用于基地离场清算） */
         trueOwnerId: PlayerId;
-        buriedFrom: 'hand' | 'discard' | 'play';
+        buriedFrom: 'hand' | 'discard' | 'play' | 'deck';
         reason: string;
     };
 }
@@ -978,6 +1004,7 @@ export interface BuriedCardUncoveredEvent extends GameEvent<typeof SU_EVENTS.BUR
         cardUid: string;
         baseIndex: number;
         reason: string;
+        discardWithoutPlay?: boolean;
     };
 }
 
