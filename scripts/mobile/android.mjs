@@ -27,6 +27,9 @@ const defaultAndroidWebviewMode = 'remote';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
 const distDir = path.join(rootDir, 'dist');
+const distLocalesDir = path.join(distDir, 'locales');
+const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
+const distSmashUpEnglishPodAssetsDir = path.join(distLocalizedAssetsDir, 'en', 'smashup', 'pod-assets');
 const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
 const androidBuildMetaFileName = 'android-build-meta.json';
 const gameManifestGeneratorPath = path.join(rootDir, 'scripts', 'game', 'generate_game_manifests.js');
@@ -225,6 +228,47 @@ const clearBundledWebAssetsForRemote = () => {
     rmSync(androidPublicDir, { recursive: true, force: true });
 };
 
+const clearDirectoryChildren = (dirPath, { preserve = [] } = {}) => {
+    if (!existsSync(dirPath)) return;
+
+    const preservedPaths = preserve.map((value) => path.resolve(value));
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+        const fullPath = path.join(dirPath, entry.name);
+        const resolvedPath = path.resolve(fullPath);
+        const shouldPreserve = preservedPaths.some((preservedPath) => (
+            resolvedPath === preservedPath || resolvedPath.startsWith(`${preservedPath}${path.sep}`)
+        ));
+        if (shouldPreserve) continue;
+        rmSync(fullPath, { recursive: true, force: true });
+    }
+};
+
+const pruneAndroidEmbeddedDist = () => {
+    clearDirectoryChildren(distLocalesDir, {
+        preserve: [path.join(distLocalesDir, 'zh-CN')],
+    });
+
+    if (!existsSync(distLocalizedAssetsDir)) {
+        return;
+    }
+
+    clearDirectoryChildren(distLocalizedAssetsDir, {
+        preserve: [
+            path.join(distLocalizedAssetsDir, 'zh-CN'),
+            distSmashUpEnglishPodAssetsDir,
+        ],
+    });
+
+    const enDir = path.join(distLocalizedAssetsDir, 'en');
+    const smashupDir = path.join(enDir, 'smashup');
+    clearDirectoryChildren(enDir, {
+        preserve: [smashupDir],
+    });
+    clearDirectoryChildren(smashupDir, {
+        preserve: [distSmashUpEnglishPodAssetsDir],
+    });
+};
+
 const writeText = (filePath, content) => {
     mkdirSync(path.dirname(filePath), { recursive: true });
     if (existsSync(filePath) && readText(filePath) === content) {
@@ -232,6 +276,7 @@ const writeText = (filePath, content) => {
     }
     writeFileSync(filePath, content, 'utf8');
 };
+
 
 const replaceInFile = (filePath, replacer) => {
     const current = readText(filePath);
@@ -646,6 +691,7 @@ const syncAndroid = async () => {
     await ensureBuildSupport();
     if (mode === 'embedded') {
         await runAndroidWebBuild();
+        pruneAndroidEmbeddedDist();
         ensureAndroidDistBuildReady();
     }
     await ensureAndroidProject();

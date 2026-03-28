@@ -9,7 +9,21 @@
       "Bash(grep:*)",
       "Bash(gh pr list:*)",
       "Bash(git fetch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run:*)",
+      "Bash(openspec validate:*)",
+      "Bash(python:*)",
+      "Bash(node:*)",
+      "Bash(npx eslint:*)",
+      "Bash(ANDROID_WEBVIEW_MODE=embedded VITE_BACKEND_URL=https://example.com node \"/mnt/d/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
+      "Bash(ANDROID_WEBVIEW_MODE=remote ANDROID_REMOTE_WEB_URL=https://example.com node \"/mnt/d/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
+      "Bash(ANDROID_WEBVIEW_MODE=embedded VITE_BACKEND_URL=https://example.com node \"D:/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
+      "Bash(ANDROID_WEBVIEW_MODE=remote ANDROID_REMOTE_WEB_URL=https://example.com node \"D:/gongzuo/webgame/BoardGame/scripts/mobile/android.mjs\" doctor)",
+      "mcp__zai-mcp-server__ui_diff_check"
     ]
   }
 }
