@@ -250,6 +250,8 @@ export interface InteractionDescriptor {
         statusId: string;
         amount: number;
     }>;
+    /** 选定玩家后继续执行的 custom action（用于 2v2 下的定向卡牌效果） */
+    resolveCustomActionId?: string;
     /** 当前被操作的骰池归属玩家 */
     diceOwnerId?: PlayerId;
     targetOpponentDice?: boolean;
