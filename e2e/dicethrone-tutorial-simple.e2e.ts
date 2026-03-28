@@ -3,18 +3,29 @@
  * 
  * 只测试教程能启动、显示基本步骤、并能通过点击 Next 推进
  */
-
-import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './framework';
 import { setEnglishLocale } from './helpers/common';
-import { waitForBoardReady } from './helpers/dicethrone';
+
+async function waitForTutorialReady(page: Page): Promise<void> {
+    await page.waitForFunction(
+        () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+        { timeout: 30000, polling: 200 },
+    );
+
+    await page.waitForFunction(
+        () => !!document.querySelector('[data-tutorial-step]'),
+        { timeout: 30000, polling: 200 },
+    );
+}
 
 test.describe('DiceThrone Tutorial (Simplified)', () => {
-    test('Tutorial starts and shows initial steps', async ({ page }, testInfo) => {
+    test('Tutorial starts and shows initial steps', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
         await setEnglishLocale(page);
         await page.goto('/play/dicethrone/tutorial');
-        await waitForBoardReady(page, 30000);
+        await waitForTutorialReady(page);
 
         // 等待教学覆盖层出现
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
@@ -39,19 +50,19 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         }
 
         // 截图
-        await page.screenshot({ path: testInfo.outputPath('tutorial-progress.png'), fullPage: false });
+        await game.screenshot('tutorial-progress', testInfo);
 
         // 验证教程仍在运行
         const stillHasStep = await page.locator('[data-tutorial-step]').first().isVisible({ timeout: 1000 }).catch(() => false);
         expect(stillHasStep).toBe(true);
     });
 
-    test('Tutorial can advance through main phases', async ({ page }, testInfo) => {
+    test('Tutorial can advance through main phases', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await setEnglishLocale(page);
         await page.goto('/play/dicethrone/tutorial');
-        await waitForBoardReady(page, 30000);
+        await waitForTutorialReady(page);
 
         // 等待教学覆盖层
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
@@ -88,7 +99,7 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await page.waitForTimeout(500);
 
         // 截图
-        await page.screenshot({ path: testInfo.outputPath('tutorial-after-advance.png'), fullPage: false });
+        await game.screenshot('tutorial-after-advance', testInfo);
 
         // 验证进入了新阶段（骰子相关步骤）
         const diceStep = await getTutorialStepId();

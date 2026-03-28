@@ -9,7 +9,7 @@
  * 5. 验证目标玩家获得反击 token
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './framework';
 import { TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
 import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
 import {

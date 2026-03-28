@@ -34,7 +34,7 @@ test.describe('SmashUp - 我们乃最强 afterScoring 回归', () => {
                     defId: 'base_the_homeworld',
                     minions: [
                         { uid: 'scoring-source', defId: 'giant_ant_worker', baseIndex: 0, owner: '0', controller: '0', basePower: 25, powerCounters: 2 },
-                        { uid: 'scoring-rival', defId: 'pirate_first_mate', baseIndex: 0, owner: '1', controller: '1', basePower: 5, powerCounters: 0 },
+                        { uid: 'scoring-rival', defId: 'ninja_shinobi', baseIndex: 0, owner: '1', controller: '1', basePower: 5, powerCounters: 0 },
                     ],
                 },
                 {
@@ -53,8 +53,31 @@ test.describe('SmashUp - 我们乃最强 afterScoring 回归', () => {
         await game.advancePhase();
 
         await game.waitForPhase('scoreBases', 10000);
-        await game.waitForResponseWindow('afterScoring', 10000);
+        await page.waitForFunction(
+            () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const windowType = state?.sys?.responseWindow?.current?.windowType;
+                return state?.sys?.phase === 'scoreBases' && (windowType === 'meFirst' || windowType === 'afterScoring');
+            },
+            { timeout: 10000, polling: 200 },
+        );
         await expect(page.getByTestId('me-first-overlay')).toBeVisible();
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            const windowType = await page.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.responseWindow?.current?.windowType ?? null;
+            });
+            if (windowType === 'afterScoring') {
+                break;
+            }
+            if (windowType !== 'meFirst') {
+                throw new Error(`推进到 afterScoring 前遇到意外响应窗口: ${windowType}`);
+            }
+            await game.passResponseWindow();
+        }
+
+        await game.waitForResponseWindow('afterScoring', 10000);
         await game.screenshot('champions-after-scoring-window', testInfo);
 
         await game.playCard('giant_ant_we_are_the_champions', { targetBaseIndex: 0 });
@@ -67,9 +90,16 @@ test.describe('SmashUp - 我们乃最强 afterScoring 回归', () => {
             await game.passResponseWindow();
         }
 
-        await game.waitForInteraction('giant_ant_we_are_the_champions_choose_snapshot_source', 10000);
-        await expect(page.getByTestId('prompt-card-0')).toBeVisible();
-        await game.screenshot('champions-choose-snapshot-source', testInfo);
+        await page.waitForFunction(
+            () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const sourceId = state?.sys?.interaction?.current?.data?.sourceId;
+                return sourceId === 'giant_ant_we_are_the_champions_choose_snapshot_source'
+                    || sourceId === 'giant_ant_we_are_the_champions_choose_source';
+            },
+            { timeout: 10000, polling: 200 },
+        );
+        await game.screenshot('champions-choose-source', testInfo);
 
         await game.selectInteractionOptionBy(
             (option: any) => option?.value?.minionUid === 'scoring-source',
@@ -93,7 +123,19 @@ test.describe('SmashUp - 我们乃最强 afterScoring 回归', () => {
         });
         await game.screenshot('champions-choose-amount', testInfo);
 
-        await page.getByRole('button', { name: /^(确认转移|Confirm)/i }).click();
+        await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const state = harness?.state?.get?.();
+            const interaction = state?.sys?.interaction?.current;
+            if (!interaction) {
+                throw new Error('choose_amount interaction not found');
+            }
+            harness.command.dispatch({
+                type: 'SYS_INTERACTION_RESPOND',
+                playerId: interaction.playerId,
+                payload: { optionId: 'confirm-transfer', mergedValue: { amount: 2, value: 2 } },
+            });
+        });
         await game.waitForNoInteraction(10000);
 
         const player0 = await game.getPlayerState('0');

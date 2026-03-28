@@ -1,5 +1,10 @@
 import { test, expect } from './framework';
 
+const FOUR_PLAYER_TEST_QUERY = {
+    numPlayers: 4,
+    skipInitialization: true,
+} as const;
+
 function buildFourPlayerLayoutScene() {
     return {
         gameId: 'smashup',
@@ -143,10 +148,7 @@ test.describe('大杀四方四人局布局', () => {
         test.setTimeout(60000);
 
         await page.setViewportSize({ width: 1440, height: 900 });
-        await game.openTestGame('smashup', {
-            numPlayers: 4,
-            skipInitialization: true,
-        });
+        await game.openTestGame('smashup', FOUR_PLAYER_TEST_QUERY, 20000);
         await game.setupScene(buildFourPlayerLayoutScene());
 
         const scoreboard = page.locator('[data-tutorial-id="su-scoreboard"]');

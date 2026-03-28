@@ -1,48 +1,44 @@
-/**
- * DiceThrone 简单启动测试
- * 只测试到游戏开始，不测试业务逻辑
- */
+import { test, expect } from './framework';
+import type { GameTestContext } from './framework';
 
-import { test, expect } from '@playwright/test';
-import { setupDTOnlineMatch, selectCharacter, waitForGameBoard, readyAndStartGame } from './helpers/dicethrone';
+async function readStartState(game: GameTestContext) {
+    const state = await game.getState();
+    return {
+        phase: state?.sys?.phase ?? null,
+        activePlayerId: state?.core?.activePlayerId ?? null,
+        playerCount: Object.keys(state?.core?.players ?? {}).length,
+    };
+}
 
-test.describe('DiceThrone Simple Start', () => {
-    test('Online match: Can start a game successfully', async ({ browser }, testInfo) => {
-        test.setTimeout(60000);
-        const baseURL = testInfo.project.use.baseURL as string | undefined;
+test.describe('DiceThrone 本地启动冒烟', () => {
+    test('framework 场景应直接渲染基础战局与关键控件', async ({ page, game }) => {
+        await game.openTestGame('dicethrone');
 
-        const setup = await setupDTOnlineMatch(browser, baseURL);
-        
-        if (!setup) {
-            test.skip(true, '游戏服务器不可用或创建房间失败');
-            return;
-        }
-        
-        const { hostPage, guestPage, hostContext, guestContext } = setup;
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 2, HP: 50 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'main1',
+            extra: {
+                selectedCharacters: { '0': 'barbarian', '1': 'paladin' },
+                hostStarted: true,
+            },
+        });
 
-        // 选择英雄：野蛮人 vs 圣骑士
-        await selectCharacter(hostPage, 'barbarian');
-        await selectCharacter(guestPage, 'paladin');
-        
-        // 准备并开始游戏
-        await readyAndStartGame(hostPage, guestPage);
-        
-        // 等待游戏开始
-        await waitForGameBoard(hostPage);
-        await waitForGameBoard(guestPage);
+        await game.waitForPhase('main1', 10000);
+        await expect.poll(async () => readStartState(game), { timeout: 10000 }).toMatchObject({
+            phase: 'main1',
+            activePlayerId: '0',
+            playerCount: 2,
+        });
 
-        // 截图验证
-        await hostPage.screenshot({ path: testInfo.outputPath('host-game-started.png'), fullPage: false });
-        await guestPage.screenshot({ path: testInfo.outputPath('guest-game-started.png'), fullPage: false });
-
-        // 验证游戏界面元素存在（而不是验证 window.__BG_STATE__，因为 DiceThrone 使用新的传输层架构）
-        const hostDiceButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
-        await expect(hostDiceButton).toBeVisible({ timeout: 5000 });
-
-        const guestDiceButton = guestPage.locator('[data-tutorial-id="dice-roll-button"]');
-        await expect(guestDiceButton).toBeVisible({ timeout: 5000 });
-
-        await guestContext.close();
-        await hostContext.close();
+        await expect(page.locator('[data-tutorial-id="hand-area"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('[data-tutorial-id="advance-phase-button"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 5000 });
     });
 });
