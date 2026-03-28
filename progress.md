@@ -1130,3 +1130,84 @@ Error Log: `src/games/dicethrone/domain/flowHooks.ts` 中仍有历史残留的 5
 - Batch 2 当前主线已经从“范围再校正”推进到真实完成态：`remove-status-self` 的 self-only 约束和 `allOpponents` 的 enemy-set 语义都已拿到规则回归，`allOpponents` 还额外拿到了在线 4 人证据。
 - `Soul Burn` 不再悬空：本轮已确认它应该是当前目标/defender 伤害，而不是“所有对手”广播。
 
+## Session: 2026-03-28 DiceThrone Batch 3 多步骰子交互规划启动
+- **Status:** completed
+- Actions taken:
+  - 复核 `openspec/AGENTS.md`、`docs/ai-rules/testing-audit.md`、`src/games/dicethrone/rule/王权骰铸规则.md` 与三件套尾部，确认当前四人专项不能被表述成“全审计完成”。
+  - 重新盘点 `modifyDie` / `selectDie` / `shadow_thief-shadow-manipulation` 的共享入口，确认 Batch 3 不只是旧 E2E 过时，还存在 `targetOpponentDice:boolean` 继续承担骰池归属语义的共享风险。
+  - 复核 `src/games/dicethrone/domain/rules.ts`、`src/games/dicethrone/domain/execute.ts` 与 2v2 原始 spec，确认 `afterRollConfirmed` 当前仍是“非 rollerId 的对手”视角，必须继续审计它与“队友可改骰、队友不进同队响应队列”边界是否一致。
+  - 新建 OpenSpec change `update-dicethrone-4p-interactions-batch-3`，把四人专项下一批正式固定为“多步骰子交互 Batch 3”，不再混写 Batch 1/2 已完成边界。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| OpenSpec 活跃 change 清单 | `openspec list` | 确认 Batch 1/2 已 completed，便于新开 Batch 3 | `update-dicethrone-4p-player-target-interactions ✓ Complete` / `update-dicethrone-4p-interactions-batch-2 ✓ Complete` | ✅ |
+| 四人规则与 2v2 边界复核 | `Get-Content src/games/dicethrone/rule/王权骰铸规则.md` + `Get-Content openspec/changes/add-dicethrone-2v2-team-mode/specs/dicethrone-team-mode/spec.md` | 确认“队友可改骰，但队友不进同队响应队列”仍是现役边界 | 已确认 | ✅ |
+| 新 change 严格校验 | `openspec validate update-dicethrone-4p-interactions-batch-3 --strict --no-interactive` | Batch 3 proposal / design / tasks / spec 满足 OpenSpec 格式 | `valid` | ✅ |
+
+### Next Step
+- 进入 Batch 3 正式实现审计：先决定是仅需现代化测试与证据，还是需要在共享层显式建模“当前骰池归属 / 观察视角”，再落规则回归和在线 E2E。
+
+## Session: 2026-03-28 DiceThrone 炎术士多角色交互覆盖复核
+- **Status:** completed
+- Actions taken:
+  - 重新盘点炎术士整组能力与 custom action，区分“已完成多人目标审计”与“仍依赖 attacker/defender/roller 共享语义但没拿到四人专项证据”的入口。
+  - 确认 `Soul Burn`、`Meteor`、`Meteor II`、`Ultimate Inferno` 已被 Batch 2 收口，不应再把它们和尚未审计完成的炎术士入口混为一谈。
+  - 确认炎术士仍未拿到四人专项证据的高风险入口主要是：
+    - `Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`
+    - `Fiery Combo` / `Hot Streak II` / `Burn Down` / `Ignite`
+    - `Magma Armor I/II/III`
+    - `Get Fired Up` / `Red Hot`
+  - 将上述结论回填到 `findings.md`，避免后续把“火法整组都审完”说成既成事实。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 炎术士入口盘点 | `rg -n "Pyro Blast|burn-down|ignite|magma-armor|get-fired-up|red-hot|Meteor|Soul Burn" src/games/dicethrone/__tests__ e2e` | 区分已覆盖与未覆盖的炎术士多角色语义入口 | 已确认 | ✅ |
+
+### Next Step
+- 若继续按“多角色交互技能专项”推进，炎术士应优先审 `Pyro Blast II/III` 与 `Magma Armor`，它们比 `Fireball` 这类纯单体伤害更接近当前四人专项的共享风险核心。
+
+## Session: 2026-03-28 DiceThrone 全量多人语义审计矩阵首轮汇总
+- **Status:** completed
+- Actions taken:
+  - 基于 `docs/ai-rules/testing-audit.md` 的 D1/D2/D5/D8/D23 维度，重新定义本轮“全量多人审计”的口径：只统计在 2 人以上会发生语义变化的技能 / token / 卡牌设计，不把所有普通单体伤害一股脑算进来。
+  - 通过 `rg` 交叉扫描 `heroes/`、`domain/customActions/`、`effects.ts`、`rules.ts`、`execute.ts`、`__tests__/`、`e2e/` 与 OpenSpec changes，按实现模式而不是按卡名平铺，汇总出当前多人语义家族矩阵。
+  - 明确 3 类当前完成态：
+    - Batch 1：多人玩家目标交互
+    - Batch 2：self-only / enemy-set
+    - Batch 3：多步骰子交互已建 change，但尚未实现收口
+  - 明确 2 类当前未完成态：
+    - P0：共享骰子窗口 / `targetOpponentDice` / `afterRollConfirmed`
+    - P1-P3：炎术士长尾与其他英雄的 `defenderId` / 防御视角翻转家族
+  - 将“已修复的真实缺口”和“只有 2 人或局部行为测试、但无 4 人专项证据”的家族拆开记录，避免后续再把“有测试”误说成“全量多人已审完”。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 全量多人语义入口盘点 | `rg -n "selectPlayer|selectStatus|selectTargetStatus|allOpponents|targetOpponentDice|modifyDie|selectDie|responseWindow|afterRollConfirmed" src/games/dicethrone e2e openspec` | 找出当前显式多人语义入口与共享层关键字 | 已定位到 Batch 1/2/3 与响应窗口共享入口 | ✅ |
+| 炎术士长尾家族盘点 | `rg -n "Pyro Blast|Fiery Combo|Hot Streak|Burn Down|Ignite|Magma Armor|Get Fired Up|Red Hot|Blazing Soul|Meteor Shower" src/games/dicethrone/__tests__ src/games/dicethrone/heroes src/games/dicethrone/domain/customActions e2e` | 区分火法已审与未审家族 | 已形成 P1/P2 清单 | ✅ |
+| 全英雄角色映射盘点 | `rg -n "ctx\\.defenderId|ctx\\.ctx\\.defenderId|防御上下文|原攻击者" src/games/dicethrone/domain/customActions` | 找出仍依赖 defender/防御视角翻转的未专项家族 | 已定位 `paladin/moon_elf/shadow_thief/barbarian/monk` 多组入口 | ✅ |
+
+### Conclusion
+- 当前最准确的完成度口径是：“多人玩家目标交互已完成 Batch 1/2，通用多步骰子交互已识别为 Batch 3，火法与多名英雄的角色映射长尾仍待分批审计。”
+- 这轮矩阵已经足够回答用户的核心问题：四人模式并没有“全都审完”，剩余缺口不是抽象的“可能还有一些”，而是可以按 P0/P1/P2/P3 继续推进的明确家族列表。
+
+## Session: 2026-03-28 DiceThrone Batch 3 P0 路由冲突复核
+- **Status:** completed
+- Actions taken:
+  - 继续下钻 `update-dicethrone-4p-interactions-batch-3` 的 P0，共读 `execute.ts`、`rules.ts`、`ResponseWindowSystem.ts`、`RightSidebar.tsx` 与现有 `flow.test.ts`，确认问题不只停在 `targetOpponentDice` 命名和提示文案。
+  - 明确当前 `afterRollConfirmed` 的真实控制链：`execute.ts` 用 `getContextualOpponentId(...rollerId)` 作为 `triggerId` 打开响应窗口，`getResponderQueue()` 会排除 `triggerId` 的同队玩家，`ResponseWindowSystem` 又要求 `PLAY_CARD` 必须来自 `currentResponderId`。
+  - 用现役回归交叉验证了这条链已经固化到行为层：`flow.test.ts` 中“4 人模式下防御掷骰确认后的响应窗口只归当前攻击方”断言 `responderQueue === ['0']`，说明攻击方队友 `P2` 当前被显式排除。
+  - 因此把 Batch 3 的 P0 进一步从“共享语义可能失真”收紧为“共享响应窗口路由与 2v2 规则口径至少存在未裁决冲突”，后续必须先做语义裁决，再决定实现是走 allied responder queue 还是非队列豁免路径。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| P0 代码路径复核 | `Get-Content src/games/dicethrone/domain/execute.ts` + `Get-Content src/games/dicethrone/domain/rules.ts` + `Get-Content src/engine/systems/ResponseWindowSystem.ts` | 确认 `afterRollConfirmed` 的 trigger / queue / responder gate 是否仍是单一 trigger-side 视角 | 已确认 | ✅ |
+| 现役回归佐证 | `Get-Content src/games/dicethrone/__tests__/flow.test.ts` | 判断是否已有测试锁住“攻击方队友被排除” | 已确认 `responderQueue === ['0']` | ✅ |
+
+### Conclusion
+- Batch 3 的 P0 现在已经不是宽泛的“可能只差现代化测试”，而是一个更具体的共享路由裁决问题：当前实现并未为“攻击方队友在防御骰确认后帮队友压敌方骰面”保留现役路径。
+- 下一步最正确的动作不是先补 E2E，而是先决定 2v2 下 allied dice interference 的权威语义，再据此改共享层和测试。
+

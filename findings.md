@@ -809,3 +809,103 @@
   - 队友 `P3` 仍保持 `50`；
   - 这说明 online 结算已经只命中真实敌方集合，没有再把 ally 算进 `allOpponents`。
 
+## 2026-03-28 DiceThrone Batch 3 多步骰子交互审计结论
+
+- 四人专项当前还没有“全审计完”。Batch 1/2 已完成的只是玩家目标交互；剩余现役高风险家族是 `modifyDie` / `selectDie` 多步骰子交互，以及共用同一路径的 `shadow_thief-shadow-manipulation`。
+- 旧 `e2e/dicethrone-die-modification.e2e.ts` 与 `e2e/dicethrone-die-reroll.e2e.ts` 不能再被当成现役证据：
+  - 文件仍混用 `browser` fixture 与未定义的 `page` 变量；
+  - 没沿用当前在线 E2E 三板斧；
+  - 没把 4 人 / 2v2 作为默认审计口径。
+- 这批风险不只是“缺在线证据”，还包括共享语义压缩：
+  - `src/games/dicethrone/domain/customActions/common.ts` 的 `resolveTargetOpponentDice()` 仍把 `target: 'select'` 简化为 `attackerId !== rollerId` 的布尔值；
+  - `src/games/dicethrone/domain/systems.ts`、`src/games/dicethrone/ui/DiceTray.tsx`、`src/games/dicethrone/ui/RightSidebar.tsx` 继续透传并消费 `targetOpponentDice:boolean`；
+  - 本地化 `interaction.hint_select_opponent` 也直接把这类交互文案写成“选择对手的骰子”。
+- 这说明当前共享层把“当前不是自己的骰子”压缩成了“对手骰子”。在 4 人 / 2v2 下，这已经不是可靠的领域语义，至少需要继续审计“当前骰池归属 / 观察视角”是否应显式建模。
+- 规则层还存在第二个必须继续核对的边界：`src/games/dicethrone/domain/rules.ts` 与 `src/games/dicethrone/domain/execute.ts` 的 `afterRollConfirmed` 路径，当前仍按“非 rollerId 的对手”打开骰子响应窗口；但 `src/games/dicethrone/rule/王权骰铸规则.md` 与 `add-dicethrone-2v2-team-mode` spec 已明确写了“队友可在合法掷骰窗口干预骰面，同时队友不进入同队响应队列”。
+- 进一步下钻后确认，这里暂时不能直接判成“队友被逻辑拦死”：
+  - `validatePlayCard()` 当前只看 `responseWindowType` + `isCardPlayableInResponseWindow()`；
+  - `isCardPlayableInResponseWindow()` 在 `afterRollConfirmed` 下实际校验的是“非 rollerId + 目标语义合法”，并不要求玩家必须位于 `responderQueue`。
+- 因此 Batch 3 当前更准确的 open question 不是“队友能不能打出合法改骰卡”，而是：
+  - 队友这条合法路径在真实 UI / 在线链路里是否可发现、可完成；
+  - `responderQueue` 的 opponent-only 提示是否会与“队友可改骰”形成体验割裂；
+  - 共享交互元数据与文案是否仍把队友干预错误描述成“对手骰子”。
+- 因此 Batch 3 的最正确方向不是继续给旧 dice E2E 打补丁，而是新开 change，正式审计并收口：
+  - 当前骰池归属语义是否需要显式元数据，而不是 `targetOpponentDice:boolean`
+  - 合法掷骰干预窗口与同队响应队列边界是否仍被单一 opponent 视角污染
+  - `shadow_thief-shadow-manipulation` 在 4 人 / 2v2 下的双骰多步语义是否已被真实页面证明
+
+## 2026-03-28 DiceThrone 炎术士多角色交互覆盖盘点
+
+- 目前不能把“炎术士一堆”都说成已完成四人审计；准确说法是：炎术士里最明显的多人目标家族已经收口，但仍有一批 `attacker / defender / roller / response window` 共享语义入口还没有四人口径的专项证据。
+- 已被 Batch 2 明确覆盖的炎术士多人目标入口：
+  - `Soul Burn`：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `73-88` + [`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `67-87`
+  - `Meteor` / `Meteor II` / `Ultimate Inferno` 的 `allOpponents` collateral：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `105-119`、`349-383`、`198-210`
+  - 对应四人规则回归已在 [`src/games/dicethrone/__tests__/rule-consistency.test.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/__tests__/rule-consistency.test.ts) `722-801`，在线证据已在 [`e2e/dicethrone-simple-start.e2e.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/e2e/dicethrone-simple-start.e2e.ts) `1209-1260`。
+- 仍未拿到四人专项证据、但属于炎术士“多角色共享语义”入口的能力：
+  - `Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`
+    - 入口：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `122-145`、`386-420`
+    - 执行：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `460-499`
+    - 现状：只有 2 人行为/潜行回归，没有 4 人 `defender` 口径专项证据。
+  - `Fiery Combo` / `Hot Streak II` / `Burn Down` / `Ignite`
+    - 执行都走 `custom target='self' + ctx.ctx.defenderId`：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `98-172`、`222-309`
+    - 现状：有行为测试，但没有四人 `targetingRoll/defender` 专项回归或在线证据。
+  - `Magma Armor I/II/III`
+    - 入口与执行：[`src/games/dicethrone/heroes/pyromancer/abilities.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/heroes/pyromancer/abilities.ts) `185-212`；[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `328-446`
+    - 风险不在多目标，而在“防御者视角下原攻击者=defenderId”的共享角色映射，当前没有四人专项覆盖。
+  - `Get Fired Up` / `Red Hot`
+    - 执行：[`src/games/dicethrone/domain/customActions/pyromancer.ts`](D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode/src/games/dicethrone/domain/customActions/pyromancer.ts) `509-592`
+    - 现状：更偏攻击修正/bonusDamage/bonusDie 语义，E2E 主要是 spotlight / overlay，不是四人链路审计。
+- 风险排序上，炎术士下一批最值得优先进专项的是：
+  - `Pyro Blast II/III`：因为同时依赖 `defender`、bonus die、额外状态/伤害写回
+  - `Magma Armor`：因为依赖防御视角下 attacker/defender 角色翻转
+  - `Get Fired Up`：因为依赖当前攻击链的 bonus die 与目标写回
+- `Fireball` 本身虽然属于对手目标，但它没有额外的多角色共享语义，当前不应和上面这几组混在同一优先级里。
+
+## 2026-03-28 DiceThrone 全量多人语义审计矩阵结论
+
+- 现在不能说“所有技能、token、卡牌设计在两人以上都审完了”。更准确的口径是：Batch 1/2 已收口多人玩家目标交互，Batch 3 已建好 change 并确认了共享骰子窗口风险，但全量多人语义审计仍在进行中。
+- 已明确拿到 4 人 / 2v2 专项规则或在线证据的家族：
+  - `Transfer Status`、`Consecrate`、`Vengeance II`、`remove-status-1`、`remove-all-status`
+  - `remove-status-self`
+  - `Meteor` / `Meteor II` / `Ultimate Inferno`
+  - `Soul Burn`
+  - “无默认 defender 的无伤害技能”共享攻击流程
+  - “同队不进入响应队列”的当前在线主链路边界
+- 当前最真实的 P0 空白不是又冒出一个新的玩家目标弹窗，而是共享骰子交互层还残留 2 人压缩语义：
+  - `src/games/dicethrone/domain/customActions/common.ts` 用 `targetOpponentDice:boolean` 表达骰池归属；
+  - `src/games/dicethrone/domain/execute.ts` / `rules.ts` 的 `afterRollConfirmed` 仍围绕单一 opponent / responderQueue 视角；
+  - 这条共享层会影响所有 `modifyDie/selectDie` 通用卡，以及 `shadow_thief-shadow-manipulation`。
+- 炎术士当前仍是最大的“未审完”集中区，但要分层看：
+  - P1：`Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`
+  - P1：`Magma Armor I/II/III`
+  - P2：`Fiery Combo` / `Hot Streak II` / `Incinerate`
+  - P2：`Burn Down` / `Burn Down II`
+  - P2：`Ignite` / `Ignite II`
+  - P2：`Get Fired Up` / `Red Hot`
+  - P2：`Blazing Soul` / `Meteor Shower`
+- 更广义地看，除了火法之外，代码里还有一整批“共享角色映射已显式写进 custom action，但尚无 4 人专项证据”的家族，当前不能假装它们已被全量审计：
+  - 圣骑士：`holy-defense` / `holy-defense-2` / `holy-defense-3`
+  - 月精灵：`exploding-arrow` / `exploding-arrow-2` / `exploding-arrow-3`、`elusive-step` / `elusive-step-2`
+  - 暗影盗贼：`shadow-defense` / `shadow-defense-2`、`fearless-riposte` / `fearless-riposte-2`、`shadow-dance` / `shadow-dance-2`、`damage-half-cp` / `damage-full-cp`
+  - 狂战士：`barbarian-suppress-roll` / `barbarian-suppress-2-roll`、`thick-skin` / `thick-skin-2`
+  - 武僧：`meditation` / `meditation-2` / `meditation-3`、`thunder-strike` / `thunder-strike-2`
+- 上述家族并不一定已经有逻辑错误；当前更准确的风险分级是：
+  - “已确认错误并已修复”；
+  - “共享实现已知高风险、但未拿到 4 人专项证据”；
+  - “只有 2 人/局部行为测试，尚未升级为四人口径审计”。
+- 因此后续推进必须按矩阵分批，而不是继续用“火法的一堆”或“多人模式都差不多”这种口径笼统描述完成度。
+
+## 2026-03-28 DiceThrone Batch 3 P0 精确 blocker
+
+- `targetOpponentDice:boolean` 的问题不只是命名和提示文案。继续下钻 `src/games/dicethrone/domain/execute.ts`、`src/games/dicethrone/domain/rules.ts` 与 `src/engine/systems/ResponseWindowSystem.ts` 后，当前 P0 已可更精确描述为“共享响应窗口路由仍按 trigger-side 单一响应者视角工作”。
+- 具体证据链是：
+  - `execute.ts` 在 `CONFIRM_ROLL` 后用 `getContextualOpponentId(stateAfterConfirm, rollerId)` 作为 `triggerId` 打开 `afterRollConfirmed`；
+  - `getResponderQueue()` 会排除 `triggerId` 的同队玩家；
+  - `ResponseWindowSystem.beforeCommand()` 又强制只有 `currentResponderId` 才能打出 `PLAY_CARD`。
+- 这意味着当前代码不只是“没有证明”攻击方队友能在防御方确认骰面后帮队友压低敌方骰子，而是已有现役回归明确锁住了相反行为：
+  - `src/games/dicethrone/__tests__/flow.test.ts` 里“4 人模式下防御掷骰确认后的响应窗口只归当前攻击方”断言 `responderQueue === ['0']`，攻击方队友 `P2` 被排除。
+- 因而 Batch 3 的 P0 已经不能再笼统写成“也许只差在线证据”。更准确地说：
+  - 若 2v2 规则口径坚持“可以强化队友输出”，那当前共享响应窗口/队列模型就存在真实语义冲突；
+  - 若产品决定收紧口径，只保留当前攻击方本人在该窗口响应，则应反向修 spec / 规则文档，而不是继续保留“队友可改骰”的描述。
+- 下一步真正需要裁决的不是“要不要补一条 E2E”，而是“合法 allied dice interference 在 `afterRollConfirmed` 到底走响应队列、还是走非队列豁免路径”，否则继续给旧 `targetOpponentDice` 打补丁没有意义。
+
