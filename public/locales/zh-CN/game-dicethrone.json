@@ -370,7 +370,21 @@
     "cancelReady": "取消准备",
     "readyWaiting": "等待其他玩家...",
     "readyProgress": "准备进度",
-    "you": "你"
+    "you": "你",
+    "targetOptionDisabled": "不可选",
+    "seating": {
+      "title": "2v2 站位",
+      "hostTip": "点击任意玩家头像，再点击空位完成移动。不支持交换位。",
+      "readOnly": "仅房主可调整站位，其他玩家只读查看。",
+      "moveHint": "已选中 {{player}}，点击空位完成移动。",
+      "occupied": "该位置已有玩家，不支持交换位。",
+      "emptySlot": "空位",
+      "currentSlot": "当前位置",
+      "cancel": "取消",
+      "seatNumber": "{{seat}}号位",
+      "teamA": "A 队",
+      "teamB": "B 队"
+    }
   },
   "imageAlt": {
     "deck": "牌堆",
@@ -602,6 +616,10 @@
     "defense_ability_not_selected": "需要先选择防御技能才能掷骰",
     "invalid_character": "无效的角色选择",
     "character_not_selected": "请先选择角色",
+    "game_already_started": "对局已经开始，不能再调整站位或准备状态",
+    "not_team_mode": "当前不是 2v2 模式",
+    "invalid_seat_target": "目标空位无效",
+    "seat_not_changed": "请选择新的空位",
     "roll_not_confirmed": "请先确认投掷结果",
     "no_pending_attack": "没有待防御的攻击",
     "deck_empty": "牌库和弃牌堆均为空",
@@ -686,7 +704,9 @@
     "cancel": "取消",
     "confirm": "确认",
     "self": "自己",
-    "opponent": "对手"
+    "opponent": "对手",
+    "ally": "队友",
+    "enemy": "敌方"
   },
   "interaction": {
     "waitingOpponent": "等待对手操作...",

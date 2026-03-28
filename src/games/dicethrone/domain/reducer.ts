@@ -10,12 +10,12 @@ import type {
     HeroState,
 } from './types';
 import type { RandomFn } from '../../../engine/types';
-import { getDieFaceByDefinition, getTokenStackLimit, getRollerId } from './rules';
+import { buildTeamIdByPlayerIdFromSeatingOrder, getDieFaceByDefinition, getTokenStackLimit, getRollerId } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { initHeroState, createCharacterDice } from './characters';
-import { getChoiceEffectHandler, registerChoiceEffectHandler } from './choiceEffects';
+import { registerChoiceEffectHandler, resolveChoiceEffect } from './choiceEffects';
 import { removeCard } from './utils';
 import {
     handlePreventDamage, handleAttackPreDefenseResolved, handleDamageDealt,
@@ -132,6 +132,18 @@ const handleHostStarted: EventHandler<Extract<DiceThroneEvent, { type: 'HOST_STA
 ) => ({ ...state, hostStarted: true });
 
 /**
+ * 处理 2v2 站位移动事件
+ */
+const handleSeatingMoved: EventHandler<Extract<DiceThroneEvent, { type: 'SEATING_MOVED' }>> = (
+    state,
+    event
+) => ({
+    ...state,
+    seatingOrder: event.payload.seatingOrder,
+    teamIdByPlayerId: buildTeamIdByPlayerIdFromSeatingOrder(event.payload.seatingOrder),
+});
+
+/**
  * 处理玩家准备事件
  */
 const handlePlayerReady: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_READY' }>> = (
@@ -140,6 +152,17 @@ const handlePlayerReady: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_R
 ) => ({
     ...state,
     readyPlayers: { ...state.readyPlayers, [event.payload.playerId]: true },
+});
+
+/**
+ * 处理玩家取消准备事件
+ */
+const handlePlayerUnready: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_UNREADY' }>> = (
+    state,
+    event
+) => ({
+    ...state,
+    readyPlayers: { ...state.readyPlayers, [event.payload.playerId]: false },
 });
 
 /**
@@ -403,8 +426,24 @@ const handleTokenLimitChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TO
  * 这里仅记录来源信息
  */
 const handleChoiceRequested: EventHandler<Extract<DiceThroneEvent, { type: 'CHOICE_REQUESTED' }>> = (
-    state
+    state,
+    event
 ) => {
+    const isTargetSelection = event.payload.options.some((option) => option.customId?.startsWith('select-target:'));
+    if (isTargetSelection && state.pendingAttack) {
+        if (state.pendingAttack.targetingSelectionResolved === true) {
+            return state;
+        }
+        return {
+            ...state,
+            pendingAttack: {
+                ...state.pendingAttack,
+                targetingSelectionPending: true,
+                targetingSelectionResolved: false,
+            },
+        };
+    }
+
     // 不修改核心状态，prompt 由系统层管理
     return state;
 };
@@ -447,12 +486,9 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
 
     // 通过注册表处理特殊选择效果
     if (customId) {
-        const handler = getChoiceEffectHandler(customId);
-        if (handler) {
-            const result = handler({ state: resultState, playerId, customId, sourceAbilityId, value });
-            if (result) {
-                resultState = { ...resultState, ...result };
-            }
+        const result = resolveChoiceEffect({ state: resultState, playerId, customId, sourceAbilityId, value });
+        if (result) {
+            resultState = { ...resultState, ...result };
         }
     }
 
@@ -856,8 +892,12 @@ export const reduce = (
             return handleHeroInitialized(state, event);
         case 'HOST_STARTED':
             return handleHostStarted(state, event);
+        case 'SEATING_MOVED':
+            return handleSeatingMoved(state, event);
         case 'PLAYER_READY':
             return handlePlayerReady(state, event);
+        case 'PLAYER_UNREADY':
+            return handlePlayerUnready(state, event);
         default: {
             // 处理系统层事件：SYS_PHASE_CHANGED 同步副作用到 core（阶段本身由 sys.phase 管理）
             if ((event as { type: string }).type === FLOW_EVENTS.PHASE_CHANGED) {
@@ -889,6 +929,19 @@ export const reduce = (
                         rollConfirmed: false,
                         rollDiceCount: 0,
                         dice: resetDiceArray(playerDice ?? state.dice, 0),
+                    };
+                }
+
+                if (to === 'targetingRoll') {
+                    const playerDice = createPlayerDice(state, activePlayerId);
+                    return {
+                        ...state,
+                        activePlayerId,
+                        rollCount: 0,
+                        rollLimit: 1,
+                        rollDiceCount: 1,
+                        rollConfirmed: false,
+                        dice: resetDiceArray(playerDice ?? state.dice, 1),
                     };
                 }
 

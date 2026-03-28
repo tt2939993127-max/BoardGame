@@ -530,3 +530,220 @@
 - 对低活跃站点，raw 保留期默认 30 天即可，过期后迁入 archive 目录，比一开始就做数据库清洗管线更轻、更稳，也更符合当前用户量。
 - 归档策略不需要额外守护进程也能落地：在 recorder 的日常写入路径上做“每天最多一次”的归档检查，就足以把治理成本控制在很低水平。
 - 这条链路完成后，后续无论是做离线清洗、抽样评估、微调数据准备，还是接 AstrBot/远程 AI，都可以直接消费同一批版本化日志，不需要再回头补采集。
+
+## 2026-03-25 Dice Throne 4 人/2v2 targetingRoll 收尾发现
+
+- 根因不是 `customId` 或 payload 丢失，而是目标选择完成后缺少稳定的“已完成”标记，同时 `src/games/dicethrone/domain/flowHooks.ts` 里还残留了一段旧的 5/6 分支，会再次发出 `CHOICE_REQUESTED`。
+- 仅把 `targetingSelectionPending` 改回 `false` 不足以阻止同一条命令链里的重复选择；需要一个能跨 reducer、system、effect 共享的幂等信号，因此新增 `pendingAttack.targetingSelectionResolved`。
+- 4 人/2v2 模式下，`targetingRoll` 掷出 `5/6` 的正确行为是：玩家完成目标选择后应直接进入 `defensiveRoll`，不需要再手动 `ADVANCE_PHASE`。
+- 直接检查 flow hook 事件链时，选择目标后应看到 `SYS_INTERACTION_RESOLVED`、`CHOICE_RESOLVED(select-target:1)`、`ATTACK_PRE_DEFENSE_RESOLVED`、`SYS_PHASE_CHANGED { from: 'targetingRoll', to: 'defensiveRoll' }`，说明推进链路本来就应该在响应命令内完成。
+- `src/games/dicethrone/__tests__/flow.test.ts` 的断言口径已同步为“目标选择后自动推进”，避免后续又把手动 `ADVANCE_PHASE` 误当成正确行为。
+
+## 2026-03-25 Dice Throne 4人/2v2 targetingRoll 收尾发现（格式修正）
+
+本次卡在 `targetingRoll` 的根因不是 `customId` 或 payload 丢失，而是目标选择完成后缺少稳定的“已完成”标记，同时 `src/games/dicethrone/domain/flowHooks.ts` 里还残留了一段旧的 5/6 分支，会再次发出 `CHOICE_REQUESTED`。
+
+仅把 `targetingSelectionPending` 改回 `false` 不足以阻止同一条命令链里的重复选择，因此需要一个能跨 reducer、system、effect 共享的幂等信号；这也是新增 `pendingAttack.targetingSelectionResolved` 的原因。
+
+4 人/2v2 模式下，`targetingRoll` 掷出 `5/6` 的正确行为是：玩家完成目标选择后直接进入 `defensiveRoll`，不需要再手动 `ADVANCE_PHASE`。`flow.test.ts` 的断言口径也已与此对齐。
+## 2026-03-25 Dice Throne 4人/2v2 验证补跑发现
+
+- 当前受限终端可以完成 `tsc`，但无法在 Vitest 初始化阶段启动 worker / esbuild service；默认 forks worker 报 `spawn EPERM`，改成 `--pool threads --no-file-parallelism --maxWorkers 1` 后，仍在 `vite:esbuild` 处理 `vitest.setup.ts` 时触发同样的 `spawn EPERM`。
+- 这说明当前 blocker 是终端对子进程 / esbuild service 的限制，不是这批 DiceThrone 4 人改动自身的编译错误；至少静态类型检查仍为绿色。
+- `src/games/dicethrone/domain/flowHooks.ts` 的 `targetingRoll` 5/6 分支里残留了一个 `if (true) { ... } else { ... }` 的死代码块，本轮已清理，只保留真实执行路径。
+- 当前 Git 命令也受 `dubious ownership` 影响，但可通过 `git -c safe.directory=D:/gongzuo/webgame/BoardGame-wt-dicethrone-4p-team-mode ...` 在单命令级绕过；由于 `C:/Users/zhuagenbao/.gitconfig` 无写权限，不能持久写入 `safe.directory`。
+
+## 2026-03-25 Dice Throne 4人/2v2 站位移动闭环发现
+
+- 4 人 team mode 的站位调整不需要新增“空座位槽”状态；对当前 `seatingOrder` 采用“移除玩家后按目标下标重新插入”的模型，就能直接支撑“先点玩家，再点空位”的 UI 交互。
+- 站位调整真正需要守住的边界是：`setup` 阶段、4 人 team mode、房主权限、开局后锁定、目标下标合法、禁止移动到原位。把这些统一放进领域校验后，前端只负责交互引导，不需要各处散落判断。
+- `SEATING_MOVED` 事件直接携带完整 `seatingOrder` 比“只传 source/target 再让 reducer 重算”更稳，因为 reducer 可以据此一次性重建 `teamIdByPlayerId`，避免座位、队伍、左右对手三套派生关系短暂失步。
+- 这轮最小 UI 接法不是重做整个选角页，而是在右下既有红框区加一个站位面板。这样既满足 spec，也降低了与并发改动冲突的概率。
+- `PLAYER_UNREADY` 此前已经在 `Board.tsx` 被 UI 调用，但 `resolveMoves`、领域执行、事件与 reducer 没有全链路接通；这属于典型的“入口已存在、领域没闭环”的历史缺口，这轮已顺手补齐。
+## Addendum（2026-03-25）：DiceThrone 四人房服务端 / E2E 闭环发现
+
+- 当前真正的阻塞不是业务逻辑，而是 `e2e/helpers/dicethrone.ts` 曾被坏正则和不可达旧代码污染，导致 Playwright 在解析阶段直接报 `Unterminated regular expression`。
+- `initContext()` 已统一注入英文 locale，所以 `waitForCharacterSelection()` 只匹配 `Select Your Hero` 即可稳定工作。
+- 4 人联机 setup 采用 `create -> claim-seat(host) -> join(guest1/2/3)` 即可覆盖本次服务端关键链路；不需要为每个 guest 再走一次 `claim-seat` 才能验证 4 座 metadata 与 `playing` 状态流转。
+- E2E 断言确认：`GET /games/dicethrone/:matchId` 在 4 个 seat 全部占用后返回 `players=[0,1,2,3]`、每个 seat 都带 `name`、`status === 'playing'`。
+- 实际截图确认 4 人房顶部存在 3 个他人窗口，且已进入主阶段并显示投骰区，说明不是“接口绿了但 UI 还卡在准备页”。
+- 新发现的服务端缺口是：`/games/:name/create` 原本只按 `minPlayers/maxPlayers` 校验，DiceThrone 会错误放行 3 人房。现在已改为优先按 manifest `playerOptions` 白名单校验，`[2,4]` 不再接受 `3`。
+- 证据文档已新增：`evidence/dicethrone-simple-start-e2e-test.md`。
+
+---
+
+## 2026-03-26 Dice Throne 4人/2v2 回合顺序与 OpenSpec 审计发现
+
+- `getPlayerOrder/getNextPlayerId` 之前仍按 `seatingOrder` 顺时针轮转，这与 OpenSpec 要求的“起始玩家所在队连走两手，再切到敌队两手”不一致；`flow.test.ts` 里原先期待 `0→1→2→3` 其实把旧错误行为固化成了测试。
+- 2v2 回合顺序和 4 人 UI 排布不能共用同一个顺序函数。`Board.tsx` 顶部三窗如果继续依赖 `getPlayerOrder`，修正 turn order 后会把观察顺序也一起改掉，因此要把 UI 继续绑定到 `getSeatingOrder`。
+- 现有实现与测试已足够支撑这些 OpenSpec 项为已完成：`1.2`（队伍状态模型）、`1.6/1.7`（Targeting Roll 与目标选择）、`1.9`（共享体力伤害/治疗/上限）、`1.10`（同队响应过滤与队友干预边界）、`1.11`（队伍胜负判定）、`1.12`（`playerView` 与 4 人 Board 映射）、`1.18`（规则/边界/服务端/E2E 覆盖）。
+- 本轮补上 `startingPlayerId='1'` 的 turn-order 规则测试后，可以确认 2v2 顺序不是写死在默认 host=0 场景上。
+- 4 人选角页的站位面板已可以直接被在线 E2E 稳定选择：使用 `2v2 Seating` 标题 + `Seat n` / `Empty` / `Team A/B` 文案即可覆盖“默认站位展示 → 点击空位移动 → 点击已占位拒绝”这一整条真实 UI 链路，不必额外改组件结构或新增测试专用入口。
+
+## 2026-03-26 DiceThrone 4 人 / 2v2 E2E 收口发现
+
+- 旧的“进攻方确认掷骰后只应出现敌方响应者”假设不稳定，根因不是在线注入接口，而是 `CONFIRM_ROLL` 在 `offensiveRoll` 下会使用 `getContextualOpponentId()` 选择当前语境对手；在 4 人座位顺序 `0,1,2,3` 下，玩家 `0` 的默认语境对手优先落到左侧敌人 `3`，不是 `1`。
+- 因此要稳定验证“队友不响应队友”，应走“防守方确认掷骰后”的链路：当 `pendingAttack.attackerId='0'`、`defenderId='3'` 时，防守方 `3` 确认掷骰后，语境对手稳定是 `0`，此时同队玩家 `2` 会被正确排除在响应队列外。
+- 在线 `/test/get-state` 返回的是权威状态，但响应窗口是否打开仍严格依赖真实前置条件；仅补 `rollCount` 和手牌不够，还必须补齐可操作骰子，否则 `requireDiceExists` 会把响应卡全部过滤掉。
+- 目标面板证据截图必须在面板可见时截取；若等点击后再截，虽然断言仍能通过，但截图会落在后续防守阶段，不能直接作为 `2.7` 的可视证据。
+- 现有 `e2e/dicethrone-simple-start.e2e.ts` 已足够覆盖 OpenSpec `2.5-2.9`，不需要再新建 E2E 文件；关键是把状态构造函数改成“显式稳定场景”，避免依赖在线对局里的动态抽牌结果。
+
+## 2026-03-26 DiceThrone 4 人玩家目标交互专项审计发现
+
+- 这次收口完成的是 2v2 核心规则闭环，不等于“所有面向玩家目标的技能/卡牌都已做 4 人审计”。多人能力兼容需要独立切一轮。
+- `customActions/common.ts` 里的“移除 1 个状态 / 移除所有状态 / 转移状态”与 `customActions/paladin.ts` 里的 `Vengeance II`、`Consecrate`，都已经把候选目标扩成 `Object.keys(state.players)`；说明领域入口具备 4 人潜力，但这不代表验证和 UI 已完整跟上。
+- `InteractionOverlay.tsx` 当前在 4 人玩家选择卡片里仍以 `self/opponent` 为主语义，组件测试也主要按 `['0','1']` 写断言；在 4 人下，这种口径不足以证明多个敌/友候选都能被稳定区分与正确点击。
+- `validateGrantTokens` 与 `validateTransferStatus` 目前仅校验“存在 pendingInteraction 且 playerId 匹配”，没有进一步核对目标玩家是否在 `targetPlayerIds` 中、转移目标是否与来源玩家不同，属于共享验证层缺口。
+- `TRANSFER_STATUS` 执行层本身已经同时支持状态与 token 的转移，并且会拦截 `removable: false` 的 token；因此第一批重点不是重写 execute，而是把验证、交互与 4 人 E2E 补齐到和执行层能力一致。
+- 现有 `dicethrone-paladin-vengeance-select-player.e2e.ts` 仍是 2 人版本，只证明了“自己/对手”二选一，不足以作为 4 人“任意玩家授 token”的证据。
+
+## 2026-03-26 DiceThrone 4 人玩家目标交互 Batch 1 收口发现
+
+- `TRANSFER_STATUS` 的真实在线 blocker 不在 execute，而在验证层与 UI 双阶段建模错位：`Board.tsx` 只在本地把交互从 `selectStatus` 推演成 `selectTargetStatus`，服务端权威态仍停在 `selectStatus + transferConfig:{}`；若 `validateTransferStatus` 只接受 `selectTargetStatus`，在线点击确认后会被验证层拒绝。
+- 正确做法不是放松成“任何 transfer 命令都放行”，而是兼容两种合法权威态：
+  - `selectTargetStatus`：继续严格校验 `sourcePlayerId/statusId` 与交互上下文完全匹配。
+  - `selectStatus + transferConfig:{}`：允许从命令 payload 读取 `fromPlayerId/statusId`，但仍必须校验来源玩家在候选集内、来源上真实存在该状态或 token、目标在候选集内且不等于来源。
+- 4 人状态 / 可移除 token 交互要想稳定 E2E，不能只给玩家卡片加 test id；第一阶段的可点击状态徽章也必须有稳定 selector。为 `SelectableEffectsContainer` 增加 `getItemTestId()` 后，`InteractionOverlay` 才能输出 `dt-status-effect-<pid>-<effectId>` 这类稳定入口。
+- `Transfer Status` 是 Batch 1 最有代表性的在线链路，因为它同时覆盖“来源玩家选择、第二阶段目标候选、来源玩家排除、友敌标识、权威状态广播”五个风险点；单独跑通这一条，比继续扩 2 人 `Vengeance` 旧 E2E 更能说明 4 人兼容已开始收口。
+
+## 2026-03-26 DiceThrone 4 人授 token 在线证据补强发现
+
+- 只靠 `GRANT_TOKENS` 的规则层测试还不足以证明“任意玩家授 token”真的完成 4 人兼容；因为最容易漏的是 `tokenGrantConfigs` 多 token 路径，以及在线玩家选择面板是否还能稳定区分多个敌/友候选。
+- `Consecrate` 比 `Vengeance II` 更适合作为第二条在线证据：它一次授予 `Protect/Retribution/Crit/Accuracy` 四个 token，能同时覆盖 `tokenGrantConfigs`、`selectPlayer`、多玩家候选渲染和权威状态同步。
+- 实测表明 `Board.tsx -> engineMoves.grantTokens()` 这一段在 4 人下已经能把 ally 目标稳定带到服务端，并由 `execute.ts` 正确生成四个 `TOKEN_GRANTED` 事件；这说明当前 `selectPlayer + tokenGrantConfigs` 主链路已经具备在线可验证性。
+
+## 2026-03-26 DiceThrone 面向多人能力审计边界更新
+
+- 按当前代码检索，真正属于“面向玩家目标”的多人高风险入口主要集中在：
+  - `customActions/paladin.ts`：`paladin-vengeance-select-player`、`paladin-consecrate`
+  - `customActions/common.ts`：`remove-status-1`、`remove-all-status`、`transfer-status`
+- 其中更复杂、风险更高的两类已经拿到 4 人在线证据：
+  - `transfer-status`：双阶段状态 / token 转移
+  - `paladin-consecrate`：任意玩家多 token 授予
+- `remove-status-1` / `remove-all-status` 仍属于玩家目标交互，但复杂度低于已收口的 `Transfer Status`；按当前决策，不再优先补它们的在线 E2E，把时间留给后续更复杂或更高风险的多人交互。
+
+## 2026-03-26 DiceThrone 4 人目标交互 UI 精简发现
+
+- 用户指出的“为什么选中还额外多一个框、为什么四人会像有六个框”是对的，根因在 `InteractionOverlay.tsx` 的 `selectTargetStatus` 第二阶段：它同时渲染了第一阶段的来源状态卡和第二阶段的目标玩家卡，视觉上把“来源展示”和“目标选择”叠在了一个 modal 里。
+- 正确收口不是再给卡片加更多提示，而是减少并行信息：第二阶段只保留一个紧凑的来源摘要块，再显示真实可选目标卡片。来源玩家继续整排保留会让 4 人场景从“3 个目标”膨胀成“1 排来源 + 1 排目标”的 6 框感知。
+- 已选目标的外挂勾选块也属于重复信号。卡片自身边框高亮已经足够表达“当前选中”，再在卡片外侧加一个独立小框只会制造“多了一层框”的噪音。
+- 在线截图 `06-four-player-transfer-token-target-selection.png` 复核后确认，新版第二阶段已收口为“1 个来源摘要 + 3 张候选目标卡”，符合用户对 4 人目标选择密度和层级的直觉预期。
+
+## 2026-03-26 DiceThrone 4 人目标交互四宫格修正发现
+
+- 用户继续指出“既然本质是先选一个再选另一个，就不该把来源做成异类摘要块，而应保持四宫格”是对的；上一版把来源卡降成摘要，虽然去掉了 6 框，但也把原本统一的玩家选择语义拆坏了。
+- 更正确的结构是：第二阶段仍展示同一组 4 个玩家卡，其中来源玩家保留在原位，但转为 `locked/disabled` 态；其余 3 张仍是可点击目标。这样用户看到的仍是“四人里先选一个，再选另一个”，而不是“先选一个，再读一段说明，再选另一个”。
+- 因此 `selectTargetStatus` 第二阶段现已改为四宫格：来源玩家卡使用 `dt-transfer-source-locked-<pid>`，保留座位/敌我/被转移 token 信息，但不可点击；另外 3 张继续使用 `dt-transfer-target-<pid>`。
+- 这次在线 E2E 包装器整份 `dicethrone-simple-start.e2e.ts` 都走成了 `skip`，说明当前没拿到新的在线证据；所以这轮只能确认组件层和类型层已经改对，不能把它表述成“新截图已复核完成”。
+
+## 2026-03-27 DiceThrone 联机 E2E 跳过根因修复
+
+- 导致 `setupDTOnlineMatchWithPlayers()` 返回 `null` 的真实原因不是“游戏服务器不可用”，而是浏览器偶发在 `page.goto(/play/dicethrone/match/...)` 阶段抛出 `net::ERR_INSUFFICIENT_RESOURCES`；因为 helper 直接吞掉异常并返回 `null`，测试表面上才会退化成 `skip`。
+- 手工 API 探针已确认 `/games/dicethrone/create`、`/claim-seat`、`/join` 都能正常返回；也就是说联机链路的服务端并没有坏，问题集中在前端 match 页导航的瞬时资源错误。
+- 最小正确修复不是改业务断言，也不是把 `skip` 改成硬失败，而是在 `e2e/helpers/dicethrone.ts` 为联机 match 页导航增加小范围重试，专门兜住 `ERR_INSUFFICIENT_RESOURCES`、`ERR_ABORTED`、`NS_BINDING_ABORTED` 这类瞬时错误。
+- 修复后，4 人 `Transfer Status` 单用例重新恢复为 `1 passed`，整份 `e2e/dicethrone-simple-start.e2e.ts` 也恢复为 `8 passed`；同时新截图确认第二阶段确实是“四宫格 + 锁定来源卡”，不是只靠测试选择器蒙混过关。
+
+## 2026-03-27 DiceThrone 2 人 Transfer Status 进度确认
+
+- 2 人转移没有被漏掉；因为 `selectTargetStatus` 第二阶段现在是共享组件逻辑，2 人也会显示来源锁定卡 `dt-transfer-source-locked-*` 和真实目标卡 `dt-transfer-target-*`。
+- 新增到 `e2e/dicethrone-simple-start.e2e.ts` 的 2 人在线用例，已经把 UI 结构断言和 token 转移结果都写进去了；当前缺的不是测试设计，而是把它从 `skip` 推到真实执行。
+- 直接 `tsx + Playwright` 探针已证明 `setupDTOnlineMatch()` 在同一组端口服务下可以成功返回 `OK <matchId>`；因此现有 `skip` 更像是项目 Playwright 运行链路里的目标/环境口径问题，而不是 2 人联机 helper 或 `Transfer Status` 业务本身损坏。
+
+## 2026-03-27 DiceThrone 2 人联机 setup 真正 blocker 收口
+
+- 2 人联机 helper 的第一个真 blocker 不是选角组件改坏，而是时序错位：host 在只有自己占座时就提前等待角色选择页，但真实页面此时只会显示 `Waiting for opponent...`。正确顺序必须是“所有玩家进入 match 页后，再统一等待选角 UI”。
+- 第二个真 blocker 不是 `/create` / `/join` API，而是“同一条测试链路分叉到了两个游戏服端口”：
+  - API helper 显式打到了 `http://127.0.0.1:20000`
+  - 浏览器页里的 `__FORCE_GAME_SERVER_URL__` 却仍被 `initContext()` 按旧环境注成了 `18000`
+  - `/test/get-state` / `/test/inject-state` 也继续跟着旧默认口径打到 `18000`
+  这会表现为：房间能创建、凭证能拿到，但 match 页一直 `CONNECTING / Loading match resources...`，或者状态注入直接 `ECONNREFUSED 127.0.0.1:18000`。
+- 因此最小正确修复不是继续堆选择器等待，也不是把用例改回本地 `/test` 场景，而是把同一个 `gameServerBaseURL` override 贯穿到：
+  - `initContext()` 注入的 `__FORCE_GAME_SERVER_URL__`
+  - DiceThrone 在线 helper 的上下文创建
+  - `/test/*` 状态注入 helper
+  只有这样浏览器 WebSocket、API 调房、状态注入三条链路才会重新指向同一台游戏服。
+- 2 人 `Transfer Status` 在线用例自身也有一个测试设计缺口：它一开始直接断言第二阶段 `dt-transfer-source-locked-1`，但真实流程必须先在第一阶段点击 `dt-status-effect-1-crit` 才会进入第二阶段。这不是业务 bug，而是测试漏走了一步用户操作。
+- 在显式 `6174/20000/21000` 环境下，`dicethrone-simple-start.e2e.ts` 已拿到 `9 passed` 的有效在线结果；但连续多次直接 CLI 复跑时仍偶发整份 `skip`。当前判断这是 Playwright runner / 本机环境的瞬时不稳定，不是本轮修复的代码回退。
+
+## 2026-03-27 DiceThrone remove-status 在线证据与默认脚本回归
+
+- 当前默认 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 口径已经能直接拿到 `11 passed`，不再需要手工先写显式 `6174/20000/21000` 环境变量才能证明多人目标交互成立。
+- `remove-status-1` / `remove-all-status` 真正容易误判的点不在 host 页执行，而在目标页权威态同步：host 页往往会先看到 `crit/burn` 被清空，但目标页广播会慢半拍。如果只在 host 页断言，很容易把测试写成“假绿”。
+- 对这两类移除交互，最小正确修复不是改领域逻辑，而是在 E2E 中显式等待目标页 `__BG_TEST_HARNESS__` 状态追平后再断言。这样既不放宽业务约束，也避免把多页广播时序误报成规则 bug。
+- 到这一步，玩家目标交互第一批三类高风险链路都已拿到 4 人在线证据：
+  - `transfer-status`
+  - `paladin-consecrate`
+  - `remove-status-1` / `remove-all-status`
+
+## 2026-03-27 DiceThrone Vengeance II 与 Batch 1 spec 边界校正
+
+- 用户指出“spec 不止这个”是对的。当前 `proposal/design/tasks` 已按 Batch 1 写清范围，但原 `spec.md` 仍只有一个总括 requirement，容易被误读成“所有 4 人玩家目标交互都已审计完成”。
+- 更准确的 spec 结构应把 Batch 1 拆成明确 requirement：`任意玩家授 token`、`任意玩家移除状态`、`状态/可移除 token 转移`、`无单一敌方目标的无伤害技能流程兼容`。这样才能把“本轮已收口哪些共享根因”和“尚未纳入的后续批次”分开。
+- `Vengeance II` 在 4 人 / 2v2 下最初不弹玩家选择，根因不是 E2E 断言或 abilityId 写错，而是共享攻击流程不支持“无默认 defender、无伤害、但仍会触发玩家交互与 postDamage”的技能。
+- 这条共享层缺口具体表现为：
+  - `preDefense` 在 `defenderId` 为空时被错误短路；
+  - 4 人模式下无脑进入 `targetingRoll`；
+  - `INTERACTION_REQUESTED` 没被当成阻塞事件，导致 phase 提前推进；
+  - 无 `defenderId` 的攻击没能完整跑完 `withDamage/postDamage`，使后续资源结果丢失。
+- 正确修复不是给 `Vengeance II` 单独开特判，而是把共享攻击流程收紧到“按攻击真实语义推进”：
+  - 无单一敌方目标的无伤害技能不再误进 `targetingRoll`；
+  - `INTERACTION_REQUESTED` 会阻塞流程，等待玩家完成交互；
+  - 无 `defenderId` 的攻击也能完成 `postDamage` 结算。
+- `rule-consistency.test.ts` 新增/调整的回归已经覆盖这类共享根因，而不是只锁一条 UI 路径：
+  - 4 人模式下有真实单一敌方目标的攻击仍进入 `targetingRoll`；
+  - 无单一敌方目标的无伤害技能不会误进 `targetingRoll`；
+  - 无默认 `defender` 的 4 人无伤害技能仍会发出 `INTERACTION_REQUESTED` 并继续后续结算。
+- `Vengeance II` 现在已经拿到真实 4 人在线证据，说明 Batch 1 中“任意玩家授 token”这一类不再只靠 `Consecrate` 代表；同时也证明共享攻击流程已不再把这类技能吞掉。
+- 到当前版本，Batch 1 已拿到 4 人在线证据的代表性入口是：
+  - `transfer-status`
+  - `paladin-consecrate`
+  - `paladin-vengeance-select-player` / `Vengeance II`
+  - `remove-status-1`
+  - `remove-all-status`
+- 这轮还确认了一个测试层陷阱：E2E 文件如果直接从 `domain/rules.ts` 调 `getAvailableAbilityIds()` 做 Node 侧调试，而没有显式调用 `registerDiceThroneConditions()`，会因为 `diceSet/allSymbolsPresent` 未注册而误报“技能不可用”。浏览器端通过 `domain/index.ts` 会自动注册条件，但测试进程不会。
+
+## 2026-03-28 DiceThrone worktree 依赖树残缺导致的验证假失败
+
+- 本轮最后的真实 blocker 不是业务逻辑，而是 `BoardGame-wt-dicethrone-4p-team-mode/node_modules` 里多个关键包只剩局部目录，缺了包根入口文件；直接表现为 `tsc.js`、`vitest.mjs`、`dotenv/config`、`playwright/cli.js` 等路径解析失败。
+- 这种失败会把“验证命令起不来”伪装成“代码又坏了”，但根因与 DiceThrone 4 人玩家目标交互无关；修复前应先区分是测试环境损坏，还是业务回归。
+- 在当前 worktree 里，最直接可行的恢复方式是重新执行一次 `npm install`，把锁文件对应的缺失入口补回；补完后，`openspec validate`、`rule-consistency.test.ts`、`dicethrone-simple-start.e2e.ts` 已分别恢复为 `valid`、`31 passed`、`12 passed`。
+
+## 2026-03-28 DiceThrone Consecrate 多页同步等待补正
+
+- `Consecrate` 单用例本身是绿的，整文件串跑时真正失败的不是授 token 逻辑，而是 ally 页权威态比 host 页慢半拍，导致测试在 `readHarnessState(allyPage)` 时抢跑。
+- 这类失败和前面的 `remove-status-1` / `remove-all-status` 属于同一类多页广播时序问题；最小正确修复仍然是 E2E 补显式等待，而不是去动领域逻辑。
+- 现已在 `Consecrate` 用例中补上 `allyPage.waitForFunction()`，要求队友页的 `Protect / Retribution / Crit / Accuracy` 四个 token 都追平后再读 harness state。
+- 补完后，`dicethrone-simple-start.e2e.ts` 默认整文件回归重新稳定为 `12 passed`，因此此前旧专项收敛阶段记录的 `11 passed, 1 skipped` 已被新的有效结果覆盖。
+
+## 2026-03-28 DiceThrone 旧专项 E2E 收敛审计
+
+- `dicethrone-status-interaction-complete.e2e.ts` 仍有独立价值，因为它对应的是共享交互层 UI 契约：`selectStatus`、`selectPlayer`、`selectTargetStatus` 的按钮可用性、禁用态和第二阶段卡片结构。这些断言不应继续散落在已偏业务化的旧文件里。
+- `dicethrone-status-removal.e2e.ts` 已经不是“待修一下就能用”的状态，而是同时依赖旧页面结构、旧英雄入口、旧 `hero-card/status-area/target-selector` 选择器。继续修它，本质上是在重写一份与 `simple-start` 高度重复的文件。
+- `dicethrone-status-interaction-cancel.e2e.ts` 与 `status-interaction-complete` 在测试主题上高度重复，只是旧版把“取消按钮”拆成了单独文件；保留它只会制造重复维护点。
+- `dicethrone-paladin-vengeance-select-player.e2e.ts` 已经被当前 4 人 `Vengeance II` 在线证据实质取代，而且它本身还保留 2 人 self/opponent 旧语义、重复函数定义与过时的 `+4 CP` 绑定断言，不适合作为现役专项继续存在。
+- 因此这轮最正确的收敛方案是：
+  - 保留并现代化 `dicethrone-status-interaction-complete.e2e.ts`
+  - 退役 `dicethrone-status-removal.e2e.ts`
+  - 退役 `dicethrone-status-interaction-cancel.e2e.ts`
+  - 退役 `dicethrone-paladin-vengeance-select-player.e2e.ts`
+  - 同步清理 `playwright.config.ts` 里的对应 legacy ignore
+- `Board.tsx` 当前并不会直接读取裸 `InteractionDescriptor`；状态交互弹窗的真实入口是 `sys.interaction.current.kind === 'dt:card-interaction'`，再从 `data` 解包出 `InteractionDescriptor`。因此任何 harness 级 E2E 若直接往 `current` 塞裸对象，页面上不会出现交互弹窗。
+- 这轮 `simple-start` 的异常不是收敛改动带来的功能回退，而是 runner / 服务启动层噪音：
+  - 一次整文件回归结果为 `11 passed, 1 skipped`，唯一跳过的是 `targeting roll` 用例；
+  - 单独复跑同一 targeting roll 用例也直接走到 `setupDTOnlineMatchWithPlayers()` 返回 `null`；
+  - 调试日志已记录 `game_server_unavailable`、`apiRequestContext.post: connect ECONNREFUSED 127.0.0.1:20000`，另一次整文件复跑则在 global setup 阶段出现 Vite 前端进程异常退出。
+- 因此本轮可以下的代码结论是：旧专项 E2E 收敛本身已完成，且新 `status-interaction-complete` 套件稳定可跑；`simple-start` 的 residual risk 仍然是既有 E2E 基础设施抖动，不是本轮删除/重写旧专项文件造成的行为变化。
+
+## 2026-03-28 DiceThrone simple-start 基础设施抖动收敛发现
+
+- `simple-start` 不是“新角色”或“新功能”，而是当前 DiceThrone 在用的主回归 E2E 文件；它的问题如果不澄清，后续很容易把一次测试基础设施修复误记成业务能力新增。
+- 先前 `setupDTOnlineMatchWithPlayers()` 偶发返回 `null`，表面上会把测试退化成 `skip`，但根因并不总是游戏逻辑失败，而是 setup 探针与网络层过于脆弱：
+  - 旧版 `ensureGameServerAvailable()` 用创建房间当健康检查，本身就会把瞬时连接抖动放大成“服务器不可用”；
+  - 房间创建 / claim-seat / join 这几步缺少小范围重试，遇到 `ECONNREFUSED`、`ECONNRESET`、`ETIMEDOUT`、`socket hang up`、`fetch failed` 或 `408/425/429/5xx` 时会直接短路。
+- 这轮最小正确修复不是改业务断言，也不是把 `skip` 改成硬失败，而是把 setup 层做成更接近真实联机环境的韧性实现：
+  - 用只读的 `GET /games` 轮询代替创建房间探针；
+  - 将 server available timeout 提高到 `15000ms`；
+  - 对 create / claim-seat / join 增加瞬时网络重试；
+  - 把重试与失败上下文写入 `temp/dicethrone-setup-debug.log`，让后续排障有可审计落点。
+- 修复后最关键的事实不是单用例恢复，而是默认整文件脚本 `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts` 已重新拿到 `12 passed`；这说明当前 `simple-start` 的残余问题不再表现为稳定可复现的 setup 回退。
+
