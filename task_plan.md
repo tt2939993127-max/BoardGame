@@ -1182,6 +1182,32 @@ completed
 ### Status
 - in_progress
 
+## Addendum: 2026-03-28 DiceThrone 合并后续能力审计推进
+
+### Goal
+- 在确认四人专题已经进入主分支后，继续按“多人能力审计”主线推进，而不是停留在分支/合并状态确认。
+- 收紧两类最容易被误报为“已审完”的残余风险：Batch 3 P0 共享改骰/响应窗口路由，以及炎术士整组多角色能力的 4 人专项缺口。
+
+### Result
+- [x] 已确认远端 `origin/main` 不是停在旧的 `0f95bdcc`；`git ls-remote origin refs/heads/main` 当前返回 `5a4099e092f6d419e5e6fbdfe1013b9340e556d8`，说明四人专题已进入主线。
+- [x] 已把炎术士按“已拿到 4 人专项证据 / 只有 2 人或局部测试”重新分层：
+  - 已完成：`Soul Burn`、`Meteor` / `Meteor II` / `Ultimate Inferno`
+  - P1 未完成：`Pyro Blast` / `Pyro Blast II` / `Pyro Blast III`、`Magma Armor I/II/III`
+  - P2 未完成：`Fiery Combo` / `Hot Streak II` / `Incinerate`、`Burn Down` / `Burn Down II`、`Ignite` / `Ignite II`、`Get Fired Up` / `Red Hot`、`Blazing Soul` / `Meteor Shower`
+- [x] 已确认 Batch 3 P0 的 blocker 仍是共享层，不是单条卡牌：
+  - `execute.ts` / `rules.ts` 的 `afterRollConfirmed -> responderQueue` 仍排除队友；
+  - `ResponseWindowSystem.beforeCommand()` 仍要求 `command.playerId === currentResponderId`；
+  - `common.ts` + `RightSidebar.tsx` + `DiceTray.tsx` 仍以 `targetOpponentDice:boolean` 压缩骰池归属语义。
+- [ ] 下一步先落 Batch 3 P0 的语义裁决与共享实现，再把炎术士 P1 升级成 4 人规则回归与在线证据。
+
+### Validation
+- `git -C D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode ls-remote origin refs/heads/main`
+- `rg -n "Pyro Blast|Fiery Combo|Hot Streak|Burn Down|Ignite|Magma Armor|Get Fired Up|Red Hot|Blazing Soul|Meteor Shower|Soul Burn|Meteor|Ultimate Inferno" src/games/dicethrone/heroes/pyromancer/abilities.ts src/games/dicethrone/domain/customActions/pyromancer.ts src/games/dicethrone/__tests__ e2e`
+- `rg -n "afterRollConfirmed|targetOpponentDice|modifyDie|selectDie|responderQueue|getResponderQueue|currentResponderId" src/games/dicethrone src/engine openspec`
+
+### Status
+- in_progress
+
 ## Addendum: 2026-03-28 DiceThrone 4 人多步骰子交互 Batch 3 启动
 
 ### Goal
