@@ -129,10 +129,10 @@ npm run test:e2e:ci -- e2e/smashup-gameplay.e2e.ts
 
 若上述两条在本地终端或 CI 通过，再补充新的通过截图与最终提交即可。
 
-## 2026-03-19 �����տڣ��������ӹܣ�
-- �޸���1�������ܶ�������Ӱ��ĵ����Ϊ locator force click��acolyte ������ѡ�񣩡�
-- �޸���2�������̶��Ը�Ϊ�ȶ�ҵ����ԣ��Ƴ��� UI �ɼ����� minionsPlayed ����Ϊ���衣
-- ���
+## 2026-03-19 复跑收口（主代理接管）
+- 修复点1：将易受动画抖动影响的点击改为 locator force click（acolyte 与手牌选择）。
+- 修复点2：主流程断言改为稳定业务断言，移除对 UI 可见性与 minionsPlayed 旧行为假设。
+- 命令：
   - npm run test:e2e:ci -- e2e/smashup-gameplay.e2e.ts
-- �����2 passed��������+�����ȶ��Ծ�ͨ������
+- 结果：2 passed（主流程+交互稳定性均通过）。
 
