@@ -265,15 +265,7 @@ describe('GameDetailsModal local AI entry', () => {
         thumbnail: createElement('div'),
     };
 
-    it('支持 AI 的游戏会区分单机模式和对战AI入口', () => {
-        render(createElement(GameDetailsModal, baseProps));
-
-        fireEvent.click(screen.getByText('actions.singleDevice'));
-
-        expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/local?seat1=human');
-    });
-
-    it('对战AI入口会直接进入本地 AI 对局', () => {
+    it('支持 AI 的游戏只保留对战AI入口，并直接进入 AI 对局', () => {
         render(createElement(GameDetailsModal, baseProps));
 
         fireEvent.click(screen.getByText('actions.playAi'));

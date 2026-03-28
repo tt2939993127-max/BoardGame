@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { allocateAvailablePorts, loadWorkerPorts, saveWorkerPorts, isPortInUse } from './port-allocator.js';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { registerExitGuard, spawnBundleRunner, spawnNodeScript, spawnTsLoaderEntry, spawnTsxEntry } from './e2e-server-launcher.js';
+import { startRuntimeHeartbeat } from './e2e-runtime-registry.js';
 
 const workerId = Number.parseInt(process.argv[2] ?? '', 10);
 const bundleWatchEnabled = process.env.PW_SERVER_WATCH !== 'false';
@@ -151,8 +152,16 @@ const managedServices = [
   { label: '游戏服务', child: gameServer },
   { label: 'API 服务', child: apiServer },
 ];
+const runtimeScope = process.env.PW_RUNTIME_SCOPE ?? 'default';
+const stopHeartbeat = startRuntimeHeartbeat(runtimeScope, () => ({
+  active: true,
+  ownerPids: [process.pid],
+  servicePids: managedServices.map(service => service.child.pid).filter(pid => Number.isInteger(pid) && pid > 0),
+  bootstrapLogFiles: bootstrapLogFile ? [bootstrapLogFile] : [],
+}));
 
 const cleanup = (exitCode = 0, reason = '') => {
+  stopHeartbeat();
   console.log(`\n🛑 停止 Worker ${workerId} 的 E2E 服务...`);
   if (reason) {
     console.error(`  原因: ${reason}`);
