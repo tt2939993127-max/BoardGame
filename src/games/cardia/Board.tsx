@@ -33,6 +33,7 @@ import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
 import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<CardiaCore>;
 
@@ -96,11 +97,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
     const [focusedHandCardUid, setFocusedHandCardUid] = useState<string | null>(null);
 
-    const [viewportSize, setViewportSize] = useState(() => ({
-        width: typeof window !== 'undefined' ? window.innerWidth : 0,
-        height: typeof window !== 'undefined' ? window.innerHeight : 0,
-    }));
-
+    const viewportSize = useRuntimeViewport();
     const isTouchLikeDevice = React.useMemo(() => detectTouchLikeInput(), [viewportSize.width, viewportSize.height]);
 
     const openMagnify = React.useCallback((card: any) => {
@@ -198,26 +195,6 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     // 动画状态
     const animations = useAbilityAnimations();
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const syncViewportSize = () => {
-            setViewportSize({
-                width: window.innerWidth,
-                height: window.innerHeight,
-            });
-        };
-
-        syncViewportSize();
-        window.addEventListener('resize', syncViewportSize);
-        window.addEventListener('orientationchange', syncViewportSize);
-
-        return () => {
-            window.removeEventListener('resize', syncViewportSize);
-            window.removeEventListener('orientationchange', syncViewportSize);
-        };
-    }, []);
-
     // 设备类型检测
     type DeviceType = 
         | 'phone-portrait'      // 手机竖屏
@@ -269,8 +246,8 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
             case 'phone-landscape':
                 // 手机横屏：可视高度非常紧张，必须让卡牌“更扁平”才能完整展示两排（战场+手牌）。
                 // 这里进一步降低卡牌宽度（等比缩放），避免出现上下被裁切。
-                cardWidth = 128;
-                smallCardWidth = 128;
+                cardWidth = Math.max(50, Math.min(66, Math.round(height * 0.125)));
+                smallCardWidth = Math.max(34, Math.min(46, Math.round(height * 0.086)));
                 break;
                 
             case 'tablet-portrait':
@@ -309,6 +286,10 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 : deviceType === 'tablet-portrait'
                   ? 'clamp(6.5rem, 14vw, 7.75rem)'
                   : 'auto';
+        const compactPlayerZoneHeight =
+            deviceType === 'tight-landscape'
+                ? 'clamp(4.8rem, 22dvh, 5.6rem)'
+                : 'auto';
 
         const reservedBottom =
             deviceType === 'phone-portrait' || deviceType === 'tablet-portrait'
@@ -317,6 +298,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
 
         return {
             '--cardia-player-zone-height': playerZoneHeight,
+            '--cardia-compact-player-zone-height': compactPlayerZoneHeight,
             '--cardia-reserved-bottom': reservedBottom,
         } as React.CSSProperties;
     }, [deviceType]);
@@ -842,6 +824,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                             <div
                                 data-testid="cardia-player-zone"
                                 className={`mt-0.5 flex h-[clamp(8.9rem,31dvh,10.6rem)] items-end gap-2 overflow-visible pb-1 ${focusedHandCardUid ? 'relative z-[260]' : ''}`}
+
                                 style={playerZoneWrapperStyle}
                             >
                                 <div className="min-w-0 flex-1">
@@ -1489,7 +1472,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                 data-testid="cardia-player-area-panel"
                 className="flex h-full min-h-0 items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-black/62 px-4 py-3 backdrop-blur-md"
             >
-                <div className="flex w-[10.5rem] flex-shrink-0 flex-col justify-between gap-1.5 overflow-hidden">
+                <div className="flex w-[7.5rem] flex-shrink-0 flex-col justify-between gap-1 overflow-hidden">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
                         <div className="truncate text-[14px] font-bold text-white">{player.name}</div>
                         <div

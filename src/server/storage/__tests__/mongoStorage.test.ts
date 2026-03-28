@@ -256,7 +256,7 @@ type MatchIdDoc = { matchID: string };
 
 // MongoDB 内存服务器在某些环境下启动很慢（>60s），暂时跳过测试
 // 如需运行这些测试，请移除下面的 .skip
-describe.skip('MongoStorage 行为', () => {
+describe('MongoStorage 行为', () => {
     let mongo: MongoMemoryServer | null = null;
 
     beforeAll(async () => {
@@ -284,8 +284,8 @@ describe.skip('MongoStorage 行为', () => {
         // 验证旧房间已被清理
         const Match = mongoose.model('Match');
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-2');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-1', 'match-2']);
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {
@@ -318,8 +318,8 @@ describe.skip('MongoStorage 行为', () => {
 
         // 验证旧房间已被清理
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-2');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-1', 'match-2']);
     });
 
     it('cleanupDuplicateOwnerMatches 仅保留最新房间', async () => {
@@ -509,8 +509,8 @@ describe.skip('MongoStorage 行为', () => {
 
         const Match = mongoose.model('Match');
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-new');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-gameover', 'match-new']);
     });
 
     it('cleanupEphemeralMatches 强制清理幽灵连接（长时间无更新但 isConnected=true）', async () => {

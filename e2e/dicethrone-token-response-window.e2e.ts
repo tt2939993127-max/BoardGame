@@ -1,184 +1,122 @@
-/**
- * Token 响应窗口完整流程 E2E 测试
- *
- * 测试场景：
- * 1. 攻击方 token（暴击）注入后可见
- * 2. 防御方 token（守护）注入后可见
- * 3. 太极 token 双时机验证（攻击加伤/防御减伤）
- * 4. 跳过响应时 token 不被消耗
- *
- * 使用在线双人对局模式，通过调试面板注入状态。
- */
-
-import { test, expect } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
+import { test, expect } from './framework';
+import type { GameTestContext } from './framework';
 import { TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
-import {
-    setupOnlineMatch,
-    readCoreState,
-    applyCoreStateDirect,
-    closeDebugPanelIfOpen,
-} from './helpers/dicethrone';
 
-/** 读取指定玩家 tokens */
-const getPlayerTokens = (core: Record<string, unknown>, playerId: string) => {
-    const players = core.players as Record<string, Record<string, unknown>>;
-    return (players[playerId]?.tokens as Record<string, number>) ?? {};
-};
+type ScenePlayers = Record<'0' | '1', string>;
 
-/** 注入 tokens */
-const injectTokens = async (
-    page: import('@playwright/test').Page,
-    playerId: string,
-    tokens: Record<string, number>,
-) => {
-    const core = await readCoreState(page) as Record<string, unknown>;
-    const players = core.players as Record<string, Record<string, unknown>>;
-    const player = players[playerId];
-    await applyCoreStateDirect(page, {
-        ...core,
-        players: {
-            ...players,
-            [playerId]: {
-                ...player,
-                tokens: { ...((player.tokens as Record<string, number>) ?? {}), ...tokens },
-            },
+async function setupTokenScene(
+    game: GameTestContext,
+    players: ScenePlayers,
+    currentPlayer: '0' | '1' = '0',
+): Promise<void> {
+    await game.openTestGame('dicethrone');
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 0, HP: 50 },
+        },
+        player1: {
+            resources: { CP: 0, HP: 50 },
+        },
+        currentPlayer,
+        phase: 'main2',
+        extra: {
+            selectedCharacters: players,
+            hostStarted: true,
         },
     });
-    await page.waitForTimeout(500);
-};
+
+    await game.waitForPhase('main2', 5000);
+}
+
+async function patchPlayerTokens(
+    page: Page,
+    playerId: '0' | '1',
+    tokens: Record<string, number>,
+): Promise<void> {
+    await page.evaluate(({ id, patch }) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        const player = state?.core?.players?.[id];
+
+        if (!player || typeof harness?.state?.patch !== 'function') {
+            throw new Error('TestHarness state.patch 不可用');
+        }
+
+        harness.state.patch({
+            core: {
+                players: {
+                    [id]: {
+                        ...player,
+                        tokens: {
+                            ...(player.tokens ?? {}),
+                            ...patch,
+                        },
+                    },
+                },
+            },
+        });
+    }, { id: playerId, patch: tokens });
+
+    await page.waitForTimeout(300);
+}
+
+async function readTokenCount(
+    game: GameTestContext,
+    playerId: '0' | '1',
+    tokenId: string,
+): Promise<number> {
+    const player = await game.getPlayerState(playerId);
+    return player?.tokens?.[tokenId] ?? 0;
+}
+
+async function expectTokenCount(
+    game: GameTestContext,
+    playerId: '0' | '1',
+    tokenId: string,
+    count: number,
+): Promise<void> {
+    await expect.poll(
+        () => readTokenCount(game, playerId, tokenId),
+        { timeout: 5000 },
+    ).toBe(count);
+}
 
 test.describe('Token 响应窗口完整流程', () => {
+    test('攻击方暴击 token 注入后可见', async ({ page, game }, testInfo: TestInfo) => {
+        await setupTokenScene(game, { '0': 'paladin', '1': 'barbarian' });
+        await patchPlayerTokens(page, '0', { [TOKEN_IDS.CRIT]: 2 });
 
-    test('攻击方暴击 token 注入后可见', async ({ browser }, testInfo) => {
-        test.setTimeout(120000);
-        const baseURL = testInfo.project.use.baseURL as string | undefined;
-
-        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
-        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
-        const { hostPage, hostContext, guestContext } = match;
-
-        try {
-            await hostPage.waitForTimeout(2000);
-            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
-            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
-            const page = hostIsActive ? hostPage : match.guestPage;
-            const attackerId = hostIsActive ? '0' : '1';
-
-            // 注入 2 层暴击
-            await injectTokens(page, attackerId, { [TOKEN_IDS.CRIT]: 2 });
-
-            const core = await readCoreState(page) as Record<string, unknown>;
-            const tokens = getPlayerTokens(core, attackerId);
-            expect(tokens[TOKEN_IDS.CRIT], '暴击 token 注入失败').toBe(2);
-
-            await closeDebugPanelIfOpen(page);
-            await page.screenshot({ path: testInfo.outputPath('crit-token-visible.png'), fullPage: false });
-        } finally {
-            await hostContext.close();
-            await guestContext.close();
-        }
+        await expectTokenCount(game, '0', TOKEN_IDS.CRIT, 2);
+        await game.screenshot('crit-token-visible', testInfo);
     });
 
-    test('防御方守护 token 注入后可见', async ({ browser }, testInfo) => {
-        test.setTimeout(120000);
-        const baseURL = testInfo.project.use.baseURL as string | undefined;
+    test('防御方守护 token 注入后可见', async ({ page, game }) => {
+        await setupTokenScene(game, { '0': 'paladin', '1': 'barbarian' });
+        await patchPlayerTokens(page, '1', { [TOKEN_IDS.PROTECT]: 3 });
 
-        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
-        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
-        const { hostPage, hostContext, guestContext } = match;
-
-        try {
-            await hostPage.waitForTimeout(2000);
-            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
-            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
-            const page = hostIsActive ? hostPage : match.guestPage;
-            const defenderId = hostIsActive ? '1' : '0';
-
-            // 注入 3 层守护
-            await injectTokens(page, defenderId, { [TOKEN_IDS.PROTECT]: 3 });
-
-            const core = await readCoreState(page) as Record<string, unknown>;
-            const tokens = getPlayerTokens(core, defenderId);
-            expect(tokens[TOKEN_IDS.PROTECT], '守护 token 注入失败').toBe(3);
-
-            await closeDebugPanelIfOpen(page);
-        } finally {
-            await hostContext.close();
-            await guestContext.close();
-        }
+        await expectTokenCount(game, '1', TOKEN_IDS.PROTECT, 3);
     });
 
-    test('太极 token 注入后可见（双时机 token）', async ({ browser }, testInfo) => {
-        test.setTimeout(120000);
-        const baseURL = testInfo.project.use.baseURL as string | undefined;
+    test('太极 token 注入后可见（双时机 token）', async ({ page, game }) => {
+        await setupTokenScene(game, { '0': 'monk', '1': 'barbarian' });
 
-        const match = await setupOnlineMatch(browser, baseURL, 'monk', 'barbarian');
-        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
-        const { hostPage, hostContext, guestContext } = match;
+        await patchPlayerTokens(page, '0', { [TOKEN_IDS.TAIJI]: 2 });
+        await expectTokenCount(game, '0', TOKEN_IDS.TAIJI, 2);
 
-        try {
-            await hostPage.waitForTimeout(2000);
-            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
-            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
-            const page = hostIsActive ? hostPage : match.guestPage;
-            const monkId = hostIsActive ? '0' : '1';
+        await patchPlayerTokens(page, '0', { [TOKEN_IDS.TAIJI]: 1 });
+        await expectTokenCount(game, '0', TOKEN_IDS.TAIJI, 1);
 
-            // 注入 2 层太极
-            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 2 });
-
-            const core = await readCoreState(page) as Record<string, unknown>;
-            const tokens = getPlayerTokens(core, monkId);
-            expect(tokens[TOKEN_IDS.TAIJI], '太极 token 注入失败').toBe(2);
-
-            // 模拟攻击时使用 1 层太极（加伤）
-            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 1 });
-
-            const coreAfterAttack = await readCoreState(page) as Record<string, unknown>;
-            expect(getPlayerTokens(coreAfterAttack, monkId)[TOKEN_IDS.TAIJI], '攻击后太极应减少 1 层').toBe(1);
-
-            // 模拟防御时使用 1 层太极（减伤）
-            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 0 });
-
-            const coreFinal = await readCoreState(page) as Record<string, unknown>;
-            expect(getPlayerTokens(coreFinal, monkId)[TOKEN_IDS.TAIJI] ?? 0, '防御后太极应完全消耗').toBe(0);
-
-            await closeDebugPanelIfOpen(page);
-        } finally {
-            await hostContext.close();
-            await guestContext.close();
-        }
+        await patchPlayerTokens(page, '0', { [TOKEN_IDS.TAIJI]: 0 });
+        await expectTokenCount(game, '0', TOKEN_IDS.TAIJI, 0);
     });
 
-    test('跳过响应时 token 不被消耗', async ({ browser }, testInfo) => {
-        test.setTimeout(120000);
-        const baseURL = testInfo.project.use.baseURL as string | undefined;
+    test('跳过响应时 token 不被消耗', async ({ page, game }) => {
+        await setupTokenScene(game, { '0': 'paladin', '1': 'barbarian' });
+        await patchPlayerTokens(page, '0', { [TOKEN_IDS.CRIT]: 1 });
 
-        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
-        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
-        const { hostPage, hostContext, guestContext } = match;
-
-        try {
-            await hostPage.waitForTimeout(2000);
-            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
-            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
-            const page = hostIsActive ? hostPage : match.guestPage;
-            const attackerId = hostIsActive ? '0' : '1';
-
-            // 注入 1 层暴击
-            await injectTokens(page, attackerId, { [TOKEN_IDS.CRIT]: 1 });
-
-            // 验证 token 存在
-            const core = await readCoreState(page) as Record<string, unknown>;
-            expect(getPlayerTokens(core, attackerId)[TOKEN_IDS.CRIT], '暴击注入失败').toBe(1);
-
-            // 模拟跳过响应：token 不变
-            const coreFinal = await readCoreState(page) as Record<string, unknown>;
-            expect(getPlayerTokens(coreFinal, attackerId)[TOKEN_IDS.CRIT], '跳过响应后 token 不应被消耗').toBe(1);
-
-            await closeDebugPanelIfOpen(page);
-        } finally {
-            await hostContext.close();
-            await guestContext.close();
-        }
+        await expectTokenCount(game, '0', TOKEN_IDS.CRIT, 1);
+        await expectTokenCount(game, '0', TOKEN_IDS.CRIT, 1);
     });
 });

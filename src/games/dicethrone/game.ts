@@ -50,6 +50,8 @@ import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
 import { ASSETS } from './ui/assets';
+import { registerGameAiRuntime } from '../../engine/ai';
+import { diceThroneAiRuntime } from './ai';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -1003,6 +1005,7 @@ const COMMAND_TYPES = [
     // 选角相关
     'SELECT_CHARACTER',
     'HOST_START_GAME',
+    'MOVE_SEAT',
     'PLAYER_READY',
     'PLAYER_UNREADY',
     // Token 响应系统
@@ -1034,7 +1037,7 @@ const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 2,
+    maxPlayers: 4,
     commandTypes: COMMAND_TYPES,
 };
 
@@ -1058,3 +1061,5 @@ registerCriticalImageResolver('dicethrone', diceThroneCriticalImageResolver);
 
 // 导出类型（兼容）
 export type { DiceThroneCore } from './domain';
+
+registerGameAiRuntime(diceThroneAiRuntime);

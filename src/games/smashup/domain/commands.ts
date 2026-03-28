@@ -18,6 +18,7 @@ import {
     getActionLikeResponseWindowTiming,
     canUseBaseLimitedMinionQuota,
     canUseSameNameMinionQuota,
+    getMinionTalentActivationError,
     getMaxRemainingGlobalPowerLimitedQuota,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
@@ -155,16 +156,17 @@ export function validate(
                     return { valid: false, error: '弃牌堆中没有该随从' };
                 }
                 const basePower = getMinionLikePower(discardCard.defId) ?? 0;
+                const isExtraMinionAttempt = isExtraMinionPlayAttempt(
+                    core,
+                    command.playerId,
+                    baseIndex,
+                    discardCard.defId,
+                    basePower,
+                    true,
+                    discardCheck.consumesNormalLimit,
+                );
                 const blockedByBearNecessitiesPod = hasActiveBearNecessitiesPodRestriction(core, command.playerId)
-                    && isExtraMinionPlayAttempt(
-                        core,
-                        command.playerId,
-                        baseIndex,
-                        discardCard.defId,
-                        basePower,
-                        true,
-                        discardCheck.consumesNormalLimit,
-                    );
+                    && isExtraMinionAttempt;
                 if (blockedByBearNecessitiesPod) {
                     return { valid: false, error: '受黑熊口粮POD限制：你不能打出额外牌' };
                 }
@@ -174,6 +176,7 @@ export function validate(
                     minionDefId: discardCard.defId,
                     basePower,
                     usesBaseLimitedMinionQuota,
+                    isExtraMinionPlayAttempt: isExtraMinionAttempt,
                 })) {
                     return { valid: false, error: '该基地禁止打出该随从' };
                 }
@@ -193,16 +196,17 @@ export function validate(
             const minionDef = getMinionDef(card.defId);
             const fusionDef = getFusionDef(card.defId);
             const basePower = (minionDef?.power ?? fusionDef?.minionPower) ?? 0;
+            const isExtraMinionAttempt = isExtraMinionPlayAttempt(
+                core,
+                command.playerId,
+                baseIndex,
+                card.defId,
+                basePower,
+                false,
+                true,
+            );
             const blockedByBearNecessitiesPod = hasActiveBearNecessitiesPodRestriction(core, command.playerId)
-                && isExtraMinionPlayAttempt(
-                    core,
-                    command.playerId,
-                    baseIndex,
-                    card.defId,
-                    basePower,
-                    false,
-                    true,
-                );
+                && isExtraMinionAttempt;
             if (blockedByBearNecessitiesPod) {
                 return { valid: false, error: '受黑熊口粮POD限制：你不能打出额外牌' };
             }
@@ -238,6 +242,7 @@ export function validate(
                 minionDefId: card.defId,
                 basePower,
                 usesBaseLimitedMinionQuota,
+                isExtraMinionPlayAttempt: isExtraMinionAttempt,
             })) {
                 return { valid: false, error: '该基地禁止打出该随从' };
             }
@@ -569,6 +574,10 @@ export function validate(
             const mDef = getCardDef(targetMinion.defId);
             if (!mDef || !('abilityTags' in mDef) || !mDef.abilityTags?.includes('talent')) {
                 return { valid: false, error: '该随从没有天赋能力' };
+            }
+            const talentActivationError = getMinionTalentActivationError(core, targetMinion, baseIndex);
+            if (talentActivationError) {
+                return { valid: false, error: talentActivationError };
             }
             return { valid: true };
         }
