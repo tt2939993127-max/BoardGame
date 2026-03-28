@@ -338,6 +338,42 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 ### Status
 - in_progress
 
+## Addendum（2026-03-28）：枪手 The Law 审计与端到端验证
+
+### Goal
+- 不再用“实现已接上”代替“关键交互已验证”，先完成枪手 `The Law` 的正式审计，再补 spec，最后补并跑端到端。
+
+### Result
+- [x] 审计 `The Law` 的卡牌定义、custom action、命令校验、执行、UI 本地选择状态与确认链路。
+- [x] 在 `openspec/specs/interaction-system/spec.md` 补齐 `selectPlayer` 多目标语义。
+- [x] 在 `src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx` 补 UI 多选回归并跑通。
+- [x] 在 `e2e/dicethrone-watch-out-spotlight.e2e.ts` 补两条 `The Law` 多目标交互 E2E 并跑通。
+- [x] 在 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md` 留存截图与结论。
+
+### Remaining
+- [ ] 如需把这套多目标 `selectPlayer` 能力推广到其他英雄/卡牌，再按同一 spec 契约补对应回归。
+
+### Status
+- in_progress
+
+## Addendum（2026-03-28）：Dice Throne 枪手 `The Law` 多目标交互闭环
+
+### Goal
+- 收掉枪手剩余唯一规则缺口：`card-the-law` 的“至多 2 位目标玩家”交互。
+
+### Result
+- [x] 在 `src/games/dicethrone/domain/customActions/gunslinger.ts` 为 `card-the-law` 补上多人局选择逻辑，`1v1` 继续保留唯一对手直通。
+- [x] 在 `src/games/dicethrone/domain/commands.ts`、`commandValidation.ts`、`execute.ts` 增加 `RESOLVE_INTERACTION`，单次命令结算多目标选择。
+- [x] 在 `src/games/dicethrone/hooks/useInteractionState.ts`、`src/games/dicethrone/Board.tsx`、`src/games/dicethrone/ui/resolveMoves.ts` 把玩家选择从单选改为按 `selectCount` 的多选。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 补 `The Law` 的 3 人局回归，并把初始化辅助函数扩成支持多玩家。
+- [x] 在 `src/games/dicethrone/rule/枪手卡牌录入核对.md` 将 `card-the-law` 改为“已落地”。
+
+### Remaining
+- [ ] 在具备依赖的环境补跑 `eslint` 与 `src/games/dicethrone/__tests__/cross-hero.test.ts`，完成最终机器验证。
+
+### Status
+- in_progress
+
 ---
 
 ## Addendum（2026-03-26）：Dice Throne 武士防御回归修正
@@ -660,5 +696,91 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 - [x] 依据费用区模板比对，将 `cpCost` 暂定为 `2CP`，并在代码中保留证据说明。
 ### Remaining
 - [ ] 继续核定 `Masamune II` 的真实升级差异。
+### Status
+- in_progress
+## Addendum（2026-03-27）：Dice Throne 武士 `Masamune II` 变体闭环
+### Goal
+- 核定 `Masamune II` 的真实升级差异，并把规则、代码、locale、回归一次性接通。
+
+### Result
+- [x] 在 `src/games/dicethrone/heroes/samurai/abilities.ts` 将 `Masamune II` 明确拆成 `large-straight` 与 `power-up` 两个变体。
+- [x] 在 `src/games/dicethrone/domain/customActions/samurai.ts` 让 `samurai-masamune` 支持可配置额外掷骰数，升级版按 `6` 颗骰结算。
+- [x] 修正 `power-up` 分支结算时机为 `preDefense`，避免被攻击执行链漏掉。
+- [x] 在 `public/locales/zh-CN/game-dicethrone.json` 与 `public/locales/en/game-dicethrone.json` 补齐对应文案。
+- [x] 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 增补两条 `Masamune II` 回归并跑通。
+
+### Remaining
+- [ ] 若后续拿到更清晰原图，再裁定 `power-up` 的最终中文牌面名称。
+
+### Status
+- in_progress
+
+## Addendum（2026-03-27）：武士中文名与资源链收口
+
+### Goal
+- 去掉“武士最终中文名未闭环 / 资源尚未正式接入”的旧判断，确认当前真实剩余项。
+
+### Result
+- [x] 在 `public/locales/zh-CN/game-dicethrone.json` 回写武士角色板、升级卡与行动牌的中文名与中文描述。
+- [x] 确认 `public/assets/i18n/zh-CN/dicethrone/assets-manifest.json` 已登记武士图片、裁图、icon 与 atlas。
+- [x] 通过 `npm run assets:check` 复核，确认当前远端差异不在武士资源。
+- [x] 在 `src/games/dicethrone/rule/武士录入核对.md` 与 `src/games/dicethrone/rule/武士卡牌录入核对.md` 追加现状裁决，覆盖历史 `pending` 口径。
+
+### Remaining
+- [ ] 若后续拿到更清晰原图，再裁定 `masamune-2-power-up` 是否存在独立官方中文标题。
+
+### Status
+- in_progress
+
+## Addendum（2026-03-28）：枪手 / 武士关键交互真实点击验证
+
+### Goal
+- 把这轮真正改过的关键交互从“实现存在”推进到“真实点击可跑通”，并补齐缺失的当前真相 spec。
+
+### Result
+- [x] 复跑武士既有点击型 E2E：`Righteousness`、`Zanshin`。
+- [x] 为武士 token 响应新增两条真实点击 E2E：`Honor` 连续两次点击、`Back Strike` 反打。
+- [x] 新增 `openspec/specs/dicethrone-token-response/spec.md`，补齐 token response 当前真相契约。
+- [x] 合并复跑枪手 `The Law` 多目标交互与武士关键交互，确认本轮关键链路整体通过。
+- [x] 新增 `evidence/dicethrone-samurai-token-response-e2e-test.md`，登记截图与断言证据。
+
+### Remaining
+- [ ] 若后续要继续扩大验证面，再按“本轮新改交互优先”原则补其他非关键链路；当前不把“全角色全技能全量 E2E”误报成已完成。
+
+### Status
+- in_progress
+
+## Addendum（2026-03-28）：枪手 The Law 真实入口验证
+
+### Goal
+- 把 `The Law` 从“交互已弹出后可验证”推进到“从手牌点击打出即可真实跑通”。
+
+### Result
+- [x] 新增 `1v1` 用例，验证从手牌点击 `The Law` 后直接结算唯一目标。
+- [x] 新增 `3` 人局用例，验证从手牌点击 `The Law` 后先进入多目标交互，再完成双目标确认结算。
+- [x] 将这两条用例并入 `samurai|枪手 The Law` 合并回归。
+- [x] 在 `evidence/dicethrone-gunslinger-the-law-multiselect-e2e-test.md` 追加手牌打出截图证据。
+
+### Remaining
+- [ ] 若后续继续扩验证，应优先补其他“真实入口尚未覆盖”的交互，而不是重复给已覆盖链路堆更多同质 E2E。
+
+### Status
+- in_progress
+
+## Addendum（2026-03-28）：武士 Token Response 真实整局入口收口
+
+### Goal
+- 把武士 `Honor / Back Strike` 从“token 响应窗已可见可点”推进到“整局真实攻击流程能打开并跑通”，同时补齐这条链路暴露出的测试层误判。
+
+### Result
+- [x] 在 `e2e/dicethrone-token-response-window.e2e.ts` 补齐两条整局真实入口用例：`Honor` 与 `Back Strike`。
+- [x] 修正 `Back Strike` 用例中攻击方响应层的推进方式，改为真实点击 `PASS` 后再进入 `Resolve Attack`。
+- [x] 修正 `e2e/helpers/dicethrone.ts` 的 `maybePassResponse`，避免宽松 UI 文本下漏点 `PASS`。
+- [x] 将 `Back Strike` 的最终断言改成基于真实运行时状态，而不是把 `pendingDamage.currentDamage` 误当作最终掉血。
+- [x] 重新运行 `openspec validate dicethrone-token-response --strict --no-interactive` 与整局真实入口 E2E，确认闭环。
+
+### Remaining
+- [ ] 若后续继续做 Dice Throne 交互扩审，应优先补其他“整局真实入口尚未覆盖”的交互类型；当前不再把武士 token response 视为待收口项。
+
 ### Status
 - in_progress

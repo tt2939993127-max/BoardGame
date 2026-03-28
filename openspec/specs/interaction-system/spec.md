@@ -44,3 +44,26 @@ The engine SHALL provide a `useMultistepInteraction` React Hook that manages loc
 - **GIVEN** a `multistep-choice` interaction defines `maxSteps`
 - **WHEN** the completed local progress reaches that threshold
 - **THEN** the Hook automatically confirms the interaction without requiring a separate manual click
+
+### Requirement: Card Interaction Multi-Target Player Selection
+The engine SHALL support `dt:card-interaction` payloads whose `selectPlayer` descriptor allows selecting up to `selectCount` target players before a single confirmation dispatch.
+
+#### Scenario: Player selection keeps local progress before confirmation
+- **GIVEN** a `dt:card-interaction` whose descriptor type is `selectPlayer`
+- **AND** the descriptor declares `selectCount` greater than `1`
+- **WHEN** the acting player locally selects one or more valid target players
+- **THEN** the interaction remains open until the player confirms or cancels
+- **AND** the current local selection is preserved for UI rendering
+
+#### Scenario: Confirmation dispatches all selected player ids at once
+- **GIVEN** a `dt:card-interaction` whose descriptor type is `selectPlayer`
+- **AND** the acting player has selected one or more valid target players
+- **WHEN** the player confirms the interaction
+- **THEN** the client dispatches a single `RESOLVE_INTERACTION` command
+- **AND** the command payload contains every selected player id in `selectedPlayerIds`
+
+#### Scenario: Command validation rejects invalid or excessive targets
+- **GIVEN** a `dt:card-interaction` whose descriptor type is `selectPlayer`
+- **WHEN** a `RESOLVE_INTERACTION` command includes targets outside `targetPlayerIds`
+- **OR** the number of unique selected targets exceeds `selectCount`
+- **THEN** the command is rejected before state mutation

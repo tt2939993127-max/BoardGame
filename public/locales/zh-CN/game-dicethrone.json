@@ -370,7 +370,7 @@
     "moon_elf": "月精灵",
     "paladin": "圣骑士",
     "gunslinger": "枪手",
-    "samurai": "Samurai"
+    "samurai": "武士"
   },
   "characters": {
     "monk": "僧侣",
@@ -380,7 +380,7 @@
     "moon_elf": "月精灵",
     "paladin": "圣骑士",
     "gunslinger": "枪手",
-    "samurai": "Samurai"
+    "samurai": "武士"
   },
   "selection": {
     "title": "选择你的英雄",
@@ -764,6 +764,7 @@
     "selectPlayerToRemoveAllStatus": "选择要移除所有状态的玩家",
     "selectPlayerForRetribution": "选择获得神罚的玩家",
     "selectPlayerForConsecrate": "选择获得祝圣的玩家",
+    "gunslingerTheLaw": "选择至多 2 名目标玩家",
     "selectStatusToTransfer": "选择要转移的状态效果",
     "hint_copy_step1": "选择要复制的源骰子",
     "hint_copy_step2": "选择要设为{{value}}的目标骰子",
@@ -1912,76 +1913,84 @@
       "damageByFist": "每有[拳]造成3点伤害"
     },
     "katana-slice": {
-      "name": "Katana Slice",
-      "description": "3/4/5 Katana: deal 5/6/7 damage."
+      "name": "太刀斩",
+      "description": "3/4/5 武士刀：造成 5/6/7 点伤害。"
     },
     "katana-slice-2": {
-      "name": "Katana Slice II",
-      "description": "3/4/5 Katana: deal 6/7/8 damage. If at least 4 dice show the same pip value, inflict 1 Shame."
+      "name": "太刀斩 II",
+      "description": "3/4/5 武士刀：造成 6/7/8 点伤害。若至少有 4 颗骰子点数相同，施加 1 层耻辱。"
     },
     "katana-slice-3": {
-      "name": "Katana Slice III",
-      "description": "3/4/5 Katana: deal 6/7/8 damage. If at least 3 dice show the same pip value, inflict 1 Shame."
+      "name": "太刀斩 III",
+      "description": "3/4/5 武士刀：造成 6/7/8 点伤害。若至少有 3 颗骰子点数相同，施加 1 层耻辱。"
     },
     "wakizashi": {
-      "name": "Wakizashi",
-      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike and deal 3 undefendable damage."
+      "name": "胁差",
+      "description": "2 武士刀 + 2 旭日：获得 1 个反击指示物，并造成 3 点不可防御伤害。"
     },
     "wakizashi-2": {
-      "name": "Wakizashi II",
-      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike and deal 4 undefendable damage."
+      "name": "胁差 II",
+      "description": "2 武士刀 + 2 旭日：获得 1 个反击指示物，并造成 4 点不可防御伤害。"
     },
     "wakizashi-3": {
-      "name": "Wakizashi III",
-      "description": "2 Katana + 2 Rising Sun: gain 1 Back Strike, inflict 1 Shame, and deal 4 undefendable damage."
+      "name": "胁差 III",
+      "description": "2 武士刀 + 2 旭日：获得 1 个反击指示物，施加 1 层耻辱，并造成 4 点不可防御伤害。"
     },
     "bushido": {
-      "name": "Bushido",
-      "description": "Passive. If you are the starting player, gain 1 Honor. At end of turn, if you rolled fewer than 3 times during Offensive Roll, gain 1 Honor."
+      "name": "武士道",
+      "description": "被动：若你是起始玩家，获得 1 个荣誉指示物。回合结束时，若你在进攻掷骰阶段的投掷次数少于 3 次，获得 1 个荣誉指示物。"
     },
     "solemnity": {
-      "name": "Solemnity",
-      "description": "2 Katana + 3 Helm: inflict 1 Shame and deal 7 damage."
+      "name": "肃穆之仪",
+      "description": "2 武士刀 + 3 头盔：施加 1 层耻辱，并造成 7 点伤害。"
     },
     "solemnity-2": {
-      "name": "Solemnity II",
-      "description": "2 Katana + 3 Helm: inflict 2 Shame and deal 8 damage."
+      "name": "肃穆之仪 II",
+      "description": "2 武士刀 + 3 头盔：施加 2 层耻辱，并造成 8 点伤害。"
     },
     "budo": {
-      "name": "Budo",
-      "description": "Small Straight: gain 1 Honor and deal 6 damage."
+      "name": "武道",
+      "description": "小顺：获得 1 个荣誉指示物，并造成 6 点伤害。"
     },
     "budo-2": {
-      "name": "Budo II",
-      "description": "Small Straight: gain 1 Honor and deal 8 damage."
+      "name": "武道 II",
+      "description": "小顺：获得 1 个荣誉指示物，并造成 8 点伤害。"
     },
     "samurai-slot-06": {
-      "name": "Heart of Hagakure",
-      "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 1 Shame, then deal 5 undefendable damage."
+      "name": "叶隐之心",
+      "description": "4 旭日：获得 1 个荣誉指示物，获得 1 个反击指示物，施加 1 层耻辱，然后造成 5 点不可防御伤害。"
     },
     "samurai-slot-06-2": {
-      "name": "Heart of Hagakure II",
-      "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 2 Shame, then deal 7 undefendable damage."
+      "name": "叶隐之心 II",
+      "description": "4 旭日：获得 1 个荣誉指示物，获得 1 个反击指示物，施加 2 层耻辱，然后造成 7 点不可防御伤害。"
     },
     "masamune": {
-      "name": "Masamune",
-      "description": "Large Straight: deal 7 damage, then roll 5 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
+      "name": "正宗",
+      "description": "大顺：造成 7 点伤害，然后额外掷 5 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。"
     },
     "masamune-2": {
-      "name": "Masamune II",
-      "description": "Large Straight: deal 7 damage, then roll 5 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
+      "name": "正宗 II",
+      "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。此外，若本次掷骰同时包含武士刀、头盔与旭日，也可以改为获得 1 个反击指示物。"
+    },
+    "masamune-2-large-straight": {
+      "name": "正宗 II",
+      "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。"
+    },
+    "masamune-2-power-up": {
+      "name": "蓄势",
+      "description": "武士刀 + 头盔 + 旭日：获得 1 个反击指示物。"
     },
     "stand-tall": {
-      "name": "Stand Tall",
-      "description": "Defensive Roll: roll 3 dice. Each Katana deals 1 undefendable damage, each Helm prevents 1 damage, each Rising Sun prevents 2 damage. If you roll no Helm or Rising Sun, gain 1 Shame."
+      "name": "昂首无畏",
+      "description": "防御掷骰：掷 3 颗骰子。每个武士刀造成 1 点不可防御伤害；每个头盔抵挡 1 点伤害；每个旭日抵挡 2 点伤害。若未掷出头盔或旭日，则获得 1 层耻辱。"
     },
     "stand-tall-2": {
-      "name": "Stand Tall II",
-      "description": "Defensive Roll: roll 4 dice. Each Katana deals 1 undefendable damage, each Helm prevents 1 damage, each Rising Sun prevents 2 damage."
+      "name": "昂首无畏 II",
+      "description": "防御掷骰：掷 4 颗骰子。每个武士刀造成 1 点不可防御伤害；每个头盔抵挡 1 点伤害；每个旭日抵挡 2 点伤害。"
     },
     "samurai-ultimate": {
-      "name": "Shogun!",
-      "description": "Gain 1 Honor, inflict 2 Shame, then deal 13 undefendable damage."
+      "name": "征夷大将军！",
+      "description": "获得 1 个荣誉指示物，施加 2 层耻辱，然后造成 13 点不可防御伤害。"
     }
   },
   "cards": {
@@ -2512,52 +2521,52 @@
       "description": "升级教皇税：抽牌消耗降为2CP，进攻阶段激活含🙏技能时获得1CP。"
     },
     "upgrade-katana-slice-2": {
-      "name": "Katana Slice II",
-      "description": "Upgrade Katana Slice to Level II."
+      "name": "太刀斩 II",
+      "description": "升级你的太刀斩至 II 级。"
     },
     "upgrade-katana-slice-3": {
-      "name": "Katana Slice III",
-      "description": "Upgrade Katana Slice to Level III."
+      "name": "太刀斩 III",
+      "description": "升级你的太刀斩至 III 级。"
     },
     "upgrade-wakizashi-2": {
-      "name": "Wakizashi II",
-      "description": "Upgrade Wakizashi to Level II."
+      "name": "胁差 II",
+      "description": "升级你的胁差至 II 级。"
     },
     "upgrade-wakizashi-3": {
-      "name": "Wakizashi III",
-      "description": "Upgrade Wakizashi to Level III."
+      "name": "胁差 III",
+      "description": "升级你的胁差至 III 级。"
     },
     "upgrade-solemnity-2": {
-      "name": "Solemnity II",
-      "description": "Upgrade Solemnity to Level II."
+      "name": "肃穆之仪 II",
+      "description": "升级你的肃穆之仪至 II 级。"
     },
     "upgrade-budo-2": {
-      "name": "Budo II",
-      "description": "Upgrade Budo to Level II."
+      "name": "武道 II",
+      "description": "升级你的武道至 II 级。"
     },
     "upgrade-masamune-2": {
-      "name": "Masamune II",
-      "description": "Upgrade Masamune to Level II."
+      "name": "正宗 II",
+      "description": "升级你的正宗至 II 级。"
     },
     "upgrade-slot-06-2": {
-      "name": "Heart of Hagakure II",
-      "description": "Upgrade Heart of Hagakure to Level II."
+      "name": "叶隐之心 II",
+      "description": "升级你的叶隐之心至 II 级。"
     },
     "upgrade-stand-tall-2": {
-      "name": "Stand Tall II",
-      "description": "Upgrade Stand Tall to Level II."
+      "name": "昂首无畏 II",
+      "description": "升级你的昂首无畏至 II 级。"
     },
     "card-samurai-honor": {
-      "name": "Samurai Honor!",
-      "description": "Gain 2 Honor."
+      "name": "武士荣耀！",
+      "description": "获得 2 个荣誉指示物。"
     },
     "card-you-should-be-ashamed": {
-      "name": "You Should Be Ashamed!",
-      "description": "Choose an opponent. That opponent gains 2 Shame."
+      "name": "你真可耻！",
+      "description": "选择一名对手。该对手获得 2 层耻辱。"
     },
     "card-no-retreat": {
-      "name": "No Retreat!",
-      "description": "Gain 1 Back Strike."
+      "name": "不退缩！",
+      "description": "获得 1 个反击指示物。"
     },
     "card-righteousness": {
       "name": "舍生取义！",

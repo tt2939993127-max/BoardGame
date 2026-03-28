@@ -1,15 +1,17 @@
 import { createBonusDiceWithReroll, createDisplayOnlySettlement, registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { registerChoiceResolvedEventHandler } from '../choiceResolvedEvents';
 import { GUNSLINGER_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
-import { getPlayerDieFace } from '../rules';
+import { getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
+import type { PendingInteraction } from '../core-types';
 import type {
     BonusDamageAddedEvent,
     ChoiceRequestedEvent,
     CpChangedEvent,
     DamageShieldGrantedEvent,
     DiceThroneEvent,
+    InteractionRequestedEvent,
     StatusAppliedEvent,
 } from '../events';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
@@ -278,6 +280,74 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
     return events;
 }
 
+function createKnockdownEvent(
+    state: CustomActionContext['state'],
+    targetId: string,
+    sourceAbilityId: string,
+    timestamp: number,
+): StatusAppliedEvent {
+    const currentStacks = state.players[targetId]?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+    return {
+        type: 'STATUS_APPLIED',
+        payload: {
+            targetId,
+            statusId: STATUS_IDS.KNOCKDOWN,
+            stacks: 1,
+            newTotal: Math.min(currentStacks + 1, 1),
+            sourceAbilityId,
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as StatusAppliedEvent;
+}
+
+function handleTheLaw({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const opponentIds = Object.keys(state.players).filter(playerId => playerId !== attackerId);
+
+    if (opponentIds.length <= 1) {
+        const targetId = opponentIds[0];
+        if (!targetId) return [];
+
+        const currentBounty = state.players[targetId]?.tokens[TOKEN_IDS.BOUNTY] ?? 0;
+        const newBountyTotal = Math.min(currentBounty + 1, getTokenStackLimit(state, targetId, TOKEN_IDS.BOUNTY));
+        return [
+            {
+                type: 'TOKEN_GRANTED',
+                payload: {
+                    targetId,
+                    tokenId: TOKEN_IDS.BOUNTY,
+                    amount: Math.max(0, newBountyTotal - currentBounty),
+                    newTotal: newBountyTotal,
+                    sourceAbilityId,
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as DiceThroneEvent,
+            createKnockdownEvent(state, targetId, sourceAbilityId, timestamp + 1),
+        ];
+    }
+
+    const interaction: PendingInteraction = {
+        id: `${sourceAbilityId}-${timestamp}`,
+        playerId: attackerId,
+        sourceCardId: sourceAbilityId,
+        type: 'selectPlayer',
+        titleKey: 'interaction.gunslingerTheLaw',
+        selectCount: 2,
+        selected: [],
+        targetPlayerIds: opponentIds,
+        tokenGrantConfig: { tokenId: TOKEN_IDS.BOUNTY, amount: 1 },
+        statusGrantConfig: { statusId: STATUS_IDS.KNOCKDOWN, amount: 1 },
+    };
+
+    return [{
+        type: 'INTERACTION_REQUESTED',
+        payload: { interaction },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as InteractionRequestedEvent];
+}
+
 export function registerGunslingerCustomActions(): void {
     registerCustomActionHandler('gunslinger-loaded-use', handleLoadedUse, {
         categories: ['token', 'dice'],
@@ -297,6 +367,10 @@ export function registerGunslingerCustomActions(): void {
     });
     registerCustomActionHandler('gunslinger-card-eat-my-lead', handleEatMyLead, {
         categories: ['card', 'dice', 'status'],
+    });
+    registerCustomActionHandler('gunslinger-card-the-law', handleTheLaw, {
+        categories: ['card', 'token', 'status'],
+        requiresInteraction: true,
     });
 
     registerChoiceResolvedEventHandler('gunslinger-duel-deal-3', ({ state, playerId, sourceAbilityId, timestamp }) => {

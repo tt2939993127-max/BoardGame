@@ -57,11 +57,15 @@ function createInitializedStateWithCharacters(
         sys: createInitialSystemState(playerIds, testSystems, undefined),
     };
 
+    const hostPlayerId = playerIds[0] ?? '0';
     const commands: CommandInput[] = [
-        cmd('SELECT_CHARACTER', '0', { characterId: characters['0'] ?? 'monk' }),
-        cmd('SELECT_CHARACTER', '1', { characterId: characters['1'] ?? 'monk' }),
-        cmd('PLAYER_READY', '1'),
-        cmd('HOST_START_GAME', '0'),
+        ...playerIds.map(playerId => cmd('SELECT_CHARACTER', playerId, {
+            characterId: characters[playerId] ?? 'monk',
+        })),
+        ...playerIds
+            .filter(playerId => playerId !== hostPlayerId)
+            .map(playerId => cmd('PLAYER_READY', playerId)),
+        cmd('HOST_START_GAME', hostPlayerId),
     ];
 
     for (const input of commands) {
@@ -497,6 +501,55 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['0'].tokens.evasive).toBe(1);
             expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
             expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
+        });
+
+        it('the law can select up to two target players in multiplayer', () => {
+            const theLawCard = GUNSLINGER_CARDS.find(card => card.id === 'card-the-law');
+            expect(theLawCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1', '2'],
+                random: fixedRandom,
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk', '2': 'paladin' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...theLawCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger the-law multiplayer',
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'card-the-law' }),
+                    cmd('RESOLVE_INTERACTION', '0', { selectedPlayerIds: ['1', '2'] }),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { cp: 0, discardSize: 1 },
+                        '1': {},
+                        '2': {},
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens.evasive).toBe(1);
+            expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.players['2'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
+            expect(result.finalState.core.players['2'].statusEffects.knockdown).toBe(1);
         });
 
         it('pistol whip undefendable damage should not trigger protect', () => {
@@ -1248,6 +1301,113 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
             expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
             expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(2);
+        });
+
+        it('upgrade-masamune-2 large straight variant rolls 6 extra dice', () => {
+            const upgradeCard = SAMURAI_CARDS.find(card => card.id === 'upgrade-masamune-2');
+            expect(upgradeCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([2, 3, 4, 5, 6, 1, 4, 6, 2, 5, 3]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'samurai', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'samurai masamune ii large straight',
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-masamune-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'masamune-2-large-straight' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { cp: 0, discardSize: 1 },
+                        '1': {},
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(6);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+        });
+
+        it('upgrade-masamune-2 power-up variant grants 1 back strike on all symbols present', () => {
+            const upgradeCard = SAMURAI_CARDS.find(card => card.id === 'upgrade-masamune-2');
+            expect(upgradeCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([2, 3, 4, 5, 6]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'samurai', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'samurai masamune ii power up',
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-masamune-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'masamune-2-power-up' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50, cp: 0, discardSize: 1 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+            expect(result.finalState.core.pendingBonusDiceSettlement).toBeUndefined();
         });
 
         it('upgrade-wakizashi-3 replaces runtime definition with level III', () => {

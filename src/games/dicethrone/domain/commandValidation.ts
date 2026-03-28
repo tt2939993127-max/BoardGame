@@ -1108,6 +1108,41 @@ const validateGrantTokens = (
     return ok();
 };
 
+const validateResolveInteraction = (
+    _state: DiceThroneCore,
+    cmd: DiceThroneCommand,
+    playerId: PlayerId,
+    pendingInteraction?: InteractionDescriptor
+): ValidationResult => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+    if (pendingInteraction.type !== 'selectPlayer') {
+        return fail('interaction_type_mismatch');
+    }
+
+    const { selectedPlayerIds = [] } = cmd.payload as { selectedPlayerIds?: PlayerId[] };
+    if (selectedPlayerIds.length === 0) {
+        return fail('no_selected_player');
+    }
+
+    const uniqueSelectedPlayerIds = Array.from(new Set(selectedPlayerIds));
+    if (uniqueSelectedPlayerIds.length > (pendingInteraction.selectCount ?? 1)) {
+        return fail('too_many_selected_players');
+    }
+
+    const targetPlayerIds = pendingInteraction.targetPlayerIds ?? [];
+    const hasInvalidTarget = uniqueSelectedPlayerIds.some(targetId => !targetPlayerIds.includes(targetId));
+    if (hasInvalidTarget) {
+        return fail('invalid_target_player');
+    }
+
+    return ok();
+};
+
 // ============================================================================
 // 主验证入口
 // ============================================================================
@@ -1148,6 +1183,7 @@ export const validateCommand = (
     if (isCommandType(command, 'REROLL_DIE')) return validateRerollDieStrict(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'RESOLVE_INTERACTION')) return validateResolveInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);
