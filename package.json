@@ -82,7 +82,7 @@
     "test:e2e:check": "node scripts/infra/check-e2e-safety.js",
     "test:e2e:list": "node scripts/infra/list-e2e-runtimes.mjs",
     "capture:mobile:evidence": "node scripts/infra/capture-mobile-evidence.mjs",
-    "init:admin": "npx tsx scripts/db/init_admin.ts",
+    "init:admin": "npx tsx --tsconfig tsconfig.api.json scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
     "check:prod-deps": "bash scripts/deploy/verify-prod-deps.sh",
     "merge:audit": "node scripts/verify/merge-conflict-audit.mjs",
