@@ -1129,6 +1129,7 @@ npm run test:e2e:ci:all
 - 常用项目脚本（如 `npm run test:e2e`、`npm run test:e2e:ci`、`npm run test:e2e:parallel`）会显式强制无头运行，避免终端里残留的 `PW_HEADED` / `PWDEBUG` 导致突然弹出一批浏览器窗口
 - 如需可见浏览器调试，请显式使用 `npx playwright test --headed` 或 `npx playwright test --debug`
 - E2E 自动起服默认会给游戏服务注入 `USE_PERSISTENT_STORAGE=false`，此时游戏服应以纯内存模式启动，不要求本机先准备 MongoDB；对应代价是 UGC、排行榜归档等依赖 Mongo 的能力会被自动跳过
+- `npm run test:e2e:ci:file -- <文件> "<用例名>"` 这类“显式目标”入口会先在共享 registry 中保留一组隔离端口，再启动服务；多 AI / 多 worktree 并发时优先使用这个入口，避免两个运行链路同时挑中同一组动态端口
 
 ### 端口配置与隔离（重要）
 

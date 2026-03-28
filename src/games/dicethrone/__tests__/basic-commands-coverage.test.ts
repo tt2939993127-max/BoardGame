@@ -27,6 +27,7 @@ import type { DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
+import { resolveLocalPregameControlledPlayerId } from '../../../engine/transport/followCurrentTurnPlayer';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -284,6 +285,29 @@ describe('AI legal actions', () => {
         });
     });
 
+    it('本地 AI 在已选角色后应进入准备动作，而不是重复选角', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['1'] = 'monk';
+
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        expect(actions.some((action) => action.kind === 'setup-select-character')).toBe(false);
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'setup-ready',
+        }));
+    });
+
     it('本地 AI 在 main1 应优先打出可用升级牌而不是直接推进阶段', async () => {
         const state = createSetupWithHand(['card-storm-assault-2'], { cp: 1 })(['0', '1'], fixedRandom);
 
@@ -305,6 +329,62 @@ describe('AI legal actions', () => {
                 targetAbilityId: 'thunder-strike',
             },
         });
+    });
+});
+
+describe('本地 AI setup 视角切换', () => {
+    it('应先保留房主视角，房主选完后切到 AI 座位，AI 准备后回到房主', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('0');
+
+        core.selectedCharacters['0'] = 'barbarian';
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('1');
+
+        core.selectedCharacters['1'] = 'monk';
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('1');
+
+        core.readyPlayers['1'] = true;
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('0');
     });
 });
 

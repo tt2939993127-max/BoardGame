@@ -47,7 +47,10 @@ import { TestHarness, isTestEnvironment } from '../testing';
 import { refreshInteractionOptions } from '../systems/InteractionSystem';
 import type { LatencyOptimizationConfig } from './latency/types';
 import { createOptimisticEngine, filterPlayedEvents, type OptimisticEngine as OptimisticEngineType } from './latency/optimisticEngine';
-import { resolveFollowCurrentTurnPlayerId } from './followCurrentTurnPlayer';
+import {
+    resolveFollowCurrentTurnPlayerId,
+    resolveLocalPregameControlledPlayerId,
+} from './followCurrentTurnPlayer';
 import { resolveNextAiAction, type AiSeatController } from '../ai';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
@@ -705,6 +708,16 @@ export function LocalGameProvider({
         return { sys, core };
     });
 
+    const localPregameControlledPlayerId = useMemo(
+        () => resolveLocalPregameControlledPlayerId({
+            gameId: config.gameId,
+            state,
+            seatControllers,
+            localPlayerId: localPlayerId ?? null,
+        }),
+        [config.gameId, localPlayerId, seatControllers, state],
+    );
+
     const dispatch = useCallback((type: string, payload: unknown) => {
         setState((prev) => {
             const payloadRecord = payload && typeof payload === 'object'
@@ -734,7 +747,8 @@ export function LocalGameProvider({
             // 优先级：
             // 1. SYS_INTERACTION_*  → interaction 所有者（交互可能在对方回合属于我）
             // 2. 响应窗口活跃时     → 当前响应者（Me First 出牌、RESPONSE_PASS 等）
-            // 3. 其他              → 当前回合玩家（默认）
+            // 3. 本地 setup 代配     → 当前被本地控制的 setup 座位
+            // 4. 其他              → 当前回合玩家（默认）
             const systemPlayerId = (() => {
                 // 交互命令：始终使用交互所有者
                 if (type.startsWith('SYS_INTERACTION_')) {
@@ -748,7 +762,11 @@ export function LocalGameProvider({
                 }
                 return undefined;
             })();
-            const resolvedPlayerId = tutorialOverrideId ?? systemPlayerId ?? coreCurrentPlayer ?? '0';
+            const resolvedPlayerId = tutorialOverrideId
+                ?? systemPlayerId
+                ?? localPregameControlledPlayerId
+                ?? coreCurrentPlayer
+                ?? '0';
 
             const command: Command = {
                 type,
@@ -788,11 +806,16 @@ export function LocalGameProvider({
             const refreshedState = refreshInteractionOptions(result.state);
             return refreshedState;
         });
-    }, [config, playerIds]);
+    }, [config, localPregameControlledPlayerId, playerIds]);
 
     useEffect(() => {
         const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
         if (!hasAiSeat) {
+            lastAiAttemptKeyRef.current = null;
+            return;
+        }
+
+        if (localPregameControlledPlayerId) {
             lastAiAttemptKeyRef.current = null;
             return;
         }
@@ -837,7 +860,7 @@ export function LocalGameProvider({
         return () => {
             cancelled = true;
         };
-    }, [config, dispatch, seatControllers, seed, state]);
+    }, [config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
 
     const reset = useCallback(() => {
         randomRef.current = createLocalProviderRandom(seed);
@@ -856,6 +879,9 @@ export function LocalGameProvider({
     );
 
     const localBoardPlayerId = useMemo(() => {
+        if (localPregameControlledPlayerId) {
+            return localPregameControlledPlayerId;
+        }
         if (followCurrentTurnPlayer) {
             const currentTurnPlayerId = resolveFollowCurrentTurnPlayerId(state.core);
             if (currentTurnPlayerId) {
@@ -863,7 +889,7 @@ export function LocalGameProvider({
             }
         }
         return localPlayerId ?? null;
-    }, [followCurrentTurnPlayer, localPlayerId, state.core]);
+    }, [followCurrentTurnPlayer, localPlayerId, localPregameControlledPlayerId, state.core]);
 
     const value = useMemo<GameClientContextValue>(() => ({
         state,

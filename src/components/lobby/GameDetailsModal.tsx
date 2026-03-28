@@ -14,7 +14,6 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
-import { buildLocalMatchSearchParams } from '../../engine/ai';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
@@ -64,7 +63,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
-    const supportsAiSeatConfig = Boolean(gameManifest?.ai && (gameManifest.ai.localAi || gameManifest.ai.remoteAi));
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -259,25 +257,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         const query = search?.toString();
         onNavigate?.();
         navigate(`/play/${gameId}/local${query ? `?${query}` : ''}`);
-    };
-
-    const handleSingleDevicePlay = () => {
-        if (!gameManifest) {
-            navigateToLocalPlay();
-            return;
-        }
-
-        const defaultPlayerCount = gameManifest.playerOptions?.[0] ?? 2;
-        const seatControllers = Object.fromEntries(
-            Array.from({ length: defaultPlayerCount }, (_, index) => [String(index), { type: 'human' as const }]),
-        );
-        const search = buildLocalMatchSearchParams({
-            numPlayers: defaultPlayerCount,
-            playerOptions: gameManifest.playerOptions,
-            aiSupport: gameManifest.ai,
-            seatControllers,
-        });
-        navigateToLocalPlay(search);
     };
 
     const handlePlayAi = () => {
@@ -984,15 +963,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             {/* 操作按钮 - 固定在底部 */}
                             <div className="mt-1 grid shrink-0 w-full gap-2 md:mt-0 md:grid-cols-1">
                                 {allowLocalMode && (
-                                    <button
-                                        type="button"
-                                        onClick={handleSingleDevicePlay}
-                                        className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
-                                    >
-                                        {t('actions.singleDevice')}
-                                    </button>
-                                )}
-                                {allowLocalMode && supportsAiSeatConfig && (
                                     <button
                                         type="button"
                                         onClick={handlePlayAi}
