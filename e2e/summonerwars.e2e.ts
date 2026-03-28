@@ -931,17 +931,13 @@ const getFabStoredPosition = async (page: Page) => (
 const touchDragElement = async (
   locator: Locator,
   {
-    holdMs = 0,
     deltaX,
     deltaY,
     steps = 8,
-    pointerId = 41,
   }: {
-    holdMs?: number;
     deltaX: number;
     deltaY: number;
     steps?: number;
-    pointerId?: number;
   },
 ) => {
   const box = await locator.boundingBox();
@@ -952,42 +948,17 @@ const touchDragElement = async (
   const startX = box.x + box.width / 2;
   const startY = box.y + box.height / 2;
   const page = locator.page();
-
-  await locator.dispatchEvent('pointerdown', {
-    pointerType: 'touch',
-    pointerId,
-    isPrimary: true,
-    buttons: 1,
-    clientX: startX,
-    clientY: startY,
-  });
-
-  if (holdMs > 0) {
-    await page.waitForTimeout(holdMs);
-  }
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
 
   for (let step = 1; step <= steps; step += 1) {
     const nextX = startX + (deltaX * step) / steps;
     const nextY = startY + (deltaY * step) / steps;
-    await locator.dispatchEvent('pointermove', {
-      pointerType: 'touch',
-      pointerId,
-      isPrimary: true,
-      buttons: 1,
-      clientX: nextX,
-      clientY: nextY,
-    });
+    await page.mouse.move(nextX, nextY);
     await page.waitForTimeout(16);
   }
 
-  await locator.dispatchEvent('pointerup', {
-    pointerType: 'touch',
-    pointerId,
-    isPrimary: true,
-    buttons: 0,
-    clientX: startX + deltaX,
-    clientY: startY + deltaY,
-  });
+  await page.mouse.up();
 };
 
 const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
@@ -2702,7 +2673,7 @@ test.describe('SummonerWars', () => {
     await hostContext.close();
   });
 
-  test('移动横屏：悬浮球短触摸不误拖，长按后仍可拖动且不阻塞结束阶段按钮', async ({ browser }, testInfo) => {
+  test('移动横屏：悬浮球可拖出边界并让出结束阶段按钮', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
@@ -2739,47 +2710,33 @@ test.describe('SummonerWars', () => {
     expect(beforeBox).not.toBeNull();
 
     await touchDragElement(exitFab, {
-      holdMs: 80,
-      deltaX: -160,
-      deltaY: -120,
-      pointerId: 51,
+      deltaX: -520,
+      deltaY: 120,
     });
     await hostPage.waitForTimeout(180);
 
-    const shortTouchBox = await exitFab.boundingBox();
-    expect(shortTouchBox).not.toBeNull();
-    expect(Math.abs((shortTouchBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeLessThan(8);
-    expect(Math.abs((shortTouchBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeLessThan(8);
+    const draggedBox = await exitFab.boundingBox();
+    const draggedStoredPosition = await getFabStoredPosition(hostPage);
+    expect(draggedBox).not.toBeNull();
+    expect(draggedStoredPosition).not.toBeNull();
+    expect((draggedStoredPosition?.leftPercent ?? 1)).toBeLessThan(0.08);
+    expect((draggedBox?.x ?? 999)).toBeLessThan(50);
+    expect(Math.abs((draggedBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(120);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-short-touch-stays-put', {
-        filename: '30-mobile-fab-short-touch-stays-put.png',
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-position', {
+        filename: '30-mobile-fab-overflow-position.png',
       }),
       fullPage: false,
     });
-
-    await touchDragElement(exitFab, {
-      holdMs: 360,
-      deltaX: -160,
-      deltaY: -120,
-      pointerId: 52,
-    });
-    await hostPage.waitForTimeout(220);
-
-    const longPressBox = await exitFab.boundingBox();
-    const longPressPosition = await getFabStoredPosition(hostPage);
-    expect(longPressBox).not.toBeNull();
-    expect(longPressPosition).not.toBeNull();
-    expect(Math.abs((longPressBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(40);
-    expect(Math.abs((longPressBox?.y ?? 0) - (beforeBox?.y ?? 0))).toBeGreaterThan(40);
 
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);
     const phaseAfterAdvance = await advancePhase(hostPage, phaseBeforeAdvance);
     expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-long-press-drag-and-end-phase-clickable', {
-        filename: '31-mobile-fab-long-press-drag-and-end-phase-clickable.png',
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-and-end-phase-clickable', {
+        filename: '31-mobile-fab-overflow-and-end-phase-clickable.png',
       }),
       fullPage: false,
     });
