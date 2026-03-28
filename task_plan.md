@@ -1080,3 +1080,29 @@ completed
 ### Status
 - completed
 
+## Addendum: 2026-03-28 DiceThrone 四人模式分支上传与主分支合并
+
+### Goal
+- 将 `feat/dicethrone-4p-team-mode` 上已经收口的四人模式 Batch 1 与主回归基础设施修复完整上传，并安全合并回 `main`。
+- 在合并前补齐 pre-push 阻塞项与 merge 冲突文档，避免“分支推上去了，但主分支没法安全接”。
+
+### Result
+- [x] 已修复 pre-push 的 i18n 阻塞：`selection.targetOptionDisabled` 现在落在正确的 locale 路径。
+- [x] `feat/dicethrone-4p-team-mode` 已成功推送到 `origin`。
+- [x] 已按 merge checklist 完成 `main...feat` 预检，并处理 6 个冲突文件。
+- [x] 已生成冲突汇报文档 `evidence/merge-conflict-feat-dicethrone-4p-team-mode-2026-03-28.md`。
+- [x] 合并态下额外修复了 2 人 `Transfer Status` 用例的游戏服端口硬编码问题，避免 isolated E2E 假 `skip`。
+- [x] 已在 `main` 生成 merge commit `f188d523`，并通过 `merge:audit:strict`。
+
+### Validation
+- `node .\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
+- `npm run i18n:check`
+- `openspec validate update-dicethrone-4p-player-target-interactions --strict --no-interactive`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/boundaryEdgeCases.test.ts src/games/dicethrone/__tests__/rule-consistency.test.ts src/server/__tests__/matchOccupancy.test.ts src/games/dicethrone/ui/__tests__/InteractionOverlay.test.tsx --configLoader native`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 2-player transfer token: transfer phase keeps locked source card and target card"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
+- `npm run merge:audit:strict -- HEAD`
+
+### Status
+- completed
+

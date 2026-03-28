@@ -76,5 +76,6 @@
   - `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`：`12 passed`
 
 ## 5. 结果
-- 提交：待生成 merge commit 后回填
-- 推送：计划推送到 `origin/main`
+- 提交：`f188d523` `merge: 合并王权骰铸四人模式 Batch 1 专项`
+- merge audit：`npm run merge:audit:strict -- HEAD` 结果为 `11 mixed / 0 single-side`
+- 推送：下一步推送到 `origin/main`
