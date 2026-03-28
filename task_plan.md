@@ -480,7 +480,8 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 - [x] 已补通用 4 人 direct-dice 回归，继续锁住“队友不进 `responderQueue`，但交互 meta 明确指向当前 defender 骰池”。
 - [x] 已补 UI 回归，确认 `selectDie + diceOwnerId=同队玩家` 会显示 `interaction.hint_select_ally`。
 - [x] 已补 `shadow_thief-shadow-manipulation` 的 4 人 / 2v2 handler 级专项，锁住 `Sneak -> selectCount=2` 与 `diceOwnerId='3'`。
-- [x] 已确认当前共享 `afterRollConfirmed` 门禁仍将 `target='self'` 的骰子卡排除在响应窗外；本轮未把这条未裁决边界硬改成既定规则。
+- [x] 已确认当前共享 `afterRollConfirmed` 门禁仍将 `target='self'` 的骰子卡排除在响应窗外。
+- [x] 用户已明确裁决：凡是没有明确写“可改队友”的 `self-only` 骰子卡，一律只能改自己，不能改队友；因此这条门禁现在与权威口径一致，不再视为未裁决边界。
 
 ### Validation
 - `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/flow.test.ts src/games/dicethrone/__tests__/active-modifiers-undo.test.ts src/games/dicethrone/__tests__/flick-response-debug.test.ts src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts src/games/dicethrone/__tests__/shadow_thief-behavior.test.ts --configLoader native`
