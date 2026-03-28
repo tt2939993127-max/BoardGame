@@ -392,23 +392,13 @@ export function processTokenUsage(
     const currentAmount = player?.tokens[tokenDef.id] ?? 0;
     const usedInWindow = state.pendingDamage?.tokenUsageTotals?.[tokenDef.id] ?? 0;
     const maxWindowUsage = getMaxTokenUseAmount(tokenDef);
-    if (amount > currentAmount) {
-        return {
-            events,
-            result: { success: false },
-            newTokenAmount: currentAmount,
-        };
-    }
-    const actualAmount = amount;
-    
-    if (actualAmount <= 0) {
-        return {
-            events,
-            result: { success: false },
-            newTokenAmount: currentAmount,
-        };
-    }
-    if (usedInWindow + amount > maxWindowUsage) {
+    const hasExplicitWindowCap = (tokenDef.activeUse?.allowedConsumeAmounts?.length ?? 0) > 0;
+    const remainingWindowUsage = hasExplicitWindowCap
+        ? Math.max(0, maxWindowUsage - usedInWindow)
+        : currentAmount;
+    const actualAmount = Math.min(amount, currentAmount, remainingWindowUsage);
+
+    if (amount <= 0 || actualAmount <= 0) {
         return {
             events,
             result: { success: false },
