@@ -669,3 +669,23 @@ completed
 
 ### Status
 - completed
+
+## Addendum: 2026-03-28 DiceThrone simple-start 主回归 E2E 基础设施收敛
+
+### Goal
+- 沿用户指定的“1”继续处理 `simple-start` 这份现役主回归 E2E 的基础设施抖动，而不是继续扩展新功能或新卡牌覆盖。
+- 将本轮 helper 修复与整文件复跑结果回填到三件套，避免后续又把 `simple-start` 误读成“新角色”或“新增业务链路”。
+
+### Result
+- [x] 已明确 `e2e/dicethrone-simple-start.e2e.ts` 的定位：它是王权骰铸当前在用的主回归 E2E 文件，集中承载开局、2v2、多人目标交互等现役在线链路。
+- [x] `ensureGameServerAvailable()` 已改为轮询 `GET /games`，不再用“创建测试房间”当探针；超时从 `5000ms` 提高到 `15000ms`。
+- [x] `createDTRoomViaAPI`、`claimDTSeatViaAPI`、`joinDTMatchViaAPI` 已补入瞬时网络重试，覆盖 `ECONNREFUSED`、`ECONNRESET`、`ETIMEDOUT`、`socket hang up`、`fetch failed` 以及 `408/425/429/5xx`。
+- [x] setup 重试与失败信息已写入 `temp/dicethrone-setup-debug.log`，后续若再出现 `skip` 可直接区分是房间链路抖动还是 runner / Vite 启动层异常。
+- [x] 默认脚本口径下已重新执行 `simple-start` 整文件回归，结果恢复为 `12 passed`，说明本轮收敛已把主回归重新拉回稳定全绿。
+
+### Validation
+- `npm run test:e2e:cleanup`
+- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
+
+### Status
+- completed
