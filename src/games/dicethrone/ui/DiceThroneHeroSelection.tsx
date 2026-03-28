@@ -78,9 +78,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const hasSelectedChar = selectedCharacters[currentPlayerId] && selectedCharacters[currentPlayerId] !== 'unselected';
 
     const availableCharacters = useMemo(() => {
-        return DICETHRONE_CHARACTER_CATALOG.filter(char =>
-            ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief', 'paladin'].includes(char.id)
-        );
+        return DICETHRONE_CHARACTER_CATALOG;
     }, []);
 
     const previewCharId = useMemo(() => {
