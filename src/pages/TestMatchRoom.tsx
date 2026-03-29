@@ -25,7 +25,7 @@ import { LoadingScreen } from '../components/system/LoadingScreen';
 import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
 import { SEO } from '../components/common/SEO';
 import { enableTestMode } from '../engine/testing/environment';
-import { getGamePageDataAttributes } from '../games/mobileSupport';
+import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { MobileBoardShell } from '../components/game/framework';
 import { useToast } from '../contexts/ToastContext';
 import { resolveCommandError } from '../engine/transport/errorI18n';
@@ -54,7 +54,12 @@ export const TestMatchRoom: React.FC = () => {
     } = useGameNamespaceReady(gameId, i18n);
 
     const gameConfig = gameId ? getGameById(gameId) : null;
-    const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
+    const gamePageDataAttributes = useMemo(
+        () => getGamePageDataAttributes(gameId, gameConfig),
+        [gameConfig, gameId],
+    );
+
+    useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     const handleCommandRejected = useCallback((commandType: string, error: string) => {
         if (!gameId || TUTORIAL_SILENT_ERRORS.has(error)) return;

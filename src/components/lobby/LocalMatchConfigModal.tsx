@@ -4,19 +4,21 @@ import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import { UI_Z_INDEX } from '../../core';
 import type { GameManifestEntry } from '../../games/manifest.types';
-import type { AiSeatController } from '../../engine/ai';
+import type { AiSeatController, LocalMatchPreferences } from '../../engine/ai';
 import {
     buildLocalMatchSearchParams,
-    getDefaultSeatController,
+    createDefaultLocalMatchPreferences,
     normalizeSeatController,
     resolveLocalMatchPlayerCount,
-} from '../../engine/ai/seatControllers';
+} from '../../engine/ai';
+import { SetupOptionsFields } from './SetupOptionsFields';
 
 interface LocalMatchConfigModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (search: URLSearchParams) => void;
+    onConfirm: (result: { search: URLSearchParams; preferences: LocalMatchPreferences }) => void;
     gameManifest: GameManifestEntry;
+    initialPreferences?: LocalMatchPreferences | null;
 }
 
 export function LocalMatchConfigModal({
@@ -24,24 +26,34 @@ export function LocalMatchConfigModal({
     onClose,
     onConfirm,
     gameManifest,
+    initialPreferences,
 }: LocalMatchConfigModalProps) {
-    const { t } = useTranslation('lobby');
+    const gameNamespace = `game-${gameManifest.id}`;
+    const { t } = useTranslation(['lobby', gameNamespace]);
     const playerOptions = gameManifest.playerOptions?.length ? gameManifest.playerOptions : [2];
     const defaultPlayerCount = resolveLocalMatchPlayerCount(null, playerOptions);
 
     const [numPlayers, setNumPlayers] = useState(defaultPlayerCount);
     const [seatControllers, setSeatControllers] = useState<Record<string, AiSeatController>>({});
+    const [setupSelections, setSetupSelections] = useState(() => createDefaultLocalMatchPreferences(gameManifest).setupSelections);
 
     useEffect(() => {
         if (!isOpen) return;
 
+        const nextPreferences = initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest);
         const nextControllers: Record<string, AiSeatController> = {};
-        for (let index = 0; index < defaultPlayerCount; index += 1) {
-            nextControllers[String(index)] = getDefaultSeatController(index, defaultPlayerCount, gameManifest.ai);
+        for (let index = 0; index < nextPreferences.numPlayers; index += 1) {
+            const playerId = String(index);
+            const existing = nextPreferences.seatControllers[playerId];
+            nextControllers[playerId] = existing
+                ? normalizeSeatController(existing, gameManifest.ai)
+                : createDefaultLocalMatchPreferences(gameManifest).seatControllers[playerId];
         }
-        setNumPlayers(defaultPlayerCount);
+
+        setNumPlayers(nextPreferences.numPlayers);
         setSeatControllers(nextControllers);
-    }, [defaultPlayerCount, gameManifest.ai, isOpen]);
+        setSetupSelections(nextPreferences.setupSelections);
+    }, [gameManifest, initialPreferences, isOpen]);
 
     const seatIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, index) => String(index)),
@@ -59,23 +71,35 @@ export function LocalMatchConfigModal({
         setNumPlayers(nextNumPlayers);
         setSeatControllers((prev) => {
             const next: Record<string, AiSeatController> = {};
+            const defaults = createDefaultLocalMatchPreferences({
+                ...gameManifest,
+                playerOptions: [nextNumPlayers],
+            }).seatControllers;
+
             for (let index = 0; index < nextNumPlayers; index += 1) {
                 next[String(index)] = prev[String(index)]
                     ? normalizeSeatController(prev[String(index)], gameManifest.ai)
-                    : getDefaultSeatController(index, nextNumPlayers, gameManifest.ai);
+                    : defaults[String(index)];
             }
             return next;
         });
     };
 
     const handleConfirm = () => {
+        const preferences: LocalMatchPreferences = {
+            numPlayers,
+            seatControllers,
+            setupSelections,
+        };
         const search = buildLocalMatchSearchParams({
             numPlayers,
             playerOptions,
             aiSupport: gameManifest.ai,
             seatControllers,
+            gameManifest,
+            setupSelections,
         });
-        onConfirm(search);
+        onConfirm({ search, preferences });
     };
 
     return (
@@ -145,10 +169,18 @@ export function LocalMatchConfigModal({
                                     </div>
                                 )}
 
+                                <SetupOptionsFields
+                                    gameManifest={gameManifest}
+                                    selections={setupSelections}
+                                    onSelectionsChange={setSetupSelections}
+                                    t={t}
+                                    gameNamespace={gameNamespace}
+                                />
+
                                 <div className="grid gap-3 md:grid-cols-2">
                                     {seatIds.map((playerId, index) => {
                                         const controller = seatControllers[playerId]
-                                            ?? getDefaultSeatController(index, numPlayers, gameManifest.ai);
+                                            ?? createDefaultLocalMatchPreferences(gameManifest).seatControllers[playerId];
                                         return (
                                             <div
                                                 key={playerId}
@@ -176,7 +208,7 @@ export function LocalMatchConfigModal({
                                                     >
                                                         {t('ai.controllers.human')}
                                                     </button>
-                                                    {gameManifest.ai.localAi && (
+                                                    {gameManifest.ai?.localAi && (
                                                         <button
                                                             type="button"
                                                             onClick={() => updateSeatController(playerId, { type: 'local-ai' })}
@@ -190,7 +222,7 @@ export function LocalMatchConfigModal({
                                                             {t('ai.controllers.local')}
                                                         </button>
                                                     )}
-                                                    {gameManifest.ai.remoteAi && (
+                                                    {gameManifest.ai?.remoteAi && (
                                                         <button
                                                             type="button"
                                                             onClick={() => updateSeatController(playerId, { type: 'remote-ai', providerId: 'astrbot' })}

@@ -6,6 +6,7 @@ export * from './context';
 export * from './localRunner';
 export * from './scoring';
 export * from './seatControllers';
+export * from './localMatchPreferences';
 export * from './providers';
 
 import { registerDefaultRemoteAiProviders } from './providers';

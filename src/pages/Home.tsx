@@ -41,6 +41,7 @@ import { SEO } from '../components/common/SEO';
 import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
+import { versionedPublicFileUrl } from '../lib/publicFileUrl';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
@@ -51,6 +52,7 @@ export const Home = () => {
     const [, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const [registryVersion, setRegistryVersion] = useState(0);
+    const [gameModalReopenNonce, setGameModalReopenNonce] = useState(0);
 
     // 活跃对局状态
     const [activeMatch, setActiveMatch] = useState<{ matchID: string; gameName: string; players: Array<{ id: number; name?: string; isConnected?: boolean }> } | null>(null);
@@ -144,9 +146,15 @@ export const Home = () => {
     const authModalIdRef = useRef<string | null>(null);
     const missingMatchConfirmRef = useRef<string | null>(null);
     const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
+    const initialUrlModalCheckDoneRef = useRef(false);
 
-    const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
+    const {
+        paramValue: activeGameModalId,
+        isOpen: isGameModalOpen,
+        navigateAwayRef: gameModalNavigateAwayRef,
+    } = useUrlModal({
         paramKey: 'game',
+        reopenNonce: gameModalReopenNonce,
         getModalConfig: useCallback((gameId: string) => {
             const game = getGameById(gameId);
             if (!game) return null;
@@ -177,6 +185,16 @@ export const Home = () => {
         };
     }, []);
 
+    useEffect(() => {
+        if (initialUrlModalCheckDoneRef.current) {
+            return;
+        }
+        initialUrlModalCheckDoneRef.current = true;
+        if (activeGameModalId) {
+            setGameModalReopenNonce((nonce) => nonce + 1);
+        }
+    }, [activeGameModalId]);
+
     const handleGameClick = (id: string) => {
         if (id === 'assetslicer') {
             navigate('/dev/slicer');
@@ -198,8 +216,25 @@ export const Home = () => {
             navigate('/dev/arch');
             return;
         }
-        setSearchParams({ game: id });
+
+        if (activeGameModalId === id) {
+            setGameModalReopenNonce((nonce) => nonce + 1);
+            return;
+        }
+
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('game', id);
+            return next;
+        });
     };
+
+    const handleGameIntent = useCallback((id: string) => {
+        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
+            return;
+        }
+        void import('../components/lobby/GameDetailsModal');
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -638,7 +673,7 @@ export const Home = () => {
                     {/* 标题行：Logo + H1 */}
                     <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
                         <img
-                            src="/logos/logo_1_grid.svg"
+                            src={versionedPublicFileUrl('/logos/logo_1_grid.svg')}
                             alt="logo"
                             className="w-8 md:w-10 opacity-90"
                         />
@@ -683,7 +718,12 @@ export const Home = () => {
 
                 {/* 游戏列表 */}
                 <section className="w-full pb-20">
-                    <GameList games={filteredGames} onGameClick={handleGameClick} mostPopularGameId={mostPopularGameId} />
+                    <GameList
+                        games={filteredGames}
+                        onGameClick={handleGameClick}
+                        onGameIntent={handleGameIntent}
+                        mostPopularGameId={mostPopularGameId}
+                    />
                 </section>
             </main>
 

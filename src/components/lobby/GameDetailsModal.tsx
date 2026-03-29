@@ -6,7 +6,7 @@ import { Info } from 'lucide-react';
 import * as matchApi from '../../services/matchApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
-import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, isOwnerActiveMatchSuppressed, suppressOwnerActiveMatch, clearMatchCredentials, readStoredMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials } from '../../hooks/match/useMatchStatus';
+import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, isOwnerActiveMatchSuppressed, suppressOwnerActiveMatch, clearMatchCredentials, readStoredMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials, isMatchNotFoundError } from '../../hooks/match/useMatchStatus';
 import { getOrCreateGuestId, getGuestName as resolveGuestName, getOwnerKey as resolveOwnerKey, getOwnerType as resolveOwnerType } from '../../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../common/overlays/ConfirmModal';
 import { ModalBase } from '../common/overlays/ModalBase';
@@ -15,14 +15,19 @@ import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
+import { LocalMatchConfigModal } from './LocalMatchConfigModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
+import { GameDetailsMobilePackageCard, type GamePackageCardState } from './GameDetailsMobilePackageCard';
+import { GamePackageInstallConfirmModal } from './GamePackageInstallConfirmModal';
 import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
+import { ensureLocalMatchSeedSearchParams } from '../../engine/transport/localSession';
+import { readLocalMatchPreferences, writeLocalMatchPreferences, type LocalMatchPreferences } from '../../engine/ai';
 
 
 interface GameDetailsModalProps {
@@ -44,16 +49,27 @@ type PendingRoomAction = {
     isHost: boolean;
 };
 
+type PendingPackageInstall = {
+    gameName: string;
+    modulePackId?: string;
+    assetPackId?: string;
+    modulePackBytes?: number;
+    assetPackBytes?: number;
+};
+
+const PACKAGE_INSTALL_PLACEHOLDER_DELAY_MS = 1400;
+
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
     const activeMatchCheckRef = useRef<string | null>(null);
     const { user, token } = useAuth();
-    const { t } = useTranslation(['lobby', 'common']);
+    const { t, i18n } = useTranslation(['lobby', 'common']);
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
     const confirmJoinModalIdRef = useRef<string | null>(null);
+    const confirmPackageInstallModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
     const gameDisplayName = resolveGameDisplayName(gameManifest ?? { id: gameId, titleKey }, t, gameId);
@@ -63,6 +79,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
     const allowLocalMode = gameManifest?.allowLocalMode !== false;
+    const isPackageManagedMobileGame = gameManifest?.mobileDelivery?.mode === 'package-managed';
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -78,6 +95,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const pendingActionRef = useRef<PendingRoomAction | null>(null);
     const isConfirmingActionRef = useRef(false);
     const roomsRef = useRef<Room[]>([]);
+    const packageInstallFallbackTimerRef = useRef<number | null>(null);
 
     // 排行榜状态
     const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard' | 'changelog' | 'reviews'>('lobby');
@@ -87,8 +105,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [leaderboardError, setLeaderboardError] = useState(false);
     // 创建房间弹窗状态
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+    const [showLocalMatchConfigModal, setShowLocalMatchConfigModal] = useState(false);
+    const [isPreparingCreateRoom, setIsPreparingCreateRoom] = useState(false);
     const [passwordModalConfig, setPasswordModalConfig] = useState<{ matchID: string; gameName: string } | null>(null);
     const [showAuthorInfoModal, setShowAuthorInfoModal] = useState(false);
+    const [pendingPackageInstall, setPendingPackageInstall] = useState<PendingPackageInstall | null>(null);
+    const [isConfirmingPackageInstall, setIsConfirmingPackageInstall] = useState(false);
+    const [packageInstallCardState, setPackageInstallCardState] = useState<GamePackageCardState>({
+        status: 'not-installed',
+        modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+        assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+    });
 
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, getGuestId());
@@ -106,6 +133,27 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         roomsRef.current = rooms;
     }, [rooms]);
+
+    useEffect(() => {
+        setPackageInstallCardState({
+            status: 'not-installed',
+            modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+            assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+        });
+    }, [
+        gameId,
+        gameManifest?.mobileDelivery?.assetPackBytes,
+        gameManifest?.mobileDelivery?.modulePackBytes,
+    ]);
+
+    useEffect(() => {
+        return () => {
+            if (packageInstallFallbackTimerRef.current !== null) {
+                window.clearTimeout(packageInstallFallbackTimerRef.current);
+                packageInstallFallbackTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
@@ -254,17 +302,113 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const navigateToLocalPlay = (search?: URLSearchParams) => {
-        const query = search?.toString();
+        const nextSearch = ensureLocalMatchSeedSearchParams(search);
+        const query = nextSearch.toString();
         onNavigate?.();
         navigate(`/play/${gameId}/local${query ? `?${query}` : ''}`);
     };
 
-    const handlePlayAi = () => {
-        navigateToLocalPlay();
+    const initialLocalMatchPreferences = useMemo<LocalMatchPreferences | null>(() => {
+        if (!gameManifest) return null;
+        return readLocalMatchPreferences(gameManifest);
+    }, [gameManifest]);
+
+    const handleOpenLocalMatchConfig = () => {
+        setShowLocalMatchConfigModal(true);
+    };
+
+    const handleConfirmLocalMatchConfig = ({ search, preferences }: { search: URLSearchParams; preferences: LocalMatchPreferences }) => {
+        if (gameManifest) {
+            writeLocalMatchPreferences(gameManifest, preferences);
+        }
+        setShowLocalMatchConfigModal(false);
+        navigateToLocalPlay(search);
+    };
+
+    const handleOpenMobilePackageInstall = () => {
+        if (!gameManifest?.mobileDelivery || gameManifest.mobileDelivery.mode !== 'package-managed') {
+            return;
+        }
+
+        setPendingPackageInstall({
+            gameName: gameDisplayName,
+            modulePackId: gameManifest.mobileDelivery.modulePackId,
+            assetPackId: gameManifest.mobileDelivery.assetPackId,
+            modulePackBytes: gameManifest.mobileDelivery.modulePackBytes,
+            assetPackBytes: gameManifest.mobileDelivery.assetPackBytes,
+        });
+    };
+
+    const handleCancelPackageInstall = () => {
+        if (isConfirmingPackageInstall) return;
+        setPendingPackageInstall(null);
+    };
+
+    const handleConfirmPackageInstall = async () => {
+        if (!pendingPackageInstall) return;
+
+        setIsConfirmingPackageInstall(true);
+        try {
+            setPackageInstallCardState({
+                status: 'manifest',
+                progressMode: 'indeterminate',
+                modulePackBytes: pendingPackageInstall.modulePackBytes,
+                assetPackBytes: pendingPackageInstall.assetPackBytes,
+            });
+            setPendingPackageInstall(null);
+            if (packageInstallFallbackTimerRef.current !== null) {
+                window.clearTimeout(packageInstallFallbackTimerRef.current);
+            }
+            // TODO: 接入真实 downloader 后，用真实阶段/百分比替换这个占位回落逻辑。
+            packageInstallFallbackTimerRef.current = window.setTimeout(() => {
+                setPackageInstallCardState((current) => {
+                    if (current.status === 'not-installed' || current.status === 'failed') {
+                        return current;
+                    }
+
+                    return {
+                        status: 'failed',
+                        modulePackBytes: current.modulePackBytes,
+                        assetPackBytes: current.assetPackBytes,
+                        errorMessage: t('packageManager.backendPending'),
+                    };
+                });
+                packageInstallFallbackTimerRef.current = null;
+            }, PACKAGE_INSTALL_PLACEHOLDER_DELAY_MS);
+        } finally {
+            setIsConfirmingPackageInstall(false);
+        }
+    };
+
+    const handleRetryPackageInstall = () => {
+        setPackageInstallCardState({
+            status: 'not-installed',
+            modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+            assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+        });
+        handleOpenMobilePackageInstall();
     };
 
     // 打开创建房间弹窗
-    const handleOpenCreateRoom = () => {
+    const handleOpenCreateRoom = async () => {
+        if (isPreparingCreateRoom) return;
+
+        const namespace = `game-${gameId}`;
+        setIsPreparingCreateRoom(true);
+        try {
+            if (!i18n.hasLoadedNamespace(namespace)) {
+                await i18n.loadNamespaces(namespace);
+            }
+        } catch (error) {
+            logger.error('[GameDetailsModal] 预加载创建房间 namespace 失败', {
+                gameId,
+                namespace,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            setIsPreparingCreateRoom(false);
+        }
+
         setShowCreateRoomModal(true);
     };
 
@@ -567,9 +711,28 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         toast.warning({ kind: 'i18n', key: 'error.localStateCleared', ns: 'lobby' });
     };
 
-    const handleSpectate = (matchID: string) => {
+    const handleSpectate = async (matchID: string) => {
+        const room = roomsRef.current.find((item) => item.matchID === matchID);
+        const roomGameName = normalizeGameName(room?.gameName) || normalizedGameId || 'tictactoe';
+
+        try {
+            await matchApi.getMatch(roomGameName, matchID);
+        } catch (error) {
+            if (isMatchNotFoundError(error)) {
+                setRooms((prev) => prev.filter((item) => item.matchID !== matchID));
+                lobbySocket.requestRefresh(roomGameName);
+                toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                return;
+            }
+            logger.warn('[GameDetailsModal] 观战前校验房间失败，继续尝试进入', {
+                matchID,
+                gameId: roomGameName,
+                error,
+            });
+        }
+
         onNavigate?.();
-        navigate(`/play/${normalizedGameId}/match/${matchID}?spectate=1`);
+        navigate(`/play/${roomGameName}/match/${matchID}?spectate=1`);
     };
 
     const handleAction = (
@@ -722,6 +885,47 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     }, [closeModal, handleCancelJoin, handleConfirmJoin, openModal, pendingJoin, t]);
 
     useEffect(() => {
+        if (pendingPackageInstall && !confirmPackageInstallModalIdRef.current) {
+            confirmPackageInstallModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    handleCancelPackageInstall();
+                    confirmPackageInstallModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
+                    <GamePackageInstallConfirmModal
+                        gameName={pendingPackageInstall.gameName}
+                        modulePackId={pendingPackageInstall.modulePackId}
+                        assetPackId={pendingPackageInstall.assetPackId}
+                        modulePackBytes={pendingPackageInstall.modulePackBytes}
+                        assetPackBytes={pendingPackageInstall.assetPackBytes}
+                        isLoading={isConfirmingPackageInstall}
+                        closeOnBackdrop={stackCloseOnBackdrop}
+                        onConfirm={handleConfirmPackageInstall}
+                        onCancel={() => {
+                            close();
+                        }}
+                    />
+                ),
+            });
+        }
+
+        if (!pendingPackageInstall && confirmPackageInstallModalIdRef.current) {
+            closeModal(confirmPackageInstallModalIdRef.current);
+            confirmPackageInstallModalIdRef.current = null;
+        }
+    }, [
+        closeModal,
+        handleCancelPackageInstall,
+        handleConfirmPackageInstall,
+        isConfirmingPackageInstall,
+        openModal,
+        pendingPackageInstall,
+    ]);
+
+    useEffect(() => {
         return () => {
             if (confirmModalIdRef.current) {
                 closeModal(confirmModalIdRef.current);
@@ -730,6 +934,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             if (confirmJoinModalIdRef.current) {
                 closeModal(confirmJoinModalIdRef.current);
                 confirmJoinModalIdRef.current = null;
+            }
+            if (confirmPackageInstallModalIdRef.current) {
+                closeModal(confirmPackageInstallModalIdRef.current);
+                confirmPackageInstallModalIdRef.current = null;
             }
         };
     }, [closeModal]);
@@ -864,6 +1072,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 />
                 <div
                     ref={modalRef}
+                    data-testid="game-details-modal-root"
                     className="
                         bg-parchment-card-bg pointer-events-auto 
                         w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
@@ -874,6 +1083,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         overflow-hidden
                     "
                 >
+                    {isPackageManagedMobileGame && (
+                        <div className="absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)] md:hidden">
+                            <GameDetailsMobilePackageCard
+                                gameName={gameDisplayName}
+                                state={packageInstallCardState}
+                                onInstall={handleOpenMobilePackageInstall}
+                                onRetry={handleRetryPackageInstall}
+                            />
+                        </div>
+                    )}
+
                     {/* 装饰性边角 */}
                     <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
                     <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />
@@ -965,10 +1185,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 {allowLocalMode && (
                                     <button
                                         type="button"
-                                        onClick={handlePlayAi}
+                                        onClick={handleOpenLocalMatchConfig}
                                         className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                                     >
-                                        {t('actions.playAi')}
+                                        {t('ai.configureTitle')}
                                     </button>
                                 )}
                                 <button
@@ -1054,7 +1274,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             <RoomList
                                 roomItems={roomItems}
                                 activeMatch={activeMatch}
-                                isActionLoading={isLoading}
+                                isActionLoading={isLoading || isPreparingCreateRoom}
                                 isLobbyLoading={isLobbyLoading}
                                 onJoinRoom={handleJoinRoom}
                                 onJoinRequest={handleJoinRequest}
@@ -1092,6 +1312,16 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     onConfirm={handleCreateRoom}
                     gameManifest={gameManifest}
                     isLoading={isLoading}
+                />
+            )}
+
+            {gameManifest && (
+                <LocalMatchConfigModal
+                    isOpen={showLocalMatchConfigModal}
+                    onClose={() => setShowLocalMatchConfigModal(false)}
+                    onConfirm={handleConfirmLocalMatchConfig}
+                    gameManifest={gameManifest}
+                    initialPreferences={initialLocalMatchPreferences}
                 />
             )}
 
