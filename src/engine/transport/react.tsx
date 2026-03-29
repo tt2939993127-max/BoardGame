@@ -51,7 +51,11 @@ import {
     resolveFollowCurrentTurnPlayerId,
     resolveLocalPregameControlledPlayerId,
 } from './followCurrentTurnPlayer';
-import { resolveNextAiAction, type AiSeatController } from '../ai';
+import {
+    resolveAiMinimumActionDelayMs,
+    resolveNextAiAction,
+    type AiSeatController,
+} from '../ai';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -821,8 +825,10 @@ export function LocalGameProvider({
         }
 
         let cancelled = false;
+        let delayTimer: ReturnType<typeof setTimeout> | null = null;
 
         const runAiTurn = async () => {
+            const startedAt = Date.now();
             const resolution = await resolveNextAiAction({
                 engineConfig: config,
                 state,
@@ -843,6 +849,27 @@ export function LocalGameProvider({
 
             lastAiAttemptKeyRef.current = resolution.attemptKey;
 
+            const controller = seatControllers[resolution.playerId];
+            if (!controller || controller.type === 'human') {
+                return;
+            }
+
+            const remainingDelayMs = Math.max(
+                0,
+                resolveAiMinimumActionDelayMs(controller) - (Date.now() - startedAt),
+            );
+
+            if (remainingDelayMs > 0) {
+                await new Promise<void>((resolve) => {
+                    delayTimer = setTimeout(() => {
+                        delayTimer = null;
+                        resolve();
+                    }, remainingDelayMs);
+                });
+            }
+
+            if (cancelled) return;
+
             for (const command of resolution.action.commands) {
                 const normalizedPayload = command.payload && typeof command.payload === 'object'
                     ? command.payload as Record<string, unknown>
@@ -859,6 +886,10 @@ export function LocalGameProvider({
 
         return () => {
             cancelled = true;
+            if (delayTimer) {
+                clearTimeout(delayTimer);
+                delayTimer = null;
+            }
         };
     }, [config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
 

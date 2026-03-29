@@ -8,13 +8,19 @@ export interface AiSupportProfile {
 
 export type AiSeatController =
     | { type: 'human' }
-    | { type: 'local-ai'; policyId?: string; fallbackPolicyId?: string }
+    | {
+        type: 'local-ai';
+        policyId?: string;
+        fallbackPolicyId?: string;
+        minimumActionDelayMs?: number;
+    }
     | {
         type: 'remote-ai';
         providerId: string;
         fallbackPolicyId?: string;
         timeoutMs?: number;
         retryCount?: number;
+        minimumActionDelayMs?: number;
     };
 
 export interface AiInteractionOptionSnapshot {

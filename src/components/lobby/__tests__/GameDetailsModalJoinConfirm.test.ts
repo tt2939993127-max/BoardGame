@@ -2,7 +2,12 @@
 import { createElement, type ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildLocalMatchSearchParams, resolveSeatControllersFromSearchParams } from '../../../engine/ai';
+import {
+    buildLocalMatchSearchParams,
+    normalizeSeatController,
+    resolveAiMinimumActionDelayMs,
+    resolveSeatControllersFromSearchParams,
+} from '../../../engine/ai';
 import { GameDetailsModal } from '../GameDetailsModal';
 import { AiSupportPills } from '../AiSupportPills';
 import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../roomActions';
@@ -236,6 +241,33 @@ describe('AI seat controller helpers', () => {
         expect(search.get('players')).toBe('3');
         expect(search.get('seat1')).toBe('local-ai:opening-v1');
         expect(search.get('seat2')).toBe('remote-ai:astrbot');
+    });
+
+    it('AI controller 默认使用统一最小时长，并支持自定义覆盖', () => {
+        expect(resolveAiMinimumActionDelayMs({ type: 'human' })).toBe(0);
+        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai' })).toBe(600);
+        expect(resolveAiMinimumActionDelayMs({ type: 'remote-ai', providerId: 'astrbot' })).toBe(600);
+        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai', minimumActionDelayMs: 950 })).toBe(950);
+    });
+
+    it('normalizeSeatController 会保留并清洗 AI 最小时长', () => {
+        expect(normalizeSeatController({
+            type: 'local-ai',
+            minimumActionDelayMs: 321.4,
+        }, aiSupport)).toEqual({
+            type: 'local-ai',
+            minimumActionDelayMs: 321,
+        });
+
+        expect(normalizeSeatController({
+            type: 'remote-ai',
+            providerId: 'astrbot',
+            minimumActionDelayMs: -50,
+        }, aiSupport)).toEqual({
+            type: 'remote-ai',
+            providerId: 'astrbot',
+            minimumActionDelayMs: 0,
+        });
     });
 });
 

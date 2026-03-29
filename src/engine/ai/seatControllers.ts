@@ -1,10 +1,27 @@
 import type { AiSeatController, AiSupportProfile } from './types';
 
 const DEFAULT_REMOTE_PROVIDER_ID = 'astrbot';
+export const DEFAULT_AI_MINIMUM_ACTION_DELAY_MS = 600;
+const MAX_AI_MINIMUM_ACTION_DELAY_MS = 5000;
 
 function sanitizeOptionalId(value: string | undefined): string | undefined {
     const trimmed = value?.trim();
     return trimmed ? trimmed : undefined;
+}
+
+function sanitizeMinimumActionDelayMs(value: number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    if (!Number.isFinite(value)) return undefined;
+    return Math.max(0, Math.min(Math.round(value), MAX_AI_MINIMUM_ACTION_DELAY_MS));
+}
+
+export function resolveAiMinimumActionDelayMs(controller: AiSeatController): number {
+    if (controller.type === 'human') {
+        return 0;
+    }
+
+    return sanitizeMinimumActionDelayMs(controller.minimumActionDelayMs)
+        ?? DEFAULT_AI_MINIMUM_ACTION_DELAY_MS;
 }
 
 export function getDefaultSeatController(
@@ -30,12 +47,14 @@ export function normalizeSeatController(
         if (!aiSupport?.localAi) {
             return { type: 'human' };
         }
+        const minimumActionDelayMs = sanitizeMinimumActionDelayMs(controller.minimumActionDelayMs);
         return {
             type: 'local-ai',
             ...(sanitizeOptionalId(controller.policyId) ? { policyId: sanitizeOptionalId(controller.policyId) } : {}),
             ...(sanitizeOptionalId(controller.fallbackPolicyId)
                 ? { fallbackPolicyId: sanitizeOptionalId(controller.fallbackPolicyId) }
                 : {}),
+            ...(minimumActionDelayMs !== undefined ? { minimumActionDelayMs } : {}),
         };
     }
 
@@ -45,11 +64,13 @@ export function normalizeSeatController(
 
     const providerId = sanitizeOptionalId(controller.providerId) ?? DEFAULT_REMOTE_PROVIDER_ID;
     const fallbackPolicyId = sanitizeOptionalId(controller.fallbackPolicyId);
+    const minimumActionDelayMs = sanitizeMinimumActionDelayMs(controller.minimumActionDelayMs);
 
     return {
         type: 'remote-ai',
         providerId,
         ...(fallbackPolicyId ? { fallbackPolicyId } : {}),
+        ...(minimumActionDelayMs !== undefined ? { minimumActionDelayMs } : {}),
     };
 }
 
