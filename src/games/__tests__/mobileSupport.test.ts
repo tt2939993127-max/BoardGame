@@ -1,3 +1,5 @@
+/* @vitest-environment happy-dom */
+
 import { describe, expect, it } from 'vitest';
 import { getAllGames, getGameById } from '../../config/games.config';
 import {
@@ -6,6 +8,7 @@ import {
     resolveStableViewportSize,
     resolveGameMobileSupport,
     shouldUseBoardShellScale,
+    syncGamePageDocumentAttributes,
 } from '../mobileSupport';
 
 describe('mobile support manifest contract', () => {
@@ -16,10 +19,11 @@ describe('mobile support manifest contract', () => {
         for (const game of games) {
             expect(game.mobileProfile).toBeDefined();
             expect(game.shellTargets?.length ?? 0).toBeGreaterThan(0);
+            expect(game.mobileDelivery?.mode).toBeDefined();
         }
     });
 
-    it('dicethrone declares landscape board-shell support and container targets', () => {
+    it('dicethrone declares landscape board-shell support, container targets and package delivery metadata', () => {
         const game = getGameById('dicethrone');
 
         expect(game?.mobileProfile).toBe('landscape-adapted');
@@ -28,6 +32,12 @@ describe('mobile support manifest contract', () => {
         expect(game?.shellTargets).toEqual(
             expect.arrayContaining(['pwa', 'app-webview', 'mini-program-webview']),
         );
+        expect(game?.mobileDelivery).toEqual({
+            mode: 'package-managed',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+        });
     });
 
     it('cardia declares landscape board-shell support', () => {
@@ -76,6 +86,26 @@ describe('mobile support helpers', () => {
             preferredOrientation: 'landscape',
             mobileLayoutPreset: 'board-shell',
             shellTargets: ['pwa'],
+            mobileDelivery: {
+                mode: 'builtin',
+            },
+        });
+    });
+
+    it('does not infer package-managed delivery for entries outside app-webview targets', () => {
+        expect(
+            resolveGameMobileSupport({
+                mobileProfile: 'landscape-adapted',
+                shellTargets: ['pwa'],
+                mobileDelivery: {
+                    mode: 'package-managed',
+                    runtimeChannel: 'beta',
+                    modulePackId: 'demo',
+                    assetPackId: 'demo',
+                },
+            }).mobileDelivery,
+        ).toEqual({
+            mode: 'builtin',
         });
     });
 
@@ -122,6 +152,30 @@ describe('mobile support helpers', () => {
         expect(attrs['data-preferred-orientation']).toBe('landscape');
         expect(attrs['data-mobile-layout-preset']).toBe('board-shell');
         expect(attrs['data-shell-targets']).toBe('pwa,app-webview');
+    });
+
+    it('mirrors game page attributes to html and body while the page is mounted', () => {
+        document.documentElement.setAttribute('data-game-id', 'previous-root');
+        document.body.setAttribute('data-mobile-profile', 'previous-body-profile');
+
+        const cleanup = syncGamePageDocumentAttributes({
+            'data-game-page': 'true',
+            'data-game-id': 'dicethrone',
+            'data-mobile-profile': 'landscape-adapted',
+            'data-mobile-layout-preset': 'board-shell',
+        });
+
+        expect(document.documentElement.getAttribute('data-game-page')).toBe('true');
+        expect(document.documentElement.getAttribute('data-game-id')).toBe('dicethrone');
+        expect(document.body.getAttribute('data-mobile-profile')).toBe('landscape-adapted');
+        expect(document.body.getAttribute('data-mobile-layout-preset')).toBe('board-shell');
+
+        cleanup();
+
+        expect(document.documentElement.getAttribute('data-game-page')).toBeNull();
+        expect(document.documentElement.getAttribute('data-game-id')).toBe('previous-root');
+        expect(document.body.getAttribute('data-mobile-profile')).toBe('previous-body-profile');
+        expect(document.body.getAttribute('data-mobile-layout-preset')).toBeNull();
     });
 
     it('only landscape board-shell games enable legacy scale fallback', () => {

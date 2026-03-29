@@ -98,9 +98,8 @@ const ghostButtonStyle: CSSProperties = {
 };
 
 const reasonKeyMap: Record<BrowserCompatibilityReason, string> = {
-    'css-oklch': 'compatibility.reasonOklch',
-    'css-translate': 'compatibility.reasonTranslate',
-    'css-register-property': 'compatibility.reasonRegisterProperty',
+    'runtime-core': 'compatibility.reasonRuntimeCore',
+    'game-resize-observer': 'compatibility.reasonResizeObserver',
 };
 
 export const BrowserCompatibilityPage = ({

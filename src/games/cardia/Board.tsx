@@ -33,6 +33,7 @@ import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
 import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
+import { safeMatchMedia, subscribeMediaQueryChange } from '../../lib/mediaQuery';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<CardiaCore>;
@@ -49,11 +50,11 @@ const SMALL_CARD_SIZE_CLASSES = 'w-[var(--cardia-small-card-width)] aspect-[106/
 
 const detectTouchLikeInput = (): boolean => {
     if (typeof window === 'undefined') return false;
-    const hasAnyHover = window.matchMedia('(hover: hover)').matches
-        || window.matchMedia('(any-hover: hover)').matches;
+    const hasAnyHover = safeMatchMedia('(hover: hover)').matches
+        || safeMatchMedia('(any-hover: hover)').matches;
     if (hasAnyHover) return false;
 
-    const pointerCoarse = window.matchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches;
+    const pointerCoarse = safeMatchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches;
     const hasTouchPoints = (navigator.maxTouchPoints ?? 0) > 0;
     return pointerCoarse || hasTouchPoints;
 };
@@ -1364,15 +1365,15 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const mediaQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+        const mediaQuery = safeMatchMedia('(hover: none), (pointer: coarse)');
         const syncTouchCapability = () => setIsTouchDevice(detectTouchLikeInput());
 
         syncTouchCapability();
-        mediaQuery.addEventListener?.('change', syncTouchCapability);
+        const unsubscribeMediaQuery = subscribeMediaQueryChange(mediaQuery, syncTouchCapability);
         window.addEventListener('resize', syncTouchCapability);
 
         return () => {
-            mediaQuery.removeEventListener?.('change', syncTouchCapability);
+            unsubscribeMediaQuery();
             window.removeEventListener('resize', syncTouchCapability);
         };
     }, []);
@@ -1794,15 +1795,15 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const mediaQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+        const mediaQuery = safeMatchMedia('(hover: none), (pointer: coarse)');
         const syncTouchCapability = () => setIsTouchDevice(detectTouchLikeInput());
 
         syncTouchCapability();
-        mediaQuery.addEventListener?.('change', syncTouchCapability);
+        const unsubscribeMediaQuery = subscribeMediaQueryChange(mediaQuery, syncTouchCapability);
         window.addEventListener('resize', syncTouchCapability);
 
         return () => {
-            mediaQuery.removeEventListener?.('change', syncTouchCapability);
+            unsubscribeMediaQuery();
             window.removeEventListener('resize', syncTouchCapability);
         };
     }, []);

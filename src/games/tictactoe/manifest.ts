@@ -14,6 +14,12 @@ const entry: GameManifestEntry = {
     preferredOrientation: 'portrait',
     mobileLayoutPreset: 'portrait-simple',
     shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'tictactoe',
+        assetPackId: 'tictactoe',
+    },
     ai: {
         capture: true,
         localAi: true,

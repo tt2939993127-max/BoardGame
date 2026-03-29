@@ -8,6 +8,7 @@ import {
     readBrowserCompatibilityBypass,
     writeBrowserCompatibilityBypass,
 } from '../../lib/browserCompatibility';
+import { MapContainer } from '../../games/summonerwars/ui/MapContainer';
 
 const mockLoggerError = vi.fn();
 const mockNavigate = vi.fn();
@@ -343,17 +344,125 @@ describe('browser compatibility detection', () => {
         window.sessionStorage.clear();
     });
 
-    it('detects missing CSS features and parses browser identity', () => {
-        const report = detectBrowserCompatibility();
+    it('keeps old Chrome browsers passable after gameplay fallback adaptation', () => {
+        const report = detectBrowserCompatibility('/play/smashup');
 
-        expect(report.isCompatible).toBe(false);
+        expect(report.isCompatible).toBe(true);
         expect(report.browserName).toBe('Chrome');
         expect(report.browserVersion).toBe('109.0.0.0');
-        expect(report.reasons).toEqual([
-            'css-oklch',
-            'css-translate',
-            'css-register-property',
-        ]);
+        expect(report.reasons).toEqual([]);
+    });
+
+    it('allows lower browser versions when core capabilities are still available', () => {
+        Object.defineProperty(navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/70.0.3538.77 Safari/537.36',
+        });
+
+        const report = detectBrowserCompatibility('/play/smashup');
+
+        expect(report.isCompatible).toBe(true);
+        expect(report.browserName).toBe('Chrome');
+        expect(report.reasons).toEqual([]);
+    });
+
+    it('keeps gameplay routes passable when matchMedia is missing but fallback paths exist', () => {
+        const originalMatchMedia = window.matchMedia;
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: undefined,
+        });
+
+        const report = detectBrowserCompatibility('/play/smashup');
+
+        expect(report.isCompatible).toBe(true);
+        expect(report.reasons).toEqual([]);
+
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: originalMatchMedia,
+        });
+    });
+
+    it('keeps games without ResizeObserver dependence passable when the API is missing', () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: undefined,
+        });
+
+        const report = detectBrowserCompatibility('/play/smashup');
+
+        expect(report.isCompatible).toBe(true);
+        expect(report.reasons).toEqual([]);
+
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: originalResizeObserver,
+        });
+    });
+
+    it('keeps summonerwars gameplay passable when ResizeObserver fallback is available', () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: undefined,
+        });
+
+        const report = detectBrowserCompatibility('/play/summonerwars');
+
+        expect(report.isCompatible).toBe(true);
+        expect(report.reasons).toEqual([]);
+
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: originalResizeObserver,
+        });
+    });
+
+    it('blocks ugc dev routes when ResizeObserver is missing', () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: undefined,
+        });
+
+        const report = detectBrowserCompatibility('/dev/ugc');
+
+        expect(report.isCompatible).toBe(false);
+        expect(report.reasons).toEqual(['game-resize-observer']);
+
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: originalResizeObserver,
+        });
+    });
+
+    it('keeps summonerwars map container renderable when ResizeObserver is missing', () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: undefined,
+        });
+
+        render(
+            <div style={{ width: '800px', height: '600px' }}>
+                <MapContainer
+                    containerTestId="sw-map-container-fallback"
+                    contentTestId="sw-map-content-fallback"
+                >
+                    <div style={{ width: '1200px', height: '800px' }}>fallback map</div>
+                </MapContainer>
+            </div>,
+        );
+
+        expect(screen.getByTestId('sw-map-container-fallback')).toBeTruthy();
+        expect(screen.getByTestId('sw-map-content-fallback')).toBeTruthy();
+
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+            configurable: true,
+            value: originalResizeObserver,
+        });
     });
 
     it('supports bypassing the compatibility gate for the current session', () => {

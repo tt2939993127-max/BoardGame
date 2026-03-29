@@ -10,6 +10,17 @@ export type GameMobileLayoutPreset = 'board-shell' | 'portrait-simple' | 'map-sh
 
 export type GameShellTarget = 'pwa' | 'app-webview' | 'mini-program-webview';
 
+export type GameMobileDeliveryMode = 'builtin' | 'package-managed';
+
+export interface GameManifestMobileDelivery {
+    mode: GameMobileDeliveryMode;
+    runtimeChannel?: string;
+    modulePackId?: string;
+    assetPackId?: string;
+    modulePackBytes?: number;
+    assetPackBytes?: number;
+}
+
 export interface GameSetupSelectOption {
     value: string;
     labelKey: string;
@@ -73,5 +84,6 @@ export interface GameManifestEntry {
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
     shellTargets?: GameShellTarget[];
+    mobileDelivery?: GameManifestMobileDelivery;
     ai?: GameManifestAiSupport;
 }
