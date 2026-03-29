@@ -6,7 +6,12 @@ import {
     LANGUAGE_OPTIONS,
     RUNTIME_SUPPORTED_LANGUAGES,
 } from '../i18n/types';
-import { parseNamespaceLiteral, collectReferencesFromContent } from '../../../scripts/verify/i18n-check';
+import {
+    parseNamespaceLiteral,
+    collectManifestReferencesFromContent,
+    collectStaticKeyReferencesFromContent,
+    collectReferencesFromContent,
+} from '../../../scripts/verify/i18n-check';
 import {
     collectImplicitCandidateFiles,
     shouldIncludeChangedGitFile,
@@ -71,13 +76,208 @@ describe('i18n 静态检查工具', () => {
         const content = `
             import { useTranslation } from 'react-i18next';
             const { t } = useTranslation('lobby');
-            t(\`home.${'${id}'}\`);
+            t(\`home.pre${'${id}'}\`);
         `;
         const result = collectReferencesFromContent(content, 'demo.tsx', {
             defaultNamespace: 'common',
             knownNamespaces: new Set(['common', 'lobby']),
         });
         expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(true);
+    });
+
+    it('混合字面量与动态 namespace 时，仍保留可确定的字面量 namespace', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const gameNamespace = 'game-smashup';
+            const { t } = useTranslation(['lobby', gameNamespace]);
+            t('createRoom.title');
+        `;
+
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'lobby', 'game-smashup']),
+        });
+
+        expect(result.references).toContainEqual(expect.objectContaining({
+            key: 'createRoom.title',
+            namespaces: ['lobby'],
+        }));
+        expect(result.warnings.some((warning) => warning.type === 'dynamic-namespace')).toBe(false);
+    });
+
+    it('识别 template literal 的单段动态模式并生成可验证引用', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('game-summonerwars');
+            t(\`phase.${'${phaseId}'}\`);
+            t(\`statusBanners.abilityNames.${'${abilityId}'}\`);
+        `;
+
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'game-summonerwars']),
+        });
+
+        expect(result.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'phase.*',
+                namespaces: ['game-summonerwars'],
+                patternSegments: ['phase', null],
+            }),
+            expect.objectContaining({
+                key: 'statusBanners.abilityNames.*',
+                namespaces: ['game-summonerwars'],
+                patternSegments: ['statusBanners', 'abilityNames', null],
+            }),
+        ]));
+        expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);
+    });
+
+    it('命令校验直接返回自然语言错误文案会产生告警', () => {
+        const content = `
+            export function validate() {
+                return { valid: false, error: 'Not in play phase' };
+            }
+        `;
+        const result = collectReferencesFromContent(content, 'demo.ts', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common']),
+        });
+
+        expect(result.warnings).toContainEqual(expect.objectContaining({
+            type: 'raw-validation-error',
+            key: 'Not in play phase',
+        }));
+    });
+
+    it('识别 manifest 中的 setupOptions 与基础展示 key', () => {
+        const content = `
+            const entry = {
+                titleKey: 'games.smashup.title',
+                descriptionKey: 'games.smashup.description',
+                playersKey: 'games.smashup.players',
+                setupOptions: {
+                    expansions: {
+                        labelKey: 'games.smashup.setup.expansions.label',
+                        options: [
+                            { value: 'titans', labelKey: 'games.smashup.setup.expansions.titans' },
+                        ],
+                    },
+                },
+            };
+        `;
+
+        const result = collectManifestReferencesFromContent(
+            content,
+            'D:/gongzuo/webgame/BoardGame/src/games/smashup/manifest.ts',
+            new Set(['lobby', 'game-smashup']),
+        );
+
+        expect(result).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'games.smashup.title',
+                namespaces: ['lobby'],
+            }),
+            expect.objectContaining({
+                key: 'games.smashup.description',
+                namespaces: ['lobby'],
+            }),
+            expect.objectContaining({
+                key: 'games.smashup.players',
+                namespaces: ['lobby'],
+            }),
+            expect.objectContaining({
+                key: 'setup.expansions.label',
+                namespaces: ['game-smashup'],
+            }),
+            expect.objectContaining({
+                key: 'setup.expansions.titans',
+                namespaces: ['game-smashup'],
+            }),
+        ]));
+    });
+
+    it('识别游戏目录中的静态 *Key 配置，并推断到游戏 namespace', () => {
+        const content = `
+            export const CONFIG = {
+                titleKey: 'interaction.selectPlayer',
+                labelKey: 'choices.confirm',
+                nameKey: 'factions.pirates.name',
+            };
+        `;
+
+        const result = collectStaticKeyReferencesFromContent(
+            content,
+            'D:/gongzuo/webgame/BoardGame/src/games/smashup/ui/factionMeta.ts',
+            new Set(['game-smashup', 'common']),
+        );
+
+        expect(result).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'interaction.selectPlayer',
+                namespaces: ['game-smashup'],
+            }),
+            expect.objectContaining({
+                key: 'choices.confirm',
+                namespaces: ['game-smashup'],
+            }),
+            expect.objectContaining({
+                key: 'factions.pirates.name',
+                namespaces: ['game-smashup'],
+            }),
+        ]));
+    });
+
+    it('识别 useTranslation 指向的非游戏 namespace 静态 *Key 配置', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('lobby');
+            const ITEMS = [
+                { labelKey: 'ai.capture' },
+                { labelKey: 'ai.local' },
+            ];
+            void t;
+        `;
+
+        const result = collectStaticKeyReferencesFromContent(
+            content,
+            'D:/gongzuo/webgame/BoardGame/src/components/lobby/AiSupportPills.tsx',
+            new Set(['lobby', 'common']),
+        );
+
+        expect(result).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'ai.capture',
+                namespaces: ['lobby'],
+            }),
+            expect.objectContaining({
+                key: 'ai.local',
+                namespaces: ['lobby'],
+            }),
+        ]));
+    });
+
+    it('忽略非翻译语义的 *Key 字段，例如 sfxKey/effectKey', () => {
+        const content = `
+            export const FX = {
+                sfxKey: 'magic.general.arcane.hit_001',
+                effectKey: 'bonusDie.effect.fire',
+                labelKey: 'choices.confirm',
+            };
+        `;
+
+        const result = collectStaticKeyReferencesFromContent(
+            content,
+            'D:/gongzuo/webgame/BoardGame/src/games/smashup/data/demo.ts',
+            new Set(['game-smashup']),
+        );
+
+        expect(result).toEqual([
+            expect.objectContaining({
+                key: 'choices.confirm',
+                namespaces: ['game-smashup'],
+            }),
+        ]);
     });
 });
 

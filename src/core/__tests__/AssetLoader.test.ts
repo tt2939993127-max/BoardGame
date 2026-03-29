@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { setPublicFileHashesForTesting, versionedPublicFileUrl } from '../../lib/publicFileUrl';
 import {
     getLocalAssetPath,
     getLocalizedImageUrls,
@@ -11,6 +12,7 @@ describe('AssetLoader.getOptimizedImageUrls', () => {
     beforeEach(() => {
         setAssetsBaseUrl('/assets');
         setAssetHashesForTesting({});
+        setPublicFileHashesForTesting({});
     });
 
     it('SVG 资源保持原路径', () => {
@@ -61,5 +63,24 @@ describe('AssetLoader.getOptimizedImageUrls', () => {
         });
         expect(getLocalAssetPath('atlas-configs/dicethrone/ability-cards-common.atlas.json'))
             .toBe('/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json?v=ef567890');
+    });
+
+    it('public 根目录字体与 logo 资源也会附加内容 hash', () => {
+        setPublicFileHashesForTesting({
+            'fonts/inter-400-latin.woff2': 'font12345',
+            'logos/logo_1_grid.svg': 'logo67890',
+        });
+        expect(versionedPublicFileUrl('/fonts/inter-400-latin.woff2'))
+            .toBe('/fonts/inter-400-latin.woff2?v=font12345');
+        expect(versionedPublicFileUrl('/logos/logo_1_grid.svg'))
+            .toBe('/logos/logo_1_grid.svg?v=logo67890');
+    });
+
+    it('显式排除的动态 game-data 文件保持原路径', () => {
+        setPublicFileHashesForTesting({
+            'game-data/summonerwars.layout.json': 'layout1111',
+        });
+        expect(versionedPublicFileUrl('/game-data/summonerwars.layout.json'))
+            .toBe('/game-data/summonerwars.layout.json');
     });
 });

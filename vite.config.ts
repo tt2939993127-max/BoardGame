@@ -5,9 +5,19 @@ import { fileURLToPath } from 'url'
 import ts from 'typescript'
 import localeHashPlugin from './plugins/vite-locale-hash.ts'
 import assetHashPlugin from './plugins/vite-asset-hash.ts'
+import publicFileHashPlugin from './plugins/vite-public-file-hash.ts'
 import { readyCheckPlugin } from './vite-plugins/ready-check.ts'
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
+const LEGACY_GAMEPLAY_BUILD_TARGETS = ['chrome88', 'edge88', 'firefox78', 'safari14']
+const MANUAL_CHUNK_PATTERNS: Array<[string, string[]]> = [
+  ['vendor-react', ['/node_modules/react/', '/node_modules/react-dom/', '/node_modules/react-router-dom/', '/node_modules/scheduler/']],
+  ['vendor-motion', ['/node_modules/framer-motion/']],
+  ['vendor-socket', ['/node_modules/socket.io-client/']],
+  ['vendor-i18n', ['/node_modules/i18next/', '/node_modules/react-i18next/', '/node_modules/i18next-http-backend/', '/node_modules/i18next-browser-languagedetector/']],
+  ['vendor-query', ['/node_modules/@tanstack/react-query/']],
+  ['vendor-howler', ['/node_modules/howler/']],
+]
 
 const readCliFlag = (flagName: string): string | undefined => {
   const prefix = `--${flagName}=`
@@ -93,7 +103,7 @@ export default defineConfig(({ mode }) => {
   const cliHost = readCliFlag('host')
   const devPort = Number.isFinite(cliPort) && cliPort > 0
     ? cliPort
-    : Number(env.VITE_DEV_PORT) || 5173
+    : Number(env.VITE_DEV_PORT) || 4173
   const serverHost = cliHost || '0.0.0.0'
   const hmrHost = cliHost && cliHost !== '0.0.0.0' ? cliHost : 'localhost'
   const gameServerPort = Number(env.GAME_SERVER_PORT) || 18000
@@ -143,20 +153,27 @@ export default defineConfig(({ mode }) => {
       createInlineTypeScriptFallbackPlugin(forceInlineVite),
       localeHashPlugin(),
       assetHashPlugin(),
+      publicFileHashPlugin(),
       readyCheckPlugin(),
       createAndroidBuildMetaPlugin(mode, backendUrl),
     ],
     esbuild: forceInlineVite ? false : undefined,
     build: {
+      // 生产构建向下兼容到 Chrome 88+ 这档现代浏览器，确保旧一点的 WebView 也能正常进入并游玩。
+      target: LEGACY_GAMEPLAY_BUILD_TARGETS,
+      cssTarget: LEGACY_GAMEPLAY_BUILD_TARGETS,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-motion': ['framer-motion'],
-            'vendor-socket': ['socket.io-client'],
-            'vendor-i18n': ['i18next', 'react-i18next', 'i18next-http-backend', 'i18next-browser-languagedetector'],
-            'vendor-query': ['@tanstack/react-query'],
-            'vendor-howler': ['howler'],
+          manualChunks(id) {
+            if (!id.includes('/node_modules/')) return undefined
+
+            for (const [chunkName, patterns] of MANUAL_CHUNK_PATTERNS) {
+              if (patterns.some(pattern => id.includes(pattern))) {
+                return chunkName
+              }
+            }
+
+            return undefined
           },
         },
       },
