@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from '../src/spa-fallback';
+import { LONG_CACHE_MAX_AGE, NO_CACHE_HEADER, isNoCacheSpaEntryPath, isNoCacheStaticFilePath, shouldServeSpaFallback } from '../src/spa-fallback';
 
 describe('SPA fallback guards', () => {
     it('should keep /assets requests out of SPA fallback', () => {
@@ -25,5 +25,18 @@ describe('SPA fallback guards', () => {
         expect(isNoCacheSpaEntryPath('/admin/changelogs/')).toBe(true);
         expect(shouldServeSpaFallback('/admin/changelogs')).toBe(true);
         expect(shouldServeSpaFallback('/admin/changelogs/')).toBe(true);
+    });
+
+    it('should keep html and editable layout files on no-cache policy', () => {
+        expect(isNoCacheStaticFilePath('D:/repo/dist/index.html')).toBe(true);
+        expect(isNoCacheStaticFilePath('D:\\repo\\dist\\game-data\\summonerwars.layout.json')).toBe(true);
+        expect(NO_CACHE_HEADER).toBe('no-cache, no-store, must-revalidate');
+    });
+
+    it('should allow hashed public static directories to use long cache', () => {
+        expect(isNoCacheStaticFilePath('D:/repo/dist/fonts/inter-400-latin.woff2')).toBe(false);
+        expect(isNoCacheStaticFilePath('D:/repo/dist/logos/logo_1_grid.svg')).toBe(false);
+        expect(isNoCacheStaticFilePath('D:/repo/dist/game-data/dicethrone/monk/dice-sprite.png')).toBe(false);
+        expect(LONG_CACHE_MAX_AGE).toBe('1y');
     });
 });

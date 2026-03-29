@@ -130,6 +130,44 @@ export class UserSettingsController {
         );
         return res.status(201).json({ settings: { cursorTheme, overrideScope, highContrast, gameVariants } });
     }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('local-ai/:gameId')
+    async getLocalAiMatchPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Param('gameId') gameId: string,
+        @Res() res: Response,
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        const settings = await this.userSettingsService.getLocalAiMatchPreference(currentUser.userId, gameId);
+        if (!settings) {
+            return res.json({ empty: true, settings: null });
+        }
+        return res.json({ empty: false, settings });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Put('local-ai/:gameId')
+    async updateLocalAiMatchPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Param('gameId') gameId: string,
+        @Body() body: {
+            numPlayers?: unknown;
+            seatControllers?: Record<string, unknown>;
+            setupSelections?: Record<string, string | string[]>;
+        },
+        @Res() res: Response,
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        const settings = {
+            numPlayers: typeof body?.numPlayers === 'number' ? body.numPlayers : Number(body?.numPlayers),
+            seatControllers: body?.seatControllers,
+            setupSelections: body?.setupSelections,
+        };
+        await this.userSettingsService.upsertLocalAiMatchPreference(currentUser.userId, gameId, settings);
+        const saved = await this.userSettingsService.getLocalAiMatchPreference(currentUser.userId, gameId);
+        return res.status(201).json({ settings: saved });
+    }
 }
 
 
