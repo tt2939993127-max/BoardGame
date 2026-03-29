@@ -1475,9 +1475,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
         return (
             <div
                 data-testid="cardia-player-area-panel"
-                className="flex h-full min-h-0 items-stretch gap-1.5 overflow-visible rounded-[0.9rem] border border-white/10 bg-black/62 px-2.5 py-1.5 backdrop-blur-md"
+                className="flex h-full min-h-0 items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-black/62 px-4 py-3 backdrop-blur-md"
             >
-                <div className="flex w-[6.5rem] flex-shrink-0 flex-col justify-between gap-1 overflow-hidden">
+                <div className="flex w-[10.5rem] flex-shrink-0 flex-col justify-between gap-1.5 overflow-hidden">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
                         <div className="truncate text-[14px] font-bold text-white">{player.name}</div>
                         <div
