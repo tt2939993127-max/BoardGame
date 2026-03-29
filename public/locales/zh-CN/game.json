@@ -339,6 +339,7 @@
       "human": "真人",
       "local": "本地 AI",
       "remote": "远程 AI",
+      "difficulty": "难度：{{value}}",
       "policy": "策略：{{value}}",
       "provider": "Provider：{{value}}",
       "modes": {

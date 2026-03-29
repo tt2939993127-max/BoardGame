@@ -15,7 +15,7 @@ import { UI_Z_INDEX } from '../../../../core';
 import { useToast } from '../../../../contexts/ToastContext';
 import { copyToClipboard } from '../../../../lib/utils';
 import { getGameById } from '../../../../config/games.config';
-import { resolveSeatControllersFromSearchParams } from '../../../../engine/ai';
+import { DEFAULT_LOCAL_AI_DIFFICULTY, resolveSeatControllersFromSearchParams } from '../../../../engine/ai';
 import { useRuntimeViewport } from '../../../../hooks/ui/useRuntimeViewport';
 
 const DEBUG_BUTTON_SIZE = 48;
@@ -195,12 +195,13 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events,
         aiSupport?.localAi ? t('lobby:ai.local') : null,
         aiSupport?.remoteAi ? t('lobby:ai.remote') : null,
     ].filter(Boolean) as string[]), [aiSupport?.capture, aiSupport?.localAi, aiSupport?.remoteAi, t]);
-    const formatSeatController = React.useCallback((controller: { type: string; policyId?: string; providerId?: string }) => {
+    const formatSeatController = React.useCallback((controller: { type: string; policyId?: string; providerId?: string; difficulty?: string }) => {
         if (controller.type === 'local-ai') {
             const label = t('debug.ai.local');
+            const difficultyLabel = t(`lobby:ai.difficulties.${controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY}`);
             return controller.policyId
-                ? `${label} · ${t('debug.ai.policy', { value: controller.policyId })}`
-                : label;
+                ? `${label} · ${difficultyLabel} · ${t('debug.ai.policy', { value: controller.policyId })}`
+                : `${label} · ${difficultyLabel}`;
         }
         if (controller.type === 'remote-ai') {
             const label = t('debug.ai.remote');
