@@ -13,6 +13,7 @@ import { MsgpackIoAdapter } from './adapters/msgpack-io.adapter';
 import { GlobalHttpExceptionFilter } from './shared/filters/http-exception.filter';
 import logger from '../../../server/logger';
 import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from './spa-fallback';
+import { LONG_CACHE_MAX_AGE, NO_CACHE_HEADER, isNoCacheStaticFilePath } from './spa-fallback';
 
 const initSentryInBackground = async () => {
     const dsn = process.env.SENTRY_DSN?.trim();
@@ -92,26 +93,49 @@ async function bootstrap() {
     }
     if (existsSync(distPath)) {
         expressApp.use('/assets', express.static(join(distPath, 'assets'), {
-            maxAge: '1y',
+            maxAge: LONG_CACHE_MAX_AGE,
             immutable: true,
+        }));
+        expressApp.use('/fonts', express.static(join(distPath, 'fonts'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+        }));
+        expressApp.use('/logos', express.static(join(distPath, 'logos'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+        }));
+        expressApp.use('/game-data', express.static(join(distPath, 'game-data'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+            setHeaders: (res, filePath) => {
+                if (isNoCacheStaticFilePath(filePath)) {
+                    res.setHeader('Cache-Control', NO_CACHE_HEADER);
+                }
+            },
         }));
         expressApp.use(express.static(distPath, {
             etag: true,
             lastModified: true,
             setHeaders: (res, filePath) => {
-                if (filePath.endsWith('.html')) {
-                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                if (isNoCacheStaticFilePath(filePath)) {
+                    res.setHeader('Cache-Control', NO_CACHE_HEADER);
                 }
             },
         }));
 
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (isNoCacheSpaEntryPath(req.path)) {
-                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                res.setHeader('Cache-Control', NO_CACHE_HEADER);
                 return res.sendFile(join(distPath, 'index.html'));
             }
             if (!shouldServeSpaFallback(req.path)) return next();
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Cache-Control', NO_CACHE_HEADER);
             return res.sendFile(join(distPath, 'index.html'));
         });
     }

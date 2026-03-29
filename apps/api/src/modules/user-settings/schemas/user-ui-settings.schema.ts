@@ -28,6 +28,14 @@ export class UserUISettings {
     @Prop({ type: Object, default: {} })
     cursorGameVariants!: Record<string, string>;
 
+    /** 本地 AI 开局偏好（gameId → 最近一次配置） */
+    @Prop({ type: Object, default: {} })
+    localAiMatchPreferences!: Record<string, {
+        numPlayers: number;
+        seatControllers?: Record<string, unknown>;
+        setupSelections?: Record<string, string | string[]>;
+    }>;
+
     createdAt!: Date;
     updatedAt!: Date;
 }
