@@ -307,6 +307,13 @@
       "local": "本地 AI",
       "remote": "远程 AI"
     },
+    "difficulty": "难度",
+    "difficulties": {
+      "easy": "简单",
+      "normal": "普通",
+      "hard": "困难",
+      "expert": "专家"
+    },
     "policyId": "策略 ID",
     "policyPlaceholder": "留空则使用默认策略",
     "providerId": "Provider ID",

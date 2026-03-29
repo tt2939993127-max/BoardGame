@@ -1,7 +1,8 @@
 import type { MatchState } from '../types';
+import { resolveAiDifficultyProfile } from './difficulty';
 import { getGameAiRuntime } from './registry';
 import { extractAiInteractionSnapshot, extractAiResponseWindowSnapshot } from './snapshots';
-import type { AiActionDecision, AiDecisionContext, AiLegalAction } from './types';
+import type { AiActionDecision, AiDecisionContext, AiLegalAction, AiSeatController } from './types';
 
 export function createAiLegalActionId(...parts: Array<string | number | undefined | null>): string {
     return parts
@@ -18,6 +19,7 @@ interface BuildAiDecisionContextArgs {
     rulesVersion: string | null;
     decisionBudgetMs: number;
     source: 'local' | 'online';
+    seatController?: AiSeatController;
 }
 
 export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDecisionContext {
@@ -38,6 +40,11 @@ export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDeci
         rulesVersion: args.rulesVersion,
         decisionBudgetMs: args.decisionBudgetMs,
         source: args.source,
+        difficulty: resolveAiDifficultyProfile(
+            args.seatController?.type === 'local-ai'
+                ? args.seatController.difficulty
+                : undefined,
+        ),
     };
 }
 

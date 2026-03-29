@@ -4,7 +4,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import { UI_Z_INDEX } from '../../core';
 import type { GameManifestEntry } from '../../games/manifest.types';
-import type { AiSeatController, LocalMatchPreferences } from '../../engine/ai';
+import {
+    DEFAULT_LOCAL_AI_DIFFICULTY,
+    type AiDifficultyLevel,
+    type AiSeatController,
+    type LocalMatchPreferences,
+} from '../../engine/ai';
 import {
     buildLocalMatchSearchParams,
     createDefaultLocalMatchPreferences,
@@ -58,6 +63,10 @@ export function LocalMatchConfigModal({
     const seatIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, index) => String(index)),
         [numPlayers],
+    );
+    const difficultyOptions = useMemo(
+        () => (['easy', 'normal', 'hard', 'expert'] as AiDifficultyLevel[]),
+        [],
     );
 
     const updateSeatController = (playerId: string, controller: AiSeatController) => {
@@ -239,20 +248,43 @@ export function LocalMatchConfigModal({
                                                 </div>
 
                                                 {controller.type === 'local-ai' && (
-                                                    <div className="space-y-1">
-                                                        <label className="block text-[11px] font-bold text-parchment-light-text">
-                                                            {t('ai.policyId')}
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={controller.policyId ?? ''}
-                                                            onChange={(event) => updateSeatController(playerId, {
-                                                                type: 'local-ai',
-                                                                policyId: event.target.value,
-                                                            })}
-                                                            placeholder={t('ai.policyPlaceholder')}
-                                                            className="w-full px-3 py-2 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
-                                                        />
+                                                    <div className="space-y-3">
+                                                        <div className="space-y-1">
+                                                            <label className="block text-[11px] font-bold text-parchment-light-text">
+                                                                {t('ai.difficulty')}
+                                                            </label>
+                                                            <select
+                                                                value={controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY}
+                                                                onChange={(event) => updateSeatController(playerId, {
+                                                                    ...controller,
+                                                                    type: 'local-ai',
+                                                                    difficulty: event.target.value as AiDifficultyLevel,
+                                                                })}
+                                                                className="w-full px-3 py-2 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text focus:outline-none focus:border-parchment-base-text transition-colors"
+                                                            >
+                                                                {difficultyOptions.map((difficulty) => (
+                                                                    <option key={difficulty} value={difficulty}>
+                                                                        {t(`ai.difficulties.${difficulty}`)}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="block text-[11px] font-bold text-parchment-light-text">
+                                                                {t('ai.policyId')}
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={controller.policyId ?? ''}
+                                                                onChange={(event) => updateSeatController(playerId, {
+                                                                    ...controller,
+                                                                    type: 'local-ai',
+                                                                    policyId: event.target.value,
+                                                                })}
+                                                                placeholder={t('ai.policyPlaceholder')}
+                                                                className="w-full px-3 py-2 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 )}
 

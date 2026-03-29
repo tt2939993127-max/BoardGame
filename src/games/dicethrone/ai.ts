@@ -2,7 +2,7 @@ import type { Command, MatchState, PlayerId } from '../../engine/types';
 import { createAiLegalActionId } from '../../engine/ai';
 import {
     createActionKindScorer,
-    createScoredLocalAiPolicy,
+    createLookaheadLocalAiPolicy,
 } from '../../engine/ai';
 import type {
     AiDecisionContext,
@@ -941,6 +941,248 @@ const phaseTempoScorer: LocalAiActionScorer = {
     },
 };
 
+const getEvaluatorScale = (context: AiDecisionContext): number => {
+    switch (context.difficulty.evaluatorProfile) {
+        case 'basic':
+            return 0.45;
+        case 'balanced':
+            return 0.75;
+        case 'strong':
+            return 1;
+        case 'expert':
+            return 1.2;
+        default:
+            return 1;
+    }
+};
+
+const getOpponentIds = (state: DiceThroneState, playerId: PlayerId): PlayerId[] => {
+    return Object.keys(state.core.players).filter((id): id is PlayerId => id !== playerId);
+};
+
+const countStatusStacks = (player: DiceThroneState['core']['players'][PlayerId]): number => {
+    return Object.values(player.statusEffects ?? {}).reduce((sum, value) => sum + value, 0);
+};
+
+const countTokenStacks = (player: DiceThroneState['core']['players'][PlayerId]): number => {
+    return Object.values(player.tokens ?? {}).reduce((sum, value) => sum + value, 0);
+};
+
+const getCardDrawCount = (card: AbilityCard): number => {
+    return card.effects?.reduce((sum, effect) => {
+        if (effect.action?.type !== 'drawCard') return sum;
+        return sum + (effect.action.drawCount ?? effect.action.value ?? 0);
+    }, 0) ?? 0;
+};
+
+const estimateCardStrategicValue = (
+    card: AbilityCard,
+    actionKind: AiLegalAction['kind'],
+): number => {
+    if (actionKind === 'play-upgrade-card') {
+        return 90 + card.cpCost * 22;
+    }
+
+    if (actionKind === 'play-card' || actionKind === 'response-play-card') {
+        return 35 + card.cpCost * 10 + (card.isAttackModifier ? 22 : 0) + getCardDrawCount(card) * 14;
+    }
+
+    if (actionKind === 'sell-card') {
+        return 10 + card.cpCost * 8;
+    }
+
+    if (actionKind === 'discard-card') {
+        return card.cpCost * 18 + (card.type === 'action' ? 8 : 0);
+    }
+
+    return 0;
+};
+
+const estimateBestUnlockedCardValue = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+    soldCardId: string,
+): number => {
+    const player = state.core.players[playerId];
+    const soldCard = findPlayerHandCard(state, playerId, soldCardId);
+    if (!player || !soldCard) return 0;
+
+    const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+    const cpAfterSell = currentCp + soldCard.cpCost;
+    let best = 0;
+
+    for (const card of player.hand) {
+        if (card.id === soldCardId) continue;
+        if (currentCp >= card.cpCost || cpAfterSell < card.cpCost) continue;
+
+        best = Math.max(
+            best,
+            estimateCardStrategicValue(
+                card,
+                card.type === 'upgrade' ? 'play-upgrade-card' : 'play-card',
+            ),
+        );
+    }
+
+    return best;
+};
+
+const evaluateDiceThronePosition = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+): number => {
+    const self = state.core.players[playerId];
+    if (!self) return 0;
+
+    const opponentIds = getOpponentIds(state, playerId);
+    const opponentHealth = opponentIds.reduce((sum, opponentId) => {
+        return sum + (state.core.players[opponentId]?.resources[RESOURCE_IDS.HP] ?? 0);
+    }, 0);
+    const opponentCp = opponentIds.reduce((sum, opponentId) => {
+        return sum + (state.core.players[opponentId]?.resources[RESOURCE_IDS.CP] ?? 0);
+    }, 0);
+    const divisor = Math.max(1, opponentIds.length);
+
+    const ownHp = self.resources[RESOURCE_IDS.HP] ?? 0;
+    const ownCp = self.resources[RESOURCE_IDS.CP] ?? 0;
+    const ownUpgradeCount = Object.keys(self.upgradeCardByAbilityId ?? {}).length;
+    const pendingDamage = state.core.pendingDamage;
+    const pendingAttack = state.core.pendingAttack;
+    const pendingPressure = pendingAttack?.attackerId === playerId
+        ? (pendingAttack.damage ?? 0) + (pendingAttack.attackModifierBonusDamage ?? 0)
+        : 0;
+    const incomingDamage = pendingDamage?.targetPlayerId === playerId
+        ? pendingDamage.currentDamage
+        : 0;
+
+    return (
+        (ownHp - opponentHealth / divisor) * 6
+        + (ownCp - opponentCp / divisor) * 3
+        + self.hand.length * 7
+        + ownUpgradeCount * 18
+        + self.damageShields.length * 12
+        + countTokenStacks(self) * 3
+        - countStatusStacks(self) * 8
+        + pendingPressure * 5
+        - incomingDamage * 6
+    );
+};
+
+const projectDiceThroneAction = (args: {
+    context: AiDecisionContext;
+    action: AiLegalAction;
+}): { score: number; reason: string; metadata?: Record<string, unknown> } | null => {
+    const state = args.context.visibleState as DiceThroneState;
+    const player = state.core.players[args.context.playerId];
+    if (!player) return null;
+
+    const scale = getEvaluatorScale(args.context);
+    const phase = getContextPhase(args.context);
+
+    if (args.action.kind === 'play-upgrade-card' || args.action.kind === 'play-card') {
+        const cardId = typeof args.action.metadata?.cardId === 'string'
+            ? args.action.metadata.cardId
+            : null;
+        const card = cardId ? findPlayerHandCard(state, args.context.playerId, cardId) : null;
+        if (!card) return null;
+
+        const projectedPosition = evaluateDiceThronePosition(state, args.context.playerId);
+        const strategicValue = estimateCardStrategicValue(card, args.action.kind);
+        const phaseBonus = phase === 'main1' ? 12 : 0;
+        return {
+            score: Number(((strategicValue * 0.3 + projectedPosition * 0.04 + phaseBonus) * scale).toFixed(3)),
+            reason: args.action.kind === 'play-upgrade-card'
+                ? '高难度会额外考虑长期成长与后续回合收益'
+                : '高难度会额外考虑当前出牌后的持续收益',
+            metadata: {
+                projectedPosition,
+                strategicValue,
+            },
+        };
+    }
+
+    if (args.action.kind === 'sell-card') {
+        const cardId = typeof args.action.metadata?.cardId === 'string'
+            ? args.action.metadata.cardId
+            : null;
+        if (!cardId) return null;
+
+        const unlockedValue = estimateBestUnlockedCardValue(state, args.context.playerId, cardId);
+        const score = unlockedValue > 0
+            ? Number((unlockedValue * 0.45 * scale).toFixed(3))
+            : Number((-12 * scale).toFixed(3));
+
+        return {
+            score,
+            reason: unlockedValue > 0
+                ? '卖牌后若能解锁更高价值动作，高难度会更愿意先转资源'
+                : '卖牌后若不能立刻换来更优动作，高难度会压低优先级',
+            metadata: {
+                unlockedValue,
+            },
+        };
+    }
+
+    if (args.action.kind === 'advance-phase') {
+        const bestSellUnlock = args.context.legalActions
+            .filter((candidate) => candidate.kind === 'sell-card')
+            .reduce((best, candidate) => {
+                const cardId = typeof candidate.metadata?.cardId === 'string' ? candidate.metadata.cardId : null;
+                if (!cardId) return best;
+                return Math.max(best, estimateBestUnlockedCardValue(state, args.context.playerId, cardId));
+            }, 0);
+        const proactiveActionCount = args.context.legalActions.filter((candidate) => {
+            return candidate.actionId !== args.action.actionId
+                && candidate.kind !== 'response-pass'
+                && candidate.kind !== 'discard-card';
+        }).length;
+
+        const score = proactiveActionCount > 0
+            ? Number(((-20 - bestSellUnlock * 0.35) * scale).toFixed(3))
+            : Number((18 * scale).toFixed(3));
+
+        return {
+            score,
+            reason: proactiveActionCount > 0
+                ? '高难度会在结束阶段前多看一眼是否还能转出更好的线'
+                : '当前已经接近无事可做，可以结束阶段',
+            metadata: {
+                proactiveActionCount,
+                bestSellUnlock,
+            },
+        };
+    }
+
+    if (args.action.kind === 'select-ability') {
+        const abilityId = typeof args.action.metadata?.abilityId === 'string'
+            ? args.action.metadata.abilityId
+            : null;
+        if (!abilityId) return null;
+        const opponentIds = getOpponentIds(state, args.context.playerId);
+        const lowestOpponentHp = opponentIds.reduce((best, opponentId) => {
+            const hp = state.core.players[opponentId]?.resources[RESOURCE_IDS.HP] ?? 999;
+            return Math.min(best, hp);
+        }, 999);
+        const baseDamage = getPlayerAbilityBaseDamage(state.core, args.context.playerId, abilityId);
+        if (baseDamage <= 0) return null;
+
+        return {
+            score: lowestOpponentHp <= baseDamage
+                ? Number((55 * scale).toFixed(3))
+                : Number((baseDamage * 8 * scale).toFixed(3)),
+            reason: lowestOpponentHp <= baseDamage
+                ? '高难度会放大接近斩杀的技能价值'
+                : '高难度会额外看重技能造成的确定性收益',
+            metadata: {
+                baseDamage,
+                lowestOpponentHp,
+            },
+        };
+    }
+
+    return null;
+};
+
 const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     diceThroneKindScorer,
     setupCharacterScorer,
@@ -953,9 +1195,12 @@ const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     phaseTempoScorer,
 ];
 
-const defaultLocalPolicy = createScoredLocalAiPolicy({
+const defaultLocalPolicy = createLookaheadLocalAiPolicy({
     id: 'baseline',
     scorers: diceThroneLocalPolicyScorers,
+    projectAction({ context, action }) {
+        return projectDiceThroneAction({ context, action });
+    },
 });
 
 export const diceThroneAiRuntime: GameAiRuntime = {

@@ -9,9 +9,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
-import { resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
-import { buildDiceThroneAiLegalActions } from '../ai';
+import { buildDiceThroneAiLegalActions, diceThroneAiRuntime } from '../ai';
 import { engineConfig } from '../game';
 import {
     testSystems,
@@ -736,6 +736,63 @@ describe('AI legal actions', () => {
         expect(second?.action).toBeTruthy();
         expect(second?.attemptKey).toBeTruthy();
         expect(second?.attemptKey).not.toBe(first?.attemptKey);
+    });
+
+    it('不同难度会影响近似动作的最终选择与搜索行为', async () => {
+        const state = createSetupWithHand(['card-enlightenment', 'card-boss-generous'], { cp: 0 })(['0', '1'], fixedRandom);
+        const matchId = 'probe';
+
+        const easyResolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId,
+            seatControllers: {
+                '0': { type: 'local-ai', difficulty: 'easy' },
+            },
+        });
+        const expertResolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId,
+            seatControllers: {
+                '0': { type: 'local-ai', difficulty: 'expert' },
+            },
+        });
+
+        expect(easyResolution?.action.kind).toBe('play-card');
+        expect(expertResolution?.action.kind).toBe('play-card');
+        expect(easyResolution?.action.metadata).toMatchObject({ cardId: 'card-boss-generous' });
+        expect(expertResolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+
+        const easyContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId,
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'easy' },
+        });
+        const expertContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId,
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const easyDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(easyContext);
+        const expertDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(expertContext);
+        const easyEvaluations = (easyDecision?.providerMetadata?.evaluations ?? []) as Array<{ searched?: boolean; noiseScore?: number }>;
+        const expertEvaluations = (expertDecision?.providerMetadata?.evaluations ?? []) as Array<{ searched?: boolean; noiseScore?: number }>;
+
+        expect(easyEvaluations.some((item) => item.searched)).toBe(false);
+        expect(expertEvaluations.some((item) => item.searched)).toBe(true);
+        expect(expertEvaluations.every((item) => item.noiseScore === 0)).toBe(true);
     });
 });
 

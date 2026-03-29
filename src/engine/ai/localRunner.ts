@@ -173,6 +173,7 @@ export async function resolveNextAiAction(
             rulesVersion,
             decisionBudgetMs,
             source: seatController.type === 'remote-ai' ? 'online' : 'local',
+            seatController,
         });
 
         if (context.legalActions.length === 0) continue;

@@ -6,12 +6,25 @@ export interface AiSupportProfile {
     remoteAi: boolean;
 }
 
+export type AiDifficultyLevel = 'easy' | 'normal' | 'hard' | 'expert';
+
+export interface AiDifficultyProfile {
+    level: AiDifficultyLevel;
+    searchDepth: number;
+    shortlistSize: number;
+    simulationBudgetMs: number;
+    randomness: number;
+    beliefSampleCount: number;
+    evaluatorProfile: 'basic' | 'balanced' | 'strong' | 'expert';
+}
+
 export type AiSeatController =
     | { type: 'human' }
     | {
         type: 'local-ai';
         policyId?: string;
         fallbackPolicyId?: string;
+        difficulty?: AiDifficultyLevel;
         minimumActionDelayMs?: number;
     }
     | {
@@ -71,6 +84,7 @@ export interface AiDecisionContext {
     rulesVersion: string | null;
     decisionBudgetMs: number;
     source: 'local' | 'online';
+    difficulty: AiDifficultyProfile;
 }
 
 export interface AiActionDecision {
