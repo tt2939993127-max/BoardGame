@@ -212,7 +212,7 @@ describe('AI seat controller helpers', () => {
         });
 
         expect(controllers['0']).toEqual({ type: 'human' });
-        expect(controllers['1']).toEqual({ type: 'local-ai' });
+        expect(controllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
     });
 
     it('显式 seat 参数可以覆盖默认 controller', () => {
@@ -233,14 +233,30 @@ describe('AI seat controller helpers', () => {
             aiSupport,
             seatControllers: {
                 '0': { type: 'human' },
-                '1': { type: 'local-ai', policyId: 'opening-v1' },
+                '1': { type: 'local-ai', policyId: 'opening-v1', difficulty: 'hard' },
                 '2': { type: 'remote-ai', providerId: 'astrbot' },
             },
         });
 
         expect(search.get('players')).toBe('3');
         expect(search.get('seat1')).toBe('local-ai:opening-v1');
+        expect(search.get('seat1Difficulty')).toBe('hard');
         expect(search.get('seat2')).toBe('remote-ai:astrbot');
+    });
+
+    it('显式 difficulty 参数会恢复到 local-ai controller', () => {
+        const searchParams = new URLSearchParams('seat1=local-ai:opening-v1&seat1Difficulty=expert');
+        const controllers = resolveSeatControllersFromSearchParams({
+            numPlayers: 2,
+            searchParams,
+            aiSupport,
+        });
+
+        expect(controllers['1']).toEqual({
+            type: 'local-ai',
+            policyId: 'opening-v1',
+            difficulty: 'expert',
+        });
     });
 
     it('AI controller 默认使用统一最小时长，并支持自定义覆盖', () => {

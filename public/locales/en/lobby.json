@@ -269,6 +269,13 @@
       "local": "Local AI",
       "remote": "Remote AI"
     },
+    "difficulty": "Difficulty",
+    "difficulties": {
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard",
+      "expert": "Expert"
+    },
     "policyId": "Policy ID",
     "policyPlaceholder": "Leave blank for default policy",
     "providerId": "Provider ID",
