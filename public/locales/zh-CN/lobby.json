@@ -64,6 +64,7 @@
     "empty": "暂无活跃房间",
     "matchTitle": "对局 #{{id}}",
     "mine": "我的",
+    "seatSeparator": " / ",
     "emptySlot": "空位",
     "ownerMustReconnect": "这是您创建的房间，请重连进入",
     "ownerRejoinOnly": "空房间仅房主可重连（游客需使用原浏览器/设备，清理缓存后需重新创建）",
@@ -98,6 +99,43 @@
     "game": "作品：{{game}}",
     "hint": "当前先展示电子化作者署名，后续如有更完整的作者介绍，会从这里展开。",
     "close": "关闭"
+  },
+  "packageManager": {
+    "cardLabel": "{{game}} 移动端包管理",
+    "eyebrow": "移动端包",
+    "mode": "按需下载",
+    "notInstalled": "未安装",
+    "notInstalledHint": "首次进入 {{game}} 前，需要先下载对应的代码包和素材包。",
+    "installAction": "安装游戏包",
+    "confirmEyebrow": "安装确认",
+    "confirmTitle": "下载 {{game}} 游戏包",
+    "confirmDescription": "本次会为当前游戏准备独立的代码包与素材包，未游玩的其他游戏不会一起下载。",
+    "confirmHint": "实际下载大小和进度将以发布清单与下载器返回结果为准；当前阶段先接入确认流程和预览结构。",
+    "modalHint": "真实下载器接入前，这里先承接状态同步、失败回退和进度骨架展示。",
+    "confirmAction": "确认下载",
+    "totalSize": "预计下载大小",
+    "modulePack": "代码包",
+    "assetPack": "素材包",
+    "packIdUnknown": "包标识待同步",
+    "sizeUnknown": "大小待同步",
+    "backendPending": "真实下载器尚未接入，当前先展示确认流程、大小预览和进度条骨架。",
+    "failedTitle": "待接入下载器",
+    "failedHint": "当前还没有真实下载服务，稍后接入发布清单和下载器后，这里会切成真实进度。",
+    "retryAction": "重新发起",
+    "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",
+    "progress": {
+      "label": "当前进度",
+      "percent": "{{percent}}%",
+      "pendingPercent": "等待中",
+      "queuedTitle": "准备下载",
+      "queuedHint": "正在整理当前游戏需要的下载任务。",
+      "manifestTitle": "读取清单",
+      "manifestHint": "正在等待发布清单和真实下载器接入。",
+      "downloadTitle": "下载中",
+      "downloadHint": "真实下载接入后，这里会显示当前包的下载进度。",
+      "verifyTitle": "校验中",
+      "verifyHint": "真实下载完成后，这里会显示校验和激活阶段。"
+    }
   },
   "player": {
     "guest": "游客{{id}}"
@@ -298,7 +336,8 @@
     "multiSelectButton": "已选 {{count}} 项",
     "multiSelectSelected": "已启用 {{count}} 项",
     "multiSelectNone": "未启用",
-    "removeSelectedOption": "取消 {{label}}"
+    "removeSelectedOption": "取消 {{label}}",
+    "confirm": "确认创建"
   },
   "socket": {
     "invalidGameId": "非法 gameId，已忽略订阅: {{value}}",

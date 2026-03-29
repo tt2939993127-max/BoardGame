@@ -1,10 +1,10 @@
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { loadGameImplementation, getGameImplementation } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
-import { getGamePageDataAttributes } from '../games/mobileSupport';
+import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
@@ -17,11 +17,14 @@ import { useToast } from '../contexts/ToastContext';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import {
+    buildLocalMatchSetupData,
     resolveLocalMatchPlayerCount,
+    resolveSetupSelectionsFromSearchParams,
     resolveSeatControllersFromSearchParams,
 } from '../engine/ai';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { createLocalMatchSeed, ensureLocalMatchSeedSearchParams } from '../engine/transport/localSession';
 
 // 教程系统正常拦截，不弹 toast
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -30,6 +33,7 @@ export const LocalMatchRoom = () => {
     usePerformanceMonitor();
     const { gameId } = useParams();
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const { t, i18n } = useTranslation('lobby');
     const toast = useToast();
     const {
@@ -39,7 +43,12 @@ export const LocalMatchRoom = () => {
     } = useGameNamespaceReady(gameId, i18n);
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
-    const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
+    const gamePageDataAttributes = useMemo(
+        () => getGamePageDataAttributes(gameId, gameConfig),
+        [gameConfig, gameId],
+    );
+
+    useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     // 异步加载游戏实现
     const [gameImplReady, setGameImplReady] = useState(false);
@@ -55,9 +64,22 @@ export const LocalMatchRoom = () => {
         return () => { cancelled = true; };
     }, [gameId]);
 
-    // 从地址参数获取种子，如果没有则生成新的
     const seedFromUrl = searchParams.get('seed');
-    const gameSeed = seedFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const fallbackSeedRef = useRef(seedFromUrl || createLocalMatchSeed());
+    const gameSeed = seedFromUrl || fallbackSeedRef.current;
+
+    useEffect(() => {
+        if (seedFromUrl) return;
+        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeedRef.current);
+        navigate(
+            {
+                pathname: gameId ? `/play/${gameId}/local` : undefined,
+                search: `?${nextSearch.toString()}`,
+            },
+            { replace: true },
+        );
+    }, [gameId, navigate, searchParams, seedFromUrl]);
+
     const localPlayerCount = resolveLocalMatchPlayerCount(searchParams.get('players'), gameConfig?.playerOptions);
     const seatControllers = useMemo(
         () => resolveSeatControllersFromSearchParams({
@@ -66,6 +88,17 @@ export const LocalMatchRoom = () => {
             aiSupport: gameConfig?.ai,
         }),
         [gameConfig?.ai, localPlayerCount, searchParams],
+    );
+    const setupSelections = useMemo(
+        () => resolveSetupSelectionsFromSearchParams({
+            gameManifest: gameConfig,
+            searchParams,
+        }),
+        [gameConfig, searchParams],
+    );
+    const localSetupData = useMemo(
+        () => buildLocalMatchSetupData(setupSelections),
+        [setupSelections],
     );
     const hasAiSeat = useMemo(
         () => Object.values(seatControllers).some((controller) => controller.type !== 'human'),
@@ -139,12 +172,15 @@ export const LocalMatchRoom = () => {
                         <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
                             {engineConfig && WrappedBoard ? (
                                 <LocalGameProvider
+                                    key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
                                     config={engineConfig}
                                     numPlayers={localPlayerCount}
                                     seed={gameSeed}
+                                    setupData={localSetupData}
                                     onCommandRejected={handleCommandRejected}
                                     seatControllers={seatControllers}
                                     followCurrentTurnPlayer
+                                    persistSession
                                 >
                                     <BoardBridge
                                         board={WrappedBoard}

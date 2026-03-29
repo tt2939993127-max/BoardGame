@@ -32,7 +32,7 @@ import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { getGameServerUrl } from '../config/server';
 import { getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
-import { getGamePageDataAttributes } from '../games/mobileSupport';
+import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
@@ -131,10 +131,15 @@ export const MatchRoom = () => {
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
-    const gamePageDataAttributes = getGamePageDataAttributes(gameId, gameConfig);
+    const gamePageDataAttributes = useMemo(
+        () => getGamePageDataAttributes(gameId, gameConfig),
+        [gameConfig, gameId],
+    );
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+
+    useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
     const [gameImplReady, setGameImplReady] = useState(false);

@@ -64,6 +64,7 @@
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",
     "mine": "Mine",
+    "seatSeparator": " / ",
     "emptySlot": "Empty",
     "ownerMustReconnect": "This is your room. Please reconnect.",
     "ownerRejoinOnly": "Only the room owner can rejoin an empty room (guests must use the original browser/device; clearing storage requires creating a new room)",
@@ -98,6 +99,43 @@
     "game": "Work: {{game}}",
     "hint": "This entry currently shows the credited digital edition author. More detailed creator info can expand here later.",
     "close": "Close"
+  },
+  "packageManager": {
+    "cardLabel": "{{game}} mobile package management",
+    "eyebrow": "Mobile Package",
+    "mode": "On-demand",
+    "notInstalled": "Not installed",
+    "notInstalledHint": "Before entering {{game}} on mobile, download its code pack and asset pack first.",
+    "installAction": "Install Pack",
+    "confirmEyebrow": "Install Confirm",
+    "confirmTitle": "Download {{game}} packages",
+    "confirmDescription": "This download prepares a dedicated code pack and asset pack for the current game only.",
+    "confirmHint": "Final size and progress will come from the release manifest and downloader. This stage wires in the confirmation flow and preview shell first.",
+    "modalHint": "Until the real downloader is wired in, this area handles state sync, failure fallback, and the progress shell.",
+    "confirmAction": "Confirm Download",
+    "totalSize": "Estimated Download",
+    "modulePack": "Code Pack",
+    "assetPack": "Asset Pack",
+    "packIdUnknown": "Pack ID pending",
+    "sizeUnknown": "Pending manifest",
+    "backendPending": "The real downloader is not wired in yet. This flow currently shows the confirmation, size preview, and progress shell only.",
+    "failedTitle": "Downloader Pending",
+    "failedHint": "The real download service is not connected yet. This card will switch to real progress once the manifest and downloader are in place.",
+    "retryAction": "Retry",
+    "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
+    "progress": {
+      "label": "Progress",
+      "percent": "{{percent}}%",
+      "pendingPercent": "Pending",
+      "queuedTitle": "Preparing",
+      "queuedHint": "Preparing the package list for the current game.",
+      "manifestTitle": "Reading Manifest",
+      "manifestHint": "Waiting for the release manifest and real downloader integration.",
+      "downloadTitle": "Downloading",
+      "downloadHint": "This area will show per-package download progress once the real downloader is connected.",
+      "verifyTitle": "Verifying",
+      "verifyHint": "After real downloads finish, this area will show verification and activation progress."
+    }
   },
   "player": {
     "guest": "Guest{{id}}"
@@ -298,7 +336,8 @@
     "multiSelectButton": "{{count}} selected",
     "multiSelectSelected": "{{count}} enabled",
     "multiSelectNone": "Disabled",
-    "removeSelectedOption": "Remove {{label}}"
+    "removeSelectedOption": "Remove {{label}}",
+    "confirm": "Create Room"
   },
   "socket": {
     "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",
