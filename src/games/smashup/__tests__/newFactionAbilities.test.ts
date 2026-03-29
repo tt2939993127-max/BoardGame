@@ -229,6 +229,36 @@ describe('Vikings abilities', () => {
         expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
     });
 
+    it('vikings_shield_maiden 可以跳过可选揭示', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('sm-1', 'vikings_shield_maiden', 'minion', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('top-action', 'wizard_summon', 'action', '1')],
+                }),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'sm-1', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const skip = prompt.data.options.find((entry: any) => entry.value?.skip === true);
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: skip.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-action')).toBe(false);
+        expect(resolved.finalState.core.players['1'].deck[0]?.uid).toBe('top-action');
+    });
+
     it('vikings_pillage 会从目标玩家手牌中随机拿走一张牌', () => {
         const core = makeState({
             players: {
@@ -259,6 +289,108 @@ describe('Vikings abilities', () => {
 
         expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'victim-1')).toBe(true);
         expect(resolved.finalState.core.players['1'].hand.some(card => card.uid === 'victim-1')).toBe(false);
+    });
+
+    it('vikings_raiding_party 会把揭示的低力量随从作为额外随从直接打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('rp-1', 'vikings_raiding_party', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('top-minion', 'robot_microbot_alpha', 'minion', '1')],
+                }),
+            },
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'rp-1' } },
+            defaultTestRandom,
+        );
+        const playerPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const playerOption = playerPrompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const afterPlayer = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: playerOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const choicePrompt = getInteractionsFromMS(afterPlayer.finalState)[0] as any;
+        const cardOption = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-minion');
+        const afterChoice = runCommand(
+            afterPlayer.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: cardOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const basePrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        expect(basePrompt?.data?.sourceId).toBe('vikings_raiding_party_minion_base');
+        const baseOption = basePrompt.data.options.find((entry: any) => entry.value?.baseIndex === 1);
+        const resolved = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: baseOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.bases[1].minions.some(minion => minion.uid === 'top-minion')).toBe(true);
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-minion')).toBe(false);
+        expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
+    });
+
+    it('vikings_raiding_party 选择需要基地的行动时会先选基地再作为额外行动打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('rp-1', 'vikings_raiding_party', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('top-action', 'trickster_enshrouding_mist', 'action', '1')],
+                }),
+            },
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'rp-1' } },
+            defaultTestRandom,
+        );
+        const playerPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const playerOption = playerPrompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const afterPlayer = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: playerOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const choicePrompt = getInteractionsFromMS(afterPlayer.finalState)[0] as any;
+        const cardOption = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-action');
+        const afterChoice = runCommand(
+            afterPlayer.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: cardOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const basePrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        expect(basePrompt?.data?.sourceId).toBe('vikings_raiding_party_action_base');
+        const baseOption = basePrompt.data.options.find((entry: any) => entry.value?.baseIndex === 1);
+        const resolved = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: baseOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.bases[1].ongoingActions.some(action => action.uid === 'top-action')).toBe(true);
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-action')).toBe(false);
+        expect(resolved.finalState.core.players['0'].actionsPlayed).toBe(1);
     });
 });
 

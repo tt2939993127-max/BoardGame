@@ -1,50 +1,56 @@
-# Dice Throne 手牌图修正 E2E 证据
+# Dice Throne 手牌卡图验收证据
 
-## 用例
+## 本轮口径
 
-- 文件：`e2e/dicethrone-watch-out-spotlight.e2e.ts`
-- 用例名：`samurai and gunslinger hand area should show corrected hand card images`
-- 运行命令：
+- 问题对象：`dicethrone` 手牌里出现的卡图
+- 对照角色：`monk`
+- 目标角色：`samurai`、`gunslinger`
+- 本文只记录运行时正式素材链路，不再引用录入中间产物或临时裁图
 
-```bash
-node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai and gunslinger hand area should show corrected hand card images"
-```
+## 验证方式
 
-## 截图
+- 页面：本地 `http://127.0.0.1:4173/play/dicethrone`
+- 方式：Playwright 打开真实页面，注入最小手牌场景，保留本地资源门禁，不跳过正式图片加载
+- 额外校验：
+  - `samurai` / `gunslinger` 的 `hand-cards-atlas` 已纳入 DiceThrone 运行时图片预加载解析
+  - `CardPreview` 的 atlas 卡面不再在 4 秒后强行移除 shimmer 露出深蓝底板
 
-### 武士手牌区
+## 截图与观察
 
-![武士手牌区](../test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/samurai-and-gunslinger-hand-area-should-show-corrected-hand-card-images/10-samurai-hand-area.png)
+### 武士手牌
 
-观察结论：
+![武士手牌](../test-results/evidence-screenshots/dicethrone-hand-final/samurai-hand.png)
 
-- 手牌区中 3 张目标卡都显示为上半张目标卡内容，没有再混入下一张卡的标题条。
-- `肃穆之仪 II`、`正宗 II`、`叶隐之心 II` 的卡面主体都落在各自卡框内，没有出现之前那种“下半张内容串进来”的错位感。
-- 由于手牌本身有扇形重叠，卡牌会互相遮挡边缘，但可见部分都属于正确卡面，不是错误 slot 内容。
+观察：
 
-### 枪手手牌区
+- 手牌里两张武士卡在首帧可见状态下就是实际卡图，不再是整块深蓝底板。
+- 左侧 `肃穆之仪 II` 和右侧 `正宗 II` 都能看到各自标题区、正文区和插画区，不是透明区或空白区。
+- 两张牌只是正常扇形重叠，上沿有少量遮挡，没有出现“整体偏到透明区”的现象。
 
-![枪手手牌区](../test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/samurai-and-gunslinger-hand-area-should-show-corrected-hand-card-images/11-gunslinger-hand-area.png)
+### 枪手手牌
 
-观察结论：
+![枪手手牌](../test-results/evidence-screenshots/dicethrone-hand-final/gunslinger-hand.png)
 
-- 6 张目标卡已经按正确来源显示，顶部 3 张升级卡不再出现复合 slot 串图。
-- `手枪鞭打`、`标记目标`、`执法者` 现在显示的是对应短条卡面本体，位置居中，没有再错拿到别张卡的内容。
-- 枪手下排这 3 张仍然是短条视觉，不是完整竖卡；这是源图本身的半高内容特征，不再是“偏移”或“错裁到另一张卡”。
+观察：
 
-### 正常角色对照：狂战士手牌区
+- 手牌里的枪手卡同样直接显示正式卡图，没有先露深蓝底板。
+- 左卡可见 `枪托击打` 的标题和正文，右卡可见 `执法者` 的标题、费用区和正文区。
+- 两张牌都落在卡框可视区域内，仍然是正常重叠，不存在之前那种“只有底色、像裁到透明区”的表现。
 
-![狂战士手牌区](../test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/samurai-and-gunslinger-hand-area-should-show-corrected-hand-card-images/12-barbarian-hand-area-reference.png)
+### Monk 对照
 
-观察结论：
+![Monk 手牌对照](../test-results/evidence-screenshots/dicethrone-hand-final/monk-hand.png)
 
-- 正常角色的手牌卡面会从标题区一直延续到卡底，卡面主体基本填满整张手牌卡框。
-- 即使在扇形重叠下，仍然能明显看出每张牌都是完整竖卡，而不是半张卡或上下拼接的一段。
-- 这说明本轮问题不在 `HandArea` 的排布本身，而在武士/枪手少数卡牌的手牌图来源。
+观察：
+
+- `monk` 手牌继续正常显示，标题、插画和正文完整可见。
+- `samurai` / `gunslinger` 修复后的表现已经和 `monk` 回到同一类运行时效果：进入手牌后直接看到卡图，而不是蓝板。
+- 三组手牌都保留相同的扇形排布与重叠方式，说明问题不在 `HandArea` 布局，而在正式 hand atlas 的加载与显示时机。
 
 ## 结论
 
-- 这次修正已经落实到真实手牌区，不只是本地裁图目录。
-- 对照狂战士后可以明确：异常不是“手牌容器把整张卡摆歪了”，而是“卡面内容在手牌卡框里的来源错了”。
-- 武士问题表现为“复合 slot 被直接当成手牌图”，所以底部会串入下一张标题条；本轮已清掉这类串图。
-- 枪手问题表现为“复合 slot/拆卡来源错误”；本轮已改为正确来源。其中特定 3 张仍是短条，是素材本体特征，不再是手牌显示偏移。
+- 根因不是 atlas 裁切公式，也不是手牌排布偏移。
+- 根因是两点叠加：
+  - `samurai` / `gunslinger` 的 `hand-cards-atlas` 没有进入 DiceThrone 的正式预加载资源集合。
+  - atlas 卡面组件会在图片尚未完成时 4 秒后强行去掉 shimmer，直接露出深蓝底色。
+- 修复后，武士和枪手手牌已与 `monk` 对齐：真实手牌场景里直接显示正式卡图。

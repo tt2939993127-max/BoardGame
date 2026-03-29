@@ -5,7 +5,7 @@ import { hasPlayerTurnRestriction, isOperationRestricted } from './ongoingEffect
 import { getPlayerEffectivePowerOnBase } from './ongoingModifiers';
 import { mustUseBaseLimitedMinionQuota } from './utils';
 import { isCardMinionLike } from './utils';
-import { actionLikeNeedsPlayBase } from './utils';
+import { actionLikeNeedsPlayBase, actionLikeNeedsPlayMinion } from './utils';
 
 function isCurrentTurnPlayer(core: SmashUpCore, playerId: string): boolean {
     return core.turnOrder[core.currentPlayerIndex] === playerId;
@@ -154,6 +154,19 @@ export function validateActionPlaySemantics(
         }
         if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
             return { valid: false, error: '无效的基地索引' };
+        }
+    }
+
+    if (actionLikeNeedsPlayMinion(def)) {
+        if (!params.targetMinionUid) {
+            return { valid: false, error: '该行动卡需要选择目标随从' };
+        }
+        if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
+            return { valid: false, error: '该行动卡需要选择目标基地' };
+        }
+        const targetMinion = core.bases[targetBaseIndex]?.minions.find(minion => minion.uid === params.targetMinionUid);
+        if (!targetMinion) {
+            return { valid: false, error: '基地上没有该随从' };
         }
     }
 

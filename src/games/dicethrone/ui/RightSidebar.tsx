@@ -222,6 +222,7 @@ export const RightSidebar = ({
                     )}
                     <DiceTray
                         dice={dice}
+                        rollCount={rollCount}
                         onToggleLock={(id) => {
                             if (!canInteractDice) return;
                             onToggleLock(id);

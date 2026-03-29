@@ -18,6 +18,7 @@ import { isSpecialLimitBlocked } from './abilityHelpers';
 import { validateDeckTopRegularMinionPlaySemantics } from './playLegality';
 import {
     actionLikeNeedsPlayBase,
+    actionLikeNeedsPlayMinion,
     actionLikeNeedsResponseWindowBase,
     getActionLikeResponseWindowTiming,
     canUseBaseLimitedMinionQuota,
@@ -463,6 +464,19 @@ export function validate(
                 }
                 if (targetBase < 0 || targetBase >= core.bases.length) {
                     return { valid: false, error: '无效的基地索引' };
+                }
+            }
+            if (actionLikeNeedsPlayMinion(def)) {
+                const targetMinionUid = command.payload.targetMinionUid;
+                if (!targetMinionUid) {
+                    return { valid: false, error: '该行动卡需要选择目标随从' };
+                }
+                if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
+                    return { valid: false, error: '该行动卡需要选择目标基地' };
+                }
+                const targetMinion = core.bases[targetBase].minions.find(m => m.uid === targetMinionUid);
+                if (!targetMinion) {
+                    return { valid: false, error: '基地上没有该随从' };
                 }
             }
             if (subtype === 'ongoing') {

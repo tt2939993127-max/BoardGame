@@ -3,16 +3,18 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
-import { registerBaseAbility, type BaseAbilityContext } from '../domain/baseAbilities';
+import { registerActiveBaseAbility, registerBaseAbility, type BaseAbilityContext } from '../domain/baseAbilities';
 import { registerTrigger } from '../domain/ongoingEffects';
 import type { TriggerContext } from '../domain/ongoingEffects';
 import {
     addTempPower,
     buildAbilityFeedback,
+    buildBaseTargetOptions,
     buildMinionTargetOptions,
     buildStandardDrawEvents,
     createSkipOption,
     findMinionOnBases,
+    grantExtraAction,
     getMinionPower,
     peekDeckTop,
     revealDeckTop,
@@ -29,8 +31,11 @@ import type {
     SmashUpEvent,
     VpAwardedEvent,
 } from '../domain/types';
-import { SU_EVENTS } from '../domain/types';
-import { getCardDef } from '../data/cards';
+import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
+import { getBaseDef, getCardDef } from '../data/cards';
+import { actionLikeNeedsPlayBase } from '../domain/utils';
+import { execute } from '../domain/reducer';
+import { reduce } from '../domain/reduce';
 
 type PlayerChoice = { targetPlayerId: PlayerId };
 type HandChoice = { cardUid: string; defId: string };
@@ -55,7 +60,13 @@ export function registerVikingsAbilities(): void {
     registerTrigger('vikings_viking_funeral', 'onMinionDiscardedFromBase', vikingsVikingFuneralTrigger, { perInstance: true });
 
     registerBaseAbility('base_drakkar', 'onMinionPlayed', vikingsBaseDrakkarOnMinionPlayed);
-    registerBaseAbility('base_longhouse', 'onTurnStart', vikingsBaseLonghouseOnTurnStart, { mandatory: false });
+    registerActiveBaseAbility('base_longhouse', vikingsBaseLonghouseDuringTurn, {
+        canUse: (ctx) => {
+            const player = ctx.state.players[ctx.playerId];
+            const minions = ctx.state.bases[ctx.baseIndex]?.minions.filter(minion => minion.controller === ctx.playerId) ?? [];
+            return !!player && player.hand.length > 0 && minions.length > 0;
+        },
+    });
 }
 
 export function registerVikingsInteractionHandlers(): void {
@@ -69,6 +80,9 @@ export function registerVikingsInteractionHandlers(): void {
     registerInteractionHandler('vikings_cast_the_runes_order', handleVikingsCastTheRunesOrder);
     registerInteractionHandler('vikings_raiding_party_player', handleVikingsRaidingPartyPlayer);
     registerInteractionHandler('vikings_raiding_party_choice', handleVikingsRaidingPartyChoice);
+    registerInteractionHandler('vikings_raiding_party_minion_base', handleVikingsRaidingPartyMinionBase);
+    registerInteractionHandler('vikings_raiding_party_action_base', handleVikingsRaidingPartyActionBase);
+    registerInteractionHandler('vikings_raiding_party_action_minion', handleVikingsRaidingPartyActionMinion);
     registerInteractionHandler('vikings_berserk_card', handleVikingsBerserkCard);
     registerInteractionHandler('vikings_berserk_minion', handleVikingsBerserkMinion);
     registerInteractionHandler('base_drakkar', handleBaseDrakkar);
@@ -86,7 +100,7 @@ function vikingsHuscarlTalent(ctx: AbilityContext): AbilityResult {
         `vikings_huscarl_${ctx.now}`,
         ctx.playerId,
         '侍卫：选择一张手牌置于牌库顶，本随从在回合结束前 +2 力量',
-        buildHandCardOptions(player.hand),
+        [createSkipOption('跳过（不放牌）') as any, ...buildHandCardOptions(player.hand)] as any[],
         { sourceId: 'vikings_huscarl', targetType: 'generic' },
     );
     (interaction.data as any).continuationContext = { minionUid: source.minion.uid, baseIndex: source.baseIndex };
@@ -104,7 +118,7 @@ function vikingsShieldMaidenOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_shield_maiden_${ctx.now}`,
         ctx.playerId,
         '盾女：选择另一位玩家，展示其牌库顶的一张牌',
-        buildPlayerOptions(opponents),
+        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents)] as any[],
         { sourceId: 'vikings_shield_maiden', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -120,11 +134,11 @@ function vikingsRaiderTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `vikings_raider_${ctx.now}`,
         ctx.playerId,
-        `袭击者：选择 1-${Math.min(3, options.length)} 张手牌置于牌库顶，本随从每张 +1 力量`,
+        `袭击者：选择至多 ${Math.min(3, options.length)} 张手牌置于牌库顶，本随从每张 +1 力量`,
         options,
         { sourceId: 'vikings_raider', targetType: 'generic' },
         undefined,
-        { min: 1, max: Math.min(3, options.length) },
+        { min: 0, max: Math.min(3, options.length) },
     );
     (interaction.data as any).continuationContext = { minionUid: source.minion.uid, baseIndex: source.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -150,7 +164,7 @@ function vikingsValkyrieOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_valkyrie_${ctx.now}`,
         ctx.playerId,
         '女武神：选择另一位玩家弃牌堆中的一个随从',
-        options,
+        [createSkipOption('跳过（不取回）') as any, ...options] as any[],
         { sourceId: 'vikings_valkyrie', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -290,13 +304,13 @@ function vikingsBaseDrakkarOnMinionPlayed(ctx: BaseAbilityContext): AbilityResul
         `base_drakkar_${ctx.now}`,
         ctx.playerId,
         '德拉卡尔号：选择另一位玩家，展示其牌库顶的一张牌',
-        buildPlayerOptions(opponents),
+        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents)] as any[],
         { sourceId: 'base_drakkar', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-function vikingsBaseLonghouseOnTurnStart(ctx: BaseAbilityContext): AbilityResult {
+function vikingsBaseLonghouseDuringTurn(ctx: BaseAbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minions = ctx.state.bases[ctx.baseIndex]?.minions.filter(minion => minion.controller === ctx.playerId) ?? [];
     if (!player || player.hand.length === 0 || minions.length === 0) return { events: [] };
@@ -312,6 +326,7 @@ function vikingsBaseLonghouseOnTurnStart(ctx: BaseAbilityContext): AbilityResult
 }
 
 const handleVikingsHuscarl = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, _random: RandomFn, timestamp: number) => {
+    if ((value as any)?.skip) return { state, events: [] };
     const selected = value as HandChoice | undefined;
     const ctx = data?.continuationContext as { minionUid: string; baseIndex: number } | undefined;
     if (!selected?.cardUid || !selected.defId || ctx?.baseIndex === undefined) return { state, events: [] };
@@ -325,6 +340,7 @@ const handleVikingsHuscarl = (state: MatchState<SmashUpCore>, playerId: PlayerId
 };
 
 const handleVikingsShieldMaiden = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, _data: any, random: RandomFn, timestamp: number) => {
+    if ((value as any)?.skip) return { state, events: [] };
     const selected = value as PlayerChoice | undefined;
     if (!selected?.targetPlayerId) return { state, events: [] };
     const peek = peekDeckTop(state.core, random, selected.targetPlayerId, 'all', 'vikings_shield_maiden', timestamp);
@@ -352,6 +368,7 @@ const handleVikingsRaider = (state: MatchState<SmashUpCore>, playerId: PlayerId,
 };
 
 const handleVikingsValkyrie = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, _data: any, _random: RandomFn, timestamp: number) => {
+    if ((value as any)?.skip) return { state, events: [] };
     const selected = value as { cardUid?: string; ownerId?: PlayerId; defId?: string } | undefined;
     if (!selected?.cardUid || !selected.ownerId || !selected.defId) return { state, events: [] };
     return { state, events: [transferCard(selected.cardUid, selected.defId, selected.ownerId, playerId, 'vikings_valkyrie', timestamp)] };
@@ -494,24 +511,94 @@ const handleVikingsRaidingPartyPlayer = (state: MatchState<SmashUpCore>, playerI
     return { state: queueInteraction(state, interaction), events };
 };
 
-const handleVikingsRaidingPartyChoice = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, _random: RandomFn, timestamp: number) => {
+const handleVikingsRaidingPartyChoice = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, random: RandomFn, timestamp: number) => {
     const selected = value as RaidingPartyChoice | undefined;
     const ctx = data?.continuationContext as { targetPlayerId: PlayerId; remainingDeckUids: string[]; revealedCards: Array<{ uid: string; defId: string }> } | undefined;
     if (!ctx) return { state, events: [] };
     const chosenUid = selected && 'cardUid' in selected ? selected.cardUid : undefined;
     const remaining = ctx.revealedCards.filter(card => card.uid !== chosenUid);
-    const events: SmashUpEvent[] = [{
+    const reorderEvent: SmashUpEvent = {
         type: SU_EVENTS.DECK_REORDERED,
         payload: { playerId: ctx.targetPlayerId, deckUids: [...remaining.map(card => card.uid), ...ctx.remainingDeckUids] },
         timestamp,
-    } as DeckReorderedEvent];
-    if (selected && 'cardUid' in selected) {
-        events.push(transferCard(selected.cardUid, selected.defId, selected.ownerId, playerId, 'vikings_raiding_party', timestamp));
-        events.push(selected.type === 'action'
-            ? grantExtraAction(playerId, 'vikings_raiding_party', timestamp)
-            : grantExtraMinion(playerId, 'vikings_raiding_party', timestamp));
+    } as DeckReorderedEvent;
+
+    if (!selected || 'skip' in selected) {
+        return { state, events: [reorderEvent] };
     }
-    return { state, events };
+
+    if (selected.type === 'minion') {
+        if (state.core.bases.length === 1) {
+            return playRaidingPartyCard(state, playerId, selected, { baseIndex: 0 }, random, timestamp, [reorderEvent]);
+        }
+        const interaction = createSimpleChoice(
+            `vikings_raiding_party_minion_base_${timestamp}`,
+            playerId,
+            '突袭队：选择该额外随从要打出的基地',
+            buildBaseOptions(state.core),
+            { sourceId: 'vikings_raiding_party_minion_base', targetType: 'base' },
+        );
+        (interaction.data as any).continuationContext = { selected, reorderEvent };
+        return { state: queueInteraction(state, interaction), events: [] };
+    }
+
+    const actionDef = getCardDef(selected.defId) as any;
+    if (actionDef?.subtype === 'ongoing' && actionDef?.ongoingTarget === 'minion') {
+        const minionOptions = getAllMinionOptions(state.core, playerId);
+        if (minionOptions.length === 0) return { state, events: [reorderEvent] };
+        const interaction = createSimpleChoice(
+            `vikings_raiding_party_action_minion_${timestamp}`,
+            playerId,
+            '突袭队：选择该额外行动的目标随从',
+            minionOptions,
+            { sourceId: 'vikings_raiding_party_action_minion', targetType: 'minion' },
+        );
+        (interaction.data as any).continuationContext = { selected, reorderEvent };
+        return { state: queueInteraction(state, interaction), events: [] };
+    }
+
+    if (actionDef && (actionDef.subtype === 'ongoing' || actionLikeNeedsPlayBase(actionDef))) {
+        const interaction = createSimpleChoice(
+            `vikings_raiding_party_action_base_${timestamp}`,
+            playerId,
+            '突袭队：选择该额外行动的目标基地',
+            buildBaseOptions(state.core),
+            { sourceId: 'vikings_raiding_party_action_base', targetType: 'base' },
+        );
+        (interaction.data as any).continuationContext = { selected, reorderEvent };
+        return { state: queueInteraction(state, interaction), events: [] };
+    }
+
+    return playRaidingPartyCard(state, playerId, selected, {}, random, timestamp, [reorderEvent]);
+};
+
+const handleVikingsRaidingPartyMinionBase = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, random: RandomFn, timestamp: number) => {
+    const selectedBase = value as { baseIndex?: number } | undefined;
+    const ctx = data?.continuationContext as { selected: Exclude<RaidingPartyChoice, { skip: true }>; reorderEvent: SmashUpEvent } | undefined;
+    if (selectedBase?.baseIndex === undefined || !ctx) return { state, events: [] };
+    return playRaidingPartyCard(state, playerId, ctx.selected, { baseIndex: selectedBase.baseIndex }, random, timestamp, [ctx.reorderEvent]);
+};
+
+const handleVikingsRaidingPartyActionBase = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, random: RandomFn, timestamp: number) => {
+    const selectedBase = value as { baseIndex?: number } | undefined;
+    const ctx = data?.continuationContext as { selected: Exclude<RaidingPartyChoice, { skip: true }>; reorderEvent: SmashUpEvent } | undefined;
+    if (selectedBase?.baseIndex === undefined || !ctx) return { state, events: [] };
+    return playRaidingPartyCard(state, playerId, ctx.selected, { targetBaseIndex: selectedBase.baseIndex }, random, timestamp, [ctx.reorderEvent]);
+};
+
+const handleVikingsRaidingPartyActionMinion = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, random: RandomFn, timestamp: number) => {
+    const selectedMinion = value as { minionUid?: string; baseIndex?: number } | undefined;
+    const ctx = data?.continuationContext as { selected: Exclude<RaidingPartyChoice, { skip: true }>; reorderEvent: SmashUpEvent } | undefined;
+    if (!selectedMinion?.minionUid || selectedMinion.baseIndex === undefined || !ctx) return { state, events: [] };
+    return playRaidingPartyCard(
+        state,
+        playerId,
+        ctx.selected,
+        { targetBaseIndex: selectedMinion.baseIndex, targetMinionUid: selectedMinion.minionUid },
+        random,
+        timestamp,
+        [ctx.reorderEvent],
+    );
 };
 
 const handleVikingsBerserkCard = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, _data: any, _random: RandomFn, timestamp: number) => {
@@ -551,7 +638,8 @@ const handleVikingsBerserkMinion = (state: MatchState<SmashUpCore>, playerId: Pl
     };
 };
 
-const handleBaseDrakkar = (state: MatchState<SmashUpCore>, _playerId: PlayerId, value: unknown, _data: any, random: RandomFn, timestamp: number) => {
+const handleBaseDrakkar = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, _data: any, random: RandomFn, timestamp: number) => {
+    if ((value as any)?.skip) return { state, events: [] };
     const selected = value as PlayerChoice | undefined;
     if (!selected?.targetPlayerId) return { state, events: [] };
     const peek = peekDeckTop(state.core, random, selected.targetPlayerId, 'all', 'base_drakkar', timestamp);
@@ -560,11 +648,7 @@ const handleBaseDrakkar = (state: MatchState<SmashUpCore>, _playerId: PlayerId, 
     const eligible = peek.card.type === 'action' || (peek.card.type === 'minion' && (def?.power ?? 99) <= 3);
     const events: SmashUpEvent[] = [...peek.events];
     if (eligible) {
-        events.push({
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: selected.targetPlayerId, count: 1, cardUids: [peek.card.uid] },
-            timestamp,
-        } as SmashUpEvent);
+        events.push(transferCard(peek.card.uid, peek.card.defId, selected.targetPlayerId, playerId, 'base_drakkar', timestamp));
     }
     return { state, events };
 };
@@ -641,6 +725,28 @@ function buildPlayerOptions(playerIds: PlayerId[]) {
         value: { targetPlayerId },
         displayMode: 'button' as const,
     }));
+}
+
+function buildBaseOptions(state: SmashUpCore) {
+    return buildBaseTargetOptions(
+        state.bases.map((base, baseIndex) => ({
+            baseIndex,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
+        })),
+        state,
+    ) as any[];
+}
+
+function getAllMinionOptions(state: SmashUpCore, sourcePlayerId: PlayerId) {
+    const candidates = state.bases.flatMap((base, baseIndex) => (
+        base.minions.map(minion => ({
+            uid: minion.uid,
+            defId: minion.defId,
+            baseIndex,
+            label: `${getCardDef(minion.defId)?.name ?? minion.defId}（力量 ${getMinionPower(state, minion, baseIndex)}）`,
+        }))
+    ));
+    return buildMinionTargetOptions(candidates, { state, sourcePlayerId }) as any[];
 }
 
 function collectRansackTargets(state: SmashUpCore) {
@@ -733,6 +839,78 @@ function isRaidingPartyPlayable(card: CardInstance): boolean {
     return ((getCardDef(card.defId) as any)?.power ?? 99) <= 4;
 }
 
+function cloneSysForSimulatedExecute(state: MatchState<SmashUpCore>) {
+    return {
+        ...state.sys,
+        interaction: state.sys.interaction
+            ? {
+                ...state.sys.interaction,
+                queue: [...(state.sys.interaction.queue ?? [])],
+            }
+            : { queue: [] },
+    } as MatchState<SmashUpCore>['sys'];
+}
+
+function playRaidingPartyCard(
+    state: MatchState<SmashUpCore>,
+    playerId: PlayerId,
+    selected: Exclude<RaidingPartyChoice, { skip: true }>,
+    targets: { baseIndex?: number; targetBaseIndex?: number; targetMinionUid?: string },
+    random: RandomFn,
+    timestamp: number,
+    prefixEvents: SmashUpEvent[],
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
+    const transferEvent = transferCard(selected.cardUid, selected.defId, selected.ownerId, playerId, 'vikings_raiding_party', timestamp);
+    const simulatedCore = reduce(state.core, transferEvent);
+    const simulatedState: MatchState<SmashUpCore> = {
+        ...state,
+        core: simulatedCore,
+        sys: cloneSysForSimulatedExecute(state),
+    };
+
+    const command = selected.type === 'minion'
+        ? {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId,
+            payload: { cardUid: selected.cardUid, baseIndex: targets.baseIndex ?? 0 },
+        }
+        : {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId,
+            payload: {
+                cardUid: selected.cardUid,
+                ...(targets.targetBaseIndex !== undefined ? { targetBaseIndex: targets.targetBaseIndex } : {}),
+                ...(targets.targetMinionUid ? { targetMinionUid: targets.targetMinionUid } : {}),
+            },
+        };
+
+    const playEvents = execute(simulatedState, command as any, random).map((event) => {
+        if (event.type === SU_EVENTS.MINION_PLAYED && selected.type === 'minion' && (event as any).payload.cardUid === selected.cardUid) {
+            return {
+                ...event,
+                payload: { ...(event as any).payload, consumesNormalLimit: false },
+            } as SmashUpEvent;
+        }
+        if (event.type === SU_EVENTS.ACTION_PLAYED && selected.type === 'action' && (event as any).payload.cardUid === selected.cardUid) {
+            return {
+                ...event,
+                payload: { ...(event as any).payload, isExtraAction: true },
+            } as SmashUpEvent;
+        }
+        return event;
+    });
+    const currentInteractionId = state.sys.interaction?.current?.interactionId;
+    const nextInteractionId = simulatedState.sys.interaction?.current?.interactionId;
+    const hasNewInteraction = (
+        !!nextInteractionId && nextInteractionId !== currentInteractionId
+    ) || ((simulatedState.sys.interaction?.queue?.length ?? 0) > (state.sys.interaction?.queue?.length ?? 0));
+
+    return {
+        state: hasNewInteraction ? { ...state, sys: simulatedState.sys } : state,
+        events: [transferEvent, ...prefixEvents, ...playEvents],
+    };
+}
+
 function transferCard(
     cardUid: string,
     defId: string,
@@ -760,22 +938,6 @@ function toDeckTop(
         payload: { cardUid, defId, ownerId: playerId, reason },
         timestamp,
     };
-}
-
-function grantExtraAction(playerId: PlayerId, reason: string, timestamp: number): SmashUpEvent {
-    return {
-        type: SU_EVENTS.LIMIT_MODIFIED,
-        payload: { playerId, limitType: 'action', delta: 1, reason },
-        timestamp,
-    } as SmashUpEvent;
-}
-
-function grantExtraMinion(playerId: PlayerId, reason: string, timestamp: number): SmashUpEvent {
-    return {
-        type: SU_EVENTS.LIMIT_MODIFIED,
-        payload: { playerId, limitType: 'minion', delta: 1, reason },
-        timestamp,
-    } as SmashUpEvent;
 }
 
 function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): number {

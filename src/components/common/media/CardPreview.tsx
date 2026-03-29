@@ -181,7 +181,6 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     // 避免 useEffect 异步更新导致的一帧 shimmer 闪烁
     const effectiveLoaded = loaded || preloaded;
     const checkKey = checkUrls.join('|');
-    const shimmerTimeoutMs = 4000;
     const [activeUrl, setActiveUrl] = useState(() => checkUrls.find(isUsableAtlasUrlLoaded) ?? checkUrls[0] ?? '');
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
@@ -225,14 +224,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         }
         setLoaded(false);
         let cancelled = false;
-        const timeoutId = window.setTimeout(() => {
-            if (!cancelled) {
-                setLoaded(true);
-            }
-        }, shimmerTimeoutMs);
-
         const markReady = () => {
-            window.clearTimeout(timeoutId);
             if (!cancelled) {
                 setLoaded(true);
             }
@@ -240,7 +232,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
 
         const tryLoad = (idx: number) => {
             if (idx >= checkUrls.length) {
-                markReady(); // 全部失败也移除 shimmer
+                markReady(); // 全部候选都明确失败后再移除 shimmer
                 return;
             }
             const url = checkUrls[idx];
@@ -265,10 +257,8 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         tryLoad(0);
         return () => {
             cancelled = true;
-            window.clearTimeout(timeoutId);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [checkKey, source?.image, effectiveLocale, shimmerTimeoutMs]);
+    }, [checkKey, source?.image, effectiveLocale]);
 
     // Fallback：source 为 undefined 时（CriticalImageGate 预加载超时/失败），
     // 自行加载图片获取尺寸，触发懒解析提升

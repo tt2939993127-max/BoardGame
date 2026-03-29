@@ -29,6 +29,7 @@ import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import {
     triggerBaseAbilityWithMS,
+    getInteractionsFromMS,
     getInteractionsFromResult,
     makeMatchState,
     findInteractionOption,
@@ -1245,7 +1246,7 @@ describe('base_crypt: 地窖 - 可选触发', () => {
 });
 
 describe('Oops Vikings bases', () => {
-    it('base_drakkar 首次有随从打到这里时会提示选择另一位玩家', () => {
+    it('base_drakkar 首次有随从打到这里时会提示选择另一位玩家并把合格牌抽到发动者手里', () => {
         const result = triggerBaseAbilityWithMS('base_drakkar', 'onMinionPlayed', {
             state: makeState({
                 bases: [{
@@ -1282,6 +1283,7 @@ describe('Oops Vikings bases', () => {
 
         const prompt = getInteractionsFromResult(result)[0] as any;
         expect(prompt?.data?.sourceId).toBe('base_drakkar');
+        expect(prompt.data.options.some((entry: any) => entry.value?.skip === true)).toBe(true);
 
         const option = prompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
         const resolved = runCommand(
@@ -1290,40 +1292,41 @@ describe('Oops Vikings bases', () => {
             defaultTestRandom,
         );
 
-        expect(resolved.finalState.core.players['1'].hand.some(card => card.uid === 'd1')).toBe(true);
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'd1')).toBe(true);
+        expect(resolved.finalState.core.players['1'].hand.some(card => card.uid === 'd1')).toBe(false);
         expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
     });
 
-    it('base_longhouse 会把手牌置于牌库顶并给此基地的己方随从 +2 力量', () => {
-        const result = triggerBaseAbilityWithMS('base_longhouse', 'onTurnStart', {
-            state: makeState({
-                bases: [{
-                    defId: 'base_longhouse',
-                    minions: [makeMinion('m1', '0', 4)],
-                    ongoingActions: [],
-                }],
-                players: {
-                    '0': {
-                        id: '0', vp: 0,
-                        hand: [makeCard('h1', '0', 'robot_microbot_alpha')],
-                        deck: [], discard: [],
-                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
-                        factions: [SMASHUP_FACTION_IDS.VIKINGS, SMASHUP_FACTION_IDS.ALIENS],
-                    },
-                } as any,
-            }),
-            baseIndex: 0,
-            baseDefId: 'base_longhouse',
-            playerId: '0',
-            now: 1001,
+    it('base_longhouse 改为主动基地能力：使用后会把手牌置于牌库顶并给此基地己方随从 +2 力量', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_longhouse',
+                minions: [makeMinion('m1', '0', 4)],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0', vp: 0,
+                    hand: [makeCard('h1', '0', 'robot_microbot_alpha')],
+                    deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.VIKINGS, SMASHUP_FACTION_IDS.ALIENS],
+                },
+            } as any,
         });
 
-        const cardPrompt = getInteractionsFromResult(result)[0] as any;
+        const started = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.USE_BASE_ABILITY, playerId: '0', payload: { baseIndex: 0 } } as any,
+            defaultTestRandom,
+        );
+
+        const cardPrompt = getInteractionsFromMS(started.finalState)[0] as any;
         expect(cardPrompt?.data?.sourceId).toBe('base_longhouse_card');
 
         const chooseCard = cardPrompt.data.options.find((entry: any) => entry.value?.cardUid === 'h1');
         const afterCard = runCommand(
-            result.matchState!,
+            started.finalState,
             { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseCard.id } } as any,
             defaultTestRandom,
         );

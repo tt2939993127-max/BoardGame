@@ -1131,6 +1131,82 @@ describe('ancient_egyptians audit regressions', () => {
         expect(resolved?.events.some((event: any) => event.type === SU_EVENTS.BURIED_CARD_UNCOVERED)).toBe(true);
     });
 
+    it('Ancient Curse 在目标有 +1 指示物时提供可选交互，只有确认才会移除', () => {
+        const executor = resolveAbility('ancient_egyptians_ancient_curse', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const target = makeMinion('curse-target', 'robot_warbot', '1', 4, { powerModifier: 0, powerCounters: 2 });
+        const core = makeState({
+            bases: [makeBase({ minions: [target] })],
+        });
+
+        const result = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'curse-card',
+            defId: 'ancient_egyptians_ancient_curse',
+            baseIndex: 0,
+            targetMinionUid: 'curse-target',
+            random: dummyRandom,
+            now: 4,
+        });
+        const prompt = result.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_ancient_curse_confirm');
+
+        const handler = getInteractionHandler('ancient_egyptians_ancient_curse_confirm');
+        expect(handler).toBeDefined();
+
+        const skipOption = prompt.data.options.find((option: any) => option.value?.skip);
+        const skipped = handler!(result.matchState!, '0', skipOption.value, prompt.data, dummyRandom, 5);
+        expect(skipped.events).toHaveLength(0);
+
+        const applyOption = prompt.data.options.find((option: any) => option.value?.apply);
+        const applied = handler!(result.matchState!, '0', applyOption.value, prompt.data, dummyRandom, 6);
+        const removed = applied.events.find((event: any) => event.type === SU_EVENTS.POWER_COUNTER_REMOVED) as any;
+        expect(removed).toBeDefined();
+        expect(removed.payload.minionUid).toBe('curse-target');
+        expect(removed.payload.amount).toBe(1);
+    });
+
+    it('Pharaoh 在计分前翻开普通行动时会直接弃置而不打出', () => {
+        const pharaoh = makeMinion('pharaoh-plain', 'ancient_egyptians_pharaoh', '0', 5, { powerModifier: 0 });
+        const core = makeState({
+            bases: [makeBase({
+                minions: [pharaoh],
+                buriedCards: [
+                    {
+                        uid: 'curse-buried',
+                        defId: 'ancient_egyptians_ancient_curse',
+                        trueOwnerId: '0',
+                        controllerId: '0',
+                        buriedFrom: 'hand',
+                    },
+                ],
+            })],
+        });
+
+        const triggered = fireTriggers(core, 'beforeScoring', {
+            state: core,
+            matchState: { core, sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } } } as any,
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 7,
+        });
+        const prompt = triggered.matchState?.sys.interaction.current as any;
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'curse-buried');
+        const handler = getInteractionHandler('ancient_egyptians_pharaoh_before_scoring');
+        expect(handler).toBeDefined();
+
+        const resolved = handler!(triggered.matchState!, '0', option.value, prompt.data, dummyRandom, 8);
+        const uncoverEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.BURIED_CARD_UNCOVERED) as any;
+        expect(uncoverEvent?.payload?.discardWithoutPlay).toBe(true);
+        expect(resolved.events.some((event: any) => event.type === SU_EVENTS.ACTION_PLAYED)).toBe(false);
+        expect(resolved.events.some((event: any) => event.type === SU_EVENTS.ONGOING_ATTACHED)).toBe(false);
+        expect(resolved.events.some((event: any) => event.type === SU_EVENTS.TRIGGER_QUEUED)).toBe(true);
+    });
+
     it('Lost Knowledge 埋葬模式会排除自己并要求单独选择目标基地', () => {
         const executor = resolveAbility('ancient_egyptians_lost_knowledge', 'special');
         expect(executor).toBeDefined();

@@ -6,15 +6,15 @@
 - [x] 2.1 为 `Ancient Egyptians` 补齐 card defs 的 `abilityTags / subtype / 元数据`
 - [x] 2.2 实现 `Mummy / Priest of Anubis / Pharaoh / Pyramid Engineer` 与对应 action/base 能力
 - [x] 2.3 补齐埋葬链路 UI：己方埋葬牌可见、对手仅见隐藏占位、翻开/打出流程可操作
-- [ ] 2.4 从 `Ancient Egyptians` 开始执行首轮规则审计，覆盖 `bury / uncover / 目标基地 / 可见性 / 替代去向` 链路
+- [x] 2.4 从 `Ancient Egyptians` 开始执行首轮规则审计，覆盖 `bury / uncover / 目标基地 / 可见性 / 替代去向` 链路
 - [x] 2.5 为 `Ancient Egyptians` 补领域回归测试与 evidence；新交互 E2E 可延后到统一阶段，但审计结论不得延后
 
 ## 3. Vikings
-- [ ] 3.1 为 `Vikings` 补齐 card defs 的 `abilityTags / subtype / 元数据`
-- [ ] 3.2 实现 `Huscarl / Shield Maiden / Raider / Valkyrie` 与对应 action/base 能力
-- [ ] 3.3 复用 Ancient Egyptians 的埋葬 UI，并补足跨玩家 bury / forced discard / extra play 联动
-- [ ] 3.4 完成 `Vikings` 专项规则审计，覆盖 bury/discard/hidden-information 与共享链路扩审
-- [ ] 3.5 为 `Vikings` 补领域测试与派系 evidence，必要时补最小 E2E 证据
+- [x] 3.1 为 `Vikings` 补齐 card defs 的 `abilityTags / subtype / 元数据`
+- [x] 3.2 实现 `Huscarl / Shield Maiden / Raider / Valkyrie` 与对应 action/base 能力
+- [x] 3.3 复用 Ancient Egyptians 的埋葬 UI，并补足跨玩家 bury / forced discard / extra play 联动
+- [x] 3.4 完成 `Vikings` 专项规则审计，覆盖 bury/discard/hidden-information 与共享链路扩审
+- [x] 3.5 为 `Vikings` 补领域测试与派系 evidence，必要时补最小 E2E 证据
 
 ## 4. Cowboys
 - [ ] 4.1 为 `Cowboys` 补齐 card defs 的 `abilityTags / subtype / 元数据`
