@@ -1,7 +1,6 @@
 export type BrowserCompatibilityReason =
-    | 'css-oklch'
-    | 'css-translate'
-    | 'css-register-property';
+    | 'runtime-core'
+    | 'game-resize-observer';
 
 export interface BrowserCompatibilityReport {
     isCompatible: boolean;
@@ -20,22 +19,18 @@ interface BrowserSignature {
     pattern: RegExp;
 }
 
+const DEV_RESIZE_OBSERVER_REQUIRED_PREFIXES = [
+    '/dev/ugc',
+];
+
 const BROWSER_SIGNATURES: BrowserSignature[] = [
     { name: 'Edge', pattern: /Edg\/([\d.]+)/i },
     { name: 'Firefox', pattern: /Firefox\/([\d.]+)/i },
     { name: 'Samsung Internet', pattern: /SamsungBrowser\/([\d.]+)/i },
-    { name: 'Android WebView', pattern: /Version\/([\d.]+).*Chrome\/[\d.]+.*\bwv\b/i },
+    { name: 'Android WebView', pattern: /Chrome\/([\d.]+).*\bwv\b/i },
     { name: 'Chrome', pattern: /Chrome\/([\d.]+)/i },
     { name: 'Safari', pattern: /Version\/([\d.]+).*Safari/i },
 ];
-
-const supportsCssFeature = (property: string, value: string): boolean => {
-    if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
-        return false;
-    }
-
-    return CSS.supports(property, value);
-};
 
 const parseBrowserIdentity = (userAgent: string): { browserName: string; browserVersion: string | null } => {
     for (const signature of BROWSER_SIGNATURES) {
@@ -54,7 +49,14 @@ const parseBrowserIdentity = (userAgent: string): { browserName: string; browser
     };
 };
 
-export const detectBrowserCompatibility = (): BrowserCompatibilityReport => {
+const requiresResizeObserver = (pathname: string): boolean => {
+    if (DEV_RESIZE_OBSERVER_REQUIRED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+        return true;
+    }
+    return false;
+};
+
+export const detectBrowserCompatibility = (pathname = '/'): BrowserCompatibilityReport => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') {
         return {
             isCompatible: true,
@@ -69,19 +71,25 @@ export const detectBrowserCompatibility = (): BrowserCompatibilityReport => {
     const browserIdentity = parseBrowserIdentity(userAgent);
     const reasons: BrowserCompatibilityReason[] = [];
 
-    if (!supportsCssFeature('color', 'oklch(62.3% 0.214 259.815)')) {
-        reasons.push('css-oklch');
+    if (
+        typeof Promise === 'undefined'
+        || typeof Map === 'undefined'
+        || typeof Set === 'undefined'
+        || typeof Symbol === 'undefined'
+        || typeof URLSearchParams === 'undefined'
+        || typeof fetch !== 'function'
+    ) {
+        reasons.push('runtime-core');
     }
 
-    if (!supportsCssFeature('translate', '1px')) {
-        reasons.push('css-translate');
-    }
-
-    if (typeof CSS === 'undefined' || typeof (CSS as CSS & { registerProperty?: unknown }).registerProperty !== 'function') {
-        reasons.push('css-register-property');
+    if (requiresResizeObserver(pathname)) {
+        if (typeof ResizeObserver !== 'function') {
+            reasons.push('game-resize-observer');
+        }
     }
 
     return {
+        // 版本号只做识别展示；只有缺少项目当前没有 fallback 的关键能力时才拦截。
         isCompatible: reasons.length === 0,
         reasons,
         isAndroidWebView: /\bwv\b|; wv\)/i.test(userAgent),

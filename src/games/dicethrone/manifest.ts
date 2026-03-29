@@ -20,6 +20,12 @@ const entry: GameManifestEntry = {
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
     shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'dicethrone',
+        assetPackId: 'dicethrone',
+    },
     ai: {
         capture: true,
         localAi: true,

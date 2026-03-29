@@ -1,5 +1,6 @@
 import React from 'react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
+import { safeMatchMedia, subscribeMediaQueryChange } from '../../../lib/mediaQuery';
 import type { CardInstance } from '../domain/core-types';
 import { CardTransition, CardListTransition } from './CardTransition';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from '../imagePaths';
@@ -73,15 +74,15 @@ const DiscardCardFace: React.FC<DiscardCardFaceProps> = ({ card, onMagnify, clas
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const mediaQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+        const mediaQuery = safeMatchMedia('(hover: none), (pointer: coarse)');
         const syncTouchCapability = () => setIsTouchDevice(mediaQuery.matches || window.innerWidth < 1024);
 
         syncTouchCapability();
-        mediaQuery.addEventListener?.('change', syncTouchCapability);
+        const unsubscribeMediaQuery = subscribeMediaQueryChange(mediaQuery, syncTouchCapability);
         window.addEventListener('resize', syncTouchCapability);
 
         return () => {
-            mediaQuery.removeEventListener?.('change', syncTouchCapability);
+            unsubscribeMediaQuery();
             window.removeEventListener('resize', syncTouchCapability);
         };
     }, []);
