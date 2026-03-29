@@ -58,7 +58,7 @@ describe('Cardia - 交互系统', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('not in hand');
+            expect(result.error).toBe('card_not_in_hand');
         });
         
         it('应该拒绝空选择', () => {
@@ -72,7 +72,7 @@ describe('Cardia - 交互系统', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('No cards selected');
+            expect(result.error).toBe('no_cards_selected');
         });
         
         it('应该允许选择多张卡牌', () => {
@@ -119,7 +119,7 @@ describe('Cardia - 交互系统', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Invalid faction');
+            expect(result.error).toBe('invalid_faction');
         });
         
         it('应该允许所有四个派系', () => {
