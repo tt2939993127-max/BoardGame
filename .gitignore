@@ -129,6 +129,8 @@ temp/
 tmp/
 *.tmp
 .worktrees/
+.claude/worktrees/
+production/session-logs/
 
 # Kiro 临时文件
 .kiro/temp/

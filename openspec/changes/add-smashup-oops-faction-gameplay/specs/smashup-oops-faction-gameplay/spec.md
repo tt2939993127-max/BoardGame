@@ -22,6 +22,12 @@
 - **THEN** 系统 MUST 结算其 "when uncovered" 文本
 - **AND** MUST 在结算后将该牌置入弃牌堆，而不是按普通额外行动牌打出
 
+#### Scenario: Bury-this-card actions require an explicit target base when played
+- **GIVEN** 玩家从手牌打出 `You Can Take It With You`、`Tomb Trap`、`Blessing of Anubis` 或 `Seal the Tomb`
+- **WHEN** 该牌的规则要求“埋葬这张牌”或以埋葬方式落到基地
+- **THEN** 系统 MUST 要求玩家选择一个合法目标基地
+- **AND** MUST 将该牌放入所选基地的 `buriedCards`，而不是无目标移除
+
 #### Scenario: Owner sees buried cards while opponent sees hidden state only
 - **GIVEN** 某基地存在埋葬牌
 - **WHEN** 控制者查看该基地

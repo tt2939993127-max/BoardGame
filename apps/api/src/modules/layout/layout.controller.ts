@@ -1,7 +1,11 @@
 import { Body, Controller, Post, Req, Res, Inject } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { LayoutService } from './layout.service';
-import type { AbilitySlotLayoutItem } from './layout.service';
+import type {
+    AbilitySlotLayoutItem,
+    DiceThroneAbilityLayoutVersion,
+    DiceThroneAbilityLayoutsPayload,
+} from './layout.service';
 
 @Controller('layout')
 export class LayoutController {
@@ -42,7 +46,7 @@ export class LayoutController {
             return res.status(403).json({ error: '布局保存已禁用' });
         }
         try {
-            const payload = this.normalizeAbilityLayoutBody(body);
+            const payload = this.normalizeAbilityLayoutsPayload(body);
             if (!payload) {
                 return res.status(400).json({ error: '布局保存失败', message: 'layoutConfig.invalid', path: req.path });
             }
@@ -86,7 +90,26 @@ export class LayoutController {
         return null;
     }
 
-    private normalizeAbilityLayoutBody(body: unknown): AbilitySlotLayoutItem[] | null {
+    private normalizeAbilityLayoutsPayload(body: unknown): DiceThroneAbilityLayoutsPayload | null {
+        if (!body) return null;
+        const raw = this.normalizeBody(body);
+        const layouts = raw?.layouts as Record<string, unknown> | undefined;
+        if (!layouts || typeof layouts !== 'object') {
+            return null;
+        }
+
+        const versions: DiceThroneAbilityLayoutVersion[] = ['v1', 'v2'];
+        const normalizedLayouts = {} as Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+        for (const version of versions) {
+            const normalized = this.normalizeAbilityLayoutArray(layouts[version]);
+            if (!normalized) return null;
+            normalizedLayouts[version] = normalized;
+        }
+
+        return { layouts: normalizedLayouts };
+    }
+
+    private normalizeAbilityLayoutArray(body: unknown): AbilitySlotLayoutItem[] | null {
         const raw = this.normalizeArrayBody(body);
         if (!raw) return null;
         const normalized: AbilitySlotLayoutItem[] = [];

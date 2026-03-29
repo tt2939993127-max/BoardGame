@@ -125,3 +125,91 @@ export const AntIcon = ({ size = 24, strokeWidth = 2, ...props }: LucideProps) =
         <path d="M13.5 13 L17 16" />
     </svg>
 );
+
+// 5. 双斧图标 (Double Axe) - 用于维京人派系
+export const DoubleAxeIcon = ({ size = 24, strokeWidth = 2, ...props }: LucideProps) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <path d="M7 3L17 21" />
+        <path d="M17 3L7 21" />
+        <path d="M6.5 4.5C4.5 5.5 3.5 7 3.5 9.5C5.8 9.5 7.7 8.5 9 6.5" />
+        <path d="M17.5 4.5C19.5 5.5 20.5 7 20.5 9.5C18.2 9.5 16.3 8.5 15 6.5" />
+        <path d="M6 19.5C4.4 18.8 3.5 17.4 3.5 15.5C5.5 15.5 7.2 16.2 8.5 17.8" />
+        <path d="M18 19.5C19.6 18.8 20.5 17.4 20.5 15.5C18.5 15.5 16.8 16.2 15.5 17.8" />
+    </svg>
+);
+
+// 6. 金字塔图标 (Pyramid) - 用于古埃及人派系
+export const PyramidIcon = ({ size = 24, strokeWidth = 2, ...props }: LucideProps) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <path d="M12 3L3 20.5H21L12 3Z" />
+        <path d="M12 3V20.5" />
+        <path d="M8 11H16" />
+        <path d="M6 15.5H18" />
+    </svg>
+);
+
+// 7. 牛仔帽图标 (Cowboy Hat) - 用于牛仔派系
+export const CowboyHatIcon = ({ size = 24, strokeWidth = 2, ...props }: LucideProps) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <path d="M8 8C8.6 5.2 10 3.5 12 3.5C14 3.5 15.4 5.2 16 8" />
+        <path d="M7 8C6.8 10 6.4 11.8 5.8 13.4C7.6 14.3 9.8 14.8 12 14.8C14.2 14.8 16.4 14.3 18.2 13.4C17.6 11.8 17.2 10 17 8" />
+        <path d="M2.5 14.5C4.8 13.6 7.8 13.2 12 13.2C16.2 13.2 19.2 13.6 21.5 14.5" />
+        <path d="M3.5 16C5.8 18 8.5 19 12 19C15.5 19 18.2 18 20.5 16" />
+        <path d="M9.5 9.5H14.5" />
+    </svg>
+);
+
+// 8. 武士刀图标 (Katana) - 用于武士派系
+export const KatanaIcon = ({ size = 24, strokeWidth = 2, ...props }: LucideProps) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <path d="M4 19L17.5 5.5C18.6 4.4 20 3.8 21 4.2C21.4 5.2 20.8 6.6 19.7 7.7L6.2 21.2" />
+        <path d="M3 21H7" />
+        <path d="M5.3 17.7L7.8 20.2" />
+        <path d="M8.3 14.7L10.8 17.2" />
+        <path d="M2.5 21.5L6.5 17.5" />
+    </svg>
+);

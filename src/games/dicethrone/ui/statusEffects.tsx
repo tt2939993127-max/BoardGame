@@ -165,7 +165,7 @@ export const StatusEffectBadge = ({
     onClick?: () => void;
     clickable?: boolean;
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || { color: 'from-gray-500 to-gray-600' };
 
     // Check if sprite exists in the resolved atlas
@@ -479,12 +479,14 @@ export const SelectableStatusBadge = ({
             hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
         }
     }
+    const descriptionKey = `${i18nPrefix}.${effectId}.description`;
+    const nameKey = `${i18nPrefix}.${effectId}.name`;
     const description = resolveI18nList(
-        t(`${i18nPrefix}.${effectId}.description`, { returnObjects: true })
+        t(descriptionKey, { returnObjects: true, defaultValue: [] })
     );
     const info = {
         ...meta,
-        name: t(`${i18nPrefix}.${effectId}.name`) as string,
+        name: t(nameKey, { defaultValue: effectId }) as string,
         description,
     };
     const [isHovered, setIsHovered] = React.useState(false);

@@ -808,15 +808,19 @@ export const HandArea = ({
                                             <CardPreview
                                                 previewRef={card.previewRef}
                                                 locale={locale}
-                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] backface-hidden border border-slate-700"
-                                                style={{ backgroundColor: '#1e293b' }}
+                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
+                                                style={{
+                                                    backgroundColor: '#1e293b',
+                                                    backfaceVisibility: 'hidden',
+                                                }}
                                             />
                                             <div
-                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] backface-hidden border border-slate-700"
+                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
                                                 style={{
                                                     transform: 'rotateY(180deg)',
                                                     backgroundImage: cardBackImage,
                                                     backgroundSize: 'cover',
+                                                    backfaceVisibility: 'hidden',
                                                 }}
                                             />
                                         </motion.div>

@@ -16,7 +16,7 @@ import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { initAllAbilities } from '../abilities';
 import smashUpEnglishMap from '../data/englishAtlasMap.json';
-import { getAllBaseDefs, getBaseDefIdsForFactions } from '../data/cards';
+import { getAllBaseDefs, getBaseDefIdsForFactions, getFactionTitans } from '../data/cards';
 import { getSmashUpAtlasLookupKey } from '../ui/SmashUpCardRenderer';
 
 const PLAYER_IDS = ['0', '1'];
@@ -322,6 +322,16 @@ describe('派系选择系统', () => {
         it('POD 基地图集 lookup key 不会重复追加后缀', () => {
             expect(getSmashUpAtlasLookupKey('base_secret_garden_pod', true, true)).toBe('base_secret_garden_pod');
             expect(getSmashUpAtlasLookupKey('base_secret_garden', true, true)).toBe('base_secret_garden_pod');
+        });
+
+        it('按派系查询泰坦时，基础派系与 POD 变体都能回到同一张泰坦，未接入派系返回空数组', () => {
+            const pirateTitans = getFactionTitans(SMASHUP_FACTION_IDS.PIRATES);
+            const piratePodTitans = getFactionTitans(SMASHUP_FACTION_IDS.PIRATES_POD);
+            const alienTitans = getFactionTitans(SMASHUP_FACTION_IDS.ALIENS);
+
+            expect(pirateTitans.map((titan) => titan.id)).toContain('pirates_the_kraken');
+            expect(piratePodTitans.map((titan) => titan.id)).toContain('pirates_the_kraken');
+            expect(alienTitans).toEqual([]);
         });
     });
 });

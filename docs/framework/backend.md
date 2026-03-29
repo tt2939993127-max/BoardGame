@@ -39,7 +39,7 @@ src/server/
 
 ## 2. 端口与入口
 
-- **开发入口**：`http://localhost:5173`（同域代理详见 `docs/deploy.md`）
+- **开发入口**：`http://localhost:4173`（同域代理详见 `docs/deploy.md`）
 - **游戏服务**：`18000`（`GAME_SERVER_PORT`）
 - **认证/社交服务**：`18001`（`API_SERVER_PORT`，前缀 `/auth`）
 - **MongoDB**：`27017`

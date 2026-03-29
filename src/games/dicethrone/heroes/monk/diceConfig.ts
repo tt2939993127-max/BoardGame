@@ -3,6 +3,7 @@
  */
 
 import type { DiceDefinition } from '../../../../engine/primitives';
+import { versionedPublicFileUrl } from '../../../../lib/publicFileUrl';
 import { DICE_FACE_IDS } from '../../domain/ids';
 
 /**
@@ -28,7 +29,7 @@ export const monkDiceDefinition: DiceDefinition = {
         { value: 6, symbols: [DICE_FACE_IDS.LOTUS] },
     ],
     assets: {
-        spriteSheet: '/game-data/dicethrone/monk/dice-sprite.png',
+        spriteSheet: versionedPublicFileUrl('/game-data/dicethrone/monk/dice-sprite.png'),
     },
 };
 

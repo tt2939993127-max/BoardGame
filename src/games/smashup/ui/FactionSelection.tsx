@@ -5,7 +5,7 @@ import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
 import { FACTION_METADATA, getVisibleFactionMetadata } from './factionMeta';
 import type { PlayerId } from '../../../engine/types';
-import { getFactionCards, resolveCardName } from '../data/cards';
+import { getFactionCards, getFactionTitans, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { X, Check, Search, Layers, ZoomIn, Pencil, Lock } from 'lucide-react';
 import { UI_Z_INDEX } from '../../../core';
@@ -22,7 +22,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     const { t, i18n } = useTranslation('game-smashup');
     const selectionState = core.factionSelection;
     const [focusedFactionId, setFocusedFactionId] = useState<string | null>(null);
-    const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' } | null>(null);
+    const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' | 'titan' } | null>(null);
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window === 'undefined' ? 1440 : window.innerWidth,
         height: typeof window === 'undefined' ? 900 : window.innerHeight,
@@ -71,6 +71,9 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         )
         : 1;
     const useScaledLandscapeModal = isMobileLandscape && mobileLandscapeScale < 0.98;
+    const focusedFactionMeta = focusedFactionId
+        ? FACTION_METADATA.find((faction) => faction.id === focusedFactionId) ?? null
+        : null;
 
     const handleConfirmSelect = (factionId: string) => {
         if (!isMyTurn) return;
@@ -177,6 +180,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 whileHover={{ rotate: 0, scale: 1.05, zIndex: 30 }}
                                 transition={{ delay: idx * 0.03 }}
                                 onClick={() => setFocusedFactionId(faction.id)}
+                                data-testid={`faction-option-${faction.id}`}
                                 className={`
                                     group relative flex w-full flex-col items-center cursor-pointer
                                     ${isTaken ? 'opacity-40 grayscale pointer-events-none' : 'z-10'}
@@ -240,49 +244,40 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
             <AnimatePresence>
                 {focusedFactionId && (
                     <div
-                        className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 md:p-8"
+                        className="pointer-events-none fixed inset-x-2 top-[5.25rem] bottom-[5.5rem] sm:inset-x-3 sm:top-[5.75rem] sm:bottom-[5.75rem] md:inset-x-4 md:top-[6.25rem] md:bottom-[6rem] flex items-stretch justify-end"
                         style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                     >
-                        {/* Backdrop */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setFocusedFactionId(null)}
-                            className="absolute inset-0 bg-black/80"
-                        />
-
-                        {/* Modal Content - Rulebook/Clipboard style */}
-                        <div
-                            className="relative flex items-center justify-center"
-                            style={useScaledLandscapeModal
-                                ? {
-                                    width: modalDesignWidth * mobileLandscapeScale,
-                                    height: modalDesignHeight * mobileLandscapeScale,
-                                }
-                                : {
-                                    width: '100%',
-                                    maxWidth: '80rem',
-                                    height: isMobileLandscape ? '100%' : undefined,
-                                }}
-                        >
+                        <div className="pointer-events-auto flex h-full w-full justify-end">
                             <div
-                                className="relative"
+                                className="relative flex h-full items-center justify-center"
                                 style={useScaledLandscapeModal
                                     ? {
-                                        width: modalDesignWidth,
-                                        height: modalDesignHeight,
-                                        transform: `scale(${mobileLandscapeScale})`,
-                                        transformOrigin: 'center center',
+                                        width: modalDesignWidth * mobileLandscapeScale,
+                                        height: modalDesignHeight * mobileLandscapeScale,
                                     }
                                     : {
-                                        width: '100%',
+                                        width: 'min(78vw, 80rem)',
+                                        maxWidth: '80rem',
                                         height: '100%',
                                     }}
                             >
+                                <div
+                                    className="relative"
+                                    style={useScaledLandscapeModal
+                                        ? {
+                                            width: modalDesignWidth,
+                                            height: modalDesignHeight,
+                                            transform: `scale(${mobileLandscapeScale})`,
+                                            transformOrigin: 'center center',
+                                        }
+                                        : {
+                                            width: '100%',
+                                            height: '100%',
+                                        }}
+                                >
                             <motion.div
                                 layoutId={focusedFactionId}
-                                className="relative w-full max-w-5xl h-[92dvh] md:h-[85vh] min-h-0 bg-[#fdfdfd] border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.6)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged"
+                                className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
                                 style={useScaledLandscapeModal
                                     ? {
                                         width: modalDesignWidth,
@@ -291,9 +286,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
                                     }
                                     : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
-                                initial={{ scale: 0.9, opacity: 0, rotate: -2 }}
-                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                                exit={{ scale: 0.9, opacity: 0, rotate: 2 }}
+                                initial={{ x: 32, opacity: 0, scale: 0.97 }}
+                                animate={{ x: 0, opacity: 1, scale: 1 }}
+                                exit={{ x: 32, opacity: 0, scale: 0.97 }}
+                                data-testid="faction-detail-panel"
                             >
                             {/* Tape effect on top */}
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-white/60 z-50 -translate-y-4" />
@@ -301,6 +297,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             <button
                                 onClick={() => setFocusedFactionId(null)}
                                 className="absolute top-3 right-3 md:top-4 md:right-4 z-50 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-colors"
+                                data-testid="faction-detail-close"
                             >
                                 <X size={24} />
                             </button>
@@ -311,17 +308,20 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 <div
                                     className="absolute top-0 right-0 w-full h-full opacity-5 pointer-events-none blur-3xl saturate-200"
                                     style={{
-                                        backgroundColor: FACTION_METADATA.find(f => f.id === focusedFactionId)?.color || '#334155',
-                                        background: `radial-gradient(circle at top right, ${FACTION_METADATA.find(f => f.id === focusedFactionId)?.color}, transparent 70%)`
+                                        backgroundColor: focusedFactionMeta?.color || '#334155',
+                                        background: `radial-gradient(circle at top right, ${focusedFactionMeta?.color || '#334155'}, transparent 70%)`
                                     }}
                                 />
 
                                 {(() => {
-                                    const meta = FACTION_METADATA.find(f => f.id === focusedFactionId)!;
+                                    if (!focusedFactionMeta) return null;
+                                    const meta = focusedFactionMeta;
                                     const cards = getFactionCards(meta.id);
+                                    const titans = getFactionTitans(meta.id);
                                     const isTaken = takenFactions.has(meta.id);
                                     const isSelectedByMe = mySelections.includes(meta.id);
                                     const canSelect = isMyTurn && !isTaken && mySelections.length < 2 && !isSelectedByMe;
+                                    const titanGridCols = 'grid-cols-1';
 
                                     return (
                                         <>
@@ -344,6 +344,60 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 <p className="text-sm md:text-sm lg:text-base text-slate-600 leading-relaxed mb-4 lg:mb-8 font-medium">
                                                     {t(meta.descriptionKey)}
                                                 </p>
+                                            </div>
+
+                                            <div className="relative z-10 mb-4 lg:mb-6">
+                                                <div className="mb-2 flex items-center gap-2 text-slate-400">
+                                                    <Layers size={16} />
+                                                    <span className="text-xs font-black uppercase tracking-widest">
+                                                        {t('ui.faction_titan_preview', { defaultValue: '泰坦预览' })}
+                                                    </span>
+                                                </div>
+
+                                                <div
+                                                    className="rounded-sm border border-slate-200 bg-white/70 p-3 shadow-inner"
+                                                    data-testid="faction-titan-section"
+                                                >
+                                                    {titans.length > 0 ? (
+                                                        <div className={`grid ${titanGridCols} gap-3 md:gap-4`}>
+                                                            {titans.map((titan) => {
+                                                                const titanName = resolveCardName(titan, t) || titan.id;
+                                                                return (
+                                                                    <button
+                                                                        key={titan.id}
+                                                                        type="button"
+                                                                        onClick={() => setViewingCard({ defId: titan.id, type: 'titan' })}
+                                                                        className="group flex flex-col items-center text-center"
+                                                                        data-testid="faction-titan-card"
+                                                                    >
+                                                                        <div className="relative w-full overflow-hidden rounded-sm border-2 border-slate-200 bg-white p-[3px] shadow-md transition-all group-hover:-translate-y-1 group-hover:border-amber-300 group-hover:shadow-lg">
+                                                                            <div className="relative aspect-[0.714] w-full overflow-hidden bg-slate-100">
+                                                                                <CardPreview
+                                                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: titan.id } }}
+                                                                                    className="w-full h-full"
+                                                                                    title={titanName}
+                                                                                />
+                                                                                <div className="absolute top-2 right-2 rounded-full bg-black/75 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                                                    <ZoomIn size={14} />
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className="mt-2 text-[11px] font-black uppercase leading-tight tracking-tight text-slate-700 md:text-xs">
+                                                                            {titanName}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <div
+                                                            className="flex min-h-[12rem] items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50/80 px-4 text-center text-sm font-bold leading-relaxed text-slate-500 md:min-h-[14rem] lg:min-h-[18rem]"
+                                                            data-testid="faction-titan-empty"
+                                                        >
+                                                            {t('ui.faction_titan_missing', { defaultValue: '该种族泰坦暂未接入' })}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="mt-4 lg:mt-auto relative z-10">
@@ -384,7 +438,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                     <span>{t('ui.preview_cards')}</span>
                                 </h3>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4" data-testid="faction-preview-grid">
                                     {(() => {
                                         const cards = getFactionCards(focusedFactionId);
                                         return cards.map((card, cidx) => (
@@ -393,6 +447,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 className="group relative aspect-[0.714] rounded-sm overflow-hidden bg-white p-[2px] lg:p-[3px] shadow-md border-2 border-slate-100 transition-all cursor-zoom-in hover:z-20 hover:scale-110 hover:shadow-xl"
                                                 style={{ transform: `rotate(${(cidx % 5) - 2}deg)` }}
                                                 onClick={() => setViewingCard({ defId: card.id, type: card.type })}
+                                                data-testid="faction-preview-card"
                                             >
                                                 <div className="w-full h-full bg-slate-100 overflow-hidden relative">
                                                     <CardPreview
@@ -430,6 +485,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                         </motion.div>
                         </div>
                         </div>
+                    </div>
                     </div>
                 )}
             </AnimatePresence>

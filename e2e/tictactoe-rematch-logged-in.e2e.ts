@@ -8,18 +8,12 @@
  * 回归测试：修复 3f098ca 引入的 bug（只修了匿名用户路径，漏了 token 路径）。
  */
 
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
-import { getGameServerBaseURL } from './helpers/common';
+import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { getGameServerBaseURL, setChineseLocale } from './helpers/common';
 
 // ============================================================================
 // 工具函数
 // ============================================================================
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-    await context.addInitScript(() => {
-        localStorage.setItem('i18nextLng', 'en');
-    });
-};
 
 /** 注入已登录用户状态到 localStorage */
 const injectAuthState = async (
@@ -75,7 +69,7 @@ const waitForNewMatch = async (page: Page, oldMatchId: string) => {
 // 测试
 // ============================================================================
 
-test.describe('TicTacToe Rematch - 已登录用户', () => {
+test.describe('井字棋重赛 - 已登录用户', () => {
     /**
      * 核心回归测试：已登录用户重赛时 /create 必须携带 Authorization header。
      *
@@ -97,7 +91,7 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
 
         // ── Host 上下文（已登录用户） ──────────────────────────────────────
         const hostContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(hostContext);
+        await setChineseLocale(hostContext);
         await injectAuthState(hostContext, FAKE_TOKEN, FAKE_USER_ID, FAKE_USERNAME);
 
         // mock auth/me，让 AuthContext 认为 token 有效
@@ -160,15 +154,15 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
 
         // ── Guest 上下文（匿名用户，正常流程） ────────────────────────────
         const guestContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(guestContext);
+        await setChineseLocale(guestContext);
         const guestPage = await guestContext.newPage();
 
         // ── 创建房间并开始游戏 ────────────────────────────────────────────
         await hostPage.goto('/');
-        await hostPage.getByRole('heading', { name: 'Tic-Tac-Toe' }).click();
-        await hostPage.getByRole('button', { name: 'Create Room' }).click();
-        await expect(hostPage.getByRole('heading', { name: 'Create Room' })).toBeVisible();
-        await hostPage.getByRole('button', { name: 'Confirm' }).click();
+        await hostPage.getByRole('heading', { name: '井字棋' }).click();
+        await hostPage.getByRole('button', { name: '创建房间' }).click();
+        await expect(hostPage.getByRole('heading', { name: '创建房间' })).toBeVisible();
+        await hostPage.getByRole('button', { name: '确认' }).click();
 
         await hostPage.waitForURL(/\/play\/tictactoe\/match\//);
         await expect(hostPage.locator('[data-tutorial-id="cell-0"]')).toBeVisible({ timeout: 15000 });
@@ -202,11 +196,11 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
         await waitForCellFilled(hostPage, 8);
         await waitForCellFilled(guestPage, 8);
 
-        await expect(hostPage.getByText(/WINS|DRAW GAME/i)).toBeVisible({ timeout: 15000 });
+        await expect(hostPage.getByText(/胜利|平局/i)).toBeVisible({ timeout: 15000 });
 
         // ── 双方点击再来一局 ──────────────────────────────────────────────
-        const playAgainHost = hostPage.getByRole('button', { name: /Play Again|再来一局/i });
-        const playAgainGuest = guestPage.getByRole('button', { name: /Play Again|再来一局/i });
+        const playAgainHost = hostPage.getByRole('button', { name: '再来一局' });
+        const playAgainGuest = guestPage.getByRole('button', { name: '再来一局' });
         await expect(playAgainHost).toBeVisible({ timeout: 15000 });
         await expect(playAgainGuest).toBeVisible({ timeout: 15000 });
 
@@ -237,7 +231,7 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
         const NEXT_MATCH_ID = 'e2e-next-match-id-002';
 
         const hostContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(hostContext);
+        await setChineseLocale(hostContext);
         // 不注入 auth state，模拟匿名用户
 
         let capturedCreateAuthHeader: string | null | undefined = undefined;
@@ -285,14 +279,14 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
         const hostPage = await hostContext.newPage();
 
         const guestContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(guestContext);
+        await setChineseLocale(guestContext);
         const guestPage = await guestContext.newPage();
 
         await hostPage.goto('/');
-        await hostPage.getByRole('heading', { name: 'Tic-Tac-Toe' }).click();
-        await hostPage.getByRole('button', { name: 'Create Room' }).click();
-        await expect(hostPage.getByRole('heading', { name: 'Create Room' })).toBeVisible();
-        await hostPage.getByRole('button', { name: 'Confirm' }).click();
+        await hostPage.getByRole('heading', { name: '井字棋' }).click();
+        await hostPage.getByRole('button', { name: '创建房间' }).click();
+        await expect(hostPage.getByRole('heading', { name: '创建房间' })).toBeVisible();
+        await hostPage.getByRole('button', { name: '确认' }).click();
 
         await hostPage.waitForURL(/\/play\/tictactoe\/match\//);
         await expect(hostPage.locator('[data-tutorial-id="cell-0"]')).toBeVisible({ timeout: 15000 });
@@ -325,10 +319,10 @@ test.describe('TicTacToe Rematch - 已登录用户', () => {
         await waitForCellFilled(hostPage, 8);
         await waitForCellFilled(guestPage, 8);
 
-        await expect(hostPage.getByText(/WINS|DRAW GAME/i)).toBeVisible({ timeout: 15000 });
+        await expect(hostPage.getByText(/胜利|平局/i)).toBeVisible({ timeout: 15000 });
 
-        const playAgainHost = hostPage.getByRole('button', { name: /Play Again|再来一局/i });
-        const playAgainGuest = guestPage.getByRole('button', { name: /Play Again|再来一局/i });
+        const playAgainHost = hostPage.getByRole('button', { name: '再来一局' });
+        const playAgainGuest = guestPage.getByRole('button', { name: '再来一局' });
         await expect(playAgainHost).toBeVisible({ timeout: 15000 });
         await expect(playAgainGuest).toBeVisible({ timeout: 15000 });
 

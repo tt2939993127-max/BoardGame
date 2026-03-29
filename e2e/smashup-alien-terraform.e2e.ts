@@ -1747,6 +1747,32 @@ async function waitForNoInteraction(game: any): Promise<void> {
     }).toBe(null);
 }
 
+async function expectSmashUpMagnifyTarget(page: any, targetType: 'minion' | 'base' | 'action' | 'titan', defId?: string): Promise<void> {
+    const overlay = page.getByTestId('su-card-magnify-overlay');
+    const content = page.getByTestId('su-card-magnify-content');
+    await expect(overlay).toBeVisible();
+    await expect(content).toHaveAttribute('data-card-type', targetType);
+    if (defId) {
+        await expect(content).toHaveAttribute('data-card-def-id', defId);
+    }
+}
+
+async function closeSmashUpMagnifyOverlay(page: any): Promise<void> {
+    const overlay = page.getByTestId('su-card-magnify-overlay');
+    await expect(overlay).toBeVisible();
+    await overlay.getByRole('button').click();
+    await expect(overlay).toBeHidden();
+}
+
+async function dismissSmashUpSpotlightQueueIfVisible(page: any): Promise<void> {
+    const spotlightQueue = page.getByTestId('card-spotlight-queue');
+    const hasSpotlightQueue = await spotlightQueue.isVisible().catch(() => false);
+    if (!hasSpotlightQueue) return;
+    await spotlightQueue.click({ force: true });
+    await expect(spotlightQueue).toBeHidden();
+    await page.waitForTimeout(150);
+}
+
 function getCurrentPlayer(state: any): any {
     const currentPlayerId = state.core.turnOrder[state.core.currentPlayerIndex];
     return state.core.players[currentPlayerId];
@@ -1940,9 +1966,19 @@ test.describe('Smash Up - Alien Terraform', () => {
 
         const titanRail = page.getByTestId('su-titan-rail');
         await expect(titanRail).toBeVisible();
+        const railTitan = page.getByTestId('su-rail-titan-titan-trickster');
+        const railTitanMagnify = page.getByTestId('su-rail-titan-magnify-titan-trickster');
+        await railTitan.hover();
+        await expect(railTitanMagnify).toBeVisible();
+        await railTitanMagnify.click();
+        await expectSmashUpMagnifyTarget(page, 'titan', 'tricksters_big_funny_giant');
+        await game.screenshot('terraform-titan-rail-magnify', testInfo);
+        await closeSmashUpMagnifyOverlay(page);
         await game.screenshot('terraform-titan-rail-prompt', testInfo);
-        await titanRail.locator('button').first().click();
+        await railTitan.click();
         await page.waitForTimeout(300);
+        await dismissSmashUpSpotlightQueueIfVisible(page);
+        await game.selectBase(0);
         await waitForNoInteraction(game);
 
         const finalState = await game.getState();
@@ -2037,6 +2073,13 @@ test.describe('Smash Up - Alien Terraform', () => {
 
         const titan = page.locator('[data-titan-uid="titan-cthulhu-talent-draw"]');
         await expect(titan).toBeVisible();
+        const titanMagnify = page.getByTestId('su-base-titan-magnify-titan-cthulhu-talent-draw');
+        await titan.hover();
+        await expect(titanMagnify).toBeVisible();
+        await titanMagnify.click({ force: true });
+        await expectSmashUpMagnifyTarget(page, 'titan', 'cthulhu_cthulhu_titan');
+        await game.screenshot('cthulhu-titan-magnify', testInfo);
+        await closeSmashUpMagnifyOverlay(page);
         await titan.click({ force: true });
 
         await game.waitForInteraction('titan_cthulhu_cthulhu_titan_talent_choice');

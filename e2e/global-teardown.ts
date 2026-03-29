@@ -12,6 +12,7 @@ import {
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
 import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
+import { stopManagedRuntime } from '../scripts/infra/e2e-runtime-manager.mjs';
 
 interface RuntimeRecord {
     workerId: number;
@@ -54,8 +55,25 @@ export default async function globalTeardown() {
     const forceStartServers = process.env.PW_START_SERVERS === 'true';
     const shouldStartServers = forceStartServers || !useDevServers;
     const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+    const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
+    const managedRuntimeMode = process.env.PW_RUNTIME_MODE?.trim() || '';
+    const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
 
     if (!shouldStartServers) {
+        return;
+    }
+
+    if (workers <= 1 && shouldSkipBootstrap && managedRuntimeId) {
+        if (managedRuntimeMode === 'isolated-single') {
+            await stopManagedRuntime({
+                runtimeId: managedRuntimeId,
+                scope: getRuntimeScope(),
+                logger: console,
+            });
+        } else {
+            console.log(`♻️ 本次运行附着共享 runtime，teardown 不主动停止: ${managedRuntimeId}`);
+        }
+        cleanupAllWorkerPortFiles();
         return;
     }
 

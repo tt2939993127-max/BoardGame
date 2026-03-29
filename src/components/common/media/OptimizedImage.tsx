@@ -23,17 +23,6 @@ export const SHIMMER_BG: React.CSSProperties = {
     animation: 'img-shimmer 1.5s linear infinite',
 };
 
-/**
- * 回退策略（CDN 不稳定时自动降级）：
- * 0 = CDN 国际化路径（首选）
- * 1 = CDN 重试（加 ?retry=1 绕过浏览器缓存，处理瞬时连接中断）
- * 2 = 本地 /assets/ 路径（CDN 完全不可用时降级）
- * 3 = 最终失败，显示错误状态
- */
-const CDN_RETRY_LEVEL = 1;
-const LANGUAGE_FALLBACK_LEVEL = 2; // 语言回退级别
-const LOCAL_FALLBACK_LEVEL = 3; // 本地降级级别
-
 /** 指数退避自动重试配置 */
 const AUTO_RETRY_MAX = 5;           // 最多自动重试 5 轮
 const AUTO_RETRY_BASE_MS = 2000;    // 首次 2s
@@ -55,7 +44,20 @@ const appendRetryParam = (url: string, retry: number) => {
     return `${url}${sep}retry=${retry}`;
 };
 
-export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, onError, onLoad: onLoadProp, style: styleProp, placeholder = true, className, ...rest }: OptimizedImageProps) => {
+export const OptimizedImage = ({
+    src,
+    fallbackSrc: _fallbackSrc,
+    locale,
+    alt,
+    onError,
+    onLoad: onLoadProp,
+    onDragStart,
+    style: styleProp,
+    placeholder = true,
+    className,
+    draggable = false,
+    ...rest
+}: OptimizedImageProps) => {
     const { i18n } = useTranslation();
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     const [fallbackLevel, setFallbackLevel] = React.useState(0);
@@ -98,33 +100,29 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
     }, [cdnUrl, src, effectiveLocale]);
 
-    // 根据 fallbackLevel 计算当前实际 src
-    // 降级顺序：CDN primary → CDN primary retry → CDN fallback (语言回退) → 本地 primary
-    const currentSrc = React.useMemo(() => {
-        if (!isCdnUrl(cdnUrl)) {
-            return cdnUrl; // 本地路径不走降级
+    const fallbackCandidates = React.useMemo(() => {
+        const candidates: Array<{ url: string; label: string }> = [];
+        const pushCandidate = (url: string, label: string) => {
+            if (!url) return;
+            if (candidates.some(candidate => candidate.url === url)) return;
+            candidates.push({ url, label });
+        };
+
+        pushCandidate(cdnUrl, 'primary');
+        if (isCdnUrl(cdnUrl)) {
+            pushCandidate(appendRetryParam(cdnUrl, 1), 'retry');
         }
-        
-        let result: string;
-        switch (fallbackLevel) {
-            case 0: 
-                result = cdnUrl;
-                break;
-            case CDN_RETRY_LEVEL: 
-                result = appendRetryParam(cdnUrl, 1);
-                break;
-            case LANGUAGE_FALLBACK_LEVEL: 
-                result = cdnFallbackUrl; // 语言回退
-                break;
-            case LOCAL_FALLBACK_LEVEL: 
-                result = localUrl;
-                break;
-            default: 
-                result = cdnUrl;
+        pushCandidate(cdnFallbackUrl, 'language-fallback');
+        if (isCdnUrl(cdnUrl)) {
+            pushCandidate(localUrl, 'local');
         }
-        
-        return result;
-    }, [cdnUrl, cdnFallbackUrl, localUrl, fallbackLevel]);
+
+        return candidates;
+    }, [cdnFallbackUrl, cdnUrl, localUrl]);
+
+    const currentCandidate = fallbackCandidates[Math.min(fallbackLevel, Math.max(fallbackCandidates.length - 1, 0))];
+    const currentSrc = currentCandidate?.url ?? cdnUrl;
+    const isLocalFallback = currentCandidate?.label === 'local';
 
     const isSvg = isSvgSource(currentSrc);
     
@@ -170,7 +168,7 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         setLoaded(true);
         autoRetryRef.current = 0; // 加载成功，重置重试计数
         markImageLoaded(src, effectiveLocale, event.currentTarget);
-        if (fallbackLevel === LOCAL_FALLBACK_LEVEL) {
+        if (isLocalFallback) {
             console.warn('[OptimizedImage] CDN 不可用，已降级到本地资源:', src);
         }
         onLoadProp?.(event);
@@ -186,8 +184,8 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
             error: event.type
         });
         
-        // 非 CDN 路径或已到最终失败层级 → 进入自动重试
-        if (!isCdnUrl(cdnUrl) || fallbackLevel >= LOCAL_FALLBACK_LEVEL) {
+        const hasMoreFallback = fallbackLevel + 1 < fallbackCandidates.length;
+        if (!hasMoreFallback) {
             const attempt = autoRetryRef.current;
             if (attempt < AUTO_RETRY_MAX) {
                 // 指数退避自动重试：重置回退链从头再来
@@ -206,7 +204,7 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         }
         // 还有回退层级，推进到下一级
         const nextLevel = fallbackLevel + 1;
-        console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel} (${['primary', 'retry', 'language-fallback', 'local'][nextLevel]}):`, src);
+        console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel} (${fallbackCandidates[nextLevel]?.label ?? 'unknown'}):`, src);
         setFallbackLevel(nextLevel);
     };
 
@@ -242,11 +240,42 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         opacity: errored ? 0 : effectiveLoaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
     };
 
+    const handleDragStart: React.DragEventHandler<HTMLImageElement> = (event) => {
+        if (draggable !== true) {
+            event.preventDefault();
+        }
+        onDragStart?.(event);
+    };
+
     if (isSvg) {
-        return <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />;
+        return (
+            <img
+                ref={imgRef}
+                src={currentSrc}
+                alt={alt ?? ''}
+                draggable={draggable}
+                onDragStart={handleDragStart}
+                onError={handleError}
+                onLoad={handleLoad}
+                style={imgStyle}
+                className={className}
+                {...rest}
+            />
+        );
     }
 
     return (
-        <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />
+        <img
+            ref={imgRef}
+            src={currentSrc}
+            alt={alt ?? ''}
+            draggable={draggable}
+            onDragStart={handleDragStart}
+            onError={handleError}
+            onLoad={handleLoad}
+            style={imgStyle}
+            className={className}
+            {...rest}
+        />
     );
 };

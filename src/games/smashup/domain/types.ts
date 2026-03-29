@@ -120,6 +120,8 @@ export interface FusionCardDef {
     actionAbilityTags?: AbilityTag[];
     actionOngoingTarget?: 'base' | 'minion';
     actionPlayConstraint?: PlayConstraint;
+    /** action 面在正常打出时是否需要显式选择目标基地 */
+    actionPlayNeedsBase?: boolean;
     actionSpecialNeedsBase?: boolean;
     actionSpecialLimitGroup?: string;
     actionSpecialTiming?: SpecialTiming;
@@ -187,6 +189,8 @@ export interface ActionCardDef {
      * @see PlayConstraint
      */
     playConstraint?: PlayConstraint;
+    /** 正常打出时是否需要显式选择目标基地 */
+    playNeedsBase?: boolean;
     /** 特殊行动卡是否需要选择目标基地（Me First! 窗口中高亮可选基地） */
     specialNeedsBase?: boolean;
     /**
@@ -724,6 +728,17 @@ export interface SmashUpCore {
      * 生命周期：在 TURN_STARTED 时清空。
      */
     turnUsedOngoingUids?: string[];
+    /**
+     * 本回合已使用过的主动基地能力。
+     *
+     * 用于实现“During your turn, once each turn”类基地能力。
+     * 生命周期：在对应玩家的 TURN_STARTED 时清空该玩家记录。
+     */
+    usedBaseAbilitiesThisTurn?: Array<{
+        playerId: PlayerId;
+        baseIndex: number;
+        baseDefId: string;
+    }>;
 
     /** 全局触发队列：用于按 Wiki 规则统一“同时触发”的反应排序与 witness/LKI */
     triggerQueue?: TriggerInstance[];
@@ -785,6 +800,8 @@ export const SU_COMMANDS = {
     DISCARD_TO_LIMIT: 'su:discard_to_limit',
     // === 新增 ===
     SELECT_FACTION: 'su:select_faction',
+    DESELECT_FACTION: 'su:deselect_faction',
+    USE_BASE_ABILITY: 'su:use_base_ability',
     USE_TALENT: 'su:use_talent',
     /** 激活场上随从的 special 能力（如忍者侍从回手+额外随从） */
     ACTIVATE_SPECIAL: 'su:activate_special',
@@ -825,6 +842,20 @@ export interface SelectFactionCommand extends Command<typeof SU_COMMANDS.SELECT_
     };
 }
 
+/** 取消已选派系 */
+export interface DeselectFactionCommand extends Command<typeof SU_COMMANDS.DESELECT_FACTION> {
+    payload: {
+        factionId: string;
+    };
+}
+
+/** 使用基地的主动能力 */
+export interface UseBaseAbilityCommand extends Command<typeof SU_COMMANDS.USE_BASE_ABILITY> {
+    payload: {
+        baseIndex: number;
+    };
+}
+
 /** 使用天赋（随从天赋或 ongoing 行动卡天赋） */
 export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT> {
     payload: {
@@ -859,6 +890,8 @@ export type SmashUpCommand =
     | PlayActionCommand
     | DiscardToLimitCommand
     | SelectFactionCommand
+    | DeselectFactionCommand
+    | UseBaseAbilityCommand
     | UseTalentCommand
     | ActivateSpecialCommand
     | ActivateTitanOngoingCommand;
@@ -1196,6 +1229,7 @@ export type SmashUpEvent =
     | MinionReturnedEvent
     | LimitModifiedEvent
     | FactionSelectedEvent
+    | FactionDeselectedEvent
     | AllFactionsSelectedEvent
     | MinionDestroyedEvent
     | MinionMovedEvent
@@ -1240,6 +1274,13 @@ export type SmashUpEvent =
 // ============================================================================
 
 export interface FactionSelectedEvent extends GameEvent<'su:faction_selected'> {
+    payload: {
+        playerId: PlayerId;
+        factionId: string;
+    };
+}
+
+export interface FactionDeselectedEvent extends GameEvent<'su:faction_deselected'> {
     payload: {
         playerId: PlayerId;
         factionId: string;
@@ -1583,6 +1624,15 @@ export interface BaseAbilitySuppressedEvent extends GameEvent<typeof SU_EVENTS.B
         baseIndex: number;
         suppressorPlayerId: PlayerId;
         reason: string;
+    };
+}
+
+/** 主动基地能力已使用事件 */
+export interface BaseAbilityUsedEvent extends GameEvent<typeof SU_EVENTS.BASE_ABILITY_USED> {
+    payload: {
+        playerId: PlayerId;
+        baseIndex: number;
+        baseDefId: string;
     };
 }
 

@@ -1,4 +1,4 @@
-import type { CardDef, BaseCardDef, MinionCardDef, FusionCardDef, TitanCardDef } from '../domain/types';
+import type { CardDef, BaseCardDef, MinionCardDef, ActionCardDef, FusionCardDef, TitanCardDef } from '../domain/types';
 import { SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
 import { TITAN_CARD_DEFS } from './titans';
 
@@ -1294,7 +1294,7 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
  */
 export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
-    const textField = ('type' in def && def.type === 'action') ? 'effectText' : 'abilityText';
+    const textField = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
     const localeKeys = [`cards.${def.id}.${textField}`];
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
     if (fallbackLocaleKeyId) {
@@ -1304,7 +1304,7 @@ export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key:
     const localeValue = resolveLocaleValue(t, localeKeys);
     if (localeValue) return localeValue;
     // 随从用 abilityText，行动卡用 effectText，基地用 abilityText
-    const field = ('type' in def && def.type === 'action') ? 'effectText' : 'abilityText';
+    const field = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
 
     // 1. 优先尝试完整 ID (如果是 POD 版，这将匹配 cards.xxx_pod.xxxText)
     const podKey = `cards.${def.id}.${field}`;
@@ -1339,11 +1339,27 @@ export function getFactionCards(factionId: FactionId): Array<MinionCardDef | Act
     );
 }
 
-/** 获取派系对应的官方泰坦（若有） */
-export function getFactionTitan(factionId: FactionId): TitanCardDef | undefined {
-    return Array.from(_cardRegistry.values()).find(
+/** 获取派系对应的官方泰坦列表（为未来多泰坦派系保留数组形态） */
+export function getFactionTitans(factionId: FactionId): TitanCardDef[] {
+    const exactTitans = Array.from(_cardRegistry.values()).filter(
         (card): card is TitanCardDef => card.faction === factionId && card.type === 'titan',
     );
+    if (exactTitans.length > 0) return exactTitans;
+
+    const fallbackFactionId = typeof factionId === 'string' && factionId.endsWith(POD_SUFFIX)
+        ? factionId.slice(0, -POD_SUFFIX.length) as FactionId
+        : null;
+
+    if (!fallbackFactionId) return [];
+
+    return Array.from(_cardRegistry.values()).filter(
+        (card): card is TitanCardDef => card.faction === fallbackFactionId && card.type === 'titan',
+    );
+}
+
+/** 获取派系对应的官方泰坦（若有） */
+export function getFactionTitan(factionId: FactionId): TitanCardDef | undefined {
+    return getFactionTitans(factionId)[0];
 }
 
 /** 获取所有卡牌定义 */

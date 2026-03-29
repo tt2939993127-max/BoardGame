@@ -124,6 +124,13 @@ export function actionLikeNeedsResponseWindowBase(def: ActionLikeDef): boolean {
     return def.responseWindowNeedsBase === true;
 }
 
+export function actionLikeNeedsPlayBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsBase === true;
+    }
+    return def.playNeedsBase === true;
+}
+
 export function isActionLikeRespondableInWindow(
     def: ActionLikeDef,
     windowType: ResponseWindowType,

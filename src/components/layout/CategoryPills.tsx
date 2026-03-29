@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
 export type Category = 'All' | 'card' | 'dice' | 'abstract' | 'wargame' | 'casual' | 'tools';
@@ -43,11 +42,7 @@ export const CategoryPills = ({ activeCategory, onSelect }: CategoryPillsProps) 
 
                             {/* 当前选中背景 */}
                             {isActive && (
-                                <motion.div
-                                    layoutId="activeCategory"
-                                    className="absolute inset-0 bg-parchment-brown/10 rounded-full z-0"
-                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                />
+                                <span className="absolute inset-0 rounded-full bg-parchment-brown/10 z-0 transition-all duration-300" />
                             )}
                         </button>
                     );

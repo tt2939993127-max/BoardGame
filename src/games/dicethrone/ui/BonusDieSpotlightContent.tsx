@@ -66,7 +66,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     compact = false,
 }) => {
 
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const [isRolling, setIsRolling] = React.useState(true);
     const face = propFace || 'fist';
 
@@ -81,8 +81,8 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     // 获取翻译后的效果文本
     const effectText = React.useMemo(() => {
         if (!effectKey) return null;
-        return t(effectKey, effectParams);
-    }, [t, effectKey, effectParams]);
+        return i18n.exists(effectKey) ? t(effectKey, effectParams) : effectKey;
+    }, [t, i18n, effectKey, effectParams]);
 
     return (
         <div className="flex flex-col items-center gap-[1.5vw]">

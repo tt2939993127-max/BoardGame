@@ -3,8 +3,11 @@
  * 闂佽崵鍠愬ú鏍涘☉妯忕儤绻濋崘顏佹灃婵犮垼娉涢鍡涙嫃鐎ｎ喗鈷戦柣鎰靛墮缁€鍐煟椤撱垻鐣洪柡? * 1. 闂備胶鍘ч〃搴㈢濠婂懏宕插〒姘ｅ亾妤犵偛绉归獮姗€宕橀崣澶屾 Watch Out 闂備礁鎼崯鎶筋敊閹邦喗顫曟繝闈涙处閸庣喖鏌￠崘銊モ偓鍦不濞嗘挻鐓曢柟鐑樻尰缁惰尙鈧娲滈崰鎰般€冮妷鈺佺妞ゆ梻鈷堝Λ妤呮⒑? * 2. 闂備礁鎼Λ娆忣焽濞嗘挸鍚规い鏇楀亾鐎规洩缍侀、鏃堝礋閸偅绶梻浣告啞濮婄粯鎱ㄩ悽绋跨劦妞ゆ帒鍠氶崬鐑樼節绾版ê浜鹃梺璇叉捣椤㈠﹤鈻嶉弴鐑嗘富闁稿瞼鍋為弲顒勬倶閻愯泛浜归柣鐔哥箞楠炴牜鈧稒蓱椤ュ牓鏌℃担闈╁姛闁归濞€椤㈡稑鈽夊▎灞剧亙缂傚倷璁查崑鎾绘煟閹寸倖鎴﹀汲娴煎瓨鐓曢柟杈剧秵閸炴椽鏌熸笟鍨妞ゎ偁鍨介弫鎰板川椤栨粌鎹剁紓? * 3. P1 闂備胶鎳撻悘姘跺箰閹间礁鍚规い鎾跺枎缁剁偟鎲稿澶婄畺闊洦鏌ㄧ欢鐐垫喐瀹ュ鏄ラ柛鏇ㄥ灠缁秹鎮规担鍛婅础缂佲偓婵? 闂備礁鎲￠悷顖涚濠婂懓濮抽柡灞诲劜閸庢垿鎮楅敐搴濈盎闁绘挸鍊块弻娑樜旂€ｎ剛锛熸繝鈷€鍕疄闁诡啫鍥ㄥ仭闁哄瀵у▍銏ゆ⒑閹稿海鈽夊┑鍌涙⒒缁厽寰勭€ｎ偄鍔呴梺鍝勫暙閻楀棗鈻嶉姀鐙€鐔嗛悹楦挎鑲栧┑鐘亾闁告稒娼欑粈?bonus overlay
  */
 
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { test, expect } from './framework';
 import type { Locator, Page } from '@playwright/test';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { BARBARIAN_CARDS } from '../src/games/dicethrone/heroes/barbarian/cards';
 import {
     advanceToOffensiveRoll,
@@ -17,7 +20,7 @@ import {
     setupDTOnlineMatch,
     waitForGameBoard,
 } from './helpers/dicethrone';
-import { waitForTestHarness } from './helpers/common';
+import { setChineseLocale, waitForTestHarness } from './helpers/common';
 
 const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
 const DICETHRONE_TEST_TIMEOUT_MS = 300000;
@@ -81,6 +84,8 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
             .toBeLessThanOrEqual(metrics.gamePageClientWidth + 1);
     }
 }
+
+const SAMURAI_PLAYER_BOARD_ASPECT_RATIO = 2048 / 1248;
 
 async function injectPyromancerAttackModifierScene(
     page: Page,
@@ -689,6 +694,162 @@ async function waitForGunslingerTheLawPlayScene(
     }, options, { timeout: 30000, polling: 200 });
 }
 
+async function saveLocatorEvidenceScreenshot(
+    locator: Locator,
+    testInfo: Parameters<typeof getEvidenceScreenshotPath>[0],
+    name: string,
+    filename: string,
+): Promise<string> {
+    const path = getEvidenceScreenshotPath(testInfo, name, { filename });
+    await mkdir(dirname(path), { recursive: true });
+    await locator.screenshot({ path });
+    return path;
+}
+
+async function injectHeroHandScreenshotScene(
+    page: Page,
+    options: {
+        heroId: 'samurai' | 'gunslinger' | 'barbarian' | 'monk';
+        opponentId: 'monk' | 'barbarian';
+        handCardIds: string[];
+    },
+): Promise<void> {
+    await page.evaluate(async ({ heroId, opponentId, handCardIds }) => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!harness || !state) {
+            throw new Error('TestHarness state not ready');
+        }
+
+        const random = {
+            random: () => 0.5,
+            d: (max: number) => Math.min(max, 1),
+            range: (min: number) => min,
+            shuffle: <T,>(array: T[]) => [...array],
+        };
+
+        const [{ initHeroState }, heroModule] = await Promise.all([
+            import('/src/games/dicethrone/domain/characters.ts'),
+            heroId === 'samurai'
+                ? import('/src/games/dicethrone/heroes/samurai/cards.ts')
+                : heroId === 'gunslinger'
+                    ? import('/src/games/dicethrone/heroes/gunslinger/cards.ts')
+                    : heroId === 'monk'
+                        ? import('/src/games/dicethrone/heroes/monk/cards.ts')
+                        : import('/src/games/dicethrone/heroes/barbarian/cards.ts'),
+        ]);
+
+        const heroCards = heroId === 'samurai'
+            ? (heroModule as any).SAMURAI_CARDS
+            : heroId === 'gunslinger'
+                ? (heroModule as any).GUNSLINGER_CARDS
+                : heroId === 'monk'
+                    ? (heroModule as any).MONK_CARDS
+                    : (heroModule as any).BARBARIAN_CARDS;
+
+        const hand = handCardIds.map((cardId: string) => {
+            const card = heroCards.find((entry: any) => entry.id === cardId);
+            if (!card) {
+                throw new Error(`Card ${cardId} not found for ${heroId}`);
+            }
+            return JSON.parse(JSON.stringify(card));
+        });
+
+        const heroBase = initHeroState('0', heroId, random as any);
+        const opponentBase = initHeroState('1', opponentId, random as any);
+
+        const nextState = {
+            ...state,
+            sys: {
+                ...state.sys,
+                phase: 'main1',
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                },
+            },
+            core: {
+                ...state.core,
+                activePlayerId: '0',
+                hostStarted: true,
+                selectedCharacters: {
+                    ...(state.core.selectedCharacters ?? {}),
+                    '0': heroId,
+                    '1': opponentId,
+                },
+                readyPlayers: {
+                    ...(state.core.readyPlayers ?? {}),
+                    '0': true,
+                    '1': true,
+                },
+                players: {
+                    ...state.core.players,
+                    '0': {
+                        ...heroBase,
+                        hand,
+                        discard: [],
+                        resources: {
+                            ...heroBase.resources,
+                            cp: 8,
+                            hp: 50,
+                        },
+                    },
+                    '1': {
+                        ...opponentBase,
+                        hand: [],
+                        discard: [],
+                        resources: {
+                            ...opponentBase.resources,
+                            cp: 2,
+                            hp: 50,
+                        },
+                    },
+                },
+                pendingAttack: null,
+                pendingDamage: undefined,
+                rollCount: 0,
+                rollConfirmed: false,
+            },
+        };
+
+        harness.state.set(nextState);
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    }, options);
+}
+
+async function waitForHeroHandScreenshotScene(
+    page: Page,
+    options: {
+        heroId: 'samurai' | 'gunslinger' | 'barbarian' | 'monk';
+        handCardIds: string[];
+    },
+): Promise<void> {
+    await page.waitForFunction(({ heroId, handCardIds }) => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        const handIds = state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [];
+        return state?.sys?.phase === 'main1'
+            && state?.core?.selectedCharacters?.['0'] === heroId
+            && handIds.length === handCardIds.length
+            && handCardIds.every((cardId: string, index: number) => handIds[index] === cardId);
+    }, options, { timeout: 30000, polling: 200 });
+}
+
+async function waitForHandCardsFlipped(
+    page: Page,
+    expectedCount: number,
+): Promise<void> {
+    await page.waitForFunction((count) => {
+        const handArea = document.querySelector('[data-testid="hand-area"]');
+        if (!handArea) return false;
+        const cards = Array.from(handArea.querySelectorAll('[data-card-id]'));
+        const hasAtlasShimmer = handArea.querySelector('.atlas-shimmer') !== null;
+        return cards.length === count
+            && cards.every((card) => card.getAttribute('data-is-flipped') === 'true')
+            && !hasAtlasShimmer;
+    }, expectedCount, { timeout: 10000, polling: 100 });
+    await page.waitForTimeout(300);
+}
+
 test('self watch out should show bonus die spotlight', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
@@ -774,6 +935,84 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
 
     expect(afterClickState.player0Hand).not.toContain('watch-out');
     expect(afterClickState.lastEventTypes).toContain('BONUS_DIE_ROLLED');
+});
+
+test('samurai and gunslinger hand area should show corrected hand card images', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+
+    const handArea = page.locator('[data-testid="hand-area"]');
+
+    await injectHeroHandScreenshotScene(page, {
+        heroId: 'samurai',
+        opponentId: 'monk',
+        handCardIds: ['upgrade-solemnity-2', 'upgrade-masamune-2', 'upgrade-slot-06-2'],
+    });
+    await waitForHeroHandScreenshotScene(page, {
+        heroId: 'samurai',
+        handCardIds: ['upgrade-solemnity-2', 'upgrade-masamune-2', 'upgrade-slot-06-2'],
+    });
+    await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
+    await waitForHandCardsFlipped(page, 3);
+    await saveLocatorEvidenceScreenshot(
+        handArea,
+        testInfo,
+        '10-samurai-hand-area',
+        '10-samurai-hand-area.png',
+    );
+
+    await injectHeroHandScreenshotScene(page, {
+        heroId: 'gunslinger',
+        opponentId: 'monk',
+        handCardIds: [
+            'upgrade-fan-the-hammer-2',
+            'card-pistol-whip',
+            'upgrade-take-cover-2',
+            'card-mark-the-target',
+            'upgrade-deadeye-2',
+            'card-the-law',
+        ],
+    });
+    await waitForHeroHandScreenshotScene(page, {
+        heroId: 'gunslinger',
+        handCardIds: [
+            'upgrade-fan-the-hammer-2',
+            'card-pistol-whip',
+            'upgrade-take-cover-2',
+            'card-mark-the-target',
+            'upgrade-deadeye-2',
+            'card-the-law',
+        ],
+    });
+    await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
+    await waitForHandCardsFlipped(page, 6);
+    await saveLocatorEvidenceScreenshot(
+        handArea,
+        testInfo,
+        '11-gunslinger-hand-area',
+        '11-gunslinger-hand-area.png',
+    );
+
+    await injectHeroHandScreenshotScene(page, {
+        heroId: 'monk',
+        opponentId: 'barbarian',
+        handCardIds: ['card-enlightenment', 'card-inner-peace', 'card-deep-thought'],
+    });
+    await waitForHeroHandScreenshotScene(page, {
+        heroId: 'monk',
+        handCardIds: ['card-enlightenment', 'card-inner-peace', 'card-deep-thought'],
+    });
+    await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
+    await waitForHandCardsFlipped(page, 3);
+    await saveLocatorEvidenceScreenshot(
+        handArea,
+        testInfo,
+        '12-monk-hand-area-reference',
+        '12-monk-hand-area-reference.png',
+    );
 });
 
 test('bonus die spotlight should close on backdrop click before confirm interaction', async ({ page, game }, testInfo) => {
@@ -1685,6 +1924,7 @@ test('opponent lucky card should only show card spotlight for viewer', async ({ 
 test('mobile narrow viewport should keep magnify entries visible and clickable', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
+    await setChineseLocale(page.context());
     await page.setViewportSize({ width: 812, height: 375 });
     await page.addInitScript((query: string) => {
         const originalMatchMedia = window.matchMedia.bind(window);
@@ -1711,7 +1951,7 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
         gameId: 'dicethrone',
         player0: {
             resources: { CP: 2, HP: 50 },
-            discard: ['watch-out'],
+            discard: ['card-play-six'],
         },
         player1: {
             resources: { HP: 50 },
@@ -1719,7 +1959,7 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
         currentPlayer: '0',
         phase: 'offensiveRoll',
         extra: {
-            selectedCharacters: { '0': 'moon_elf', '1': 'barbarian' },
+            selectedCharacters: { '0': 'samurai', '1': 'gunslinger' },
             hostStarted: true,
             rollCount: 1,
             rollConfirmed: false,
@@ -1776,16 +2016,36 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
 
     await playerBoardMagnifyButton.click();
     await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
+    const overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    const magnifiedBoardFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
+    await expect(magnifiedBoardFrame).toBeVisible({ timeout: 5000 });
+    const magnifiedBoardImage = boardMagnifyOverlay.locator('img[alt="Preview"]').first();
     await game.screenshot('11-mobile-player-board-magnify-open', testInfo);
+    const magnifiedBoardImageCount = await magnifiedBoardImage.count();
+    if (magnifiedBoardImageCount > 0) {
+        const naturalSize = await magnifiedBoardImage.evaluate((node) => ({
+            width: (node as HTMLImageElement).naturalWidth,
+            height: (node as HTMLImageElement).naturalHeight,
+        }));
+        if (naturalSize.width > 0 && naturalSize.height > 0) {
+            expect(naturalSize.width).toBe(2048);
+            expect(naturalSize.height).toBe(1248);
+        }
+    }
+    const magnifiedBoardBox = await magnifiedBoardFrame.boundingBox();
+    expect(magnifiedBoardBox, 'magnified samurai board frame should expose bounding box').not.toBeNull();
+    const renderedRatio = magnifiedBoardBox!.width / magnifiedBoardBox!.height;
+    expect(Math.abs(renderedRatio - SAMURAI_PLAYER_BOARD_ASPECT_RATIO)).toBeLessThan(0.06);
 
     await boardMagnifyOverlay.click({ position: { x: 10, y: 10 } });
     await expect(boardMagnifyOverlay).toBeHidden({ timeout: 5000 });
 
     await discardPileInspectButton.click();
     await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
-    await expect(
-        boardMagnifyOverlay.locator('img[alt="Card Preview"], .atlas-shimmer, [style*="background-image"]').first(),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    const discardPreviewFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
+    await expect(discardPreviewFrame).toBeVisible({ timeout: 5000 });
     await game.screenshot('12-mobile-discard-pile-inspect-open', testInfo);
 });
 

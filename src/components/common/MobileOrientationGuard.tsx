@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getGameById, subscribeGameRegistry } from '../../config/games.config';
+import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
+import type { GameManifestEntry } from '../../games/manifest';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
@@ -8,6 +9,11 @@ import {
     type GameMobileBannerKind,
 } from '../../games/mobileSupport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
+
+type GameMobileEntry = Pick<
+    GameManifestEntry,
+    'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+>;
 
 const hasCapacitorRuntime = () => {
     if (typeof window === 'undefined') return false;
@@ -150,11 +156,12 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const location = useLocation();
     const viewport = useRuntimeViewport({ syncCssVars: true });
     const [dismissedBannerKey, setDismissedBannerKey] = useState<string | null>(null);
-    const [, forceRegistryVersion] = useState(0);
     const [nativeAppShell, setNativeAppShell] = useState(false);
+    const [dynamicGameConfig, setDynamicGameConfig] = useState<GameMobileEntry | undefined>(undefined);
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
-    const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const builtInGameConfig = gameId ? GAME_MANIFEST_BY_ID[gameId] : undefined;
+    const gameConfig = builtInGameConfig ?? dynamicGameConfig;
     const preferredOrientation = gameId
         ? resolveGameMobileSupport(gameConfig).preferredOrientation
         : undefined;
@@ -169,10 +176,43 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
         : null;
 
     useEffect(() => {
-        return subscribeGameRegistry(() => {
-            forceRegistryVersion((version) => version + 1);
-        });
-    }, []);
+        if (!gameId || builtInGameConfig) {
+            setDynamicGameConfig(undefined);
+            return;
+        }
+
+        let disposed = false;
+        let unsubscribe: (() => void) | undefined;
+
+        const syncRegistryGameConfig = (getGameById: (id: string) => GameMobileEntry | undefined) => {
+            const nextGameConfig = getGameById(gameId);
+            startTransition(() => {
+                setDynamicGameConfig(nextGameConfig);
+            });
+        };
+
+        void import('../../config/games.config')
+            .then(({ getGameById, subscribeGameRegistry }) => {
+                if (disposed) {
+                    return;
+                }
+
+                syncRegistryGameConfig(getGameById);
+                unsubscribe = subscribeGameRegistry(() => {
+                    syncRegistryGameConfig(getGameById);
+                });
+            })
+            .catch(() => {
+                if (!disposed) {
+                    setDynamicGameConfig(undefined);
+                }
+            });
+
+        return () => {
+            disposed = true;
+            unsubscribe?.();
+        };
+    }, [builtInGameConfig, gameId]);
 
     useEffect(() => {
         let disposed = false;

@@ -4,6 +4,11 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { GlobalErrorBoundary } from '../GlobalErrorBoundary';
 import { ViewportDebugProbe } from '../ViewportDebugProbe';
+import {
+    BOARD_ERROR_BOUNDARY_MAX_RETRIES,
+    isBoardRenderErrorRecoverable,
+    shouldShowBoardRenderFallback,
+} from '../../../engine/transport/react';
 
 // Mock Dependencies
 vi.mock('react', async () => {
@@ -58,5 +63,36 @@ describe('ViewportDebugProbe', () => {
 
         expect(screen.getByTestId('viewport-debug-probe')).toBeInTheDocument();
         expect(screen.getByText('真机视口诊断')).toBeInTheDocument();
+    });
+});
+
+describe('BoardErrorBoundary helpers', () => {
+    it('仅对可恢复的上下文类错误继续显示 loading fallback', () => {
+        expect(isBoardRenderErrorRecoverable(new Error('AudioProvider not ready'))).toBe(true);
+        expect(isBoardRenderErrorRecoverable(new Error('useAudio hook missing provider'))).toBe(true);
+        expect(isBoardRenderErrorRecoverable(new Error('Context value is undefined'))).toBe(true);
+        expect(isBoardRenderErrorRecoverable(new Error('Cannot read properties of undefined'))).toBe(false);
+    });
+
+    it('超过重试上限或错误不可恢复时不再显示黑色 loading fallback', () => {
+        const fallback = <div>loading</div>;
+
+        expect(shouldShowBoardRenderFallback({
+            error: new Error('AudioProvider not ready'),
+            retryCount: 0,
+            fallback,
+        })).toBe(true);
+
+        expect(shouldShowBoardRenderFallback({
+            error: new Error('AudioProvider not ready'),
+            retryCount: BOARD_ERROR_BOUNDARY_MAX_RETRIES,
+            fallback,
+        })).toBe(false);
+
+        expect(shouldShowBoardRenderFallback({
+            error: new Error('Cannot read properties of undefined'),
+            retryCount: 0,
+            fallback,
+        })).toBe(false);
     });
 });

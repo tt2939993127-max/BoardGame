@@ -6,7 +6,7 @@
 /* eslint-disable react-refresh/only-export-components -- framework util exports factory + component together */
 
 import React, { createContext, useContext, useMemo } from 'react';
-import { playDeniedSound } from '../../../lib/audio/useGameAudio';
+import { playDeniedSoundLazy } from '../../../lib/audio/playDeniedSoundLazy';
 
 export const DEFAULT_INTERACTION_GUARD_THROTTLE_MS = 400;
 
@@ -27,7 +27,7 @@ export function createInteractionGuardController(options?: {
     onDenied?: () => void;
 }): InteractionGuardController {
     const throttleMs = options?.throttleMs ?? DEFAULT_INTERACTION_GUARD_THROTTLE_MS;
-    const onDenied = options?.onDenied ?? playDeniedSound;
+    const onDenied = options?.onDenied ?? playDeniedSoundLazy;
     const lastPlayedRef = new Map<string, number>();
 
     const notifyDenied = (reason?: string, notifyOptions?: InteractionDeniedOptions) => {

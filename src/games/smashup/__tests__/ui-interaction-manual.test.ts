@@ -32,15 +32,20 @@ import { createInitialSystemState } from '../../../engine/pipeline';
 import { SU_COMMANDS } from '../domain/types';
 import { ToastProvider } from '../../../contexts/ToastContext';
 import { PromptOverlay } from '../ui/PromptOverlay';
+import { SmashUpCardRenderer } from '../ui/SmashUpCardRenderer';
 
-vi.mock('../../../components/common/media/CardPreview', () => ({
-    CardPreview: ({ previewRef }: { previewRef?: unknown }) => (
-        React.createElement('div', {
-            'data-testid': 'mock-card-preview',
-            'data-preview-ref': JSON.stringify(previewRef ?? null),
-        })
-    ),
-}));
+vi.mock('../../../components/common/media/CardPreview', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../components/common/media/CardPreview')>();
+    return {
+        ...actual,
+        CardPreview: ({ previewRef }: { previewRef?: unknown }) => (
+            React.createElement('div', {
+                'data-testid': 'mock-card-preview',
+                'data-preview-ref': JSON.stringify(previewRef ?? null),
+            })
+        ),
+    };
+});
 
 const PLAYER_IDS = ['0', '1'];
 
@@ -143,6 +148,25 @@ beforeAll(() => {
 });
 
 describe('SmashUp UI 交互验证', () => {
+    it('原生泰坦图集预览应透传正确的 atlas index', () => {
+        render(
+            React.createElement(SmashUpCardRenderer, {
+                previewRef: {
+                    type: 'renderer',
+                    rendererId: 'smashup-card-renderer',
+                    payload: { defId: 'pirates_the_kraken' },
+                },
+            }),
+        );
+
+        const preview = screen.getByTestId('mock-card-preview');
+        expect(JSON.parse(preview.getAttribute('data-preview-ref') ?? 'null')).toEqual({
+            type: 'atlas',
+            atlasId: 'smashup:titans',
+            index: 14,
+        });
+    });
+
     it('PromptOverlay 的卡牌选择模式应始终走 smashup-card-renderer（POD 卡也一样）', () => {
         const interaction = createSimpleChoice(
             'pod-preview-check',

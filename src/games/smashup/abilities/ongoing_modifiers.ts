@@ -250,7 +250,7 @@ function registerVampireModifiers(): void {
 function registerAncientEgyptiansModifiers(): void {
     registerPowerModifier('ancient_egyptians_priest_of_anubis', (ctx: PowerModifierContext) => {
         if (!matchesDefId(ctx.minion, 'ancient_egyptians_priest_of_anubis')) return 0;
-        return (ctx.base.buriedCards?.length ?? 0) > 0 ? 2 : 0;
+        return (ctx.base.buriedCards ?? []).some(card => card.controllerId === ctx.minion.controller) ? 2 : 0;
     }, { handlesPodInternally: true });
 
     registerOngoingPowerModifier('ancient_egyptians_ancient_curse', 'minion', 'self', -2);

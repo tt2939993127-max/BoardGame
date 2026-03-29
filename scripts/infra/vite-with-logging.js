@@ -14,6 +14,8 @@ import { join } from 'path';
 import { runViteCli } from './vite-cli-safe.mjs';
 import { withWindowsHide } from './windows-hide.js';
 
+const DEFAULT_VITE_DEV_PORT = 4173;
+
 const logDir = join(process.cwd(), 'logs');
 if (!existsSync(logDir)) {
   mkdirSync(logDir, { recursive: true });
@@ -64,25 +66,51 @@ async function runViteInline(reason) {
   }
 }
 
+function readCliFlagValue(args, flagName) {
+  const prefix = `${flagName}=`;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === flagName) {
+      const next = args[i + 1];
+      return next && !next.startsWith('--') ? next : undefined;
+    }
+    if (arg.startsWith(prefix)) {
+      return arg.slice(prefix.length);
+    }
+  }
+  return undefined;
+}
+
 function createViteArgs() {
   const viteArgs = process.argv.slice(2);
   const configLoader = process.env.VITE_CONFIG_LOADER?.trim();
   const hasExplicitConfigLoader = viteArgs.some((arg) => arg === '--configLoader' || arg.startsWith('--configLoader='));
   const hasExplicitHost = viteArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
   const hasExplicitPort = viteArgs.some((arg) => arg === '--port' || arg.startsWith('--port='));
+  const explicitHost = readCliFlagValue(viteArgs, '--host');
+  const configuredHost = explicitHost || process.env.VITE_HOST?.trim() || '127.0.0.1';
   const configuredPort = process.env.VITE_DEV_PORT?.trim();
-  const configuredHost = process.env.VITE_HOST?.trim() || '127.0.0.1';
 
   if (configLoader && !hasExplicitConfigLoader) {
     viteArgs.push('--configLoader', configLoader);
   }
 
-  if (configuredPort && !hasExplicitHost) {
+  if (!hasExplicitPort) {
+    const preferredPort = Number(configuredPort);
+    const resolvedPort = Number.isFinite(preferredPort) && preferredPort > 0
+      ? preferredPort
+      : DEFAULT_VITE_DEV_PORT;
+    process.env.VITE_DEV_PORT = String(resolvedPort);
+  }
+
+  const effectivePort = process.env.VITE_DEV_PORT?.trim();
+
+  if (effectivePort && !hasExplicitHost) {
     viteArgs.push('--host', configuredHost);
   }
 
-  if (configuredPort && !hasExplicitPort) {
-    viteArgs.push('--port', configuredPort);
+  if (effectivePort && !hasExplicitPort) {
+    viteArgs.push('--port', effectivePort);
   }
 
   return viteArgs;

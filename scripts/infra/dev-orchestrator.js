@@ -1,6 +1,8 @@
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { saveDevRuntimePorts, removeDevRuntimePorts } from './dev-port-runtime.js';
 import { withWindowsHide } from './windows-hide.js';
 
 const managedChildren = [];
@@ -8,9 +10,27 @@ let shuttingDown = false;
 const repoRoot = process.cwd();
 const devBundleDir = process.env.DEV_BUNDLE_DIR || path.join('temp', 'dev-bundles');
 const devStartupTimeoutMs = Number(process.env.DEV_STARTUP_TIMEOUT_MS) || 300000;
+const DEFAULT_DEV_PORTS = Object.freeze({
+    frontend: 4173,
+    gameServer: 18000,
+    apiServer: 18001,
+});
 
 function getBundleOutfile(...segments) {
     return path.join(devBundleDir, ...segments);
+}
+
+function resolveConfiguredPort(value, fallback) {
+    const port = Number(value);
+    return Number.isFinite(port) && port > 0 ? port : fallback;
+}
+
+export async function resolveDevPortsFromEnv(env = process.env) {
+    return {
+        frontend: resolveConfiguredPort(env.VITE_DEV_PORT, DEFAULT_DEV_PORTS.frontend),
+        gameServer: resolveConfiguredPort(env.GAME_SERVER_PORT, DEFAULT_DEV_PORTS.gameServer),
+        apiServer: resolveConfiguredPort(env.API_SERVER_PORT, DEFAULT_DEV_PORTS.apiServer),
+    };
 }
 
 function prefixOutput(label, stream, target) {
@@ -102,6 +122,7 @@ function shutdown(code = 0) {
         return;
     }
     shuttingDown = true;
+    removeDevRuntimePorts();
 
     for (const child of managedChildren) {
         if (child.killed) continue;
@@ -128,6 +149,17 @@ function resolveLocalDevModeEnv() {
 }
 
 async function main() {
+    removeDevRuntimePorts();
+    const resolvedPorts = await resolveDevPortsFromEnv();
+    saveDevRuntimePorts(resolvedPorts);
+    const sharedDevEnv = {
+        VITE_DEV_PORT: String(resolvedPorts.frontend),
+        GAME_SERVER_PORT: String(resolvedPorts.gameServer),
+        API_SERVER_PORT: String(resolvedPorts.apiServer),
+        GAME_SERVER_PROXY_TARGET: `http://127.0.0.1:${resolvedPorts.gameServer}`,
+    };
+
+    console.log('[dev-orchestrator] resolved dev ports:', resolvedPorts);
     console.log('[dev-orchestrator] starting api and game in parallel');
     const apiChild = startCommand('dev:api', process.execPath, [
         'scripts/infra/dev-bundle-runner.mjs',
@@ -135,7 +167,7 @@ async function main() {
         '--entry', 'apps/api/src/main.ts',
         '--outfile', getBundleOutfile('api', 'main.mjs'),
         '--tsconfig', 'apps/api/tsconfig.json',
-    ], {}, { optional: true });
+    ], sharedDevEnv, { optional: true });
     const gameExtraEnv = resolveLocalDevModeEnv();
     startCommand('dev:game', process.execPath, [
         'scripts/infra/dev-bundle-runner.mjs',
@@ -143,12 +175,15 @@ async function main() {
         '--entry', 'server.ts',
         '--outfile', getBundleOutfile('game', 'server.mjs'),
         '--tsconfig', 'tsconfig.server.json',
-    ], gameExtraEnv);
+    ], {
+        ...sharedDevEnv,
+        ...gameExtraEnv,
+    });
 
     console.log(`[dev-orchestrator] waiting for ports (timeout=${Math.floor(devStartupTimeoutMs / 1000)}s)`);
 
-    const gamePort = Number(process.env.GAME_SERVER_PORT) || 18000;
-    const apiPort = Number(process.env.API_SERVER_PORT) || 18001;
+    const gamePort = resolvedPorts.gameServer;
+    const apiPort = resolvedPorts.apiServer;
 
     await waitForPort(gamePort, 'game');
 
@@ -172,14 +207,23 @@ async function main() {
     }
 
     console.log('[dev-orchestrator] starting frontend');
-    startCommand('dev:frontend', process.execPath, ['scripts/infra/vite-with-logging.js']);
+    startCommand('dev:frontend', process.execPath, ['scripts/infra/vite-with-logging.js'], sharedDevEnv);
 
     if (!apiReady) {
         console.log('[dev-orchestrator] frontend 已启动；API 因本地数据库不可用被跳过');
+        return;
     }
+
+    console.log(`[dev-orchestrator] frontend: http://127.0.0.1:${resolvedPorts.frontend}`);
 }
 
-main().catch((error) => {
-    console.error('[dev-orchestrator] startup failed:', error instanceof Error ? error.message : String(error));
-    shutdown(1);
-});
+const isDirectExecution = process.argv[1]
+    ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+    : false;
+
+if (isDirectExecution) {
+    main().catch((error) => {
+        console.error('[dev-orchestrator] startup failed:', error instanceof Error ? error.message : String(error));
+        shutdown(1);
+    });
+}

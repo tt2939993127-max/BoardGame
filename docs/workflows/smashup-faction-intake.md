@@ -185,6 +185,11 @@ https://assets.easyboardgame.top/official
 
 则新 atlas 必须上传，否则默认运行态会 404。
 
+本步骤的“是否必须上传、失败后如何汇报”按通用规则执行：
+
+- `docs/ai-rules/data-entry.md` § 资源上传收口
+- `docs/ai-rules/asset-pipeline.md` § R2 / CDN 上传收口规则（强制）
+
 检查差异：
 
 ```bash

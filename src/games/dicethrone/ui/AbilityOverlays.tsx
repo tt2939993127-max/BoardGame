@@ -4,7 +4,12 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
-import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import {
+    DICETHRONE_PLAYER_BOARD_LAYOUTS,
+    getAbilitySlotLayoutForCharacter,
+    getPlayerBoardLayoutVersion,
+    type DiceThronePlayerBoardLayoutVersion,
+} from './abilitySlotLayout';
 import type { CardPreviewRef } from '../../../core';
 import type { AbilityCard } from '../types';
 import {
@@ -19,6 +24,8 @@ import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
 import { MOON_ELF_CARDS } from '../heroes/moon_elf/cards';
 import { SHADOW_THIEF_CARDS } from '../heroes/shadow_thief/cards';
+import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 
 // 角色 ID 到卡牌定义的映射
 const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
@@ -28,6 +35,8 @@ const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
     paladin: PALADIN_CARDS,
     moon_elf: MOON_ELF_CARDS,
     shadow_thief: SHADOW_THIEF_CARDS,
+    gunslinger: GUNSLINGER_CARDS,
+    samurai: SAMURAI_CARDS,
 };
 
 // 被动能力配置（按角色）
@@ -122,6 +131,28 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         meditate: 'fearless-riposte', // 恐惧反击 (防御)
         ultimate: 'shadow-shank',     // 暗影刺杀 (终极)
     },
+    gunslinger: {
+        fist: 'revolver',
+        chi: 'bounty-hunter',
+        sky: 'quick-draw',
+        lotus: 'take-cover',
+        combo: 'showdown',
+        lightning: 'deadeye',
+        calm: 'fan-the-hammer',
+        meditate: 'duel',
+        ultimate: 'fill-em-with-lead',
+    },
+    samurai: {
+        fist: 'katana-slice',
+        chi: 'wakizashi',
+        sky: 'bushido',
+        lotus: 'solemnity',
+        combo: 'budo',
+        lightning: 'samurai-slot-06',
+        calm: 'masamune',
+        meditate: 'stand-tall',
+        ultimate: 'samurai-ultimate',
+    },
 };
 
     // 获取槽位对应的基础技能 ID
@@ -194,11 +225,15 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
     }, ref) => {
         const { t } = useTranslation('game-dicethrone');
 
-        // 游戏级布局配置：所有用户共享一致的默认布局
-        const [slots, setSlots] = React.useState(() => {
-            const initial = DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }));
-            return initial;
-        });
+        const layoutVersion = React.useMemo<DiceThronePlayerBoardLayoutVersion>(
+            () => getPlayerBoardLayoutVersion(characterId),
+            [characterId],
+        );
+        const [allLayouts, setAllLayouts] = React.useState(() => ({
+            v1: DICETHRONE_PLAYER_BOARD_LAYOUTS.v1.map(slot => ({ ...slot })),
+            v2: DICETHRONE_PLAYER_BOARD_LAYOUTS.v2.map(slot => ({ ...slot })),
+        }));
+        const slots = allLayouts[layoutVersion] ?? getAbilitySlotLayoutForCharacter(characterId);
         const [editingId, setEditingId] = React.useState<string | null>(null);
         const containerRef = React.useRef<HTMLDivElement>(null);
         const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
@@ -207,15 +242,17 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         React.useImperativeHandle(ref, () => ({
             saveLayout: async () => {
                 try {
-                    const result = await saveDiceThroneAbilityLayout(slots);
-                    const hint = result.relativePath ? `已写入 ${result.relativePath}` : '已写入布局文件';
+                    const result = await saveDiceThroneAbilityLayout({ layouts: allLayouts });
+                    const hint = result.relativePath
+                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()}）`
+                        : `已写入布局文件（${layoutVersion.toUpperCase()}）`;
                     return { hint };
                 } catch (error) {
                     const message = error instanceof Error ? error.message : '保存失败';
                     return { hint: message };
                 }
             },
-        }), [slots]);
+        }), [allLayouts, layoutVersion]);
 
         const resolveAbilityId = (slotId: string) => {
             const mapping = ABILITY_SLOT_MAP[slotId];
@@ -239,12 +276,15 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 const rect = containerRef.current.getBoundingClientRect();
                 const deltaX = ((e.clientX - startX) / rect.width) * 100;
                 const deltaY = ((e.clientY - startY) / rect.height) * 100;
-                setSlots(prev => prev.map(s => s.id === id ? {
-                    ...s,
-                    ...(type === 'move'
-                        ? { x: Number((startVal.x + deltaX).toFixed(2)), y: Number((startVal.y + deltaY).toFixed(2)) }
-                        : { w: Number(Math.max(5, startVal.w + deltaX).toFixed(2)), h: Number(Math.max(5, startVal.h + deltaY).toFixed(2)) })
-                } : s));
+                setAllLayouts(prev => ({
+                    ...prev,
+                    [layoutVersion]: prev[layoutVersion].map(s => s.id === id ? {
+                        ...s,
+                        ...(type === 'move'
+                            ? { x: Number((startVal.x + deltaX).toFixed(2)), y: Number((startVal.y + deltaY).toFixed(2)) }
+                            : { w: Number(Math.max(5, startVal.w + deltaX).toFixed(2)), h: Number(Math.max(5, startVal.h + deltaY).toFixed(2)) })
+                    } : s),
+                }));
             };
             const handleMouseUp = () => { dragInfo.current = null; };
             if (isEditing) {
@@ -255,7 +295,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
             };
-        }, [isEditing]);
+        }, [isEditing, layoutVersion]);
 
         return (
             <div

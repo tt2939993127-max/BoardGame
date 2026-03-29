@@ -39,13 +39,27 @@ const abilityCardsAtlasJob = {
   atlasConfigPath: 'public/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json',
   maxIndex: 31,
   splitEntries: [
-    { id: 'fan-the-hammer-2', left: 2073, top: 2127, width: 598, height: 540 },
-    { id: 'pistol-whip', left: 2073, top: 2557, width: 598, height: 553 },
-    { id: 'take-cover-2', left: 2743, top: 2127, width: 598, height: 540 },
-    { id: 'mark-the-target', left: 2743, top: 2557, width: 598, height: 553 },
-    { id: 'deadeye-2', left: 3413, top: 2127, width: 598, height: 540 },
-    { id: 'the-law', left: 3413, top: 2557, width: 598, height: 553 },
+    { sourceSlot: 'slot-22.webp', topId: 'fan-the-hammer-2', bottomId: 'pistol-whip' },
+    { sourceSlot: 'slot-23.webp', topId: 'take-cover-2', bottomId: 'mark-the-target' },
+    { sourceSlot: 'slot-24.webp', topId: 'deadeye-2', bottomId: 'the-law' },
+  ],
+  directEntries: [
     { id: 'hero-portrait-extra', left: 6065, top: 6318, width: 675, height: 1054 },
+  ],
+};
+
+const handPreviewJob = {
+  // 仅供录入核对使用，不得再接入运行时代码。
+  outputDir: 'temp/dicethrone-intake/gunslinger/hand-preview',
+  targetWidth: 598,
+  targetHeight: 965,
+  entries: [
+    'fan-the-hammer-2.webp',
+    'pistol-whip.webp',
+    'take-cover-2.webp',
+    'mark-the-target.webp',
+    'deadeye-2.webp',
+    'the-law.webp',
   ],
 };
 
@@ -69,6 +83,69 @@ async function extractFromRect(sourcePath, outputPath, rect) {
     })
     .webp({ quality: 100 })
     .toFile(outputPath);
+}
+
+async function detectVerticalSplit(sourcePath) {
+  const { data, info } = await sharp(sourcePath)
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const startY = Math.floor(info.height * 0.35);
+  const endY = Math.floor(info.height * 0.75);
+  let bestY = Math.floor(info.height * 0.55);
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let y = startY; y <= endY; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < info.width; x += 1) {
+      rowSum += data[y * info.width + x];
+    }
+    if (rowSum < bestScore) {
+      bestScore = rowSum;
+      bestY = y;
+    }
+  }
+
+  return Math.max(1, bestY - 40);
+}
+
+async function writeSegmentCrop(sourcePath, outputDir, fileName, segment) {
+  await ensureDir(outputDir);
+  await ensureDir(path.join(outputDir, 'compressed'));
+
+  const metadata = await sharp(sourcePath).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error(`无法读取图片尺寸: ${sourcePath}`);
+  }
+  const splitY = await detectVerticalSplit(sourcePath);
+  const rect = segment === 'top'
+    ? { left: 0, top: 0, width: metadata.width, height: splitY }
+    : { left: 0, top: splitY, width: metadata.width, height: metadata.height - splitY };
+
+  const buildPipeline = () => sharp(sourcePath)
+    .extract(rect)
+    .webp({ quality: 100 });
+
+  await buildPipeline().toFile(path.join(outputDir, fileName));
+  await buildPipeline().toFile(path.join(outputDir, 'compressed', fileName));
+}
+
+async function writeNormalizedPreview(sourcePath, outputDir, fileName, targetWidth, targetHeight) {
+  await ensureDir(outputDir);
+  await ensureDir(path.join(outputDir, 'compressed'));
+
+  const buildPipeline = () => sharp(sourcePath)
+    .resize({
+      width: targetWidth,
+      height: targetHeight,
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .webp({ quality: 100 });
+
+  await buildPipeline().toFile(path.join(outputDir, fileName));
+  await buildPipeline().toFile(path.join(outputDir, 'compressed', fileName));
 }
 
 function getScaledAtlasRect(atlasConfig, metadata, index) {
@@ -120,9 +197,33 @@ async function run() {
   }
 
   for (const entry of abilityCardsAtlasJob.splitEntries) {
+    const sourceSlotPath = path.join(atlasOutputDir, entry.sourceSlot);
+    await writeSegmentCrop(sourceSlotPath, atlasOutputDir, `${entry.topId}.webp`, 'top');
+    await writeSegmentCrop(sourceSlotPath, atlasOutputDir, `${entry.bottomId}.webp`, 'bottom');
+    console.log(`${abilityCardsAtlasJob.outputDir}/${entry.topId}.webp`);
+    console.log(`${abilityCardsAtlasJob.outputDir}/compressed/${entry.topId}.webp`);
+    console.log(`${abilityCardsAtlasJob.outputDir}/${entry.bottomId}.webp`);
+    console.log(`${abilityCardsAtlasJob.outputDir}/compressed/${entry.bottomId}.webp`);
+  }
+
+  for (const entry of abilityCardsAtlasJob.directEntries) {
     const outputPath = path.join(atlasOutputDir, `${entry.id}.webp`);
     await extractFromRect(atlasSourcePath, outputPath, entry);
     console.log(`${abilityCardsAtlasJob.outputDir}/${entry.id}.webp`);
+  }
+
+  const handPreviewOutputDir = path.join(rootDir, handPreviewJob.outputDir);
+  for (const fileName of handPreviewJob.entries) {
+    const sourcePath = path.join(atlasOutputDir, fileName);
+    await writeNormalizedPreview(
+      sourcePath,
+      handPreviewOutputDir,
+      fileName,
+      handPreviewJob.targetWidth,
+      handPreviewJob.targetHeight,
+    );
+    console.log(`${handPreviewJob.outputDir}/${fileName}`);
+    console.log(`${handPreviewJob.outputDir}/compressed/${fileName}`);
   }
 }
 

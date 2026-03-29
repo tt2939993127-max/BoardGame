@@ -1,0 +1,154 @@
+# Smash Up Ancient Egyptians 审计（2026-03-29）
+
+## 审计定位
+- 本文档是 `Oops, You Did It Again` 四派系逐派系审计的第 1 轮，先审 `Ancient Egyptians`。
+- 本轮目的不是一次性宣告古埃及“全部通过”，而是先把已确认问题、规则依据、已修复项与剩余审计面收口成可追踪证据。
+
+## 审计范围
+- 派系数据定义：`src/games/smashup/data/factions/ancient_egyptians.ts`
+- 派系能力实现：`src/games/smashup/abilities/ancient_egyptians.ts`
+- 埋葬共享链路：
+  - `src/games/smashup/domain/bury.ts`
+  - `src/games/smashup/domain/playLegality.ts`
+  - `src/games/smashup/domain/commands.ts`
+  - `src/games/smashup/Board.tsx`
+- 已补回归：
+  - `src/games/smashup/__tests__/buryEngine.test.ts`
+  - `src/games/smashup/__tests__/properties/coreProperties.test.ts`
+
+## 规则依据
+- 旧的“四个新派系审计”不覆盖古埃及；它实际审的是科学怪人、狼人、吸血鬼、巨蚁：
+  - `evidence/smashup-four-new-factions-audit-2026-02-22.md`
+- 本轮用于核对古埃及埋葬语义的外部规则来源：
+  - `https://smashup.fandom.com/wiki/Ancient_Egyptians`
+  - `https://smashup.fandom.com/wiki/Burying`
+  - `https://www.alderac.com/wp-content/uploads/2024/05/SU_OOPS-YOU-DID-IT-AGAIN_RULEBOOK.pdf`
+
+## 已确认结论
+
+### 结论 1：古埃及不在旧“四新派系审计”范围内
+- 旧审计文件标题与范围已明确写明只覆盖：
+  - `frankenstein`
+  - `werewolves`
+  - `vampires`
+  - `giant_ants`
+- 因此，古埃及本轮必须单独建立审计结论，不能引用旧文档冒充“已审过”。
+
+### 结论 2：`Bury this card` 不是无目标埋葬，必须落到基地
+- 命中卡牌：
+  - `You Can Take It With You`
+  - `Tomb Trap`
+  - `Blessing of Anubis`
+  - `Seal the Tomb`
+- 已确认这些卡现在都显式声明 `playNeedsBase: true`：
+  - `src/games/smashup/data/factions/ancient_egyptians.ts:70`
+  - `src/games/smashup/data/factions/ancient_egyptians.ts:103`
+  - `src/games/smashup/data/factions/ancient_egyptians.ts:126`
+  - `src/games/smashup/data/factions/ancient_egyptians.ts:137`
+
+### 结论 3：此前确实存在实现缺陷，现已修到共享链路
+- 根因：
+  - 普通行动卡默认可以直接打出，不会自动进入“选基地”流程。
+  - 但古埃及这几张牌的 `onPlay` 实现依赖 `baseIndex` 才知道要埋到哪个基地。
+- 旧行为：
+  - 未传 `targetBaseIndex` 时，牌会离开手牌，但不会进入任何基地的 `buriedCards`，等于“蒸发”。
+- 已修复到共享层：
+  - 数据层新增 `playNeedsBase` / `actionPlayNeedsBase`
+  - helper 新增 `actionLikeNeedsPlayBase`
+  - 前端出牌流程要求先选基地
+  - 校验层拒绝无 `targetBaseIndex` 的普通行动卡
+
+## 已补回归
+- `src/games/smashup/__tests__/properties/coreProperties.test.ts:459`
+  - 覆盖：声明 `playNeedsBase` 的普通行动卡缺少 `targetBaseIndex` 时必须校验失败。
+- `src/games/smashup/__tests__/buryEngine.test.ts:21`
+  - 覆盖：`You Can Take It With You` 正常打出后必须埋到所选基地，不能无目标消失。
+- `src/games/smashup/__tests__/newOngoingAbilities.test.ts`
+  - 覆盖：
+    - `Priest of Anubis` 只在“你自己有埋葬牌”时获得 +2。
+    - `Pyramid Engineer` 只允许翻开这里你的一张埋葬牌。
+    - `Pharaoh` 在计分前只提示翻开这里你的一张埋葬牌。
+    - `Lost Knowledge` 埋葬模式会排除自己，并在选手牌后再单独选择目标基地。
+    - `Mummy` 在基地结算后可改为埋到另一个基地，而不是进入弃牌堆。
+    - `Plague of Locusts` 只让所选基地上的其他玩家随从获得 `-1`。
+    - `Mummy Strength` 的 `+4` 模式可作用于存在任意埋葬牌的基地。
+    - `Seal the Tomb` 的翻开模式只提供同一基地且属于你的埋葬牌。
+- `src/games/smashup/__tests__/newBaseAbilities.test.ts`
+  - 覆盖：
+    - `Pyramids` 改为“你的回合中、每回合一次”的主动基地能力入口。
+    - 同回合第二次使用会被命令校验拦截。
+
+## 本轮新增已确认修复
+
+### 修复 1：`Priest of Anubis` 只认己方埋葬牌
+- 规则语义是 “if you have a card buried here”。
+- 旧实现把“这里存在任意埋葬牌”都算作满足条件。
+- 现已改为只认该随从控制者自己的埋葬牌。
+
+### 修复 2：`Pyramid Engineer` 只允许翻开“你的一张”埋葬牌
+- 旧实现会把同一基地上对手的埋葬牌也列进可翻开候选。
+- 现已收紧为只构造自己控制的 buried 选项。
+
+### 修复 3：`Pharaoh` 补齐 `beforeScoring` 翻开链路
+- 旧实现只有“翻开后抽 1 张”的 `onBuriedCardUncovered`，缺少“计分前你可以翻开这里你的一张埋葬牌”这半条触发。
+- 现已补 `beforeScoring` trigger 与对应 interaction handler。
+
+### 修复 4：`Lost Knowledge` 的埋葬路径改为“先选手牌，再选基地”
+- 规则侧要求你埋葬一张手牌时，要把它埋到一个基地，而不是默认绑死当前上下文基地。
+- 旧实现曾依赖 `ctx.baseIndex`，会把“在哪个基地埋”错误地偷换成当前结算基地。
+- 现已改为：
+  - 先选要埋的手牌
+  - 再单独选择目标基地
+  - 并排除当前打出的 `Lost Knowledge` 自己，不再把自己混入可埋手牌
+
+### 修复 5：`Seal the Tomb` 的埋葬模式排除当前打出的自己
+- `onPlay` 时读取手牌候选，如果不排除当前行动牌，容易把正在打出的自己也列进“可再埋葬”的候选。
+- 现已过滤 `ctx.cardUid`。
+
+### 修复 6：`Pyramids` 已从错误的 `onTurnStart` 迁到主动基地能力入口
+- 规则语义是 “During your turn, once each turn, you may bury a card from your hand here.”
+- 旧实现把它做成了回合开始时自动/半自动提示，时点不对，也不具备共享的“主动基地能力”语义。
+- 现已补齐共享链路：
+  - 新增 `USE_BASE_ABILITY` 命令、`BASE_ABILITY_USED` 事件和 `usedBaseAbilitiesThisTurn`
+  - `base_pyramids` 改为玩家在自己回合出牌阶段主动点击基地使用
+  - 同回合第二次使用会被校验层显式拦截
+
+### 修复 7：古埃及多步交互 handler 存在返回契约错位，现已修正
+- 审计新增用例时发现：
+  - `Mummy Strength`
+  - `Seal the Tomb`
+  - `Lost Knowledge` 的模式切换 handler
+  曾直接把能力执行器返回的 `matchState` 结构透传给交互系统。
+- 但交互系统消费 `InteractionHandler` 时只读取 `result.state`。
+- 旧行为下，这类二段交互在真实链路里可能丢失后续 prompt。
+- 现已统一改为返回 `state`，并把能力执行器结果显式适配到 handler 契约。
+
+## 本轮验证
+- 已运行：
+  - `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/newOngoingAbilities.test.ts src/games/smashup/__tests__/buryEngine.test.ts src/games/smashup/__tests__/properties/coreProperties.test.ts src/games/smashup/__tests__/newBaseAbilities.test.ts --configLoader native --environment node`
+- 结果：
+  - `4` 个测试文件通过
+  - `235` 条测试通过
+- 说明：
+  - 这里使用 `--environment node`，因为该工作区默认 Vitest/jsdom worker 之前出现过本地依赖缺失问题；本轮验证的是古埃及相关领域链路，不依赖浏览器渲染。
+
+## 工具链失效证据
+- 本地 Smash Up Wiki 抓取链路当前不可作为权威输入：
+  - `node scripts/scrape-wiki-with-descriptions.mjs`
+  - 运行后对 `ancient_egyptians` 等派系抓取结果为 `0` 种卡牌 / `0` 张
+- 因此本轮古埃及审计没有采用该缓存结果作为规则真相，而是改以外部规则页和 FAQ 直接核对。
+
+## 当前仍在继续的审计面
+- `Plague of Locusts`
+  - 仍需继续扩审其与 `beforeScoring` 窗口、计分结算顺序及多基地并存时的联动。
+- `Mummy / Priest of Anubis / Pharaoh / Pyramid Engineer`
+  - 仍需继续扩审更复杂组合场景，例如多实例、压制、基地替换与结算链式传递。
+- `Ancient Curse / Mummy Strength / Seal the Tomb`
+  - `Ancient Curse` 的附着+移除指示物链路、`Seal the Tomb` 多选上限与双模式边界仍要继续扩审。
+- 共享扩审
+  - 继续复查所有复用 `bury.ts`、`playNeedsBase`、`Board.tsx` 选基地链路的调用点，避免只修古埃及单卡。
+
+## 本轮状态
+- 状态：`进行中`
+- 已锁定并修复 1 个高优先级规则偏差：古埃及自埋牌必须选基地。
+- 下一步：继续按卡牌逐张核对古埃及剩余能力，再进入 `Vikings` 审计。
