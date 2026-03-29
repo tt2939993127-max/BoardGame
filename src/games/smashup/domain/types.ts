@@ -122,6 +122,8 @@ export interface FusionCardDef {
     actionPlayConstraint?: PlayConstraint;
     /** action 面在正常打出时是否需要显式选择目标基地 */
     actionPlayNeedsBase?: boolean;
+    /** action 面在正常打出时是否需要显式选择目标随从（并隐含需要目标基地） */
+    actionPlayNeedsMinion?: boolean;
     actionSpecialNeedsBase?: boolean;
     actionSpecialLimitGroup?: string;
     actionSpecialTiming?: SpecialTiming;
@@ -191,6 +193,8 @@ export interface ActionCardDef {
     playConstraint?: PlayConstraint;
     /** 正常打出时是否需要显式选择目标基地 */
     playNeedsBase?: boolean;
+    /** 正常打出时是否需要显式选择目标随从（并隐含需要目标基地） */
+    playNeedsMinion?: boolean;
     /** 特殊行动卡是否需要选择目标基地（Me First! 窗口中高亮可选基地） */
     specialNeedsBase?: boolean;
     /**

@@ -175,6 +175,15 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
         const actionDef = def as any;
         const subtype = actionDef.subtype as string;
         const specialTiming = actionDef.specialTiming ?? 'beforeScoring';
+        if (subtype !== 'special' && !isStandardActionTimingAllowed(matchState)) {
+            const events: SmashUpEvent[] = [{
+                type: SU_EVENTS.BURIED_CARD_UNCOVERED,
+                payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
+                timestamp: now,
+            } as SmashUpEvent];
+            if (uncoverTriggers) events.push(uncoverTriggers);
+            return { state: matchState, events };
+        }
         if (subtype === 'special' && !isSpecialTimingAllowed(matchState, specialTiming)) {
             const events: SmashUpEvent[] = [{
                 type: SU_EVENTS.BURIED_CARD_UNCOVERED,
@@ -327,6 +336,12 @@ function isSpecialTimingAllowed(
         return windowType === 'meFirst' || matchState.sys.phase === 'scoreBases';
     }
     return windowType === 'afterScoring';
+}
+
+function isStandardActionTimingAllowed(matchState: MatchState<SmashUpCore>): boolean {
+    const startTurnWindowActive = matchState.sys.phase === 'startTurn'
+        || Boolean((matchState.sys as any)._smashupStartTurnWindowActive);
+    return startTurnWindowActive || matchState.sys.phase === 'playCards';
 }
 
 const handleUncoverAtStartTurn: InteractionHandler = (state, playerId, value, _data, random, now) => {

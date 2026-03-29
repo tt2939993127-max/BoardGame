@@ -73,6 +73,7 @@ export function getDtMeta(interaction?: InteractionDescriptor): DtDiceMeta | und
 
 export const DiceTray = ({
     dice,
+    rollCount,
     onToggleLock,
     currentPhase: _currentPhase,
     canInteract,
@@ -84,6 +85,7 @@ export const DiceTray = ({
     isPassiveRerollMode,
 }: {
     dice: Die[];
+    rollCount: number;
     onToggleLock: (id: number) => void;
     currentPhase: TurnPhase;
     canInteract: boolean;
@@ -141,6 +143,7 @@ export const DiceTray = ({
         ? (selectResult?.selectedDiceIds.length ?? 0)
         : (modifyResult?.modCount ?? 0);
     const canSelectMore = currentSelectCount < maxSelectCount;
+    const canToggleDieLock = canInteract && rollCount > 0;
 
     const handleDieClick = (dieId: number) => {
         if (isRolling && !isInteractionMode) return;
@@ -160,7 +163,7 @@ export const DiceTray = ({
                     multistepInteraction.step({ action: 'select', dieId, dieValue: die.value } as DiceModifyStep);
                 }
             }
-        } else if (canInteract) {
+        } else if (canToggleDieLock) {
             onToggleLock(dieId);
         }
     };
@@ -215,7 +218,7 @@ export const DiceTray = ({
                     const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
-                        : canInteract;
+                        : canToggleDieLock;
                     // any/adjust 模式下使用本地预览值
                     const displayValue = (isAnyMode || isAdjustMode)
                         ? (modifyResult?.modifications[d.id] ?? d.value)

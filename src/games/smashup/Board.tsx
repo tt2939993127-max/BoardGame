@@ -49,6 +49,7 @@ import { getDiscardPlayOptions } from './domain/discardPlayability';
 import { canUseActiveBaseAbility } from './domain/baseAbilities';
 import {
     actionLikeNeedsPlayBase,
+    actionLikeNeedsPlayMinion,
     actionLikeNeedsResponseWindowBase,
     getMaxRemainingGlobalPowerLimitedQuota,
     isActionLikeRespondableInWindow,
@@ -221,7 +222,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     });
 
     const [selectedCardUid, setSelectedCardUid] = useState<string | null>(null);
-    const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | null>(null);
+    const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | 'action-minion' | null>(null);
     const [selectedSetAsideTitanUid, setSelectedSetAsideTitanUid] = useState<string | null>(null);
     const [pendingFusionChoiceUid, setPendingFusionChoiceUid] = useState<string | null>(null);
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
@@ -814,9 +815,9 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                         indices.add(i);
                     }
                 }
-            } else if (selectedCardMode === 'ongoing' || selectedCardMode === 'ongoing-minion') {
-                // ongoing-minion 模式：行动卡附着到随从上，不受基地 play_action 限制
-                if (selectedCardMode === 'ongoing-minion') {
+            } else if (selectedCardMode === 'ongoing' || selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') {
+                // 需要选择随从的行动卡：目标来自随从，不受基地 play_action 限制
+                if (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') {
                     // 只检查基地上是否有随从
                     if (core.bases[i].minions.length === 0) {
                         continue; // 没有随从，跳过该基地
@@ -851,7 +852,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
 
     // ongoing-minion 模式下的有效随从 UID 集合（只包含未被限制基地上的随从）
     const ongoingMinionTargetUids = useMemo<Set<string>>(() => {
-        if (selectedCardMode !== 'ongoing-minion' || !playerID) return new Set();
+        if ((selectedCardMode !== 'ongoing-minion' && selectedCardMode !== 'action-minion') || !playerID) return new Set();
         const uids = new Set<string>();
         for (let i = 0; i < core.bases.length; i++) {
             if (!deployableBaseIndices.has(i)) continue;
@@ -1364,6 +1365,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     // 根据 ongoingTarget 决定选择基地还是随从
                     setSelectedCardMode(cardDef.ongoingTarget === 'minion' ? 'ongoing-minion' : 'ongoing');
                 }
+            } else if (cardDef && actionLikeNeedsPlayMinion(cardDef)) {
+                if (selectedCardUid === card.uid) {
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                } else {
+                    setSelectedCardUid(card.uid);
+                    setSelectedCardMode('action-minion');
+                }
             } else if (cardDef && actionLikeNeedsPlayBase(cardDef)) {
                 if (selectedCardUid === card.uid) {
                     setSelectedCardUid(null);
@@ -1416,6 +1425,12 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             return;
         }
 
+        if (actionLikeNeedsPlayMinion(def)) {
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode('action-minion');
+            return;
+        }
+
         if (actionLikeNeedsPlayBase(def)) {
             setSelectedCardUid(card.uid);
             setSelectedCardMode('ongoing');
@@ -1456,8 +1471,8 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
             return;
         }
-        // ongoing-minion 模式下附着行动卡到随从
-        if (selectedCardUid && selectedCardMode === 'ongoing-minion') {
+        // 需要随从目标的行动卡：点击随从后直接打出
+        if (selectedCardUid && (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion')) {
             if (!ongoingMinionTargetUids.has(minionUid)) return;
             handlePlayOngoingToMinion(selectedCardUid, baseIndex, minionUid);
         }
@@ -2068,14 +2083,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                     || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
                                     || (!!selectedSetAsideTitanUid && selectedTitanDeployableBaseIndices.has(idx))
                                 }
-                                isMinionSelectMode={!isOngoingSelectPrompt && ((selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
-                                selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
+                                isMinionSelectMode={!isOngoingSelectPrompt && (((selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
+                                selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') ? ongoingMinionTargetUids : undefined}
                                 multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
                                 isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
                                 isDimmed={
                                     (isBaseSelectPrompt && !selectableBaseIndices.has(idx))
                                     || (discardStripSelectedUid != null && !discardStripAllowedBases.has(idx))
-                                    || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && !deployableBaseIndices.has(idx))
+                                    || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && selectedCardMode !== 'action-minion' && !deployableBaseIndices.has(idx))
                                     || (!!meFirstPendingCard && !meFirstEligibleBaseIndices.has(idx))
                                     || (!!selectedSetAsideTitanUid && !selectedTitanDeployableBaseIndices.has(idx))
                                 }

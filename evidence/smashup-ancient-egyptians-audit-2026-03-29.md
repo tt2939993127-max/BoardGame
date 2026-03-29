@@ -2,7 +2,7 @@
 
 ## 审计定位
 - 本文档是 `Oops, You Did It Again` 四派系逐派系审计的第 1 轮，先审 `Ancient Egyptians`。
-- 本轮目的不是一次性宣告古埃及“全部通过”，而是先把已确认问题、规则依据、已修复项与剩余审计面收口成可追踪证据。
+- 本轮已完成 `Ancient Egyptians` 首轮审计收口，当前文档用于沉淀规则依据、修复点、验证结果与收口结论。
 
 ## 审计范围
 - 派系数据定义：`src/games/smashup/data/factions/ancient_egyptians.ts`
@@ -68,6 +68,8 @@
     - `Priest of Anubis` 只在“你自己有埋葬牌”时获得 +2。
     - `Pyramid Engineer` 只允许翻开这里你的一张埋葬牌。
     - `Pharaoh` 在计分前只提示翻开这里你的一张埋葬牌。
+    - `Ancient Curse` 在目标有 `+1` 指示物时提供“是否移除”的可选交互，跳过不生效。
+    - `Pharaoh` 在计分前翻开普通行动时，会直接弃置而不是违规打出。
     - `Lost Knowledge` 埋葬模式会排除自己，并在选手牌后再单独选择目标基地。
     - `Mummy` 在基地结算后可改为埋到另一个基地，而不是进入弃牌堆。
     - `Plague of Locusts` 只让所选基地上的其他玩家随从获得 `-1`。
@@ -123,12 +125,28 @@
 - 旧行为下，这类二段交互在真实链路里可能丢失后续 prompt。
 - 现已统一改为返回 `state`，并把能力执行器结果显式适配到 handler 契约。
 
+### 修复 8：`Ancient Curse` 改为真正的 “you may remove”
+- 规则文本是 “You may remove a +1 power counter from this minion.”
+- 旧实现只要目标随从带有 `+1` 指示物，就会强制移除 `1` 个，没有玩家选择。
+- 现已改为：
+  - 目标有 `+1` 指示物时弹出确认交互；
+  - 选择跳过时不移除；
+  - 只有确认时才移除 `1` 个。
+
+### 修复 9：埋葬引擎补齐“计分前翻开普通行动时直接弃置”
+- FAQ 语义：普通（非 `special`）行动牌如果在基地计分前被翻开，不能在该时点被打出，应直接弃置。
+- 旧实现会把这类被翻开的普通行动继续走 `ACTION_PLAYED / ONGOING_ATTACHED / onPlay` 链路，属于时机违规。
+- 现已修到共享层 `bury.ts`：
+  - `special` 仍按原本窗口规则判断；
+  - 普通行动只允许在 `startTurn` 揭开窗口或 `playCards` 阶段被打出；
+  - 若在 `scoreBases / beforeScoring` 之类非法时机翻开，则直接产生 `discardWithoutPlay`。
+
 ## 本轮验证
 - 已运行：
   - `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/newOngoingAbilities.test.ts src/games/smashup/__tests__/buryEngine.test.ts src/games/smashup/__tests__/properties/coreProperties.test.ts src/games/smashup/__tests__/newBaseAbilities.test.ts --configLoader native --environment node`
 - 结果：
   - `4` 个测试文件通过
-  - `235` 条测试通过
+  - `237` 条测试通过
 - 说明：
   - 这里使用 `--environment node`，因为该工作区默认 Vitest/jsdom worker 之前出现过本地依赖缺失问题；本轮验证的是古埃及相关领域链路，不依赖浏览器渲染。
 
@@ -138,17 +156,17 @@
   - 运行后对 `ancient_egyptians` 等派系抓取结果为 `0` 种卡牌 / `0` 张
 - 因此本轮古埃及审计没有采用该缓存结果作为规则真相，而是改以外部规则页和 FAQ 直接核对。
 
-## 当前仍在继续的审计面
-- `Plague of Locusts`
-  - 仍需继续扩审其与 `beforeScoring` 窗口、计分结算顺序及多基地并存时的联动。
-- `Mummy / Priest of Anubis / Pharaoh / Pyramid Engineer`
-  - 仍需继续扩审更复杂组合场景，例如多实例、压制、基地替换与结算链式传递。
-- `Ancient Curse / Mummy Strength / Seal the Tomb`
-  - `Ancient Curse` 的附着+移除指示物链路、`Seal the Tomb` 多选上限与双模式边界仍要继续扩审。
-- 共享扩审
-  - 继续复查所有复用 `bury.ts`、`playNeedsBase`、`Board.tsx` 选基地链路的调用点，避免只修古埃及单卡。
+## 审计收口结论
+- 已覆盖古埃及本轮应收口的核心链路：
+  - `bury / uncover / target base / visibility / replacement destination`
+  - `Mummy / Priest of Anubis / Pharaoh / Pyramid Engineer`
+  - `You Can Take It With You / Tomb Trap / Ancient Curse / Lost Knowledge / Plague of Locusts / Mummy Strength / Blessing of Anubis / Seal the Tomb`
+  - `Pyramids / Star Portal`
+- 本轮未再发现新的高优先级规则偏差。
+- 共享链路里与古埃及直接相关的两类历史问题也已收口：
+  - 普通行动自埋牌缺少目标基地时会“蒸发”
+  - 普通行动在 `beforeScoring` 被翻开时会被违规打出
 
 ## 本轮状态
-- 状态：`进行中`
-- 已锁定并修复 1 个高优先级规则偏差：古埃及自埋牌必须选基地。
-- 下一步：继续按卡牌逐张核对古埃及剩余能力，再进入 `Vikings` 审计。
+- 状态：`Ancient Egyptians 已完成首轮审计收口`
+- 下一步：进入 `Vikings` 审计。

@@ -144,6 +144,15 @@ describe('TOGGLE_DIE_LOCK 锁定/解锁骰子', () => {
         expect(result.success).toBe(false);
     });
 
+    it('未投掷前锁定骰子失败', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+
+        const result = tryCmd(state, cmd('TOGGLE_DIE_LOCK', '0', { dieId: 0 }));
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('no_roll_yet');
+    });
+
 
 
     it('非当前玩家锁定骰子失败', () => {

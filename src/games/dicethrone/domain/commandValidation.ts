@@ -332,6 +332,10 @@ const validateToggleDieLock = (
     if (state.rollConfirmed) {
         return fail('roll_already_confirmed');
     }
+
+    if (state.rollCount === 0) {
+        return fail('no_roll_yet');
+    }
     
     const die = state.dice.find(d => d.id === cmd.payload.dieId);
     if (!die) {

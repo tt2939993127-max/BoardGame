@@ -126,9 +126,16 @@ export function actionLikeNeedsResponseWindowBase(def: ActionLikeDef): boolean {
 
 export function actionLikeNeedsPlayBase(def: ActionLikeDef): boolean {
     if (isFusionActionDef(def)) {
-        return def.actionPlayNeedsBase === true;
+        return def.actionPlayNeedsBase === true || def.actionPlayNeedsMinion === true;
     }
-    return def.playNeedsBase === true;
+    return def.playNeedsBase === true || def.playNeedsMinion === true;
+}
+
+export function actionLikeNeedsPlayMinion(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsMinion === true;
+    }
+    return def.playNeedsMinion === true;
 }
 
 export function isActionLikeRespondableInWindow(

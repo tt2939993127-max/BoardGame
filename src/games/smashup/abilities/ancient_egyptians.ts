@@ -82,6 +82,7 @@ export function registerAncientEgyptiansInteractionHandlers(): void {
     registerInteractionHandler('ancient_egyptians_lost_knowledge_uncover', handleLostKnowledgeUncover);
     registerInteractionHandler('ancient_egyptians_plague_of_locusts', handlePlagueOfLocusts);
     registerInteractionHandler('ancient_egyptians_tomb_trap', handleTombTrap);
+    registerInteractionHandler('ancient_egyptians_ancient_curse_confirm', handleAncientCurseConfirm);
     registerInteractionHandler('ancient_egyptians_mummy_strength_mode', handleMummyStrengthMode);
     registerInteractionHandler('ancient_egyptians_mummy_strength_target', handleMummyStrengthTarget);
     registerInteractionHandler('ancient_egyptians_seal_the_tomb_mode', handleSealTheTombMode);
@@ -248,7 +249,25 @@ function ancientEgyptiansAncientCurse(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     const target = base?.minions.find(minion => minion.uid === ctx.targetMinionUid);
     if (!target || target.powerCounters <= 0) return { events: [] };
-    return { events: [removePowerCounter(target.uid, ctx.baseIndex, 1, 'ancient_egyptians_ancient_curse', ctx.now)] };
+    if (!ctx.matchState) {
+        return { events: [removePowerCounter(target.uid, ctx.baseIndex, 1, 'ancient_egyptians_ancient_curse', ctx.now)] };
+    }
+    const interaction = createSimpleChoice(
+        `ancient_egyptians_ancient_curse_confirm_${ctx.now}_${target.uid}`,
+        ctx.playerId,
+        '远古诅咒：是否移除该随从上的 1 个 +1 力量指示物？',
+        [
+            {
+                id: 'apply',
+                label: '移除 1 个 +1 力量指示物',
+                value: { apply: true, targetMinionUid: target.uid, baseIndex: ctx.baseIndex },
+                displayMode: 'button' as const,
+            },
+            createSkipOption('跳过（不移除）'),
+        ],
+        { sourceId: 'ancient_egyptians_ancient_curse_confirm', targetType: 'minion' },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 function ancientEgyptiansBlessingOfAnubisOnUncover(ctx: AbilityContext): AbilityResult {
@@ -558,6 +577,19 @@ const handleTombTrap: InteractionHandler = (state, playerId, value, data, _rando
             reason: 'ancient_egyptians_tomb_trap',
             now,
         }),
+    };
+};
+
+const handleAncientCurseConfirm: InteractionHandler = (state, _playerId, value, _data, _random, now) => {
+    const selected = value as { apply?: boolean; targetMinionUid?: string; baseIndex?: number; skip?: boolean } | undefined;
+    if (!selected || selected.skip || !selected.apply || !selected.targetMinionUid || selected.baseIndex === undefined) {
+        return { state, events: [] };
+    }
+    const target = state.core.bases[selected.baseIndex]?.minions.find(minion => minion.uid === selected.targetMinionUid);
+    if (!target || target.powerCounters <= 0) return { state, events: [] };
+    return {
+        state,
+        events: [removePowerCounter(target.uid, selected.baseIndex, 1, 'ancient_egyptians_ancient_curse', now)],
     };
 };
 
