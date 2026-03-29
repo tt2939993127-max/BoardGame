@@ -24,7 +24,7 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { startDuel } from '../domain/duel';
-import { fireTriggers } from '../domain/ongoingEffects';
+import { fireTriggers, isMinionProtected } from '../domain/ongoingEffects';
 import { reduce } from '../domain/reduce';
 import { execute, processDestroyTriggers } from '../domain/reducer';
 import { validate } from '../domain/commands';
@@ -430,7 +430,7 @@ describe('Cowboys abilities', () => {
         expect(duelResolved.finalState.core.bases[0].minions.some(m => m.uid === 'enemy-1')).toBe(false);
     });
 
-    it('cowboys_quick_draw 当前第一轮实现会给所选随从 +2 力量', () => {
+    it('cowboys_quick_draw 在非决斗状态会给所选随从 +2 力量', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -722,6 +722,154 @@ describe('Cowboys abilities', () => {
 
         expect(play.events.some(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
         expect(play.finalState.core.players['0'].hand.some(card => card.uid === 'draw-1')).toBe(true);
+    });
+
+    it('cowboys_gold_in_them_thar_hills 可把所选牌抓到手里，并让其余牌按所选顺序回到牌库顶', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gold-1', 'cowboys_gold_in_them_thar_hills', 'action', '0')],
+                    deck: [
+                        makeCard('top-a', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('top-b', 'wizard_summon', 'action', '0'),
+                        makeCard('top-c', 'robot_microbot_beta', 'minion', '0'),
+                        makeCard('rest-1', 'robot_microbot_gamma', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'gold-1' } },
+            defaultTestRandom,
+        );
+        const choicePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(choicePrompt?.data?.sourceId).toBe('cowboys_gold_in_them_thar_hills');
+
+        const chooseTopB = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-b');
+        const afterChoice = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopB.id } } as any,
+            defaultTestRandom,
+        );
+
+        const orderPrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        expect(orderPrompt?.data?.sourceId).toBe('cowboys_gold_in_them_thar_hills_order');
+        const chooseTopC = orderPrompt.data.options.find((entry: any) => entry.value?.topCardUid === 'top-c');
+        const afterOrder = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopC.id } } as any,
+            defaultTestRandom,
+        );
+
+        const modePrompt = getInteractionsFromMS(afterOrder.finalState)[0] as any;
+        expect(modePrompt?.data?.sourceId).toBe('cowboys_gold_in_them_thar_hills_mode');
+        const keepOption = modePrompt.data.options.find((entry: any) => entry.value?.mode === 'hand');
+        const resolved = runCommand(
+            afterOrder.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: keepOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-b')).toBe(true);
+        expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['top-c', 'top-a', 'rest-1']);
+    });
+
+    it('cowboys_gold_in_them_thar_hills 选择额外随从时会先选基地再直接打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gold-1', 'cowboys_gold_in_them_thar_hills', 'action', '0')],
+                    deck: [
+                        makeCard('top-minion', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('rest-1', 'robot_microbot_beta', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'gold-1' } },
+            defaultTestRandom,
+        );
+        const choicePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseTopMinion = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-minion');
+        const afterChoice = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopMinion.id } } as any,
+            defaultTestRandom,
+        );
+
+        const modePrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        expect(modePrompt?.data?.sourceId).toBe('cowboys_gold_in_them_thar_hills_mode');
+        const playOption = modePrompt.data.options.find((entry: any) => entry.value?.mode === 'play');
+        const afterMode = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: playOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const basePrompt = getInteractionsFromMS(afterMode.finalState)[0] as any;
+        expect(basePrompt?.data?.sourceId).toBe('cowboys_gold_in_them_thar_hills_minion_base');
+        const chooseBaseB = basePrompt.data.options.find((entry: any) => entry.value?.baseIndex === 1);
+        const resolved = runCommand(
+            afterMode.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseBaseB.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.bases[1].minions.some(minion => minion.uid === 'top-minion')).toBe(true);
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-minion')).toBe(false);
+        expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['rest-1']);
+    });
+
+    it('cowboys_form_a_posse 会让你的所有随从本回合 +1 且受保护', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('posse-1', 'cowboys_form_a_posse', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('ally-1', 'cowboys_gunfighter', '0', 3),
+                    makeMinion('ally-2', 'cowboys_deputy', '0', 2),
+                    makeMinion('ally-3', 'cowboys_pinkerton', '0', 4),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'posse-1' } },
+            defaultTestRandom,
+        );
+        expect(getInteractionsFromMS(play.finalState)).toHaveLength(0);
+
+        const target1 = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-1')!;
+        const target2 = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-2')!;
+        const target3 = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-3')!;
+
+        expect(target1.tempPowerModifier).toBe(1);
+        expect(target2.tempPowerModifier).toBe(1);
+        expect(target3.tempPowerModifier).toBe(1);
+        expect(isMinionProtected(play.finalState.core, target1, 0, '1', 'destroy')).toBe(true);
+        expect(isMinionProtected(play.finalState.core, target1, 0, '1', 'move')).toBe(true);
+        expect(isMinionProtected(play.finalState.core, target1, 0, '1', 'affect')).toBe(true);
+        expect(isMinionProtected(play.finalState.core, target2, 0, '1', 'destroy')).toBe(true);
+        expect(isMinionProtected(play.finalState.core, target3, 0, '1', 'destroy')).toBe(true);
     });
 
     it('cowboys_stagecoach 当前 MVP 可把同一基地上至多两个己方随从移动到另一个基地', () => {

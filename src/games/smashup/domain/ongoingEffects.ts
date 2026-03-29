@@ -783,6 +783,7 @@ export function isMinionProtected(
     sourcePlayerId: PlayerId,
     protectionType: ProtectionType
 ): boolean {
+    if (hasTurnScopedMetadataProtection(state, targetMinion, protectionType)) return true;
     if (protectionRegistry.length === 0) return false;
 
     const ctx: ProtectionCheckContext = {
@@ -816,6 +817,7 @@ export function isMinionProtectedNonConsumable(
     sourcePlayerId: PlayerId,
     protectionType: ProtectionType
 ): boolean {
+    if (hasTurnScopedMetadataProtection(state, targetMinion, protectionType)) return true;
     if (protectionRegistry.length === 0) return false;
 
     const ctx: ProtectionCheckContext = {
@@ -833,6 +835,29 @@ export function isMinionProtectedNonConsumable(
         if (!isSourceActive(filteredState, entry.sourceDefId)) continue;
         if (entry.checker({ ...ctx, state: filteredState })) return true;
     }
+    return false;
+}
+
+function hasTurnScopedMetadataProtection(
+    state: SmashUpCore,
+    targetMinion: MinionOnBase,
+    protectionType: ProtectionType,
+): boolean {
+    const metadata = targetMinion.metadata ?? {};
+    const currentTurn = state.turnNumber ?? 0;
+    const destroyUntilTurn = typeof metadata.tempProtectDestroyUntilTurnNumber === 'number'
+        ? metadata.tempProtectDestroyUntilTurnNumber
+        : undefined;
+    const moveUntilTurn = typeof metadata.tempProtectMoveUntilTurnNumber === 'number'
+        ? metadata.tempProtectMoveUntilTurnNumber
+        : undefined;
+    const affectUntilTurn = typeof metadata.tempProtectAffectUntilTurnNumber === 'number'
+        ? metadata.tempProtectAffectUntilTurnNumber
+        : undefined;
+
+    if (protectionType === 'destroy') return (destroyUntilTurn ?? -1) >= currentTurn;
+    if (protectionType === 'move') return (moveUntilTurn ?? -1) >= currentTurn;
+    if (protectionType === 'affect' || protectionType === 'action') return (affectUntilTurn ?? -1) >= currentTurn;
     return false;
 }
 
