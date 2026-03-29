@@ -828,7 +828,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 });
 
 test.describe('大杀四方移动端派系选择布局', () => {
-    test('横屏移动端打开派系详情时应完整显示并可滚动查看全部卡牌', async ({ page, game }, testInfo) => {
+    test('横屏移动端打开派系详情时应显示泰坦区，并可完整滚动查看全部卡牌', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await page.setViewportSize({ width: 852, height: 393 });
@@ -858,18 +858,27 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const factionSelect = page.locator('[data-tutorial-id="su-faction-select"]');
         const factionHeading = page.getByText(/Draft Your Factions|选择你的派系/i);
         const aliensCard = factionSelect.getByText(/Aliens|外星人/i).first();
+        const piratesCard = factionSelect.getByText(/Pirates|海盗/i).first();
         const rotateBanner = page.getByText(/建议旋转至横屏|建议切换为竖屏/i);
+        const closeButton = page.getByTestId('faction-detail-close');
 
         await expect(factionHeading).toBeVisible({ timeout: 15000 });
         await expect(rotateBanner).toHaveCount(0);
         await expect(aliensCard).toBeVisible({ timeout: 10000 });
-        await aliensCard.click();
+        await expect(piratesCard).toBeVisible({ timeout: 10000 });
+        await piratesCard.click();
 
         const confirmButton = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-        const previewCards = factionSelect.locator('.cursor-zoom-in');
-        const previewSection = previewCards.first().locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
+        const previewGrid = page.getByTestId('faction-preview-grid');
+        const previewCards = page.getByTestId('faction-preview-card');
+        const previewSection = previewGrid.locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
+        const titanSection = page.getByTestId('faction-titan-section');
+        const titanCards = page.getByTestId('faction-titan-card');
 
         await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await expect(titanSection).toBeVisible({ timeout: 10000 });
+        await expect(titanCards).toHaveCount(1);
+        await expect(aliensCard).toBeVisible({ timeout: 10000 });
         const previewCardCount = await previewCards.count();
         expect(previewCardCount).toBeGreaterThan(8);
         await expect(previewSection).toBeVisible({ timeout: 10000 });
@@ -887,5 +896,10 @@ test.describe('大杀四方移动端派系选择布局', () => {
         await expect(previewCards.last()).toBeVisible({ timeout: 5000 });
 
         await game.screenshot('12-mobile-landscape-faction-detail-bottom', testInfo);
+
+        await closeButton.click();
+        await aliensCard.click();
+        await expect(page.getByTestId('faction-titan-empty')).toContainText(/该种族泰坦暂未接入|Titan/i);
+        await game.screenshot('13-mobile-landscape-faction-detail-no-titan', testInfo);
     });
 });

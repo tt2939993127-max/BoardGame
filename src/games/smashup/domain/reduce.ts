@@ -63,6 +63,42 @@ import {
     resolveLiveBaseIndex,
 } from './utils';
 
+function buildCompletedDraftPlayers(
+    turnOrder: PlayerId[],
+    playerSelections: Record<PlayerId, string[]>,
+): PlayerId[] {
+    return turnOrder.filter((playerId) => (playerSelections[playerId] ?? []).length >= 2);
+}
+
+function getNextDraftPlayerIndex(
+    turnOrder: PlayerId[],
+    playerSelections: Record<PlayerId, string[]>,
+    anchorPlayerId: PlayerId,
+    fallbackIndex: number,
+): number {
+    if (turnOrder.length === 0) return 0;
+
+    const counts = turnOrder.map((playerId) => (playerSelections[playerId] ?? []).length);
+    if (counts.every((count) => count >= 2)) {
+        return 0;
+    }
+
+    const allPlayersHaveFirstFaction = counts.every((count) => count >= 1);
+    const targetCount = allPlayersHaveFirstFaction ? 2 : 1;
+    const direction = allPlayersHaveFirstFaction ? -1 : 1;
+    const anchorIndex = Math.max(0, turnOrder.indexOf(anchorPlayerId));
+    const startIndex = turnOrder.includes(anchorPlayerId) ? anchorIndex : fallbackIndex;
+
+    for (let offset = 0; offset < turnOrder.length; offset += 1) {
+        const index = (startIndex + direction * offset + turnOrder.length) % turnOrder.length;
+        if ((playerSelections[turnOrder[index]] ?? []).length < targetCount) {
+            return index;
+        }
+    }
+
+    return fallbackIndex;
+}
+
 // ============================================================================
 // reduce：事件 → 新状态（确定性）
 // ============================================================================
@@ -79,19 +115,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...selection.playerSelections,
                 [playerId]: [...(selection.playerSelections[playerId] || []), factionId],
             };
-
-            // 蛇形选秀：第一轮按玩家顺序选，第二轮按反向顺序选。
-            // 2 人时顺序为 P0 → P1 → P1 → P0。
-            const totalPlayers = state.turnOrder.length;
-            const totalRequired = totalPlayers * 2;
-            const nextPickNumber = newTaken.length;
-            let nextPlayerIndex = state.currentPlayerIndex;
-
-            if (nextPickNumber < totalRequired) {
-                nextPlayerIndex = nextPickNumber < totalPlayers
-                    ? nextPickNumber
-                    : totalRequired - 1 - nextPickNumber;
-            }
+            const nextPlayerIndex = getNextDraftPlayerIndex(
+                state.turnOrder,
+                newPlayerSelections,
+                playerId,
+                state.currentPlayerIndex,
+            );
 
             return {
                 ...state,
@@ -100,6 +129,36 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...selection,
                     takenFactions: newTaken,
                     playerSelections: newPlayerSelections,
+                    completedPlayers: buildCompletedDraftPlayers(state.turnOrder, newPlayerSelections),
+                },
+            };
+        }
+
+        case SU_EVENTS.FACTION_DESELECTED: {
+            const { playerId, factionId } = event.payload;
+            const selection = state.factionSelection;
+            if (!selection) return state;
+
+            const newTaken = selection.takenFactions.filter((takenFactionId) => takenFactionId !== factionId);
+            const newPlayerSelections = {
+                ...selection.playerSelections,
+                [playerId]: (selection.playerSelections[playerId] || []).filter((selectedFactionId) => selectedFactionId !== factionId),
+            };
+            const nextPlayerIndex = getNextDraftPlayerIndex(
+                state.turnOrder,
+                newPlayerSelections,
+                playerId,
+                state.currentPlayerIndex,
+            );
+
+            return {
+                ...state,
+                currentPlayerIndex: nextPlayerIndex,
+                factionSelection: {
+                    ...selection,
+                    takenFactions: newTaken,
+                    playerSelections: newPlayerSelections,
+                    completedPlayers: buildCompletedDraftPlayers(state.turnOrder, newPlayerSelections),
                 },
             };
         }
@@ -1205,6 +1264,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
                 turnUsedOngoingUids: undefined,
+                usedBaseAbilitiesThisTurn: (() => {
+                    const remaining = (state.usedBaseAbilitiesThisTurn ?? []).filter(entry => entry.playerId !== playerId);
+                    return remaining.length > 0 ? remaining : undefined;
+                })(),
                 activeDuel: undefined,
                 sleepMarkedPlayers: state.sleepMarkedPlayers,
                 playerRestrictionsUntilTurnStart: remainingPlayerRestrictions?.length
@@ -2344,6 +2407,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...prev,
                     [limitGroup]: [...prevGroup, baseIndex],
                 },
+            };
+        }
+
+        case SU_EVENTS.BASE_ABILITY_USED: {
+            const { playerId, baseIndex, baseDefId } = (event as any).payload;
+            const prev = state.usedBaseAbilitiesThisTurn ?? [];
+            if (prev.some(
+                entry => entry.playerId === playerId
+                    && entry.baseIndex === baseIndex
+                    && entry.baseDefId === baseDefId,
+            )) {
+                return state;
+            }
+            return {
+                ...state,
+                usedBaseAbilitiesThisTurn: [...prev, { playerId, baseIndex, baseDefId }],
             };
         }
 

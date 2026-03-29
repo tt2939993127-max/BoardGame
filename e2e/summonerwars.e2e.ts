@@ -9,17 +9,12 @@ import { test, expect } from './framework';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/waitForState';
 import { cloneState, createSWRoomViaAPI } from './helpers/summonerwars';
+import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import {
   createSummonerWarsMobileEvidenceState,
   withSummonerWarsMobileEvidenceActionLog,
 } from '../src/games/summonerwars/mobileEvidence';
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
-};
 
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
   if (process.env.PW_SW_USE_REAL_MAP === 'true') {

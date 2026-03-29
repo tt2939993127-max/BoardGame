@@ -50,7 +50,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   attackCount = 0,
   className = '',
 }) => {
-  const { t } = useTranslation('game-summonerwars');
+  const { t, i18n } = useTranslation('game-summonerwars');
   const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
   const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
@@ -65,7 +65,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
     label: t(`phase.${phaseId}`),
-    desc: PHASE_DESC_KEYS[phaseId].map(key => t(key)),
+    desc: PHASE_DESC_KEYS[phaseId].map((key) => (i18n.exists(key) ? t(key) : key)),
   }));
 
   // 构建带数字的阶段配置

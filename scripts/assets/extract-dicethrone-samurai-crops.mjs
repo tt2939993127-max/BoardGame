@@ -39,6 +39,18 @@ const abilityCardsAtlasJob = {
   maxIndex: 39,
 };
 
+const handPreviewJob = {
+  // 仅供录入核对使用，不得再接入运行时代码。
+  outputDir: 'temp/dicethrone-intake/samurai/hand-preview',
+  targetWidth: 166,
+  targetHeight: 268,
+  entries: [
+    { sourceFile: 'slot-22.webp', outputFile: 'slot-22.webp', cropBottom: 180 },
+    { sourceFile: 'slot-24.webp', outputFile: 'slot-24.webp', cropBottom: 180 },
+    { sourceFile: 'slot-25.webp', outputFile: 'slot-25.webp', cropBottom: 162 },
+  ],
+};
+
 async function ensureDir(targetDir) {
   await fs.mkdir(targetDir, { recursive: true });
 }
@@ -59,6 +71,55 @@ async function extractFromRect(sourcePath, outputPath, rect) {
     })
     .webp({ quality: 100 })
     .toFile(outputPath);
+}
+
+async function detectVerticalSplit(sourcePath) {
+  const { data, info } = await sharp(sourcePath)
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const startY = Math.floor(info.height * 0.35);
+  const endY = Math.floor(info.height * 0.75);
+  let bestY = Math.floor(info.height * 0.55);
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let y = startY; y <= endY; y += 1) {
+    let rowSum = 0;
+    for (let x = 0; x < info.width; x += 1) {
+      rowSum += data[y * info.width + x];
+    }
+    if (rowSum < bestScore) {
+      bestScore = rowSum;
+      bestY = y;
+    }
+  }
+
+  return Math.max(1, bestY - 12);
+}
+
+async function writeTopCardPreview(sourcePath, outputDir, fileName, targetWidth, targetHeight, explicitBottom) {
+  await ensureDir(outputDir);
+  await ensureDir(path.join(outputDir, 'compressed'));
+
+  const splitY = explicitBottom ?? await detectVerticalSplit(sourcePath);
+  const buildPipeline = () => sharp(sourcePath)
+    .extract({
+      left: 0,
+      top: 0,
+      width: targetWidth,
+      height: splitY,
+    })
+    .resize({
+      width: targetWidth,
+      height: targetHeight,
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .webp({ quality: 100 });
+
+  await buildPipeline().toFile(path.join(outputDir, fileName));
+  await buildPipeline().toFile(path.join(outputDir, 'compressed', fileName));
 }
 
 function getScaledAtlasRect(atlasConfig, metadata, index) {
@@ -99,6 +160,20 @@ async function run() {
     const rect = getScaledAtlasRect(atlasConfig, atlasMetadata, index);
     await extractFromRect(atlasSourcePath, outputPath, rect);
     console.log(`${abilityCardsAtlasJob.outputDir}/${id}.webp`);
+  }
+
+  const handPreviewOutputDir = path.join(rootDir, handPreviewJob.outputDir);
+  for (const entry of handPreviewJob.entries) {
+    await writeTopCardPreview(
+      path.join(atlasOutputDir, entry.sourceFile),
+      handPreviewOutputDir,
+      entry.outputFile,
+      handPreviewJob.targetWidth,
+      handPreviewJob.targetHeight,
+      entry.cropBottom,
+    );
+    console.log(`${handPreviewJob.outputDir}/${entry.outputFile}`);
+    console.log(`${handPreviewJob.outputDir}/compressed/${entry.outputFile}`);
   }
 }
 

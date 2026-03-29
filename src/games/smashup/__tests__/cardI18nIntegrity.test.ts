@@ -74,6 +74,16 @@ describe('SmashUp 卡牌 i18n 完整性', () => {
     expect(missing, `zh-CN 缺少行动卡 effectText: ${missing.join(', ')}`).toEqual([]);
   });
 
+  it('所有泰坦卡的 effectText 在 zh-CN 中存在', () => {
+    const missing: string[] = [];
+    for (const def of allCards) {
+      if (def.type !== 'titan') continue;
+      const val = zhCN.cards?.[def.id]?.effectText;
+      if (typeof val !== 'string' || val.length === 0) missing.push(def.id);
+    }
+    expect(missing, `zh-CN 缺少泰坦 effectText: ${missing.join(', ')}`).toEqual([]);
+  });
+
   it('所有基地的 name 在 zh-CN 中存在', () => {
     const missing: string[] = [];
     for (const def of allBases) {
@@ -115,6 +125,14 @@ describe('SmashUp 卡牌 i18n 完整性', () => {
     );
     expect(resolveCardText(getCardDef('ninja_infiltrate_pod'), enTranslator)).toBe(
       en.cards.ninja_infiltrate_pod.effectText,
+    );
+  });
+
+  it('resolveCardText 对泰坦读取 effectText', () => {
+    const zhTranslator = makeTranslator(zhCN);
+
+    expect(resolveCardText(getCardDef('pirates_the_kraken'), zhTranslator)).toBe(
+      zhCN.cards.pirates_the_kraken.effectText,
     );
   });
 

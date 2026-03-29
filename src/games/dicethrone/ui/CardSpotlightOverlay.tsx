@@ -23,8 +23,8 @@ const SummaryText: React.FC<{
     effectParams: Record<string, string | number>;
     locale?: string;
 }> = ({ effectKey, effectParams }) => {
-    const { t } = useTranslation('game-dicethrone');
-    const text = t(effectKey, effectParams);
+    const { t, i18n } = useTranslation('game-dicethrone');
+    const text = i18n.exists(effectKey) ? t(effectKey, effectParams) : effectKey;
     
     return (
         <motion.div

@@ -1,8 +1,16 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { existsSync } from 'fs';
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { readFileSync } from 'fs';
 import { createHash } from 'crypto';
 import { join } from 'path';
+
+if (existsSync('.env')) {
+  config({ path: '.env', override: false });
+}
+if (existsSync('.env.example')) {
+  config({ path: '.env.example', override: false });
+}
 
 const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;

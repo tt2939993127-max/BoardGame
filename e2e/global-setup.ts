@@ -17,6 +17,7 @@ import {
     pruneStaleRuntimes,
     upsertRuntime,
 } from '../scripts/infra/e2e-runtime-registry.js';
+import { inspectManagedRuntime } from '../scripts/infra/e2e-runtime-manager.mjs';
 
 interface RuntimeRecord {
     workerId: number;
@@ -156,6 +157,10 @@ function spawnDetachedServer(script: string, args: string[] = [], portsOverride 
     const logFile = getBootstrapLogFile(workerId);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     const logFd = fs.openSync(logFile, 'a');
+    const shouldDetachBootstrap = !(
+        process.platform === 'win32'
+        && process.env.CODEX_MANAGED_BY_NPM === '1'
+    );
 
     let child;
     try {
@@ -165,7 +170,7 @@ function spawnDetachedServer(script: string, args: string[] = [], portsOverride 
                 ...process.env,
                 PW_BOOTSTRAP_LOG_FILE: logFile,
             },
-            detached: true,
+            detached: shouldDetachBootstrap,
             stdio: ['ignore', logFd, logFd],
             ...withWindowsHide({}, process.env),
         });
@@ -177,7 +182,9 @@ function spawnDetachedServer(script: string, args: string[] = [], portsOverride 
         throw new Error(`启动服务失败，未获取到进程 PID: ${script}`);
     }
 
-    child.unref();
+    if (shouldDetachBootstrap) {
+        child.unref();
+    }
 
     return {
         workerId,
@@ -243,8 +250,34 @@ function cleanupRecordedRuntimes(): void {
 export default async function globalSetup() {
     const workers = Number.parseInt(process.env.PW_WORKERS || '1', 10);
     const currentWorktreeRoot = getWorktreeRoot();
+    const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
+    const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
 
     if (!shouldStartServers) {
+        return;
+    }
+
+    if (workers <= 1 && shouldSkipBootstrap && managedRuntimeId) {
+        const runtime = await inspectManagedRuntime({
+            runtimeId: managedRuntimeId,
+            scope: getRuntimeScope(),
+        });
+        if (!runtime?.health?.ready) {
+            throw new Error(
+                [
+                    `托管 E2E runtime 不可用: runtimeId=${managedRuntimeId}`,
+                    runtime ? `runtime=${JSON.stringify({ scope: runtime.scope, mode: runtime.mode, ports: runtime.ports, health: runtime.health }, null, 2)}` : 'runtime=missing',
+                    'run-e2e-command 应先确保 runtime 已就绪；若此处失败，说明 runtime manager 或 registry 出现了假 ready。',
+                ].join('\n'),
+            );
+        }
+
+        process.env.PW_PORT = String(runtime.ports.frontend);
+        process.env.PW_GAME_SERVER_PORT = String(runtime.ports.gameServer);
+        process.env.GAME_SERVER_PORT = String(runtime.ports.gameServer);
+        process.env.PW_API_SERVER_PORT = String(runtime.ports.apiServer);
+        process.env.API_SERVER_PORT = String(runtime.ports.apiServer);
+        console.log(`♻️ globalSetup 附着托管 runtime: ${runtime.runtimeId}`);
         return;
     }
 

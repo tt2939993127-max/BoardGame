@@ -21,6 +21,7 @@ export const ASSETS = {
     PLAYER_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/player-board`, charId),
     TIP_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/tip`, charId),
     CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/ability-cards`, charId),
+    HAND_CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/hand-cards-atlas`, charId),
     DICE_SPRITE: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/dice`,
     EFFECT_ICONS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/status-icons-atlas`, charId),
     CARD_BG: 'dicethrone/images/Common/card-background',
@@ -37,8 +38,9 @@ const normalizeDiceSpriteAssetPath = (assetPath?: string | null) => {
 
     const trimmed = assetPath.trim();
     if (!trimmed) return undefined;
+    const sanitized = trimmed.split('#', 1)[0].split('?', 1)[0];
 
-    const gameDataMatch = trimmed.match(GAME_DATA_DICE_SPRITE_RE);
+    const gameDataMatch = sanitized.match(GAME_DATA_DICE_SPRITE_RE);
     if (gameDataMatch?.[1]) {
         const normalized = `dicethrone/images/${gameDataMatch[1]}/dice`;
         diceAssetsLogger.info('normalize-from-game-data', {
@@ -48,7 +50,7 @@ const normalizeDiceSpriteAssetPath = (assetPath?: string | null) => {
         return normalized;
     }
 
-    const logicalMatch = trimmed
+    const logicalMatch = sanitized
         .replace(/^\/+/, '')
         .match(LOGICAL_DICE_SPRITE_RE);
     if (logicalMatch?.[1]) {
@@ -100,8 +102,7 @@ const getLogicalSpriteUrlCandidates = (assetPath: string, locale?: string) => {
             if (base.startsWith('http://') || base.startsWith('https://')) {
                 return `${base}/${url.replace(/^\/+assets\/+/, '')}`;
             }
-            // base 若不是绝对域名（极端配置），至少保留非 /assets 的同源绝对路径
-            return `/${url.replace(/^\/+assets\/+/, '')}`;
+            return url;
         }
         if (url.startsWith('/')) {
             if (base.startsWith('http://') || base.startsWith('https://')) {
@@ -550,11 +551,11 @@ const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
     moon_elf: 4,
     paladin: 5,
     pyromancer: 6,
-    vampire_lord: 7,
+    vampire_lord: 11,
     cursed_pirate: 8,
     shadow_thief: 9,
     ninja: 10,
-    samurai: 11,
+    samurai: 7,
     barbarian: 13,
     seraph: 14,
 };

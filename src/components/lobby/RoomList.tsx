@@ -147,7 +147,7 @@ export const RoomList = ({
                                                 )}
                                             </div>
                                             <div className="text-[10px] text-parchment-light-text mt-0.5">
-                                                {seatLabels.join(' vs ')}
+                                                {seatLabels.join(t('rooms.seatSeparator'))}
                                             </div>
                                         </>
                                     );

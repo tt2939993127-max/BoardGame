@@ -1107,7 +1107,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 {isLayoutEditing ? t('layout.exitEdit') : t('layout.enterEdit')}
                             </button>
                             {isLayoutEditing && (
-                                <LayoutSaveButton abilityOverlaysRef={abilityOverlaysRef} />
+                                <LayoutSaveButton
+                                    abilityOverlaysRef={abilityOverlaysRef}
+                                    characterId={viewPlayer.characterId}
+                                />
                             )}
                         </div>
                     </GameDebugPanel>

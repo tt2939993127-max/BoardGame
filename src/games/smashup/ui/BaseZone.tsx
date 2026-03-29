@@ -57,11 +57,12 @@ export const BaseZone: React.FC<{
     onViewTitan: (defId: string) => void;
     usableTitanTalentUids?: Set<string>;
     usableTitanOngoingUids?: Set<string>;
+    canUseBaseAbility?: boolean;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
     /** 当前游戏阶段（用于限制 scoreBases 阶段的 special 高亮范围） */
     phase?: string;
-}> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, onViewTitan, usableTitanTalentUids, usableTitanOngoingUids, tokenRef, isTutorialTargetAllowed, phase }) => {
+}> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onViewMinion, onViewAction, onViewBase, onViewTitan, usableTitanTalentUids, usableTitanOngoingUids, canUseBaseAbility = false, tokenRef, isTutorialTargetAllowed, phase }) => {
     const { t } = useTranslation('game-smashup');
     const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
@@ -134,6 +135,15 @@ export const BaseZone: React.FC<{
         enabled: true,
         onInspect: (_key, payload) => {
             onViewAction(payload.defId);
+        },
+    });
+    const {
+        getTouchInspectProps: getTitanTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockTitanClick,
+    } = useTouchInspectGesture<string, { defId: string }>({
+        enabled: true,
+        onInspect: (_key, payload) => {
+            onViewTitan(payload.defId);
         },
     });
 
@@ -285,8 +295,11 @@ export const BaseZone: React.FC<{
             <motion.div
                 key={titan.uid}
                 data-titan-uid={titan.uid}
+                data-testid={`su-base-titan-${titan.uid}`}
+                {...getTitanTouchInspectProps(`titan-${titan.uid}`, { defId: titan.defId })}
                 onClick={(e) => {
                     e.stopPropagation();
+                    if (shouldBlockTitanClick(`titan-${titan.uid}`)) return;
                     if (hasMultipleTitanActivations) {
                         if (!isCoarsePointer) {
                             setArmedKey((current) => current === titanActivationKey ? null : titanActivationKey);
@@ -316,7 +329,7 @@ export const BaseZone: React.FC<{
                     clearArmedActivation();
                     onViewTitan(titan.defId);
                 }}
-                className={`relative aspect-[0.714] bg-white rounded-[0.18vw] shadow-lg cursor-pointer
+                className={`group relative aspect-[0.714] bg-white rounded-[0.18vw] shadow-lg cursor-pointer
                     hover:z-50 hover:scale-125 hover:-translate-y-[0.3vw] transition-all border-[0.12vw]
                     ${isTitanActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
@@ -346,6 +359,22 @@ export const BaseZone: React.FC<{
                         transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ background: 'radial-gradient(ellipse at center, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
                     />
+                )}
+                {showDesktopInspectButton && (
+                    <button
+                        type="button"
+                        data-testid={`su-base-titan-magnify-${titan.uid}`}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            clearArmedActivation();
+                            onViewTitan(titan.defId);
+                        }}
+                        className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                    >
+                        <svg className="h-[0.8vw] w-[0.8vw] fill-current" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                    </button>
                 )}
                 {hasMultipleTitanActivations && isTitanActivationArmed && (
                     <div className="absolute -top-[1.45vw] left-1/2 z-50 flex -translate-x-1/2 gap-[0.18vw]">
@@ -463,6 +492,8 @@ export const BaseZone: React.FC<{
                         ? 'opacity-40 grayscale cursor-not-allowed rotate-1'
                         : isSelectable
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
+                        : canUseBaseAbility
+                        ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(251,191,36,0.45)] ring-4 ring-amber-300'
                         : isDeployMode && !isMinionSelectMode
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
                         : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-pointer'}
@@ -500,6 +531,15 @@ export const BaseZone: React.FC<{
                     />
                 )}
 
+                {canUseBaseAbility && !isSelectable && (
+                    <motion.div
+                        className="absolute inset-0 pointer-events-none z-25 rounded-sm"
+                        animate={{ opacity: [0.08, 0.24, 0.08] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.32) 0%, transparent 72%)' }}
+                    />
+                )}
+
                 {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
                 {showDesktopInspectButton && (
                     <button
@@ -510,6 +550,12 @@ export const BaseZone: React.FC<{
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                         </svg>
                     </button>
+                )}
+
+                {canUseBaseAbility && (
+                    <div className="absolute bottom-[0.45vw] left-1/2 -translate-x-1/2 bg-amber-300/95 text-slate-900 text-[0.55vw] font-black px-[0.42vw] py-[0.08vw] rounded-sm shadow-md border border-white z-30 whitespace-nowrap pointer-events-none">
+                        基地能力
+                    </div>
                 )}
 
                 {/* Power Token */}

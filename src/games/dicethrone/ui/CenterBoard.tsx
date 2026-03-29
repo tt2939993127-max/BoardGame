@@ -6,6 +6,7 @@ import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
+import { getPlayerBoardUiTuning } from './abilitySlotLayout';
 
 export interface CenterBoardProps {
     coreAreaHighlighted: boolean;
@@ -50,13 +51,14 @@ export const CenterBoard = ({
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
+    const boardUiTuning = getPlayerBoardUiTuning(characterId);
     const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
     const boardGapClassName = 'gap-[0.5vw]';
     const overlayButtonIconClassName = 'w-[0.72vw] h-[0.72vw] fill-current';
     const overlayButtonClassName = `absolute flex items-center justify-center rounded-full border border-white/20 bg-black/60 p-0 text-white shadow-xl transition-[background-color,border-color,opacity] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`;
     const overlayButtonVisualClassName = 'flex h-full w-full items-center justify-center';
     const overlayButtonStyle = {
-        top: '0.48vw',
+        top: `${boardUiTuning.magnifyButtonTop}vw`,
         right: '0.9vw',
         width: '2.6vw',
         height: '2.6vw',
@@ -76,10 +78,18 @@ export const CenterBoard = ({
     const tipBoardPath = ASSETS.TIP_BOARD(characterId);
 
     return (
-        <div className={shellFrameClassName}>
+        <div
+            className={shellFrameClassName}
+            style={boardUiTuning.shellTranslateX === 0
+                ? undefined
+                : { transform: `translateX(${boardUiTuning.shellTranslateX}vw)` }}
+        >
             <div className={`relative flex items-center justify-center ${boardGapClassName}`}>
                 <div
                     className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    style={boardUiTuning.playerBoardTranslateY === 0
+                        ? undefined
+                        : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }}
                     data-tutorial-id="player-board"
                 >
                     <OptimizedImage

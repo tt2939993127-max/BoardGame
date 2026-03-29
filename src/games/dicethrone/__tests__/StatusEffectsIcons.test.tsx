@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
@@ -13,11 +13,15 @@ import {
     getDiceSpriteUrls,
 } from '../ui/assets';
 import { getStatusEffectIconNode, type StatusIconAtlasConfig } from '../ui/statusEffects';
-import { getAssetsBaseUrl } from '../../../core';
+import { getAssetsBaseUrl, setAssetsBaseUrl } from '../../../core';
 
 registerDiceDefinition(moonElfDiceDefinition);
 
 describe('StatusEffectsIcons', () => {
+    beforeEach(() => {
+        setAssetsBaseUrl('/assets');
+    });
+
     it('渲染状态图集时应指向压缩后的 atlas 资源', () => {
         const atlas: StatusIconAtlasConfig = {
             imageW: 1314,
@@ -49,16 +53,18 @@ describe('StatusEffectsIcons', () => {
         expect(backgroundImage).toContain('dicethrone/images/monk/compressed/dice.webp');
     });
 
-    it('R2 路径兼容：骰图强制走远程 R2，不返回本地 /assets 路径', () => {
+    it('本地资源模式下，骰图候选 URL 应保留 /assets 前缀', () => {
+        const urls = getDiceSpriteUrls('moon_elf-dice', 'moon_elf', 'zh-CN');
+        expect(urls.some(url => url.includes('/dice.webp'))).toBe(true);
+        expect(urls.some(url => url.startsWith('/assets/i18n/zh-CN/dicethrone/images/moon_elf/compressed/dice.webp'))).toBe(true);
+    });
+
+    it('远程资源模式下，骰图候选 URL 应走官方资源域名', () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
         const urls = getDiceSpriteUrls('moon_elf-dice', 'moon_elf', 'zh-CN');
         const base = getAssetsBaseUrl();
         expect(urls.some(url => url.includes('/dice.webp'))).toBe(true);
-        expect(urls.every(url => !url.startsWith('/assets/'))).toBe(true);
-        if (base.startsWith('http://') || base.startsWith('https://')) {
-            expect(urls.every(url => url.startsWith(`${base}/`))).toBe(true);
-        } else {
-            expect(urls.every(url => url.startsWith('/'))).toBe(true);
-        }
+        expect(urls.every(url => url.startsWith(`${base}/`))).toBe(true);
     });
 
     it('骰图切片坐标应匹配旧版 3x3 atlas 布局', () => {

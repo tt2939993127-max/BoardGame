@@ -34,6 +34,7 @@ import type {
     ActionPlayedEvent,
     CardsDiscardedEvent,
     FactionSelectedEvent,
+    FactionDeselectedEvent,
     AllFactionsSelectedEvent,
     MinionDestroyedEvent,
     MinionMovedEvent,
@@ -57,6 +58,7 @@ import type {
 } from './types';
 import type { PlayerId } from '../../../engine/types';
 import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from './types';
+import { triggerActiveBaseAbility } from './baseAbilities';
 import { getMinionDef, getMinionLikePower, getCardDef, getBaseDefIdsForFactions, getFusionDef } from '../data/cards';
 import type { ActionCardDef, FusionCardDef } from './types';
 import { buildDeck, drawCards, getMinionTalentActivationError, isCardMinionLike } from './utils';
@@ -517,6 +519,35 @@ function executeCommand(
             }
 
             return { events };
+        }
+
+        case SU_COMMANDS.DESELECT_FACTION: {
+            const { factionId } = command.payload;
+            const deselectedEvt: FactionDeselectedEvent = {
+                type: SU_EVENTS.FACTION_DESELECTED,
+                payload: { playerId: command.playerId, factionId },
+                sourceCommandType: command.type,
+                timestamp: now,
+            };
+            return { events: [deselectedEvt] };
+        }
+
+        case SU_COMMANDS.USE_BASE_ABILITY: {
+            const { baseIndex } = command.payload;
+            const base = core.bases[baseIndex];
+            if (!base) return { events: [] };
+            const result = triggerActiveBaseAbility(base.defId, {
+                state: core,
+                matchState: state,
+                baseIndex,
+                baseDefId: base.defId,
+                playerId: command.playerId,
+                now,
+            });
+            return {
+                events: result.events,
+                ...(result.matchState ? { updatedState: result.matchState } : {}),
+            };
         }
 
         case SU_COMMANDS.USE_TALENT: {

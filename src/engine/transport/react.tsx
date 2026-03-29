@@ -56,6 +56,7 @@ import {
     resolveNextAiAction,
     type AiSeatController,
 } from '../ai';
+import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -482,6 +483,8 @@ export interface LocalGameProviderProps {
     numPlayers: number;
     /** 随机种子 */
     seed: string;
+    /** 本地对局 setupData，透传给领域 setup() */
+    setupData?: unknown;
     /** 子组件 */
     children: ReactNode;
     /** 命令被拒绝时的回调（验证失败） */
@@ -502,19 +505,56 @@ export interface LocalGameProviderProps {
      * 教程模式应保持 false，继续固定在指定 playerId 视角。
      */
     followCurrentTurnPlayer?: boolean;
+    /** 是否持久化本地对局，以便刷新后恢复进度 */
+    persistSession?: boolean;
 }
 
-function createLocalProviderRandom(seed: string): RandomFn {
+type LocalProviderRandom = RandomFn & {
+    getCursor: () => number;
+};
+
+function createLocalProviderRandom(seed: string, initialCursor = 0): LocalProviderRandom {
     const base = createSeededRandom(seed);
+    const normalizedCursor = Number.isFinite(initialCursor) && initialCursor > 0
+        ? Math.floor(initialCursor)
+        : 0;
+
+    for (let i = 0; i < normalizedCursor; i += 1) {
+        base.random();
+    }
+
+    let cursor = normalizedCursor;
 
     if (!isTestEnvironment()) {
-        return base;
+        return {
+            random: () => {
+                cursor += 1;
+                return base.random();
+            },
+            d: (max: number) => {
+                cursor += 1;
+                return Math.floor(base.random() * max) + 1;
+            },
+            range: (min: number, max: number) => {
+                cursor += 1;
+                return Math.floor(base.random() * (max - min + 1)) + min;
+            },
+            shuffle: <T,>(array: T[]): T[] => {
+                const result = [...array];
+                cursor += Math.max(0, result.length - 1);
+                for (let i = result.length - 1; i > 0; i -= 1) {
+                    const j = Math.floor(base.random() * (i + 1));
+                    [result[i], result[j]] = [result[j], result[i]];
+                }
+                return result;
+            },
+            getCursor: () => cursor,
+        };
     }
 
     TestHarness.init();
     const harness = TestHarness.getInstance();
     const nextRandom = harness.random.wrap(() => base.random());
-    let cursor = 0;
 
     return {
         random: () => {
@@ -531,8 +571,8 @@ function createLocalProviderRandom(seed: string): RandomFn {
         },
         shuffle: <T,>(array: T[]): T[] => {
             const result = [...array];
+            cursor += Math.max(0, result.length - 1);
             for (let i = result.length - 1; i > 0; i--) {
-                cursor += 1;
                 const j = Math.floor(nextRandom() * (i + 1));
                 [result[i], result[j]] = [result[j], result[i]];
             }
@@ -546,30 +586,51 @@ export function LocalGameProvider({
     config,
     numPlayers,
     seed,
+    setupData,
     children,
     onCommandRejected,
     seatControllers = {},
     playerId: localPlayerId,
     followCurrentTurnPlayer = false,
+    persistSession = false,
 }: LocalGameProviderProps) {
     console.log('[LocalGameProvider] 组件渲染:', {
         numPlayers,
         seed,
         playerId: localPlayerId,
+        hasSetupData: setupData != null,
     });
     
     const playerIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
         [numPlayers],
     );
+    const persistedSnapshot = useMemo(
+        () => (
+            persistSession
+                ? readLocalMatchSnapshot({ gameId: config.gameId, seed, numPlayers })
+                : null
+        ),
+        [config.gameId, numPlayers, persistSession, seed],
+    );
 
-    const randomRef = useRef<RandomFn>(createLocalProviderRandom(seed));
+    const randomRef = useRef<LocalProviderRandom>(
+        createLocalProviderRandom(seed, persistedSnapshot?.randomCursor ?? 0),
+    );
     const onCommandRejectedRef = useRef(onCommandRejected);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
     onCommandRejectedRef.current = onCommandRejected;
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
         console.log('[LocalGameProvider] 初始化状态');
+        if (persistedSnapshot?.state) {
+            console.log('[LocalGameProvider] 已恢复本地对局快照:', {
+                gameId: config.gameId,
+                seed,
+                randomCursor: persistedSnapshot.randomCursor,
+            });
+            return persistedSnapshot.state;
+        }
         const random = randomRef.current;
         
         // 检查是否启用 skipInitialization（测试模式 - 完全跳过初始化）
@@ -631,7 +692,7 @@ export function LocalGameProvider({
             console.log('[LocalGameProvider] skipFactionSelect=true，同步执行派系选择');
             
             // 调用 domain.setup 创建初始状态
-            const core = config.domain.setup(playerIds, random) as any;
+            const core = config.domain.setup(playerIds, random, setupData) as any;
             const sys = createInitialSystemState(
                 playerIds,
                 config.systems as EngineSystem[],
@@ -699,7 +760,7 @@ export function LocalGameProvider({
         }
         
         // 正常流程：从 factionSelect 阶段开始
-        const core = config.domain.setup(playerIds, random);
+        const core = config.domain.setup(playerIds, random, setupData);
         const sys = createInitialSystemState(
             playerIds,
             config.systems as EngineSystem[],
@@ -811,6 +872,17 @@ export function LocalGameProvider({
             return refreshedState;
         });
     }, [config, localPregameControlledPlayerId, playerIds]);
+
+    useEffect(() => {
+        if (!persistSession) return;
+        persistLocalMatchSnapshot({
+            gameId: config.gameId,
+            seed,
+            numPlayers,
+            state,
+            randomCursor: randomRef.current.getCursor(),
+        });
+    }, [config.gameId, numPlayers, persistSession, seed, state]);
 
     useEffect(() => {
         const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
@@ -1032,6 +1104,28 @@ export function BoardBridge<TCore = unknown>({
     );
 }
 
+export const BOARD_ERROR_BOUNDARY_MAX_RETRIES = 5;
+
+export const isBoardRenderErrorRecoverable = (error?: Error | null) => {
+    const message = error?.message ?? '';
+    return message.includes('AudioProvider')
+        || message.includes('useAudio')
+        || message.includes('Context');
+};
+
+export const shouldShowBoardRenderFallback = ({
+    error,
+    retryCount,
+    fallback,
+}: {
+    error?: Error | null;
+    retryCount: number;
+    fallback?: React.ReactNode;
+}) => Boolean(fallback)
+    && Boolean(error)
+    && isBoardRenderErrorRecoverable(error)
+    && retryCount < BOARD_ERROR_BOUNDARY_MAX_RETRIES;
+
 /**
  * Board 组件的错误边界
  * 
@@ -1051,7 +1145,7 @@ class BoardErrorBoundary extends React.Component<
     { hasError: boolean; error?: Error; retryCount: number }
 > {
     private retryTimer: NodeJS.Timeout | null = null;
-    private readonly maxRetries = 5;
+    private readonly maxRetries = BOARD_ERROR_BOUNDARY_MAX_RETRIES;
 
     constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
         super(props);
@@ -1066,10 +1160,7 @@ class BoardErrorBoundary extends React.Component<
         console.error('[BoardBridge] Board 组件渲染错误:', error, errorInfo);
         console.error('[BoardBridge] 错误堆栈:', error.stack);
         
-        // 检查是否为可恢复错误
-        const isRecoverable = error.message?.includes('AudioProvider') || 
-                              error.message?.includes('useAudio') ||
-                              error.message?.includes('Context');
+        const isRecoverable = isBoardRenderErrorRecoverable(error);
         
         if (isRecoverable && this.state.retryCount < this.maxRetries) {
             // 指数退避：500ms, 1000ms, 2000ms, 4000ms, 5000ms (最大)
@@ -1111,16 +1202,14 @@ class BoardErrorBoundary extends React.Component<
 
     render() {
         if (this.state.hasError) {
-            // 如果还在重试范围内，显示 loading fallback
-            if (this.state.retryCount < this.maxRetries && this.props.fallback) {
+            if (shouldShowBoardRenderFallback({
+                error: this.state.error,
+                retryCount: this.state.retryCount,
+                fallback: this.props.fallback,
+            })) {
                 return this.props.fallback;
             }
-            
-            // 超过重试次数或没有 fallback，显示错误信息
-            if (this.props.fallback && this.state.retryCount >= this.maxRetries) {
-                return this.props.fallback;
-            }
-            
+
             return (
                 <div className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
                     <div className="text-center">

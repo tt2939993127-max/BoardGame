@@ -7,6 +7,8 @@ type ModalRenderFn = ModalEntry['render'];
 interface UseUrlModalOptions {
     /** URL 参数名，例如 'game' 对应 ?game=xxx */
     paramKey: string;
+    /** 外部要求对当前参数值执行一次强制重开时使用 */
+    reopenNonce?: number;
     /** 根据参数值生成弹窗配置，返回 null 表示该值无效不打开弹窗 */
     getModalConfig: (paramValue: string) => {
         render: ModalRenderFn;
@@ -26,7 +28,7 @@ interface UseUrlModalOptions {
  * 3. 路由切换 → 弹窗由 ModalStackRoot 自动清理，不触发 URL 清理
  * 4. 刷新后重建 → 检测栈状态，确保弹窗正确打开
  */
-export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
+export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlModalOptions) {
     const [searchParams, setSearchParams] = useSearchParams();
     const { openModal, closeModal, stack } = useModalStack();
 
@@ -44,6 +46,7 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
     const isModalInStack = modalIdRef.current
         ? stack.some((entry) => entry.id === modalIdRef.current)
         : false;
+    const lastReopenNonceRef = useRef(reopenNonce);
 
     // 用户主动关闭弹窗时清理 URL
     const handleUserClose = useCallback(() => {
@@ -128,6 +131,48 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
         paramKey,
         paramValue,
         setSearchParams,
+    ]);
+
+    useEffect(() => {
+        if (!paramValue) {
+            lastReopenNonceRef.current = reopenNonce;
+            return;
+        }
+
+        if (reopenNonce === undefined || lastReopenNonceRef.current === reopenNonce) {
+            return;
+        }
+
+        lastReopenNonceRef.current = reopenNonce;
+
+        const config = getModalConfig(paramValue);
+        if (!config) {
+            return;
+        }
+
+        closingValueRef.current = null;
+        boundValueRef.current = paramValue;
+
+        if (modalIdRef.current) {
+            closeModal(modalIdRef.current);
+            modalIdRef.current = null;
+        }
+
+        modalIdRef.current = openModal({
+            closeOnBackdrop: config.closeOnBackdrop ?? true,
+            closeOnEsc: config.closeOnEsc ?? true,
+            lockScroll: config.lockScroll ?? true,
+            zIndex: config.zIndex,
+            onClose: handleUserClose,
+            render: config.render,
+        });
+    }, [
+        closeModal,
+        getModalConfig,
+        handleUserClose,
+        openModal,
+        paramValue,
+        reopenNonce,
     ]);
 
     // 提供给调用方的导航辅助函数（稳定引用，可安全用于 render 闭包）

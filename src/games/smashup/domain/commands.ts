@@ -8,6 +8,7 @@ import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
 import { getCardDef, getFusionDef, getMinionDef, getMinionLikePower, getTitanDef } from '../data/cards';
 import { hasPlayerTurnRestriction, isCardSuppressed, isOperationRestricted } from './ongoingEffects';
 import { validateTitanOngoingActivation, validateTitanSpecialActivation, validateTitanTalentUse } from './titanAbilityValidators';
+import { canUseActiveBaseAbility, getActiveBaseAbilityOptions, hasActiveBaseAbility } from './baseAbilities';
 import {
     getScoringEligibleBaseIndices,
     getPlayerEffectivePowerOnBase,
@@ -16,6 +17,7 @@ import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
 import { validateDeckTopRegularMinionPlaySemantics } from './playLegality';
 import {
+    actionLikeNeedsPlayBase,
     actionLikeNeedsResponseWindowBase,
     getActionLikeResponseWindowTiming,
     canUseBaseLimitedMinionQuota,
@@ -104,7 +106,7 @@ export function validate(
 
     // 防御性检查：确保 command 和 type 存在
     if (!command || typeof command.type !== 'string') {
-        return { valid: false, error: 'Invalid command: missing type' };
+        return { valid: false, error: 'invalid_command_missing_type' };
     }
 
     // 系统命令（SYS_ 前缀）由引擎层处理，领域层直接放行
@@ -455,6 +457,14 @@ export function validate(
 
             // 持续行动卡：必须显式选择附着目标
             const targetBase = command.payload.targetBaseIndex;
+            if (actionLikeNeedsPlayBase(def)) {
+                if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
+                    return { valid: false, error: '该行动卡需要选择目标基地' };
+                }
+                if (targetBase < 0 || targetBase >= core.bases.length) {
+                    return { valid: false, error: '无效的基地索引' };
+                }
+            }
             if (subtype === 'ongoing') {
                 if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
                     return { valid: false, error: '持续行动卡需要选择目标基地' };
@@ -545,6 +555,43 @@ export function validate(
                 return { valid: false, error: '你已选择了两个派系' };
             }
 
+            return { valid: true };
+        }
+
+        case SU_COMMANDS.USE_BASE_ABILITY: {
+            if (phase !== 'playCards') {
+                return { valid: false, error: '只能在出牌阶段使用基地能力' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            const { baseIndex } = command.payload;
+            const base = core.bases[baseIndex];
+            if (!base) return { valid: false, error: '无效的基地索引' };
+            if (!hasActiveBaseAbility(base.defId)) {
+                return { valid: false, error: '该基地没有可主动使用的能力' };
+            }
+            const options = getActiveBaseAbilityOptions(base.defId);
+            if (options?.oncePerTurn) {
+                const alreadyUsed = (core.usedBaseAbilitiesThisTurn ?? []).some(
+                    entry => entry.playerId === command.playerId
+                        && entry.baseIndex === baseIndex
+                        && entry.baseDefId === base.defId,
+                );
+                if (alreadyUsed) {
+                    return { valid: false, error: '该基地能力本回合已使用' };
+                }
+            }
+            if (!canUseActiveBaseAbility(base.defId, {
+                state: core,
+                matchState: state,
+                baseIndex,
+                baseDefId: base.defId,
+                playerId: command.playerId,
+                now: 0,
+            })) {
+                return { valid: false, error: '当前无法使用该基地能力' };
+            }
             return { valid: true };
         }
 
@@ -718,7 +765,7 @@ export function validate(
                 }
                 // 响应窗口仍打开时不允许激活（Me First! 优先）
                 if (state.sys.responseWindow?.current) {
-                    return { valid: false, error: 'Me First! 响应窗口仍在进行中' };
+                    return { valid: false, error: 'me_first_response_window_active' };
                 }
             }
             return { valid: true };

@@ -9,7 +9,7 @@ export const BASE_PORTS = {
 };
 
 const PORT_OFFSET = 100;
-const PORT_SCAN_RANGE = 20;
+const PORT_SCAN_RANGE = 200;
 const RESERVATION_LOCK_TIMEOUT_MS = 10000;
 const RESERVATION_LOCK_RETRY_MS = 100;
 const RESERVATION_STALE_MS = 30000;
@@ -249,7 +249,7 @@ async function withReservationLock(fn, cwd = process.cwd()) {
   }
 }
 
-async function canBindPort(port, host = '0.0.0.0') {
+export async function canBindPort(port, host = '0.0.0.0') {
   return await new Promise(resolve => {
     const server = createServer();
     let settled = false;
@@ -303,18 +303,22 @@ export async function arePortsBindable(ports) {
   return results.every(Boolean);
 }
 
-async function findAvailablePort(startPort, options = {}) {
+export async function findAvailablePort(startPort, options = {}) {
   const reservedPorts = options.reservedPorts ?? new Set();
-  for (let port = startPort; port < startPort + PORT_SCAN_RANGE; port++) {
+  const scanRange = Number(options.range);
+  const maxRange = Number.isFinite(scanRange) && scanRange > 0 ? scanRange : PORT_SCAN_RANGE;
+  const host = options.host ?? '0.0.0.0';
+
+  for (let port = startPort; port < startPort + maxRange; port++) {
     if (reservedPorts.has(port)) {
       continue;
     }
-    if (await canBindPort(port)) {
+    if (await canBindPort(port, host)) {
       return port;
     }
   }
 
-  throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${PORT_SCAN_RANGE}`);
+  throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${maxRange}`);
 }
 
 export async function allocateAvailablePorts(workerId, options = {}) {

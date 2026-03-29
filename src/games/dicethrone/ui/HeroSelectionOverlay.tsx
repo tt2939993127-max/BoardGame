@@ -219,7 +219,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                         src={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
                                         className="h-full w-auto object-contain"
-                                        alt="Player Board"
+                                        alt="玩家面板"
                                     />
                                 </div>
 
@@ -232,7 +232,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                         src={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
                                         className="h-full w-auto object-contain"
-                                        alt="Tip Board"
+                                        alt="提示板"
                                     />
                                 </div>
                             </div>
@@ -286,7 +286,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                         </div>
                                         <div className="text-[0.6vw] text-white/50 truncate max-w-[8vw]">
                                             {playerNames[pid]}
-                                            {isMe && <span className="ml-[0.2vw] text-amber-400/80 font-bold">(YOU)</span>}
+                                            {isMe && <span className="ml-[0.2vw] text-amber-400/80 font-bold">({t('selection.you', '你')})</span>}
                                         </div>
                                     </div>
 
@@ -344,7 +344,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                             )}
                         >
                             <span className="inline-flex items-center gap-[0.8vw]">
-                                <span>{everyoneReady ? t('selection.pressStart', 'Press Start') : t('selection.waitingAll', '等待全员就绪')}</span>
+                                <span>{everyoneReady ? t('selection.pressStart', '开始游戏') : t('selection.waitingAll', '等待全员就绪')}</span>
                                 <span className="flex items-center gap-[0.35vw]">
                                     {readyProgressDots}
                                 </span>
@@ -376,7 +376,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                         src={magnifyImage}
                         locale={locale}
                         className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                        alt="Preview"
+                        alt="预览图"
                     />
                 )}
             </MagnifyOverlay>

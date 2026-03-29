@@ -6,6 +6,7 @@
  * 6: Moon (月)
  */
 import type { DiceDefinition } from '../../../../engine/primitives';
+import { versionedPublicFileUrl } from '../../../../lib/publicFileUrl';
 import { MOON_ELF_DICE_FACE_IDS } from '../../domain/ids';
 
 export const moonElfDiceDefinition: DiceDefinition = {
@@ -22,6 +23,6 @@ export const moonElfDiceDefinition: DiceDefinition = {
         { value: 6, symbols: [MOON_ELF_DICE_FACE_IDS.MOON] },
     ],
     assets: {
-        spriteSheet: '/game-data/dicethrone/moon_elf/dice-sprite.png',
+        spriteSheet: versionedPublicFileUrl('/game-data/dicethrone/moon_elf/dice-sprite.png'),
     },
 };

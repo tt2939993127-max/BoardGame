@@ -3,7 +3,7 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler, type InteractionHandler } from '../domain/abilityInteractionHandlers';
-import { registerBaseAbility } from '../domain/baseAbilities';
+import { registerActiveBaseAbility, registerBaseAbility } from '../domain/baseAbilities';
 import {
     addTempPower,
     buildBaseTargetOptions,
@@ -16,7 +16,8 @@ import {
     removePowerCounter,
 } from '../domain/abilityHelpers';
 import { buildBuryCardEvents, uncoverBuriedCard } from '../domain/bury';
-import type { SmashUpCore, SmashUpEvent, BuriedCardOnBase } from '../domain/types';
+import { SU_EVENTS } from '../domain/types';
+import type { BaseAbilityUsedEvent, SmashUpCore, SmashUpEvent, BuriedCardOnBase } from '../domain/types';
 import { registerTrigger } from '../domain/ongoingEffects';
 import { getBaseDef, getCardDef } from '../data/cards';
 
@@ -49,6 +50,11 @@ export function registerAncientEgyptiansAbilities(): void {
         perInstance: true,
         sourceScope: 'triggerBase',
     });
+    registerTrigger('ancient_egyptians_pharaoh', 'beforeScoring', ancientEgyptiansPharaohBeforeScoring, {
+        optional: true,
+        perInstance: true,
+        sourceScope: 'triggerBase',
+    });
     registerTrigger('ancient_egyptians_pharaoh', 'onBuriedCardUncovered', ancientEgyptiansPharaohOnUncover, {
         perInstance: true,
     });
@@ -57,7 +63,13 @@ export function registerAncientEgyptiansAbilities(): void {
         sourceScope: 'triggerBase',
     });
 
-    registerBaseAbility('base_pyramids', 'onTurnStart', ancientEgyptiansPyramidsOnTurnStart, { mandatory: false });
+    registerActiveBaseAbility('base_pyramids', ancientEgyptiansPyramidsDuringTurn, {
+        oncePerTurn: true,
+        canUse: (ctx) => {
+            const player = ctx.state.players[ctx.playerId];
+            return !!player && player.hand.length > 0;
+        },
+    });
     registerBaseAbility('base_star_portal', 'onActionPlayed', ancientEgyptiansStarPortalOnActionPlayed, { mandatory: true });
 }
 
@@ -66,6 +78,7 @@ export function registerAncientEgyptiansInteractionHandlers(): void {
     registerInteractionHandler('ancient_egyptians_pyramid_engineer_talent', handlePyramidEngineerTalent);
     registerInteractionHandler('ancient_egyptians_lost_knowledge_mode', handleLostKnowledgeMode);
     registerInteractionHandler('ancient_egyptians_lost_knowledge_bury', handleLostKnowledgeBury);
+    registerInteractionHandler('ancient_egyptians_lost_knowledge_bury_base', handleLostKnowledgeBuryBase);
     registerInteractionHandler('ancient_egyptians_lost_knowledge_uncover', handleLostKnowledgeUncover);
     registerInteractionHandler('ancient_egyptians_plague_of_locusts', handlePlagueOfLocusts);
     registerInteractionHandler('ancient_egyptians_tomb_trap', handleTombTrap);
@@ -75,19 +88,20 @@ export function registerAncientEgyptiansInteractionHandlers(): void {
     registerInteractionHandler('ancient_egyptians_seal_the_tomb_bury', handleSealTheTombBury);
     registerInteractionHandler('ancient_egyptians_seal_the_tomb_uncover', handleSealTheTombUncover);
     registerInteractionHandler('ancient_egyptians_mummy_after_scoring', handleMummyAfterScoring);
+    registerInteractionHandler('ancient_egyptians_pharaoh_before_scoring', handlePharaohBeforeScoring);
     registerInteractionHandler('base_pyramids', handleBasePyramids);
 }
 
 function ancientEgyptiansPyramidEngineerOnPlay(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base || (base.buriedCards?.length ?? 0) === 0) return { events: [] };
-    const options = buildBuriedCardOptions(ctx.state, ctx.playerId, base.buriedCards ?? [], false);
+    const options = buildBuriedCardOptions(ctx.state, ctx.playerId, base.buriedCards ?? [], true);
     if (options.length === 0) return { events: [] };
     return queueBuriedCardPrompt(
         ctx.matchState,
         ctx.playerId,
         `ancient_egyptians_pyramid_engineer_${ctx.now}`,
-        '金字塔工程师：你可以翻开这里的一张埋葬牌',
+        '金字塔工程师：你可以翻开这里你的一张埋葬牌',
         'ancient_egyptians_pyramid_engineer_uncover',
         options,
     );
@@ -110,7 +124,8 @@ function ancientEgyptiansPyramidEngineerTalent(ctx: AbilityContext): AbilityResu
 function ancientEgyptiansLostKnowledge(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     if (!player) return { events: [] };
-    const canBury = player.hand.length > 0;
+    const buriableHand = player.hand.filter(card => card.uid !== ctx.cardUid);
+    const canBury = buriableHand.length > 0;
     const canUncover = getBuriedCardChoices(ctx.state, ctx.playerId).length > 0;
     if (!canBury && !canUncover) return { events: [] };
 
@@ -129,12 +144,12 @@ function ancientEgyptiansLostKnowledge(ctx: AbilityContext): AbilityResult {
             options,
             { sourceId: 'ancient_egyptians_lost_knowledge_mode', targetType: 'button' },
         );
-        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+        (interaction.data as any).continuationContext = { cardUid: ctx.cardUid };
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     }
 
     return options[0]?.value?.mode === 'bury'
-        ? queueLostKnowledgeBury(ctx.matchState, ctx.playerId, ctx.baseIndex, ctx.now)
+        ? queueLostKnowledgeBury(ctx.matchState, ctx.playerId, ctx.cardUid, ctx.now)
         : queueLostKnowledgeUncover(ctx.matchState, ctx.state, ctx.playerId, ctx.now);
 }
 
@@ -249,8 +264,9 @@ function ancientEgyptiansBlessingOfAnubisOnUncover(ctx: AbilityContext): Ability
 function ancientEgyptiansSealTheTomb(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const buriedChoices = getBuriedCardChoices(ctx.state, ctx.playerId, ctx.baseIndex);
+    const buriableHand = player?.hand.filter(card => card.uid !== ctx.cardUid) ?? [];
     const options = [];
-    if ((player?.hand.length ?? 0) > 0) {
+    if (buriableHand.length > 0) {
         options.push({ id: 'bury', label: '埋葬至多两张手牌', value: { mode: 'bury' }, displayMode: 'button' as const });
     }
     if (buriedChoices.length > 0) {
@@ -264,7 +280,7 @@ function ancientEgyptiansSealTheTomb(ctx: AbilityContext): AbilityResult {
         options,
         { sourceId: 'ancient_egyptians_seal_the_tomb_mode', targetType: 'button' },
     );
-    (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+    (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex, cardUid: ctx.cardUid };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -299,12 +315,28 @@ function ancientEgyptiansPharaohOnUncover(ctx: any): SmashUpEvent[] {
     return buildStandardDrawEvents(ctx.state, pharaohController, 1, ctx.random, ctx.now);
 }
 
+function ancientEgyptiansPharaohBeforeScoring(ctx: any): AbilityResult {
+    if (!ctx.matchState || ctx.baseIndex === undefined || !ctx.sourceControllerId) return { events: [] };
+    const base = ctx.state.bases[ctx.baseIndex];
+    if (!base || (base.buriedCards?.length ?? 0) === 0) return { events: [] };
+    const options = buildBuriedCardOptions(ctx.state, ctx.sourceControllerId, base.buriedCards ?? [], true);
+    if (options.length === 0) return { events: [] };
+    const interaction = createSimpleChoice(
+        `ancient_egyptians_pharaoh_before_scoring_${ctx.now}_${ctx.sourceCardUid ?? 'pharaoh'}`,
+        ctx.sourceControllerId,
+        '法老：你可以在计分前翻开这里你的一张埋葬牌',
+        [createSkipOption(), ...options] as any[],
+        { sourceId: 'ancient_egyptians_pharaoh_before_scoring', targetType: 'generic' },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
 function ancientEgyptiansStarPortalOnBuried(ctx: any): SmashUpEvent[] {
     if (!ctx.buriedCardControllerId) return [];
     return buildStandardDrawEvents(ctx.state, ctx.buriedCardControllerId, 1, ctx.random, ctx.now);
 }
 
-function ancientEgyptiansPyramidsOnTurnStart(ctx: any): AbilityResult {
+function ancientEgyptiansPyramidsDuringTurn(ctx: any): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     if (!ctx.matchState || !player || player.hand.length === 0) return { events: [] };
     const interaction = createSimpleChoice(
@@ -340,19 +372,19 @@ function queueBuriedCardPrompt(
 function queueLostKnowledgeBury(
     matchState: MatchState<SmashUpCore>,
     playerId: PlayerId,
-    baseIndex: number,
+    playedCardUid: string,
     now: number,
 ): AbilityResult {
     const player = matchState.core.players[playerId];
-    if (!player || player.hand.length === 0) return { events: [] };
+    const buriableHand = player?.hand.filter(card => card.uid !== playedCardUid) ?? [];
+    if (!player || buriableHand.length === 0) return { events: [] };
     const interaction = createSimpleChoice(
         `ancient_egyptians_lost_knowledge_bury_${now}`,
         playerId,
         '失落知识：选择一张手牌埋葬',
-        buildHandCardOptions(player.hand),
+        buildHandCardOptions(buriableHand),
         { sourceId: 'ancient_egyptians_lost_knowledge_bury', targetType: 'generic' },
     );
-    (interaction.data as any).continuationContext = { baseIndex };
     return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
 
@@ -430,16 +462,42 @@ const handlePyramidEngineerTalent: InteractionHandler = (state, playerId, value,
 
 const handleLostKnowledgeMode: InteractionHandler = (state, playerId, value, data, _random, now) => {
     const mode = (value as any)?.mode as 'bury' | 'uncover' | undefined;
-    const baseIndex = (data?.continuationContext as any)?.baseIndex as number | undefined;
-    if (!mode || baseIndex === undefined) return { state, events: [] };
-    return mode === 'bury'
-        ? queueLostKnowledgeBury(state, playerId, baseIndex, now)
+    const playedCardUid = (data?.continuationContext as any)?.cardUid as string | undefined;
+    if (!mode) return { state, events: [] };
+    const result = mode === 'bury'
+        ? queueLostKnowledgeBury(state, playerId, playedCardUid ?? '', now)
         : queueLostKnowledgeUncover(state, state.core, playerId, now);
+    return { state: result.matchState ?? state, events: result.events };
 };
 
 const handleLostKnowledgeBury: InteractionHandler = (state, playerId, value, data, random, now) => {
-    const baseIndex = (data?.continuationContext as any)?.baseIndex as number | undefined;
     const selected = value as HandCardChoice | undefined;
+    if (!selected?.cardUid) return { state, events: [] };
+    const options = buildBaseTargetOptions(
+        state.core.bases.map((base, baseIndex) => ({
+            baseIndex,
+            label: getBaseDef(base.defId)?.name ?? base.defId,
+        })),
+        state.core,
+    );
+    if (options.length === 0) return { state, events: [] };
+    const interaction = createSimpleChoice(
+        `ancient_egyptians_lost_knowledge_bury_base_${now}`,
+        playerId,
+        '失落知识：选择要埋葬到的基地',
+        options,
+        { sourceId: 'ancient_egyptians_lost_knowledge_bury_base', targetType: 'base' },
+    );
+    (interaction.data as any).continuationContext = {
+        cardUid: selected.cardUid,
+        defId: selected.defId,
+    };
+    return { state: queueInteraction(state, interaction), events: [] };
+};
+
+const handleLostKnowledgeBuryBase: InteractionHandler = (state, playerId, value, data, random, now) => {
+    const baseIndex = (value as any)?.baseIndex as number | undefined;
+    const selected = (data?.continuationContext as any) as HandCardChoice | undefined;
     if (baseIndex === undefined || !selected?.cardUid) return { state, events: [] };
     return {
         state,
@@ -507,7 +565,8 @@ const handleMummyStrengthMode: InteractionHandler = (state, playerId, value, _da
     const amount = (value as any)?.amount as 2 | 4 | undefined;
     if (!amount) return { state, events: [] };
     const targets = amount === 4 ? getOwnMinionsWithBuriedBase(state.core, playerId) : getOwnMinions(state.core, playerId);
-    return queueMummyStrengthTarget(state, playerId, now, amount, targets);
+    const result = queueMummyStrengthTarget(state, playerId, now, amount, targets);
+    return { state: result.matchState ?? state, events: result.events };
 };
 
 const handleMummyStrengthTarget: InteractionHandler = (state, _playerId, value, data, _random, now) => {
@@ -526,15 +585,16 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
     if (!mode || baseIndex === undefined) return { state, events: [] };
     if (mode === 'bury') {
         const player = state.core.players[playerId];
+        const buriableHand = player?.hand.filter(card => card.uid !== (data?.continuationContext as any)?.cardUid) ?? [];
         const interaction = createSimpleChoice(
             `ancient_egyptians_seal_the_tomb_bury_${now}`,
             playerId,
             '封印墓穴：选择至多两张手牌埋葬到这里',
-            buildHandCardOptions(player.hand),
-            { sourceId: 'ancient_egyptians_seal_the_tomb_bury', targetType: 'generic', multi: { min: 0, max: Math.min(2, player.hand.length) } },
+            buildHandCardOptions(buriableHand),
+            { sourceId: 'ancient_egyptians_seal_the_tomb_bury', targetType: 'generic', multi: { min: 0, max: Math.min(2, buriableHand.length) } },
         );
         (interaction.data as any).continuationContext = { baseIndex };
-        return { events: [], matchState: queueInteraction(state, interaction) };
+        return { state: queueInteraction(state, interaction), events: [] };
     }
 
     const choices = getBuriedCardChoices(state.core, playerId, baseIndex);
@@ -545,7 +605,7 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
         buildBuriedCardChoiceOptions(state.core, playerId, choices),
         { sourceId: 'ancient_egyptians_seal_the_tomb_uncover', targetType: 'generic', multi: { min: 0, max: Math.min(2, choices.length) } },
     );
-    return { events: [], matchState: queueInteraction(state, interaction) };
+    return { state: queueInteraction(state, interaction), events: [] };
 };
 
 const handleSealTheTombBury: InteractionHandler = (state, playerId, value, data, random, now) => {
@@ -612,26 +672,51 @@ const handleMummyAfterScoring: InteractionHandler = (state, playerId, value, dat
     };
 };
 
+const handlePharaohBeforeScoring: InteractionHandler = (state, playerId, value, _data, random, now) => {
+    const selected = value as BuriedChoice | { skip?: true } | undefined;
+    if (!selected || (selected as any)?.skip || !(selected as BuriedChoice).cardUid) {
+        return { state, events: [] };
+    }
+    return uncoverBuriedCard({
+        matchState: state,
+        playerId,
+        cardUid: (selected as BuriedChoice).cardUid,
+        baseIndex: (selected as BuriedChoice).baseIndex,
+        random,
+        now,
+        reason: 'ancient_egyptians_pharaoh',
+    });
+};
+
 const handleBasePyramids: InteractionHandler = (state, playerId, value, data, random, now) => {
     if ((value as any)?.skip) return { state, events: [] };
     const baseIndex = (data?.continuationContext as any)?.baseIndex as number | undefined;
     const selected = value as HandCardChoice | undefined;
     if (baseIndex === undefined || !selected?.cardUid) return { state, events: [] };
+    const baseDefId = state.core.bases[baseIndex]?.defId ?? 'base_pyramids';
+    const usedEvent: BaseAbilityUsedEvent = {
+        type: SU_EVENTS.BASE_ABILITY_USED,
+        payload: { playerId, baseIndex, baseDefId },
+        timestamp: now,
+    };
     return {
         state,
-        events: buildBuryCardEvents({
-            core: state.core,
-            matchState: state,
-            playerId,
-            cardUid: selected.cardUid,
-            defId: selected.defId,
-            baseIndex,
-            trueOwnerId: playerId,
-            buriedFrom: 'hand',
-            reason: 'base_pyramids',
-            random,
-            now,
-        }),
+        events: [
+            usedEvent,
+            ...buildBuryCardEvents({
+                core: state.core,
+                matchState: state,
+                playerId,
+                cardUid: selected.cardUid,
+                defId: selected.defId,
+                baseIndex,
+                trueOwnerId: playerId,
+                buriedFrom: 'hand',
+                reason: 'base_pyramids',
+                random,
+                now,
+            }),
+        ],
     };
 };
 

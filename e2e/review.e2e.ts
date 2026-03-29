@@ -1,19 +1,18 @@
 import { test, expect } from '@playwright/test';
+import { setChineseLocale } from './helpers/common';
 
 const mockUser = {
     id: 'user-review-test',
-    username: 'ReviewerBot',
+    username: '评测者',
     email: 'reviewer@example.com',
     emailVerified: true,
     role: 'user',
     banned: false,
 };
 
-test.describe('Game Review System', () => {
+test.describe('游戏评价系统', () => {
     test.beforeEach(async ({ page }) => {
-        await page.addInitScript(() => {
-            localStorage.setItem('i18nextLng', 'en');
-        });
+        await setChineseLocale(page);
         await page.addInitScript((user) => {
             localStorage.setItem('auth_token', 'e2e-token');
             localStorage.setItem('auth_user', JSON.stringify(user));
@@ -73,16 +72,16 @@ test.describe('Game Review System', () => {
         await page.goto('/?game=tictactoe');
     });
 
-    test('should allow a logged-in user to post a review', async ({ page }) => {
+    test('已登录用户可以发布评价', async ({ page }) => {
         const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
         if (await serviceUnavailable.isVisible().catch(() => false)) {
             await page.getByRole('button', { name: /Close|关闭/i }).first().click();
         }
         // 1. Switch to Reviews tab and ensure stats visible
         const modalRoot = page.locator('#modal-root');
-        const reviewsTab = modalRoot.getByRole('button', { name: /^(Reviews|评价)$/i });
+        const reviewsTab = modalRoot.getByRole('button', { name: '评价' });
         await reviewsTab.click();
-        await expect(modalRoot.getByText(/Few Reviews|评价较少/i)).toBeVisible();
+        await expect(modalRoot.getByText('评价较少')).toBeVisible();
 
         // 2. Mock create review response
         await page.route('**/auth/reviews/tictactoe', async route => {
@@ -91,7 +90,7 @@ test.describe('Game Review System', () => {
                     status: 201,
                     json: {
                         isPositive: true,
-                        content: 'Great game!',
+                        content: '游戏不错！',
                         createdAt: new Date().toISOString(),
                         user: { _id: mockUser.id, username: mockUser.username }
                     }
@@ -114,21 +113,21 @@ test.describe('Game Review System', () => {
         });
 
         // 3. Open review modal
-        const writeButton = modalRoot.getByRole('button', { name: /^(写评价|撰写评价|Write Review)$/i });
+        const writeButton = modalRoot.getByRole('button', { name: '写评价' });
         await expect(writeButton).toBeVisible();
         await writeButton.click();
 
         // 4. Fill and submit form
-        await expect(modalRoot.getByText(/撰写评价|修改我的评价|Write a Review|Edit My Review/i)).toBeVisible();
+        await expect(modalRoot.getByText(/撰写评价|修改我的评价/)).toBeVisible();
 
-        const positiveBtn = modalRoot.getByRole('button', { name: /^(推荐|Recommend)$/i });
+        const positiveBtn = modalRoot.getByRole('button', { name: '推荐' });
         await expect(positiveBtn).toBeVisible({ timeout: 10000 });
         await positiveBtn.click();
 
-        const textarea = modalRoot.getByPlaceholder(/写点什么|Write something/i);
-        await textarea.fill('Great game!');
+        const textarea = modalRoot.getByPlaceholder('写点什么...');
+        await textarea.fill('游戏不错！');
 
-        const submitBtn = modalRoot.getByRole('button', { name: /发布评论|Post Review/i });
+        const submitBtn = modalRoot.getByRole('button', { name: '发布评论' });
 
         // Mock refresh stats after submit
         await page.route('**/auth/reviews/tictactoe/stats', async route => {
@@ -149,7 +148,7 @@ test.describe('Game Review System', () => {
                 json: {
                     items: [{
                         isPositive: true,
-                        content: 'Great game!',
+                        content: '游戏不错！',
                         createdAt: new Date().toISOString(),
                         user: { _id: mockUser.id, username: mockUser.username }
                     }],
@@ -166,7 +165,7 @@ test.describe('Game Review System', () => {
             await route.fulfill({
                 json: {
                     isPositive: true,
-                    content: 'Great game!',
+                    content: '游戏不错！',
                     user: { _id: mockUser.id }
                 }
             });
@@ -175,8 +174,8 @@ test.describe('Game Review System', () => {
         await submitBtn.click();
 
         // 4. Verify toast or update
-        await expect(page.getByText(/评价已发布|Review saved|Review posted/i)).toBeVisible();
-        await expect(page.getByText(/100%\s*(好评|Positive)/i)).toBeVisible(); // stats updated
-        await expect(page.getByText('ReviewerBot', { exact: true })).toBeVisible(); // list updated
+        await expect(page.getByText('评价已发布')).toBeVisible();
+        await expect(page.getByText(/100%\s*好评/i)).toBeVisible();
+        await expect(page.getByText('评测者', { exact: true })).toBeVisible();
     });
 });

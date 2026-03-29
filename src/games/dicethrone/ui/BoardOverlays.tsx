@@ -28,7 +28,10 @@ import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
 import type { TokenDef } from '../domain/tokenTypes';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import {
+    getAbilitySlotLayoutForCharacter,
+    getPlayerBoardAspectRatio,
+} from './abilitySlotLayout';
 import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
 import { createScopedLogger } from '../../../lib/logger';
@@ -156,9 +159,10 @@ const MagnifyUpgradeOverlay: React.FC<{
     abilityLevels: Record<string, number>;
     locale: string;
 }> = ({ characterId, abilityLevels, locale }) => {
+    const slots = getAbilitySlotLayoutForCharacter(characterId);
     return (
         <div className="absolute inset-0 pointer-events-none">
-            {DEFAULT_ABILITY_SLOT_LAYOUT.map((slot) => {
+            {slots.map((slot) => {
                 if (slot.id === 'ultimate') return null;
                 const baseAbilityId = getSlotAbilityId(characterId, slot.id);
                 const level = baseAbilityId ? (abilityLevels[baseAbilityId] ?? 1) : 1;
@@ -212,9 +216,10 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(props.viewCharacterId);
     const magnifyContainerClassName = `
         group/modal
-        ${isPlayerBoardPreview ? 'aspect-[2048/1673] h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
+        ${isPlayerBoardPreview ? 'h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
         ${props.magnifiedCard ? 'aspect-[0.61] h-auto w-auto max-h-[90vh] max-w-[60vw]' : ''}
         ${isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
         ${!isPlayerBoardPreview && !props.magnifiedCard && !isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
@@ -253,12 +258,15 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 locale={props.locale}
                             />
                         ) : (
-                            <div className="relative">
+                            <div
+                                className="relative"
+                                style={isPlayerBoardPreview ? { aspectRatio: String(playerBoardAspectRatio) } : undefined}
+                            >
                                 <OptimizedImage
                                     src={props.magnifiedImage ?? ''}
                                     locale={props.locale}
-                                    className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                                    alt="Preview"
+                                    className="block max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
+                                    alt="预览图"
                                 />
                                 {/* 玩家面板放大时叠加升级卡预览 */}
                                 {isPlayerBoardPreview && props.viewCharacterId && props.abilityLevels && (

@@ -5,6 +5,7 @@ import { hasPlayerTurnRestriction, isOperationRestricted } from './ongoingEffect
 import { getPlayerEffectivePowerOnBase } from './ongoingModifiers';
 import { mustUseBaseLimitedMinionQuota } from './utils';
 import { isCardMinionLike } from './utils';
+import { actionLikeNeedsPlayBase } from './utils';
 
 function isCurrentTurnPlayer(core: SmashUpCore, playerId: string): boolean {
     return core.turnOrder[core.currentPlayerIndex] === playerId;
@@ -147,6 +148,15 @@ export function validateActionPlaySemantics(
     }
 
     const targetBaseIndex = params.targetBaseIndex;
+    if (actionLikeNeedsPlayBase(def)) {
+        if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
+            return { valid: false, error: '该行动卡需要选择目标基地' };
+        }
+        if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
+            return { valid: false, error: '无效的基地索引' };
+        }
+    }
+
     if (subtype === 'ongoing') {
         if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
             return { valid: false, error: '持续行动卡需要选择目标基地' };

@@ -35,6 +35,7 @@ const MADNESS_KEY = 'magic.dark.32.dark_spell_01';
 export const SU_EVENTS = defineEvents({
   // ========== UI 交互（本地播放）==========
   'su:faction_selected': { audio: 'ui', sound: SELECTION_KEY },
+  'su:faction_deselected': 'silent',
 
   // ========== 即时反馈（EventStream）==========
   'su:minion_played': { audio: 'immediate', sound: MINION_PLAY_KEY },
@@ -91,6 +92,7 @@ export const SU_EVENTS = defineEvents({
   'su:ongoing_detached': { audio: 'immediate', sound: CARD_DISCARD_KEY },
   'su:ongoing_card_counter_changed': { audio: 'immediate', sound: POWER_GAIN_KEY },
   
+  'su:base_ability_used': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
   'su:talent_used': { audio: 'immediate', sound: TALENT_KEY },
   'su:minion_play_effect_queued': 'silent',
   'su:minion_play_effect_consumed': 'silent',
@@ -159,6 +161,7 @@ export const SU_EVENT_TYPES = {
   MINION_RETURNED: SU_EVENTS['su:minion_returned'].type,
   LIMIT_MODIFIED: SU_EVENTS['su:limit_modified'].type,
   FACTION_SELECTED: SU_EVENTS['su:faction_selected'].type,
+  FACTION_DESELECTED: SU_EVENTS['su:faction_deselected'].type,
   ALL_FACTIONS_SELECTED: SU_EVENTS['su:all_factions_selected'].type,
   STARTING_HAND_MULLIGAN_USED: SU_EVENTS['su:starting_hand_mulligan_used'].type,
   MINION_DESTROYED: SU_EVENTS['su:minion_destroyed'].type,
@@ -173,6 +176,7 @@ export const SU_EVENT_TYPES = {
   ONGOING_ATTACHED: SU_EVENTS['su:ongoing_attached'].type,
   ONGOING_DETACHED: SU_EVENTS['su:ongoing_detached'].type,
   ONGOING_CARD_COUNTER_CHANGED: SU_EVENTS['su:ongoing_card_counter_changed'].type,
+  BASE_ABILITY_USED: SU_EVENTS['su:base_ability_used'].type,
   TALENT_USED: SU_EVENTS['su:talent_used'].type,
   CARD_TO_DECK_TOP: SU_EVENTS['su:card_to_deck_top'].type,
   CARD_TO_DECK_BOTTOM: SU_EVENTS['su:card_to_deck_bottom'].type,

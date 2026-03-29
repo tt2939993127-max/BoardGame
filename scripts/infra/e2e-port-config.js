@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { loadDevRuntimePorts } from './dev-port-runtime.js';
+
+const devRuntimePorts = loadDevRuntimePorts();
 
 function resolvePort(value, fallback) {
   const port = Number(value);
@@ -7,9 +10,9 @@ function resolvePort(value, fallback) {
 
 // 开发环境端口始终读取当前 .env，避免测试脚本误把本地开发前端当成 E2E 服务。
 export const DEV_SERVER_PORTS = Object.freeze({
-  frontend: resolvePort(process.env.VITE_DEV_PORT, 5173),
-  gameServer: resolvePort(process.env.GAME_SERVER_PORT, 18000),
-  apiServer: resolvePort(process.env.API_SERVER_PORT, 18001),
+  frontend: resolvePort(process.env.VITE_DEV_PORT, devRuntimePorts?.frontend ?? 4173),
+  gameServer: resolvePort(process.env.GAME_SERVER_PORT, devRuntimePorts?.gameServer ?? 18000),
+  apiServer: resolvePort(process.env.API_SERVER_PORT, devRuntimePorts?.apiServer ?? 18001),
 });
 
 // 单 worker E2E 端口：供默认 `npm run test:e2e` / `test:e2e:ci` 使用。

@@ -18,6 +18,35 @@ beforeAll(() => {
 });
 
 describe('bury engine', () => {
+    it('playing You Can Take It With You requires a chosen base and buries onto that base', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [{ uid: 'yk-play', defId: 'ancient_egyptians_you_can_take_it_with_you', type: 'action', owner: '0' } as any],
+                    deck: [],
+                    discard: [],
+                    factions: ['ancient_egyptians', 'robots'] as any,
+                }),
+                '1': makePlayer('1', { hand: [], deck: [], discard: [] }),
+            },
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                { defId: 'base_pyramids', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const result = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'yk-play', targetBaseIndex: 1 } } as any,
+            defaultTestRandom,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.finalState.core.players['0'].hand.some(card => card.uid === 'yk-play')).toBe(false);
+        expect(result.finalState.core.bases[0].buriedCards?.some(card => card.uid === 'yk-play') ?? false).toBe(false);
+        expect(result.finalState.core.bases[1].buriedCards?.some(card => card.uid === 'yk-play') ?? false).toBe(true);
+    });
+
     it('at startTurn, player may uncover one buried card and play it as extra', () => {
         const core = makeState({
             turnOrder: ['0', '1'],

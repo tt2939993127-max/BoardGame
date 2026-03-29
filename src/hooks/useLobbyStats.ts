@@ -2,10 +2,10 @@
 import { useMemo } from 'react';
 import { useLobbyMatchPresence } from './useLobbyMatchPresence';
 
-export const useLobbyStats = () => {
+export const useLobbyStats = (enabled = true) => {
     const { matches, hasSnapshot } = useLobbyMatchPresence({
         gameId: 'all',
-        enabled: true,
+        enabled,
         requireSeen: false,
     });
 

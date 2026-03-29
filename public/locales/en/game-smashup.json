@@ -17,6 +17,8 @@
     "endTurn": "End"
   },
   "error": {
+    "invalid_command_missing_type": "Invalid command: missing type",
+    "me_first_response_window_active": "Me First! response window is still active",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped"
@@ -68,6 +70,8 @@
     "confirm_selection": "Confirm Selection",
     "wait_turn": "Wait for your turn",
     "preview_cards": "Included Card Preview",
+    "faction_titan_preview": "Titan Preview",
+    "faction_titan_missing": "This faction's titan is not available yet",
     "minion": "Minion",
     "action": "Action",
     "discard_badge": "Discard",
@@ -2662,6 +2666,156 @@
     "zombie_mall_crawl_pod": {
       "name": "Mall Crawl",
       "effectText": "Search your deck for any number of cards of the same name and put them into your discard pile. Shuffle your deck."
+    },
+    "miskatonic_book_of_iter_the_unseen_pod": {
+      "name": "Book of Iters"
+    },
+    "miskatonic_thing_on_the_doorstep_pod": {
+      "name": "Thing on the Doorstep"
+    },
+    "miskatonic_lost_knowledge_pod": {
+      "name": "Lost Knowledge"
+    },
+    "miskatonic_mandatory_reading_pod": {
+      "name": "Mandatory Reading"
+    },
+    "miskatonic_psychological_profiling_pod": {
+      "name": "Psychological Profiling"
+    },
+    "vampire_summon_wolves_pod": {
+      "name": "Summon Wolves"
+    },
+    "base_miskatonic_university_base_pod": {
+      "name": "Miskatonic University"
+    },
+    "base_the_asylum_pod": {
+      "name": "The Asylum"
+    },
+    "base_the_grey_opal_pod": {
+      "name": "The Grey Opal"
+    },
+    "base_tortuga_pod": {
+      "name": "Tortuga"
+    },
+    "base_factory_436_1337_pod": {
+      "name": "Factory 436-1337"
+    },
+    "base_the_central_brain_pod": {
+      "name": "The Central Brain"
+    },
+    "base_inventors_salon_pod": {
+      "name": "Inventor's Salon"
+    },
+    "base_the_workshop_pod": {
+      "name": "The Workshop"
+    },
+    "base_the_homeworld_pod": {
+      "name": "The Homeworld"
+    },
+    "base_the_mothership_pod": {
+      "name": "The Mothership"
+    },
+    "base_the_jungle_pod": {
+      "name": "The Jungle"
+    },
+    "base_tar_pits_pod": {
+      "name": "Tar Pits"
+    },
+    "base_pirate_cove_pod": {
+      "name": "Pirate Cove"
+    },
+    "base_dread_lookout_pod": {
+      "name": "Dread Lookout"
+    },
+    "base_haunted_house_al9000_pod": {
+      "name": "Haunted House"
+    },
+    "base_the_field_of_honor_pod": {
+      "name": "The Field of Honor"
+    },
+    "base_tsars_palace_pod": {
+      "name": "Tsar's Palace"
+    },
+    "base_greenhouse_pod": {
+      "name": "Greenhouse"
+    },
+    "base_secret_garden_pod": {
+      "name": "Secret Garden"
+    },
+    "base_cat_fanciers_alley_pod": {
+      "name": "Cat Fancier's Alley"
+    },
+    "base_house_of_nine_lives_pod": {
+      "name": "House of Nine Lives"
+    },
+    "base_enchanted_glade_pod": {
+      "name": "Enchanted Glade"
+    },
+    "base_fairy_ring_pod": {
+      "name": "Fairy Ring"
+    },
+    "base_beautiful_castle_pod": {
+      "name": "Beautiful Castle"
+    },
+    "base_castle_of_ice_pod": {
+      "name": "Castle of Ice"
+    },
+    "base_land_of_balance_pod": {
+      "name": "Land of Balance"
+    },
+    "base_pony_paradise_pod": {
+      "name": "Pony Paradise"
+    },
+    "base_north_pole_pod": {
+      "name": "North Pole"
+    },
+    "base_antarctic_base_pod": {
+      "name": "Antarctic Base"
+    },
+    "base_ritual_site_pod": {
+      "name": "Ritual Site"
+    },
+    "base_rlyeh_pod": {
+      "name": "R'lyeh"
+    },
+    "base_innsmouth_base_pod": {
+      "name": "Innsmouth"
+    },
+    "base_mountains_of_madness_pod": {
+      "name": "Mountains of Madness"
+    },
+    "base_plateau_of_leng_pod": {
+      "name": "Plateau of Leng"
+    },
+    "base_the_pasture_pod": {
+      "name": "The Pasture"
+    },
+    "base_sheep_shrine_pod": {
+      "name": "Sheep Shrine"
+    },
+    "base_castle_blood_pod": {
+      "name": "Castle Blood"
+    },
+    "base_crypt_pod": {
+      "name": "Crypt"
+    },
+    "base_laboratorium_pod": {
+      "name": "Laboratorium"
+    },
+    "base_golem_schloss_pod": {
+      "name": "Golem Schloss"
+    },
+    "base_moot_site_pod": {
+      "name": "Moot Site"
+    },
+    "base_standing_stones_pod": {
+      "name": "Standing Stones"
+    },
+    "base_egg_chamber_pod": {
+      "name": "Egg Chamber"
+    },
+    "base_the_hill_pod": {
+      "name": "The Hill"
     },
     "pirate_cut_lass": {
       "name": "Cut Lass"

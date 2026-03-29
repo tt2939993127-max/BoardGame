@@ -1,10 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import './games/cursorRegistry';
 import { i18nInitPromise } from './lib/i18n';
 import App from './App.tsx';
 import { SENTRY_DSN } from './config/server';
+import { notifyAndroidBundleReady } from './lib/mobile/androidLiveUpdates';
 import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
 
 const captureParams = typeof window !== 'undefined'
@@ -85,6 +85,8 @@ if (SENTRY_DSN) {
     });
   });
 }
+
+void notifyAndroidBundleReady();
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

@@ -6,6 +6,9 @@ const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_TTL_MS = 15000;
 const SHARED_RUNTIME_DIR = 'boardgame-e2e';
 const SHARED_RUNTIME_REGISTRY = 'runtime-registry.json';
+const REGISTRY_WRITE_RETRYABLE_CODES = new Set(['EBUSY', 'EPERM']);
+const REGISTRY_WRITE_RETRY_COUNT = 6;
+const REGISTRY_WRITE_RETRY_DELAY_MS = 50;
 
 function nowIso() {
   return new Date().toISOString();
@@ -25,6 +28,10 @@ function runGit(command, cwd = process.cwd()) {
 
 function ensureDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function readJson(filePath, fallback) {
@@ -61,6 +68,40 @@ function normalizePorts(ports) {
   return ports ?? {};
 }
 
+function normalizeRuntimeHealth(health) {
+  if (!health || typeof health !== 'object') {
+    return {
+      ready: false,
+      checks: {},
+      urls: {},
+      lastHealthCheckAt: null,
+    };
+  }
+
+  const checks = health.checks && typeof health.checks === 'object'
+    ? Object.fromEntries(
+      Object.entries(health.checks)
+        .map(([name, value]) => [name, Boolean(value)]),
+    )
+    : {};
+
+  const urls = health.urls && typeof health.urls === 'object'
+    ? Object.fromEntries(
+      Object.entries(health.urls)
+        .map(([name, value]) => [name, typeof value === 'string' ? value : ''])
+        .filter(([, value]) => value),
+    )
+    : {};
+
+  return {
+    ready: Boolean(health.ready),
+    checks,
+    urls,
+    lastHealthCheckAt: typeof health.lastHealthCheckAt === 'string' ? health.lastHealthCheckAt : null,
+    details: typeof health.details === 'string' ? health.details : '',
+  };
+}
+
 function uniqueStrings(values) {
   return [...new Set((Array.isArray(values) ? values : [values]).filter(value => typeof value === 'string' && value.trim()))];
 }
@@ -84,10 +125,35 @@ function readRegistryFile(filePath) {
 
 function writeRegistryFile(filePath, runtimes) {
   ensureDir(filePath);
-  fs.writeFileSync(filePath, JSON.stringify({
+  const content = JSON.stringify({
     runtimes,
     updatedAt: nowIso(),
-  }, null, 2));
+  }, null, 2);
+  let lastError = null;
+
+  for (let attempt = 0; attempt < REGISTRY_WRITE_RETRY_COUNT; attempt += 1) {
+    const tempFilePath = `${filePath}.${process.pid}.${Date.now()}.${attempt}.tmp`;
+    try {
+      fs.writeFileSync(tempFilePath, content, 'utf-8');
+      fs.renameSync(tempFilePath, filePath);
+      return;
+    } catch (error) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch {
+        // ignore temp cleanup failure
+      }
+
+      const code = error?.code;
+      if (!code || !REGISTRY_WRITE_RETRYABLE_CODES.has(code) || attempt === REGISTRY_WRITE_RETRY_COUNT - 1) {
+        throw error;
+      }
+      lastError = error;
+      sleepSync(REGISTRY_WRITE_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError;
 }
 
 export function getWorktreeRoot(cwd = process.cwd()) {
@@ -126,10 +192,12 @@ function inspectRuntime(runtime) {
   const aliveTrackedPids = trackedPids.filter(isPidAlive);
   const leaseExpiresAt = Date.parse(runtime.leaseExpiresAt ?? '');
   const heartbeatFresh = Number.isFinite(leaseExpiresAt) ? leaseExpiresAt > Date.now() : false;
+  const health = normalizeRuntimeHealth(runtime.health);
+  const healthReady = health.ready === true;
 
   let status = 'stopped';
   if (aliveOwnerPids.length > 0) {
-    status = heartbeatFresh ? 'active' : 'active-unhealthy';
+    status = heartbeatFresh && healthReady ? 'active' : 'active-unhealthy';
   } else if (aliveServicePids.length > 0 || aliveTrackedPids.length > 0) {
     status = 'orphaned';
   }
@@ -140,6 +208,8 @@ function inspectRuntime(runtime) {
     aliveServicePids,
     aliveTrackedPids,
     heartbeatFresh,
+    health,
+    healthReady,
     status,
     stale: status === 'orphaned' || status === 'stopped',
     killPids: normalizePids([...ownerPids, ...servicePids, ...trackedPids]),
@@ -177,6 +247,7 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
     servicePids,
     pids: normalizePids([...ownerPids, ...servicePids, ...explicitPids]),
     ports,
+    health: normalizeRuntimeHealth(record.health ?? existing?.health),
     bootstrapLogFiles,
     active: record.active ?? existing?.active ?? true,
     createdAt,
@@ -186,6 +257,27 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
     heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
     heartbeatTtlMs: HEARTBEAT_TTL_MS,
   };
+}
+
+function stripInspectionFields(runtime) {
+  if (!runtime || typeof runtime !== 'object') {
+    return runtime;
+  }
+
+  const {
+    ownerAlive,
+    aliveOwnerPids,
+    aliveServicePids,
+    aliveTrackedPids,
+    heartbeatFresh,
+    healthReady,
+    status,
+    stale,
+    killPids,
+    ...rest
+  } = runtime;
+
+  return rest;
 }
 
 function readSharedRegistry(cwd = process.cwd()) {
@@ -215,7 +307,7 @@ export function upsertRuntime(record, cwd = process.cwd()) {
   const runtimeId = getRuntimeId(record.scope, cwd, record.worktreeRoot ? path.resolve(record.worktreeRoot) : undefined);
   const registry = readSharedRegistry(cwd);
   const runtimes = Array.isArray(registry.runtimes) ? registry.runtimes : [];
-  const existing = runtimes.find(runtime => runtime.runtimeId === runtimeId) ?? null;
+  const existing = stripInspectionFields(runtimes.find(runtime => runtime.runtimeId === runtimeId) ?? null);
   const nextRecord = normalizeRuntimeRecord({ ...record, runtimeId }, cwd, existing);
   const next = runtimes.filter(runtime => runtime.runtimeId !== runtimeId);
   next.push(nextRecord);
@@ -251,6 +343,15 @@ export function listRuntimes(cwd = process.cwd(), options = {}) {
 
 export function listActiveRuntimes(cwd = process.cwd()) {
   return listRuntimes(cwd).filter(runtime => runtime.status === 'active' || runtime.status === 'active-unhealthy');
+}
+
+export function findRuntimeByScope(scope, cwd = process.cwd(), options = {}) {
+  const normalizedScope = normalizeScope(scope);
+  return listRuntimes(cwd, options).find(runtime => runtime.scope === normalizedScope) ?? null;
+}
+
+export function findRuntimeById(runtimeId, cwd = process.cwd(), options = {}) {
+  return listRuntimes(cwd, options).find(runtime => runtime.runtimeId === runtimeId) ?? null;
 }
 
 export function findRuntimesByPorts(ports, cwd = process.cwd(), options = {}) {
@@ -303,7 +404,7 @@ export function pruneStaleRuntimes(cwd = process.cwd(), options = {}) {
     }
   }
 
-  writeSharedRegistry(active.map(({ ownerAlive, aliveServicePids, aliveTrackedPids, heartbeatFresh, status, stale: _stale, killPids, ...runtime }) => runtime), cwd);
+  writeSharedRegistry(active.map(runtime => stripInspectionFields(runtime)), cwd);
   syncLocalRegistry(cwd);
 
   return {
@@ -371,6 +472,6 @@ export function describeRuntimeConflict(runtimes, cwd = process.cwd()) {
     }
   }
 
-  lines.push('请改用 isolated 端口、先结束对应 runtime，或显式检查 `npm run test:e2e:list`。');
+  lines.push('请改用 isolated 端口、先结束对应 runtime，或显式检查 `node scripts/infra/list-e2e-runtimes.mjs`。');
   return lines.join('\n');
 }

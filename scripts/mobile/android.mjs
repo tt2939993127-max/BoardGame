@@ -23,7 +23,7 @@ const gradleWrapper = process.platform === 'win32'
     : path.join(androidDir, 'gradlew');
 const defaultAppId = 'top.easyboardgame.app';
 const defaultAppName = '易桌游';
-const defaultAndroidWebviewMode = 'remote';
+const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
 const distDir = path.join(rootDir, 'dist');
@@ -325,6 +325,8 @@ const getAppConfig = () => ({
     appName: process.env.CAPACITOR_APP_NAME?.trim() || defaultAppName,
 });
 
+const isHttpUrl = (value) => /^http:\/\//i.test(value);
+
 const writeCapacitorShellConfig = () => {
     const { appId, appName } = getAppConfig();
     const mode = getAndroidWebviewMode();
@@ -334,6 +336,7 @@ const writeCapacitorShellConfig = () => {
 
     if (mode === 'remote') {
         server.url = ensureRemoteWebUrl();
+        server.cleartext = isHttpUrl(server.url);
     }
 
     writeText(
@@ -367,14 +370,17 @@ const getAndroidWebviewMode = () => {
 };
 
 const getAndroidRemoteWebUrl = () => process.env.ANDROID_REMOTE_WEB_URL?.trim() || '';
+const getAndroidOtaEnabled = () => /^(1|true|yes|on)$/i.test(process.env.VITE_ANDROID_OTA_ENABLED?.trim() || '');
+const getAndroidOtaManifestUrl = () => process.env.VITE_ANDROID_OTA_MANIFEST_URL?.trim() || '';
+const getAndroidOtaChannel = () => process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || '';
 
 const ensureRemoteWebUrl = () => {
     const remoteUrl = getAndroidRemoteWebUrl();
     if (!remoteUrl) {
-        throw new Error('remote 模式必须配置 ANDROID_REMOTE_WEB_URL，且必须是绝对 HTTPS 地址。');
+        throw new Error('remote 模式必须配置 ANDROID_REMOTE_WEB_URL，且必须是绝对 HTTP/HTTPS 地址。');
     }
-    if (!/^https:\/\//i.test(remoteUrl)) {
-        throw new Error(`ANDROID_REMOTE_WEB_URL 必须是绝对 HTTPS 地址，当前值为: ${remoteUrl}`);
+    if (!/^https?:\/\//i.test(remoteUrl)) {
+        throw new Error(`ANDROID_REMOTE_WEB_URL 必须是绝对 HTTP/HTTPS 地址，当前值为: ${remoteUrl}`);
     }
     return remoteUrl;
 };
@@ -390,11 +396,11 @@ const getAndroidShellStatus = () => {
                 message: 'remote 模式缺少 ANDROID_REMOTE_WEB_URL。',
             };
         }
-        if (!/^https:\/\//i.test(remoteUrl)) {
+        if (!/^https?:\/\//i.test(remoteUrl)) {
             return {
                 ok: false,
                 code: 'remote-invalid-url',
-                message: `ANDROID_REMOTE_WEB_URL 必须是绝对 HTTPS 地址，当前值为: ${remoteUrl}`,
+                message: `ANDROID_REMOTE_WEB_URL 必须是绝对 HTTP/HTTPS 地址，当前值为: ${remoteUrl}`,
             };
         }
         return {
@@ -759,6 +765,9 @@ const printDoctor = async () => {
         `VITE_BACKEND_URL=${process.env.VITE_BACKEND_URL || '(未设置)'}`,
         `ANDROID_WEBVIEW_MODE=${getAndroidWebviewMode()}`,
         `ANDROID_REMOTE_WEB_URL=${getAndroidRemoteWebUrl() || '(未设置)'}`,
+        `ANDROID_OTA_ENABLED=${getAndroidOtaEnabled() ? 'true' : 'false'}`,
+        `ANDROID_OTA_MANIFEST_URL=${getAndroidOtaManifestUrl() || '(未设置)'}`,
+        `ANDROID_OTA_CHANNEL=${getAndroidOtaChannel() || '(未设置)'}`,
         `CAPACITOR_APP_ID=${appId}`,
         `CAPACITOR_APP_NAME=${appName}`,
         `ANDROID_PROJECT=${hasAndroidProject() ? 'ready' : 'missing'}`,

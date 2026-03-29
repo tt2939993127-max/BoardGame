@@ -46,7 +46,9 @@ import { CardMagnifyOverlay, type CardMagnifyTarget } from './ui/CardMagnifyOver
 import { GameButton as SmashUpGameButton } from './ui/GameButton';
 import { DeckDiscardZone } from './ui/DeckDiscardZone';
 import { getDiscardPlayOptions } from './domain/discardPlayability';
+import { canUseActiveBaseAbility } from './domain/baseAbilities';
 import {
+    actionLikeNeedsPlayBase,
     actionLikeNeedsResponseWindowBase,
     getMaxRemainingGlobalPowerLimitedQuota,
     isActionLikeRespondableInWindow,
@@ -860,6 +862,33 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         return uids;
     }, [selectedCardMode, playerID, core, deployableBaseIndices]);
 
+    const usableActiveBaseAbilityIndices = useMemo(() => {
+        if (!playerID || !isMyTurn || phase !== 'playCards') return new Set<number>();
+        if (selectedCardUid || discardStripSelectedUid || selectedSetAsideTitanUid || isBaseSelectPrompt || meFirstPendingCard) {
+            return new Set<number>();
+        }
+        const usable = new Set<number>();
+        core.bases.forEach((base, baseIndex) => {
+            const alreadyUsed = (core.usedBaseAbilitiesThisTurn ?? []).some(
+                entry => entry.playerId === playerID
+                    && entry.baseIndex === baseIndex
+                    && entry.baseDefId === base.defId,
+            );
+            if (alreadyUsed) return;
+            if (canUseActiveBaseAbility(base.defId, {
+                state: core,
+                matchState: G,
+                baseIndex,
+                baseDefId: base.defId,
+                playerId: playerID,
+                now: 0,
+            })) {
+                usable.add(baseIndex);
+            }
+        });
+        return usable;
+    }, [G, playerID, isMyTurn, phase, selectedCardUid, discardStripSelectedUid, selectedSetAsideTitanUid, isBaseSelectPrompt, meFirstPendingCard, core]);
+
     // 基地 DOM 引用（用于 FX 特效定位）
     const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
 
@@ -1156,8 +1185,17 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
             } else {
                 handlePlayMinion(selectedCardUid, index);
             }
+            return;
         }
-    }, [selectedCardUid, selectedCardMode, selectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer]);
+
+        if (usableActiveBaseAbilityIndices.has(index)) {
+            if (!isTutorialCommandAllowed(SU_COMMANDS.USE_BASE_ABILITY)) {
+                playDeniedSound();
+                return;
+            }
+            dispatch(SU_COMMANDS.USE_BASE_ABILITY, { baseIndex: index });
+        }
+    }, [selectedCardUid, selectedCardMode, selectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
 
     const handleSetAsideTitanSelect = useCallback((titanUid: string) => {
         if (!playerID) return;
@@ -1326,6 +1364,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     // 根据 ongoingTarget 决定选择基地还是随从
                     setSelectedCardMode(cardDef.ongoingTarget === 'minion' ? 'ongoing-minion' : 'ongoing');
                 }
+            } else if (cardDef && actionLikeNeedsPlayBase(cardDef)) {
+                if (selectedCardUid === card.uid) {
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                } else {
+                    setSelectedCardUid(card.uid);
+                    setSelectedCardMode('ongoing');
+                }
             } else {
                 dispatch(SU_COMMANDS.PLAY_ACTION, { cardUid: card.uid });
             }
@@ -1367,6 +1413,12 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         if (def.actionSubtype === 'ongoing') {
             setSelectedCardUid(card.uid);
             setSelectedCardMode((def.actionOngoingTarget ?? 'base') === 'minion' ? 'ongoing-minion' : 'ongoing');
+            return;
+        }
+
+        if (actionLikeNeedsPlayBase(def)) {
+            setSelectedCardUid(card.uid);
+            setSelectedCardMode('ongoing');
             return;
         }
 
@@ -1654,7 +1706,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                         setTimeout(() => setIsSubmitting(false), 3000);
                                     }}
                                     disabled={!!G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting}
-                                    className={`group w-24 h-24 rounded-full border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting
+                                    className={`group w-24 h-24 rounded-full border-solid border-4 border-white/95 ring-1 ring-white/55 shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting
                                             ? 'bg-slate-600 opacity-50 cursor-not-allowed'
                                             : 'bg-slate-900 hover:scale-110 hover:rotate-3 active:scale-95'
                                         }`}
@@ -1796,7 +1848,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                         ? t('ui.show_end_turn_controls', { defaultValue: '显示结束回合按钮和额度提示' })
                                         : t('ui.hide_end_turn_controls', { defaultValue: '隐藏结束回合按钮和额度提示' })}
                                     onClick={() => setIsEndTurnUiHidden(prev => !prev)}
-                                    className={`absolute right-0 bottom-0 z-10 flex items-center justify-center rounded-full border-2 border-white/85 bg-slate-900/95 text-white shadow-[0_6px_14px_rgba(0,0,0,0.45)] transition-all hover:scale-105 active:scale-95 ${isMobileViewport ? 'h-7 w-7 translate-x-[30%] translate-y-[30%] text-[11px]' : 'h-8 w-8 translate-x-[35%] translate-y-[35%] text-xs'}`}
+                                    className={`absolute right-0 bottom-0 z-10 flex items-center justify-center rounded-full border-solid border-2 border-white/95 ring-1 ring-slate-950/15 bg-slate-900/95 text-white shadow-[0_6px_14px_rgba(0,0,0,0.45)] transition-all hover:scale-105 active:scale-95 ${isMobileViewport ? 'h-7 w-7 translate-x-[30%] translate-y-[30%] text-[11px]' : 'h-8 w-8 translate-x-[35%] translate-y-[35%] text-xs'}`}
                                 >
                                     <span className="font-black leading-none">{isEndTurnUiHidden ? '显' : '隐'}</span>
                                 </button>
@@ -2040,6 +2092,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
                                 usableTitanTalentUids={usableTitanTalentUids}
                                 usableTitanOngoingUids={usableTitanOngoingUids}
+                                canUseBaseAbility={usableActiveBaseAbilityIndices.has(idx)}
                                 isTutorialTargetAllowed={isTutorialTargetAllowed}
                                 phase={phase as string}
                                 tokenRef={(el) => {

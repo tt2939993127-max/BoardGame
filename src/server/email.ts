@@ -44,23 +44,28 @@ export function generateCode(): string {
 const buildEmailHtml = (
     code: string,
     t: (key: string, params?: Record<string, string | number>) => string,
-    templateKeyPrefix: string,
+    templateKeys: {
+        title: string;
+        intro: string;
+        note: string;
+        footer: string;
+    },
 ) => (
     `
         <div style="font-family: 'Georgia', serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #fcfbf9; border: 1px solid #e5e0d0;">
-            <h2 style="color: #433422; margin-bottom: 24px; text-align: center;">${t(`${templateKeyPrefix}.title`)}</h2>
+            <h2 style="color: #433422; margin-bottom: 24px; text-align: center;">${t(templateKeys.title)}</h2>
             <p style="color: #8c7b64; font-size: 14px; line-height: 1.6;">
-                ${t(`${templateKeyPrefix}.intro`)}
+                ${t(templateKeys.intro)}
             </p>
             <div style="background: #f3f0e6; padding: 20px; text-align: center; margin: 24px 0; border: 1px solid #e5e0d0;">
                 <span style="font-size: 32px; font-weight: bold; color: #433422; letter-spacing: 8px;">${code}</span>
             </div>
             <p style="color: #8c7b64; font-size: 12px;">
-                ${t(`${templateKeyPrefix}.note`, { minutes: 5 })}
+                ${t(templateKeys.note, { minutes: 5 })}
             </p>
             <hr style="border: none; border-top: 1px solid #e5e0d0; margin: 24px 0;" />
             <p style="color: #c0a080; font-size: 10px; text-align: center;">
-                ${t(`${templateKeyPrefix}.footer`)}
+                ${t(templateKeys.footer)}
             </p>
         </div>
     `
@@ -86,7 +91,12 @@ export async function sendVerificationEmailWithCode(
             from: `"${t('email.template.senderName')}" <${smtpUser}>`,
             to: email,
             subject: t('email.subject'),
-            html: buildEmailHtml(code, t, 'email.template'),
+            html: buildEmailHtml(code, t, {
+                title: 'email.template.title',
+                intro: 'email.template.intro',
+                note: 'email.template.note',
+                footer: 'email.template.footer',
+            }),
         });
 
         logger.info(`验证码已发送至 ${email}: ${code}`);
@@ -125,7 +135,12 @@ export async function sendPasswordResetEmailWithCode(
             from: `"${t('email.template.senderName')}" <${smtpUser}>`,
             to: email,
             subject: t('email.reset.subject'),
-            html: buildEmailHtml(code, t, 'email.reset.template'),
+            html: buildEmailHtml(code, t, {
+                title: 'email.reset.template.title',
+                intro: 'email.reset.template.intro',
+                note: 'email.reset.template.note',
+                footer: 'email.reset.template.footer',
+            }),
         });
 
         logger.info(`密码重置验证码已发送至 ${email}: ${code}`);

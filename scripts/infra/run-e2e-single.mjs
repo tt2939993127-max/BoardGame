@@ -1,5 +1,9 @@
 import { runE2ECommand } from './run-e2e-command.mjs';
 
+function normalizeE2EPath(value) {
+    return value.trim().replace(/\\/g, '/');
+}
+
 function parseArgs(argv) {
     let file = process.env.PW_TEST_MATCH?.trim() ?? '';
     let testCase = process.env.PW_TEST_GREP?.trim() ?? '';
@@ -9,18 +13,18 @@ function parseArgs(argv) {
         const arg = argv[index];
 
         if (arg === '--file' || arg === '--match') {
-            file = argv[index + 1]?.trim() ?? '';
+            file = normalizeE2EPath(argv[index + 1] ?? '');
             index += 1;
             continue;
         }
 
         if (arg.startsWith('--file=')) {
-            file = arg.slice('--file='.length).trim();
+            file = normalizeE2EPath(arg.slice('--file='.length));
             continue;
         }
 
         if (arg.startsWith('--match=')) {
-            file = arg.slice('--match='.length).trim();
+            file = normalizeE2EPath(arg.slice('--match='.length));
             continue;
         }
 
@@ -41,7 +45,7 @@ function parseArgs(argv) {
         }
 
         if (!arg.startsWith('-') && !file) {
-            file = arg.trim();
+            file = normalizeE2EPath(arg);
             continue;
         }
 
@@ -67,8 +71,8 @@ if (!mode) {
 const { file, testCase, playwrightArgs } = parseArgs(rawArgs);
 
 if (!file) {
-    console.error('用法: npm run test:e2e:ci:file -- e2e/<文件>.e2e.ts "可选用例名"');
-    console.error('示例: npm run test:e2e:ci:file -- e2e/smashup-tutorial.e2e.ts "手机横屏下教程浮层不应跑出视口"');
+    console.error('用法: node scripts/infra/run-e2e-single.mjs <default|ci> e2e/<文件>.e2e.ts "可选用例名"');
+    console.error('示例: node scripts/infra/run-e2e-single.mjs ci e2e/smashup-tutorial.e2e.ts "手机横屏下教程浮层不应跑出视口"');
     process.exit(1);
 }
 

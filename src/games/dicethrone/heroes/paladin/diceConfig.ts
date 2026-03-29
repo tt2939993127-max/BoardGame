@@ -3,6 +3,7 @@
  */
 
 import type { DiceDefinition } from '../../../../engine/primitives';
+import { versionedPublicFileUrl } from '../../../../lib/publicFileUrl';
 import { PALADIN_DICE_FACE_IDS } from '../../domain/ids';
 
 /**
@@ -33,7 +34,7 @@ export const paladinDiceDefinition: DiceDefinition = {
         { value: 6, symbols: [PALADIN_DICE_FACE_IDS.PRAY] },
     ],
     assets: {
-        spriteSheet: '/game-data/dicethrone/paladin/dice-sprite.png',
+        spriteSheet: versionedPublicFileUrl('/game-data/dicethrone/paladin/dice-sprite.png'),
     },
 };
 

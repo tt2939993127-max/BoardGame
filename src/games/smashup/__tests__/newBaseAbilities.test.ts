@@ -24,8 +24,9 @@ import { processDestroyTriggers } from '../domain/reducer';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import type { SmashUpCore, MinionOnBase, CardInstance, MinionDestroyedEvent } from '../domain/types';
-import { SU_EVENTS } from '../domain/types';
+import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import {
     triggerBaseAbilityWithMS,
     getInteractionsFromResult,
@@ -345,60 +346,73 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
 });
 
 describe('Oops Ancient Egyptians bases', () => {
-    it('base_pyramids 在回合开始时给出埋葬手牌提示', () => {
-        const ctx: BaseAbilityContext = {
-            state: makeState({
-                bases: [{
-                    defId: 'base_pyramids',
-                    minions: [],
-                    ongoingActions: [],
-                }],
-                players: {
-                    '0': {
-                        id: '0',
-                        vp: 0,
-                        hand: [{ uid: 'h1', defId: 'ancient_egyptians_tomb_trap', type: 'action', owner: '0' }],
-                        deck: [],
-                        discard: [],
-                        minionsPlayed: 0,
-                        minionLimit: 1,
-                        actionsPlayed: 0,
-                        actionLimit: 1,
-                        factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
-                    },
-                } as any,
-            }),
-            matchState: makeMatchState(makeState({
-                bases: [{
-                    defId: 'base_pyramids',
-                    minions: [],
-                    ongoingActions: [],
-                }],
-                players: {
-                    '0': {
-                        id: '0',
-                        vp: 0,
-                        hand: [{ uid: 'h1', defId: 'ancient_egyptians_tomb_trap', type: 'action', owner: '0' }],
-                        deck: [],
-                        discard: [],
-                        minionsPlayed: 0,
-                        minionLimit: 1,
-                        actionsPlayed: 0,
-                        actionLimit: 1,
-                        factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
-                    },
-                } as any,
-            })),
-            baseIndex: 0,
-            baseDefId: 'base_pyramids',
-            playerId: '0',
-            now: 1000,
-        };
+    it('base_pyramids 在出牌阶段可主动使用，埋葬后同回合不能再用', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_pyramids',
+                minions: [],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [{ uid: 'h1', defId: 'ancient_egyptians_tomb_trap', type: 'action', owner: '0' }],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS],
+                },
+            } as any,
+        });
+        const initial = makeMatchState(core);
 
-        const result = triggerBaseAbilityWithMS('base_pyramids', 'onTurnStart', ctx);
-        const interactions = getInteractionsFromResult(result);
-        expect(interactions).toHaveLength(1);
-        expect(interactions[0].data.sourceId).toBe('base_pyramids');
+        const activated = runCommand(initial, {
+            type: SU_COMMANDS.USE_BASE_ABILITY,
+            playerId: '0',
+            payload: { baseIndex: 0 },
+        } as any, defaultTestRandom);
+        expect(activated.success).toBe(true);
+
+        const prompt = activated.finalState.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('base_pyramids');
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'h1');
+        expect(option).toBeDefined();
+
+        const buried = runCommand(activated.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: option.id },
+        } as any, defaultTestRandom);
+        expect(buried.success).toBe(true);
+        expect(buried.events.some(event => event.type === SU_EVENTS.BASE_ABILITY_USED)).toBe(true);
+        expect(buried.events.some(event => event.type === SU_EVENTS.CARD_BURIED)).toBe(true);
+        expect(buried.finalState.core.usedBaseAbilitiesThisTurn).toEqual([
+            { playerId: '0', baseIndex: 0, baseDefId: 'base_pyramids' },
+        ]);
+
+        const secondUse = runCommand(buried.finalState, {
+            type: SU_COMMANDS.USE_BASE_ABILITY,
+            playerId: '0',
+            payload: { baseIndex: 0 },
+        } as any, defaultTestRandom);
+        expect(secondUse.success).toBe(false);
+        expect(secondUse.error).toContain('本回合已使用');
     });
 
     it('base_star_portal 在行动牌打到此基地时让其控制者抽一张牌', () => {

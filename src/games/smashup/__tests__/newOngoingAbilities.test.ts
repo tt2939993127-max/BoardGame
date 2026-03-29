@@ -1005,6 +1005,376 @@ describe('cthulhu_chosen beforeScoring', () => {
     });
 });
 
+describe('ancient_egyptians audit regressions', () => {
+    function makeMS(core: SmashUpCore) {
+        return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    }
+
+    it('Priest of Anubis 只在你有埋葬牌时获得 +2 力量', () => {
+        const priest = makeMinion('priest', 'ancient_egyptians_priest_of_anubis', '0', 4, { powerModifier: 0 });
+        const withOpponentBuried = makeState({
+            bases: [makeBase({
+                minions: [priest],
+                buriedCards: [{
+                    uid: 'opp-buried',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '1',
+                    controllerId: '1',
+                    buriedFrom: 'hand',
+                }],
+            })],
+        });
+        expect(getEffectivePower(withOpponentBuried, priest, 0)).toBe(4);
+
+        const ownPriest = makeMinion('priest-own', 'ancient_egyptians_priest_of_anubis', '0', 4, { powerModifier: 0 });
+        const withOwnBuried = makeState({
+            bases: [makeBase({
+                minions: [ownPriest],
+                buriedCards: [{
+                    uid: 'own-buried',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            })],
+        });
+        expect(getEffectivePower(withOwnBuried, ownPriest, 0)).toBe(6);
+    });
+
+    it('Pyramid Engineer onPlay 只允许翻开这里你的一张埋葬牌', () => {
+        const executor = resolveAbility('ancient_egyptians_pyramid_engineer', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const engineer = makeMinion('engineer', 'ancient_egyptians_pyramid_engineer', '0', 3, { powerModifier: 0 });
+        const core = makeState({
+            bases: [makeBase({
+                minions: [engineer],
+                buriedCards: [
+                    {
+                        uid: 'own-buried',
+                        defId: 'robot_warbot',
+                        trueOwnerId: '0',
+                        controllerId: '0',
+                        buriedFrom: 'hand',
+                    },
+                    {
+                        uid: 'opp-buried',
+                        defId: 'robot_zapbot',
+                        trueOwnerId: '1',
+                        controllerId: '1',
+                        buriedFrom: 'hand',
+                    },
+                ],
+            })],
+        });
+
+        const result = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'engineer',
+            defId: 'ancient_egyptians_pyramid_engineer',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 1,
+        });
+        const prompt = result.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_pyramid_engineer_uncover');
+        const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionCardUids).toContain('own-buried');
+        expect(optionCardUids).not.toContain('opp-buried');
+    });
+
+    it('Pharaoh 在计分前只提示翻开这里你的一张埋葬牌', () => {
+        const pharaoh = makeMinion('pharaoh', 'ancient_egyptians_pharaoh', '0', 5, { powerModifier: 0 });
+        const core = makeState({
+            bases: [makeBase({
+                minions: [pharaoh],
+                buriedCards: [
+                    {
+                        uid: 'own-buried',
+                        defId: 'ancient_egyptians_you_can_take_it_with_you',
+                        trueOwnerId: '0',
+                        controllerId: '0',
+                        buriedFrom: 'play',
+                    },
+                    {
+                        uid: 'opp-buried',
+                        defId: 'robot_warbot',
+                        trueOwnerId: '1',
+                        controllerId: '1',
+                        buriedFrom: 'hand',
+                    },
+                ],
+            })],
+        });
+
+        const triggered = fireTriggers(core, 'beforeScoring', {
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 2,
+        });
+        const prompt = triggered.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_pharaoh_before_scoring');
+        const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionCardUids).toContain('own-buried');
+        expect(optionCardUids).not.toContain('opp-buried');
+
+        const handler = getInteractionHandler('ancient_egyptians_pharaoh_before_scoring');
+        expect(handler).toBeDefined();
+        const ownOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        const resolved = handler!(triggered.matchState!, '0', ownOption.value, prompt.data, dummyRandom, 3);
+        expect(resolved?.events.some((event: any) => event.type === SU_EVENTS.BURIED_CARD_UNCOVERED)).toBe(true);
+    });
+
+    it('Lost Knowledge 埋葬模式会排除自己并要求单独选择目标基地', () => {
+        const executor = resolveAbility('ancient_egyptians_lost_knowledge', 'special');
+        expect(executor).toBeDefined();
+
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        { uid: 'lost', defId: 'ancient_egyptians_lost_knowledge', type: 'action', owner: '0' },
+                        { uid: 'bury-target', defId: 'robot_warbot', type: 'minion', owner: '0' },
+                    ],
+                    factions: ['ancient_egyptians', 'robots'] as any,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({ defId: 'base_pyramids' }), makeBase({ defId: 'base_star_portal' })],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'lost',
+            defId: 'ancient_egyptians_lost_knowledge',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 4,
+        });
+        const handPrompt = initial.matchState?.sys.interaction.current as any;
+        expect(handPrompt?.data?.sourceId).toBe('ancient_egyptians_lost_knowledge_bury');
+        const handOptionUids = handPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(handOptionUids).toEqual(['bury-target']);
+
+        const buryHandler = getInteractionHandler('ancient_egyptians_lost_knowledge_bury');
+        expect(buryHandler).toBeDefined();
+        const buryOption = handPrompt.data.options.find((option: any) => option.value?.cardUid === 'bury-target');
+        const chooseBase = buryHandler!(initial.matchState!, '0', buryOption.value, handPrompt.data, dummyRandom, 5);
+        const basePrompt = chooseBase.state.sys.interaction.queue[0] as any;
+        expect(basePrompt?.data?.sourceId).toBe('ancient_egyptians_lost_knowledge_bury_base');
+        expect(basePrompt.data.options.map((option: any) => option.value?.baseIndex)).toEqual([0, 1]);
+
+        const baseHandler = getInteractionHandler('ancient_egyptians_lost_knowledge_bury_base');
+        expect(baseHandler).toBeDefined();
+        const baseOption = basePrompt.data.options.find((option: any) => option.value?.baseIndex === 1);
+        const buried = baseHandler!(chooseBase.state, '0', baseOption.value, basePrompt.data, dummyRandom, 6);
+        const buriedEvent = buried?.events.find((event: any) => event.type === SU_EVENTS.CARD_BURIED) as any;
+        expect(buriedEvent).toBeDefined();
+        expect(buriedEvent.payload.cardUid).toBe('bury-target');
+        expect(buriedEvent.payload.baseIndex).toBe(1);
+    });
+
+    it('Mummy 在基地结算后可改为埋到另一个基地，而不是进入弃牌堆', () => {
+        const mummy = makeMinion('mummy', 'ancient_egyptians_mummy', '0', 2, { powerModifier: 0 });
+        const core = makeState({
+            bases: [
+                makeBase({ defId: 'base_pyramids', minions: [mummy] }),
+                makeBase({ defId: 'base_star_portal' }),
+            ],
+        });
+
+        const triggered = fireTriggers(core, 'afterScoring', {
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 7,
+        });
+        const prompt = triggered.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_mummy_after_scoring');
+        expect(prompt.data.options.map((option: any) => option.value?.baseIndex).filter((index: unknown) => index !== undefined)).toEqual([1]);
+
+        const handler = getInteractionHandler('ancient_egyptians_mummy_after_scoring');
+        expect(handler).toBeDefined();
+        const otherBaseOption = prompt.data.options.find((option: any) => option.value?.baseIndex === 1);
+        const resolved = handler!(triggered.matchState!, '0', otherBaseOption.value, prompt.data, dummyRandom, 8);
+        const buriedEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.CARD_BURIED) as any;
+        expect(buriedEvent).toBeDefined();
+        expect(buriedEvent.payload.cardUid).toBe('mummy');
+        expect(buriedEvent.payload.baseIndex).toBe(1);
+    });
+
+    it('Plague of Locusts 只让所选基地上的其他玩家随从 -1 力量', () => {
+        const executor = resolveAbility('ancient_egyptians_plague_of_locusts', 'special');
+        expect(executor).toBeDefined();
+
+        const allied = makeMinion('ally', 'robot_microbot_alpha', '0', 1, { powerModifier: 0 });
+        const enemyA = makeMinion('enemy-a', 'robot_warbot', '1', 4, { powerModifier: 0 });
+        const enemyB = makeMinion('enemy-b', 'robot_zapbot', '1', 2, { powerModifier: 0 });
+        const untouchedEnemy = makeMinion('enemy-c', 'robot_microbot_alpha', '1', 1, { powerModifier: 0 });
+        const core = makeState({
+            bases: [
+                makeBase({ defId: 'base_pyramids', minions: [allied, enemyA, enemyB] }),
+                makeBase({ defId: 'base_star_portal', minions: [untouchedEnemy] }),
+            ],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'plague',
+            defId: 'ancient_egyptians_plague_of_locusts',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 9,
+        });
+        const prompt = initial.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_plague_of_locusts');
+
+        const handler = getInteractionHandler('ancient_egyptians_plague_of_locusts');
+        expect(handler).toBeDefined();
+        const targetBaseOption = prompt.data.options.find((option: any) => option.value?.baseIndex === 0);
+        const resolved = handler!(initial.matchState!, '0', targetBaseOption.value, prompt.data, dummyRandom, 10);
+        const tempPowerEvents = resolved.events.filter((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent[];
+        expect(tempPowerEvents).toHaveLength(2);
+        expect(tempPowerEvents.map(event => event.payload.minionUid).sort()).toEqual(['enemy-a', 'enemy-b']);
+        expect(tempPowerEvents.every(event => event.payload.amount === -1 && event.payload.baseIndex === 0)).toBe(true);
+    });
+
+    it('Mummy Strength 的 +4 模式可作用于存在任意埋葬牌的基地', () => {
+        const executor = resolveAbility('ancient_egyptians_mummy_strength', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const empowered = makeMinion('empowered', 'ancient_egyptians_mummy', '0', 2, { powerModifier: 0 });
+        const other = makeMinion('other', 'robot_microbot_alpha', '0', 1, { powerModifier: 0 });
+        const core = makeState({
+            bases: [
+                makeBase({
+                    defId: 'base_pyramids',
+                    minions: [empowered],
+                    buriedCards: [{
+                        uid: 'opp-buried',
+                        defId: 'robot_warbot',
+                        trueOwnerId: '1',
+                        controllerId: '1',
+                        buriedFrom: 'hand',
+                    }],
+                }),
+                makeBase({ defId: 'base_star_portal', minions: [other] }),
+            ],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'mummy-strength',
+            defId: 'ancient_egyptians_mummy_strength',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 11,
+        });
+        const modePrompt = initial.matchState?.sys.interaction.current as any;
+        expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_mode');
+
+        const modeHandler = getInteractionHandler('ancient_egyptians_mummy_strength_mode');
+        expect(modeHandler).toBeDefined();
+        const plusFourOption = modePrompt.data.options.find((option: any) => option.value?.amount === 4);
+        const chooseTarget = modeHandler!(initial.matchState!, '0', plusFourOption.value, modePrompt.data, dummyRandom, 12);
+        const targetPrompt = chooseTarget.state.sys.interaction.queue[0] as any;
+        expect(targetPrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_target');
+        expect(targetPrompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean)).toEqual(['empowered']);
+
+        const targetHandler = getInteractionHandler('ancient_egyptians_mummy_strength_target');
+        expect(targetHandler).toBeDefined();
+        const targetOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'empowered');
+        const resolved = targetHandler!(chooseTarget.state, '0', targetOption.value, targetPrompt.data, dummyRandom, 13);
+        const powerEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
+        expect(powerEvent?.payload.amount).toBe(4);
+        expect(powerEvent?.payload.minionUid).toBe('empowered');
+        expect(powerEvent?.payload.baseIndex).toBe(0);
+    });
+
+    it('Seal the Tomb 翻开模式只提供同一基地且属于你的埋葬牌', () => {
+        const executor = resolveAbility('ancient_egyptians_seal_the_tomb', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: ['ancient_egyptians', 'robots'] as any,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_pyramids',
+                    buriedCards: [
+                        {
+                            uid: 'own-here',
+                            defId: 'ancient_egyptians_you_can_take_it_with_you',
+                            trueOwnerId: '0',
+                            controllerId: '0',
+                            buriedFrom: 'play',
+                        },
+                        {
+                            uid: 'opp-here',
+                            defId: 'robot_warbot',
+                            trueOwnerId: '1',
+                            controllerId: '1',
+                            buriedFrom: 'hand',
+                        },
+                    ],
+                }),
+                makeBase({
+                    defId: 'base_star_portal',
+                    buriedCards: [
+                        {
+                            uid: 'own-there',
+                            defId: 'robot_microbot_alpha',
+                            trueOwnerId: '0',
+                            controllerId: '0',
+                            buriedFrom: 'hand',
+                        },
+                    ],
+                }),
+            ],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'seal',
+            defId: 'ancient_egyptians_seal_the_tomb',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 14,
+        });
+        const modePrompt = initial.matchState?.sys.interaction.current as any;
+        expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_mode');
+
+        const modeHandler = getInteractionHandler('ancient_egyptians_seal_the_tomb_mode');
+        expect(modeHandler).toBeDefined();
+        const uncoverOption = modePrompt.data.options.find((option: any) => option.value?.mode === 'uncover');
+        const chooseBuried = modeHandler!(initial.matchState!, '0', uncoverOption.value, modePrompt.data, dummyRandom, 15);
+        const buriedPrompt = chooseBuried.state.sys.interaction.queue[0] as any;
+        expect(buriedPrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_uncover');
+        const optionCardUids = buriedPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionCardUids).toEqual(['own-here']);
+    });
+});
+
 describe('werewolf beforeScoring - 多实例触发', () => {
     it('多个 loup_garou 会各自产生独立 beforeScoring trigger', () => {
         const wolf1 = makeMinion('wolf1', 'werewolf_loup_garou', '0', 4, { powerModifier: 0 });

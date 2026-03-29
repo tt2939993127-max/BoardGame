@@ -1,12 +1,13 @@
 import 'dotenv/config';
 import { execSync } from 'node:child_process';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { removeDevRuntimePorts } from './dev-port-runtime.js';
 import { cleanupPorts as cleanupBoundPorts } from './port-allocator.js';
 import { waitForPortsFree } from './port-allocator.js';
 
 await assertChildProcessSupport('开发端口清理');
 
-const defaultPorts = [5173, 18000, 18001];
+const defaultPorts = [4173, 5173, 18000, 18001];
 const envPorts = process.env.CLEAN_PORTS
     ? process.env.CLEAN_PORTS.split(',').map((value) => Number(value.trim()))
     : [];
@@ -175,6 +176,8 @@ function cleanResidualDevProcesses() {
 }
 
 async function cleanPorts() {
+    removeDevRuntimePorts();
+
     if (ports.length === 0) {
         console.log('未配置需要清理的端口');
         cleanResidualDevProcesses();
