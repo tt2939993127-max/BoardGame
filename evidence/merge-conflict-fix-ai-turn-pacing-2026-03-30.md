@@ -27,7 +27,7 @@
   - `npm run merge:audit:strict -- HEAD`
 - 验证结果：
   - 大厅与王权骰铸两组定向测试通过，共 `2` 个测试文件、`50` 个用例通过。
-  - merge audit：待 merge commit 生成后执行并回填结果。
+  - `npm run merge:audit:strict -- df88b0eb` 通过；审计文件 `8` 个，均为“混合结果”，`完全等于父1/父2` 均为 `0`。
   - 已核对 `git diff --cached --name-status`，merge commit 仅包含本次合并进入 index 的 AI / lobby / dicethrone / openspec 文件，不包含主工作树现有未提交的 Smash Up 与页面文件改动。
 
 ## 5. 回归与行为变化登记
@@ -40,5 +40,5 @@
   - 无。
 
 ## 6. 结果
-- 提交：待生成 merge commit 后回填
+- 提交：`df88b0ebbabb129def6bed4cc9a0be5808374429`（`合并 fix/ai-turn-pacing 并补齐本地AI难度`）
 - 推送：未执行
