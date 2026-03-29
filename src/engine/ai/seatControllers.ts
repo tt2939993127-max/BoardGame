@@ -1,3 +1,4 @@
+import { DEFAULT_LOCAL_AI_DIFFICULTY, normalizeAiDifficultyLevel } from './difficulty';
 import type { AiSeatController, AiSupportProfile } from './types';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import {
@@ -38,7 +39,7 @@ export function getDefaultSeatController(
     aiSupport?: AiSupportProfile,
 ): AiSeatController {
     if (playerIndex === 1 && numPlayers > 1 && aiSupport?.localAi) {
-        return { type: 'local-ai' };
+        return { type: 'local-ai', difficulty: DEFAULT_LOCAL_AI_DIFFICULTY };
     }
     return { type: 'human' };
 }
@@ -62,6 +63,7 @@ export function normalizeSeatController(
             ...(sanitizeOptionalId(controller.fallbackPolicyId)
                 ? { fallbackPolicyId: sanitizeOptionalId(controller.fallbackPolicyId) }
                 : {}),
+            ...(normalizeAiDifficultyLevel(controller.difficulty) ? { difficulty: normalizeAiDifficultyLevel(controller.difficulty) } : {}),
             ...(minimumActionDelayMs !== undefined ? { minimumActionDelayMs } : {}),
         };
     }
@@ -155,9 +157,16 @@ export function resolveSeatControllersFromSearchParams(args: {
             args.searchParams.get(`seat${index}`),
             args.aiSupport,
         );
+        const explicitDifficulty = normalizeAiDifficultyLevel(
+            args.searchParams.get(`seat${index}Difficulty`) ?? undefined,
+        );
         const fallback = getDefaultSeatController(index, args.numPlayers, args.aiSupport);
         controllers[playerId] = args.searchParams.has(`seat${index}`)
-            ? explicit
+            ? (
+                explicit.type === 'local-ai' && explicitDifficulty
+                    ? normalizeSeatController({ ...explicit, difficulty: explicitDifficulty }, args.aiSupport)
+                    : explicit
+            )
             : fallback;
     }
 
@@ -188,6 +197,16 @@ export function buildLocalMatchSearchParams(args: {
         const defaultController = getDefaultSeatController(index, args.numPlayers, args.aiSupport);
         if (serializeSeatControllerParam(controller) !== serializeSeatControllerParam(defaultController)) {
             search.set(`seat${index}`, serializeSeatControllerParam(controller));
+        }
+        if (
+            controller.type === 'local-ai'
+            && controller.difficulty
+            && (
+                defaultController.type !== 'local-ai'
+                || defaultController.difficulty !== controller.difficulty
+            )
+        ) {
+            search.set(`seat${index}Difficulty`, controller.difficulty);
         }
     }
 
