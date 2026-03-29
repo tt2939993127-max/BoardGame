@@ -15,9 +15,10 @@ import type {
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
-    returnMadnessCard,
     grantExtraMinion,
     grantExtraAction,
+    drawMadnessCards,
+    findMinionOnBases,
     recoverCardsFromDiscard,
     buildValidatedMoveEvents,
     buildValidatedDestroyEvents,
@@ -50,44 +51,35 @@ function getDeferredPostScoringEvents(interactionData: Record<string, unknown> |
 export function registerExpansionBaseAbilities(): void {
 
     // ── 疯人院（The Asylum）──────────────────────────────────────
-    // "在一个随从被打出到这后，该随从的拥有者可以将一张疯狂卡从手牌返回疯狂牌堆"
-    // 疯狂卡都是同一张牌（special_madness），按来源分组显示，无需逐张列出
+    // "在一个玩家打出一个随从到这后，该玩家可以将一张手牌移出游戏（放入盒子），在你的一个随从上放置一个+1力量指示物"
     registerBaseAbility('base_the_asylum', 'onMinionPlayed', (ctx) => {
-        if (!ctx.state.madnessDeck) return { events: [] };
-        const base = ctx.state.bases[ctx.baseIndex];
-        const playedMinion = ctx.minionUid ? base?.minions.find(m => m.uid === ctx.minionUid) : undefined;
-        const ownerId = playedMinion?.owner ?? ctx.playerId;
-        const owner = ctx.state.players[ownerId];
-        if (!owner) return { events: [] };
+        const player = ctx.state.players[ctx.playerId];
+        if (!player || player.hand.length === 0 || !ctx.matchState) return { events: [] };
 
-        // Infiltrate：只让拥有者自己忽略（不影响其他玩家）
-        const ignoredByOwner = base?.ongoingActions?.some(o =>
-            o.ownerId === ownerId && o.defId.startsWith('ninja_infiltrate'),
-        ) ?? false;
-        if (ignoredByOwner) return { events: [] };
+        const handOptions = player.hand.map((card, index) => {
+            const def = getCardDef(card.defId);
+            return {
+                id: `card-${index}`,
+                label: def?.name ?? card.defId,
+                value: { cardUid: card.uid, defId: card.defId },
+                _source: 'hand' as const,
+                displayMode: 'card' as const,
+            };
+        });
 
-        const handMadness = owner.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-        if (handMadness.length === 0) return { events: [] };
-
-        // 按来源分组的按钮选项（返回1张）
         const options: PromptOption<Record<string, unknown>>[] = [
-            {
-                id: 'hand',
-                label: `从手牌返回 (${handMadness.length}张)`,
-                value: { source: 'hand' },
-                displayMode: 'button' as const,
-            },
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+            ...handOptions,
         ];
 
-        if (!ctx.matchState) return { events: [] };
         const interaction = createSimpleChoice(
-            `base_the_asylum_${ctx.now}`, ownerId,
-            '疯人院：选择返回一张疯狂卡', options,
-            { sourceId: 'base_the_asylum', targetType: 'button' },
+            `base_the_asylum_${ctx.now}`, ctx.playerId,
+            '疯人院：选择一张手牌放入盒子',
+            options,
+            { sourceId: 'base_the_asylum', targetType: 'hand' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
-    }, { mandatory: false });
+    });
 
     // ── 印斯茅斯基地（Innsmouth Base）────────────────────────────
     // "在一个随从被打出到这后，它的拥有者可以将任意玩家弃牌堆中的一张卡放到该卡拥有者的牌库底"
@@ -132,77 +124,50 @@ export function registerExpansionBaseAbilities(): void {
     }, { mandatory: false });
 
     // ── 密斯卡托尼克大学基地（Miskatonic University Base）────────
-    // "在这个基地计分后，冠军可以搜寻他的手牌和弃牌堆中任意数量的疯狂卡，然后返回到疯狂卡牌库。"
-    // 疯狂卡都是同一张牌（special_madness），按来源+数量分组显示按钮，无需逐张列出
-    registerBaseAbility('base_miskatonic_university_base', 'afterScoring', (ctx) => {
-        if (!ctx.state.madnessDeck) return { events: [] };
-        if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
+    // "每回合一次，在你打出一个随从到这里后，你可以抓两张疯狂卡，或者从手牌弃置一张疯狂卡来额外打出一张行动。"
+    registerBaseAbility('base_miskatonic_university_base', 'onMinionPlayed', (ctx) => {
+        const player = ctx.state.players[ctx.playerId];
+        if (!player || !ctx.matchState) return { events: [] };
 
-        // 只限冠军操作
-        const winnerId = ctx.rankings[0].playerId;
-        const winner = ctx.state.players[winnerId];
-        if (!winner) return { events: [] };
+        const playedAtBase = player.minionsPlayedPerBase?.[ctx.baseIndex] ?? 0;
+        if (playedAtBase !== 1) return { events: [] };
 
-        const handMadness = winner.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-        const discardMadness = winner.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-        const totalCount = handMadness.length + discardMadness.length;
+        const canDrawMadness = (ctx.state.madnessDeck?.length ?? 0) > 0;
+        const canDiscardMadness = player.hand.some(card => card.defId === MADNESS_CARD_DEF_ID);
+        if (!canDrawMadness && !canDiscardMadness) return { events: [] };
 
-        // 无疯狂卡 → 跳过
-        if (totalCount === 0) return { events: [] };
-
-        // 按来源+数量分组的按钮选项
         const options: PromptOption<Record<string, unknown>>[] = [];
-
-        if (handMadness.length > 0) {
-            for (let i = 1; i <= handMadness.length; i++) {
-                options.push({
-                    id: `hand-${i}`,
-                    label: `从手牌返回 ${i} 张`,
-                    value: { source: 'hand', count: i },
-                    displayMode: 'button' as const,
-                });
-            }
-        }
-
-        if (discardMadness.length > 0) {
-            for (let i = 1; i <= discardMadness.length; i++) {
-                options.push({
-                    id: `discard-${i}`,
-                    label: `从弃牌堆返回 ${i} 张`,
-                    value: { source: 'discard', count: i },
-                    displayMode: 'button' as const,
-                });
-            }
-        }
-
-        // 两个来源都有时，添加"全部返回"选项
-        if (handMadness.length > 0 && discardMadness.length > 0) {
+        if (canDrawMadness) {
             options.push({
-                id: 'all',
-                label: `全部返回 (手牌${handMadness.length}张 + 弃牌堆${discardMadness.length}张)`,
-                value: { source: 'all', handCount: handMadness.length, discardCount: discardMadness.length },
+                id: 'draw',
+                label: '抓两张疯狂卡',
+                value: { choice: 'draw' },
                 displayMode: 'button' as const,
             });
         }
-
+        if (canDiscardMadness) {
+            options.push({
+                id: 'discard',
+                label: '弃一张疯狂卡并额外打出行动',
+                value: { choice: 'discard_for_action' },
+                displayMode: 'button' as const,
+            });
+        }
         options.push({
             id: 'skip',
-            label: '不返回',
+            label: '跳过',
             value: { skip: true },
             displayMode: 'button' as const,
         });
 
-        if (ctx.matchState) {
-            const interaction = createSimpleChoice(
-                `base_miskatonic_university_base_${winnerId}_${ctx.now}`, winnerId,
-                `密大基地：你有 ${totalCount} 张疯狂卡可以消耗`, options,
-                { sourceId: 'base_miskatonic_university_base', targetType: 'button' },
-            );
-            ctx.matchState = queueInteraction(ctx.matchState, interaction);
-        }
-
-        return { events: [], matchState: ctx.matchState };
-    }, { mandatory: false });
+        const interaction = createSimpleChoice(
+            `base_miskatonic_university_base_${ctx.playerId}_${ctx.now}`, ctx.playerId,
+            '阿卡姆大学：选择要执行的效果',
+            options,
+            { sourceId: 'base_miskatonic_university_base', targetType: 'button' },
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    });
 
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
     // "每回合玩家第一次打出一个随从到这里后，可以额外打出一张与其同名的随从到这里"
@@ -687,17 +652,100 @@ export function registerExpansionBaseAbilities(): void {
 /** 注册扩展包基地能力的交互解决处理函数 */
 export function registerExpansionBaseInteractionHandlers(): void {
 
-    // 疯人院：从手牌返回1张疯狂卡（可跳过）
+    // 疯人院：先选手牌，再选择一个自己的随从放置 +1 力量指示物
     registerInteractionHandler('base_the_asylum', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as { skip?: boolean; source?: 'hand' };
+        const selected = value as { skip?: boolean; cardUid?: string; defId?: string };
         if (selected.skip) return { state, events: [] };
-        
+
         const player = state.core.players[playerId];
-        const madnessCards = player.hand;
-        const madnessCard = madnessCards.find(c => c.defId === MADNESS_CARD_DEF_ID);
-        
-        if (!madnessCard) return { state, events: [] };
-        return { state, events: [returnMadnessCard(playerId, madnessCard.uid, '疯人院：消耗疯狂卡', timestamp)] };
+        if (!player || !selected.cardUid || !selected.defId) return { state, events: [] };
+
+        const boxedCard = player.hand.find(card => card.uid === selected.cardUid && card.defId === selected.defId);
+        if (!boxedCard) return { state, events: [] };
+
+        const minionOptions: PromptOption<Record<string, unknown>>[] = [];
+        state.core.bases.forEach((base, baseIndex) => {
+            const baseDef = getBaseDef(base.defId);
+            base.minions
+                .filter(minion => minion.controller === playerId)
+                .forEach((minion, index) => {
+                    const minionDef = getCardDef(minion.defId);
+                    minionOptions.push({
+                        id: `minion-${baseIndex}-${index}`,
+                        label: `${minionDef?.name ?? minion.defId} (${baseDef?.name ?? '基地'})`,
+                        value: { minionUid: minion.uid, baseIndex },
+                        _source: 'field' as const,
+                        displayMode: 'card' as const,
+                    });
+                });
+        });
+
+        if (minionOptions.length === 0) return { state, events: [] };
+
+        const interaction = createSimpleChoice(
+            `base_the_asylum_choose_minion_${timestamp}`, playerId,
+            '疯人院：选择你的一个随从放置 +1 力量指示物',
+            minionOptions,
+            { sourceId: 'base_the_asylum_choose_minion', targetType: 'minion' },
+        );
+
+        return {
+            state: queueInteraction(state, {
+                ...interaction,
+                data: {
+                    ...interaction.data,
+                    continuationContext: {
+                        cardUid: boxedCard.uid,
+                        defId: boxedCard.defId,
+                    },
+                },
+            }, { urgent: true }),
+            events: [],
+        };
+    });
+
+    registerInteractionHandler('base_the_asylum_choose_minion', (state, playerId, value, iData, _random, timestamp) => {
+        const selected = value as { minionUid?: string; baseIndex?: number };
+        const ctx = getContinuationContext<{ cardUid: string; defId: string }>(iData);
+        if (!ctx || !ctx.cardUid || !ctx.defId || !selected.minionUid || selected.baseIndex === undefined) {
+            return { state, events: [] };
+        }
+
+        const player = state.core.players[playerId];
+        const boxedCard = player?.hand.find(card => card.uid === ctx.cardUid && card.defId === ctx.defId);
+        if (!boxedCard) return { state, events: [] };
+
+        const target = findMinionOnBases(state.core, selected.minionUid);
+        if (!target || target.baseIndex !== selected.baseIndex || target.minion.controller !== playerId) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: [
+                {
+                    type: SU_EVENTS.CARD_BOXED,
+                    payload: {
+                        playerId,
+                        cardUid: boxedCard.uid,
+                        defId: boxedCard.defId,
+                        from: 'hand',
+                        reason: 'base_the_asylum',
+                    },
+                    timestamp,
+                } as SmashUpEvent,
+                {
+                    type: SU_EVENTS.POWER_COUNTER_ADDED,
+                    payload: {
+                        minionUid: target.minion.uid,
+                        baseIndex: target.baseIndex,
+                        amount: 1,
+                        reason: 'base_the_asylum',
+                    },
+                    timestamp,
+                } as SmashUpEvent,
+            ],
+        };
     });
 
     // 印斯茅斯基地第一步：选择玩家后，创建第二步交互（选择卡牌）
@@ -755,38 +803,37 @@ export function registerExpansionBaseInteractionHandlers(): void {
         };
     });
 
-    // 密大基地：按来源+数量返回疯狂卡（按钮单选，和金克丝同模式）
+    // 密大基地：打出随从后，选择抓疯狂或弃疯狂换额外行动
     registerInteractionHandler('base_miskatonic_university_base', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as { 
+        const selected = value as {
             skip?: boolean;
-            source?: 'hand' | 'discard' | 'all';
-            count?: number;
-            handCount?: number;
-            discardCount?: number;
+            choice?: 'draw' | 'discard_for_action';
         };
         if (selected.skip) return { state, events: [] };
-        
-        const player = state.core.players[playerId];
-        const events: SmashUpEvent[] = [];
-        
-        if (selected.source === 'all') {
-            const handMadness = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-            const discardMadness = player.discard.filter(c => c.defId === MADNESS_CARD_DEF_ID);
-            for (const card of handMadness) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
-            }
-            for (const card of discardMadness) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
-            }
-        } else {
-            const madnessCards = selected.source === 'hand' ? player.hand : player.discard;
-            const toReturn = madnessCards.filter(c => c.defId === MADNESS_CARD_DEF_ID).slice(0, selected.count);
-            for (const card of toReturn) {
-                events.push(returnMadnessCard(playerId, card.uid, '密大基地：消耗疯狂卡', timestamp));
-            }
+
+        if (selected.choice === 'draw') {
+            const drawEvent = drawMadnessCards(playerId, 2, state.core, 'base_miskatonic_university_base', timestamp);
+            return { state, events: drawEvent ? [drawEvent] : [] };
         }
-        
-        return { state, events };
+
+        if (selected.choice === 'discard_for_action') {
+            const player = state.core.players[playerId];
+            const madnessCard = player?.hand.find(card => card.defId === MADNESS_CARD_DEF_ID);
+            if (!player || !madnessCard) return { state, events: [] };
+            return {
+                state,
+                events: [
+                    {
+                        type: SU_EVENTS.CARDS_DISCARDED,
+                        payload: { playerId, cardUids: [madnessCard.uid] },
+                        timestamp,
+                    } as SmashUpEvent,
+                    grantExtraAction(playerId, 'base_miskatonic_university_base', timestamp),
+                ],
+            };
+        }
+
+        return { state, events: [] };
     });
 
     registerInteractionHandler('base_greenhouse', (state, playerId, value, iData, _random, timestamp) => {

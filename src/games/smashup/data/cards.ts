@@ -499,6 +499,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         breakpoint: 24,
         vpAwards: [5, 3, 2],
         faction: 'elder_things',
+        podFactions: [SMASHUP_FACTION_IDS.ELDER_THINGS_POD],
         // NOTE: atlas index 10 is reserved for this base in our atlas map
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 10 },
         restrictions: [{ type: 'play_minion', condition: { minionPlayLimitPerTurn: 1 } }],
@@ -510,6 +511,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         breakpoint: 20,
         vpAwards: [4, 2, 2],
         faction: 'elder_things',
+        podFactions: [SMASHUP_FACTION_IDS.INNSMOUTH_POD],
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 1 },
     },
     {
@@ -528,6 +530,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         breakpoint: 16,
         vpAwards: [3, 1, 1],
         faction: 'elder_things',
+        podFactions: [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD],
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 3 },
     },
     {
@@ -546,6 +549,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         breakpoint: 20,
         vpAwards: [6, 4, 3],
         faction: 'elder_things',
+        podFactions: [SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU_POD],
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 5 },
     },
     {
@@ -564,6 +568,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         breakpoint: 18,
         vpAwards: [3, 2, 1],
         faction: 'innsmouth',
+        podFactions: [SMASHUP_FACTION_IDS.ELDER_THINGS_POD],
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 7 },
     },
     {
@@ -1029,16 +1034,50 @@ registerBases(POD_BASE_OVERRIDES_EXTENDED);
 // ============================================================================
 
 /** 根据所选派系获取基地定义 ID（只使用所选派系的基地） */
+export function getBasePodFactionIds(base: BaseCardDef | undefined): string[] {
+    if (!base) return [];
+    if (base.podFactions && base.podFactions.length > 0) {
+        return [...base.podFactions];
+    }
+    if (!base.faction) return [];
+    return [base.faction.endsWith(POD_SUFFIX) ? base.faction : `${base.faction}_pod`];
+}
+
+export function isBasePodVariantSelected(
+    base: BaseCardDef | undefined,
+    selectedFactions: Iterable<string>,
+): boolean {
+    if (!base) return false;
+    const selectedSet = selectedFactions instanceof Set ? selectedFactions : new Set(selectedFactions);
+    return getBasePodFactionIds(base).some(factionId => selectedSet.has(factionId));
+}
+
+export function getBasePodVariantId(
+    base: BaseCardDef | undefined,
+    selectedFactions: Iterable<string>,
+): string | undefined {
+    if (!base) return undefined;
+    return isBasePodVariantSelected(base, selectedFactions) ? `${base.id}_pod` : base.id;
+}
+
+function addFactionBaseCount(counts: Map<string, number>, factionId: string): void {
+    counts.set(factionId, (counts.get(factionId) || 0) + 1);
+}
+
+function getPublicBaseDefs(): BaseCardDef[] {
+    return Array.from(_baseRegistry.values()).filter(base => !isPodVariantId(base.id));
+}
+
 function getBaseDefIdsForFactionsLegacy(factionIds: string[]): string[] {
     const selected = new Set(factionIds);
-    const matched = Array.from(_baseRegistry.values())
+    const matched = getPublicBaseDefs()
         .filter(base => base.faction && selected.has(base.faction))
         .map(base => base.id);
 
     // 检查是否有派系没有对应基地（如 POD 派系）
     // 统计每个派系匹配到的基地数量
     const factionBaseCounts = new Map<string, number>();
-    for (const base of _baseRegistry.values()) {
+    for (const base of getPublicBaseDefs()) {
         if (base.faction && selected.has(base.faction)) {
             factionBaseCounts.set(base.faction, (factionBaseCounts.get(base.faction) || 0) + 1);
         }
@@ -1066,54 +1105,44 @@ function getBaseDefIdsForFactionsLegacy(factionIds: string[]): string[] {
 /** 查找卡牌定义 */
 /** 鏍规嵁鎵€閫夋淳绯昏幏鍙栧熀鍦板畾涔?ID锛堝悓鍙樹綋琛ュ厖锛欿OD 鍙ˉ POD锛屽熀纭€鍙ˉ鍩虹锛?*/
 export function getBaseDefIdsForFactions(factionIds: string[]): string[] {
-    const selectedFactions = Array.from(new Set(factionIds));
-    if (selectedFactions.length === 0) {
-        return getBaseDefIdsForFactionsLegacy(factionIds);
-    }
-    const allBases = Array.from(_baseRegistry.values()).filter(base => !!base.faction);
+    const selectedFactionIds = [...new Set(factionIds)];
+    const selectedOriginalFactions = new Set(
+        selectedFactionIds.filter(factionId => !factionId.endsWith('_pod')),
+    );
+    const selectedExactFactions = new Set(selectedFactionIds);
+    const matchedBases = getPublicBaseDefs().filter(base => {
+        if (base.faction && selectedOriginalFactions.has(base.faction)) {
+            return true;
+        }
+        return getBasePodFactionIds(base).some(factionId => selectedExactFactions.has(factionId));
+    });
+    const matched = matchedBases.map(base => base.id);
 
-    const basesByFaction = new Map<string, string[]>();
-    for (const base of allBases) {
-        const faction = base.faction as string;
-        const existing = basesByFaction.get(faction);
-        if (existing) {
-            existing.push(base.id);
-        } else {
-            basesByFaction.set(faction, [base.id]);
+    const factionBaseCounts = new Map<string, number>();
+    for (const base of matchedBases) {
+        if (base.faction && selectedOriginalFactions.has(base.faction)) {
+            addFactionBaseCount(factionBaseCounts, base.faction);
+        }
+        for (const podFactionId of getBasePodFactionIds(base)) {
+            if (selectedExactFactions.has(podFactionId)) {
+                addFactionBaseCount(factionBaseCounts, podFactionId);
+            }
         }
     }
 
-    const result: string[] = [];
-    const usedBaseIds = new Set<string>();
-    const appendBaseIds = (baseIds: string[]) => {
-        for (const baseId of baseIds) {
-            if (usedBaseIds.has(baseId)) continue;
-            usedBaseIds.add(baseId);
-            result.push(baseId);
-        }
-    };
+    const factionsWithoutBases = selectedFactionIds.filter(fid => !factionBaseCounts.has(fid));
 
-    // 1) 绮剧‘鍖归厤鎵€閫夋淳绯伙紙鍚?POD 锛?
-    for (const factionId of selectedFactions) {
-        appendBaseIds(basesByFaction.get(factionId) ?? []);
+    if (factionsWithoutBases.length > 0) {
+        const allBases = getAllBaseDefIds();
+        const usedBases = new Set(matched);
+        const availableBases = allBases.filter(id => !usedBases.has(id));
+
+        const missingCount = factionsWithoutBases.length * 2;
+        const supplementBases = availableBases.slice(0, Math.min(missingCount, availableBases.length));
+        return [...matched, ...supplementBases];
     }
 
-    // 2) 杞繃娓★細姣忎釜娲剧郴涓嶈冻 2 寮犲熀鍦版椂锛屾寜鍚屽彉浣撹ˉ榻?
-    for (const factionId of selectedFactions) {
-        const exactCount = (basesByFaction.get(factionId) ?? []).length;
-        const needCount = Math.max(0, BASES_PER_FACTION - exactCount);
-        if (needCount === 0) continue;
-
-        const wantsPodVariant = isPodVariantId(factionId);
-        const supplementCandidates = allBases
-            .filter(base => isPodVariantId(base.id) === wantsPodVariant)
-            .map(base => base.id)
-            .filter(baseId => !usedBaseIds.has(baseId));
-
-        appendBaseIds(supplementCandidates.slice(0, needCount));
-    }
-
-    return result;
+    return matched;
 }
 
 export function getCardDef(defId: string): CardDef | undefined {
@@ -1245,12 +1274,12 @@ export function getAllCardDefs(): CardDef[] {
 
 /** 获取所有基地定义 ID 列表 */
 export function getAllBaseDefIds(): string[] {
-    return Array.from(_baseRegistry.keys());
+    return getPublicBaseDefs().map(base => base.id);
 }
 
 /** 获取所有基地定义 */
 export function getAllBaseDefs(): BaseCardDef[] {
-    return Array.from(_baseRegistry.values());
+    return getPublicBaseDefs();
 }
 
 // 重导出类型用于外部引用

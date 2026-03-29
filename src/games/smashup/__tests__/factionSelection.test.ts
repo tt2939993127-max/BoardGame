@@ -15,7 +15,15 @@ import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types'
 import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { initAllAbilities } from '../abilities';
-import { getBaseDefIdsForFactions } from '../data/cards';
+import smashUpEnglishMap from '../data/englishAtlasMap.json';
+import {
+    getAllBaseDefs,
+    getBaseDef,
+    getBaseDefIdsForFactions,
+    getBasePodFactionIds,
+    getBasePodVariantId,
+} from '../data/cards';
+import { getSmashUpPodAtlasImagePath } from '../ui/cardAtlas';
 
 const PLAYER_IDS = ['0', '1'];
 
@@ -233,6 +241,155 @@ describe('派系选择系统', () => {
             for (const id of allBaseIds) {
                 expect(allowed.has(id)).toBe(true);
             }
+        });
+        it('POD factions reuse their original base pool', () => {
+            const baseIds = getBaseDefIdsForFactions([
+                SMASHUP_FACTION_IDS.WIZARDS_POD,
+                SMASHUP_FACTION_IDS.GHOSTS_POD,
+            ]);
+
+            expect(baseIds).toEqual(expect.arrayContaining([
+                'base_great_library',
+                'base_wizard_academy',
+                'base_dread_lookout',
+                'base_haunted_house_al9000',
+            ]));
+            expect(baseIds).not.toContain('base_the_homeworld');
+        });
+
+        it('uses the POD-specific cthulhu expansion base pools', () => {
+            expect(getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU_POD]).sort()).toEqual([
+                'base_mountains_of_madness',
+                'base_rlyeh',
+            ]);
+            expect(getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.ELDER_THINGS_POD]).sort()).toEqual([
+                'base_antarctic_base',
+                'base_plateau_of_leng',
+            ]);
+            expect(getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.INNSMOUTH_POD]).sort()).toEqual([
+                'base_innsmouth_base',
+                'base_ritual_site',
+            ]);
+            expect(getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD]).sort()).toEqual([
+                'base_miskatonic_university_base',
+                'base_the_asylum',
+            ]);
+        });
+
+        it('resolves the POD locale key for reassigned cthulhu bases', () => {
+            expect(getBasePodVariantId(
+                getBaseDef('base_antarctic_base'),
+                new Set([SMASHUP_FACTION_IDS.ELDER_THINGS_POD]),
+            )).toBe('base_antarctic_base_pod');
+            expect(getBasePodVariantId(
+                getBaseDef('base_the_asylum'),
+                new Set([SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY_POD]),
+            )).toBe('base_the_asylum_pod');
+            expect(getBasePodVariantId(
+                getBaseDef('base_mountains_of_madness'),
+                new Set([SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU_POD]),
+            )).toBe('base_mountains_of_madness_pod');
+        });
+
+        it('all POD-enabled bases have POD atlas mappings', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+            const supportedPodFactions = new Set(
+                Object.values(SMASHUP_FACTION_IDS)
+                    .filter((factionId): factionId is string => typeof factionId === 'string' && factionId.endsWith('_pod'))
+            );
+
+            const missingPodBaseMappings = getAllBaseDefs()
+                .filter(base => getBasePodFactionIds(base).some(factionId => supportedPodFactions.has(factionId)))
+                .map(base => `${base.id}_pod`)
+                .filter(key => !englishMap[key]);
+
+            expect(missingPodBaseMappings).toEqual([]);
+        });
+
+        it('uses the corrected POD base atlas for the bear cavalry / ghosts / killer plants / steampunks base set', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                base_tsars_palace_pod: { atlasId: 'tts_atlas_0a564692f2', index: 0 },
+                base_the_field_of_honor_pod: { atlasId: 'tts_atlas_0a564692f2', index: 1 },
+                base_haunted_house_al9000_pod: { atlasId: 'tts_atlas_0a564692f2', index: 2 },
+                base_dread_lookout_pod: { atlasId: 'tts_atlas_0a564692f2', index: 3 },
+                base_greenhouse_pod: { atlasId: 'tts_atlas_0a564692f2', index: 4 },
+                base_secret_garden_pod: { atlasId: 'tts_atlas_0a564692f2', index: 5 },
+                base_inventors_salon_pod: { atlasId: 'tts_atlas_0a564692f2', index: 6 },
+                base_the_workshop_pod: { atlasId: 'tts_atlas_0a564692f2', index: 7 },
+            }));
+        });
+
+        it('uses the corrected POD base atlas for base game factions', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                base_the_homeworld_pod: { atlasId: 'tts_atlas_1', index: 0 },
+                base_the_mothership_pod: { atlasId: 'tts_atlas_1', index: 1 },
+                base_the_jungle_pod: { atlasId: 'tts_atlas_1', index: 2 },
+                base_tar_pits_pod: { atlasId: 'tts_atlas_1', index: 3 },
+                base_ninja_dojo_pod: { atlasId: 'tts_atlas_1', index: 4 },
+                base_temple_of_goju_pod: { atlasId: 'tts_atlas_1', index: 5 },
+                base_tortuga_pod: { atlasId: 'tts_atlas_1', index: 6 },
+                base_pirate_cove_pod: { atlasId: 'tts_atlas_1', index: 7 },
+                base_the_factory_pod: { atlasId: 'tts_atlas_1', index: 8 },
+                base_central_brain_pod: { atlasId: 'tts_atlas_1', index: 9 },
+                base_mushroom_kingdom_pod: { atlasId: 'tts_atlas_1', index: 10 },
+                base_cave_of_shinies_pod: { atlasId: 'tts_atlas_1', index: 11 },
+                base_wizard_academy_pod: { atlasId: 'tts_atlas_1', index: 12 },
+                base_great_library_pod: { atlasId: 'tts_atlas_1', index: 13 },
+                base_haunted_house_pod: { atlasId: 'tts_atlas_1', index: 14 },
+                base_rhodes_plaza_pod: { atlasId: 'tts_atlas_1', index: 15 },
+            }));
+        });
+
+        it('uses the corrected POD base atlas for cthulhu expansion bases', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                base_antarctic_base_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 0 },
+                base_plateau_of_leng_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 1 },
+                base_innsmouth_base_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 2 },
+                base_ritual_site_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 3 },
+                base_rlyeh_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 4 },
+                base_mountains_of_madness_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 5 },
+                base_the_asylum_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 6 },
+                base_miskatonic_university_base_pod: { atlasId: 'tts_atlas_0b888d02fd', index: 7 },
+            }));
+        });
+
+        it('uses the corrected POD base atlas for monster smash bases', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                base_the_hill_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 0 },
+                base_egg_chamber_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 1 },
+                base_laboratorium_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 2 },
+                base_golem_schloss_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 3 },
+                base_castle_blood_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 4 },
+                base_crypt_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 5 },
+                base_moot_site_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 6 },
+                base_standing_stones_pod: { atlasId: 'tts_atlas_9aed5872d2', index: 7 },
+            }));
+        });
+
+        it('loads the corrected POD base atlas from local assets without affecting other atlas paths', () => {
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_1')).toBe(
+                '/assets/i18n/en/smashup/cards/tts_atlas_1',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_0a564692f2')).toBe(
+                '/assets/i18n/en/smashup/pod-assets/tts_atlas_0a564692f2',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_0b888d02fd')).toBe(
+                '/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_9aed5872d2')).toBe(
+                '/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_8310911466')).toBe(
+                'smashup/pod-assets/tts_atlas_8310911466',
+            );
         });
     });
 });

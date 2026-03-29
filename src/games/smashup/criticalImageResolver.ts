@@ -1,6 +1,6 @@
 import type { MatchState } from '../../engine/types';
 import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
-import { getAllBaseDefs, getAllCardDefs } from './data/cards';
+import { getAllBaseDefs, getAllCardDefs, getBasePodFactionIds } from './data/cards';
 import { getSmashUpAtlasImageById, getSmashUpAtlasImagesByKind } from './domain/atlasCatalog';
 
 type PreviewRefLike = {
@@ -58,7 +58,33 @@ function getFactionCardAtlasMap(): Record<string, string[]> {
 }
 
 function getFactionBaseAtlasMap(): Record<string, string[]> {
-    return buildFactionAtlasMap(getAllBaseDefs());
+    const map = new Map<string, Set<string>>();
+
+    for (const base of getAllBaseDefs()) {
+        const atlasPath = resolveAtlasImagePath(base.previewRef);
+        if (!atlasPath) continue;
+
+        const factionIds = new Set<string>();
+        if (base.faction) {
+            factionIds.add(base.faction);
+        }
+        for (const podFactionId of getBasePodFactionIds(base)) {
+            factionIds.add(podFactionId);
+        }
+
+        for (const factionId of factionIds) {
+            let set = map.get(factionId);
+            if (!set) {
+                set = new Set<string>();
+                map.set(factionId, set);
+            }
+            set.add(atlasPath);
+        }
+    }
+
+    return Object.fromEntries(
+        [...map.entries()].map(([faction, atlases]) => [faction, [...atlases]]),
+    );
 }
 
 function getCardAtlasesForFactions(factionIds: string[]): string[] {

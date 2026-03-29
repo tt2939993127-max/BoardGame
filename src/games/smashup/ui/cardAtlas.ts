@@ -76,7 +76,7 @@ export const getCardAtlasStyle = (index: number, atlas: CardAtlasConfig) => {
     return computeSpriteStyle(index, atlas) as CSSProperties;
 };
 
-import { registerLazyCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
+import { getCardAtlasSource, getLazyRegistration, registerLazyCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 import podAtlasConfig from '../../../../public/assets/atlas-configs/smashup/pod-atlas-config.json';
 
 type TtsConfig = {
@@ -90,6 +90,17 @@ const REQUIRED_TTS_ATLAS_IDS = Array.from(
         Object.values(smashUpEnglishMap as Record<string, EnglishMapConfig>).map(entry => entry.atlasId)
     )
 ).sort();
+
+const LOCAL_POD_ATLAS_IMAGE_OVERRIDES: Record<string, string> = {
+    tts_atlas_1: '/assets/i18n/en/smashup/cards/tts_atlas_1',
+    tts_atlas_0a564692f2: '/assets/i18n/en/smashup/pod-assets/tts_atlas_0a564692f2',
+    tts_atlas_0b888d02fd: '/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd',
+    tts_atlas_9aed5872d2: '/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2',
+};
+
+export function getSmashUpPodAtlasImagePath(atlasId: string): string {
+    return LOCAL_POD_ATLAS_IMAGE_OVERRIDES[atlasId] ?? `smashup/pod-assets/${atlasId}`;
+}
 
 /**
  * 初始化 SmashUp 所有图集（模块加载时同步注册）
@@ -114,12 +125,40 @@ export function initSmashUpAtlases() {
             console.warn(`[SmashUp.cardAtlas] ⚠️ 缺少 POD 图集配置: ${atlasId}`);
             continue;
         }
-        const imagePath = `smashup/pod-assets/${atlasId}`;
+        const imagePath = getSmashUpPodAtlasImagePath(atlasId);
         registerLazyCardAtlasSource(atlasId, {
             image: imagePath,
             grid: { rows: config.grid.rows, cols: config.grid.cols },
         });
     }
+}
+
+export function ensureSmashUpAtlasRegistered(atlasId: string): boolean {
+    if (!atlasId) return false;
+    if (getCardAtlasSource(atlasId, 'en') || getLazyRegistration(atlasId)) {
+        return false;
+    }
+
+    const builtInAtlas = SMASHUP_ATLAS_DEFINITIONS.find(atlas => atlas.id === atlasId);
+    if (builtInAtlas) {
+        registerLazyCardAtlasSource(atlasId, {
+            image: builtInAtlas.image,
+            grid: builtInAtlas.grid,
+        });
+        return true;
+    }
+
+    const podData = podAtlasConfig as TtsConfig;
+    const ttsConfig = podData.atlases[atlasId];
+    if (ttsConfig) {
+        registerLazyCardAtlasSource(atlasId, {
+            image: getSmashUpPodAtlasImagePath(atlasId),
+            grid: { rows: ttsConfig.grid.rows, cols: ttsConfig.grid.cols },
+        });
+        return true;
+    }
+
+    return false;
 }
 
 /** @deprecated 使用 initSmashUpAtlases 代替 */
