@@ -458,14 +458,6 @@ export function validate(
 
             // 持续行动卡：必须显式选择附着目标
             const targetBase = command.payload.targetBaseIndex;
-            if (actionLikeNeedsPlayBase(def)) {
-                if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
-                    return { valid: false, error: '该行动卡需要选择目标基地' };
-                }
-                if (targetBase < 0 || targetBase >= core.bases.length) {
-                    return { valid: false, error: '无效的基地索引' };
-                }
-            }
             if (actionLikeNeedsPlayMinion(def)) {
                 const targetMinionUid = command.payload.targetMinionUid;
                 if (!targetMinionUid) {
@@ -477,6 +469,14 @@ export function validate(
                 const targetMinion = core.bases[targetBase].minions.find(m => m.uid === targetMinionUid);
                 if (!targetMinion) {
                     return { valid: false, error: '基地上没有该随从' };
+                }
+            }
+            if (actionLikeNeedsPlayBase(def)) {
+                if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
+                    return { valid: false, error: '该行动卡需要选择目标基地' };
+                }
+                if (targetBase < 0 || targetBase >= core.bases.length) {
+                    return { valid: false, error: '无效的基地索引' };
                 }
             }
             if (subtype === 'ongoing') {

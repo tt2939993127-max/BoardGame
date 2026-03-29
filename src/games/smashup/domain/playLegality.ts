@@ -148,15 +148,6 @@ export function validateActionPlaySemantics(
     }
 
     const targetBaseIndex = params.targetBaseIndex;
-    if (actionLikeNeedsPlayBase(def)) {
-        if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
-            return { valid: false, error: '该行动卡需要选择目标基地' };
-        }
-        if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
-            return { valid: false, error: '无效的基地索引' };
-        }
-    }
-
     if (actionLikeNeedsPlayMinion(def)) {
         if (!params.targetMinionUid) {
             return { valid: false, error: '该行动卡需要选择目标随从' };
@@ -167,6 +158,15 @@ export function validateActionPlaySemantics(
         const targetMinion = core.bases[targetBaseIndex]?.minions.find(minion => minion.uid === params.targetMinionUid);
         if (!targetMinion) {
             return { valid: false, error: '基地上没有该随从' };
+        }
+    }
+
+    if (actionLikeNeedsPlayBase(def)) {
+        if (typeof targetBaseIndex !== 'number' || !Number.isInteger(targetBaseIndex)) {
+            return { valid: false, error: '该行动卡需要选择目标基地' };
+        }
+        if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
+            return { valid: false, error: '无效的基地索引' };
         }
     }
 

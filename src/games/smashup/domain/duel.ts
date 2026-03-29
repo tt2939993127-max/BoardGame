@@ -730,9 +730,10 @@ function resolveDuelResult(
             }));
         }
         if (winner?.uid === duel.challengerMinionUid && duel.sourcePlayerId === duel.challengerPlayerId) {
+            const winnerBaseIndex = findMinionOnBases(state.core, winner.uid)?.baseIndex ?? baseIndex;
             events.push({
                 type: SU_EVENTS.LIMIT_MODIFIED,
-                payload: { playerId: duel.sourcePlayerId, limitType: 'minion', delta: 1, restrictToBase: baseIndex },
+                payload: { playerId: duel.sourcePlayerId, limitType: 'minion', delta: 1, restrictToBase: winnerBaseIndex },
                 timestamp: now,
             } as SmashUpEvent);
         }
