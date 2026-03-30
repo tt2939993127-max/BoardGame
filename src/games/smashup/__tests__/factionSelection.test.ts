@@ -133,6 +133,66 @@ describe('派系选择系统', () => {
             // 第5步失败（阶段已不是 factionSelect）
             expect(result.steps[4]?.success).toBe(false);
         });
+
+        it('当前玩家可以取消自己已选的派系，并保留当前选择权', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消自己已选派系',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                ],
+            });
+
+            expect(result.steps[0]?.success).toBe(true);
+            expect(result.steps[1]?.success).toBe(true);
+            expect(result.steps[2]?.success).toBe(true);
+            expect(result.finalState.core.factionSelection?.playerSelections['1']).toEqual([]);
+            expect(result.finalState.core.factionSelection?.takenFactions).toEqual([SMASHUP_FACTION_IDS.ALIENS]);
+            expect(result.finalState.core.turnOrder[result.finalState.core.currentPlayerIndex]).toBe('1');
+        });
+
+        it('不能取消其他玩家已选的派系', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消他人派系',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                ],
+            });
+
+            expect(result.steps[0]?.success).toBe(true);
+            expect(result.steps[1]?.success).toBe(false);
+            expect(result.steps[1]?.error).toContain('尚未选择');
+        });
+
+        it('取消后仍可重新完成整轮选秀', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消后重选完成选秀',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.ALIENS,
+                SMASHUP_FACTION_IDS.DINOSAURS,
+            ]);
+            expect(result.finalState.core.players['1'].factions).toEqual([
+                SMASHUP_FACTION_IDS.NINJAS,
+                SMASHUP_FACTION_IDS.PIRATES,
+            ]);
+            expect(result.finalState.sys.phase).toBe('playCards');
+        });
     });
 
     // Property 2: 牌库构建正确性

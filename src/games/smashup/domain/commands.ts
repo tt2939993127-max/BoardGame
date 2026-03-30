@@ -572,6 +572,25 @@ export function validate(
             return { valid: true };
         }
 
+        case SU_COMMANDS.DESELECT_FACTION: {
+            if (phase !== 'factionSelect') {
+                return { valid: false, error: '只能在派系选择阶段取消派系' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            const selection = core.factionSelection;
+            if (!selection) return { valid: false, error: '派系选择状态未初始化' };
+
+            const factionId = command.payload.factionId;
+            const playerSelections = selection.playerSelections[command.playerId] || [];
+            if (!playerSelections.includes(factionId)) {
+                return { valid: false, error: '你尚未选择该派系' };
+            }
+
+            return { valid: true };
+        }
+
         case SU_COMMANDS.USE_BASE_ABILITY: {
             if (phase !== 'playCards') {
                 return { valid: false, error: '只能在出牌阶段使用基地能力' };

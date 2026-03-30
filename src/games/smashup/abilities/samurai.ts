@@ -21,7 +21,7 @@ import {
     grantExtraAction,
     grantExtraMinion,
 } from '../domain/abilityHelpers';
-import type { SmashUpCore, SmashUpEvent, VpAwardedEvent } from '../domain/types';
+import type { MinionMetadataUpdatedEvent, SmashUpCore, SmashUpEvent, VpAwardedEvent } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { getBaseDef, getCardDef } from '../data/cards';
 
@@ -54,6 +54,9 @@ export function registerSamuraiAbilities(): void {
     registerTrigger('samurai_shogun', 'onMinionDiscardedFromBase', samuraiShogunTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDestroyed', samuraiFinalHaikuTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDiscardedFromBase', samuraiFinalHaikuTrigger, { perInstance: true });
+    registerTrigger('samurai_yokai_attack', 'onMinionDestroyed', samuraiYokaiAttackResolvedTrigger, { global: true });
+    registerTrigger('samurai_way_of_the_warrior', 'onMinionDestroyed', samuraiWayOfTheWarriorTrigger, { global: true });
+    registerTrigger('samurai_way_of_the_warrior', 'onMinionDiscardedFromBase', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_honor_the_fallen', 'onMinionDestroyed', samuraiHonorTheFallenTrigger, {
         perInstance: true,
         sourceScope: 'triggerBase',
@@ -122,13 +125,13 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
 function samuraiYokaiAttackOnPlay(ctx: AbilityContext): AbilityResult {
     const ownMinions = collectOwnMinions(ctx.state, ctx.playerId);
     if (ownMinions.length === 0) {
-        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+        return { events: [] };
     }
     const interaction = createSimpleChoice(
         `samurai_yokai_attack_${ctx.now}`,
         ctx.playerId,
         '妖怪来袭！：选择一个你的随从，将其消灭以额外打出一个随从和一个行动',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        [createSkipOption('跳过（不消灭随从）'), ...buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId })] as any[],
         { sourceId: 'samurai_yokai_attack', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -210,7 +213,24 @@ function samuraiWayOfTheWarriorOnPlay(ctx: AbilityContext): AbilityResult {
     if (!target) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
-    return { events: [addTempPower(target.uid, ctx.baseIndex, 3, 'samurai_way_of_the_warrior', ctx.now)] };
+    return {
+        events: [
+            addTempPower(target.uid, ctx.baseIndex, 3, 'samurai_way_of_the_warrior', ctx.now),
+            {
+                type: SU_EVENTS.MINION_METADATA_UPDATED,
+                payload: {
+                    minionUid: target.uid,
+                    baseIndex: ctx.baseIndex,
+                    metadataUpdate: {
+                        samuraiWayOfTheWarriorDrawUntilTurnNumber: ctx.state.turnNumber ?? 0,
+                        samuraiWayOfTheWarriorDrawPlayerId: ctx.playerId,
+                    },
+                    reason: 'samurai_way_of_the_warrior',
+                },
+                timestamp: ctx.now,
+            } as MinionMetadataUpdatedEvent,
+        ],
+    };
 }
 
 function samuraiHeartOfTheBattleSpecial(ctx: AbilityContext): AbilityResult {
@@ -272,10 +292,41 @@ function samuraiFinalHaikuTrigger(ctx: TriggerContext): SmashUpEvent[] {
     ctx.state.bases.forEach((base, baseIndex) => {
         base.minions.forEach(minion => {
             if (minion.controller !== ctx.sourceControllerId) return;
+            if (minion.uid === ctx.triggerMinionUid) return;
             events.push(addTempPower(minion.uid, baseIndex, 2, 'samurai_final_haiku', ctx.now));
         });
     });
     return events;
+}
+
+function samuraiYokaiAttackResolvedTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    if (ctx.reason !== 'samurai_yokai_attack' || !ctx.destroyerId) return [];
+    return [
+        grantExtraMinion(ctx.destroyerId, 'samurai_yokai_attack', ctx.now),
+        grantExtraAction(ctx.destroyerId, 'samurai_yokai_attack', ctx.now),
+    ];
+}
+
+function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    const metadata = ctx.triggerMinion?.metadata ?? {};
+    const drawUntilTurnNumber = typeof metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber === 'number'
+        ? metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber
+        : undefined;
+    const drawPlayerId = typeof metadata.samuraiWayOfTheWarriorDrawPlayerId === 'string'
+        ? metadata.samuraiWayOfTheWarriorDrawPlayerId as PlayerId
+        : undefined;
+    if (!drawPlayerId || drawUntilTurnNumber !== (ctx.state.turnNumber ?? 0)) return [];
+
+    if (ctx.timing === 'onMinionDestroyed' && ctx.baseIndex !== undefined) {
+        const base = ctx.state.bases[ctx.baseIndex];
+        const destroyedAtBaseThisTurnCount = (ctx.state.turnDestroyedMinions ?? [])
+            .filter(record => record.baseIndex === ctx.baseIndex)
+            .length;
+        if (base?.defId === 'base_temple_of_goju_pod') return [];
+        if (base?.defId === 'base_tar_pits' && destroyedAtBaseThisTurnCount === 0) return [];
+    }
+
+    return buildStandardDrawEvents(ctx.state, drawPlayerId, 1, ctx.random, ctx.now);
 }
 
 function samuraiSakuraGardenTrigger(ctx: TriggerContext): SmashUpEvent[] {
@@ -324,22 +375,19 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
 };
 
 const handleSamuraiYokaiAttack: InteractionHandler = (state, playerId, value, _data, _random, now) => {
+    if ((value as any)?.skip) return { state, events: [] };
     const selected = value as MinionChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined || !selected.defId) return { state, events: [] };
     return {
         state,
-        events: [
-            ...buildValidatedDestroyEvents(state, {
-                minionUid: selected.minionUid,
-                minionDefId: selected.defId,
-                fromBaseIndex: selected.baseIndex,
-                destroyerId: playerId,
-                reason: 'samurai_yokai_attack',
-                now,
-            }),
-            grantExtraMinion(playerId, 'samurai_yokai_attack', now),
-            grantExtraAction(playerId, 'samurai_yokai_attack', now),
-        ],
+        events: buildValidatedDestroyEvents(state, {
+            minionUid: selected.minionUid,
+            minionDefId: selected.defId,
+            fromBaseIndex: selected.baseIndex,
+            destroyerId: playerId,
+            reason: 'samurai_yokai_attack',
+            now,
+        }),
     };
 };
 

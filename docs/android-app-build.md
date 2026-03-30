@@ -96,6 +96,18 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
+如果走 GitHub Actions 自动化：
+
+- `main` 分支合入影响 H5 bundle 的改动后，会自动发布到非生产 channel，默认是 `edge`
+- `stable` / `gray` 通过 Actions `Android OTA Publish` 手动触发
+- `stable` 建议绑定 `android-ota-production` Environment 审批，避免误发
+
+推荐发布策略：
+
+1. 日常合并到 `main`：自动发 `edge`
+2. 群友 / 测试机验证：手动发 `gray`
+3. 确认稳定：手动发 `stable`
+
 可选参数：
 
 - `--channel <name>`：发布 channel，例如 `stable`、`gray`
@@ -154,6 +166,35 @@ npm run mobile:android:ota:publish -- --channel stable
 - 小流量验证建议先发 `gray` 之类独立 channel，再切 `stable`
 - App 端当前提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
+
+## GitHub Actions 配置
+
+自动化 OTA workflow 文件：
+
+- `.github/workflows/android-ota-publish.yml`
+
+需要的 GitHub Secrets：
+
+- `ANDROID_VITE_BACKEND_URL`
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+
+可选 GitHub Variables：
+
+- `VITE_ASSETS_BASE_URL`
+- `ANDROID_OTA_AUTO_CHANNEL`
+- `ANDROID_OTA_APP_READY_TIMEOUT_MS`
+- `CAPACITOR_APP_ID`
+- `CAPACITOR_APP_NAME`
+
+推荐 Environment：
+
+- `android-ota-nonprod`
+- `android-ota-production`
+
+其中 `android-ota-production` 应配置 required reviewers，用于保护 `stable` 发布。
 
 ## 关键约束
 

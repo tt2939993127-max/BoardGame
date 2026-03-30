@@ -13,15 +13,16 @@
 
 ## 3. Publish Pipeline
 
-- [ ] 3.1 增加 Android OTA bundle 构建产物与 manifest 生成
-- [ ] 3.2 增加 bundle 上传、发布、回滚脚本
-- [ ] 3.3 增加渠道/灰度/紧急停用开关
+- [x] 3.1 增加 Android OTA bundle 构建产物与 manifest 生成
+- [x] 3.2 增加 bundle 上传、发布、回滚脚本
+- [x] 3.3 增加渠道/灰度/紧急停用开关
+- [x] 3.4 增加 GitHub Actions OTA 自动发布链路，并为正式 channel 增加审批门禁
 
 ## 4. Product Rules & Cleanup
 
-- [ ] 4.1 把 `embedded + OTA` 写入 Android 主线发布文档
-- [ ] 4.2 把 `remote WebView` 明确降级为兼容/调试模式
-- [ ] 4.3 盘点现有“发 APK 才能更新前端”的流程文档并修正
+- [x] 4.1 把 `embedded + OTA` 写入 Android 主线发布文档
+- [x] 4.2 把 `remote WebView` 明确降级为兼容/调试模式
+- [x] 4.3 盘点现有“发 APK 才能更新前端”的流程文档并修正
 
 ## 5. Verification
 

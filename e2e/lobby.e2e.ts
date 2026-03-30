@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './framework';
+import { setChineseLocale } from './helpers/common';
 
 function isRetryableNavigationError(error: unknown): boolean {
     return error instanceof Error
@@ -34,7 +35,7 @@ async function ensureLobbyReady(page: Page): Promise<void> {
         await gotoLobbyWithRetry(page);
 
         try {
-            await expect(page.getByRole('heading', { name: /Tic-Tac-Toe/i })).toBeVisible({ timeout: 10000 });
+            await expect(page.getByRole('heading', { name: '井字棋' })).toBeVisible({ timeout: 10000 });
             return;
         } catch (error) {
             if (attempt === maxAttempts) {
@@ -52,55 +53,53 @@ test.describe('Lobby E2E', () => {
     test.describe.configure({ timeout: 90000 });
 
     test.beforeEach(async ({ page }, testInfo) => {
-        await page.addInitScript(() => {
-            localStorage.setItem('i18nextLng', 'en');
-        });
+        await setChineseLocale(page);
         if (testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME) {
             return;
         }
         await ensureLobbyReady(page);
     });
 
-    test('Category filters show expected games', async ({ page }) => {
-        await page.getByRole('button', { name: /Tools/i }).click();
-        await expect(page.getByRole('heading', { name: /Asset Slicer/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Dice Throne/i })).toHaveCount(0);
-        await expect(page.getByRole('heading', { name: /Tic-Tac-Toe/i })).toHaveCount(0);
+    test('分类筛选会显示对应的中文游戏列表', async ({ page }) => {
+        await page.getByRole('button', { name: '工具' }).click();
+        await expect(page.getByRole('heading', { name: '素材切片机' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '王权骰铸' })).toHaveCount(0);
+        await expect(page.getByRole('heading', { name: '井字棋' })).toHaveCount(0);
 
-        await page.getByRole('button', { name: /All Games/i }).click();
-        await expect(page.getByRole('heading', { name: /Dice Throne/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Tic-Tac-Toe/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Asset Slicer/i })).toHaveCount(0);
+        await page.getByRole('button', { name: '全部游戏' }).click();
+        await expect(page.getByRole('heading', { name: '王权骰铸' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '井字棋' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: '素材切片机' })).toHaveCount(0);
     });
 
-    test('Game details modal opens and shows actions', async ({ page }) => {
-        await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
+    test('游戏详情弹窗会显示当前中文动作入口', async ({ page }) => {
+        await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
 
-        await expect(page.getByRole('button', { name: /Create Room/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Single Device/i })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /Local Match Setup/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Play AI/i })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /Tutorial/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '本地对战设置' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '教程模式' })).toBeVisible();
 
-        await page.getByRole('button', { name: /Leaderboard/i }).click();
-        await expect(page.getByRole('heading', { name: /Top Wins/i, level: 4 })).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/Loading/i)).toHaveCount(0, { timeout: 10000 });
+        await page.getByRole('button', { name: '排行榜' }).click();
+        await expect(page.getByRole('heading', { name: '胜场排行', level: 4 })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText('加载中...')).toHaveCount(0, { timeout: 10000 });
     });
 
-    test('Tic-Tac-Toe 本地对战设置会进入带 local-ai 的本地对局', async ({ page, game }, testInfo) => {
+    test('井字棋本地对战设置会进入带 local-ai 的本地对局', async ({ page, game }, testInfo) => {
         await page.addInitScript(() => {
             (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ = true;
         });
 
-        await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
+        await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
-        await expect(page.getByRole('button', { name: /Single Device/i })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /Play AI/i })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
 
-        await page.getByRole('button', { name: /Local Match Setup/i }).click();
+        await page.getByRole('button', { name: '本地对战设置' }).click();
         await expect(page.getByTestId('local-match-config-modal')).toBeVisible();
-        await page.getByRole('button', { name: /Start Local Match/i }).click();
+        await page.getByRole('button', { name: '开始本地对战' }).click();
 
         await expect(page).toHaveURL(/\/play\/tictactoe\/local/);
         await expect(page.getByTestId('debug-toggle')).toBeVisible({ timeout: 15000 });

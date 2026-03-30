@@ -15,7 +15,7 @@ import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { waitForState } from './helpers/waitForState';
 import {
   initContext,
-  setEnglishLocale,
+  setChineseLocale,
   disableAudio,
   blockAudioRequests,
 } from './helpers/common';
@@ -108,14 +108,14 @@ test.describe('Summoner Wars Tutorial E2E', () => {
 
   test('教程完整流程 - 从初始化到完成', async ({ page }) => {
     test.setTimeout(120000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
     await navigateToTutorial(page);
 
     // Step 0: setup（AI 自动执行）
     // Step 1: welcome — 高亮棋盘
     await waitForTutorialStep(page, 'welcome', 40000);
-    await expect(page.getByText(/Welcome to Summoner Wars/i)).toBeVisible();
+    await expect(page.getByText(/欢迎来到召唤师战争/i)).toBeVisible();
     await clickNext(page);
 
     // Step 2: summoner-intro — 高亮己方召唤师
@@ -368,7 +368,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
   });
 
   test('教程入口可达性 - 从首页进入教程', async ({ page }) => {
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/');
@@ -392,12 +392,12 @@ test.describe('Summoner Wars Tutorial E2E', () => {
     await page.waitForURL(/\/play\/summonerwars\/tutorial/, { timeout: 15000 });
 
     await waitForTutorialStep(page, 'welcome', 40000);
-    await expect(page.getByText(/Welcome to Summoner Wars|欢迎来到召唤师战争/i)).toBeVisible();
+    await expect(page.getByText(/欢迎来到召唤师战争/i)).toBeVisible();
   });
 
   test('教程概览步骤 - 非交互步骤可正常点击推进', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');
@@ -428,7 +428,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
 
   test('教程高亮目标 - 每个步骤都高亮对应 UI 元素', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');
@@ -476,7 +476,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
 
   test('教程 UI 元素完整性 - 游戏界面关键组件可见', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');

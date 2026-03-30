@@ -552,6 +552,10 @@ export interface TriggerInstance {
     buriedCardDefId?: string;
     buriedCardControllerId?: PlayerId;
     buriedFrom?: 'hand' | 'discard' | 'play' | 'deck';
+    inspectionCards?: Array<{ uid: string; defId: string }>;
+    inspectionZone?: 'deck' | 'hand';
+    inspectionTargetPlayerIds?: PlayerId[];
+    inspectionCausePlayerId?: PlayerId;
 
     /** LKI snapshots captured at queue time */
     lkiMinion?: MinionLkiSnapshot;

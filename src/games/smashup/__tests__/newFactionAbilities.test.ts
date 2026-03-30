@@ -872,7 +872,7 @@ describe('Cowboys abilities', () => {
         expect(isMinionProtected(play.finalState.core, target3, 0, '1', 'destroy')).toBe(true);
     });
 
-    it('cowboys_stagecoach 当前 MVP 可把同一基地上至多两个己方随从移动到另一个基地', () => {
+    it('cowboys_stagecoach 可把同一基地上至多两个己方随从移动到另一个基地', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -915,8 +915,8 @@ describe('Cowboys abilities', () => {
         const cardsPrompt = getInteractionsFromMS(afterSource.finalState)[0] as any;
         expect(cardsPrompt?.data?.sourceId).toBe('cowboys_stagecoach_cards');
 
-        const ally1 = cardsPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-1');
-        const ally2 = cardsPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-2');
+        const ally1 = cardsPrompt.data.options.find((entry: any) => entry.value?.uid === 'ally-1');
+        const ally2 = cardsPrompt.data.options.find((entry: any) => entry.value?.uid === 'ally-2');
         const afterCards = runCommand(
             afterSource.finalState,
             { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionIds: [ally1.id, ally2.id] } } as any,
@@ -936,6 +936,132 @@ describe('Cowboys abilities', () => {
         expect(resolved.events.filter(e => e.type === SU_EVENTS.MINION_MOVED)).toHaveLength(2);
         expect(resolved.finalState.core.bases[0].minions).toHaveLength(0);
         expect(resolved.finalState.core.bases[1].minions.map(minion => minion.uid)).toEqual(['ally-1', 'ally-2']);
+    });
+
+    it('cowboys_stagecoach 也可搬运基地上的持续行动和埋葬牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('stagecoach-1', 'cowboys_stagecoach', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [],
+                    ongoingActions: [{ uid: 'gold-1', defId: 'cowboys_gold_strike', ownerId: '0' } as any],
+                    buriedCards: [{
+                        uid: 'bury-1',
+                        defId: 'ancient_egyptians_tomb_trap',
+                        trueOwnerId: '0',
+                        controllerId: '0',
+                        buriedFrom: 'hand',
+                    }] as any,
+                },
+                {
+                    defId: 'base_b',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'stagecoach-1' } },
+            defaultTestRandom,
+        );
+        const sourcePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const sourceOption = sourcePrompt.data.options.find((entry: any) => entry.value?.baseIndex === 0);
+        const afterSource = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: sourceOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const cardsPrompt = getInteractionsFromMS(afterSource.finalState)[0] as any;
+        const ongoing = cardsPrompt.data.options.find((entry: any) => entry.value?.uid === 'gold-1');
+        const buried = cardsPrompt.data.options.find((entry: any) => entry.value?.uid === 'bury-1');
+        const afterCards = runCommand(
+            afterSource.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionIds: [ongoing.id, buried.id] } } as any,
+            defaultTestRandom,
+        );
+
+        const destPrompt = getInteractionsFromMS(afterCards.finalState)[0] as any;
+        const destOption = destPrompt.data.options.find((entry: any) => entry.value?.baseIndex === 1);
+        const resolved = runCommand(
+            afterCards.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: destOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.bases[0].ongoingActions.some(action => action.uid === 'gold-1')).toBe(false);
+        expect(resolved.finalState.core.bases[1].ongoingActions.some(action => action.uid === 'gold-1')).toBe(true);
+        expect((resolved.finalState.core.bases[0].buriedCards ?? []).some(card => card.uid === 'bury-1')).toBe(false);
+        expect((resolved.finalState.core.bases[1].buriedCards ?? []).some(card => card.uid === 'bury-1')).toBe(true);
+    });
+
+    it('cowboys_stagecoach 也可搬运你控制的泰坦', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('stagecoach-1', 'cowboys_stagecoach', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+            ],
+            titans: [{
+                uid: 'titan-1',
+                defId: 'super_spies_moon_zero_three',
+                faction: 'super_spies',
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            }] as any,
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'stagecoach-1' } },
+            defaultTestRandom,
+        );
+        const sourcePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const sourceOption = sourcePrompt.data.options.find((entry: any) => entry.value?.baseIndex === 0);
+        const afterSource = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: sourceOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const cardsPrompt = getInteractionsFromMS(afterSource.finalState)[0] as any;
+        const titan = cardsPrompt.data.options.find((entry: any) => entry.value?.uid === 'titan-1');
+        const afterCards = runCommand(
+            afterSource.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: titan.id } } as any,
+            defaultTestRandom,
+        );
+
+        const destPrompt = getInteractionsFromMS(afterCards.finalState)[0] as any;
+        const destOption = destPrompt.data.options.find((entry: any) => entry.value?.baseIndex === 1);
+        const resolved = runCommand(
+            afterCards.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: destOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.events.some(event => event.type === SU_EVENTS.TITAN_MOVED)).toBe(true);
+        expect((resolved.finalState.core.titans ?? []).find((titan: any) => titan.uid === 'titan-1')?.location).toEqual({
+            zone: 'base',
+            baseIndex: 1,
+            enteredAt: 1,
+        });
     });
 });
 
@@ -1034,6 +1160,158 @@ describe('Samurai abilities', () => {
         expect(resolved.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
         expect(limitEvents.some((event: any) => event.payload.limitType === 'minion')).toBe(true);
         expect(limitEvents.some((event: any) => event.payload.limitType === 'action')).toBe(true);
+    });
+
+    it('cowboys_dynamite_surprise 在你的手牌被另一位玩家展示时可以直接打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('dyn-1', 'cowboys_dynamite_surprise', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('enemy-1', 'robot_microbot_alpha', '1', 4)],
+                ongoingActions: [],
+            }],
+        });
+
+        const trigger = fireTriggers(core, 'onDeckInspected', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '1',
+            reason: 'test_reveal_hand',
+            inspectionCards: [{ uid: 'dyn-1', defId: 'cowboys_dynamite_surprise' }],
+            inspectionZone: 'hand',
+            inspectionTargetPlayerIds: ['0'],
+            inspectionCausePlayerId: '1',
+            random: defaultTestRandom,
+            now: 1000,
+        });
+
+        const prompt = getInteractionsFromMS(trigger.matchState!)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('cowboys_dynamite_surprise_seen');
+
+        const target = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const resolved = runCommand(
+            trigger.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'dyn-1')).toBe(false);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'dyn-1')).toBe(true);
+        expect(resolved.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+    });
+
+    it('cowboys_dynamite_surprise 在你的牌库顶被另一位玩家翻开时也可以直接打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dyn-1', 'cowboys_dynamite_surprise', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('enemy-1', 'robot_microbot_alpha', '1', 4)],
+                ongoingActions: [],
+            }],
+        });
+
+        const trigger = fireTriggers(core, 'onDeckInspected', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '1',
+            reason: 'test_reveal_deck_top',
+            inspectionCards: [{ uid: 'dyn-1', defId: 'cowboys_dynamite_surprise' }],
+            inspectionZone: 'deck',
+            inspectionTargetPlayerIds: ['0'],
+            inspectionCausePlayerId: '1',
+            random: defaultTestRandom,
+            now: 1001,
+        });
+
+        const prompt = getInteractionsFromMS(trigger.matchState!)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('cowboys_dynamite_surprise_seen');
+
+        const target = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const resolved = runCommand(
+            trigger.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].deck.some(card => card.uid === 'dyn-1')).toBe(false);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'dyn-1')).toBe(true);
+        expect(resolved.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+    });
+
+    it('samurai_yokai_attack 可以跳过而不消灭己方随从', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('yokai-1', 'samurai_yokai_attack', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('ally-1', 'robot_microbot_alpha', '0', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'yokai-1' } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const skipOption = prompt.data.options.find((entry: any) => entry.value?.skip === true);
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: skipOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(resolved.events.some(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBe(false);
+        expect(resolved.finalState.core.bases[0].minions.some(m => m.uid === 'ally-1')).toBe(true);
+    });
+
+    it('samurai_yokai_attack 选择不能被消灭的己方随从时不会给额外额度', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('yokai-1', 'samurai_yokai_attack', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('warbot-1', 'robot_warbot', '0', 4)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'yokai-1' } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const option = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'warbot-1');
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(resolved.events.some(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBe(false);
+        expect(resolved.finalState.core.bases[0].minions.some(m => m.uid === 'warbot-1')).toBe(true);
     });
 
     it('samurai_honorable_combat 按决斗结果给胜者 1VP 而不会默认消灭失败者', () => {
@@ -1204,6 +1482,138 @@ describe('Samurai abilities', () => {
         expect(play.finalState.core.players['0'].discard.some(card => card.uid === 'discard-1')).toBe(false);
     });
 
+    it('samurai_way_of_the_warrior 会让目标本回合进入弃牌堆时抽一张牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('warrior-1', 'samurai_way_of_the_warrior', 'action', '0')],
+                    deck: [makeCard('draw-1', 'robot_microbot_alpha', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('ally-1', 'samurai_ronin', '0', 3)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'warrior-1', targetBaseIndex: 0, targetMinionUid: 'ally-1' },
+            },
+            defaultTestRandom,
+        );
+
+        const target = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-1');
+        expect(target?.tempPowerModifier).toBe(3);
+
+        const result = fireTriggers(play.finalState.core, 'onMinionDestroyed', {
+            state: play.finalState.core,
+            matchState: play.finalState,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: target,
+            triggerMinionUid: 'ally-1',
+            triggerMinionDefId: 'samurai_ronin',
+            destroyerId: '1',
+            reason: 'test_destroy',
+            random: defaultTestRandom,
+            now: 1004,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+    });
+
+    it('samurai_way_of_the_warrior 在目标因基地结算进入弃牌堆时也会抽一张牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('warrior-1', 'samurai_way_of_the_warrior', 'action', '0')],
+                    deck: [makeCard('draw-1', 'robot_microbot_alpha', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('ally-1', 'samurai_ronin', '0', 3)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'warrior-1', targetBaseIndex: 0, targetMinionUid: 'ally-1' },
+            },
+            defaultTestRandom,
+        );
+
+        const target = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-1');
+        const result = fireTriggers(play.finalState.core, 'onMinionDiscardedFromBase', {
+            state: play.finalState.core,
+            matchState: play.finalState,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: target,
+            triggerMinionUid: 'ally-1',
+            triggerMinionDefId: 'samurai_ronin',
+            random: defaultTestRandom,
+            now: 1005,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+    });
+
+    it('samurai_way_of_the_warrior 在焦油坑把目标改放牌库底时不会抽牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('warrior-1', 'samurai_way_of_the_warrior', 'action', '0')],
+                    deck: [makeCard('draw-1', 'robot_microbot_alpha', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_tar_pits',
+                minions: [makeMinion('ally-1', 'samurai_ronin', '0', 3)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'warrior-1', targetBaseIndex: 0, targetMinionUid: 'ally-1' },
+            },
+            defaultTestRandom,
+        );
+
+        const target = play.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-1');
+        const result = fireTriggers(play.finalState.core, 'onMinionDestroyed', {
+            state: play.finalState.core,
+            matchState: play.finalState,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: target,
+            triggerMinionUid: 'ally-1',
+            triggerMinionDefId: 'samurai_ronin',
+            destroyerId: '1',
+            reason: 'test_destroy',
+            random: defaultTestRandom,
+            now: 1006,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(false);
+    });
+
     it('samurai_shogun 会在另一名己方随从从场上进入弃牌堆后给自己一个指示物', () => {
         const state = makeState({
             players: {
@@ -1280,6 +1690,7 @@ describe('Samurai abilities', () => {
         const tempPowerTargets = result.events
             .filter(event => event.type === SU_EVENTS.TEMP_POWER_ADDED)
             .map((event: any) => event.payload.minionUid);
+        expect(tempPowerTargets).not.toContain('host-1');
         expect(tempPowerTargets).toContain('ally-1');
         expect(tempPowerTargets).toContain('ally-2');
     });
