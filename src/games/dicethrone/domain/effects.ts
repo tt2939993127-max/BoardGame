@@ -1174,6 +1174,9 @@ export function resolveEffectsToEvents(
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     let bonusApplied = false;
+    const shouldInlineBonusDamage =
+        (timing === 'withDamage' || timing === 'postDamage')
+        && ctx.state.pendingAttack?.attackerId === ctx.attackerId;
 
     // 构建 EffectResolutionContext 用于条件检查
     const activeDice = getActiveDice(ctx.state);
@@ -1220,24 +1223,36 @@ export function resolveEffectsToEvents(
         }
 
         const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey).filter(e => e !== undefined);
-        events.push(...effectEvents);
+        const immediateEvents: DiceThroneEvent[] = [];
+        for (const event of effectEvents) {
+            if (
+                shouldInlineBonusDamage
+                && event.type === 'BONUS_DAMAGE_ADDED'
+                && event.payload.playerId === ctx.attackerId
+            ) {
+                ctx.accumulatedBonusDamage = (ctx.accumulatedBonusDamage ?? 0) + event.payload.amount;
+                continue;
+            }
+            immediateEvents.push(event);
+        }
+        events.push(...immediateEvents);
 
         // TOKEN_RESPONSE_REQUESTED 意味着伤害被挂起等待玩家响应，
         // 后续效果（如 rollDie）应在 Token 响应完成后由 resolvePostDamageEffects 执行。
         // 此处必须中断，否则 rollDie 会消耗 random 值，导致后续重新执行时 random 队列偏移。
-        if (effectEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED')) {
+        if (immediateEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED')) {
             break;
         }
 
         // CHOICE_REQUESTED 同样需要中断：用户选择完成前不应执行后续效果
         // 例如：taiji-combo 的 rollDie=莲花 产生选择，后续的 damage(6) 应等待选择完成后再执行
         // 否则会导致伤害在选择前就被应用，破坏游戏流程
-        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED')) {
+        if (immediateEvents.some(e => e.type === 'CHOICE_REQUESTED')) {
             break;
         }
 
         // 如果产生伤害且只允许一次加成
-        if (effectEvents.some(e => e.type === 'DAMAGE_DEALT') && config?.bonusDamageOnce) {
+        if (immediateEvents.some(e => e.type === 'DAMAGE_DEALT') && config?.bonusDamageOnce) {
             bonusApplied = true;
             // 伤害已应用，清空累加的额外伤害
             ctx.accumulatedBonusDamage = 0;

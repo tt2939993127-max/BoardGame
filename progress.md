@@ -1,5 +1,41 @@
 # Progress Log
 
+## Session: 2026-03-30 Dice Throne 枪手 / 武士全能力审计完成
+- **Status:** completed
+- Actions taken:
+  - 在 `src/games/dicethrone/__tests__/cross-hero.test.ts` 把枪手 / 武士剩余升级能力与全能力审计用例全部补齐并收口。
+  - 在 `src/games/dicethrone/domain/effects.ts` 修复当前攻击中的 `BONUS_DAMAGE_ADDED` 内联结算，确保 `Showdown / Masamune` 这类 custom action 加伤真正并入本次攻击。
+  - 在 `src/games/dicethrone/domain/attack.ts` 与 `src/games/dicethrone/domain/flowHooks.ts` 为 offensive preDefense 明确透传 `random`，让 `Showdown` 这类 preDefense 掷骰裁定能力正式生效。
+  - 将高风险断言统一切到 `getPendingAttackExpectedDamage(...)`，避免继续把 `pendingAttack.damage` 的可空实现细节误判为缺陷。
+  - 回填任务记录与 OpenSpec 口径，把当前范围从“角色板能力已审计”更新为“枪手 / 武士 token + 手牌 + 技能 + 升级 全能力已审计完成”。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 枪手 / 武士全能力回归 | `npm run test -- src/games/dicethrone/__tests__/cross-hero.test.ts` | 全能力审计用例与既有回归全绿 | `92 passed` | ✅ |
+| Token 执行回归 | `npm run test -- src/games/dicethrone/__tests__/token-execution.test.ts` | 共享结算修复不破坏 token / 额外攻击链 | `55 passed` | ✅ |
+| TypeScript 类型检查 | `npm run typecheck` | 全绿 | 通过 | ✅ |
+
+## Session: 2026-03-30 Dice Throne 枪手 / 武士角色板能力审计收口
+- **Status:** completed
+- Actions taken:
+  - 重新核对本地真相源切图，确认 `Bushido` 的“起始玩家开局得 honor + 回合末少于 3 次 roll 再得 honor”双条款。
+  - 在 `src/games/dicethrone/domain/flowHooks.ts` 接入：
+    - `setup` 退出时的 `Bushido` 开局 `honor`
+    - offensive roll 次数记录
+    - `discard` 退出时的 `< 3` 次 Bushido 判定
+    - 共享 `phaseStart/upkeep` 被动执行，收掉 `Quick Draw` 运行时缺口
+  - 在 `src/games/dicethrone/heroes/gunslinger/abilities.ts` 将 `Bounty Hunter / Deadeye / Revolver II` 的非伤害效果移动到 `preDefense`，确保 token / status 进入当前攻击结算链。
+  - 按本地 `bounty.webp` 与 `bounty-hunter.webp` 切图裁定 `Bounty Hunter` 的同次攻击增伤语义，并更新 `cross-hero.test.ts` 断言为 `2 damage + 1 CP`。
+  - 更新 `src/games/dicethrone/rule/枪手录入核对.md`，清理 `fill-em-with-lead` 的过期“待继续实施”状态，并把 `bounty` 同次攻击生效写入核对结论。
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| 枪手 / 武士跨英雄回归 | `npm run test -- src/games/dicethrone/__tests__/cross-hero.test.ts` | 角色板能力与既有回归全绿 | `64 passed` | ✅ |
+| Token 执行回归 | `npm run test -- src/games/dicethrone/__tests__/token-execution.test.ts` | Bushido / Quick Draw 改动不破坏共享 token 执行 | `55 passed` | ✅ |
+| TypeScript 类型检查 | `npm run typecheck` | 全绿 | 通过 | ✅ |
+
 ## Session: 2026-03-28 Smash Up Titans merge 收口
 - **Status:** in_progress
 - Actions taken:

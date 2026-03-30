@@ -40,6 +40,7 @@ import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
 import { getGameMode, applyEvents, getPendingAttackExpectedDamage } from './utils';
+import { resolveEffectsToEvents, type EffectContext } from './effects';
 import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
@@ -356,6 +357,22 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             if (initEvents.length > 0) {
                 events.push(...initEvents);
             }
+
+            const startingPlayerId = core.startingPlayerId;
+            if (core.selectedCharacters[startingPlayerId] === 'samurai') {
+                events.push({
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: startingPlayerId,
+                        tokenId: TOKEN_IDS.HONOR,
+                        amount: 1,
+                        newTotal: 1,
+                        sourceAbilityId: 'bushido',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
         }
 
         // ========== main1 阶段退出：检查击倒状态 ==========
@@ -384,6 +401,18 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
         // ========== offensiveRoll 阶段退出：攻击前处理 ==========
         if (from === 'offensiveRoll') {
+            if (!core.extraAttackInProgress && core.offensiveRollAttemptsThisTurn === undefined) {
+                events.push({
+                    type: 'OFFENSIVE_ROLL_ATTEMPTS_RECORDED',
+                    payload: {
+                        playerId: core.activePlayerId,
+                        attempts: core.rollCount,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
+
             if (core.pendingAttack) {
                 if (pendingAttackNeedsTargetingRoll(core) && !core.pendingAttack.damageResolved && !core.pendingAttack.bonusDiceResolved) {
                     return { events, overrideNextPhase: 'targetingRoll' };
@@ -501,7 +530,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     // 不消耗潜行标记——潜行在回合末自动弃除，触发免伤时不移除
 
                     // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
-                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
+                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, random, timestamp);
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -562,7 +591,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 处理进攻方的 preDefense 效果
-                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp);
+                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, random, timestamp);
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -821,7 +850,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : undefined;
             const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
             if (sneakStacks > 0 && !targetingCore.pendingAttack.isUltimate) {
-                const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, random, timestamp);
                 events.push(...preDefenseEventsSneak);
 
                 const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -875,7 +904,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return { events, overrideNextPhase: 'main2' };
             }
 
-            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, random, timestamp);
             events.push(...preDefenseEvents);
 
             const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -1108,6 +1137,26 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
             }
 
+            if (
+                core.selectedCharacters[activeId] === 'samurai'
+                && core.offensiveRollAttemptsThisTurn !== undefined
+                && core.offensiveRollAttemptsThisTurn < 3
+            ) {
+                const currentHonor = core.players[activeId]?.tokens[TOKEN_IDS.HONOR] ?? 0;
+                events.push({
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: activeId,
+                        tokenId: TOKEN_IDS.HONOR,
+                        amount: 1,
+                        newTotal: currentHonor + 1,
+                        sourceAbilityId: 'bushido',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
+
             const nextPlayerId = getNextPlayerId(core);
             const turnEvent: TurnChangedEvent = {
                 type: 'TURN_CHANGED',
@@ -1249,6 +1298,25 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : core.activePlayerId;
             const player = core.players[activeId];
             if (player?.statusEffects) {
+                const phaseStartPassiveEvents = player.abilities
+                    .filter((ability) =>
+                        ability.type === 'passive'
+                        && ability.trigger?.type === 'phaseStart'
+                        && ability.trigger.phase === 'upkeep'
+                    )
+                    .flatMap((ability) => {
+                        const passiveCtx: EffectContext = {
+                            attackerId: activeId,
+                            defenderId: activeId,
+                            sourceAbilityId: ability.id,
+                            state: core,
+                            damageDealt: 0,
+                            timestamp,
+                        };
+                        return resolveEffectsToEvents(ability.effects ?? [], 'immediate', passiveCtx, { random });
+                    });
+                events.push(...phaseStartPassiveEvents);
+
                 // 0. 火焰精通冷却 — 维持阶段移除 1 个火焰精通
                 const fmCount = player.tokens?.[TOKEN_IDS.FIRE_MASTERY] ?? 0;
                 if (fmCount > 0) {

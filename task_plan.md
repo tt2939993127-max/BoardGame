@@ -4,6 +4,49 @@
 - 本文件在同步 `origin/main` 后，仍以当前 worktree 的正式任务计划为唯一入口。
 - 主分支新增的历史 Addendum 与结论已转存到本次合并冲突汇报，避免把本文件再次扩展成多份并行主计划。
 
+## Addendum（2026-03-30）：Dice Throne 枪手 / 武士角色板能力审计收口
+
+## Addendum（2026-03-30）：Dice Throne 枪手 / 武士全能力审计完成
+
+### Goal
+- 把本轮审计范围从“角色板能力”正式扩到 `token + 手牌 + 技能 + 升级` 全能力，完成枪手 / 武士两名角色的整角色运行时审计收口。
+
+### Result
+- [x] 在 `cross-hero.test.ts` 补齐枪手 / 武士剩余升级能力运行时覆盖，审计面已覆盖角色板、行动牌、升级分支与 token 交互。
+- [x] 修正 `withDamage` 阶段 custom action 产生的 `BONUS_DAMAGE_ADDED` 并入当前攻击的共享结算链，关闭 `Masamune / Showdown` 这类“加伤事件落日志但不进本次伤害”的共享缺口。
+- [x] 为 offensive preDefense 显式透传 `random`，使 `Showdown` 这类 preDefense 掷骰裁定能力正式进入运行时。
+- [x] 重新校准高风险断言口径：`pendingAttack.damage` 改为统一通过 `getPendingAttackExpectedDamage(...)` 读取预期攻击伤害，避免把 reducer 中可空字段误当成实现缺陷。
+- [x] 当前枪手 / 武士两名角色已完成 `token + 手牌 + 技能 + 升级` 全能力运行时审计，不再保留这两名角色自身的 card-level residual scope。
+
+### Validation
+- [x] `npm run test -- src/games/dicethrone/__tests__/cross-hero.test.ts`
+- [x] `npm run test -- src/games/dicethrone/__tests__/token-execution.test.ts`
+- [x] `npm run typecheck`
+
+### Next
+- [ ] 若后续继续扩 DiceThrone 审计，应转向新的角色或新的共享交互家族，而不是继续把枪手 / 武士已闭环范围重复登记为 residual。
+
+### Goal
+- 继续沿 `update-dicethrone-gunslinger-samurai-release-readiness` 的口径，把枪手 / 武士仍未显式闭环的角色板能力补齐并审计完。
+- 先裁决 `Bushido`、`Quick Draw`、`Bounty Hunter` 三条剩余能力语义，再决定是修实现还是修断言。
+
+### Result
+- [x] 本地图证确认 `Bushido` 包含两条规则：起始玩家开局获得 `1 honor`；回合结束时若本回合攻击掷骰次数少于 `3` 次，再获得 `1 honor`。
+- [x] 在 `flowHooks.ts` 补齐武士 `Bushido` 的开局与回合末判定，并用 `offensiveRollAttemptsThisTurn` 记录本回合常规攻击掷骰次数。
+- [x] 在共享阶段切换链路补上 `phaseStart/upkeep` 被动执行，使枪手 `Quick Draw` 正式进入运行时。
+- [x] 修正枪手 `Bounty Hunter / Deadeye / Revolver II` 的非伤害效果时机到 `preDefense`，避免 token / status 掉出结算链。
+- [x] 通过本地切图与提示板重新裁定：`Bounty Hunter` 先施加 `bounty` 再造成攻击伤害时，该次攻击立即吃到 `bounty` 的 `+1 damage +1 CP`。
+- [x] 在 `cross-hero.test.ts` 补齐枪手 / 武士角色板能力回归后，当前两名角色的角色板能力均已有运行时审计覆盖。
+
+### Validation
+- [x] `npm run test -- src/games/dicethrone/__tests__/cross-hero.test.ts`
+- [x] `npm run test -- src/games/dicethrone/__tests__/token-execution.test.ts`
+- [x] `npm run typecheck`
+
+### Next
+- [ ] 若继续扩大“穷尽式完成”范围，优先补卡牌级 residual scope，而不是重复堆角色板能力回归。
+- [ ] 保持 OpenSpec 口径：当前“角色板能力已审计完毕”不等于“两个角色所有卡牌与所有真实入口都已穷尽覆盖”。
+
 > 当前根目录三件套已切换为 **2026-03-22 多线任务恢复入口**。下次开新会话时，先按本文件的“当前主任务 / 并行子线 / 下一步”继续，不要被后面的历史 Addendum 标题误导。
 > 术语约束：当用户说 **plan** 时，默认指的是 `planning-with-files` 这套规划工作方式 / 效果；而这套流程产出的正式计划文档唯一落点就是本文件 `task_plan.md`。`findings.md` / `progress.md` 是配套记录，不是第二份 plan；`temp/*plan*` 只算历史临时材料，不得继续作为当前正式计划入口。
 

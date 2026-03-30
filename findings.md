@@ -4,6 +4,36 @@
 - 本文件在同步 `origin/main` 时保留当前 worktree 的任务现场作为主记录。
 - `origin/main` 在 2026-03-25~2026-03-26 新增的 OpenSpec、移动端、AI 与大厅入口历史结论，已转存到本次合并冲突汇报文档，避免本文件继续膨胀成并行主线入口。
 
+## 新发现（2026-03-30）：枪手 / 武士全能力已审计完成
+- 本轮新增的 10 条“全能力审计”回归里，8 条确实只是断言口径拿错：
+  - `pendingAttack.damage` 在很多场景本来就允许为 `undefined`
+  - 正确入口应使用 `getPendingAttackExpectedDamage(...)` 统一读取基础伤害 + bonusDamage
+  - `Masamune` 这类 display-only bonus dice 也不该在 `defensiveRoll` 前强断最终附加效果
+- 但剩余 2 条 `Showdown II / III` 暴露出共享实现缺口，不是测试问题：
+  - offensive preDefense 之前没有向效果解析透传 `random`
+  - `withDamage / postDamage` 阶段 custom action 产生的 `BONUS_DAMAGE_ADDED` 会落事件，但不会自动并入当前这次攻击
+- 这次已在共享层补齐两条根因：
+  - `resolveOffensivePreDefenseEffects(...)` 现在显式透传 `random`
+  - `resolveEffectsToEvents(...)` 现在会把当前攻击中的 `BONUS_DAMAGE_ADDED` 内联进本次伤害计算，而不是只留给 reducer 事后累计
+- 共享修复落地后，`Showdown` 与 `Masamune` 都已按预期进入当前攻击结算，说明这轮发现的是共享链路缺陷，不是单卡特例。
+- 当前审计面已覆盖枪手 / 武士的 `token + 手牌 + 技能 + 升级` 全能力运行时，不再保留这两名角色自身的“card-level residual scope 未审计”口径。
+
+## 新发现（2026-03-30）：枪手 / 武士角色板能力已审计闭环
+- `Bushido` 之前并非只有“回合末少于 3 次 roll 得 honor”这一条。本地切图 `public/assets/i18n/zh-CN/dicethrone/images/samurai/crops/player-board/slot-03.webp` 已明确写出：
+  - 如果你是起始玩家，获得荣誉指示物。
+  - 在你回合结束时，如果你在掷骰攻击阶段时掷骰少于 `3` 次，获得荣誉指示物。
+- 因此武士这条缺口不能靠补测试糊过去，而必须补共享运行时：
+  - `setup` 结束时按起始玩家身份发 `honor`
+  - 回合内记录常规 offensive roll 次数
+  - `discard` 退出时按 `< 3` 次判定再发 `honor`
+- 枪手 `Quick Draw` 之前的真实缺口不是能力定义缺字段，而是共享阶段链没有正式执行 `phaseStart/upkeep` 的被动能力；这次修在共享 `flowHooks.ts` 后，枪手与后续同类被动都能沿同一条通道运行。
+- `Bounty Hunter` 这次暴露出的不是测试随机误差，而是语义裁决问题。重新核对本地切图后可以确定：
+  - 技能写的是“先造成赏金效果，再造成 1 点不可防御伤害”。
+  - `Bounty` 提示写的是“当受此指示物影响的玩家遭到对手攻击时，攻击者增加 `1` 点攻击伤害且获得 `1CP`”。
+  - 所以同一次攻击若先施加 `bounty` 再造成攻击伤害，本次就应立刻吃到 `+1 damage +1 CP`；当前实现打 `2` 点并给 `1CP` 是规则一致，旧断言才是过期的。
+- 以 `cross-hero.test.ts` 当前回归面看，枪手角色板 `revolver / bounty-hunter / quick-draw / take-cover / showdown / deadeye / fan-the-hammer / duel / fill-em-with-lead` 与武士角色板 `katana-slice / wakizashi / bushido / solemnity / budo / samurai-slot-06 / stand-tall / samurai-ultimate` 均已有运行时审计覆盖。
+- 这轮收口后，残余范围不再包括“枪手 / 武士角色板能力未审计”；仍需显式保留的 residual scope 是卡牌级与真实入口覆盖，不得外推成“两个角色所有内容都已穷尽完成”。
+
 ## 新发现（2026-03-27）：武士跨角色 E2E / Masamune II 审计
 - `Masamune II` 当前仍是唯一真实未闭环点。已核对代码定义、OCR 图证、现有规则文档裁决，但升级差异数字仍然不足以安全裁决，因此本轮不改实现，只保留为审计 blocker。
 - `Righteousness` / `Zanshin` 之前在 E2E 中不稳定，根因不是武士逻辑，而是测试基础设施缺口：

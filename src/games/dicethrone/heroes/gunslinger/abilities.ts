@@ -87,7 +87,7 @@ export const REVOLVER_2: AbilityDef = {
             trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 4 } },
             effects: [
                 damage(5, '造成 5 点伤害。'),
-                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。'),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。', 'preDefense'),
             ],
             priority: 2,
         },
@@ -96,7 +96,7 @@ export const REVOLVER_2: AbilityDef = {
             trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 5 } },
             effects: [
                 damage(6, '造成 6 点伤害。'),
-                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。'),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。', 'preDefense'),
             ],
             priority: 3,
         },
@@ -111,7 +111,7 @@ const BOUNTY_HUNTER: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
-        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。'),
+        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。', 'preDefense'),
         damage(1, '造成 1 点不可防御伤害。'),
     ],
 };
@@ -124,7 +124,7 @@ export const BOUNTY_HUNTER_2: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
-        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。'),
+        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。', 'preDefense'),
         damage(2, '造成 2 点不可防御伤害。'),
     ],
 };
@@ -234,7 +234,7 @@ const DEADEYE: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
     effects: [
-        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。'),
+        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
         damage(6, '造成 6 点不可防御伤害。'),
     ],
 };
@@ -247,7 +247,7 @@ export const DEADEYE_2: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
     effects: [
-        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。'),
+        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
         damage(8, '造成 8 点不可防御伤害。'),
     ],
 };

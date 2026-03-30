@@ -128,6 +128,7 @@ export const DT_EVENTS = defineEvents({
 
   // ========== 静默事件 ==========
   HERO_INITIALIZED: 'silent',    // 英雄初始化（内部状态）
+  OFFENSIVE_ROLL_ATTEMPTS_RECORDED: 'silent', // 回合内常规 offensiveRoll 掷骰次数快照（内部状态）
   RESPONSE_WINDOW_RESPONDER_CHANGED: 'silent', // 响应者变更（内部状态）
 });
 
@@ -190,6 +191,14 @@ export interface HeroInitializedEvent extends GameEvent<'HERO_INITIALIZED'> {
     payload: {
         playerId: PlayerId;
         characterId: SelectableCharacterId;
+    };
+}
+
+/** 常规 offensiveRoll 掷骰次数记录事件（用于回合末被动能力判定） */
+export interface OffensiveRollAttemptsRecordedEvent extends GameEvent<'OFFENSIVE_ROLL_ATTEMPTS_RECORDED'> {
+    payload: {
+        playerId: PlayerId;
+        attempts: number;
     };
 }
 
@@ -825,6 +834,7 @@ export type DiceThroneEvent =
     | RollConfirmedEvent
     | CharacterSelectedEvent
     | HeroInitializedEvent
+    | OffensiveRollAttemptsRecordedEvent
     | HostStartedEvent
     | SeatingMovedEvent
     | PlayerReadyEvent
