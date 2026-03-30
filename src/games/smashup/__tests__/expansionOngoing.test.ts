@@ -924,6 +924,21 @@ describe('印斯茅斯 ongoing 能力', () => {
 
             expect(isMinionProtected(state, oppMinion, 0, '0', 'affect')).toBe(false);
         });
+
+        test('力量≤2的己方随从不会被对手的藤蔓缠绕禁止移动', () => {
+            const protectedMinion = makeMinion({ defId: 'inn_a', uid: 'ia-1', controller: '0', basePower: 2 });
+            const entangledOwnerMinion = makeMinion({ defId: 'kp_a', uid: 'kp-1', controller: '1', basePower: 3 });
+            const base = makeBase({
+                minions: [protectedMinion, entangledOwnerMinion],
+                ongoingActions: [
+                    { uid: 'ips-1', defId: 'innsmouth_in_plain_sight', ownerId: '0' },
+                    { uid: 'ent-1', defId: 'killer_plant_entangled', ownerId: '1' },
+                ],
+            });
+            const state = makeState([base]);
+
+            expect(isMinionProtected(state, protectedMinion, 0, '0', 'move')).toBe(false);
+        });
     });
 
     describe('innsmouth_return_to_the_sea: 回归大海', () => {
