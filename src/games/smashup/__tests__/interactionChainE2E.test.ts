@@ -1722,6 +1722,61 @@ describe('P1: ghost_the_dead_rise（亡者崛起）3步链', () => {
         // 无论是否有后续交互，测试弃牌步骤成功即可
     });
 
+    it('弃牌堆直点基地时应立即打出对应随从', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('tdr1', 'ghost_the_dead_rise', '0', 'action'),
+                        makeCard('dc1', 'pirate_cannon', '0', 'action'),
+                        makeCard('dc2', 'pirate_broadside', '0', 'action'),
+                    ],
+                    discard: [
+                        makeCard('disc-m1', 'giant_ant_worker', '0', 'minion'),
+                    ],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                    factions: ['ghosts', 'giant_ants'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tdr1' },
+        }, 'dead_rise merged-base step1');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const discardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'dc1');
+        const r2 = respond(r1.finalState, '0', discardOpt, 'dead_rise merged-base step2');
+
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        expect(choice2.sourceId).toBe('ghost_the_dead_rise_play');
+        expect(choice2.targetType).toBe('discard_minion');
+        expect((r2.finalState.sys.interaction.current as any)?.data?.allowedBaseIndices).toEqual([0, 1]);
+
+        const minionOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r3 = respondWithMergedValue(
+            r2.finalState,
+            '0',
+            minionOpt,
+            { baseIndex: 1 },
+            'dead_rise merged-base step3',
+        );
+
+        expect(r3.steps[0]?.success).toBe(true);
+        expect(r3.finalState.sys.interaction.current).toBeUndefined();
+        expect(r3.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+        expect(r3.finalState.core.players['0'].discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(r3.finalState.core.players['0'].minionsPlayed).toBe(1);
+    });
+
     it('从弃牌堆额外打出时应直接落场，不额外发放随从额度', () => {
         const core = makeState({
             players: {
