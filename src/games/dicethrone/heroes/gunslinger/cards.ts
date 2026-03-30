@@ -252,7 +252,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
     },
 
     // 通用卡继续复用 monk 的正式 atlas。
-    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.MONK),
+    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER),
 ];
 
 export const getGunslingerStartingDeck = (random: RandomFn): AbilityCard[] => {

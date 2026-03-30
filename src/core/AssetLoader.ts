@@ -1040,13 +1040,10 @@ export function buildLocalizedImageSet(src: string, locale?: string): string {
         console.warn(`[AssetLoader] invalid_src type=${typeof src} value=${String(src)}`);
         return '';
     }
-    const { primary, fallback } = getLocalizedImageUrls(src, locale);
+    const { primary } = getLocalizedImageUrls(src, locale);
     const primaryUrl = primary.webp;
-    const fallbackUrl = fallback.webp;
-    if (primaryUrl && fallbackUrl && fallbackUrl !== primaryUrl) {
-        // CSS 会依次尝试加载多个背景图；primary 失败（404）时会自动回退到 fallback
-        return `url("${primaryUrl}"), url("${fallbackUrl}")`;
-    }
+    // CSS background-image 的多 url 是叠层，不是可靠的失败回退。
+    // 统一只返回主路径；需要显式回退的场景在调用层处理。
     return primaryUrl ? `url("${primaryUrl}")` : '';
 }
 
