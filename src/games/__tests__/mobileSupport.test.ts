@@ -109,6 +109,30 @@ describe('mobile support helpers', () => {
         });
     });
 
+    it('保留 package-managed 的必须更新 App 元数据', () => {
+        expect(
+            resolveGameMobileSupport({
+                mobileProfile: 'landscape-adapted',
+                shellTargets: ['pwa', 'app-webview'],
+                mobileDelivery: {
+                    mode: 'package-managed',
+                    runtimeChannel: 'stable',
+                    modulePackId: 'demo',
+                    assetPackId: 'demo',
+                    requiresAppUpdate: true,
+                    requiredAppVersion: '0.6.0',
+                },
+            }).mobileDelivery,
+        ).toEqual({
+            mode: 'package-managed',
+            runtimeChannel: 'stable',
+            modulePackId: 'demo',
+            assetPackId: 'demo',
+            requiresAppUpdate: true,
+            requiredAppVersion: '0.6.0',
+        });
+    });
+
     it('builds banner state from profile and viewport', () => {
         expect(
             getGameMobileBannerKind(

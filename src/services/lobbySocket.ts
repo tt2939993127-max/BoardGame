@@ -9,7 +9,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from '../lib/socketConnectionConfig';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {

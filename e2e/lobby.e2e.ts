@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './framework';
-import { setChineseLocale } from './helpers/common';
+import { getGameServerBaseURL, setChineseLocale } from './helpers/common';
 
 function isRetryableNavigationError(error: unknown): boolean {
     return error instanceof Error
@@ -78,8 +78,8 @@ test.describe('Lobby E2E', () => {
 
         await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible();
         await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '本地对战设置' })).toBeVisible();
         await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '本地对战设置' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '教程模式' })).toBeVisible();
 
         await page.getByRole('button', { name: '排行榜' }).click();
@@ -87,31 +87,99 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByText('加载中...')).toHaveCount(0, { timeout: 10000 });
     });
 
-    test('井字棋本地对战设置会进入带 local-ai 的本地对局', async ({ page, game }, testInfo) => {
-        await page.addInitScript(() => {
-            (window as Window & { __BG_E2E_DEBUG__?: boolean }).__BG_E2E_DEBUG__ = true;
+    test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
+        let delayedOnce = false;
+        await page.route('**/games/tictactoe/create', async (route) => {
+            if (!delayedOnce) {
+                delayedOnce = true;
+                await page.waitForTimeout(1200);
+            }
+            await route.continue();
         });
 
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
-        await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
+        await page.getByRole('button', { name: '创建房间' }).click();
+        await expect(page.getByRole('heading', { name: '创建房间' })).toBeVisible();
 
-        await page.getByRole('button', { name: '本地对战设置' }).click();
-        await expect(page.getByTestId('local-match-config-modal')).toBeVisible();
-        await page.getByRole('button', { name: '开始本地对战' }).click();
+        await page.getByRole('button', { name: '确认创建' }).click();
 
-        await expect(page).toHaveURL(/\/play\/tictactoe\/local/);
-        await expect(page.getByTestId('debug-toggle')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByText('创建中')).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText('正在创建房间并进入对局...')).toBeVisible();
 
-        await page.getByTestId('debug-toggle').click();
-        await expect(page.getByTestId('debug-panel')).toBeVisible();
+        await game.screenshot('lobby-tictactoe-create-room-loading', testInfo);
 
-        await page.getByTestId('debug-tab-controls').click();
-        await expect(page.getByTestId('debug-ai-support')).toBeVisible();
-        await expect(page.getByTestId('debug-ai-seat-controller-1')).toContainText(/Local AI/i);
+        await expect(page).toHaveURL(/\/play\/tictactoe\/match\//, { timeout: 15000 });
+    });
 
-        await game.screenshot('lobby-tictactoe-local-ai-config-debug', testInfo);
+    test('大杀四方创建房间弹窗可直接配置 AI 人数和模组，并为游客保存偏好', async ({ page, game }, testInfo) => {
+        await page.evaluate(() => {
+            localStorage.removeItem('local_ai_match_preferences:smashup');
+            Object.keys(localStorage)
+                .filter((key) => key.startsWith('match_ai_creds_'))
+                .forEach((key) => localStorage.removeItem(key));
+        });
+
+        await page.getByRole('heading', { name: '大杀四方' }).click();
+        await expect(page).toHaveURL(/game=smashup/);
+        await page.getByRole('button', { name: '创建房间' }).click();
+
+        await expect(page.getByRole('heading', { name: '创建房间' })).toBeVisible();
+        await page.getByRole('button', { name: '3人' }).click();
+        await page.getByTestId('setup-option-toggle-expansions-titans').click();
+        await page.getByRole('button', { name: /加入 AI/ }).click();
+        await expect(page.getByText('已开启')).toBeVisible();
+        await expect(page.getByRole('button', { name: '1 号位（房主）' })).toBeDisabled();
+        await page.getByRole('button', { name: '3 号位' }).click();
+
+        await game.screenshot('lobby-smashup-create-room-ai-config-modal', testInfo);
+
+        await page.getByRole('button', { name: '确认创建' }).click();
+
+        await expect(page).toHaveURL(/\/play\/smashup\/match\//);
+        await expect(page.getByRole('heading', { name: '选择你的派系' })).toBeVisible({ timeout: 15000 });
+
+        const matchId = page.url().match(/\/play\/smashup\/match\/([^?]+)/)?.[1];
+        expect(matchId).toBeTruthy();
+        if (!matchId) {
+            throw new Error('未能从 URL 提取 matchId');
+        }
+
+        const response = await page.request.get(`${getGameServerBaseURL()}/games/smashup/${matchId}`);
+        expect(response.ok()).toBeTruthy();
+        const payload = await response.json() as {
+            setupData?: {
+                enableAi?: boolean;
+                setupSelections?: { expansions?: string[] };
+                seatControllers?: Record<string, { type?: string }>;
+            };
+        };
+
+        expect(payload.setupData?.enableAi).toBe(true);
+        expect(payload.setupData?.setupSelections?.expansions ?? []).toEqual([]);
+        expect(payload.setupData?.seatControllers?.['1']?.type).toBe('local-ai');
+        expect(payload.setupData?.seatControllers?.['2']?.type).toBe('local-ai');
+
+        const storedPreferences = await page.evaluate(() => {
+            const raw = localStorage.getItem('local_ai_match_preferences:smashup');
+            return raw ? JSON.parse(raw) : null;
+        });
+        expect(storedPreferences).not.toBeNull();
+        expect(storedPreferences?.numPlayers).toBe(3);
+        expect(storedPreferences?.setupSelections?.expansions ?? []).toEqual([]);
+        expect(storedPreferences?.seatControllers?.['1']?.type).toBe('local-ai');
+        expect(storedPreferences?.seatControllers?.['2']?.type).toBe('local-ai');
+
+        const aiSeatCredentials = await page.evaluate(() => {
+            const key = Object.keys(localStorage).find((item) => item.startsWith('match_ai_creds_'));
+            if (!key) return null;
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : null;
+        });
+        expect(aiSeatCredentials?.['1']).toBeTruthy();
+        expect(aiSeatCredentials?.['2']).toBeTruthy();
+
+        await game.screenshot('lobby-smashup-create-room-ai-config-result', testInfo);
     });
 
     test(MOBILE_AUTHOR_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {

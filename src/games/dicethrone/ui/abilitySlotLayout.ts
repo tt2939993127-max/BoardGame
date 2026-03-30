@@ -28,27 +28,27 @@ type PlayerBoardUiTuning = {
 
 const V1_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
     { id: 'fist', x: 0.60, y: 1.62, w: 20.80, h: 38.50 },
-    { id: 'chi', x: 23.00, y: 1.15, w: 20.80, h: 39.65 },
+    { id: 'chi', x: 23, y: 1.15, w: 20.80, h: 39.65 },
     { id: 'sky', x: 55.50, y: 1.28, w: 20.70, h: 39.11 },
     { id: 'lotus', x: 77.60, y: 1.42, w: 21.10, h: 39.38 },
     { id: 'combo', x: 0.70, y: 42.05, w: 20.70, h: 38.44 },
     { id: 'lightning', x: 22.90, y: 42.40, w: 20.90, h: 38.70 },
     { id: 'calm', x: 55.10, y: 41.75, w: 21.20, h: 39.59 },
     { id: 'meditate', x: 77.80, y: 41.63, w: 20.90, h: 39.53 },
-    { id: 'ultimate', x: 0.60, y: 82.89, w: 55.00, h: 15.60 },
+    { id: 'ultimate', x: 0.60, y: 82.89, w: 55, h: 15.60 },
 ];
 
 // v2 面板来自枪手 / 武士图片裁图坐标，顶部留白显著增加。
 const V2_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
-    { id: 'fist', x: 0.00, y: 13.60, w: 16.11, h: 38.80 },
-    { id: 'chi', x: 16.11, y: 13.60, w: 16.60, h: 38.80 },
-    { id: 'sky', x: 0.00, y: 51.15, w: 16.11, h: 39.15 },
-    { id: 'lotus', x: 16.11, y: 51.15, w: 16.60, h: 39.15 },
-    { id: 'combo', x: 67.38, y: 13.60, w: 16.60, h: 38.80 },
-    { id: 'lightning', x: 83.74, y: 13.60, w: 16.26, h: 38.80 },
-    { id: 'calm', x: 67.38, y: 51.15, w: 16.60, h: 39.15 },
-    { id: 'meditate', x: 83.74, y: 51.15, w: 16.26, h: 39.15 },
-    { id: 'ultimate', x: 31.74, y: 70.75, w: 36.62, h: 27.20 },
+    { id: 'fist', x: 0.73, y: 27.27, w: 15.09, h: 29.23 },
+    { id: 'chi', x: 16.84, y: 26.29, w: 14.71, h: 30.99 },
+    { id: 'sky', x: 0.87, y: 59.55, w: 14.95, h: 30.36 },
+    { id: 'lotus', x: 16.69, y: 59.94, w: 15.44, h: 30.36 },
+    { id: 'combo', x: 67.38, y: 26.49, w: 16.02, h: 30.60 },
+    { id: 'lightning', x: 83.45, y: 26.68, w: 15.82, h: 30.99 },
+    { id: 'calm', x: 67.38, y: 59.94, w: 15.58, h: 30.36 },
+    { id: 'meditate', x: 84.02, y: 60.72, w: 15.25, h: 29.58 },
+    { id: 'ultimate', x: 33.78, y: 77.39, w: 32.27, h: 12.17 },
 ];
 
 export const DICETHRONE_PLAYER_BOARD_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {

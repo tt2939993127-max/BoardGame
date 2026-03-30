@@ -20,12 +20,13 @@ import {
 import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../roomActions';
 import { RoomList } from '../RoomList';
 import * as matchApi from '../../../services/matchApi';
+import * as matchStatus from '../../../hooks/match/useMatchStatus';
 import { lobbySocket } from '../../../services/lobbySocket';
 
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
 const closeModalMock = vi.fn();
-const { getGameByIdMock } = vi.hoisted(() => ({
+const { getGameByIdMock, latestCreateRoomModalProps } = vi.hoisted(() => ({
     getGameByIdMock: vi.fn((gameId: string) => {
         if (gameId !== 'dicethrone') return null;
         return {
@@ -52,6 +53,7 @@ const { getGameByIdMock } = vi.hoisted(() => ({
             },
         };
     }),
+    latestCreateRoomModalProps: { current: null as null | Record<string, unknown> },
 }));
 
 const buildMockGameManifest = (override: Record<string, unknown> = {}) => ({
@@ -86,7 +88,16 @@ const toastMock = {
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
+        i18n: {
+            language: 'zh-CN',
+            hasLoadedNamespace: () => true,
+            loadNamespaces: vi.fn().mockResolvedValue(undefined),
+        },
     }),
+    initReactI18next: {
+        type: '3rdParty',
+        init: () => undefined,
+    },
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -113,6 +124,11 @@ vi.mock('../../../contexts/ToastContext', () => ({
 
 vi.mock('../../../config/server', () => ({
     GAME_SERVER_URL: 'http://test.example',
+}));
+
+vi.mock('../../../api/user-settings', () => ({
+    getLocalMatchPreferences: vi.fn(),
+    updateLocalMatchPreferences: vi.fn(),
 }));
 
 vi.mock('../../../config/games.config', () => ({
@@ -143,6 +159,7 @@ vi.mock('../../../hooks/match/useMatchStatus', () => ({
     listStoredMatchCredentials: vi.fn(() => []),
     getLatestStoredMatchCredentials: vi.fn(() => null),
     pruneStoredMatchCredentials: vi.fn(),
+    persistAiSeatCredentials: vi.fn(),
     persistMatchCredentials: vi.fn(),
     isMatchNotFoundError: (err: unknown) => String(err).includes('404'),
 }));
@@ -163,28 +180,39 @@ vi.mock('../../common/overlays/ModalBase', () => ({
 }));
 
 vi.mock('../CreateRoomModal', () => ({
-    CreateRoomModal: () => null,
-}));
-
-vi.mock('../LocalMatchConfigModal', () => ({
-    LocalMatchConfigModal: ({ isOpen, onConfirm }: { isOpen: boolean; onConfirm: (result: { search: URLSearchParams; preferences: unknown }) => void }) => (
-        isOpen
-            ? createElement('button', {
-                type: 'button',
-                onClick: () => onConfirm({
-                    search: new URLSearchParams('players=2&seat1=local-ai'),
-                    preferences: {
+    CreateRoomModal: ({
+        isOpen,
+        isLoading,
+        onConfirm,
+        initialPreferences,
+    }: {
+        isOpen: boolean;
+        isLoading?: boolean;
+        onConfirm: (config: unknown) => void;
+        initialPreferences?: unknown;
+    }) => {
+        latestCreateRoomModalProps.current = { isOpen, isLoading, initialPreferences };
+        return isOpen
+            ? createElement('div', null,
+                createElement('button', {
+                    type: 'button',
+                    onClick: () => onConfirm({
+                        roomName: 'AI 房间',
                         numPlayers: 2,
+                        ttlSeconds: 0,
+                        password: '',
+                        enableAi: true,
                         seatControllers: {
                             '0': { type: 'human' },
                             '1': { type: 'local-ai' },
                         },
                         setupSelections: {},
-                    },
-                }),
-            }, 'mock-local-match-confirm')
-            : null
-    ),
+                    }),
+                }, 'mock-create-room-confirm'),
+                isLoading ? createElement('span', null, 'mock-create-room-loading') : null,
+            )
+            : null;
+    },
 }));
 
 vi.mock('../../common/overlays/PasswordEntryModal', () => ({
@@ -217,10 +245,12 @@ const buildStored = (override: Partial<{ matchID: string; playerID: string; cred
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
 });
 
 beforeEach(() => {
+    window.localStorage.clear();
     navigateMock.mockReset();
     openModalMock.mockReset();
     openModalMock.mockReturnValue('modal-1');
@@ -232,6 +262,7 @@ beforeEach(() => {
     });
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
+    latestCreateRoomModalProps.current = null;
 });
 
 describe('GameDetailsModal join confirm helpers', () => {
@@ -413,9 +444,25 @@ describe('GameDetailsMobilePackageCard', () => {
 
         expect(retryMock).toHaveBeenCalledTimes(1);
     });
+
+    it('更新模式显示更新提示而不是安装按钮', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'not-installed',
+            },
+            onInstall: vi.fn(),
+            presentation: 'update-required',
+            requiredAppVersion: '0.6.0',
+        }));
+
+        expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.updateRequiredHintWithVersion')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
 });
 
-describe('GameDetailsModal local match entry', () => {
+describe('GameDetailsModal create room ai entry', () => {
     const baseProps = {
         isOpen: true,
         onClose: vi.fn(),
@@ -425,32 +472,100 @@ describe('GameDetailsModal local match entry', () => {
         thumbnail: createElement('div'),
     };
 
-    it('支持本地模式的游戏不再显示对战AI入口，而是打开本地对战设置弹窗', () => {
+    it('创建房间弹窗内直接配置 AI，不再显示独立对战 AI 入口', async () => {
+        vi.spyOn(matchApi, 'createMatch').mockResolvedValueOnce({ matchID: 'match-ai-1' });
+        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
+        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({
+            success: true,
+            credentials: 'host-cred',
+        });
+
         render(createElement(GameDetailsModal, baseProps));
 
         expect(screen.queryByText('actions.playAi')).toBeNull();
+        expect(screen.queryByText('ai.configureTitle')).toBeNull();
 
-        fireEvent.click(screen.getByText('ai.configureTitle'));
-        fireEvent.click(screen.getByText('mock-local-match-confirm'));
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
 
-        expect(navigateMock).toHaveBeenCalledTimes(1);
-        const target = navigateMock.mock.calls[0]?.[0] as string;
-        expect(target).toMatch(/^\/play\/dicethrone\/local\?/);
-        expect(target).toContain('seat1=local-ai');
-        expect(target).toContain('seed=');
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-ai-1?playerID=0');
+        });
+
+        expect(matchApi.createMatch).toHaveBeenCalledWith(
+            'dicethrone',
+            expect.objectContaining({
+                numPlayers: 2,
+                setupData: expect.objectContaining({
+                    enableAi: true,
+                    seatControllers: expect.objectContaining({
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai' },
+                    }),
+                }),
+            }),
+            undefined,
+        );
+        expect(matchApi.claimSeat).toHaveBeenCalledWith(
+            'dicethrone',
+            'match-ai-1',
+            '1',
+            expect.objectContaining({
+                guestId: 'guest-1',
+            }),
+        );
     });
 
-    it('package-managed 游戏渲染移动端包管理入口并会先打开确认弹窗', () => {
+    it('未保存过 AI 偏好时，创建房间弹窗默认传入空偏好', async () => {
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+
+        expect(latestCreateRoomModalProps.current).toEqual(
+            expect.objectContaining({
+                initialPreferences: null,
+            }),
+        );
+    });
+
+    it('package-managed 游戏默认渲染单一下载入口', () => {
         render(createElement(GameDetailsModal, baseProps));
 
         const packageCard = screen.getByTestId('game-details-mobile-package-card');
         expect(packageCard).toBeInTheDocument();
         expect(packageCard.className).toContain('md:hidden');
-        expect(screen.getByText('packageManager.notInstalled')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+    });
 
-        fireEvent.click(screen.getByText('packageManager.installAction'));
+    it('标记必须更新时，渲染移动端更新提示入口', () => {
+        getGameByIdMock.mockImplementation((gameId: string) => {
+            if (gameId !== 'dicethrone') return null;
+            return buildMockGameManifest({
+                mobileDelivery: {
+                    mode: 'package-managed',
+                    runtimeChannel: 'stable',
+                    modulePackId: 'dicethrone',
+                    assetPackId: 'dicethrone',
+                    requiresAppUpdate: true,
+                    requiredAppVersion: '0.6.0',
+                },
+            });
+        });
 
-        expect(openModalMock).toHaveBeenCalledTimes(1);
+        render(createElement(GameDetailsModal, baseProps));
+
+        const packageCard = screen.getByTestId('game-details-mobile-package-card');
+        expect(packageCard).toBeInTheDocument();
+        expect(packageCard.className).toContain('md:hidden');
+        expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
 
     it('观战前发现房间 404 时不再跳进对局页，并提示房间已销毁', async () => {
@@ -496,6 +611,53 @@ describe('GameDetailsModal local match entry', () => {
         render(createElement(GameDetailsModal, baseProps));
 
         expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+    });
+
+    it('创建房间时显示进入对局 loading', async () => {
+        let resolveCreateMatch: ((value: { matchID: string }) => void) | null = null;
+        vi.spyOn(matchApi, 'createMatch').mockImplementationOnce(() => new Promise((resolve) => {
+            resolveCreateMatch = resolve as (value: { matchID: string }) => void;
+        }));
+        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({ success: true, credentials: 'seat-creds' } as never);
+        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-creds' });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
+
+        await waitFor(() => {
+            expect(screen.getByText('matchRoom.title.creating')).toBeInTheDocument();
+            expect(screen.getByText('matchRoom.creatingRoom')).toBeInTheDocument();
+        });
+
+        resolveCreateMatch?.({ matchID: 'match-created' });
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-created?playerID=0');
+        });
+    });
+
+    it('socket 瞬时错误恢复后不再立刻弹服务不可用提示', async () => {
+        vi.useFakeTimers();
+        let statusCallback: ((status: { connected: boolean; lastError?: string }) => void) | null = null;
+        vi.mocked(lobbySocket.subscribeStatus).mockImplementationOnce((callback) => {
+            statusCallback = callback;
+            return () => {};
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        statusCallback?.({ connected: false, lastError: 'websocket error' });
+        expect(toastMock.error).not.toHaveBeenCalled();
+
+        statusCallback?.({ connected: true });
+        vi.advanceTimersByTime(1600);
+
+        expect(toastMock.error).not.toHaveBeenCalled();
     });
 });
 

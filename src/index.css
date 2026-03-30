@@ -1,6 +1,25 @@
 @import "tailwindcss";
 @import "./fonts.css";
 
+/*
+ * Tailwind v4 当前没有稳定检测到 DiceThrone HUD 里一批通过常量复用的 arbitrary-value utilities，
+ * 会导致血条高度塌陷、阶段按钮只剩文本壳。
+ * 这里用官方 @source inline() 显式保留这些关键类，避免样式回退。
+ */
+@source inline("
+  h-[1.8vw] w-[1.8vw] text-[0.8vw] text-[1.1vw]
+  rounded-[1.2vw] p-[0.6vw] gap-[0.5vw]
+  w-[10.2vw] h-[2.5vw] w-[15vw] right-[1.5vw] bottom-[1.5vw]
+  gap-[0.75vw] gap-[0.35vw] gap-[0.4vw] gap-[0.15vw]
+  mb-[0.55vw] mr-[0.6vw] max-w-[8.8vw]
+  px-[0.6vw] py-[0.4vw] w-[1vw] h-[1vw] text-[0.75vw]
+  !px-[0.5vw] !py-0 !min-h-0 !rounded-[0.5vw] !text-[0.75vw]
+  w-[5.8vw] rounded-[1.5vw] p-[0.2vw] ml-[0.3vw]
+  aspect-[0.7] border-[0.2vw] translate-x-[0.2vw] translate-y-[0.2vw]
+  w-[2vw] h-[2vw] text-[0.6vw] text-[1vw] w-[2.5vw] h-[2.5vw] w-[1.5vw] h-[1.5vw]
+  rounded-[0.5vw]
+");
+
 @theme {
     /* Fonts锛堝瓧浣撴枃浠惰嚜鎵樼鍦?public/fonts/锛孈font-face 鍦?fonts.css锛?*/
     --font-sans: 'Inter', system-ui, sans-serif;

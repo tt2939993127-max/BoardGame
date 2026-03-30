@@ -11,6 +11,8 @@ interface GameDetailsMobilePackageCardProps {
     state: GamePackageCardState;
     onInstall: () => void;
     onRetry?: () => void;
+    presentation?: 'install' | 'update-required';
+    requiredAppVersion?: string;
 }
 
 const getProgressTitleKey = (status: Extract<GamePackageCardStatus, 'queued' | 'manifest' | 'downloading' | 'verifying'>) => {
@@ -46,7 +48,22 @@ const getStatusMeta = (
     t: ReturnType<typeof useTranslation<'lobby'>>['t'],
     gameName: string,
     errorMessage?: string,
+    presentation: 'install' | 'update-required' = 'install',
+    requiredAppVersion?: string,
 ) => {
+    if (presentation === 'update-required') {
+        return {
+            title: t('packageManager.updateRequiredTitle'),
+            description: requiredAppVersion
+                ? t('packageManager.updateRequiredHintWithVersion', { game: gameName, version: requiredAppVersion })
+                : t('packageManager.updateRequiredHint', { game: gameName }),
+            actionLabel: null,
+            icon: AlertTriangle,
+            iconClassName: '',
+            iconToneClassName: 'border-amber-800/20 bg-amber-50/70 text-amber-900',
+        };
+    }
+
     switch (status) {
         case 'queued':
             return {
@@ -111,9 +128,11 @@ export const GameDetailsMobilePackageCard = ({
     state,
     onInstall,
     onRetry,
+    presentation = 'install',
+    requiredAppVersion,
 }: GameDetailsMobilePackageCardProps) => {
     const { t } = useTranslation('lobby');
-    const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage);
+    const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
     const StatusIcon = statusMeta.icon;
     const isInProgress = state.status !== 'not-installed' && state.status !== 'failed';
     const progressMode = state.progressMode ?? 'indeterminate';
@@ -145,14 +164,14 @@ export const GameDetailsMobilePackageCard = ({
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-parchment-light-text/80">
-                                {t('packageManager.eyebrow')}
+                                {presentation === 'update-required' ? t('packageManager.updateRequiredEyebrow') : t('packageManager.eyebrow')}
                             </p>
                             <p className="mt-1 text-sm font-bold leading-tight text-parchment-base-text">
                                 {statusMeta.title}
                             </p>
                         </div>
                         <span className="shrink-0 rounded-full border border-parchment-card-border/35 bg-parchment-base-bg/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-parchment-light-text">
-                            {sizeLabel}
+                            {presentation === 'update-required' ? t('packageManager.updateRequiredBadge') : sizeLabel}
                         </span>
                     </div>
 
