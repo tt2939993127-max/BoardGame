@@ -489,6 +489,12 @@ export interface DiceThroneCore {
      * TOKEN_GRANTED 时累加（仅 TAIJI），TURN_CHANGED 时清除
      */
     taijiGainedThisTurn?: Record<PlayerId, number>;
+    /**
+     * 当前回合常规 offensiveRoll 阶段的实际掷骰次数快照。
+     * 仅记录从 main1 进入的那次 offensiveRoll，用于武士道（Bushido）在回合末判定。
+     * 额外攻击产生的 offensiveRoll 不覆盖该值。
+     */
+    offensiveRollAttemptsThisTurn?: number;
 }
 
 // ============================================================================

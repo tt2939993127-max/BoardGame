@@ -10,9 +10,10 @@
 import { describe, it, expect } from 'vitest';
 import { DiceThroneDomain } from '../domain';
 import type { DiceThroneCore, DiceThroneCommand } from '../domain/types';
-import { TOKEN_IDS } from '../domain/ids';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { INITIAL_HEALTH, INITIAL_CP } from '../domain/types';
+import { getPendingAttackExpectedDamage } from '../domain/utils';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
 import { GameTestRunner } from '../../../engine/testing';
@@ -28,6 +29,8 @@ import { getAbilitySlotId } from '../ui/abilitySlotMapping';
 import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
 import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import {
+    BOUNTY_HUNTER_2,
+    REVOLVER_2,
     DEADEYE_2,
     DUEL_2,
     FAN_THE_HAMMER_2,
@@ -36,7 +39,16 @@ import {
     SHOWDOWN_3,
     TAKE_COVER_2,
 } from '../heroes/gunslinger/abilities';
-import { WAKIZASHI_3 } from '../heroes/samurai/abilities';
+import {
+    BUDO_2,
+    KATANA_SLICE_2,
+    KATANA_SLICE_3,
+    SAMURAI_SLOT_06_2,
+    SOLEMNITY_2,
+    STAND_TALL_2,
+    WAKIZASHI_2,
+    WAKIZASHI_3,
+} from '../heroes/samurai/abilities';
 
 // ============================================================================
 // 闂傚倷娴囧畷鍨叏閸偆顩插ù鐘差儏缁€澶愮叓閸ャ劍纾甸柛瀣尭椤繈顢橀悙鈺傜亞婵?setup 闂備浇顕у锕傦綖婢舵劕绠栭柛顐ｆ礀绾惧潡姊洪鈧粔鎾儗?
@@ -98,6 +110,40 @@ function createCrossHeroRunner(
         assertFn: assertState,
         silent,
     });
+}
+
+function createConfiguredCrossHeroRunner(
+    random: RandomFn,
+    characters: Record<PlayerId, string>,
+    configure: (state: MatchState<DiceThroneCore>) => void,
+    silent = true,
+) {
+    return new GameTestRunner({
+        domain: DiceThroneDomain,
+        systems: testSystems,
+        playerIds: ['0', '1'],
+        random,
+        setup: (playerIds: PlayerId[], r: RandomFn) => {
+            const state = createInitializedStateWithCharacters(playerIds, r, characters);
+            configure(state);
+            return state;
+        },
+        assertFn: assertState,
+        silent,
+    });
+}
+
+function replacePlayerAbility(
+    state: MatchState<DiceThroneCore>,
+    playerId: PlayerId,
+    abilityId: string,
+    abilityDef: DiceThroneCore['players'][PlayerId]['abilities'][number],
+    level: number,
+): void {
+    state.core.players[playerId].abilities = state.core.players[playerId].abilities.map(ability =>
+        ability.id === abilityId ? { ...abilityDef } : ability
+    );
+    state.core.players[playerId].abilityLevels[abilityId] = level;
 }
 
 // ============================================================================
@@ -294,6 +340,170 @@ describe('cross hero battles', () => {
 
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.sys.interaction.current).toBeFalsy();
+        });
+
+        it('bounty-hunter applies 1 bounty and 1 undefendable damage', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 6, 6, 4]),
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger bounty-hunter resolve',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'bounty-hunter' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 50, cp: 3 },
+                        '1': { hp: 48 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.BOUNTY]).toBe(1);
+        });
+
+        it('quick-draw grants 1 loaded at the start of gunslinger upkeep', () => {
+            const runner = createCrossHeroRunner(
+                fixedRandom,
+                { '0': 'monk', '1': 'gunslinger' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger quick-draw upkeep grant',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.activePlayerId).toBe('1');
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.LOADED]).toBe(1);
+        });
+
+        it('take-cover grants evasive before entering defensiveRoll', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 4, 4, 4]),
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger take-cover pre-defense',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'take-cover' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE]).toBe(1);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('take-cover');
+        });
+
+        it('showdown adds 2 damage on a winning duel before defensiveRoll', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 6, 6, 1]),
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger showdown win branch',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'showdown' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('showdown');
+        });
+
+        it('deadeye applies knockdown and 6 undefendable damage', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([6, 6, 6, 6, 1]),
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger deadeye resolve',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'deadeye' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 44 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].statusEffects[STATUS_IDS.KNOCKDOWN]).toBe(1);
+        });
+
+        it('fan-the-hammer grants 2 evasive before entering defensiveRoll', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 5]),
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger fan-the-hammer pre-defense',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fan-the-hammer' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE]).toBe(2);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('fan-the-hammer');
         });
 
         it('fill-em-with-lead can reroll loaded die and add damage', () => {
@@ -1326,6 +1536,261 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
             expect(result.finalState.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
         });
+
+        it('revolver ii runtime applies knockdown on the 4-bullet branch', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 1, 1, 4]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'revolver', REVOLVER_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger revolver ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-2-4' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].statusEffects[STATUS_IDS.KNOCKDOWN]).toBe(1);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(5);
+        });
+
+        it('bounty-hunter ii runtime applies bounty, 3 undefendable damage, and 1 cp reward', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 6, 6, 4]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'bounty-hunter', BOUNTY_HUNTER_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger bounty-hunter ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'bounty-hunter' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 50, cp: 3 },
+                        '1': { hp: 47 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.BOUNTY]).toBe(1);
+        });
+
+        it.each([
+            ['showdown ii runtime', SHOWDOWN_2, 2, 42],
+            ['showdown iii runtime', SHOWDOWN_3, 3, 41],
+        ] as const)('%s resolves upgraded duel bonus damage correctly', (_label, abilityDef, level, defenderHp) => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 6, 6, 1]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'showdown', abilityDef, level);
+                }
+            );
+
+            const result = runner.run({
+                name: `gunslinger showdown level ${level} runtime`,
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'showdown' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 46 },
+                        '1': { hp: defenderHp },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+        });
+
+        it('take-cover ii runtime grants evasive and deals 6 damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 4, 4, 4]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'take-cover', TAKE_COVER_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger take-cover ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'take-cover' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE]).toBe(1);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(6);
+        });
+
+        it('deadeye ii runtime applies knockdown and 8 undefendable damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([6, 6, 6, 6, 1]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'deadeye', DEADEYE_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger deadeye ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'deadeye' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 42 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].statusEffects[STATUS_IDS.KNOCKDOWN]).toBe(1);
+        });
+
+        it('fan-the-hammer ii runtime grants 2 evasive and deals 8 damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 5]),
+                { '0': 'gunslinger', '1': 'monk' },
+                state => {
+                    replacePlayerAbility(state, '0', 'fan-the-hammer', FAN_THE_HAMMER_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger fan-the-hammer ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fan-the-hammer' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.EVASIVE]).toBe(2);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(8);
+        });
+
+        it('duel ii treats ties as a winning defense branch', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 1, 1, 1, 3, 3]),
+                { '0': 'monk', '1': 'gunslinger' },
+                state => {
+                    replacePlayerAbility(state, '1', 'duel', DUEL_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'gunslinger duel ii tie is win',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                    cmd('SYS_INTERACTION_RESPOND', '1', { optionId: 'option-0' }),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 47 },
+                        '1': { hp: 42 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+        });
     });
 
     describe('samurai vs monk', () => {
@@ -1343,6 +1808,191 @@ describe('cross hero battles', () => {
             expect(samuraiAbilityIds).toContain('samurai-ultimate');
             expect(state.core.players['0'].abilityLevels['katana-slice']).toBe(1);
             expect(state.core.players['0'].abilityLevels['stand-tall']).toBe(1);
+        });
+
+        it('samurai starts with 1 honor when acting as the starting player', () => {
+            const state = createInitializedStateWithCharacters(
+                ['0', '1'],
+                fixedRandom,
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            expect(state.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+            expect(state.core.players['1'].tokens[TOKEN_IDS.HONOR] ?? 0).toBe(0);
+        });
+
+        it('bushido grants 1 honor at turn end when samurai used fewer than 3 roll attempts', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 1, 1, 1]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai bushido fewer than 3 roll attempts',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.activePlayerId).toBe('1');
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+        });
+
+        it('bushido does not grant extra honor after 3 roll attempts', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai bushido exactly 3 roll attempts',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+        });
+
+        it('solemnity applies 1 shame before entering defensiveRoll', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 4, 4, 4]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai solemnity pre-defense',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'solemnity' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('solemnity');
+        });
+
+        it('budo grants 1 honor before entering defensiveRoll', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 6]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai budo pre-defense',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'budo' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('budo');
+        });
+
+        it('samurai-slot-06 resolves honor, retribution, shame and unblockable damage', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([6, 6, 6, 6, 1]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai slot-06 resolve',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'samurai-slot-06' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 45 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
+        });
+
+        it('samurai ultimate resolves 13 undefendable damage after honor response is skipped', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([6, 6, 6, 6, 6]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai ultimate resolve',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'samurai-ultimate' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 37 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
         });
 
         it('wakizashi grants 1 back strike and 3 undefendable damage', () => {
@@ -1722,6 +2372,461 @@ describe('cross hero battles', () => {
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.players['0'].abilityLevels['wakizashi']).toBe(3);
             expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === 'wakizashi')).toMatchObject(WAKIZASHI_3);
+        });
+
+        it.each([
+            ['upgrade-katana-slice-2', 2, 'katana-slice', 2, KATANA_SLICE_2],
+            ['upgrade-katana-slice-3', 3, 'katana-slice', 3, KATANA_SLICE_3],
+            ['upgrade-wakizashi-2', 2, 'wakizashi', 2, WAKIZASHI_2],
+            ['upgrade-solemnity-2', 2, 'solemnity', 2, SOLEMNITY_2],
+            ['upgrade-budo-2', 2, 'budo', 2, BUDO_2],
+            ['upgrade-slot-06-2', 2, 'samurai-slot-06', 2, SAMURAI_SLOT_06_2],
+            ['upgrade-stand-tall-2', 3, 'stand-tall', 2, STAND_TALL_2],
+        ] as const)('%s replaces runtime definition with the upgraded ability', (cardId, cpCost, targetAbilityId, expectedLevel, expectedAbility) => {
+            const upgradeCard = SAMURAI_CARDS.find(card => card.id === cardId);
+            expect(upgradeCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: fixedRandom,
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'samurai', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = cpCost;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: `samurai ${cardId} replace`,
+                commands: [cmd('PLAY_CARD', '0', { cardId })],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].abilityLevels[targetAbilityId]).toBe(expectedLevel);
+            expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === targetAbilityId)).toMatchObject(expectedAbility);
+        });
+
+        it('masamune base runtime rolls 5 bonus dice and resolves all samurai faces', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 5, 1, 4, 6, 6, 2]),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai masamune base runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'masamune' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': { hp: 46 },
+                        '1': { hp: 41 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(2);
+        });
+
+        it('card-samurai-honor grants 2 honor', () => {
+            const honorCard = SAMURAI_CARDS.find(card => card.id === 'card-samurai-honor');
+            expect(honorCard).toBeDefined();
+
+            const runner = createConfiguredCrossHeroRunner(
+                fixedRandom,
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    state.core.players['0'].hand = [{ ...honorCard! }];
+                    state.core.players['0'].deck = [];
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai honor card',
+                commands: [cmd('PLAY_CARD', '0', { cardId: 'card-samurai-honor' })],
+                expect: {
+                    turnPhase: 'main1',
+                    players: {
+                        '0': { cp: 1, discardSize: 1 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+        });
+
+        it('card-no-retreat grants 1 retribution', () => {
+            const noRetreatCard = SAMURAI_CARDS.find(card => card.id === 'card-no-retreat');
+            expect(noRetreatCard).toBeDefined();
+
+            const runner = createConfiguredCrossHeroRunner(
+                fixedRandom,
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    state.core.players['0'].hand = [{ ...noRetreatCard! }];
+                    state.core.players['0'].deck = [];
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai no-retreat card',
+                commands: [cmd('PLAY_CARD', '0', { cardId: 'card-no-retreat' })],
+                expect: {
+                    turnPhase: 'main1',
+                    players: {
+                        '0': { cp: 1, discardSize: 1 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+        });
+
+        it('you-should-be-ashamed applies 2 shame in 1v1 without opening extra interaction', () => {
+            const ashamedCard = SAMURAI_CARDS.find(card => card.id === 'card-you-should-be-ashamed');
+            expect(ashamedCard).toBeDefined();
+
+            const runner = createConfiguredCrossHeroRunner(
+                fixedRandom,
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    state.core.players['0'].hand = [{ ...ashamedCard! }];
+                    state.core.players['0'].deck = [];
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai you-should-be-ashamed 1v1',
+                commands: [cmd('PLAY_CARD', '0', { cardId: 'card-you-should-be-ashamed' })],
+                expect: {
+                    turnPhase: 'main1',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { cp: 1, discardSize: 1 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
+        });
+
+        it('righteousness rising sun face grants 1 retribution', () => {
+            const righteousnessCard = SAMURAI_CARDS.find(card => card.id === 'card-righteousness');
+            expect(righteousnessCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 1, 1, 4, 4, 6]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'samurai', '1': 'monk' }
+                    );
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...righteousnessCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'samurai righteousness rising sun branch',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'katana-slice-3' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'card-righteousness' }),
+                ],
+                expect: {
+                    turnPhase: 'offensiveRoll',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50, cp: 0, discardSize: 1 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingAttack?.bonusDamage ?? 0).toBe(0);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME] ?? 0).toBe(0);
+        });
+
+        it.each([
+            ['katana-slice ii runtime', KATANA_SLICE_2, 2, [1, 1, 1, 1, 4], 'katana-slice-2-4', 43],
+            ['katana-slice iii runtime', KATANA_SLICE_3, 3, [1, 1, 1, 4, 4], 'katana-slice-3-3', 44],
+        ] as const)('%s applies the correct shame threshold', (_label, abilityDef, level, queue, abilityId, defenderHp) => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom(queue),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    replacePlayerAbility(state, '0', 'katana-slice', abilityDef, level);
+                }
+            );
+
+            const result = runner.run({
+                name: `samurai ${abilityId} runtime`,
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(defenderHp === 43 ? 7 : 6);
+        });
+
+        it.each([
+            ['wakizashi ii runtime', WAKIZASHI_2, 2, 0],
+            ['wakizashi iii runtime', WAKIZASHI_3, 3, 1],
+        ] as const)('%s resolves retribution and shame correctly', (_label, abilityDef, level, shame) => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 6, 6, 4]),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    replacePlayerAbility(state, '0', 'wakizashi', abilityDef, level);
+                }
+            );
+
+            const result = runner.run({
+                name: `samurai wakizashi level ${level} runtime`,
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'wakizashi' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 46 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME] ?? 0).toBe(shame);
+        });
+
+        it('solemnity ii runtime applies 2 shame and 8 damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 4, 4, 4]),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    replacePlayerAbility(state, '0', 'solemnity', SOLEMNITY_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai solemnity ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'solemnity' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(8);
+        });
+
+        it('budo ii runtime grants 1 honor and deals 8 damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 2, 3, 4, 6]),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    replacePlayerAbility(state, '0', 'budo', BUDO_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai budo ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'budo' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 50 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(8);
+        });
+
+        it('slot-06 ii runtime grants honor, retribution, 2 shame, and 7 undefendable damage', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([6, 6, 6, 6, 1]),
+                { '0': 'samurai', '1': 'monk' },
+                state => {
+                    state.core.players['0'].tokens[TOKEN_IDS.HONOR] = 0;
+                    replacePlayerAbility(state, '0', 'samurai-slot-06', SAMURAI_SLOT_06_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai slot-06 ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'samurai-slot-06' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50 },
+                        '1': { hp: 43 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(2);
+        });
+
+        it('stand-tall ii runtime uses 4 defense dice and suppresses self-shame', () => {
+            const runner = createConfiguredCrossHeroRunner(
+                createQueuedRandom([1, 1, 1, 1, 1, 1, 4, 6, 4]),
+                { '0': 'monk', '1': 'samurai' },
+                state => {
+                    replacePlayerAbility(state, '1', 'stand-tall', STAND_TALL_2, 2);
+                }
+            );
+
+            const result = runner.run({
+                name: 'samurai stand-tall ii runtime',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 49 },
+                        '1': { hp: 46 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME] ?? 0).toBe(0);
         });
     });
 

@@ -48,6 +48,7 @@ const createDefenseResolvedEvent = (
 
 export const resolveOffensivePreDefenseEffects = (
     state: DiceThroneCore,
+    random?: RandomFn,
     timestamp: number = 0
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
@@ -72,7 +73,7 @@ export const resolveOffensivePreDefenseEffects = (
     };
 
     const events: DiceThroneEvent[] = [];
-    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx));
+    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx, { random }));
     events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp));
     return events;
 };
@@ -181,7 +182,7 @@ export const resolveAttack = (
 
     const events: DiceThroneEvent[] = [];
     if (options?.includePreDefense) {
-        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp);
+        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, random, timestamp);
         events.push(...preDefenseEvents);
 
         const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
