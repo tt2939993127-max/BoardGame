@@ -414,6 +414,7 @@ function createTriggerInstance(
                 powerModifier: ctx.triggerMinion.powerModifier,
                 tempPowerModifier: ctx.triggerMinion.tempPowerModifier,
                 attachedActionDefIds: ctx.triggerMinion.attachedActions?.map(a => a.defId) ?? [],
+                metadata: ctx.triggerMinion.metadata ? { ...ctx.triggerMinion.metadata } : undefined,
             }
             : undefined,
     };
