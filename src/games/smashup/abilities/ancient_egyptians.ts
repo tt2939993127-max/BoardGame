@@ -831,6 +831,6 @@ function getOwnMinionsWithBuriedBase(
 ): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
     return getOwnMinions(state, playerId).filter(({ baseIndex }) => {
         const base = state.bases[baseIndex];
-        return (base.buriedCards ?? []).some(card => card.controllerId === playerId);
+        return (base.buriedCards?.length ?? 0) > 0;
     });
 }
