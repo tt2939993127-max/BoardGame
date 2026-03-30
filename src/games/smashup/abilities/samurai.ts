@@ -54,7 +54,6 @@ export function registerSamuraiAbilities(): void {
     registerTrigger('samurai_shogun', 'onMinionDiscardedFromBase', samuraiShogunTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDestroyed', samuraiFinalHaikuTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDiscardedFromBase', samuraiFinalHaikuTrigger, { perInstance: true });
-    registerTrigger('samurai_yokai_attack', 'onMinionDestroyed', samuraiYokaiAttackResolvedTrigger, { global: true });
     registerTrigger('samurai_way_of_the_warrior', 'onMinionDestroyed', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_way_of_the_warrior', 'onMinionDiscardedFromBase', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_honor_the_fallen', 'onMinionDestroyed', samuraiHonorTheFallenTrigger, {
@@ -299,34 +298,13 @@ function samuraiFinalHaikuTrigger(ctx: TriggerContext): SmashUpEvent[] {
     return events;
 }
 
-function samuraiYokaiAttackResolvedTrigger(ctx: TriggerContext): SmashUpEvent[] {
-    if (ctx.reason !== 'samurai_yokai_attack' || !ctx.destroyerId) return [];
-    return [
-        grantExtraMinion(ctx.destroyerId, 'samurai_yokai_attack', ctx.now),
-        grantExtraAction(ctx.destroyerId, 'samurai_yokai_attack', ctx.now),
-    ];
-}
-
 function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
-    const metadata = ctx.triggerMinion?.metadata ?? {};
-    const drawUntilTurnNumber = typeof metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber === 'number'
-        ? metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber
-        : undefined;
-    const drawPlayerId = typeof metadata.samuraiWayOfTheWarriorDrawPlayerId === 'string'
-        ? metadata.samuraiWayOfTheWarriorDrawPlayerId as PlayerId
-        : undefined;
-    if (!drawPlayerId || drawUntilTurnNumber !== (ctx.state.turnNumber ?? 0)) return [];
-
-    if (ctx.timing === 'onMinionDestroyed' && ctx.baseIndex !== undefined) {
-        const base = ctx.state.bases[ctx.baseIndex];
-        const destroyedAtBaseThisTurnCount = (ctx.state.turnDestroyedMinions ?? [])
-            .filter(record => record.baseIndex === ctx.baseIndex)
-            .length;
-        if (base?.defId === 'base_temple_of_goju_pod') return [];
-        if (base?.defId === 'base_tar_pits' && destroyedAtBaseThisTurnCount === 0) return [];
-    }
-
-    return buildStandardDrawEvents(ctx.state, drawPlayerId, 1, ctx.random, ctx.now);
+    const sourcePlayerId = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawPlayerId;
+    const untilTurnNumber = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawUntilTurnNumber;
+    if (!sourcePlayerId || untilTurnNumber == null) return [];
+    const currentTurnNumber = ctx.state.turnNumber ?? 0;
+    if (currentTurnNumber !== untilTurnNumber) return [];
+    return buildStandardDrawEvents(ctx.state, sourcePlayerId, 2, ctx.random, ctx.now);
 }
 
 function samuraiSakuraGardenTrigger(ctx: TriggerContext): SmashUpEvent[] {

@@ -221,7 +221,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.MINION_PLAYED: {
-            const { playerId, cardUid, defId, baseIndex, power, fromDiscard, fromDeck, fromBuried, discardPlaySourceId, consumesNormalLimit } = event.payload;
+            const { playerId, cardUid, defId, baseIndex, power, fromDiscard, fromDeck, fromBuried, discardPlaySourceId, consumesNormalLimit, allowImplicitSource } = event.payload;
             const resolvedBaseIndex = resolveLiveBaseIndex(state, baseIndex, event.payload.baseDefId) ?? baseIndex;
             const player = state.players[playerId];
             const cardInHand = player.hand.some(card => card.uid === cardUid);
@@ -230,14 +230,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const buriedHasCard = fromBuried
                 ? (state.bases[resolvedBaseIndex]?.buriedCards ?? []).some(c => c.uid === cardUid)
                 : false;
-            if (fromBuried && !buriedHasCard) return state;
-            if (!fromBuried && ((fromDiscard && !cardInDiscard) || (fromDeck && !cardInDeck) || (!fromDiscard && !fromDeck && !cardInHand))) {
+            if (fromBuried && !buriedHasCard && !allowImplicitSource) return state;
+            if (!fromBuried && !allowImplicitSource && ((fromDiscard && !cardInDiscard) || (fromDeck && !cardInDeck) || (!fromDiscard && !fromDeck && !cardInHand))) {
                 return state;
             }
             // 根据来源从手牌、弃牌堆或牌库移除卡牌
-            const newHand = (fromDiscard || fromDeck || fromBuried) ? player.hand : player.hand.filter(c => c.uid !== cardUid);
-            const newDiscard = fromDiscard ? player.discard.filter(c => c.uid !== cardUid) : player.discard;
-            const newDeck = fromDeck ? player.deck.filter(c => c.uid !== cardUid) : player.deck;
+            // allowImplicitSource: true 时从所有位置尝试移除（用于动态牌源）
+            const removeCard = (cards: CardInstance[]) => cards.filter(c => c.uid !== cardUid);
+            const newHand = allowImplicitSource ? removeCard(player.hand) : (fromDiscard || fromDeck || fromBuried) ? player.hand : removeCard(player.hand);
+            const newDiscard = allowImplicitSource ? removeCard(player.discard) : fromDiscard ? removeCard(player.discard) : player.discard;
+            const newDeck = allowImplicitSource ? removeCard(player.deck) : fromDeck ? removeCard(player.deck) : player.deck;
             const minion: MinionOnBase = {
                 uid: cardUid,
                 defId,

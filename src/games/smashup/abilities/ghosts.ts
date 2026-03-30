@@ -463,7 +463,7 @@ export function registerGhostInteractionHandlers(): void {
         if (state.core.bases.length === 1) {
             const playedEvt: MinionPlayedEvent = {
                 type: SU_EVENTS.MINION_PLAYED,
-                payload: { playerId, cardUid, defId, baseIndex: 0, baseDefId: state.core.bases[0].defId, power, fromDiscard: true },
+                payload: { playerId, cardUid, defId, baseIndex: 0, baseDefId: state.core.bases[0].defId, power, fromDiscard: true, allowImplicitSource: true },
                 timestamp,
             };
             playedEvt.payload.consumesNormalLimit = false;
@@ -503,6 +503,7 @@ export function registerGhostInteractionHandlers(): void {
                 power: ctx.power,
                 fromDiscard: true,
                 consumesNormalLimit: false,
+                allowImplicitSource: true,
             },
             timestamp,
         };
