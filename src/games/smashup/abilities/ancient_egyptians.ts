@@ -180,21 +180,17 @@ function ancientEgyptiansTombTrapOnUncover(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
     const candidates = base.minions
+        .filter((minion) => getMinionPower(ctx.state, minion, ctx.baseIndex) <= 4)
         .map((minion) => ({
             uid: minion.uid,
             defId: minion.defId,
             baseIndex: ctx.baseIndex,
             label: `${getCardDef(minion.defId)?.name ?? minion.defId}`,
-        }))
-        .filter(({ uid }) => {
-            const minion = base.minions.find(entry => entry.uid === uid);
-            return !!minion && getMinionPower(ctx.state, minion, ctx.baseIndex) <= 4;
-        });
+        }));
     const options = [
         ...buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
         createSkipOption(),
     ];
-    if (options.length <= 1) return { events: [] };
     const interaction = createSimpleChoice(
         `ancient_egyptians_tomb_trap_${ctx.now}`,
         ctx.playerId,
@@ -630,6 +626,7 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
     }
 
     const choices = getBuriedCardChoices(state.core, playerId, baseIndex);
+    if (choices.length === 0) return { state, events: [] };
     const interaction = createSimpleChoice(
         `ancient_egyptians_seal_the_tomb_uncover_${now}`,
         playerId,
@@ -832,5 +829,8 @@ function getOwnMinionsWithBuriedBase(
     state: SmashUpCore,
     playerId: PlayerId,
 ): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
-    return getOwnMinions(state, playerId).filter(({ baseIndex }) => (state.bases[baseIndex].buriedCards?.length ?? 0) > 0);
+    return getOwnMinions(state, playerId).filter(({ baseIndex }) => {
+        const base = state.bases[baseIndex];
+        return (base.buriedCards ?? []).some(card => card.controllerId === playerId);
+    });
 }
