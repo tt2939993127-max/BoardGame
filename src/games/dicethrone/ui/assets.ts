@@ -89,12 +89,14 @@ const getSpriteAssetPathCandidates = (assetPath?: string | null) => {
 
 const getLogicalSpriteUrlCandidates = (assetPath: string, locale?: string) => {
     const localized = getLocalizedImageUrls(assetPath, locale);
-    const unlocalized = getLocalizedImageUrls(assetPath);
     const urls = dedupeStringList([
         localized.primary.webp,
         localized.fallback.webp,
-        unlocalized.primary.webp,
     ]);
+    // DiceThrone 骰图强制不走未语言化的本地 /assets 回退：
+    // 本地开发时该路径会被 dev server 以 SPA index.html 的假 200 响应吞掉，
+    // Image 探测链路会误把“HTML 不是图片”的情况当成图片候选，导致长期 loading。
+    // 因此这里仅保留语言化 primary/fallback 两条真实图片链路。
     // DiceThrone 骰图强制不走本地 /assets 回退，统一转成 R2 绝对域名
     const base = getAssetsBaseUrl().replace(/\/+$/, '');
     const toR2AbsoluteUrl = (url: string) => {
