@@ -17,7 +17,7 @@ import type {
     MinionPlayedEvent, BreakpointModifiedEvent,
 } from '../domain/types';
 import { registerPowerModifier } from '../domain/ongoingModifiers';
-import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
+import { isMinionProtectedNonConsumable, registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -680,7 +680,18 @@ function killerPlantEntangledChecker(ctx: ProtectionCheckContext): boolean {
         const ownerHasMinion = ctx.state.bases[ctx.targetBaseIndex].minions.some(
             m => m.controller === entangled.ownerId
         );
-        if (ownerHasMinion) return true;
+        if (!ownerHasMinion) continue;
+        // 一目了然：力量≤2的己方随从不受其他玩家卡牌影响。
+        // 若藤蔓缠绕来自其他玩家，则该随从不应再被其“不可移动”效果约束。
+        const protectedFromEntangled = isMinionProtectedNonConsumable(
+            ctx.state,
+            ctx.targetMinion,
+            ctx.targetBaseIndex,
+            entangled.ownerId,
+            'affect',
+        );
+        if (protectedFromEntangled) continue;
+        return true;
     }
     return false;
 }
