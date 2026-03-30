@@ -105,6 +105,55 @@ function hasPendingScoreBasesSpecialActivation(state: MatchState<SmashUpCore>): 
     return false;
 }
 
+function getPlayersWithPlayableAfterScoringResponses(state: MatchState<SmashUpCore>, now: number): PlayerId[] {
+    const eligibleBaseIndices = getScoringEligibleBaseIndices(state.core);
+    const playablePlayers: PlayerId[] = [];
+
+    for (const playerId of Object.keys(state.core.players) as PlayerId[]) {
+        const player = state.core.players[playerId];
+        if (!player) continue;
+
+        const probeState: MatchState<SmashUpCore> = {
+            ...state,
+            sys: {
+                ...state.sys,
+                responseWindow: {
+                    ...state.sys.responseWindow,
+                    current: {
+                        id: `afterScoring_probe_${playerId}_${now}`,
+                        windowType: 'afterScoring',
+                        sourceId: 'scoreBases',
+                        responderQueue: [playerId],
+                        currentResponderIndex: 0,
+                        passedPlayers: [],
+                    },
+                },
+            },
+        };
+
+        const hasPlayableResponse = player.hand.some(card => {
+            const baseCandidates = [undefined, ...eligibleBaseIndices];
+            return baseCandidates.some(targetBaseIndex => {
+                const result = validate(probeState, {
+                    type: SU_COMMANDS.PLAY_ACTION,
+                    playerId,
+                    payload: {
+                        cardUid: card.uid,
+                        ...(targetBaseIndex !== undefined ? { targetBaseIndex } : {}),
+                    },
+                });
+                return result.valid;
+            });
+        });
+
+        if (hasPlayableResponse) {
+            playablePlayers.push(playerId);
+        }
+    }
+
+    return playablePlayers;
+}
+
 function buildBaseRankings(
     baseDef: { vpAwards: number[] },
     playerPowers: Map<PlayerId, number>,
@@ -416,17 +465,9 @@ export function scoreOneBase(
     // 鍘熷洜锛氬熀鍦拌兘鍔涘垱寤轰氦浜掞紙濡傛捣鐩楁咕绉诲姩闅忎粠锛夊拰鍝嶅簲绐楀彛锛堣鐜╁鎵撳嚭 afterScoring 鍗＄墝锛?
     // 鏄袱涓嫭绔嬬殑鏈哄埗锛屽簲璇ュ悓鏃跺瓨鍦?
     // 妫€鏌ユ槸鍚︽湁鐜╁鎵嬬墝涓湁 afterScoring 鍗＄墝
-    const playersWithAfterScoringCards: PlayerId[] = [];
-    for (const [playerId, player] of Object.entries(afterScoringCore.players)) {
-        const hasAfterScoringCard = player.hand.some(c => {
-            if (c.type !== 'action') return false;
-            const def = getCardDef(c.defId) as ActionCardDef | undefined;
-            return def?.subtype === 'special' && def.specialTiming === 'afterScoring';
-        });
-        if (hasAfterScoringCard) {
-            playersWithAfterScoringCards.push(playerId);
-        }
-    }
+    const playersWithAfterScoringCards = ms
+        ? getPlayersWithPlayableAfterScoringResponses({ ...ms, core: afterScoringCore }, now)
+        : [];
 
     // 濡傛灉鏈夌帺瀹舵湁 afterScoring 鍗＄墝锛屾墦寮€ afterScoring 鍝嶅簲绐楀彛
     if (playersWithAfterScoringCards.length > 0) {
