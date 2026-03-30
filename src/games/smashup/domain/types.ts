@@ -259,6 +259,7 @@ export interface BaseCardDef {
     vpAwards: [number, number, number];
     /** 关联派系 */
     faction?: FactionId;
+    podFactions?: FactionId[];
     previewRef?: CardPreviewRef;
     /** 基地限制规则（如禁止打出随从/行动） */
     restrictions?: BaseRestriction[];
@@ -1253,6 +1254,7 @@ export type SmashUpEvent =
     | TitanMetadataUpdatedEvent
     | CardRemovedFromDeckEvent
     | CardRemovedFromGameEvent
+    | CardBoxedEvent
     | StakeoutPodBlockAddedEvent
     | CardToDeckTopEvent
     | CardToDeckBottomEvent
@@ -1463,6 +1465,16 @@ export interface CardRemovedFromGameEvent extends GameEvent<typeof SU_EVENTS.CAR
 }
 
 /** Stakeout POD：添加临时基地打随从限制 */
+export interface CardBoxedEvent extends GameEvent<typeof SU_EVENTS.CARD_BOXED> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        from: 'hand' | 'deck' | 'discard';
+        reason: string;
+    };
+}
+
 export interface StakeoutPodBlockAddedEvent extends GameEvent<typeof SU_EVENTS.STAKEOUT_POD_BLOCK_ADDED> {
     payload: {
         baseIndex: number;

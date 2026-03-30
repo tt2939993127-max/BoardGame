@@ -33,8 +33,24 @@ export const SMASHUP_ATLAS_DEFINITIONS: readonly SmashUpAtlasDefinition[] = [
 
 const atlasById = new Map(SMASHUP_ATLAS_DEFINITIONS.map((atlas) => [atlas.id, atlas] as const));
 
+const LOCAL_POD_ATLAS_IMAGE_OVERRIDES: Record<string, string> = {
+    tts_atlas_1: '/assets/i18n/en/smashup/cards/tts_atlas_1',
+    tts_atlas_0a564692f2: '/assets/i18n/en/smashup/pod-assets/tts_atlas_0a564692f2',
+    tts_atlas_0b888d02fd: '/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd',
+    tts_atlas_9aed5872d2: '/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2',
+};
+
+export function getSmashUpPodAtlasImagePath(atlasId: string): string {
+    return LOCAL_POD_ATLAS_IMAGE_OVERRIDES[atlasId] ?? `smashup/pod-assets/${atlasId}`;
+}
+
 export function getSmashUpAtlasImageById(atlasId: string): string | undefined {
-    return atlasById.get(atlasId)?.image;
+    const builtIn = atlasById.get(atlasId)?.image;
+    if (builtIn) return builtIn;
+    if (atlasId.startsWith('tts_atlas_')) {
+        return getSmashUpPodAtlasImagePath(atlasId);
+    }
+    return undefined;
 }
 
 export function getSmashUpAtlasImagesByKind(kind: SmashUpAtlasKind): string[] {
