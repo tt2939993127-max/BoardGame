@@ -9,12 +9,12 @@ import { config } from 'dotenv';
 import { existsSync } from 'fs';
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
-// 加载环境变量：优先 .env，回退到 .env.example
+// 加载环境变量：先读 .env，再用 .env.example 补齐缺失键
 if (existsSync('.env')) {
-  config({ path: '.env' });
-} else {
-  console.log('⚠️  未找到 .env 文件，使用 .env.example 中的配置');
-  config({ path: '.env.example' });
+  config({ path: '.env', override: false });
+}
+if (existsSync('.env.example')) {
+  config({ path: '.env.example', override: false });
 }
 
 const R2_ENDPOINT = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;

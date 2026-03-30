@@ -14,10 +14,37 @@ interface TouchPoint {
   clientY: number;
 }
 
+interface ElementSize {
+  width: number;
+  height: number;
+}
+
 const getTouchDistance = (touchA: TouchPoint, touchB: TouchPoint) => {
   const dx = touchA.clientX - touchB.clientX;
   const dy = touchA.clientY - touchB.clientY;
   return Math.sqrt(dx * dx + dy * dy);
+};
+
+const measureElementSize = (element: HTMLElement | null): ElementSize => {
+  if (!element) {
+    return { width: 0, height: 0 };
+  }
+
+  const width = element.offsetWidth || element.clientWidth || element.getBoundingClientRect().width || 0;
+  const height = element.offsetHeight || element.clientHeight || element.getBoundingClientRect().height || 0;
+
+  return { width, height };
+};
+
+const updateSizeState = (
+  setSize: React.Dispatch<React.SetStateAction<ElementSize>>,
+  nextSize: ElementSize,
+) => {
+  setSize((currentSize) => (
+    currentSize.width === nextSize.width && currentSize.height === nextSize.height
+      ? currentSize
+      : nextSize
+  ));
 };
 
 export interface MapContainerProps {
@@ -67,6 +94,14 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isScaleBadgeVisible, setIsScaleBadgeVisible] = useState(false);
+
+  const syncContainerSize = useCallback(() => {
+    updateSizeState(setContainerSize, measureElementSize(containerRef.current));
+  }, []);
+
+  const syncContentSize = useCallback(() => {
+    updateSizeState(setContentSize, measureElementSize(contentRef.current));
+  }, []);
 
   const baseScale = containerSize.width > 0
     && containerSize.height > 0
@@ -140,36 +175,74 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const clampedPosition = clampPosition(position.x, position.y, scale);
 
   useEffect(() => {
-    if (!containerRef.current) return undefined;
+    const container = containerRef.current;
+    if (!container) return undefined;
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setContainerSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
+    syncContainerSize();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver === 'function') {
+      observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        updateSizeState(setContainerSize, {
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
       });
-    });
+      observer.observe(container);
+    }
 
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
+    window.addEventListener('resize', syncContainerSize);
+    window.addEventListener('orientationchange', syncContainerSize);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', syncContainerSize);
+      window.removeEventListener('orientationchange', syncContainerSize);
+    };
+  }, [syncContainerSize]);
 
   useEffect(() => {
-    if (!contentRef.current) return undefined;
+    const content = contentRef.current;
+    if (!content) return undefined;
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setContentSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
+    syncContentSize();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver === 'function') {
+      observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        updateSizeState(setContentSize, {
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
       });
+      observer.observe(content);
+    }
+
+    const images = Array.from(content.querySelectorAll('img'));
+    images.forEach((image) => {
+      image.addEventListener('load', syncContentSize);
+      image.addEventListener('error', syncContentSize);
     });
 
-    observer.observe(contentRef.current);
-    return () => observer.disconnect();
-  }, []);
+    const frameId = window.requestAnimationFrame(syncContentSize);
+    window.addEventListener('resize', syncContentSize);
+    window.addEventListener('orientationchange', syncContentSize);
+
+    return () => {
+      observer?.disconnect();
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', syncContentSize);
+      window.removeEventListener('orientationchange', syncContentSize);
+      images.forEach((image) => {
+        image.removeEventListener('load', syncContentSize);
+        image.removeEventListener('error', syncContentSize);
+      });
+    };
+  }, [syncContentSize]);
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     if (event.button !== 0 || interactionDisabled) return;

@@ -1,5 +1,6 @@
-import type { CardDef, BaseCardDef, MinionCardDef, FusionCardDef } from '../domain/types';
+import type { CardDef, BaseCardDef, MinionCardDef, ActionCardDef, FusionCardDef, TitanCardDef } from '../domain/types';
 import { SMASHUP_ATLAS_IDS, SMASHUP_FACTION_IDS } from '../domain/ids';
+import { TITAN_CARD_DEFS } from './titans';
 
 import { PIRATE_CARDS } from './factions/pirates';
 import { PIRATE_POD_CARDS } from './factions/pirates_pod';
@@ -42,6 +43,10 @@ import { VAMPIRE_POD_CARDS } from './factions/vampires_pod';
 import { GIANT_ANT_CARDS } from './factions/giant-ants';
 import { GIANT_ANT_CARDS as GIANT_ANT_POD_CARDS } from './factions/giant-ants_pod';
 import { NINJA_POD_CARDS } from './factions/ninjas_pod';
+import { ANCIENT_EGYPTIANS_CARDS } from './factions/ancient_egyptians';
+import { COWBOYS_CARDS } from './factions/cowboys';
+import { SAMURAI_CARDS } from './factions/samurai';
+import { VIKINGS_CARDS } from './factions/vikings';
 
 // ============================================================================
 // 注册表
@@ -74,6 +79,7 @@ function registerBases(bases: BaseCardDef[]): void {
 // 初始化注册
 const POD_SUFFIX = '_pod';
 const BASES_PER_FACTION = 2;
+const KNOWN_FACTION_IDS = new Set(Object.values(SMASHUP_FACTION_IDS));
 
 function isPodVariantId(id: string): boolean {
     return id.endsWith(POD_SUFFIX);
@@ -93,10 +99,12 @@ function cloneBaseRestrictions(restrictions: BaseCardDef['restrictions']): BaseC
 
 function cloneBaseAsPodSkeleton(base: BaseCardDef): BaseCardDef | undefined {
     if (!base.faction || isPodVariantId(base.id)) return undefined;
+    const podFactionId = toPodId(base.faction);
+    if (!KNOWN_FACTION_IDS.has(podFactionId)) return undefined;
     return {
         ...base,
         id: toPodId(base.id),
-        faction: toPodId(base.faction) as BaseCardDef['faction'],
+        faction: podFactionId as BaseCardDef['faction'],
         restrictions: cloneBaseRestrictions(base.restrictions),
     };
 }
@@ -152,8 +160,13 @@ registerCards(VAMPIRE_CARDS);
 registerCards(VAMPIRE_POD_CARDS);
 registerCards(GIANT_ANT_CARDS);
 registerCards(GIANT_ANT_POD_CARDS);
+registerCards(ANCIENT_EGYPTIANS_CARDS);
+registerCards(COWBOYS_CARDS);
+registerCards(SAMURAI_CARDS);
+registerCards(VIKINGS_CARDS);
 // POD 版本阵营（最新英文 POD 版本）
 registerCards(NINJA_POD_CARDS);
+registerCards(TITAN_CARD_DEFS);
 
 // ============================================================================
 // 基础基地卡（基础版）
@@ -477,6 +490,85 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
     },
 ];
 registerBases(BASE_CARDS_PRETTY_PRETTY);
+
+// ============================================================================
+// 扩展基地 (Oops, You Did It Again)
+// ============================================================================
+export const BASE_CARDS_OOPS_YOU_DID_IT_AGAIN: BaseCardDef[] = [
+    {
+        id: 'base_saloon',
+        name: '酒馆',
+        nameEn: 'Saloon',
+        breakpoint: 20,
+        vpAwards: [3, 2, 1],
+        faction: SMASHUP_FACTION_IDS.COWBOYS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 0 },
+    },
+    {
+        id: 'base_so_so_corral',
+        name: '小镇',
+        nameEn: 'So-So Corral',
+        breakpoint: 19,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.COWBOYS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 1 },
+    },
+    {
+        id: 'base_pyramids',
+        name: '金字塔',
+        nameEn: 'Pyramids',
+        breakpoint: 21,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 2 },
+    },
+    {
+        id: 'base_star_portal',
+        name: '星界之门',
+        nameEn: 'Star Portal',
+        breakpoint: 17,
+        vpAwards: [3, 1, 1],
+        faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 3 },
+    },
+    {
+        id: 'base_shoguns_palace',
+        name: '天守阁',
+        nameEn: "Shogun's Palace",
+        breakpoint: 23,
+        vpAwards: [4, 3, 1],
+        faction: SMASHUP_FACTION_IDS.SAMURAI,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 4 },
+    },
+    {
+        id: 'base_sakura_garden',
+        name: '樱花花园',
+        nameEn: 'Sakura Garden',
+        breakpoint: 18,
+        vpAwards: [3, 2, 1],
+        faction: SMASHUP_FACTION_IDS.SAMURAI,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 5 },
+    },
+    {
+        id: 'base_drakkar',
+        name: '德拉卡尔号',
+        nameEn: 'Drakkar',
+        breakpoint: 21,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.VIKINGS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 6 },
+    },
+    {
+        id: 'base_longhouse',
+        name: '长屋',
+        nameEn: 'Longhouse',
+        breakpoint: 25,
+        vpAwards: [5, 3, 2],
+        faction: SMASHUP_FACTION_IDS.VIKINGS,
+        previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE5, index: 7 },
+    },
+];
+registerBases(BASE_CARDS_OOPS_YOU_DID_IT_AGAIN);
 
 // ============================================================================
 // 扩展基地 (Set 4 - Mixed including Cthulhu)
@@ -1132,6 +1224,12 @@ export function getFusionDef(defId: string): FusionCardDef | undefined {
     return def?.type === 'fusion' ? def : undefined;
 }
 
+/** 查找泰坦卡定义 */
+export function getTitanDef(defId: string): TitanCardDef | undefined {
+    const def = _cardRegistry.get(defId);
+    return def?.type === 'titan' ? def : undefined;
+}
+
 /** 获取“作为随从”打出时的印制力量（随从或融合卡） */
 export function getMinionLikePower(defId: string): number | undefined {
     const def = _cardRegistry.get(defId);
@@ -1196,7 +1294,7 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
  */
 export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
-    const textField = ('type' in def && def.type === 'action') ? 'effectText' : 'abilityText';
+    const textField = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
     const localeKeys = [`cards.${def.id}.${textField}`];
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
     if (fallbackLocaleKeyId) {
@@ -1206,7 +1304,7 @@ export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key:
     const localeValue = resolveLocaleValue(t, localeKeys);
     if (localeValue) return localeValue;
     // 随从用 abilityText，行动卡用 effectText，基地用 abilityText
-    const field = ('type' in def && def.type === 'action') ? 'effectText' : 'abilityText';
+    const field = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
 
     // 1. 优先尝试完整 ID (如果是 POD 版，这将匹配 cards.xxx_pod.xxxText)
     const podKey = `cards.${def.id}.${field}`;
@@ -1234,8 +1332,34 @@ export function registerFaction(cards: CardDef[], bases?: BaseCardDef[]): void {
 }
 
 /** 获取派系的所有卡牌定义 */
-export function getFactionCards(factionId: FactionId): CardDef[] {
-    return Array.from(_cardRegistry.values()).filter(c => c.faction === factionId);
+export function getFactionCards(factionId: FactionId): Array<MinionCardDef | ActionCardDef | FusionCardDef> {
+    return Array.from(_cardRegistry.values()).filter(
+        (card): card is MinionCardDef | ActionCardDef | FusionCardDef =>
+            card.faction === factionId && card.type !== 'titan',
+    );
+}
+
+/** 获取派系对应的官方泰坦列表（为未来多泰坦派系保留数组形态） */
+export function getFactionTitans(factionId: FactionId): TitanCardDef[] {
+    const exactTitans = Array.from(_cardRegistry.values()).filter(
+        (card): card is TitanCardDef => card.faction === factionId && card.type === 'titan',
+    );
+    if (exactTitans.length > 0) return exactTitans;
+
+    const fallbackFactionId = typeof factionId === 'string' && factionId.endsWith(POD_SUFFIX)
+        ? factionId.slice(0, -POD_SUFFIX.length) as FactionId
+        : null;
+
+    if (!fallbackFactionId) return [];
+
+    return Array.from(_cardRegistry.values()).filter(
+        (card): card is TitanCardDef => card.faction === fallbackFactionId && card.type === 'titan',
+    );
+}
+
+/** 获取派系对应的官方泰坦（若有） */
+export function getFactionTitan(factionId: FactionId): TitanCardDef | undefined {
+    return getFactionTitans(factionId)[0];
 }
 
 /** 获取所有卡牌定义 */

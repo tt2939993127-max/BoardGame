@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
@@ -12,12 +12,20 @@ import {
     getDiceSpritePosition,
     getDiceSpriteUrls,
 } from '../ui/assets';
-import { getStatusEffectIconNode, type StatusIconAtlasConfig } from '../ui/statusEffects';
-import { getAssetsBaseUrl } from '../../../core';
+import { getStatusEffectIconNode, loadStatusAtlases, type StatusIconAtlasConfig } from '../ui/statusEffects';
+import { getAssetsBaseUrl, setAssetsBaseUrl } from '../../../core';
 
 registerDiceDefinition(moonElfDiceDefinition);
 
 describe('StatusEffectsIcons', () => {
+    beforeEach(() => {
+        setAssetsBaseUrl('/assets');
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
     it('渲染状态图集时应指向压缩后的 atlas 资源', () => {
         const atlas: StatusIconAtlasConfig = {
             imageW: 1314,
@@ -49,16 +57,69 @@ describe('StatusEffectsIcons', () => {
         expect(backgroundImage).toContain('dicethrone/images/monk/compressed/dice.webp');
     });
 
-    it('R2 路径兼容：骰图强制走远程 R2，不返回本地 /assets 路径', () => {
+    it('本地资源模式下，骰图候选 URL 应保留 /assets 前缀', () => {
+        const urls = getDiceSpriteUrls('moon_elf-dice', 'moon_elf', 'zh-CN');
+        expect(urls.some(url => url.includes('/dice.webp'))).toBe(true);
+        expect(urls.some(url => url.startsWith('/assets/i18n/zh-CN/dicethrone/images/moon_elf/compressed/dice.webp'))).toBe(true);
+    });
+
+    it('远程资源模式下，骰图候选 URL 应走官方资源域名', () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
         const urls = getDiceSpriteUrls('moon_elf-dice', 'moon_elf', 'zh-CN');
         const base = getAssetsBaseUrl();
         expect(urls.some(url => url.includes('/dice.webp'))).toBe(true);
-        expect(urls.every(url => !url.startsWith('/assets/'))).toBe(true);
-        if (base.startsWith('http://') || base.startsWith('https://')) {
-            expect(urls.every(url => url.startsWith(`${base}/`))).toBe(true);
-        } else {
-            expect(urls.every(url => url.startsWith('/'))).toBe(true);
-        }
+        expect(urls.every(url => url.startsWith(`${base}/`))).toBe(true);
+    });
+
+    it('状态图集 JSON 在远程资源模式下应优先走官方资源域名', async () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
+            ok: true,
+            json: async () => ({
+                meta: { image: 'status-icons-atlas.png', size: { w: 1314, h: 400 } },
+                frames: {
+                    purify: { frame: { x: 0, y: 0, w: 400, h: 400 } },
+                },
+            }),
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const atlases = await loadStatusAtlases('zh-CN');
+
+        expect(Object.keys(atlases).length).toBeGreaterThan(0);
+        expect(fetchMock).toHaveBeenCalled();
+        expect(fetchMock.mock.calls.every(([input]) => String(input).startsWith('https://assets.easyboardgame.top/official/'))).toBe(true);
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/i18n/zh-CN/'))).toBe(true);
+    });
+
+    it('远端状态图集 JSON 缺失时应回退到本地 /assets', async () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.startsWith('https://assets.easyboardgame.top/official/')) {
+                return {
+                    ok: false,
+                    json: async () => null,
+                };
+            }
+            return {
+                ok: true,
+                json: async () => ({
+                    meta: { image: 'status-icons-atlas.png', size: { w: 1314, h: 400 } },
+                    frames: {
+                        purify: { frame: { x: 0, y: 0, w: 400, h: 400 } },
+                    },
+                }),
+            };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const atlases = await loadStatusAtlases('zh-CN');
+
+        expect(Object.keys(atlases).length).toBeGreaterThan(0);
+        expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/assets/'))).toBe(true);
     });
 
     it('骰图切片坐标应匹配旧版 3x3 atlas 布局', () => {

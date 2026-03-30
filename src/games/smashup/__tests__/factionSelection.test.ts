@@ -16,7 +16,7 @@ import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { initAllAbilities } from '../abilities';
 import smashUpEnglishMap from '../data/englishAtlasMap.json';
-import { getAllBaseDefs, getBaseDefIdsForFactions } from '../data/cards';
+import { getAllBaseDefs, getBaseDefIdsForFactions, getFactionTitans } from '../data/cards';
 import { getSmashUpAtlasLookupKey } from '../ui/SmashUpCardRenderer';
 
 const PLAYER_IDS = ['0', '1'];
@@ -133,6 +133,66 @@ describe('派系选择系统', () => {
             // 第5步失败（阶段已不是 factionSelect）
             expect(result.steps[4]?.success).toBe(false);
         });
+
+        it('当前玩家可以取消自己已选的派系，并保留当前选择权', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消自己已选派系',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                ],
+            });
+
+            expect(result.steps[0]?.success).toBe(true);
+            expect(result.steps[1]?.success).toBe(true);
+            expect(result.steps[2]?.success).toBe(true);
+            expect(result.finalState.core.factionSelection?.playerSelections['1']).toEqual([]);
+            expect(result.finalState.core.factionSelection?.takenFactions).toEqual([SMASHUP_FACTION_IDS.ALIENS]);
+            expect(result.finalState.core.turnOrder[result.finalState.core.currentPlayerIndex]).toBe('1');
+        });
+
+        it('不能取消其他玩家已选的派系', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消他人派系',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                ],
+            });
+
+            expect(result.steps[0]?.success).toBe(true);
+            expect(result.steps[1]?.success).toBe(false);
+            expect(result.steps[1]?.error).toContain('尚未选择');
+        });
+
+        it('取消后仍可重新完成整轮选秀', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: '取消后重选完成选秀',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.DESELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.ALIENS,
+                SMASHUP_FACTION_IDS.DINOSAURS,
+            ]);
+            expect(result.finalState.core.players['1'].factions).toEqual([
+                SMASHUP_FACTION_IDS.NINJAS,
+                SMASHUP_FACTION_IDS.PIRATES,
+            ]);
+            expect(result.finalState.sys.phase).toBe('playCards');
+        });
     });
 
     // Property 2: 牌库构建正确性
@@ -164,6 +224,25 @@ describe('派系选择系统', () => {
             expect(core.players['0'].factions).toEqual([SMASHUP_FACTION_IDS.ALIENS, SMASHUP_FACTION_IDS.DINOSAURS]);
             // P1 选了 pirates + ninjas
             expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS]);
+        });
+
+        it('新接入派系也能正常构建 40 张牌库', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Oops 四派系牌库构建',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.SAMURAI } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.VIKINGS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS } },
+                ],
+            });
+
+            expect(result.steps.every(step => step.success)).toBe(true);
+            for (const pid of PLAYER_IDS) {
+                const player = result.finalState.core.players[pid];
+                expect(player.hand.length + player.deck.length).toBe(40);
+            }
         });
     });
 
@@ -236,6 +315,27 @@ describe('派系选择系统', () => {
                 expect(allowed.has(id)).toBe(true);
             }
         });
+
+        it('Oops 四派系返回对应的 8 张基地', () => {
+            const baseIds = getBaseDefIdsForFactions([
+                SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+                SMASHUP_FACTION_IDS.COWBOYS,
+                SMASHUP_FACTION_IDS.SAMURAI,
+                SMASHUP_FACTION_IDS.VIKINGS,
+            ]);
+
+            expect(baseIds).toEqual(expect.arrayContaining([
+                'base_saloon',
+                'base_so_so_corral',
+                'base_pyramids',
+                'base_star_portal',
+                'base_shoguns_palace',
+                'base_sakura_garden',
+                'base_drakkar',
+                'base_longhouse',
+            ]));
+        });
+
         it('POD factions 使用对应的 POD 基地池', () => {
             const baseIds = getBaseDefIdsForFactions([
                 SMASHUP_FACTION_IDS.WIZARDS_POD,
@@ -282,6 +382,16 @@ describe('派系选择系统', () => {
         it('POD 基地图集 lookup key 不会重复追加后缀', () => {
             expect(getSmashUpAtlasLookupKey('base_secret_garden_pod', true, true)).toBe('base_secret_garden_pod');
             expect(getSmashUpAtlasLookupKey('base_secret_garden', true, true)).toBe('base_secret_garden_pod');
+        });
+
+        it('按派系查询泰坦时，基础派系与 POD 变体都能回到同一张泰坦，未接入派系返回空数组', () => {
+            const pirateTitans = getFactionTitans(SMASHUP_FACTION_IDS.PIRATES);
+            const piratePodTitans = getFactionTitans(SMASHUP_FACTION_IDS.PIRATES_POD);
+            const alienTitans = getFactionTitans(SMASHUP_FACTION_IDS.ALIENS);
+
+            expect(pirateTitans.map((titan) => titan.id)).toContain('pirates_the_kraken');
+            expect(piratePodTitans.map((titan) => titan.id)).toContain('pirates_the_kraken');
+            expect(alienTitans).toEqual([]);
         });
     });
 });

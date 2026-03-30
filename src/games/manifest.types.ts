@@ -10,6 +10,19 @@ export type GameMobileLayoutPreset = 'board-shell' | 'portrait-simple' | 'map-sh
 
 export type GameShellTarget = 'pwa' | 'app-webview' | 'mini-program-webview';
 
+export type GameMobileDeliveryMode = 'builtin' | 'package-managed';
+
+export interface GameManifestMobileDelivery {
+    mode: GameMobileDeliveryMode;
+    runtimeChannel?: string;
+    modulePackId?: string;
+    assetPackId?: string;
+    modulePackBytes?: number;
+    assetPackBytes?: number;
+    requiresAppUpdate?: boolean;
+    requiredAppVersion?: string;
+}
+
 export interface GameSetupSelectOption {
     value: string;
     labelKey: string;
@@ -22,7 +35,14 @@ export interface GameSetupSelectField {
     default?: string;
 }
 
-export type GameSetupField = GameSetupSelectField;
+export interface GameSetupMultiSelectField {
+    type: 'multi-select';
+    labelKey: string;
+    options: GameSetupSelectOption[];
+    default?: string[];
+}
+
+export type GameSetupField = GameSetupSelectField | GameSetupMultiSelectField;
 
 export interface GamePreloadAssets {
     images?: string[];
@@ -66,5 +86,6 @@ export interface GameManifestEntry {
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
     shellTargets?: GameShellTarget[];
+    mobileDelivery?: GameManifestMobileDelivery;
     ai?: GameManifestAiSupport;
 }

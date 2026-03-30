@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { safeMatchMedia, subscribeMediaQueryChange } from '../../lib/mediaQuery';
 
 const COARSE_POINTER_QUERY = '(pointer: coarse)';
 const FORCE_COARSE_POINTER_QUERY_KEY = 'bgForceCoarsePointer';
@@ -27,11 +28,11 @@ const getIsCoarsePointer = () => {
         return forcedCoarsePointer;
     }
 
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    if (typeof window === 'undefined') {
         return false;
     }
 
-    return window.matchMedia(COARSE_POINTER_QUERY).matches;
+    return safeMatchMedia(COARSE_POINTER_QUERY).matches;
 };
 
 export function useCoarsePointer() {
@@ -43,21 +44,17 @@ export function useCoarsePointer() {
             return undefined;
         }
 
-        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        if (typeof window === 'undefined') {
             return undefined;
         }
 
-        const mediaQuery = window.matchMedia(COARSE_POINTER_QUERY);
+        const mediaQuery = safeMatchMedia(COARSE_POINTER_QUERY);
         const updatePointer = () => {
             setIsCoarsePointer(mediaQuery.matches);
         };
 
         updatePointer();
-        mediaQuery.addEventListener('change', updatePointer);
-
-        return () => {
-            mediaQuery.removeEventListener('change', updatePointer);
-        };
+        return subscribeMediaQueryChange(mediaQuery, updatePointer);
     }, [forcedCoarsePointer]);
 
     return forcedCoarsePointer ?? isCoarsePointer;

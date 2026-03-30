@@ -142,9 +142,9 @@ if (!allowFullRun && !hasExplicitTarget) {
         [
             '已阻止无目标的全量 E2E 运行，避免直接跑完整套 Playwright 测试卡死机器。',
             '请改用以下任一方式：',
-            '1. npm run test:e2e -- e2e/<相关文件>.e2e.ts',
-            '2. npm run test:e2e -- --grep "<相关用例名>"',
-            '3. 需要明确全量时，使用 npm run test:e2e:all',
+            '1. node scripts/infra/run-e2e-command.mjs ci e2e/<相关文件>.e2e.ts',
+            '2. node scripts/infra/run-e2e-command.mjs ci --grep "<相关用例名>"',
+            '3. 需要明确全量时，再显式使用 npm run test:e2e:all',
         ].join('\n'),
     );
 }

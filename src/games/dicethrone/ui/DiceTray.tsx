@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
 import { GameButton } from './components/GameButton';
-import type { Die, TurnPhase } from '../types';
+import type { Die, PlayerId, TurnPhase } from '../types';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { MultistepInteractionState } from '../../../engine/systems/useMultistepInteraction';
 import type { DiceModifyResult, DiceModifyStep, DiceSelectResult, DiceSelectStep } from '../domain/systems';
@@ -21,12 +21,14 @@ interface DtDiceModifyMeta {
         adjustRange?: { min: number; max: number };
     };
     selectCount: number;
+    diceOwnerId?: PlayerId;
     targetOpponentDice: boolean;
 }
 
 interface DtDiceSelectMeta {
     dtType: 'selectDie';
     selectCount: number;
+    diceOwnerId?: PlayerId;
     targetOpponentDice: boolean;
 }
 
@@ -71,6 +73,7 @@ export function getDtMeta(interaction?: InteractionDescriptor): DtDiceMeta | und
 
 export const DiceTray = ({
     dice,
+    rollCount,
     onToggleLock,
     currentPhase: _currentPhase,
     canInteract,
@@ -82,6 +85,7 @@ export const DiceTray = ({
     isPassiveRerollMode,
 }: {
     dice: Die[];
+    rollCount: number;
     onToggleLock: (id: number) => void;
     currentPhase: TurnPhase;
     canInteract: boolean;
@@ -139,6 +143,7 @@ export const DiceTray = ({
         ? (selectResult?.selectedDiceIds.length ?? 0)
         : (modifyResult?.modCount ?? 0);
     const canSelectMore = currentSelectCount < maxSelectCount;
+    const canToggleDieLock = canInteract && rollCount > 0;
 
     const handleDieClick = (dieId: number) => {
         if (isRolling && !isInteractionMode) return;
@@ -158,7 +163,7 @@ export const DiceTray = ({
                     multistepInteraction.step({ action: 'select', dieId, dieValue: die.value } as DiceModifyStep);
                 }
             }
-        } else if (canInteract) {
+        } else if (canToggleDieLock) {
             onToggleLock(dieId);
         }
     };
@@ -213,7 +218,7 @@ export const DiceTray = ({
                     const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
-                        : canInteract;
+                        : canToggleDieLock;
                     // any/adjust 模式下使用本地预览值
                     const displayValue = (isAnyMode || isAdjustMode)
                         ? (modifyResult?.modifications[d.id] ?? d.value)

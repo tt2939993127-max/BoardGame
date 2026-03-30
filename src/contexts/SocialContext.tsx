@@ -33,6 +33,34 @@ interface SocialContextType {
 }
 
 const SocialContext = createContext<SocialContextType | undefined>(undefined);
+const OPTIONAL_SOCIAL_FALLBACK: SocialContextType = {
+    friends: [],
+    requests: [],
+    conversations: [],
+    unreadTotal: 0,
+    isConnected: false,
+    ensureRealtimeConnection: () => {},
+    refreshFriends: async () => {},
+    refreshRequests: async () => {},
+    refreshConversations: async () => {},
+    searchUsers: async () => [],
+    sendFriendRequest: async () => {},
+    acceptFriendRequest: async () => {},
+    rejectFriendRequest: async () => {},
+    deleteFriend: async () => {},
+    sendMessage: async () => ({
+        id: generateUUID(),
+        from: '',
+        to: '',
+        content: '',
+        type: 'text',
+        read: true,
+        createdAt: new Date().toISOString(),
+    }),
+    markAsRead: async () => {},
+    getMessages: async () => [],
+};
+let hasWarnedOptionalSocialMissing = false;
 
 export function SocialProvider({ children }: { children: ReactNode }) {
     const { token, user } = useAuth();
@@ -313,4 +341,20 @@ export function useSocial() {
         throw new Error('useSocial must be used within a SocialProvider');
     }
     return context;
+}
+
+export function useOptionalSocial() {
+    const context = useContext(SocialContext);
+    useEffect(() => {
+        if (!context && !hasWarnedOptionalSocialMissing) {
+            hasWarnedOptionalSocialMissing = true;
+            log.warn('optional_social_provider_missing');
+        }
+    }, [context]);
+
+    if (context) {
+        return context;
+    }
+
+    return OPTIONAL_SOCIAL_FALLBACK;
 }

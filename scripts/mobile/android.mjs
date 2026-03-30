@@ -23,10 +23,12 @@ const gradleWrapper = process.platform === 'win32'
     : path.join(androidDir, 'gradlew');
 const defaultAppId = 'top.easyboardgame.app';
 const defaultAppName = '易桌游';
-const defaultAndroidWebviewMode = 'remote';
+const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
 const distDir = path.join(rootDir, 'dist');
+const distLocalesDir = path.join(distDir, 'locales');
+const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
 const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
 const androidBuildMetaFileName = 'android-build-meta.json';
 const gameManifestGeneratorPath = path.join(rootDir, 'scripts', 'game', 'generate_game_manifests.js');
@@ -225,6 +227,31 @@ const clearBundledWebAssetsForRemote = () => {
     rmSync(androidPublicDir, { recursive: true, force: true });
 };
 
+const clearDirectoryChildren = (dirPath, { preserve = [] } = {}) => {
+    if (!existsSync(dirPath)) return;
+
+    const preservedPaths = preserve.map((value) => path.resolve(value));
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+        const fullPath = path.join(dirPath, entry.name);
+        const resolvedPath = path.resolve(fullPath);
+        const shouldPreserve = preservedPaths.some((preservedPath) => (
+            resolvedPath === preservedPath || resolvedPath.startsWith(`${preservedPath}${path.sep}`)
+        ));
+        if (shouldPreserve) continue;
+        rmSync(fullPath, { recursive: true, force: true });
+    }
+};
+
+const pruneAndroidEmbeddedDist = () => {
+    clearDirectoryChildren(distLocalesDir, {
+        preserve: [path.join(distLocalesDir, 'zh-CN')],
+    });
+
+    if (existsSync(distLocalizedAssetsDir)) {
+        rmSync(distLocalizedAssetsDir, { recursive: true, force: true });
+    }
+};
+
 const writeText = (filePath, content) => {
     mkdirSync(path.dirname(filePath), { recursive: true });
     if (existsSync(filePath) && readText(filePath) === content) {
@@ -232,6 +259,7 @@ const writeText = (filePath, content) => {
     }
     writeFileSync(filePath, content, 'utf8');
 };
+
 
 const replaceInFile = (filePath, replacer) => {
     const current = readText(filePath);
@@ -280,6 +308,8 @@ const getAppConfig = () => ({
     appName: process.env.CAPACITOR_APP_NAME?.trim() || defaultAppName,
 });
 
+const isHttpUrl = (value) => /^http:\/\//i.test(value);
+
 const writeCapacitorShellConfig = () => {
     const { appId, appName } = getAppConfig();
     const mode = getAndroidWebviewMode();
@@ -289,6 +319,7 @@ const writeCapacitorShellConfig = () => {
 
     if (mode === 'remote') {
         server.url = ensureRemoteWebUrl();
+        server.cleartext = isHttpUrl(server.url);
     }
 
     writeText(
@@ -322,14 +353,17 @@ const getAndroidWebviewMode = () => {
 };
 
 const getAndroidRemoteWebUrl = () => process.env.ANDROID_REMOTE_WEB_URL?.trim() || '';
+const getAndroidOtaEnabled = () => /^(1|true|yes|on)$/i.test(process.env.VITE_ANDROID_OTA_ENABLED?.trim() || '');
+const getAndroidOtaManifestUrl = () => process.env.VITE_ANDROID_OTA_MANIFEST_URL?.trim() || '';
+const getAndroidOtaChannel = () => process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || '';
 
 const ensureRemoteWebUrl = () => {
     const remoteUrl = getAndroidRemoteWebUrl();
     if (!remoteUrl) {
-        throw new Error('remote 模式必须配置 ANDROID_REMOTE_WEB_URL，且必须是绝对 HTTPS 地址。');
+        throw new Error('remote 模式必须配置 ANDROID_REMOTE_WEB_URL，且必须是绝对 HTTP/HTTPS 地址。');
     }
-    if (!/^https:\/\//i.test(remoteUrl)) {
-        throw new Error(`ANDROID_REMOTE_WEB_URL 必须是绝对 HTTPS 地址，当前值为: ${remoteUrl}`);
+    if (!/^https?:\/\//i.test(remoteUrl)) {
+        throw new Error(`ANDROID_REMOTE_WEB_URL 必须是绝对 HTTP/HTTPS 地址，当前值为: ${remoteUrl}`);
     }
     return remoteUrl;
 };
@@ -345,11 +379,11 @@ const getAndroidShellStatus = () => {
                 message: 'remote 模式缺少 ANDROID_REMOTE_WEB_URL。',
             };
         }
-        if (!/^https:\/\//i.test(remoteUrl)) {
+        if (!/^https?:\/\//i.test(remoteUrl)) {
             return {
                 ok: false,
                 code: 'remote-invalid-url',
-                message: `ANDROID_REMOTE_WEB_URL 必须是绝对 HTTPS 地址，当前值为: ${remoteUrl}`,
+                message: `ANDROID_REMOTE_WEB_URL 必须是绝对 HTTP/HTTPS 地址，当前值为: ${remoteUrl}`,
             };
         }
         return {
@@ -646,6 +680,7 @@ const syncAndroid = async () => {
     await ensureBuildSupport();
     if (mode === 'embedded') {
         await runAndroidWebBuild();
+        pruneAndroidEmbeddedDist();
         ensureAndroidDistBuildReady();
     }
     await ensureAndroidProject();
@@ -713,6 +748,9 @@ const printDoctor = async () => {
         `VITE_BACKEND_URL=${process.env.VITE_BACKEND_URL || '(未设置)'}`,
         `ANDROID_WEBVIEW_MODE=${getAndroidWebviewMode()}`,
         `ANDROID_REMOTE_WEB_URL=${getAndroidRemoteWebUrl() || '(未设置)'}`,
+        `ANDROID_OTA_ENABLED=${getAndroidOtaEnabled() ? 'true' : 'false'}`,
+        `ANDROID_OTA_MANIFEST_URL=${getAndroidOtaManifestUrl() || '(未设置)'}`,
+        `ANDROID_OTA_CHANNEL=${getAndroidOtaChannel() || '(未设置)'}`,
         `CAPACITOR_APP_ID=${appId}`,
         `CAPACITOR_APP_NAME=${appName}`,
         `ANDROID_PROJECT=${hasAndroidProject() ? 'ready' : 'missing'}`,

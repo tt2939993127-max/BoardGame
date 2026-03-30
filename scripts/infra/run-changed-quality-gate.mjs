@@ -7,6 +7,7 @@ const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
 const mode = modeInput === 'prepush' ? 'pre-push' : modeInput;
 const isPrePushMode = mode === 'pre-push';
+const CACHE_SCHEMA_VERSION = 2;
 
 const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
 const FAST_VITEST_ARGS = ['--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
@@ -23,6 +24,8 @@ const TEXT_LIKE_EXTENSIONS = new Set([
 ]);
 const CACHE_DIR = path.join(repoRoot, 'temp', 'quality-gate-cache');
 const PRE_PUSH_CACHE_FILE = path.join(CACHE_DIR, 'pre-push.json');
+const COMMAND_CACHE_FILE = path.join(CACHE_DIR, 'command-results.json');
+const QUALITY_GATE_TYPECHECK_BUILD_INFO = path.join('temp', 'quality-gate-cache', 'typecheck.tsbuildinfo');
 
 function runGit(args, options = {}) {
   try {
@@ -38,6 +41,10 @@ function runGit(args, options = {}) {
   }
 }
 
+function readGitFile(ref, file) {
+  return runGit(['show', `${ref}:${file}`], { allowFailure: true });
+}
+
 function normalizeFile(file) {
   return file.replace(/\\/g, '/').replace(/^\.?\//, '');
 }
@@ -48,6 +55,32 @@ function hasAny(files, predicate) {
 
 function dedupeValues(values) {
   return [...new Set(values)];
+}
+
+function splitFilesForCommand(baseArgs, files, maxCommandLength = 7000) {
+  if (files.length === 0) return [];
+
+  const chunks = [];
+  let currentChunk = [];
+  let currentLength = commandToLine('npx', [...baseArgs]).length;
+
+  for (const file of files) {
+    const nextLength = currentLength + 1 + quoteArg(file).length;
+    if (currentChunk.length > 0 && nextLength > maxCommandLength) {
+      chunks.push(currentChunk);
+      currentChunk = [file];
+      currentLength = commandToLine('npx', [...baseArgs, file]).length;
+      continue;
+    }
+    currentChunk.push(file);
+    currentLength = nextLength;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
 }
 
 function isSourceCodeFile(file) {
@@ -164,9 +197,40 @@ function resolveChangeContext() {
   return { baseRef, mergeBase, headSha, files };
 }
 
-function affectsTypecheck(file) {
-  if (file === 'package.json' || file.startsWith('tsconfig') || file === 'vite.config.ts' || file === 'eslint.config.js') return true;
-  return isTsFamilyFile(file) && !isDocOnly(file);
+function buildPackageJsonTypecheckFingerprint(content) {
+  if (!content) return '__missing__';
+  try {
+    const parsed = JSON.parse(content);
+    const relevant = {
+      type: parsed.type,
+      packageManager: parsed.packageManager,
+      engines: parsed.engines,
+      dependencies: parsed.dependencies,
+      devDependencies: parsed.devDependencies,
+      peerDependencies: parsed.peerDependencies,
+      optionalDependencies: parsed.optionalDependencies,
+      overrides: parsed.overrides,
+      resolutions: parsed.resolutions,
+    };
+    return JSON.stringify(relevant);
+  } catch {
+    return '__parse_error__';
+  }
+}
+
+function packageJsonAffectsTypecheck(baseRef, headSha) {
+  const baseFingerprint = buildPackageJsonTypecheckFingerprint(readGitFile(baseRef, 'package.json'));
+  const headFingerprint = buildPackageJsonTypecheckFingerprint(readGitFile(headSha, 'package.json'));
+  return baseFingerprint !== headFingerprint;
+}
+
+function createTypecheckPredicate(baseRef, headSha) {
+  const packageJsonRelevant = packageJsonAffectsTypecheck(baseRef, headSha);
+  return (file) => {
+    if (file === 'package.json') return packageJsonRelevant;
+    if (file.startsWith('tsconfig') || file === 'vite.config.ts' || file === 'eslint.config.js') return true;
+    return isTsFamilyFile(file) && !isDocOnly(file);
+  };
 }
 
 function affectsBuild(file) {
@@ -215,6 +279,7 @@ function isCoreSourceFile(file) {
 
 function affectsPrePushGlobalVitest(file) {
   if (isTestFile(file)) return false;
+  if (file.startsWith('src/lib/i18n/')) return false;
   return file.startsWith('src/core/')
     || file.startsWith('src/engine/')
     || file.startsWith('src/shared/')
@@ -249,7 +314,7 @@ function buildVitestChangedArgs(baseRef, targets, options = {}) {
   return args;
 }
 
-function collectCommands(files, baseRef) {
+function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
   const lintFiles = files.filter(isLintTarget);
   const coreSourceChanged = hasAny(
@@ -264,17 +329,23 @@ function collectCommands(files, baseRef) {
     commands.push({
       label: 'Typecheck',
       reason: '存在 TypeScript 或配置改动',
-      command: 'npm',
-      args: ['run', 'typecheck'],
+      command: 'npx',
+      args: ['tsc', '--noEmit', '--incremental', '--tsBuildInfoFile', QUALITY_GATE_TYPECHECK_BUILD_INFO],
     });
   }
 
   if (lintFiles.length > 0) {
-    commands.push({
-      label: 'ESLint',
-      reason: '存在可 lint 的源码改动',
-      command: 'npx',
-      args: ['eslint', '--max-warnings', '999', ...lintFiles],
+    const eslintBaseArgs = ['eslint', '--max-warnings', '999'];
+    const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles);
+    lintChunks.forEach((chunk, index) => {
+      commands.push({
+        label: lintChunks.length === 1 ? 'ESLint' : `ESLint (${index + 1}/${lintChunks.length})`,
+        reason: lintChunks.length === 1
+          ? '存在可 lint 的源码改动'
+          : '存在可 lint 的源码改动，按批次切分以避免 Windows 命令行过长',
+        command: 'npx',
+        args: [...eslintBaseArgs, ...chunk],
+      });
     });
   }
 
@@ -349,14 +420,16 @@ function collectCommands(files, baseRef) {
         });
       }
       if (gameSourceIds.length > 0) {
-        for (const gameId of gameSourceIds) {
-          commands.push({
-            label: `${gameId} changed tests`,
-            reason: `${gameId} 源码改动，运行 changed 测试集`,
-            command: 'npx',
-            args: buildVitestChangedArgs(baseRef, [`src/games/${gameId}`], { gameOnly: true }),
-          });
-        }
+        commands.push({
+          label: 'Changed game source tests',
+          reason: `${gameSourceIds.join(', ')} 源码改动，合并运行 changed 测试集`,
+          command: 'npx',
+          args: buildVitestChangedArgs(
+            baseRef,
+            gameSourceIds.map((gameId) => `src/games/${gameId}`),
+            { gameOnly: true },
+          ),
+        });
       } else if (gameTestFiles.length > 0) {
         commands.push({
           label: 'Changed game test files',
@@ -403,6 +476,56 @@ function dedupeCommands(commands) {
     seen.add(key);
     return true;
   });
+}
+
+function createCommandCacheKey(context, command) {
+  return createHash('sha256').update(JSON.stringify({
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    mode,
+    baseRef: context.baseRef,
+    mergeBase: context.mergeBase,
+    headSha: context.headSha,
+    files: context.files,
+    command: command.command,
+    args: command.args,
+  })).digest('hex');
+}
+
+function readCommandCache() {
+  if (!existsSync(COMMAND_CACHE_FILE)) {
+    return { version: CACHE_SCHEMA_VERSION, entries: {} };
+  }
+  try {
+    const content = readFileSync(COMMAND_CACHE_FILE, 'utf8');
+    const parsed = JSON.parse(content);
+    if (parsed?.version !== CACHE_SCHEMA_VERSION || typeof parsed?.entries !== 'object' || parsed.entries === null) {
+      return { version: CACHE_SCHEMA_VERSION, entries: {} };
+    }
+    return parsed;
+  } catch {
+    return { version: CACHE_SCHEMA_VERSION, entries: {} };
+  }
+}
+
+function writeCommandCache(cache) {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  writeFileSync(COMMAND_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf8');
+}
+
+function trimCommandCache(cache, maxEntries = 200) {
+  const entries = Object.entries(cache.entries ?? {});
+  if (entries.length <= maxEntries) return cache;
+
+  entries.sort(([, left], [, right]) => {
+    const leftAt = typeof left?.completedAt === 'string' ? Date.parse(left.completedAt) : 0;
+    const rightAt = typeof right?.completedAt === 'string' ? Date.parse(right.completedAt) : 0;
+    return rightAt - leftAt;
+  });
+
+  return {
+    version: CACHE_SCHEMA_VERSION,
+    entries: Object.fromEntries(entries.slice(0, maxEntries)),
+  };
 }
 
 function quoteArg(value) {
@@ -470,6 +593,7 @@ function shouldUsePrePushCache() {
 }
 
 const { baseRef, mergeBase, headSha, files } = resolveChangeContext();
+const affectsTypecheck = createTypecheckPredicate(baseRef, headSha);
 console.log(`[changed-quality-gate] 模式: ${mode}`);
 console.log(`[changed-quality-gate] 基线: ${baseRef}`);
 console.log(`[changed-quality-gate] merge-base: ${mergeBase}`);
@@ -485,15 +609,17 @@ for (const file of files) {
   console.log(`- ${file}`);
 }
 
+mkdirSync(CACHE_DIR, { recursive: true });
 runEncodingGuard(files);
 
-const commands = collectCommands(files, baseRef);
+const commands = collectCommands(files, baseRef, affectsTypecheck);
 if (commands.length === 0) {
   console.log('[changed-quality-gate] 当前改动仅涉及文档/证据，跳过代码校验。');
   process.exit(0);
 }
 
 const cachePayload = {
+  schemaVersion: CACHE_SCHEMA_VERSION,
   mode,
   baseRef,
   mergeBase,
@@ -513,9 +639,39 @@ if (shouldUsePrePushCache()) {
 
 const startedAt = Date.now();
 const durations = [];
+const commandCache = shouldUsePrePushCache()
+  ? readCommandCache()
+  : { version: CACHE_SCHEMA_VERSION, entries: {} };
 for (const command of commands) {
+  const commandCacheKey = createCommandCacheKey({ baseRef, mergeBase, headSha, files }, command);
+  const cachedResult = shouldUsePrePushCache()
+    ? commandCache.entries?.[commandCacheKey]
+    : null;
+
+  if (cachedResult?.status === 'passed') {
+    console.log(`\n[changed-quality-gate] ${command.label}`);
+    console.log('[changed-quality-gate] 命中步骤缓存，跳过重复校验。');
+    durations.push({
+      label: `${command.label} (cached)`,
+      durationMs: cachedResult.durationMs ?? 0,
+    });
+    continue;
+  }
+
   const durationMs = runCommand(command);
   durations.push({ label: command.label, durationMs });
+  if (shouldUsePrePushCache()) {
+    commandCache.entries[commandCacheKey] = {
+      status: 'passed',
+      label: command.label,
+      durationMs,
+      completedAt: new Date().toISOString(),
+      headSha,
+      baseRef,
+      mergeBase,
+    };
+    writeCommandCache(trimCommandCache(commandCache));
+  }
 }
 
 const totalMs = Date.now() - startedAt;

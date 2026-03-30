@@ -20,6 +20,7 @@ import type {
 } from './types';
 import { getPlayerPassiveAbilities } from './passiveAbility';
 import { findPlayerAbility } from './abilityLookup';
+import { getChoiceResolvedEventHandler } from './choiceResolvedEvents';
 import { RESOURCE_IDS } from './resources';
 import { CP_MAX } from './core-types';
 
@@ -179,7 +180,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
         name: 'DiceThrone 事件处理',
         priority: 22, // 在 InteractionSystem(20) 之后、FlowSystem(25) 之前，确保 interaction 状态对 autoContinue 可见
 
-        afterEvents: ({ state, events }): HookResult<DiceThroneCore> | void => {
+        afterEvents: ({ state, events, random }): HookResult<DiceThroneCore> | void => {
             let newState = state;
             const nextEvents: GameEvent[] = [];
             // 防止同一批事件中多个 STATUS_REMOVED 重复 resolve
@@ -262,6 +263,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                                 dtType: 'modifyDie',
                                 dieModifyConfig: config,
                                 selectCount,
+                                diceOwnerId: pendingInteraction.diceOwnerId,
                                 targetOpponentDice: pendingInteraction.targetOpponentDice ?? false,
                             },
                         };
@@ -290,6 +292,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             meta: {
                                 dtType: 'selectDie',
                                 selectCount,
+                                diceOwnerId: pendingInteraction.diceOwnerId,
                                 targetOpponentDice: pendingInteraction.targetOpponentDice ?? false,
                             },
                         };
@@ -405,7 +408,16 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // ---- TOKEN_RESPONSE_CLOSED → resolve ----
                 if (dtEvent.type === 'TOKEN_RESPONSE_CLOSED') {
                     console.log('[DT-EventSystem] TOKEN_RESPONSE_CLOSED，resolve 交互');
-                    newState = resolveInteraction(newState);
+                    const resolvedState = resolveInteraction(newState);
+                    newState = {
+                        ...resolvedState,
+                        sys: {
+                            ...resolvedState.sys,
+                            responseWindow: {
+                                current: undefined,
+                            },
+                        },
+                    };
                 }
 
                 // ---- BONUS_DICE_REROLL_REQUESTED → queue dt:bonus-dice ----
@@ -477,6 +489,21 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 const resolvedEvent = handlePromptResolved(event);
                 if (resolvedEvent) {
                     nextEvents.push(resolvedEvent);
+                    const customId = resolvedEvent.payload.customId;
+                    if (customId) {
+                        const followupHandler = getChoiceResolvedEventHandler(customId);
+                        if (followupHandler) {
+                            nextEvents.push(...followupHandler({
+                                state: newState.core,
+                                playerId: resolvedEvent.payload.playerId,
+                                customId,
+                                sourceAbilityId: resolvedEvent.payload.sourceAbilityId,
+                                value: resolvedEvent.payload.value,
+                                timestamp: resolvedEvent.timestamp,
+                                random,
+                            }));
+                        }
+                    }
                 }
 
                 // ---- 被动能力触发器：ABILITY_ACTIVATED + pray 面 → 获得 CP ----

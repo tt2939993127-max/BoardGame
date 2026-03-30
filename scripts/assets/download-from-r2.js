@@ -23,12 +23,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdir
 import { join, dirname, relative, sep } from 'path';
 import { createHash } from 'crypto';
 
-// 加载环境变量：优先 .env，回退到 .env.example
+// 加载环境变量：先读 .env，再用 .env.example 补齐缺失键
 if (existsSync('.env')) {
-  config({ path: '.env' });
-} else {
-  console.log('⚠️  未找到 .env 文件，使用 .env.example 中的配置');
-  config({ path: '.env.example' });
+  config({ path: '.env', override: false });
+}
+if (existsSync('.env.example')) {
+  config({ path: '.env.example', override: false });
 }
 
 // R2 配置
@@ -154,7 +154,7 @@ function formatSize(bytes) {
 async function main() {
   // 检查环境变量
   if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
-    console.error('❌ 缺少 R2 环境变量，请在 .env 中配置 R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY、R2_BUCKET_NAME');
+    console.error('❌ 缺少 R2 环境变量，请在 .env 或 .env.example 中配置 R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY、R2_BUCKET_NAME');
     process.exit(1);
   }
 

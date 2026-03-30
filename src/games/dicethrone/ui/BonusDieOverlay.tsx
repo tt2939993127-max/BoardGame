@@ -82,7 +82,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     summaryEffectKey,
     summaryEffectParams,
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
     const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
     const costAmount = rerollCostAmount ?? 1;
@@ -213,7 +213,9 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
                             style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
                         >
-                            {t(summaryEffectKey, summaryEffectParams)}
+                            {i18n.exists(summaryEffectKey)
+                                ? t(summaryEffectKey, summaryEffectParams)
+                                : summaryEffectKey}
                         </motion.div>
                     )}
 

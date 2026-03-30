@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Info } from 'lucide-react';
 import * as matchApi from '../../services/matchApi';
+import { getLocalMatchPreferences, updateLocalMatchPreferences } from '../../api/user-settings';
 import { useAuth } from '../../contexts/AuthContext';
 import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
-import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, isOwnerActiveMatchSuppressed, suppressOwnerActiveMatch, clearMatchCredentials, readStoredMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials } from '../../hooks/match/useMatchStatus';
+import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, isOwnerActiveMatchSuppressed, suppressOwnerActiveMatch, clearMatchCredentials, readStoredMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistAiSeatCredentials, persistMatchCredentials, isMatchNotFoundError } from '../../hooks/match/useMatchStatus';
 import { getOrCreateGuestId, getGuestName as resolveGuestName, getOwnerKey as resolveOwnerKey, getOwnerType as resolveOwnerType } from '../../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../common/overlays/ConfirmModal';
 import { ModalBase } from '../common/overlays/ModalBase';
@@ -14,7 +15,6 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
-import { buildLocalMatchSearchParams } from '../../engine/ai';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
@@ -22,8 +22,18 @@ import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitP
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
+import { GameDetailsMobilePackageCard, type GamePackageCardState } from './GameDetailsMobilePackageCard';
+import { GamePackageInstallConfirmModal } from './GamePackageInstallConfirmModal';
 import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
+import { UI_Z_INDEX } from '../../core';
+import {
+    normalizeLocalMatchPreferences,
+    readStoredLocalMatchPreferences,
+    writeLocalMatchPreferences,
+    type LocalMatchPreferences,
+} from '../../engine/ai';
+import { LoadingScreen } from '../system/LoadingScreen';
 
 
 interface GameDetailsModalProps {
@@ -45,16 +55,30 @@ type PendingRoomAction = {
     isHost: boolean;
 };
 
+type PendingPackageInstall = {
+    gameName: string;
+    modulePackId?: string;
+    assetPackId?: string;
+    modulePackBytes?: number;
+    assetPackBytes?: number;
+};
+
+type MatchEntryLoadingPhase = 'creating' | 'joining';
+
+const PACKAGE_INSTALL_PLACEHOLDER_DELAY_MS = 1400;
+const LOBBY_CONNECT_ERROR_TOAST_DELAY_MS = 1500;
+
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
     const activeMatchCheckRef = useRef<string | null>(null);
     const { user, token } = useAuth();
-    const { t } = useTranslation(['lobby', 'common']);
+    const { t, i18n } = useTranslation(['lobby', 'common']);
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
     const confirmJoinModalIdRef = useRef<string | null>(null);
+    const confirmPackageInstallModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
     const gameDisplayName = resolveGameDisplayName(gameManifest ?? { id: gameId, titleKey }, t, gameId);
@@ -63,8 +87,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
-    const allowLocalMode = gameManifest?.allowLocalMode !== false;
-    const supportsAiSeatConfig = Boolean(gameManifest?.ai && (gameManifest.ai.localAi || gameManifest.ai.remoteAi));
+    const isPackageManagedMobileGame = gameManifest?.mobileDelivery?.mode === 'package-managed';
+    const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -80,6 +104,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const pendingActionRef = useRef<PendingRoomAction | null>(null);
     const isConfirmingActionRef = useRef(false);
     const roomsRef = useRef<Room[]>([]);
+    const packageInstallFallbackTimerRef = useRef<number | null>(null);
 
     // 排行榜状态
     const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard' | 'changelog' | 'reviews'>('lobby');
@@ -89,13 +114,29 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [leaderboardError, setLeaderboardError] = useState(false);
     // 创建房间弹窗状态
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+    const [isPreparingCreateRoom, setIsPreparingCreateRoom] = useState(false);
+    const [initialCreateRoomPreferences, setInitialCreateRoomPreferences] = useState<LocalMatchPreferences | null>(null);
     const [passwordModalConfig, setPasswordModalConfig] = useState<{ matchID: string; gameName: string } | null>(null);
     const [showAuthorInfoModal, setShowAuthorInfoModal] = useState(false);
+    const [pendingPackageInstall, setPendingPackageInstall] = useState<PendingPackageInstall | null>(null);
+    const [isConfirmingPackageInstall, setIsConfirmingPackageInstall] = useState(false);
+    const [matchEntryLoadingPhase, setMatchEntryLoadingPhase] = useState<MatchEntryLoadingPhase | null>(null);
+    const [packageInstallCardState, setPackageInstallCardState] = useState<GamePackageCardState>({
+        status: 'not-installed',
+        modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+        assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+    });
 
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, getGuestId());
     const getOwnerKey = () => resolveOwnerKey(user?.id, getGuestId());
     const getOwnerType = () => resolveOwnerType(user?.id);
+    const matchEntryLoadingTitle = matchEntryLoadingPhase === 'creating'
+        ? t('matchRoom.title.creating')
+        : t('matchRoom.title.joining');
+    const matchEntryLoadingDescription = matchEntryLoadingPhase === 'creating'
+        ? t('matchRoom.creatingRoom')
+        : t('matchRoom.joiningRoom');
 
     useEffect(() => {
         pendingActionRef.current = pendingAction;
@@ -108,6 +149,27 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         roomsRef.current = rooms;
     }, [rooms]);
+
+    useEffect(() => {
+        setPackageInstallCardState({
+            status: 'not-installed',
+            modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+            assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+        });
+    }, [
+        gameId,
+        gameManifest?.mobileDelivery?.assetPackBytes,
+        gameManifest?.mobileDelivery?.modulePackBytes,
+    ]);
+
+    useEffect(() => {
+        return () => {
+            if (packageInstallFallbackTimerRef.current !== null) {
+                window.clearTimeout(packageInstallFallbackTimerRef.current);
+                packageInstallFallbackTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
@@ -162,6 +224,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         const handleOwnerActive = () => handleStorage();
         window.addEventListener('owner-active-match-changed', handleOwnerActive);
         window.addEventListener('match-credentials-changed', handleStorage);
+        let connectErrorToastTimer: number | null = null;
 
         // 订阅大厅更新（仅当前游戏）
         const unsubscribeMatches = lobbySocket.subscribe(normalizedGameId, (matches: LobbyMatch[]) => {
@@ -182,13 +245,26 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         // 订阅连接状态
         const unsubscribeStatus = lobbySocket.subscribeStatus((status) => {
+            if (status.connected) {
+                if (connectErrorToastTimer !== null) {
+                    window.clearTimeout(connectErrorToastTimer);
+                    connectErrorToastTimer = null;
+                }
+                return;
+            }
+
             if (status.lastError) {
-                // 将后端连接问题提示给用户
-                toast.error(
-                    { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
-                    { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
-                    { dedupeKey: 'lobbySocket.connectError' }
-                );
+                if (connectErrorToastTimer !== null) {
+                    window.clearTimeout(connectErrorToastTimer);
+                }
+                connectErrorToastTimer = window.setTimeout(() => {
+                    toast.error(
+                        { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
+                        { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
+                        { dedupeKey: 'lobbySocket.connectError' }
+                    );
+                    connectErrorToastTimer = null;
+                }, LOBBY_CONNECT_ERROR_TOAST_DELAY_MS);
             }
         });
 
@@ -200,6 +276,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             window.removeEventListener('storage', handleStorage);
             window.removeEventListener('owner-active-match-changed', handleOwnerActive);
             window.removeEventListener('match-credentials-changed', handleStorage);
+            if (connectErrorToastTimer !== null) {
+                window.clearTimeout(connectErrorToastTimer);
+                connectErrorToastTimer = null;
+            }
             unsubscribeMatches();
             unsubscribeStatus();
         };
@@ -254,42 +334,147 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         onNavigate?.();
         navigate(`/play/${gameId}/tutorial`);
     };
+    const loadCreateRoomPreferences = async (): Promise<LocalMatchPreferences | null> => {
+        if (!gameManifest) {
+            return null;
+        }
 
-    const navigateToLocalPlay = (search?: URLSearchParams) => {
-        const query = search?.toString();
-        onNavigate?.();
-        navigate(`/play/${gameId}/local${query ? `?${query}` : ''}`);
+        const localFallback = readStoredLocalMatchPreferences(gameManifest);
+
+        if (!token) {
+            return localFallback;
+        }
+
+        try {
+            const result = await getLocalMatchPreferences(token, gameManifest.id);
+            if (result.empty || !result.settings) {
+                return localFallback;
+            }
+            return normalizeLocalMatchPreferences(
+                gameManifest,
+                result.settings as unknown as Record<string, unknown>,
+            );
+        } catch (error) {
+            logger.error('[GameDetailsModal] 读取创建房间 AI 偏好失败，回退到本地设置', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            return localFallback;
+        }
     };
 
-    const handleSingleDevicePlay = () => {
-        if (!gameManifest) {
-            navigateToLocalPlay();
+    const persistCreateRoomPreferences = async (preferences: LocalMatchPreferences) => {
+        if (!gameManifest) return;
+
+        if (!token) {
+            writeLocalMatchPreferences(gameManifest, preferences);
             return;
         }
 
-        const defaultPlayerCount = gameManifest.playerOptions?.[0] ?? 2;
-        const seatControllers = Object.fromEntries(
-            Array.from({ length: defaultPlayerCount }, (_, index) => [String(index), { type: 'human' as const }]),
-        );
-        const search = buildLocalMatchSearchParams({
-            numPlayers: defaultPlayerCount,
-            playerOptions: gameManifest.playerOptions,
-            aiSupport: gameManifest.ai,
-            seatControllers,
-        });
-        navigateToLocalPlay(search);
+        try {
+            await updateLocalMatchPreferences(token, gameManifest.id, preferences);
+        } catch (error) {
+            logger.error('[GameDetailsModal] 保存创建房间 AI 偏好失败', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     };
 
-    const handlePlayAi = () => {
-        navigateToLocalPlay();
+    const handleOpenMobilePackageInstall = () => {
+        if (!gameManifest?.mobileDelivery || gameManifest.mobileDelivery.mode !== 'package-managed') {
+            return;
+        }
+
+        setPendingPackageInstall({
+            gameName: gameDisplayName,
+            modulePackId: gameManifest.mobileDelivery.modulePackId,
+            assetPackId: gameManifest.mobileDelivery.assetPackId,
+            modulePackBytes: gameManifest.mobileDelivery.modulePackBytes,
+            assetPackBytes: gameManifest.mobileDelivery.assetPackBytes,
+        });
+    };
+
+    const handleCancelPackageInstall = () => {
+        if (isConfirmingPackageInstall) return;
+        setPendingPackageInstall(null);
+    };
+
+    const handleConfirmPackageInstall = async () => {
+        if (!pendingPackageInstall) return;
+
+        setIsConfirmingPackageInstall(true);
+        try {
+            setPackageInstallCardState({
+                status: 'manifest',
+                progressMode: 'indeterminate',
+                modulePackBytes: pendingPackageInstall.modulePackBytes,
+                assetPackBytes: pendingPackageInstall.assetPackBytes,
+            });
+            setPendingPackageInstall(null);
+            if (packageInstallFallbackTimerRef.current !== null) {
+                window.clearTimeout(packageInstallFallbackTimerRef.current);
+            }
+            // TODO: 接入真实 downloader 后，用真实阶段/百分比替换这个占位回落逻辑。
+            packageInstallFallbackTimerRef.current = window.setTimeout(() => {
+                setPackageInstallCardState((current) => {
+                    if (current.status === 'not-installed' || current.status === 'failed') {
+                        return current;
+                    }
+
+                    return {
+                        status: 'failed',
+                        modulePackBytes: current.modulePackBytes,
+                        assetPackBytes: current.assetPackBytes,
+                        errorMessage: t('packageManager.backendPending'),
+                    };
+                });
+                packageInstallFallbackTimerRef.current = null;
+            }, PACKAGE_INSTALL_PLACEHOLDER_DELAY_MS);
+        } finally {
+            setIsConfirmingPackageInstall(false);
+        }
+    };
+
+    const handleRetryPackageInstall = () => {
+        setPackageInstallCardState({
+            status: 'not-installed',
+            modulePackBytes: gameManifest?.mobileDelivery?.modulePackBytes,
+            assetPackBytes: gameManifest?.mobileDelivery?.assetPackBytes,
+        });
+        handleOpenMobilePackageInstall();
     };
 
     // 打开创建房间弹窗
-    const handleOpenCreateRoom = () => {
+    const handleOpenCreateRoom = async () => {
+        if (isPreparingCreateRoom) return;
+
+        const namespace = `game-${gameId}`;
+        setIsPreparingCreateRoom(true);
+        try {
+            if (!i18n.hasLoadedNamespace(namespace)) {
+                await i18n.loadNamespaces(namespace);
+            }
+            setInitialCreateRoomPreferences(await loadCreateRoomPreferences());
+        } catch (error) {
+            logger.error('[GameDetailsModal] 预加载创建房间 namespace 失败', {
+                gameId,
+                namespace,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            setIsPreparingCreateRoom(false);
+        }
+
         setShowCreateRoomModal(true);
     };
 
-    const tryClaimSeat = async (matchID: string, gameName: string) => {
+    const tryClaimSeat = async (
+        matchID: string,
+        gameName: string,
+        options?: { navigateOnSuccess?: boolean },
+    ) => {
+        setMatchEntryLoadingPhase('joining');
         const claimResult = user?.id && token
             ? await claimSeat(gameName, matchID, '0', { token, playerName: user.username })
             : await claimSeat(gameName, matchID, '0', { guestId: getGuestId(), playerName: getGuestName() });
@@ -311,19 +496,44 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         setShowCreateRoomModal(false);
         // 通知大厅刷新，确保其他玩家能看到房间状态更新
         lobbySocket.requestRefresh(normalizedGameId);
-        onNavigate?.();
-        navigate(`/play/${gameName}/match/${matchID}?playerID=0`);
-        return { success: true };
+        if (options?.navigateOnSuccess !== false) {
+            onNavigate?.();
+            navigate(`/play/${gameName}/match/${matchID}?playerID=0`);
+        }
+        return { success: true, credentials: claimResult.credentials };
     };
 
     // 实际创建房间逻辑
     const handleCreateRoom = async (config: RoomConfig) => {
+        let shouldPreserveLoading = false;
         setIsLoading(true);
+        setMatchEntryLoadingPhase('creating');
         try {
-            const { numPlayers, roomName, ttlSeconds, password } = config;
+            const { numPlayers, roomName, ttlSeconds, password, setupSelections, enableAi, seatControllers } = config;
             const ownerKey = getOwnerKey();
             const ownerType = getOwnerType();
             const guestId = user?.id ? undefined : getGuestId();
+            const normalizedSetupSelections = Object.fromEntries(
+                Object.entries(setupSelections ?? {}).map(([key, value]) => [
+                    key,
+                    Array.isArray(value) ? [...value] : value,
+                ]),
+            );
+            const hasSetupSelections = Object.keys(normalizedSetupSelections).length > 0;
+            const normalizedPreferences = gameManifest
+                ? normalizeLocalMatchPreferences(gameManifest, {
+                    numPlayers,
+                    seatControllers,
+                    setupSelections,
+                })
+                : null;
+            const normalizedSeatControllers = enableAi
+                ? (normalizedPreferences?.seatControllers ?? seatControllers)
+                : {};
+
+            if (normalizedPreferences) {
+                await persistCreateRoomPreferences(normalizedPreferences);
+            }
 
             // 使用传入的游戏编号传递房间名
             const setupData = {
@@ -333,6 +543,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 ownerType,
                 ...(guestId ? { guestId } : {}),
                 ...(password ? { password } : {}),
+                ...(hasSetupSelections ? normalizedSetupSelections : {}),
+                ...(hasSetupSelections ? { setupSelections: normalizedSetupSelections } : {}),
+                ...(enableAi ? { enableAi: true, seatControllers: normalizedSeatControllers } : {}),
             };
             const result = await matchApi.createMatch(
                     gameId,
@@ -347,7 +560,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 return;
             }
 
-            const claimResult = await tryClaimSeat(matchID, gameId);
+            const claimResult = await tryClaimSeat(matchID, gameId, { navigateOnSuccess: false });
             if (!claimResult.success) {
                 console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
                 toast.error({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
@@ -355,6 +568,38 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 lobbySocket.requestRefresh(normalizedGameId);
                 return;
             }
+
+            if (enableAi) {
+                const aiSeatCredentials: Record<string, string> = {};
+                const aiSeatEntries = Object.entries(normalizedSeatControllers).filter(([, controller]) => controller.type !== 'human');
+
+                for (const [playerId] of aiSeatEntries) {
+                    try {
+                        const response = await matchApi.claimSeat(gameId, matchID, playerId, {
+                            token,
+                            guestId,
+                            playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                        });
+                        aiSeatCredentials[playerId] = response.playerCredentials;
+                    } catch (error) {
+                        logger.error('[GameDetailsModal] AI 座位占座失败', {
+                            gameId,
+                            matchID,
+                            playerId,
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                        toast.warning({ kind: 'i18n', key: 'error.aiSeatClaimFailed', ns: 'lobby' });
+                    }
+                }
+
+                persistAiSeatCredentials(matchID, aiSeatCredentials);
+            } else {
+                persistAiSeatCredentials(matchID, {});
+            }
+
+            onNavigate?.();
+            navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
+            shouldPreserveLoading = true;
         } catch (error) {
             console.error('Failed to create match:', error);
             const message = error instanceof Error ? error.message : String(error);
@@ -388,6 +633,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 const claimResult = await tryClaimSeat(existingMatchID, existingGameName);
                 if (claimResult.success) {
                     lobbySocket.requestRefresh(normalizedGameId);
+                    shouldPreserveLoading = true;
                     return;
                 }
                 toast.warning({ kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' });
@@ -407,13 +653,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
         } finally {
             setIsLoading(false);
+            if (!shouldPreserveLoading) {
+                setMatchEntryLoadingPhase(null);
+            }
         }
     };
 
     const handleJoinRoom = async (matchID: string, overrideGameName?: string, password?: string) => {
+        let shouldPreserveLoading = false;
         // 检查是否有已保存的凭证（重连场景）
         const savedCreds = localStorage.getItem(`match_creds_${matchID}`);
         if (savedCreds) {
+            setMatchEntryLoadingPhase('joining');
             let data: { playerID?: string; gameName?: string; playerName?: string } | null = null;
             try {
                 data = JSON.parse(savedCreds);
@@ -437,6 +688,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         // 直接重连：让服务端/客户端用凭据校验
                         onNavigate?.();
                         navigate(`/play/${roomGameName}/match/${matchID}?playerID=${data.playerID}`);
+                        shouldPreserveLoading = true;
                         return;
                     }
                 } catch (error) {
@@ -450,21 +702,30 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         // 新加入逻辑需要从当前大厅列表拿到玩家占位信息
         const match = rooms.find(r => r.matchID === matchID);
-        if (!match) return;
+        if (!match) {
+            setMatchEntryLoadingPhase(null);
+            return;
+        }
 
         const roomGameName = normalizeGameName(overrideGameName || match.gameName) || normalizedGameId || 'tictactoe';
 
         // 检查是否有密码锁
         if (match.isLocked && !password) {
+            setMatchEntryLoadingPhase(null);
             setPasswordModalConfig({ matchID, gameName: roomGameName });
             return;
         }
 
+        setMatchEntryLoadingPhase('joining');
         const canClaimSeat = !!(match.ownerKey && match.ownerKey === getOwnerKey());
         if (canClaimSeat) {
             const claimResult = await tryClaimSeat(matchID, roomGameName);
-            if (claimResult.success) return;
+            if (claimResult.success) {
+                shouldPreserveLoading = true;
+                return;
+            }
             toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+            setMatchEntryLoadingPhase(null);
             return;
         }
         let targetPlayerID = '';
@@ -484,6 +745,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         } catch (error) {
             console.error('获取房间状态失败:', error);
             toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
+            setMatchEntryLoadingPhase(null);
             return;
         }
 
@@ -509,9 +771,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
             onNavigate?.();
             navigate(`/play/${roomGameName}/match/${matchID}?playerID=${targetPlayerID}`);
+            shouldPreserveLoading = true;
         } catch (error) {
             console.error('Join failed:', error);
             toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
+        } finally {
+            if (!shouldPreserveLoading) {
+                setMatchEntryLoadingPhase(null);
+            }
         }
     };
 
@@ -579,9 +846,28 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         toast.warning({ kind: 'i18n', key: 'error.localStateCleared', ns: 'lobby' });
     };
 
-    const handleSpectate = (matchID: string) => {
+    const handleSpectate = async (matchID: string) => {
+        const room = roomsRef.current.find((item) => item.matchID === matchID);
+        const roomGameName = normalizeGameName(room?.gameName) || normalizedGameId || 'tictactoe';
+
+        try {
+            await matchApi.getMatch(roomGameName, matchID);
+        } catch (error) {
+            if (isMatchNotFoundError(error)) {
+                setRooms((prev) => prev.filter((item) => item.matchID !== matchID));
+                lobbySocket.requestRefresh(roomGameName);
+                toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                return;
+            }
+            logger.warn('[GameDetailsModal] 观战前校验房间失败，继续尝试进入', {
+                matchID,
+                gameId: roomGameName,
+                error,
+            });
+        }
+
         onNavigate?.();
-        navigate(`/play/${normalizedGameId}/match/${matchID}?spectate=1`);
+        navigate(`/play/${roomGameName}/match/${matchID}?spectate=1`);
     };
 
     const handleAction = (
@@ -734,6 +1020,47 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     }, [closeModal, handleCancelJoin, handleConfirmJoin, openModal, pendingJoin, t]);
 
     useEffect(() => {
+        if (pendingPackageInstall && !confirmPackageInstallModalIdRef.current) {
+            confirmPackageInstallModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    handleCancelPackageInstall();
+                    confirmPackageInstallModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
+                    <GamePackageInstallConfirmModal
+                        gameName={pendingPackageInstall.gameName}
+                        modulePackId={pendingPackageInstall.modulePackId}
+                        assetPackId={pendingPackageInstall.assetPackId}
+                        modulePackBytes={pendingPackageInstall.modulePackBytes}
+                        assetPackBytes={pendingPackageInstall.assetPackBytes}
+                        isLoading={isConfirmingPackageInstall}
+                        closeOnBackdrop={stackCloseOnBackdrop}
+                        onConfirm={handleConfirmPackageInstall}
+                        onCancel={() => {
+                            close();
+                        }}
+                    />
+                ),
+            });
+        }
+
+        if (!pendingPackageInstall && confirmPackageInstallModalIdRef.current) {
+            closeModal(confirmPackageInstallModalIdRef.current);
+            confirmPackageInstallModalIdRef.current = null;
+        }
+    }, [
+        closeModal,
+        handleCancelPackageInstall,
+        handleConfirmPackageInstall,
+        isConfirmingPackageInstall,
+        openModal,
+        pendingPackageInstall,
+    ]);
+
+    useEffect(() => {
         return () => {
             if (confirmModalIdRef.current) {
                 closeModal(confirmModalIdRef.current);
@@ -742,6 +1069,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             if (confirmJoinModalIdRef.current) {
                 closeModal(confirmJoinModalIdRef.current);
                 confirmJoinModalIdRef.current = null;
+            }
+            if (confirmPackageInstallModalIdRef.current) {
+                closeModal(confirmPackageInstallModalIdRef.current);
+                confirmPackageInstallModalIdRef.current = null;
             }
         };
     }, [closeModal]);
@@ -876,6 +1207,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 />
                 <div
                     ref={modalRef}
+                    data-testid="game-details-modal-root"
                     className="
                         bg-parchment-card-bg pointer-events-auto 
                         w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
@@ -886,6 +1218,19 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         overflow-hidden
                     "
                 >
+                    {isPackageManagedMobileGame && (
+                        <div className="absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)] md:hidden">
+                            <GameDetailsMobilePackageCard
+                                gameName={gameDisplayName}
+                                state={packageInstallCardState}
+                                onInstall={handleOpenMobilePackageInstall}
+                                onRetry={handleRetryPackageInstall}
+                                presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
+                                requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
+                            />
+                        </div>
+                    )}
+
                     {/* 装饰性边角 */}
                     <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
                     <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />
@@ -974,24 +1319,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
                             {/* 操作按钮 - 固定在底部 */}
                             <div className="mt-1 grid shrink-0 w-full gap-2 md:mt-0 md:grid-cols-1">
-                                {allowLocalMode && (
-                                    <button
-                                        type="button"
-                                        onClick={handleSingleDevicePlay}
-                                        className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
-                                    >
-                                        {t('actions.singleDevice')}
-                                    </button>
-                                )}
-                                {allowLocalMode && supportsAiSeatConfig && (
-                                    <button
-                                        type="button"
-                                        onClick={handlePlayAi}
-                                        className="w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
-                                    >
-                                        {t('actions.playAi')}
-                                    </button>
-                                )}
                                 <button
                                     type="button"
                                     onClick={handleTutorial}
@@ -1075,7 +1402,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             <RoomList
                                 roomItems={roomItems}
                                 activeMatch={activeMatch}
-                                isActionLoading={isLoading}
+                                isActionLoading={isLoading || isPreparingCreateRoom}
                                 isLobbyLoading={isLobbyLoading}
                                 onJoinRoom={handleJoinRoom}
                                 onJoinRequest={handleJoinRequest}
@@ -1112,6 +1439,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     onClose={() => setShowCreateRoomModal(false)}
                     onConfirm={handleCreateRoom}
                     gameManifest={gameManifest}
+                    initialPreferences={initialCreateRoomPreferences}
                     isLoading={isLoading}
                 />
             )}
@@ -1155,6 +1483,16 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         </p>
                     </div>
                 </ModalBase>
+            )}
+
+            {matchEntryLoadingPhase && (
+                <div className="fixed inset-0" style={{ zIndex: UI_Z_INDEX.modalTooltip + 1 }}>
+                    <LoadingScreen
+                        title={matchEntryLoadingTitle}
+                        description={matchEntryLoadingDescription}
+                        fullScreen={false}
+                    />
+                </div>
             )}
         </>
     );

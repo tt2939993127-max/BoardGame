@@ -78,6 +78,15 @@ export const TOKEN_IDS = {
 
     /** 什一税升级（圣骑士） */
     TITHES_UPGRADED: 'tithes_upgraded',
+
+    /** 装填弹药（枪手） */
+    LOADED: 'loaded',
+
+    /** 赏金（枪手） */
+    BOUNTY: 'bounty',
+    HONOR: 'honor',
+    SHAME: 'shame',
+    SAMURAI_RETRIBUTION: 'samurai_retribution',
 } as const;
 
 export type TokenId = (typeof TOKEN_IDS)[keyof typeof TOKEN_IDS];
@@ -159,6 +168,14 @@ export const GUNSLINGER_DICE_FACE_IDS = {
 
 export type GunslingerDiceFaceId = (typeof GUNSLINGER_DICE_FACE_IDS)[keyof typeof GUNSLINGER_DICE_FACE_IDS];
 
+export const SAMURAI_DICE_FACE_IDS = {
+    KATANA: 'katana',
+    HELM: 'helm',
+    RISING_SUN: 'rising_sun',
+} as const;
+
+export type SamuraiDiceFaceId = (typeof SAMURAI_DICE_FACE_IDS)[keyof typeof SAMURAI_DICE_FACE_IDS];
+
 // ============================================================================
 // 骰面 ID（影贼）
 // ============================================================================
@@ -218,6 +235,13 @@ export const DICETHRONE_CARD_ATLAS_IDS = {
     MOON_ELF: 'dicethrone:moon_elf-cards',
     SHADOW_THIEF: 'dicethrone:shadow_thief-cards',
     PALADIN: 'dicethrone:paladin-cards',
+    GUNSLINGER: 'dicethrone:gunslinger-cards',
+    SAMURAI: 'dicethrone:samurai-cards',
+} as const;
+
+export const DICETHRONE_HAND_CARD_ATLAS_IDS = {
+    GUNSLINGER: 'dicethrone:gunslinger-hand-cards',
+    SAMURAI: 'dicethrone:samurai-hand-cards',
 } as const;
 
 export const DICETHRONE_STATUS_ATLAS_IDS = {
@@ -227,4 +251,6 @@ export const DICETHRONE_STATUS_ATLAS_IDS = {
     MOON_ELF: 'dicethrone:moon_elf-status',
     SHADOW_THIEF: 'dicethrone:shadow_thief-status',
     PALADIN: 'dicethrone:paladin-status',
+    GUNSLINGER: 'dicethrone:gunslinger-status',
+    SAMURAI: 'dicethrone:samurai-status',
 } as const;

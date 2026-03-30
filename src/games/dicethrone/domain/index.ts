@@ -25,6 +25,8 @@ import { shadowThiefDiceDefinition } from '../heroes/shadow_thief/diceConfig';
 import { SHADOW_THIEF_RESOURCES as shadowThiefResourceDefinitions } from '../heroes/shadow_thief/resourceConfig';
 import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
 import { paladinResourceDefinitions } from '../heroes/paladin/resourceConfig';
+import { gunslingerDiceDefinition } from '../heroes/gunslinger/diceConfig';
+import { samuraiDiceDefinition } from '../heroes/samurai/diceConfig';
 import { INITIAL_HEALTH } from './types';
 import { buildTeamIdByPlayerIdFromSeatingOrder, getTeamIdByPlayerIdMap, isTeamMode } from './rules';
 
@@ -38,6 +40,8 @@ registerDiceDefinition(pyromancerDiceDefinition);
 registerDiceDefinition(moonElfDiceDefinition);
 registerDiceDefinition(shadowThiefDiceDefinition);
 registerDiceDefinition(paladinDiceDefinition);
+registerDiceDefinition(gunslingerDiceDefinition);
+registerDiceDefinition(samuraiDiceDefinition);
 monkResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 barbarianResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 pyromancerResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
@@ -201,5 +205,13 @@ export type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent } from './types
 export * from './rules';
 
 // 导出常量
-export { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS, DICETHRONE_COMMANDS } from './ids';
+export {
+    STATUS_IDS,
+    TOKEN_IDS,
+    DICE_FACE_IDS,
+    SAMURAI_DICE_FACE_IDS,
+    DICETHRONE_CARD_ATLAS_IDS,
+    DICETHRONE_STATUS_ATLAS_IDS,
+    DICETHRONE_COMMANDS,
+} from './ids';
 export { RESOURCE_IDS } from './resources';

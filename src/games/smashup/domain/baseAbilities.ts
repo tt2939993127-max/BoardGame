@@ -40,6 +40,7 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
 import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
+import { resolveLiveBaseIndex } from './utils';
 
 // ============================================================================
 // 类型定义
@@ -108,6 +109,13 @@ export type BaseAbilityRegistrationOptions = {
     mandatory?: boolean;
 };
 
+export type ActiveBaseAbilityRegistrationOptions = {
+    /** 主动基地能力是否限制为“每回合一次” */
+    oncePerTurn?: boolean;
+    /** 当前状态下是否允许发动；用于 UI 高亮与命令验证 */
+    canUse?: (ctx: BaseAbilityContext) => boolean;
+};
+
 type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
 type PirateCoveSysState = MatchState<SmashUpCore>['sys'] & { _pirateCoveTriggered?: Set<number> };
 type HandCardChoiceValue = { cardUid: string; defId: string };
@@ -137,6 +145,10 @@ function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): numb
 // ============================================================================
 
 type BaseAbilityEntry = { executor: BaseAbilityExecutor; options: Required<BaseAbilityRegistrationOptions> };
+type ActiveBaseAbilityEntry = {
+    executor: BaseAbilityExecutor;
+    options: Required<Omit<ActiveBaseAbilityRegistrationOptions, 'canUse'>> & Pick<ActiveBaseAbilityRegistrationOptions, 'canUse'>;
+};
 const POD_SUFFIX = '_pod';
 
 function isPodDefId(defId: string): boolean {
@@ -149,6 +161,7 @@ function toPodDefId(defId: string): string {
 
 /** 内部存储：baseDefId 到 Map<BaseTriggerTiming, BaseAbilityEntry> */
 const baseAbilityRegistry = new Map<string, Map<BaseTriggerTiming, BaseAbilityEntry>>();
+const activeBaseAbilityRegistry = new Map<string, ActiveBaseAbilityEntry>();
 
 /** 注册一个基地能力 */
 export function registerBaseAbility(
@@ -167,6 +180,21 @@ export function registerBaseAbility(
     registerBaseAbilityAsQueuedTrigger(baseDefId, timing);
 }
 
+/** 注册一个“你的回合中主动使用”的基地能力 */
+export function registerActiveBaseAbility(
+    baseDefId: string,
+    executor: BaseAbilityExecutor,
+    options: ActiveBaseAbilityRegistrationOptions = {},
+): void {
+    activeBaseAbilityRegistry.set(baseDefId, {
+        executor,
+        options: {
+            oncePerTurn: options.oncePerTurn ?? false,
+            ...(options.canUse ? { canUse: options.canUse } : {}),
+        },
+    });
+}
+
 /** 触发指定基地在指定时机的能力 */
 export function triggerBaseAbility(
     baseDefId: string,
@@ -176,6 +204,17 @@ export function triggerBaseAbility(
     // 检查基地能力是否被压制（如 alien_jammed_signal）
     if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
     const entry = baseAbilityRegistry.get(baseDefId)?.get(timing);
+    if (!entry) return { events: [] };
+    return entry.executor(ctx);
+}
+
+/** 主动触发基地能力（如“During your turn, once each turn”） */
+export function triggerActiveBaseAbility(
+    baseDefId: string,
+    ctx: BaseAbilityContext,
+): BaseAbilityResult {
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
+    const entry = activeBaseAbilityRegistry.get(baseDefId);
     if (!entry) return { events: [] };
     return entry.executor(ctx);
 }
@@ -225,9 +264,25 @@ export function getBaseAbilityOptions(baseDefId: string, timing: BaseTriggerTimi
     return baseAbilityRegistry.get(baseDefId)?.get(timing)?.options;
 }
 
+export function hasActiveBaseAbility(baseDefId: string): boolean {
+    return activeBaseAbilityRegistry.has(baseDefId);
+}
+
+export function getActiveBaseAbilityOptions(baseDefId: string): ActiveBaseAbilityEntry['options'] | undefined {
+    return activeBaseAbilityRegistry.get(baseDefId)?.options;
+}
+
+export function canUseActiveBaseAbility(baseDefId: string, ctx: BaseAbilityContext): boolean {
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return false;
+    const entry = activeBaseAbilityRegistry.get(baseDefId);
+    if (!entry) return false;
+    return entry.options.canUse ? entry.options.canUse(ctx) : true;
+}
+
 /** 清空注册表（测试用） */
 export function clearBaseAbilityRegistry(): void {
     baseAbilityRegistry.clear();
+    activeBaseAbilityRegistry.clear();
     extendedRegistry.clear();
 }
 
@@ -237,6 +292,7 @@ export function getBaseAbilityRegistrySize(): number {
     for (const timingMap of baseAbilityRegistry.values()) {
         count += timingMap.size;
     }
+    count += activeBaseAbilityRegistry.size;
     for (const timingMap of extendedRegistry.values()) {
         count += timingMap.size;
     }
@@ -328,6 +384,15 @@ export function registerPodBaseAbilityAliases(): void {
 
         if (!extendedRegistry.has(podDefId)) {
             extendedRegistry.set(podDefId, podTimingMap);
+        }
+    }
+
+    const activeEntries = Array.from(activeBaseAbilityRegistry.entries());
+    for (const [baseDefId, entry] of activeEntries) {
+        if (isPodDefId(baseDefId)) continue;
+        const podDefId = toPodDefId(baseDefId);
+        if (!activeBaseAbilityRegistry.has(podDefId)) {
+            activeBaseAbilityRegistry.set(podDefId, entry);
         }
     }
 }
@@ -1700,9 +1765,29 @@ export function registerBaseInteractionHandlers(): void {
 
     // 海盗湾：第二步——选择目标基地后执行移动
     registerInteractionHandler('base_pirate_cove_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
-        const { baseIndex: targetBase } = value as { baseIndex: number };
+        const { baseIndex: targetBase, baseDefId } = value as { baseIndex: number; baseDefId?: string };
         const ctx = getContinuationContext<{ minionUid: string; minionDefId: string; fromBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
+
+        const deferredEvents = getDeferredPostScoringEvents(iData);
+        if (deferredEvents && deferredEvents.length > 0) {
+            const resolvedTargetBase = resolveLiveBaseIndex(state.core, targetBase, baseDefId) ?? targetBase;
+            const events: SmashUpEvent[] = [
+                {
+                    type: SU_EVENTS.MINION_MOVED,
+                    payload: {
+                        minionUid: ctx.minionUid,
+                        minionDefId: ctx.minionDefId,
+                        fromBaseIndex: ctx.fromBaseIndex,
+                        toBaseIndex: resolvedTargetBase,
+                        reason: '海盗湾：移动随从到其他基地',
+                    },
+                    timestamp,
+                },
+            ];
+            return { state, events };
+        }
+
         return {
             state,
             events: buildValidatedMoveEvents(state, {
@@ -1710,6 +1795,7 @@ export function registerBaseInteractionHandlers(): void {
                 minionDefId: ctx.minionDefId,
                 fromBaseIndex: ctx.fromBaseIndex,
                 toBaseIndex: targetBase,
+                toBaseDefId: baseDefId,
                 reason: '海盗湾：移动随从到其他基地',
                 now: timestamp,
             }),

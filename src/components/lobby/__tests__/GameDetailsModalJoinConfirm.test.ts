@@ -1,16 +1,85 @@
 /* @vitest-environment happy-dom */
 import { createElement, type ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildLocalMatchSearchParams, resolveSeatControllersFromSearchParams } from '../../../engine/ai';
+import {
+    buildLocalMatchSearchParams,
+    normalizeSeatController,
+    resolveAiMinimumActionDelayMs,
+    resolveSeatControllersFromSearchParams,
+} from '../../../engine/ai';
 import { GameDetailsModal } from '../GameDetailsModal';
 import { AiSupportPills } from '../AiSupportPills';
+import { GameDetailsMobilePackageCard } from '../GameDetailsMobilePackageCard';
+import {
+    clearLocalMatchSnapshot,
+    ensureLocalMatchSeedSearchParams,
+    persistLocalMatchSnapshot,
+    readLocalMatchSnapshot,
+} from '../../../engine/transport/localSession';
 import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../roomActions';
 import { RoomList } from '../RoomList';
+import * as matchApi from '../../../services/matchApi';
+import * as matchStatus from '../../../hooks/match/useMatchStatus';
+import { lobbySocket } from '../../../services/lobbySocket';
 
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
 const closeModalMock = vi.fn();
+const { getGameByIdMock, latestCreateRoomModalProps } = vi.hoisted(() => ({
+    getGameByIdMock: vi.fn((gameId: string) => {
+        if (gameId !== 'dicethrone') return null;
+        return {
+            id: 'dicethrone',
+            type: 'game',
+            enabled: true,
+            titleKey: 'games.dicethrone.title',
+            descriptionKey: 'games.dicethrone.description',
+            category: 'dice',
+            playersKey: 'games.dicethrone.players',
+            icon: '🎲',
+            allowLocalMode: true,
+            playerOptions: [2],
+            mobileDelivery: {
+                mode: 'package-managed',
+                runtimeChannel: 'stable',
+                modulePackId: 'dicethrone',
+                assetPackId: 'dicethrone',
+            },
+            ai: {
+                capture: true,
+                localAi: true,
+                remoteAi: true,
+            },
+        };
+    }),
+    latestCreateRoomModalProps: { current: null as null | Record<string, unknown> },
+}));
+
+const buildMockGameManifest = (override: Record<string, unknown> = {}) => ({
+    id: 'dicethrone',
+    type: 'game',
+    enabled: true,
+    titleKey: 'games.dicethrone.title',
+    descriptionKey: 'games.dicethrone.description',
+    category: 'dice',
+    playersKey: 'games.dicethrone.players',
+    icon: '🎲',
+    allowLocalMode: true,
+    playerOptions: [2],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'dicethrone',
+        assetPackId: 'dicethrone',
+    },
+    ai: {
+        capture: true,
+        localAi: true,
+        remoteAi: true,
+    },
+    ...override,
+});
 const toastMock = {
     warning: vi.fn(),
     error: vi.fn(),
@@ -19,7 +88,16 @@ const toastMock = {
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
+        i18n: {
+            language: 'zh-CN',
+            hasLoadedNamespace: () => true,
+            loadNamespaces: vi.fn().mockResolvedValue(undefined),
+        },
     }),
+    initReactI18next: {
+        type: '3rdParty',
+        init: () => undefined,
+    },
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -48,27 +126,13 @@ vi.mock('../../../config/server', () => ({
     GAME_SERVER_URL: 'http://test.example',
 }));
 
+vi.mock('../../../api/user-settings', () => ({
+    getLocalMatchPreferences: vi.fn(),
+    updateLocalMatchPreferences: vi.fn(),
+}));
+
 vi.mock('../../../config/games.config', () => ({
-    getGameById: (gameId: string) => {
-        if (gameId !== 'dicethrone') return null;
-        return {
-            id: 'dicethrone',
-            type: 'game',
-            enabled: true,
-            titleKey: 'games.dicethrone.title',
-            descriptionKey: 'games.dicethrone.description',
-            category: 'dice',
-            playersKey: 'games.dicethrone.players',
-            icon: '🎲',
-            allowLocalMode: true,
-            playerOptions: [2],
-            ai: {
-                capture: true,
-                localAi: true,
-                remoteAi: true,
-            },
-        };
-    },
+    getGameById: getGameByIdMock,
 }));
 
 vi.mock('../../../services/lobbySocket', () => ({
@@ -95,7 +159,9 @@ vi.mock('../../../hooks/match/useMatchStatus', () => ({
     listStoredMatchCredentials: vi.fn(() => []),
     getLatestStoredMatchCredentials: vi.fn(() => null),
     pruneStoredMatchCredentials: vi.fn(),
+    persistAiSeatCredentials: vi.fn(),
     persistMatchCredentials: vi.fn(),
+    isMatchNotFoundError: (err: unknown) => String(err).includes('404'),
 }));
 
 vi.mock('../../../hooks/match/ownerIdentity', () => ({
@@ -114,7 +180,39 @@ vi.mock('../../common/overlays/ModalBase', () => ({
 }));
 
 vi.mock('../CreateRoomModal', () => ({
-    CreateRoomModal: () => null,
+    CreateRoomModal: ({
+        isOpen,
+        isLoading,
+        onConfirm,
+        initialPreferences,
+    }: {
+        isOpen: boolean;
+        isLoading?: boolean;
+        onConfirm: (config: unknown) => void;
+        initialPreferences?: unknown;
+    }) => {
+        latestCreateRoomModalProps.current = { isOpen, isLoading, initialPreferences };
+        return isOpen
+            ? createElement('div', null,
+                createElement('button', {
+                    type: 'button',
+                    onClick: () => onConfirm({
+                        roomName: 'AI 房间',
+                        numPlayers: 2,
+                        ttlSeconds: 0,
+                        password: '',
+                        enableAi: true,
+                        seatControllers: {
+                            '0': { type: 'human' },
+                            '1': { type: 'local-ai' },
+                        },
+                        setupSelections: {},
+                    }),
+                }, 'mock-create-room-confirm'),
+                isLoading ? createElement('span', null, 'mock-create-room-loading') : null,
+            )
+            : null;
+    },
 }));
 
 vi.mock('../../common/overlays/PasswordEntryModal', () => ({
@@ -127,6 +225,10 @@ vi.mock('../LeaderboardTab', () => ({
 
 vi.mock('../GameDetailsChangelogSection', () => ({
     GameDetailsChangelogSection: () => createElement('div', null, 'changelog'),
+}));
+
+vi.mock('../GamePackageInstallConfirmModal', () => ({
+    GamePackageInstallConfirmModal: () => createElement('div', null, 'package-install-confirm'),
 }));
 
 vi.mock('../../review/GameReviewSection', () => ({
@@ -143,15 +245,24 @@ const buildStored = (override: Partial<{ matchID: string; playerID: string; cred
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
 });
 
 beforeEach(() => {
+    window.localStorage.clear();
     navigateMock.mockReset();
     openModalMock.mockReset();
+    openModalMock.mockReturnValue('modal-1');
     closeModalMock.mockReset();
+    getGameByIdMock.mockReset();
+    getGameByIdMock.mockImplementation((gameId: string) => {
+        if (gameId !== 'dicethrone') return null;
+        return buildMockGameManifest();
+    });
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
+    latestCreateRoomModalProps.current = null;
 });
 
 describe('GameDetailsModal join confirm helpers', () => {
@@ -207,7 +318,7 @@ describe('AI seat controller helpers', () => {
         });
 
         expect(controllers['0']).toEqual({ type: 'human' });
-        expect(controllers['1']).toEqual({ type: 'local-ai' });
+        expect(controllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
     });
 
     it('显式 seat 参数可以覆盖默认 controller', () => {
@@ -228,14 +339,57 @@ describe('AI seat controller helpers', () => {
             aiSupport,
             seatControllers: {
                 '0': { type: 'human' },
-                '1': { type: 'local-ai', policyId: 'opening-v1' },
+                '1': { type: 'local-ai', policyId: 'opening-v1', difficulty: 'hard' },
                 '2': { type: 'remote-ai', providerId: 'astrbot' },
             },
         });
 
         expect(search.get('players')).toBe('3');
         expect(search.get('seat1')).toBe('local-ai:opening-v1');
+        expect(search.get('seat1Difficulty')).toBe('hard');
         expect(search.get('seat2')).toBe('remote-ai:astrbot');
+    });
+
+    it('显式 difficulty 参数会恢复到 local-ai controller', () => {
+        const searchParams = new URLSearchParams('seat1=local-ai:opening-v1&seat1Difficulty=expert');
+        const controllers = resolveSeatControllersFromSearchParams({
+            numPlayers: 2,
+            searchParams,
+            aiSupport,
+        });
+
+        expect(controllers['1']).toEqual({
+            type: 'local-ai',
+            policyId: 'opening-v1',
+            difficulty: 'expert',
+        });
+    });
+
+    it('AI controller 默认使用统一最小时长，并支持自定义覆盖', () => {
+        expect(resolveAiMinimumActionDelayMs({ type: 'human' })).toBe(0);
+        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai' })).toBe(600);
+        expect(resolveAiMinimumActionDelayMs({ type: 'remote-ai', providerId: 'astrbot' })).toBe(600);
+        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai', minimumActionDelayMs: 950 })).toBe(950);
+    });
+
+    it('normalizeSeatController 会保留并清洗 AI 最小时长', () => {
+        expect(normalizeSeatController({
+            type: 'local-ai',
+            minimumActionDelayMs: 321.4,
+        }, aiSupport)).toEqual({
+            type: 'local-ai',
+            minimumActionDelayMs: 321,
+        });
+
+        expect(normalizeSeatController({
+            type: 'remote-ai',
+            providerId: 'astrbot',
+            minimumActionDelayMs: -50,
+        }, aiSupport)).toEqual({
+            type: 'remote-ai',
+            providerId: 'astrbot',
+            minimumActionDelayMs: 0,
+        });
     });
 });
 
@@ -255,7 +409,60 @@ describe('AiSupportPills', () => {
     });
 });
 
-describe('GameDetailsModal local AI entry', () => {
+describe('GameDetailsMobilePackageCard', () => {
+    it('进行中状态显示进度条和阶段文案', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'manifest',
+                progressMode: 'indeterminate',
+            },
+            onInstall: vi.fn(),
+        }));
+
+        expect(screen.getByTestId('game-details-mobile-package-progress-track')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.progress.manifestTitle')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.progress.pendingPercent')).toBeInTheDocument();
+    });
+
+    it('失败状态显示重试按钮和错误文案', () => {
+        const retryMock = vi.fn();
+
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'failed',
+                errorMessage: '下载器待接入',
+            },
+            onInstall: vi.fn(),
+            onRetry: retryMock,
+        }));
+
+        expect(screen.getByText('下载器待接入')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText('packageManager.retryAction'));
+
+        expect(retryMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('更新模式显示更新提示而不是安装按钮', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'not-installed',
+            },
+            onInstall: vi.fn(),
+            presentation: 'update-required',
+            requiredAppVersion: '0.6.0',
+        }));
+
+        expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.updateRequiredHintWithVersion')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
+});
+
+describe('GameDetailsModal create room ai entry', () => {
     const baseProps = {
         isOpen: true,
         onClose: vi.fn(),
@@ -265,20 +472,247 @@ describe('GameDetailsModal local AI entry', () => {
         thumbnail: createElement('div'),
     };
 
-    it('支持 AI 的游戏会区分单机模式和对战AI入口', () => {
+    it('创建房间弹窗内直接配置 AI，不再显示独立对战 AI 入口', async () => {
+        vi.spyOn(matchApi, 'createMatch').mockResolvedValueOnce({ matchID: 'match-ai-1' });
+        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
+        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({
+            success: true,
+            credentials: 'host-cred',
+        });
+
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByText('actions.singleDevice'));
+        expect(screen.queryByText('actions.playAi')).toBeNull();
+        expect(screen.queryByText('ai.configureTitle')).toBeNull();
 
-        expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/local?seat1=human');
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-ai-1?playerID=0');
+        });
+
+        expect(matchApi.createMatch).toHaveBeenCalledWith(
+            'dicethrone',
+            expect.objectContaining({
+                numPlayers: 2,
+                setupData: expect.objectContaining({
+                    enableAi: true,
+                    seatControllers: expect.objectContaining({
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai' },
+                    }),
+                }),
+            }),
+            undefined,
+        );
+        expect(matchApi.claimSeat).toHaveBeenCalledWith(
+            'dicethrone',
+            'match-ai-1',
+            '1',
+            expect.objectContaining({
+                guestId: 'guest-1',
+            }),
+        );
     });
 
-    it('对战AI入口会直接进入本地 AI 对局', () => {
+    it('未保存过 AI 偏好时，创建房间弹窗默认传入空偏好', async () => {
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByText('actions.playAi'));
+        fireEvent.click(screen.getByText('actions.createRoom'));
 
-        expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/local');
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+
+        expect(latestCreateRoomModalProps.current).toEqual(
+            expect.objectContaining({
+                initialPreferences: null,
+            }),
+        );
+    });
+
+    it('package-managed 游戏默认渲染单一下载入口', () => {
+        render(createElement(GameDetailsModal, baseProps));
+
+        const packageCard = screen.getByTestId('game-details-mobile-package-card');
+        expect(packageCard).toBeInTheDocument();
+        expect(packageCard.className).toContain('md:hidden');
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+    });
+
+    it('标记必须更新时，渲染移动端更新提示入口', () => {
+        getGameByIdMock.mockImplementation((gameId: string) => {
+            if (gameId !== 'dicethrone') return null;
+            return buildMockGameManifest({
+                mobileDelivery: {
+                    mode: 'package-managed',
+                    runtimeChannel: 'stable',
+                    modulePackId: 'dicethrone',
+                    assetPackId: 'dicethrone',
+                    requiresAppUpdate: true,
+                    requiredAppVersion: '0.6.0',
+                },
+            });
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        const packageCard = screen.getByTestId('game-details-mobile-package-card');
+        expect(packageCard).toBeInTheDocument();
+        expect(packageCard.className).toContain('md:hidden');
+        expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
+
+    it('观战前发现房间 404 时不再跳进对局页，并提示房间已销毁', async () => {
+        vi.mocked(lobbySocket.subscribe).mockImplementationOnce((_gameId, callback) => {
+            callback([{
+                matchID: 'match-spectate',
+                players: [
+                    { id: 0, name: 'A' },
+                    { id: 1, name: 'B' },
+                ],
+                totalSeats: 2,
+                gameName: 'dicethrone',
+                roomName: '测试房间',
+                ownerKey: 'owner-2',
+                ownerType: 'guest',
+                isLocked: false,
+            }]);
+            return () => {};
+        });
+        vi.spyOn(matchApi, 'getMatch').mockRejectedValueOnce(new Error('404: Match not found'));
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTitle('actions.spectate'));
+
+        await waitFor(() => {
+            expect(navigateMock).not.toHaveBeenCalledWith('/play/dicethrone/match/match-spectate?spectate=1');
+        });
+        expect(vi.mocked(lobbySocket.requestRefresh)).toHaveBeenCalledWith('dicethrone');
+        expect(toastMock.warning).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    });
+
+    it('builtin 游戏不渲染移动端包管理入口', () => {
+        getGameByIdMock.mockImplementation((gameId: string) => {
+            if (gameId !== 'dicethrone') return null;
+            return buildMockGameManifest({
+                mobileDelivery: {
+                    mode: 'builtin',
+                },
+            });
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+    });
+
+    it('创建房间时显示进入对局 loading', async () => {
+        let resolveCreateMatch: ((value: { matchID: string }) => void) | null = null;
+        vi.spyOn(matchApi, 'createMatch').mockImplementationOnce(() => new Promise((resolve) => {
+            resolveCreateMatch = resolve as (value: { matchID: string }) => void;
+        }));
+        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({ success: true, credentials: 'seat-creds' } as never);
+        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-creds' });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
+
+        await waitFor(() => {
+            expect(screen.getByText('matchRoom.title.creating')).toBeInTheDocument();
+            expect(screen.getByText('matchRoom.creatingRoom')).toBeInTheDocument();
+        });
+
+        resolveCreateMatch?.({ matchID: 'match-created' });
+
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-created?playerID=0');
+        });
+    });
+
+    it('socket 瞬时错误恢复后不再立刻弹服务不可用提示', async () => {
+        vi.useFakeTimers();
+        let statusCallback: ((status: { connected: boolean; lastError?: string }) => void) | null = null;
+        vi.mocked(lobbySocket.subscribeStatus).mockImplementationOnce((callback) => {
+            statusCallback = callback;
+            return () => {};
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        statusCallback?.({ connected: false, lastError: 'websocket error' });
+        expect(toastMock.error).not.toHaveBeenCalled();
+
+        statusCallback?.({ connected: true });
+        vi.advanceTimersByTime(1600);
+
+        expect(toastMock.error).not.toHaveBeenCalled();
+    });
+});
+
+describe('localSession helpers', () => {
+    beforeEach(() => {
+        window.localStorage.clear();
+    });
+
+    it('ensureLocalMatchSeedSearchParams 会补 seed 且保留原参数', () => {
+        const search = ensureLocalMatchSeedSearchParams(new URLSearchParams('players=2&seat1=local-ai'), 'seed-fixed');
+
+        expect(search.get('players')).toBe('2');
+        expect(search.get('seat1')).toBe('local-ai');
+        expect(search.get('seed')).toBe('seed-fixed');
+    });
+
+    it('persist/read/clear local snapshot 正常工作', () => {
+        const state = {
+            core: { turn: 3 },
+            sys: { phase: 'main' },
+        } as any;
+
+        persistLocalMatchSnapshot({
+            gameId: 'dicethrone',
+            seed: 'seed-1',
+            numPlayers: 2,
+            state,
+            randomCursor: 7,
+        });
+
+        expect(readLocalMatchSnapshot({
+            gameId: 'dicethrone',
+            seed: 'seed-1',
+            numPlayers: 2,
+        })).toMatchObject({
+            gameId: 'dicethrone',
+            seed: 'seed-1',
+            numPlayers: 2,
+            randomCursor: 7,
+            state,
+        });
+
+        expect(readLocalMatchSnapshot({
+            gameId: 'dicethrone',
+            seed: 'seed-1',
+            numPlayers: 3,
+        })).toBeNull();
+
+        clearLocalMatchSnapshot('dicethrone', 'seed-1');
+
+        expect(readLocalMatchSnapshot({
+            gameId: 'dicethrone',
+            seed: 'seed-1',
+            numPlayers: 2,
+        })).toBeNull();
     });
 });
 

@@ -56,6 +56,7 @@ import {
     getSeatingOrder,
     isTeamMode,
 } from './rules';
+import { getMaxTokenUseAmount, getTokenUseOptions } from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
@@ -331,6 +332,10 @@ const validateToggleDieLock = (
     if (state.rollConfirmed) {
         return fail('roll_already_confirmed');
     }
+
+    if (state.rollCount === 0) {
+        return fail('no_roll_yet');
+    }
     
     const die = state.dice.find(d => d.id === cmd.payload.dieId);
     if (!die) {
@@ -360,6 +365,10 @@ const validateConfirmRoll = (
     
     if (state.rollCount === 0) {
         return fail('no_roll_yet');
+    }
+
+    if (state.rollConfirmed) {
+        return fail('roll_already_confirmed');
     }
     
     return ok();
@@ -1048,6 +1057,21 @@ const validateUseToken = (
         return fail('invalid_amount');
     }
 
+    if (cmd.payload.amount > currentAmount) {
+        return fail('not_enough_token');
+    }
+
+    const allowedAmounts = getTokenUseOptions(tokenDef, currentAmount);
+    if (!allowedAmounts.includes(cmd.payload.amount)) {
+        return fail('invalid_amount');
+    }
+
+    const maxWindowUsage = getMaxTokenUseAmount(tokenDef);
+    const usedInWindow = state.pendingDamage.tokenUsageTotals?.[cmd.payload.tokenId] ?? 0;
+    if (usedInWindow + cmd.payload.amount > maxWindowUsage) {
+        return fail('invalid_amount');
+    }
+
     return ok();
 };
 
@@ -1282,6 +1306,41 @@ const validateGrantTokens = (
     return ok();
 };
 
+const validateResolveInteraction = (
+    _state: DiceThroneCore,
+    cmd: DiceThroneCommand,
+    playerId: PlayerId,
+    pendingInteraction?: InteractionDescriptor
+): ValidationResult => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+    if (pendingInteraction.type !== 'selectPlayer') {
+        return fail('interaction_type_mismatch');
+    }
+
+    const { selectedPlayerIds = [] } = cmd.payload as { selectedPlayerIds?: PlayerId[] };
+    if (selectedPlayerIds.length === 0) {
+        return fail('no_selected_player');
+    }
+
+    const uniqueSelectedPlayerIds = Array.from(new Set(selectedPlayerIds));
+    if (uniqueSelectedPlayerIds.length > (pendingInteraction.selectCount ?? 1)) {
+        return fail('too_many_selected_players');
+    }
+
+    const targetPlayerIds = pendingInteraction.targetPlayerIds ?? [];
+    const hasInvalidTarget = uniqueSelectedPlayerIds.some(targetId => !targetPlayerIds.includes(targetId));
+    if (hasInvalidTarget) {
+        return fail('invalid_target_player');
+    }
+
+    return ok();
+};
+
 // ============================================================================
 // 主验证入口
 // ============================================================================
@@ -1324,6 +1383,7 @@ export const validateCommand = (
     if (isCommandType(command, 'REROLL_DIE')) return validateRerollDieStrict(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'RESOLVE_INTERACTION')) return validateResolveInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);

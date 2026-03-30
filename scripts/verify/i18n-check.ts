@@ -13,10 +13,11 @@ type I18nReference = {
     file: string;
     line: number;
     source: string;
+    patternSegments?: Array<string | null>;
 };
 
 type I18nWarning = {
-    type: 'dynamic-namespace' | 'ambiguous-namespace' | 'unknown-namespace' | 'dynamic-key';
+    type: 'dynamic-namespace' | 'ambiguous-namespace' | 'unknown-namespace' | 'dynamic-key' | 'raw-validation-error';
     key: string;
     file: string;
     line: number;
@@ -64,6 +65,10 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
+const isAsciiOnly = (value: string): boolean => (
+    Array.from(value).every((char) => char.charCodeAt(0) <= 0x7f)
+);
+
 export const parseNamespaceLiteral = (value: string): string[] => {
     const trimmed = value.trim();
     const namespaces: string[] = [];
@@ -82,12 +87,12 @@ const parseNamespaceArgument = (argument: string): { namespaces: string[]; dynam
     }
     const firstMatch = trimmed.match(/^([\s\S]*?]|['"][^'"]+['"])/);
     if (!firstMatch) {
-        return { namespaces: [DEFAULT_NAMESPACE], dynamic: true, fromArray: false };
+        return { namespaces: [], dynamic: true, fromArray: false };
     }
     const token = firstMatch[1];
     const namespaces = parseNamespaceLiteral(token);
     if (namespaces.length === 0) {
-        return { namespaces: [DEFAULT_NAMESPACE], dynamic: true, fromArray: token.startsWith('[') };
+        return { namespaces: [], dynamic: true, fromArray: token.startsWith('[') };
     }
     let dynamic = false;
     if (token.startsWith('[')) {
@@ -117,6 +122,35 @@ const hasKeyPath = (namespaceData: LocaleNamespace, keyPath: string): boolean =>
         cursor = cursor[segment];
     }
     return true;
+};
+
+const collectPatternMatches = (
+    namespaceData: LocaleNamespace,
+    patternSegments: Array<string | null>,
+    prefix: string[] = [],
+): string[] => {
+    const visit = (cursor: unknown, index: number, currentPrefix: string[]): string[] => {
+        if (index >= patternSegments.length) {
+            return [currentPrefix.join('.')];
+        }
+
+        const segment = patternSegments[index];
+        if (!isPlainObject(cursor)) {
+            return [];
+        }
+
+        if (segment === null) {
+            return Object.entries(cursor).flatMap(([key, value]) => visit(value, index + 1, [...currentPrefix, key]));
+        }
+
+        if (!(segment in cursor)) {
+            return [];
+        }
+
+        return visit(cursor[segment], index + 1, [...currentPrefix, segment]);
+    };
+
+    return visit(namespaceData, 0, prefix);
 };
 
 const loadLocales = (): { locales: LocalesByLanguage; namespaceFiles: string[] } => {
@@ -228,6 +262,55 @@ const parseStringLiteral = (quote: string, value: string): { value: string; dyna
     return { value, dynamic: false };
 };
 
+const parseTemplateLiteralPattern = (
+    rawValue: string,
+    knownNamespaces: Set<string>,
+): { namespace?: string; key: string; patternSegments: Array<string | null> } | null => {
+    if (!rawValue.includes('${')) {
+        return null;
+    }
+
+    const parsed = parseI18nKey(rawValue, knownNamespaces);
+    const keyPath = parsed.key;
+    const placeholderRegex = /\$\{[^}]+\}/g;
+    let placeholderMatch: RegExpExecArray | null;
+    while ((placeholderMatch = placeholderRegex.exec(keyPath)) !== null) {
+        const before = placeholderMatch.index > 0 ? keyPath[placeholderMatch.index - 1] : '';
+        const afterIndex = placeholderMatch.index + placeholderMatch[0].length;
+        const after = afterIndex < keyPath.length ? keyPath[afterIndex] : '';
+        if ((before && before !== '.') || (after && after !== '.')) {
+            return null;
+        }
+    }
+
+    const normalized = keyPath.replace(placeholderRegex, '*');
+    if (normalized.startsWith('.') || normalized.endsWith('.') || normalized.includes('..')) {
+        return null;
+    }
+
+    const patternSegments = normalized.split('.').map((segment) => {
+        if (segment === '*') return null;
+        return segment;
+    });
+
+    if (patternSegments.length === 0 || patternSegments.every((segment) => segment === null) || patternSegments[0] === null) {
+        return null;
+    }
+
+    return {
+        namespace: parsed.namespace,
+        key: patternSegments.map((segment) => segment ?? '*').join('.'),
+        patternSegments,
+    };
+};
+
+const looksLikeHumanReadableValidationError = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    if (!isAsciiOnly(trimmed)) return false;
+    return trimmed.includes(' ') || /[:!]/.test(trimmed);
+};
+
 const extractLiteralKeysFromExpression = (expression: string): { keys: string[]; dynamic: boolean } => {
     const trimmed = expression.trim();
     if (trimmed.includes('`') && trimmed.includes('${')) {
@@ -296,7 +379,13 @@ export const collectReferencesFromContent = (
         warnings.push(warning);
     };
 
-    const pushReference = (key: string, namespaces: string[], line: number, source: string) => {
+    const pushReference = (
+        key: string,
+        namespaces: string[],
+        line: number,
+        source: string,
+        patternSegments?: Array<string | null>,
+    ) => {
         const resolvedNamespaces = namespaces.filter((ns) => !!ns);
         if (resolvedNamespaces.length === 0) return;
         const known = resolvedNamespaces.filter((ns) => {
@@ -320,13 +409,15 @@ export const collectReferencesFromContent = (
             file: filePath,
             line,
             source,
+            patternSegments,
         });
     };
 
     const resolveAliasNamespaces = (alias: string, line: number, source: string): string[] => {
         const info = aliasMap.get(alias);
         if (!info) return [defaultNamespace];
-        if (info.dynamic) {
+        const namespaces = Array.from(info.namespaces);
+        if (info.dynamic && namespaces.length === 0) {
             addWarning({
                 type: 'dynamic-namespace',
                 key: '',
@@ -337,7 +428,6 @@ export const collectReferencesFromContent = (
             });
             return [];
         }
-        const namespaces = Array.from(info.namespaces);
         if (namespaces.length > 1 && !info.fromArray) {
             addWarning({
                 type: 'ambiguous-namespace',
@@ -361,6 +451,27 @@ export const collectReferencesFromContent = (
             const line = getLineNumber(content, match.index);
             const source = `${aliasName}(${literal.value})`;
             if (literal.dynamic) {
+                const parsedPattern = quote === '`'
+                    ? parseTemplateLiteralPattern(literal.value, knownNamespaces)
+                    : null;
+                if (parsedPattern) {
+                    const callEnd = findCallEnd(content, match.index + match[0].length);
+                    const snippet = content.slice(match.index, callEnd);
+                    const overrideNamespaces = findNsOverride(snippet);
+                    const namespaces = parsedPattern.namespace
+                        ? [parsedPattern.namespace]
+                        : (overrideNamespaces.length ? overrideNamespaces : resolveAliasNamespaces(aliasName, line, source));
+                    if (namespaces.length) {
+                        pushReference(
+                            parsedPattern.key,
+                            namespaces,
+                            line,
+                            source,
+                            parsedPattern.patternSegments,
+                        );
+                        continue;
+                    }
+                }
                 addWarning({ type: 'dynamic-key', key: literal.value, file: filePath, line, source });
                 continue;
             }
@@ -431,6 +542,25 @@ export const collectReferencesFromContent = (
         const line = getLineNumber(content, i18nMatch.index);
         const source = `i18n.${i18nMatch[1]}(${literal.value})`;
         if (literal.dynamic) {
+            const parsedPattern = i18nMatch[2] === '`'
+                ? parseTemplateLiteralPattern(literal.value, knownNamespaces)
+                : null;
+            if (parsedPattern) {
+                const callEnd = findCallEnd(content, i18nMatch.index + i18nMatch[0].length);
+                const snippet = content.slice(i18nMatch.index, callEnd);
+                const overrideNamespaces = findNsOverride(snippet);
+                const namespaces = parsedPattern.namespace
+                    ? [parsedPattern.namespace]
+                    : (overrideNamespaces.length ? overrideNamespaces : [defaultNamespace]);
+                pushReference(
+                    parsedPattern.key,
+                    namespaces,
+                    line,
+                    source,
+                    parsedPattern.patternSegments,
+                );
+                continue;
+            }
             addWarning({ type: 'dynamic-key', key: literal.value, file: filePath, line, source });
             continue;
         }
@@ -535,7 +665,201 @@ export const collectReferencesFromContent = (
         pushReference(parsed.key, namespaces, line, source);
     }
 
+    const validationErrorRegex = /return\s*\{\s*valid\s*:\s*false[\s\S]{0,160}?error\s*:\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+    let validationErrorMatch: RegExpExecArray | null;
+    while ((validationErrorMatch = validationErrorRegex.exec(content)) !== null) {
+        const literal = parseStringLiteral(validationErrorMatch[1], validationErrorMatch[2]);
+        if (literal.dynamic || !looksLikeHumanReadableValidationError(literal.value)) {
+            continue;
+        }
+        const line = getLineNumber(content, validationErrorMatch.index);
+        addWarning({
+            type: 'raw-validation-error',
+            key: literal.value,
+            file: filePath,
+            line,
+            source: 'validation.error',
+            detail: '命令校验直接返回了自然语言 error 文案，请改用稳定错误码',
+        });
+    }
+
     return { references, warnings };
+};
+
+const normalizeFilePath = (filePath: string): string => filePath.replace(/\\/g, '/');
+
+const getManifestGameId = (filePath: string): string | null => {
+    const normalized = normalizeFilePath(filePath);
+    const match = normalized.match(/\/src\/games\/([^/]+)\/manifest\.[jt]sx?$/);
+    return match?.[1] ?? null;
+};
+
+const getGameIdFromPath = (filePath: string): string | null => {
+    const normalized = normalizeFilePath(filePath);
+    const match = normalized.match(/\/src\/games\/([^/]+)\//);
+    return match?.[1] ?? null;
+};
+
+const looksLikeI18nKey = (value: string): boolean => {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    if (/\s/.test(trimmed)) return false;
+    if (!isAsciiOnly(trimmed)) return false;
+    return /[.:]/.test(trimmed);
+};
+
+const isI18nPropertyName = (propertyName: string): boolean => (
+    /(?:^|[A-Z])(title|label|description|players|name|message|hint)Key$/.test(propertyName)
+);
+
+const inferStaticNamespacesForFile = (
+    content: string,
+    filePath: string,
+    knownNamespaces: Set<string>,
+): string[] => {
+    const namespaces = new Set<string>();
+    const aliasMap = buildAliasMap(content, DEFAULT_NAMESPACE);
+
+    for (const info of aliasMap.values()) {
+        if (info.dynamic) continue;
+        for (const namespace of info.namespaces) {
+            if (knownNamespaces.has(namespace)) {
+                namespaces.add(namespace);
+            }
+        }
+    }
+
+    const gameId = getGameIdFromPath(filePath);
+    if (gameId) {
+        const gameNamespace = `game-${gameId}`;
+        if (knownNamespaces.has(gameNamespace)) {
+            namespaces.add(gameNamespace);
+        }
+    }
+
+    return Array.from(namespaces);
+};
+
+const createManifestReference = (
+    filePath: string,
+    line: number,
+    source: string,
+    key: string,
+    namespace: string,
+): I18nReference => ({
+    key,
+    namespaces: [namespace],
+    file: filePath,
+    line,
+    source,
+});
+
+export const collectManifestReferencesFromContent = (
+    content: string,
+    filePath: string,
+    knownNamespaces: Set<string>,
+): I18nReference[] => {
+    const gameId = getManifestGameId(filePath);
+    if (!gameId) return [];
+
+    const references: I18nReference[] = [];
+    const manifestNamespace = `game-${gameId}`;
+    const pushManifestRef = (rawKey: string, namespace: string, index: number, source: string) => {
+        if (!knownNamespaces.has(namespace)) return;
+        references.push(createManifestReference(
+            filePath,
+            getLineNumber(content, index),
+            source,
+            rawKey,
+            namespace,
+        ));
+    };
+
+    const topLevelKeyPatterns = [
+        { property: 'titleKey', namespace: 'lobby' },
+        { property: 'descriptionKey', namespace: 'lobby' },
+        { property: 'playersKey', namespace: 'lobby' },
+    ] as const;
+
+    for (const { property, namespace } of topLevelKeyPatterns) {
+        const regex = new RegExp(`\\b${property}\\s*:\\s*['"]([^'"]+)['"]`, 'g');
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(content)) !== null) {
+            pushManifestRef(match[1], namespace, match.index, `manifest.${property}`);
+        }
+    }
+
+    const setupPrefix = `games.${gameId}.setup.`;
+    const labelKeyRegex = /\blabelKey\s*:\s*['"]([^'"]+)['"]/g;
+    let labelMatch: RegExpExecArray | null;
+    while ((labelMatch = labelKeyRegex.exec(content)) !== null) {
+        const rawKey = labelMatch[1];
+        if (!rawKey.startsWith(setupPrefix)) {
+            continue;
+        }
+        pushManifestRef(
+            rawKey.slice(`games.${gameId}.`.length),
+            manifestNamespace,
+            labelMatch.index,
+            'manifest.setup.labelKey',
+        );
+    }
+
+    return references;
+};
+
+export const collectStaticKeyReferencesFromContent = (
+    content: string,
+    filePath: string,
+    knownNamespaces: Set<string>,
+): I18nReference[] => {
+    const normalizedPath = normalizeFilePath(filePath);
+    const manifestGameId = getManifestGameId(filePath);
+    if (manifestGameId) {
+        return [];
+    }
+
+    const inferredNamespaces = inferStaticNamespacesForFile(content, filePath, knownNamespaces);
+    if (inferredNamespaces.length === 0) {
+        return [];
+    }
+
+    const references: I18nReference[] = [];
+    const seen = new Set<string>();
+    const propertyRegex = /\b([A-Za-z_$][\w$]*Key)\s*:\s*(['"`])((?:\\.|(?!\2).)*)\2/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = propertyRegex.exec(content)) !== null) {
+        const propertyName = match[1];
+        if (!isI18nPropertyName(propertyName)) {
+            continue;
+        }
+        const literal = parseStringLiteral(match[2], match[3]);
+        if (literal.dynamic || !looksLikeI18nKey(literal.value)) {
+            continue;
+        }
+
+        const parsed = parseI18nKey(literal.value, knownNamespaces);
+        const namespaces = parsed.namespace
+            ? [parsed.namespace]
+            : inferredNamespaces;
+
+        for (const namespace of namespaces) {
+            if (!knownNamespaces.has(namespace)) continue;
+            const dedupeKey = `${propertyName}:${namespace}:${parsed.key}:${match.index}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            references.push(createManifestReference(
+                normalizedPath,
+                getLineNumber(content, match.index),
+                `static.${propertyName}`,
+                parsed.key,
+                namespace,
+            ));
+        }
+    }
+
+    return references;
 };
 
 const scanFilePaths = (rootDir: string): string[] => {
@@ -567,6 +891,29 @@ const formatRefs = (refs: I18nReference[]): string => (
     refs.map((ref) => `${ref.file}:${ref.line}`).join(', ')
 );
 
+const getReferenceConcreteKeys = (
+    ref: I18nReference,
+    locales: LocalesByLanguage,
+    language: string,
+): string[] => {
+    if (!ref.patternSegments) {
+        return ref.namespaces
+            .filter((namespace) => {
+                const localeData = locales[language]?.[namespace];
+                return Boolean(localeData) && hasKeyPath(localeData, ref.key);
+            })
+            .map((namespace) => `${namespace}:${ref.key}`);
+    }
+
+    return ref.namespaces.flatMap((namespace) => {
+        const localeData = locales[language]?.[namespace];
+        if (!localeData) {
+            return [];
+        }
+        return collectPatternMatches(localeData, ref.patternSegments).map((key) => `${namespace}:${key}`);
+    });
+};
+
 const main = () => {
     const { locales, namespaceFiles } = loadLocales();
     const knownNamespaces = new Set([...namespaceFiles, ...I18N_NAMESPACES]);
@@ -579,37 +926,94 @@ const main = () => {
         const content = fs.readFileSync(file, 'utf-8');
         const result = collectReferencesFromContent(content, file, { defaultNamespace: DEFAULT_NAMESPACE, knownNamespaces });
         references.push(...result.references);
+        references.push(...collectManifestReferencesFromContent(content, file, knownNamespaces));
+        references.push(...collectStaticKeyReferencesFromContent(content, file, knownNamespaces));
         warnings.push(...result.warnings);
     }
 
     const missingMap = new Map<string, MissingTranslation>();
     for (const ref of references) {
-        const missingLanguages = SUPPORTED_LANGUAGES.filter((lang) => {
-            const hasAny = ref.namespaces.some((namespace) => {
-                const localeData = locales[lang]?.[namespace];
-                if (!localeData) return false;
-                return hasKeyPath(localeData, ref.key);
+        if (!ref.patternSegments) {
+            const missingLanguages = SUPPORTED_LANGUAGES.filter((lang) => {
+                const hasAny = ref.namespaces.some((namespace) => {
+                    const localeData = locales[lang]?.[namespace];
+                    if (!localeData) return false;
+                    return hasKeyPath(localeData, ref.key);
+                });
+                return !hasAny;
             });
-            return !hasAny;
-        });
-        if (missingLanguages.length === 0) continue;
-        const namespacesKey = ref.namespaces.slice().sort().join(',');
-        const id = `${namespacesKey}:${ref.key}`;
-        const existing = missingMap.get(id);
-        if (existing) {
-            existing.languages = Array.from(new Set([...existing.languages, ...missingLanguages]));
-            existing.refs.push(ref);
+            if (missingLanguages.length === 0) continue;
+            const namespacesKey = ref.namespaces.slice().sort().join(',');
+            const id = `${namespacesKey}:${ref.key}`;
+            const existing = missingMap.get(id);
+            if (existing) {
+                existing.languages = Array.from(new Set([...existing.languages, ...missingLanguages]));
+                existing.refs.push(ref);
+                continue;
+            }
+            missingMap.set(id, {
+                namespaces: ref.namespaces.slice().sort(),
+                key: ref.key,
+                languages: missingLanguages,
+                refs: [ref],
+            });
             continue;
         }
-        missingMap.set(id, {
-            namespaces: ref.namespaces.slice().sort(),
-            key: ref.key,
-            languages: missingLanguages,
-            refs: [ref],
-        });
+
+        const concreteKeysByLanguage = new Map<string, Set<string>>();
+        for (const language of SUPPORTED_LANGUAGES) {
+            concreteKeysByLanguage.set(language, new Set(getReferenceConcreteKeys(ref, locales, language)));
+        }
+
+        const allConcreteKeys = new Set<string>();
+        for (const keys of concreteKeysByLanguage.values()) {
+            for (const key of keys) {
+                allConcreteKeys.add(key);
+            }
+        }
+
+        if (allConcreteKeys.size === 0) {
+            const namespacesKey = ref.namespaces.slice().sort().join(',');
+            const id = `${namespacesKey}:${ref.key}`;
+            const existing = missingMap.get(id);
+            if (existing) {
+                existing.languages = Array.from(new Set([...existing.languages, ...SUPPORTED_LANGUAGES]));
+                existing.refs.push(ref);
+            } else {
+                missingMap.set(id, {
+                    namespaces: ref.namespaces.slice().sort(),
+                    key: ref.key,
+                    languages: [...SUPPORTED_LANGUAGES],
+                    refs: [ref],
+                });
+            }
+            continue;
+        }
+
+        for (const concreteKey of allConcreteKeys) {
+            const [namespace, ...keyParts] = concreteKey.split(':');
+            const key = keyParts.join(':');
+            const missingLanguages = SUPPORTED_LANGUAGES.filter((language) => !concreteKeysByLanguage.get(language)?.has(concreteKey));
+            if (missingLanguages.length === 0) continue;
+            const id = `${namespace}:${key}`;
+            const existing = missingMap.get(id);
+            if (existing) {
+                existing.languages = Array.from(new Set([...existing.languages, ...missingLanguages]));
+                existing.refs.push(ref);
+                continue;
+            }
+            missingMap.set(id, {
+                namespaces: [namespace],
+                key,
+                languages: missingLanguages,
+                refs: [ref],
+            });
+        }
     }
 
     const missing = Array.from(missingMap.values());
+    const blockingWarnings = warnings.filter((warning) => warning.type === 'raw-validation-error');
+
     if (missing.length === 0 && warnings.length === 0) {
         console.log('i18n-check: no missing keys detected.');
         return;
@@ -630,7 +1034,7 @@ const main = () => {
         }
     }
 
-    if (missing.length > 0) {
+    if (missing.length > 0 || blockingWarnings.length > 0) {
         process.exitCode = 1;
     }
 };

@@ -90,7 +90,7 @@ export default entry;
 
 ## game.ts（参考 smashup 简洁风格）
 ```ts
-import { createBaseSystems, createGameAdapter, createFlowSystem, createCheatSystem } from '../../engine';
+import { createBaseSystems, createGameEngine, createFlowSystem, createCheatSystem } from '../../engine';
 import { <GameId>Domain, XX_COMMANDS } from './domain';
 import type { <GameId>Core } from './domain/types';
 import { flowHooks } from './domain/flowHooks';
@@ -101,8 +101,8 @@ const systems = [
     createCheatSystem<<GameId>Core>(cheatModifier),
 ];
 
-// commandTypes 只列业务命令，系统命令由 adapter 自动合并
-export const <GameId> = createGameAdapter<<GameId>Core>({
+// commandTypes 只列业务命令，系统命令由引擎按当前项目约定处理
+export const <GameId> = createGameEngine<<GameId>Core>({
     domain: <GameId>Domain,
     systems,
     minPlayers: 2,

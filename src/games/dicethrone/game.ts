@@ -27,6 +27,7 @@ import { DICETHRONE_COMMANDS, TOKEN_IDS } from './domain/ids';
 import type {
     AbilityCard,
     DiceThroneCore,
+    DtResponseWindowType,
     TurnPhase,
     ChoiceResolvedEvent,
     DamageDealtEvent,
@@ -45,10 +46,12 @@ import type {
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
-import { getNextPhase, getRollerId, getActiveDice } from './domain/rules';
+import { getNextPhase, getRollerId, getActiveDice, areTeammates } from './domain/rules';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
+import { isCardPlayableInResponseWindow } from './domain/rules';
+import { isDirectDiceInterferenceActor } from './domain/responseWindowGuards';
 import { ASSETS } from './ui/assets';
 import { registerGameAiRuntime } from '../../engine/ai';
 import { diceThroneAiRuntime } from './ai';
@@ -87,6 +90,7 @@ const DT_NS = 'game-dicethrone';
 const OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS: Partial<Record<string, string>> = {
     [TOKEN_IDS.CRIT]: 'actionLog.offensiveRollEndTokenEffect.crit',
     [TOKEN_IDS.ACCURACY]: 'actionLog.offensiveRollEndTokenEffect.accuracy',
+    [TOKEN_IDS.LOADED]: 'actionLog.offensiveRollEndTokenEffect.loaded',
 };
 
 function getOffensiveRollEndTokenEffectKey(
@@ -105,6 +109,7 @@ const dtDamageSourceResolver: DamageSourceResolver = {
             case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true, ns: DT_NS };
             case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true, ns: DT_NS };
             case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true, ns: DT_NS };
+            case 'samurai-back-strike-reflect': return { label: 'actionLog.damageSource.backStrike', isI18n: true, ns: DT_NS };
         }
         return null;
     },
@@ -962,6 +967,35 @@ const systems = [
         ],
         
         responderExemptCommands: ['USE_TOKEN', 'SKIP_TOKEN_RESPONSE', 'USE_PASSIVE_ABILITY'],
+        allowNonResponderCommand: ({ state, command, currentWindow }) => {
+            if (command.type !== 'PLAY_CARD' || currentWindow.windowType !== 'afterRollConfirmed') {
+                return false;
+            }
+
+            const matchState = state as MatchState<DiceThroneCore>;
+            const cardId = (command.payload as { cardId?: string } | undefined)?.cardId;
+            if (!cardId) {
+                return false;
+            }
+
+            if (!isDirectDiceInterferenceActor(matchState.core, currentWindow, command.playerId)) {
+                return false;
+            }
+
+            const player = matchState.core.players[command.playerId];
+            const card = player?.hand.find((item) => item.id === cardId);
+            if (!card) {
+                return false;
+            }
+
+            return isCardPlayableInResponseWindow(
+                matchState.core,
+                command.playerId,
+                card,
+                currentWindow.windowType as DtResponseWindowType,
+                matchState.sys.phase as TurnPhase,
+            );
+        },
         responseAdvanceEvents: [
             { eventType: 'CARD_PLAYED' },
         ],

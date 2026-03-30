@@ -4,7 +4,7 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
@@ -50,7 +50,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   attackCount = 0,
   className = '',
 }) => {
-  const { t } = useTranslation('game-summonerwars');
+  const { t, i18n } = useTranslation('game-summonerwars');
   const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
   const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
@@ -58,10 +58,14 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     ? PHASE_ORDER[0]
     : currentPhase;
 
+  useEffect(() => {
+    setSelectedPhaseId(null);
+  }, [currentPhase, isCoarsePointer]);
+
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
     label: t(`phase.${phaseId}`),
-    desc: PHASE_DESC_KEYS[phaseId].map(key => t(key)),
+    desc: PHASE_DESC_KEYS[phaseId].map((key) => (i18n.exists(key) ? t(key) : key)),
   }));
 
   // 构建带数字的阶段配置
@@ -109,7 +113,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
               }}
             >
               <div
-                key={`${String(isCoarsePointer)}-${currentPhase}-${phase.id}`}
+                key={`${String(isCoarsePointer)}-${phase.id}`}
                 role={isCoarsePointer ? 'button' : undefined}
                 tabIndex={isCoarsePointer ? 0 : undefined}
                 onClick={() => {

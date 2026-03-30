@@ -27,11 +27,17 @@ export const formatActionLogSegments = (segments: ActionLogSegment[] = []): stri
                     for (const paramKey of segment.paramI18nKeys) {
                         const rawValue = resolvedParams[paramKey];
                         if (typeof rawValue === 'string' && rawValue) {
-                            resolvedParams[paramKey] = i18n.t(`${segment.ns}:${rawValue}`, { defaultValue: rawValue });
+                            const fullKey = `${segment.ns}:${rawValue}`;
+                            resolvedParams[paramKey] = i18n.exists(fullKey)
+                                ? i18n.t(fullKey, { defaultValue: rawValue })
+                                : rawValue;
                         }
                     }
                 }
-                return i18n.t(`${segment.ns}:${segment.key}`, resolvedParams);
+                const fullKey = `${segment.ns}:${segment.key}`;
+                return i18n.exists(fullKey)
+                    ? i18n.t(fullKey, resolvedParams)
+                    : segment.key;
             }
             // breakdown segment：纯文本 fallback 只显示数值
             if (segment.type === 'breakdown') return segment.displayText;
@@ -39,7 +45,10 @@ export const formatActionLogSegments = (segments: ActionLogSegment[] = []): stri
             if (segment.type === 'diceResult') return `[${segment.dice.map(d => d.value).join(',')}]`;
             // card segment：如果有 previewTextNs，翻译 previewText
             if (segment.previewTextNs && segment.previewText) {
-                return i18n.t(`${segment.previewTextNs}:${segment.previewText}`, { defaultValue: segment.previewText });
+                const fullKey = `${segment.previewTextNs}:${segment.previewText}`;
+                return i18n.exists(fullKey)
+                    ? i18n.t(fullKey, { defaultValue: segment.previewText })
+                    : segment.previewText;
             }
             return segment.previewText ?? segment.cardId ?? '';
         })

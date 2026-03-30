@@ -2,8 +2,10 @@
  * 游戏资源加载器
  * 
  * 提供统一的资源路径解析、预加载和缓存管理。
- * 所有游戏资源路径相对于资源基址（当前默认官方资源域名，
- * 显式 /assets 路径与本地配置资源仍然受支持）。
+ * 资源基址默认策略：
+ * - 开发 / E2E：默认走本地 /assets
+ * - 生产：默认走官方资源域名
+ * - 显式配置 VITE_ASSETS_BASE_URL 时优先使用显式值
  */
 
 import type { GameAssets, SpriteAtlasDefinition, CriticalImageResolverResult } from './types';
@@ -14,6 +16,7 @@ import { resolveCriticalImages } from './CriticalImageResolverRegistry';
 // ============================================================================
 
 const DEFAULT_ASSETS_BASE_URL = 'https://assets.easyboardgame.top/official';
+const LOCAL_ASSETS_BASE_URL = '/assets';
 const COMPRESSED_SUBDIR = 'compressed';
 const LOCALIZED_ASSETS_SUBDIR = 'i18n';
 const VERSION_PARAM = 'v';
@@ -31,15 +34,45 @@ const normalizeAssetsBaseUrl = (value?: string) => {
     return `/${trimmed.replace(/\/+$/, '')}`;
 };
 
+type AssetSourceMode = 'auto' | 'local' | 'remote';
+
+const normalizeAssetSourceMode = (value?: string): AssetSourceMode | null => {
+    if (!value) return null;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'auto' || normalized === 'local' || normalized === 'remote') {
+        return normalized;
+    }
+    return null;
+};
+
+type AssetEnvLike = {
+    DEV?: boolean | string;
+    VITE_ASSETS_BASE_URL?: string;
+    VITE_ASSET_SOURCE?: string;
+};
+
+export function resolveAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
+    const explicitBaseUrl = normalizeAssetsBaseUrl(env?.VITE_ASSETS_BASE_URL);
+    if (explicitBaseUrl) return explicitBaseUrl;
+
+    const sourceMode = normalizeAssetSourceMode(env?.VITE_ASSET_SOURCE) ?? 'auto';
+    if (sourceMode === 'local') return LOCAL_ASSETS_BASE_URL;
+    if (sourceMode === 'remote') return DEFAULT_ASSETS_BASE_URL;
+
+    return env?.DEV === true || env?.DEV === 'true'
+        ? LOCAL_ASSETS_BASE_URL
+        : DEFAULT_ASSETS_BASE_URL;
+}
+
 /**
- * 资源基址（当前默认官方资源域名）。
- * 允许通过 setAssetsBaseUrl 进行覆盖，也兼容显式 /assets 本地路径场景。
+ * 资源基址。
+ * 默认按环境自动选择，也允许通过 setAssetsBaseUrl 进行覆盖。
  */
-let assetsBaseUrl = normalizeAssetsBaseUrl(import.meta.env?.VITE_ASSETS_BASE_URL) ?? DEFAULT_ASSETS_BASE_URL;
+let assetsBaseUrl = resolveAssetsBaseUrlFromEnv(import.meta.env);
 let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
 
 export function setAssetsBaseUrl(value?: string): void {
-    assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? DEFAULT_ASSETS_BASE_URL;
+    assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? resolveAssetsBaseUrlFromEnv(import.meta.env);
 }
 
 export function getAssetsBaseUrl(): string {

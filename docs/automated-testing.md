@@ -18,6 +18,8 @@
 
 ## 快速开始
 
+> **Windows / Codex / AI 终端注意**：单文件 / 单用例 E2E 优先直连 `node scripts/infra/run-e2e-command.mjs ...` 或 `node scripts/infra/run-e2e-single.mjs ...`，不要优先用 `npm run test:e2e:*`；否则会经过 `npm.cmd -> cmd.exe`，产生可见黑框。
+
 ```bash
 # 默认先跑增量测试（基于 origin/main）
 npm run test:changed
@@ -281,6 +283,11 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 - 如果问题发生在线上或特定环境，必须额外保留该环境的现状截图，禁止只用本地 mock 截图宣布“已修复”
 - 汇报时必须同时说明：看的是哪张截图、截图对应哪个环境、你从截图里确认了什么
 - 游戏内移动端截图的主验证方向必须跟该游戏 manifest 的 `preferredOrientation` 一致；不要用错误方向截图替代主验证，只能把错误方向截图用于旋转提示或降级行为验证
+
+**外部资源缺失补充口径**：
+- 如果截图依赖外部 R2 / CDN 牌面资源，而当前测试环境没有稳定拉到图片，必须在结论里明确标注“牌面美术未正常渲染”
+- 遇到上述情况时，E2E 看图验收重点改为：布局位置、相对大小、层级、遮挡、溢出、对齐、交互高亮是否正确；不能把“牌面空白”本身误判成布局失败
+- 但这不构成跳过看图的理由：即使牌面空白，也仍然必须继续检查卡牌容器的宽高、一致性、排列方向和是否互相挤压
 
 #### 2. 服务器就绪检查
 
@@ -607,7 +614,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 2. **开发服务器复用模式**（只在调试测试代码时使用）：
    ```bash
-   # 终端 1：启动开发服务（5173 / 18000 / 18001）
+   # 终端 1：启动开发服务（4173 / 18000 / 18001）
    npm run dev
    
    # 终端 2：复用开发服务运行测试
@@ -649,7 +656,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 1. **检查端口配置**
    - 读取 `.env` 文件确认端口配置：
-     - `VITE_DEV_PORT`（默认 5173，开发环境）
+     - `VITE_DEV_PORT`（默认 4173，开发环境）
      - `GAME_SERVER_PORT`（默认 18000）
      - `API_SERVER_PORT`（默认 18001）
    - 单 worker 隔离测试端口固定为：
@@ -660,7 +667,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 2. **检查服务状态**
    ```powershell
    # 开发环境端口
-   netstat -ano | findstr ":5173"
+   netstat -ano | findstr ":4173"
    netstat -ano | findstr ":18000"
    netstat -ano | findstr ":18001"
 
@@ -670,7 +677,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
    netstat -ano | findstr ":21000"
    
    # 或使用 PowerShell
-   Get-NetTCPConnection -LocalPort 5173
+   Get-NetTCPConnection -LocalPort 4173
    Get-NetTCPConnection -LocalPort 18000
    Get-NetTCPConnection -LocalPort 18001
    Get-NetTCPConnection -LocalPort 6173
@@ -680,7 +687,7 @@ await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 
 3. **验证服务可达性**
    - 开发模式：
-     - 前端：`http://localhost:5173`
+     - 前端：`http://localhost:4173`
      - 游戏服务器：`http://localhost:18000/games`
      - API 服务器：`http://localhost:18001/health`
    - 隔离测试模式：
@@ -820,8 +827,13 @@ const cancelButton = banner.locator('button').filter({
 
 **为什么会出现语言不一致**：
 - 手动操作时浏览器可能加载中文（根据系统语言或用户设置）
-- E2E 测试环境可能加载英文（Playwright 默认语言或 CI 环境语言）
-- i18next 根据 `navigator.language` 或 localStorage 自动选择语言
+- 个别 E2E 用例会显式切到英文（例如调用 `setEnglishLocale()` 做英文断言）
+- i18next 会根据 `localStorage.i18nextLng` 或 `navigator.language` 选择语言
+
+**当前框架默认口径**：
+- `initContext()` 默认写入 `zh-CN`，因为当前开发者和主要验收语境都是中文。
+- 只有在确实要验证英文文案时，才显式调用 `setEnglishLocale()`。
+- 不要再假设“E2E 默认英文”；需要多语言兼容时，用正则同时覆盖中英文。
 
 **教训案例**：
 - 问题：`e2e/summonerwars-magic-event-choice.e2e.ts` 测试失败，横幅文本未找到
@@ -1124,6 +1136,7 @@ npm run test:e2e:ci:all
 - 常用项目脚本（如 `npm run test:e2e`、`npm run test:e2e:ci`、`npm run test:e2e:parallel`）会显式强制无头运行，避免终端里残留的 `PW_HEADED` / `PWDEBUG` 导致突然弹出一批浏览器窗口
 - 如需可见浏览器调试，请显式使用 `npx playwright test --headed` 或 `npx playwright test --debug`
 - E2E 自动起服默认会给游戏服务注入 `USE_PERSISTENT_STORAGE=false`，此时游戏服应以纯内存模式启动，不要求本机先准备 MongoDB；对应代价是 UGC、排行榜归档等依赖 Mongo 的能力会被自动跳过
+- `npm run test:e2e:ci:file -- <文件> "<用例名>"` 这类“显式目标”入口会先在共享 registry 中保留一组隔离端口，再启动服务；多 AI / 多 worktree 并发时优先使用这个入口，避免两个运行链路同时挑中同一组动态端口
 
 ### 端口配置与隔离（重要）
 
@@ -1344,14 +1357,24 @@ npm run test:api
 3. UI 问题交付时必须同时给出你亲自核对过的截图绝对路径（`F:\...`），路径要能让人直接复制打开，并写出从图里确认到的可见结果。
 4. 如果证据文档中嵌入了多张图，必须保证每张图旁边都有自己的绝对路径，不能只在文档开头给一个总目录。
 5. 线上问题必须至少附一张线上环境现状截图；本地修复截图不能替代线上现状截图。
-6. UI / 移动端适配 / 布局 / 动画 / 触屏交互类 E2E，必须额外逐项核对这些视觉项：
+6. 黑图、纯加载页、纯空白页、只有遮罩或只有单个噪点而看不出业务界面的截图，一律视为“无有效截图”，不得拿来充当 UI 验收证据。
+7. 只要首张截图已经表现为“无有效截图”，就必须立刻在结论里写明“本轮没有拿到有效业务截图”，不能继续用这轮产物宣称“已看图确认正常”。
+8. 未亲自打开过的截图路径不得汇报给用户作为验收依据；如果只是文件存在、尚未看图，只能表述为“产物路径”，不能表述为“已核对截图”。
+9. UI / 移动端适配 / 布局 / 动画 / 触屏交互类 E2E，必须额外逐项核对这些视觉项：
    - 主棋盘或主内容区的纵向锚点是否正确，是否明显偏上/偏下。
    - 浮动按钮、结束回合区、顶部横幅、HUD 是否和主棋盘处于同一缩放体系，而不是肉眼看起来大小脱节。
    - 预留空间是否和真实控件高度一致，是否出现大块空带、挤压或控件悬空。
    - 移动端是否错误保留桌面 hover 入口、常驻放大按钮或其他假 hover 设计。
    - 关键区域是否被遮挡、裁切、出屏或互相覆盖。
-6. 上述视觉结论必须来自实际看图，不得用“locator 可见”“元素在视口内”“断言通过”替代。
-7. 若首张主状态截图已经能肉眼看出明显问题，禁止继续把该轮结果汇报为“已通过”；必须先按失败处理并回到修复。
+10. 上述视觉结论必须来自实际看图，不得用“locator 可见”“元素在视口内”“断言通过”替代。
+11. 若首张主状态截图已经能肉眼看出明显问题，禁止继续把该轮结果汇报为“已通过”；必须先按失败处理并回到修复。
+
+### 外部 R2/CDN 资源缺失时的看图规则（补充）
+
+1. 如果截图中的牌面美术依赖外部 R2 / CDN，而当前环境没有稳定拉到图片，必须在证据文档和汇报里明确写出“牌面美术未正常渲染”。
+2. 这种情况下，E2E 的人工验收重点改为布局、相对大小、层级、遮挡、溢出、对齐、交互高亮，不再把“白卡面”本身当成 blocker。
+3. 但不能因此放松验收。相反，必须更仔细核对卡牌容器本身的宽高、一致性、排列方向，以及是否出现互相挤压、错位或比例失真。
+4. 如果用户关心的是布局而不是美术渲染，结论里必须区分“资源未渲染”和“布局异常”两件事，禁止混写。
 
 ---
 

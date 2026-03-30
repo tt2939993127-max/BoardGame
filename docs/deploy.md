@@ -147,7 +147,7 @@ Cloudflare 控制台 → **Workers & Pages** → 选择你的 Pages 项目 → *
 - **环境变量**（非常重要）：
   - `VITE_BACKEND_URL` = `https://api.<你的域名>`
   - 例如：`VITE_BACKEND_URL=https://api.easyboardgame.top`
-- **如果 Android App 使用 remote WebView 模式**：
+- **如果 Android App 临时使用 remote WebView 模式**：
   - `ANDROID_REMOTE_WEB_URL` 应指向实际对外可访问的前端页面入口，例如 `https://easyboardgame.top`
   - 不要把 `ANDROID_REMOTE_WEB_URL` 指到纯 API 域名，例如 `https://api.easyboardgame.top`
 - **自定义域名**：
@@ -196,15 +196,54 @@ SMTP_PASS=xxx
 
 ### Android remote WebView 额外约束
 
-如果 Android 壳使用 `ANDROID_WEBVIEW_MODE=remote`，部署侧还需要满足以下条件：
+如果 Android 壳临时使用 `ANDROID_WEBVIEW_MODE=remote`，部署侧还需要满足以下条件：
 
-- `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTPS 地址，且应指向真实前端入口
+- `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTP/HTTPS 地址，且应指向真实前端入口
+- 除局域网临时调试或短期灰度外，仍优先使用 HTTPS
 - 该前端入口加载出来的 H5 仍然会访问你的后端接口，因此 `WEB_ORIGINS` 必须包含这个前端域名
 - 远程模式下，Android App 会与线上 Web 同步更新；如果线上前端需要回滚，App 也会一起回滚，不再依赖重新发 APK
 - Android `remote` 打包应视为“纯壳模式”：不会执行 `vite build`，也不会把 `dist` 前端资源复制进 APK；打包只更新原生壳、Capacitor 配置和壳内静态资产（例如方向映射、图标、启动图）
 - Android `remote` 的 `build-debug / build-release / build-bundle` 不再自动执行 `capacitor sync/update`；如果你新增了 Capacitor 插件、修改了 Android 原生模板或首次初始化工程，先手动执行一次 `npm run mobile:android:sync`
 - 当前 Android 壳默认行为：游戏页按 `preferredOrientation` 自动切换横竖屏，并隐藏顶部状态栏；非游戏页恢复竖屏和系统状态栏
 - Android 壳进入后台、按 Home、锁屏或熄屏时，会主动通知 H5 停止当前 BGM；恢复前台后默认不自动续播
+
+> **主线口径**：`remote WebView` 只作为兼容 / 调试 / 短期灰度路径保留。Android 的长期主线应是 `embedded` 打包；若未来需要热更新 H5 本体，应演进为 `embedded + OTA/Live Update`，而不是继续把 `remote` 当默认产品方案。
+
+### Android embedded OTA 发布源
+
+当前 Android 主线热更新不再依赖 `remote`，而是：
+
+- App 打包仍走 `embedded`
+- H5 本体通过 OTA manifest + zip bundle 更新
+- 发布源复用同一个对象存储桶，路径前缀为 `official/app-updates/android/<channel>/...`
+
+默认约定：
+
+- `latest.json`：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/latest.json`
+- bundle zip：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/bundles/<bundleVersion>.zip`
+- version manifest：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/manifests/<bundleVersion>.json`
+
+发布命令：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --dry-run
+npm run mobile:android:ota:publish -- --channel stable --skip-latest
+npm run mobile:android:ota:publish -- --channel stable
+```
+
+GitHub Actions 自动化：
+
+- workflow：`.github/workflows/android-ota-publish.yml`
+- 自动触发：`main` 分支合入影响 H5 bundle 的改动后，自动发布到非生产 channel，默认 `edge`
+- 手动触发：可手动选择 `stable` / `gray` / `edge`，并支持 `dry_run`、`skip_latest`
+- 正式门禁：`stable` 发布应绑定 `android-ota-production` Environment 审批
+
+约束：
+
+- `--dry-run` 只本地打 zip 和 manifest，不上传
+- `--skip-latest` 会上传 bundle 与版本 manifest，但不会切换该 channel 的 `latest.json`
+- 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
+- OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
 
 ## Nginx 反向代理（自动管理）
 
@@ -260,6 +299,15 @@ SMTP_PASS=xxx
 - **缓存失效机制**：构建时会扫描 `public/assets`，为资源 URL 自动追加 `?v=<content-hash>`。资源内容变化后 URL 会自动变化，因此 R2 上的图片/音频/SVG 可以安全使用长期缓存。
 - **本地 JSON / 图集配置**：仍走本地 `/assets`，但同样会追加 `?v=<content-hash>`，避免本地回退路径拿到旧配置。
 
+## 非 /assets 静态资源缓存策略（当前主链路）
+
+- **适用范围**：`/fonts/*`、`/logos/*`、大多数 `/game-data/*` 即使没有上 R2，也可以使用长期缓存；关键不在“是否走对象存储”，而在“URL 是否带内容版本指纹”。
+- **当前实现**：构建阶段会为 `public/fonts`、`public/logos`、静态 `public/game-data` 生成内容 hash，并在最终 `index.html`、字体 CSS、运行时代码引用里自动追加 `?v=<content-hash>`。
+- **服务端缓存头**：生产单体服务会把上述目录按 `Cache-Control: public, max-age=31536000, immutable` 提供；浏览器或 Cloudflare 拿到新 URL 才会请求新内容。
+- **例外文件**：`/game-data/summonerwars.layout.json` 仍保持 `no-cache, no-store, must-revalidate`，因为它承载运行时布局编辑结果，不能误进长期缓存。
+- **入口页策略不变**：`index.html` 和 SPA fallback 继续 `no-cache, no-store, must-revalidate`，确保部署后刷新页面一定拿到新的资源引用关系。
+- **新增 game-data 的判断规则**：如果文件是“构建期静态产物”，应纳入版本指纹 + 长缓存；如果文件可能被后台、编辑器或运行时直接改写，则默认保守缓存，除非同时设计了独立版本号或发布链路。
+
 ## 资源发布流程（官方）
 
 1. 准备/更新 `public/assets/<gameId>/...` 资源。
@@ -267,6 +315,23 @@ SMTP_PASS=xxx
 3. 校验清单：`npm run assets:validate`（缺文件/变体不一致会报错）。
 4. 上传资源与清单到对象存储（路径 `official/<gameId>/...`）。
 5. 如仅修改了对象元数据（例如 `Cache-Control`），使用 `npm run assets:upload:force` 重新上传；常规资源内容更新不需要手动 purge，因为 URL 会随内容 hash 自动变化。
+
+### Android OTA 产物发布流程
+
+Android OTA 产物也走同一个对象存储桶，但前缀独立：
+
+1. 先执行 `npm run mobile:android:sync`，确保 `dist/` 与 Android embedded 资源同步
+2. 预演发布：`npm run mobile:android:ota:publish -- --channel gray --dry-run`
+3. 灰度上传但不切流：`npm run mobile:android:ota:publish -- --channel gray --skip-latest`
+4. 准备正式生效时，再执行不带 `--skip-latest` 的正式发布命令
+
+建议把 `stable`、`gray` 等 channel 作为独立发布轨道管理，不要把未验证 bundle 直接覆盖到 `stable/latest.json`
+
+建议的 OTA 发布节奏：
+
+1. `main` 自动发 `edge`
+2. 测试确认后手动发 `gray`
+3. 最后经审批手动发 `stable`
 
 ## UGC 资源前缀预留（未实现）
 

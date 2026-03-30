@@ -372,7 +372,7 @@ init_admin_if_configured() {
 
   log "初始化管理员账号..."
   if docker compose -f "$COMPOSE_FILE" exec -T -e NODE_ENV=development web \
-    npx tsx scripts/db/init_admin.ts \
+    npx tsx --tsconfig tsconfig.api.json scripts/db/init_admin.ts \
       --email="$admin_email" \
       --password="$admin_password" \
       --username="${admin_username:-管理员}" \
@@ -415,7 +415,7 @@ init_admin() {
 
   log "初始化管理员账号..."
   docker compose -f "$COMPOSE_FILE" exec -T -e NODE_ENV=development web \
-    npx tsx scripts/db/init_admin.ts \
+    npx tsx --tsconfig tsconfig.api.json scripts/db/init_admin.ts \
       --email="$admin_email" \
       --password="$admin_password" \
       --username="$admin_username" \

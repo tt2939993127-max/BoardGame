@@ -9,6 +9,7 @@ import {
     signalCriticalImagesReady,
 } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
+import { warmPreloadScheduler } from './warmPreloadScheduler';
 
 const criticalImageGateWindow = typeof window !== 'undefined'
     ? window as Window & {
@@ -70,6 +71,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         };
 
         document.addEventListener('visibilitychange', onVisibilityChange);
+        onVisibilityChange();
         return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     }, []);
 
@@ -97,6 +99,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     }, [effectiveEnabled, gameId, gameState, locale, playerID]);
 
     const runKey = `${gameId ?? ''}:${locale ?? ''}:${phaseKey}:${stateKey}`;
+    const latestRunKeyRef = useRef(runKey);
+    latestRunKeyRef.current = runKey;
 
     const needsPreload = effectiveEnabled
         && !!gameId
@@ -133,6 +137,13 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     }, [gameState]);
 
     useEffect(() => {
+        // 教程启动常通过 useLayoutEffect 同步推进 state。
+        // 当前 render 对应的 passive effect 真正执行时，组件可能已经带着新的 runKey 重渲染过。
+        // 这里必须跳过旧 render 遗留的 preload，避免“教程前状态”和“教程后状态”各跑一轮。
+        if (runKey !== latestRunKeyRef.current) {
+            return;
+        }
+
         if (!effectiveEnabled || !gameId) {
             setReady(true);
             inFlightRef.current = false;
@@ -203,6 +214,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
 
         preloadPromise
             .then((warmPaths) => {
+                if (runKey !== latestRunKeyRef.current) {
+                    return;
+                }
                 lastReadyKeyRef.current = runKey;
                 readyRunKeys.add(runKey);
                 setReady(true);
@@ -214,6 +228,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                 }
             })
             .catch((err) => {
+                if (runKey !== latestRunKeyRef.current) {
+                    return;
+                }
                 console.error('[CriticalImageGate] 预加载失败', err);
                 lastReadyKeyRef.current = runKey;
                 readyRunKeys.add(runKey);
@@ -223,6 +240,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             })
             .finally(() => {
                 inFlightRef.current = false;
+                if (runKey !== latestRunKeyRef.current && !pendingRunKeyRef.current) {
+                    pendingRunKeyRef.current = latestRunKeyRef.current;
+                }
                 if (pendingRunKeyRef.current) {
                     pendingRunKeyRef.current = null;
                     setRetryTick((tick) => tick + 1);

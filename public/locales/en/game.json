@@ -339,6 +339,7 @@
       "human": "Human",
       "local": "Local AI",
       "remote": "Remote AI",
+      "difficulty": "Difficulty: {{value}}",
       "policy": "Policy: {{value}}",
       "provider": "Provider: {{value}}",
       "modes": {

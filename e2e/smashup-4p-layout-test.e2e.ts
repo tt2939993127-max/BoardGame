@@ -1,4 +1,5 @@
 import { test, expect } from './framework';
+import { setChineseLocale } from './helpers/common';
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -311,6 +312,35 @@ function buildFactionSelectionMobileScene() {
                         '0': [],
                         '1': [],
                     },
+                    completedPlayers: [],
+                },
+            },
+        },
+    };
+}
+
+function buildFactionSelectionWithOwnedPickScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'factionSelect' as const,
+        extra: {
+            core: {
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                turnNumber: 1,
+                nextUid: 1000,
+                players: {
+                    '0': createPlayerState('0', 0, ['aliens', 'pirates']),
+                    '1': createPlayerState('1', 0, ['ninjas', 'dinosaurs']),
+                },
+                factionSelection: {
+                    takenFactions: ['pirates'],
+                    playerSelections: {
+                        '0': ['pirates'],
+                        '1': [],
+                    },
+                    completedPlayers: [],
                 },
             },
         },
@@ -828,7 +858,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 });
 
 test.describe('大杀四方移动端派系选择布局', () => {
-    test('横屏移动端打开派系详情时应完整显示并可滚动查看全部卡牌', async ({ page, game }, testInfo) => {
+    test('横屏移动端打开派系详情时应显示泰坦区，并可完整滚动查看全部卡牌', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await page.setViewportSize({ width: 852, height: 393 });
@@ -858,18 +888,27 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const factionSelect = page.locator('[data-tutorial-id="su-faction-select"]');
         const factionHeading = page.getByText(/Draft Your Factions|选择你的派系/i);
         const aliensCard = factionSelect.getByText(/Aliens|外星人/i).first();
+        const piratesCard = factionSelect.getByText(/Pirates|海盗/i).first();
         const rotateBanner = page.getByText(/建议旋转至横屏|建议切换为竖屏/i);
+        const closeButton = page.getByTestId('faction-detail-close');
 
         await expect(factionHeading).toBeVisible({ timeout: 15000 });
         await expect(rotateBanner).toHaveCount(0);
         await expect(aliensCard).toBeVisible({ timeout: 10000 });
-        await aliensCard.click();
+        await expect(piratesCard).toBeVisible({ timeout: 10000 });
+        await piratesCard.click();
 
         const confirmButton = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-        const previewCards = factionSelect.locator('.cursor-zoom-in');
-        const previewSection = previewCards.first().locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
+        const previewGrid = page.getByTestId('faction-preview-grid');
+        const previewCards = page.getByTestId('faction-preview-card');
+        const previewSection = previewGrid.locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
+        const titanSection = page.getByTestId('faction-titan-section');
+        const titanCards = page.getByTestId('faction-titan-card');
 
         await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await expect(titanSection).toBeVisible({ timeout: 10000 });
+        await expect(titanCards).toHaveCount(1);
+        await expect(aliensCard).toBeVisible({ timeout: 10000 });
         const previewCardCount = await previewCards.count();
         expect(previewCardCount).toBeGreaterThan(8);
         await expect(previewSection).toBeVisible({ timeout: 10000 });
@@ -887,5 +926,64 @@ test.describe('大杀四方移动端派系选择布局', () => {
         await expect(previewCards.last()).toBeVisible({ timeout: 5000 });
 
         await game.screenshot('12-mobile-landscape-faction-detail-bottom', testInfo);
+
+        await closeButton.click();
+        await aliensCard.click();
+        await expect(page.getByTestId('faction-titan-empty')).toContainText(/该种族泰坦暂未接入|Titan/i);
+        await game.screenshot('13-mobile-landscape-faction-detail-no-titan', testInfo);
+    });
+
+    test('PC 已选派系可取消并重新选择', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await setChineseLocale(page.context());
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildFactionSelectionWithOwnedPickScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.phase === 'factionSelect'
+                && state?.core?.turnOrder?.[state.core.currentPlayerIndex] === '0'
+                && Array.isArray(state?.core?.factionSelection?.playerSelections?.['0'])
+                && state.core.factionSelection.playerSelections['0'][0] === 'pirates';
+        }, { timeout: 10000, polling: 200 });
+
+        const piratesCard = page.getByTestId('faction-option-pirates');
+        const aliensCard = page.getByTestId('faction-option-aliens');
+        const detailPanel = page.getByTestId('faction-detail-panel');
+        const cancelButton = page.getByTestId('faction-cancel-button');
+        const confirmButton = page.getByTestId('faction-confirm-button');
+
+        await expect(piratesCard).toBeVisible({ timeout: 10000 });
+        await piratesCard.click();
+
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(cancelButton).toBeVisible({ timeout: 10000 });
+        await game.screenshot('18-desktop-faction-cancel-before', testInfo);
+
+        await cancelButton.click();
+        await expect(detailPanel).toHaveCount(0);
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const picks = state?.core?.factionSelection?.playerSelections?.['0'] ?? [];
+            const currentPlayerId = state?.core?.turnOrder?.[state.core.currentPlayerIndex];
+            return Array.isArray(picks) && picks.length === 0 && currentPlayerId === '0';
+        }, { timeout: 10000, polling: 200 });
+
+        await aliensCard.click();
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await confirmButton.click();
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const picks = state?.core?.factionSelection?.playerSelections?.['0'] ?? [];
+            const currentPlayerId = state?.core?.turnOrder?.[state.core.currentPlayerIndex];
+            return Array.isArray(picks) && picks.length === 1 && picks[0] === 'aliens' && currentPlayerId === '1';
+        }, { timeout: 10000, polling: 200 });
+
+        await game.screenshot('19-desktop-faction-cancel-after', testInfo);
     });
 });

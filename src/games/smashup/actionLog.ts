@@ -32,6 +32,7 @@ import { buildDamageBreakdownSegment, type DamageSourceResolver } from '../../en
 export const ACTION_ALLOWLIST = [
     SU_COMMANDS.PLAY_MINION,
     SU_COMMANDS.PLAY_ACTION,
+    SU_COMMANDS.USE_BASE_ABILITY,
     SU_COMMANDS.USE_TALENT,
     SU_COMMANDS.DISCARD_TO_LIMIT,
     FLOW_COMMANDS.ADVANCE_PHASE,
@@ -48,6 +49,7 @@ export const ACTION_ALLOWLIST = [
 export const UNDO_ALLOWLIST = [
     SU_COMMANDS.PLAY_MINION,
     SU_COMMANDS.PLAY_ACTION,
+    SU_COMMANDS.USE_BASE_ABILITY,
     SU_COMMANDS.USE_TALENT,
 ] as const;
 

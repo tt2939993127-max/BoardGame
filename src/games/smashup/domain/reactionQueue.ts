@@ -36,6 +36,9 @@ function getReactionTimingLabelKey(timing: TriggerInstance['timing']): string {
   switch (timing) {
     case 'onMinionPlayed':
     case 'onActionPlayed':
+    case 'onCardsDiscarded':
+    case 'onCardBuried':
+    case 'onBuriedCardUncovered':
     case 'onBaseRevealed':
     case 'onMinionDestroyed':
     case 'onMinionMoved':
@@ -87,6 +90,8 @@ export function maybeResolveReactionQueue(
         sourceControllerId: t.sourceControllerId,
         playerId: t.ownerPlayerId,
         baseIndex: t.baseIndex,
+        moveFromBaseIndex: t.moveFromBaseIndex,
+        moveToBaseIndex: t.moveToBaseIndex,
         rankings: t.rankings,
         triggerMinionUid: t.triggerMinionUid,
         triggerMinionDefId: t.triggerMinionDefId,
@@ -111,6 +116,14 @@ export function maybeResolveReactionQueue(
         actionTargetBaseIndex: t.actionTargetBaseIndex,
         actionTargetType: (t as any).actionTargetType,
         actionTargetMinionUid: t.actionTargetMinionUid,
+        buriedCardUid: t.buriedCardUid,
+        buriedCardDefId: t.buriedCardDefId,
+        buriedCardControllerId: t.buriedCardControllerId,
+        buriedFrom: t.buriedFrom,
+        inspectionCards: t.inspectionCards,
+        inspectionZone: t.inspectionZone,
+        inspectionTargetPlayerIds: t.inspectionTargetPlayerIds,
+        inspectionCausePlayerId: t.inspectionCausePlayerId,
         random,
         now,
       } as any);

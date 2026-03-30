@@ -43,6 +43,9 @@ function buildAttemptKey(args: {
     const statePhase = typeof args.state.sys?.phase === 'string'
         ? args.state.sys.phase
         : '';
+    const eventStreamNextId = typeof args.state.sys?.eventStream?.nextId === 'number'
+        ? args.state.sys.eventStream.nextId
+        : '';
     const controllerKey = args.controller.type === 'remote-ai'
         ? `${args.controller.type}:${args.controller.providerId}:${args.controller.fallbackPolicyId ?? ''}`
         : `${args.controller.type}:${args.controller.policyId ?? ''}:${args.controller.fallbackPolicyId ?? ''}`;
@@ -52,6 +55,7 @@ function buildAttemptKey(args: {
         controllerKey,
         stateTurnNumber,
         statePhase,
+        eventStreamNextId,
         args.interactionId ?? '',
         args.responderIndex ?? '',
         legalActionIds,
@@ -169,6 +173,7 @@ export async function resolveNextAiAction(
             rulesVersion,
             decisionBudgetMs,
             source: seatController.type === 'remote-ai' ? 'online' : 'local',
+            seatController,
         });
 
         if (context.legalActions.length === 0) continue;

@@ -1,4 +1,5 @@
 import type {
+    GameManifestMobileDelivery,
     GameManifestEntry,
     GameMobileLayoutPreset,
     GameMobileProfile,
@@ -19,6 +20,7 @@ export interface ResolvedGameMobileSupport {
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
     shellTargets: GameShellTarget[];
+    mobileDelivery: GameManifestMobileDelivery;
 }
 
 export interface RuntimeViewportSize {
@@ -26,7 +28,19 @@ export interface RuntimeViewportSize {
     height: number;
 }
 
+const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
+    'data-game-page',
+    'data-game-id',
+    'data-mobile-profile',
+    'data-preferred-orientation',
+    'data-mobile-layout-preset',
+    'data-shell-targets',
+] as const;
+
+type GamePageDocumentAttributeKey = typeof GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS[number];
+
 const DEFAULT_SHELL_TARGETS: GameShellTarget[] = ['pwa'];
+const DEFAULT_RUNTIME_CHANNEL = 'stable';
 
 const isUsableViewportDimension = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value) && value > 0;
@@ -44,7 +58,7 @@ export const extractGameIdFromPlayPath = (pathname: string) => {
 export const resolveGameMobileSupport = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ): ResolvedGameMobileSupport => {
     const mobileProfile = entry?.mobileProfile ?? 'none';
@@ -63,12 +77,31 @@ export const resolveGameMobileSupport = (
     const shellTargets = entry?.shellTargets?.length
         ? [...entry.shellTargets]
         : [...DEFAULT_SHELL_TARGETS];
+    const canUsePackageManagedDelivery = shellTargets.includes('app-webview');
+    const requestedDeliveryMode = entry?.mobileDelivery?.mode ?? 'builtin';
+    const deliveryMode = requestedDeliveryMode === 'package-managed' && canUsePackageManagedDelivery
+        ? 'package-managed'
+        : 'builtin';
+    const requiredAppVersion = entry?.mobileDelivery?.requiredAppVersion?.trim();
+    const mobileDelivery = deliveryMode === 'package-managed'
+        ? {
+            mode: 'package-managed' as const,
+            runtimeChannel: entry?.mobileDelivery?.runtimeChannel?.trim() || DEFAULT_RUNTIME_CHANNEL,
+            modulePackId: entry?.mobileDelivery?.modulePackId?.trim(),
+            assetPackId: entry?.mobileDelivery?.assetPackId?.trim(),
+            ...(entry?.mobileDelivery?.requiresAppUpdate === true ? { requiresAppUpdate: true } : {}),
+            ...(requiredAppVersion ? { requiredAppVersion } : {}),
+        }
+        : {
+            mode: 'builtin' as const,
+        };
 
     return {
         mobileProfile,
         preferredOrientation,
         mobileLayoutPreset,
         shellTargets,
+        mobileDelivery,
     };
 };
 
@@ -84,7 +117,7 @@ export const getGamePageDataAttributes = (
     gameId?: string,
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ) => {
     const attributes: Record<string, string> = {
@@ -111,10 +144,53 @@ export const getGamePageDataAttributes = (
     return attributes;
 };
 
+export const syncGamePageDocumentAttributes = (
+    attributes: Partial<Record<GamePageDocumentAttributeKey, string>>,
+) => {
+    if (typeof document === 'undefined') {
+        return () => {};
+    }
+
+    const targets = [document.documentElement, document.body];
+    const snapshots = targets.map((target) =>
+        Object.fromEntries(
+            GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS.map((key) => [key, target.getAttribute(key)]),
+        ) as Record<GamePageDocumentAttributeKey, string | null>,
+    );
+
+    targets.forEach((target) => {
+        GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS.forEach((key) => {
+            const value = attributes[key];
+            if (value) {
+                target.setAttribute(key, value);
+                return;
+            }
+
+            target.removeAttribute(key);
+        });
+    });
+
+    return () => {
+        targets.forEach((target, index) => {
+            const snapshot = snapshots[index];
+            GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS.forEach((key) => {
+                const value = snapshot[key];
+                if (value === null) {
+                    target.removeAttribute(key);
+                    return;
+                }
+
+                target.setAttribute(key, value);
+            });
+        });
+    };
+};
+
 export const getGameMobileBannerKind = (
     entry?: Pick<
         GameManifestEntry,
         'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
+        | 'mobileDelivery'
     > | null,
     width = 0,
     height = 0,
@@ -141,7 +217,7 @@ export const getGameMobileBannerKind = (
 export const shouldUseBoardShellScale = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
     width = 0,
     height = 0,

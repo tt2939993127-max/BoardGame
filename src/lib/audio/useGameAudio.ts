@@ -229,7 +229,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             return {
                 activeGroup: null as BgmGroupId | null,
                 playlist: allBgm,
-                targetKey: null as string | null,
+                targetKey: currentBgmKeyRef.current,
             };
         }
 

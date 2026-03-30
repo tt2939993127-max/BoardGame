@@ -92,9 +92,14 @@ export type EventInterceptor = (
 export type TriggerTiming =
     | 'onMinionPlayed'     // 随从入场时
     | 'onActionPlayed'     // 行动卡打出时（用于基地能力队列化）
+    | 'onCardsDiscarded'   // 手牌弃置时
+    | 'onCardBuried'       // 卡牌被埋葬时
+    | 'onBuriedCardUncovered' // 埋葬牌被翻开时
     | 'onBaseRevealed'     // 基地翻出/替换后入场（扩展基地触发）
     | 'onMinionDestroyed'  // 随从被消灭时
     | 'onMinionMoved'      // 随从被移动时
+    | 'onCardReturnedToHand' // 卡牌从场上或弃牌堆进入手牌时
+    | 'onDeckInspected'    // 牌库被查看 / 展示 / 检索时
     | 'onMinionAffected'   // 随从被对手效果影响时（聚合时机：消灭/移动/力量修改/附着/控制权变更）
     | 'onMinionDiscardedFromBase' // 基地结算时随从被弃置（非消灭）
     | 'onTurnEnd'          // 回合结束时
@@ -103,14 +108,16 @@ export type TriggerTiming =
     | 'afterScoring';      // 基地计分后
 
 /** 影响类型（仅 onMinionAffected 时有值） */
-export type AffectType = 'destroy' | 'move' | 'power_change' | 'attach_action';
+export type TitanAwareTriggerTiming = TriggerTiming | 'onTitanMoved';
+
+export type AffectType = 'destroy' | 'move' | 'power_change' | 'attach_action' | 'control_change';
 
 /** 触发上下文 */
 export interface TriggerContext {
     state: SmashUpCore;
     /** 完整的 match 状态，用于调用 queueInteraction（触发器需要创建交互时使用） */
     matchState?: MatchState<SmashUpCore>;
-    timing: TriggerTiming;
+    timing: TitanAwareTriggerTiming;
     /** 具体触发来源的实例 uid；同名来源需要按实例结算时使用 */
     sourceCardUid?: string;
     /** 触发来源在触发时所在基地 */
@@ -121,6 +128,10 @@ export interface TriggerContext {
     playerId: PlayerId;
     /** 触发相关的基地索引 */
     baseIndex?: number;
+    /** onMinionMoved 时：移动前的基地索引 */
+    moveFromBaseIndex?: number;
+    /** onMinionMoved 时：移动后的基地索引 */
+    moveToBaseIndex?: number;
     /** 触发相关的随从（如入场/被消灭的随从） */
     triggerMinion?: MinionOnBase;
     /** 触发相关的随从 UID */
@@ -135,6 +146,28 @@ export interface TriggerContext {
     affectType?: AffectType;
     /** 基地计分排名（仅 afterScoring 时有值） */
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    /** 埋葬/翻开相关卡牌 UID */
+    buriedCardUid?: string;
+    /** 埋葬/翻开相关卡牌 defId */
+    buriedCardDefId?: string;
+    /** 埋葬/翻开相关卡牌控制者 */
+    buriedCardControllerId?: PlayerId;
+    /** 埋葬来源 */
+    buriedFrom?: 'hand' | 'discard' | 'play' | 'deck';
+    /** onActionPlayed 时：行动卡目标基地 */
+    actionTargetBaseIndex?: number;
+    /** onActionPlayed 时：行动卡目标类型 */
+    actionTargetType?: 'base' | 'minion';
+    /** onActionPlayed 时：行动卡目标随从（附着行动卡时有值） */
+    actionTargetMinionUid?: string;
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：本次暴露出来的卡牌 */
+    inspectionCards?: Array<{ uid: string; defId: string }>;
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：暴露区域 */
+    inspectionZone?: 'deck' | 'hand';
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：被查看/展示的玩家 */
+    inspectionTargetPlayerIds?: PlayerId[];
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：实际造成查看/展示的玩家 */
+    inspectionCausePlayerId?: PlayerId;
     random: RandomFn;
     now: number;
 }
@@ -170,10 +203,12 @@ interface RestrictionEntry {
 
 interface TriggerEntry {
     sourceDefId: string;
-    timing: TriggerTiming;
+    timing: TitanAwareTriggerTiming;
     callback: TriggerCallback;
     optional?: boolean;
     phase?: 'replacement' | 'reaction';
+    playerContext?: 'eventPlayer' | 'sourceController';
+    baseScoped?: boolean;
     /** true 时按场上每个来源实例单独入队/执行，而不是按 defId 聚合一次 */
     perInstance?: boolean;
     /** true 时要求来源必须位于当前触发对应的基地（例如计分基地上的随从） */
@@ -183,12 +218,15 @@ interface TriggerEntry {
      * Use for Special cards that can be played from hand/discard when a condition happens.
      */
     global?: boolean;
+    /** global 触发器允许见证的来源区域；默认 hand + discard */
+    globalZones?: Array<'hand' | 'discard' | 'deck'>;
 }
 
 interface TriggerSourceLocation {
     uid?: string;
     baseIndex?: number;
     controllerId?: PlayerId;
+    titanUid?: string;
 }
 
 interface InterceptorEntry {
@@ -232,12 +270,15 @@ export function registerRestriction(
 /** 注册触发拦截器 */
 export function registerTrigger(
     sourceDefId: string,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     callback: TriggerCallback,
     options?: {
         optional?: boolean;
         phase?: 'replacement' | 'reaction';
         global?: boolean;
+        globalZones?: Array<'hand' | 'discard' | 'deck'>;
+        playerContext?: 'eventPlayer' | 'sourceController';
+        baseScoped?: boolean;
         perInstance?: boolean;
         sourceScope?: 'any' | 'triggerBase';
     }
@@ -253,6 +294,9 @@ export function registerTrigger(
         perInstance: options?.perInstance,
         sourceScope: options?.sourceScope ?? 'any',
         global: options?.global,
+        globalZones: options?.globalZones,
+        playerContext: options?.playerContext ?? 'eventPlayer',
+        baseScoped: options?.baseScoped ?? true,
     });
     registerTriggerExecutor(sourceDefId, timing, callback);
 }
@@ -274,6 +318,15 @@ function locateSources(state: SmashUpCore, sourceDefId: string): TriggerSourceLo
             }
         }
     }
+    for (const titan of state.titans ?? []) {
+        if (titan.defId !== sourceDefId || titan.location.zone !== 'base') continue;
+        locations.push({
+            uid: titan.uid,
+            titanUid: titan.uid,
+            baseIndex: titan.location.baseIndex,
+            controllerId: titan.controllerId,
+        });
+    }
     for (const special of state.pendingAfterScoringSpecials ?? []) {
         if (special.sourceDefId !== sourceDefId) continue;
         locations.push({
@@ -291,12 +344,16 @@ function locateSource(state: SmashUpCore, sourceDefId: string): TriggerSourceLoc
 
 function isTriggerSourceEligible(
     entry: TriggerEntry,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     located: TriggerSourceLocation,
     triggerBaseIndex: number | undefined,
 ): boolean {
     if (triggerBaseIndex === undefined) return true;
-    if ((timing === 'onMinionMoved' || timing === 'onMinionAffected') && located.baseIndex !== triggerBaseIndex) {
+    if (
+        entry.baseScoped !== false
+        && (timing === 'onMinionMoved' || timing === 'onMinionAffected' || timing === 'onTitanMoved')
+        && located.baseIndex !== triggerBaseIndex
+    ) {
         return false;
     }
     if (entry.sourceScope === 'triggerBase' && located.baseIndex !== triggerBaseIndex) {
@@ -307,7 +364,7 @@ function isTriggerSourceEligible(
 
 function buildTriggerId(
     entry: TriggerEntry,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     now: number,
     order: number,
     located: TriggerSourceLocation,
@@ -320,7 +377,7 @@ function buildTriggerId(
 
 function createTriggerInstance(
     entry: TriggerEntry,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     now: number,
     order: number,
     pid: PlayerId,
@@ -335,10 +392,14 @@ function createTriggerInstance(
         sourceControllerId: located.controllerId,
         sourceBaseIndex: located.baseIndex,
         mandatory: entry.optional ? false : true,
-        ownerPlayerId: pid,
+        ownerPlayerId: entry.playerContext === 'sourceController' && located.controllerId
+            ? located.controllerId
+            : pid,
         witnessRequirement: 'inPlayAtTriggerTime',
         witnessed: true,
         baseIndex: ctx.baseIndex,
+        moveFromBaseIndex: ctx.moveFromBaseIndex,
+        moveToBaseIndex: ctx.moveToBaseIndex,
         triggerMinionUid: ctx.triggerMinionUid,
         triggerMinionDefId: ctx.triggerMinionDefId,
         triggerMinionPower: (ctx as any).triggerMinionPower,
@@ -346,6 +407,17 @@ function createTriggerInstance(
         reason: ctx.reason,
         affectType: ctx.affectType,
         rankings: ctx.rankings,
+        buriedCardUid: (ctx as any).buriedCardUid,
+        buriedCardDefId: (ctx as any).buriedCardDefId,
+        buriedCardControllerId: (ctx as any).buriedCardControllerId,
+        buriedFrom: (ctx as any).buriedFrom,
+        actionTargetBaseIndex: ctx.actionTargetBaseIndex,
+        actionTargetType: ctx.actionTargetType,
+        actionTargetMinionUid: ctx.actionTargetMinionUid,
+        inspectionCards: ctx.inspectionCards,
+        inspectionZone: ctx.inspectionZone,
+        inspectionTargetPlayerIds: ctx.inspectionTargetPlayerIds,
+        inspectionCausePlayerId: ctx.inspectionCausePlayerId,
         lkiMinion: ctx.triggerMinion
             ? {
                 uid: ctx.triggerMinion.uid,
@@ -363,10 +435,22 @@ function createTriggerInstance(
     };
 }
 
+function shouldSkipTriggerInstance(
+    state: SmashUpCore,
+    entry: TriggerEntry,
+    timing: TitanAwareTriggerTiming,
+    located: TriggerSourceLocation,
+): boolean {
+    return entry.sourceDefId === 'explorers_very_large_boulder'
+        && timing === 'onMinionMoved'
+        && !!located.titanUid
+        && (state.veryLargeBoulderTriggeredTurnByTitan ?? {})[located.titanUid] === state.turnNumber;
+}
+
 /** 收集触发器为 TriggerInstance（不立即执行），用于全局反应队列 */
 export function collectTriggers(
     state: SmashUpCore,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     ctx: Omit<TriggerContext, 'timing'>,
 ): TriggerQueuedEvent | undefined {
     if (triggerRegistry.length === 0) return undefined;
@@ -379,7 +463,7 @@ export function collectTriggers(
         // Only queue reaction-phase triggers (replacement effects must remain immediate)
         if (entry.phase === 'replacement') continue;
         if (entry.global) {
-            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
             triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
             continue;
         }
@@ -395,6 +479,7 @@ export function collectTriggers(
         if (entry.perInstance) {
             for (const located of locatedSources) {
                 if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
+                if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
                 triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
             }
             continue;
@@ -402,6 +487,7 @@ export function collectTriggers(
 
         const located = locatedSources[0];
         if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
+        if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
         triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
     }
 
@@ -484,6 +570,7 @@ export function registerPodOngoingAliases(): void {
             perInstance: entry.perInstance,
             sourceScope: entry.sourceScope,
             global: entry.global,
+            globalZones: entry.globalZones,
         });
         mappedCount++;
     }
@@ -496,6 +583,7 @@ export function registerPodOngoingAliases(): void {
             perInstance: entry.perInstance,
             sourceScope: entry.sourceScope,
             global: entry.global,
+            globalZones: entry.globalZones,
         });
     }
     
@@ -713,6 +801,7 @@ export function isMinionProtected(
     sourcePlayerId: PlayerId,
     protectionType: ProtectionType
 ): boolean {
+    if (hasTurnScopedMetadataProtection(state, targetMinion, protectionType)) return true;
     if (protectionRegistry.length === 0) return false;
 
     const ctx: ProtectionCheckContext = {
@@ -746,6 +835,7 @@ export function isMinionProtectedNonConsumable(
     sourcePlayerId: PlayerId,
     protectionType: ProtectionType
 ): boolean {
+    if (hasTurnScopedMetadataProtection(state, targetMinion, protectionType)) return true;
     if (protectionRegistry.length === 0) return false;
 
     const ctx: ProtectionCheckContext = {
@@ -763,6 +853,29 @@ export function isMinionProtectedNonConsumable(
         if (!isSourceActive(filteredState, entry.sourceDefId)) continue;
         if (entry.checker({ ...ctx, state: filteredState })) return true;
     }
+    return false;
+}
+
+function hasTurnScopedMetadataProtection(
+    state: SmashUpCore,
+    targetMinion: MinionOnBase,
+    protectionType: ProtectionType,
+): boolean {
+    const metadata = targetMinion.metadata ?? {};
+    const currentTurn = state.turnNumber ?? 0;
+    const destroyUntilTurn = typeof metadata.tempProtectDestroyUntilTurnNumber === 'number'
+        ? metadata.tempProtectDestroyUntilTurnNumber
+        : undefined;
+    const moveUntilTurn = typeof metadata.tempProtectMoveUntilTurnNumber === 'number'
+        ? metadata.tempProtectMoveUntilTurnNumber
+        : undefined;
+    const affectUntilTurn = typeof metadata.tempProtectAffectUntilTurnNumber === 'number'
+        ? metadata.tempProtectAffectUntilTurnNumber
+        : undefined;
+
+    if (protectionType === 'destroy') return (destroyUntilTurn ?? -1) >= currentTurn;
+    if (protectionType === 'move') return (moveUntilTurn ?? -1) >= currentTurn;
+    if (protectionType === 'affect' || protectionType === 'action') return (affectUntilTurn ?? -1) >= currentTurn;
     return false;
 }
 
@@ -950,7 +1063,7 @@ export function interceptEvent(
  */
 export function fireTriggers(
     state: SmashUpCore,
-    timing: TriggerTiming,
+    timing: TitanAwareTriggerTiming,
     ctx: Omit<TriggerContext, 'timing'>,
     options?: { phase?: 'replacement' | 'reaction' }
 ): TriggerResult {
@@ -974,7 +1087,7 @@ export function fireTriggers(
         );
 
         if (entry.global) {
-            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
             const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
             const triggerEvents = Array.isArray(result) ? result : result.events;
             if (triggerEvents.length > 0) {
@@ -1134,10 +1247,18 @@ export function fireTriggerForSource(
     return { events, matchState };
 }
 
-function isSourceInHandOrDiscard(state: SmashUpCore, sourceDefId: string): boolean {
+function isSourceInZones(
+    state: SmashUpCore,
+    sourceDefId: string,
+    zones: Array<'hand' | 'discard' | 'deck'>,
+): boolean {
     for (const p of Object.values(state.players)) {
-        if (p.hand?.some(c => c.defId === sourceDefId)) return true;
-        if (p.discard?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('hand') && p.hand?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('discard') && p.discard?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('deck') && p.deck?.some(c => c.defId === sourceDefId)) return true;
+    }
+    if ((state.titans ?? []).some(titan => titan.defId === sourceDefId)) {
+        return true;
     }
     return false;
 }
@@ -1179,6 +1300,10 @@ function isSourceActive(state: SmashUpCore, sourceDefId: string): boolean {
             }
         }
     }
+
+    if ((state.titans ?? []).some(titan => titan.defId === sourceDefId && titan.location.zone === 'base')) {
+        return true;
+    }
     
     return false;
 }
@@ -1200,6 +1325,13 @@ export function isSourceActiveOnBase(state: SmashUpCore, sourceDefId: string, ba
         if (minion.attachedActions?.some(action => action.defId === sourceDefId)) {
             return true;
         }
+    }
+    if ((state.titans ?? []).some(titan =>
+        titan.defId === sourceDefId
+        && titan.location.zone === 'base'
+        && titan.location.baseIndex === baseIndex,
+    )) {
+        return true;
     }
     return false;
 }

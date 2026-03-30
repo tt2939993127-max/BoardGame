@@ -19,16 +19,11 @@ import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { createDeckByFactionId } from '../src/games/summonerwars/config/factions';
 import { BOARD_COLS, BOARD_ROWS, HAND_SIZE } from '../src/games/summonerwars/domain/helpers';
 import { cloneState } from './helpers/summonerwars';
+import { setChineseLocale } from './helpers/common';
 
 // ============================================================================
 // 通用辅助函数（与 summonerwars.e2e.ts 保持一致）
 // ============================================================================
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
-};
 
 const normalizeUrl = (url: string) => url.replace(/\/$/, '');
 

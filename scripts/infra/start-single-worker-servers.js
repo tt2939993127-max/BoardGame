@@ -8,6 +8,7 @@ import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './e2e-port-config.js'
 import { isPortInUse } from './port-allocator.js';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { registerExitGuard, spawnBundleRunner, spawnNodeScript, spawnTsLoaderEntry, spawnTsxEntry } from './e2e-server-launcher.js';
+import { startRuntimeHeartbeat } from './e2e-runtime-registry.js';
 
 const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const bundleWatchEnabled = process.env.PW_SERVER_WATCH !== 'false';
@@ -15,10 +16,21 @@ const selectedRuntime = process.env.PW_SERVER_RUNTIME?.trim() || 'bundle';
 const useTsxRuntime = selectedRuntime === 'tsx';
 const useTsLoaderRuntime = selectedRuntime === 'ts-loader';
 const usePrebuiltRuntime = selectedRuntime === 'prebuilt';
-const ports = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+const defaultPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 const prebuiltBundleRoot = process.env.PW_PREBUILT_BUNDLE_ROOT
   ?? path.join('temp', 'dev-bundles', 'e2e-single');
 const bootstrapLogFile = process.env.PW_BOOTSTRAP_LOG_FILE?.trim() || '';
+
+function resolvePort(value, fallback) {
+  const port = Number.parseInt(String(value ?? '').trim(), 10);
+  return Number.isFinite(port) && port > 0 ? port : fallback;
+}
+
+const ports = {
+  frontend: resolvePort(process.env.PW_PORT ?? process.env.VITE_DEV_PORT, defaultPorts.frontend),
+  gameServer: resolvePort(process.env.PW_GAME_SERVER_PORT ?? process.env.GAME_SERVER_PORT, defaultPorts.gameServer),
+  apiServer: resolvePort(process.env.PW_API_SERVER_PORT ?? process.env.API_SERVER_PORT, defaultPorts.apiServer),
+};
 
 await assertChildProcessSupport('single worker E2E 启动', { probeEsbuild: !(usePrebuiltRuntime || useTsLoaderRuntime) });
 
@@ -143,8 +155,24 @@ const managedServices = [
   { label: '游戏服务', child: gameServer },
   { label: 'API 服务', child: apiServer },
 ];
+const runtimeScope = process.env.PW_RUNTIME_SCOPE ?? 'default';
+const requestedRuntimeMode = process.env.PW_E2E_DAEMON?.trim() || '';
+const runtimeMode = requestedRuntimeMode === 'shared-single' || requestedRuntimeMode === 'isolated-single'
+  ? requestedRuntimeMode
+  : (useDevServers ? 'shared-dev' : 'shared-single-run');
+const stopHeartbeat = startRuntimeHeartbeat(runtimeScope, () => ({
+  active: true,
+  mode: runtimeMode,
+  workers: 1,
+  ports,
+  target: process.env.PW_TEST_TARGET || '',
+  ownerPids: [process.pid],
+  servicePids: managedServices.map(service => service.child.pid).filter(pid => Number.isInteger(pid) && pid > 0),
+  bootstrapLogFiles: bootstrapLogFile ? [bootstrapLogFile] : [],
+}));
 
 const cleanup = (exitCode = 0, reason = '') => {
+  stopHeartbeat();
   console.log('\n🛑 停止单 worker E2E 服务...');
   if (reason) {
     console.error(`  原因: ${reason}`);

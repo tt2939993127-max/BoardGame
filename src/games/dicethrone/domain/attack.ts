@@ -4,6 +4,7 @@ import type {
     DiceThroneEvent,
     AttackResolvedEvent,
     AttackPreDefenseResolvedEvent,
+    AttackDefenseResolvedEvent,
     TokenGrantedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
@@ -24,6 +25,22 @@ const createPreDefenseResolvedEvent = (
         attackerId,
         defenderId,
         sourceAbilityId,
+    },
+    sourceCommandType: 'ABILITY_EFFECT',
+    timestamp,
+});
+
+const createDefenseResolvedEvent = (
+    attackerId: string,
+    defenderId: string,
+    defenseAbilityId: string | undefined,
+    timestamp: number
+): AttackDefenseResolvedEvent => ({
+    type: 'ATTACK_DEFENSE_RESOLVED',
+    payload: {
+        attackerId,
+        defenderId,
+        defenseAbilityId,
     },
     sourceCommandType: 'ABILITY_EFFECT',
     timestamp,
@@ -66,7 +83,7 @@ const resolveDefenseEffects = (
     timestamp: number
 ): { defenseEvents: DiceThroneEvent[]; stateAfterDefense: DiceThroneCore } => {
     const pending = state.pendingAttack;
-    if (!pending?.defenseAbilityId || !pending.defenderId) {
+    if (!pending?.defenseAbilityId || !pending.defenderId || pending.defenseResolved) {
         return { defenseEvents: [], stateAfterDefense: state };
     }
 
@@ -85,6 +102,7 @@ const resolveDefenseEffects = (
     const defenseEvents: DiceThroneEvent[] = [];
     defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
     defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
+    defenseEvents.push(createDefenseResolvedEvent(attackerId, defenderId, defenseAbilityId, timestamp));
 
     const tokenGrantedEvents = defenseEvents.filter((e): e is TokenGrantedEvent => e.type === 'TOKEN_GRANTED');
     if (tokenGrantedEvents.length === 0) {
@@ -174,6 +192,15 @@ export const resolveAttack = (
     const bonusDamage = pending.bonusDamage ?? 0;
     const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(state, random, timestamp);
     events.push(...defenseEvents);
+    const hasDefenseChoice = defenseEvents.some(e => e.type === 'CHOICE_REQUESTED');
+    const hasDefenseTokenResponse = defenseEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+    const hasDefenseInteractiveBonusDiceReroll = defenseEvents.some(e =>
+        e.type === 'BONUS_DICE_REROLL_REQUESTED'
+        && !(e as any).payload?.settlement?.displayOnly
+    );
+    if (hasDefenseChoice || hasDefenseTokenResponse || hasDefenseInteractiveBonusDiceReroll) {
+        return events;
+    }
 
     const attackEvents: DiceThroneEvent[] = [];
     let totalDamage = 0;

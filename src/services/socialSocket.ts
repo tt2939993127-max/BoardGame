@@ -4,7 +4,7 @@ import { AUTH_API_URL } from '../config/server';
 import { createScopedLogger } from '../lib/logger';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from './socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from '../lib/socketConnectionConfig';
 
 const log = createScopedLogger('SocialSocket');
 

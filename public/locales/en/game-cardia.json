@@ -58,6 +58,26 @@
   "validation": {
     "opponent_must_play_first": "Opponent must play first (Diviner ability)"
   },
+  "error": {
+    "unknown_command": "Unknown command",
+    "not_in_play_phase": "Not in play phase",
+    "player_not_found": "Player not found",
+    "already_played_card_this_turn": "Already played a card this turn",
+    "opponent_must_play_first": "Opponent must play first (Diviner ability)",
+    "card_not_in_hand": "Card not in hand",
+    "not_in_ability_phase": "Not in ability phase",
+    "no_current_encounter": "No current encounter",
+    "only_loser_can_activate_abilities": "Only the loser can activate abilities",
+    "card_not_found_on_board": "Card not found on board",
+    "ability_not_found_on_card": "Ability not found on card",
+    "only_loser_can_skip_abilities": "Only the loser can skip abilities",
+    "invalid_modifier_value": "Invalid modifier value",
+    "no_interaction_id": "No interaction ID",
+    "no_cards_selected": "No cards selected",
+    "invalid_faction": "Invalid faction",
+    "not_in_end_phase": "Not in end phase",
+    "not_your_turn": "Not your turn"
+  },
   "hud": {
     "offlineBanner": {
       "message": "{{name}} is offline{{time}}"

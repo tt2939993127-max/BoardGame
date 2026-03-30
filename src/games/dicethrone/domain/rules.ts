@@ -427,12 +427,17 @@ export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolea
         return allSelected && allNonHostReady && state.hostStarted;
     }
 
-    // 防御阶段：必须已选择防御技能才能推进
+    // 防御阶段：必须已选择防御技能，并且完成掷骰确认后才能推进
     // 规则 §3.6：先选技能 → 掷骰 → 确认
     // 注意：pendingAttack 为 null 表示攻击已结算（ATTACK_RESOLVED），此时允许推进
     if (phase === 'defensiveRoll') {
-        if (state.pendingAttack && !state.pendingAttack.defenseAbilityId) {
-            return false;
+        if (state.pendingAttack) {
+            if (!state.pendingAttack.defenseAbilityId) {
+                return false;
+            }
+            if (state.rollCount === 0 || !state.rollConfirmed) {
+                return false;
+            }
         }
     }
 

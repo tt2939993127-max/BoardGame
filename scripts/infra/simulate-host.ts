@@ -2,6 +2,7 @@
 // import fetch from 'node-fetch'; // Use native fetch
 
 const BASE_URL = 'http://localhost:8000/games/TicTacToe';
+const FRONTEND_PORT = Number(process.env.VITE_DEV_PORT) || 4173;
 
 async function runTest() {
     console.log('🤖 [HostBot] 开始测试流程...');
@@ -16,7 +17,7 @@ async function runTest() {
         });
         const { matchID } = await createRes.json() as any;
         console.log(`✅ 房间创建成功: ${matchID}`);
-        console.log(`🔗 访客链接: http://localhost:5173/games/tictactoe/match/${matchID}?playerID=1`);
+        console.log(`🔗 访客链接: http://localhost:${FRONTEND_PORT}/games/tictactoe/match/${matchID}?playerID=1`);
 
         // 2. 房主加入 (获取凭证以便销毁)
         console.log('2️⃣  房主加入...');

@@ -33,6 +33,7 @@ import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { CARDIA_IMAGE_PATHS, resolveCardiaCardImagePath } from './imagePaths';
 import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
+import { safeMatchMedia, subscribeMediaQueryChange } from '../../lib/mediaQuery';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<CardiaCore>;
@@ -49,11 +50,11 @@ const SMALL_CARD_SIZE_CLASSES = 'w-[var(--cardia-small-card-width)] aspect-[106/
 
 const detectTouchLikeInput = (): boolean => {
     if (typeof window === 'undefined') return false;
-    const hasAnyHover = window.matchMedia('(hover: hover)').matches
-        || window.matchMedia('(any-hover: hover)').matches;
+    const hasAnyHover = safeMatchMedia('(hover: hover)').matches
+        || safeMatchMedia('(any-hover: hover)').matches;
     if (hasAnyHover) return false;
 
-    const pointerCoarse = window.matchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches;
+    const pointerCoarse = safeMatchMedia('(hover: none), (pointer: coarse), (any-pointer: coarse)').matches;
     const hasTouchPoints = (navigator.maxTouchPoints ?? 0) > 0;
     return pointerCoarse || hasTouchPoints;
 };
@@ -269,9 +270,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                 break;
         }
 
+        const cardHeight = Math.round((cardWidth * 160) / 106);
+        const smallCardHeight = Math.round((smallCardWidth * 160) / 106);
+
         return {
             '--cardia-card-width': `${cardWidth}px`,
+            '--cardia-card-height': `${cardHeight}px`,
             '--cardia-small-card-width': `${smallCardWidth}px`,
+            '--cardia-small-card-height': `${smallCardHeight}px`,
         } as React.CSSProperties;
     }, [deviceType, viewportSize]);
 
@@ -288,7 +294,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                   : 'auto';
         const compactPlayerZoneHeight =
             deviceType === 'tight-landscape'
-                ? 'clamp(4.8rem, 22dvh, 5.6rem)'
+                ? 'calc(var(--cardia-small-card-height) + 2.875rem)'
                 : 'auto';
 
         const reservedBottom =
@@ -1359,15 +1365,15 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const mediaQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+        const mediaQuery = safeMatchMedia('(hover: none), (pointer: coarse)');
         const syncTouchCapability = () => setIsTouchDevice(detectTouchLikeInput());
 
         syncTouchCapability();
-        mediaQuery.addEventListener?.('change', syncTouchCapability);
+        const unsubscribeMediaQuery = subscribeMediaQueryChange(mediaQuery, syncTouchCapability);
         window.addEventListener('resize', syncTouchCapability);
 
         return () => {
-            mediaQuery.removeEventListener?.('change', syncTouchCapability);
+            unsubscribeMediaQuery();
             window.removeEventListener('resize', syncTouchCapability);
         };
     }, []);
@@ -1472,7 +1478,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({ player, core, onPlayCard, canPl
                 data-testid="cardia-player-area-panel"
                 className="flex h-full min-h-0 items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-black/62 px-4 py-3 backdrop-blur-md"
             >
-                <div className="flex w-[7.5rem] flex-shrink-0 flex-col justify-between gap-1 overflow-hidden">
+                <div className="flex w-[10.5rem] flex-shrink-0 flex-col justify-between gap-1.5 overflow-hidden">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
                         <div className="truncate text-[14px] font-bold text-white">{player.name}</div>
                         <div
@@ -1789,15 +1795,15 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        const mediaQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+        const mediaQuery = safeMatchMedia('(hover: none), (pointer: coarse)');
         const syncTouchCapability = () => setIsTouchDevice(detectTouchLikeInput());
 
         syncTouchCapability();
-        mediaQuery.addEventListener?.('change', syncTouchCapability);
+        const unsubscribeMediaQuery = subscribeMediaQueryChange(mediaQuery, syncTouchCapability);
         window.addEventListener('resize', syncTouchCapability);
 
         return () => {
-            mediaQuery.removeEventListener?.('change', syncTouchCapability);
+            unsubscribeMediaQuery();
             window.removeEventListener('resize', syncTouchCapability);
         };
     }, []);

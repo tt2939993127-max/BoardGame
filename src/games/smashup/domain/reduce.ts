@@ -9,6 +9,7 @@ import type {
     SmashUpEvent,
     MinionDestroyedEvent,
     MinionMovedEvent,
+    MinionControlChangedEvent,
     PowerCounterAddedEvent,
     PowerCounterRemovedEvent,
     OngoingDetachedEvent,
@@ -34,23 +35,69 @@ import type {
     TriggerQueuedEvent,
     TriggerConsumedEvent,
     MinionOnBase,
+    CardType,
     CardInstance,
     BaseInPlay,
     ActionCardDef,
     PlayerState,
+    TitanState,
+    TitanPlayedEvent,
+    TitanMovedEvent,
+    TitanRemovedFromPlayEvent,
+    TitanPowerCounterAddedEvent,
+    TitanPowerCounterRemovedEvent,
+    TitanMetadataUpdatedEvent,
 } from './types';
 import type { PlayerId } from '../../../engine/types';
 import { SU_EVENTS, SU_EVENT_TYPES, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from './types';
-import { getBaseDef, getMinionDef, getCardDef } from '../data/cards';
+import { getBaseDef, getMinionDef, getCardDef, getFactionTitan } from '../data/cards';
 import { hasCthulhuExpansionFaction } from './abilityHelpers';
 import {
+    getBestMatchingBaseLimitedPowerQuota,
     canUseBaseLimitedMinionQuota,
     canUseSameNameMinionQuota,
     getBestMatchingGlobalPowerLimitedQuota,
+    getRemainingBaseLimitedPowerLimitedMinionQuotas,
     getRemainingGlobalPowerLimitedMinionQuotas,
     getRemainingUnrestrictedGlobalMinionQuota,
     resolveLiveBaseIndex,
 } from './utils';
+
+function buildCompletedDraftPlayers(
+    turnOrder: PlayerId[],
+    playerSelections: Record<PlayerId, string[]>,
+): PlayerId[] {
+    return turnOrder.filter((playerId) => (playerSelections[playerId] ?? []).length >= 2);
+}
+
+function getNextDraftPlayerIndex(
+    turnOrder: PlayerId[],
+    playerSelections: Record<PlayerId, string[]>,
+    anchorPlayerId: PlayerId,
+    fallbackIndex: number,
+): number {
+    if (turnOrder.length === 0) return 0;
+
+    const counts = turnOrder.map((playerId) => (playerSelections[playerId] ?? []).length);
+    if (counts.every((count) => count >= 2)) {
+        return 0;
+    }
+
+    const allPlayersHaveFirstFaction = counts.every((count) => count >= 1);
+    const targetCount = allPlayersHaveFirstFaction ? 2 : 1;
+    const direction = allPlayersHaveFirstFaction ? -1 : 1;
+    const anchorIndex = Math.max(0, turnOrder.indexOf(anchorPlayerId));
+    const startIndex = turnOrder.includes(anchorPlayerId) ? anchorIndex : fallbackIndex;
+
+    for (let offset = 0; offset < turnOrder.length; offset += 1) {
+        const index = (startIndex + direction * offset + turnOrder.length) % turnOrder.length;
+        if ((playerSelections[turnOrder[index]] ?? []).length < targetCount) {
+            return index;
+        }
+    }
+
+    return fallbackIndex;
+}
 
 // ============================================================================
 // reduce：事件 → 新状态（确定性）
@@ -68,19 +115,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...selection.playerSelections,
                 [playerId]: [...(selection.playerSelections[playerId] || []), factionId],
             };
-
-            // 蛇形选秀：第一轮按玩家顺序选，第二轮按反向顺序选。
-            // 2 人时顺序为 P0 → P1 → P1 → P0。
-            const totalPlayers = state.turnOrder.length;
-            const totalRequired = totalPlayers * 2;
-            const nextPickNumber = newTaken.length;
-            let nextPlayerIndex = state.currentPlayerIndex;
-
-            if (nextPickNumber < totalRequired) {
-                nextPlayerIndex = nextPickNumber < totalPlayers
-                    ? nextPickNumber
-                    : totalRequired - 1 - nextPickNumber;
-            }
+            const nextPlayerIndex = getNextDraftPlayerIndex(
+                state.turnOrder,
+                newPlayerSelections,
+                playerId,
+                state.currentPlayerIndex,
+            );
 
             return {
                 ...state,
@@ -89,6 +129,36 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...selection,
                     takenFactions: newTaken,
                     playerSelections: newPlayerSelections,
+                    completedPlayers: buildCompletedDraftPlayers(state.turnOrder, newPlayerSelections),
+                },
+            };
+        }
+
+        case SU_EVENTS.FACTION_DESELECTED: {
+            const { playerId, factionId } = event.payload;
+            const selection = state.factionSelection;
+            if (!selection) return state;
+
+            const newTaken = selection.takenFactions.filter((takenFactionId) => takenFactionId !== factionId);
+            const newPlayerSelections = {
+                ...selection.playerSelections,
+                [playerId]: (selection.playerSelections[playerId] || []).filter((selectedFactionId) => selectedFactionId !== factionId),
+            };
+            const nextPlayerIndex = getNextDraftPlayerIndex(
+                state.turnOrder,
+                newPlayerSelections,
+                playerId,
+                state.currentPlayerIndex,
+            );
+
+            return {
+                ...state,
+                currentPlayerIndex: nextPlayerIndex,
+                factionSelection: {
+                    ...selection,
+                    takenFactions: newTaken,
+                    playerSelections: newPlayerSelections,
+                    completedPlayers: buildCompletedDraftPlayers(state.turnOrder, newPlayerSelections),
                 },
             };
         }
@@ -96,6 +166,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.ALL_FACTIONS_SELECTED: {
             const { readiedPlayers, nextUid, bases, baseDeck } = event.payload;
             const newPlayers: Record<PlayerId, PlayerState> = { ...state.players };
+            const titans: TitanState[] = [];
+            const titansEnabled = (state.enabledExpansions ?? ['titans']).includes('titans');
 
             for (const [pid, data] of Object.entries(readiedPlayers)) {
                 if (newPlayers[pid]) {
@@ -110,6 +182,23 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         hand: data.hand,
                         factions,
                     };
+
+                    if (titansEnabled) {
+                        for (const factionId of factions) {
+                            const titanDef = getFactionTitan(factionId);
+                            if (!titanDef) continue;
+                            titans.push({
+                                uid: `titan_${pid}_${titanDef.id}`,
+                                defId: titanDef.id,
+                                faction: titanDef.faction,
+                                ownerId: pid as PlayerId,
+                                controllerId: pid as PlayerId,
+                                powerCounters: 0,
+                                talentUsed: false,
+                                location: { zone: 'setaside' },
+                            });
+                        }
+                    }
                 }
             }
 
@@ -125,6 +214,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 currentPlayerIndex: 0,
                 factionSelection: undefined,
                 madnessDeck,
+                titans,
                 bases: bases ?? state.bases,
                 baseDeck: baseDeck ?? state.baseDeck,
             };
@@ -185,15 +275,23 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     restriction => restriction.type === 'play_minion'
                         && restriction.condition?.extraPlayMinionPowerMax !== undefined,
                 ) ?? false;
+                const remainingBasePowerCaps = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, resolvedBaseIndex);
                 const canUseBaseQuota = shouldIncrementPlayed
                     && canUseBaseLimitedMinionQuota(state, player, resolvedBaseIndex, defId, power);
                 const canUseSameNameQuota = shouldIncrementPlayed
                     && canUseSameNameMinionQuota(player, defId);
+                const matchingBasePowerQuota = shouldIncrementPlayed
+                    ? getBestMatchingBaseLimitedPowerQuota(player, resolvedBaseIndex, power)
+                    : undefined;
                 const matchingGlobalPowerQuota = shouldIncrementPlayed
                     ? getBestMatchingGlobalPowerLimitedQuota(player, power)
                     : undefined;
                 const useRestrictedBaseQuota = canUseBaseQuota
-                    && (player.baseLimitedSameNameRequired?.[resolvedBaseIndex] === true || baseHasPowerRestrictedQuota);
+                    && (
+                        player.baseLimitedSameNameRequired?.[resolvedBaseIndex] === true
+                        || baseHasPowerRestrictedQuota
+                        || matchingBasePowerQuota !== undefined
+                    );
                 const useSameNameQuota = !useRestrictedBaseQuota && canUseSameNameQuota;
                 const useGlobalPowerQuota = !useRestrictedBaseQuota
                     && !useSameNameQuota
@@ -208,6 +306,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     : 0;
 
                 let newBaseLimitedMinionQuota = player.baseLimitedMinionQuota;
+                let newBaseLimitedMinionPowerCaps = player.baseLimitedMinionPowerCaps;
                 let newSameNameRemaining = player.sameNameMinionRemaining;
                 let newSameNameDefId = player.sameNameMinionDefId;
                 let newExtraMinionPowerCaps = remainingGlobalPowerCaps;
@@ -218,6 +317,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         ...player.baseLimitedMinionQuota,
                         [resolvedBaseIndex]: baseQuota - 1,
                     };
+                    if (matchingBasePowerQuota !== undefined && remainingBasePowerCaps.length > 0) {
+                        const removeIndex = remainingBasePowerCaps.findIndex(powerCap => powerCap === matchingBasePowerQuota);
+                        const nextBasePowerCaps = removeIndex >= 0
+                            ? [
+                                ...remainingBasePowerCaps.slice(0, removeIndex),
+                                ...remainingBasePowerCaps.slice(removeIndex + 1),
+                            ]
+                            : remainingBasePowerCaps;
+                        const nextMap = { ...(player.baseLimitedMinionPowerCaps ?? {}) };
+                        if (nextBasePowerCaps.length > 0) {
+                            nextMap[resolvedBaseIndex] = nextBasePowerCaps;
+                        } else {
+                            delete nextMap[resolvedBaseIndex];
+                        }
+                        newBaseLimitedMinionPowerCaps = Object.keys(nextMap).length > 0 ? nextMap : undefined;
+                    }
                 } else if (useSameNameQuota) {
                     newSameNameRemaining = sameNameRemaining - 1;
                     if (newSameNameDefId === null || newSameNameDefId === undefined) {
@@ -239,6 +354,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 return {
                     minionsPlayed: finalMinionsPlayed,
                     baseLimitedMinionQuota: newBaseLimitedMinionQuota,
+                    baseLimitedMinionPowerCaps: newBaseLimitedMinionPowerCaps,
                     sameNameMinionRemaining: newSameNameRemaining,
                     sameNameMinionDefId: newSameNameDefId,
                     extraMinionPowerCaps: newExtraMinionPowerCaps.length > 0 ? newExtraMinionPowerCaps : undefined,
@@ -264,6 +380,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         },
                         usedDiscardPlayAbilities: newUsedAbilities,
                         baseLimitedMinionQuota: quotaResolution.baseLimitedMinionQuota,
+                        baseLimitedMinionPowerCaps: quotaResolution.baseLimitedMinionPowerCaps,
                         extraMinionPowerCaps: quotaResolution.extraMinionPowerCaps,
                         extraMinionPowerMax: quotaResolution.extraMinionPowerMax,
                         sameNameMinionRemaining: quotaResolution.sameNameMinionRemaining,
@@ -271,6 +388,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     },
                 },
                 bases: newBases,
+                cardsPlayedThisTurn: (state.cardsPlayedThisTurn ?? 0) + 1,
             };
         }
 
@@ -319,7 +437,161 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         actionsPlayed: (isSpecial || isExtraAction) ? player.actionsPlayed : player.actionsPlayed + 1,
                     },
                 },
+                cardsPlayedThisTurn: (state.cardsPlayedThisTurn ?? 0) + 1,
                 ...(newBases !== state.bases ? { bases: newBases } : {}),
+            };
+        }
+
+        case SU_EVENTS.TITAN_PLAYED: {
+            const {
+                titanUid,
+                ownerId,
+                controllerId,
+                baseIndex,
+                baseDefId,
+                consumesRegularPlayKind,
+                consumesRegularPlayKinds,
+            } = (event as TitanPlayedEvent).payload;
+            const resolvedBaseIndex = resolveLiveBaseIndex(state, baseIndex, baseDefId) ?? baseIndex;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const player = state.players[controllerId];
+            if (!player) return state;
+            const consumedKinds = new Set(
+                [
+                    ...(consumesRegularPlayKinds ?? []),
+                    ...(consumesRegularPlayKind ? [consumesRegularPlayKind] : []),
+                ],
+            );
+
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...nextTitans[titanIndex],
+                ownerId,
+                controllerId,
+                talentUsed: false,
+                location: {
+                    zone: 'base',
+                    baseIndex: resolvedBaseIndex,
+                    enteredAt: event.timestamp ?? 0,
+                },
+            };
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [controllerId]: {
+                        ...player,
+                        minionsPlayed: consumedKinds.has('minion') ? player.minionsPlayed + 1 : player.minionsPlayed,
+                        actionsPlayed: consumedKinds.has('action') ? player.actionsPlayed + 1 : player.actionsPlayed,
+                    },
+                },
+                titans: nextTitans,
+                cardsPlayedThisTurn: (state.cardsPlayedThisTurn ?? 0) + 1,
+            };
+        }
+
+        case SU_EVENTS.TITAN_MOVED: {
+            const { titanUid, toBaseIndex, toBaseDefId } = (event as TitanMovedEvent).payload;
+            const resolvedBaseIndex = resolveLiveBaseIndex(state, toBaseIndex, toBaseDefId) ?? toBaseIndex;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const titan = titans[titanIndex];
+            if (titan.location.zone !== 'base') return state;
+
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...titan,
+                location: {
+                    zone: 'base',
+                    baseIndex: resolvedBaseIndex,
+                    enteredAt: titan.location.enteredAt,
+                },
+            };
+            return {
+                ...state,
+                titans: nextTitans,
+                titanMovedTurnByTitanUid: {
+                    ...(state.titanMovedTurnByTitanUid ?? {}),
+                    [titanUid]: state.turnNumber,
+                },
+            };
+        }
+
+        case SU_EVENTS.TITAN_REMOVED_FROM_PLAY: {
+            const { titanUid } = (event as TitanRemovedFromPlayEvent).payload;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const titan = titans[titanIndex];
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...titan,
+                controllerId: titan.ownerId,
+                powerCounters: 0,
+                talentUsed: false,
+                metadata: undefined,
+                location: { zone: 'setaside' },
+            };
+            return { ...state, titans: nextTitans };
+        }
+
+        case SU_EVENTS.TITAN_POWER_COUNTER_ADDED: {
+            const { titanUid, amount, reason } = (event as TitanPowerCounterAddedEvent).payload;
+            if (amount <= 0) return state;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...nextTitans[titanIndex],
+                powerCounters: nextTitans[titanIndex].powerCounters + amount,
+            };
+            return {
+                ...state,
+                titans: nextTitans,
+                ...(reason === 'super_spies_moon_zero_three_on_deck_inspected'
+                    ? {
+                        moonZeroThreeTriggeredTurnByTitan: {
+                            ...(state.moonZeroThreeTriggeredTurnByTitan ?? {}),
+                            [titanUid]: state.turnNumber,
+                        },
+                    }
+                    : {}),
+                ...(reason === 'itty_critters_rainboroc'
+                    ? {
+                        rainborocTriggeredTurnByTitan: {
+                            ...(state.rainborocTriggeredTurnByTitan ?? {}),
+                            [titanUid]: state.turnNumber,
+                        },
+                    }
+                    : {}),
+            };
+        }
+
+        case SU_EVENTS.TITAN_POWER_COUNTER_REMOVED: {
+            const { titanUid, amount } = (event as TitanPowerCounterRemovedEvent).payload;
+            if (amount <= 0) return state;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...nextTitans[titanIndex],
+                powerCounters: Math.max(0, nextTitans[titanIndex].powerCounters - amount),
+            };
+            return { ...state, titans: nextTitans };
+        }
+
+        case SU_EVENTS.TITAN_ONGOING_SUPPRESSED: {
+            const { titanUid } = (event as any).payload;
+            const prev = state.titanOngoingSuppressedUntilTurnEnd ?? [];
+            if (prev.includes(titanUid)) return state;
+            return {
+                ...state,
+                titanOngoingSuppressedUntilTurnEnd: [...prev, titanUid],
             };
         }
 
@@ -328,25 +600,115 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const player = state.players[playerId];
             const existsInHand = player.hand.some(c => c.uid === cardUid);
             const existsInDiscard = player.discard.some(c => c.uid === cardUid);
-            const existsInDeck = player.deck.some(c => c.uid === cardUid);
             const newHand = buriedFrom === 'hand' ? player.hand.filter(c => c.uid !== cardUid) : player.hand;
             const newDiscard = buriedFrom === 'discard' ? player.discard.filter(c => c.uid === cardUid ? false : true) : player.discard;
-            const newDeck = buriedFrom === 'play' ? player.deck : player.deck; // play->buried handled later
+            const newDeck = buriedFrom === 'deck' ? player.deck.filter(c => c.uid !== cardUid) : player.deck;
+            let updatedPlayers = {
+                ...state.players,
+                [playerId]: { ...player, hand: newHand, discard: newDiscard, deck: newDeck },
+            };
+            let updatedBases = state.bases;
             if (buriedFrom === 'hand' && !existsInHand) return state;
             if (buriedFrom === 'discard' && !existsInDiscard) return state;
-            if (buriedFrom === 'play' && !existsInDeck) { /* allow no-op for now */ }
+            if (buriedFrom === 'deck' && !player.deck.some(c => c.uid === cardUid)) return state;
+            if (buriedFrom === 'play') {
+                const discardOwner = updatedPlayers[playerId];
+                const discardIndex = discardOwner.discard.findIndex(card => card.uid === cardUid);
+                if (discardIndex >= 0) {
+                    updatedPlayers = {
+                        ...updatedPlayers,
+                        [playerId]: {
+                            ...discardOwner,
+                            discard: discardOwner.discard.filter(card => card.uid !== cardUid),
+                        },
+                    };
+                }
+
+                updatedBases = state.bases.map((base) => {
+                    const minion = base.minions.find(entry => entry.uid === cardUid);
+                    if (minion) {
+                        let detachedPlayers = updatedPlayers;
+                        for (const attached of minion.attachedActions ?? []) {
+                            const attachedOwner = detachedPlayers[attached.ownerId];
+                            if (!attachedOwner) continue;
+                            detachedPlayers = {
+                                ...detachedPlayers,
+                                [attached.ownerId]: {
+                                    ...attachedOwner,
+                                    discard: [
+                                        ...attachedOwner.discard,
+                                        { uid: attached.uid, defId: attached.defId, type: 'action', owner: attached.ownerId },
+                                    ],
+                                },
+                            };
+                        }
+                        updatedPlayers = detachedPlayers;
+                        return {
+                            ...base,
+                            minions: base.minions.filter(entry => entry.uid !== cardUid),
+                        };
+                    }
+
+                    const ongoing = base.ongoingActions.find(entry => entry.uid === cardUid);
+                    if (ongoing) {
+                        return {
+                            ...base,
+                            ongoingActions: base.ongoingActions.filter(entry => entry.uid !== cardUid),
+                        };
+                    }
+
+                    let attachedRemoved = false;
+                    const minions = base.minions.map((entry) => {
+                        const hasAttached = entry.attachedActions?.some(action => action.uid === cardUid) ?? false;
+                        if (!hasAttached) return entry;
+                        attachedRemoved = true;
+                        return {
+                            ...entry,
+                            attachedActions: entry.attachedActions.filter(action => action.uid !== cardUid),
+                        };
+                    });
+                    return attachedRemoved ? { ...base, minions } : base;
+                });
+            }
             const buriedEntry = { uid: cardUid, defId, trueOwnerId, controllerId: playerId, buriedFrom } as any;
-            const newBases = state.bases.map((b, i) => i !== baseIndex ? b : ({
+            const newBases = updatedBases.map((b, i) => i !== baseIndex ? b : ({
                 ...b,
                 buriedCards: [...(b.buriedCards ?? []), buriedEntry],
             }));
             return {
                 ...state,
+                players: updatedPlayers,
+                bases: newBases,
+            };
+        }
+
+        case SU_EVENTS.BURIED_CARD_UNCOVERED: {
+            const { cardUid, baseIndex, discardWithoutPlay } = event.payload as any;
+            if (!discardWithoutPlay) return state;
+            const base = state.bases[baseIndex];
+            const buried = (base?.buriedCards ?? []).find((card) => card.uid === cardUid);
+            if (!base || !buried) return state;
+            const owner = state.players[buried.trueOwnerId];
+            if (!owner) return state;
+            const returned: CardInstance = {
+                uid: buried.uid,
+                defId: buried.defId,
+                type: (getCardDef(buried.defId)?.type === 'minion' ? 'minion' : 'action') as any,
+                owner: buried.trueOwnerId,
+            };
+            return {
+                ...state,
                 players: {
                     ...state.players,
-                    [playerId]: { ...player, hand: newHand, discard: newDiscard, deck: newDeck },
+                    [buried.trueOwnerId]: {
+                        ...owner,
+                        discard: [...owner.discard, returned],
+                    },
                 },
-                bases: newBases,
+                bases: state.bases.map((entry, index) => index !== baseIndex ? entry : ({
+                    ...entry,
+                    buriedCards: (entry.buriedCards ?? []).filter((card) => card.uid !== cardUid),
+                })),
             };
         }
 
@@ -429,6 +791,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const scoredBase = state.bases[baseIndex];
             if (!scoredBase) return state;
             let newPlayers = { ...state.players };
+            const titans = state.titans ?? [];
             const newBaseDiscard = [...(state.baseDiscard ?? []), scoredBase.defId];
 
             // 埋葬卡：基地离场时翻开弃置到真正所有者弃牌堆（不触发能力）
@@ -497,6 +860,29 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             }
 
             const newBases = state.bases.filter((_, i) => i !== baseIndex);
+            const newTitans = titans.map(titan => {
+                if (titan.location.zone !== 'base') return titan;
+                if (titan.location.baseIndex === baseIndex) {
+                    return {
+                        ...titan,
+                        controllerId: titan.ownerId,
+                        powerCounters: 0,
+                        talentUsed: false,
+                        metadata: undefined,
+                        location: { zone: 'setaside' } as const,
+                    };
+                }
+                if (titan.location.baseIndex > baseIndex) {
+                    return {
+                        ...titan,
+                        location: {
+                            ...titan.location,
+                            baseIndex: titan.location.baseIndex - 1,
+                        },
+                    };
+                }
+                return titan;
+            });
             // 从锁定的 eligible 列表中移除已计分的基地索引，并调整后续索引（因 bases 数组收缩）
             const prevEligible = state.scoringEligibleBaseIndices;
             const newEligible = prevEligible
@@ -508,6 +894,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 players: newPlayers,
                 bases: newBases,
+                titans: newTitans,
                 baseDiscard: newBaseDiscard,
                 scoringEligibleBaseIndices: newEligible?.length ? newEligible : undefined,
             };
@@ -611,10 +998,44 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const { triggerId } = (event as TriggerConsumedEvent).payload;
             const prev = state.triggerQueue ?? [];
             if (!triggerId || prev.length === 0) return state;
-            const next = prev.filter(t => t.id !== triggerId);
+            const consumed = prev.find(t => t.id === triggerId);
+            const next = prev.filter(t => {
+                if (t.id === triggerId) return false;
+                if (
+                    consumed?.sourceDefId === 'explorers_very_large_boulder'
+                    && consumed.timing === 'onMinionMoved'
+                    && consumed.sourceControllerId
+                ) {
+                    return !(
+                        t.sourceDefId === consumed.sourceDefId
+                        && t.timing === consumed.timing
+                        && t.sourceControllerId === consumed.sourceControllerId
+                    );
+                }
+                return true;
+            });
+            const consumedBoulder = (
+                consumed?.sourceDefId === 'explorers_very_large_boulder'
+                && consumed.timing === 'onMinionMoved'
+                && consumed.sourceControllerId
+            )
+                ? (state.titans ?? []).find(titan =>
+                    titan.defId === 'explorers_very_large_boulder'
+                    && titan.controllerId === consumed.sourceControllerId
+                    && titan.location.zone === 'base',
+                )
+                : undefined;
             return {
                 ...state,
                 triggerQueue: next.length ? next : undefined,
+                ...(consumedBoulder
+                    ? {
+                        veryLargeBoulderTriggeredTurnByTitan: {
+                            ...(state.veryLargeBoulderTriggeredTurnByTitan ?? {}),
+                            [consumedBoulder.uid]: state.turnNumber,
+                        },
+                    }
+                    : {}),
             };
         }
 
@@ -741,6 +1162,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     talentUsed: o.ownerId === playerId ? false : o.talentUsed,
                 })),
             }));
+            const newTitans = (state.titans ?? []).map(titan => ({
+                ...titan,
+                talentUsed: titan.controllerId === playerId ? false : titan.talentUsed,
+            }));
             const remainingPlayerRestrictions = state.playerRestrictionsUntilTurnStart?.filter(
                 entry => entry.sourcePlayerId !== playerId,
             );
@@ -767,12 +1192,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         minionsPlayedPerBase: undefined,
                         usedDiscardPlayAbilities: undefined,
                         baseLimitedMinionQuota: undefined,
+                        baseLimitedMinionPowerCaps: undefined,
                         baseLimitedSameNameRequired: undefined,
                         extraMinionPowerCaps: undefined,
                         extraMinionPowerMax: undefined,
                         sameNameMinionRemaining: undefined,
                         sameNameMinionDefId: null,
                         pendingMinionPlayEffects: undefined,
+                        extraTalentUsesConsumed: undefined,
                     };
                     continue;
                 }
@@ -787,8 +1214,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 turnNumber,
                 bases: newBases,
+                titans: newTitans,
                 // 清空本回合消灭记录
                 turnDestroyedMinions: [],
+                cardsPlayedThisTurn: 0,
+                powerCountersPlacedOnMinionsThisTurn: 0,
                 destroyedMinionByPlayersThisTurn: undefined,
                 basePowerDecreasedPlayersThisTurn: undefined,
                 stakeoutPodBlocks: (() => {
@@ -801,6 +1231,9 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     );
                     return remaining.length ? remaining : undefined;
                 })(),
+                titanOngoingSuppressedUntilTurnEnd: undefined,
+                moonZeroThreeTriggeredTurnByTitan: undefined,
+                veryLargeBoulderTriggeredTurnByTitan: undefined,
                 // 清空本回合移动追踪
                 minionsMovedToBaseThisTurn: undefined,
                 movedToBasesThisTurn: undefined,
@@ -831,6 +1264,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
                 turnUsedOngoingUids: undefined,
+                usedBaseAbilitiesThisTurn: (() => {
+                    const remaining = (state.usedBaseAbilitiesThisTurn ?? []).filter(entry => entry.playerId !== playerId);
+                    return remaining.length > 0 ? remaining : undefined;
+                })(),
+                activeDuel: undefined,
                 sleepMarkedPlayers: state.sleepMarkedPlayers,
                 playerRestrictionsUntilTurnStart: remainingPlayerRestrictions?.length
                     ? remainingPlayerRestrictions
@@ -846,6 +1284,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 currentPlayerIndex: nextPlayerIndex,
                 sleepMarkedPlayers: remainingSleepMarked?.length ? remainingSleepMarked : undefined,
+                titanOngoingSuppressedUntilTurnEnd: undefined,
+                activeDuel: undefined,
             };
         }
 
@@ -1033,6 +1473,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 // 基地限定额度：写入 baseLimitedMinionQuota
                 if (restrictToBase !== undefined) {
                     const oldQuota = player.baseLimitedMinionQuota ?? {};
+                    const oldPowerCaps = player.baseLimitedMinionPowerCaps ?? {};
                     const updatedPlayer: typeof player = {
                         ...player,
                         baseLimitedMinionQuota: {
@@ -1053,6 +1494,27 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                                 [restrictToBase]: sameNameDefId,
                             };
                         }
+                    }
+                    if (powerMax !== undefined) {
+                        const nextPowerCaps = [...(oldPowerCaps[restrictToBase] ?? [])];
+                        if (delta > 0) {
+                            nextPowerCaps.push(...Array.from({ length: delta }, () => powerMax));
+                        } else if (delta < 0) {
+                            let remainingToRemove = Math.abs(delta);
+                            while (remainingToRemove > 0) {
+                                const removeIndex = nextPowerCaps.findIndex(cap => cap === powerMax);
+                                if (removeIndex < 0) break;
+                                nextPowerCaps.splice(removeIndex, 1);
+                                remainingToRemove -= 1;
+                            }
+                        }
+                        const nextMap = { ...oldPowerCaps };
+                        if (nextPowerCaps.length > 0) {
+                            nextMap[restrictToBase] = nextPowerCaps;
+                        } else {
+                            delete nextMap[restrictToBase];
+                        }
+                        updatedPlayer.baseLimitedMinionPowerCaps = Object.keys(nextMap).length > 0 ? nextMap : undefined;
                     }
                     return {
                         ...state,
@@ -1277,6 +1739,27 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return { ...state, bases: newBases, buccaneerPodUsedUids };
         }
 
+        case SU_EVENTS.MINION_CONTROL_CHANGED: {
+            const { minionUid, baseIndex, toControllerId } = (event as MinionControlChangedEvent).payload;
+            const base = state.bases[baseIndex];
+            if (!base) return state;
+
+            let changed = false;
+            const nextBases = state.bases.map((candidate, index) => {
+                if (index !== baseIndex) return candidate;
+                return {
+                    ...candidate,
+                    minions: candidate.minions.map(minion => {
+                        if (minion.uid !== minionUid) return minion;
+                        changed = true;
+                        return { ...minion, controller: toControllerId };
+                    }),
+                };
+            });
+
+            return changed ? { ...state, bases: nextBases } : state;
+        }
+
         case SU_EVENTS.MINION_METADATA_UPDATED: {
             const { minionUid, baseIndex, metadataUpdate } = (event as any as { payload: { minionUid: string; baseIndex?: number; metadataUpdate: Record<string, unknown> } }).payload;
             const tryUpdateBase = (b: BaseInPlay) => ({
@@ -1300,6 +1783,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.TITAN_METADATA_UPDATED: {
+            const { titanUid, metadataUpdate } = (event as TitanMetadataUpdatedEvent).payload;
+            const titans = state.titans ?? [];
+            const titanIndex = titans.findIndex(titan => titan.uid === titanUid);
+            if (titanIndex === -1) return state;
+            const nextTitans = [...titans];
+            nextTitans[titanIndex] = {
+                ...nextTitans[titanIndex],
+                metadata: { ...(nextTitans[titanIndex].metadata ?? {}), ...metadataUpdate },
+            };
+            return { ...state, titans: nextTitans };
+        }
+
         case SU_EVENTS.POWER_COUNTER_ADDED: {
             const { minionUid, amount } = (event as PowerCounterAddedEvent).payload;
             // 力量指示物：操作 powerCounters 字段（独立可追踪实体）
@@ -1311,7 +1807,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         : m
                 ),
             }));
-            return { ...state, bases: newBases };
+            return {
+                ...state,
+                bases: newBases,
+                powerCountersPlacedOnMinionsThisTurn: amount > 0
+                    ? (state.powerCountersPlacedOnMinionsThisTurn ?? 0) + amount
+                    : state.powerCountersPlacedOnMinionsThisTurn,
+            };
         }
 
         case SU_EVENTS.POWER_COUNTER_REMOVED: {
@@ -1372,7 +1874,36 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.TALENT_USED: {
-            const { minionUid, ongoingCardUid, baseIndex } = (event as TalentUsedEvent).payload;
+            const { playerId, minionUid, ongoingCardUid, titanUid, baseIndex } = (event as TalentUsedEvent).payload;
+            const oldBase = baseIndex < state.bases.length ? state.bases[baseIndex] : undefined;
+            let reusedTalent = false;
+            let consumedStandingStones = false;
+
+            if (ongoingCardUid) {
+                const baseOngoing = oldBase?.ongoingActions.find(o => o.uid === ongoingCardUid);
+                if (baseOngoing?.talentUsed) {
+                    reusedTalent = true;
+                }
+                if (!reusedTalent) {
+                    for (const minion of oldBase?.minions ?? []) {
+                        const attached = minion.attachedActions.find(action => action.uid === ongoingCardUid);
+                        if (attached?.talentUsed) {
+                            reusedTalent = true;
+                            break;
+                        }
+                    }
+                }
+            } else if (titanUid) {
+                const oldTitan = (state.titans ?? []).find(titan => titan.uid === titanUid);
+                reusedTalent = oldTitan?.talentUsed ?? false;
+            } else if (minionUid) {
+                const oldMinion = oldBase?.minions.find(m => m.uid === minionUid);
+                reusedTalent = oldMinion?.talentUsed ?? false;
+                consumedStandingStones = reusedTalent
+                    && oldBase?.defId === 'base_standing_stones'
+                    && !state.standingStonesDoubleTalentMinionUid;
+            }
+
             // 使用 uid 查找，不依赖 baseIndex（避免基地删除后索引错位）
             const newBases = state.bases.map(base => {
                 // ongoing 行动卡天赋（基地上或随从附着）
@@ -1400,15 +1931,30 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             });
             // 巨石阵双才能追踪：如果随从在使用前 talentUsed 已为 true，说明这是第二次使用
             let newStandingStonesUid = state.standingStonesDoubleTalentMinionUid;
-            if (minionUid && !ongoingCardUid) {
-                // 使用 baseIndex 查找旧状态（这里 baseIndex 仍然有效，因为是在 TALENT_USED 命令执行时）
-                const oldBase = baseIndex < state.bases.length ? state.bases[baseIndex] : undefined;
-                const oldMinion = oldBase?.minions.find(m => m.uid === minionUid);
-                if (oldMinion?.talentUsed && oldBase?.defId === 'base_standing_stones') {
-                    newStandingStonesUid = minionUid;
-                }
+            if (minionUid && !ongoingCardUid && consumedStandingStones) {
+                newStandingStonesUid = minionUid;
             }
-            return { ...state, bases: newBases, standingStonesDoubleTalentMinionUid: newStandingStonesUid };
+            const newTitans = titanUid
+                ? (state.titans ?? []).map(titan =>
+                    titan.uid === titanUid ? { ...titan, talentUsed: true } : titan,
+                )
+                : state.titans;
+            const currentPlayer = state.players[playerId];
+            const nextPlayer = reusedTalent && !consumedStandingStones && currentPlayer
+                ? {
+                    ...currentPlayer,
+                    extraTalentUsesConsumed: (currentPlayer.extraTalentUsesConsumed ?? 0) + 1,
+                }
+                : currentPlayer;
+            return {
+                ...state,
+                bases: newBases,
+                titans: newTitans,
+                standingStonesDoubleTalentMinionUid: newStandingStonesUid,
+                players: nextPlayer
+                    ? { ...state.players, [playerId]: nextPlayer }
+                    : state.players,
+            };
         }
 
         case SU_EVENTS.ONGOING_DETACHED: {
@@ -1589,6 +2135,26 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const fromHand = removeCard(fromPlayer.hand);
             const fromDeck = removeCard(fromPlayer.deck);
             const fromDiscard = removeCard(fromPlayer.discard);
+            let newBases = state.bases;
+
+            if (!found) {
+                newBases = state.bases.map(base => {
+                    const buried = (base.buriedCards ?? []).find(card => card.uid === cardUid);
+                    if (!buried) return base;
+                    if (!found) {
+                        found = {
+                            uid: buried.uid,
+                            defId: buried.defId,
+                            type: (getCardDef(buried.defId)?.type ?? 'minion') as CardType,
+                            owner: buried.trueOwnerId,
+                        };
+                    }
+                    return {
+                        ...base,
+                        buriedCards: (base.buriedCards ?? []).filter(card => card.uid !== cardUid),
+                    };
+                });
+            }
 
             if (!found) return state;
 
@@ -1602,6 +2168,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
             return {
                 ...state,
+                bases: newBases,
                 players: {
                     ...state.players,
                     [fromPlayerId]: {
@@ -1734,6 +2301,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         // 展示手牌（纯事件，UI 通过 EventStream 消费展示，不写入 core）
         case SU_EVENTS.REVEAL_HAND:
         case SU_EVENTS.REVEAL_DECK_TOP:
+        case SU_EVENTS.DECK_INSPECTED:
             return state;
 
         // 临时力量修正（回合结束自动清零）
@@ -1839,6 +2407,22 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     ...prev,
                     [limitGroup]: [...prevGroup, baseIndex],
                 },
+            };
+        }
+
+        case SU_EVENTS.BASE_ABILITY_USED: {
+            const { playerId, baseIndex, baseDefId } = (event as any).payload;
+            const prev = state.usedBaseAbilitiesThisTurn ?? [];
+            if (prev.some(
+                entry => entry.playerId === playerId
+                    && entry.baseIndex === baseIndex
+                    && entry.baseDefId === baseDefId,
+            )) {
+                return state;
+            }
+            return {
+                ...state,
+                usedBaseAbilitiesThisTurn: [...prev, { playerId, baseIndex, baseDefId }],
             };
         }
 

@@ -9,7 +9,7 @@ describe('SmashUp command validation', () => {
 
         const result = validate(ms as any, {} as any);
         expect(result.valid).toBe(false);
-        expect((result as any).error).toBe('Invalid command: missing type');
+        expect((result as any).error).toBe('invalid_command_missing_type');
     });
 });
 

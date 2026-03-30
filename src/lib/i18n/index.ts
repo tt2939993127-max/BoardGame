@@ -2,8 +2,39 @@ import i18n from 'i18next';
 import Backend from 'i18next-http-backend';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
-import { DEFAULT_LANGUAGE, I18N_NAMESPACES, SUPPORTED_LANGUAGES, normalizeI18nLanguage } from './types';
+import { DEFAULT_LANGUAGE, I18N_NAMESPACES, RUNTIME_SUPPORTED_LANGUAGES, normalizeI18nLanguage } from './types';
 import { zhCNBundled } from './zh-CN-bundled';
+
+const LANGUAGE_PREFERENCE_STORAGE_KEY = 'bg_locale_preference';
+const LEGACY_LANGUAGE_STORAGE_KEY = 'i18nextLng';
+
+const getInitialLanguage = () => {
+    if (typeof window === 'undefined') return DEFAULT_LANGUAGE;
+    try {
+        const preferred = window.localStorage.getItem(LANGUAGE_PREFERENCE_STORAGE_KEY);
+        if (preferred) {
+            return normalizeI18nLanguage(preferred);
+        }
+
+        const legacy = window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
+        const isE2E = Boolean((window as Window & { __E2E_TEST_MODE__?: boolean }).__E2E_TEST_MODE__);
+        if (isE2E && legacy) {
+            return normalizeI18nLanguage(legacy);
+        }
+
+        if (legacy) {
+            const normalizedLegacy = normalizeI18nLanguage(legacy);
+            if (normalizedLegacy === DEFAULT_LANGUAGE) {
+                window.localStorage.setItem(LANGUAGE_PREFERENCE_STORAGE_KEY, DEFAULT_LANGUAGE);
+                return DEFAULT_LANGUAGE;
+            }
+        }
+    } catch {
+        return DEFAULT_LANGUAGE;
+    }
+
+    return DEFAULT_LANGUAGE;
+};
 
 // 构建时注入的 locale JSON content hash 映射
 // 开发模式为空对象（Vite dev server 不缓存）
@@ -29,8 +60,9 @@ export const i18nInitPromise = i18n
     .use(LanguageDetector)
     .use(initReactI18next)
     .init({
+        lng: getInitialLanguage(),
         fallbackLng: DEFAULT_LANGUAGE,
-        supportedLngs: [...SUPPORTED_LANGUAGES],
+        supportedLngs: [...RUNTIME_SUPPORTED_LANGUAGES],
         defaultNS: 'common',
         ns: [...I18N_NAMESPACES],
         // 中文核心 namespace 内联打包，零网络请求
@@ -46,7 +78,8 @@ export const i18nInitPromise = i18n
             loadPath: getLoadPath,
         },
         detection: {
-            order: ['localStorage', 'navigator'],
+            order: ['localStorage'],
+            lookupLocalStorage: LANGUAGE_PREFERENCE_STORAGE_KEY,
             caches: ['localStorage'],
             convertDetectedLanguage: (lng: string) => normalizeI18nLanguage(lng),
         },

@@ -8,6 +8,9 @@ import { join } from 'node:path';
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import {
     ensureGameServerAvailable,
+    resetMatchStorage,
+    setChineseLocale,
+    waitForHomeGameList,
 } from './helpers/common';
 
 const selectionTitlePattern = /选择你的英雄|Choose your hero|Select Your Hero/i;
@@ -18,11 +21,14 @@ const turnPattern = /回合|Turn/i;
 const diceThroneHeadingPattern = /Dice Throne|王权骰铸/i;
 const createRoomPattern = /Create Room|创建房间/i;
 const confirmPattern = /Confirm|确认/i;
+const v2PlayerBoardAspectRatio = 2048 / 1248;
 
 /** 通过 UI 打开 DiceThrone 房间（此文件特有的 UI 流程） */
 const openDiceThroneRoom = async (page: Page) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    await waitForHomeGameList(page);
+    await expect(page.getByRole('heading', { name: diceThroneHeadingPattern })).toBeVisible();
     await page.getByRole('heading', { name: diceThroneHeadingPattern }).click();
     await page.getByRole('button', { name: createRoomPattern }).click();
     await expect(page.getByRole('heading', { name: createRoomPattern })).toBeVisible();
@@ -42,12 +48,28 @@ const ensureHostPlayerId = async (page: Page) => {
     }
 };
 
+const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
+    await expect.poll(async () => page.evaluate(({ testId, target }) => {
+        const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
+        const visibleCount = overlays.filter((overlay) => {
+            const styles = window.getComputedStyle(overlay);
+            return styles.display !== 'none'
+                && styles.visibility !== 'hidden'
+                && styles.pointerEvents !== 'none'
+                && styles.opacity !== '0';
+        }).length;
+        return target === 'open' ? visibleCount > 0 : visibleCount === 0;
+    }, { testId: overlayTestId, target: expected }), { timeout: 5000 }).toBe(true);
+};
+
 const waitForSelectionOverlay = async (page: Page) => {
     await expect(page.locator('[data-testid="character-selection-overlay"]')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(selectionTitlePattern)).toBeVisible({ timeout: 15000 });
 };
 
 const prepareHostSelection = async (page: Page) => {
+    await setChineseLocale(page.context());
+    await resetMatchStorage(page.context(), '__dicethrone_character_selection_host_storage_reset');
     if (!await ensureGameServerAvailable(page)) {
         test.skip(true, 'Game server unavailable for online tests.');
     }
@@ -74,6 +96,8 @@ const joinGuest = async (page: Page): Promise<{ guestContext: BrowserContext; gu
     if (!matchId) throw new Error('Failed to parse match id from host URL.');
 
     const guestContext = await browser.newContext();
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext, '__dicethrone_character_selection_guest_storage_reset');
     const guestPage = await guestContext.newPage();
     await guestPage.goto(`${hostUrl.origin}/play/dicethrone/match/${matchId}?join=true`, {
         waitUntil: 'domcontentloaded',
@@ -88,40 +112,71 @@ test.describe('角色选择系统', () => {
     test('应该显示角色选择界面', async ({ page }) => {
         await prepareHostSelection(page);
         await expect(page.getByText(selectionTitlePattern)).toBeVisible();
-        await expect(page.locator('[data-char-id="monk"]')).toBeVisible();
-        await expect(page.locator('[data-char-id="barbarian"]')).toBeVisible();
-        await expect(page.locator('[data-char-id="pyromancer"]')).toBeVisible();
+        await expect(page.locator('[data-character-id="monk"]')).toBeVisible();
+        await expect(page.locator('[data-character-id="barbarian"]')).toBeVisible();
+        await expect(page.locator('[data-character-id="pyromancer"]')).toBeVisible();
+        await expect(page.locator('[data-character-id="gunslinger"]')).toBeVisible();
+        await expect(page.locator('[data-character-id="samurai"]')).toBeVisible();
     });
 
     test('应该能够切换角色', async ({ page }) => {
         await prepareHostSelection(page);
-        await page.click('[data-char-id="monk"]');
+        await page.click('[data-character-id="monk"]');
         await page.waitForTimeout(500);
-        await expect(page.locator('[data-char-id="monk"]')).toHaveClass(/border-amber-400/);
+        await expect(page.locator('[data-character-id="monk"]')).toHaveClass(/border-amber-400/);
 
-        await page.click('[data-char-id="barbarian"]');
+        await page.click('[data-character-id="barbarian"]');
         await page.waitForTimeout(500);
-        await expect(page.locator('[data-char-id="barbarian"]')).toHaveClass(/border-amber-400/);
-        await expect(page.locator('[data-char-id="monk"]')).not.toHaveClass(/border-amber-400/);
-        await expect(page.locator('[data-char-id="barbarian"]')).toContainText(/P1/i);
-        await expect(page.locator('[data-char-id="monk"]')).not.toContainText(/P1/i);
+        await expect(page.locator('[data-character-id="barbarian"]')).toHaveClass(/border-amber-400/);
+        await expect(page.locator('[data-character-id="monk"]')).not.toHaveClass(/border-amber-400/);
+        await expect(page.locator('[data-character-id="barbarian"]')).toContainText(/P1/i);
+        await expect(page.locator('[data-character-id="monk"]')).not.toContainText(/P1/i);
     });
 
-    test('应该能够放大预览角色面板', async ({ page }) => {
+    test('应该能够放大预览第二版角色面板且不被裁剪', async ({ page }) => {
+        const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'character-selection.e2e', '应该能够放大预览第二版角色面板且不被裁剪');
+        mkdirSync(evidenceDir, { recursive: true });
+        const evidencePath = join(evidenceDir, 'samurai-v2-player-board-magnify-open.png');
+
         await prepareHostSelection(page);
-        await page.click('[data-char-id="monk"]');
+        await page.click('[data-character-id="samurai"]');
         await page.waitForTimeout(1000);
         await page.getByAltText(playerBoardAltPattern).click();
         await page.waitForTimeout(500);
 
         const closeButton = page.getByRole('button', { name: closePreviewPattern }).first();
-        const overlay = page.locator('.fixed.inset-0.z-\\[9999\\]');
+        const previewOverlay = page.getByTestId('character-selection-magnify-overlay');
+        const previewContent = closeButton.locator('xpath=following-sibling::div[1]');
+        const previewImage = page.locator('[data-interaction-allow] img[alt="Preview"]').last();
+        await waitForOverlayState(page, 'character-selection-magnify-overlay', 'open');
+        await expect(previewOverlay).toBeAttached();
         await expect(closeButton).toBeVisible();
-        await expect(overlay).toBeVisible();
+        await expect(previewContent).toBeVisible();
+        await page.screenshot({ path: evidencePath, fullPage: false });
 
-        await overlay.click({ position: { x: 5, y: 5 } });
-        await page.waitForTimeout(500);
-        await expect(overlay).not.toBeVisible();
+        const previewBox = await previewContent.boundingBox();
+        expect(previewBox, '预览内容应提供边界框').not.toBeNull();
+        const viewportSize = page.viewportSize();
+        expect(viewportSize).not.toBeNull();
+        expect(previewBox!.x).toBeGreaterThanOrEqual(0);
+        expect(previewBox!.y).toBeGreaterThanOrEqual(0);
+        expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual((viewportSize?.width ?? 0) + 1);
+        expect(previewBox!.y + previewBox!.height).toBeLessThanOrEqual((viewportSize?.height ?? 0) + 1);
+
+        const previewImageCount = await previewImage.count();
+        if (previewImageCount > 0) {
+            const naturalWidth = await previewImage.evaluate((node) => (node as HTMLImageElement).naturalWidth);
+            if (naturalWidth > 0) {
+                const renderedRatio = previewBox!.width / previewBox!.height;
+                expect(Math.abs(renderedRatio - v2PlayerBoardAspectRatio)).toBeLessThan(0.06);
+            }
+        } else {
+            const renderedRatio = previewBox!.width / previewBox!.height;
+            expect(Math.abs(renderedRatio - v2PlayerBoardAspectRatio)).toBeLessThan(0.06);
+        }
+
+        await closeButton.click();
+        await waitForOverlayState(page, 'character-selection-magnify-overlay', 'closed');
     });
 
     test('手机横屏下选角界面不应出现顶层横向滚动', async ({ page }, testInfo) => {
@@ -196,10 +251,10 @@ test.describe('角色选择系统', () => {
 
     test('选角后应该能够开始游戏', async ({ page }) => {
         await withOnlineMatch(page, async (guestPage) => {
-            await page.click('[data-char-id="monk"]');
+            await page.click('[data-character-id="samurai"]');
             await page.waitForTimeout(500);
 
-            await guestPage.click('[data-char-id="barbarian"]');
+            await guestPage.click('[data-character-id="gunslinger"]');
             await guestPage.getByRole('button', { name: readyButtonPattern }).click();
 
             const startButton = page.getByRole('button', { name: /开始游戏|Press Start/i });
@@ -211,4 +266,5 @@ test.describe('角色选择系统', () => {
             await expect(page.getByText(turnPattern)).toBeVisible();
         });
     });
+
 });

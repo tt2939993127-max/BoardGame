@@ -5,12 +5,12 @@ import { CardPreview, registerCardPreviewRenderer } from '../../../components/co
 import type { CardPreviewRef } from '../../../core';
 import smashUpEnglishMap from '../data/englishAtlasMap.json';
 import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from '../data/cards';
+import { SMASHUP_ATLAS_IDS } from '../domain/ids';
 import { useSmashUpOverlay } from './SmashUpOverlayContext';
 
 type EnglishMapConfig = { atlasId: string; index: number };
 
 const TTS_MAP = smashUpEnglishMap as Record<string, EnglishMapConfig>;
-
 interface SmashUpRendererArgs {
     previewRef: CardPreviewRef;
     locale?: string;
@@ -174,8 +174,14 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
     // 1. POD 派系卡牌 → 使用英文 locale（图片在 en/smashup/pod-assets/）
     // 2. 基地卡且玩家选择了 POD 版派系 → 使用英文 locale（图片在 en/smashup/pod-assets/）
     // 3. 使用了 TTS 英文图集（图集 ID 以 tts_atlas_ 开头）→ 使用英文 locale
-    // 4. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
-    const imageLocale = (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas) ? 'en' : effectiveLocale;
+    // 4. 原生泰坦图集当前只有本地资源，需要强制回到 zh-CN 目录
+    // 5. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
+    const usesNativeTitanAtlas = finalAtlasId === SMASHUP_ATLAS_IDS.TITANS;
+    const imageLocale = usesNativeTitanAtlas
+        ? 'zh-CN'
+        : (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas)
+            ? 'en'
+            : effectiveLocale;
 
     // 直接返回完整的卡牌（图片 + 覆盖层）
     return (

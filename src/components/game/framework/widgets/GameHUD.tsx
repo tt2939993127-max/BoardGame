@@ -30,7 +30,7 @@ import { matchSocket, type MatchChatMessage } from '../../../../services/matchSo
 import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../../../shared/chat';
 import { useModalStack } from '../../../../contexts/ModalStackContext';
 import { FriendsChatModal } from '../../../social/FriendsChatModal';
-import { useSocial } from '../../../../contexts/SocialContext';
+import { useOptionalSocial } from '../../../../contexts/SocialContext';
 import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
 import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
@@ -123,7 +123,7 @@ export const GameHUD = ({
 
     const locale = i18n.language;
     const { openModal, closeModal } = useModalStack();
-    const { unreadTotal, requests, ensureRealtimeConnection } = useSocial();
+    const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const [copied, setCopied] = useState(false);
 
     // 撤回状态
@@ -428,8 +428,8 @@ export const GameHUD = ({
     };
 
     // 0. 主按钮逻辑
-    // 在线模式：聊天为主按钮
-    // 本地模式：设置为主按钮（聊天无效）
+    // 在线/教程模式：聊天为主按钮
+    // 本地模式：无聊天主按钮，设置按钮应作为离主球最近的第一个卫星按钮
     const useChatAsMain = isOnline || isTutorial;
 
     if (useChatAsMain) {
@@ -595,7 +595,7 @@ export const GameHUD = ({
     };
 
     // ===== 联机模式卫星按钮顺序（push 顺序 = 从上到下显示顺序） =====
-    // 目标：退出 → 反馈 → 社交 → 全屏 → 设置 → 撤回 → 操作日志 → 聊天(主按钮)
+    // 目标：退出 → 反馈 → 社交 → 全屏 → 撤回 → 操作日志 → 设置 → 聊天(主按钮)
 
     const exitAction: FabAction = {
         id: 'exit',
@@ -743,12 +743,7 @@ export const GameHUD = ({
         onClick: toggleFullscreen,
     });
 
-    // 5. 设置
-    if (useChatAsMain) {
-        items.push(settingsAction);
-    }
-
-    // 6. 撤回
+    // 5. 撤回
     if (!isSpectator) {
         if (!undoState) {
             items.push({
@@ -825,15 +820,20 @@ export const GameHUD = ({
         }
     }
 
-    // 7. 操作日志
+    // 6. 操作日志
     if (useChatAsMain) {
         items.push(actionLogAction);
     }
 
+    // 7. 设置（联机/教程模式中紧贴聊天主按钮）
+    if (useChatAsMain) {
+        items.push(settingsAction);
+    }
+
     // ===== 本地模式卫星按钮顺序 =====
     if (!useChatAsMain) {
-        items.push(settingsAction);
         items.push(actionLogAction);
+        items.push(settingsAction);
     }
 
     return (

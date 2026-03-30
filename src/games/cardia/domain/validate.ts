@@ -8,6 +8,27 @@ import type { CardiaCommand } from './commands';
 import { CARDIA_COMMANDS } from './commands';
 import { FACTION_IDS } from './ids';
 
+const CARDIA_ERROR = {
+    unknownCommand: 'unknown_command',
+    notInPlayPhase: 'not_in_play_phase',
+    playerNotFound: 'player_not_found',
+    alreadyPlayed: 'already_played_card_this_turn',
+    opponentMustPlayFirst: 'opponent_must_play_first',
+    cardNotInHand: 'card_not_in_hand',
+    notInAbilityPhase: 'not_in_ability_phase',
+    noCurrentEncounter: 'no_current_encounter',
+    onlyLoserCanActivateAbilities: 'only_loser_can_activate_abilities',
+    cardNotFoundOnBoard: 'card_not_found_on_board',
+    abilityNotFoundOnCard: 'ability_not_found_on_card',
+    onlyLoserCanSkipAbilities: 'only_loser_can_skip_abilities',
+    invalidModifierValue: 'invalid_modifier_value',
+    noInteractionId: 'no_interaction_id',
+    noCardsSelected: 'no_cards_selected',
+    invalidFaction: 'invalid_faction',
+    notInEndPhase: 'not_in_end_phase',
+    notYourTurn: 'not_your_turn',
+} as const;
+
 /**
  * 验证命令
  */
@@ -48,7 +69,7 @@ export function validate(
             return validateEndTurn(core, command);
         
         default:
-            return { valid: false, error: 'Unknown command type' };
+            return { valid: false, error: CARDIA_ERROR.unknownCommand };
     }
 }
 
@@ -71,7 +92,7 @@ function validatePlayCard(
             playerId,
             currentPhase: core.phase,
         });
-        return { valid: false, error: 'Not in play phase' };
+        return { valid: false, error: CARDIA_ERROR.notInPlayPhase };
     }
     
     // 检查玩家是否存在
@@ -81,7 +102,7 @@ function validatePlayCard(
             playerId,
             availablePlayers: Object.keys(core.players),
         });
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 检查是否已经打出卡牌
@@ -90,7 +111,7 @@ function validatePlayCard(
             playerId,
             hasPlayed: player.hasPlayed,
         });
-        return { valid: false, error: 'Already played a card this turn' };
+        return { valid: false, error: CARDIA_ERROR.alreadyPlayed };
     }
     
     // 占卜师能力：检查强制出牌顺序
@@ -105,7 +126,7 @@ function validatePlayCard(
                 forcedPlayer,
                 forcedPlayerHasPlayed: forcedPlayerState.hasPlayed,
             });
-            return { valid: false, error: 'validation.opponent_must_play_first' };
+            return { valid: false, error: CARDIA_ERROR.opponentMustPlayFirst };
         }
     }
     
@@ -117,7 +138,7 @@ function validatePlayCard(
             cardUid,
             handCards: player.hand.map(c => c.uid),
         });
-        return { valid: false, error: 'Card not in hand' };
+        return { valid: false, error: CARDIA_ERROR.cardNotInHand };
     }
     
     console.log('[Cardia] PLAY_CARD validation passed', {
@@ -142,23 +163,23 @@ function validateActivateAbility(
     
     // 检查是否在能力阶段（从 sys.phase 读取，FlowSystem 管理的权威来源）
     if (state.sys.phase !== 'ability') {
-        return { valid: false, error: 'Not in ability phase' };
+        return { valid: false, error: CARDIA_ERROR.notInAbilityPhase };
     }
     
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 检查是否有当前遭遇
     if (!core.currentEncounter) {
-        return { valid: false, error: 'No current encounter' };
+        return { valid: false, error: CARDIA_ERROR.noCurrentEncounter };
     }
     
     // 检查是否是失败者（只有失败者可以激活能力）
     if (core.currentEncounter.loserId !== playerId) {
-        return { valid: false, error: 'Only the loser can activate abilities' };
+        return { valid: false, error: CARDIA_ERROR.onlyLoserCanActivateAbilities };
     }
     
     // 检查卡牌是否存在（可能在 playedCards 或 currentCard 中）
@@ -167,12 +188,12 @@ function validateActivateAbility(
         card = player.currentCard;
     }
     if (!card) {
-        return { valid: false, error: 'Card not found on board' };
+        return { valid: false, error: CARDIA_ERROR.cardNotFoundOnBoard };
     }
     
     // 检查能力是否属于该卡牌
     if (!card.abilityIds.includes(abilityId)) {
-        return { valid: false, error: 'Ability not found on card' };
+        return { valid: false, error: CARDIA_ERROR.abilityNotFoundOnCard };
     }
     
     // TODO: 检查能力是否有可选目标（需要能力注册表）
@@ -194,16 +215,16 @@ function validateSkipAbility(
     
     // 检查是否在能力阶段（从 sys.phase 读取，FlowSystem 管理）
     if (sys.phase !== 'ability') {
-        return { valid: false, error: 'Not in ability phase' };
+        return { valid: false, error: CARDIA_ERROR.notInAbilityPhase };
     }
     
     // 检查是否是失败者
     if (!core.currentEncounter) {
-        return { valid: false, error: 'No current encounter' };
+        return { valid: false, error: CARDIA_ERROR.noCurrentEncounter };
     }
     
     if (core.currentEncounter.loserId !== playerId) {
-        return { valid: false, error: 'Only the loser can skip abilities' };
+        return { valid: false, error: CARDIA_ERROR.onlyLoserCanSkipAbilities };
     }
     
     return { valid: true };
@@ -222,13 +243,13 @@ function validateChooseModifier(
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 检查修正值是否有效
     const validValues = [1, 3, 5, -1, -3, -5];
     if (!validValues.includes(value)) {
-        return { valid: false, error: 'Invalid modifier value' };
+        return { valid: false, error: CARDIA_ERROR.invalidModifierValue };
     }
     
     // 注意：更详细的验证由 InteractionSystem 处理
@@ -249,7 +270,7 @@ function validateConfirmChoice(
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 注意：更详细的验证由 InteractionSystem 处理
@@ -271,12 +292,12 @@ function validateChooseCard(
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 检查交互ID是否存在
     if (!interactionId) {
-        return { valid: false, error: 'No interaction ID' };
+        return { valid: false, error: CARDIA_ERROR.noInteractionId };
     }
     
     // 支持单选和多选两种格式
@@ -284,14 +305,14 @@ function validateChooseCard(
     
     // 检查是否有选择的卡牌
     if (selectedCards.length === 0) {
-        return { valid: false, error: 'No cards selected' };
+        return { valid: false, error: CARDIA_ERROR.noCardsSelected };
     }
     
     // 检查所有选择的卡牌是否在手牌中
     for (const uid of selectedCards) {
         const card = player.hand.find(c => c.uid === uid);
         if (!card) {
-            return { valid: false, error: `Card ${uid} not in hand` };
+            return { valid: false, error: CARDIA_ERROR.cardNotInHand };
         }
     }
     
@@ -314,18 +335,18 @@ function validateChooseFaction(
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     // 检查派系是否有效
     const validFactions = Object.values(FACTION_IDS);
     if (!validFactions.includes(faction as any)) {
-        return { valid: false, error: 'Invalid faction' };
+        return { valid: false, error: CARDIA_ERROR.invalidFaction };
     }
     
     // 检查交互ID是否存在
     if (!interactionId) {
-        return { valid: false, error: 'No interaction ID' };
+        return { valid: false, error: CARDIA_ERROR.noInteractionId };
     }
     
     // 注意：更详细的验证由 InteractionSystem 处理
@@ -345,18 +366,18 @@ function validateEndTurn(
     
     // 检查是否在结束阶段
     if (core.phase !== 'end') {
-        return { valid: false, error: 'Not in end phase' };
+        return { valid: false, error: CARDIA_ERROR.notInEndPhase };
     }
     
     // 检查是否是当前玩家
     if (core.currentPlayerId !== playerId) {
-        return { valid: false, error: 'Not your turn' };
+        return { valid: false, error: CARDIA_ERROR.notYourTurn };
     }
     
     // 检查玩家是否存在
     const player = core.players[playerId];
     if (!player) {
-        return { valid: false, error: 'Player not found' };
+        return { valid: false, error: CARDIA_ERROR.playerNotFound };
     }
     
     return { valid: true };

@@ -12,6 +12,7 @@ import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverl
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
+import { getPlayerBoardAspectRatio } from './abilitySlotLayout';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import clsx from 'clsx';
@@ -48,6 +49,11 @@ const PLAYER_LABELS: Record<string, string> = {
 
 const HERO_SELECTION_CLICK_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 
+type MagnifyPreview =
+    | { src: string; kind: 'player-board'; characterId: CharacterId }
+    | { src: string; kind: 'tip-board'; characterId: CharacterId }
+    | null;
+
 export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = ({
     isOpen,
     currentPlayerId,
@@ -63,7 +69,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     onStart,
     locale,
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
     const isFourPlayerMode = playerIds.length === 4;
@@ -78,9 +84,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const hasSelectedChar = selectedCharacters[currentPlayerId] && selectedCharacters[currentPlayerId] !== 'unselected';
 
     const availableCharacters = useMemo(() => {
-        return DICETHRONE_CHARACTER_CATALOG.filter(char =>
-            ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief', 'paladin'].includes(char.id)
-        );
+        return DICETHRONE_CHARACTER_CATALOG;
     }, []);
 
     const previewCharId = useMemo(() => {
@@ -89,9 +93,10 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
         return availableCharacters[0]?.id || 'monk';
     }, [selectedCharacters, currentPlayerId, availableCharacters]);
 
-    const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
+    const [magnifyPreview, setMagnifyPreview] = useState<MagnifyPreview>(null);
     const [pendingSeatPlayerId, setPendingSeatPlayerId] = useState<PlayerId | null>(null);
     const [seatFeedbackKey, setSeatFeedbackKey] = useState<string | null>(null);
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(previewCharId);
 
     const effectiveSeatingOrder = useMemo(() => {
         const orderedPlayers = seatingOrder?.filter((pid) => playerIds.includes(pid)) ?? [];
@@ -169,7 +174,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             return null;
         }
         if (seatFeedbackKey) {
-            return t(seatFeedbackKey);
+            return i18n.exists(seatFeedbackKey) ? t(seatFeedbackKey) : seatFeedbackKey;
         }
         if (!isHost) {
             return t('selection.seating.readOnly');
@@ -381,25 +386,34 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 {/* 物理面板预览 - OptimizedImage 自动处理本地化路径 */}
                                 <div
                                     className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
+                                    style={{ aspectRatio: String(playerBoardAspectRatio) }}
+                                    onClick={() => setMagnifyPreview({
+                                        src: ASSETS.PLAYER_BOARD(previewCharId as CharacterId),
+                                        kind: 'player-board',
+                                        characterId: previewCharId as CharacterId,
+                                    })}
                                 >
                                     <OptimizedImage
                                         src={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
-                                        className="h-full w-auto object-contain"
-                                        alt="Player Board"
+                                        className="block h-full w-auto object-contain"
+                                        alt="玩家面板"
                                     />
                                 </div>
 
                                 <div
                                     className="relative h-[85%] w-auto rounded-[0.6vw] overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    onClick={() => setMagnifyImage(ASSETS.TIP_BOARD(previewCharId as CharacterId))}
+                                    onClick={() => setMagnifyPreview({
+                                        src: ASSETS.TIP_BOARD(previewCharId as CharacterId),
+                                        kind: 'tip-board',
+                                        characterId: previewCharId as CharacterId,
+                                    })}
                                 >
                                     <OptimizedImage
                                         src={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
                                         className="h-full w-auto object-contain"
-                                        alt="Tip Board"
+                                        alt="提示板"
                                     />
                                 </div>
                             </div>
@@ -577,18 +591,26 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
             {/* 放大预览弹窗 - OptimizedImage 自动处理本地化路径 */}
             <MagnifyOverlay
-                isOpen={!!magnifyImage}
-                onClose={() => setMagnifyImage(null)}
+                isOpen={!!magnifyPreview}
+                onClose={() => setMagnifyPreview(null)}
                 containerClassName="max-h-[90vh] max-w-[90vw]"
                 closeLabel={t('actions.closePreview')}
+                overlayTestId="character-selection-magnify-overlay"
             >
-                {magnifyImage && (
-                    <OptimizedImage
-                        src={magnifyImage}
-                        locale={locale}
-                        className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                        alt="Preview"
-                    />
+                {magnifyPreview && (
+                    <div
+                        className="relative"
+                        style={magnifyPreview.kind === 'player-board'
+                            ? { aspectRatio: String(getPlayerBoardAspectRatio(magnifyPreview.characterId)) }
+                            : undefined}
+                    >
+                        <OptimizedImage
+                            src={magnifyPreview.src}
+                            locale={locale}
+                            className="block max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
+                            alt="预览图"
+                        />
+                    </div>
                 )}
             </MagnifyOverlay>
         </motion.div>

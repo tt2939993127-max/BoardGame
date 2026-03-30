@@ -13,7 +13,7 @@ import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from '../dat
 
 export interface CardMagnifyTarget {
     defId: string;
-    type: 'minion' | 'base' | 'action';
+    type: 'minion' | 'base' | 'action' | 'titan';
 }
 
 interface Props {
@@ -35,6 +35,9 @@ export const CardMagnifyOverlay: React.FC<Props> = ({ target, onClose }) => {
     return (
         <MagnifyOverlay isOpen onClose={onClose} overlayTestId="su-card-magnify-overlay">
             <div
+                data-testid="su-card-magnify-content"
+                data-card-type={target.type}
+                data-card-def-id={target.defId}
                 className={`relative bg-transparent ${isBase ? 'w-[40vw] max-w-[600px] aspect-[1.43]' : 'w-[25vw] max-w-[400px] aspect-[0.714]'}`}
             >
                 <button
