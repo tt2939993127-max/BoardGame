@@ -248,10 +248,16 @@ function registerVampireModifiers(): void {
 }
 
 function registerAncientEgyptiansModifiers(): void {
-    registerPowerModifier('ancient_egyptians_priest_of_anubis', (ctx: PowerModifierContext) => {
-        if (!matchesDefId(ctx.minion, 'ancient_egyptians_priest_of_anubis')) return 0;
-        return (ctx.base.buriedCards ?? []).some(card => card.controllerId === ctx.minion.controller) ? 2 : 0;
-    }, { handlesPodInternally: true });
+    // 阿努比斯祭司：如果此基地上有你控制的埋葬牌，你在此基地的所有随从+2力量
+    registerOngoingPowerModifier('ancient_egyptians_priest_of_anubis', 'minion', 'ownerMinions', 2, (ctx) => {
+        // 检查目标随从是否与 priest_of_anubis 同基地
+        const priest = ctx.base.minions.find(m => matchesDefId(m, 'ancient_egyptians_priest_of_anubis'));
+        if (!priest) return false;
+        // 检查 priest 是否与目标随从同控制者
+        if (priest.controller !== ctx.minion.controller) return false;
+        // 检查基地上是否有该玩家控制的埋葬牌
+        return (ctx.base.buriedCards ?? []).some(card => card.controllerId === ctx.minion.controller);
+    });
 
     registerOngoingPowerModifier('ancient_egyptians_ancient_curse', 'minion', 'self', -2);
 }

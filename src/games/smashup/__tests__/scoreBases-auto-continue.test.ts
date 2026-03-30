@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { smashUpFlowHooks } from '../domain/index';
+import { buildSmashUpAiLegalActions } from '../ai';
 import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
 
@@ -262,5 +263,32 @@ describe('scoreBases 阶段自动推进', () => {
         });
 
         expect(result).toBeUndefined();
+    });
+
+    it('AI 在计分阶段存在可激活 special 时不应暴露 advance-phase', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                bases: [makeBase('base_pirate_cove', [
+                    makeMinion('0', 'trickster_gnome_pod', 3),
+                    makeMinion('0', 'robot_hoverbot', 4),
+                    makeMinion('1', 'robot_microbot_guard', 3),
+                ])],
+                scoringEligibleBaseIndices: [0],
+            }),
+            sys: {
+                phase: 'scoreBases',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(true);
+        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
     });
 });

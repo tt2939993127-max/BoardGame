@@ -88,13 +88,42 @@ const createCommand = (playerId: PlayerId, type: string, payload: unknown = {}):
     timestamp: 0,
 });
 
+const hasPendingScoreBasesSpecialActivation = (state: SmashUpState, playerId: PlayerId): boolean => {
+    if (state.sys.phase !== 'scoreBases') return false;
+
+    const eligibleIndices = getScoringEligibleBaseIndices(state.core);
+    for (const baseIndex of eligibleIndices) {
+        const base = state.core.bases[baseIndex];
+        if (!base) continue;
+        for (const minion of base.minions) {
+            if (minion.controller !== playerId) continue;
+            const result = validate(state, createCommand(playerId, SU_COMMANDS.ACTIVATE_SPECIAL, {
+                minionUid: minion.uid,
+                baseIndex,
+            }) as never);
+            if (result.valid) return true;
+        }
+    }
+
+    return false;
+};
+
+const canAdvancePhase = (state: SmashUpState, playerId: PlayerId): boolean => {
+    if (state.sys.interaction?.current) return false;
+    if (state.sys.responseWindow?.current) return false;
+    if (state.sys.phase === 'scoreBases' && hasPendingScoreBasesSpecialActivation(state, playerId)) {
+        return false;
+    }
+    return true;
+};
+
 const isCommandValid = (
     state: SmashUpState,
     playerId: PlayerId,
     type: string,
     payload: unknown = {},
 ): boolean => {
-    if (type === 'ADVANCE_PHASE') return true;
+    if (type === 'ADVANCE_PHASE') return canAdvancePhase(state, playerId);
     const result = validate(state, createCommand(playerId, type, payload) as never);
     return result.valid;
 };
@@ -507,18 +536,21 @@ const buildDiscardActions = (state: SmashUpState, playerId: PlayerId): AiLegalAc
     }].filter((action) => isCommandValid(state, playerId, action.commands[0].type, action.commands[0].payload));
 };
 
-const buildAdvancePhaseAction = (state: SmashUpState, playerId: PlayerId): AiLegalAction => ({
-    actionId: createAiLegalActionId('advance-phase', state.sys.phase, playerId),
-    kind: 'advance-phase',
-    label: '结束当前阶段',
-    commands: [{
-        type: 'ADVANCE_PHASE',
-        payload: {},
-    }],
-    metadata: {
-        phase: state.sys.phase,
-    },
-});
+const buildAdvancePhaseAction = (state: SmashUpState, playerId: PlayerId): AiLegalAction | null => {
+    if (!isCommandValid(state, playerId, 'ADVANCE_PHASE')) return null;
+    return {
+        actionId: createAiLegalActionId('advance-phase', state.sys.phase, playerId),
+        kind: 'advance-phase',
+        label: '结束当前阶段',
+        commands: [{
+            type: 'ADVANCE_PHASE',
+            payload: {},
+        }],
+        metadata: {
+            phase: state.sys.phase,
+        },
+    };
+};
 
 const estimateCardKeepValue = (card: CardInstance): number => {
     if (isCardMinionLike(card)) {
@@ -598,23 +630,27 @@ export function buildSmashUpAiLegalActions(args: {
         actions.push(...buildSpecialActions(state, playerId));
         actions.push(...buildTalentActions(state, playerId));
         actions.push(...buildPlayableCardActions(state, playerId));
-        actions.push(buildAdvancePhaseAction(state, playerId));
+        const advanceAction = buildAdvancePhaseAction(state, playerId);
+        if (advanceAction) actions.push(advanceAction);
         return actions;
     }
 
     if (phase === 'scoreBases') {
         actions.push(...buildSpecialActions(state, playerId));
-        actions.push(buildAdvancePhaseAction(state, playerId));
+        const advanceAction = buildAdvancePhaseAction(state, playerId);
+        if (advanceAction) actions.push(advanceAction);
         return actions;
     }
 
     if (phase === 'draw') {
         const discardActions = buildDiscardActions(state, playerId);
         if (discardActions.length > 0) return discardActions;
-        return [buildAdvancePhaseAction(state, playerId)];
+        const advanceAction = buildAdvancePhaseAction(state, playerId);
+        return advanceAction ? [advanceAction] : [];
     }
 
-    return [buildAdvancePhaseAction(state, playerId)];
+    const advanceAction = buildAdvancePhaseAction(state, playerId);
+    return advanceAction ? [advanceAction] : [];
 }
 
 const actionKindScorer = createActionKindScorer('action-kind', {
