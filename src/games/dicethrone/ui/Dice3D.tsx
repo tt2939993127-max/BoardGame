@@ -31,6 +31,50 @@ interface SpriteState {
     url?: string;
 }
 const dice3DLogger = createScopedLogger('dicethrone:dice3d');
+const spriteProbeStatusCache = new Map<string, 'ready' | 'error'>();
+const spriteProbePromiseCache = new Map<string, Promise<'ready' | 'error'>>();
+
+const probeSpriteUrl = (candidateUrl: string) => {
+    const cachedStatus = spriteProbeStatusCache.get(candidateUrl);
+    if (cachedStatus) {
+        return Promise.resolve(cachedStatus);
+    }
+
+    // 对 DiceThrone 本地语言化资源直接放行：
+    // 已验证同页环境下 /assets/i18n/... 的 fetch 与 Image.onload 都正常，
+    // 但组件内的额外探测链在局内存在时序问题，导致状态长期卡在 loading。
+    // 这里先对这类稳定本地资源直接判 ready，避免把局内骰图继续卡空。
+    if (/^\/assets\/i18n\//i.test(candidateUrl)) {
+        spriteProbeStatusCache.set(candidateUrl, 'ready');
+        return Promise.resolve('ready');
+    }
+
+    const existingPromise = spriteProbePromiseCache.get(candidateUrl);
+    if (existingPromise) {
+        return existingPromise;
+    }
+
+    const probePromise = (async (): Promise<'ready' | 'error'> => {
+        try {
+            const response = await fetch(candidateUrl, {
+                method: 'GET',
+                credentials: 'same-origin',
+            });
+            const contentType = response.headers.get('content-type') ?? '';
+            const result = response.ok && /^image\//i.test(contentType) ? 'ready' : 'error';
+            spriteProbeStatusCache.set(candidateUrl, result);
+            return result;
+        } catch {
+            spriteProbeStatusCache.set(candidateUrl, 'error');
+            return 'error';
+        } finally {
+            spriteProbePromiseCache.delete(candidateUrl);
+        }
+    })();
+
+    spriteProbePromiseCache.set(candidateUrl, probePromise);
+    return probePromise;
+};
 
 /** 3D 骰子组件 */
 export const Dice3D = ({
@@ -58,10 +102,20 @@ export const Dice3D = ({
         () => getDiceSpriteUrls(definitionId, characterId, locale),
         [characterId, definitionId, locale],
     );
-    const [spriteState, setSpriteState] = React.useState<SpriteState>(() => ({
-        status: spriteUrls.length > 0 ? 'loading' : 'error',
-        url: spriteUrls[0],
-    }));
+    const [spriteState, setSpriteState] = React.useState<SpriteState>(() => {
+        const initialUrl = spriteUrls[0];
+        const cachedStatus = initialUrl ? spriteProbeStatusCache.get(initialUrl) : undefined;
+        if (cachedStatus === 'ready' && initialUrl) {
+            return { status: 'ready', url: initialUrl };
+        }
+        if (cachedStatus === 'error') {
+            return { status: 'error', url: undefined };
+        }
+        return {
+            status: spriteUrls.length > 0 ? 'loading' : 'error',
+            url: initialUrl,
+        };
+    });
 
     React.useEffect(() => {
         dice3DLogger.debug('sprite-candidates', {
@@ -94,10 +148,16 @@ export const Dice3D = ({
             return undefined;
         }
 
+        const firstCachedUrl = spriteUrls.find((url) => spriteProbeStatusCache.get(url) === 'ready');
+        if (firstCachedUrl) {
+            setSpriteState({ status: 'ready', url: firstCachedUrl });
+            return undefined;
+        }
+
         setSpriteState({ status: 'loading', url: undefined });
         let cancelled = false;
 
-        const tryLoad = (index: number) => {
+        const tryLoad = async (index: number): Promise<void> => {
             if (cancelled) return;
             if (index >= spriteUrls.length) {
                 dice3DLogger.error('sprite-all-failed', {
@@ -115,30 +175,26 @@ export const Dice3D = ({
                 index,
                 candidateUrl,
             });
-            const image = new Image();
-            image.onload = () => {
-                if (!cancelled) {
-                    dice3DLogger.info('sprite-probe-success', {
-                        index,
-                        candidateUrl,
-                        naturalWidth: image.naturalWidth,
-                        naturalHeight: image.naturalHeight,
-                    });
-                    setSpriteState({ status: 'ready', url: candidateUrl });
-                }
-            };
-            image.onerror = () => {
-                if (!cancelled) {
-                    dice3DLogger.warn('sprite-probe-fail', {
-                        index,
-                        candidateUrl,
-                    });
-                    tryLoad(index + 1);
-                }
-            };
-            image.src = candidateUrl;
+
+            const result = await probeSpriteUrl(candidateUrl);
+            if (cancelled) return;
+
+            if (result === 'ready') {
+                dice3DLogger.info('sprite-probe-success', {
+                    index,
+                    candidateUrl,
+                });
+                setSpriteState({ status: 'ready', url: candidateUrl });
+                return;
+            }
+
+            dice3DLogger.warn('sprite-probe-fail', {
+                index,
+                candidateUrl,
+            });
+            await tryLoad(index + 1);
         };
-        tryLoad(0);
+        void tryLoad(0);
 
         return () => {
             cancelled = true;
