@@ -21,7 +21,7 @@ import {
     grantExtraAction,
     grantExtraMinion,
 } from '../domain/abilityHelpers';
-import type { SmashUpCore, SmashUpEvent, VpAwardedEvent } from '../domain/types';
+import type { MinionMetadataUpdatedEvent, SmashUpCore, SmashUpEvent, VpAwardedEvent } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { getBaseDef, getCardDef } from '../data/cards';
 
@@ -54,6 +54,8 @@ export function registerSamuraiAbilities(): void {
     registerTrigger('samurai_shogun', 'onMinionDiscardedFromBase', samuraiShogunTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDestroyed', samuraiFinalHaikuTrigger, { perInstance: true });
     registerTrigger('samurai_final_haiku', 'onMinionDiscardedFromBase', samuraiFinalHaikuTrigger, { perInstance: true });
+    registerTrigger('samurai_way_of_the_warrior', 'onMinionDestroyed', samuraiWayOfTheWarriorTrigger, { global: true });
+    registerTrigger('samurai_way_of_the_warrior', 'onMinionDiscardedFromBase', samuraiWayOfTheWarriorTrigger, { global: true });
     registerTrigger('samurai_honor_the_fallen', 'onMinionDestroyed', samuraiHonorTheFallenTrigger, {
         perInstance: true,
         sourceScope: 'triggerBase',
@@ -210,7 +212,24 @@ function samuraiWayOfTheWarriorOnPlay(ctx: AbilityContext): AbilityResult {
     if (!target) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
-    return { events: [addTempPower(target.uid, ctx.baseIndex, 3, 'samurai_way_of_the_warrior', ctx.now)] };
+    return {
+        events: [
+            addTempPower(target.uid, ctx.baseIndex, 3, 'samurai_way_of_the_warrior', ctx.now),
+            {
+                type: SU_EVENTS.MINION_METADATA_UPDATED,
+                payload: {
+                    minionUid: target.uid,
+                    baseIndex: ctx.baseIndex,
+                    metadataUpdate: {
+                        samuraiWayOfTheWarriorDrawUntilTurnNumber: ctx.state.turnNumber ?? 0,
+                        samuraiWayOfTheWarriorDrawPlayerId: ctx.playerId,
+                    },
+                    reason: 'samurai_way_of_the_warrior',
+                },
+                timestamp: ctx.now,
+            } as MinionMetadataUpdatedEvent,
+        ],
+    };
 }
 
 function samuraiHeartOfTheBattleSpecial(ctx: AbilityContext): AbilityResult {
@@ -272,10 +291,20 @@ function samuraiFinalHaikuTrigger(ctx: TriggerContext): SmashUpEvent[] {
     ctx.state.bases.forEach((base, baseIndex) => {
         base.minions.forEach(minion => {
             if (minion.controller !== ctx.sourceControllerId) return;
+            if (minion.uid === ctx.triggerMinionUid) return;
             events.push(addTempPower(minion.uid, baseIndex, 2, 'samurai_final_haiku', ctx.now));
         });
     });
     return events;
+}
+
+function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    const sourcePlayerId = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawPlayerId;
+    const untilTurnNumber = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawUntilTurnNumber;
+    if (!sourcePlayerId || untilTurnNumber == null) return [];
+    const currentTurnNumber = ctx.state.turnNumber ?? 0;
+    if (currentTurnNumber !== untilTurnNumber) return [];
+    return buildStandardDrawEvents(ctx.state, sourcePlayerId, 2, ctx.random, ctx.now);
 }
 
 function samuraiSakuraGardenTrigger(ctx: TriggerContext): SmashUpEvent[] {
