@@ -97,11 +97,11 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `samurai_ronin_${ctx.now}`,
         ctx.playerId,
-        '浪人：你可以在此随从上放置两个 +1 力量指示物',
+        '浪人：你可以在此随从上放置一个 +1 力量指示物',
         [
             {
                 id: 'yes',
-                label: '放置两个指示物',
+                label: '放置一个指示物',
                 value: { apply: true },
                 displayMode: 'button' as const,
             },
@@ -221,7 +221,7 @@ function samuraiWayOfTheWarriorOnPlay(ctx: AbilityContext): AbilityResult {
                     minionUid: target.uid,
                     baseIndex: ctx.baseIndex,
                     metadataUpdate: {
-                        samuraiWayOfTheWarriorDrawUntilTurnNumber: ctx.state.turnNumber ?? 0,
+                        samuraiWayOfTheWarriorDrawUntilTurnNumber: (ctx.state.turnNumber ?? 0) + 1,
                         samuraiWayOfTheWarriorDrawPlayerId: ctx.playerId,
                     },
                     reason: 'samurai_way_of_the_warrior',
@@ -301,9 +301,12 @@ function samuraiFinalHaikuTrigger(ctx: TriggerContext): SmashUpEvent[] {
 function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
     const sourcePlayerId = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawPlayerId;
     const untilTurnNumber = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawUntilTurnNumber;
-    if (!sourcePlayerId || untilTurnNumber == null) return [];
+    if (!sourcePlayerId || typeof untilTurnNumber !== 'number') return [];
     const currentTurnNumber = ctx.state.turnNumber ?? 0;
-    if (currentTurnNumber !== untilTurnNumber) return [];
+    const currentPlayerId = ctx.state.currentPlayerId ?? ctx.state.turnOrder?.[ctx.state.currentPlayerIndex ?? 0];
+    const isWindowActive = currentTurnNumber < untilTurnNumber
+        || (currentTurnNumber === untilTurnNumber && currentPlayerId !== sourcePlayerId);
+    if (!isWindowActive) return [];
     return buildStandardDrawEvents(ctx.state, sourcePlayerId, 2, ctx.random, ctx.now);
 }
 
@@ -346,7 +349,6 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
     return {
         state,
         events: [
-            addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
             addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
         ],
     };

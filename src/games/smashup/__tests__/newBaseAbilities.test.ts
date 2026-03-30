@@ -19,7 +19,8 @@ import {
     triggerBaseAbility,
     triggerExtendedBaseAbility,
 } from '../domain/baseAbilities';
-import { fireTriggers } from '../domain/ongoingEffects';
+import { collectTriggers, fireTriggers } from '../domain/ongoingEffects';
+import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { processDestroyTriggers } from '../domain/reducer';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { MatchState, RandomFn } from '../../../engine/types';
@@ -1648,6 +1649,84 @@ describe('Oops Samurai bases', () => {
         });
 
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+    });
+
+    it('base_sakura_garden 与 samurai_honor_the_fallen 同时触发时两者都会结算抓牌', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            players: {
+                '0': {
+                    id: '0', vp: 0, hand: [],
+                    deck: [
+                        makeCard('draw-1', '0', 'robot_microbot_alpha'),
+                        makeCard('draw-2', '0', 'robot_microbot_alpha'),
+                    ],
+                    discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.SAMURAI, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1', vp: 0, hand: [], deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                },
+            } as any,
+            bases: [{
+                defId: 'base_sakura_garden',
+                minions: [makeMinion('dead-1', '0', 3, 'samurai_ronin')],
+                ongoingActions: [{ uid: 'hof-1', defId: 'samurai_honor_the_fallen', ownerId: '0' } as any],
+            }],
+        });
+
+        const queued = collectTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: core.bases[0].minions[0],
+            triggerMinionUid: 'dead-1',
+            triggerMinionDefId: 'samurai_ronin',
+            destroyerId: '1',
+            random: dummyRandom,
+            now: 1000,
+        });
+
+        expect(queued).toBeDefined();
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1000);
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = firstQueueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'samurai_honor_the_fallen';
+        }) ?? (firstPrompt!.state.sys.interaction.current as any).data.options[0];
+        const firstResolved = runCommand(
+            firstPrompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: firstOption.id } } as any,
+            dummyRandom,
+        );
+
+        const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
+        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+            ? (() => {
+                const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+                const secondOption = secondPrompt.data.options.find((option: any) => {
+                    const trigger = secondQueueById.get(option.value.triggerId) as any;
+                    return trigger?.sourceDefId === 'base_sakura_garden';
+                }) ?? secondPrompt.data.options[0];
+                return runCommand(
+                    firstResolved.finalState,
+                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: secondOption.id } } as any,
+                    dummyRandom,
+                );
+            })()
+            : { events: [], finalState: firstResolved.finalState };
+
+        const drawEvents = [...firstResolved.events, ...secondResolved.events].filter(event => event.type === SU_EVENTS.CARDS_DRAWN) as any[];
+        expect(drawEvents).toHaveLength(2);
+        expect(drawEvents.every(event => event.payload.playerId === '0' && event.payload.count === 1)).toBe(true);
     });
 
     it('base_sakura_garden 同回合第二次有同一玩家的随从被消灭时不应再次抽牌', () => {
