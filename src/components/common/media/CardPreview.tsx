@@ -82,10 +82,10 @@ export function getCardAtlasCandidateUrls(image: string, locale: string): string
     const localFallback = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, fallbackLocale));
 
     return [
-        localPrimary.webp,
         localizedUrls.primary.webp,
-        localFallback.webp,
         localizedUrls.fallback.webp,
+        localPrimary.webp,
+        localFallback.webp,
     ].filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index);
 }
 

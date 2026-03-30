@@ -57,6 +57,32 @@ function dedupeValues(values) {
   return [...new Set(values)];
 }
 
+function splitFilesForCommand(baseArgs, files, maxCommandLength = 7000) {
+  if (files.length === 0) return [];
+
+  const chunks = [];
+  let currentChunk = [];
+  let currentLength = commandToLine('npx', [...baseArgs]).length;
+
+  for (const file of files) {
+    const nextLength = currentLength + 1 + quoteArg(file).length;
+    if (currentChunk.length > 0 && nextLength > maxCommandLength) {
+      chunks.push(currentChunk);
+      currentChunk = [file];
+      currentLength = commandToLine('npx', [...baseArgs, file]).length;
+      continue;
+    }
+    currentChunk.push(file);
+    currentLength = nextLength;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
 function isSourceCodeFile(file) {
   return /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file);
 }
@@ -309,11 +335,17 @@ function collectCommands(files, baseRef, affectsTypecheck) {
   }
 
   if (lintFiles.length > 0) {
-    commands.push({
-      label: 'ESLint',
-      reason: '存在可 lint 的源码改动',
-      command: 'npx',
-      args: ['eslint', '--max-warnings', '999', ...lintFiles],
+    const eslintBaseArgs = ['eslint', '--max-warnings', '999'];
+    const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles);
+    lintChunks.forEach((chunk, index) => {
+      commands.push({
+        label: lintChunks.length === 1 ? 'ESLint' : `ESLint (${index + 1}/${lintChunks.length})`,
+        reason: lintChunks.length === 1
+          ? '存在可 lint 的源码改动'
+          : '存在可 lint 的源码改动，按批次切分以避免 Windows 命令行过长',
+        command: 'npx',
+        args: [...eslintBaseArgs, ...chunk],
+      });
     });
   }
 

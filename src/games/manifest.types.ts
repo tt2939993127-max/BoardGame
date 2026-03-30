@@ -19,6 +19,8 @@ export interface GameManifestMobileDelivery {
     assetPackId?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    requiresAppUpdate?: boolean;
+    requiredAppVersion?: string;
 }
 
 export interface GameSetupSelectOption {

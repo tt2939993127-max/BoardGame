@@ -5,6 +5,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
 import { loadGameImplementation, getGameImplementation } from '../games/registry';
 import { GameProvider, LocalGameProvider, BoardBridge, useGameClient } from '../engine/transport/react';
+import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { GameBoardProps } from '../engine/transport/protocol';
 import type { MatchState } from '../engine/types';
@@ -22,6 +23,7 @@ import {
     clearMatchCredentials,
     clearOwnerActiveMatch,
     suppressOwnerActiveMatch,
+    readStoredAiSeatCredentials,
     readStoredMatchCredentials,
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
@@ -52,6 +54,12 @@ import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
+import {
+    normalizeLocalMatchPreferences,
+    resolveAiMinimumActionDelayMs,
+    resolveNextAiAction,
+    type AiSeatController,
+} from '../engine/ai';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -115,6 +123,138 @@ const TutorialDispatchBridge = ({ children }: { children: ReactNode }) => {
     }, [isTutorialMode, state]);
 
     return <>{children}</>;
+};
+
+const OnlineAiSeatBridge = ({
+    server,
+    matchId,
+    engineConfig,
+    seatControllers,
+    seatCredentials,
+}: {
+    server: string;
+    matchId: string;
+    engineConfig: GameEngineConfig;
+    seatControllers: Record<string, AiSeatController>;
+    seatCredentials: Record<string, string>;
+}) => {
+    const { state } = useGameClient();
+    const clientsRef = useRef<Record<string, GameTransportClient>>({});
+    const [connectionVersion, setConnectionVersion] = useState(0);
+    const lastAiAttemptKeyRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        const nextClientKeys = new Set(
+            Object.entries(seatControllers)
+                .filter(([playerId, controller]) => controller.type !== 'human' && Boolean(seatCredentials[playerId]))
+                .map(([playerId]) => playerId),
+        );
+
+        for (const [playerId, client] of Object.entries(clientsRef.current)) {
+            if (nextClientKeys.has(playerId)) {
+                continue;
+            }
+            client.destroy();
+            delete clientsRef.current[playerId];
+        }
+
+        for (const playerId of nextClientKeys) {
+            if (clientsRef.current[playerId]) {
+                continue;
+            }
+            const client = new GameTransportClient({
+                server,
+                matchID: matchId,
+                playerID: playerId,
+                credentials: seatCredentials[playerId],
+                onConnectionChange: () => {
+                    setConnectionVersion((version) => version + 1);
+                },
+            });
+            client.connect();
+            clientsRef.current[playerId] = client;
+        }
+
+        return () => {
+            for (const client of Object.values(clientsRef.current)) {
+                client.destroy();
+            }
+            clientsRef.current = {};
+        };
+    }, [matchId, seatControllers, seatCredentials, server]);
+
+    useEffect(() => {
+        const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+        if (!hasAiSeat || !state) {
+            lastAiAttemptKeyRef.current = null;
+            return;
+        }
+
+        let cancelled = false;
+        let delayTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const runAiTurn = async () => {
+            const startedAt = Date.now();
+            const resolution = await resolveNextAiAction({
+                engineConfig,
+                state,
+                matchId,
+                seatControllers,
+            });
+
+            if (cancelled) return;
+
+            if (!resolution) {
+                lastAiAttemptKeyRef.current = null;
+                return;
+            }
+
+            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+                return;
+            }
+
+            const controller = seatControllers[resolution.playerId];
+            const client = clientsRef.current[resolution.playerId];
+            if (!controller || controller.type === 'human' || !client?.isConnected) {
+                return;
+            }
+
+            lastAiAttemptKeyRef.current = resolution.attemptKey;
+
+            const remainingDelayMs = Math.max(
+                0,
+                resolveAiMinimumActionDelayMs(controller) - (Date.now() - startedAt),
+            );
+
+            if (remainingDelayMs > 0) {
+                await new Promise<void>((resolve) => {
+                    delayTimer = setTimeout(() => {
+                        delayTimer = null;
+                        resolve();
+                    }, remainingDelayMs);
+                });
+            }
+
+            if (cancelled || !client.isConnected) {
+                return;
+            }
+
+            for (const command of resolution.action.commands) {
+                client.sendCommand(command.type, command.payload);
+            }
+        };
+
+        void runAiTurn();
+
+        return () => {
+            cancelled = true;
+            if (delayTimer) {
+                clearTimeout(delayTimer);
+            }
+        };
+    }, [connectionVersion, engineConfig, matchId, seatControllers, state]);
+
+    return null;
 };
 
 export const MatchRoom = () => {
@@ -301,6 +441,8 @@ export const MatchRoom = () => {
     const [forceExitModalId, setForceExitModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
     const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [onlineAiSeatControllers, setOnlineAiSeatControllers] = useState<Record<string, AiSeatController>>({});
+    const [onlineAiSeatCredentials, setOnlineAiSeatCredentials] = useState<Record<string, string>>({});
     const [tutorialBoardBootstrapComplete, setTutorialBoardBootstrapComplete] = useState(false);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
@@ -492,6 +634,64 @@ export const MatchRoom = () => {
             return;
         }
     }, [gameId, matchId]);
+
+    useEffect(() => {
+        if (isTutorialRoute || !matchId || !gameId || !gameConfig) {
+            setOnlineAiSeatControllers({});
+            setOnlineAiSeatCredentials({});
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadOnlineAiSeatControllers = async () => {
+            try {
+                const matchInfo = await matchApi.getMatch(gameId, matchId);
+                if (cancelled) return;
+
+                const setupData = matchInfo.setupData && typeof matchInfo.setupData === 'object'
+                    ? matchInfo.setupData as Record<string, unknown>
+                    : {};
+                const rawSeatControllers = setupData.seatControllers && typeof setupData.seatControllers === 'object' && !Array.isArray(setupData.seatControllers)
+                    ? setupData.seatControllers as Record<string, unknown>
+                    : {};
+                const rawSetupSelections = setupData.setupSelections && typeof setupData.setupSelections === 'object' && !Array.isArray(setupData.setupSelections)
+                    ? setupData.setupSelections as Record<string, unknown>
+                    : {};
+                const normalized = normalizeLocalMatchPreferences(gameConfig, {
+                    numPlayers: matchInfo.players.length,
+                    seatControllers: rawSeatControllers,
+                    setupSelections: rawSetupSelections,
+                }).seatControllers;
+                const storedAiSeatCredentials = readStoredAiSeatCredentials(matchId);
+                const nextSeatControllers: Record<string, AiSeatController> = {};
+
+                for (let index = 0; index < matchInfo.players.length; index += 1) {
+                    const playerId = String(index);
+                    const controller = normalized[playerId] ?? { type: 'human' };
+                    if (controller.type !== 'human' && !storedAiSeatCredentials[playerId]) {
+                        nextSeatControllers[playerId] = { type: 'human' };
+                        continue;
+                    }
+                    nextSeatControllers[playerId] = controller;
+                }
+
+                setOnlineAiSeatControllers(nextSeatControllers);
+                setOnlineAiSeatCredentials(storedAiSeatCredentials);
+            } catch {
+                if (!cancelled) {
+                    setOnlineAiSeatControllers({});
+                    setOnlineAiSeatCredentials({});
+                }
+            }
+        };
+
+        void loadOnlineAiSeatControllers();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [gameConfig, gameId, isTutorialRoute, localStorageTick, matchId]);
 
     const tutorialPlayerID = debugPlayerID ?? urlPlayerID ?? '0';
 
@@ -1082,6 +1282,15 @@ export const MatchRoom = () => {
                                             latencyConfig={latencyConfig}
                                             onError={handleGameError}
                                         >
+                                            {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
+                                                <OnlineAiSeatBridge
+                                                    server={getGameServerUrl()}
+                                                    matchId={matchId}
+                                                    engineConfig={engineConfig}
+                                                    seatControllers={onlineAiSeatControllers}
+                                                    seatCredentials={onlineAiSeatCredentials}
+                                                />
+                                            )}
                                             <BoardBridge
                                                 board={WrappedBoard}
                                                 loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}

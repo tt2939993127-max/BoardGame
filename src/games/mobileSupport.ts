@@ -82,12 +82,15 @@ export const resolveGameMobileSupport = (
     const deliveryMode = requestedDeliveryMode === 'package-managed' && canUsePackageManagedDelivery
         ? 'package-managed'
         : 'builtin';
+    const requiredAppVersion = entry?.mobileDelivery?.requiredAppVersion?.trim();
     const mobileDelivery = deliveryMode === 'package-managed'
         ? {
             mode: 'package-managed' as const,
             runtimeChannel: entry?.mobileDelivery?.runtimeChannel?.trim() || DEFAULT_RUNTIME_CHANNEL,
             modulePackId: entry?.mobileDelivery?.modulePackId?.trim(),
             assetPackId: entry?.mobileDelivery?.assetPackId?.trim(),
+            ...(entry?.mobileDelivery?.requiresAppUpdate === true ? { requiresAppUpdate: true } : {}),
+            ...(requiredAppVersion ? { requiredAppVersion } : {}),
         }
         : {
             mode: 'builtin' as const,
