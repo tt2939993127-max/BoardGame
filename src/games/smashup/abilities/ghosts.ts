@@ -17,6 +17,7 @@ import { registerDiscardPlayProvider } from '../domain/discardPlayability';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { validateDiscardMinionPlaySemantics } from '../domain/playLegality';
 
 /** 注册幽灵派系所有能力*/
 export function registerGhostAbilities(): void {
@@ -449,25 +450,56 @@ export function registerGhostInteractionHandlers(): void {
         });
         const next = createSimpleChoice(
             `ghost_the_dead_rise_play_${timestamp}`, playerId,
-            `选择力量<${discardCount}的随从从弃牌堆打出（可跳过）`, [...options, skipOption] as any[], { sourceId: 'ghost_the_dead_rise_play', targetType: 'discard_minion' },
+            `选择力量<${discardCount}的随从从弃牌堆打出，然后点击目标基地（可跳过）`, [...options, skipOption] as any[], { sourceId: 'ghost_the_dead_rise_play', targetType: 'discard_minion' },
         );
-        return { state: queueInteraction(state, next), events };
+        return {
+            state: queueInteraction(state, {
+                ...next,
+                data: {
+                    ...next.data,
+                    allowedBaseIndices: state.core.bases.map((_, index) => index),
+                },
+            }),
+            events,
+        };
     });
 
     // 亡者崛起：选择随从后，链式选择基地
     registerInteractionHandler('ghost_the_dead_rise_play', (state, playerId, value, _iData, _random, timestamp) => {
         // 跳过
         if ((value as any)?.skip) return { state, events: [] };
-        const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
-        // 只有一个基地时直接打出
-        if (state.core.bases.length === 1) {
+        const { cardUid, defId, power, baseIndex } = value as { cardUid: string; defId: string; power: number; baseIndex?: number };
+        const playFromDiscard = (chosenBaseIndex: number) => {
+            if (!validateDiscardMinionPlaySemantics(state.core, playerId, {
+                cardUid,
+                baseIndex: chosenBaseIndex,
+                consumesNormalLimit: false,
+            }).valid) {
+                return { state, events: [] };
+            }
             const playedEvt: MinionPlayedEvent = {
                 type: SU_EVENTS.MINION_PLAYED,
-                payload: { playerId, cardUid, defId, baseIndex: 0, baseDefId: state.core.bases[0].defId, power, fromDiscard: true, allowImplicitSource: true },
+                payload: {
+                    playerId,
+                    cardUid,
+                    defId,
+                    baseIndex: chosenBaseIndex,
+                    baseDefId: state.core.bases[chosenBaseIndex]?.defId,
+                    power,
+                    fromDiscard: true,
+                    allowImplicitSource: true,
+                    consumesNormalLimit: false,
+                },
                 timestamp,
             };
-            playedEvt.payload.consumesNormalLimit = false;
             return { state, events: [playedEvt] };
+        };
+        if (typeof baseIndex === 'number') {
+            return playFromDiscard(baseIndex);
+        }
+        // 只有一个基地时直接打出
+        if (state.core.bases.length === 1) {
+            return playFromDiscard(0);
         }
         // 多个基地时让玩家选择
         const baseCandidates = state.core.bases.map((b, i) => {
