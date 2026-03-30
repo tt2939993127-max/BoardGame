@@ -5,7 +5,7 @@
   "setup": {
     "expansions": {
       "label": "Expansion Rules",
-      "titans": "Enable Titans"
+      "titans": "Titans"
     }
   },
   "phases": {
@@ -68,6 +68,7 @@
     "taken_by_other": "Taken by another player",
     "faction_full": "Already selected 2 factions",
     "confirm_selection": "Confirm Selection",
+    "cancel_selection": "Cancel Selection",
     "wait_turn": "Wait for your turn",
     "preview_cards": "Included Card Preview",
     "faction_titan_preview": "Titan Preview",

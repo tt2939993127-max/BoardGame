@@ -120,6 +120,10 @@ export function maybeResolveReactionQueue(
         buriedCardDefId: t.buriedCardDefId,
         buriedCardControllerId: t.buriedCardControllerId,
         buriedFrom: t.buriedFrom,
+        inspectionCards: t.inspectionCards,
+        inspectionZone: t.inspectionZone,
+        inspectionTargetPlayerIds: t.inspectionTargetPlayerIds,
+        inspectionCausePlayerId: t.inspectionCausePlayerId,
         random,
         now,
       } as any);

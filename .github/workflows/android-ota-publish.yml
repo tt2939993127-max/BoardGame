@@ -1,0 +1,179 @@
+name: Android OTA Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'postcss.config.js'
+      - 'postcss-tailwind-*.js'
+      - 'tsconfig*.json'
+      - 'scripts/game/**'
+      - 'scripts/audio/generate-slim-registry.mjs'
+      - 'scripts/mobile/**'
+      - '.github/workflows/android-ota-publish.yml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '目标 OTA channel'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - gray
+          - edge
+      git_ref:
+        description: '要发布的 git ref（分支、tag 或 commit SHA，留空默认当前触发 ref）'
+        required: false
+        type: string
+      dry_run:
+        description: '仅预演，不上传'
+        required: true
+        default: false
+        type: boolean
+      skip_latest:
+        description: '上传 bundle，但不覆盖 latest.json'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('manual-{0}', inputs.channel) || format('push-{0}', github.ref_name) }}
+  cancel-in-progress: true
+
+jobs:
+  publish-ota:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && !inputs.dry_run && 'android-ota-production' || 'android-ota-nonprod' }}
+
+    steps:
+      - name: Resolve publish parameters
+        id: params
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            channel="${{ inputs.channel }}"
+            target_ref="${{ inputs.git_ref }}"
+            dry_run="${{ inputs.dry_run }}"
+            skip_latest="${{ inputs.skip_latest }}"
+            source_mode="manual"
+          else
+            channel="${{ vars.ANDROID_OTA_AUTO_CHANNEL || 'edge' }}"
+            target_ref="${GITHUB_SHA}"
+            dry_run="false"
+            skip_latest="false"
+            source_mode="auto"
+          fi
+
+          if [[ -z "${target_ref}" ]]; then
+            target_ref="${GITHUB_SHA}"
+          fi
+
+          {
+            echo "channel=${channel}"
+            echo "target_ref=${target_ref}"
+            echo "dry_run=${dry_run}"
+            echo "skip_latest=${skip_latest}"
+            echo "source_mode=${source_mode}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.params.outputs.target_ref }}
+
+      - name: Resolve bundle metadata
+        id: bundle
+        shell: bash
+        run: |
+          short_sha="$(git rev-parse --short=7 HEAD)"
+          current_ref="$(git rev-parse HEAD)"
+          manifest_url="${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/app-updates/android/${{ steps.params.outputs.channel }}/latest.json"
+          bundle_version="gha-${{ steps.params.outputs.channel }}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
+          notes="GitHub Actions ${{ steps.params.outputs.source_mode }} OTA publish ${current_ref}@${short_sha}"
+
+          {
+            echo "short_sha=${short_sha}"
+            echo "current_ref=${current_ref}"
+            echo "manifest_url=${manifest_url}"
+            echo "bundle_version=${bundle_version}"
+            echo "notes=${notes}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.1.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create Android OTA env file
+        shell: bash
+        run: |
+          cat <<EOF > .env.android
+          VITE_BACKEND_URL=${{ secrets.ANDROID_VITE_BACKEND_URL }}
+          VITE_ASSETS_BASE_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}
+          CAPACITOR_APP_ID=${{ vars.CAPACITOR_APP_ID || 'top.easyboardgame.app' }}
+          CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || 'EasyBoardGame' }}
+          ANDROID_WEBVIEW_MODE=embedded
+          VITE_ANDROID_OTA_ENABLED=true
+          VITE_ANDROID_OTA_MANIFEST_URL=${{ steps.bundle.outputs.manifest_url }}
+          VITE_ANDROID_OTA_CHANNEL=${{ steps.params.outputs.channel }}
+          VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=${{ vars.ANDROID_OTA_APP_READY_TIMEOUT_MS || '15000' }}
+          EOF
+
+      - name: Build Android web bundle
+        run: npm run mobile:android:sync
+
+      - name: Publish Android OTA bundle
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        shell: bash
+        run: |
+          args=(
+            --channel "${{ steps.params.outputs.channel }}"
+            --version "${{ steps.bundle.outputs.bundle_version }}"
+            --notes "${{ steps.bundle.outputs.notes }}"
+          )
+
+          if [[ "${{ steps.params.outputs.dry_run }}" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          if [[ "${{ steps.params.outputs.skip_latest }}" == "true" ]]; then
+            args+=(--skip-latest)
+          fi
+
+          npm run mobile:android:ota:publish -- "${args[@]}"
+
+      - name: Write workflow summary
+        shell: bash
+        run: |
+          {
+            echo "### Android OTA 发布结果"
+            echo ""
+            echo "| 字段 | 值 |"
+            echo "|---|---|"
+            echo "| 来源 | ${{ steps.params.outputs.source_mode }} |"
+            echo "| Channel | ${{ steps.params.outputs.channel }} |"
+            echo "| Git Ref | ${{ steps.bundle.outputs.current_ref }} |"
+            echo "| Bundle Version | ${{ steps.bundle.outputs.bundle_version }} |"
+            echo "| Dry Run | ${{ steps.params.outputs.dry_run }} |"
+            echo "| Skip Latest | ${{ steps.params.outputs.skip_latest }} |"
+            echo "| Manifest URL | ${{ steps.bundle.outputs.manifest_url }} |"
+          } >> "${GITHUB_STEP_SUMMARY}"

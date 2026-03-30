@@ -10,10 +10,11 @@ import { readyCheckPlugin } from './vite-plugins/ready-check.ts'
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
 const LEGACY_GAMEPLAY_BUILD_TARGETS = ['chrome88', 'edge88', 'firefox78', 'safari14']
+const VIRTUAL_RUNTIME_CHUNK_PATTERNS = ['commonjsHelpers.js']
 const MANUAL_CHUNK_PATTERNS: Array<[string, string[]]> = [
   ['vendor-react', ['/node_modules/react/', '/node_modules/react-dom/', '/node_modules/react-router-dom/', '/node_modules/scheduler/']],
   ['vendor-motion', ['/node_modules/framer-motion/']],
-  ['vendor-socket', ['/node_modules/socket.io-client/']],
+  ['vendor-socket', ['/node_modules/socket.io-client/', '/node_modules/socket.io-msgpack-parser/', '/node_modules/@msgpack/msgpack/']],
   ['vendor-i18n', ['/node_modules/i18next/', '/node_modules/react-i18next/', '/node_modules/i18next-http-backend/', '/node_modules/i18next-browser-languagedetector/']],
   ['vendor-query', ['/node_modules/@tanstack/react-query/']],
   ['vendor-howler', ['/node_modules/howler/']],
@@ -165,6 +166,11 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // 把 CommonJS helper 单独抽离，避免某个大 vendor chunk 承载它后反向拖进首页入口。
+            if (VIRTUAL_RUNTIME_CHUNK_PATTERNS.some(pattern => id.includes(pattern))) {
+              return 'vendor-runtime'
+            }
+
             if (!id.includes('/node_modules/')) return undefined
 
             for (const [chunkName, patterns] of MANUAL_CHUNK_PATTERNS) {

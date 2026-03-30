@@ -160,6 +160,14 @@ export interface TriggerContext {
     actionTargetType?: 'base' | 'minion';
     /** onActionPlayed 时：行动卡目标随从（附着行动卡时有值） */
     actionTargetMinionUid?: string;
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：本次暴露出来的卡牌 */
+    inspectionCards?: Array<{ uid: string; defId: string }>;
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：暴露区域 */
+    inspectionZone?: 'deck' | 'hand';
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：被查看/展示的玩家 */
+    inspectionTargetPlayerIds?: PlayerId[];
+    /** REVEAL_HAND / REVEAL_DECK_TOP / onDeckInspected 时：实际造成查看/展示的玩家 */
+    inspectionCausePlayerId?: PlayerId;
     random: RandomFn;
     now: number;
 }
@@ -210,6 +218,8 @@ interface TriggerEntry {
      * Use for Special cards that can be played from hand/discard when a condition happens.
      */
     global?: boolean;
+    /** global 触发器允许见证的来源区域；默认 hand + discard */
+    globalZones?: Array<'hand' | 'discard' | 'deck'>;
 }
 
 interface TriggerSourceLocation {
@@ -266,6 +276,7 @@ export function registerTrigger(
         optional?: boolean;
         phase?: 'replacement' | 'reaction';
         global?: boolean;
+        globalZones?: Array<'hand' | 'discard' | 'deck'>;
         playerContext?: 'eventPlayer' | 'sourceController';
         baseScoped?: boolean;
         perInstance?: boolean;
@@ -283,6 +294,7 @@ export function registerTrigger(
         perInstance: options?.perInstance,
         sourceScope: options?.sourceScope ?? 'any',
         global: options?.global,
+        globalZones: options?.globalZones,
         playerContext: options?.playerContext ?? 'eventPlayer',
         baseScoped: options?.baseScoped ?? true,
     });
@@ -402,6 +414,10 @@ function createTriggerInstance(
         actionTargetBaseIndex: ctx.actionTargetBaseIndex,
         actionTargetType: ctx.actionTargetType,
         actionTargetMinionUid: ctx.actionTargetMinionUid,
+        inspectionCards: ctx.inspectionCards,
+        inspectionZone: ctx.inspectionZone,
+        inspectionTargetPlayerIds: ctx.inspectionTargetPlayerIds,
+        inspectionCausePlayerId: ctx.inspectionCausePlayerId,
         lkiMinion: ctx.triggerMinion
             ? {
                 uid: ctx.triggerMinion.uid,
@@ -447,7 +463,7 @@ export function collectTriggers(
         // Only queue reaction-phase triggers (replacement effects must remain immediate)
         if (entry.phase === 'replacement') continue;
         if (entry.global) {
-            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
             triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
             continue;
         }
@@ -554,6 +570,7 @@ export function registerPodOngoingAliases(): void {
             perInstance: entry.perInstance,
             sourceScope: entry.sourceScope,
             global: entry.global,
+            globalZones: entry.globalZones,
         });
         mappedCount++;
     }
@@ -566,6 +583,7 @@ export function registerPodOngoingAliases(): void {
             perInstance: entry.perInstance,
             sourceScope: entry.sourceScope,
             global: entry.global,
+            globalZones: entry.globalZones,
         });
     }
     
@@ -1069,7 +1087,7 @@ export function fireTriggers(
         );
 
         if (entry.global) {
-            if (!isSourceInHandOrDiscard(state, entry.sourceDefId)) continue;
+            if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
             const result = entry.callback({ ...fullCtx, state: filteredState, matchState: getFilteredMatchState() });
             const triggerEvents = Array.isArray(result) ? result : result.events;
             if (triggerEvents.length > 0) {
@@ -1229,10 +1247,15 @@ export function fireTriggerForSource(
     return { events, matchState };
 }
 
-function isSourceInHandOrDiscard(state: SmashUpCore, sourceDefId: string): boolean {
+function isSourceInZones(
+    state: SmashUpCore,
+    sourceDefId: string,
+    zones: Array<'hand' | 'discard' | 'deck'>,
+): boolean {
     for (const p of Object.values(state.players)) {
-        if (p.hand?.some(c => c.defId === sourceDefId)) return true;
-        if (p.discard?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('hand') && p.hand?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('discard') && p.discard?.some(c => c.defId === sourceDefId)) return true;
+        if (zones.includes('deck') && p.deck?.some(c => c.defId === sourceDefId)) return true;
     }
     if ((state.titans ?? []).some(titan => titan.defId === sourceDefId)) {
         return true;

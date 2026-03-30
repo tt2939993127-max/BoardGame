@@ -2163,6 +2163,16 @@ function postProcessSystemEvents(
         }
     }
 
+    if ((ms.sys as any)._smashupStartTurnWindowActive && ms.sys.phase !== 'startTurn' && ms.sys.interaction?.current) {
+        ms = {
+            ...ms,
+            sys: {
+                ...ms.sys,
+                phase: 'startTurn',
+            },
+        };
+    }
+
     if ((ms.sys as any)._smashupStartTurnWindowActive && ms.sys.phase !== 'startTurn' && !ms.sys.interaction?.current) {
         ms = {
             ...ms,
