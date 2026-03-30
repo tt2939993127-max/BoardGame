@@ -76,6 +76,9 @@ const isUsableAtlasUrlLoaded = (url: string): boolean => {
 };
 
 export function getCardAtlasCandidateUrls(image: string, locale: string): string[] {
+    if (image.startsWith('data:')) {
+        return [image];
+    }
     const localizedUrls = getLocalizedImageUrls(image, locale);
     const fallbackLocale = getFallbackLocale(locale);
     const localPrimary = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, locale));
@@ -176,12 +179,12 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         ? hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale)) || checkUrls.some(isUsableAtlasUrlLoaded)
         : false;
     const [loaded, setLoaded] = useState(() => preloaded);
-
-    // 同步修正：如果 loaded 为 false 但缓存已就绪，立即同步为 true，
-    // 避免 useEffect 异步更新导致的一帧 shimmer 闪烁
-    const effectiveLoaded = loaded || preloaded;
     const checkKey = checkUrls.join('|');
     const [activeUrl, setActiveUrl] = useState(() => checkUrls.find(isUsableAtlasUrlLoaded) ?? checkUrls[0] ?? '');
+
+    // 同步修正：如果 loaded 为 false 但缓存已就绪，或已经解析出可用 activeUrl，立即视为已加载，
+    // 避免 atlas 背景已挂上但 shimmer 仍长期覆盖。
+    const effectiveLoaded = loaded || preloaded || Boolean(activeUrl);
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
     // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer

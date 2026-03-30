@@ -33,6 +33,22 @@ interface SpriteState {
 const dice3DLogger = createScopedLogger('dicethrone:dice3d');
 const spriteProbeStatusCache = new Map<string, 'ready' | 'error'>();
 const spriteProbePromiseCache = new Map<string, Promise<'ready' | 'error'>>();
+const DICE3D_STYLE_ELEMENT_ID = 'dicethrone-dice3d-styles';
+const DICE3D_STYLE_TEXT = `
+.dice3d-perspective { perspective: 1000px; }
+.dice3d-preserve-3d { transform-style: preserve-3d; }
+.dice3d-backface-hidden { backface-visibility: hidden; }
+@keyframes dice3d-tumble {
+    0% { transform: rotateX(0) rotateY(0); }
+    100% { transform: rotateX(1440deg) rotateY(1440deg); }
+}
+@keyframes dice3d-bonus-tumble {
+    0% { transform: rotateX(0) rotateY(0); }
+    100% { transform: rotateX(1440deg) rotateY(1440deg); }
+}
+.animate-dice3d-tumble { animation: dice3d-tumble 1s linear infinite; }
+.animate-dice3d-bonus-tumble { animation: dice3d-bonus-tumble 0.8s linear infinite; }
+`;
 
 const probeSpriteUrl = (candidateUrl: string) => {
     const cachedStatus = spriteProbeStatusCache.get(candidateUrl);
@@ -116,6 +132,15 @@ export const Dice3D = ({
             url: initialUrl,
         };
     });
+
+    React.useEffect(() => {
+        if (typeof document === 'undefined') return;
+        if (document.getElementById(DICE3D_STYLE_ELEMENT_ID)) return;
+        const style = document.createElement('style');
+        style.id = DICE3D_STYLE_ELEMENT_ID;
+        style.textContent = DICE3D_STYLE_TEXT;
+        document.head.appendChild(style);
+    }, []);
 
     React.useEffect(() => {
         dice3DLogger.debug('sprite-candidates', {
@@ -273,21 +298,6 @@ export const Dice3D = ({
                     );
                 })}
             </div>
-            <style>{`
-                .dice3d-perspective { perspective: 1000px; }
-                .dice3d-preserve-3d { transform-style: preserve-3d; }
-                .dice3d-backface-hidden { backface-visibility: hidden; }
-                @keyframes dice3d-tumble {
-                    0% { transform: rotateX(0) rotateY(0); }
-                    100% { transform: rotateX(1440deg) rotateY(1440deg); }
-                }
-                @keyframes dice3d-bonus-tumble {
-                    0% { transform: rotateX(0) rotateY(0); }
-                    100% { transform: rotateX(1440deg) rotateY(1440deg); }
-                }
-                .animate-dice3d-tumble { animation: dice3d-tumble 1s linear infinite; }
-                .animate-dice3d-bonus-tumble { animation: dice3d-bonus-tumble 0.8s linear infinite; }
-            `}</style>
         </div>
     );
 };

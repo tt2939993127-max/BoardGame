@@ -212,7 +212,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
             },
         ],
     },
-    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.MONK),
+    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.SAMURAI),
 ];
 
 export const getSamuraiStartingDeck = (random: RandomFn): AbilityCard[] => {
