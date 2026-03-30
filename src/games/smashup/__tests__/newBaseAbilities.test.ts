@@ -1297,6 +1297,54 @@ describe('Oops Vikings bases', () => {
         expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
     });
 
+    it('base_drakkar 会在目标牌库为空时先洗回弃牌堆再把揭示到的合格低力量随从拿到发动者手里', () => {
+        const result = triggerBaseAbilityWithMS('base_drakkar', 'onMinionPlayed', {
+            state: makeState({
+                bases: [{
+                    defId: 'base_drakkar',
+                    minions: [makeMinion('m1', '0', 3)],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 1, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        minionsPlayedPerBase: { 0: 1 },
+                        factions: [SMASHUP_FACTION_IDS.VIKINGS, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1',
+                        vp: 0,
+                        hand: [],
+                        deck: [],
+                        discard: [{ uid: 'd2', defId: 'robot_microbot_alpha', type: 'minion', owner: '1' }],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.PIRATES],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_drakkar',
+            playerId: '0',
+            minionUid: 'm1',
+            minionDefId: 'test_minion',
+            minionPower: 3,
+            now: 1000,
+        });
+
+        const prompt = getInteractionsFromResult(result)[0] as any;
+        const option = prompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const resolved = runCommand(
+            result.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'd2')).toBe(true);
+        expect(resolved.finalState.core.players['1'].discard).toHaveLength(0);
+        expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
+    });
+
     it('base_longhouse 改为主动基地能力：使用后会把手牌置于牌库顶并给此基地己方随从 +2 力量', () => {
         const core = makeState({
             bases: [{
