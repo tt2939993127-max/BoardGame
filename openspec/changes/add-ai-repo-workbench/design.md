@@ -11,7 +11,7 @@
 ## Goals / Non-Goals
 
 - Goals:
-  - 不是教程式渐进拼装，而是先一次性冻结 MVP 骨架、分层边界与 fork 裁决，再进入实现。
+  - 不走随意拼装路线；先建立 MVP 的当前骨架、分层边界与 fork 裁决基线，再进入实现，并允许后续按真实反馈持续完善。
   - 用单一、固定、可观察的“新建派系”节点流验证工作台架构。
   - 明确每个节点的输入、输出、持久化状态与暂停/恢复契约。
   - 定义 `DecisionRequest` 作为人工决策的统一协议，而不是各节点各自发问。
@@ -26,11 +26,11 @@
 
 ## Skeleton-First Principles
 
-### Decision: 这不是教程式渐进方案，而是先冻结骨架再落实现
+### Decision: 这条线先建立清晰基线，再在实现中持续迭代完善
 
 第一版不能采用“先做个聊天框 / 先打通一条最短 happy path / 以后再慢慢抽象”的路径，因为那会把最关键的架构判断延后，最后演变成产品边界、运行边界和证据边界都不稳定的临时系统。
 
-本 change 必须先一次性冻结以下骨架，再允许进入实现：
+但这里的目标也不是把后续演进空间一次性锁死，而是先明确当前成立的架构基线，再允许随着实现反馈持续修正。当前基线至少包括：
 
 1. **产品骨架**：MVP 只暴露 `new-faction`，不把工作台伪装成通用任务中心。
 2. **分层骨架**：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`。
@@ -38,7 +38,7 @@
 4. **交付骨架**：所有阶段性交付都归一到 `ArtifactBundle`。
 5. **开源底座裁决**：在实现前明确“是否 fork 成熟开源仓库作为底座”。
 
-若上述任一项未冻结，不进入第二模板、自由画布、远程执行、云端多租户等扩展讨论。
+若上述任一项尚未定义清楚，不进入第二模板、自由画布、远程执行、云端多租户等扩展讨论；若后续发现更优方案，应通过显式更新 spec/design 的方式演进，而不是在实现里悄悄漂移。
 
 ## 开源基线与可复用结论
 
@@ -56,6 +56,12 @@
 | Temporal | 提供强 durable orchestration、Event History、command/event 回放、signals / queries，以及对 deterministic workflow code 的强约束。 | 直接借鉴“事件历史是恢复真相源”“signal / update 负责外部输入恢复”“工作流代码必须确定性”这些编排原则；适合作为未来 `LocalRuntime` 的替代执行器。 | 不适合第一版直接接入：它是基础设施级编排内核，不是现成产品底座；过早引入会把 MVP 升级成分布式 workflow 平台工程。 | `https://docs.temporal.io/workflows`、`https://docs.temporal.io/encyclopedia/event-history` |
 | Dagu | 提供 local-first、YAML/file-based、单二进制、轻运维 Web UI，以及 shell/http/docker/ssh 等步骤编排。 | 直接借鉴 local-first、轻运维、执行详情可见性与低基础设施成本的取向。 | 不适合直接作为底座：它是 shell-first / scheduler-first 的 DAG 引擎，更像运维编排器，不是 repo-aware AI workbench。 | `https://github.com/dagu-org/dagu`、`https://docs.dagu.sh/writing-workflows/examples` |
 
+这不是“可选调研”，而是 **MVP 实现前的硬前置门槛**：
+
+1. 在 `LocalRuntime`、工作台 UI、模板节点或任何 repo-aware runtime 代码开始实现前，必须先完成这一节并形成明确裁决。
+2. 若这一节仍停留在“听过项目名”“觉得像”“应该能借鉴”的层面，则视为前置条件未满足，不得进入第一版实现。
+3. 后续如果因为新证据而改变底座判断，必须先更新本节，再更新实现任务；禁止跳过文档直接漂移。
+
 基于这组官方基线，第一版可复用结论固定如下：
 
 1. **工作台的核心不是聊天，也不是自由画布，而是“仓库模板工作流 + 决策暂停 + 证据交付”。**
@@ -71,13 +77,25 @@
 
 老板要求的关键问题不是“能不能 fork”，而是“fork 之后会不会把产品重心带偏”。因此本 change 必须先给出显式裁决：
 
-| 候选底座 | 与目标问题的贴合度 | 强项 | 关键错位 | fork 结论 |
-| --- | --- | --- | --- | --- |
-| OpenHands | 中高 | 最接近 repo-native agent：本地 GUI、CLI、SDK、真实仓库工具运行。 | 核心对象仍是 agent / conversation / task 执行体验，而不是 `RepoSession + WorkflowTemplate + ArtifactBundle`；技术栈也偏 Python 中心。 | **不 fork**。保留为“仓库代理与本地执行体验”参考源。 |
-| Flowise | 中 | 现成的可视化节点流、运行面板、低门槛 AI workflow UI。 | 产品中心是 visual builder；若直接 fork，MVP 很容易退回“先有画布，再找模板”。 | **不 fork**。只借 UI 表达与节点可视化思路。 |
-| n8n | 中低 | 执行历史、失败节点、重试、成熟集成与运维形态。 | iPaaS / automation 平台心智太强，且 fair-code 许可会让底座策略更复杂。 | **不 fork**。只借执行历史与失败可见性模式。 |
-| Activepieces | 中 | TypeScript 栈、人机审批 / 表单输入做得更贴近我们需要。 | 依然是 automation / piece 生态中心，不是 repo-local 工作流中心。 | **不 fork**。只借 approval / input UX 模式。 |
-| 现有 BoardGame 基础上扩展 | 高 | 完整复用现有 React 19、Node、认证、上传、OpenSpec、E2E、证据文档和本地开发链路。 | 需要自己补齐 workflow runtime、决策卡片、运行详情页与 durable resume 最小集。 | **采用**。这是第一版唯一底座路线。 |
+| 候选底座 | 贴合度 | 能直接省掉什么 | 真正要付出的改造成本 | 为什么不作为第一版底座 / 为什么采用 | 结论 |
+| --- | --- | --- | --- | --- | --- |
+| OpenHands | 中高 | 能直接复用 repo 选取、工具执行、CLI/GUI 共后端、本地/容器 runtime 经验。 | 要把以 `conversation / agent / task` 为中心的产品骨架改造成 `RepoSession / WorkflowTemplate / DecisionRequest / ArtifactBundle`；还要处理 Python 主栈与现有 React + Node 产品壳错位。 | 它更像“通用 coding agent 产品”，而我们当前要的是“固定模板的 repo-aware 工作台”。若 fork，第一阶段大部分工作都会变成对主语义做逆向改造。 | **不 fork** |
+| Flowise | 中 | 能直接复用节点图 UI、运行流可视化、共享 flow state、HITL checkpoint 交互。 | 要把 visual builder 主心智收缩成固定模板产品，还要把 `$flow.state` 风格的运行态改造为可审计领域对象；同时接入现有认证、上传、OpenSpec 和证据体系。 | 它适合作为“节点编排交互参考”，不适合作为“第一版产品底座”；否则会反向驱动我们先做画布，而不是先做模板。 | **不 fork** |
+| n8n | 中低 | 能直接复用等待/恢复、执行历史、失败节点可见性、人审 tool-call 的成熟模式。 | 要绕开 connector/credential/marketplace 这条 iPaaS 主线，把自动化平台改造成 repo-local 工作台；此外 fair-code 许可也会让底座策略与未来分发方式变复杂。 | 它解决的是“自动化集成编排”，不是“仓库任务语义”；fork 后需要长期对抗其产品默认值。 | **不 fork** |
+| Activepieces | 中 | 能直接复用 TypeScript 栈、approval/form/chat 这套低心智负担的 HITL 交互，以及 flow pause/stop 控制流。 | 仍需把 piece/trigger/action 生态改造成 repo/worktree/workflow 模型，并补齐工作台级证据 bundle、仓库会话、模板化节点契约。 | 它在技术栈上最接近我们，但产品语义仍是 automation builder，不是 repo-aware workbench；直接 fork 依然会花大量精力对抗错误主语义。 | **不 fork** |
+| 现有 BoardGame 基础上扩展 | 高 | 直接复用现有 React 19、Node、认证、上传、本地脚本链路、OpenSpec、E2E、证据文档与 repo 内规则资产。 | 需要自建最小 `WorkflowOrchestrator`、`DecisionRequest`、运行详情页、`ArtifactBundle` 与 durable journal。 | 虽然要补 runtime 骨架，但这是“新增正确主语义”，不是“拆旧主语义再重装”；实现路径更短，也更符合当前产品目标。 | **采用** |
+
+### Fork 裁决标准
+
+本次不是按“谁更成熟”拍脑袋选，而是按下面五条标准做裁决：
+
+1. **主语义是否一致**：候选底座是否天然围绕 repo / worktree / 模板工作流 / 证据交付，而不是 conversation、canvas 或 integration marketplace。
+2. **技术栈是否顺手**：是否能在不重建整个产品壳的前提下接入现有 React 19、Node、认证、上传和本地脚本链路。
+3. **改造成本是加法还是逆向改造**：我们是在补少量缺件，还是必须先拆掉它最核心的默认抽象。
+4. **本地仓库语义是否可保真**：是否能把 `RepoSession / WorktreeTask / ArtifactBundle` 维持为唯一真实来源，而不是被外部框架状态反客为主。
+5. **后续演进是否稳**：第一版之后接 LangGraph / Temporal 或扩模板时，是否还能保持领域边界稳定。
+
+结论上，四个外部产品底座都属于“需要大规模逆向改造主语义”，而“在现有 BoardGame 基础上扩展”属于“补齐缺失骨架但保留正确主语义”。因此第一版底座裁决不是“谨慎保守”，而是**从架构正确性出发的唯一最优解**。
 
 最终裁决：
 
@@ -111,9 +129,9 @@ MVP **明确不包含** 以下内容：
 
 ## Architecture Overview
 
-### Decision: 先冻结五层骨架，再实现固定节点图
+### Decision: 先建立五层骨架基线，再实现固定节点图
 
-MVP 的骨架不是“聊天框 + 若干工具调用”，而是固定的五层：
+MVP 的骨架不是“聊天框 + 若干工具调用”，而是当前明确采用的五层：
 
 1. `Workbench Surface`：模板入口、运行详情、决策卡片、证据预览。
 2. `WorkflowOrchestrator`：节点图推进、checkpoint、interrupt / resume、状态迁移。
@@ -121,7 +139,7 @@ MVP 的骨架不是“聊天框 + 若干工具调用”，而是固定的五层�
 4. `Repo Domain`：`RepoSession`、`WorktreeTask`、`WorkflowRun`、`DecisionRequest`、`ArtifactBundle`。
 5. `Artifact Publisher`：bundle 组装、证据索引、阶段产物发布。
 
-只有在这五层边界稳定后，固定节点图才有意义；否则实现细节会反过来绑死领域模型。
+只有在这五层边界先被明确后，固定节点图才有意义；否则实现细节会反过来绑死领域模型。后续如果实践证明某层拆分需要调整，应通过文档和 schema 一起演进，而不是跳过分层直接堆实现。
 
 ### Decision: 采用固定节点图 + 持久化运行日志，而不是自由聊天拼接
 
@@ -620,7 +638,7 @@ MVP **不** 让 `LocalRuntime` 负责：
 
 | 风险 | 触发方式 | 当前控制策略 |
 | --- | --- | --- |
-| 领域骨架定义得不够硬，后续又被实现细节反推 | 先写节点代码，再补 schema | 先冻结 schema、接口与层次边界，再做节点实现 |
+| 领域骨架定义得不够清楚，后续又被实现细节反推 | 先写节点代码，再补 schema | 先定义当前 schema、接口与层次边界，再做节点实现；若实现中发现更优抽象，再显式回写文档 |
 | LangGraph 侵入过深，导致领域对象被其线程状态绑架 | 直接把 session / artifact 全塞进 graph state | 只允许保存引用与可重放状态，不让 LangGraph 成为领域真源 |
 | 不 fork 带来初期自研成本 | 前期需要自建运行详情、决策卡片、bundle 发布 | 只自研领域骨架与必要 UI，其他交互模式按成熟项目收敛 |
 | local-first 在可靠性上弱于成熟编排平台 | 进程重启 / 长时暂停 / 重试策略不足 | 先用本地 durable journal，接口层提前为 Temporal 预留适配面 |

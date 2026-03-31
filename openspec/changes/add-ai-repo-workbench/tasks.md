@@ -1,8 +1,9 @@
-## 0. Baseline & Skeleton Freeze
+## 0. Baseline & Architecture Alignment
+- [ ] 0.0 将“先完成开源参考对照与底座决策，才能开始第一版实现”写成显式门槛，未满足前不得进入 runtime / UI / 节点开发。
 - [ ] 0.1 在 `design.md` 前置补齐《开源基线与可复用结论》，基于官方仓库 / 官方文档比较 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 的成熟做法。
 - [ ] 0.2 对每个候选明确写出“它具体提供什么 / 哪些能力可直接借鉴 / 哪些不适合我们”，禁止只点名不展开。
 - [ ] 0.3 输出一张硬决策表，显式比较 `fork OpenHands / Flowise / n8n / Activepieces` 与“在现有 BoardGame 基础上扩展实现”的可行性，并写明为什么 fork / 不 fork。
-- [ ] 0.4 冻结五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，禁止后续实现绕过该分层。
+- [ ] 0.4 建立五层骨架的当前基线：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，后续实现不得绕过主分层；若需要调整，必须显式更新文档而不是隐式漂移。 
 - [ ] 0.5 明确 LangGraph 只允许位于 `WorkflowOrchestrator` 层，并写清它与 `LocalRuntime`、`RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 的边界。
 - [ ] 0.6 若继续沿用当前技术路线，必须同步记录“为什么成立、风险在哪里、还需要哪些优化”，不能只保留结论。
 

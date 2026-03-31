@@ -14,19 +14,19 @@
 - **THEN** 系统 MUST 先绑定一个 `RepoSession` 与单一 `WorktreeTask`
 - **AND** 后续节点执行 MUST 只在该仓库执行上下文内推进
 
-### Requirement: MVP 架构骨架 SHALL 在实现前被显式冻结
+### Requirement: MVP 架构基线 SHALL 在实现前被显式定义
 
-系统 MUST 在进入实现前先固定工作台的五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，避免首版退化成教程式渐进拼装。
+系统 MUST 在进入实现前先明确工作台当前采用的五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，避免首版退化成随意拼装；后续若有更优认识，可以在保持主语义可迁移的前提下继续演进。 
 
 #### Scenario: 骨架先于节点实现被定义
 - **WHEN** 团队开始实现 `new-faction` MVP
-- **THEN** 设计文档 MUST 明确五层职责边界与调用方向
+- **THEN** 设计文档 MUST 明确当前五层职责边界与调用方向
 - **AND** 不得在未定义骨架前直接以聊天式流程或临时工具调用替代正式工作流分层
 
-#### Scenario: 新增第二模板前仍需保持骨架稳定
-- **WHEN** 后续有人尝试增加 `new-faction` 之外的第二个模板
-- **THEN** 现有五层骨架 MUST 已经是唯一真实来源
-- **AND** 不得通过引入自由画布或通用聊天入口绕过既有 `Repo Domain` 与 `Artifact Publisher` 边界
+#### Scenario: 后续演进时保持主语义连续
+- **WHEN** 后续有人尝试增加 `new-faction` 之外的第二个模板或调整现有分层
+- **THEN** 变更 MUST 先显式更新 design/spec 中的五层边界说明
+- **AND** 不得通过引入自由画布或通用聊天入口绕过既有 `Repo Domain` 与 `Artifact Publisher` 主语义
 
 ### Requirement: `new-faction` 模板 SHALL 按固定节点图推进
 
@@ -142,6 +142,11 @@
 - **WHEN** 团队准备开始 `ai-repo-workbench` 第一版 runtime、前端或节点实现
 - **THEN** 文档 MUST 已经比较 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 的成熟做法
 - **AND** 每个候选 MUST 至少明确“它具体提供什么 / 哪些能力可直接借鉴 / 哪些不适合我们”
+
+#### Scenario: 开源对照缺失时不得开始第一版实现
+- **WHEN** 《开源基线与可复用结论》尚未完成，或仍停留在“只点名项目、不展开能力与边界”的状态
+- **THEN** 团队 MUST 视为前置条件未满足
+- **AND** 不得开始第一版 runtime、工作台 UI、模板节点或 repo-aware 执行逻辑实现
 
 #### Scenario: fork 裁决必须显式比较产品底座
 - **WHEN** 设计文档给出第一版产品底座结论
