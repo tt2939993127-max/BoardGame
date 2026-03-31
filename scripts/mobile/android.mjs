@@ -309,12 +309,18 @@ const getAppConfig = () => ({
 });
 
 const isHttpUrl = (value) => /^http:\/\//i.test(value);
+const isHttpsUrl = (value) => /^https:\/\//i.test(value);
+const resolveEmbeddedAndroidScheme = () => {
+    const backendUrl = process.env.VITE_BACKEND_URL?.trim() || '';
+    if (isHttpUrl(backendUrl)) return 'http';
+    return 'https';
+};
 
 const writeCapacitorShellConfig = () => {
     const { appId, appName } = getAppConfig();
     const mode = getAndroidWebviewMode();
     const server = {
-        androidScheme: 'https',
+        androidScheme: mode === 'embedded' ? resolveEmbeddedAndroidScheme() : 'https',
     };
     const otaEnabled = getAndroidOtaEnabled();
     const otaAppReadyTimeout = Number.parseInt(process.env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?.trim() || '', 10);
@@ -424,10 +430,10 @@ const ensureEmbeddedBackendUrl = () => {
     const backendUrl = process.env.VITE_BACKEND_URL?.trim();
     if (!backendUrl) {
         throw new Error(
-            '移动端壳构建必须显式配置 VITE_BACKEND_URL。请在 .env.android 或 .env.android.local 中设置绝对 HTTPS 地址。',
+            '移动端壳构建必须显式配置 VITE_BACKEND_URL。请在 .env.android 或 .env.android.local 中设置绝对 HTTP/HTTPS 地址。',
         );
     }
-    if (!/^https?:\/\//i.test(backendUrl)) {
+    if (!isHttpUrl(backendUrl) && !isHttpsUrl(backendUrl)) {
         throw new Error(`VITE_BACKEND_URL 必须是绝对地址，当前值为: ${backendUrl}`);
     }
 };

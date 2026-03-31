@@ -15,6 +15,7 @@ const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'thread
 const FAST_VITEST_ARGS = ['--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
 const CORE_TEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
+const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -324,7 +325,7 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
 function buildVitestChangedArgs(baseRef, targets, options = {}) {
   const { gameOnly = false } = options;
   const stableArgs = gameOnly ? GAME_VITEST_ARGS : FAST_VITEST_ARGS;
-  const args = ['vitest', 'run', '--changed', baseRef, ...stableArgs];
+  const args = [...VITEST_SAFE_ENTRY, 'run', '--changed', baseRef, ...stableArgs];
   if (targets.length > 0) {
     args.push('--', ...targets);
   }
@@ -440,15 +441,15 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         commands.push({
           label: 'Changed core test files',
           reason: '仅改动核心测试文件，按文件精确运行',
-          command: 'npx',
-          args: ['vitest', 'run', ...dedupeValues(coreTestFiles), ...FAST_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(coreTestFiles), ...FAST_VITEST_ARGS],
         });
       }
       if (gameSourceIds.length > 0) {
         commands.push({
           label: 'Changed game source tests',
           reason: `${gameSourceIds.join(', ')} 源码改动，合并运行 changed 测试集`,
-          command: 'npx',
+          command: process.execPath,
           args: buildVitestChangedArgs(
             baseRef,
             gameSourceIds.map((gameId) => `src/games/${gameId}`),
@@ -459,8 +460,8 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         commands.push({
           label: 'Changed game test files',
           reason: '仅改动游戏测试文件，按文件精确运行',
-          command: 'npx',
-          args: ['vitest', 'run', ...dedupeValues(gameTestFiles), ...GAME_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(gameTestFiles), ...GAME_VITEST_ARGS],
         });
       }
     }
@@ -475,16 +476,16 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       commands.push({
         label: 'Games core tests',
         reason: '核心框架改动可能影响所有游戏',
-        command: 'npx',
-        args: ['vitest', 'run', 'src/games', ...GAME_VITEST_ARGS],
+        command: process.execPath,
+        args: [...VITEST_SAFE_ENTRY, 'run', 'src/games', ...GAME_VITEST_ARGS],
       });
     } else {
       for (const gameId of collectGameIds(files)) {
         commands.push({
           label: `${gameId} tests`,
           reason: `${gameId} 目录有改动`,
-          command: 'npx',
-          args: ['vitest', 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
         });
       }
     }

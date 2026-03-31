@@ -30,6 +30,7 @@ import {
 import { DICETHRONE_CHARACTER_CATALOG } from './domain/types';
 import { findPlayerAbility, getPlayerAbilityBaseDamage } from './domain/abilityLookup';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
+import { getOpponents } from './domain/rules';
 import { hasDebuffs, hasPurifyToken, getUsableTokensForTiming } from './domain/tokenResponse';
 import type {
     AbilityCard,
@@ -957,7 +958,7 @@ const getEvaluatorScale = (context: AiDecisionContext): number => {
 };
 
 const getOpponentIds = (state: DiceThroneState, playerId: PlayerId): PlayerId[] => {
-    return Object.keys(state.core.players).filter((id): id is PlayerId => id !== playerId);
+    return getOpponents(state.core, playerId);
 };
 
 const countStatusStacks = (player: DiceThroneState['core']['players'][PlayerId]): number => {

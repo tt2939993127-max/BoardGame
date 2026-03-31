@@ -145,6 +145,7 @@ export const GameDetailsMobilePackageCard = ({
     const { t } = useTranslation('lobby');
     const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
     const StatusIcon = statusMeta.icon;
+    const showLeadingStatusIcon = state.status !== 'not-installed';
     const isInProgress = state.status !== 'not-installed' && state.status !== 'failed';
     const progressMode = state.progressMode ?? 'indeterminate';
     const progressPercent = Math.max(0, Math.min(100, state.progressPercent ?? 0));
@@ -164,15 +165,17 @@ export const GameDetailsMobilePackageCard = ({
             ].filter(Boolean).join(' ')}
             aria-label={t('packageManager.cardLabel', { game: gameName })}
         >
-            <div className="flex items-start gap-3">
-                <div
-                    className={[
-                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
-                        statusMeta.iconToneClassName,
-                    ].join(' ')}
-                >
-                    <StatusIcon size={18} strokeWidth={2.2} className={statusMeta.iconClassName} />
-                </div>
+            <div className={showLeadingStatusIcon ? 'flex items-start gap-3' : 'flex items-start'}>
+                {showLeadingStatusIcon && (
+                    <div
+                        className={[
+                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+                            statusMeta.iconToneClassName,
+                        ].join(' ')}
+                    >
+                        <StatusIcon size={18} strokeWidth={2.2} className={statusMeta.iconClassName} />
+                    </div>
+                )}
 
                 <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
