@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,8 @@ import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { runEncodingCheck } from './check-file-encoding.mjs';
 import { runE2ESafetyCheck } from './check-e2e-safety.js';
 import { cleanupTestConnections } from './cleanup_test_connections.js';
+import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
+import { acquireTaskGuard } from './heavy-task-guard.mjs';
 
 const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
 const runtimeNode = process.env.PW_NODE_BINARY || process.execPath;
@@ -295,6 +298,34 @@ function resolveRequestedServiceReuse(envOverrides = {}) {
     return value;
 }
 
+function deriveManagedRuntimeScope(mode, explicitTargetPath) {
+    const normalizedTarget = String(explicitTargetPath ?? '')
+        .trim()
+        .replace(/\\/g, '/')
+        .toLowerCase();
+    const normalizedWorktree = process.cwd()
+        .trim()
+        .replace(/\\/g, '/')
+        .toLowerCase();
+    const baseName = path.basename(normalizedTarget)
+        .replace(/\.e2e\.[cm]?tsx?$/i, '')
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        || 'target';
+    const worktreeName = path.basename(normalizedWorktree)
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        || 'worktree';
+    const digest = createHash('sha1')
+        .update(`${normalizedWorktree}:${mode}:${normalizedTarget}`)
+        .digest('hex')
+        .slice(0, 10);
+
+    return `single-${mode}-${worktreeName}-${baseName}-${digest}`;
+}
+
 export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } = {}) {
     if (!mode) {
         console.error('用法: node scripts/infra/run-e2e-command.mjs <default|dev|isolated|ci|critical|parallel> [...playwrightArgs]');
@@ -329,6 +360,16 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         && !process.env.PW_USE_DEV_SERVERS
         && !envOverrides.PW_USE_DEV_SERVERS
     );
+
+    if (
+        shouldUseManagedSingleRuntime
+        && !preferSharedSingleRun
+        && !modeEnv.PW_RUNTIME_SCOPE
+        && explicitTargetPath
+    ) {
+        modeEnv.PW_RUNTIME_SCOPE = deriveManagedRuntimeScope(mode, explicitTargetPath);
+        console.log(`♻️ 单文件 E2E 将复用稳定 runtime scope: ${modeEnv.PW_RUNTIME_SCOPE}`);
+    }
 
     if (preferSharedSingleRun) {
         modeEnv.PW_E2E_SERVICE_REUSE = 'shared-single';
@@ -379,7 +420,31 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
     }
 
     let heldRuntimeManager = null;
+    let globalBudgetHandle = null;
+    const taskGuard = acquireTaskGuard({
+        name: 'e2e-run',
+        conflicts: ['quality-gate'],
+        command: [runtimeNode, playwrightCli, 'test', ...extraArgs].join(' '),
+        metadata: {
+            mode,
+            target: explicitTargetPath || '<all>',
+            managedRuntime: shouldUseManagedSingleRuntime,
+            runtimeScope: modeEnv.PW_RUNTIME_SCOPE || '',
+            serviceReuse: preferSharedSingleRun ? 'shared-single' : 'isolated',
+        },
+    });
     try {
+        globalBudgetHandle = await acquireGlobalHeavyBudget({
+            group: 'e2e',
+            command: [runtimeNode, playwrightCli, 'test', ...extraArgs].join(' '),
+            metadata: {
+                mode,
+                target: explicitTargetPath || '<all>',
+                runtimeScope: modeEnv.PW_RUNTIME_SCOPE || '',
+                serviceReuse: preferSharedSingleRun ? 'shared-single' : 'isolated',
+            },
+        });
+
         if (shouldUseManagedSingleRuntime) {
             const managerArgs = [
                 'scripts/infra/e2e-runtime-manager.mjs',
@@ -433,6 +498,8 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         }
     } finally {
         await stopHeldManager(heldRuntimeManager);
+        globalBudgetHandle?.release?.();
+        taskGuard.release();
     }
 }
 

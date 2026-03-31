@@ -176,10 +176,11 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             if (teamADefeated && teamBDefeated) return { draw: true };
 
             const winnerTeamId: TeamId = teamADefeated ? 'B' : 'A';
-            const winner = (Object.keys(state.players) as PlayerId[]).find(
+            const winners = (Object.keys(state.players) as PlayerId[]).filter(
                 (playerId) => teamIdByPlayerId[playerId] === winnerTeamId
             );
-            return winner ? { winner } : { draw: true };
+            const winner = winners[0];
+            return winner ? { winner, winners } : { draw: true };
         }
 
         const playerIds = Object.keys(state.players);

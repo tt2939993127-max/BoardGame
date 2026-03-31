@@ -682,8 +682,14 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
     registerCustomActionHandler('pyro-increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
 
-    registerCustomActionHandler('pyro-details-dmg-per-fm', resolveDmgPerFM, { categories: ['damage'] });
-    registerCustomActionHandler('pyro-get-fired-up-roll', resolveGetFiredUpRoll, { categories: ['dice', 'damage', 'status', 'token'] });
+    registerCustomActionHandler('pyro-details-dmg-per-fm', resolveDmgPerFM, {
+        categories: ['damage'],
+        requiresSelectedDefender: true,
+    });
+    registerCustomActionHandler('pyro-get-fired-up-roll', resolveGetFiredUpRoll, {
+        categories: ['dice', 'damage', 'status', 'token'],
+        requiresSelectedDefender: true,
+    });
     registerCustomActionHandler('pyro-spend-cp-for-fm', resolveSpendCpForFM, { categories: ['resource', 'choice'] });
 
     registerCustomActionHandler('pyro-blast-2-roll', (ctx) => createPyroBlastRollEvents(ctx, { diceCount: 2, dieEffectKey: 'bonusDie.effect.pyroBlast2Die', rerollEffectKey: 'bonusDie.effect.pyroBlast2Reroll' }), { categories: ['dice', 'other'] });

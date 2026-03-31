@@ -698,12 +698,15 @@ export function registerMoonElfCustomActions(): void {
     // 琛屽姩鍗?
     registerCustomActionHandler('moon_elf-action-moon-shadow-strike', handleMoonShadowStrike, {
         categories: ['dice', 'status', 'resource'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('moon_elf-action-volley', handleVolley, {
         categories: ['dice', 'status'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('moon_elf-action-watch-out', handleWatchOut, {
         categories: ['dice', 'status'],
+        requiresSelectedDefender: true,
     });
 
     // 鐘舵€佹晥鏋滈挬瀛?

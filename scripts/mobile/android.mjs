@@ -316,11 +316,30 @@ const writeCapacitorShellConfig = () => {
     const server = {
         androidScheme: 'https',
     };
+    const otaEnabled = getAndroidOtaEnabled();
+    const otaAppReadyTimeout = Number.parseInt(process.env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?.trim() || '', 10);
 
     if (mode === 'remote') {
         server.url = ensureRemoteWebUrl();
         server.cleartext = isHttpUrl(server.url);
     }
+
+    const plugins = otaEnabled
+        ? {
+            CapacitorUpdater: {
+                autoUpdate: false,
+                appReadyTimeout: Number.isFinite(otaAppReadyTimeout) && otaAppReadyTimeout >= 1000
+                    ? otaAppReadyTimeout
+                    : 10000,
+                autoDeleteFailed: true,
+                autoDeletePrevious: true,
+                resetWhenUpdate: true,
+                keepUrlPathAfterReload: true,
+                allowManualBundleError: true,
+                defaultChannel: getAndroidOtaChannel() || undefined,
+            },
+        }
+        : undefined;
 
     writeText(
         path.join(androidDir, 'app', 'src', 'main', 'assets', 'capacitor.config.json'),
@@ -330,6 +349,7 @@ const writeCapacitorShellConfig = () => {
                 appName,
                 webDir: 'dist',
                 server,
+                ...(plugins ? { plugins } : {}),
             },
             null,
             2,

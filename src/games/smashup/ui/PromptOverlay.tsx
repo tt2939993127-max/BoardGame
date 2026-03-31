@@ -241,7 +241,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const contextPreviewRef = useMemo(() => prompt ? extractContextPreview(prompt) : undefined, [prompt]);
 
     // 少量选项 + 非卡牌模式 → 内联面板
-    const useInlineMode = !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
+    const useInlineMode = !isMulti && !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
 
     // 解析标题中的 i18n key（使用 useMemo 确保响应式更新）
     const title = useMemo(() => {

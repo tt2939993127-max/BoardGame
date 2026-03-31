@@ -13,6 +13,7 @@ interface GameDetailsMobilePackageCardProps {
     onRetry?: () => void;
     presentation?: 'install' | 'update-required';
     requiredAppVersion?: string;
+    className?: string;
 }
 
 const getProgressTitleKey = (status: Extract<GamePackageCardStatus, 'queued' | 'manifest' | 'downloading' | 'verifying'>) => {
@@ -110,6 +111,15 @@ const getStatusMeta = (
                 iconClassName: '',
                 iconToneClassName: 'border-amber-800/20 bg-amber-50/70 text-amber-900',
             };
+        case 'installed':
+            return {
+                title: t('packageManager.installedTitle'),
+                description: t('packageManager.installedHint', { game: gameName }),
+                actionLabel: null,
+                icon: HardDriveDownload,
+                iconClassName: '',
+                iconToneClassName: 'border-emerald-700/20 bg-emerald-50/70 text-emerald-900',
+            };
         case 'not-installed':
         default:
             return {
@@ -130,6 +140,7 @@ export const GameDetailsMobilePackageCard = ({
     onRetry,
     presentation = 'install',
     requiredAppVersion,
+    className = 'md:hidden',
 }: GameDetailsMobilePackageCardProps) => {
     const { t } = useTranslation('lobby');
     const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
@@ -147,7 +158,10 @@ export const GameDetailsMobilePackageCard = ({
         <section
             data-testid="game-details-mobile-package-card"
             data-status={state.status}
-            className="pointer-events-auto w-full rounded-[8px] border border-parchment-card-border/45 bg-parchment-card-bg/96 p-3 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm md:hidden"
+            className={[
+                'pointer-events-auto w-full rounded-[8px] border border-parchment-card-border/45 bg-parchment-card-bg/96 p-3 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm',
+                className,
+            ].filter(Boolean).join(' ')}
             aria-label={t('packageManager.cardLabel', { game: gameName })}
         >
             <div className="flex items-start gap-3">

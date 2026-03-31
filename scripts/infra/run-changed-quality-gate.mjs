@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
+import { acquireTaskGuard } from './heavy-task-guard.mjs';
 
 const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
@@ -243,6 +245,21 @@ function affectsBuild(file) {
     || file.startsWith('scripts/audio/');
 }
 
+function affectsDiceThroneStyleContract(file) {
+  return file === 'src/index.css'
+    || file === 'vite.config.ts'
+    || file === 'postcss.config.js'
+    || file === 'postcss-tailwind-legacy-structure.js'
+    || file === 'postcss-tailwind-legacy-colors.js'
+    || file === 'postcss-tailwind-legacy-translate.js'
+    || file === 'package.json'
+    || file === 'playwright.config.ts'
+    || file.startsWith('src/games/dicethrone/ui/')
+    || file === 'src/components/game/framework/presets.tsx'
+    || file === 'scripts/verify/dicethrone-style-contract.mjs'
+    || file === 'e2e/dicethrone-simple-start.e2e.ts';
+}
+
 function affectsI18n(file) {
   return file.startsWith('src/')
     || file.startsWith('apps/api/')
@@ -356,6 +373,14 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       command: 'npm',
       args: ['run', 'build'],
     });
+    if (hasAny(files, affectsDiceThroneStyleContract)) {
+      commands.push({
+        label: 'DiceThrone style contract',
+        reason: '涉及 DiceThrone HUD / Tailwind 兼容链改动，需验证构建产物关键样式合同',
+        command: 'npm',
+        args: ['run', 'verify:dicethrone:style-contract'],
+      });
+    }
   } else if (hasAny(files, affectsBuild) && isPrePushMode) {
     console.log('[changed-quality-gate] pre-push 模式：跳过 build，交给 CI 全量构建兜底。');
   }
@@ -609,86 +634,115 @@ for (const file of files) {
   console.log(`- ${file}`);
 }
 
-mkdirSync(CACHE_DIR, { recursive: true });
-runEncodingGuard(files);
+const taskGuard = acquireTaskGuard({
+  name: 'quality-gate',
+  conflicts: ['e2e-run'],
+  command: process.argv.join(' '),
+  metadata: {
+    mode,
+    baseRef,
+    fileCount: files.length,
+  },
+});
 
-const commands = collectCommands(files, baseRef, affectsTypecheck);
-if (commands.length === 0) {
-  console.log('[changed-quality-gate] 当前改动仅涉及文档/证据，跳过代码校验。');
-  process.exit(0);
-}
+try {
+  const globalBudgetHandle = await acquireGlobalHeavyBudget({
+    group: 'quality-gate',
+    command: process.argv.join(' '),
+    metadata: {
+      mode,
+      baseRef,
+      fileCount: files.length,
+    },
+  });
 
-const cachePayload = {
-  schemaVersion: CACHE_SCHEMA_VERSION,
-  mode,
-  baseRef,
-  mergeBase,
-  headSha,
-  files,
-  commands: commands.map((item) => ({ command: item.command, args: item.args })),
-};
-const cacheKey = createCacheKey(cachePayload);
+  try {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  runEncodingGuard(files);
 
-if (shouldUsePrePushCache()) {
-  const cache = readPrePushCache();
-  if (cache?.key === cacheKey) {
-    console.log('[changed-quality-gate] 命中 pre-push 缓存，本次跳过重复校验。');
+  const commands = collectCommands(files, baseRef, affectsTypecheck);
+  if (commands.length === 0) {
+    console.log('[changed-quality-gate] 当前改动仅涉及文档/证据，跳过代码校验。');
     process.exit(0);
   }
-}
 
-const startedAt = Date.now();
-const durations = [];
-const commandCache = shouldUsePrePushCache()
-  ? readCommandCache()
-  : { version: CACHE_SCHEMA_VERSION, entries: {} };
-for (const command of commands) {
-  const commandCacheKey = createCommandCacheKey({ baseRef, mergeBase, headSha, files }, command);
-  const cachedResult = shouldUsePrePushCache()
-    ? commandCache.entries?.[commandCacheKey]
-    : null;
-
-  if (cachedResult?.status === 'passed') {
-    console.log(`\n[changed-quality-gate] ${command.label}`);
-    console.log('[changed-quality-gate] 命中步骤缓存，跳过重复校验。');
-    durations.push({
-      label: `${command.label} (cached)`,
-      durationMs: cachedResult.durationMs ?? 0,
-    });
-    continue;
-  }
-
-  const durationMs = runCommand(command);
-  durations.push({ label: command.label, durationMs });
-  if (shouldUsePrePushCache()) {
-    commandCache.entries[commandCacheKey] = {
-      status: 'passed',
-      label: command.label,
-      durationMs,
-      completedAt: new Date().toISOString(),
-      headSha,
-      baseRef,
-      mergeBase,
-    };
-    writeCommandCache(trimCommandCache(commandCache));
-  }
-}
-
-const totalMs = Date.now() - startedAt;
-console.log('\n[changed-quality-gate] 执行耗时:');
-for (const item of durations) {
-  console.log(`- ${item.label}: ${(item.durationMs / 1000).toFixed(1)}s`);
-}
-console.log(`[changed-quality-gate] 总耗时: ${(totalMs / 1000).toFixed(1)}s`);
-console.log('[changed-quality-gate] 全部增量校验完成。');
-
-if (shouldUsePrePushCache()) {
-  writePrePushCache({
-    key: cacheKey,
+  const cachePayload = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
     mode,
     baseRef,
     mergeBase,
     headSha,
-    generatedAt: new Date().toISOString(),
-  });
+    files,
+    commands: commands.map((item) => ({ command: item.command, args: item.args })),
+  };
+  const cacheKey = createCacheKey(cachePayload);
+
+  if (shouldUsePrePushCache()) {
+    const cache = readPrePushCache();
+    if (cache?.key === cacheKey) {
+      console.log('[changed-quality-gate] 命中 pre-push 缓存，本次跳过重复校验。');
+      process.exit(0);
+    }
+  }
+
+  const startedAt = Date.now();
+  const durations = [];
+  const commandCache = shouldUsePrePushCache()
+    ? readCommandCache()
+    : { version: CACHE_SCHEMA_VERSION, entries: {} };
+  for (const command of commands) {
+    const commandCacheKey = createCommandCacheKey({ baseRef, mergeBase, headSha, files }, command);
+    const cachedResult = shouldUsePrePushCache()
+      ? commandCache.entries?.[commandCacheKey]
+      : null;
+
+    if (cachedResult?.status === 'passed') {
+      console.log(`\n[changed-quality-gate] ${command.label}`);
+      console.log('[changed-quality-gate] 命中步骤缓存，跳过重复校验。');
+      durations.push({
+        label: `${command.label} (cached)`,
+        durationMs: cachedResult.durationMs ?? 0,
+      });
+      continue;
+    }
+
+    const durationMs = runCommand(command);
+    durations.push({ label: command.label, durationMs });
+    if (shouldUsePrePushCache()) {
+      commandCache.entries[commandCacheKey] = {
+        status: 'passed',
+        label: command.label,
+        durationMs,
+        completedAt: new Date().toISOString(),
+        headSha,
+        baseRef,
+        mergeBase,
+      };
+      writeCommandCache(trimCommandCache(commandCache));
+    }
+  }
+
+  const totalMs = Date.now() - startedAt;
+  console.log('\n[changed-quality-gate] 执行耗时:');
+  for (const item of durations) {
+    console.log(`- ${item.label}: ${(item.durationMs / 1000).toFixed(1)}s`);
+  }
+  console.log(`[changed-quality-gate] 总耗时: ${(totalMs / 1000).toFixed(1)}s`);
+  console.log('[changed-quality-gate] 全部增量校验完成。');
+
+  if (shouldUsePrePushCache()) {
+    writePrePushCache({
+      key: cacheKey,
+      mode,
+      baseRef,
+      mergeBase,
+      headSha,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+  } finally {
+    globalBudgetHandle.release();
+  }
+} finally {
+  taskGuard.release();
 }

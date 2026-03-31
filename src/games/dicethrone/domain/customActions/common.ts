@@ -4,15 +4,18 @@
  */
 
 import type {
+    DiceThroneCore,
     DiceThroneEvent,
     CpChangedEvent,
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import type { PlayerId } from '../../../../engine/types';
+import { registerCustomActionHandler, resolveEffectsToEvents, type CustomActionContext } from '../effects';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
 import { getRollerId } from '../rules';
+import { findHeroCard } from '../../heroes';
 
 // ============================================================================
 // 资源处理器
@@ -267,6 +270,30 @@ function handleTransferStatus({ attackerId, sourceAbilityId, state, timestamp }:
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
 }
 
+/** 四人模式下选定敌方目标后，继续结算原卡牌效果。 */
+function handleResolveCardEffectsOnSelectedOpponent({
+    attackerId,
+    targetId,
+    sourceAbilityId,
+    state,
+    timestamp,
+    random,
+}: CustomActionContext): DiceThroneEvent[] {
+    const card = findHeroCard(sourceAbilityId);
+    if (!card?.effects?.length) {
+        return [];
+    }
+
+    return resolveEffectsToEvents(card.effects, 'immediate', {
+        attackerId,
+        defenderId: targetId,
+        sourceAbilityId,
+        state,
+        damageDealt: 0,
+        timestamp,
+    }, { random });
+}
+
 // ============================================================================
 // 注册所有通用 Custom Action 处理器
 // ============================================================================
@@ -327,5 +354,8 @@ export function registerCommonCustomActions(): void {
     registerCustomActionHandler('transfer-status', handleTransferStatus, {
         categories: ['status'],
         requiresInteraction: true,
+    });
+    registerCustomActionHandler('resolve-card-effects-on-selected-opponent', handleResolveCardEffectsOnSelectedOpponent, {
+        categories: ['card'],
     });
 }

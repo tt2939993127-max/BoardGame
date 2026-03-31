@@ -106,6 +106,8 @@
     "mode": "按需下载",
     "notInstalled": "未安装",
     "notInstalledHint": "首次进入 {{game}} 前，需要先下载对应的代码包和素材包。",
+    "installedTitle": "已可进入",
+    "installedHint": "{{game}} 的移动端包已就绪，可以直接进入对局。",
     "installAction": "安装游戏包",
     "confirmEyebrow": "安装确认",
     "confirmTitle": "下载 {{game}} 游戏包",
@@ -144,6 +146,28 @@
   },
   "player": {
     "guest": "游客{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "更新中",
+      "checkingTitle": "正在准备更新",
+      "checkingDescription": "正在检查并准备新版本，请稍候。",
+      "downloadingTitle": "正在下载更新",
+      "downloadingDescription": "正在下载必要更新，完成后会自动切换。",
+      "applyingTitle": "正在切换新版本",
+      "applyingDescription": "更新已下载完成，正在重启并切换到新版本。",
+      "requiredTitle": "需要更新 App",
+      "requiredDescription": "当前 App 版本过旧，需要先安装新版本后继续使用。",
+      "requiredDescriptionWithVersion": "当前 App 版本过旧，需要升级到 {{version}} 或更高版本后继续使用。",
+      "errorTitle": "更新失败",
+      "errorDescription": "下载或切换新版本失败，请重试。",
+      "bundleVersion": "目标本体版本",
+      "requiredAppVersion": "所需 App 版本",
+      "progressLabel": "下载进度",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "准备中",
+      "retryAction": "重新检查"
+    }
   },
   "gameDetails": {
     "description": "经典策略游戏。连成3个符号即可获胜。"

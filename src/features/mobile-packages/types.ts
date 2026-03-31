@@ -8,6 +8,7 @@ export type GamePackageInstallStatus =
     | 'manifest'
     | 'downloading'
     | 'verifying'
+    | 'installed'
     | 'failed';
 
 export interface ResolvedGamePackageManifest {

@@ -8,7 +8,7 @@ import { dirname } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './framework';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
-import { waitForTestHarness } from './helpers/common';
+import { setChineseLocale, waitForTestHarness } from './helpers/common';
 import { getMatchState, injectMatchState } from './helpers/state-injection';
 import { COMMON_CARDS } from '../src/games/dicethrone/domain/commonCards';
 import { PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
@@ -26,6 +26,7 @@ import {
     selectCharacter,
     setupDTOnlineMatch,
     setupDTOnlineMatchWithPlayers,
+    waitForCharacterSelection,
     waitForGameBoard,
 } from './helpers/dicethrone';
 import { getGameServerBaseURL } from './helpers/common';
@@ -67,6 +68,29 @@ const saveEvidenceScreenshot = async (
     await mkdir(dirname(path), { recursive: true });
     await page.screenshot({ path, fullPage: true });
     return path;
+};
+
+const readHudStyleContract = async (page: Page) => {
+    return page.evaluate(() => {
+        const advanceButton = document.querySelector('[data-tutorial-id="advance-phase-button"]');
+        const hpFill = document.querySelector('.absolute.top-0.bottom-0.left-0.bg-gradient-to-r.from-red-900.to-red-600');
+        const hpLabel = Array.from(document.querySelectorAll('span')).find((node) => node.textContent?.trim() === '生命');
+
+        const hpFillStyle = hpFill ? window.getComputedStyle(hpFill) : null;
+        const advanceButtonStyle = advanceButton ? window.getComputedStyle(advanceButton) : null;
+
+        return {
+            hasHealthLabel: Boolean(hpLabel),
+            hpFillFound: Boolean(hpFill),
+            advanceButtonFound: Boolean(advanceButton),
+            hpBackgroundImage: hpFillStyle?.backgroundImage ?? null,
+            hpWidthPx: hpFill ? hpFill.getBoundingClientRect().width : 0,
+            advanceButtonBackgroundImage: advanceButtonStyle?.backgroundImage ?? null,
+            advanceButtonBoxShadow: advanceButtonStyle?.boxShadow ?? null,
+            advanceButtonBorderColor: advanceButtonStyle?.borderColor ?? null,
+            advanceButtonText: advanceButton?.textContent?.trim() ?? null,
+        };
+    });
 };
 
 const waitForHarnessPages = async (pages: Page[]) => {
@@ -756,6 +780,44 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
+    test('Local match: HUD 样式合同应保留生命条渐变与下一阶段按钮实体外观', async ({ page }, testInfo) => {
+        test.setTimeout(60000);
+
+        await setChineseLocale(page);
+        await page.goto('/play/dicethrone/local', { waitUntil: 'domcontentloaded' });
+        await waitForCharacterSelection(page, 30000);
+
+        await selectCharacter(page, 'barbarian');
+        await selectCharacter(page, 'paladin');
+
+        const readyButton = page.getByRole('button', { name: /准备|Ready/i }).first();
+        await expect(readyButton).toBeVisible({ timeout: 10000 });
+        await readyButton.click();
+
+        const startButton = page.getByRole('button', { name: /开始游戏|Start Game/i }).first();
+        await expect(startButton).toBeVisible({ timeout: 10000 });
+        await expect(startButton).toBeEnabled({ timeout: 10000 });
+        await startButton.click();
+
+        await waitForGameBoard(page);
+        await page.waitForTimeout(1200);
+
+        const hudStyle = await readHudStyleContract(page);
+
+        expect(hudStyle.hasHealthLabel).toBe(true);
+        expect(hudStyle.hpFillFound).toBe(true);
+        expect(hudStyle.advanceButtonFound).toBe(true);
+        expect(hudStyle.hpBackgroundImage).toContain('gradient');
+        expect(hudStyle.hpWidthPx).toBeGreaterThan(40);
+        expect(hudStyle.advanceButtonBackgroundImage).toContain('gradient');
+        expect(hudStyle.advanceButtonBoxShadow).not.toBe('none');
+        expect(hudStyle.advanceButtonBorderColor).not.toBe('rgba(0, 0, 0, 0)');
+        expect(hudStyle.advanceButtonText).toBe('下一阶段');
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(page, testInfo, '02-hud-style-contract');
+    });
+
     test('Online 2-player transfer token: transfer phase keeps locked source card and target card', async ({ browser, workerPorts }, testInfo) => {
         test.setTimeout(90000);
         const baseURL = `http://127.0.0.1:${workerPorts.frontend}`;
@@ -1011,9 +1073,10 @@ test.describe('DiceThrone Simple Start', () => {
             return (window as any).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.playerId === '3';
         }, { timeout: 10000 });
         await expect(defenderCaptainPage.getByTestId('dt-target-choice-panel')).toBeVisible({ timeout: 10000 });
-        await expect(defenderCaptainPage.locator('[data-testid^="dt-target-option-"]')).toHaveCount(3, { timeout: 10000 });
-        await expect(defenderCaptainPage.getByTestId('dt-target-option-1')).toHaveAttribute('data-team-tone', 'ally');
-        await expect(defenderCaptainPage.getByTestId('dt-target-option-2')).toHaveAttribute('data-team-tone', 'enemy');
+        await expect(defenderCaptainPage.locator('[data-testid^="dt-target-option-"]')).toHaveCount(2, { timeout: 10000 });
+        await expect(defenderCaptainPage.getByTestId('dt-target-option-1')).toBeVisible({ timeout: 10000 });
+        await expect(defenderCaptainPage.getByTestId('dt-target-option-3')).toBeVisible({ timeout: 10000 });
+        await expect(defenderCaptainPage.getByTestId('dt-target-option-2')).toHaveCount(0);
         await defenderCaptainPage.getByTestId('dt-target-option-1').click();
         await defenderCaptainPage.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -1028,8 +1091,9 @@ test.describe('DiceThrone Simple Start', () => {
             return (window as any).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.playerId === '0';
         }, { timeout: 10000 });
         await expect(hostPage.getByTestId('dt-target-choice-panel')).toBeVisible({ timeout: 10000 });
-        await expect(hostPage.locator('[data-testid^="dt-target-option-"]')).toHaveCount(3, { timeout: 10000 });
-        await expect(hostPage.getByTestId('dt-target-option-2')).toHaveAttribute('data-team-tone', 'ally');
+        await expect(hostPage.locator('[data-testid^="dt-target-option-"]')).toHaveCount(2, { timeout: 10000 });
+        await expect(hostPage.getByTestId('dt-target-option-1')).toHaveAttribute('data-team-tone', 'enemy');
+        await expect(hostPage.getByTestId('dt-target-option-3')).toHaveAttribute('data-team-tone', 'enemy');
 
         await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(hostPage, testInfo, '04-four-player-target-choice-panel-host');

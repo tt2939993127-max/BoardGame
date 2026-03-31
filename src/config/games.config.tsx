@@ -12,6 +12,8 @@ import type {
     UgcPackageSummary,
 } from '../ugc/client/types';
 
+const isAndroidShellBuild = import.meta.env.MODE === 'android';
+
 export interface GameConfig extends GameManifestEntry {
     thumbnail: ReactNode;
     isUgc?: boolean;
@@ -30,6 +32,9 @@ const buildGameRegistry = () => {
     const registry: Record<string, GameConfig> = {};
     for (const entry of GAME_CLIENT_MANIFEST) {
         const { manifest, thumbnail } = entry;
+        if (isAndroidShellBuild && manifest.type === 'tool') {
+            continue;
+        }
         if (!thumbnail) {
             throw new Error(`[GameManifest] 缺少缩略图配置: ${manifest.id}`);
         }

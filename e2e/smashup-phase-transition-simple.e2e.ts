@@ -125,6 +125,14 @@ async function waitForSelectableMinion(page: Page, minionUid: string): Promise<v
     });
 }
 
+async function dismissSpotlightIfVisible(page: Page): Promise<void> {
+    const spotlightQueue = page.getByTestId('card-spotlight-queue');
+    const isVisible = await spotlightQueue.isVisible({ timeout: 300 }).catch(() => false);
+    if (!isVisible) return;
+    await spotlightQueue.click({ force: true });
+    await expect(spotlightQueue).toBeHidden({ timeout: 5000 });
+}
+
 async function clickSelectableMinion(page: Page, minionUid: string): Promise<void> {
     await waitForSelectableMinion(page, minionUid);
     await page.locator(`[data-minion-uid="${minionUid}"]`).click({ force: true });
@@ -469,42 +477,17 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
     await expect(page.locator('[data-buried-count="1"]').first()).toBeVisible({ timeout: 8000 });
     await saveEvidenceScreenshot(page, testInfo, 'oops-bury-strip-before-uncover');
 
-    await page.evaluate(() => {
-        const harness = (window as any).__BG_TEST_HARNESS__;
-        harness.state.patch({
-            sys: {
-                interaction: {
-                    current: {
-                        id: 'seal-the-tomb-uncover-test',
-                        kind: 'simple-choice',
-                        playerId: '0',
-                        data: {
-                            title: '封印墓穴：翻开同一基地至多两张你的埋葬牌',
-                            options: [
-                                {
-                                    id: 'buried-buried-yk',
-                                    label: 'You Can Take It With You @ Pyramids',
-                                    value: { cardUid: 'buried-yk', baseIndex: 0 },
-                                    displayMode: 'button',
-                                },
-                            ],
-                            sourceId: 'ancient_egyptians_seal_the_tomb_uncover',
-                            targetType: 'generic',
-                            multi: { min: 0, max: 1 },
-                        },
-                    },
-                    queue: [],
-                    isBlocked: false,
-                },
-            },
-        });
-    });
+    await page.locator('[data-testid="su-hand-area"] [data-card-uid="seal-1"]').click({ force: true });
     await page.waitForTimeout(300);
+    await page.locator('[data-base-index="0"]').click({ force: true });
+
+    await dismissSpotlightIfVisible(page);
+    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('ancient_egyptians_seal_the_tomb_mode');
+    await page.getByRole('button', { name: /翻开同一基地至多两张你的埋葬牌/i }).click();
+
     await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('ancient_egyptians_seal_the_tomb_uncover');
-    const uncoverOptions = await getCurrentInteractionOptions(page);
-    const buriedOption = uncoverOptions.find((option: any) => option?.value?.cardUid === 'buried-yk');
-    expect(buriedOption).toBeTruthy();
-    await respondCurrentInteraction(page, { optionIds: [buriedOption.id] });
+    await page.getByRole('button', { name: /随身带走 @ 金字塔|You Can Take It With You @ Pyramids/i }).click();
+    await page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).click();
 
     await expect.poll(async () => {
         const state = await game.getState();
@@ -514,7 +497,7 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
     await expect.poll(async () => {
         const state = await game.getState();
         return state.core.players['0'].hand.length;
-    }, { timeout: 8000 }).toBe(4);
+    }, { timeout: 8000 }).toBe(3);
 
     await expect.poll(async () => {
         const state = await game.getState();
@@ -672,54 +655,54 @@ test('Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行�
     });
 
     await waitForSmashUpUI(page);
-    await page.evaluate(() => {
-        const harness = (window as any).__BG_TEST_HARNESS__;
-        harness.state.patch({
-            sys: {
-                interaction: {
-                    current: {
-                        id: 'samurai-yokai-attack-test',
-                        kind: 'simple-choice',
-                        playerId: '0',
-                        data: {
-                            title: '妖怪来袭：选择你要消灭的一个随从',
-                            options: [
-                                {
-                                    id: 'minion-0',
-                                    label: 'Samurai-Chan',
-                                    value: { minionUid: 'ally-1', baseIndex: 0, defId: 'samurai_samurai_chan' },
-                                },
-                            ],
-                            sourceId: 'samurai_yokai_attack',
-                            targetType: 'minion',
-                        },
-                    },
-                    queue: [],
-                    isBlocked: false,
-                },
-            },
-        });
-    });
-    await page.waitForTimeout(300);
+    await page.locator('[data-testid="su-hand-area"] [data-card-uid="yokai-1"]').click({ force: true });
+    await dismissSpotlightIfVisible(page);
     await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('samurai_yokai_attack');
+    console.log('[Samurai E2E] after click action', await page.evaluate(() => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        const player = state?.core?.players?.['0'];
+        return {
+            hand: (player?.hand ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
+            discard: (player?.discard ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
+            interactionSourceId: state?.sys?.interaction?.current?.data?.sourceId ?? null,
+            stateID: state?._stateID ?? null,
+        };
+    }));
 
     await waitForSelectableMinion(page, 'ally-1');
     await saveEvidenceScreenshot(page, testInfo, 'oops-extra-play-before-select');
     await clickSelectableMinion(page, 'ally-1');
 
-    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null, { timeout: 8000 }).toBe('reaction_queue_choose_next');
-    await page.getByRole('button', { name: /妖怪来袭.*随从被消灭后|Yokai Attack.*destroyed/i }).click();
-    await page.waitForTimeout(300);
+    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null, { timeout: 8000 }).toBe(null);
+    console.log('[Samurai E2E] after respond', await page.evaluate(() => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        const player = state?.core?.players?.['0'];
+        return {
+            hand: (player?.hand ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
+            discard: (player?.discard ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
+            interactionSourceId: state?.sys?.interaction?.current?.data?.sourceId ?? null,
+            minionLimit: player?.minionLimit ?? null,
+            actionLimit: player?.actionLimit ?? null,
+            base0Minions: (state?.core?.bases?.[0]?.minions ?? []).map((minion: any) => ({ uid: minion.uid, defId: minion.defId })),
+            stateID: state?._stateID ?? null,
+        };
+    }));
 
     await expect.poll(async () => {
         const state = await game.getState();
         return {
             allyGone: !state.core.bases[0].minions.some((minion: any) => minion.uid === 'ally-1'),
+            actionDiscarded: state.core.players['0'].discard.some((card: any) => card.uid === 'yokai-1'),
+            handEmpty: state.core.players['0'].hand.length === 0,
             minionLimit: state.core.players['0'].minionLimit,
             actionLimit: state.core.players['0'].actionLimit,
         };
     }, { timeout: 8000 }).toEqual({
         allyGone: true,
+        actionDiscarded: true,
+        handEmpty: true,
         minionLimit: 2,
         actionLimit: 2,
     });
