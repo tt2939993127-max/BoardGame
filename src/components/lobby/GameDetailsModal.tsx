@@ -69,7 +69,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
     const confirmJoinModalIdRef = useRef<string | null>(null);
-    const confirmPackageInstallModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
     const gameDisplayName = resolveGameDisplayName(gameManifest ?? { id: gameId, titleKey }, t, gameId);
@@ -320,21 +319,95 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         if (!isPackageManagedMobileGame || isAppUpdateRequiredForMobileGame) {
             return;
         }
+        logger.info('[GameDetailsModal] 请求安装游戏包', {
+            gameId,
+            gameName: gameDisplayName,
+            status: packageInstallCardState.status,
+        });
         requestGamePackageInstall();
-    }, [isAppUpdateRequiredForMobileGame, isPackageManagedMobileGame, requestGamePackageInstall]);
+    }, [
+        gameDisplayName,
+        gameId,
+        isAppUpdateRequiredForMobileGame,
+        isPackageManagedMobileGame,
+        packageInstallCardState.status,
+        requestGamePackageInstall,
+    ]);
 
     const handleCancelPackageInstall = useCallback(() => {
         if (isConfirmingPackageInstall) return;
+        logger.info('[GameDetailsModal] 取消安装游戏包', {
+            gameId,
+            gameName: gameDisplayName,
+            status: packageInstallCardState.status,
+        });
         cancelGamePackageInstall();
-    }, [cancelGamePackageInstall, isConfirmingPackageInstall]);
+    }, [
+        cancelGamePackageInstall,
+        gameDisplayName,
+        gameId,
+        isConfirmingPackageInstall,
+        packageInstallCardState.status,
+    ]);
 
     const handleConfirmPackageInstall = useCallback(async () => {
+        logger.info('[GameDetailsModal] 确认安装游戏包', {
+            gameId,
+            gameName: gameDisplayName,
+            pendingInstall: pendingPackageInstall ? 'yes' : 'no',
+            status: packageInstallCardState.status,
+        });
         await confirmGamePackageInstall();
-    }, [confirmGamePackageInstall]);
+    }, [
+        confirmGamePackageInstall,
+        gameDisplayName,
+        gameId,
+        packageInstallCardState.status,
+        pendingPackageInstall,
+    ]);
 
     const handleRetryPackageInstall = useCallback(() => {
+        logger.info('[GameDetailsModal] 重试安装游戏包', {
+            gameId,
+            gameName: gameDisplayName,
+            status: packageInstallCardState.status,
+            errorMessage: packageInstallCardState.errorMessage,
+        });
         retryGamePackageInstall();
-    }, [retryGamePackageInstall]);
+    }, [
+        gameDisplayName,
+        gameId,
+        packageInstallCardState.errorMessage,
+        packageInstallCardState.status,
+        retryGamePackageInstall,
+    ]);
+
+    useEffect(() => {
+        if (!isPackageManagedMobileGame) {
+            return;
+        }
+
+        logger.info('[GameDetailsModal] 游戏包状态变化', {
+            gameId,
+            gameName: gameDisplayName,
+            pendingInstall: pendingPackageInstall ? 'yes' : 'no',
+            pendingModulePackId: pendingPackageInstall?.modulePackId || '',
+            pendingAssetPackId: pendingPackageInstall?.assetPackId || '',
+            status: packageInstallCardState.status,
+            progressMode: packageInstallCardState.progressMode || '',
+            progressPercent: packageInstallCardState.progressPercent ?? '',
+            errorMessage: packageInstallCardState.errorMessage || '',
+        });
+    }, [
+        gameDisplayName,
+        gameId,
+        isPackageManagedMobileGame,
+        packageInstallCardState.errorMessage,
+        packageInstallCardState.progressMode,
+        packageInstallCardState.progressPercent,
+        packageInstallCardState.status,
+        pendingPackageInstall,
+    ]);
 
     const guardRoomEntryWithPackageState = useCallback(() => {
         if (!isPackageManagedMobileGame) {
@@ -1010,47 +1083,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     }, [closeModal, handleCancelJoin, handleConfirmJoin, openModal, pendingJoin, t]);
 
     useEffect(() => {
-        if (pendingPackageInstall && !confirmPackageInstallModalIdRef.current) {
-            confirmPackageInstallModalIdRef.current = openModal({
-                closeOnBackdrop: true,
-                closeOnEsc: true,
-                lockScroll: true,
-                onClose: () => {
-                    handleCancelPackageInstall();
-                    confirmPackageInstallModalIdRef.current = null;
-                },
-                render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
-                    <GamePackageInstallConfirmModal
-                        gameName={pendingPackageInstall.gameName}
-                        modulePackId={pendingPackageInstall.modulePackId}
-                        assetPackId={pendingPackageInstall.assetPackId}
-                        modulePackBytes={pendingPackageInstall.modulePackBytes}
-                        assetPackBytes={pendingPackageInstall.assetPackBytes}
-                        isLoading={isConfirmingPackageInstall}
-                        closeOnBackdrop={stackCloseOnBackdrop}
-                        onConfirm={handleConfirmPackageInstall}
-                        onCancel={() => {
-                            close();
-                        }}
-                    />
-                ),
-            });
-        }
-
-        if (!pendingPackageInstall && confirmPackageInstallModalIdRef.current) {
-            closeModal(confirmPackageInstallModalIdRef.current);
-            confirmPackageInstallModalIdRef.current = null;
-        }
-    }, [
-        closeModal,
-        handleCancelPackageInstall,
-        handleConfirmPackageInstall,
-        isConfirmingPackageInstall,
-        openModal,
-        pendingPackageInstall,
-    ]);
-
-    useEffect(() => {
         return () => {
             if (confirmModalIdRef.current) {
                 closeModal(confirmModalIdRef.current);
@@ -1059,10 +1091,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             if (confirmJoinModalIdRef.current) {
                 closeModal(confirmJoinModalIdRef.current);
                 confirmJoinModalIdRef.current = null;
-            }
-            if (confirmPackageInstallModalIdRef.current) {
-                closeModal(confirmPackageInstallModalIdRef.current);
-                confirmPackageInstallModalIdRef.current = null;
             }
         };
     }, [closeModal]);
@@ -1479,6 +1507,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         </p>
                     </div>
                 </ModalBase>
+            )}
+
+            {pendingPackageInstall && (
+                <GamePackageInstallConfirmModal
+                    gameName={pendingPackageInstall.gameName}
+                    state={packageInstallCardState}
+                    modulePackId={pendingPackageInstall.modulePackId}
+                    assetPackId={pendingPackageInstall.assetPackId}
+                    modulePackBytes={pendingPackageInstall.modulePackBytes}
+                    assetPackBytes={pendingPackageInstall.assetPackBytes}
+                    isLoading={isConfirmingPackageInstall}
+                    closeOnBackdrop
+                    onConfirm={handleConfirmPackageInstall}
+                    onRetry={handleRetryPackageInstall}
+                    onCancel={handleCancelPackageInstall}
+                />
             )}
 
             {matchEntryLoadingPhase && (

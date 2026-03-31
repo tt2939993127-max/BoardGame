@@ -27,7 +27,7 @@ import { resetGamePackageManagerForTests } from '../../../features/mobile-packag
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
 const closeModalMock = vi.fn();
-const { getGameByIdMock, latestCreateRoomModalProps } = vi.hoisted(() => ({
+const { getGameByIdMock, latestCreateRoomModalProps, latestPackageInstallModalProps } = vi.hoisted(() => ({
     getGameByIdMock: vi.fn((gameId: string) => {
         if (gameId !== 'dicethrone') return null;
         return {
@@ -55,6 +55,7 @@ const { getGameByIdMock, latestCreateRoomModalProps } = vi.hoisted(() => ({
         };
     }),
     latestCreateRoomModalProps: { current: null as null | Record<string, unknown> },
+    latestPackageInstallModalProps: { current: null as null | Record<string, unknown> },
 }));
 
 const buildMockGameManifest = (override: Record<string, unknown> = {}) => ({
@@ -240,7 +241,10 @@ vi.mock('../GameDetailsChangelogSection', () => ({
 }));
 
 vi.mock('../GamePackageInstallConfirmModal', () => ({
-    GamePackageInstallConfirmModal: () => createElement('div', null, 'package-install-confirm'),
+    GamePackageInstallConfirmModal: (props: Record<string, unknown>) => {
+        latestPackageInstallModalProps.current = props;
+        return createElement('div', null, 'package-install-confirm');
+    },
 }));
 
 vi.mock('../../review/GameReviewSection', () => ({
@@ -276,6 +280,7 @@ beforeEach(() => {
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
     latestCreateRoomModalProps.current = null;
+    latestPackageInstallModalProps.current = null;
 });
 
 describe('GameDetailsModal join confirm helpers', () => {
@@ -592,9 +597,17 @@ describe('GameDetailsModal create room ai entry', () => {
         fireEvent.click(screen.getByText('actions.createRoom'));
 
         await waitFor(() => {
-            expect(openModalMock).toHaveBeenCalled();
+            expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
         });
         expect(screen.queryByText('mock-create-room-confirm')).toBeNull();
+        expect(latestPackageInstallModalProps.current).toEqual(
+            expect.objectContaining({
+                gameName: 'games.dicethrone.title',
+                state: expect.objectContaining({
+                    status: 'not-installed',
+                }),
+            }),
+        );
     });
 
     it('下载完成后，package-managed 游戏允许创建房间', async () => {
