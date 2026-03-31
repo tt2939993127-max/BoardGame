@@ -134,13 +134,18 @@
 - **THEN** 系统 MAY 让 Temporal 接管运行历史、信号恢复、超时与重试
 - **AND** `RepoSession`、`DecisionRequest`、节点 I/O schema 与 `ArtifactBundle` 的领域结构 MUST 保持不变
 
-### Requirement: 开源基线与 fork 裁决 SHALL 先于扩模板被文档化
+### Requirement: 开源基线与 fork 裁决 SHALL 先于第一版实现被文档化
 
-系统在扩展到 `new-faction` 之外前 MUST 先形成《开源基线与可复用结论》，并显式裁决是否直接 fork OpenHands、Flowise、n8n、Activepieces 中的任一成熟开源仓库。
+系统在进入 `ai-repo-workbench` 第一版实现前 MUST 先形成《开源基线与可复用结论》，并显式裁决是否直接 fork OpenHands、Flowise、n8n、Activepieces 中的任一成熟开源仓库；研究范围至少覆盖 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu。
 
-#### Scenario: 开源基线先于第二模板
-- **WHEN** 团队计划把工作台从 `new-faction` 扩展到第二模板或通用任务中心
-- **THEN** 文档 MUST 已经比较 OpenHands、Flowise、n8n、Activepieces 的产品定位、可复用能力与关键错位
+#### Scenario: 开源基线先于第一版实现
+- **WHEN** 团队准备开始 `ai-repo-workbench` 第一版 runtime、前端或节点实现
+- **THEN** 文档 MUST 已经比较 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 的成熟做法
+- **AND** 每个候选 MUST 至少明确“它具体提供什么 / 哪些能力可直接借鉴 / 哪些不适合我们”
+
+#### Scenario: fork 裁决必须显式比较产品底座
+- **WHEN** 设计文档给出第一版产品底座结论
+- **THEN** 文档 MUST 显式比较 `fork OpenHands / Flowise / n8n / Activepieces` 与“在现有 BoardGame 基础上扩展”的可行性与代价
 - **AND** 文档 MUST 给出“fork / 不 fork”的明确结论，而不是只列出项目名词
 
 #### Scenario: fork 裁决不能覆盖本地仓库语义

@@ -1,9 +1,10 @@
 ## 0. Baseline & Skeleton Freeze
-- [ ] 0.1 在 `design.md` 前置补齐《开源基线与可复用结论》，基于官方仓库 / 官方文档比较 LangGraph、OpenHands、Flowise、n8n、Activepieces 的产品定位与可复用能力。
-- [ ] 0.2 输出一张硬决策表，至少显式裁决 OpenHands / Flowise / n8n / Activepieces 是否应直接 fork 为底座，并写明为什么 fork / 不 fork。
-- [ ] 0.3 冻结五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，禁止后续实现绕过该分层。
-- [ ] 0.4 明确 LangGraph 只允许位于 `WorkflowOrchestrator` 层，并写清它与 `LocalRuntime`、`RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 的边界。
-- [ ] 0.5 若继续沿用当前技术路线，必须同步记录“为什么成立、风险在哪里、还需要哪些优化”，不能只保留结论。
+- [ ] 0.1 在 `design.md` 前置补齐《开源基线与可复用结论》，基于官方仓库 / 官方文档比较 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 的成熟做法。
+- [ ] 0.2 对每个候选明确写出“它具体提供什么 / 哪些能力可直接借鉴 / 哪些不适合我们”，禁止只点名不展开。
+- [ ] 0.3 输出一张硬决策表，显式比较 `fork OpenHands / Flowise / n8n / Activepieces` 与“在现有 BoardGame 基础上扩展实现”的可行性，并写明为什么 fork / 不 fork。
+- [ ] 0.4 冻结五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，禁止后续实现绕过该分层。
+- [ ] 0.5 明确 LangGraph 只允许位于 `WorkflowOrchestrator` 层，并写清它与 `LocalRuntime`、`RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 的边界。
+- [ ] 0.6 若继续沿用当前技术路线，必须同步记录“为什么成立、风险在哪里、还需要哪些优化”，不能只保留结论。
 
 ## 1. Runtime Foundation
 - [ ] 1.1 定义 `RepoSession`、`WorktreeTask`、`WorkflowRun`、`NodeExecutionRecord` 的持久化 schema，并约束 `new-faction` MVP 必须运行在单一 `WorktreeTask` 内。

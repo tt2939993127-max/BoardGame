@@ -42,24 +42,28 @@
 
 ## 开源基线与可复用结论
 
-### Decision: 先形成官方基线，再做产品裁决
+### Decision: 第一版实现前必须先完成开源对照与底座决策
 
 以下结论只建立在官方仓库 / 官方文档所表达的产品定位上，而不是只引用项目名词：
 
-| 项目 | 官方基线 | 可复用结论 | 明确不复用的部分 | 主要来源 |
+| 候选 | 它具体提供什么 | 哪些能力可直接借鉴 | 哪些不适合我们 | 主要来源 |
 | --- | --- | --- | --- | --- |
-| LangGraph | 面向 long-running、stateful agent 的 low-level orchestration framework，强调 durable execution、human-in-the-loop、checkpoint / resume。 | 适合作为**工作流编排层语义参考**：中断、恢复、checkpoint、deterministic replay。 | 不把它抬升成工作台领域模型本身；不让 LangGraph 类型渗透 `RepoSession`、`DecisionRequest`、`ArtifactBundle`。 | `https://docs.langchain.com/oss/javascript/langgraph/overview`、`https://docs.langchain.com/oss/javascript/langgraph/durable-execution` |
-| OpenHands | 面向 AI-driven development，提供 SDK、CLI、Local GUI、Cloud，能在真实代码仓库上运行代理。 | 适合作为**本地仓库代理执行体验参考**：真实仓库操作、工具反馈、本地 GUI/CLI 协同。 | 不沿用其“聊天 / agent session 是主入口”的产品中心；不把工作台退化成通用 coding agent 外壳。 | `https://github.com/OpenHands/OpenHands` |
-| Flowise | 明确定位为 “Build AI Agents, Visually”，Apache 2.0，长于可视化节点流与运行面板。 | 适合作为**节点可视化与运行详情 UI 参考**。 | 不引入自由拖拽画布作为首版产品中心；不让可视化编排先于领域模板。 | `https://github.com/FlowiseAI/Flowise` |
-| n8n | 明确定位为技术团队工作流自动化平台，强调 400+ integrations、AI capabilities、fair-code license。 | 适合作为**执行历史、失败重试、运行数据可见性**参考。 | 不把项目做成 iPaaS / 集成市场；不以 n8n 的节点生态作为仓库工作流建模基础。 | `https://github.com/n8n-io/n8n` |
-| Activepieces | TypeScript 自动化平台，社区版 MIT，强调 approval / human input / chat-form 接口。 | 适合作为**审批卡片、人机输入界面、低认知负担恢复交互**参考。 | 不继承其 piece marketplace / automation builder 的产品重心。 | `https://github.com/activepieces/activepieces` |
+| LangGraph interrupts / durable execution | 提供图式 agent/workflow 编排、`interrupt` 暂停、checkpoint 持久化、thread/run 级恢复，以及对 deterministic / idempotent / side-effect 包装的明确约束。 | 直接借鉴 `waiting_decision` / resume 语义、checkpoint 思路、可重放节点契约，以及“副作用必须幂等化并与恢复边界解耦”的要求。 | 不适合把 LangGraph graph DSL 直接当成产品底座；它不提供本项目需要的仓库会话、worktree、证据 bundle 与产品化工作台语义。 | `https://docs.langchain.com/oss/python/langgraph/interrupts`、`https://docs.langchain.com/oss/python/langgraph/durable-execution` |
+| OpenHands | 提供面向真实代码仓库的 AI 开发产品：SDK、CLI、本地 GUI、REST API、云/企业形态，以及在本地/沙箱中执行工具与修改代码的能力。 | 直接借鉴“仓库是第一等公民”“工具执行反馈必须可见”“GUI/CLI 共用执行后端”这三点；也借鉴 repository customization 与本地运行时视角。 | 不适合直接作为底座：其主心智仍是对话式通用 coding agent；本地 process sandbox 默认无隔离；Python 主栈与现有 React + Node 产品壳不对齐。 | `https://github.com/OpenHands/OpenHands`、`https://docs.all-hands.dev/openhands/usage/sandboxes/process` |
+| Flowise | 提供可视化 AgentFlow V2，强调独立节点、显式连线、Flow State、执行队列、loops / conditions / HITL 与 checkpoint 恢复。 | 直接借鉴节点时间线可视化、显式共享状态、HITL checkpoint 恢复、结构化 JSON 输出节点思路。 | 不适合直接作为底座：它的核心是通用 AI workflow builder，天然会把产品推回“自由拖拽平台”；而第一版只做固定模板 `new-faction`。 | `https://docs.flowiseai.com/using-flowise/agentflowv2` |
+| n8n | 提供通用 workflow automation，重点在执行历史、Wait 节点、Webhook/Form 恢复，以及面向 AI tool call 的 human review。 | 直接借鉴等待后落库恢复、审批/人工 review 卡片、运行详情对失败节点和输入输出的展示。 | 不适合直接作为底座：其强项是 SaaS/集成自动化，不是本地仓库任务语义；连接器、凭据系统和集成市场都会稀释 `RepoSession / WorktreeTask / ArtifactBundle` 主语义。 | `https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait/`、`https://docs.n8n.io/advanced-ai/human-in-the-loop-tools/` |
+| Activepieces | 提供 piece-based 自动化平台，支持 flow control hooks、webhook/delay pause、approval / human input / chat / form 等低门槛人机交互。 | 直接借鉴 `ctx.run.pause/stop` 这种明确控制流接口，以及 approval / chat / form 的低认知负担交互。 | 不适合直接作为底座：其主语义是 piece / trigger / action，不是 repo/worktree；若硬 fork，仍需大规模逆向改造领域模型。 | `https://github.com/activepieces/activepieces`、`https://www.activepieces.com/docs/build-pieces/piece-reference/flow-control` |
+| Temporal | 提供强 durable orchestration、Event History、command/event 回放、signals / queries，以及对 deterministic workflow code 的强约束。 | 直接借鉴“事件历史是恢复真相源”“signal / update 负责外部输入恢复”“工作流代码必须确定性”这些编排原则；适合作为未来 `LocalRuntime` 的替代执行器。 | 不适合第一版直接接入：它是基础设施级编排内核，不是现成产品底座；过早引入会把 MVP 升级成分布式 workflow 平台工程。 | `https://docs.temporal.io/workflows`、`https://docs.temporal.io/encyclopedia/event-history` |
+| Dagu | 提供 local-first、YAML/file-based、单二进制、轻运维 Web UI，以及 shell/http/docker/ssh 等步骤编排。 | 直接借鉴 local-first、轻运维、执行详情可见性与低基础设施成本的取向。 | 不适合直接作为底座：它是 shell-first / scheduler-first 的 DAG 引擎，更像运维编排器，不是 repo-aware AI workbench。 | `https://github.com/dagu-org/dagu`、`https://docs.dagu.sh/writing-workflows/examples` |
 
 基于这组官方基线，第一版可复用结论固定如下：
 
 1. **工作台的核心不是聊天，也不是自由画布，而是“仓库模板工作流 + 决策暂停 + 证据交付”。**
 2. **LangGraph 最多是编排层基础设施，不是领域模型来源。**
 3. **仓库本地执行语义必须由本项目自定义的 `RepoSession / WorktreeTask / ArtifactBundle` 持有，而不是从现成自动化平台反推。**
-4. **UI 可以借鉴 Flowise / Activepieces，执行可见性可以借鉴 n8n，仓库执行体验可以借鉴 OpenHands，但产品骨架不能被任何单个外部项目接管。**
+4. **UI 可以借鉴 Flowise / Activepieces，执行可见性可以借鉴 n8n，仓库执行体验可以借鉴 OpenHands，durable orchestration 原则可以借鉴 LangGraph / Temporal，local-first 运营方式可以借鉴 Dagu，但产品骨架不能被任何单个外部项目接管。**
+
+本轮未额外把这些开源仓库拉到本地做对照；原因是官方文档与官方仓库首页已经足以回答“产品提供什么 / 可借鉴什么 / 为什么不适合作为底座”。若后续进入实现并需要核对具体目录边界，再按需做浅克隆。
 
 ## Fork 评估与底座裁决
 
@@ -73,11 +77,13 @@
 | Flowise | 中 | 现成的可视化节点流、运行面板、低门槛 AI workflow UI。 | 产品中心是 visual builder；若直接 fork，MVP 很容易退回“先有画布，再找模板”。 | **不 fork**。只借 UI 表达与节点可视化思路。 |
 | n8n | 中低 | 执行历史、失败节点、重试、成熟集成与运维形态。 | iPaaS / automation 平台心智太强，且 fair-code 许可会让底座策略更复杂。 | **不 fork**。只借执行历史与失败可见性模式。 |
 | Activepieces | 中 | TypeScript 栈、人机审批 / 表单输入做得更贴近我们需要。 | 依然是 automation / piece 生态中心，不是 repo-local 工作流中心。 | **不 fork**。只借 approval / input UX 模式。 |
+| 现有 BoardGame 基础上扩展 | 高 | 完整复用现有 React 19、Node、认证、上传、OpenSpec、E2E、证据文档和本地开发链路。 | 需要自己补齐 workflow runtime、决策卡片、运行详情页与 durable resume 最小集。 | **采用**。这是第一版唯一底座路线。 |
 
 最终裁决：
 
 - **最正确方案：不直接 fork，上层自定义领域骨架，下层按需吸收成熟项目的局部模式。**
 - 理由不是“改动最小”，而是**架构正确性最高**：我们要先把 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 这套仓库工作台语义定成唯一真实来源，任何直接 fork 都会先继承对方的主语义，再被迫做大规模逆向改造。
+- 与其把 OpenHands / Flowise / n8n / Activepieces 其中之一硬改成 repo-aware workbench，不如在现有 BoardGame 基础上直接扩展；这样能保留现有用户系统、上传链路、规则文档、OpenSpec、E2E 与证据体系，避免“先拆自己，再装回去”。
 - 若未来目标切换为“聊天式 coding agent 平台”，再重新评估以 OpenHands 为底座；若未来目标切换为“通用自动化 / SaaS 集成市场”，再重新评估 n8n / Activepieces。当前目标下，两类 fork 都不是最正确路线。
 
 ## MVP Boundary
@@ -592,26 +598,6 @@ MVP **不** 让 `LocalRuntime` 负责：
 
 未来若切到 Temporal，只替换这些接口背后的执行器，不重写业务节点语义。
 
-## Open Source Reference Mapping
-
-### Decision: 只借鉴成熟项目中与“仓库工作流”直接相关的部分
-
-| 参考项目 | 借鉴点 | 不照搬点 | 对本设计的直接影响 |
-| --- | --- | --- | --- |
-| LangGraph | `interrupt`、durable execution、resume 语义 | 不引入通用 agent graph DSL 作为首版产品 | `DecisionRequest` 与 `waiting_decision` / checkpoint 设计 |
-| OpenHands | 本地工作区执行、对代码仓库的真实操作、工具运行反馈 | 不以聊天框作为主入口，不复刻其全量代理能力 | `RepoSession`、`WorktreeTask`、本地工具执行视角 |
-| Flowise | 节点式执行可视化、运行记录面板 | 不开放自由拖拽编排器 | 前端用节点卡片展示输入/输出/状态 |
-| n8n | 执行历史、失败节点可见性、阶段性运行数据 | 不引入通用 SaaS 集成市场 | `NodeExecutionRecord`、运行轨迹与错误可见性 |
-| Activepieces | approval / human input 卡片、低认知负担的人机交互 | 不做面向大众自动化的广场模板体系 | 决策节点 UI 与阻塞态设计 |
-| Temporal | 长时工作流、signal/update、可靠恢复 | 第一版不直接接入、不把基础设施侵入领域模型 | 未来编排适配边界 |
-| Dagu | local-first、轻量 Web UI、低运维调度观 | 不走 shell-first 全局调度器产品路线 | 先做本地执行器而非先上分布式平台 |
-
-### 采用规则
-
-1. 借鉴交互与编排语义，不复制别人的产品边界。
-2. 凡是会把 MVP 从“新建派系”拉回“通用自动化平台”的能力，一律延后。
-3. 凡是会破坏本地仓库安全边界的“云端透明执行”能力，一律不进入第一版。
-
 ## Selection Validity / Risks / Optimizations
 
 ### Decision: 当前技术选型仍成立，但必须带着风险表推进
@@ -655,11 +641,12 @@ MVP **不** 让 `LocalRuntime` 负责：
 
 ## Migration Plan
 
-1. 先发布 `ai-repo-workbench` capability spec，明确 MVP 只支持 `new-faction`。
-2. 先用 local-first runtime 打通节点执行、暂停/恢复、证据回传。
-3. 第二阶段再增加“生成派系代码骨架 + 本地预览 + E2E”子流程。
-4. 第三阶段再评估是否需要把执行器切换为 Temporal-backed runtime。
-5. 在 `new-faction` 验证稳定后，再复制同一套领域模型到“数据录入 / Bug 修复”等模板。
+1. 先完成《开源基线与可复用结论》与底座决策，锁定“在现有 BoardGame 基础上扩展，不 fork 外部产品”。
+2. 再发布 `ai-repo-workbench` capability spec，明确 MVP 只支持 `new-faction`。
+3. 先用 local-first runtime 打通节点执行、暂停/恢复、证据回传。
+4. 第二阶段再增加“生成派系代码骨架 + 本地预览 + E2E”子流程。
+5. 第三阶段再评估是否需要把执行器切换为 Temporal-backed runtime。
+6. 在 `new-faction` 验证稳定后，再复制同一套领域模型到“数据录入 / Bug 修复”等模板。
 
 ## Open Questions
 
