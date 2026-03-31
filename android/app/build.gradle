@@ -2,7 +2,32 @@ import java.util.Properties
 import groovy.json.JsonSlurper
 
 apply plugin: 'com.android.application'
-archivesBaseName = 'easyboardgame'
+def archiveBaseNameOverride = (
+    project.findProperty('androidArchiveBaseName')
+        ?: System.getenv('ANDROID_ARCHIVE_BASE_NAME')
+        ?: 'easyboardgame'
+).toString().trim()
+archivesBaseName = archiveBaseNameOverride ?: 'easyboardgame'
+
+def packageJsonFile = rootProject.file('../package.json')
+def packageJson = packageJsonFile.exists() ? new JsonSlurper().parse(packageJsonFile) : [:]
+def packageVersionName = (packageJson.version ?: '1.0.0').toString()
+def parseAndroidVersionCode = { versionName ->
+    def segments = versionName
+        .split('\\.')
+        .collect { segment ->
+            def numeric = (segment =~ /\d+/)
+            numeric.find() ? Integer.parseInt(numeric.group(0)) : 0
+        }
+
+    while (segments.size() < 3) {
+        segments << 0
+    }
+
+    return (segments[0] * 10000) + (segments[1] * 100) + segments[2]
+}
+// 保持原生版本与 package.json 单一真实来源一致，避免 OTA targetNativeVersion 对不齐。
+def packageVersionCode = parseAndroidVersionCode(packageVersionName)
 
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
@@ -32,8 +57,8 @@ android {
         applicationId "top.easyboardgame.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode packageVersionCode
+        versionName packageVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -50,6 +75,12 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+android.applicationVariants.configureEach { variant ->
+    variant.outputs.configureEach { output ->
+        outputFileName = "${archivesBaseName}-${variant.buildType.name}.apk"
     }
 }
 

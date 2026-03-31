@@ -23,6 +23,8 @@ import { getLayoutConfig } from './layoutConfig';
 import { useArmedActivation } from '../../../hooks/ui/useArmedActivation';
 import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
 
+const USED_STATE_CLASS = 'border-slate-400 ring-2 ring-slate-300/80 shadow-[0_0_12px_rgba(148,163,184,0.32)]';
+
 // ============================================================================
 // Base Zone: The "Battlefield"
 // ============================================================================
@@ -200,6 +202,7 @@ export const BaseZone: React.FC<{
         const isOngoingActivationArmed = isActivationArmed(ongoingActivationKey);
         const isSelectableOngoing = !!selectableOngoingUids?.has(oa.uid);
         const isDimmedOngoing = !!selectableOngoingUids && !selectableOngoingUids.has(oa.uid);
+        const showUsedOngoingState = hasOngoingTalent && oa.talentUsed && !canUseOngoingTalent;
 
         return (
             <motion.div
@@ -231,7 +234,11 @@ export const BaseZone: React.FC<{
                         ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
                         : isOngoingActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
-                        : canUseOngoingTalent ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : `${pConf.border} ${pConf.shadow}`}`}
+                        : canUseOngoingTalent
+                        ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]'
+                        : showUsedOngoingState
+                        ? USED_STATE_CLASS
+                        : `${pConf.border} ${pConf.shadow}`}`}
                 style={{
                     width: `${layout.ongoingCardWidth}vw`,
                     marginLeft: isFirstInGroup ? '0vw' : `-${ongoingCardOverlap}vw`,
@@ -290,6 +297,7 @@ export const BaseZone: React.FC<{
         const canActivateTitan = canUseTitanTalent || canUseTitanOngoing;
         const titanActivationKey = `titan-${titan.uid}`;
         const isTitanActivationArmed = isActivationArmed(titanActivationKey);
+        const showUsedTitanState = titan.talentUsed && !canActivateTitan;
 
         return (
             <motion.div
@@ -311,19 +319,29 @@ export const BaseZone: React.FC<{
                         return;
                     }
                     if (canUseTitanTalent) {
-                        armOrActivate(titanActivationKey, {
-                            onActivate: () => {
-                                dispatch(SU_COMMANDS.USE_TALENT, { titanUid: titan.uid, baseIndex });
-                            },
-                        });
+                        if (isCoarsePointer) {
+                            armOrActivate(titanActivationKey, {
+                                onActivate: () => {
+                                    dispatch(SU_COMMANDS.USE_TALENT, { titanUid: titan.uid, baseIndex });
+                                },
+                            });
+                            return;
+                        }
+                        clearArmedActivation();
+                        dispatch(SU_COMMANDS.USE_TALENT, { titanUid: titan.uid, baseIndex });
                         return;
                     }
                     if (canUseTitanOngoing) {
-                        armOrActivate(titanActivationKey, {
-                            onActivate: () => {
-                                dispatch(SU_COMMANDS.ACTIVATE_TITAN_ONGOING, { titanUid: titan.uid, baseIndex });
-                            },
-                        });
+                        if (isCoarsePointer) {
+                            armOrActivate(titanActivationKey, {
+                                onActivate: () => {
+                                    dispatch(SU_COMMANDS.ACTIVATE_TITAN_ONGOING, { titanUid: titan.uid, baseIndex });
+                                },
+                            });
+                            return;
+                        }
+                        clearArmedActivation();
+                        dispatch(SU_COMMANDS.ACTIVATE_TITAN_ONGOING, { titanUid: titan.uid, baseIndex });
                         return;
                     }
                     clearArmedActivation();
@@ -335,6 +353,8 @@ export const BaseZone: React.FC<{
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                         : canActivateTitan
                         ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]'
+                        : showUsedTitanState
+                        ? USED_STATE_CLASS
                         : `${pConf.border} ${pConf.shadow}`}`}
                 style={{ width: `${titanCardWidth}vw` }}
                 initial={{ y: 20, opacity: 0, scale: 0.7 }}
@@ -769,13 +789,13 @@ export const BaseZone: React.FC<{
 
 /** 附着行动卡角标（纯视觉提示，不含交互） */
 const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
-    <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
-        bg-purple-600 border-[0.1vw] border-white shadow-md
+    <div className="absolute -top-[8%] -right-[8%] h-[24%] w-[24%] rounded-full
+        bg-purple-600 border-2 border-white shadow-md
         flex items-center justify-center pointer-events-none z-30">
-        <Paperclip className="w-[0.6vw] h-[0.6vw] text-white" strokeWidth={3} />
+        <Paperclip className="h-[58%] w-[58%] text-white" strokeWidth={3} />
         {count > 1 && (
-            <span className="absolute -top-[0.15vw] -right-[0.15vw] w-[0.5vw] h-[0.5vw] rounded-full
-                bg-amber-400 text-[0.3vw] font-black text-slate-900 flex items-center justify-center border border-white">
+            <span className="absolute -top-[14%] -right-[14%] h-[46%] w-[46%] rounded-full
+                bg-amber-400 text-[clamp(5px,0.3vw,8px)] font-black text-slate-900 flex items-center justify-center border border-white">
                 {count}
             </span>
         )}
@@ -953,6 +973,7 @@ const MinionCard: React.FC<{
 
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
+    const showUsedMinionState = hasTalent && minion.talentUsed && !canActivate;
 
     return (
         <motion.div
@@ -978,9 +999,13 @@ const MinionCard: React.FC<{
                     ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
                     : canActivate
                     ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                    : showUsedMinionState
+                    ? `cursor-pointer ${USED_STATE_CLASS}`
                     : 'cursor-pointer border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
                     : canActivate
                     ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
+                    : showUsedMinionState
+                    ? `cursor-pointer ${USED_STATE_CLASS}`
                     : `cursor-pointer ${conf.border} ${conf.shadow}`}
             `}
             style={style}
@@ -1114,6 +1139,7 @@ const MinionCard: React.FC<{
                             const canUseAATalent = hasAATalent && !aa.talentUsed && isMyTurn && aa.ownerId === myPlayerId;
                             const attachedActivationKey = `attached-${aa.uid}`;
                             const isAttachedActivationArmed = isActivationArmed(attachedActivationKey);
+                            const showUsedAttachedState = hasAATalent && aa.talentUsed && !canUseAATalent;
                             return (
                                 <motion.div
                                     key={aa.uid}
@@ -1147,6 +1173,8 @@ const MinionCard: React.FC<{
                                             ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.75)]'
                                             : canUseAATalent
                                             ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]'
+                                            : showUsedAttachedState
+                                            ? USED_STATE_CLASS
                                             : 'border-purple-400 ring-1 ring-purple-300/50'
                                         }`}
                                     title={actionTitle}

@@ -11,11 +11,6 @@ export function shouldHideChildWindows(env = process.env) {
     return true;
   }
 
-  // Codex Windows 环境下，隐藏子进程窗口会触发 spawn EPERM。
-  if (env.CODEX_MANAGED_BY_NPM === '1') {
-    return false;
-  }
-
   return true;
 }
 
