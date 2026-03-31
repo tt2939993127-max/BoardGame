@@ -802,10 +802,10 @@ describe('王权骰铸流程测试', () => {
             expect(state.core.players['2'].discard.some((card) => card.id === 'card-flick')).toBe(true);
             expect(state.sys.responseWindow?.current?.responderQueue).toEqual(['0']);
             expect(state.sys.interaction.current?.playerId).toBe('2');
-            expect(state.sys.interaction.current?.kind).toBe('multistep-choice');
-            expect((state.sys.interaction.current?.data as { meta?: { dtType?: string; diceOwnerId?: PlayerId; targetOpponentDice?: boolean } } | undefined)?.meta?.dtType).toBe('modifyDie');
-            expect((state.sys.interaction.current?.data as { meta?: { dtType?: string; diceOwnerId?: PlayerId; targetOpponentDice?: boolean } } | undefined)?.meta?.diceOwnerId).toBe('3');
-            expect((state.sys.interaction.current?.data as { meta?: { dtType?: string; diceOwnerId?: PlayerId; targetOpponentDice?: boolean } } | undefined)?.meta?.targetOpponentDice).toBe(true);
+            expect(state.sys.interaction.current?.kind).toBe('dt:card-interaction');
+            expect((state.sys.interaction.current?.data as { type?: string; targetPlayerIds?: PlayerId[]; resolveCustomActionId?: string } | undefined)?.type).toBe('selectPlayer');
+            expect((state.sys.interaction.current?.data as { type?: string; targetPlayerIds?: PlayerId[]; resolveCustomActionId?: string } | undefined)?.targetPlayerIds).toEqual(['1', '3']);
+            expect((state.sys.interaction.current?.data as { type?: string; targetPlayerIds?: PlayerId[]; resolveCustomActionId?: string } | undefined)?.resolveCustomActionId).toBe('resolve-card-effects-on-selected-opponent');
         });
 
         it('4 人模式在进攻阶段结算后会先进入 targetingRoll', () => {
