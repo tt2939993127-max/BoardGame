@@ -1699,6 +1699,20 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
         }
 
+        if (to === 'playCards' && from === 'startTurn' && (state.sys as any)._smashupStartTurnWindowActive) {
+            return {
+                events,
+                updatedState: {
+                    ...state,
+                    sys: {
+                        ...state.sys,
+                        _smashupStartTurnWindowActive: undefined,
+                        _waitForStartTurnInteractionReduce: undefined,
+                    } as any,
+                },
+            } as PhaseEnterResult;
+        }
+
         return events;
     },
 
@@ -1727,6 +1741,9 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
         // startTurn 鑷姩鎺ㄨ繘鍒?playCards
         if (phase === 'startTurn') {
+            if ((state.sys as any)._waitForStartTurnInteractionReduce) {
+                return undefined;
+            }
             return { autoContinue: true, playerId: pid };
         }
 
