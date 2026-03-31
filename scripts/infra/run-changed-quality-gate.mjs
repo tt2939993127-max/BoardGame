@@ -563,20 +563,28 @@ function commandToLine(command, args) {
   return [command, ...args].map(quoteArg).join(' ');
 }
 
+function shouldDirectSpawnOnWindows(command) {
+  if (process.platform !== 'win32') return true;
+  const normalized = command.trim().toLowerCase();
+  return path.isAbsolute(command)
+    || normalized.endsWith('.exe')
+    || normalized.endsWith('.com');
+}
+
 function runCommand({ label, reason, command, args }) {
   console.log(`\n[changed-quality-gate] ${label}`);
   console.log(`[changed-quality-gate] 原因: ${reason}`);
   console.log(`[changed-quality-gate] 命令: ${commandToLine(command, args)}`);
 
   const startAt = Date.now();
-  const result = process.platform === 'win32'
-    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
+  const result = shouldDirectSpawnOnWindows(command)
+    ? spawnSync(command, args, {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
         env: process.env,
       })
-    : spawnSync(command, args, {
+    : spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
