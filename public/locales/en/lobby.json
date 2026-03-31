@@ -108,6 +108,8 @@
     "notInstalledHint": "Before entering {{game}} on mobile, download its local game resource pack first.",
     "installedTitle": "Ready to play",
     "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
+    "installedCompletedBadge": "Completed",
+    "installedVersionBadge": "Completed · {{version}}",
     "installAction": "Install Pack",
     "confirmEyebrow": "Install Confirm",
     "confirmTitle": "Download {{game}} packages",

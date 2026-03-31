@@ -108,6 +108,8 @@
     "notInstalledHint": "首次进入 {{game}} 前，需要先下载对应的游戏资源包。",
     "installedTitle": "已可进入",
     "installedHint": "{{game}} 的移动端包已就绪，可以直接进入对局。",
+    "installedCompletedBadge": "已完成",
+    "installedVersionBadge": "已完成 · {{version}}",
     "installAction": "安装游戏包",
     "confirmEyebrow": "安装确认",
     "confirmTitle": "下载 {{game}} 游戏包",

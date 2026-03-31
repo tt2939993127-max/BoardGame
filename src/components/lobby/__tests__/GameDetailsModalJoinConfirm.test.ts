@@ -87,13 +87,14 @@ const toastMock = {
     error: vi.fn(),
 };
 
-const markGamePackageInstalled = (gameId = 'dicethrone') => {
+const markGamePackageInstalled = (gameId = 'dicethrone', installedVersion?: string) => {
     window.localStorage.setItem(`mobile-package-state:${gameId}`, JSON.stringify({
         gameId,
         runtimeChannel: 'stable',
         status: 'installed',
         modulePackId: gameId,
         assetPackId: gameId,
+        installedVersion,
         updatedAt: Date.now(),
     }));
 };
@@ -618,6 +619,16 @@ describe('GameDetailsModal create room ai entry', () => {
         await waitFor(() => {
             expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
         });
+    });
+
+    it('已下载 package-managed 游戏时，房间详情页左下角显示单个绿色完成版本标而非下载卡片', () => {
+        markGamePackageInstalled('dicethrone', '0.5.0');
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.getByTestId('game-details-mobile-package-installed-badge')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installedCompletedBadge')).toBeNull();
     });
 
     it('标记必须更新时，渲染移动端更新提示入口', () => {

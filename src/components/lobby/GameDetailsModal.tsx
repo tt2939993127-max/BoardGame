@@ -103,6 +103,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         ).Capacitor?.isNativePlatform() === true;
     const shouldShowMobilePackageCard = isPackageManagedMobileGame
         && (isAppUpdateRequiredForMobileGame || !isPackageInstalledForMobileGame);
+    const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
+    const shouldShowInstalledPackageBadge = isPackageManagedMobileGame
+        && !isAppUpdateRequiredForMobileGame
+        && isPackageInstalledForMobileGame;
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -1252,6 +1256,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
                                 className={isNativeCapacitorRuntime ? '' : 'md:hidden'}
                             />
+                        </div>
+                    )}
+
+                    {shouldShowInstalledPackageBadge && (
+                        <div
+                            data-testid="game-details-mobile-package-installed-badge"
+                            className={clsx(
+                                'pointer-events-none absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)]',
+                                !isNativeCapacitorRuntime && 'md:hidden',
+                            )}
+                        >
+                            <span className="inline-flex rounded-full border border-emerald-700/25 bg-emerald-50/92 px-2.5 py-1 text-[10px] font-semibold tracking-[0.04em] text-emerald-900 shadow-[0_8px_18px_rgba(5,150,105,0.16)] backdrop-blur-sm">
+                                {installedPackageVersionLabel
+                                    ? t('packageManager.installedVersionBadge', { version: installedPackageVersionLabel })
+                                    : t('packageManager.installedCompletedBadge')}
+                            </span>
                         </div>
                     )}
 
