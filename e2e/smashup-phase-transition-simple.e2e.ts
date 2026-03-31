@@ -625,7 +625,7 @@ test('Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行�
             deck: [],
             discard: [],
             field: [
-                { uid: 'ally-1', defId: 'samurai_samurai_chan', baseIndex: 0, owner: '0', controller: '0', power: 2 },
+                { uid: 'ally-1', defId: 'samurai_ronin', baseIndex: 0, owner: '0', controller: '0', power: 3 },
             ],
             minionsPlayed: 0,
             minionLimit: 1,
@@ -658,37 +658,12 @@ test('Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行�
     await page.locator('[data-testid="su-hand-area"] [data-card-uid="yokai-1"]').click({ force: true });
     await dismissSpotlightIfVisible(page);
     await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('samurai_yokai_attack');
-    console.log('[Samurai E2E] after click action', await page.evaluate(() => {
-        const harness = (window as any).__BG_TEST_HARNESS__;
-        const state = harness?.state?.get?.();
-        const player = state?.core?.players?.['0'];
-        return {
-            hand: (player?.hand ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
-            discard: (player?.discard ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
-            interactionSourceId: state?.sys?.interaction?.current?.data?.sourceId ?? null,
-            stateID: state?._stateID ?? null,
-        };
-    }));
 
     await waitForSelectableMinion(page, 'ally-1');
     await saveEvidenceScreenshot(page, testInfo, 'oops-extra-play-before-select');
     await clickSelectableMinion(page, 'ally-1');
 
     await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null, { timeout: 8000 }).toBe(null);
-    console.log('[Samurai E2E] after respond', await page.evaluate(() => {
-        const harness = (window as any).__BG_TEST_HARNESS__;
-        const state = harness?.state?.get?.();
-        const player = state?.core?.players?.['0'];
-        return {
-            hand: (player?.hand ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
-            discard: (player?.discard ?? []).map((card: any) => ({ uid: card.uid, defId: card.defId })),
-            interactionSourceId: state?.sys?.interaction?.current?.data?.sourceId ?? null,
-            minionLimit: player?.minionLimit ?? null,
-            actionLimit: player?.actionLimit ?? null,
-            base0Minions: (state?.core?.bases?.[0]?.minions ?? []).map((minion: any) => ({ uid: minion.uid, defId: minion.defId })),
-            stateID: state?._stateID ?? null,
-        };
-    }));
 
     await expect.poll(async () => {
         const state = await game.getState();

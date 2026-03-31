@@ -1,5 +1,15 @@
 # Android App 构建自动化
 
+## GitHub Actions 配置口径（先看这里）
+
+- Android Release / OTA workflow 默认优先读取与 `.env.example` 一致的同名配置。
+- 后端地址优先使用 GitHub Variables 的 `VITE_BACKEND_URL`。
+- `ANDROID_VITE_BACKEND_URL` 只作为兼容旧配置的别名，不再是唯一入口。
+- OTA 对象存储仍使用 GitHub Secrets：`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME`。
+- 推荐最小配置：
+  - Variables: `VITE_BACKEND_URL`、`VITE_ASSETS_BASE_URL`、`ANDROID_OTA_AUTO_CHANNEL`、`CAPACITOR_APP_ID`、`CAPACITOR_APP_NAME`
+  - Secrets: `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME`
+
 ## 命令
 
 - `npm run mobile:android:doctor`
@@ -254,7 +264,6 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 需要的 GitHub Secrets：
 
-- `ANDROID_VITE_BACKEND_URL`
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
@@ -262,11 +271,17 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 可选 GitHub Variables：
 
+- `VITE_BACKEND_URL`
 - `VITE_ASSETS_BASE_URL`
 - `ANDROID_OTA_AUTO_CHANNEL`
 - `ANDROID_OTA_APP_READY_TIMEOUT_MS`
 - `CAPACITOR_APP_ID`
 - `CAPACITOR_APP_NAME`
+
+兼容旧配置：
+
+- `ANDROID_VITE_BACKEND_URL`
+- `secrets.VITE_BACKEND_URL`
 
 推荐 Environment：
 
