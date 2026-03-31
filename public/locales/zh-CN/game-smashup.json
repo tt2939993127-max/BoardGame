@@ -73,6 +73,8 @@
     "preview_cards": "包含卡牌预览",
     "faction_titan_preview": "泰坦预览",
     "faction_titan_missing": "该种族泰坦暂未接入",
+    "faction_variant_base": "原版",
+    "faction_variant_pod": "POD版",
     "minion": "随从",
     "action": "战术",
     "discard_badge": "丢弃",

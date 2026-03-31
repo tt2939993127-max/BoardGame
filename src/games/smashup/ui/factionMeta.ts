@@ -1,4 +1,3 @@
-
 import {
     Anchor,
     Axe,
@@ -34,6 +33,32 @@ export interface FactionMeta {
     descriptionKey: string;
     /** 可选：限制仅在哪些语言界面中显示此阵营，不填则全语言显示 */
     locales?: string[];
+}
+
+export interface FactionVariantGroup {
+    groupId: string;
+    icon: FactionMeta['icon'];
+    color: string;
+    variants: FactionMeta[];
+}
+
+const POD_SUFFIX = '_pod';
+
+function toFactionGroupId(factionId: string): string {
+    return factionId.endsWith(POD_SUFFIX) ? factionId.slice(0, -POD_SUFFIX.length) : factionId;
+}
+
+function isFactionVisibleInLocale(faction: FactionMeta, locale: string): boolean {
+    return !faction.locales || faction.locales.includes(locale);
+}
+
+function preferBaseVariant(variants: FactionMeta[], locale: string): FactionMeta {
+    const visibleVariants = variants.filter((variant) => isFactionVisibleInLocale(variant, locale));
+    const candidates = visibleVariants.length > 0 ? visibleVariants : variants;
+
+    return candidates.find((variant) => !variant.id.endsWith(POD_SUFFIX))
+        ?? candidates[0]
+        ?? variants[0];
 }
 
 export const FACTION_METADATA: FactionMeta[] = [
@@ -85,8 +110,62 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.NINJAS_POD, nameKey: 'factions.ninjas_pod.name', icon: ShurikenIcon, color: '#991b1b', descriptionKey: 'factions.ninjas_pod.description' },
 ];
 
+export const FACTION_VARIANT_GROUPS: FactionVariantGroup[] = (() => {
+    const groups = new Map<string, FactionVariantGroup>();
+
+    for (const faction of FACTION_METADATA) {
+        const groupId = toFactionGroupId(faction.id);
+        const existing = groups.get(groupId);
+        if (existing) {
+            existing.variants.push(faction);
+            continue;
+        }
+
+        groups.set(groupId, {
+            groupId,
+            icon: faction.icon,
+            color: faction.color,
+            variants: [faction],
+        });
+    }
+
+    return Array.from(groups.values()).map((group) => ({
+        ...group,
+        variants: [...group.variants].sort((left, right) => {
+            const leftScore = left.id.endsWith(POD_SUFFIX) ? 1 : 0;
+            const rightScore = right.id.endsWith(POD_SUFFIX) ? 1 : 0;
+            return leftScore - rightScore;
+        }),
+    }));
+})();
+
 export function getVisibleFactionMetadata(locale: string): FactionMeta[] {
-    return FACTION_METADATA.filter((faction) => !faction.locales || faction.locales.includes(locale));
+    return FACTION_METADATA.filter((faction) => isFactionVisibleInLocale(faction, locale));
+}
+
+export function getVisibleFactionVariantGroups(locale: string): Array<FactionVariantGroup & { defaultVariant: FactionMeta }> {
+    return FACTION_VARIANT_GROUPS
+        .map((group) => {
+            const visibleVariants = group.variants.filter((variant) => isFactionVisibleInLocale(variant, locale));
+            if (visibleVariants.length === 0) return null;
+            return {
+                ...group,
+                variants: visibleVariants,
+                defaultVariant: preferBaseVariant(group.variants, locale),
+            };
+        })
+        .filter((group): group is FactionVariantGroup & { defaultVariant: FactionMeta } => Boolean(group));
+}
+
+export function getFactionVariantGroupById(factionId: string): FactionVariantGroup | undefined {
+    const groupId = toFactionGroupId(factionId);
+    return FACTION_VARIANT_GROUPS.find((group) => group.groupId === groupId);
+}
+
+export function getPreferredFactionVariant(groupId: string, locale: string): FactionMeta | undefined {
+    const group = getFactionVariantGroupById(groupId);
+    if (!group) return undefined;
+    return preferBaseVariant(group.variants, locale);
 }
 
 export function getFactionMeta(id: string): FactionMeta | undefined {

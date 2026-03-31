@@ -73,6 +73,8 @@
     "preview_cards": "Included Card Preview",
     "faction_titan_preview": "Titan Preview",
     "faction_titan_missing": "This faction's titan is not available yet",
+    "faction_variant_base": "Base",
+    "faction_variant_pod": "POD",
     "minion": "Minion",
     "action": "Action",
     "discard_badge": "Discard",
