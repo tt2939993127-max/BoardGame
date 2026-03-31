@@ -3,9 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LoadingScreen } from './LoadingScreen';
 import { UI_Z_INDEX } from '../../core';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
+import { useCoarsePointer } from '../../hooks/ui/useCoarsePointer';
 
-/** 连接超时阈值（毫秒） */
+/** 桌面端连接超时阈值（毫秒） */
 const CONNECTION_TIMEOUT_MS = 15_000;
+/** 移动端/粗指针设备更容易遇到资源慢加载，延后显示“重试” */
+const SLOW_DEVICE_CONNECTION_TIMEOUT_MS = 45_000;
 
 interface ConnectionLoadingScreenProps {
     title?: string;
@@ -13,6 +17,10 @@ interface ConnectionLoadingScreenProps {
     gameId?: string;
     onRetry?: () => void;
     anchor?: 'viewport' | 'container';
+    /** 真实进度/阶段变化时传入变化 key，用于重置超时 */
+    activityKey?: string;
+    /** 已知仍在下载/安装/校验等活跃阶段时，禁止显示“重试” */
+    suppressTimeout?: boolean;
 }
 
 /**
@@ -28,17 +36,30 @@ export const ConnectionLoadingScreen = ({
     gameId,
     onRetry,
     anchor = 'viewport',
+    activityKey,
+    suppressTimeout = false,
 }: ConnectionLoadingScreenProps) => {
     const { t } = useTranslation('lobby');
     const navigate = useNavigate();
+    const isMobileViewport = useMobileViewport();
+    const isCoarsePointer = useCoarsePointer();
     const [timedOut, setTimedOut] = useState(false);
+    const timeoutMs = (isMobileViewport || isCoarsePointer)
+        ? SLOW_DEVICE_CONNECTION_TIMEOUT_MS
+        : CONNECTION_TIMEOUT_MS;
 
     useEffect(() => {
+        if (suppressTimeout) {
+            setTimedOut(false);
+            return undefined;
+        }
+
+        setTimedOut(false);
         const timer = window.setTimeout(() => {
             setTimedOut(true);
-        }, CONNECTION_TIMEOUT_MS);
+        }, timeoutMs);
         return () => window.clearTimeout(timer);
-    }, []);
+    }, [activityKey, suppressTimeout, timeoutMs]);
 
     const handleRetry = useCallback(() => {
         if (onRetry) {
