@@ -105,16 +105,23 @@ export const CreateRoomModal = ({
 
     useEffect(() => {
         if (!isOpen) return;
+        const hasSavedPreferences = initialPreferences != null;
         const nextPreferences = normalizeLocalMatchPreferences(
             gameManifest,
             (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
         );
-        const nextSeatControllers = forceHumanOwnerSeat(nextPreferences.seatControllers);
+        const nextSeatControllers = hasSavedPreferences
+            ? forceHumanOwnerSeat(nextPreferences.seatControllers)
+            : forceHumanOwnerSeat(
+                Object.fromEntries(
+                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+                ),
+            );
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
