@@ -257,6 +257,37 @@ const OnlineAiSeatBridge = ({
     return null;
 };
 
+const OnlineRoomConnectionLoading = ({
+    title,
+    description,
+    gameId,
+}: {
+    title: string;
+    description: string;
+    gameId?: string;
+}) => {
+    const { state, isConnected, matchPlayers } = useGameClient();
+    const core = state?.core as { turnNumber?: number; activePlayer?: number | string; phase?: string } | undefined;
+    const activityKey = [
+        isConnected ? 'connected' : 'connecting',
+        matchPlayers.length,
+        core?.turnNumber ?? 'no-turn',
+        core?.activePlayer ?? 'no-player',
+        core?.phase ?? 'no-phase',
+    ].join(':');
+
+    return (
+        <ConnectionLoadingScreen
+            anchor="container"
+            title={title}
+            description={description}
+            gameId={gameId}
+            activityKey={activityKey}
+            suppressTimeout={Boolean(state)}
+        />
+    );
+};
+
 export const MatchRoom = () => {
     usePerformanceMonitor();
     const { playerID: debugPlayerID, setPlayerID } = useDebug();
@@ -1261,7 +1292,7 @@ export const MatchRoom = () => {
                                         >
                                             <BoardBridge
                                                 board={ugcBoard}
-                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
+                                                loading={<OnlineRoomConnectionLoading title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
@@ -1293,7 +1324,7 @@ export const MatchRoom = () => {
                                             )}
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
+                                                loading={<OnlineRoomConnectionLoading title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
