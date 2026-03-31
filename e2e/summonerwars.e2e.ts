@@ -11,6 +11,7 @@ import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/wa
 import { cloneState, createSWRoomViaAPI } from './helpers/summonerwars';
 import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import { DESKTOP_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
 import {
   createSummonerWarsMobileEvidenceState,
   withSummonerWarsMobileEvidenceActionLog,
@@ -2398,7 +2399,7 @@ test.describe('SummonerWars', () => {
 
     const desktopContext = await browser.newContext({
       baseURL,
-      viewport: { width: 1920, height: 1080 },
+      viewport: DESKTOP_REFERENCE_VIEWPORT,
     });
     await desktopContext.addInitScript(() => {
       (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;

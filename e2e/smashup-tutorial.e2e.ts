@@ -14,6 +14,7 @@ import { test, expect } from './framework';
 import type { Page } from '@playwright/test';
 import { setEnglishLocale, disableAudio, blockAudioRequests } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import { MOBILE_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
 
 const waitForTutorialStep = async (page: Page, stepId: string, timeout = 30000) => {
     await expect(page.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout });
@@ -358,7 +359,7 @@ test.describe('Smash Up Tutorial E2E', () => {
     test('手机从竖屏旋转到横屏后教程画布不应塌成黑屏', async ({ page }, testInfo) => {
         test.setTimeout(60000);
         await clearEvidenceScreenshotsForTest(testInfo);
-        await page.setViewportSize({ width: 375, height: 812 });
+        await page.setViewportSize(MOBILE_REFERENCE_VIEWPORT);
         await setEnglishLocale(page);
         await disableAudio(page);
         await navigateToTutorial(page);
