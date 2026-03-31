@@ -32,7 +32,7 @@ jobs:
       - name: Create Android env file
         run: |
           cat <<'EOF' > .env.android
-          VITE_BACKEND_URL=${{ secrets.ANDROID_VITE_BACKEND_URL }}
+          VITE_BACKEND_URL=${{ vars.VITE_BACKEND_URL || vars.ANDROID_VITE_BACKEND_URL || secrets.VITE_BACKEND_URL || secrets.ANDROID_VITE_BACKEND_URL }}
           CAPACITOR_APP_ID=${{ vars.CAPACITOR_APP_ID || 'top.easyboardgame.app' }}
           CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || 'EasyBoardGame' }}
           ANDROID_ICON_SOURCE=${{ vars.ANDROID_ICON_SOURCE || 'public/logos/logo_1_grid.png' }}
