@@ -19,6 +19,23 @@ export interface LocalMatchPreferences {
     setupSelections: GameSetupSelections;
 }
 
+export function readStoredLocalMatchPreferences(
+    gameManifest: GameManifestEntry,
+): LocalMatchPreferences | null {
+    try {
+        const raw = localStorage.getItem(STORAGE_PREFIX + gameManifest.id);
+        if (!raw) {
+            return null;
+        }
+        return normalizeLocalMatchPreferences(
+            gameManifest,
+            JSON.parse(raw) as Record<string, unknown>,
+        );
+    } catch {
+        return null;
+    }
+}
+
 export function createDefaultLocalMatchPreferences(gameManifest: GameManifestEntry): LocalMatchPreferences {
     const playerOptions = gameManifest.playerOptions?.length ? gameManifest.playerOptions : [2];
     const numPlayers = resolveLocalMatchPlayerCount(null, playerOptions);
@@ -78,15 +95,8 @@ export function normalizeLocalMatchPreferences(
 }
 
 export function readLocalMatchPreferences(gameManifest: GameManifestEntry): LocalMatchPreferences {
-    try {
-        const raw = localStorage.getItem(STORAGE_PREFIX + gameManifest.id);
-        if (!raw) {
-            return createDefaultLocalMatchPreferences(gameManifest);
-        }
-        return normalizeLocalMatchPreferences(gameManifest, JSON.parse(raw) as Record<string, unknown>);
-    } catch {
-        return createDefaultLocalMatchPreferences(gameManifest);
-    }
+    return readStoredLocalMatchPreferences(gameManifest)
+        ?? createDefaultLocalMatchPreferences(gameManifest);
 }
 
 export function writeLocalMatchPreferences(gameManifest: GameManifestEntry, preferences: LocalMatchPreferences): void {

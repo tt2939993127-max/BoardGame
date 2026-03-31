@@ -136,6 +136,20 @@ describe('smashUpCriticalImageResolver', () => {
         expect(result.critical).not.toContain('smashup/cards/cards2');
     });
 
+    it('POD faction 会预热对应的本地 POD 基地图集路径', () => {
+        const result = smashUpCriticalImageResolver(
+            makePlayingState({
+                '0': ['killer_plants_pod', 'giant_ants_pod'],
+                '1': ['elder_things_pod', 'miskatonic_university_pod'],
+            }),
+            undefined,
+            '0',
+        );
+
+        expect(result.critical).toContain('/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2');
+        expect(result.critical).toContain('/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd');
+    });
+
     it('playing 阶段缺少派系数据时回退到全量图集', () => {
         const result = smashUpCriticalImageResolver(
             { sys: { phase: 'playCards' }, core: {} },

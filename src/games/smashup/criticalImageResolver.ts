@@ -1,6 +1,7 @@
 import type { MatchState } from '../../engine/types';
 import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
-import { getAllBaseDefs, getAllCardDefs } from './data/cards';
+import { getAllBaseDefs, getAllCardDefs, getBasePodFactionIds } from './data/cards';
+import smashUpEnglishMap from './data/englishAtlasMap.json';
 import { getSmashUpAtlasImageById, getSmashUpAtlasImagesByKind } from './domain/atlasCatalog';
 
 type PreviewRefLike = {
@@ -19,6 +20,7 @@ type SmashUpPlayerLike = {
 
 const ALL_CARD_ATLAS = getSmashUpAtlasImagesByKind('card');
 const ALL_BASE_ATLAS = getSmashUpAtlasImagesByKind('base');
+const TTS_MAP = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
 
 function dedupePreserveOrder<T>(items: T[]): T[] {
     return [...new Set(items)];
@@ -58,7 +60,44 @@ function getFactionCardAtlasMap(): Record<string, string[]> {
 }
 
 function getFactionBaseAtlasMap(): Record<string, string[]> {
-    return buildFactionAtlasMap(getAllBaseDefs());
+    const map = new Map<string, Set<string>>();
+
+    for (const base of getAllBaseDefs()) {
+        const factionIds = new Set<string>();
+        if (base.faction) {
+            factionIds.add(base.faction);
+        }
+        for (const podFactionId of getBasePodFactionIds(base)) {
+            factionIds.add(podFactionId);
+        }
+
+        const atlasPaths = new Set<string>();
+        const previewAtlasPath = resolveAtlasImagePath(base.previewRef);
+        if (previewAtlasPath) {
+            atlasPaths.add(previewAtlasPath);
+        }
+        const podAtlasId = TTS_MAP[`${base.id}_pod`]?.atlasId;
+        const podAtlasPath = podAtlasId ? getSmashUpAtlasImageById(podAtlasId) : undefined;
+        if (podAtlasPath) {
+            atlasPaths.add(podAtlasPath);
+        }
+        if (atlasPaths.size === 0) continue;
+
+        for (const factionId of factionIds) {
+            let set = map.get(factionId);
+            if (!set) {
+                set = new Set<string>();
+                map.set(factionId, set);
+            }
+            for (const atlasPath of atlasPaths) {
+                set.add(atlasPath);
+            }
+        }
+    }
+
+    return Object.fromEntries(
+        [...map.entries()].map(([faction, atlases]) => [faction, [...atlases]]),
+    );
 }
 
 function getCardAtlasesForFactions(factionIds: string[]): string[] {

@@ -1947,10 +1947,6 @@
     "atlasId": "tts_atlas_bd2112e526",
     "index": 10
   },
-  "base_antarctic_base_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
-    "index": 10
-  },
   "base_the_asylum": {
     "atlasId": "tts_atlas_bd2112e526",
     "index": 3
@@ -2064,108 +2060,100 @@
     "index": 3
   },
   "base_the_homeworld_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 1
+    "atlasId": "tts_atlas_1",
+    "index": 0
   },
   "base_the_mothership_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 5
+    "atlasId": "tts_atlas_1",
+    "index": 1
   },
   "base_central_brain_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 8
-  },
-  "base_the_jungle_pod": {
-    "atlasId": "tts_atlas_7",
+    "atlasId": "tts_atlas_1",
     "index": 9
   },
+  "base_the_jungle_pod": {
+    "atlasId": "tts_atlas_1",
+    "index": 2
+  },
   "base_temple_of_goju_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 4
+    "atlasId": "tts_atlas_1",
+    "index": 5
   },
   "base_cave_of_shinies_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
+    "atlasId": "tts_atlas_1",
     "index": 11
   },
   "base_haunted_house_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 7
+    "atlasId": "tts_atlas_1",
+    "index": 14
   },
   "base_rhodes_plaza_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 2
-  },
-  "base_the_factory_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 7
-  },
-  "base_tar_pits_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
+    "atlasId": "tts_atlas_1",
     "index": 15
   },
+  "base_the_factory_pod": {
+    "atlasId": "tts_atlas_1",
+    "index": 8
+  },
+  "base_tar_pits_pod": {
+    "atlasId": "tts_atlas_1",
+    "index": 3
+  },
   "base_ninja_dojo_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 0
+    "atlasId": "tts_atlas_1",
+    "index": 4
   },
   "base_mushroom_kingdom_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 6
+    "atlasId": "tts_atlas_1",
+    "index": 10
   },
   "base_tortuga_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 13
+    "atlasId": "tts_atlas_1",
+    "index": 6
   },
   "base_pirate_cove": {
     "atlasId": "tts_atlas_a9e2eeadeb",
     "index": 3
   },
   "base_pirate_cove_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 3
+    "atlasId": "tts_atlas_1",
+    "index": 7
   },
   "base_great_library_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
-    "index": 10
+    "atlasId": "tts_atlas_1",
+    "index": 13
   },
   "base_wizard_academy": {
     "atlasId": "tts_atlas_a9e2eeadeb",
     "index": 12
   },
   "base_wizard_academy_pod": {
-    "atlasId": "tts_atlas_a9e2eeadeb",
+    "atlasId": "tts_atlas_1",
     "index": 12
   },
   "base_haunted_house_al9000_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 7
-  },
-  "base_the_field_of_honor_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 0
-  },
-  "base_tsars_palace_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 1
-  },
-  "base_inventors_salon_pod": {
-    "atlasId": "tts_atlas_8310911466",
+    "atlasId": "tts_atlas_0a564692f2",
     "index": 2
   },
+  "base_the_field_of_honor_pod": {
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 1
+  },
+  "base_tsars_palace_pod": {
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 0
+  },
+  "base_inventors_salon_pod": {
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 6
+  },
   "base_the_workshop_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 3
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 7
   },
   "base_greenhouse_pod": {
-    "atlasId": "tts_atlas_8310911466",
+    "atlasId": "tts_atlas_0a564692f2",
     "index": 4
-  },
-  "base_secret_garden_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 5
-  },
-  "base_dread_lookout_pod": {
-    "atlasId": "tts_atlas_8310911466",
-    "index": 6
   },
   "base_cat_fanciers_alley_pod": {
     "atlasId": "tts_atlas_52",
@@ -2180,32 +2168,32 @@
     "index": 7
   },
   "base_ritual_site_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
-    "index": 1
-  },
-  "base_rlyeh_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
-    "index": 2
-  },
-  "base_the_asylum_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
+    "atlasId": "tts_atlas_0b888d02fd",
     "index": 3
   },
-  "base_innsmouth_base_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
+  "base_rlyeh_pod": {
+    "atlasId": "tts_atlas_0b888d02fd",
     "index": 4
   },
+  "base_the_asylum_pod": {
+    "atlasId": "tts_atlas_0b888d02fd",
+    "index": 6
+  },
+  "base_innsmouth_base_pod": {
+    "atlasId": "tts_atlas_0b888d02fd",
+    "index": 2
+  },
   "base_mountains_of_madness_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
+    "atlasId": "tts_atlas_0b888d02fd",
     "index": 5
   },
   "base_miskatonic_university_base_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
-    "index": 6
+    "atlasId": "tts_atlas_0b888d02fd",
+    "index": 7
   },
   "base_plateau_of_leng_pod": {
-    "atlasId": "tts_atlas_bd2112e526",
-    "index": 7
+    "atlasId": "tts_atlas_0b888d02fd",
+    "index": 1
   },
   "base_the_pasture_pod": {
     "atlasId": "tts_atlas_bd2112e526",
@@ -2216,35 +2204,47 @@
     "index": 9
   },
   "base_castle_blood_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
     "index": 4
   },
   "base_crypt_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
     "index": 5
   },
   "base_laboratorium_pod": {
-    "atlasId": "tts_atlas_0157978c57",
-    "index": 6
+    "atlasId": "tts_atlas_9aed5872d2",
+    "index": 2
   },
   "base_golem_schloss_pod": {
-    "atlasId": "tts_atlas_0157978c57",
-    "index": 7
+    "atlasId": "tts_atlas_9aed5872d2",
+    "index": 3
   },
   "base_moot_site_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
     "index": 6
   },
   "base_standing_stones_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
     "index": 7
   },
   "base_egg_chamber_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
     "index": 1
   },
   "base_the_hill_pod": {
-    "atlasId": "tts_atlas_1218",
+    "atlasId": "tts_atlas_9aed5872d2",
+    "index": 0
+  },
+  "base_secret_garden_pod": {
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 5
+  },
+  "base_dread_lookout_pod": {
+    "atlasId": "tts_atlas_0a564692f2",
+    "index": 3
+  },
+  "base_antarctic_base_pod": {
+    "atlasId": "tts_atlas_0b888d02fd",
     "index": 0
   }
 }

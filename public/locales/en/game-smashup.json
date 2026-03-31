@@ -5,7 +5,7 @@
   "setup": {
     "expansions": {
       "label": "Expansion Rules",
-      "titans": "Enable Titans"
+      "titans": "Titans"
     }
   },
   "phases": {
@@ -68,6 +68,7 @@
     "taken_by_other": "Taken by another player",
     "faction_full": "Already selected 2 factions",
     "confirm_selection": "Confirm Selection",
+    "cancel_selection": "Cancel Selection",
     "wait_turn": "Wait for your turn",
     "preview_cards": "Included Card Preview",
     "faction_titan_preview": "Titan Preview",
@@ -2686,10 +2687,12 @@
       "name": "Summon Wolves"
     },
     "base_miskatonic_university_base_pod": {
-      "name": "Miskatonic University"
+      "name": "Miskatonic University",
+      "abilityText": "Once per turn, after you play a minion here, you may draw two Madness cards or discard a Madness card from your hand to play an extra action."
     },
     "base_the_asylum_pod": {
-      "name": "The Asylum"
+      "name": "The Asylum",
+      "abilityText": "After you play a minion here, you may put a card from your hand back in the box to place a +1 power counter on a minion."
     },
     "base_the_grey_opal_pod": {
       "name": "The Grey Opal"
@@ -2770,22 +2773,28 @@
       "name": "North Pole"
     },
     "base_antarctic_base_pod": {
-      "name": "Antarctic Base"
+      "name": "Antarctic Base",
+      "abilityText": "Each player may play only one minion at this base each turn."
     },
     "base_ritual_site_pod": {
-      "name": "Ritual Site"
+      "name": "Ritual Site",
+      "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."
     },
     "base_rlyeh_pod": {
-      "name": "R'lyeh"
+      "name": "R'lyeh",
+      "abilityText": "At the start of each player's turn, that player may destroy one of their minions here to gain 1 VP."
     },
     "base_innsmouth_base_pod": {
-      "name": "Innsmouth"
+      "name": "Innsmouth",
+      "abilityText": "After each time a minion is played here, its owner may place a card from any player's discard pile on the bottom of its owner's deck."
     },
     "base_mountains_of_madness_pod": {
-      "name": "Mountains of Madness"
+      "name": "Mountains of Madness",
+      "abilityText": "After each time a minion is played here, its owner draws a Madness card."
     },
     "base_plateau_of_leng_pod": {
-      "name": "Plateau of Leng"
+      "name": "Plateau of Leng",
+      "abilityText": "The first time a player plays a minion here from their hand each turn, they may play an extra minion of the same name here."
     },
     "base_the_pasture_pod": {
       "name": "The Pasture"

@@ -1,4 +1,5 @@
 import { test, expect } from './framework';
+import { setChineseLocale } from './helpers/common';
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -311,6 +312,35 @@ function buildFactionSelectionMobileScene() {
                         '0': [],
                         '1': [],
                     },
+                    completedPlayers: [],
+                },
+            },
+        },
+    };
+}
+
+function buildFactionSelectionWithOwnedPickScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'factionSelect' as const,
+        extra: {
+            core: {
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                turnNumber: 1,
+                nextUid: 1000,
+                players: {
+                    '0': createPlayerState('0', 0, ['aliens', 'pirates']),
+                    '1': createPlayerState('1', 0, ['ninjas', 'dinosaurs']),
+                },
+                factionSelection: {
+                    takenFactions: ['pirates'],
+                    playerSelections: {
+                        '0': ['pirates'],
+                        '1': [],
+                    },
+                    completedPlayers: [],
                 },
             },
         },
@@ -901,5 +931,59 @@ test.describe('大杀四方移动端派系选择布局', () => {
         await aliensCard.click();
         await expect(page.getByTestId('faction-titan-empty')).toContainText(/该种族泰坦暂未接入|Titan/i);
         await game.screenshot('13-mobile-landscape-faction-detail-no-titan', testInfo);
+    });
+
+    test('PC 已选派系可取消并重新选择', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await setChineseLocale(page.context());
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildFactionSelectionWithOwnedPickScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.phase === 'factionSelect'
+                && state?.core?.turnOrder?.[state.core.currentPlayerIndex] === '0'
+                && Array.isArray(state?.core?.factionSelection?.playerSelections?.['0'])
+                && state.core.factionSelection.playerSelections['0'][0] === 'pirates';
+        }, { timeout: 10000, polling: 200 });
+
+        const piratesCard = page.getByTestId('faction-option-pirates');
+        const aliensCard = page.getByTestId('faction-option-aliens');
+        const detailPanel = page.getByTestId('faction-detail-panel');
+        const cancelButton = page.getByTestId('faction-cancel-button');
+        const confirmButton = page.getByTestId('faction-confirm-button');
+
+        await expect(piratesCard).toBeVisible({ timeout: 10000 });
+        await piratesCard.click();
+
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(cancelButton).toBeVisible({ timeout: 10000 });
+        await game.screenshot('18-desktop-faction-cancel-before', testInfo);
+
+        await cancelButton.click();
+        await expect(detailPanel).toHaveCount(0);
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const picks = state?.core?.factionSelection?.playerSelections?.['0'] ?? [];
+            const currentPlayerId = state?.core?.turnOrder?.[state.core.currentPlayerIndex];
+            return Array.isArray(picks) && picks.length === 0 && currentPlayerId === '0';
+        }, { timeout: 10000, polling: 200 });
+
+        await aliensCard.click();
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await confirmButton.click();
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            const picks = state?.core?.factionSelection?.playerSelections?.['0'] ?? [];
+            const currentPlayerId = state?.core?.turnOrder?.[state.core.currentPlayerIndex];
+            return Array.isArray(picks) && picks.length === 1 && picks[0] === 'aliens' && currentPlayerId === '1';
+        }, { timeout: 10000, polling: 200 });
+
+        await game.screenshot('19-desktop-faction-cancel-after', testInfo);
     });
 });

@@ -29,10 +29,9 @@ import { MaintenancePage } from './pages/Maintenance';
 
 // 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
 const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
-const MatchRoom = React.lazy(() => import('./pages/MatchRoom').then(m => ({ default: m.MatchRoom })));
-const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoom').then(m => ({ default: m.LocalMatchRoom })));
-const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoom').then(m => ({ default: m.TestMatchRoom })));
-const LazyAudioProvider = React.lazy(() => import('./contexts/AudioContext').then(m => ({ default: m.AudioProvider })));
+const MatchRoom = React.lazy(() => import('./pages/MatchRoomWithAudio'));
+const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoomWithAudio'));
+const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoomWithAudio'));
 // 旧的测试路由已废弃，使用新的 TestHarness 框架
 const LazyLoadingScreen = React.lazy(() => import('./components/system/LoadingScreen').then(m => ({ default: m.LoadingScreen })));
 const LazyGlobalHUD = React.lazy(() => import('./components/system/GlobalHUD').then(m => ({ default: m.GlobalHUD })));
@@ -49,17 +48,13 @@ TestHarness.init();
  * 与在线对局使用不同的组件类型，强制 React 在路由切换时完全卸载/重建 MatchRoom，
  * 防止从在线对局导航到教程时组件实例复用导致 state/ref 泄漏（教程卡在"初始化中"）。
  */
-const TutorialMatchRoom = React.lazy(() =>
-    import('./pages/MatchRoom').then(m => ({
-        default: () => <m.MatchRoom />,
-    }))
-);
+const TutorialMatchRoom = React.lazy(() => import('./pages/TutorialMatchRoomWithAudio'));
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
 const DevToolsAudioBrowser = React.lazy(() => import('./pages/devtools/AudioBrowser'));
 const DevToolsArchView = React.lazy(() => import('./pages/devtools/ArchitectureView'));
-const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilder').then(m => ({ default: m.UnifiedBuilder })));
+const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio'));
 const UGCRuntimeViewPage = React.lazy(() => import('./ugc/runtime/RuntimeViewPage'));
 const UGCSandbox = React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox })));
 const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
@@ -85,10 +80,6 @@ const RouteLoadingFallback = ({ title }: { title?: string }) => (
   <React.Suspense fallback={null}>
     <LazyLoadingScreen title={title} />
   </React.Suspense>
-);
-
-const AudioScope = ({ children }: { children: React.ReactNode }) => (
-  <LazyAudioProvider>{children}</LazyAudioProvider>
 );
 
 const AppContent = () => {
@@ -128,9 +119,7 @@ const AppContent = () => {
                       path="/play/:gameId/match/:matchId"
                       element={(
                         <React.Suspense fallback={<RouteLoadingFallback />}>
-                          <AudioScope>
-                            <MatchRoom />
-                          </AudioScope>
+                          <MatchRoom />
                         </React.Suspense>
                       )}
                     />
@@ -138,9 +127,7 @@ const AppContent = () => {
                       path="/play/:gameId/local"
                       element={(
                         <React.Suspense fallback={<RouteLoadingFallback />}>
-                          <AudioScope>
-                            <LocalMatchRoom />
-                          </AudioScope>
+                          <LocalMatchRoom />
                         </React.Suspense>
                       )}
                     />
@@ -149,9 +136,7 @@ const AppContent = () => {
                       path="/play/:gameId"
                       element={(
                         <React.Suspense fallback={<RouteLoadingFallback />}>
-                          <AudioScope>
-                            <TestMatchRoom />
-                          </AudioScope>
+                          <TestMatchRoom />
                         </React.Suspense>
                       )}
                     />
@@ -164,9 +149,7 @@ const AppContent = () => {
                       path="/dev/ugc"
                       element={(
                         <React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcBuilder')} />}>
-                          <AudioScope>
-                            <UnifiedBuilder />
-                          </AudioScope>
+                          <UnifiedBuilder />
                         </React.Suspense>
                       )}
                     />
@@ -180,9 +163,7 @@ const AppContent = () => {
                       path="/play/:gameId/tutorial"
                       element={(
                         <React.Suspense fallback={<RouteLoadingFallback />}>
-                          <AudioScope>
-                            <TutorialMatchRoom />
-                          </AudioScope>
+                          <TutorialMatchRoom />
                         </React.Suspense>
                       )}
                     />

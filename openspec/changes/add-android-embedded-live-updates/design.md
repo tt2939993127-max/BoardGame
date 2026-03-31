@@ -43,6 +43,13 @@
 - Decision: `remote WebView` 降级为兼容/调试路径，不再承担长期产品更新职责
   - Rationale: 产品主线应收敛到一个 bundle 交付模型，避免线上 remote 站点和 embedded 首包长期双轨。
 
+- Decision: OTA 发布链路分为“非生产自动 channel”和“正式手动 channel”
+  - Rule:
+    - `main` 分支的自动化发布只允许推送到非生产 channel（默认 `edge`）
+    - `stable` 等正式 channel 必须通过手动触发工作流发布
+    - 正式 channel 必须绑定 GitHub Environment 审批
+  - Rationale: 既保留持续交付效率，又避免每次合入 `main` 都直接影响正式 App 用户。
+
 ## Alternatives Considered
 
 - Alternative: 继续使用 `remote WebView` 作为主线
@@ -65,6 +72,9 @@
 - 发布链路复杂度上升。
   - Mitigation: 把 bundle 打包、上传、发布、回滚做成单独命令和文档。
 
+- 自动化发布如果直接面向正式 channel，误发风险很高。
+  - Mitigation: 默认自动化只发 `edge`，`stable` 需要手动触发 + 环境审批。
+
 ## Migration Plan
 
 1. 保持当前 `embedded` 默认模式不变
@@ -73,9 +83,4 @@
 4. 先在 Android 灰度渠道验证 OTA 下载、激活、回滚
 5. 验证稳定后，把“前端改动默认走 OTA”写入正式发布规范
 6. 将 `remote` 标记为非主线兼容模式
-
-## Open Questions
-
-- OTA provider 是直接接官方 Appflow，还是做 provider 抽象后接内部/第三方发布源？
-- 更新策略默认是“下次启动生效”，还是提供后台下载后用户确认重启？
-- bundle 资源是否与现有 `/assets` / R2 hash 体系完全复用，还是独立产物目录？
+7. 接入 GitHub Actions 自动发布到非生产 channel，并为正式 channel 增加审批门禁

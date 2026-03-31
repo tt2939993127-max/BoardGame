@@ -63,6 +63,10 @@ export function registerReactionQueueInteractionHandlers(): void {
       actionTargetBaseIndex: (t as any).actionTargetBaseIndex,
       actionTargetType: (t as any).actionTargetType,
       actionTargetMinionUid: (t as any).actionTargetMinionUid,
+      inspectionCards: (t as any).inspectionCards,
+      inspectionZone: (t as any).inspectionZone,
+      inspectionTargetPlayerIds: (t as any).inspectionTargetPlayerIds,
+      inspectionCausePlayerId: (t as any).inspectionCausePlayerId,
       random: random as RandomFn,
       now: timestamp,
     } as any);

@@ -231,6 +231,13 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
+GitHub Actions 自动化：
+
+- workflow：`.github/workflows/android-ota-publish.yml`
+- 自动触发：`main` 分支合入影响 H5 bundle 的改动后，自动发布到非生产 channel，默认 `edge`
+- 手动触发：可手动选择 `stable` / `gray` / `edge`，并支持 `dry_run`、`skip_latest`
+- 正式门禁：`stable` 发布应绑定 `android-ota-production` Environment 审批
+
 约束：
 
 - `--dry-run` 只本地打 zip 和 manifest，不上传
@@ -319,6 +326,12 @@ Android OTA 产物也走同一个对象存储桶，但前缀独立：
 4. 准备正式生效时，再执行不带 `--skip-latest` 的正式发布命令
 
 建议把 `stable`、`gray` 等 channel 作为独立发布轨道管理，不要把未验证 bundle 直接覆盖到 `stable/latest.json`
+
+建议的 OTA 发布节奏：
+
+1. `main` 自动发 `edge`
+2. 测试确认后手动发 `gray`
+3. 最后经审批手动发 `stable`
 
 ## UGC 资源前缀预留（未实现）
 

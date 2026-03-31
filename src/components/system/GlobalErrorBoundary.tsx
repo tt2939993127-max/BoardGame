@@ -70,12 +70,10 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                         </div>
 
                         <h1 className="text-3xl font-bold text-parchment-brown mb-2 tracking-wide">
-                            Something went wrong
+                            页面出了点问题
                         </h1>
                         <p className="text-parchment-light-text mb-6">
-                            系统遇到了一点小麻烦，魔法卷轴暂时无法通过。
-                            <br />
-                            The scrolls are momentarily illegible.
+                            当前页面渲染失败了，请先刷新重试；如果反复出现，再返回大厅。
                         </p>
 
                         {/* Error Details (Only in Dev) */}

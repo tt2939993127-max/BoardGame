@@ -707,6 +707,10 @@ test('Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行�
     await saveEvidenceScreenshot(page, testInfo, 'oops-extra-play-before-select');
     await clickSelectableMinion(page, 'ally-1');
 
+    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null, { timeout: 8000 }).toBe('reaction_queue_choose_next');
+    await page.getByRole('button', { name: /妖怪来袭.*随从被消灭后|Yokai Attack.*destroyed/i }).click();
+    await page.waitForTimeout(300);
+
     await expect.poll(async () => {
         const state = await game.getState();
         return {

@@ -29,7 +29,6 @@ const command = process.argv[2];
 const distDir = path.join(rootDir, 'dist');
 const distLocalesDir = path.join(distDir, 'locales');
 const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
-const distSmashUpEnglishPodAssetsDir = path.join(distLocalizedAssetsDir, 'en', 'smashup', 'pod-assets');
 const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
 const androidBuildMetaFileName = 'android-build-meta.json';
 const gameManifestGeneratorPath = path.join(rootDir, 'scripts', 'game', 'generate_game_manifests.js');
@@ -248,25 +247,9 @@ const pruneAndroidEmbeddedDist = () => {
         preserve: [path.join(distLocalesDir, 'zh-CN')],
     });
 
-    if (!existsSync(distLocalizedAssetsDir)) {
-        return;
+    if (existsSync(distLocalizedAssetsDir)) {
+        rmSync(distLocalizedAssetsDir, { recursive: true, force: true });
     }
-
-    clearDirectoryChildren(distLocalizedAssetsDir, {
-        preserve: [
-            path.join(distLocalizedAssetsDir, 'zh-CN'),
-            distSmashUpEnglishPodAssetsDir,
-        ],
-    });
-
-    const enDir = path.join(distLocalizedAssetsDir, 'en');
-    const smashupDir = path.join(enDir, 'smashup');
-    clearDirectoryChildren(enDir, {
-        preserve: [smashupDir],
-    });
-    clearDirectoryChildren(smashupDir, {
-        preserve: [distSmashUpEnglishPodAssetsDir],
-    });
 };
 
 const writeText = (filePath, content) => {

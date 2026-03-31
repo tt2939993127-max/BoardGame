@@ -84,6 +84,14 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         setFocusedFactionId(null);
     };
 
+    const handleCancelSelect = (factionId: string) => {
+        if (!isMyTurn) return;
+        if (!mySelections.includes(factionId)) return;
+
+        dispatch(SU_COMMANDS.DESELECT_FACTION, { factionId });
+        setFocusedFactionId(null);
+    };
+
     return (
         <div
             data-tutorial-id="su-faction-select"
@@ -166,6 +174,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                     {visibleFactions.map((faction, idx) => {
                         const isTaken = takenFactions.has(faction.id);
                         const isSelectedByMe = mySelections.includes(faction.id);
+                        const isTakenByOther = isTaken && !isSelectedByMe;
                         const ownerId = Object.entries(selectionState.playerSelections).find(([_, f]) => f.includes(faction.id))?.[0];
 
                         // Get first card for preview
@@ -183,7 +192,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 data-testid={`faction-option-${faction.id}`}
                                 className={`
                                     group relative flex w-full flex-col items-center cursor-pointer
-                                    ${isTaken ? 'opacity-40 grayscale pointer-events-none' : 'z-10'}
+                                    ${isTakenByOther ? 'opacity-40 grayscale pointer-events-none' : 'z-10'}
                                 `}
                             >
                                 {/* Card Stack Visual */}
@@ -206,7 +215,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                             />
 
                                             {/* Taken Status */}
-                                            {isTaken && (
+                                            {isTakenByOther && (
                                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center z-30">
                                                     <div className="mb-2 p-2 bg-slate-700 rounded-full">
                                                         <Lock size={24} className="text-white" strokeWidth={2.5} />
@@ -320,7 +329,8 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                     const titans = getFactionTitans(meta.id);
                                     const isTaken = takenFactions.has(meta.id);
                                     const isSelectedByMe = mySelections.includes(meta.id);
-                                    const canSelect = isMyTurn && !isTaken && mySelections.length < 2 && !isSelectedByMe;
+                                    const isTakenByOther = isTaken && !isSelectedByMe;
+                                    const canSelect = isMyTurn && !isTakenByOther && mySelections.length < 2 && !isSelectedByMe;
                                     const titanGridCols = 'grid-cols-1';
 
                                     return (
@@ -382,9 +392,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                        <span className="mt-2 text-[11px] font-black uppercase leading-tight tracking-tight text-slate-700 md:text-xs">
-                                                                            {titanName}
-                                                                        </span>
                                                                     </button>
                                                                 );
                                                             })}
@@ -402,11 +409,25 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
                                             <div className="mt-4 lg:mt-auto relative z-10">
                                                 {isSelectedByMe ? (
-                                                    <div className="w-full py-3 lg:py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
-                                                        <Check size={20} strokeWidth={3} />
-                                                        {t('ui.selected')}
-                                                    </div>
-                                                ) : isTaken ? (
+                                                    isMyTurn ? (
+                                                        <GameButton
+                                                            onClick={() => handleCancelSelect(meta.id)}
+                                                            type="button"
+                                                            variant="secondary"
+                                                            size="md"
+                                                            className="md:text-base lg:text-xl md:py-3 lg:py-4"
+                                                            fullWidth
+                                                            data-testid="faction-cancel-button"
+                                                        >
+                                                            {t('ui.cancel_selection')}
+                                                        </GameButton>
+                                                    ) : (
+                                                        <div className="w-full py-3 lg:py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
+                                                            <Check size={20} strokeWidth={3} />
+                                                            {t('ui.selected')}
+                                                        </div>
+                                                    )
+                                                ) : isTakenByOther ? (
                                                     <div className="w-full py-3 lg:py-4 bg-slate-200 rounded text-slate-500 font-black text-center cursor-not-allowed uppercase shadow-inner">
                                                         {t('ui.taken_by_other')}
                                                     </div>

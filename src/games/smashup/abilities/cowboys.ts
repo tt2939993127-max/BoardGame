@@ -14,6 +14,7 @@ import {
     createSkipOption,
     getMinionPower,
     inspectDeck,
+    moveTitan,
 } from '../domain/abilityHelpers';
 import { registerBaseAbility, registerExtended } from '../domain/baseAbilities';
 import { registerTrigger } from '../domain/ongoingEffects';
@@ -45,9 +46,17 @@ type DuelContinuation = {
 type StagecoachSourceContinuation = {
     sourceBaseIndex: number;
 };
+type StagecoachCardChoice = {
+    kind: 'minion' | 'titan' | 'ongoing_base' | 'buried';
+    uid: string;
+    defId: string;
+    baseIndex: number;
+    ownerId?: PlayerId;
+    trueOwnerId?: PlayerId;
+};
 type StagecoachDestinationContinuation = {
     sourceBaseIndex: number;
-    selectedMinions: Array<{ minionUid: string; defId: string }>;
+    selectedCards: StagecoachCardChoice[];
 };
 type GoldChoice = { cardUid: string; defId: string };
 type GoldModeChoice = { mode: 'hand' | 'play' };
@@ -76,6 +85,10 @@ export function registerCowboysAbilities(): void {
         perInstance: true,
         sourceScope: 'triggerBase',
     });
+    registerTrigger('cowboys_dynamite_surprise', 'onDeckInspected', cowboysDynamiteSurpriseSeenTrigger, {
+        global: true,
+        globalZones: ['hand', 'deck'],
+    });
 
     registerBaseAbility('base_so_so_corral', 'onMinionPlayed', cowboysBaseSoSoCorralOnMinionPlayed, { mandatory: false });
     registerExtended('base_saloon', 'onMinionDestroyed', cowboysBaseSaloonOnMinionDestroyed, { mandatory: true });
@@ -98,6 +111,7 @@ export function registerCowboysInteractionHandlers(): void {
     registerInteractionHandler('cowboys_stagecoach_cards', handleStagecoachCards);
     registerInteractionHandler('cowboys_stagecoach_destination', handleStagecoachDestination);
     registerInteractionHandler('cowboys_dynamite_surprise', handleDynamiteSurprise);
+    registerInteractionHandler('cowboys_dynamite_surprise_seen', handleDynamiteSurpriseSeen);
     registerInteractionHandler('cowboys_sheriff_before_scoring', handleSheriffBeforeScoring);
     registerInteractionHandler('base_so_so_corral', handleBaseSoSoCorral);
 }
@@ -254,6 +268,51 @@ function cowboysDynamiteSurpriseSpecial(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }) as any[],
         { sourceId: 'cowboys_dynamite_surprise', targetType: 'minion' },
     );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+function cowboysDynamiteSurpriseSeenTrigger(ctx: TriggerContext): AbilityResult {
+    if (!ctx.matchState || !ctx.inspectionCards?.length || !ctx.inspectionZone || !ctx.inspectionCausePlayerId) {
+        return { events: [] };
+    }
+
+    const ownerPlayerId = (ctx.inspectionTargetPlayerIds ?? []).find((candidate) => {
+        const player = ctx.state.players[candidate];
+        if (!player) return false;
+        const zoneCards = ctx.inspectionZone === 'hand' ? player.hand : player.deck;
+        return ctx.inspectionCards!.some(card => (
+            card.defId === 'cowboys_dynamite_surprise' && zoneCards.some(entry => entry.uid === card.uid)
+        ));
+    });
+    if (!ownerPlayerId || ownerPlayerId === ctx.inspectionCausePlayerId) return { events: [] };
+
+    const exposedCard = ctx.inspectionCards.find((card) => {
+        if (card.defId !== 'cowboys_dynamite_surprise') return false;
+        const player = ctx.state.players[ownerPlayerId];
+        const zoneCards = ctx.inspectionZone === 'hand' ? player.hand : player.deck;
+        return zoneCards.some(entry => entry.uid === card.uid);
+    });
+    if (!exposedCard) return { events: [] };
+
+    const targets = collectDynamiteSeenTargets(ctx.state, ctx.inspectionCausePlayerId);
+    if (targets.length === 0) return { events: [] };
+
+    const interaction = createSimpleChoice(
+        `cowboys_dynamite_surprise_seen_${ctx.now}_${exposedCard.uid}`,
+        ownerPlayerId,
+        '炸药惊喜：你可以打出这张牌，消灭其中一个力量 4 或以下的随从',
+        [createSkipOption('跳过（不打出）'), ...buildMinionTargetOptions(targets, {
+            state: ctx.state,
+            sourcePlayerId: ownerPlayerId,
+            effectType: 'destroy',
+        })] as any[],
+        { sourceId: 'cowboys_dynamite_surprise_seen', targetType: 'minion' },
+    );
+    (interaction.data as any).continuationContext = {
+        cardUid: exposedCard.uid,
+        ownerPlayerId,
+        sourceZone: ctx.inspectionZone,
+    };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -520,27 +579,33 @@ const handleStagecoachSource = (state: MatchState<SmashUpCore>, playerId: string
     const sourceBase = state.core.bases[selected.baseIndex];
     if (!sourceBase) return { state, events: [] };
 
-    const movableMinions = sourceBase.minions
-        .filter(minion => minion.controller === playerId)
-        .map(minion => ({
-            uid: minion.uid,
-            defId: minion.defId,
-            baseIndex: selected.baseIndex!,
-            label: getCardDef(minion.defId)?.name ?? minion.defId,
-        }));
-    if (movableMinions.length === 0) {
+    const movableCards = collectStagecoachCardsOnBase(state.core, playerId as PlayerId, selected.baseIndex);
+    if (movableCards.length === 0) {
         return { state, events: [] };
     }
 
     const interaction = createSimpleChoice(
         `cowboys_stagecoach_cards_${now}`,
         playerId,
-        '驿站马车：选择 1-2 个要移动的己方随从',
-        buildMinionTargetOptions(movableMinions, { state: state.core, sourcePlayerId: playerId }) as any[],
+        '驿站马车：选择 1-2 张要搬运到另一个基地的牌',
+        movableCards.map((card, index) => ({
+            id: `stagecoach-card-${index}`,
+            label: card.label,
+            value: {
+                kind: card.kind,
+                uid: card.uid,
+                defId: card.defId,
+                baseIndex: card.baseIndex,
+                ownerId: card.ownerId,
+                trueOwnerId: card.trueOwnerId,
+            },
+            _source: 'field' as const,
+            displayMode: 'card' as const,
+        })),
         {
             sourceId: 'cowboys_stagecoach_cards',
-            targetType: 'minion',
-            multi: { min: 1, max: Math.min(2, movableMinions.length) },
+            targetType: 'generic',
+            multi: { min: 1, max: Math.min(2, movableCards.length) },
         },
     );
     (interaction.data as any).continuationContext = {
@@ -551,7 +616,7 @@ const handleStagecoachSource = (state: MatchState<SmashUpCore>, playerId: string
 
 const handleStagecoachCards = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const ctx = (data?.continuationContext ?? {}) as StagecoachSourceContinuation;
-    const selected = (Array.isArray(value) ? value : []) as MinionChoice[];
+    const selected = (Array.isArray(value) ? value : []) as StagecoachCardChoice[];
     if (ctx.sourceBaseIndex === undefined || selected.length === 0) return { state, events: [] };
 
     const destinationBases = state.core.bases
@@ -568,9 +633,16 @@ const handleStagecoachCards = (state: MatchState<SmashUpCore>, playerId: string,
     );
     (interaction.data as any).continuationContext = {
         sourceBaseIndex: ctx.sourceBaseIndex,
-        selectedMinions: selected
-            .filter(choice => choice.minionUid && choice.defId)
-            .map(choice => ({ minionUid: choice.minionUid, defId: choice.defId! })),
+        selectedCards: selected
+            .filter(choice => choice.uid && choice.defId)
+            .map(choice => ({
+                kind: choice.kind,
+                uid: choice.uid,
+                defId: choice.defId,
+                baseIndex: choice.baseIndex,
+                ownerId: choice.ownerId,
+                trueOwnerId: choice.trueOwnerId,
+            })),
     } satisfies StagecoachDestinationContinuation;
     return { state: queueInteraction(state, interaction), events: [] };
 };
@@ -578,21 +650,38 @@ const handleStagecoachCards = (state: MatchState<SmashUpCore>, playerId: string,
 const handleStagecoachDestination = (state: MatchState<SmashUpCore>, _playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const selected = value as { baseIndex?: number; baseDefId?: string } | undefined;
     const ctx = (data?.continuationContext ?? {}) as StagecoachDestinationContinuation;
-    if (selected?.baseIndex === undefined || ctx.sourceBaseIndex === undefined || !ctx.selectedMinions?.length) {
+    if (selected?.baseIndex === undefined || ctx.sourceBaseIndex === undefined || !ctx.selectedCards?.length) {
         return { state, events: [] };
     }
 
+    const nextCore = relocateStagecoachStaticCards(state.core, ctx.sourceBaseIndex, selected.baseIndex, ctx.selectedCards);
     return {
-        state,
-        events: ctx.selectedMinions.flatMap(minion => buildValidatedMoveEvents(state, {
-            minionUid: minion.minionUid,
-            minionDefId: minion.defId,
-            fromBaseIndex: ctx.sourceBaseIndex,
-            toBaseIndex: selected.baseIndex!,
-            toBaseDefId: selected.baseDefId,
-            reason: 'cowboys_stagecoach',
-            now,
-        })),
+        state: nextCore === state.core ? state : { ...state, core: nextCore },
+        events: ctx.selectedCards.flatMap((card) => {
+            if (card.kind === 'minion') {
+                return buildValidatedMoveEvents(state, {
+                    minionUid: card.uid,
+                    minionDefId: card.defId,
+                    fromBaseIndex: ctx.sourceBaseIndex,
+                    toBaseIndex: selected.baseIndex!,
+                    toBaseDefId: selected.baseDefId,
+                    reason: 'cowboys_stagecoach',
+                    now,
+                });
+            }
+            if (card.kind === 'titan') {
+                return [moveTitan(
+                    card.uid,
+                    card.defId,
+                    ctx.sourceBaseIndex,
+                    selected.baseIndex!,
+                    'cowboys_stagecoach',
+                    now,
+                    selected.baseDefId,
+                )];
+            }
+            return [];
+        }),
     };
 };
 
@@ -607,6 +696,50 @@ const handleDynamiteSurprise = (state: MatchState<SmashUpCore>, playerId: string
             fromBaseIndex: selected.baseIndex,
             destroyerId: playerId,
             reason: 'cowboys_dynamite_surprise',
+            now,
+        }),
+    };
+};
+
+const handleDynamiteSurpriseSeen = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
+    const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number; defId?: string } | undefined;
+    if (selected?.skip) return { state, events: [] };
+    if (!selected?.minionUid || selected.baseIndex === undefined || !selected.defId) return { state, events: [] };
+
+    const ctx = (data?.continuationContext ?? {}) as {
+        cardUid?: string;
+        ownerPlayerId?: PlayerId;
+        sourceZone?: 'hand' | 'deck';
+    };
+    if (!ctx.cardUid || !ctx.ownerPlayerId || !ctx.sourceZone) return { state, events: [] };
+
+    const owner = state.core.players[ctx.ownerPlayerId];
+    if (!owner) return { state, events: [] };
+    const sourceCards = ctx.sourceZone === 'hand' ? owner.hand : owner.deck;
+    const playedCard = sourceCards.find(card => card.uid === ctx.cardUid && card.defId === 'cowboys_dynamite_surprise');
+    if (!playedCard) return { state, events: [] };
+
+    const remainingSourceCards = sourceCards.filter(card => card.uid !== ctx.cardUid);
+    const nextCore: SmashUpCore = {
+        ...state.core,
+        players: {
+            ...state.core.players,
+            [ctx.ownerPlayerId]: {
+                ...owner,
+                ...(ctx.sourceZone === 'hand' ? { hand: remainingSourceCards } : { deck: remainingSourceCards }),
+                discard: [...owner.discard, playedCard],
+            },
+        },
+    };
+
+    return {
+        state: { ...state, core: nextCore },
+        events: buildValidatedDestroyEvents(nextCore, {
+            minionUid: selected.minionUid,
+            minionDefId: selected.defId,
+            fromBaseIndex: selected.baseIndex,
+            destroyerId: playerId as PlayerId,
+            reason: 'cowboys_dynamite_surprise_seen',
             now,
         }),
     };
@@ -673,10 +806,122 @@ function collectStagecoachSourceBases(state: SmashUpCore, playerId: PlayerId): A
         .map((base, baseIndex) => ({
             baseIndex,
             label: getBaseDef(base.defId)?.name ?? base.defId,
-            movableCount: base.minions.filter(minion => minion.controller === playerId).length,
+            movableCount: collectStagecoachCardsOnBase(state, playerId, baseIndex).length,
         }))
         .filter(base => base.movableCount > 0)
         .map(({ baseIndex, label }) => ({ baseIndex, label }));
+}
+
+function collectStagecoachCardsOnBase(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    baseIndex: number,
+): Array<StagecoachCardChoice & { label: string }> {
+    const base = state.bases[baseIndex];
+    if (!base) return [];
+
+    const minions = base.minions
+        .filter(minion => minion.controller === playerId)
+        .map((minion) => ({
+            kind: 'minion' as const,
+            uid: minion.uid,
+            defId: minion.defId,
+            baseIndex,
+            label: getCardDef(minion.defId)?.name ?? minion.defId,
+        }));
+
+    const titans = (state.titans ?? [])
+        .filter(titan => titan.controllerId === playerId && titan.location.zone === 'base' && titan.location.baseIndex === baseIndex)
+        .map((titan) => ({
+            kind: 'titan' as const,
+            uid: titan.uid,
+            defId: titan.defId,
+            baseIndex,
+            label: getCardDef(titan.defId)?.name ?? titan.defId,
+        }));
+
+    const ongoingActions = base.ongoingActions
+        .filter(action => action.ownerId === playerId)
+        .map((action) => ({
+            kind: 'ongoing_base' as const,
+            uid: action.uid,
+            defId: action.defId,
+            baseIndex,
+            ownerId: action.ownerId,
+            label: `${getCardDef(action.defId)?.name ?? action.defId}（持续行动）`,
+        }));
+
+    const buriedCards = (base.buriedCards ?? [])
+        .filter(card => card.controllerId === playerId)
+        .map((card) => ({
+            kind: 'buried' as const,
+            uid: card.uid,
+            defId: card.defId,
+            baseIndex,
+            trueOwnerId: card.trueOwnerId,
+            label: `${getCardDef(card.defId)?.name ?? card.defId}（埋葬）`,
+        }));
+
+    return [...minions, ...titans, ...ongoingActions, ...buriedCards];
+}
+
+function relocateStagecoachStaticCards(
+    state: SmashUpCore,
+    sourceBaseIndex: number,
+    targetBaseIndex: number,
+    selectedCards: StagecoachCardChoice[],
+): SmashUpCore {
+    const ongoingUids = new Set(selectedCards.filter(card => card.kind === 'ongoing_base').map(card => card.uid));
+    const buriedUids = new Set(selectedCards.filter(card => card.kind === 'buried').map(card => card.uid));
+    if (ongoingUids.size === 0 && buriedUids.size === 0) return state;
+
+    const sourceBase = state.bases[sourceBaseIndex];
+    const targetBase = state.bases[targetBaseIndex];
+    if (!sourceBase || !targetBase) return state;
+
+    const movedOngoing = sourceBase.ongoingActions.filter(action => ongoingUids.has(action.uid));
+    const movedBuried = (sourceBase.buriedCards ?? []).filter(card => buriedUids.has(card.uid));
+    if (movedOngoing.length === 0 && movedBuried.length === 0) return state;
+
+    const nextBases = state.bases.map((base, index) => {
+        if (index === sourceBaseIndex) {
+            return {
+                ...base,
+                ongoingActions: base.ongoingActions.filter(action => !ongoingUids.has(action.uid)),
+                buriedCards: (base.buriedCards ?? []).filter(card => !buriedUids.has(card.uid)),
+            };
+        }
+        if (index === targetBaseIndex) {
+            return {
+                ...base,
+                ongoingActions: [...base.ongoingActions, ...movedOngoing],
+                buriedCards: [...(base.buriedCards ?? []), ...movedBuried],
+            };
+        }
+        return base;
+    });
+
+    return { ...state, bases: nextBases };
+}
+
+function collectDynamiteSeenTargets(
+    state: SmashUpCore,
+    targetPlayerId: PlayerId,
+): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
+    const results: Array<{ uid: string; defId: string; baseIndex: number; label: string }> = [];
+    state.bases.forEach((base, baseIndex) => {
+        base.minions.forEach((minion) => {
+            if (minion.controller !== targetPlayerId) return;
+            if (getMinionPower(state, minion, baseIndex) > 4) return;
+            results.push({
+                uid: minion.uid,
+                defId: minion.defId,
+                baseIndex,
+                label: `${getCardDef(minion.defId)?.name ?? minion.defId}（力量 ${getMinionPower(state, minion, baseIndex)}）`,
+            });
+        });
+    });
+    return results;
 }
 
 function buildEnemyMinionOptions(state: SmashUpCore, baseIndex: number, sourcePlayerId: PlayerId): any[] {

@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CardPreview, getCardAtlasCandidateUrls, registerCardAtlasSource, registerCardPreviewRenderer } from '../CardPreview';
 import type { SpriteAtlasConfig } from '../../../../engine/primitives/spriteAtlas';
 import { getCardAtlasSource, getLazyRegistration, registerLazyCardAtlasSource } from '../cardAtlasRegistry';
-import { markImageLoaded } from '../../../../core';
+import { markImageLoaded, setAssetsBaseUrl } from '../../../../core';
 
 const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
     imageW: 100,
@@ -17,6 +17,10 @@ const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
 };
 
 describe('CardPreview i18n atlas path', () => {
+    beforeEach(() => {
+        setAssetsBaseUrl('/assets');
+    });
+
     it('atlas 预览在未传 locale 时默认使用 zh-CN 路径', () => {
         const atlasId = 'test:card-preview:atlas-default-locale';
         registerCardAtlasSource(atlasId, {
@@ -64,6 +68,18 @@ describe('CardPreview i18n atlas path', () => {
 
         expect(candidates.some((url) => url.endsWith('/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp'))).toBe(true);
         expect(candidates).toContain('/assets/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp');
+    });
+
+    it('远程资源模式下 atlas 候选 URL 应先尝试远端，再回退本地 /assets', () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+
+        const candidates = getCardAtlasCandidateUrls('smashup/taitan/taitan1', 'zh-CN');
+        const remotePrimary = 'https://assets.easyboardgame.top/official/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp';
+        const localPrimary = '/assets/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp';
+
+        expect(candidates[0]).toBe(remotePrimary);
+        expect(candidates).toContain(localPrimary);
+        expect(candidates.indexOf(localPrimary)).toBeGreaterThan(candidates.indexOf(remotePrimary));
     });
 
     it('懒注册图集不应把 1x1 占位图当成有效 atlas', () => {

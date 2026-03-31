@@ -7,14 +7,14 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { setEnglishLocale } from './helpers/common';
+import { setChineseLocale } from './helpers/common';
 import { dispatchLocalCommand, waitForTutorialBoardReady } from './helpers/dicethrone';
 
 test.describe('DiceThrone Tutorial (Simplified)', () => {
     test('Tutorial starts and shows initial steps', async ({ page }, testInfo) => {
         test.setTimeout(120000);
 
-        await setEnglishLocale(page);
+        await setChineseLocale(page);
         await page.goto('/play/dicethrone/tutorial');
         await waitForTutorialBoardReady(page, 60000);
 
@@ -51,7 +51,7 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
     test('Tutorial can advance through main phases', async ({ page }, testInfo) => {
         test.setTimeout(120000);
 
-        await setEnglishLocale(page);
+        await setChineseLocale(page);
         await page.goto('/play/dicethrone/tutorial');
         await waitForTutorialBoardReady(page, 60000);
 
@@ -126,7 +126,7 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
     test('Tutorial roll visual should not block next required action', async ({ page }, testInfo) => {
         test.setTimeout(120000);
 
-        await setEnglishLocale(page);
+        await setChineseLocale(page);
         await page.goto('/play/dicethrone/tutorial');
         await waitForTutorialBoardReady(page, 60000);
 
@@ -184,7 +184,7 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await handCard.click();
 
         await page.waitForFunction(() => {
-            return document.body.textContent?.includes('Select die to set to 6');
+            return document.body.textContent?.includes('选择要设为6的骰子');
         }, { timeout: 10000 });
 
         const firstDieButton = page.locator('[data-testid="die-button-0"]');
