@@ -305,31 +305,80 @@ export default function AIRepoWorkbench() {
 
     return (
         <div data-testid="workbench-surface" className="min-h-screen bg-[linear-gradient(180deg,#f6f1e7_0%,#efe4d4_45%,#f9f6ef_100%)] text-stone-900">
-            <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
-                <button
-                    type="button"
-                    onClick={() => navigate('/')}
-                    className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white/80 px-4 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-400 hover:bg-white"
-                >
-                    <ArrowLeft className="h-4 w-4" />
-                    返回大厅
-                </button>
-                <header className="mt-6 grid gap-6 rounded-[36px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),rgba(255,255,255,0.72))] p-8 shadow-[0_24px_80px_rgba(120,53,15,0.08)] lg:grid-cols-[1.3fr_0.7fr]">
-                    <div>
+            <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 xl:px-8">
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-white/70 bg-white/75 px-5 py-4 shadow-[0_18px_50px_rgba(120,53,15,0.06)] backdrop-blur-sm">
+                    <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.32em] text-stone-500">AI Repo Workbench</p>
-                        <h1 data-testid="workbench-page-heading" className="mt-4 text-4xl font-semibold tracking-tight text-stone-950">AI 仓库工作台</h1>
-                        <p className="mt-4 max-w-3xl text-base leading-8 text-stone-600">
-                            这不是聊天壳。当前 MVP 只做一个 repo-centric 的固定模板：`new-faction`。本页直接把 RepoSession、WorkflowRun、
-                            DecisionRequest 和 ArtifactBundle 以 local-first 方式串成一条可截图、可验证的真实纵切片。
-                        </p>
-                        <div className="mt-5 flex flex-wrap gap-3 text-sm text-stone-700">
-                            <span className="rounded-full bg-stone-900 px-4 py-2 font-semibold text-white">模板唯一真相：new-faction</span>
-                            <span className="rounded-full border border-stone-300 bg-white/80 px-4 py-2">执行方向：local-first</span>
-                            <span className="rounded-full border border-stone-300 bg-white/80 px-4 py-2">仓库路径：{AI_REPO_WORKBENCH_REPO_PATH}</span>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                            <h1 data-testid="workbench-page-heading" className="text-3xl font-semibold tracking-tight text-stone-950">AI 仓库工作台</h1>
+                            <StatusBadge status={activeRun?.status ?? 'pending'} />
                         </div>
+                        <p className="mt-2 max-w-4xl text-sm leading-7 text-stone-600">
+                            桌面工作台视图：左侧管理模板和仓库上下文，中间查看 WorkflowRun 与节点时间线，右侧固定展示 DecisionRequest 与 ArtifactBundle。
+                        </p>
                     </div>
-                    <div className="grid gap-4">
-                        <div data-testid="repo-session-card" className="rounded-[28px] border border-stone-200 bg-white/90 p-5">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/')}
+                        className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:border-stone-400 hover:bg-stone-50"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        返回大厅
+                    </button>
+                </div>
+
+                <div className="mt-6 grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_380px]">
+                    <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+                        <article data-testid="template-new-faction-card" className="rounded-[28px] border border-stone-200 bg-white/92 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">Template</p>
+                                    <h2 className="mt-3 text-2xl font-semibold text-stone-950">new-faction</h2>
+                                    <p className="mt-3 text-sm leading-7 text-stone-600">
+                                        首版只开放这一条正式模板。它覆盖规则来源选择、规则规范化、素材检查、派系定义草案和 ArtifactBundle 发布。
+                                    </p>
+                                </div>
+                                <div className="rounded-3xl bg-amber-100 p-3 text-amber-700">
+                                    <Sparkles className="h-5 w-5" />
+                                </div>
+                            </div>
+                            <div className="mt-5 flex flex-wrap gap-2 text-xs text-stone-700">
+                                <span className="rounded-full bg-stone-900 px-3 py-1.5 font-semibold text-white">模板唯一真相</span>
+                                <span className="rounded-full border border-stone-300 bg-stone-50 px-3 py-1.5">local-first</span>
+                                <span className="rounded-full border border-stone-300 bg-stone-50 px-3 py-1.5">repo-centric</span>
+                            </div>
+                            <label className="mt-6 block">
+                                <span className="text-sm font-medium text-stone-700">派系名称</span>
+                                <input
+                                    value={factionName}
+                                    onChange={(event) => setFactionName(event.target.value)}
+                                    className="mt-2 w-full rounded-2xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-500 focus:bg-white"
+                                    placeholder="输入本轮 new-faction 目标名"
+                                />
+                            </label>
+                            <div className="mt-6 grid gap-3">
+                                <button
+                                    type="button"
+                                    data-testid="start-new-faction-run"
+                                    onClick={() => setJournal((current) => startNewFactionRun(current, { factionName }, Date.now()))}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-800"
+                                >
+                                    <PlayCircle className="h-4 w-4" />
+                                    启动 new-faction
+                                </button>
+                                <button
+                                    type="button"
+                                    data-testid="reset-workbench-journal"
+                                    onClick={() => setJournal(resetWorkbenchJournal(Date.now()))}
+                                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-400 hover:bg-stone-50"
+                                >
+                                    <RefreshCcw className="h-4 w-4" />
+                                    重置演示数据
+                                </button>
+                            </div>
+                        </article>
+
+                        <div data-testid="repo-session-card" className="rounded-[28px] border border-stone-200 bg-white/92 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
                             <div className="flex items-center gap-3 text-stone-900">
                                 <FolderGit2 className="h-5 w-5 text-amber-700" />
                                 <div>
@@ -337,9 +386,20 @@ export default function AIRepoWorkbench() {
                                     <p className="mt-1 text-lg font-semibold">{journal.repoSession.metadata.repoName}</p>
                                 </div>
                             </div>
-                            <p className="mt-4 break-all text-sm leading-6 text-stone-600">{journal.repoSession.rootPath}</p>
+                            <div className="mt-4 space-y-3 text-sm text-stone-600">
+                                <p className="break-all rounded-2xl bg-stone-50 px-4 py-3">{journal.repoSession.rootPath}</p>
+                                <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                                    <span>sourceType</span>
+                                    <span className="font-medium text-stone-900">{journal.repoSession.sourceType}</span>
+                                </div>
+                                <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                                    <span>productMode</span>
+                                    <span className="font-medium text-stone-900">{journal.repoSession.metadata.productMode}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="rounded-[28px] border border-stone-200 bg-white/90 p-5">
+
+                        <div className="rounded-[28px] border border-stone-200 bg-white/92 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
                             <div className="flex items-center gap-3 text-stone-900">
                                 <GitBranch className="h-5 w-5 text-sky-700" />
                                 <div>
@@ -347,110 +407,124 @@ export default function AIRepoWorkbench() {
                                     <p className="mt-1 text-lg font-semibold">{journal.worktreeTask.branchName}</p>
                                 </div>
                             </div>
-                            <div className="mt-4 flex items-center justify-between">
-                                <p className="text-sm text-stone-600">taskKind: {journal.worktreeTask.taskKind}</p>
-                                <StatusBadge status={journal.worktreeTask.status === 'ready' ? 'pending' : journal.worktreeTask.status} />
+                            <div className="mt-4 space-y-3 text-sm text-stone-600">
+                                <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                                    <span>taskKind</span>
+                                    <span className="font-medium text-stone-900">{journal.worktreeTask.taskKind}</span>
+                                </div>
+                                <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                                    <span>status</span>
+                                    <StatusBadge status={journal.worktreeTask.status === 'ready' ? 'pending' : journal.worktreeTask.status} />
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </header>
-                <section className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-                    <article data-testid="template-new-faction-card" className="rounded-[32px] border border-stone-200 bg-white/90 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">Template</p>
-                                <h2 className="mt-3 text-2xl font-semibold text-stone-950">new-faction</h2>
-                                <p className="mt-3 text-sm leading-7 text-stone-600">
-                                    首版只开放这一条正式模板。它覆盖规则来源选择、规则规范化、素材检查、派系定义草案和 ArtifactBundle 发布。
-                                </p>
-                            </div>
-                            <div className="rounded-3xl bg-amber-100 p-3 text-amber-700">
-                                <Sparkles className="h-5 w-5" />
-                            </div>
-                        </div>
-                        <label className="mt-6 block">
-                            <span className="text-sm font-medium text-stone-700">派系名称</span>
-                            <input
-                                value={factionName}
-                                onChange={(event) => setFactionName(event.target.value)}
-                                className="mt-2 w-full rounded-2xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm outline-none transition focus:border-stone-500 focus:bg-white"
-                                placeholder="输入本轮 new-faction 目标名"
-                            />
-                        </label>
-                        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                data-testid="start-new-faction-run"
-                                onClick={() => setJournal((current) => startNewFactionRun(current, { factionName }, Date.now()))}
-                                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-800"
-                            >
-                                <PlayCircle className="h-4 w-4" />
-                                启动 new-faction
-                            </button>
-                            <button
-                                type="button"
-                                data-testid="reset-workbench-journal"
-                                onClick={() => setJournal(resetWorkbenchJournal(Date.now()))}
-                                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-400 hover:bg-stone-50"
-                            >
-                                <RefreshCcw className="h-4 w-4" />
-                                重置演示数据
-                            </button>
-                        </div>
-                    </article>
-                    <article className="rounded-[32px] border border-stone-200 bg-white/90 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">WorkflowRun</p>
-                        {activeRun ? (
-                            <>
-                                <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+
+                        <section className="grid gap-4 rounded-[28px] border border-stone-200 bg-white/92 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+                            <div className="rounded-3xl bg-stone-50 p-4">
+                                <div className="flex items-center gap-3">
+                                    <CircleDot className="h-5 w-5 text-sky-700" />
                                     <div>
-                                        <h2 className="text-2xl font-semibold text-stone-950">{activeRun.title}</h2>
-                                        <p className="mt-2 text-sm leading-7 text-stone-600">
-                                            currentNode: {activeRun.currentNodeId ?? '已到完成态'} / checkpointVersion: {activeRun.checkpointVersion}
-                                        </p>
+                                        <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Surface</p>
+                                        <p className="mt-1 font-semibold text-stone-900">Workbench Surface</p>
                                     </div>
-                                    <StatusBadge status={activeRun.status} />
                                 </div>
-                                <div className="mt-6 overflow-hidden rounded-full bg-stone-100">
-                                    <div
-                                        className="h-3 rounded-full bg-[linear-gradient(90deg,#0f766e_0%,#14b8a6_100%)] transition-all"
-                                        style={{
-                                            width: `${progressSummary.total > 0 ? (progressSummary.completed / progressSummary.total) * 100 : 0}%`,
-                                        }}
-                                    />
+                                <p className="mt-3 text-sm leading-6 text-stone-600">桌面布局优先，主工作区、上下文栏和侧边决策栏并列存在。</p>
+                            </div>
+                            <div className="rounded-3xl bg-stone-50 p-4">
+                                <div className="flex items-center gap-3">
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                                    <div>
+                                        <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Runtime</p>
+                                        <p className="mt-1 font-semibold text-stone-900">LocalRuntime Journal</p>
+                                    </div>
                                 </div>
-                                <div className="mt-3 flex items-center justify-between text-sm text-stone-600">
-                                    <span>{progressSummary.completed} / {progressSummary.total} 节点已完成</span>
-                                    <span>startedAt: {activeRun.startedAt.slice(11, 19)}</span>
+                                <p className="mt-3 text-sm leading-6 text-stone-600">运行态保存在浏览器 localStorage，结构化保留 WorkflowRun、DecisionRequest 和 ArtifactBundle。</p>
+                            </div>
+                            <div className="rounded-3xl bg-stone-50 p-4">
+                                <div className="flex items-center gap-3">
+                                    <PackageCheck className="h-5 w-5 text-amber-700" />
+                                    <div>
+                                        <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Stub Boundary</p>
+                                        <p className="mt-1 font-semibold text-stone-900">Structured Stub</p>
+                                    </div>
                                 </div>
-                            </>
-                        ) : (
-                            <>
-                                <h2 className="mt-3 text-2xl font-semibold text-stone-950">还没有运行中的 WorkflowRun</h2>
-                                <p className="mt-3 text-sm leading-7 text-stone-600">
-                                    先从左侧模板卡启动一次 `new-faction`，页面会立即创建 RepoSession 关联的 WorkflowRun 与 DecisionRequest。
-                                </p>
-                            </>
-                        )}
-                    </article>
-                </section>
-                <section className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                    <div>
-                        <div className="mb-4 flex items-center gap-3">
-                            <Clock3 className="h-5 w-5 text-stone-500" />
-                            <h2 className="text-2xl font-semibold text-stone-950">节点时间线</h2>
-                        </div>
-                        <div className="grid gap-4">
-                            {activeNodes.length > 0 ? (
-                                activeNodes.map((node) => <TimelineCard key={node.nodeId} node={node} run={activeRun as WorkflowRun} />)
-                            ) : (
-                                <div className="rounded-[28px] border border-dashed border-stone-300 bg-white/70 px-6 py-10 text-sm leading-7 text-stone-600">
-                                    启动模板后，这里会按 NodeExecutionRecord 逐步展示 `pending / running / waiting_decision / completed`。
+                                <p className="mt-3 text-sm leading-6 text-stone-600">只有规则来源是本轮真实人工决策；其余节点仍是结构化 stub，并明确标边界。</p>
+                            </div>
+                        </section>
+                    </aside>
+
+                    <main className="min-w-0 space-y-6">
+                        <article className="rounded-[28px] border border-stone-200 bg-white/92 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">WorkflowRun</p>
+                                    {activeRun ? (
+                                        <>
+                                            <h2 className="mt-3 text-2xl font-semibold text-stone-950">{activeRun.title}</h2>
+                                            <p className="mt-2 text-sm leading-7 text-stone-600">
+                                                currentNode: {activeRun.currentNodeId ?? '已到完成态'} / checkpointVersion: {activeRun.checkpointVersion}
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h2 className="mt-3 text-2xl font-semibold text-stone-950">还没有运行中的 WorkflowRun</h2>
+                                            <p className="mt-2 text-sm leading-7 text-stone-600">
+                                                从左侧模板区启动一次 `new-faction`，中间主工作区会立即接管节点推进与运行态显示。
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="space-y-6">
+                                {activeRun ? <StatusBadge status={activeRun.status} /> : null}
+                            </div>
+                            <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+                                <div>
+                                    <div className="overflow-hidden rounded-full bg-stone-100">
+                                        <div
+                                            className="h-3 rounded-full bg-[linear-gradient(90deg,#0f766e_0%,#14b8a6_100%)] transition-all"
+                                            style={{
+                                                width: `${progressSummary.total > 0 ? (progressSummary.completed / progressSummary.total) * 100 : 0}%`,
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-stone-600">
+                                        <span>{progressSummary.completed} / {progressSummary.total} 节点已完成</span>
+                                        <span>startedAt: {activeRun?.startedAt.slice(11, 19) ?? '--:--:--'}</span>
+                                    </div>
+                                </div>
+                                <div className="grid gap-3 text-sm text-stone-600">
+                                    <div className="rounded-2xl bg-stone-50 px-4 py-3">
+                                        <p className="text-xs uppercase tracking-[0.2em] text-stone-400">Current Template</p>
+                                        <p className="mt-1 font-semibold text-stone-900">new-faction</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-stone-50 px-4 py-3">
+                                        <p className="text-xs uppercase tracking-[0.2em] text-stone-400">Repo Path</p>
+                                        <p className="mt-1 break-all text-stone-700">{AI_REPO_WORKBENCH_REPO_PATH}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+
+                        <section className="rounded-[28px] border border-stone-200 bg-white/92 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+                            <div className="mb-4 flex items-center gap-3">
+                                <Clock3 className="h-5 w-5 text-stone-500" />
+                                <div>
+                                    <h2 className="text-2xl font-semibold text-stone-950">节点时间线</h2>
+                                    <p className="mt-1 text-sm text-stone-600">把当前 run 的节点推进放在中间主工作区，不再做成长页面附属卡片流。</p>
+                                </div>
+                            </div>
+                            <div className="grid gap-4">
+                                {activeNodes.length > 0 ? (
+                                    activeNodes.map((node) => <TimelineCard key={node.nodeId} node={node} run={activeRun as WorkflowRun} />)
+                                ) : (
+                                    <div className="rounded-[24px] border border-dashed border-stone-300 bg-white/70 px-6 py-10 text-sm leading-7 text-stone-600">
+                                        启动模板后，这里会按 NodeExecutionRecord 逐步展示 `pending / running / waiting_decision / completed`。
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    </main>
+
+                    <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
                         <DecisionPanel
                             decision={activeDecision}
                             selectedOptionId={selectedRuleSource}
@@ -464,40 +538,8 @@ export default function AIRepoWorkbench() {
                             }}
                         />
                         <ArtifactPanel artifact={activeArtifact} />
-                    </div>
-                </section>
-                <section className="mt-8 grid gap-4 rounded-[32px] border border-stone-200 bg-white/90 p-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)] md:grid-cols-3">
-                    <div className="rounded-3xl bg-stone-50 p-5">
-                        <div className="flex items-center gap-3">
-                            <CircleDot className="h-5 w-5 text-sky-700" />
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Surface</p>
-                                <p className="mt-1 font-semibold text-stone-900">Workbench Surface</p>
-                            </div>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-stone-600">Home 工具卡进入，当前页面直接展示运行详情、决策和 bundle。</p>
-                    </div>
-                    <div className="rounded-3xl bg-stone-50 p-5">
-                        <div className="flex items-center gap-3">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Runtime</p>
-                                <p className="mt-1 font-semibold text-stone-900">LocalRuntime Journal</p>
-                            </div>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-stone-600">运行态存在浏览器 localStorage，结构化保留 WorkflowRun、DecisionRequest 和 ArtifactBundle。</p>
-                    </div>
-                    <div className="rounded-3xl bg-stone-50 p-5">
-                        <div className="flex items-center gap-3">
-                            <PackageCheck className="h-5 w-5 text-amber-700" />
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.24em] text-stone-400">Stub Boundary</p>
-                                <p className="mt-1 font-semibold text-stone-900">Structured Stub</p>
-                            </div>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-stone-600">只有规则来源是本轮真实人工决策；后续节点仍是显式结构化 stub，页面内已标明边界。</p>
-                    </div>
-                </section>
+                    </aside>
+                </div>
             </div>
         </div>
     );
