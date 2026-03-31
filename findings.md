@@ -311,3 +311,30 @@
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup-oops-faction-intake-e2e-test.md
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\docs\workflows\smashup-faction-intake.md
 ```
+
+## 2026-03-31 feedback closeout
+
+### 已修复（按反馈归档）
+- `69c8c039`：归类文本落在 DiceThrone，但实际对应 SmashUp Samurai 同时触发问题；已由 `393b83b3` 覆盖。
+- `69c8c230` / `69c8c419` / `69c8c4f8`：Samurai 三条，已由 `393b83b3` 修复。
+- `69c903f3`：AI 计分阶段 special 卡死，已由 `d8ec6aad` 修复。
+- `69c92631`：亡者崛起选墓地随从后不能选基地打出，已由 `22713717` 修复。
+- `69c92aa4` / `69c92bca`：Ancient Egyptians 前两条，已由 `05db8831` 修复。
+- `69c92d8d` / `69c9319f`：Ancient Egyptians 剩余两条，已由 `fa9a4c02` 修复。
+- `69c92e82`：德拉卡尔号问题，主逻辑已正确，缺关键回归覆盖；已补测试并按已修复归档（`3dd374b2`）。
+- `69c93b65`：海盗船长 / afterScoring 特殊窗口异常，已由 `4ec96272` 修复。
+- `69c942f0`：一目了然 vs 杀人藤蔓，已确认真 bug 并由 `74d8e513` 修复。
+
+### 已关闭
+- `69c93d98`：证据不足；现有实现与相关回归未复现仍存在的现行 bug，先关闭。
+- `69c8f2f4`：高概率已被后续修复覆盖；当前 `mobileSupport` 横屏 zero-height 回归与 Gunslinger `The Law` 1v1/多人目标选择回归均通过，在缺少真实设备/目标浏览器复现锚点前按关闭归档。
+
+### 本批反馈对应提交
+- `74d8e513` fix(smashup): respect in plain sight against entangled
+- `393b83b3` fix(smashup): tighten samurai trigger regressions
+- `4ec96272` fix(smashup): skip pirate king afterscoring window when unplayable
+- `fa9a4c02` fix(smashup): cover ancient egyptians tomb trap and seal the tomb
+- `22713717` fix(smashup): support dead rise discard-base quick play
+- `3dd374b2` fix(smashup): cover drakkar reshuffle handoff
+- `05db8831` fix(smashup): close ancient egyptians feedback regressions
+- `d8ec6aad` fix(smashup): resolve open feedback regressions
