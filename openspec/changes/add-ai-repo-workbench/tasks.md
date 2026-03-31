@@ -1,7 +1,15 @@
+## 0. Baseline & Skeleton Freeze
+- [ ] 0.1 在 `design.md` 前置补齐《开源基线与可复用结论》，基于官方仓库 / 官方文档比较 LangGraph、OpenHands、Flowise、n8n、Activepieces 的产品定位与可复用能力。
+- [ ] 0.2 输出一张硬决策表，至少显式裁决 OpenHands / Flowise / n8n / Activepieces 是否应直接 fork 为底座，并写明为什么 fork / 不 fork。
+- [ ] 0.3 冻结五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，禁止后续实现绕过该分层。
+- [ ] 0.4 明确 LangGraph 只允许位于 `WorkflowOrchestrator` 层，并写清它与 `LocalRuntime`、`RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 的边界。
+- [ ] 0.5 若继续沿用当前技术路线，必须同步记录“为什么成立、风险在哪里、还需要哪些优化”，不能只保留结论。
+
 ## 1. Runtime Foundation
 - [ ] 1.1 定义 `RepoSession`、`WorktreeTask`、`WorkflowRun`、`NodeExecutionRecord` 的持久化 schema，并约束 `new-faction` MVP 必须运行在单一 `WorktreeTask` 内。
-- [ ] 1.2 实现 `LocalRuntime` 的最小执行接口：`runNode`、`pauseForDecision`、`resumeRun`、`publishArtifactBundle`。
-- [ ] 1.3 选择并落地本地状态存储方案（文件 journal / SQLite / 等价实现），确保节点状态、决策对象与产物索引可在进程重启后恢复。
+- [ ] 1.2 定义 `WorkflowOrchestrator` 与 `LocalRuntime` 的分层接口；如采用 LangGraph，只允许它藏在 orchestrator 适配层后面。
+- [ ] 1.3 实现 `LocalRuntime` 的最小执行接口：`runNode`、`pauseForDecision`、`resumeRun`、`publishArtifactBundle`。
+- [ ] 1.4 选择并落地本地状态存储方案（文件 journal / SQLite / 等价实现），确保节点状态、决策对象与产物索引可在进程重启后恢复。
 
 ## 2. New-Faction Workflow
 - [ ] 2.1 实现 `new-faction` 固定节点图：`capture-faction-intent -> select-rule-source -> acquire-rule-material -> transcribe-or-normalize-rules -> inspect-assets -> draft-faction-definition -> review-faction-definition -> publish-artifact-bundle`。
@@ -31,5 +39,5 @@
 - [ ] 6.3 运行 `openspec validate add-ai-repo-workbench --strict --no-interactive`，并在实现落地时同步补充用户可见的证据文档。
 
 ## 7. Future-Proofing
-- [ ] 7.1 把执行器接口与领域模型解耦，确保后续接入 Temporal 时无需改写 `DecisionRequest`、节点 I/O schema 与 `ArtifactBundle`。
+- [ ] 7.1 把执行器接口与领域模型解耦，确保后续接入 Temporal 或替换 LangGraph 实现时，无需改写 `DecisionRequest`、节点 I/O schema 与 `ArtifactBundle`。
 - [ ] 7.2 为 Temporal 适配预留边界说明：Temporal 只接管 durable orchestration，不接管仓库安全策略、前端展示与证据结构。

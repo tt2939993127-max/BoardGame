@@ -11,6 +11,7 @@
 ## Goals / Non-Goals
 
 - Goals:
+  - 不是教程式渐进拼装，而是先一次性冻结 MVP 骨架、分层边界与 fork 裁决，再进入实现。
   - 用单一、固定、可观察的“新建派系”节点流验证工作台架构。
   - 明确每个节点的输入、输出、持久化状态与暂停/恢复契约。
   - 定义 `DecisionRequest` 作为人工决策的统一协议，而不是各节点各自发问。
@@ -22,6 +23,62 @@
   - 本 change 不要求第一版就覆盖“数据录入 / Bug 修复 / 审计 / PR merge”完整产品能力。
   - 本 change 不要求第一版就引入 Temporal、Kubernetes 或分布式调度。
   - 本 change 不把 OpenHands、Flowise、n8n、Activepieces 直接当成可嵌入组件；这里只借鉴架构与交互模式。
+
+## Skeleton-First Principles
+
+### Decision: 这不是教程式渐进方案，而是先冻结骨架再落实现
+
+第一版不能采用“先做个聊天框 / 先打通一条最短 happy path / 以后再慢慢抽象”的路径，因为那会把最关键的架构判断延后，最后演变成产品边界、运行边界和证据边界都不稳定的临时系统。
+
+本 change 必须先一次性冻结以下骨架，再允许进入实现：
+
+1. **产品骨架**：MVP 只暴露 `new-faction`，不把工作台伪装成通用任务中心。
+2. **分层骨架**：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`。
+3. **人工决策骨架**：所有人工暂停点都归一到 `DecisionRequest`。
+4. **交付骨架**：所有阶段性交付都归一到 `ArtifactBundle`。
+5. **开源底座裁决**：在实现前明确“是否 fork 成熟开源仓库作为底座”。
+
+若上述任一项未冻结，不进入第二模板、自由画布、远程执行、云端多租户等扩展讨论。
+
+## 开源基线与可复用结论
+
+### Decision: 先形成官方基线，再做产品裁决
+
+以下结论只建立在官方仓库 / 官方文档所表达的产品定位上，而不是只引用项目名词：
+
+| 项目 | 官方基线 | 可复用结论 | 明确不复用的部分 | 主要来源 |
+| --- | --- | --- | --- | --- |
+| LangGraph | 面向 long-running、stateful agent 的 low-level orchestration framework，强调 durable execution、human-in-the-loop、checkpoint / resume。 | 适合作为**工作流编排层语义参考**：中断、恢复、checkpoint、deterministic replay。 | 不把它抬升成工作台领域模型本身；不让 LangGraph 类型渗透 `RepoSession`、`DecisionRequest`、`ArtifactBundle`。 | `https://docs.langchain.com/oss/javascript/langgraph/overview`、`https://docs.langchain.com/oss/javascript/langgraph/durable-execution` |
+| OpenHands | 面向 AI-driven development，提供 SDK、CLI、Local GUI、Cloud，能在真实代码仓库上运行代理。 | 适合作为**本地仓库代理执行体验参考**：真实仓库操作、工具反馈、本地 GUI/CLI 协同。 | 不沿用其“聊天 / agent session 是主入口”的产品中心；不把工作台退化成通用 coding agent 外壳。 | `https://github.com/OpenHands/OpenHands` |
+| Flowise | 明确定位为 “Build AI Agents, Visually”，Apache 2.0，长于可视化节点流与运行面板。 | 适合作为**节点可视化与运行详情 UI 参考**。 | 不引入自由拖拽画布作为首版产品中心；不让可视化编排先于领域模板。 | `https://github.com/FlowiseAI/Flowise` |
+| n8n | 明确定位为技术团队工作流自动化平台，强调 400+ integrations、AI capabilities、fair-code license。 | 适合作为**执行历史、失败重试、运行数据可见性**参考。 | 不把项目做成 iPaaS / 集成市场；不以 n8n 的节点生态作为仓库工作流建模基础。 | `https://github.com/n8n-io/n8n` |
+| Activepieces | TypeScript 自动化平台，社区版 MIT，强调 approval / human input / chat-form 接口。 | 适合作为**审批卡片、人机输入界面、低认知负担恢复交互**参考。 | 不继承其 piece marketplace / automation builder 的产品重心。 | `https://github.com/activepieces/activepieces` |
+
+基于这组官方基线，第一版可复用结论固定如下：
+
+1. **工作台的核心不是聊天，也不是自由画布，而是“仓库模板工作流 + 决策暂停 + 证据交付”。**
+2. **LangGraph 最多是编排层基础设施，不是领域模型来源。**
+3. **仓库本地执行语义必须由本项目自定义的 `RepoSession / WorktreeTask / ArtifactBundle` 持有，而不是从现成自动化平台反推。**
+4. **UI 可以借鉴 Flowise / Activepieces，执行可见性可以借鉴 n8n，仓库执行体验可以借鉴 OpenHands，但产品骨架不能被任何单个外部项目接管。**
+
+## Fork 评估与底座裁决
+
+### Decision: 当前不直接 fork 成熟开源仓库，采用“自研领域骨架 + 选择性吸收能力”
+
+老板要求的关键问题不是“能不能 fork”，而是“fork 之后会不会把产品重心带偏”。因此本 change 必须先给出显式裁决：
+
+| 候选底座 | 与目标问题的贴合度 | 强项 | 关键错位 | fork 结论 |
+| --- | --- | --- | --- | --- |
+| OpenHands | 中高 | 最接近 repo-native agent：本地 GUI、CLI、SDK、真实仓库工具运行。 | 核心对象仍是 agent / conversation / task 执行体验，而不是 `RepoSession + WorkflowTemplate + ArtifactBundle`；技术栈也偏 Python 中心。 | **不 fork**。保留为“仓库代理与本地执行体验”参考源。 |
+| Flowise | 中 | 现成的可视化节点流、运行面板、低门槛 AI workflow UI。 | 产品中心是 visual builder；若直接 fork，MVP 很容易退回“先有画布，再找模板”。 | **不 fork**。只借 UI 表达与节点可视化思路。 |
+| n8n | 中低 | 执行历史、失败节点、重试、成熟集成与运维形态。 | iPaaS / automation 平台心智太强，且 fair-code 许可会让底座策略更复杂。 | **不 fork**。只借执行历史与失败可见性模式。 |
+| Activepieces | 中 | TypeScript 栈、人机审批 / 表单输入做得更贴近我们需要。 | 依然是 automation / piece 生态中心，不是 repo-local 工作流中心。 | **不 fork**。只借 approval / input UX 模式。 |
+
+最终裁决：
+
+- **最正确方案：不直接 fork，上层自定义领域骨架，下层按需吸收成熟项目的局部模式。**
+- 理由不是“改动最小”，而是**架构正确性最高**：我们要先把 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 这套仓库工作台语义定成唯一真实来源，任何直接 fork 都会先继承对方的主语义，再被迫做大规模逆向改造。
+- 若未来目标切换为“聊天式 coding agent 平台”，再重新评估以 OpenHands 为底座；若未来目标切换为“通用自动化 / SaaS 集成市场”，再重新评估 n8n / Activepieces。当前目标下，两类 fork 都不是最正确路线。
 
 ## MVP Boundary
 
@@ -47,6 +104,18 @@ MVP **明确不包含** 以下内容：
 - 若第一版同时承载“新建游戏”“Bug 修复”“数据录入”等多条主链路，规范会重新变成宽泛口号，难以指导实现。
 
 ## Architecture Overview
+
+### Decision: 先冻结五层骨架，再实现固定节点图
+
+MVP 的骨架不是“聊天框 + 若干工具调用”，而是固定的五层：
+
+1. `Workbench Surface`：模板入口、运行详情、决策卡片、证据预览。
+2. `WorkflowOrchestrator`：节点图推进、checkpoint、interrupt / resume、状态迁移。
+3. `LocalRuntime`：worktree、文件、命令、日志、脚本与本地安全边界。
+4. `Repo Domain`：`RepoSession`、`WorktreeTask`、`WorkflowRun`、`DecisionRequest`、`ArtifactBundle`。
+5. `Artifact Publisher`：bundle 组装、证据索引、阶段产物发布。
+
+只有在这五层边界稳定后，固定节点图才有意义；否则实现细节会反过来绑死领域模型。
 
 ### Decision: 采用固定节点图 + 持久化运行日志，而不是自由聊天拼接
 
@@ -473,6 +542,32 @@ MVP **不** 让 `LocalRuntime` 负责：
 - 长期运行数月的高可用工作流编排
 - 多租户隔离
 
+### LangGraph Layer Boundary
+
+若采用 LangGraph，它**只允许位于 `WorkflowOrchestrator` 层**，用于表达节点推进、中断恢复与 checkpoint；它不能越级拥有仓库领域对象。
+
+| 对象 / 层 | 应由谁负责 | LangGraph 可以知道什么 | LangGraph 不得拥有什么 |
+| --- | --- | --- | --- |
+| `WorkflowOrchestrator` | LangGraph 适配器或等价自研 orchestrator | 节点 ID、运行状态、resume token、checkpoint key、节点间状态转移 | 仓库真实路径策略、worktree 生命周期策略、最终交付语义 |
+| `LocalRuntime` | 本项目 runtime 层 | 被 orchestrator 调用的 side-effect task 结果 | runtime 内部文件句柄、shell policy、仓库权限边界 |
+| `RepoSession` | 本项目领域层 | 一个可序列化的会话引用 / sessionId | 作为 LangGraph 原生 thread state 的唯一真源 |
+| `WorktreeTask` | 本项目领域层 + runtime | taskId、状态引用、执行结果摘要 | worktree 的创建/复用/销毁规则本身 |
+| `DecisionRequest` | 本项目领域层 | interrupt 点所需的最小 resume token 与状态引用 | 决策卡片 schema 的定义权、审计日志结构 |
+| `ArtifactBundle` | `Artifact Publisher` + 领域层 | 产物发布动作的触发时机 | bundle 的最终 schema、证据索引结构、E2E 状态定义 |
+
+因此，LangGraph 的正确位置是：
+
+- **上接** `Workbench Surface` 暴露的运行 / 恢复操作；
+- **下接** `LocalRuntime` 暴露的 side-effect task；
+- **旁路引用** `Repo Domain` 的稳定 schema；
+- **不直接拥有** 仓库语义、决策协议与证据协议。
+
+进一步约束：
+
+1. `RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 必须先独立建模，再决定是否用 LangGraph 驱动节点推进。
+2. 即使采用 LangGraph，也只在内部适配层使用 `StateGraph` / `interrupt` / `Command` 语义，对外 API 不暴露 LangGraph 专有类型。
+3. LangGraph checkpoint 中只保存可重放的运行状态与引用，不直接塞入大文件内容、截图二进制或完整仓库快照。
+
 ### Future Temporal Boundary
 
 若后续引入 Temporal，其职责边界应当是：
@@ -516,6 +611,40 @@ MVP **不** 让 `LocalRuntime` 负责：
 1. 借鉴交互与编排语义，不复制别人的产品边界。
 2. 凡是会把 MVP 从“新建派系”拉回“通用自动化平台”的能力，一律延后。
 3. 凡是会破坏本地仓库安全边界的“云端透明执行”能力，一律不进入第一版。
+
+## Selection Validity / Risks / Optimizations
+
+### Decision: 当前技术选型仍成立，但必须带着风险表推进
+
+当前推荐组合仍然成立：
+
+- **领域骨架**：`RepoSession / WorktreeTask / WorkflowRun / DecisionRequest / ArtifactBundle`
+- **执行策略**：local-first `LocalRuntime`
+- **编排策略**：固定模板工作流；LangGraph 仅作为可插拔 orchestrator 适配层
+- **产品收敛**：只做 `new-faction`
+- **开源策略**：不 fork，局部吸收成熟模式
+
+成立原因：
+
+1. 目标问题首先是**仓库工作台**，不是通用 agent playground。
+2. MVP 最关键的复杂度来自**暂停 / 恢复 / 决策 / 证据交付**，而不是任意画布编排。
+3. 本项目必须保留强本地仓库语义与可审计交付，这要求领域模型先于底层框架。
+
+主要风险：
+
+| 风险 | 触发方式 | 当前控制策略 |
+| --- | --- | --- |
+| 领域骨架定义得不够硬，后续又被实现细节反推 | 先写节点代码，再补 schema | 先冻结 schema、接口与层次边界，再做节点实现 |
+| LangGraph 侵入过深，导致领域对象被其线程状态绑架 | 直接把 session / artifact 全塞进 graph state | 只允许保存引用与可重放状态，不让 LangGraph 成为领域真源 |
+| 不 fork 带来初期自研成本 | 前期需要自建运行详情、决策卡片、bundle 发布 | 只自研领域骨架与必要 UI，其他交互模式按成熟项目收敛 |
+| local-first 在可靠性上弱于成熟编排平台 | 进程重启 / 长时暂停 / 重试策略不足 | 先用本地 durable journal，接口层提前为 Temporal 预留适配面 |
+
+还需要的优化：
+
+1. 增加 `WorkflowOrchestrator` 抽象接口，避免 LangGraph 成为事实标准实现。
+2. 优先选择可恢复的本地持久化（推荐 SQLite + artifact index），避免只靠临时文件。
+3. 强制节点 side effect task 幂等化，保证暂停恢复后不重复执行文件写入 / 命令副作用。
+4. 在运行详情页把“领域状态”与“执行器状态”分开展示，避免用户把 LangGraph / runtime 细节误认为产品对象。
 
 ## Risks / Trade-offs
 

@@ -14,6 +14,20 @@
 - **THEN** 系统 MUST 先绑定一个 `RepoSession` 与单一 `WorktreeTask`
 - **AND** 后续节点执行 MUST 只在该仓库执行上下文内推进
 
+### Requirement: MVP 架构骨架 SHALL 在实现前被显式冻结
+
+系统 MUST 在进入实现前先固定工作台的五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，避免首版退化成教程式渐进拼装。
+
+#### Scenario: 骨架先于节点实现被定义
+- **WHEN** 团队开始实现 `new-faction` MVP
+- **THEN** 设计文档 MUST 明确五层职责边界与调用方向
+- **AND** 不得在未定义骨架前直接以聊天式流程或临时工具调用替代正式工作流分层
+
+#### Scenario: 新增第二模板前仍需保持骨架稳定
+- **WHEN** 后续有人尝试增加 `new-faction` 之外的第二个模板
+- **THEN** 现有五层骨架 MUST 已经是唯一真实来源
+- **AND** 不得通过引入自由画布或通用聊天入口绕过既有 `Repo Domain` 与 `Artifact Publisher` 边界
+
 ### Requirement: `new-faction` 模板 SHALL 按固定节点图推进
 
 系统 MUST 将“新建派系”实现为固定节点图，而不是自由聊天式的隐式步骤拼接。
@@ -92,6 +106,20 @@
 - **THEN** 系统 MUST 能展示其中的证据索引、摘要与关键观察结论
 - **AND** 不得只返回一段纯文本总结替代 bundle 内容
 
+### Requirement: LangGraph 若被采用 SHALL 只位于编排层
+
+系统 MAY 在 `WorkflowOrchestrator` 层采用 LangGraph，但 MUST 保持它与 `LocalRuntime`、`RepoSession`、`WorktreeTask`、`DecisionRequest`、`ArtifactBundle` 的边界清晰。
+
+#### Scenario: LangGraph 负责中断恢复而不拥有仓库语义
+- **WHEN** 实现选择 LangGraph 作为 `WorkflowOrchestrator`
+- **THEN** LangGraph MUST 只负责节点推进、checkpoint、interrupt / resume 与可重放状态
+- **AND** 不得成为 `RepoSession`、`WorktreeTask`、`DecisionRequest` 或 `ArtifactBundle` 的领域真源
+
+#### Scenario: LangGraph 对外不泄漏专有类型
+- **WHEN** 前端、runtime 或 artifact publisher 与 orchestrator 交互
+- **THEN** 对外交互 MUST 使用本项目定义的稳定接口与领域 schema
+- **AND** 不得要求调用方直接依赖 LangGraph 的 `StateGraph`、`Command` 或其他专有类型
+
 ### Requirement: local-first runtime SHALL 明确当前职责并预留 Temporal 边界
 
 系统 MUST 在第一版采用 local-first runtime，同时为未来引入 Temporal 预留稳定接口边界。
@@ -106,16 +134,25 @@
 - **THEN** 系统 MAY 让 Temporal 接管运行历史、信号恢复、超时与重试
 - **AND** `RepoSession`、`DecisionRequest`、节点 I/O schema 与 `ArtifactBundle` 的领域结构 MUST 保持不变
 
-### Requirement: 开源参考 SHALL 只影响明确的架构决策
+### Requirement: 开源基线与 fork 裁决 SHALL 先于扩模板被文档化
 
-系统在参考 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 时 MUST 明确“借鉴什么”和“不借鉴什么”，避免第一版退化成通用平台复刻。
+系统在扩展到 `new-faction` 之外前 MUST 先形成《开源基线与可复用结论》，并显式裁决是否直接 fork OpenHands、Flowise、n8n、Activepieces 中的任一成熟开源仓库。
 
-#### Scenario: 参考映射被文档化
-- **WHEN** 设计文档描述 `ai-repo-workbench` 的架构来源
-- **THEN** 文档 MUST 至少说明 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 各自影响了哪类设计决策
-- **AND** 同时说明哪些能力被明确排除在 MVP 之外
+#### Scenario: 开源基线先于第二模板
+- **WHEN** 团队计划把工作台从 `new-faction` 扩展到第二模板或通用任务中心
+- **THEN** 文档 MUST 已经比较 OpenHands、Flowise、n8n、Activepieces 的产品定位、可复用能力与关键错位
+- **AND** 文档 MUST 给出“fork / 不 fork”的明确结论，而不是只列出项目名词
 
-#### Scenario: 参考不覆盖本地仓库语义
+#### Scenario: fork 裁决不能覆盖本地仓库语义
 - **WHEN** 某开源项目的通用自动化模式与本项目的本地仓库工作流发生冲突
 - **THEN** 系统 MUST 优先保持 `RepoSession / WorktreeTask / ArtifactBundle` 这套本地仓库语义
-- **AND** 不得为了贴合外部框架而牺牲本地执行与证据交付边界
+- **AND** 不得为了贴合外部框架或 fork 底座而牺牲本地执行与证据交付边界
+
+### Requirement: 当前技术选型 SHALL 附带成立理由、风险与优化项
+
+系统若继续采用“local-first runtime + 显式领域模型 + 可插拔 orchestrator + 不直接 fork”的路线，设计文档 MUST 同时说明为什么成立、风险在哪里、还需要哪些优化。
+
+#### Scenario: 技术选型结论可审计
+- **WHEN** 设计文档主张继续沿用当前技术选型
+- **THEN** 文档 MUST 同时列出成立原因、主要风险与后续优化项
+- **AND** 不得只给出结论而省略代价与边界
