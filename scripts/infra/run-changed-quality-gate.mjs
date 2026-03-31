@@ -427,13 +427,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       commands.push({
         label: 'Core+Games changed tests',
         reason: '核心源码改动，先跑核心 changed 测试集',
-        command: 'npx',
+        command: process.execPath,
         args: buildVitestChangedArgs(baseRef, CORE_TEST_TARGETS),
       });
       commands.push({
         label: 'Games changed tests',
         reason: '核心源码改动，同时跑游戏 changed 测试集',
-        command: 'npx',
+        command: process.execPath,
         args: buildVitestChangedArgs(baseRef, ['src/games'], { gameOnly: true }),
       });
     } else {
