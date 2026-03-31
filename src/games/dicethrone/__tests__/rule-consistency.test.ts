@@ -23,6 +23,7 @@ import { resolveOffensivePreDefenseEffects } from '../domain/attack';
 import { shouldOpenTokenResponse } from '../domain/tokenResponse';
 import { VENGEANCE_2 } from '../heroes/paladin/abilities';
 import { METEOR_2, PYROMANCER_ABILITIES } from '../heroes/pyromancer/abilities';
+import { CORNUCOPIA_2 } from '../heroes/shadow_thief/abilities';
 import {
     createRunner,
     fixedRandom,
@@ -235,6 +236,32 @@ describe('Property 6: 阶段流转正确性', () => {
         });
         const next = getNextPhase(core, 'offensiveRoll');
         expect(next).toBe('main2');
+    });
+
+    it('4 人模式无伤害但依赖单一敌方目标的技能也会进入 targetingRoll', () => {
+        const core = createMockCore({
+            players: {
+                '0': { abilities: [structuredClone(CORNUCOPIA_2)] } as any,
+                '1': {} as any,
+                '2': {} as any,
+                '3': {} as any,
+            },
+            seatingOrder: ['0', '1', '2', '3'],
+            teamIdByPlayerId: {
+                '0': 'A',
+                '1': 'B',
+                '2': 'A',
+                '3': 'B',
+            },
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: undefined,
+                sourceAbilityId: 'cornucopia',
+                isDefendable: false,
+            } as any,
+        });
+        const next = getNextPhase(core, 'offensiveRoll');
+        expect(next).toBe('targetingRoll');
     });
 
     it('offensiveRoll 有不可防御攻击 → main2', () => {
