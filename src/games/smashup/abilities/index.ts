@@ -43,7 +43,12 @@ import { registerSamuraiAbilities, registerSamuraiInteractionHandlers } from './
 import { registerVikingsAbilities, registerVikingsInteractionHandlers } from './vikings';
 import { registerTitanAbilities, registerTitanInteractionHandlers } from './titans';
 import { registerBuryInteractionHandlers } from '../domain/bury';
-import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import {
+    registerBaseAbilities,
+    registerBaseInteractionHandlers,
+    clearBaseAbilityRegistry,
+    registerPodBaseAbilityAliases,
+} from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
 import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
 import { registerMulliganInteractionHandlers } from '../domain/mulliganHandlers';
@@ -151,6 +156,7 @@ export function initAllAbilities(): void {
     // 不需为每张 POD 卡单独写一行能力代码就能让其自动接继基础版的全套逻辑
     registerPodAbilityAliases();
     registerPodInteractionAliases();
+    registerPodBaseAbilityAliases();
     registerPodOngoingAliases(); // 自动映射 trigger/restriction/protection
     registerPodPowerModifierAliases(); // 自动映射力量修正
 }
