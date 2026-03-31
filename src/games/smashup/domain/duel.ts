@@ -15,6 +15,7 @@ import {
     getMinionPower,
 } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { fireTriggers } from './ongoingEffects';
 import { validateActionPlaySemantics } from './playLegality';
 import { reduce } from './reduce';
 import type {
@@ -85,11 +86,27 @@ function simulateCore(core: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
     return events.reduce((current, event) => reduce(current, event), core);
 }
 
+function applyImmediateTriggerResult(
+    state: MatchState<SmashUpCore>,
+    result: { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> },
+): MatchState<SmashUpCore> {
+    const nextState = result.matchState ?? state;
+    if (result.events.length === 0) return nextState;
+    return {
+        ...nextState,
+        core: simulateCore(nextState.core, result.events),
+    };
+}
+
+function isPinkertonDefId(defId: string): boolean {
+    return defId === 'cowboys_pinkerton' || defId === 'cowboys_pinkerton_pod';
+}
+
 function countPinkertons(core: SmashUpCore, playerId: PlayerId): number {
     let count = 0;
     for (const base of core.bases) {
         for (const minion of base.minions) {
-            if (minion.controller === playerId && minion.defId === 'cowboys_pinkerton') {
+            if (minion.controller === playerId && isPinkertonDefId(minion.defId)) {
                 count += 1;
             }
         }
@@ -647,9 +664,7 @@ function resolveDuelResult(
                 reason: duel.destroyReason ?? duel.sourceId,
                 now,
             }));
-            return { state: nextState, events };
-        }
-        if (loser) {
+        } else if (loser) {
             events.push(...buildValidatedDestroyEvents(state, {
                 minionUid: loser.uid,
                 minionDefId: loser.defId,
@@ -659,10 +674,7 @@ function resolveDuelResult(
                 now,
             }));
         }
-        return { state: nextState, events };
-    }
-
-    if (duel.outcome === 'vp_to_winner') {
+    } else if (duel.outcome === 'vp_to_winner') {
         if (isTie) {
             events.push({
                 type: SU_EVENTS.VP_AWARDED,
@@ -674,32 +686,22 @@ function resolveDuelResult(
                 payload: { playerId: duel.challengedPlayerId, amount: 1, reason: duel.sourceId },
                 timestamp: now,
             } as VpAwardedEvent);
-            return { state: nextState, events };
-        }
-        if (winner) {
+        } else if (winner) {
             events.push({
                 type: SU_EVENTS.VP_AWARDED,
                 payload: { playerId: winner.controller, amount: 1, reason: duel.sourceId },
                 timestamp: now,
             } as VpAwardedEvent);
         }
-        return { state: nextState, events };
-    }
-
-    if (duel.outcome === 'draw2_to_winner') {
+    } else if (duel.outcome === 'draw2_to_winner') {
         if (isTie) {
             events.push(...buildStandardDrawEvents(state.core, duel.challengerPlayerId, 2, random, now));
             const simCore = simulateCore(state.core, events);
             events.push(...buildStandardDrawEvents(simCore, duel.challengedPlayerId, 2, random, now));
-            return { state: nextState, events };
-        }
-        if (winner) {
+        } else if (winner) {
             events.push(...buildStandardDrawEvents(state.core, winner.controller, 2, random, now));
         }
-        return { state: nextState, events };
-    }
-
-    if (duel.outcome === 'high_noon') {
+    } else if (duel.outcome === 'high_noon') {
         if (isTie) {
             events.push(...buildValidatedDestroyEvents(state, {
                 minionUid: challengerFound.minion.uid,
@@ -717,9 +719,7 @@ function resolveDuelResult(
                 reason: 'cowboys_high_noon',
                 now,
             }));
-            return { state: nextState, events };
-        }
-        if (loser) {
+        } else if (loser) {
             events.push(...buildValidatedDestroyEvents(state, {
                 minionUid: loser.uid,
                 minionDefId: loser.defId,
@@ -737,58 +737,70 @@ function resolveDuelResult(
                 timestamp: now,
             } as SmashUpEvent);
         }
-        return { state: nextState, events };
-    }
-
-    if (duel.outcome === 'run_em_off') {
+    } else if (duel.outcome === 'run_em_off') {
         if (isTie) {
             events.push(addTempPower(challengerFound.minion.uid, baseIndex, 3, 'cowboys_run_em_off', now));
             events.push(addTempPower(challengedFound.minion.uid, baseIndex, 3, 'cowboys_run_em_off', now));
             nextState = buildRunEmOffTieMovePrompts(nextState, duel, now);
-            return { state: nextState, events };
+        } else if (winner && loser) {
+            events.push(addTempPower(winner.uid, baseIndex, 3, 'cowboys_run_em_off', now));
+            const destinationOptions = state.core.bases
+                .map((base, candidateBaseIndex) => ({
+                    baseIndex: candidateBaseIndex,
+                    baseDefId: base.defId,
+                    label: getBaseDef(base.defId)?.name ?? base.defId,
+                }))
+                .filter(candidate => candidate.baseIndex !== baseIndex);
+            if (destinationOptions.length === 1) {
+                events.push(...buildValidatedMoveEvents(state, {
+                    minionUid: loser.uid,
+                    minionDefId: loser.defId,
+                    fromBaseIndex: baseIndex,
+                    toBaseIndex: destinationOptions[0].baseIndex,
+                    toBaseDefId: destinationOptions[0].baseDefId,
+                    reason: 'cowboys_run_em_off',
+                    now,
+                }));
+            } else if (destinationOptions.length > 1) {
+                const interaction = createSimpleChoice(
+                    `smashup_duel_run_em_off_move_${duel.id}_${winner.controller}_${now}`,
+                    winner.controller,
+                    'ui.duel_prompt_run_em_off_title',
+                    buildBaseTargetOptions(destinationOptions, state.core),
+                    { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },
+                );
+                (interaction.data as any).continuationContext = {
+                    duel,
+                    loserUid: loser.uid,
+                    loserDefId: loser.defId,
+                    fromBaseIndex: baseIndex,
+                };
+                nextState = queueInteraction(nextState, interaction);
+            }
         }
-
-        if (!winner || !loser) return { state: nextState, events };
-        events.push(addTempPower(winner.uid, baseIndex, 3, 'cowboys_run_em_off', now));
-        const destinationOptions = state.core.bases
-            .map((base, candidateBaseIndex) => ({
-                baseIndex: candidateBaseIndex,
-                baseDefId: base.defId,
-                label: getBaseDef(base.defId)?.name ?? base.defId,
-            }))
-            .filter(candidate => candidate.baseIndex !== baseIndex);
-        if (destinationOptions.length === 1) {
-            events.push(...buildValidatedMoveEvents(state, {
-                minionUid: loser.uid,
-                minionDefId: loser.defId,
-                fromBaseIndex: baseIndex,
-                toBaseIndex: destinationOptions[0].baseIndex,
-                toBaseDefId: destinationOptions[0].baseDefId,
-                reason: 'cowboys_run_em_off',
-                now,
-            }));
-            return { state: nextState, events };
-        }
-        if (destinationOptions.length > 1) {
-            const interaction = createSimpleChoice(
-                `smashup_duel_run_em_off_move_${duel.id}_${winner.controller}_${now}`,
-                winner.controller,
-                'ui.duel_prompt_run_em_off_title',
-                buildBaseTargetOptions(destinationOptions, state.core),
-                { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },
-            );
-            (interaction.data as any).continuationContext = {
-                duel,
-                loserUid: loser.uid,
-                loserDefId: loser.defId,
-                fromBaseIndex: baseIndex,
-            };
-            nextState = queueInteraction(nextState, interaction);
-        }
-        return { state: nextState, events };
     }
 
-    return { state: nextState, events };
+    const coreAfterResolution = simulateCore(nextState.core, events);
+    const duelResolved = fireTriggers(coreAfterResolution, 'onDuelResolved', {
+        state: coreAfterResolution,
+        playerId: duel.sourcePlayerId,
+        baseIndex,
+        duel,
+        duelSourceId: duel.sourceId,
+        duelOutcome: duel.outcome,
+        duelChallenger: challengerFound.minion,
+        duelChallenged: challengedFound.minion,
+        duelWinner: winner,
+        duelLoser: loser,
+        duelTie: isTie,
+        random,
+        now,
+    });
+
+    return {
+        state: duelResolved.matchState ?? nextState,
+        events: [...events, ...duelResolved.events],
+    };
 }
 
 export function canStartDuel(core: SmashUpCore): boolean {
@@ -798,6 +810,15 @@ export function canStartDuel(core: SmashUpCore): boolean {
 export function isMinionInActiveDuel(core: SmashUpCore, minionUid: string): boolean {
     return core.activeDuel?.challengerMinionUid === minionUid
         || core.activeDuel?.challengedMinionUid === minionUid;
+}
+
+export function continueActiveDuel(
+    state: MatchState<SmashUpCore>,
+    now: number,
+): MatchState<SmashUpCore> {
+    const duel = state.core.activeDuel;
+    if (!duel) return state;
+    return queueNextDuelStage(state, duel, 'pinkerton_challenger', now);
 }
 
 export function startDuel(
@@ -830,7 +851,25 @@ export function startDuel(
         outcome: params.outcome,
         destroyReason: params.destroyReason,
     };
-    const duelState = withActiveDuel(state, duel);
+    let duelState = withActiveDuel(state, duel);
+    const duelStarted = fireTriggers(duelState.core, 'onDuelStarted', {
+        state: duelState.core,
+        matchState: duelState,
+        playerId: duel.challengerPlayerId,
+        baseIndex: duel.baseIndex,
+        duel,
+        duelSourceId: duel.sourceId,
+        duelOutcome: duel.outcome,
+        duelChallenger: challengerFound.minion,
+        duelChallenged: challengedFound.minion,
+        random: DEFAULT_RANDOM,
+        now,
+    });
+    duelState = applyImmediateTriggerResult(duelState, duelStarted);
+
+    if (duelState.sys.interaction?.current || (duelState.sys.interaction?.queue?.length ?? 0) > 0) {
+        return duelState;
+    }
     return queueNextDuelStage(duelState, duel, 'pinkerton_challenger', now);
 }
 

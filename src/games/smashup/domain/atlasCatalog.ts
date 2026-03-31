@@ -37,7 +37,13 @@ const LOCAL_POD_ATLAS_IMAGE_OVERRIDES: Record<string, string> = {
     tts_atlas_1: '/assets/i18n/en/smashup/cards/tts_atlas_1',
     tts_atlas_0a564692f2: '/assets/i18n/en/smashup/pod-assets/tts_atlas_0a564692f2',
     tts_atlas_0b888d02fd: '/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd',
+    tts_atlas_54: '/assets/i18n/en/smashup/cards/tts_atlas_54',
+    tts_atlas_55: '/assets/i18n/en/smashup/cards/tts_atlas_55',
+    tts_atlas_56: '/assets/i18n/en/smashup/cards/tts_atlas_56',
+    tts_atlas_78: '/assets/i18n/en/smashup/cards/tts_atlas_78',
+    tts_atlas_79: '/assets/i18n/en/smashup/cards/tts_atlas_79',
     tts_atlas_9aed5872d2: '/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2',
+    tts_atlas_8789f47742: '/assets/i18n/en/smashup/cards/tts_atlas_8789f47742',
 };
 
 export function getSmashUpPodAtlasImagePath(atlasId: string): string {

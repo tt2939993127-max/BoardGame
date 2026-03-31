@@ -94,6 +94,31 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
     if (!source) return { events: [] };
     const ownMinions = ctx.state.bases[source.baseIndex]?.minions.filter(minion => minion.controller === ctx.playerId) ?? [];
     if (ownMinions.length !== 1) return { events: [] };
+    const roninInteraction = createSimpleChoice(
+        `samurai_ronin_${ctx.now}`,
+        ctx.playerId,
+        '浪人：你可以在此随从上放置两个 +1 力量指示物',
+        [
+            {
+                id: 'yes',
+                label: '放置两个指示物',
+                value: { apply: true },
+                displayMode: 'button' as const,
+            },
+            {
+                id: 'no',
+                label: '跳过',
+                value: { apply: false },
+                displayMode: 'button' as const,
+            },
+        ],
+        { sourceId: 'samurai_ronin', targetType: 'button' },
+    );
+    (roninInteraction.data as any).continuationContext = {
+        minionUid: source.minion.uid,
+        baseIndex: source.baseIndex,
+    } satisfies RoninContinuation;
+    return { events: [], matchState: queueInteraction(ctx.matchState, roninInteraction) };
     const interaction = createSimpleChoice(
         `samurai_ronin_${ctx.now}`,
         ctx.playerId,
@@ -368,6 +393,7 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
     return {
         state,
         events: [
+            addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
             addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
         ],
     };

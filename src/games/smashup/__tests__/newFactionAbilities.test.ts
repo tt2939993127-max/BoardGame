@@ -260,6 +260,38 @@ describe('Vikings abilities', () => {
         expect(resolved.finalState.core.players['1'].deck[0]?.uid).toBe('top-action');
     });
 
+    it('vikings_shield_maiden_pod 会沿用同一套揭示并拿牌逻辑', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('sm-1', 'vikings_shield_maiden_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [makeCard('top-action', 'wizard_summon', 'action', '1')],
+                }),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'sm-1', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('vikings_shield_maiden');
+
+        const option = prompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-action')).toBe(true);
+        expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
+    });
+
     it('vikings_pillage 会从目标玩家手牌中随机拿走一张牌', () => {
         const core = makeState({
             players: {
@@ -392,6 +424,53 @@ describe('Vikings abilities', () => {
         expect(resolved.finalState.core.bases[1].ongoingActions.some(action => action.uid === 'top-action')).toBe(true);
         expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-action')).toBe(false);
         expect(resolved.finalState.core.players['0'].actionsPlayed).toBe(1);
+    });
+
+    it('vikings_berserk_pod 会把手牌压到牌库顶并给你的随从 +4 力量', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('berserk-1', 'vikings_berserk_pod', 'action', '0'),
+                        makeCard('topdeck-1', 'robot_microbot_alpha', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('ally-1', 'vikings_huscarl_pod', '0', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'berserk-1' } },
+            defaultTestRandom,
+        );
+        const cardPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(cardPrompt?.data?.sourceId).toBe('vikings_berserk_card');
+
+        const chooseCard = cardPrompt.data.options.find((entry: any) => entry.value?.cardUid === 'topdeck-1');
+        const afterCard = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseCard.id } } as any,
+            defaultTestRandom,
+        );
+
+        const minionPrompt = getInteractionsFromMS(afterCard.finalState)[0] as any;
+        expect(minionPrompt?.data?.sourceId).toBe('vikings_berserk_minion');
+
+        const chooseMinion = minionPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-1');
+        const resolved = runCommand(
+            afterCard.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseMinion.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].deck[0]?.uid).toBe('topdeck-1');
+        expect(resolved.finalState.core.bases[0].minions[0].tempPowerModifier).toBe(4);
     });
 });
 
@@ -569,6 +648,50 @@ describe('Cowboys abilities', () => {
                 defId: 'base_a',
                 minions: [
                     makeMinion('pink-1', 'cowboys_pinkerton', '0', 4),
+                    makeMinion('enemy-1', 'robot_microbot_alpha', '1', 3),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'gun-1', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const option = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const started = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        const duelResolved = resolveDuelChain(started.finalState, {
+            smashup_duel_pinkerton: (duelPrompt) => {
+                const addOne = findInteractionOption(duelPrompt, entry => entry?.value?.amount === 1);
+                if (!addOne) throw new Error('未找到 Pinkerton 的 1 指示物选项');
+                return { optionId: addOne.id };
+            },
+        });
+
+        const gunfighter = duelResolved.finalState.core.bases[0].minions.find(minion => minion.uid === 'gun-1');
+        expect(gunfighter?.powerCounters).toBe(1);
+        expect(duelResolved.finalState.core.bases[0].minions.some(minion => minion.uid === 'enemy-1')).toBe(false);
+    });
+
+    it('cowboys_pinkerton_pod 会在决斗牌步骤前给己方决斗随从放置 +1 指示物', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gun-1', 'cowboys_gunfighter_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('pink-1', 'cowboys_pinkerton_pod', '0', 4),
                     makeMinion('enemy-1', 'robot_microbot_alpha', '1', 3),
                 ],
                 ongoingActions: [],
@@ -1098,7 +1221,7 @@ describe('Samurai abilities', () => {
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
     });
 
-    it('samurai_ronin 在自己是该基地唯一己方随从时只放置一个 +1 指示物', () => {
+    it('samurai_ronin 在自己是该基地唯一己方随从时可放置两个 +1 指示物', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1124,7 +1247,7 @@ describe('Samurai abilities', () => {
             defaultTestRandom,
         );
 
-        expect(resolved.finalState.core.bases[0].minions.find(m => m.uid === 'ronin-1')?.powerCounters).toBe(1);
+        expect(resolved.finalState.core.bases[0].minions.find(m => m.uid === 'ronin-1')?.powerCounters).toBe(2);
     });
 
     it('samurai_way_of_the_warrior 在阶段 3 弃置时仍会基于 LKI 结算抽 2', () => {
@@ -1295,6 +1418,49 @@ describe('Samurai abilities', () => {
             inspectionCausePlayerId: '1',
             random: defaultTestRandom,
             now: 1001,
+        });
+
+        const prompt = getInteractionsFromMS(trigger.matchState!)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('cowboys_dynamite_surprise_seen');
+
+        const target = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const resolved = runCommand(
+            trigger.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].deck.some(card => card.uid === 'dyn-1')).toBe(false);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'dyn-1')).toBe(true);
+        expect(resolved.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+    });
+
+    it('cowboys_dynamite_surprise_pod 在你的牌库顶被另一位玩家翻开时也可以直接打出', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dyn-1', 'cowboys_dynamite_surprise_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('enemy-1', 'robot_microbot_alpha', '1', 4)],
+                ongoingActions: [],
+            }],
+        });
+
+        const trigger = fireTriggers(core, 'onDeckInspected', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '1',
+            reason: 'test_reveal_deck_top',
+            inspectionCards: [{ uid: 'dyn-1', defId: 'cowboys_dynamite_surprise_pod' }],
+            inspectionZone: 'deck',
+            inspectionTargetPlayerIds: ['0'],
+            inspectionCausePlayerId: '1',
+            random: defaultTestRandom,
+            now: 1002,
         });
 
         const prompt = getInteractionsFromMS(trigger.matchState!)[0] as any;
