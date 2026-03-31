@@ -70,6 +70,7 @@ export function resolveAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
  */
 let assetsBaseUrl = resolveAssetsBaseUrlFromEnv(import.meta.env);
 let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
+const gameAssetBaseOverrides = new Map<string, string>();
 
 export function setAssetsBaseUrl(value?: string): void {
     assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? resolveAssetsBaseUrlFromEnv(import.meta.env);
@@ -77,6 +78,25 @@ export function setAssetsBaseUrl(value?: string): void {
 
 export function getAssetsBaseUrl(): string {
     return assetsBaseUrl;
+}
+
+export function setGameAssetBaseOverride(gameId: string, value?: string): void {
+    const normalizedGameId = typeof gameId === 'string' ? gameId.trim() : '';
+    if (!normalizedGameId) {
+        return;
+    }
+
+    const normalizedValue = normalizeAssetsBaseUrl(value);
+    if (!normalizedValue) {
+        gameAssetBaseOverrides.delete(normalizedGameId);
+        return;
+    }
+
+    gameAssetBaseOverrides.set(normalizedGameId, normalizedValue);
+}
+
+export function clearGameAssetBaseOverrides(): void {
+    gameAssetBaseOverrides.clear();
 }
 
 /**
@@ -833,9 +853,60 @@ async function preloadAudioFile(src: string): Promise<void> {
 /** 判断是否为穿透源（data/blob/http），独立资源域名不算穿透 */
 const isString = (value: unknown): value is string => typeof value === 'string';
 const isHttpUrl = (src: string) => src.startsWith('http://') || src.startsWith('https://');
+const stripKnownAssetPrefixes = (value: string) => {
+    const { path } = splitUrlParts(value);
+    if (path.startsWith('/assets/')) {
+        return path.slice('/assets/'.length);
+    }
+    if (path === assetsBaseUrl) {
+        return '';
+    }
+    if (path.startsWith(`${assetsBaseUrl}/`)) {
+        return path.slice(assetsBaseUrl.length + 1);
+    }
+    for (const overrideBase of gameAssetBaseOverrides.values()) {
+        if (path === overrideBase) {
+            return '';
+        }
+        if (path.startsWith(`${overrideBase}/`)) {
+            return path.slice(overrideBase.length + 1);
+        }
+    }
+    return path.replace(/^\/+/, '');
+};
+const resolveGameIdFromAssetRelativePath = (value: string) => {
+    const trimmed = stripKnownAssetPrefixes(value);
+    if (!trimmed) {
+        return undefined;
+    }
+
+    const segments = trimmed.split('/').filter(Boolean);
+    if (segments.length === 0) {
+        return undefined;
+    }
+
+    if (segments[0] === LOCALIZED_ASSETS_SUBDIR && segments.length >= 3) {
+        return segments[2];
+    }
+    if (segments[0] === 'atlas-configs' && segments.length >= 2) {
+        return segments[1];
+    }
+    return segments[0];
+};
+const resolveAssetBaseUrlForPath = (value: string) => {
+    const gameId = resolveGameIdFromAssetRelativePath(value);
+    return gameId ? gameAssetBaseOverrides.get(gameId) : undefined;
+};
 const isInternalAssetsUrl = (src: string) => {
-    if (!isHttpUrl(assetsBaseUrl)) return false;
-    return src.startsWith(assetsBaseUrl) || src.startsWith(`${assetsBaseUrl}/`);
+    if (src.startsWith(assetsBaseUrl) || src.startsWith(`${assetsBaseUrl}/`)) {
+        return true;
+    }
+    for (const overrideBase of gameAssetBaseOverrides.values()) {
+        if (src.startsWith(overrideBase) || src.startsWith(`${overrideBase}/`)) {
+            return true;
+        }
+    }
+    return false;
 };
 const isPassthroughSource = (src: unknown) => {
     if (!isString(src)) return false;
@@ -855,15 +926,7 @@ const stripExtension = (src: string) => {
 };
 
 const stripAssetsBasePrefix = (normalized: string) => {
-    const { path } = splitUrlParts(normalized);
-    if (path === assetsBaseUrl) return '';
-    if (path.startsWith(`${assetsBaseUrl}/`)) {
-        return path.slice(assetsBaseUrl.length + 1);
-    }
-    if (path.startsWith('/assets/')) {
-        return path.slice('/assets/'.length);
-    }
-    return path.replace(/^\/+/, '');
+    return stripKnownAssetPrefixes(normalized);
 };
 
 const splitUrlParts = (value: string) => {
@@ -903,7 +966,15 @@ const resolveVersionedAssetUrl = (value: string) => {
 export function assetsPath(path: string): string {
     if (!isString(path)) return '';
     if (isPassthroughSource(path)) return path;
-    if (!path) return assetsBaseUrl;
+    const overrideBaseUrl = resolveAssetBaseUrlForPath(path);
+    if (!path) return overrideBaseUrl || assetsBaseUrl;
+    if (overrideBaseUrl) {
+        const relativePath = stripKnownAssetPrefixes(path);
+        if (!relativePath) {
+            return overrideBaseUrl;
+        }
+        return `${overrideBaseUrl}/${relativePath}`;
+    }
     if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return resolveVersionedAssetUrl(path);
     if (path.startsWith('/assets/')) return resolveVersionedAssetUrl(path);
     const trimmed = path.startsWith('/') ? path.slice(1) : path;

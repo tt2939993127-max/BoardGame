@@ -61,6 +61,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         gameOrientations.putAll(loadOrientationMap());
+        registerPlugin(GamePackagePlugin.class);
         bridgeBuilder.addWebViewListener(
             new WebViewListener() {
                 @Override

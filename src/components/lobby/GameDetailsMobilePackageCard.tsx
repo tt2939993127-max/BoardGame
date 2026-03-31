@@ -149,8 +149,13 @@ export const GameDetailsMobilePackageCard = ({
     const isInProgress = state.status !== 'not-installed' && state.status !== 'failed';
     const progressMode = state.progressMode ?? 'indeterminate';
     const progressPercent = Math.max(0, Math.min(100, state.progressPercent ?? 0));
-    const totalBytes = [state.modulePackBytes, state.assetPackBytes].every((value) => typeof value === 'number' && Number.isFinite(value))
-        ? (state.modulePackBytes ?? 0) + (state.assetPackBytes ?? 0)
+    const knownTotalBytes = [state.modulePackBytes, state.assetPackBytes].reduce((total, value) => (
+        typeof value === 'number' && Number.isFinite(value)
+            ? total + value
+            : total
+    ), 0);
+    const totalBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => typeof value === 'number' && Number.isFinite(value))
+        ? knownTotalBytes
         : undefined;
     const sizeLabel = formatPackageBytes(totalBytes, t('packageManager.sizeUnknown'));
     const actionHandler = state.status === 'failed' ? (onRetry ?? onInstall) : onInstall;

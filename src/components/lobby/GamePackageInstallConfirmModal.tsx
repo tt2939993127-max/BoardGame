@@ -33,8 +33,28 @@ export const GamePackageInstallConfirmModal = ({
 }: GamePackageInstallConfirmModalProps) => {
     const { t } = useTranslation('lobby');
     const sizeUnknownLabel = t('packageManager.sizeUnknown');
-    const totalBytes = [modulePackBytes, assetPackBytes].every((value) => typeof value === 'number' && Number.isFinite(value))
-        ? (modulePackBytes ?? 0) + (assetPackBytes ?? 0)
+    const packageItems = [
+        {
+            label: t('packageManager.modulePack'),
+            id: modulePackId,
+            bytes: modulePackBytes,
+        },
+        {
+            label: t('packageManager.assetPack'),
+            id: assetPackId,
+            bytes: assetPackBytes,
+        },
+    ].filter((item) =>
+        Boolean(item.id)
+        || (typeof item.bytes === 'number' && Number.isFinite(item.bytes)),
+    );
+    const knownTotalBytes = packageItems.reduce((total, item) => (
+        typeof item.bytes === 'number' && Number.isFinite(item.bytes)
+            ? total + item.bytes
+            : total
+    ), 0);
+    const totalBytes = packageItems.some((item) => typeof item.bytes === 'number' && Number.isFinite(item.bytes))
+        ? knownTotalBytes
         : undefined;
     const progressPercent = Math.max(0, Math.min(100, state.progressPercent ?? 0));
     const progressMode = state.progressMode ?? 'indeterminate';
@@ -99,30 +119,23 @@ export const GamePackageInstallConfirmModal = ({
                         </div>
                     </div>
 
-                    <div className="mt-3 space-y-2.5">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="text-sm font-semibold">{t('packageManager.modulePack')}</p>
-                                <p className="mt-1 text-[11px] leading-5 text-parchment-light-text">
-                                    {modulePackId || t('packageManager.packIdUnknown')}
-                                </p>
-                            </div>
-                            <span className="shrink-0 text-[11px] font-medium text-parchment-light-text">
-                                {formatPackageBytes(modulePackBytes, sizeUnknownLabel)}
-                            </span>
+                    {packageItems.length > 0 && (
+                        <div className="mt-3 space-y-2.5">
+                            {packageItems.map((item) => (
+                                <div key={item.label} className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold">{item.label}</p>
+                                        <p className="mt-1 text-[11px] leading-5 text-parchment-light-text">
+                                            {item.id || t('packageManager.packIdUnknown')}
+                                        </p>
+                                    </div>
+                                    <span className="shrink-0 text-[11px] font-medium text-parchment-light-text">
+                                        {formatPackageBytes(item.bytes, sizeUnknownLabel)}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="text-sm font-semibold">{t('packageManager.assetPack')}</p>
-                                <p className="mt-1 text-[11px] leading-5 text-parchment-light-text">
-                                    {assetPackId || t('packageManager.packIdUnknown')}
-                                </p>
-                            </div>
-                            <span className="shrink-0 text-[11px] font-medium text-parchment-light-text">
-                                {formatPackageBytes(assetPackBytes, sizeUnknownLabel)}
-                            </span>
-                        </div>
-                    </div>
+                    )}
 
                     {isInProgress && (
                         <div className="mt-4 border-t border-parchment-card-border/20 pt-3">

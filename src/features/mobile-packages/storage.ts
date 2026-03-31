@@ -64,6 +64,12 @@ const sanitizeStoredState = (
         assetPackBytes: typeof candidate.assetPackBytes === 'number' && Number.isFinite(candidate.assetPackBytes)
             ? candidate.assetPackBytes
             : undefined,
+        installedVersion: typeof candidate.installedVersion === 'string' && candidate.installedVersion.trim()
+            ? candidate.installedVersion.trim()
+            : undefined,
+        localAssetBaseUrl: typeof candidate.localAssetBaseUrl === 'string' && candidate.localAssetBaseUrl.trim()
+            ? candidate.localAssetBaseUrl.trim()
+            : undefined,
         errorMessage: typeof candidate.errorMessage === 'string' && candidate.errorMessage.trim()
             ? candidate.errorMessage
             : undefined,
