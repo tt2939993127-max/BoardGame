@@ -106,6 +106,8 @@
     "mode": "On-demand",
     "notInstalled": "Not installed",
     "notInstalledHint": "Before entering {{game}} on mobile, download its code pack and asset pack first.",
+    "installedTitle": "Ready to play",
+    "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
     "installAction": "Install Pack",
     "confirmEyebrow": "Install Confirm",
     "confirmTitle": "Download {{game}} packages",
@@ -144,6 +146,28 @@
   },
   "player": {
     "guest": "Guest{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "Updating",
+      "checkingTitle": "Preparing update",
+      "checkingDescription": "Checking and preparing the next version. Please wait.",
+      "downloadingTitle": "Downloading update",
+      "downloadingDescription": "Downloading the required update now. The app will switch automatically when it is ready.",
+      "applyingTitle": "Switching version",
+      "applyingDescription": "The update is ready. Restarting and switching to the new version now.",
+      "requiredTitle": "App update required",
+      "requiredDescription": "This app build is too old. Install a newer app version to continue.",
+      "requiredDescriptionWithVersion": "This app build is too old. Update to app version {{version}} or newer to continue.",
+      "errorTitle": "Update failed",
+      "errorDescription": "Downloading or switching to the new version failed. Please retry.",
+      "bundleVersion": "Target bundle version",
+      "requiredAppVersion": "Required app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "retryAction": "Check again"
+    }
   },
   "gameDetails": {
     "description": "Classic strategy play. Connect three symbols to win."

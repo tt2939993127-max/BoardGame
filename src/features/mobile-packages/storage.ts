@@ -19,6 +19,7 @@ const isValidStatus = (value: unknown): value is StoredGamePackageState['status'
     || value === 'manifest'
     || value === 'downloading'
     || value === 'verifying'
+    || value === 'installed'
     || value === 'failed';
 
 const isValidProgressMode = (value: unknown): value is StoredGamePackageState['progressMode'] =>

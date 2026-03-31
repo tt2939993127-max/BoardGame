@@ -42,6 +42,10 @@ async function bootstrap() {
     const webOrigins = process.env.WEB_ORIGINS
         ? process.env.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
         : [];
+    const appWebOrigins = process.env.APP_WEB_ORIGINS
+        ? process.env.APP_WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+        : ['http://localhost', 'https://localhost', 'capacitor://localhost'];
+    const allowedOrigins = new Set([...webOrigins, ...appWebOrigins]);
     const isDev = !process.env.WEB_ORIGINS;
 
     const app = await NestFactory.create(AppModule, {
@@ -51,7 +55,7 @@ async function bootstrap() {
                 if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
                     return callback(null, true);
                 }
-                if (webOrigins.includes(origin)) {
+                if (allowedOrigins.has(origin)) {
                     return callback(null, true);
                 }
                 callback(new Error(`CORS: origin ${origin} not allowed`));

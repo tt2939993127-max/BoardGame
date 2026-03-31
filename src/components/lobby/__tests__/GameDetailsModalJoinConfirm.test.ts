@@ -22,6 +22,7 @@ import { RoomList } from '../RoomList';
 import * as matchApi from '../../../services/matchApi';
 import * as matchStatus from '../../../hooks/match/useMatchStatus';
 import { lobbySocket } from '../../../services/lobbySocket';
+import { resetGamePackageManagerForTests } from '../../../features/mobile-packages/packageManagerService';
 
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
@@ -83,6 +84,17 @@ const buildMockGameManifest = (override: Record<string, unknown> = {}) => ({
 const toastMock = {
     warning: vi.fn(),
     error: vi.fn(),
+};
+
+const markGamePackageInstalled = (gameId = 'dicethrone') => {
+    window.localStorage.setItem(`mobile-package-state:${gameId}`, JSON.stringify({
+        gameId,
+        runtimeChannel: 'stable',
+        status: 'installed',
+        modulePackId: gameId,
+        assetPackId: gameId,
+        updatedAt: Date.now(),
+    }));
 };
 
 vi.mock('react-i18next', () => ({
@@ -251,6 +263,7 @@ afterEach(() => {
 
 beforeEach(() => {
     window.localStorage.clear();
+    resetGamePackageManagerForTests();
     navigateMock.mockReset();
     openModalMock.mockReset();
     openModalMock.mockReturnValue('modal-1');
@@ -460,6 +473,19 @@ describe('GameDetailsMobilePackageCard', () => {
         expect(screen.getByText('packageManager.updateRequiredHintWithVersion')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
+
+    it('已安装状态显示可直接进入文案', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'installed',
+            },
+            onInstall: vi.fn(),
+        }));
+
+        expect(screen.getByText('packageManager.installedTitle')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
 });
 
 describe('GameDetailsModal create room ai entry', () => {
@@ -473,6 +499,7 @@ describe('GameDetailsModal create room ai entry', () => {
     };
 
     it('创建房间弹窗内直接配置 AI，不再显示独立对战 AI 入口', async () => {
+        markGamePackageInstalled();
         vi.spyOn(matchApi, 'createMatch').mockResolvedValueOnce({ matchID: 'match-ai-1' });
         vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
         vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({
@@ -520,6 +547,7 @@ describe('GameDetailsModal create room ai entry', () => {
     });
 
     it('未保存过 AI 偏好时，创建房间弹窗默认传入空偏好', async () => {
+        markGamePackageInstalled();
         render(createElement(GameDetailsModal, baseProps));
 
         fireEvent.click(screen.getByText('actions.createRoom'));
@@ -542,6 +570,27 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(packageCard).toBeInTheDocument();
         expect(packageCard.className).toContain('md:hidden');
         expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+    });
+
+    it('未下载 package-managed 游戏时，创建房间会先拉起下载确认', async () => {
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+
+        await waitFor(() => {
+            expect(openModalMock).toHaveBeenCalled();
+        });
+        expect(screen.queryByText('mock-create-room-confirm')).toBeNull();
+    });
+
+    it('下载完成后，package-managed 游戏允许创建房间', async () => {
+        markGamePackageInstalled();
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
     });
 
     it('标记必须更新时，渲染移动端更新提示入口', () => {
@@ -569,6 +618,7 @@ describe('GameDetailsModal create room ai entry', () => {
     });
 
     it('观战前发现房间 404 时不再跳进对局页，并提示房间已销毁', async () => {
+        markGamePackageInstalled();
         vi.mocked(lobbySocket.subscribe).mockImplementationOnce((_gameId, callback) => {
             callback([{
                 matchID: 'match-spectate',
@@ -614,6 +664,7 @@ describe('GameDetailsModal create room ai entry', () => {
     });
 
     it('创建房间时显示进入对局 loading', async () => {
+        markGamePackageInstalled();
         let resolveCreateMatch: ((value: { matchID: string }) => void) | null = null;
         vi.spyOn(matchApi, 'createMatch').mockImplementationOnce(() => new Promise((resolve) => {
             resolveCreateMatch = resolve as (value: { matchID: string }) => void;

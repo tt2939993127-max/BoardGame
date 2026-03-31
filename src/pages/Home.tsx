@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import packageJson from '../../package.json';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
-import { GameDetailsModal } from '../components/lobby/GameDetailsModal';
 import { GameList } from '../components/lobby/GameList';
 import { getGamesByCategory, getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +44,8 @@ import { versionedPublicFileUrl } from '../lib/publicFileUrl';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
+const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
+const isAndroidShellBuild = import.meta.env.MODE === 'android';
 
 export const Home = () => {
     useGlobalCursor();
@@ -160,16 +161,18 @@ export const Home = () => {
             if (!game) return null;
             return {
                 render: ({ close, closeOnBackdrop }: { close: () => void; closeOnBackdrop: boolean }) => (
-                    <GameDetailsModal
-                        isOpen
-                        onClose={close}
-                        gameId={game.id}
-                        titleKey={game.titleKey}
-                        descriptionKey={game.descriptionKey}
-                        thumbnail={game.thumbnail}
-                        closeOnBackdrop={closeOnBackdrop}
-                        onNavigate={() => gameModalNavigateAwayRef.current()}
-                    />
+                    <Suspense fallback={null}>
+                        <LazyGameDetailsModal
+                            isOpen
+                            onClose={close}
+                            gameId={game.id}
+                            titleKey={game.titleKey}
+                            descriptionKey={game.descriptionKey}
+                            thumbnail={game.thumbnail}
+                            closeOnBackdrop={closeOnBackdrop}
+                            onNavigate={() => gameModalNavigateAwayRef.current()}
+                        />
+                    </Suspense>
                 ),
             };
         }, []),
@@ -196,6 +199,9 @@ export const Home = () => {
     }, [activeGameModalId]);
 
     const handleGameClick = (id: string) => {
+        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+            return;
+        }
         if (id === 'assetslicer') {
             navigate('/dev/slicer');
             return;
@@ -230,6 +236,9 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
+        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+            return;
+        }
         if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
             return;
         }
@@ -736,24 +745,42 @@ export const Home = () => {
             </div>
 
             {activeMatch && (
-                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
-                    <div className="bg-parchment-base-text text-parchment-card-bg px-6 py-3 rounded shadow-xl border border-parchment-brown flex items-center gap-4">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-parchment-light-text uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>
-                            <span className="text-sm font-bold">
-                                {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
-                                <span className="mx-2 opacity-50">|</span>
-                                <span className={activeMatch.players.some(p => p.name) ? 'opacity-100' : 'opacity-50 italic'}>
+                <div
+                    data-testid="home-active-match-banner"
+                    className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 flex justify-center px-3 sm:px-4 md:px-6 animate-in slide-in-from-bottom-4 fade-in duration-300"
+                >
+                    <div
+                        data-testid="home-active-match-card"
+                        className="pointer-events-auto flex w-fit max-w-[calc(100vw-1.5rem)] flex-col gap-2 rounded-[10px] border border-parchment-brown bg-parchment-base-text/98 px-3 py-2.5 text-parchment-card-bg shadow-xl backdrop-blur-sm sm:max-w-[min(46rem,calc(100vw-2rem))] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3"
+                    >
+                        <div className="min-w-0 text-center sm:flex-1 sm:text-left">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-parchment-light-text sm:text-[10px] sm:tracking-wider">
+                                {t('lobby:home.activeMatch.status')}
+                            </span>
+                            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[13px] font-bold leading-tight sm:justify-start sm:gap-x-2 sm:gap-y-1 sm:text-sm">
+                                <span className="max-w-full truncate">
+                                    {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
+                                </span>
+                                <span className="hidden opacity-50 sm:inline">|</span>
+                                <span
+                                    className={clsx(
+                                        'max-w-full truncate',
+                                        activeMatch.players.some(p => p.name) ? 'opacity-100' : 'opacity-50 italic'
+                                    )}
+                                >
                                     {t('lobby:home.activeMatch.players', { count: activePlayerCount })}
                                 </span>
-                            </span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div
+                            data-testid="home-active-match-actions"
+                            className="flex w-fit max-w-full flex-row flex-wrap items-center justify-center gap-1.5 self-center sm:w-auto sm:max-w-none sm:flex-nowrap sm:justify-end sm:self-auto sm:gap-2"
+                        >
                             {myMatchRole?.credentials && (
                                 <button
                                     onClick={handleDestroyOrLeave}
                                     className={clsx(
-                                        "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border",
+                                        "min-w-[4.5rem] rounded px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-all cursor-pointer border sm:min-w-0 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-wider",
                                         myMatchRole.playerID === '0'
                                             ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20"
                                             : "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20"
@@ -764,7 +791,7 @@ export const Home = () => {
                             )}
                             <button
                                 onClick={handleReconnect}
-                                className="bg-parchment-light-text hover:bg-[#a08060] text-white px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm border border-parchment-light-text"
+                                className="min-w-[5.75rem] rounded border border-parchment-light-text bg-parchment-light-text px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm transition-colors cursor-pointer hover:bg-[#a08060] sm:min-w-0 sm:px-6 sm:py-1.5 sm:text-xs sm:tracking-wider"
                             >
                                 {t('lobby:actions.reconnectEnter')}
                             </button>

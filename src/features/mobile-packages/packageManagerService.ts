@@ -113,3 +113,13 @@ export const startGamePackageInstall = (
         }
     });
 };
+
+export const resetGamePackageManagerForTests = () => {
+    for (const [gameId, handle] of activeInstallRegistry.entries()) {
+        handle.cancel();
+        activeInstallRegistry.delete(gameId);
+    }
+    stateCache.clear();
+    fallbackCache.clear();
+    listenerRegistry.clear();
+};

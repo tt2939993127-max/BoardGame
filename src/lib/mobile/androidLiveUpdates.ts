@@ -24,6 +24,23 @@ type CurrentBundleResult = {
     native: string;
 };
 
+type DownloadEvent = {
+    percent: number;
+    bundle: BundleInfo;
+};
+
+type DownloadFailedEvent = {
+    version: string;
+};
+
+type UpdateFailedEvent = {
+    bundle: BundleInfo;
+};
+
+type SetEvent = {
+    bundle: BundleInfo;
+};
+
 type CapacitorUpdaterModule = {
     CapacitorUpdater: {
         notifyAppReady(): Promise<{ bundle: BundleInfo }>;
@@ -35,12 +52,30 @@ type CapacitorUpdaterModule = {
             checksum?: string;
         }): Promise<BundleInfo>;
         next(options: { id: string }): Promise<BundleInfo>;
+        set(options: { id: string }): Promise<void>;
+        reload(): Promise<void>;
         setMultiDelay(options: {
             delayConditions: Array<{ kind: 'background' | 'kill' | 'date' | 'nativeVersion'; value?: string }>;
         }): Promise<void>;
         addListener(
-            eventName: 'downloadFailed' | 'updateFailed' | 'downloadComplete',
-            listenerFunc: (event: { bundleId?: string; version?: string; error?: string }) => void,
+            eventName: 'download',
+            listenerFunc: (event: DownloadEvent) => void,
+        ): Promise<PluginListenerHandle>;
+        addListener(
+            eventName: 'downloadFailed',
+            listenerFunc: (event: DownloadFailedEvent) => void,
+        ): Promise<PluginListenerHandle>;
+        addListener(
+            eventName: 'updateFailed',
+            listenerFunc: (event: UpdateFailedEvent) => void,
+        ): Promise<PluginListenerHandle>;
+        addListener(
+            eventName: 'downloadComplete',
+            listenerFunc: (event: { bundle: BundleInfo }) => void,
+        ): Promise<PluginListenerHandle>;
+        addListener(
+            eventName: 'set',
+            listenerFunc: (event: SetEvent) => void,
         ): Promise<PluginListenerHandle>;
     };
 };
@@ -62,16 +97,47 @@ export interface AndroidOtaManifest {
     maxNativeVersion?: string;
     notes?: string;
     publishedAt?: string;
+    forceUpdate?: boolean;
+    forceUpdateTitle?: string;
+    forceUpdateMessage?: string;
 }
 
 export type AndroidLiveUpdateResult =
     | { status: 'disabled' | 'not-native' | 'manifest-missing' | 'up-to-date' }
-    | { status: 'incompatible'; version: string; reason: string }
-    | { status: 'queued'; version: string; source: 'downloaded' | 'cached' }
+    | { status: 'incompatible'; version: string; reason: string; requiredNativeVersion?: string }
+    | { status: 'queued'; version: string; source: 'downloaded' | 'cached'; mode: 'background' | 'immediate' }
     | { status: 'error'; reason: string };
+
+export type AndroidForceUpdatePhase =
+    | 'hidden'
+    | 'checking'
+    | 'downloading'
+    | 'applying'
+    | 'native-update-required'
+    | 'error';
+
+export interface AndroidForceUpdateState {
+    phase: AndroidForceUpdatePhase;
+    blocking: boolean;
+    version?: string;
+    progressPercent?: number;
+    requiredNativeVersion?: string;
+    title?: string;
+    message?: string;
+    reason?: string;
+}
+
+export interface AndroidLiveUpdateStartOptions {
+    force?: boolean;
+    onForceStateChange?: (state: AndroidForceUpdateState) => void;
+}
 
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
+const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
+    phase: 'hidden',
+    blocking: false,
+};
 
 let capacitorCoreLoader: Promise<CapacitorCoreModule | null> | null = null;
 let updaterLoader: Promise<CapacitorUpdaterModule | null> | null = null;
@@ -96,7 +162,6 @@ const parseTimeoutEnv = (value: string | boolean | undefined) => {
 };
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
-
 const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
 const normalizeComparableVersion = (value: string) => {
@@ -110,6 +175,53 @@ const parseVersionParts = (value: string) => normalizeComparableVersion(value)
         const parsed = Number.parseInt(part, 10);
         return Number.isFinite(parsed) ? parsed : 0;
     });
+
+const clampPercent = (value: number | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return undefined;
+    }
+    return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const emitForceState = (
+    onForceStateChange: AndroidLiveUpdateStartOptions['onForceStateChange'],
+    state: AndroidForceUpdateState,
+) => {
+    onForceStateChange?.(state);
+};
+
+const resolveManifestRequiredNativeVersion = (manifest: AndroidOtaManifest) => {
+    if (typeof manifest.targetNativeVersion === 'string' && manifest.targetNativeVersion.trim()) {
+        return manifest.targetNativeVersion.trim();
+    }
+
+    if (Array.isArray(manifest.targetNativeVersion) && manifest.targetNativeVersion.length === 1) {
+        const onlyVersion = manifest.targetNativeVersion[0]?.trim();
+        if (onlyVersion) {
+            return onlyVersion;
+        }
+    }
+
+    const minVersion = manifest.minNativeVersion?.trim();
+    if (minVersion) {
+        return minVersion;
+    }
+
+    return undefined;
+};
+
+const buildForceUpdateTitle = (manifest: AndroidOtaManifest, fallback: string) => {
+    const customTitle = manifest.forceUpdateTitle?.trim();
+    return customTitle || fallback;
+};
+
+const buildForceUpdateMessage = (
+    manifest: AndroidOtaManifest,
+    fallback: string,
+) => {
+    const customMessage = manifest.forceUpdateMessage?.trim();
+    return customMessage || fallback;
+};
 
 export const compareVersion = (left: string, right: string) => {
     const leftParts = parseVersionParts(left);
@@ -248,6 +360,9 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             maxNativeVersion: data.maxNativeVersion,
             notes: data.notes,
             publishedAt: data.publishedAt,
+            forceUpdate: data.forceUpdate === true,
+            forceUpdateTitle: data.forceUpdateTitle,
+            forceUpdateMessage: data.forceUpdateMessage,
         };
     } catch (error) {
         console.warn('[OTA] 读取 manifest 失败', error);
@@ -263,6 +378,22 @@ const queueDownloadedBundle = async (
     await updater.setMultiDelay({
         delayConditions: [{ kind: 'background' }],
     });
+};
+
+const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
+    if (!handle) return;
+    try {
+        await handle.remove();
+    } catch {
+        // 忽略监听器清理失败，避免覆盖主错误。
+    }
+};
+
+const applyBundleImmediately = async (
+    updater: CapacitorUpdaterModule['CapacitorUpdater'],
+    bundleId: string,
+) => {
+    await updater.set({ id: bundleId });
 };
 
 export const notifyAndroidBundleReady = async () => {
@@ -297,13 +428,16 @@ export const registerAndroidLiveUpdateListeners = async () => {
             const { CapacitorUpdater } = updaterModule;
             const handles = await Promise.all([
                 CapacitorUpdater.addListener('downloadComplete', (event) => {
-                    console.info('[OTA] bundle 下载完成', event.version || event.bundleId || 'unknown');
+                    console.info('[OTA] bundle 下载完成', event.bundle.version || event.bundle.id || 'unknown');
                 }),
                 CapacitorUpdater.addListener('downloadFailed', (event) => {
-                    console.warn('[OTA] bundle 下载失败', event.error || 'unknown');
+                    console.warn('[OTA] bundle 下载失败', event.version || 'unknown');
                 }),
                 CapacitorUpdater.addListener('updateFailed', (event) => {
-                    console.warn('[OTA] bundle 更新失败', event.error || 'unknown');
+                    console.warn('[OTA] bundle 更新失败', event.bundle.version || event.bundle.id || 'unknown');
+                }),
+                CapacitorUpdater.addListener('set', (event) => {
+                    console.info('[OTA] bundle 已切换', event.bundle.version || event.bundle.id || 'unknown');
                 }),
             ]);
 
@@ -314,9 +448,18 @@ export const registerAndroidLiveUpdateListeners = async () => {
     return listenerRegistrationPromise;
 };
 
-export const startAndroidLiveUpdateBackgroundCheck = async (): Promise<AndroidLiveUpdateResult> => {
+export const startAndroidLiveUpdateBackgroundCheck = async (
+    options: AndroidLiveUpdateStartOptions = {},
+): Promise<AndroidLiveUpdateResult> => {
+    if (options.force) {
+        backgroundUpdatePromise = null;
+    }
+
     if (!backgroundUpdatePromise) {
         backgroundUpdatePromise = (async () => {
+            const { onForceStateChange } = options;
+            emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
+
             const config = getConfigFromMetaEnv();
             if (!config.enabled) {
                 return { status: 'disabled' } as const;
@@ -337,49 +480,153 @@ export const startAndroidLiveUpdateBackgroundCheck = async (): Promise<AndroidLi
                 return { status: 'manifest-missing' } as const;
             }
 
+            const isForceUpdate = manifest.forceUpdate === true;
+            if (isForceUpdate) {
+                emitForceState(onForceStateChange, {
+                    phase: 'checking',
+                    blocking: true,
+                    version: manifest.version,
+                    title: buildForceUpdateTitle(manifest, '正在准备更新'),
+                    message: buildForceUpdateMessage(manifest, '正在检查并准备新版本，请稍候。'),
+                });
+            }
+
             try {
                 const { CapacitorUpdater } = updaterModule;
                 const current = await CapacitorUpdater.current();
                 const compatibility = isManifestCompatibleWithNativeVersion(manifest, current.native);
                 if (!compatibility.compatible) {
+                    const requiredNativeVersion = resolveManifestRequiredNativeVersion(manifest);
+                    if (isForceUpdate) {
+                        emitForceState(onForceStateChange, {
+                            phase: 'native-update-required',
+                            blocking: true,
+                            version: manifest.version,
+                            requiredNativeVersion,
+                            title: buildForceUpdateTitle(manifest, '需要更新 App'),
+                            message: buildForceUpdateMessage(
+                                manifest,
+                                requiredNativeVersion
+                                    ? `当前 App 版本过旧，需要升级到 ${requiredNativeVersion} 或更高版本后继续使用。`
+                                    : '当前 App 版本过旧，需要先安装新版本后继续使用。',
+                            ),
+                            reason: compatibility.reason,
+                        });
+                    } else {
+                        emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
+                    }
                     return {
                         status: 'incompatible',
                         version: manifest.version,
                         reason: compatibility.reason || 'bundle 与当前原生版本不兼容',
+                        requiredNativeVersion,
                     } as const;
                 }
 
                 if (current.bundle.version === manifest.version) {
+                    emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
                     return { status: 'up-to-date' } as const;
                 }
 
                 const bundleList = await CapacitorUpdater.list();
                 const cachedBundle = bundleList.bundles.find((bundle) => bundle.version === manifest.version && bundle.status !== 'error');
                 if (cachedBundle) {
+                    if (isForceUpdate) {
+                        emitForceState(onForceStateChange, {
+                            phase: 'applying',
+                            blocking: true,
+                            version: manifest.version,
+                            progressPercent: 100,
+                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
+                            message: buildForceUpdateMessage(manifest, '更新包已准备完成，正在重启并切换到新版本。'),
+                        });
+                        await applyBundleImmediately(CapacitorUpdater, cachedBundle.id);
+                        return {
+                            status: 'queued',
+                            version: manifest.version,
+                            source: 'cached',
+                            mode: 'immediate',
+                        } as const;
+                    }
+
                     await queueDownloadedBundle(CapacitorUpdater, cachedBundle.id);
+                    emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
                     return {
                         status: 'queued',
                         version: manifest.version,
                         source: 'cached',
+                        mode: isForceUpdate ? 'immediate' : 'background',
                     } as const;
                 }
 
-                const downloadedBundle = await CapacitorUpdater.download({
-                    url: normalizeUrl(manifest.url),
-                    version: manifest.version,
-                    checksum: manifest.checksum,
-                });
-                await queueDownloadedBundle(CapacitorUpdater, downloadedBundle.id);
+                let downloadHandle: PluginListenerHandle | null = null;
+                if (isForceUpdate) {
+                    downloadHandle = await CapacitorUpdater.addListener('download', (event) => {
+                        emitForceState(onForceStateChange, {
+                            phase: 'downloading',
+                            blocking: true,
+                            version: manifest.version,
+                            progressPercent: clampPercent(event.percent),
+                            title: buildForceUpdateTitle(manifest, '正在下载更新'),
+                            message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
+                        });
+                    });
+                }
 
-                return {
-                    status: 'queued',
-                    version: manifest.version,
-                    source: 'downloaded',
-                } as const;
+                try {
+                    const downloadedBundle = await CapacitorUpdater.download({
+                        url: normalizeUrl(manifest.url),
+                        version: manifest.version,
+                        checksum: manifest.checksum,
+                    });
+
+                    await removeListenerSafely(downloadHandle);
+
+                    if (isForceUpdate) {
+                        emitForceState(onForceStateChange, {
+                            phase: 'applying',
+                            blocking: true,
+                            version: manifest.version,
+                            progressPercent: 100,
+                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
+                            message: buildForceUpdateMessage(manifest, '更新已下载完成，正在重启并切换到新版本。'),
+                        });
+                        await applyBundleImmediately(CapacitorUpdater, downloadedBundle.id);
+                        return {
+                            status: 'queued',
+                            version: manifest.version,
+                            source: 'downloaded',
+                            mode: 'immediate',
+                        } as const;
+                    }
+
+                    await queueDownloadedBundle(CapacitorUpdater, downloadedBundle.id);
+                    emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
+                    return {
+                        status: 'queued',
+                        version: manifest.version,
+                        source: 'downloaded',
+                        mode: isForceUpdate ? 'immediate' : 'background',
+                    } as const;
+                } catch (error) {
+                    await removeListenerSafely(downloadHandle);
+                    throw error;
+                }
             } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                if (isForceUpdate) {
+                    emitForceState(onForceStateChange, {
+                        phase: 'error',
+                        blocking: true,
+                        version: manifest.version,
+                        title: buildForceUpdateTitle(manifest, '更新失败'),
+                        message: buildForceUpdateMessage(manifest, '下载或切换新版本失败，请重试。'),
+                        reason,
+                    });
+                }
                 return {
                     status: 'error',
-                    reason: error instanceof Error ? error.message : String(error),
+                    reason,
                 } as const;
             }
         })();

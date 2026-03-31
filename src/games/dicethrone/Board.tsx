@@ -242,7 +242,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
 
     // 判断游戏结果
-    const isWinner = isGameOver && isGameOver?.winner === rootPid;
+    const isWinner = !!isGameOver && (
+        isGameOver.winners?.includes(rootPid)
+        ?? isGameOver.winner === rootPid
+    );
 
     // 获取所有玩家名称映射
     // 音频系统

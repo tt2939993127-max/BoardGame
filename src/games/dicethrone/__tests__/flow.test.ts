@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DiceThroneDomain } from '../domain';
-import type { DiceThroneCore, DiceThroneCommand } from '../domain/types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, TurnPhase } from '../domain/types';
 import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types';
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
@@ -306,7 +306,7 @@ describe('王权骰铸流程测试', () => {
             expect(state.sys.phase).toBe('main1');
         });
 
-        it('4 人开局会初始化 2v2 团队状态并按队伍交替顺序轮转回合', () => {
+        it('4 人开局会初始化 2v2 团队状态并按敌我交替顺序轮转回合', () => {
             const playerIds: PlayerId[] = ['0', '1', '2', '3'];
             const pipelineConfig = {
                 domain: DiceThroneDomain,
@@ -327,10 +327,10 @@ describe('王权骰铸流程测试', () => {
             const turnAdvanceCommands: CommandInput[] = [
                 ...advanceTo('discard', '0'),
                 cmd('ADVANCE_PHASE', '0'),
-                ...advanceTo('discard', '2'),
-                cmd('ADVANCE_PHASE', '2'),
                 ...advanceTo('discard', '1'),
                 cmd('ADVANCE_PHASE', '1'),
+                ...advanceTo('discard', '2'),
+                cmd('ADVANCE_PHASE', '2'),
             ];
 
             for (const input of turnAdvanceCommands) {
@@ -348,7 +348,7 @@ describe('王权骰铸流程测试', () => {
                 }
             }
 
-            expect(activePlayerSequence).toEqual(['0', '2', '1', '3']);
+            expect(activePlayerSequence).toEqual(['0', '1', '2', '3']);
         });
 
         it('4 人 setup 阶段允许房主调整站位并同步更新分队与左右对手', () => {
@@ -674,6 +674,51 @@ describe('王权骰铸流程测试', () => {
             expect(state.sys.responseWindow?.current?.responderQueue).toEqual(['0']);
         });
 
+        it('4 人模式下进攻掷骰确认后的响应窗口只归两名对手', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            let state = createInitializedStateWithCharacters(playerIds, fixedRandom, {
+                '0': 'monk',
+                '1': 'barbarian',
+                '2': 'monk',
+                '3': 'monk',
+            });
+
+            for (const pid of playerIds) {
+                state.core.players[pid].hand = [];
+                state.core.players[pid].deck = [];
+            }
+
+            state.core.players['1'].hand = [getCardById('card-flick')];
+            state.core.players['1'].resources[RESOURCE_IDS.CP] = 10;
+            state.core.players['2'].hand = [getCardById('card-flick')];
+            state.core.players['2'].resources[RESOURCE_IDS.CP] = 10;
+            state.core.players['3'].hand = [getCardById('card-flick')];
+            state.core.players['3'].resources[RESOURCE_IDS.CP] = 10;
+
+            for (const input of [
+                ...advanceTo('offensiveRoll', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+            ]) {
+                const command = {
+                    type: input.type,
+                    playerId: input.playerId,
+                    payload: input.payload,
+                    timestamp: Date.now(),
+                } as DiceThroneCommand;
+                const result = executePipeline(pipelineConfig, state, command, fixedRandom, playerIds);
+                expect(result.success).toBe(true);
+                state = result.state as MatchState<DiceThroneCore>;
+            }
+
+            expect(state.sys.responseWindow?.current?.windowType).toBe('afterRollConfirmed');
+            expect(state.sys.responseWindow?.current?.responderQueue).toEqual(['1', '3']);
+        });
+
         it('4 人模式下攻击方队友不会进入响应队列，但可直接打出改骰牌', () => {
             const playerIds: PlayerId[] = ['0', '1', '2', '3'];
             const pipelineConfig = {
@@ -905,8 +950,8 @@ describe('王权骰铸流程测试', () => {
             expect(state.sys.phase).toBe('targetingRoll');
             expect(state.sys.interaction.current?.playerId).toBe('3');
             const choiceOptions = ((state.sys.interaction.current as any)?.data?.options ?? []) as Array<{ id: string; value?: { customId?: string }; disabled?: boolean }>;
-            expect(choiceOptions).toHaveLength(3);
-            expect(choiceOptions.some((option) => option.value?.customId === 'select-target:2' && option.disabled === true)).toBe(true);
+            expect(choiceOptions).toHaveLength(2);
+            expect(choiceOptions.some((option) => option.value?.customId === 'select-target:2')).toBe(false);
 
             const chooseRightOpponent = choiceOptions.find((option) => option.value?.customId === 'select-target:1');
             expect(chooseRightOpponent).toBeDefined();
@@ -966,6 +1011,8 @@ describe('王权骰铸流程测试', () => {
             expect(state.sys.phase).toBe('targetingRoll');
             expect(state.sys.interaction.current?.playerId).toBe('0');
             const choiceOptions = ((state.sys.interaction.current as any)?.data?.options ?? []) as Array<{ id: string; value?: { customId?: string } }>;
+            expect(choiceOptions).toHaveLength(2);
+            expect(choiceOptions.some((option) => option.value?.customId === 'select-target:2')).toBe(false);
             const chooseRightOpponent = choiceOptions.find((option) => option.value?.customId === 'select-target:1');
             expect(chooseRightOpponent).toBeDefined();
 
@@ -1610,6 +1657,142 @@ describe('王权骰铸流程测试', () => {
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('4 人模式主阶段打出掌击时会先要求在两名对手中选目标', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            let state = createInitializedStateWithCharacters(playerIds, fixedRandom, {
+                '0': 'monk',
+                '1': 'barbarian',
+                '2': 'monk',
+                '3': 'monk',
+            });
+
+            for (const pid of playerIds) {
+                state.core.players[pid].hand = [];
+                state.core.players[pid].deck = [];
+            }
+            state.core.players['0'].hand = [getCardById('card-palm-strike')];
+
+            const events = executeCardCommand(
+                state,
+                {
+                    type: 'PLAY_CARD',
+                    playerId: '0',
+                    payload: { cardId: 'card-palm-strike' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                state.sys.phase as TurnPhase,
+                Date.now(),
+            );
+
+            expect(events.some((event) => event.type === 'STATUS_APPLIED')).toBe(false);
+            const interactionEvent = events.find((event) => event.type === 'INTERACTION_REQUESTED') as
+                | Extract<DiceThroneEvent, { type: 'INTERACTION_REQUESTED' }>
+                | undefined;
+            expect(interactionEvent).toBeDefined();
+            expect(interactionEvent?.payload.interaction.type).toBe('selectPlayer');
+            expect(interactionEvent?.payload.interaction.targetPlayerIds).toEqual(['1', '3']);
+            expect(interactionEvent?.payload.interaction.resolveCustomActionId).toBe('resolve-card-effects-on-selected-opponent');
+        });
+
+        it('4 人模式主阶段打出月影突袭时会先要求在两名对手中选目标', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            let state = createInitializedStateWithCharacters(playerIds, fixedRandom, {
+                '0': 'moon_elf',
+                '1': 'barbarian',
+                '2': 'monk',
+                '3': 'samurai',
+            });
+
+            for (const pid of playerIds) {
+                state.core.players[pid].hand = [];
+                state.core.players[pid].deck = [];
+            }
+            state.core.players['0'].hand = [getCardById('moon-shadow-strike')];
+
+            const events = executeCardCommand(
+                state,
+                {
+                    type: 'PLAY_CARD',
+                    playerId: '0',
+                    payload: { cardId: 'moon-shadow-strike' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                state.sys.phase as TurnPhase,
+                Date.now(),
+            );
+
+            const interactionEvent = events.find((event) => event.type === 'INTERACTION_REQUESTED') as
+                | Extract<DiceThroneEvent, { type: 'INTERACTION_REQUESTED' }>
+                | undefined;
+            expect(interactionEvent).toBeDefined();
+            expect(interactionEvent?.payload.interaction.type).toBe('selectPlayer');
+            expect(interactionEvent?.payload.interaction.targetPlayerIds).toEqual(['1', '3']);
+            expect(interactionEvent?.payload.interaction.resolveCustomActionId).toBe('resolve-card-effects-on-selected-opponent');
+        });
+
+        it('4 人模式主阶段选定目标后会把混合卡牌效果结算到所选敌方', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            let state = createInitializedStateWithCharacters(playerIds, fixedRandom, {
+                '0': 'monk',
+                '1': 'barbarian',
+                '2': 'monk',
+                '3': 'monk',
+            });
+
+            for (const pid of playerIds) {
+                state.core.players[pid].hand = [];
+                state.core.players[pid].deck = [];
+            }
+            state.core.players['0'].resources[RESOURCE_IDS.CP] = 10;
+            state.core.players['0'].hand = [getCardById('card-buddha-light')];
+
+            const playResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'PLAY_CARD',
+                    playerId: '0',
+                    payload: { cardId: 'card-buddha-light' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(playResult.success).toBe(true);
+            state = playResult.state as MatchState<DiceThroneCore>;
+
+            const pendingInteraction = state.sys.interaction.current;
+            expect(pendingInteraction?.kind).toBe('dt:card-interaction');
+            expect((pendingInteraction?.data as { targetPlayerIds?: PlayerId[] } | undefined)?.targetPlayerIds).toEqual(['1', '3']);
+
+            const resolveResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'RESOLVE_INTERACTION',
+                    playerId: '0',
+                    payload: { selectedPlayerIds: ['3'] },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(resolveResult.success).toBe(true);
+            state = resolveResult.state as MatchState<DiceThroneCore>;
+
+            expect(state.core.players['0'].tokens[TOKEN_IDS.TAIJI] ?? 0).toBe(1);
+            expect(state.core.players['0'].tokens[TOKEN_IDS.EVASIVE] ?? 0).toBe(1);
+            expect(state.core.players['0'].tokens[TOKEN_IDS.PURIFY] ?? 0).toBe(1);
+            expect(state.core.players['1'].statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0).toBe(0);
+            expect(state.core.players['3'].statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0).toBe(1);
         });
     });
 

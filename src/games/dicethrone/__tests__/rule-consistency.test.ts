@@ -260,7 +260,7 @@ describe('Property 6: 阶段流转正确性', () => {
         expect(next).toBe('upkeep');
     });
 
-    it('4 人模式起始玩家为 1 号位时按同队连走后再切换敌队', () => {
+    it('4 人模式起始玩家为 1 号位时仍按环桌座位敌我交替轮转', () => {
         const core = createMockCore({
             players: {
                 '0': {} as any,
@@ -279,8 +279,8 @@ describe('Property 6: 阶段流转正确性', () => {
             activePlayerId: '1',
         });
 
-        expect(getPlayerOrder(core)).toEqual(['1', '3', '0', '2']);
-        expect(getNextPlayerId(core)).toBe('3');
+        expect(getPlayerOrder(core)).toEqual(['1', '2', '3', '0']);
+        expect(getNextPlayerId(core)).toBe('2');
     });
 
     it('击倒跳过 offensiveRoll（通过 GameTestRunner 验证）', () => {

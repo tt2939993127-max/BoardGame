@@ -27,6 +27,8 @@ import { installGlobalErrorContextCapture } from './lib/feedback/errorContext';
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
 
+const isAndroidShellBuild = import.meta.env.MODE === 'android';
+
 // 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
 const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const MatchRoom = React.lazy(() => import('./pages/MatchRoomWithAudio'));
@@ -50,13 +52,13 @@ TestHarness.init();
  */
 const TutorialMatchRoom = React.lazy(() => import('./pages/TutorialMatchRoomWithAudio'));
 
-const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
-const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
-const DevToolsAudioBrowser = React.lazy(() => import('./pages/devtools/AudioBrowser'));
-const DevToolsArchView = React.lazy(() => import('./pages/devtools/ArchitectureView'));
-const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio'));
-const UGCRuntimeViewPage = React.lazy(() => import('./ugc/runtime/RuntimeViewPage'));
-const UGCSandbox = React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox })));
+const DevToolsSlicer = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AssetSlicer')) : null;
+const DevToolsFxPreview = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
+const DevToolsAudioBrowser = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
+const DevToolsArchView = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
+const UnifiedBuilder = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio')) : null;
+const UGCRuntimeViewPage = !isAndroidShellBuild ? React.lazy(() => import('./ugc/runtime/RuntimeViewPage')) : null;
+const UGCSandbox = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox }))) : null;
 const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
@@ -69,7 +71,7 @@ const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
-const SmashUp4PLayoutTest = React.lazy(() => import('./pages/SmashUp4PLayoutTest'));
+const SmashUp4PLayoutTest = !isAndroidShellBuild ? React.lazy(() => import('./pages/SmashUp4PLayoutTest')) : null;
 const DevMobileEvidenceCaptureAgent = import.meta.env.DEV
   ? React.lazy(() =>
       import('./components/system/MobileEvidenceCaptureAgent').then(m => ({ default: m.MobileEvidenceCaptureAgent })),
@@ -141,22 +143,37 @@ const AppContent = () => {
                       )}
                     />
                     {/* /test 路由已废弃，使用新的 TestHarness 框架（/play/:gameId + setupScene） */}
-                    <Route path="/dev/slicer" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
-                    <Route path="/dev/fx" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
-                    <Route path="/dev/audio" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
-                    <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
-                    <Route
-                      path="/dev/ugc"
-                      element={(
-                        <React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcBuilder')} />}>
-                          <UnifiedBuilder />
-                        </React.Suspense>
-                      )}
-                    />
-                    <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
-                    <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
-                    {/* 临时测试路由：大杀四方四人局布局预览 */}
-                    <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={<RouteLoadingFallback title="四人局布局测试" />}><SmashUp4PLayoutTest /></React.Suspense>} />
+                    {!isAndroidShellBuild && DevToolsSlicer && (
+                      <Route path="/dev/slicer" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && DevToolsFxPreview && (
+                      <Route path="/dev/fx" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && DevToolsAudioBrowser && (
+                      <Route path="/dev/audio" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && DevToolsArchView && (
+                      <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && UnifiedBuilder && (
+                      <Route
+                        path="/dev/ugc"
+                        element={(
+                          <React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcBuilder')} />}>
+                            <UnifiedBuilder />
+                          </React.Suspense>
+                        )}
+                      />
+                    )}
+                    {!isAndroidShellBuild && UGCRuntimeViewPage && (
+                      <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && UGCSandbox && (
+                      <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && SmashUp4PLayoutTest && (
+                      <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={<RouteLoadingFallback title="四人局布局测试" />}><SmashUp4PLayoutTest /></React.Suspense>} />
+                    )}
                     {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
                         强制 React 在在线↔教程路由切换时完全卸载/重建，防止状态泄漏 */}
                     <Route

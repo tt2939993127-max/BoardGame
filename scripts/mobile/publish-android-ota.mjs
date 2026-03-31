@@ -31,8 +31,14 @@ const hasFlag = (name) => args.includes(`--${name}`);
 
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
+const explicitTargetNativeVersion = readArgValue('target-native-version', '');
+const minNativeVersion = readArgValue('min-native-version', '');
+const maxNativeVersion = readArgValue('max-native-version', '');
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
+const forceUpdate = hasFlag('force-update');
+const forceUpdateTitle = readArgValue('force-update-title', '');
+const forceUpdateMessage = readArgValue('force-update-message', '');
 const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
 const distDir = path.join(rootDir, 'dist');
@@ -51,11 +57,6 @@ if (!validChannelPattern.test(channel)) {
     throw new Error(`非法 channel: ${channel}。仅允许字母、数字、点、下划线、短横线。`);
 }
 
-const requiredEnv = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'];
-const missingEnv = requiredEnv.filter((key) => !process.env[key]);
-if (missingEnv.length > 0) {
-    throw new Error(`缺少 R2 环境变量: ${missingEnv.join(', ')}`);
-}
 if (!existsSync(distDir)) {
     throw new Error('dist 目录不存在。请先执行 Android Web 构建（例如 `npm run build:android:web` 或 `node scripts/mobile/android.mjs sync`）。');
 }
@@ -69,6 +70,14 @@ if (androidBuildMeta.mode !== 'android') {
 }
 if (typeof androidBuildMeta.backendUrl !== 'string' || !/^https?:\/\//i.test(androidBuildMeta.backendUrl.trim())) {
     throw new Error('dist/android-build-meta.json 缺少合法 backendUrl。请先执行 `npm run mobile:android:sync`。');
+}
+
+if (!dryRun) {
+    const requiredEnv = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'];
+    const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+    if (missingEnv.length > 0) {
+        throw new Error(`缺少 R2 环境变量: ${missingEnv.join(', ')}`);
+    }
 }
 
 const s3Client = new S3Client({
@@ -96,12 +105,33 @@ const collectFiles = (dirPath, baseDir, entries = {}) => {
 
 const zipBuffer = Buffer.from(zipSync(collectFiles(distDir, distDir), { level: 9 }));
 const checksum = createHash('sha256').update(zipBuffer).digest('hex');
+const normalizedTargetNativeVersion = explicitTargetNativeVersion
+    ? explicitTargetNativeVersion
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+const shouldUseDefaultTargetNativeVersion = !explicitTargetNativeVersion && !minNativeVersion && !maxNativeVersion;
+const resolvedTargetNativeVersion = shouldUseDefaultTargetNativeVersion
+    ? [nativeVersion]
+    : normalizedTargetNativeVersion;
 const manifest = {
     version: bundleVersion,
     url: bundleUrl,
     checksum,
     channel,
-    targetNativeVersion: nativeVersion,
+    ...(resolvedTargetNativeVersion.length > 0
+        ? {
+            targetNativeVersion: resolvedTargetNativeVersion.length === 1
+                ? resolvedTargetNativeVersion[0]
+                : resolvedTargetNativeVersion,
+        }
+        : {}),
+    ...(minNativeVersion ? { minNativeVersion } : {}),
+    ...(maxNativeVersion ? { maxNativeVersion } : {}),
+    ...(forceUpdate ? { forceUpdate: true } : {}),
+    ...(forceUpdateTitle ? { forceUpdateTitle } : {}),
+    ...(forceUpdateMessage ? { forceUpdateMessage } : {}),
     publishedAt: new Date().toISOString(),
     size: zipBuffer.length,
     notes,

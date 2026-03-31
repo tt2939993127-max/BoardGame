@@ -7,7 +7,8 @@ import type { PlayerId } from '../../../engine/types';
 import type { DtResponseWindowType } from './core-types';
 import type { AbilityContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { isCustomActionCategory } from './effects';
+import type { RollDieConditionalEffect, RollDieDefaultEffect } from './effects';
+import { getCustomActionMeta, isCustomActionCategory } from './effects';
 import { logger } from '../../../lib/logger';
 import type {
     DiceThroneCore,
@@ -308,14 +309,11 @@ export const getTargetingRollChoiceOptions = (
     labelKey: string;
     disabled?: boolean;
 }> => {
-    const seatingOrder = getSeatingOrder(state);
-    return seatingOrder
-        .filter((pid) => pid !== attackerId)
+    return getOpponents(state, attackerId)
         .map((pid) => ({
             customId: `select-target:${pid}`,
             value: 1,
             labelKey: `玩家 ${Number(pid) + 1}`,
-            disabled: areTeammates(state, attackerId, pid),
         }));
 };
 
@@ -347,17 +345,9 @@ const buildTeamTurnOrder = (state: DiceThroneCore): PlayerId[] => {
         return seatingOrder;
     }
 
-    const sameTeamPlayers = rotateOrderToStart(
-        seatingOrder.filter((pid) => getTeamId(state, pid) === startingTeamId),
-        startingPlayerId
-    );
-    const opposingTeamPlayers = seatingOrder.filter((pid) => getTeamId(state, pid) !== startingTeamId);
-
-    if (sameTeamPlayers.length !== 2 || opposingTeamPlayers.length !== 2) {
-        return seatingOrder;
-    }
-
-    return [...sameTeamPlayers, ...opposingTeamPlayers];
+    // 2v2 的队伍归属本身就是按座位奇偶位推导出来的；
+    // 只要把环桌座位顺序旋转到起始玩家，就天然是 A/B/A/B 交替。
+    return rotateOrderToStart(seatingOrder, startingPlayerId);
 };
 
 /**
@@ -630,6 +620,7 @@ export type CardPlayFailReason =
     | 'unknownCardTiming'          // 未知卡牌时机
     | 'wrongPhaseForCard'          // 卡牌需要特定阶段（进攻/防御）
     | 'attackModifierRequiresSelectedAttack' // 攻击修正牌需要先选定攻击技能
+    | 'attackModifierRequiresSelectedDefender' // 4 人模式下该攻击修正牌需要先选定具体受击者
     | 'requireOwnTurn'             // 卡牌需要在自己回合打出
     | 'requireOpponentTurn'        // 卡牌需要在对手回合打出
     | 'requireIsRoller'            // 卡牌需要是当前投掷方
@@ -655,6 +646,9 @@ const getAttackModifierPlayFailureReason = (
     }
     if (pendingAttack.attackerId !== playerId) {
         return 'wrongPhaseForCard';
+    }
+    if (isTeamMode(state) && pendingAttack.defenderId === undefined && cardNeedsSelectedDefender(card)) {
+        return 'attackModifierRequiresSelectedDefender';
     }
     return null;
 };
@@ -953,13 +947,64 @@ export const canUndoSell = (
  * 检查卡牌效果是否对对手生效
  * 用于决定打出卡牌后是否需要触发响应窗口
  */
+const rollBranchTargetsOpponent = (
+    branch?: RollDieConditionalEffect | RollDieDefaultEffect
+): boolean => {
+    if (!branch) return false;
+    return branch.grantStatus?.target === 'opponent'
+        || branch.grantToken?.target === 'opponent'
+        || (branch.grantTokens?.some((grant) => grant.target === 'opponent') ?? false);
+};
+
 export const hasOpponentTargetEffect = (card: AbilityCard): boolean => {
     if (!card.effects || card.effects.length === 0) return false;
     
     return card.effects.some(effect => {
         if (!effect.action) return false;
-        return effect.action.target === 'opponent';
+        if (effect.action.target === 'opponent') {
+            return true;
+        }
+        if (effect.action.type === 'rollDie') {
+            return (effect.action.conditionalEffects?.some(rollBranchTargetsOpponent) ?? false)
+                || rollBranchTargetsOpponent(effect.action.defaultEffect);
+        }
+        return false;
     });
+};
+
+const rollBranchNeedsSelectedDefender = (
+    branch?: RollDieConditionalEffect | RollDieDefaultEffect
+): boolean => {
+    if (!branch) return false;
+    return branch.grantStatus?.target === 'opponent'
+        || branch.grantToken?.target === 'opponent'
+        || (branch.grantTokens?.some((grant) => grant.target === 'opponent') ?? false);
+};
+
+const actionNeedsSelectedDefender = (
+    action: NonNullable<AbilityCard['effects']>[number]['action']
+): boolean => {
+    if (!action) return false;
+
+    if (action.type === 'rollDie') {
+        return (action.conditionalEffects?.some(rollBranchNeedsSelectedDefender) ?? false)
+            || rollBranchNeedsSelectedDefender(action.defaultEffect);
+    }
+
+    if (action.target === 'opponent' || action.target === 'select') {
+        return true;
+    }
+
+    if (action.type === 'custom' && action.customActionId) {
+        return getCustomActionMeta(action.customActionId)?.requiresSelectedDefender ?? false;
+    }
+
+    return false;
+};
+
+export const cardNeedsSelectedDefender = (card: AbilityCard): boolean => {
+    if (!card.effects?.length) return false;
+    return card.effects.some((effect) => effect.action ? actionNeedsSelectedDefender(effect.action) : false);
 };
 
 /**

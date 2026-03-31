@@ -56,6 +56,33 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 - 默认策略：后台检查、后台下载、`next()` 排队、`background` 条件生效，不在当前对局里强制热切换
 - 启动确认：App 每次原生启动时尽早调用 `notifyAppReady()`，避免已下载 bundle 被插件自动回滚
 
+### OTA 何时生效
+
+- 不是“代码一改客户端立刻变最新版”。只有你执行一次 OTA 发布，把新的 `dist/` 打包上传并更新 manifest，客户端检查到后才会下载。
+- 如果只是本地改代码或只重新打了 APK，但没有发布 OTA manifest，已安装用户不会自动拿到这次 H5 更新。
+- 当前默认检查时机是：用户打开 App 后启动检查。
+
+### 当前升级策略
+
+- 普通 OTA
+  - manifest 未声明 `forceUpdate: true`
+  - App 启动后后台检查，兼容则后台下载
+  - 下载完成后排队，切到后台或下次重启后生效
+  - 不阻塞用户
+- 强制 OTA
+  - manifest 声明 `forceUpdate: true`
+  - App 启动后显示阻塞式全屏更新页
+  - 页面会显示检查中、下载中、切换中
+  - 下载完成后立即切到新 bundle
+- 需要更新 App
+  - manifest 声明 `forceUpdate: true`，但当前原生壳版本不满足兼容条件
+  - 不会继续下载 OTA bundle
+  - 会显示阻塞页，提示先更新 App
+- 不兼容但不强更
+  - manifest 未声明 `forceUpdate: true`，且当前原生壳版本不满足兼容条件
+  - 本次 OTA 直接跳过
+  - 不阻塞用户，也不显示强更页
+
 当前环境变量：
 
 ```env
@@ -96,6 +123,24 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
+如果这次是强制 OTA，可直接这样发布：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+```
+
+如果这次 OTA 只允许某个原生壳版本区间接收：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
+```
+
+如果这次 OTA 既要强更，又要求至少某个壳版本：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
+```
+
 如果走 GitHub Actions 自动化：
 
 - `main` 分支合入影响 H5 bundle 的改动后，会自动发布到非生产 channel，默认是 `edge`
@@ -112,10 +157,23 @@ npm run mobile:android:ota:publish -- --channel stable
 
 - `--channel <name>`：发布 channel，例如 `stable`、`gray`
 - `--version <bundleVersion>`：手动指定 bundle 版本号
-- `--native-version <version>`：指定兼容的原生版本，默认取 `package.json.version`
+- `--native-version <version>`：当前打包对应的原生版本，默认取 `package.json.version`
+- `--target-native-version <version[,version]>`：只允许指定原生版本接收该 bundle
+- `--min-native-version <version>`：声明最低兼容原生版本
+- `--max-native-version <version>`：声明最高兼容原生版本
+- `--force-update`：把这次 OTA 标记为强制更新
+- `--force-update-title <text>`：覆盖强更页标题
+- `--force-update-message <text>`：覆盖强更页正文
 - `--notes <text>`：写入 manifest 备注
 - `--dry-run`：只打 zip、算 checksum、打印 manifest，不上传
 - `--skip-latest`：上传 zip 和版本 manifest，但不覆盖 `<channel>/latest.json`
+
+兼容字段生成规则：
+
+- 如果你没有显式传兼容参数，脚本默认会把这次 OTA 绑定到当前 `package.json.version`
+- 如果你传了 `--target-native-version`，则按精确版本列表生成 `targetNativeVersion`
+- 如果你传了 `--min-native-version` 或 `--max-native-version`，脚本不会再额外塞默认的精确 `targetNativeVersion`
+- `targetNativeVersion` 与 `min/maxNativeVersion` 不要混着乱用，除非你明确需要更窄的门控
 
 当前发布脚本会写入：
 
@@ -144,6 +202,26 @@ npm run mobile:android:ota:publish -- --channel stable
 
 - `targetNativeVersion`：只允许某个原生版本接收该 bundle
 - `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
+- `forceUpdate`：声明这次 OTA 是否为阻塞式强更
+- `forceUpdateTitle` / `forceUpdateMessage`：覆盖强更页默认文案
+
+示例：
+
+```json
+{
+  "version": "0.5.0-ota-2026-03-30T10-00-00-000Z",
+  "url": "https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.0-ota-2026-03-30T10-00-00-000Z.zip",
+  "checksum": "sha256-hex",
+  "channel": "stable",
+  "minNativeVersion": "0.5.0",
+  "forceUpdate": true,
+  "forceUpdateTitle": "需要更新",
+  "forceUpdateMessage": "正在下载必要更新",
+  "publishedAt": "2026-03-30T10:00:00.000Z",
+  "size": 1234567,
+  "notes": "Android embedded OTA bundle"
+}
+```
 
 ## 什么能 OTA，什么仍要发包
 
@@ -164,7 +242,8 @@ npm run mobile:android:ota:publish -- --channel stable
 
 - 预演发布先用 `--dry-run`
 - 小流量验证建议先发 `gray` 之类独立 channel，再切 `stable`
-- App 端当前提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
+- 普通 OTA 的 App 端提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
+- 强制 OTA 会显示阻塞式全屏进度页，不走普通 toast
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
 
 ## GitHub Actions 配置
@@ -195,6 +274,17 @@ npm run mobile:android:ota:publish -- --channel stable
 - `android-ota-production`
 
 其中 `android-ota-production` 应配置 required reviewers，用于保护 `stable` 发布。
+
+## GitHub Actions 自动化策略
+
+- 目标口径是：H5 本体改动自动发 OTA，原生壳改动仍然走重新打包发包。
+- 推荐做法：
+  - `main` 合入后自动发布 `edge`
+  - `gray` / `stable` 保留人工触发
+  - `stable` 绑定 Environment 审批
+- 不建议把 `stable` 也做成完全自动：
+  - 本体更新虽然不需要重新发 APK，但仍可能影响大厅、主页、房间和对局体验
+  - 给 `stable` 保留一道人工确认，可以避免把坏 bundle 直接推给所有已安装用户
 
 ## 关键约束
 
