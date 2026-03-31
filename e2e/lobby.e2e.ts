@@ -87,6 +87,38 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByText('加载中...')).toHaveCount(0, { timeout: 10000 });
     });
 
+    test('AI 仓库工作台可从工具入口进入并完成 new-faction 纵切片', async ({ page, game }, testInfo) => {
+        await page.evaluate(() => {
+            localStorage.removeItem('ai-repo-workbench:mvp-journal');
+        });
+
+        await page.getByRole('button', { name: '工具' }).click();
+        const toolCard = page.getByRole('heading', { name: 'AI 仓库工作台' });
+        await expect(toolCard).toBeVisible();
+
+        await toolCard.click();
+        await expect(page).toHaveURL(/\/dev\/ai-repo-workbench/);
+        await expect(page.getByTestId('workbench-page-heading')).toHaveText('AI 仓库工作台');
+        await expect(page.getByTestId('template-new-faction-card')).toContainText('new-faction');
+
+        await page.getByTestId('start-new-faction-run').click();
+        await expect(page.getByTestId('decision-request-panel')).toBeVisible();
+        await expect(page.getByTestId('node-card-select-rule-source')).toContainText('等待决策');
+
+        await game.screenshot('ai-repo-workbench-rule-source-decision', testInfo);
+
+        await page.getByTestId('decision-option-wiki').click();
+        await page.getByTestId('submit-rule-source-decision').click();
+
+        await expect(page.getByTestId('node-card-publish-artifact-bundle')).toContainText('已完成', { timeout: 10000 });
+        await expect(page.getByTestId('artifact-bundle-panel')).toContainText('ArtifactBundle');
+        await expect(page.getByTestId('artifact-bundle-panel')).toContainText('not_applicable');
+        await expect(page.getByText('规则来源索引')).toBeVisible();
+        await expect(page.getByText('派系定义快照')).toBeVisible();
+
+        await game.screenshot('ai-repo-workbench-artifact-bundle-complete', testInfo);
+    });
+
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
         let delayedOnce = false;
         await page.route('**/games/tictactoe/create', async (route) => {

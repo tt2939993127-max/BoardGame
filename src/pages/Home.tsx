@@ -216,6 +216,10 @@ export const Home = () => {
             navigate('/dev/arch');
             return;
         }
+        if (id === 'airepoworkbench') {
+            navigate('/dev/ai-repo-workbench');
+            return;
+        }
 
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
@@ -230,7 +234,7 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
-        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
+        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview' || id === 'airepoworkbench') {
             return;
         }
         void import('../components/lobby/GameDetailsModal');

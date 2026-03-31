@@ -54,6 +54,7 @@ const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
 const DevToolsAudioBrowser = React.lazy(() => import('./pages/devtools/AudioBrowser'));
 const DevToolsArchView = React.lazy(() => import('./pages/devtools/ArchitectureView'));
+const DevToolsAIRepoWorkbench = React.lazy(() => import('./pages/devtools/AIRepoWorkbench'));
 const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio'));
 const UGCRuntimeViewPage = React.lazy(() => import('./ugc/runtime/RuntimeViewPage'));
 const UGCSandbox = React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox })));
@@ -145,6 +146,7 @@ const AppContent = () => {
                     <Route path="/dev/fx" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                     <Route path="/dev/audio" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
                     <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
+                    <Route path="/dev/ai-repo-workbench" element={<React.Suspense fallback={<RouteLoadingFallback title="AI 仓库工作台" />}><DevToolsAIRepoWorkbench /></React.Suspense>} />
                     <Route
                       path="/dev/ugc"
                       element={(

@@ -194,6 +194,11 @@
       "description": "交互式节点连线图，展示平台分层架构与模块依赖关系。",
       "players": "单人工具"
     },
+    "airepoworkbench": {
+      "title": "AI 仓库工作台",
+      "description": "围绕 RepoSession、WorkflowRun、DecisionRequest 和 ArtifactBundle 的 repo-centric AI 工作台。",
+      "players": "单人工具"
+    },
     "summonerwars": {
       "title": "召唤师战争",
       "description": "一款战术卡牌游戏，在网格战场上指挥你的阵营战士。召唤单位、施放法术，摧毁敌方召唤师即可获胜。",
