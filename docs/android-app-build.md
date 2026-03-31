@@ -18,6 +18,7 @@
 - `npm run mobile:android:init`
 - `npm run mobile:android:sync`
 - `npm run mobile:android:ota:publish -- --channel stable`
+- `npm run mobile:android:packages:publish -- --channel stable`
 - `npm run mobile:android:build:debug`
 - `npm run mobile:android:build:release`
 - `npm run mobile:android:build:bundle`
@@ -107,6 +108,65 @@ VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=15000
 
 ```bash
 npm run mobile:android:doctor
+```
+
+## 游戏包下载主线
+
+- `package-managed` 游戏现在走 Android 原生下载器，不再只是前端 mock 状态。
+- 主线口径：
+  - H5 本体更新：`embedded + OTA`
+  - 大体积游戏资源：`mobile package manifest + zip 包 + 原生下载/解压`
+- 当前默认 manifest 基址：
+  - `https://assets.easyboardgame.top/official/mobile-packages/android/<channel>/games/<gameId>.json`
+- 如需切到其他静态源，可配置：
+
+```env
+VITE_MOBILE_PACKAGE_MANIFEST_URL=https://assets.easyboardgame.top/official/mobile-packages/android
+```
+
+### 发布游戏包
+
+推荐先预演：
+
+```bash
+node scripts/mobile/publish-android-game-packages.mjs --channel stable --game dicethrone --dry-run
+```
+
+正式发布：
+
+```bash
+node scripts/mobile/publish-android-game-packages.mjs --channel stable --game dicethrone
+```
+
+也可通过 npm script：
+
+```bash
+npm run mobile:android:packages:publish -- --channel stable --game dicethrone
+```
+
+当前脚本会上传：
+
+- `official/mobile-packages/android/<channel>/bundles/<gameId>/<version>.zip`
+- `official/mobile-packages/android/<channel>/manifests/<gameId>/<version>.json`
+- `official/mobile-packages/android/<channel>/games/<gameId>.json`
+
+manifest 结构示例：
+
+```json
+{
+  "gameId": "dicethrone",
+  "runtimeChannel": "stable",
+  "publishedAt": "2026-03-31T01:00:00.000Z",
+  "modulePack": null,
+  "assetPack": {
+    "id": "dicethrone",
+    "version": "0.5.0-dicethrone-pkg-2026-03-31T01-00-00-000Z",
+    "url": "https://assets.easyboardgame.top/official/mobile-packages/android/stable/bundles/dicethrone/0.5.0-dicethrone-pkg-2026-03-31T01-00-00-000Z.zip",
+    "checksum": "sha256-hex",
+    "bytes": 46936411,
+    "fileCount": 276
+  }
+}
 ```
 
 ## OTA 发布流程

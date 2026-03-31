@@ -1,4 +1,6 @@
+import { clearGameAssetBaseOverrides, setGameAssetBaseOverride } from '../../core';
 import { runMockGamePackageInstall } from './mockInstallRunner';
+import { createNativeGamePackageInstallHandle, listInstalledNativeGamePackages } from './nativeGamePackagePlugin';
 import { clearStoredGamePackageState, readStoredGamePackageState, writeStoredGamePackageState } from './storage';
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
@@ -9,8 +11,21 @@ const stateCache = new Map<string, StoredGamePackageState>();
 const fallbackCache = new Map<string, StoredGamePackageState>();
 const listenerRegistry = new Map<string, Set<GamePackageStateListener>>();
 const activeInstallRegistry = new Map<string, GamePackageInstallHandle>();
+const appliedAssetBaseOverrides = new Map<string, string>();
+
+const applyAssetBaseOverride = (gameId: string, assetBaseUrl?: string) => {
+    if (!assetBaseUrl) {
+        appliedAssetBaseOverrides.delete(gameId);
+        setGameAssetBaseOverride(gameId, undefined);
+        return;
+    }
+
+    appliedAssetBaseOverrides.set(gameId, assetBaseUrl);
+    setGameAssetBaseOverride(gameId, assetBaseUrl);
+};
 
 const emitState = (state: StoredGamePackageState) => {
+    applyAssetBaseOverride(state.gameId, state.localAssetBaseUrl);
     stateCache.set(state.gameId, state);
     writeStoredGamePackageState(state);
     const listeners = listenerRegistry.get(state.gameId);
@@ -88,11 +103,49 @@ export const resetGamePackageState = (
         status: 'not-installed',
         progressPercent: undefined,
         progressMode: undefined,
+        installedVersion: undefined,
+        localAssetBaseUrl: undefined,
         errorMessage: undefined,
         updatedAt: Date.now(),
     });
     emitState(nextState);
     return nextState;
+};
+
+export const hydrateInstalledNativeGamePackages = async () => {
+    const installedPackages = await listInstalledNativeGamePackages();
+    const seenGameIds = new Set<string>();
+
+    clearGameAssetBaseOverrides();
+    appliedAssetBaseOverrides.clear();
+
+    for (const installedPackage of installedPackages) {
+        seenGameIds.add(installedPackage.gameId);
+        applyAssetBaseOverride(installedPackage.gameId, installedPackage.assetBaseUrl);
+
+        const fallbackState = fallbackCache.get(installedPackage.gameId);
+        if (!fallbackState) {
+            continue;
+        }
+
+        emitState(mergeGamePackageState(fallbackState, {
+            status: 'installed',
+            progressMode: undefined,
+            progressPercent: undefined,
+            installedVersion: installedPackage.installedVersion,
+            localAssetBaseUrl: installedPackage.assetBaseUrl,
+            updatedAt: installedPackage.installedAt ?? Date.now(),
+        }));
+    }
+
+    for (const gameId of fallbackCache.keys()) {
+        if (seenGameIds.has(gameId)) {
+            continue;
+        }
+        if (!appliedAssetBaseOverrides.has(gameId)) {
+            setGameAssetBaseOverride(gameId, undefined);
+        }
+    }
 };
 
 export const startGamePackageInstall = (
@@ -101,10 +154,32 @@ export const startGamePackageInstall = (
 ): Promise<StoredGamePackageState> => {
     stopActiveInstall(manifest.gameId);
 
-    const handle = runMockGamePackageInstall(manifest, {
-        failureMessage,
-        onStateChange: emitState,
-    });
+    let resolvedHandle: GamePackageInstallHandle | null = null;
+    let cancelledBeforeReady = false;
+
+    const handle: GamePackageInstallHandle = {
+        cancel: () => {
+            cancelledBeforeReady = true;
+            resolvedHandle?.cancel();
+        },
+        finished: (async () => {
+            const nativeHandle = await createNativeGamePackageInstallHandle(manifest, {
+                onStateChange: emitState,
+                onInstalledAssetBaseUrl: applyAssetBaseOverride,
+            });
+            resolvedHandle = nativeHandle ?? runMockGamePackageInstall(manifest, {
+                failureMessage,
+                onStateChange: emitState,
+            });
+
+            if (cancelledBeforeReady) {
+                resolvedHandle.cancel();
+            }
+
+            return resolvedHandle.finished;
+        })(),
+    };
+
     activeInstallRegistry.set(manifest.gameId, handle);
 
     return handle.finished.finally(() => {
@@ -122,4 +197,6 @@ export const resetGamePackageManagerForTests = () => {
     stateCache.clear();
     fallbackCache.clear();
     listenerRegistry.clear();
+    appliedAssetBaseOverrides.clear();
+    clearGameAssetBaseOverrides();
 };

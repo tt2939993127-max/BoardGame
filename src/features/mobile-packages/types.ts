@@ -16,8 +16,16 @@ export interface ResolvedGamePackageManifest {
     runtimeChannel: string;
     modulePackId?: string;
     assetPackId?: string;
+    modulePackVersion?: string;
+    assetPackVersion?: string;
+    modulePackUrl?: string;
+    assetPackUrl?: string;
+    modulePackChecksum?: string;
+    assetPackChecksum?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    modulePackFileCount?: number;
+    assetPackFileCount?: number;
     source: 'fallback' | 'remote';
 }
 
@@ -31,6 +39,8 @@ export interface StoredGamePackageState {
     assetPackId?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    installedVersion?: string;
+    localAssetBaseUrl?: string;
     errorMessage?: string;
     updatedAt: number;
 }
@@ -88,5 +98,6 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     assetPackId: state.assetPackId,
     modulePackBytes: state.modulePackBytes,
     assetPackBytes: state.assetPackBytes,
+    installedVersion: state.installedVersion,
     errorMessage: state.errorMessage,
 });
