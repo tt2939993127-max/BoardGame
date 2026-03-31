@@ -24,7 +24,8 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { startDuel } from '../domain/duel';
-import { fireTriggers, isMinionProtected } from '../domain/ongoingEffects';
+import { collectTriggers, fireTriggers, isMinionProtected } from '../domain/ongoingEffects';
+import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { reduce } from '../domain/reduce';
 import { execute, processDestroyTriggers } from '../domain/reducer';
 import { validate } from '../domain/commands';
@@ -1097,7 +1098,7 @@ describe('Samurai abilities', () => {
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
     });
 
-    it('samurai_ronin 在自己是该基地唯一己方随从时可放置两个 +1 指示物', () => {
+    it('samurai_ronin 在自己是该基地唯一己方随从时只放置一个 +1 指示物', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1123,7 +1124,70 @@ describe('Samurai abilities', () => {
             defaultTestRandom,
         );
 
-        expect(resolved.finalState.core.bases[0].minions.find(m => m.uid === 'ronin-1')?.powerCounters).toBe(2);
+        expect(resolved.finalState.core.bases[0].minions.find(m => m.uid === 'ronin-1')?.powerCounters).toBe(1);
+    });
+
+    it('samurai_way_of_the_warrior 在阶段 3 弃置时仍会基于 LKI 结算抽 2', () => {
+        const core = makeState({
+            turnOrder: ['0', '1', '2'],
+            currentPlayerIndex: 0,
+            turnNumber: 2,
+            players: {
+                '0': makePlayer('0', {
+                    deck: [
+                        makeCard('draw-1', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('draw-2', 'robot_microbot_alpha', 'minion', '0'),
+                    ],
+                    discard: [makeCard('wotw-1', 'samurai_way_of_the_warrior', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+                '2': makePlayer('2'),
+            } as any,
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('ally-1', 'samurai_bushi', '0', 4, {
+                    metadata: {
+                        samuraiWayOfTheWarriorDrawPlayerId: '0',
+                        samuraiWayOfTheWarriorDrawUntilTurnNumber: 3,
+                    },
+                })],
+                ongoingActions: [],
+            }],
+        });
+
+        const queued = collectTriggers(core, 'onMinionDiscardedFromBase', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'ally-1',
+            triggerMinionDefId: 'samurai_bushi',
+            triggerMinion: core.bases[0].minions[0],
+            random: defaultTestRandom,
+            now: 1000,
+        });
+
+        expect(queued).toBeDefined();
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const prompt = maybeResolveReactionQueue(queuedState, defaultTestRandom, 1000);
+        expect(prompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        const queueById = new Map(prompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const targetOption = (prompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = queueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'samurai_way_of_the_warrior';
+        });
+        expect(targetOption).toBeDefined();
+
+        const resolved = runCommand(
+            prompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: targetOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const drawEvent = resolved.events.find(event => event.type === SU_EVENTS.CARDS_DRAWN) as any;
+        expect(drawEvent).toBeDefined();
+        expect(drawEvent.payload.playerId).toBe('0');
+        expect(drawEvent.payload.count).toBe(2);
     });
 
     it('samurai_yokai_attack 会消灭己方一个随从并给予额外随从与行动额度', () => {
