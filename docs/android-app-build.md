@@ -156,6 +156,7 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - `main` 分支合入影响 H5 bundle 的改动后，会自动发布到非生产 channel，默认是 `edge`
 - `stable` / `gray` 通过 Actions `Android OTA Publish` 手动触发
 - `stable` 建议绑定 `android-ota-production` Environment 审批，避免误发
+- 手动触发时，workflow 现已支持直接填写 `force_update`、`force_update_title`、`force_update_message`、`target_native_version`、`min_native_version`、`max_native_version`，不需要再改脚本或手工上服务器
 
 推荐发布策略：
 
