@@ -474,6 +474,20 @@ describe('GameDetailsMobilePackageCard', () => {
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
 
+    it('未安装状态只保留安装按钮，不再显示下载圆球', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'not-installed',
+            },
+            onInstall: vi.fn(),
+        }));
+
+        const card = screen.getByTestId('game-details-mobile-package-card');
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+        expect(card.querySelector('.h-10.w-10.rounded-full')).toBeNull();
+    });
+
     it('已安装状态显示可直接进入文案', () => {
         render(createElement(GameDetailsMobilePackageCard, {
             gameName: 'Tic-Tac-Toe',

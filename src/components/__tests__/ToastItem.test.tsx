@@ -141,6 +141,26 @@ describe('SocketCompatibilityToastListener', () => {
         expect(socialReconnectMock).not.toHaveBeenCalled();
         expect(screen.queryByText('socketCompatibility.title')).not.toBeInTheDocument();
     });
+
+    it('disables the compatibility prompt when the environment already allows polling fallback', () => {
+        canToggleSocketCompatibilityModeMock.mockReturnValue(false);
+
+        render(
+            <ToastProvider>
+                <SocketCompatibilityToastListener />
+                <ToastViewport />
+            </ToastProvider>
+        );
+
+        act(() => {
+            lastStatusHandler?.({ connected: false, lastError: 'websocket transport timeout' });
+        });
+
+        expect(setSocketCompatibilityModeEnabledMock).not.toHaveBeenCalled();
+        expect(lobbyReconnectMock).not.toHaveBeenCalled();
+        expect(socialReconnectMock).not.toHaveBeenCalled();
+        expect(screen.queryByText('socketCompatibility.title')).not.toBeInTheDocument();
+    });
 });
 
 describe('ToastItem actions', () => {
