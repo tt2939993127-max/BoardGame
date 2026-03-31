@@ -233,7 +233,7 @@ export const CreateRoomModal = ({
                         style={{ zIndex: UI_Z_INDEX.modalContent }}
                     >
                         <div
-                            className="bg-parchment-card-bg pointer-events-auto w-full max-w-md rounded-sm shadow-parchment-card-hover border border-parchment-card-border/30 relative overflow-hidden font-serif"
+                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md max-h-[min(88dvh,42rem)] flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif sm:max-h-[min(84dvh,44rem)]"
                             onClick={(event) => event.stopPropagation()}
                         >
                             <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
@@ -241,13 +241,13 @@ export const CreateRoomModal = ({
                             <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-parchment-card-border/60" />
                             <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
-                            <div className="p-6 pb-4">
+                            <div className="shrink-0 p-6 pb-4">
                                 <h2 className="text-xl font-bold text-parchment-base-text tracking-wide text-center">
                                     {t('createRoom.title')}
                                 </h2>
                             </div>
 
-                            <div className="p-6 space-y-5">
+                            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 space-y-5">
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
                                         <label className="text-sm font-bold text-parchment-base-text">
@@ -420,7 +420,7 @@ export const CreateRoomModal = ({
                                 )}
                             </div>
 
-                            <div className="p-6 pt-4 flex gap-3">
+                            <div className="shrink-0 border-t border-parchment-card-border/15 bg-parchment-card-bg/95 p-6 pt-4 flex gap-3">
                                 <button
                                     type="button"
                                     onClick={onClose}
