@@ -1,290 +1,540 @@
 ## Context
 
-当前项目已经拥有大量“可执行流程知识”，但这些知识散落在 skill、AGENTS、脚本和测试约定里：
+当前仓库已经具备大量可执行流程知识，但这些知识仍然以“AI 助手 + 人工盯进度”的方式存在：
 
-- `create-new-game` skill 定义了分阶段新游戏接入流程与门禁。
-- 数据录入、资源上传、审计、E2E、自审截图、PR 自动化各自已有规范。
-- 现状仍然偏“AI 助手协作”，不是“产品级工作台”。
+- `create-new-game` skill、数据录入规范、E2E 规范、PR 自动化规范都已经定义了做事步骤。
+- 这些步骤散落在 `AGENTS.md`、skill、脚本、测试约定与证据文档中，尚未形成产品化工作台。
+- 用户真正需要的不是一个更强的聊天框，而是一个围绕“仓库 + 工作流 + 证据交付”组织起来的网页工作台。
 
-用户希望的目标不是继续扩展 UGC Builder，而是提供一个网页工作台：
-
-- 用户可以新建游戏或导入本地已有游戏目录。
-- 用户尽量只输入需求和素材。
-- 系统自动选择工作流并推进。
-- 模糊点集中暂停询问。
-- 用户能实时看到执行过程。
-- 最终交付以 E2E 截图和证据为主，而不是只返回一段文字。
+本次 change 的目标不是把所有工作流一次性产品化，而是**先把第一版 MVP 收敛到“新建派系”工作流**，把最关键的编排、暂停/恢复、证据回传与本地执行边界定义清楚。
 
 ## Goals / Non-Goals
 
 - Goals:
-  - 把 skill 与仓库脚本产品化为可视化工作流。
-  - 让“仓库执行”而非“聊天回复”成为系统中心。
-  - 明确截图/证据回传是硬门禁，不是附加项。
-  - 支持从工作流直接进入 commit / PR / merge。
+  - 用单一、固定、可观察的“新建派系”节点流验证工作台架构。
+  - 明确每个节点的输入、输出、持久化状态与暂停/恢复契约。
+  - 定义 `DecisionRequest` 作为人工决策的统一协议，而不是各节点各自发问。
+  - 定义 `ArtifactBundle` 作为 MVP 阶段性交付与最终交付的统一证据容器。
+  - 先落地 local-first runtime 的职责边界，并为未来接入 Temporal 预留稳定接口。
+  - 明确各成熟开源方案影响到哪些设计决策、哪些不照搬。
 - Non-Goals:
-  - 本 change 不要求实现通用任意节点画布编辑器。
-  - 本 change 不要求继续扩展现有 UGC Builder 的 Schema/画布编辑体验。
-  - 本 change 不要求把所有现有 skill 一次性全部产品化。
+  - 本 change 不实现通用自由画布编辑器。
+  - 本 change 不要求第一版就覆盖“数据录入 / Bug 修复 / 审计 / PR merge”完整产品能力。
+  - 本 change 不要求第一版就引入 Temporal、Kubernetes 或分布式调度。
+  - 本 change 不把 OpenHands、Flowise、n8n、Activepieces 直接当成可嵌入组件；这里只借鉴架构与交互模式。
 
-## Decisions
+## MVP Boundary
 
-### Decision: 工作台以“模板工作流”而不是“自由画布”起步
+### Decision: 第一版 MVP 只做“新建派系”，不做通用任务中心
 
-用户目标是小白友好与可交付，不是自己搭节点。首批应以固定模板工作流为主：
+第一版产品能力应收敛为：
 
-- 新建游戏
-- 数据录入
-- 功能开发
-- Bug 修复
-- 审计
+1. 绑定一个本地仓库会话。
+2. 选择并启动“新建派系”模板。
+3. 通过固定节点流完成规则获取、转录、素材核对、结构化派系定义草案与人工确认。
+4. 生成 `ArtifactBundle` 作为阶段性交付证据。
 
-高级自定义应建立在模板节点稳定后，再开放有限组合能力。
+MVP **明确不包含** 以下内容：
 
-### Decision: 以仓库会话为一等对象
+- 通用节点画布编排。
+- 自动写完完整代码并直接进入 PR / merge。
+- 所有游戏类型、所有任务模板同时上线。
+- 多租户远程执行集群。
 
-工作台不是单纯 agent chat，需要先有明确仓库上下文：
+收敛原因：
 
-- 新建游戏：从配置的仓库模板拉取到本地隔离工作目录，再创建执行分支。
-- 导入游戏：直接绑定本地目录并扫描项目结构。
+- “新建派系”天然包含来源选择、文档转录、素材缺失、结构化确认、暂停/恢复，是最能验证工作台架构的最小闭环。
+- 若第一版同时承载“新建游戏”“Bug 修复”“数据录入”等多条主链路，规范会重新变成宽泛口号，难以指导实现。
 
-所有执行、测试、截图、PR、merge 都挂在同一个 `RepoSession` 上。
+## Architecture Overview
 
-### Decision: 多工作树并行必须成为首版能力
+### Decision: 采用固定节点图 + 持久化运行日志，而不是自由聊天拼接
 
-这个工作台的直接使用者包含仓库维护者本人，因此不能假设“一次只做一条任务”。首版就应支持：
+MVP 采用固定模板工作流：
 
-- 一个仓库下同时存在多个任务会话
-- 每个任务会话绑定一个独立 worktree
-- 每个 worktree 拥有独立运行时、端口、日志和产物
-- 用户可以从网页任务看板切换不同 worktree 的执行状态
+- 模板：`new-faction`
+- 执行模型：有向节点图，但第一版按预定义顺序推进
+- 节点类型：自动节点、决策节点、门禁节点、产物节点
+- 持久化单元：`WorkflowRun`、`NodeExecutionRecord`、`DecisionRequest`、`ArtifactBundle`
 
-这样才能同时推进“新游戏接入”“Bug 修复”“数据录入”等任务，而不互相污染。
+这样做的原因：
 
-### Decision: 服务运行时会话必须是一等对象
+- 让状态迁移、恢复、审计与前端展示都有稳定结构。
+- 与 LangGraph 的 durable execution / interrupt-resume 思路一致，但不要求第一版直接接入 LangGraph 运行时。
+- 比自由聊天更容易限制“系统到底做到哪一步了”。
 
-工作台不能只会“改代码”和“跑测试”，还必须支持用户手动验收。因此需要独立的 `DevRuntimeSession`：
+### Decision: 仓库会话与本地运行时是第一等公民
 
-- 绑定到某个 `RepoSession`
-- 支持启动 / 查询 / 停止
-- 返回前端地址、API 地址、游戏服务地址与健康状态
-- 在网页上显示运行日志
+MVP 的核心不是“消息”，而是“仓库上下文中的执行”：
 
-首版优先复用现有脚本能力：
+- `RepoSession` 表示已绑定的本地仓库。
+- `WorktreeTask` 表示该仓库中某条任务线的隔离工作目录。
+- `WorkflowRun` 表示一次具体模板执行。
+- `LocalRuntime` 负责在本机执行脚本、读取文件、生成证据与暂停恢复。
 
-- 完整开发服务：`npm run dev`
-- 轻量开发服务：`npm run dev:lite`
+第一版必须 local-first，原因是：
 
-工作台不应要求用户回到终端手动起服。
+- 当前项目大量工作依赖本地文件、现有脚本、本地浏览器与本地 dev server。
+- 用户当前真实使用场景就是在本机仓库中驱动 AI 任务，而不是把任务丢给远程 SaaS 黑盒。
+- Dagu 的轻量本地调度思路与 OpenHands 的本地工作区执行思路都证明：先把本地闭环做稳，才能决定是否引入更重的后端编排层。
 
-### Decision: skill 是后台流程知识，不是前台交互
+### Decision: 人工输入必须通过 `DecisionRequest` 聚合，而不是让节点随时发散追问
 
-现有 skill 中最有价值的是流程知识、门禁和验收标准。产品层不直接暴露 skill 文本，而是将其拆为：
+系统中的所有人工确认都必须落到统一结构：
 
-- 自动执行节点
-- 人工决策节点
-- 门禁/验收节点
+- 节点不得直接自由发问。
+- 节点只能创建 `DecisionRequest` 并暂停。
+- 前端只渲染 `DecisionRequest`，并把用户回答回写为 `DecisionResolution`。
 
-### Decision: 决策点应聚合，而不是碎片化打断
+这样做的原因：
 
-工作流运行中识别到的模糊项，应尽量汇总成一个 `DecisionRequest` 批次，例如：
+- 对齐 Activepieces 的 approval / human input 卡片思路。
+- 对齐 LangGraph interrupt：中断点必须是显式对象，而不是隐式对话状态。
+- 便于后续把同一个决策对象迁移到 Temporal signal/update 接口，而不需要重写业务节点。
 
-- 是否与 Wiki 对照
-- 是否接受可信网站作为对照源
-- 图片是否允许自动重命名
-- 图片裁切口径是否采用 row-major
+### Decision: `ArtifactBundle` 是 MVP 交付核心，不以“聊天总结”替代
 
-只有在这些决策返回后，工作流才继续推进。
+每次运行至少要产出一个结构化 `ArtifactBundle`：
 
-### Decision: 最终输出必须以 ArtifactBundle 交付
+- 阶段性 bundle：如规则转录完成、素材核对完成、派系定义确认完成。
+- 最终 bundle：本次 `new-faction` 模板主流程完成后的统一交付。
 
-工作台的最终输出不能只是一段总结，必须至少包含：
+MVP 中 bundle 的最小内容不是 E2E，而是：
 
-- 关键 E2E 截图
-- 截图对应的人眼观察结论
-- 测试结果摘要
-- 关键 diff / 变更清单
-- 若进入 PR/merge，则附带 PR 链接或 merge 结果
+- 规则来源证据
+- 规范化规则文本
+- 素材核对结果
+- 结构化派系定义草案 / 已确认版本
+- 决策日志
+- 阶段风险与后续建议
 
-### Decision: 手动测试不是旁路，而是工作流内显式阶段
+说明：
 
-对于新建游戏、数据录入、复杂功能开发等任务，工作台应允许在自动步骤完成后进入“启动服务并手动测试”阶段：
+- 第一版工作流在“结构化派系定义确认”结束，不直接产出可运行 UI，因此 E2E 状态可以是 `not_applicable`。
+- 后续若扩展到“自动写代码并启动验收”，再将 E2E 证据提升为该模板的强制门禁。
 
-1. 系统自动启动开发服务
-2. 工作台展示访问入口与日志
-3. 用户确认是否通过手测
-4. 通过后再进入 E2E、PR 或 merge
-
-这样可以避免“自动流程已经改完，但用户还得自己回终端起服务验证”的割裂体验。
-
-## Core Objects
+## Core Data Model
 
 ### RepoSession
 
-- 仓库来源：clone / import
-- 本地根目录
-- 工作分支 / 隔离目录
-- gameId / 任务类型 / 当前 workflow
+`RepoSession` 表示一个已绑定的仓库上下文。
+
+建议字段：
+
+```ts
+type RepoSession = {
+  id: string
+  sourceType: 'init-template' | 'import-local' | 'clone-remote'
+  rootPath: string
+  defaultBranch: string
+  activeWorktreeId?: string
+  repoFingerprint: string
+  createdAt: string
+  metadata: {
+    repoName: string
+    originUrl?: string
+    gameFamily?: string
+  }
+}
+```
 
 ### WorktreeTask
 
-- 任务 id
-- 绑定的 `RepoSession`
-- worktree 根目录
-- 分支名
-- 当前 workflow run
-- 运行时会话列表
-- 产物索引
+`WorktreeTask` 表示绑定在某个仓库会话上的隔离任务工作目录。
+
+```ts
+type WorktreeTask = {
+  id: string
+  repoSessionId: string
+  branchName: string
+  worktreePath: string
+  taskKind: 'new-faction'
+  status: 'ready' | 'running' | 'paused' | 'completed' | 'failed' | 'archived'
+  runtimeIds: string[]
+  artifactBundleIds: string[]
+}
+```
 
 ### WorkflowTemplate
 
-- 模板 id
-- 适用任务类型
-- 固定节点序列
-- 可选分支节点
-- 默认门禁规则
+```ts
+type WorkflowTemplate = {
+  id: 'new-faction'
+  version: string
+  entrySchemaId: string
+  nodeGraph: WorkflowNodeDefinition[]
+  completionNodeId: string
+}
+```
 
 ### WorkflowRun
 
-- 当前运行状态
-- 已完成节点
-- 阻塞节点
-- 可恢复检查点
-- 关联日志与产物
+```ts
+type WorkflowRun = {
+  id: string
+  templateId: 'new-faction'
+  templateVersion: string
+  repoSessionId: string
+  worktreeTaskId: string
+  status: 'pending' | 'running' | 'waiting_decision' | 'blocked' | 'completed' | 'failed' | 'cancelled'
+  currentNodeId?: string
+  checkpointVersion: number
+  startedAt: string
+  finishedAt?: string
+  latestDecisionRequestId?: string
+}
+```
+
+### NodeExecutionRecord
+
+每个节点都必须有独立的执行记录。
+
+```ts
+type NodeExecutionRecord = {
+  nodeId: string
+  runId: string
+  status: 'pending' | 'running' | 'waiting_decision' | 'blocked' | 'completed' | 'failed' | 'skipped'
+  attempt: number
+  inputRef: string
+  outputRef?: string
+  stateRef?: string
+  startedAt?: string
+  finishedAt?: string
+  errorCode?: string
+  errorSummary?: string
+}
+```
 
 ### DecisionRequest
 
-- 决策项列表
-- 默认建议值
-- 来源节点
-- 必答/可跳过标记
+`DecisionRequest` 是人工参与的统一中断对象。
+
+```ts
+type DecisionRequest = {
+  id: string
+  runId: string
+  nodeId: string
+  phase: 'rules' | 'assets' | 'definition' | 'delivery'
+  kind: 'single_select' | 'multi_select' | 'form' | 'approval'
+  title: string
+  summary: string
+  blocking: boolean
+  rationale?: string
+  options?: Array<{
+    id: string
+    label: string
+    description: string
+    payload?: Record<string, unknown>
+  }>
+  formFields?: Array<{
+    id: string
+    label: string
+    fieldType: 'text' | 'textarea' | 'url' | 'file' | 'boolean' | 'json'
+    required: boolean
+    defaultValue?: unknown
+    helpText?: string
+  }>
+  recommendedOptionId?: string
+  evidenceRefs: string[]
+  createdAt: string
+  resumeToken: string
+  resolution?: {
+    actorId: string
+    chosenOptionIds?: string[]
+    fieldValues?: Record<string, unknown>
+    comment?: string
+    decidedAt: string
+  }
+}
+```
 
 ### ArtifactBundle
 
-- E2E 截图
-- 证据文档
-- 测试摘要
-- 关键日志
-- diff 摘要
-- PR / merge 结果
+```ts
+type ArtifactBundle = {
+  id: string
+  runId: string
+  scope: 'milestone' | 'final'
+  stage: 'rules-acquired' | 'assets-checked' | 'definition-confirmed'
+  status: 'ready' | 'partial' | 'failed'
+  summary: string
+  evidence: Array<{
+    id: string
+    kind: 'source-link' | 'uploaded-file' | 'transcript' | 'json-snapshot' | 'markdown-report' | 'screenshot' | 'log'
+    label: string
+    path?: string
+    url?: string
+    observation?: string
+  }>
+  outputs: {
+    normalizedRuleCorpus?: string
+    assetChecklist?: string
+    factionDefinitionJson?: string
+    decisionLog?: string
+    unresolvedRisks?: string
+    e2eStatus: 'not_applicable' | 'pending' | 'passed' | 'failed'
+  }
+  createdAt: string
+}
+```
 
-### DevRuntimeSession
+## New-Faction Node Flow
 
-- 绑定仓库会话与当前 workflow run
-- 绑定具体 `WorktreeTask`
-- 启动模式：`dev` / `dev:lite`
-- 访问地址与端口
-- 健康检查状态
-- 启动日志与停止时间
+### Decision: 用单一主链路 + 少量分支节点表达 MVP
 
-## Task Board Model
+MVP 主链路如下：
 
-工作台首页不应只有“创建任务”按钮，还应有任务看板：
+1. `capture-faction-intent`
+2. `select-rule-source`
+3. `acquire-rule-material`
+4. `transcribe-or-normalize-rules`
+5. `inspect-assets`
+6. `draft-faction-definition`
+7. `review-faction-definition`
+8. `publish-artifact-bundle`
 
-- 按 worktree 列出所有活动任务
-- 显示任务类型、分支、当前步骤、阻塞状态、服务状态
-- 支持一键进入某任务的执行详情
-- 支持查看哪些任务已经完成、暂停或可归档
+其中：
 
-## First Release Flows
+- `select-rule-source` 一定会暂停等待人工决策。
+- `inspect-assets` 仅在缺素材或来源冲突时暂停。
+- `review-faction-definition` 一定是人工确认节点。
+- `publish-artifact-bundle` 负责生成 MVP 证据，并把 `e2eStatus` 标记为 `not_applicable`。
 
-### Flow A: 新建游戏
+### Node Catalog
 
-1. 用户输入需求与素材
-2. 系统创建 `RepoSession`
-3. 系统选择“新建游戏”模板
-4. 汇总决策批次
-5. 按 `create-new-game` skill 拆分节点推进
-6. 自动启动开发服务供用户手测
-7. 用户确认后继续自动测试与截图
-8. 生成 `ArtifactBundle`
-9. 进入 commit / PR / merge 门禁
+| 节点 | 类型 | 主要输入 | 主要输出 | 持久化状态 | 暂停条件 | 失败条件 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `capture-faction-intent` | 自动 | 用户最小输入、仓库会话 | 规范化任务意图、派系名、目标游戏 | `intentSnapshot` | 无 | 缺少最小输入 |
+| `select-rule-source` | 决策 | 任务意图、可用来源建议 | 已选规则来源、上传/链接元数据 | `selectedSource` | 等待用户选择来源 | 无有效来源 |
+| `acquire-rule-material` | 自动 | 来源选择、上传文件、URL | 原始规则材料列表 | `rawSourceSet` | 来源不可访问且需替代时 | 下载/读取失败 |
+| `transcribe-or-normalize-rules` | 自动 | 原始规则材料 | 规范化规则文本、来源映射 | `normalizedRuleCorpus` | OCR 质量过低需人工介入时 | 转录失败且无法恢复 |
+| `inspect-assets` | 自动/决策 | 规则文本、已上传素材 | 素材清单、缺失项、继续策略 | `assetInspection` | 缺失关键素材或素材命名冲突 | 素材目录不可读 |
+| `draft-faction-definition` | 自动 | 规则文本、素材清单、约束模板 | JSON/Markdown 派系定义草案 | `definitionDraft` | 无 | 草案结构校验失败 |
+| `review-faction-definition` | 决策 | 草案、来源证据、素材结果 | 已确认定义或修订意见 | `definitionApproval` | 等待用户确认/修订 | 用户拒绝且未给修订信息 |
+| `publish-artifact-bundle` | 自动 | 全部节点产物 | `ArtifactBundle` | `bundleRef` | 无 | 证据文件缺失 |
 
-### Flow B: 数据录入
+### Node Input / Output / State 细化
 
-1. 用户输入需求与图集/图片路径
-2. 系统识别目标游戏与素材类型
-3. 决策批次确认命名策略、Wiki/可信站点对照与上传方式
-4. 自动完成 intake、压缩、上传、审计
-5. 启动服务供用户手测素材呈现
-6. 执行 E2E 并收集截图
-7. 生成 `ArtifactBundle`
-8. 进入 commit / PR / merge
+#### `capture-faction-intent`
 
-### Flow C: Bug 修复
+- 输入：
+  - `repoSessionId`
+  - `gameId`
+  - `factionName`
+  - `userPrompt`
+  - 可选素材列表
+- 输出：
+  - `intentSnapshot.json`
+  - 规范化名称与 slug
+- 状态：
+  - `pending -> running -> completed`
+  - 若缺少 `gameId` 或 `factionName`，直接 `failed`
 
-1. 用户输入问题描述
-2. 系统导入目标目录并建立 `RepoSession`
-3. 自动复现、定位、修复
-4. 启动服务供用户手测修复结果
-5. 跑回归与 E2E
-6. 回传截图、日志、diff
-7. 进入 commit / PR / merge
+#### `select-rule-source`
 
-## Open Source Inspirations
+- 输入：
+  - `intentSnapshot`
+  - 预设来源候选：Wiki / PDF / 其他 URL / 本地文档
+- 输出：
+  - `DecisionRequest`
+  - `selectedSource.json`
+- 状态：
+  - `running -> waiting_decision -> completed`
+  - 用户提交回答后通过 `resumeToken` 恢复
 
-以下开源项目值得主动参考，但不应照搬：
+#### `acquire-rule-material`
 
-- **OpenHands**：参考其“SDK + CLI + Local GUI + Cloud”四层产品结构，以及面向软件开发任务的工作区执行模式。  
-  链接：<https://github.com/OpenHands/OpenHands>
-- **Flowise**：参考其可视化 agent / workflow 构建体验，以及 `server + ui + components` 的工作台分层。  
-  链接：<https://github.com/FlowiseAI/Flowise>
-- **n8n**：参考其执行记录、可视化编排、模板库、自托管和技术团队友好的流程产品化方式。  
-  链接：<https://github.com/n8n-io/n8n>
-- **Activepieces**：参考其 approval / human input / 非技术用户友好的工作流 builder 体验。  
-  链接：<https://github.com/activepieces/activepieces>
-- **LangGraph**：参考其 durable execution 与 interrupt / resume 模型，用于工作流暂停、恢复与人工决策节点。  
-  链接：<https://docs.langchain.com/oss/javascript/langgraph/durable-execution>  
-  链接：<https://docs.langchain.com/oss/javascript/langgraph/interrupts>
-- **Temporal**：参考其“持久化工作流 + Web UI + CLI”模式，用于后端编排层而不是前台 builder。  
-  链接：<https://github.com/temporalio/temporal>
-- **Dagu**：参考其 local-first、Web UI、低运维开销的工作流运行器思路。  
-  链接：<https://github.com/dagu-org/dagu>
+- 输入：
+  - `selectedSource`
+  - 上传文件句柄 / URL / 本地路径
+- 输出：
+  - `rawSourceSet.json`
+  - 原始文档索引
+- 状态：
+  - 可重试
+  - 下载失败或路径无权限时 `failed`
 
-这些项目可分别提供：
+#### `transcribe-or-normalize-rules`
 
-- 工作台界面参考
-- 执行记录与状态持久化参考
-- 人工审批节点参考
-- 自托管与运行时隔离参考
+- 输入：
+  - `rawSourceSet`
+- 输出：
+  - `normalizedRuleCorpus.md`
+  - `sourceMapping.json`
+  - 可选 `ocrWarnings.json`
+- 状态：
+  - 文本质量不足时可创建新的 `DecisionRequest` 请求用户补充更清晰文档或接受低可信转录
 
-但本项目的核心差异是：执行对象不是通用 SaaS 自动化，而是**本地仓库、worktree、测试、截图、PR 与 merge**。
+#### `inspect-assets`
 
-## Borrowing Rules
+- 输入：
+  - `normalizedRuleCorpus`
+  - 用户上传素材
+- 输出：
+  - `assetChecklist.md`
+  - `missingAssets.json`
+  - `continueMode`（补素材 / 纯规则继续）
+- 状态：
+  - 素材完整时直接 `completed`
+  - 素材缺失时 `waiting_decision`
 
-参考成熟项目时，采用以下裁剪原则：
+#### `draft-faction-definition`
 
-1. **前台交互优先借鉴 `OpenHands + Flowise + n8n`**
-   - 借鉴任务看板、执行日志、工作区入口、节点状态可视化。
-   - 不照搬其通用 agent chat 或通用 SaaS 自动化布局。
-2. **人工审批节点优先借鉴 `Activepieces + LangGraph interrupt`**
-   - 借鉴 approval / human input / interrupt-resume 机制。
-   - 本项目的审批项必须落到“素材处理、对照源、手测确认、是否推进 merge”。
-3. **后端编排优先借鉴 `LangGraph + Temporal + Dagu`**
-   - 借鉴持久化执行、恢复检查点、Web UI 运行记录、本地优先执行器。
-   - 但最终执行对象必须是 `RepoSession / WorktreeTask / DevRuntimeSession / ArtifactBundle`。
-4. **不追求通用平台化优先于交付闭环**
-   - 这些项目很多是通用自动化平台。
-   - 本项目首要目标是把“需求 -> 本地服务 -> 手测 -> E2E 截图 -> PR/merge”做通。
+- 输入：
+  - `normalizedRuleCorpus`
+  - `assetChecklist`
+  - 目标 schema
+- 输出：
+  - `faction-definition.draft.json`
+  - `faction-definition.draft.md`
+- 状态：
+  - 需通过 schema 校验；失败则 `failed`
+
+#### `review-faction-definition`
+
+- 输入：
+  - 草案 JSON / Markdown
+  - 关键来源证据
+  - 缺失风险
+- 输出：
+  - `DecisionRequest`
+  - `faction-definition.confirmed.json` 或 `revision-notes.md`
+- 状态：
+  - `waiting_decision`
+  - 若用户要求修订，则跳回 `draft-faction-definition`
+
+#### `publish-artifact-bundle`
+
+- 输入：
+  - 已确认派系定义
+  - 决策日志
+  - 规则来源与素材检查结果
+- 输出：
+  - `artifact-bundle.json`
+  - 可供前端预览的证据索引
+- 状态：
+  - 生成成功后整个 run `completed`
+
+## DecisionRequest Contract
+
+### Decision: 统一结构优先于灵活字段
+
+所有人工决策必须符合以下契约：
+
+1. **必须可恢复**：每个 `DecisionRequest` 都有 `resumeToken`。
+2. **必须可解释**：必须包含 `summary`、`rationale`、`evidenceRefs`。
+3. **必须可渲染**：前端只需识别 `kind + options + formFields` 就能展示。
+4. **必须可审计**：`resolution` 要记录操作者、时间、填写内容。
+5. **必须幂等**：同一个 `resumeToken` 重复提交只更新同一请求，不生成重复节点结果。
+
+对于“新建派系”MVP，至少存在三类 `DecisionRequest`：
+
+- 规则来源选择
+- 素材缺失后的继续策略
+- 派系定义确认 / 驳回并修订
+
+## ArtifactBundle Contract
+
+### Decision: MVP 证据以“定义完成”而非“运行完成”为准
+
+由于第一版工作流停在“结构化派系定义确认”，因此 `ArtifactBundle` 的 MVP 交付标准为：
+
+- 至少 1 份规则来源索引
+- 至少 1 份规范化规则文本
+- 至少 1 份素材核对清单
+- 至少 1 份结构化派系定义快照
+- 至少 1 份决策日志
+- 明确写出 `e2eStatus = not_applicable`
+
+这样做的原因：
+
+- 第一版尚未生成可运行代码，不应为了形式感伪造 E2E 交付。
+- 但必须显式声明为什么没有 E2E，避免后续调用方误判为遗漏。
+
+后续模板若扩展到“派系代码脚手架 + 启动服务 + E2E 验收”，则同一 `ArtifactBundle` 结构只需把 `e2eStatus` 从 `not_applicable` 升级为 `passed/failed` 并追加截图证据。
+
+## Local-First Runtime Boundary
+
+### Decision: 当前先做 `LocalRuntime`，只把 Temporal 作为未来编排适配层
+
+MVP 当前职责由 `LocalRuntime` 承担：
+
+- 绑定本地仓库目录与 worktree。
+- 读取 / 写入本地文件。
+- 调用仓库脚本、测试命令、转录命令与验证命令。
+- 保存 `WorkflowRun`、节点状态、决策对象与证据索引。
+- 在节点暂停后等待前端恢复。
+- 把日志、证据、错误摘要回传到网页。
+
+MVP **不** 让 `LocalRuntime` 负责：
+
+- 跨机器调度
+- 分布式任务队列
+- 长期运行数月的高可用工作流编排
+- 多租户隔离
+
+### Future Temporal Boundary
+
+若后续引入 Temporal，其职责边界应当是：
+
+- **Temporal 负责**：
+  - 持久化 workflow history
+  - 长时间暂停与恢复
+  - 重试策略、超时策略、signal/update 接口
+  - 远程 worker 调度
+- **Workbench 领域层仍负责**：
+  - `RepoSession` / `WorktreeTask` / `WorkflowRun` / `DecisionRequest` / `ArtifactBundle` 领域模型
+  - “新建派系”节点定义与节点 I/O schema
+  - 前端交互与证据展示
+  - 本地文件与仓库安全策略
+
+因此，第一版实现时必须先把下面这些接口稳定下来：
+
+- `runNode(nodeId, context)`
+- `pauseForDecision(decisionRequest)`
+- `resumeRun(runId, resolution)`
+- `publishArtifactBundle(runId, stage)`
+
+未来若切到 Temporal，只替换这些接口背后的执行器，不重写业务节点语义。
+
+## Open Source Reference Mapping
+
+### Decision: 只借鉴成熟项目中与“仓库工作流”直接相关的部分
+
+| 参考项目 | 借鉴点 | 不照搬点 | 对本设计的直接影响 |
+| --- | --- | --- | --- |
+| LangGraph | `interrupt`、durable execution、resume 语义 | 不引入通用 agent graph DSL 作为首版产品 | `DecisionRequest` 与 `waiting_decision` / checkpoint 设计 |
+| OpenHands | 本地工作区执行、对代码仓库的真实操作、工具运行反馈 | 不以聊天框作为主入口，不复刻其全量代理能力 | `RepoSession`、`WorktreeTask`、本地工具执行视角 |
+| Flowise | 节点式执行可视化、运行记录面板 | 不开放自由拖拽编排器 | 前端用节点卡片展示输入/输出/状态 |
+| n8n | 执行历史、失败节点可见性、阶段性运行数据 | 不引入通用 SaaS 集成市场 | `NodeExecutionRecord`、运行轨迹与错误可见性 |
+| Activepieces | approval / human input 卡片、低认知负担的人机交互 | 不做面向大众自动化的广场模板体系 | 决策节点 UI 与阻塞态设计 |
+| Temporal | 长时工作流、signal/update、可靠恢复 | 第一版不直接接入、不把基础设施侵入领域模型 | 未来编排适配边界 |
+| Dagu | local-first、轻量 Web UI、低运维调度观 | 不走 shell-first 全局调度器产品路线 | 先做本地执行器而非先上分布式平台 |
+
+### 采用规则
+
+1. 借鉴交互与编排语义，不复制别人的产品边界。
+2. 凡是会把 MVP 从“新建派系”拉回“通用自动化平台”的能力，一律延后。
+3. 凡是会破坏本地仓库安全边界的“云端透明执行”能力，一律不进入第一版。
 
 ## Risks / Trade-offs
 
-- 若直接做自由画布，复杂度高且不利于小白，初期会失控。
-- 若只做纯自动推进，不做决策聚合，用户仍会觉得在“被 AI 追问”。
-- 若不把截图回传纳入主链路，系统会退化为“文本型自动化”，不满足生产验收。
-- 若仓库隔离策略不清晰，容易污染主工作树或误改非目标目录。
+- 只做“新建派系”会显得范围小，但这是为了验证最关键的暂停/恢复与证据交付链路。
+- 不立即接入 Temporal，会让第一版可靠性上限受限，但能显著降低启动复杂度。
+- 统一 `DecisionRequest` 会增加节点开发规范成本，但长期能避免交互碎片化。
+- 把 `ArtifactBundle` 作为硬产物会增加每个节点的落盘负担，但能换来审计、可视化与后续自动化兼容性。
 
 ## Migration Plan
 
-1. 先新增 `ai-repo-workbench` capability，明确主能力边界。
-2. 以 `create-new-game` 为第一条被产品化的 workflow 模板来源。
-3. 逐步把“数据录入”“Bug 修复”“审计”映射为模板工作流。
-4. 后续再评估是否需要修改或弱化 `ugc-prototype-builder` 的产品定位。
+1. 先发布 `ai-repo-workbench` capability spec，明确 MVP 只支持 `new-faction`。
+2. 先用 local-first runtime 打通节点执行、暂停/恢复、证据回传。
+3. 第二阶段再增加“生成派系代码骨架 + 本地预览 + E2E”子流程。
+4. 第三阶段再评估是否需要把执行器切换为 Temporal-backed runtime。
+5. 在 `new-faction` 验证稳定后，再复制同一套领域模型到“数据录入 / Bug 修复”等模板。
 
 ## Open Questions
 
-- 工作台首版是否要求支持远程 GitHub 仓库，还是先只支持本地仓库与固定模板仓库。
-- E2E 截图回传是落对象存储、数据库还是文件系统索引。
-- 自动 merge 的默认策略是只支持非保护分支，还是支持受保护分支下的 PR merge。
-- 手动测试阶段是否允许用户直接在网页点击“重启服务”“切换 `dev/dev:lite`”“复制访问地址”。
-- worktree 的默认命名、归档和清理策略是否要暴露给用户配置，还是只提供安全默认值。
+- `faction-definition` 的正式 schema 是放在工作台侧单独维护，还是直接复用游戏目录内 schema。
+- `DecisionRequest.evidenceRefs` 是只引用本地文件，还是允许对象存储 URL。
+- 第一版是否允许“无素材纯规则模式”直接完成，还是要求至少上传占位素材清单。
+- `LocalRuntime` 的状态存储是文件型 journal、SQLite，还是仓库外部的小型本地数据库。

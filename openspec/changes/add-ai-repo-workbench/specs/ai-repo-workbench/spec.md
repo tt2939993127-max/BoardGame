@@ -1,163 +1,121 @@
 ## ADDED Requirements
 
-### Requirement: 工作台 SHALL 以本地仓库会话作为执行起点
+### Requirement: 工作台 MVP SHALL 收敛到单一 `new-faction` 模板
 
-系统 SHALL 提供“初始化项目”“导入项目”“获取项目到本地”三种仓库会话入口，并要求后续工作流、测试、截图、PR 与 merge 全部绑定到同一仓库会话。
+系统在 `ai-repo-workbench` capability 的第一版 MUST 只把“新建派系”作为主工作流模板，而不是同时承诺通用任务中心。
 
-#### Scenario: 初始化项目仓库会话
-- **WHEN** 用户在工作台选择“初始化项目”并指定本地目标目录
-- **THEN** 系统 MUST 在该目录基于配置的模板或脚手架完成项目初始化
-- **AND** 为本次任务创建新的执行分支或等价隔离执行上下文
+#### Scenario: 工作台首页暴露 MVP 模板
+- **WHEN** 用户首次进入 `ai-repo-workbench`
+- **THEN** 系统 MUST 将 `new-faction` 作为第一版唯一可启动的正式模板
+- **AND** 不得把“数据录入”“Bug 修复”“审计”“PR merge”渲染为已具备同等实现完成度的模板
 
-#### Scenario: 导入本地目录仓库会话
-- **WHEN** 用户在工作台选择“导入项目”并指定本地目录
-- **THEN** 系统 MUST 扫描该目录的项目结构与仓库状态
-- **AND** 将该目录绑定为本次工作流的唯一执行根目录
+#### Scenario: 启动模板时建立仓库执行上下文
+- **WHEN** 用户启动 `new-faction`
+- **THEN** 系统 MUST 先绑定一个 `RepoSession` 与单一 `WorktreeTask`
+- **AND** 后续节点执行 MUST 只在该仓库执行上下文内推进
 
-#### Scenario: 获取远端仓库到本地
-- **WHEN** 用户在工作台选择“获取项目到本地”并提供仓库地址与本地保存目录
-- **THEN** 系统 MUST 检查本机 Git 可用性并尝试将目标仓库拉取到指定目录
-- **AND** 在拉取成功后自动把该目录绑定为新的仓库会话
+### Requirement: `new-faction` 模板 SHALL 按固定节点图推进
 
-#### Scenario: Git 或权限前置条件不足
-- **WHEN** 工作台在初始化或获取项目到本地时发现本机缺少 Git、目录不可写或仓库权限不足
-- **THEN** 系统 MUST 返回结构化引导，明确缺失条件与修复动作
-- **AND** 不得只暴露原始命令行报错
+系统 MUST 将“新建派系”实现为固定节点图，而不是自由聊天式的隐式步骤拼接。
 
-#### Scenario: 初始化或导入完成后展示本地入口
-- **WHEN** 仓库会话创建成功
-- **THEN** 系统 MUST 展示“打开项目目录”“进入工作流”等本地入口
-- **AND** 若检测到本地预览地址则 MUST 提供“打开本地项目”按钮
-### Requirement: 工作台 SHALL 提供基于 skill 的模板工作流
+#### Scenario: 标准主链路推进
+- **WHEN** `new-faction` 模板启动成功
+- **THEN** 系统 MUST 按顺序推进 `capture-faction-intent -> select-rule-source -> acquire-rule-material -> transcribe-or-normalize-rules -> inspect-assets -> draft-faction-definition -> review-faction-definition -> publish-artifact-bundle`
+- **AND** 每个节点 MUST 有明确的输入、输出与持久化状态记录
 
-系统 SHALL 提供与项目 skill 对齐的模板工作流，而不是只提供无约束聊天入口。
+#### Scenario: PDF 规则来源进入转录分支
+- **WHEN** 用户在 `select-rule-source` 选择上传 PDF 作为规则来源
+- **THEN** 系统 MUST 在 `acquire-rule-material` 后进入 `transcribe-or-normalize-rules`
+- **AND** 输出规范化规则文本与来源映射后才能进入后续节点
 
-#### Scenario: 选择任务模板
-- **WHEN** 用户在工作台选择“新建派系”“数据录入”“功能开发”“Bug 修复”或“审计”
-- **THEN** 系统 MUST 加载对应的模板工作流
-- **AND** 该模板 MUST 预置固定的执行节点、决策节点与门禁节点
+#### Scenario: 素材缺失时进入可恢复暂停
+- **WHEN** `inspect-assets` 识别到关键素材缺失
+- **THEN** 节点 MUST 进入 `waiting_decision` 或等价暂停状态
+- **AND** 系统 MUST 提供“补素材后继续”与“先走纯规则模式”这两类恢复路径
 
-#### Scenario: 新建派系作为第一版优先模板
-- **WHEN** 用户选择“新建派系”模板
-- **THEN** 系统 MUST 以新派系创建流程组织工作流
-- **AND** 第一版 MUST 优先保证该模板能够从需求输入推进到结构化派系定义确认
+### Requirement: 每个节点 SHALL 产出结构化输入、输出与执行状态
 
-#### Scenario: create-new-game skill 被映射为后台知识来源
-- **WHEN** 工作台为“新建派系”或后续相关模板生成节点
-- **THEN** 系统 MAY 复用 `create-new-game` skill 或其他项目 skill 作为节点知识来源
-- **AND** 不得把最终产品入口退化为直接暴露 skill 提示词
-### Requirement: 用户输入 SHALL 最小化并以决策批次补足歧义
+系统 MUST 为每个节点保存独立的 `NodeExecutionRecord`，而不是把状态散落在临时日志或聊天文本中。
 
-系统 SHALL 允许用户以“需求 + 素材”为主要输入启动工作流，并把模糊项汇总成结构化决策批次，而不是持续碎片化追问。
+#### Scenario: 节点执行完成后落盘
+- **WHEN** 任一节点执行成功
+- **THEN** 系统 MUST 保存该节点的 `inputRef`、`outputRef`、`stateRef`、`attempt`、开始时间与完成时间
+- **AND** 这些记录 MUST 能被运行详情页直接读取并展示
 
-#### Scenario: 最小输入启动
-- **WHEN** 用户只提供需求描述与图片/路径等素材
-- **THEN** 系统 MUST 先尝试推断适用工作流与默认参数
-- **AND** 仅在关键事实缺失时创建待确认决策批次
+#### Scenario: 节点失败后可见
+- **WHEN** 任一节点执行失败
+- **THEN** 系统 MUST 将该节点标记为 `failed`
+- **AND** 保存结构化的 `errorCode` 与 `errorSummary`
+- **AND** 不得只把失败信息留在终端标准输出里
 
-#### Scenario: 决策批次汇总
-- **WHEN** 系统在运行中发现多个待确认项
-- **THEN** 系统 MUST 将这些问题汇总到同一个决策卡片或批次中展示
-- **AND** 典型决策项 MUST 支持图片处理方式、Wiki 对照、可信网站、命名策略等结构化选项
+#### Scenario: 节点等待人工决策
+- **WHEN** 任一节点因人工确认而暂停
+- **THEN** 系统 MUST 将该节点标记为 `waiting_decision`
+- **AND** 关联到一个显式的 `DecisionRequest`
 
-#### Scenario: 新建派系默认规则来源选择
-- **WHEN** 用户启动“新建派系”流程但未直接提供完整规则文档
-- **THEN** 系统 MUST 默认提示“优先从 Wiki 获取规则”
-- **AND** 同时提供“上传规则文档”“上传 PDF 并转录”“提供其他网址”这些可选入口
+### Requirement: 人工暂停点 SHALL 使用统一的 `DecisionRequest` 契约
 
-#### Scenario: 新建派系缺少素材时暂停
-- **WHEN** 新建派系流程检测到关键素材（如派系图片）缺失
-- **THEN** 当前节点 MUST 进入待确认状态
-- **AND** 系统 MUST 明确提示用户补充素材或选择先走纯规则定义流程
+系统 MUST 用统一的 `DecisionRequest` 结构承载所有人工决策，而不是让不同节点输出不一致的临时问答格式。
 
-#### Scenario: PDF 规则文档进入转录流程
-- **WHEN** 用户为新建派系流程上传 PDF 规则文档
-- **THEN** 系统 MUST 将该文档路由到 PDF 转录节点
-- **AND** 在提取结构化规则文本后再继续后续派系定义流程
+#### Scenario: 创建决策请求
+- **WHEN** `select-rule-source`、`inspect-assets` 或 `review-faction-definition` 需要用户输入
+- **THEN** 系统 MUST 创建一个包含 `id`、`runId`、`nodeId`、`kind`、`title`、`summary`、`blocking`、`evidenceRefs`、`resumeToken` 的 `DecisionRequest`
+- **AND** 如有推荐路径，系统 SHOULD 填充 `recommendedOptionId`
 
-### Requirement: 新建派系模板 SHALL 按固定节点流推进
+#### Scenario: 决策请求被恢复
+- **WHEN** 用户对某个 `DecisionRequest` 提交回答
+- **THEN** 系统 MUST 将回答写入 `resolution`
+- **AND** 使用 `resumeToken` 恢复原始 `WorkflowRun`
+- **AND** 重复提交同一 `resumeToken` 时 MUST 保持幂等，不得重复推进节点
 
-系统 SHALL 将“新建派系”第一版实现为可观察的固定节点流，而不是自由聊天式多轮拼接。
+#### Scenario: 决策请求可审计
+- **WHEN** 用户完成任一决策
+- **THEN** 系统 MUST 记录操作者、决定时间、选择结果与可选备注
+- **AND** 这些信息 MUST 可被打包进后续 `ArtifactBundle`
 
-#### Scenario: 新建派系节点流按顺序推进
-- **WHEN** 用户启动“新建派系”模板
-- **THEN** 系统 MUST 依次经历“需求输入”“规则来源选择”“规则获取/转录”“素材检查”“结构化派系定义确认”这些节点或等价节点
-- **AND** 每个节点 MUST 产出结构化输入、输出与状态
+### Requirement: `ArtifactBundle` SHALL 作为 MVP 阶段交付与证据容器
 
-#### Scenario: 规则来源选择节点
-- **WHEN** 新建派系流程进入规则来源选择节点
-- **THEN** 系统 MUST 提供“默认从 Wiki 获取规则”“上传规则文档”“上传 PDF 并转录”“提供其他网址”这些选项
-- **AND** 用户完成选择前该节点 MUST 保持待确认状态
+系统 MUST 为 `new-faction` 的阶段性完成与最终完成生成结构化 `ArtifactBundle`，并将其作为工作台交付对象。
 
-#### Scenario: 素材检查节点未通过
-- **WHEN** 新建派系流程进入素材检查节点且关键素材缺失
-- **THEN** 该节点 MUST 标记为未通过或待确认
-- **AND** 系统 MUST 明确展示缺失项与可继续路径（补素材 / 先走纯规则定义）
+#### Scenario: `definition-confirmed` 阶段生成 MVP 证据
+- **WHEN** `review-faction-definition` 已确认通过
+- **THEN** 系统 MUST 生成一个 `ArtifactBundle`
+- **AND** 该 bundle MUST 包含规则来源索引、规范化规则文本、素材核对清单、结构化派系定义快照与决策日志
 
-#### Scenario: 结构化派系定义确认节点完成
-- **WHEN** 系统已拿到规则文本、基础名称与可用素材信息
-- **THEN** 系统 MUST 生成结构化派系定义草案供用户确认
-- **AND** 第一版在该确认通过后即可视为模板主流程打通
-### Requirement: 工作台 SHALL 可视化展示执行过程
+#### Scenario: MVP 无 E2E 时的显式标记
+- **WHEN** `new-faction` MVP 在尚未生成可运行代码的阶段结束
+- **THEN** `ArtifactBundle.outputs.e2eStatus` MUST 被标记为 `not_applicable`
+- **AND** 系统 MUST 明确说明当前阶段未进入 E2E 验证，而不是把 E2E 缺失视为隐式遗漏
 
-系统 SHALL 在网页中持续展示工作流步骤状态、关键日志、变更摘要与当前阻塞点，使用户可以理解执行过程而不必反复催促 AI。
+#### Scenario: 证据可预览
+- **WHEN** 前端加载某个 `ArtifactBundle`
+- **THEN** 系统 MUST 能展示其中的证据索引、摘要与关键观察结论
+- **AND** 不得只返回一段纯文本总结替代 bundle 内容
 
-#### Scenario: 实时步骤状态
-- **WHEN** 工作流运行中
-- **THEN** 系统 MUST 显示每个节点的状态（待执行、进行中、待确认、已完成、失败）
-- **AND** 当前节点的输入、输出摘要与日志 MUST 可查看
+### Requirement: local-first runtime SHALL 明确当前职责并预留 Temporal 边界
 
-#### Scenario: 阻塞原因可见
-- **WHEN** 工作流因人工决策、测试失败或执行错误而暂停
-- **THEN** 系统 MUST 显示明确的阻塞节点、阻塞原因与可继续动作
+系统 MUST 在第一版采用 local-first runtime，同时为未来引入 Temporal 预留稳定接口边界。
 
-### Requirement: 工作台 SHALL 回传结构化产物而不是只返回文本
+#### Scenario: 当前由 local runtime 承担的职责
+- **WHEN** `new-faction` 模板在第一版运行
+- **THEN** 本地运行时 MUST 负责仓库绑定、worktree 执行、文件读写、节点推进、暂停恢复、日志收集与 `ArtifactBundle` 生成
+- **AND** 不得要求第一版先引入 Temporal 才能运行
 
-系统 SHALL 为每次工作流生成结构化产物包 `ArtifactBundle`，用于网页查看、审计和最终交付。
+#### Scenario: Temporal 作为未来编排适配层
+- **WHEN** 后续版本需要更强的 durable orchestration 或远程 worker
+- **THEN** 系统 MAY 让 Temporal 接管运行历史、信号恢复、超时与重试
+- **AND** `RepoSession`、`DecisionRequest`、节点 I/O schema 与 `ArtifactBundle` 的领域结构 MUST 保持不变
 
-#### Scenario: 产物包生成
-- **WHEN** 工作流达到阶段性完成或最终完成
-- **THEN** 系统 MUST 生成包含日志摘要、关键 diff、测试结果和证据索引的产物包
-- **AND** 网页 MUST 能查看这些产物而不是只显示一段文本总结
+### Requirement: 开源参考 SHALL 只影响明确的架构决策
 
-### Requirement: 最终交付 MUST 包含 E2E 截图与人工观察结论
+系统在参考 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 时 MUST 明确“借鉴什么”和“不借鉴什么”，避免第一版退化成通用平台复刻。
 
-系统 MUST 将端到端截图视为工作台的重要交付产物，并要求截图与对应观察结论回传到网页。
+#### Scenario: 参考映射被文档化
+- **WHEN** 设计文档描述 `ai-repo-workbench` 的架构来源
+- **THEN** 文档 MUST 至少说明 LangGraph、OpenHands、Flowise、n8n、Activepieces、Temporal、Dagu 各自影响了哪类设计决策
+- **AND** 同时说明哪些能力被明确排除在 MVP 之外
 
-#### Scenario: 工作流完成后回传截图
-- **WHEN** 工作流模板要求进行端到端验证
-- **THEN** 系统 MUST 执行对应 E2E 测试并收集关键截图
-- **AND** 将截图路径、缩略预览与证据摘要回传到网页工作台
-
-#### Scenario: 截图不能只作为附件存在
-- **WHEN** E2E 截图已生成
-- **THEN** 系统 MUST 为每张关键截图附带至少一条人工观察结论或等价审核结论
-- **AND** 不得仅以“测试通过”替代截图验收结果
-
-### Requirement: 模板工作流 SHALL 支持从执行到交付的全链路推进
-
-系统 SHALL 允许模板工作流覆盖从实现、上传、审计、测试到提交交付的完整链路，而不是只做到代码修改。
-
-#### Scenario: 数据录入模板全链路推进
-- **WHEN** 用户启动数据录入类工作流
-- **THEN** 系统 MUST 支持按模板顺序推进数据录入、资源上传、审计、E2E、提交与 PR
-- **AND** 仅在前置门禁通过后才能进入下一步
-
-#### Scenario: 自动推进到 PR / merge
-- **WHEN** 工作流模板声明允许自动提交交付
-- **THEN** 系统 MAY 自动执行 commit、创建 PR、触发 merge
-- **AND** 在任一门禁失败时 MUST 停止推进
-
-### Requirement: 仓库自动化操作 MUST 受隔离与门禁约束
-
-系统 MUST 对分支、目录、提交、PR、merge 施加明确的隔离与门禁约束，避免工作流自动化污染非目标工作区。
-
-#### Scenario: 执行目录隔离
-- **WHEN** 工作流需要写入代码或资源
-- **THEN** 系统 MUST 仅在当前仓库会话绑定的目标目录内执行
-- **AND** 不得隐式写入未绑定的其他项目目录
-
-#### Scenario: merge 前门禁
-- **WHEN** 工作流尝试自动 merge
-- **THEN** 系统 MUST 先确认模板要求的审计、测试、截图证据与 PR 状态全部通过
-- **AND** 任一门禁未满足时不得自动 merge
+#### Scenario: 参考不覆盖本地仓库语义
+- **WHEN** 某开源项目的通用自动化模式与本项目的本地仓库工作流发生冲突
+- **THEN** 系统 MUST 优先保持 `RepoSession / WorktreeTask / ArtifactBundle` 这套本地仓库语义
+- **AND** 不得为了贴合外部框架而牺牲本地执行与证据交付边界
