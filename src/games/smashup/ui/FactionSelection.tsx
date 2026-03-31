@@ -1,9 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
-import { FACTION_METADATA, getVisibleFactionMetadata } from './factionMeta';
+import {
+    FACTION_METADATA,
+    getFactionMeta,
+    getFactionVariantGroupById,
+    getPreferredFactionVariant,
+    getVisibleFactionVariantGroups,
+} from './factionMeta';
 import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, getFactionTitans, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
@@ -21,7 +27,8 @@ interface Props {
 export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) => {
     const { t, i18n } = useTranslation('game-smashup');
     const selectionState = core.factionSelection;
-    const [focusedFactionId, setFocusedFactionId] = useState<string | null>(null);
+    const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
+    const [activeFactionId, setActiveFactionId] = useState<string | null>(null);
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' | 'titan' } | null>(null);
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window === 'undefined' ? 1440 : window.innerWidth,
@@ -46,18 +53,38 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         };
     }, []);
 
-    if (!selectionState) return null;
-
-    const takenFactions = new Set(selectionState.takenFactions);
-    const mySelections = playerID ? selectionState.playerSelections[playerID] || [] : [];
+    const takenFactions = new Set(selectionState?.takenFactions ?? []);
+    const mySelections = playerID && selectionState ? selectionState.playerSelections[playerID] || [] : [];
     const isMyTurn = playerID === getCurrentPlayerId(core);
     const currentPlayerId = getCurrentPlayerId(core);
-
-    // 根据当前界面语言过滤可见阵营：
-    // 设置了 locales 字段的阵营只在指定语言界面中出现
-    // 例如：原版忍者仅在 zh-CN 显示，POD 版两者都可见
     const locale = i18n.language;
-    const visibleFactions = getVisibleFactionMetadata(locale);
+
+    const visibleFactionGroups = useMemo(() => getVisibleFactionVariantGroups(locale), [locale]);
+    const focusedFactionGroup = useMemo(
+        () => (focusedGroupId ? getFactionVariantGroupById(focusedGroupId) ?? null : null),
+        [focusedGroupId],
+    );
+
+    useEffect(() => {
+        if (!focusedGroupId) {
+            if (activeFactionId !== null) setActiveFactionId(null);
+            return;
+        }
+
+        if (!focusedFactionGroup) {
+            setFocusedGroupId(null);
+            setActiveFactionId(null);
+            return;
+        }
+
+        if (activeFactionId && focusedFactionGroup.variants.some((variant) => variant.id === activeFactionId)) {
+            return;
+        }
+
+        const selectedVariantId = focusedFactionGroup.variants.find((variant) => mySelections.includes(variant.id))?.id;
+        const preferredVariantId = getPreferredFactionVariant(focusedFactionGroup.groupId, locale)?.id;
+        setActiveFactionId(selectedVariantId ?? preferredVariantId ?? focusedFactionGroup.variants[0]?.id ?? null);
+    }, [activeFactionId, focusedFactionGroup, focusedGroupId, locale, mySelections]);
 
     const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
     const modalDesignWidth = 1120;
@@ -71,9 +98,19 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         )
         : 1;
     const useScaledLandscapeModal = isMobileLandscape && mobileLandscapeScale < 0.98;
-    const focusedFactionMeta = focusedFactionId
-        ? FACTION_METADATA.find((faction) => faction.id === focusedFactionId) ?? null
-        : null;
+    const focusedFactionMeta = activeFactionId ? getFactionMeta(activeFactionId) ?? null : null;
+
+    if (!selectionState) return null;
+
+    const handleOpenFactionGroup = (groupId: string, preferredFactionId: string) => {
+        setFocusedGroupId(groupId);
+        setActiveFactionId(preferredFactionId);
+    };
+
+    const handleCloseDetails = () => {
+        setFocusedGroupId(null);
+        setActiveFactionId(null);
+    };
 
     const handleConfirmSelect = (factionId: string) => {
         if (!isMyTurn) return;
@@ -81,7 +118,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         if (mySelections.length >= 2) return;
 
         dispatch(SU_COMMANDS.SELECT_FACTION, { factionId });
-        setFocusedFactionId(null);
+        handleCloseDetails();
     };
 
     const handleCancelSelect = (factionId: string) => {
@@ -89,7 +126,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         if (!mySelections.includes(factionId)) return;
 
         dispatch(SU_COMMANDS.DESELECT_FACTION, { factionId });
-        setFocusedFactionId(null);
+        handleCloseDetails();
     };
 
     return (
@@ -98,18 +135,16 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
             className="absolute inset-0 bg-[#2d1b10] flex flex-col items-center overflow-hidden font-sans selection:bg-amber-500/30"
             style={{ zIndex: UI_Z_INDEX.overlay }}
         >
-            {/* Improved CSS Wood Grain (Fallback logic) */}
-            <div className="absolute inset-0 z-0 pointer-events-none"
+            <div
+                className="absolute inset-0 z-0 pointer-events-none"
                 style={{
                     backgroundImage: `url('https://www.transparenttextures.com/patterns/wood-pattern.png'), linear-gradient(to bottom, transparent, rgba(0,0,0,0.4))`,
                     backgroundBlendMode: 'multiply',
-                    opacity: 0.5
+                    opacity: 0.5,
                 }}
             />
-            {/* Subtle Vignette */}
             <div className="absolute inset-0 z-0 pointer-events-none shadow-[inset_0_0_200px_rgba(0,0,0,0.8)]" />
 
-            {/* HEADLINE AREA - 紧凑布局 */}
             <motion.div
                 initial={{ y: -50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -123,7 +158,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                     {t('ui.select_factions_desc')}
                 </p>
 
-                {/* Turn Status: 紧凑便签样式 */}
                 <div className="h-10 relative flex items-center justify-center">
                     <AnimatePresence mode="wait">
                         {isMyTurn ? (
@@ -134,13 +168,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 exit={{ rotate: 5, scale: 0.8, opacity: 0 }}
                                 className="relative bg-[#fef3c7] py-1.5 px-6 shadow-[3px_3px_8px_rgba(0,0,0,0.4)] border-b-2 border-slate-800/10 rounded-sm flex items-center clip-path-jagged"
                             >
-                                {/* Pin icon */}
                                 <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500 opacity-60 shadow-inner" />
-
                                 <span className="text-slate-800 font-black tracking-tight uppercase text-sm italic drop-shadow-sm">
                                     {t('ui.your_turn_prompt')}
                                 </span>
-
                                 <motion.div
                                     animate={{ rotate: [0, -2, 2, 0] }}
                                     transition={{ repeat: Infinity, duration: 2 }}
@@ -168,42 +199,44 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                 </div>
             </motion.div>
 
-            {/* FACTION GRID - 16:9 横屏下尽量对齐桌面端排布与密度 */}
             <div className="flex-1 w-full max-w-7xl overflow-y-auto px-3 py-3 lg:px-6 lg:py-4 relative z-10 custom-scrollbar">
                 <div className="mx-auto grid w-full max-w-[920px] grid-cols-4 gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28">
-                    {visibleFactions.map((faction, idx) => {
-                        const isTaken = takenFactions.has(faction.id);
-                        const isSelectedByMe = mySelections.includes(faction.id);
-                        const isTakenByOther = isTaken && !isSelectedByMe;
-                        const ownerId = Object.entries(selectionState.playerSelections).find(([_, f]) => f.includes(faction.id))?.[0];
-
-                        // Get first card for preview
-                        const cards = getFactionCards(faction.id);
-                        const coverCard = cards.find(c => c.type === 'minion') || cards[0];
+                    {visibleFactionGroups.map((group, idx) => {
+                        const selectedVariantId = group.variants.find((variant) => mySelections.includes(variant.id))?.id ?? null;
+                        const takenVariantId = group.variants.find((variant) => takenFactions.has(variant.id))?.id ?? null;
+                        const ownerId = takenVariantId
+                            ? Object.entries(selectionState.playerSelections).find(([_, picks]) => picks.includes(takenVariantId))?.[0]
+                            : undefined;
+                        const isSelectedByMe = Boolean(selectedVariantId);
+                        const isTakenByOther = Boolean(takenVariantId) && !isSelectedByMe;
+                        const previewFactionId = selectedVariantId ?? group.defaultVariant.id;
+                        const cards = getFactionCards(previewFactionId);
+                        const coverCard = cards.find((card) => card.type === 'minion') || cards[0];
+                        const labelMeta = selectedVariantId
+                            ? getFactionMeta(selectedVariantId) ?? group.defaultVariant
+                            : group.defaultVariant;
 
                         return (
                             <motion.div
-                                key={faction.id}
+                                key={group.groupId}
                                 initial={{ opacity: 0, y: 20, rotate: (idx % 6) - 3 }}
                                 animate={{ opacity: 1, y: 0, rotate: (idx % 4) - 2 }}
                                 whileHover={{ rotate: 0, scale: 1.05, zIndex: 30 }}
                                 transition={{ delay: idx * 0.03 }}
-                                onClick={() => setFocusedFactionId(faction.id)}
-                                data-testid={`faction-option-${faction.id}`}
+                                onClick={() => handleOpenFactionGroup(group.groupId, selectedVariantId ?? group.defaultVariant.id)}
+                                data-testid={`faction-option-${group.groupId}`}
                                 className={`
                                     group relative flex w-full flex-col items-center cursor-pointer
                                     ${isTakenByOther ? 'opacity-40 grayscale pointer-events-none' : 'z-10'}
                                 `}
                             >
-                                {/* Card Stack Visual */}
                                 <div className="relative mb-2.5 w-full max-w-[148px] lg:max-w-[192px] aspect-[0.727] xl:max-w-[208px]">
-                                    {/* Main Cover Card */}
                                     <div className={`
                                         absolute inset-0 rounded-sm overflow-hidden shadow-[3px_3px_10px_rgba(0,0,0,0.38)] border-[4px] lg:border-[5px] transition-all
                                         bg-white p-[3px] lg:p-[4px]
                                         ${isSelectedByMe
                                             ? 'border-green-500 scale-105 -translate-y-2'
-                                            : isTaken
+                                            : takenVariantId
                                                 ? 'border-slate-300'
                                                 : 'border-white group-hover:border-amber-400 group-hover:shadow-amber-500/30'
                                         }
@@ -214,7 +247,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 className="w-full h-full"
                                             />
 
-                                            {/* Taken Status */}
                                             {isTakenByOther && (
                                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center z-30">
                                                     <div className="mb-2 p-2 bg-slate-700 rounded-full">
@@ -226,20 +258,17 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 </div>
                                             )}
 
-                                            {/* Overlay Gradient for Text Readability */}
                                             <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent" />
 
-                                            {/* Faction Name on Card */}
                                             <div className="absolute bottom-1.5 left-1.5 right-1.5 lg:bottom-2 lg:left-2 lg:right-2 text-left">
                                                 <h3 className="text-white font-black text-[11px] lg:text-base leading-none mb-0.5 lg:mb-1 drop-shadow-md uppercase italic tracking-tight lg:tracking-tighter">
-                                                    {t(faction.nameKey)}
+                                                    {t(labelMeta.nameKey)}
                                                 </h3>
                                             </div>
                                         </div>
 
-                                        {/* Faction Icon Badge - "Token" style */}
                                         <div className="absolute -top-1.5 -right-1.5 lg:-top-2 lg:-right-2 z-40 w-8 h-8 lg:w-10 lg:h-10 bg-slate-900 border-2 border-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                            <faction.icon size={16} strokeWidth={2.5} style={{ color: faction.color }} />
+                                            <group.icon size={16} strokeWidth={2.5} style={{ color: group.color }} />
                                         </div>
                                     </div>
                                 </div>
@@ -249,14 +278,13 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                 </div>
             </div>
 
-            {/* MODAL: Focused Faction Details */}
             <AnimatePresence>
-                {focusedFactionId && (
+                {focusedGroupId && focusedFactionGroup && focusedFactionMeta && (
                     <div
-                        className="pointer-events-none fixed inset-x-2 top-[5.25rem] bottom-[5.5rem] sm:inset-x-3 sm:top-[5.75rem] sm:bottom-[5.75rem] md:inset-x-4 md:top-[6.25rem] md:bottom-[6rem] flex items-stretch justify-end"
+                        className="pointer-events-none fixed inset-x-2 top-[5.25rem] bottom-[5.5rem] sm:inset-x-3 sm:top-[5.75rem] sm:bottom-[5.75rem] md:inset-x-4 md:top-[6.25rem] md:bottom-[6rem] flex items-stretch justify-center"
                         style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                     >
-                        <div className="pointer-events-auto flex h-full w-full justify-end">
+                        <div className="pointer-events-auto flex h-full w-full justify-center">
                             <div
                                 className="relative flex h-full items-center justify-center"
                                 style={useScaledLandscapeModal
@@ -265,7 +293,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         height: modalDesignHeight * mobileLandscapeScale,
                                     }
                                     : {
-                                        width: 'min(78vw, 80rem)',
+                                        width: 'min(90vw, 80rem)',
                                         maxWidth: '80rem',
                                         height: '100%',
                                     }}
@@ -284,234 +312,244 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                             height: '100%',
                                         }}
                                 >
-                            <motion.div
-                                layoutId={focusedFactionId}
-                                className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
-                                style={useScaledLandscapeModal
-                                    ? {
-                                        width: modalDesignWidth,
-                                        maxWidth: 'none',
-                                        height: modalDesignHeight,
-                                        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
-                                    }
-                                    : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
-                                initial={{ x: 32, opacity: 0, scale: 0.97 }}
-                                animate={{ x: 0, opacity: 1, scale: 1 }}
-                                exit={{ x: 32, opacity: 0, scale: 0.97 }}
-                                data-testid="faction-detail-panel"
-                            >
-                            {/* Tape effect on top */}
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-white/60 z-50 -translate-y-4" />
-                            {/* Close Button */}
-                            <button
-                                onClick={() => setFocusedFactionId(null)}
-                                className="absolute top-3 right-3 md:top-4 md:right-4 z-50 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-colors"
-                                data-testid="faction-detail-close"
-                            >
-                                <X size={24} />
-                            </button>
+                                    <motion.div
+                                        layoutId={focusedGroupId}
+                                        className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
+                                        style={useScaledLandscapeModal
+                                            ? {
+                                                width: modalDesignWidth,
+                                                maxWidth: 'none',
+                                                height: modalDesignHeight,
+                                                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
+                                            }
+                                            : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
+                                        initial={{ x: 32, opacity: 0, scale: 0.97 }}
+                                        animate={{ x: 0, opacity: 1, scale: 1 }}
+                                        exit={{ x: 32, opacity: 0, scale: 0.97 }}
+                                        data-testid="faction-detail-panel"
+                                    >
+                                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-white/60 z-50 -translate-y-4" />
+                                        <button
+                                            onClick={handleCloseDetails}
+                                            className="absolute top-3 right-3 md:top-4 md:right-4 z-50 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-colors"
+                                            data-testid="faction-detail-close"
+                                        >
+                                            <X size={24} />
+                                        </button>
 
-                            {/* Left Panel: Info & Action - Clipboard header style */}
-                            <div className="w-full md:w-1/3 max-h-[42dvh] md:max-h-none min-h-0 shrink-0 bg-white/80 p-4 sm:p-5 md:p-4 lg:p-8 flex flex-col border-b-2 md:border-b-0 md:border-r-2 border-dashed border-slate-300 relative overflow-y-auto">
-                                {/* Ambient Background */}
-                                <div
-                                    className="absolute top-0 right-0 w-full h-full opacity-5 pointer-events-none blur-3xl saturate-200"
-                                    style={{
-                                        backgroundColor: focusedFactionMeta?.color || '#334155',
-                                        background: `radial-gradient(circle at top right, ${focusedFactionMeta?.color || '#334155'}, transparent 70%)`
-                                    }}
-                                />
-
-                                {(() => {
-                                    if (!focusedFactionMeta) return null;
-                                    const meta = focusedFactionMeta;
-                                    const cards = getFactionCards(meta.id);
-                                    const titans = getFactionTitans(meta.id);
-                                    const isTaken = takenFactions.has(meta.id);
-                                    const isSelectedByMe = mySelections.includes(meta.id);
-                                    const isTakenByOther = isTaken && !isSelectedByMe;
-                                    const canSelect = isMyTurn && !isTakenByOther && mySelections.length < 2 && !isSelectedByMe;
-                                    const titanGridCols = 'grid-cols-1';
-
-                                    return (
-                                        <>
-                                            <div className="relative z-10">
-                                                <div className="flex items-center gap-2 mb-2 text-slate-400">
-                                                    <Layers size={16} />
-                                                    <span className="text-xs font-black uppercase tracking-widest">{t('ui.faction_details')}</span>
-                                                </div>
-                                                <h2 className="text-3xl md:text-3xl lg:text-4xl font-black text-slate-900 mb-3 lg:mb-4 uppercase tracking-tighter italic">{t(meta.nameKey)}</h2>
-
-                                                <div className="flex gap-2 mb-4 lg:mb-6">
-                                                    <div className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-800 border border-slate-200 shadow-sm">
-                                                        {t('ui.minion_count', { count: cards.filter(c => c.type === 'minion').length })}
-                                                    </div>
-                                                    <div className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-800 border border-slate-200 shadow-sm">
-                                                        {t('ui.action_count', { count: cards.filter(c => c.type === 'action').length })}
-                                                    </div>
-                                                </div>
-
-                                                <p className="text-sm md:text-sm lg:text-base text-slate-600 leading-relaxed mb-4 lg:mb-8 font-medium">
-                                                    {t(meta.descriptionKey)}
-                                                </p>
-                                            </div>
-
-                                            <div className="relative z-10 mb-4 lg:mb-6">
-                                                <div className="mb-2 flex items-center gap-2 text-slate-400">
-                                                    <Layers size={16} />
-                                                    <span className="text-xs font-black uppercase tracking-widest">
-                                                        {t('ui.faction_titan_preview', { defaultValue: '泰坦预览' })}
-                                                    </span>
-                                                </div>
-
-                                                <div
-                                                    className="rounded-sm border border-slate-200 bg-white/70 p-3 shadow-inner"
-                                                    data-testid="faction-titan-section"
-                                                >
-                                                    {titans.length > 0 ? (
-                                                        <div className={`grid ${titanGridCols} gap-3 md:gap-4`}>
-                                                            {titans.map((titan) => {
-                                                                const titanName = resolveCardName(titan, t) || titan.id;
-                                                                return (
-                                                                    <button
-                                                                        key={titan.id}
-                                                                        type="button"
-                                                                        onClick={() => setViewingCard({ defId: titan.id, type: 'titan' })}
-                                                                        className="group flex flex-col items-center text-center"
-                                                                        data-testid="faction-titan-card"
-                                                                    >
-                                                                        <div className="relative w-full overflow-hidden rounded-sm border-2 border-slate-200 bg-white p-[3px] shadow-md transition-all group-hover:-translate-y-1 group-hover:border-amber-300 group-hover:shadow-lg">
-                                                                            <div className="relative aspect-[0.714] w-full overflow-hidden bg-slate-100">
-                                                                                <CardPreview
-                                                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: titan.id } }}
-                                                                                    className="w-full h-full"
-                                                                                    title={titanName}
-                                                                                />
-                                                                                <div className="absolute top-2 right-2 rounded-full bg-black/75 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                                                                    <ZoomIn size={14} />
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    ) : (
-                                                        <div
-                                                            className="flex min-h-[12rem] items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50/80 px-4 text-center text-sm font-bold leading-relaxed text-slate-500 md:min-h-[14rem] lg:min-h-[18rem]"
-                                                            data-testid="faction-titan-empty"
-                                                        >
-                                                            {t('ui.faction_titan_missing', { defaultValue: '该种族泰坦暂未接入' })}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-4 lg:mt-auto relative z-10">
-                                                {isSelectedByMe ? (
-                                                    isMyTurn ? (
-                                                        <GameButton
-                                                            onClick={() => handleCancelSelect(meta.id)}
-                                                            type="button"
-                                                            variant="secondary"
-                                                            size="md"
-                                                            className="md:text-base lg:text-xl md:py-3 lg:py-4"
-                                                            fullWidth
-                                                            data-testid="faction-cancel-button"
-                                                        >
-                                                            {t('ui.cancel_selection')}
-                                                        </GameButton>
-                                                    ) : (
-                                                        <div className="w-full py-3 lg:py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
-                                                            <Check size={20} strokeWidth={3} />
-                                                            {t('ui.selected')}
-                                                        </div>
-                                                    )
-                                                ) : isTakenByOther ? (
-                                                    <div className="w-full py-3 lg:py-4 bg-slate-200 rounded text-slate-500 font-black text-center cursor-not-allowed uppercase shadow-inner">
-                                                        {t('ui.taken_by_other')}
-                                                    </div>
-                                                ) : (
-                                                    <GameButton
-                                                        onClick={() => handleConfirmSelect(meta.id)}
-                                                        disabled={!canSelect}
-                                                        variant="primary"
-                                                        size="md"
-                                                        className="md:text-base lg:text-xl md:py-3 lg:py-4"
-                                                        fullWidth
-                                                        data-testid="faction-confirm-button"
-                                                    >
-                                                        {isMyTurn
-                                                            ? (mySelections.length >= 2 ? t('ui.faction_full') : t('ui.confirm_selection'))
-                                                            : t('ui.wait_turn')}
-                                                    </GameButton>
-                                                )}
-                                            </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-
-                            {/* Right Panel: Card Grid - Rulebook content style */}
-                            <div className="flex-1 min-h-0 bg-white/50 overflow-y-auto p-3 sm:p-4 md:p-8 custom-scrollbar">
-                                <h3 className="text-slate-400 text-sm font-black uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2">
-                                    <Search size={14} strokeWidth={3} />
-                                    <span>{t('ui.preview_cards')}</span>
-                                </h3>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4" data-testid="faction-preview-grid">
-                                    {(() => {
-                                        const cards = getFactionCards(focusedFactionId);
-                                        return cards.map((card, cidx) => (
+                                        <div className="w-full md:w-1/3 max-h-[42dvh] md:max-h-none min-h-0 shrink-0 bg-white/80 p-4 sm:p-5 md:p-4 lg:p-8 flex flex-col border-b-2 md:border-b-0 md:border-r-2 border-dashed border-slate-300 relative overflow-y-auto">
                                             <div
-                                                key={card.id}
-                                                className="group relative aspect-[0.714] rounded-sm overflow-hidden bg-white p-[2px] lg:p-[3px] shadow-md border-2 border-slate-100 transition-all cursor-zoom-in hover:z-20 hover:scale-110 hover:shadow-xl"
-                                                style={{ transform: `rotate(${(cidx % 5) - 2}deg)` }}
-                                                onClick={() => setViewingCard({ defId: card.id, type: card.type })}
-                                                data-testid="faction-preview-card"
-                                            >
-                                                <div className="w-full h-full bg-slate-100 overflow-hidden relative">
-                                                    <CardPreview
-                                                        previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.id } }}
-                                                        className="w-full h-full"
-                                                    />
+                                                className="absolute top-0 right-0 w-full h-full opacity-5 pointer-events-none blur-3xl saturate-200"
+                                                style={{
+                                                    backgroundColor: focusedFactionMeta.color || '#334155',
+                                                    background: `radial-gradient(circle at top right, ${focusedFactionMeta.color || '#334155'}, transparent 70%)`,
+                                                }}
+                                            />
 
-                                                    {/* 卡牌数量徽章 */}
-                                                    {card.count > 1 && (
-                                                        <div className="absolute top-1.5 right-1.5 z-30 min-w-[22px] h-[22px] px-1 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center shadow-md">
-                                                            <span className="text-white font-black text-[10px] leading-none">×{card.count}</span>
+                                            {(() => {
+                                                const cards = getFactionCards(focusedFactionMeta.id);
+                                                const titans = getFactionTitans(focusedFactionMeta.id);
+                                                const selectedVariantId = focusedFactionGroup.variants.find((variant) => mySelections.includes(variant.id))?.id ?? null;
+                                                const takenVariantId = focusedFactionGroup.variants.find((variant) => takenFactions.has(variant.id))?.id ?? null;
+                                                const isSelectedByMe = Boolean(selectedVariantId);
+                                                const isTakenByOther = Boolean(takenVariantId) && !isSelectedByMe;
+                                                const canSelect = isMyTurn && !isTakenByOther && mySelections.length < 2 && !isSelectedByMe;
+                                                const titanGridCols = 'grid-cols-1';
+
+                                                return (
+                                                    <>
+                                                        <div className="relative z-10">
+                                                            <div className="flex items-center gap-2 mb-2 text-slate-400">
+                                                                <Layers size={16} />
+                                                                <span className="text-xs font-black uppercase tracking-widest">{t('ui.faction_details')}</span>
+                                                            </div>
+                                                            <h2 className="text-3xl md:text-3xl lg:text-4xl font-black text-slate-900 mb-3 uppercase tracking-tighter italic">
+                                                                {t(focusedFactionMeta.nameKey)}
+                                                            </h2>
+
+                                                            {focusedFactionGroup.variants.length > 1 && (
+                                                                <div className="mb-4 flex flex-wrap gap-2" data-testid="faction-variant-switch">
+                                                                    {focusedFactionGroup.variants.map((variant) => {
+                                                                        const isActive = variant.id === focusedFactionMeta.id;
+                                                                        const variantTestId = variant.id.endsWith('_pod') ? 'faction-variant-pod' : 'faction-variant-base';
+                                                                        return (
+                                                                            <GameButton
+                                                                                key={variant.id}
+                                                                                type="button"
+                                                                                size="sm"
+                                                                                variant={isActive ? 'primary' : 'secondary'}
+                                                                                className="min-w-[6.5rem] text-[11px]"
+                                                                                onClick={() => setActiveFactionId(variant.id)}
+                                                                                data-testid={variantTestId}
+                                                                            >
+                                                                                {variant.id.endsWith('_pod')
+                                                                                    ? t('ui.faction_variant_pod', { defaultValue: 'POD版' })
+                                                                                    : t('ui.faction_variant_base', { defaultValue: '原版' })}
+                                                                            </GameButton>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex gap-2 mb-4 lg:mb-6">
+                                                                <div className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-800 border border-slate-200 shadow-sm">
+                                                                    {t('ui.minion_count', { count: cards.filter((card) => card.type === 'minion').length })}
+                                                                </div>
+                                                                <div className="px-2 py-1 bg-slate-100 rounded text-xs font-black text-slate-800 border border-slate-200 shadow-sm">
+                                                                    {t('ui.action_count', { count: cards.filter((card) => card.type === 'action').length })}
+                                                                </div>
+                                                            </div>
+
+                                                            <p className="text-sm md:text-sm lg:text-base text-slate-600 leading-relaxed mb-4 lg:mb-8 font-medium">
+                                                                {t(focusedFactionMeta.descriptionKey)}
+                                                            </p>
                                                         </div>
-                                                    )}
 
-                                                    {/* Hover Action Icon */}
-                                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 p-1.5 rounded-full text-white z-30">
-                                                        <ZoomIn size={16} />
+                                                        <div className="relative z-10 mb-4 lg:mb-6">
+                                                            <div className="mb-2 flex items-center gap-2 text-slate-400">
+                                                                <Layers size={16} />
+                                                                <span className="text-xs font-black uppercase tracking-widest">
+                                                                    {t('ui.faction_titan_preview', { defaultValue: '泰坦预览' })}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="rounded-sm border border-slate-200 bg-white/70 p-3 shadow-inner" data-testid="faction-titan-section">
+                                                                {titans.length > 0 ? (
+                                                                    <div className={`grid ${titanGridCols} gap-3 md:gap-4`}>
+                                                                        {titans.map((titan) => {
+                                                                            const titanName = resolveCardName(titan, t) || titan.id;
+                                                                            return (
+                                                                                <button
+                                                                                    key={titan.id}
+                                                                                    type="button"
+                                                                                    onClick={() => setViewingCard({ defId: titan.id, type: 'titan' })}
+                                                                                    className="group flex flex-col items-center text-center"
+                                                                                    data-testid="faction-titan-card"
+                                                                                >
+                                                                                    <div className="relative w-full overflow-hidden rounded-sm border-2 border-slate-200 bg-white p-[3px] shadow-md transition-all group-hover:-translate-y-1 group-hover:border-amber-300 group-hover:shadow-lg">
+                                                                                        <div className="relative aspect-[0.714] w-full overflow-hidden bg-slate-100">
+                                                                                            <CardPreview
+                                                                                                previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: titan.id } }}
+                                                                                                className="w-full h-full"
+                                                                                                title={titanName}
+                                                                                            />
+                                                                                            <div className="absolute top-2 right-2 rounded-full bg-black/75 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                                                                <ZoomIn size={14} />
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div
+                                                                        className="flex min-h-[12rem] items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50/80 px-4 text-center text-sm font-bold leading-relaxed text-slate-500 md:min-h-[14rem] lg:min-h-[18rem]"
+                                                                        data-testid="faction-titan-empty"
+                                                                    >
+                                                                        {t('ui.faction_titan_missing', { defaultValue: '该种族泰坦暂未接入' })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="sticky bottom-0 mt-4 pt-3 lg:mt-6 lg:pt-4 relative z-20 bg-gradient-to-t from-white via-white/95 to-transparent">
+                                                            {isSelectedByMe ? (
+                                                                isMyTurn ? (
+                                                                    <GameButton
+                                                                        onClick={() => handleCancelSelect(selectedVariantId!)}
+                                                                        type="button"
+                                                                        variant="secondary"
+                                                                        size="md"
+                                                                        className="md:text-base lg:text-xl md:py-3 lg:py-4"
+                                                                        fullWidth
+                                                                        data-testid="faction-cancel-button"
+                                                                    >
+                                                                        {t('ui.cancel_selection')}
+                                                                    </GameButton>
+                                                                ) : (
+                                                                    <div className="w-full py-3 lg:py-4 bg-green-100 border-2 border-green-500 rounded text-green-700 font-black text-center flex items-center justify-center gap-2 uppercase italic shadow-md">
+                                                                        <Check size={20} strokeWidth={3} />
+                                                                        {t('ui.selected')}
+                                                                    </div>
+                                                                )
+                                                            ) : isTakenByOther ? (
+                                                                <div className="w-full py-3 lg:py-4 bg-slate-200 rounded text-slate-500 font-black text-center cursor-not-allowed uppercase shadow-inner">
+                                                                    {t('ui.taken_by_other')}
+                                                                </div>
+                                                            ) : (
+                                                                <GameButton
+                                                                    onClick={() => handleConfirmSelect(focusedFactionMeta.id)}
+                                                                    disabled={!canSelect}
+                                                                    variant="primary"
+                                                                    size="md"
+                                                                    className="md:text-base lg:text-xl md:py-3 lg:py-4"
+                                                                    fullWidth
+                                                                    data-testid="faction-confirm-button"
+                                                                >
+                                                                    {isMyTurn
+                                                                        ? (mySelections.length >= 2 ? t('ui.faction_full') : t('ui.confirm_selection'))
+                                                                        : t('ui.wait_turn')}
+                                                                </GameButton>
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        <div className="flex-1 min-h-0 bg-white/50 overflow-y-auto p-3 sm:p-4 md:p-8 custom-scrollbar">
+                                            <h3 className="text-slate-400 text-sm font-black uppercase tracking-widest mb-4 md:mb-6 flex items-center gap-2">
+                                                <Search size={14} strokeWidth={3} />
+                                                <span>{t('ui.preview_cards')}</span>
+                                            </h3>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4" data-testid="faction-preview-grid">
+                                                {getFactionCards(focusedFactionMeta.id).map((card, cidx) => (
+                                                    <div
+                                                        key={card.id}
+                                                        className="group relative aspect-[0.714] rounded-sm overflow-hidden bg-white p-[2px] lg:p-[3px] shadow-md border-2 border-slate-100 transition-all cursor-zoom-in hover:z-20 hover:scale-110 hover:shadow-xl"
+                                                        style={{ transform: `rotate(${(cidx % 5) - 2}deg)` }}
+                                                        onClick={() => setViewingCard({ defId: card.id, type: card.type })}
+                                                        data-testid="faction-preview-card"
+                                                    >
+                                                        <div className="w-full h-full bg-slate-100 overflow-hidden relative">
+                                                            <CardPreview
+                                                                previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.id } }}
+                                                                className="w-full h-full"
+                                                            />
+
+                                                            {card.count > 1 && (
+                                                                <div className="absolute top-1.5 right-1.5 z-30 min-w-[22px] h-[22px] px-1 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center shadow-md">
+                                                                    <span className="text-white font-black text-[10px] leading-none">×{card.count}</span>
+                                                                </div>
+                                                            )}
+
+                                                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 p-1.5 rounded-full text-white z-30">
+                                                                <ZoomIn size={16} />
+                                                            </div>
+
+                                                            <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 pointer-events-none">
+                                                                <div className="text-white font-black text-[10px] uppercase leading-none mb-1">
+                                                                    {resolveCardName(card, t)}
+                                                                </div>
+                                                                <div className="text-[8px] text-amber-400 font-bold uppercase tracking-widest">
+                                                                    {card.type === 'minion' ? `${t('ui.minion')}: ${(card as import('../domain/types').MinionCardDef).power}` : t('ui.action')}
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
-
-                                                    {/* Hover info */}
-                                                    <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 pointer-events-none">
-                                                        <div className="text-white font-black text-[10px] uppercase leading-none mb-1">
-                                                            {resolveCardName(card, t)}
-                                                        </div>
-                                                        <div className="text-[8px] text-amber-400 font-bold uppercase tracking-widest">
-                                                            {card.type === 'minion' ? `${t('ui.minion')}: ${(card as import('../domain/types').MinionCardDef).power}` : t('ui.action')}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                ))}
                                             </div>
-                                        ));
-                                    })()}
+                                        </div>
+                                    </motion.div>
                                 </div>
                             </div>
-                        </motion.div>
                         </div>
-                        </div>
-                    </div>
                     </div>
                 )}
             </AnimatePresence>
 
-            {/* FOOTER: Status Bar - Floating Score Sheet style */}
             <div className="absolute bottom-3 inset-x-0 z-40 pointer-events-none">
                 <div className="max-w-7xl mx-auto flex items-end justify-center gap-3 px-3 lg:gap-8 lg:px-6">
                     {core.turnOrder.map((pid, pidx) => {
@@ -531,7 +569,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         : 'bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3]'}
                                 `}
                             >
-                                {/* Player Avatar Circle */}
                                 <div className={`
                                     w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center font-black text-sm sm:text-base md:text-lg text-white shadow-inner border-4 border-white
                                     ${pid === '0' ? 'bg-red-500' : pidx === 1 ? 'bg-blue-500' : 'bg-green-500'}
@@ -539,11 +576,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                     {t('ui.player_short', { id: pid })}
                                 </div>
 
-                                {/* Selections */}
                                 <div className="flex gap-1.5 sm:gap-2">
-                                    {[0, 1].map(i => {
+                                    {[0, 1].map((i) => {
                                         const fid = selections[i];
-                                        const meta = fid ? FACTION_METADATA.find(f => f.id === fid) : null;
+                                        const meta = fid ? FACTION_METADATA.find((faction) => faction.id === fid) : null;
 
                                         return (
                                             <div
@@ -583,7 +619,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                 </div>
             </div>
 
-            {/* CARD MAGNIFICATION OVERLAY */}
             <CardMagnifyOverlay target={viewingCard} onClose={() => setViewingCard(null)} />
 
             <style>{`
@@ -609,7 +644,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                     );
                 }
             `}</style>
-        </div >
+        </div>
     );
 };
-
