@@ -10,6 +10,7 @@
  *    - base_innsmouth_base: 印斯茅斯
  *    - base_plateau_of_leng: 伦格高原
  *    - base_land_of_balance: 平衡之地
+ *    - base_miskatonic_university_base: 密大基地
  *
  * 2. onTurnStart: FlowHooks.onPhaseEnter('startTurn') → triggerAllBaseAbilities → Interaction
  *    - base_rlyeh: 拉莱耶
@@ -22,7 +23,6 @@
  *    - base_pirate_cove: 海盗湾
  *    - base_tortuga: 托尔图加
  *    - base_wizard_academy: 巫师学院
- *    - base_miskatonic_university_base: 密大基地
  *    - base_greenhouse: 温室
  *    - base_inventors_salon: 发明家沙龙
  */
@@ -500,26 +500,22 @@ describe('集成: base_wizard_academy 巫师学院 (afterScoring)', () => {
     });
 });
 
-describe('集成: base_miskatonic_university_base 密大基地 (afterScoring)', () => {
-    it('基地达标且有随从的玩家有疯狂卡 → Interaction 返回疯狂卡', () => {
-        // 密大基地 breakpoint=24
+describe('集成: base_miskatonic_university_base 密大基地 (onMinionPlayed)', () => {
+    it('首次打出随从到该基地且手牌有疯狂卡 → Interaction 返回疯狂卡/弃疯狂换额外行动', () => {
         const core = makeState({
-            bases: [makeBase('base_miskatonic_university_base', [
-                makeMinion('m1', 'test_minion', '0', 24),
-                makeMinion('m2', 'test_minion', '1', 5),
-            ])],
-            baseDeck: ['base_central_brain'],
+            bases: [makeBase('base_miskatonic_university_base')],
             madnessDeck: ['madness_0', 'madness_1'],
             players: {
                 '0': makePlayer('0', { hand: [
+                    { uid: 'minion-1', defId: 'test_minion', type: 'minion', owner: '0' },
                     { uid: 'mad-1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' },
                 ] }),
                 '1': makePlayer('1'),
             },
         });
-        const ms = makeScoreBasesMS(core);
-        callOnPhaseExitScoreBases(ms);
-        expect(hasInteraction(ms, 'base_miskatonic_university_base')).toBe(true);
+        const ms = makeMatchState(core);
+        const { ms: resultMs } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs, 'base_miskatonic_university_base')).toBe(true);
     });
 });
 

@@ -109,6 +109,7 @@ export function maybeResolveReactionQueue(
             tempPowerModifier: t.lkiMinion.tempPowerModifier,
             talentUsed: false,
             attachedActions: [],
+            metadata: t.lkiMinion.metadata ? { ...t.lkiMinion.metadata } : undefined,
           }
           : undefined,
         reason: t.reason,

@@ -311,3 +311,30 @@
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup-oops-faction-intake-e2e-test.md
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\docs\workflows\smashup-faction-intake.md
 ```
+
+## 2026-03-31 feedback closeout
+
+### ���޸����������鵵��
+- `69c8c039`�������ı����� DiceThrone����ʵ�ʶ�Ӧ SmashUp Samurai ͬʱ�������⣻���� `393b83b3` ���ǡ�
+- `69c8c230` / `69c8c419` / `69c8c4f8`��Samurai ���������� `393b83b3` �޸���
+- `69c903f3`��AI �Ʒֽ׶� special ���������� `d8ec6aad` �޸���
+- `69c92631`����������ѡĹ����Ӻ���ѡ���ش�������� `22713717` �޸���
+- `69c92aa4` / `69c92bca`��Ancient Egyptians ǰ���������� `05db8831` �޸���
+- `69c92d8d` / `69c9319f`��Ancient Egyptians ʣ������������ `fa9a4c02` �޸���
+- `69c92e82`���������������⣬���߼�����ȷ��ȱ�ؼ��ع鸲�ǣ��Ѳ����Բ������޸��鵵��`3dd374b2`����
+- `69c93b65`���������� / afterScoring ���ⴰ���쳣������ `4ec96272` �޸���
+- `69c942f0`��һĿ��Ȼ vs ɱ����������ȷ���� bug ���� `74d8e513` �޸���
+
+### �ѹر�
+- `69c93d98`��֤�ݲ��㣻����ʵ������ػع�δ�����Դ��ڵ����� bug���ȹرա�
+- `69c8f2f4`���߸����ѱ������޸����ǣ���ǰ `mobileSupport` ���� zero-height �ع��� Gunslinger `The Law` 1v1/����Ŀ��ѡ��ع��ͨ������ȱ����ʵ�豸/Ŀ�����������ê��ǰ���رչ鵵��
+
+### ����������Ӧ�ύ
+- `74d8e513` fix(smashup): respect in plain sight against entangled
+- `393b83b3` fix(smashup): tighten samurai trigger regressions
+- `4ec96272` fix(smashup): skip pirate king afterscoring window when unplayable
+- `fa9a4c02` fix(smashup): cover ancient egyptians tomb trap and seal the tomb
+- `22713717` fix(smashup): support dead rise discard-base quick play
+- `3dd374b2` fix(smashup): cover drakkar reshuffle handoff
+- `05db8831` fix(smashup): close ancient egyptians feedback regressions
+- `d8ec6aad` fix(smashup): resolve open feedback regressions

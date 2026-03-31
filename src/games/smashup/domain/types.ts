@@ -507,6 +507,7 @@ export interface MinionLkiSnapshot {
     powerModifier: number;
     tempPowerModifier: number;
     attachedActionDefIds?: string[];
+    metadata?: Record<string, unknown>;
 }
 
 export interface BaseLkiSnapshot {

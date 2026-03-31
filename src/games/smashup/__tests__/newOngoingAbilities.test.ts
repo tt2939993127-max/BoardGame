@@ -1381,6 +1381,84 @@ describe('ancient_egyptians audit regressions', () => {
         expect(powerEvent?.payload.baseIndex).toBe(0);
     });
 
+    it('Tomb Trap 翻开后可消灭所选的力量≤4随从', () => {
+        const executor = resolveAbility('ancient_egyptians_tomb_trap', 'onUncover');
+        expect(executor).toBeDefined();
+
+        const doomed = makeMinion('doomed', 'test_small_minion', '1', 4, { powerModifier: 0 });
+        const tooLarge = makeMinion('too-large', 'test_big_minion', '1', 5, { powerModifier: 0 });
+        const core = makeState({
+            bases: [
+                makeBase({
+                    defId: 'base_pyramids',
+                    minions: [doomed, tooLarge],
+                }),
+            ],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'tomb-trap',
+            defId: 'ancient_egyptians_tomb_trap',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 14,
+        });
+        const prompt = initial.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_tomb_trap');
+        expect(prompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean)).toEqual(['doomed']);
+
+        const handler = getInteractionHandler('ancient_egyptians_tomb_trap');
+        expect(handler).toBeDefined();
+        const targetOption = prompt.data.options.find((option: any) => option.value?.minionUid === 'doomed');
+        const resolved = handler!(initial.matchState!, '0', targetOption.value, prompt.data, dummyRandom, 15);
+        const destroyEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.MINION_DESTROYED) as MinionDestroyedEvent | undefined;
+        expect(destroyEvent?.payload.minionUid).toBe('doomed');
+        expect(destroyEvent?.payload.fromBaseIndex).toBe(0);
+    });
+
+    it('Seal the Tomb 埋葬模式不会把自己也当成可埋葬手牌', () => {
+        const executor = resolveAbility('ancient_egyptians_seal_the_tomb', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        { uid: 'seal', defId: 'ancient_egyptians_seal_the_tomb', type: 'action', owner: '0' } as any,
+                        { uid: 'bury-me', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' } as any,
+                    ],
+                    factions: ['ancient_egyptians', 'robots'] as any,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({ defId: 'base_pyramids' })],
+        });
+
+        const initial = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'seal',
+            defId: 'ancient_egyptians_seal_the_tomb',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 16,
+        });
+        const modePrompt = initial.matchState?.sys.interaction.current as any;
+        expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_mode');
+
+        const modeHandler = getInteractionHandler('ancient_egyptians_seal_the_tomb_mode');
+        expect(modeHandler).toBeDefined();
+        const buryOption = modePrompt.data.options.find((option: any) => option.value?.mode === 'bury');
+        const chooseHand = modeHandler!(initial.matchState!, '0', buryOption.value, modePrompt.data, dummyRandom, 17);
+        const buryPrompt = chooseHand.state.sys.interaction.queue[0] as any;
+        expect(buryPrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_bury');
+        expect(buryPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean)).toEqual(['bury-me']);
+    });
+
     it('Seal the Tomb 翻开模式只提供同一基地且属于你的埋葬牌', () => {
         const executor = resolveAbility('ancient_egyptians_seal_the_tomb', 'onPlay');
         expect(executor).toBeDefined();
