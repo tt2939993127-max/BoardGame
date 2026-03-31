@@ -289,6 +289,10 @@ function getExplicitTargetPath(args) {
     return '';
 }
 
+function isPlaywrightListMode(args) {
+    return args.some(arg => arg === '--list');
+}
+
 function resolveRequestedServiceReuse(envOverrides = {}) {
     const value = (
         envOverrides.PW_E2E_SERVICE_REUSE
@@ -341,6 +345,7 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         || `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const explicitTargetPath = getExplicitTargetPath(extraArgs);
+    const isListMode = isPlaywrightListMode(extraArgs);
     if (hasExplicitPlaywrightTarget(extraArgs)) {
         modeEnv.PW_HAS_EXPLICIT_TARGET = 'true';
     }
@@ -359,6 +364,7 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         && !envOverrides.PW_WORKERS
         && !process.env.PW_USE_DEV_SERVERS
         && !envOverrides.PW_USE_DEV_SERVERS
+        && !isListMode
     );
 
     if (
@@ -375,12 +381,17 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         modeEnv.PW_E2E_SERVICE_REUSE = 'shared-single';
         console.log('♻️ 显式启用共享单 worker E2E runtime；将尝试复用 shared-single 服务。');
     } else if (
-        modeEnv.PW_HAS_EXPLICIT_TARGET === 'true'
+        !isListMode
+        && modeEnv.PW_HAS_EXPLICIT_TARGET === 'true'
         && process.platform === 'win32'
         && process.env.CODEX_MANAGED_BY_NPM === '1'
         && !process.env.CI
     ) {
         console.log('🧭 Codex Windows 显式目标运行：默认使用托管 isolated-single runtime，避免 shared-single 在多 worktree/连续运行下的串扰。');
+    }
+
+    if (isListMode) {
+        console.log('🧾 检测到 Playwright --list，仅列举用例，跳过托管 runtime 启动。');
     }
 
     const preflightCache = readPreflightCache();

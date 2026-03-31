@@ -487,16 +487,16 @@ describe('派系选择系统', () => {
 
         it('loads the corrected POD base atlas from local assets without affecting other atlas paths', () => {
             expect(getSmashUpPodAtlasImagePath('tts_atlas_1')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_1',
+                'smashup/cards/tts_atlas_1',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_0a564692f2')).toBe(
-                '/assets/i18n/en/smashup/pod-assets/tts_atlas_0a564692f2',
+                'smashup/cards/tts_atlas_0a564692f2',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_0b888d02fd')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd',
+                'smashup/cards/tts_atlas_0b888d02fd',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_9aed5872d2')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2',
+                'smashup/cards/tts_atlas_9aed5872d2',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_8310911466')).toBe(
                 'smashup/pod-assets/tts_atlas_8310911466',

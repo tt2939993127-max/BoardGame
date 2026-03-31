@@ -5,6 +5,7 @@ import {
     createSimpleChoice,
     INTERACTION_COMMANDS,
 } from '../InteractionSystem';
+import { createSimpleChoiceSystem } from '../SimpleChoiceSystem';
 
 interface TestCore {
     value: number;
@@ -119,5 +120,81 @@ describe('InteractionSystem', () => {
         const viewForOther = system.playerView?.(state, 0 as unknown as string) as any;
         expect(viewForOther?.interaction?.current).toBeUndefined();
         expect(viewForOther?.interaction?.isBlocked).toBe(true);
+    });
+
+    it('非 slider simple-choice 不允许自定义 mergedValue', () => {
+        const system = createSimpleChoiceSystem<TestCore>();
+        const state = createTestState();
+        const command: Command = {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: {
+                optionId: 'a',
+                mergedValue: { customId: 'forged-choice', value: 999 },
+            },
+            timestamp: 100,
+        };
+
+        const result = system.beforeCommand?.({
+            state,
+            command,
+            events: [],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('非法的选择值');
+    });
+
+    it('slider simple-choice 只允许覆盖数值字段，保留原选项元数据', () => {
+        const system = createSimpleChoiceSystem<TestCore>();
+        const current = createSimpleChoice(
+            'interaction-slider',
+            '0',
+            '滑动选择',
+            [{ id: 'confirm', label: '确认', value: { customId: 'safe-choice', tokenId: 'safe-token', value: 3 } }],
+        );
+        (current.data as typeof current.data & { slider?: { confirmLabelKey: string } }).slider = {
+            confirmLabelKey: 'choices.confirm',
+        };
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+        const command: Command = {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: {
+                optionId: 'confirm',
+                mergedValue: { customId: 'forged-choice', tokenId: 'forged-token', value: 2 },
+            },
+            timestamp: 100,
+        };
+
+        const result = system.beforeCommand?.({
+            state,
+            command,
+            events: [],
+            random: mockRandom,
+            playerIds: ['0'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.events?.[0]).toMatchObject({
+            type: 'SYS_INTERACTION_RESOLVED',
+            payload: {
+                value: {
+                    customId: 'safe-choice',
+                    tokenId: 'safe-token',
+                    value: 2,
+                },
+            },
+        });
     });
 });
