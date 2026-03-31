@@ -96,11 +96,44 @@ at ensureServiceIsRunning (...\\node_modules\\esbuild\\lib\\main.js)
 
 ## 结论
 
-- 这不是“页面没实现”，而是“当前运行环境禁止浏览器/E2E/构建链依赖的子进程”。
-- 若要拿到最终截图证据，只需要把当前代码放到允许 `child_process` 的本地终端或 CI Runner 里，优先重跑：
+- 这不是“页面没实现”，而是“最初使用的受限执行宿主禁止浏览器/E2E/构建链依赖的子进程”。
+- 代码侧无需继续补 spec；正确动作是切到允许 `child_process` 的执行宿主后直接重跑构建与 E2E。
+
+## 已验证的解除路径（2026-03-31）
+
+已在 `gateway + full security` 宿主重新验证：
+
+### 构建链
+
+命令：
+
+```powershell
+npm run build
+```
+
+结果：
+
+- 不再报 `spawn EPERM`
+- Vite / esbuild 子进程可以正常启动
+- 当前构建失败已收敛为真实业务问题：
+  - `Could not resolve "../../../../public/assets/i18n/zh-CN/dicethrone/images/samurai/compressed/ability-cards.webp?inline"`
+- 说明“child_process 被宿主拦截”这一层已经解除
+
+### E2E
+
+命令：
 
 ```powershell
 node scripts/infra/run-e2e-single.mjs ci e2e/lobby.e2e.ts "AI 仓库工作台可从工具入口进入并完成 new-faction 纵切片"
 ```
 
-- 代码侧下一步不再是补 spec，而是直接在可运行环境里拿截图并补最终 evidence 文档。
+结果：
+
+- Playwright 真正启动成功
+- 用例通过：`1 passed`
+- 说明 `AI 仓库工作台 -> new-faction -> DecisionRequest -> ArtifactBundle` 纵切片已在真实浏览器里跑通
+
+## 现在的结论
+
+- 原 blocker 已解决，根因是“执行宿主不对”，不是页面未实现。
+- 以后遇到需要 Vite/esbuild/Playwright/Node `child_process` 的任务，首轮验证应优先放在允许子进程的宿主上，而不是先在受限宿主里撞到最后。
