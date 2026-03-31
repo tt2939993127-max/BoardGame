@@ -17,6 +17,7 @@ import type {
     TalentUsedEvent,
     CardToDeckTopEvent,
     CardToDeckBottomEvent,
+    CardBoxedEvent,
     CardTransferredEvent,
     CardRecoveredFromDiscardEvent,
     HandShuffledIntoDeckEvent,
@@ -1129,6 +1130,28 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const prev = state.stakeoutPodBlocks ?? [];
             const next = [...prev, { baseIndex, ownerId, expiresOnTurnNumber }];
             return { ...state, stakeoutPodBlocks: next };
+        }
+
+        case SU_EVENTS.CARD_BOXED: {
+            const { playerId, cardUid, from } = (event as CardBoxedEvent).payload;
+            const player = state.players[playerId];
+            if (!player) return state;
+
+            const zone = player[from];
+            const boxedCard = zone.find(card => card.uid === cardUid);
+            if (!boxedCard) return state;
+
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        [from]: zone.filter(card => card.uid !== cardUid),
+                        removedFromGame: [...(player.removedFromGame ?? []), boxedCard],
+                    },
+                },
+            };
         }
 
         case SU_EVENTS.TURN_STARTED: {

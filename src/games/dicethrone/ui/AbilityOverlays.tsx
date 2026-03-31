@@ -237,6 +237,10 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         const [editingId, setEditingId] = React.useState<string | null>(null);
         const containerRef = React.useRef<HTMLDivElement>(null);
         const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
+        const editingGuideClassName = 'absolute inset-0 rounded-lg border-2 border-amber-300/90 bg-amber-200/10 shadow-[0_0_0_1px_rgba(120,53,15,0.7),0_0_14px_rgba(251,191,36,0.28)] pointer-events-none';
+        const editingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-slate-950/65 pointer-events-none';
+        const activeEditingGuideClassName = 'absolute inset-0 rounded-lg border-[2.5px] border-emerald-300 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(6,95,70,0.95),0_0_18px_rgba(52,211,153,0.55)] pointer-events-none';
+        const activeEditingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-emerald-950/80 pointer-events-none';
 
         // 通过 ref 暴露保存方法，供调试面板调用
         React.useImperativeHandle(ref, () => ({
@@ -328,11 +332,17 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 onMouseDown={(e) => isEditing ? handleMouseDown(e, slot.id, 'move') : undefined}
                                 className={`
                                     absolute transition-all duration-200 rounded-lg
-                                    ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-none'}
-                                    ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
+                                    ${isEditing ? 'pointer-events-auto cursor-move' : 'pointer-events-none'}
+                                    ${isEditing && editingId === slot.id ? 'z-50' : ''}
                                 `}
                                 style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
                             >
+                                {isEditing && (
+                                    <>
+                                        <div className={editingId === slot.id ? activeEditingGuideClassName : editingGuideClassName} />
+                                        <div className={editingId === slot.id ? activeEditingGuideInnerClassName : editingGuideInnerClassName} />
+                                    </>
+                                )}
                                 {/* 只有升级后才叠加升级卡图片，未升级时玩家面板底图已有基础被动图案 */}
                                 {isUpgraded && passiveCard?.previewRef && (
                                     <div className="absolute inset-0 flex items-center justify-center">
@@ -384,8 +394,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             onMouseDown={(e) => handleMouseDown(e, slot.id, 'move')}
                             className={`
                             absolute transition-all duration-200 rounded-lg
-                            ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-auto cursor-pointer group'}
-                            ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
+                            ${isEditing ? 'pointer-events-auto cursor-move' : 'pointer-events-auto cursor-pointer group'}
+                            ${isEditing && editingId === slot.id ? 'z-50' : ''}
                             ${canClick ? 'hover:border-2 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.5)] hover:z-30' : ''}
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
@@ -400,6 +410,12 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 }
                             }}
                         >
+                            {isEditing && (
+                                <>
+                                    <div className={editingId === slot.id ? activeEditingGuideClassName : editingGuideClassName} />
+                                    <div className={editingId === slot.id ? activeEditingGuideInnerClassName : editingGuideInnerClassName} />
+                                </>
+                            )}
                             {/* 方案 A：不渲染基础精灵图，玩家面板本身已包含基础技能图案 */}
                             {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
                             {!isUltimate && upgradePreviewRef && (

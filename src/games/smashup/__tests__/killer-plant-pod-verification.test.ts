@@ -257,4 +257,101 @@ describe('Killer Plants POD Card Logic Verification', () => {
         expect((drawEvents[1] as any).payload.cardUids).toEqual(['we-1']);
         expect(respondResult.finalState.core.players['0'].hand.map(card => card.uid)).toEqual(['we-1']);
     });
+
+    it('Sprout 连锁打出另一个 Sprout 时，阶段应保持在 startTurn 直到整条链结束', () => {
+        const base = {
+            defId: 'base_ninja_dojo',
+            minions: [makeMinion('sprout-1', 'killer_plant_sprout_pod', '0', 2)],
+            ongoingActions: [],
+        } as any;
+        const core = makeState({
+            bases: [base],
+            currentPlayerIndex: 1,
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.KILLER_PLANTS_POD, SMASHUP_FACTION_IDS.BEAR_CAVALRY_POD],
+                    deck: [
+                        makeCard('sprout-2', 'killer_plant_sprout_pod', 'minion', '0'),
+                        makeCard('sprout-3', 'killer_plant_sprout_pod', 'minion', '0'),
+                        makeCard('wl-1', 'killer_plant_water_lily_pod', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(core);
+        matchState.sys.phase = 'endTurn';
+
+        const startTurnResult = runCommand(matchState, {
+            type: 'ADVANCE_PHASE' as any,
+            playerId: '1',
+            payload: undefined,
+            timestamp: 1100,
+        });
+
+        expect(startTurnResult.success).toBe(true);
+        expect(startTurnResult.finalState.sys.phase).toBe('startTurn');
+        expect(startTurnResult.finalState.sys.interaction.current?.data?.sourceId).toBe('killer_plant_sprout_search');
+
+        const firstInteraction = startTurnResult.finalState.sys.interaction.current as any;
+        const sproutOption = firstInteraction.data.options.find((option: any) => option.value?.cardUid === 'sprout-2');
+        expect(sproutOption).toBeDefined();
+
+        const firstRespondResult = runCommand(startTurnResult.finalState, {
+            type: 'SYS_INTERACTION_RESPOND' as any,
+            playerId: '0',
+            payload: { optionId: sproutOption.id },
+            timestamp: 1101,
+        });
+
+        expect(firstRespondResult.success).toBe(true);
+        expect(firstRespondResult.finalState.sys.phase).toBe('startTurn');
+        expect(firstRespondResult.finalState.sys.interaction.current?.data?.sourceId).toBe('killer_plant_sprout_search');
+
+        const secondInteraction = firstRespondResult.finalState.sys.interaction.current as any;
+        const waterLilyOption = secondInteraction.data.options.find((option: any) => option.value?.cardUid === 'wl-1');
+        expect(waterLilyOption).toBeDefined();
+
+        const secondRespondResult = runCommand(firstRespondResult.finalState, {
+            type: 'SYS_INTERACTION_RESPOND' as any,
+            playerId: '0',
+            payload: { optionId: waterLilyOption.id },
+            timestamp: 1102,
+        });
+
+        expect(secondRespondResult.success).toBe(true);
+        expect(secondRespondResult.finalState.sys.phase).toBe('playCards');
+        expect(secondRespondResult.finalState.sys.interaction.current).toBeUndefined();
+        expect(secondRespondResult.finalState.core.bases[0].minions.map(minion => minion.uid)).toEqual(['wl-1']);
+    });
+
+    it('爆破点降到 0 后进入计分阶段，只应产生一次 BASE_SCORED', () => {
+        const core = makeState({
+            tempBreakpointModifiers: { 0: -999 },
+            bases: [{
+                defId: 'base_the_jungle',
+                minions: [makeMinion('m1', 'killer_plant_weed_eater_pod', '0', 3)],
+                ongoingActions: [],
+            } as any],
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.KILLER_PLANTS_POD, SMASHUP_FACTION_IDS.BEAR_CAVALRY_POD],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(core);
+        matchState.sys.phase = 'playCards';
+
+        const result = runCommand(matchState, {
+            type: 'ADVANCE_PHASE' as any,
+            playerId: '0',
+            payload: undefined,
+            timestamp: 1200,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(1);
+        expect(result.events.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
+    });
 });

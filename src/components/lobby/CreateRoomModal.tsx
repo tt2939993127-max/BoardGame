@@ -13,6 +13,12 @@ import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import { UI_Z_INDEX } from '../../core';
+import type { AiSeatController } from '../../engine/ai';
+import {
+    createDefaultLocalMatchPreferences,
+    normalizeLocalMatchPreferences,
+    type LocalMatchPreferences,
+} from '../../engine/ai';
 import {
     getDefaultSetupSelections,
     type GameSetupSelections,
@@ -32,6 +38,8 @@ export interface RoomConfig {
     numPlayers: number;
     ttlSeconds: number;
     password?: string;
+    enableAi: boolean;
+    seatControllers: Record<string, AiSeatController>;
     setupSelections: GameSetupSelections;
 }
 
@@ -40,7 +48,38 @@ interface CreateRoomModalProps {
     onClose: () => void;
     onConfirm: (config: RoomConfig) => void;
     gameManifest: GameManifestEntry;
+    initialPreferences?: LocalMatchPreferences | null;
     isLoading?: boolean;
+}
+
+const OWNER_PLAYER_ID = '0';
+
+function getDefaultEnabledAiController(gameManifest: GameManifestEntry): AiSeatController {
+    if (gameManifest.ai?.localAi) {
+        return { type: 'local-ai' };
+    }
+    if (gameManifest.ai?.remoteAi) {
+        return { type: 'remote-ai', providerId: 'astrbot' };
+    }
+    return { type: 'human' };
+}
+
+function forceHumanOwnerSeat(seatControllers: Record<string, AiSeatController>): Record<string, AiSeatController> {
+    return {
+        ...seatControllers,
+        [OWNER_PLAYER_ID]: { type: 'human' },
+    };
+}
+
+function countAiSeats(seatControllers: Record<string, AiSeatController>, numPlayers: number): number {
+    let total = 0;
+    for (let index = 0; index < numPlayers; index += 1) {
+        const controller = seatControllers[String(index)];
+        if (controller && controller.type !== 'human') {
+            total += 1;
+        }
+    }
+    return total;
 }
 
 export const CreateRoomModal = ({
@@ -48,6 +87,7 @@ export const CreateRoomModal = ({
     onClose,
     onConfirm,
     gameManifest,
+    initialPreferences,
     isLoading = false,
 }: CreateRoomModalProps) => {
     const gameNamespace = `game-${gameManifest.id}`;
@@ -59,23 +99,100 @@ export const CreateRoomModal = ({
     const [numPlayers, setNumPlayers] = useState(playerOptions[0]);
     const [ttlSeconds, setTtlSeconds] = useState(0);
     const [password, setPassword] = useState('');
+    const [enableAi, setEnableAi] = useState(false);
+    const [seatControllers, setSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [setupSelections, setSetupSelections] = useState<GameSetupSelections>(() => getDefaultSetupSelections(gameManifest));
 
     useEffect(() => {
         if (!isOpen) return;
+        const nextPreferences = normalizeLocalMatchPreferences(
+            gameManifest,
+            (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
+        );
+        const nextSeatControllers = forceHumanOwnerSeat(nextPreferences.seatControllers);
         setRoomName('');
-        setNumPlayers(playerOptions[0]);
+        setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setSetupSelections(getDefaultSetupSelections(gameManifest));
-    }, [gameManifest, isOpen, playerOptions]);
+        setEnableAi(countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+        setSeatControllers(nextSeatControllers);
+        setSetupSelections(nextPreferences.setupSelections);
+    }, [gameManifest, initialPreferences, isOpen, playerOptions]);
+
+    useEffect(() => {
+        setSeatControllers((current) => {
+            const normalized = normalizeLocalMatchPreferences(gameManifest, {
+                numPlayers,
+                seatControllers: current,
+                setupSelections,
+            }).seatControllers;
+            return forceHumanOwnerSeat(normalized);
+        });
+    }, [gameManifest, numPlayers, setupSelections]);
+
+    const handleToggleAiEnabled = () => {
+        if (!gameManifest.ai?.localAi && !gameManifest.ai?.remoteAi) {
+            return;
+        }
+
+        setEnableAi((current) => {
+            const nextEnabled = !current;
+            if (nextEnabled) {
+                setSeatControllers((existing) => {
+                    const nextControllers = forceHumanOwnerSeat({ ...existing });
+                    const hasAiSeat = countAiSeats(nextControllers, numPlayers) > 0;
+                    if (!hasAiSeat && numPlayers > 1) {
+                        nextControllers['1'] = getDefaultEnabledAiController(gameManifest);
+                    }
+                    return nextControllers;
+                });
+                return true;
+            }
+
+            setSeatControllers((existing) => {
+                const nextControllers = forceHumanOwnerSeat({ ...existing });
+                for (let index = 1; index < numPlayers; index += 1) {
+                    nextControllers[String(index)] = { type: 'human' };
+                }
+                return nextControllers;
+            });
+            return false;
+        });
+    };
+
+    const handleToggleAiSeat = (playerId: string) => {
+        if (playerId === OWNER_PLAYER_ID || !enableAi) return;
+        setSeatControllers((current) => {
+            const nextControllers = forceHumanOwnerSeat({ ...current });
+            const currentController = nextControllers[playerId];
+            nextControllers[playerId] = currentController?.type === 'human'
+                ? getDefaultEnabledAiController(gameManifest)
+                : { type: 'human' };
+            return nextControllers;
+        });
+    };
 
     const handleConfirm = () => {
+        const normalizedSeatControllers = enableAi
+            ? forceHumanOwnerSeat(
+                normalizeLocalMatchPreferences(gameManifest, {
+                    numPlayers,
+                    seatControllers,
+                    setupSelections,
+                }).seatControllers,
+            )
+            : forceHumanOwnerSeat(
+                Object.fromEntries(
+                    Array.from({ length: numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+                ),
+            );
         onConfirm({
             roomName: roomName.trim(),
             numPlayers,
             ttlSeconds,
             password: password.trim(),
+            enableAi,
+            seatControllers: normalizedSeatControllers,
             setupSelections,
         });
     };
@@ -215,6 +332,85 @@ export const CreateRoomModal = ({
                                     t={t}
                                     gameNamespace={gameNamespace}
                                 />
+
+                                {(gameManifest.ai?.localAi || gameManifest.ai?.remoteAi) && (
+                                    <div className="space-y-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleToggleAiEnabled}
+                                            className={`w-full rounded-[6px] border px-4 py-3 text-left transition-colors cursor-pointer ${
+                                                enableAi
+                                                    ? 'border-emerald-700/20 bg-emerald-50/60'
+                                                    : 'border-parchment-card-border/30 bg-parchment-base-bg/35 hover:bg-parchment-base-bg/60'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-bold text-parchment-base-text">
+                                                        {t('createRoom.enableRoomAi')}
+                                                    </div>
+                                                    <div className="mt-1 text-xs text-parchment-light-text">
+                                                        {enableAi
+                                                            ? t('createRoom.enableRoomAiSummary', {
+                                                                players: numPlayers,
+                                                                aiCount: countAiSeats(seatControllers, numPlayers),
+                                                            })
+                                                            : t('createRoom.enableRoomAiHint')}
+                                                    </div>
+                                                </div>
+                                                <span
+                                                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                                                        enableAi
+                                                            ? 'bg-emerald-600 text-white'
+                                                            : 'bg-parchment-card-bg text-parchment-light-text border border-parchment-card-border/30'
+                                                    }`}
+                                                >
+                                                    {enableAi ? t('createRoom.enabled') : t('createRoom.disabled')}
+                                                </span>
+                                            </div>
+                                        </button>
+
+                                        {enableAi && (
+                                            <div className="rounded-[6px] border border-parchment-card-border/20 bg-parchment-base-bg/25 px-4 py-3">
+                                                <div className="mb-1 text-sm font-bold text-parchment-base-text">
+                                                    {t('createRoom.occupiedSeats')}
+                                                </div>
+                                                <div className="mb-3 text-xs text-parchment-light-text">
+                                                    {t('createRoom.occupiedSeatsHint')}
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {Array.from({ length: numPlayers }, (_, index) => {
+                                                        const playerId = String(index);
+                                                        const isOwnerSeat = playerId === OWNER_PLAYER_ID;
+                                                        const isAiSeat = seatControllers[playerId]?.type !== 'human';
+                                                        const label = isOwnerSeat
+                                                            ? t('createRoom.ownerSeatUnit', { seat: index + 1 })
+                                                            : t('createRoom.occupiedSeatUnit', { seat: index + 1 });
+
+                                                        return (
+                                                            <button
+                                                                key={playerId}
+                                                                type="button"
+                                                                onClick={() => handleToggleAiSeat(playerId)}
+                                                                disabled={isOwnerSeat}
+                                                                aria-pressed={isOwnerSeat ? false : isAiSeat}
+                                                                className={`rounded-[4px] border px-4 py-2 text-sm font-bold transition-all ${
+                                                                    isOwnerSeat
+                                                                        ? 'cursor-not-allowed border-parchment-card-border/25 bg-parchment-base-bg/55 text-parchment-light-text/80'
+                                                                        : isAiSeat
+                                                                            ? 'cursor-pointer border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                                                                            : 'cursor-pointer border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text hover:bg-parchment-base-bg'
+                                                                }`}
+                                                            >
+                                                                {label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="p-6 pt-4 flex gap-3">
@@ -232,7 +428,7 @@ export const CreateRoomModal = ({
                                     className="flex-1 py-2.5 px-4 bg-parchment-base-text text-parchment-card-bg font-bold rounded-[4px] hover:bg-parchment-brown transition-all cursor-pointer disabled:opacity-50"
                                     disabled={isLoading}
                                 >
-                                    {isLoading ? t('common:loading') : t('createRoom.confirm')}
+                                    {isLoading ? t('button.processing') : t('createRoom.confirm')}
                                 </button>
                             </div>
                         </div>

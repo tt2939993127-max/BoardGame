@@ -4,7 +4,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler, type InteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerBaseAbility, type BaseAbilityContext } from '../domain/baseAbilities';
-import { registerTrigger } from '../domain/ongoingEffects';
+import { isMinionProtected, registerTrigger } from '../domain/ongoingEffects';
 import type { TriggerContext } from '../domain/ongoingEffects';
 import { canStartDuel, startDuel } from '../domain/duel';
 import {
@@ -129,8 +129,11 @@ function samuraiYokaiAttackOnPlay(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `samurai_yokai_attack_${ctx.now}`,
         ctx.playerId,
-        '妖怪来袭！：选择一个你的随从，将其消灭以额外打出一个随从和一个行动',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        '妖怪来袭！：你可以消灭一个自己的随从，以额外打出一个随从和一个行动',
+        [
+            createSkipOption('跳过（不消灭随从）') as any,
+            ...buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        ],
         { sourceId: 'samurai_yokai_attack', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -299,15 +302,31 @@ function samuraiFinalHaikuTrigger(ctx: TriggerContext): SmashUpEvent[] {
 }
 
 function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
-    const sourcePlayerId = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawPlayerId;
-    const untilTurnNumber = ctx.triggerMinion?.metadata?.samuraiWayOfTheWarriorDrawUntilTurnNumber;
-    if (!sourcePlayerId || typeof untilTurnNumber !== 'number') return [];
+    const metadata = ctx.triggerMinion?.metadata ?? {};
+    const drawUntilTurnNumber = typeof metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber === 'number'
+        ? metadata.samuraiWayOfTheWarriorDrawUntilTurnNumber
+        : undefined;
+    const drawPlayerId = typeof metadata.samuraiWayOfTheWarriorDrawPlayerId === 'string'
+        ? metadata.samuraiWayOfTheWarriorDrawPlayerId as PlayerId
+        : undefined;
+    if (!drawPlayerId || typeof drawUntilTurnNumber !== 'number') return [];
+
     const currentTurnNumber = ctx.state.turnNumber ?? 0;
     const currentPlayerId = ctx.state.currentPlayerId ?? ctx.state.turnOrder?.[ctx.state.currentPlayerIndex ?? 0];
-    const isWindowActive = currentTurnNumber < untilTurnNumber
-        || (currentTurnNumber === untilTurnNumber && currentPlayerId !== sourcePlayerId);
+    const isWindowActive = currentTurnNumber < drawUntilTurnNumber
+        || (currentTurnNumber === drawUntilTurnNumber && currentPlayerId !== drawPlayerId);
     if (!isWindowActive) return [];
-    return buildStandardDrawEvents(ctx.state, sourcePlayerId, 2, ctx.random, ctx.now);
+
+    if (ctx.timing === 'onMinionDestroyed' && ctx.baseIndex !== undefined) {
+        const base = ctx.state.bases[ctx.baseIndex];
+        const destroyedAtBaseThisTurnCount = (ctx.state.turnDestroyedMinions ?? [])
+            .filter(record => record.baseIndex === ctx.baseIndex)
+            .length;
+        if (base?.defId === 'base_temple_of_goju_pod') return [];
+        if (base?.defId === 'base_tar_pits' && destroyedAtBaseThisTurnCount === 0) return [];
+    }
+
+    return buildStandardDrawEvents(ctx.state, drawPlayerId, 2, ctx.random, ctx.now);
 }
 
 function samuraiSakuraGardenTrigger(ctx: TriggerContext): SmashUpEvent[] {
@@ -355,8 +374,14 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
 };
 
 const handleSamuraiYokaiAttack: InteractionHandler = (state, playerId, value, _data, _random, now) => {
+    if ((value as { skip?: boolean } | undefined)?.skip) return { state, events: [] };
     const selected = value as MinionChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined || !selected.defId) return { state, events: [] };
+    const target = state.core.bases[selected.baseIndex]?.minions.find(minion => minion.uid === selected.minionUid);
+    if (!target) return { state, events: [] };
+    if (isMinionProtected(state.core, target, selected.baseIndex, playerId, 'destroy')) {
+        return { state, events: [] };
+    }
     return {
         state,
         events: [

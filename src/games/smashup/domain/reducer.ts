@@ -37,6 +37,7 @@ import type {
     FactionDeselectedEvent,
     AllFactionsSelectedEvent,
     MinionDestroyedEvent,
+    RevealHandEvent,
     MinionMovedEvent,
     MinionControlChangedEvent,
     MinionReturnedEvent,
@@ -1383,15 +1384,40 @@ export function processDeckInspectionTriggers(
     for (const event of events) {
         let inspectorPlayerId: PlayerId | undefined;
         let reason: string | undefined;
+        let inspectionCards: Array<{ uid: string; defId: string }> | undefined;
+        let inspectionZone: 'deck' | 'hand' | undefined;
+        let inspectionTargetPlayerIds: PlayerId[] | undefined;
+        let inspectionCausePlayerId: PlayerId | undefined;
 
         if (event.type === SU_EVENTS.DECK_INSPECTED) {
             const payload = (event as DeckInspectedEvent).payload;
             inspectorPlayerId = payload.inspectorPlayerId;
             reason = payload.reason;
+            inspectionTargetPlayerIds = Array.isArray(payload.targetPlayerId)
+                ? payload.targetPlayerId as PlayerId[]
+                : [payload.targetPlayerId as PlayerId];
+            inspectionCausePlayerId = payload.inspectorPlayerId;
+        } else if (event.type === SU_EVENTS.REVEAL_HAND) {
+            const payload = (event as RevealHandEvent).payload;
+            inspectorPlayerId = payload.viewerPlayerId as PlayerId;
+            reason = payload.reason;
+            inspectionCards = payload.cards;
+            inspectionZone = 'hand';
+            inspectionTargetPlayerIds = Array.isArray(payload.targetPlayerId)
+                ? payload.targetPlayerId as PlayerId[]
+                : [payload.targetPlayerId as PlayerId];
+            inspectionCausePlayerId = payload.sourcePlayerId as PlayerId | undefined ?? payload.viewerPlayerId as PlayerId;
         } else if (event.type === SU_EVENTS.REVEAL_DECK_TOP) {
             const payload = (event as RevealDeckTopEvent).payload;
             inspectorPlayerId = payload.sourcePlayerId ?? (payload.viewerPlayerId === 'all' ? undefined : payload.viewerPlayerId);
             reason = payload.reason;
+            inspectionCards = payload.cards;
+            inspectionZone = 'deck';
+            inspectionTargetPlayerIds = Array.isArray(payload.targetPlayerId)
+                ? payload.targetPlayerId as PlayerId[]
+                : [payload.targetPlayerId as PlayerId];
+            inspectionCausePlayerId = payload.sourcePlayerId as PlayerId | undefined
+                ?? (payload.viewerPlayerId === 'all' ? undefined : payload.viewerPlayerId as PlayerId);
         }
 
         if (!inspectorPlayerId || !reason) continue;
@@ -1404,6 +1430,10 @@ export function processDeckInspectionTriggers(
             matchState: ms ?? state,
             playerId: inspectorPlayerId,
             reason,
+            inspectionCards,
+            inspectionZone,
+            inspectionTargetPlayerIds,
+            inspectionCausePlayerId,
             random,
             now,
         });

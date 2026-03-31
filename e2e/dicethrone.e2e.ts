@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test';
 import { TOKEN_IDS, STATUS_IDS } from '../src/games/dicethrone/domain/ids';
-import { setEnglishLocale } from './helpers/common';
+import { setChineseLocale } from './helpers/common';
 import {
     setupOnlineMatch,
     waitForTutorialBoardReady,
@@ -205,7 +205,7 @@ test.describe('DiceThrone E2E', () => {
             if (msg.type() === 'error') consoleErrors.push(msg.text());
         });
 
-        await setEnglishLocale(page);
+        await setChineseLocale(page);
         await page.goto('/play/dicethrone/tutorial');
         await waitForTutorialBoardReady(page, 60000);
 

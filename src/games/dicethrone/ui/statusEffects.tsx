@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { buildLocalizedImageSet, getLocalizedLocalAssetPath, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedAssetPath, getLocalizedLocalAssetPath, UI_Z_INDEX } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 
@@ -54,15 +54,50 @@ const isStatusIconAtlasResponse = (value: unknown): value is StatusIconAtlasResp
 // Map of Atlas ID -> Config
 export type StatusAtlases = Record<string, StatusIconAtlasConfig>;
 
+const getAtlasFallbackLocale = (locale: string) => {
+    if (locale === 'zh-CN') return 'en';
+    if (locale === 'en') return 'zh-CN';
+    return 'en';
+};
+
+const dedupeUrls = (urls: Array<string | undefined>) => (
+    urls.filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index)
+);
+
+const getStatusAtlasJsonCandidates = (path: string, locale?: string) => {
+    const effectiveLocale = locale || 'zh-CN';
+    const fallbackLocale = getAtlasFallbackLocale(effectiveLocale);
+
+    return dedupeUrls([
+        getLocalizedAssetPath(path, effectiveLocale),
+        getLocalizedAssetPath(path, fallbackLocale),
+        getLocalizedLocalAssetPath(path, effectiveLocale),
+        getLocalizedLocalAssetPath(path, fallbackLocale),
+    ]);
+};
+
+const fetchStatusAtlasJson = async (path: string, locale?: string): Promise<StatusIconAtlasResponse | null> => {
+    for (const url of getStatusAtlasJsonCandidates(path, locale)) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue;
+            const data: unknown = await response.json();
+            if (isStatusIconAtlasResponse(data)) {
+                return data;
+            }
+        } catch {
+            continue;
+        }
+    }
+
+    return null;
+};
+
 export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases> => {
     const promises = Object.entries(STATUS_ATLAS_PATHS).map(async ([id, path]) => {
         try {
-            // JSON 配置文件始终从本地 /assets/ 加载，不走 R2 CDN
-            const url = getLocalizedLocalAssetPath(path, locale);
-            const response = await fetch(url);
-            if (!response.ok) return null;
-            const data: unknown = await response.json();
-            if (!isStatusIconAtlasResponse(data)) return null;
+            const data = await fetchStatusAtlasJson(path, locale);
+            if (!data) return null;
 
             // 图片路径也需要经过 getLocalizedAssetPath 处理（去掉 .json 后缀，加上图片文件名）
             const baseDir = path.substring(0, path.lastIndexOf('/') + 1);

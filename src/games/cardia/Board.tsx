@@ -35,6 +35,7 @@ import './ui/compactLayout.css';
 import { logger } from '../../lib/logger';
 import { safeMatchMedia, subscribeMediaQueryChange } from '../../lib/mediaQuery';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
+import { isNodeContainedBy } from './ui/domGuards';
 
 type Props = GameBoardProps<CardiaCore>;
 
@@ -1846,8 +1847,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
     }, [onRef]);
 
     const handleMouseLeave = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-        const nextTarget = event.relatedTarget as Node | null;
-        if (nextTarget && containerRef.current?.contains(nextTarget)) return;
+        if (isNodeContainedBy(containerRef.current, event.relatedTarget)) return;
         if (isTouchDevice) return;
         onHoverEnd?.(card, event);
     }, [card, isTouchDevice, onHoverEnd]);

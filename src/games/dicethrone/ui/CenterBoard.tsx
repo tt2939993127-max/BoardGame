@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
-import { UI_Z_INDEX } from '../../../core';
+import { UI_Z_INDEX, buildLocalizedImageSet } from '../../../core';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
-import { getPlayerBoardUiTuning } from './abilitySlotLayout';
+import { getPlayerBoardAspectRatio, getPlayerBoardUiTuning } from './abilitySlotLayout';
+import { getInlineBoardAsset } from './inlineBoardAssets';
 
 export interface CenterBoardProps {
     coreAreaHighlighted: boolean;
@@ -52,6 +52,7 @@ export const CenterBoard = ({
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
     const boardUiTuning = getPlayerBoardUiTuning(characterId);
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(characterId);
     const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
     const boardGapClassName = 'gap-[0.5vw]';
     const overlayButtonIconClassName = 'w-[0.72vw] h-[0.72vw] fill-current';
@@ -76,6 +77,14 @@ export const CenterBoard = ({
 
     const playerBoardPath = ASSETS.PLAYER_BOARD(characterId);
     const tipBoardPath = ASSETS.TIP_BOARD(characterId);
+    const playerBoardInlineAsset = getInlineBoardAsset(characterId, 'player-board', locale);
+    const tipBoardInlineAsset = getInlineBoardAsset(characterId, 'tip', locale);
+    const playerBoardBackground = playerBoardInlineAsset
+        ? `url("${playerBoardInlineAsset}")`
+        : buildLocalizedImageSet(playerBoardPath, locale);
+    const tipBoardBackground = tipBoardInlineAsset
+        ? `url("${tipBoardInlineAsset}")`
+        : buildLocalizedImageSet(tipBoardPath, locale);
 
     return (
         <div
@@ -92,11 +101,17 @@ export const CenterBoard = ({
                         : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }}
                     data-tutorial-id="player-board"
                 >
-                    <OptimizedImage
-                        src={playerBoardPath}
-                        locale={locale}
-                        className="w-auto h-full object-contain"
-                        alt={t('imageAlt.playerBoard')}
+                    <div
+                        className="h-full"
+                        role="img"
+                        aria-label={t('imageAlt.playerBoard')}
+                        style={{
+                            width: `calc(35vw * ${playerBoardAspectRatio})`,
+                            backgroundImage: playerBoardBackground,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'center',
+                            backgroundSize: 'contain',
+                        }}
                     />
                     <AbilityOverlays
                         ref={abilityOverlaysRef}
@@ -134,11 +149,16 @@ export const CenterBoard = ({
                     </button>
                     <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
                         <div className="relative h-full w-auto aspect-[1311/2048] group">
-                            <OptimizedImage
-                                src={tipBoardPath}
-                                locale={locale}
-                                className="w-auto h-full object-contain"
-                                alt={t('imageAlt.tipBoard')}
+                            <div
+                                className="w-full h-full"
+                                role="img"
+                                aria-label={t('imageAlt.tipBoard')}
+                                style={{
+                                    backgroundImage: tipBoardBackground,
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundPosition: 'center',
+                                    backgroundSize: 'contain',
+                                }}
                             />
                             <button
                                 type="button"

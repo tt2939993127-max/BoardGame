@@ -47,3 +47,20 @@
 - **WHEN** 发布者尝试仅通过 OTA 发布该变更
 - **THEN** 系统 MUST 将其视为不受支持的更新类型
 - **AND** 发布规范 MUST 明确要求重新发 APK/AAB
+
+### Requirement: OTA 发布流水线必须支持自动化与正式门禁
+
+系统 SHALL 提供自动化 OTA 发布流水线，并区分非生产自动发布与正式 channel 的受保护发布。
+
+#### Scenario: main 自动发布到非生产 channel
+- **GIVEN** 仓库已配置 OTA 自动发布工作流
+- **AND** 开发者向 `main` 分支合入会影响 Android H5 bundle 的改动
+- **WHEN** GitHub Actions 自动执行 OTA 发布
+- **THEN** 系统 MUST 仅发布到非生产 channel
+- **AND** 不得默认直接覆盖 `stable` 等正式 channel 的 `latest.json`
+
+#### Scenario: stable 发布必须手动批准
+- **GIVEN** 发布者要把 Android OTA 发布到 `stable`
+- **WHEN** 发布者触发正式 OTA 工作流
+- **THEN** 系统 MUST 要求显式指定正式 channel
+- **AND** MUST 经过 GitHub Environment 或等价审批门禁后才能执行

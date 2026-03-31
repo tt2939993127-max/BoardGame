@@ -11,15 +11,26 @@
 ## 执行命令
 
 ```bash
-npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完成"
-npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Cowboys 决斗交互应按官方链路完成 Pinkerton/决斗牌/Deputy/结算"
-npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行动额度"
+node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完成"
+node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Cowboys 决斗交互应按官方链路完成 Pinkerton/决斗牌/Deputy/结算"
+node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行动额度"
 ```
 
 ## 结果
 
 - 状态：通过
-- 日期：`2026-03-28`
+- 日期：`2026-03-30`
+
+## 本轮环境修复
+
+- 首次运行时，Vite 页面停在 PostCSS overlay，原因是当前工作区缺少 `@alloc/quick-lru`，导致 `__BG_TEST_HARNESS__` 无法注入。
+- 已用最小风险方式恢复当前工作区 E2E 环境：
+
+```bash
+npm install @alloc/quick-lru@5.2.0 --no-save
+```
+
+- 该步骤未修改业务代码，只恢复了当前 `node_modules` 的缺包状态。
 
 ## 证据截图
 
@@ -27,8 +38,8 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai
 
 截图路径：
 
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成-oops-bury-strip-before-uncover.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成-oops-bury-strip-after-uncover.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成-oops-bury-strip-before-uncover.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成\Oops-Ancient-Egyptians-埋葬条带与翻开交互应在浏览器中可完成-oops-bury-strip-after-uncover.png`
 
 嵌入预览：
 
@@ -38,19 +49,19 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai
 
 观察结论：
 
-- 翻开前，基地旁可见埋葬条带与 `1` 张己方埋葬牌。
-- 翻开后，埋葬条带数量归零。
-- `You Can Take It With You` 进入弃牌堆，且当前玩家手牌数增加到 `4`。
+- 翻开前，`Pyramids` 基地左侧清楚显示一张埋葬条带，手牌区只有 `Seal the Tomb`，弃牌区为 `0`。
+- 翻开后，埋葬条带消失，说明被埋的 `You Can Take It With You` 已经离开基地。
+- 翻开后手牌区变成 `4` 张，弃牌区出现 `You Can Take It With You`，符合“翻开结算后进弃牌堆”的链路。
 
 ### 2. Cowboys：官方决斗链路
 
 截图路径：
 
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-pinkerton-prompt.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-card-prompt.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-deputy-card-prompt.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-deputy-target-prompt.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-after-resolve.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-pinkerton-prompt.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-card-prompt.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-deputy-card-prompt.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-deputy-target-prompt.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算\Oops-Cowboys-决斗交互应按官方链路完成-Pinkerton-决斗牌-Deputy-结算-oops-duel-after-resolve.png`
 
 嵌入预览：
 
@@ -66,18 +77,17 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai
 
 观察结论：
 
-- 决斗横幅在全流程持续可见，文案明确提示处理顺序为 `Pinkerton / 决斗牌 / Deputy / 再结算胜负`。
-- `Pinkerton` 阶段会弹出数量按钮，浏览器里可直接点击对应的放置指示物按钮。
-- `决斗牌` 阶段显示专用提示与对应的跳过按钮，文案会随当前 locale 统一切换。
-- `Deputy` 阶段先展示弃牌选择，再进入场上随从目标点击阶段。
-- `Deputy` 目标选中后，`Deputy` 进入弃牌堆，失败随从离场，决斗横幅消失。
+- 决斗横幅全程可见，文案明确写出顺序为 `Pinkerton / 决斗牌 / Deputy / 再结算胜负`。
+- `Pinkerton` 阶段屏幕中央确实出现两个按钮，玩家可直接决定是否先放 `+1` 指示物。
+- `决斗牌` 阶段显示专用提示和“跳过（不放决斗牌）”按钮，`Deputy` 阶段又切换成弃牌与选目标两步提示。
+- 结算后敌方 `robot_microbot_alpha` 已离场，`Deputy` 进入右下弃牌区，场上只剩己方 `Pinkerton + Gunfighter`，说明整条决斗链已经走完。
 
 ### 3. Samurai：额外随从/行动额度兑现
 
 截图路径：
 
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度-oops-extra-play-before-select.png`
-- `D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度-oops-extra-play-after-resolve.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度-oops-extra-play-before-select.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度\Oops-Samurai-额外出牌效果应在浏览器中兑现额外随从与行动额度-oops-extra-play-after-resolve.png`
 
 嵌入预览：
 
@@ -87,9 +97,10 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai
 
 观察结论：
 
-- 目标己方随从会在棋盘上进入可点击高亮态。
-- 点击后，该随从离场。
-- 当前玩家的 `minionLimit` 与 `actionLimit` 从 `1` 提升到 `2`。
+- 选择前，页面顶部明确提示 `妖怪来袭：选择你要消灭的一个随从`，场上只有 `Samurai-Chan` 作为可点目标。
+- 点击后，这条链会先进入“同时触发排序”，说明当前浏览器真实反映了 `Samurai-Chan` 与 `Yokai Attack!` 的同批触发关系。
+- 结算后，场上己方随从已清空，`Yokai Attack!` 和 `Samurai-Chan` 都进入弃牌区。
+- 结算后页面顶部同时出现 `获得1次额外行动机会` 和 `获得1次额外随从机会` 两条提示，说明额外额度在浏览器里已经兑现。
 
 ## 覆盖口径与限制
 
@@ -99,20 +110,8 @@ npm run test:e2e:ci:file -- smashup-phase-transition-simple.e2e.ts "Oops Samurai
   - `Ancient Egyptians` 直接注入 `ancient_egyptians_seal_the_tomb_uncover`
   - `Samurai` 直接注入 `samurai_yokai_attack`
 - 因此这两条证明的是“埋葬翻开 UI / 目标点击 UI / 额度兑现 UI 已可工作”，不是“从手牌正常打出整张牌直到最终结算的 full-chain E2E”。
-- 本轮额外修正了 Cowboys 决斗链的 i18n 不一致：决斗横幅、阶段提示和跳过按钮现在会一起跟随 locale，不再出现“英文横幅 + 中文交互按钮”的混搭。
-
-## 同批门禁
-
-除三条 gameplay E2E 外，本轮同批还已通过：
-
-```bash
-npx vitest run src/games/smashup/__tests__/newFactionAbilities.test.ts --configLoader native
-npx vitest run src/games/smashup/__tests__/abilityBehaviorAudit.test.ts --config vitest.config.audit.ts --configLoader native
-npm run typecheck
-```
 
 ## 当前残留风险
 
-- `cowboys_stagecoach` 当前只覆盖“同一基地选择 1-2 个己方随从移动到另一基地”，尚未覆盖更完整的 transfer 语义。
-- `Ancient Egyptians / Samurai` 若要证明完整正式出牌链，后续仍需补 full-chain E2E，而不是只注入当前交互。
-- Samurai 虽然已复用官方 duel 内核，但本轮浏览器出图只覆盖了 Cowboys 共享链路；Samurai 侧当前仍以领域测试证明 `VP / draw / destroy` 等不同 outcome。
+- `Ancient Egyptians / Samurai` 若要证明完整正式出牌链，后续仍可补 full-chain E2E，而不是只注入当前交互。
+- 本轮已经确认新增交互类型在浏览器层可操作，因此这项风险不再阻塞当前四派系审计收口。

@@ -497,7 +497,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
       hasTouch: true,
     });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -519,7 +519,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -592,7 +592,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
       hasTouch: true,
     });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -613,7 +613,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1420,7 +1420,7 @@ test.describe('SummonerWars', () => {
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
     const hostContext = await browser.newContext({ baseURL });
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     const hostPage = await hostContext.newPage();
 
@@ -1435,7 +1435,7 @@ test.describe('SummonerWars', () => {
     await ensurePlayerIdInUrl(hostPage, '0');
 
     const otherContext = await browser.newContext({ baseURL });
-    await setEnglishLocale(otherContext);
+    await setChineseLocale(otherContext);
     await resetMatchStorage(otherContext);
     const otherPage = await otherContext.newPage();
 
@@ -1495,7 +1495,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1515,7 +1515,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1589,7 +1589,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1609,7 +1609,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1746,7 +1746,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1766,7 +1766,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1842,7 +1842,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1862,7 +1862,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1961,7 +1961,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1981,7 +1981,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2033,7 +2033,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2053,7 +2053,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2135,7 +2135,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2155,7 +2155,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2207,7 +2207,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2226,7 +2226,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2264,7 +2264,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2283,7 +2283,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2335,7 +2335,7 @@ test.describe('SummonerWars', () => {
       hasTouch: true,
     });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2354,7 +2354,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2408,7 +2408,7 @@ test.describe('SummonerWars', () => {
     });
     await blockAudioRequests(desktopContext);
     await mockSummonerWarsMapImage(desktopContext);
-    await setEnglishLocale(desktopContext);
+    await setChineseLocale(desktopContext);
     await disableAudio(desktopContext);
     const desktopPage = await desktopContext.newPage();
     await openSummonerWarsMobileEvidencePage(desktopPage);
@@ -2438,7 +2438,7 @@ test.describe('SummonerWars', () => {
     });
     await blockAudioRequests(hostContext);
     await mockSummonerWarsMapImage(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
     await hostPage.setViewportSize({ width: 667, height: 375 });
@@ -2689,7 +2689,7 @@ test.describe('SummonerWars', () => {
     });
     await blockAudioRequests(hostContext);
     await mockSummonerWarsMapImage(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await disableAudio(hostContext);
 
     const hostPage = await hostContext.newPage();
@@ -2746,7 +2746,7 @@ test.describe('SummonerWars', () => {
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
     await blockLobbySocket(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2766,7 +2766,7 @@ test.describe('SummonerWars', () => {
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
     await blockLobbySocket(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2806,7 +2806,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2825,7 +2825,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);

@@ -5,7 +5,7 @@
   "setup": {
     "expansions": {
       "label": "扩展规则",
-      "titans": "启用泰坦"
+      "titans": "泰坦"
     }
   },
   "phases": {
@@ -68,6 +68,7 @@
     "taken_by_other": "已被其他玩家选择",
     "faction_full": "已选满 2 个派系",
     "confirm_selection": "确认选择",
+    "cancel_selection": "取消选择",
     "wait_turn": "等待你的回合",
     "preview_cards": "包含卡牌预览",
     "faction_titan_preview": "泰坦预览",
@@ -2798,22 +2799,28 @@
       "name": "北极基地"
     },
     "base_antarctic_base_pod": {
-      "name": "南极基地"
+      "name": "南极基地",
+      "abilityText": "玩家每回合在这个基地只能打出一个随从。"
     },
     "base_ritual_site_pod": {
-      "name": "仪式场所"
+      "name": "仪式场所",
+      "abilityText": "在这个基地计分后。在它上面的所有随从洗回他们的拥有者牌库，而不是进入弃牌堆。"
     },
     "base_rlyeh_pod": {
-      "name": "拉莱耶"
+      "name": "拉莱耶",
+      "abilityText": "在每位玩家回合开始时，该玩家可以消灭他在本地的一个随从，如果他这样做，获得1VP。"
     },
     "base_innsmouth_base_pod": {
-      "name": "印斯茅斯"
+      "name": "印斯茅斯",
+      "abilityText": "每当有一个随从被打出到这后，它的拥有者可以将任意玩家弃牌堆中的一张卡置入他们牌库底。"
     },
     "base_mountains_of_madness_pod": {
-      "name": "疯狂山脉"
+      "name": "疯狂山脉",
+      "abilityText": "每当一个随从被打出到这后，它的拥有者抽取一张疯狂卡。"
     },
     "base_plateau_of_leng_pod": {
-      "name": "伦格高原"
+      "name": "伦格高原",
+      "abilityText": "每回合玩家第一次打出一个随从从手牌到这以后，他们可以额外打出一张与其同名的随从到这里。"
     },
     "base_the_pasture_pod": {
       "name": "牧场"

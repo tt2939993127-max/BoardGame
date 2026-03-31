@@ -171,7 +171,6 @@ export const generateAndroidBrandAssets = async ({
 
     for (const [density, size] of Object.entries(launcherIconSizes)) {
         const launcherPath = path.join(resDir, `mipmap-${density}`, 'ic_launcher.png');
-        const roundPath = path.join(resDir, `mipmap-${density}`, 'ic_launcher_round.png');
         const iconBuffer = createSquareIcon(
             sharp,
             config.iconSourcePath,
@@ -181,16 +180,6 @@ export const generateAndroidBrandAssets = async ({
         );
 
         await writeBuffer(launcherPath, iconBuffer);
-        await writeBuffer(
-            roundPath,
-            createSquareIcon(
-                sharp,
-                config.iconSourcePath,
-                size,
-                config.iconInsetRatio,
-                config.iconBackground,
-            ),
-        );
     }
 
     writeFileSync(
