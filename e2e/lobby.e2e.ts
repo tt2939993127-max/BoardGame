@@ -88,7 +88,6 @@ test.describe('Lobby E2E', () => {
     });
 
     test('AI 仓库工作台可从工具入口进入并完成 new-faction 纵切片', async ({ page, game }, testInfo) => {
-        await page.setViewportSize({ width: 1920, height: 1080 });
         await page.evaluate(() => {
             localStorage.removeItem('ai-repo-workbench:mvp-journal');
         });
