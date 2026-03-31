@@ -322,7 +322,7 @@ npm run dev
 **解决**：
 ```typescript
 const context = await browser.newContext({
-  viewport: { width: 1920, height: 1080 }  // 提高分辨率
+  viewport: DESKTOP_REFERENCE_VIEWPORT  // 使用项目默认 PC 参考分辨率：1920x1080
 });
 ```
 

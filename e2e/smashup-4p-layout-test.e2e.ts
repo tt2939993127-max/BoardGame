@@ -1,5 +1,6 @@
 import { test, expect } from './framework';
 import { setChineseLocale } from './helpers/common';
+import { DESKTOP_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -66,7 +67,6 @@ const EXPECTED_FINAL_VP = {
     '3': 10,
 } as const;
 const MOBILE_LANDSCAPE_VIEWPORT = { width: 800, height: 450 } as const;
-const DESKTOP_REFERENCE_VIEWPORT = { width: 1920, height: 1080 } as const;
 
 function createPlayerState(
     playerId: string,
