@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useReducer, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLocalizedImageUrls, getPreloadedImageElement, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
 import { getOptimizedImageUrls, getLocalizedAssetPath, getLocalizedLocalAssetPath } from '../../../core/AssetLoader';
@@ -181,6 +181,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     const [loaded, setLoaded] = useState(() => preloaded);
     const checkKey = checkUrls.join('|');
     const [activeUrl, setActiveUrl] = useState(() => checkUrls.find(isUsableAtlasUrlLoaded) ?? checkUrls[0] ?? '');
+    const loadAttemptRef = useRef(0);
 
     // 只有真实加载完成（loaded）或预加载缓存已命中（preloaded）时，才允许移除 shimmer。
     // 不能仅因为 activeUrl 已解析出来就视为已加载：
@@ -197,7 +198,11 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         const { webp } = getOptimizedImageUrls(localizedPath);
         if (!webp) return;
         // 防御竞态：订阅前图片可能已在后台加载完成，立即检查一次
-        if (hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale))) {
+        const readyUrl = checkUrls.find(isUsableAtlasUrlLoaded);
+        if (hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale)) || readyUrl) {
+            if (readyUrl) {
+                setActiveUrl(readyUrl);
+            }
             setLoaded(true);
         }
         return onImageReady((url) => {
@@ -227,22 +232,27 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             setLoaded(true);
             return;
         }
+        const currentAttempt = loadAttemptRef.current + 1;
+        loadAttemptRef.current = currentAttempt;
         setLoaded(false);
         let cancelled = false;
-        const markReady = () => {
-            if (!cancelled) {
+        const markReady = (url?: string) => {
+            if (!cancelled && loadAttemptRef.current === currentAttempt) {
+                if (url) {
+                    setActiveUrl(url);
+                }
                 setLoaded(true);
             }
         };
 
         const tryLoad = (idx: number) => {
             if (idx >= checkUrls.length) {
-                markReady(); // 全部候选都明确失败后再移除 shimmer
                 return;
             }
             const url = checkUrls[idx];
             const img = new Image();
             img.onload = () => {
+                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
                 if (!hasUsableAtlasImage(img)) {
                     tryLoad(idx + 1);
                     return;
@@ -250,10 +260,10 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
                 // 注册到统一缓存，供其他组件复用
                 markImageLoaded(source.image, effectiveLocale, img);
                 markImageLoaded(url, undefined, img);
-                setActiveUrl(url);
-                markReady();
+                markReady(url);
             };
             img.onerror = () => {
+                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
                 tryLoad(idx + 1);
             };
             img.src = url;
@@ -320,7 +330,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     }
 
     const atlasStyle = computeSpriteStyle(index, source.config);
-    const backgroundImage = activeUrl ? `url("${activeUrl}")` : '';
+    const backgroundImage = effectiveLoaded && activeUrl ? `url("${activeUrl}")` : '';
 
     return (
         <div

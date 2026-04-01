@@ -83,6 +83,7 @@ export const runMockGamePackageInstall = (
                 progressMode: undefined,
                 progressPercent: undefined,
                 errorMessage: undefined,
+                installedVersion: manifest.assetPackVersion ?? manifest.modulePackVersion ?? 'mock-installed',
             },
         },
     ];

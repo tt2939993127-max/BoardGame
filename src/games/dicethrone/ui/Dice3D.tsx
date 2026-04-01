@@ -70,23 +70,27 @@ const probeSpriteUrl = (candidateUrl: string) => {
         return existingPromise;
     }
 
-    const probePromise = (async (): Promise<'ready' | 'error'> => {
-        try {
-            const response = await fetch(candidateUrl, {
-                method: 'GET',
-                credentials: 'same-origin',
-            });
-            const contentType = response.headers.get('content-type') ?? '';
-            const result = response.ok && /^image\//i.test(contentType) ? 'ready' : 'error';
+    const probePromise = new Promise<'ready' | 'error'>((resolve) => {
+        const finalize = (result: 'ready' | 'error') => {
             spriteProbeStatusCache.set(candidateUrl, result);
-            return result;
-        } catch {
-            spriteProbeStatusCache.set(candidateUrl, 'error');
-            return 'error';
-        } finally {
             spriteProbePromiseCache.delete(candidateUrl);
+            resolve(result);
+        };
+
+        try {
+            const image = new Image();
+            image.decoding = 'async';
+            image.onload = () => finalize('ready');
+            image.onerror = () => finalize('error');
+            image.src = candidateUrl;
+
+            if (image.complete) {
+                queueMicrotask(() => finalize(image.naturalWidth > 0 ? 'ready' : 'error'));
+            }
+        } catch {
+            finalize('error');
         }
-    })();
+    });
 
     spriteProbePromiseCache.set(candidateUrl, probePromise);
     return probePromise;

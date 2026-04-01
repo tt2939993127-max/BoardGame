@@ -55,6 +55,7 @@ public class GamePackagePlugin extends Plugin {
         try {
             JSArray packages = new JSArray();
             File rootDir = getRootDir();
+            Log.i(TAG, "listInstalledPackages rootDir=" + rootDir.getAbsolutePath());
             File[] gameDirs = rootDir.listFiles(File::isDirectory);
             if (gameDirs != null) {
                 for (File gameDir : gameDirs) {
@@ -81,8 +82,10 @@ public class GamePackagePlugin extends Plugin {
 
             JSObject result = new JSObject();
             result.put("packages", packages);
+            Log.i(TAG, "listInstalledPackages success count=" + packages.length());
             call.resolve(result);
         } catch (Exception error) {
+            Log.e(TAG, "listInstalledPackages failed", error);
             call.reject("读取已安装游戏包失败", error);
         }
     }
@@ -98,6 +101,7 @@ public class GamePackagePlugin extends Plugin {
         AtomicBoolean cancelled = cancelRegistry.get(gameId);
         if (cancelled != null) {
             cancelled.set(true);
+            Log.w(TAG, "cancelInstall gameId=" + gameId);
         }
         call.resolve();
     }
@@ -110,6 +114,15 @@ public class GamePackagePlugin extends Plugin {
         String assetPackVersion = normalizeNonEmpty(call.getString("assetPackVersion"));
         String assetPackUrl = normalizeNonEmpty(call.getString("assetPackUrl"));
         String assetPackChecksum = normalizeChecksum(call.getString("assetPackChecksum"));
+        Log.i(
+            TAG,
+            "installGamePackage requested gameId=" + gameId
+                + " runtimeChannel=" + runtimeChannel
+                + " assetPackId=" + assetPackId
+                + " assetPackVersion=" + assetPackVersion
+                + " assetPackUrl=" + assetPackUrl
+                + " assetPackChecksum=" + (assetPackChecksum != null ? assetPackChecksum : "")
+        );
 
         if (gameId == null) {
             call.reject("缺少 gameId");
@@ -141,6 +154,12 @@ public class GamePackagePlugin extends Plugin {
             long installedAt = System.currentTimeMillis();
 
             try {
+                Log.i(
+                    TAG,
+                    "installGamePackage start gameId=" + gameId
+                        + " stagingDir=" + stagingDir.getAbsolutePath()
+                        + " archiveFile=" + archiveFile.getAbsolutePath()
+                );
                 deleteRecursively(stagingDir);
                 if (!stagingAssetsDir.mkdirs() && !stagingAssetsDir.exists()) {
                     throw new IOException("创建临时目录失败");
@@ -195,6 +214,12 @@ public class GamePackagePlugin extends Plugin {
                     currentAssetsDir.toURI().toString(),
                     installedAt
                 );
+                Log.i(
+                    TAG,
+                    "installGamePackage success gameId=" + gameId
+                        + " installedAt=" + installedAt
+                        + " currentAssetsDir=" + currentAssetsDir.getAbsolutePath()
+                );
                 resolveOnMainThread(call, result);
             } catch (Exception error) {
                 Log.e(TAG, "installGamePackage failed", error);
@@ -236,9 +261,17 @@ public class GamePackagePlugin extends Plugin {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(30000);
         connection.setRequestProperty("Accept", "application/zip,application/octet-stream");
+        Log.i(TAG, "downloadArchive start gameId=" + gameId + " version=" + assetPackVersion + " url=" + urlValue);
 
         try {
             int responseCode = connection.getResponseCode();
+            Log.i(
+                TAG,
+                "downloadArchive response gameId=" + gameId
+                    + " version=" + assetPackVersion
+                    + " code=" + responseCode
+                    + " contentLength=" + connection.getContentLengthLong()
+            );
             if (responseCode < 200 || responseCode >= 300) {
                 throw new IOException("下载失败，HTTP " + responseCode);
             }
@@ -247,6 +280,7 @@ public class GamePackagePlugin extends Plugin {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             long downloadedBytes = 0L;
             int lastPercent = -1;
+            int lastLoggedBucket = -1;
 
             try (
                 InputStream rawInput = new BufferedInputStream(connection.getInputStream());
@@ -268,6 +302,18 @@ public class GamePackagePlugin extends Plugin {
                         if (percent != lastPercent) {
                             lastPercent = percent;
                             emitInstallState(gameId, "downloading", percent, "determinate", null, assetPackVersion, null, null);
+                            int currentBucket = percent / 10;
+                            if (currentBucket != lastLoggedBucket || percent == 100) {
+                                lastLoggedBucket = currentBucket;
+                                Log.i(
+                                    TAG,
+                                    "downloadArchive progress gameId=" + gameId
+                                        + " version=" + assetPackVersion
+                                        + " percent=" + percent
+                                        + " downloadedBytes=" + downloadedBytes
+                                        + " totalBytes=" + totalBytes
+                                );
+                            }
                         }
                     } else {
                         emitInstallState(gameId, "downloading", null, "indeterminate", null, assetPackVersion, null, null);
@@ -279,6 +325,13 @@ public class GamePackagePlugin extends Plugin {
             if (expectedChecksum != null && !expectedChecksum.equalsIgnoreCase(actualChecksum)) {
                 throw new IOException("下载包校验失败");
             }
+            Log.i(
+                TAG,
+                "downloadArchive finished gameId=" + gameId
+                    + " version=" + assetPackVersion
+                    + " checksumOk=" + (expectedChecksum == null || expectedChecksum.equalsIgnoreCase(actualChecksum))
+                    + " actualChecksum=" + actualChecksum
+            );
         } finally {
             connection.disconnect();
         }
@@ -286,8 +339,10 @@ public class GamePackagePlugin extends Plugin {
 
     private void extractArchive(File archiveFile, File outputDir, AtomicBoolean cancelFlag) throws IOException {
         String outputRoot = outputDir.getCanonicalPath();
+        Log.i(TAG, "extractArchive start archive=" + archiveFile.getAbsolutePath() + " outputDir=" + outputRoot);
         try (ZipInputStream zipInputStream = new ZipInputStream(new BufferedInputStream(new FileInputStream(archiveFile)))) {
             ZipEntry entry;
+            int fileCount = 0;
             while ((entry = zipInputStream.getNextEntry()) != null) {
                 if (cancelFlag.get()) {
                     throw new IOException("安装已取消");
@@ -321,7 +376,9 @@ public class GamePackagePlugin extends Plugin {
                         output.write(buffer, 0, read);
                     }
                 }
+                fileCount += 1;
             }
+            Log.i(TAG, "extractArchive finished outputDir=" + outputRoot + " fileCount=" + fileCount);
         }
     }
 
@@ -393,6 +450,7 @@ public class GamePackagePlugin extends Plugin {
             payload.put("installedAt", installedAt);
         }
 
+        Log.i(TAG, "emitInstallState payload=" + payload.toString());
         mainHandler.post(() -> notifyListeners("installStateChanged", payload));
     }
 
