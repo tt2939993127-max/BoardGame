@@ -259,7 +259,13 @@
     "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
     "loadingProgress": {
-      "step": "{{current}}/{{total}}"
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "准备房间...",
+      "joiningRoom": "校验房间席位...",
+      "loadingGameModule": "加载游戏模块...",
+      "connecting": "连接服务器...",
+      "syncing": "同步游戏状态...",
+      "loadingAssets": "加载素材 {{loaded}}/{{total}}"
     },
     "title": {
       "joining": "加入中",

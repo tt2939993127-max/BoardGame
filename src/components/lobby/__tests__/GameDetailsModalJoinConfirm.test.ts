@@ -181,6 +181,11 @@ vi.mock('../../../config/games.config', () => ({
     getGameById: getGameByIdMock,
 }));
 
+vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
+    createNativeGamePackageInstallHandle: vi.fn(async () => null),
+    listInstalledNativeGamePackages: vi.fn(async () => []),
+}));
+
 vi.mock('../../../features/mobile-packages/manifestClient', () => ({
     hasRemoteGamePackageManifestEndpoint: true,
     buildFallbackGamePackageManifest: (gameId: string, delivery?: {
@@ -218,7 +223,6 @@ vi.mock('../../../features/mobile-packages/manifestClient', () => ({
         source: 'remote',
     })),
 }));
-
 vi.mock('../../../lib/logger', () => ({
     logger: {
         info: (...args: unknown[]) => mockLoggerInfo(...args),
@@ -743,10 +747,7 @@ describe('GameDetailsModal create room ai entry', () => {
 
         fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
         fireEvent.click(screen.getByText('packageManager.installAction'));
-
-        await waitFor(() => {
-            expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
-        });
+        expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
 
         const modalProps = latestPackageInstallModalProps.current as null | {
             onConfirm?: () => Promise<void>;
@@ -999,7 +1000,7 @@ describe('GameDetailsModal create room ai entry', () => {
         await waitFor(() => {
             expect(screen.getByText('matchRoom.title.creating')).toBeInTheDocument();
             expect(screen.getByText('matchRoom.creatingRoom')).toBeInTheDocument();
-            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.step');
+            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.preparingRoom');
         });
 
         resolveCreateMatch?.({ matchID: 'match-created' });

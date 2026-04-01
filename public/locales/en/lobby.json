@@ -259,7 +259,13 @@
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
     "loadingProgress": {
-      "step": "{{current}}/{{total}}"
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "Preparing room...",
+      "joiningRoom": "Verifying seat assignment...",
+      "loadingGameModule": "Loading game module...",
+      "connecting": "Connecting to server...",
+      "syncing": "Syncing game state...",
+      "loadingAssets": "Loading assets {{loaded}}/{{total}}"
     },
     "title": {
       "joining": "Joining",

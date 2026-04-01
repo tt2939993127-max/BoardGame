@@ -276,10 +276,9 @@ const OnlineRoomConnectionLoading = ({
         core?.activePlayer ?? 'no-player',
         core?.phase ?? 'no-phase',
     ].join(':');
-    const progressText = t('matchRoom.loadingProgress.step', {
-        current: isConnected ? 4 : 3,
-        total: 4,
-    });
+    const progressText = isConnected
+        ? t('matchRoom.loadingProgress.syncing')
+        : t('matchRoom.loadingProgress.connecting');
 
     return (
         <ConnectionLoadingScreen
@@ -315,10 +314,6 @@ export const MatchRoom = () => {
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
-    const loadingStepText = useCallback((current: number, total: number = 4) => (
-        t('matchRoom.loadingProgress.step', { current, total })
-    ), [t]);
-
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
@@ -1188,12 +1183,12 @@ export const MatchRoom = () => {
     }
 
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} progressText={loadingStepText(1)} />;
+        return <LoadingScreen description={t('matchRoom.loadingResources')} progressText={t('matchRoom.loadingProgress.loadingGameModule')} />;
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} progressText={loadingStepText(2)} />;
+        return <LoadingScreen description={t('matchRoom.joiningRoom')} progressText={t('matchRoom.loadingProgress.joiningRoom')} />;
     }
 
     if (shouldShowMatchError) {

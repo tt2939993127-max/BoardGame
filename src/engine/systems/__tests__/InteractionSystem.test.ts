@@ -153,7 +153,7 @@ describe('InteractionSystem', () => {
             'interaction-slider',
             '0',
             '滑动选择',
-            [{ id: 'confirm', label: '确认', value: { customId: 'safe-choice', tokenId: 'safe-token', value: 3 } }],
+            [{ id: 'confirm', label: '确认', value: { customId: 'safe-choice', tokenId: 'safe-token', value: 3, amount: 3 } }],
         );
         (current.data as typeof current.data & { slider?: { confirmLabelKey: string } }).slider = {
             confirmLabelKey: 'choices.confirm',
@@ -172,7 +172,7 @@ describe('InteractionSystem', () => {
             playerId: '0',
             payload: {
                 optionId: 'confirm',
-                mergedValue: { customId: 'forged-choice', tokenId: 'forged-token', value: 2 },
+                mergedValue: { customId: 'forged-choice', tokenId: 'forged-token', value: 2, amount: 2 },
             },
             timestamp: 100,
         };
@@ -193,6 +193,7 @@ describe('InteractionSystem', () => {
                     customId: 'safe-choice',
                     tokenId: 'safe-token',
                     value: 2,
+                    amount: 2,
                 },
             },
         });

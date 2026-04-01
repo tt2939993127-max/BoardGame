@@ -117,6 +117,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             let newState = state;
             const nextEvents: GameEvent[] = [];
             const pendingReduceFlag = '_waitForPostScoringReduce';
+            const pendingStartTurnInteractionReduceFlag = '_waitForStartTurnInteractionReduce';
             let latestTimestamp = 0;
 
             // 同一轮 afterEvents 中，后续系统看不到本轮新发出事件的 reduce 结果。
@@ -128,6 +129,16 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                     sys: {
                         ...newState.sys,
                         [pendingReduceFlag]: undefined,
+                    } as typeof newState.sys,
+                };
+            }
+
+            if ((newState.sys as any)[pendingStartTurnInteractionReduceFlag]) {
+                newState = {
+                    ...newState,
+                    sys: {
+                        ...newState.sys,
+                        [pendingStartTurnInteractionReduceFlag]: undefined,
                     } as typeof newState.sys,
                 };
             }
@@ -150,6 +161,10 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
                         if (handler) {
+                            const startTurnWindowActive =
+                                newState.sys.phase === 'startTurn'
+                                || Boolean((newState.sys as any)._smashupStartTurnWindowActive);
+
                             const result = handler(
                                 newState,
                                 payload.playerId,
@@ -176,6 +191,19 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                 // 这里如果手动先调用 interceptEvent，会让同一批事件在轮末 reduce 时再次被拦截，
                                 // 导致像 Cthulhu 这类“交互返回 MADNESS_DRAWN，再由拦截器补标记”的链路被重复处理。
                                 nextEvents.push(...result.events as SmashUpEvent[]);
+
+                                const producedMinionPlayed = result.events.some(
+                                    (resultEvent) => resultEvent.type === SU_EVENT_TYPES.MINION_PLAYED,
+                                );
+                                if (startTurnWindowActive && producedMinionPlayed) {
+                                    newState = {
+                                        ...newState,
+                                        sys: {
+                                            ...newState.sys,
+                                            [pendingStartTurnInteractionReduceFlag]: true,
+                                        } as typeof newState.sys,
+                                    };
+                                }
 
                                 // 补发延迟的 BASE_CLEARED/BASE_REPLACED 事件
                                 // afterScoring 基地能力创建交互时，清除事件被延迟到交互解决后发出，

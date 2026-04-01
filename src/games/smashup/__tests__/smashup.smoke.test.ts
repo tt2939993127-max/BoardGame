@@ -20,14 +20,16 @@ import { getPlayerEffectivePowerOnBase, getRegisteredModifierIds, getTitanPowerC
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { addPowerCounter } from '../domain/abilityHelpers';
 import { fireTriggers, interceptEvent } from '../domain/ongoingEffects';
-import { filterProtectedDestroyEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
+import { filterProtectedDestroyEvents, filterProtectedMoveEvents, filterProtectedReturnEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { initAllAbilities } from '../abilities';
 import { createSmashUpEventSystem } from '../domain/systems';
-import { getInteractionsFromMS, makeBase, makeCard, makeMatchState, makeMinion, makePlayer, makeState } from './helpers';
+import { findInteractionOption, getInteractionsFromMS, makeBase, makeCard, makeMatchState, makeMinion, makePlayer, makeState, resolveInteractionChain } from './helpers';
 import { runCommand } from './testRunner';
 import type { TitanState } from '../domain/types';
 import { buildSmashUpAiLegalActions, smashUpAiRuntime } from '../ai';
+import { startDuel } from '../domain/duel';
+import { getSmashUpCardPreviewMeta } from '../ui/cardPreviewHelper';
 
 const PLAYER_IDS = ['0', '1'];
 const FIXED_RANDOM = {
@@ -54,13 +56,40 @@ function createRunner(
     return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
         domain: SmashUpDomain,
         systems,
-        playerIds: PLAYER_IDS,
+        playerIds,
         setup: (playerIds, random) => ({
             core: SmashUpDomain.setup(playerIds, random, setupData),
             sys: createInitialSystemState(playerIds, systems, undefined),
         }),
         silent: true,
     });
+}
+
+function resolveDuelChain(
+    initialState: ReturnType<typeof makeMatchState>,
+    overrides: Partial<Record<string, (prompt: any, state: ReturnType<typeof makeMatchState>, step: number) => { optionId?: string; optionIds?: string[]; mergedValue?: unknown }>> = {},
+) {
+    return resolveInteractionChain(initialState, (prompt, state, step) => {
+        const sourceId = prompt?.data?.sourceId as string | undefined;
+        const custom = sourceId ? overrides[sourceId] : undefined;
+        if (custom) return custom(prompt, state, step);
+
+        if (sourceId === 'smashup_duel_pinkerton') {
+            const option = findInteractionOption(prompt, entry => entry?.value?.amount === 0);
+            if (!option) throw new Error('未找到 Pinkerton 的 0 指示物选项');
+            return { optionId: option.id };
+        }
+        if (sourceId === 'smashup_duel_card' || sourceId === 'smashup_duel_deputy_card') {
+            const option = findInteractionOption(prompt, entry => entry?.value?.skip === true);
+            if (!option) throw new Error(`未找到 ${sourceId} 的跳过选项`);
+            return { optionId: option.id };
+        }
+        if (sourceId === 'smashup_duel_run_em_off_move') {
+            return { optionId: prompt.data.options[0].id };
+        }
+
+        throw new Error(`未处理的决斗交互 sourceId: ${sourceId ?? 'unknown'}`);
+    }, FIXED_RANDOM);
 }
 
 /** 蛇形选秀命令序列（多轮 afterEvents 会自动推进 factionSelect → startTurn → playCards） */
@@ -622,6 +651,182 @@ describe('smashup', () => {
         const resolvedCore = (playResolved?.events ?? []).reduce((acc, event) => SmashUpDomain.reduce(acc, event), coreAfterDiscard);
         expect(resolvedCore.players['0'].discard.some(card => card.uid === 'ghost-seance-discard')).toBe(false);
         expect(resolvedCore.players['0'].deck[resolvedCore.players['0'].deck.length - 1]?.uid).toBe('ghost-seance-discard');
+    });
+
+    it('狮身人面像会在你的回合开始时创建回收埋葬牌并进场的交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_pyramids',
+                buriedCards: [{
+                    uid: 'sphinx-start-buried',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            })],
+            titans: [{
+                uid: 't-sphinx-setaside',
+                defId: 'sphinx',
+                faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            } satisfies TitanState],
+        });
+
+        const result = fireTriggers(core, 'onTurnStart', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            random: FIXED_RANDOM,
+            now: 80,
+        });
+
+        const prompt = result.matchState?.sys.interaction?.current as any;
+        expect(prompt?.data?.sourceId).toBe('titan_sphinx_start_turn');
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-start-buried');
+        expect(option).toBeDefined();
+
+        const handler = getInteractionHandler('titan_sphinx_start_turn');
+        expect(handler).toBeDefined();
+        const resolved = handler!(result.matchState!, '0', option.value, prompt.data, FIXED_RANDOM, 81);
+        const finalCore = (resolved?.events ?? []).reduce(
+            (acc, event) => SmashUpDomain.reduce(acc, event),
+            resolved?.state.core ?? result.matchState!.core,
+        );
+
+        expect(finalCore.players['0'].hand.some(card => card.uid === 'sphinx-start-buried')).toBe(true);
+        expect(finalCore.bases[0].buriedCards?.some(card => card.uid === 'sphinx-start-buried') ?? false).toBe(false);
+        expect((finalCore.titans ?? []).find(candidate => candidate.uid === 't-sphinx-setaside')?.location).toMatchObject({
+            zone: 'base',
+            baseIndex: 0,
+        });
+    });
+
+    it('狮身人面像在其所在基地计分后会创建回收该基地埋葬牌的交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_pyramids',
+                minions: [makeMinion('ally-score', 'ancient_egyptians_pharaoh', '0', 5)],
+                buriedCards: [{
+                    uid: 'sphinx-score-buried',
+                    defId: 'robot_zapbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            })],
+            titans: [{
+                uid: 't-sphinx-live',
+                defId: 'sphinx',
+                faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            } satisfies TitanState],
+        });
+
+        const result = fireTriggers(core, 'afterScoring', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            rankings: [{ playerId: '0', power: 5, vp: 4 }],
+            random: FIXED_RANDOM,
+            now: 82,
+        });
+
+        const prompt = result.matchState?.sys.interaction?.current as any;
+        expect(prompt?.data?.sourceId).toBe('titan_sphinx_after_scoring');
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-score-buried');
+        expect(option).toBeDefined();
+
+        const handler = getInteractionHandler('titan_sphinx_after_scoring');
+        expect(handler).toBeDefined();
+        const resolved = handler!(result.matchState!, '0', option.value, prompt.data, FIXED_RANDOM, 83);
+        const finalCore = (resolved?.events ?? []).reduce(
+            (acc, event) => SmashUpDomain.reduce(acc, event),
+            resolved?.state.core ?? result.matchState!.core,
+        );
+
+        expect(finalCore.players['0'].hand.some(card => card.uid === 'sphinx-score-buried')).toBe(true);
+        expect(finalCore.bases[0].buriedCards?.some(card => card.uid === 'sphinx-score-buried') ?? false).toBe(false);
+    });
+
+    it('狮身人面像天赋会把一张手牌埋葬到它所在的基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [{ uid: 'sphinx-hand-card', defId: 'robot_warbot', type: 'minion', owner: '0' }],
+                    deck: [],
+                    discard: [],
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({ defId: 'base_pyramids' })],
+            titans: [{
+                uid: 't-sphinx-talent',
+                defId: 'sphinx',
+                faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            } satisfies TitanState],
+        });
+
+        const state = makeMatchState(core);
+        const command: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { titanUid: 't-sphinx-talent', baseIndex: 0 },
+            timestamp: 84,
+        };
+
+        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
+        const events = SmashUpDomain.execute(state, command, FIXED_RANDOM);
+        expect(events.map((event) => event.type)).toContain(SU_EVENTS.TALENT_USED);
+
+        const prompt = state.sys.interaction?.current as any;
+        expect(prompt?.data?.sourceId).toBe('titan_sphinx_talent');
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-hand-card');
+        expect(option).toBeDefined();
+
+        const handler = getInteractionHandler('titan_sphinx_talent');
+        expect(handler).toBeDefined();
+        const resolved = handler!(state, '0', option.value, prompt.data, FIXED_RANDOM, 85);
+        const finalCore = (resolved?.events ?? []).reduce(
+            (acc, event) => SmashUpDomain.reduce(acc, event),
+            resolved?.state.core ?? state.core,
+        );
+
+        expect(finalCore.players['0'].hand.some(card => card.uid === 'sphinx-hand-card')).toBe(false);
+        expect(finalCore.bases[0].buriedCards?.some(card => card.uid === 'sphinx-hand-card')).toBe(true);
     });
 
     it('鲜血领主满足条件后可通过 special 从牌库旁进场', () => {
@@ -4333,7 +4538,13 @@ describe('smashup', () => {
     });
 
     it('活动泰坦静态契约与当前已接入范围保持一致', () => {
-        expect(TITAN_CARD_DEFS).toHaveLength(20);
+        expect(TITAN_CARD_DEFS).toHaveLength(22);
+        expect(getTitanDef('sphinx')?.id).toBe('sphinx');
+        expect(getTitanDef('sphinx')?.abilityTags).toEqual(['special', 'talent']);
+        expect(getTitanDef('sphinx')?.previewRef).toEqual({ type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 29 });
+        expect(getTitanDef('pecos_bill')?.id).toBe('pecos_bill');
+        expect(getTitanDef('pecos_bill')?.abilityTags).toEqual(['special', 'ongoing']);
+        expect(getTitanDef('pecos_bill')?.previewRef).toEqual({ type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 30 });
 
         const futureTitanIds = [
             'changerbots_mergacon',
@@ -4353,16 +4564,24 @@ describe('smashup', () => {
         }
 
         expect(getTitanDef('time_travelers_time_box')?.abilityTags).toEqual(['special', 'talent']);
+        expect(getSmashUpCardPreviewMeta('sphinx')).toEqual({
+            name: getTitanDef('sphinx')?.name,
+            previewRef: { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: 'sphinx' } },
+        });
+        expect(getSmashUpCardPreviewMeta('pecos_bill')).toEqual({
+            name: getTitanDef('pecos_bill')?.name,
+            previewRef: { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: 'pecos_bill' } },
+        });
     });
 
     it('同时消耗通常随从与通常战术额度的泰坦打出事件会正确结算两种额度', () => {
         const core = makeState({
             players: {
-                '0': makePlayer({
+                '0': makePlayer('0', {
                     minionsPlayed: 0,
                     actionsPlayed: 0,
                 }),
-                '1': makePlayer(),
+                '1': makePlayer('1'),
             },
             titans: [{
                 uid: 't-dual-consume',
@@ -4396,5 +4615,344 @@ describe('smashup', () => {
             zone: 'base',
             baseIndex: 0,
         });
+    });
+
+    it('Samurai POD 可进入选秀并完成开局链路', () => {
+        const samuraiPodDraft: SmashUpCommand[] = [
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.SAMURAI_POD } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS } },
+        ];
+
+        const runner = createRunner();
+        const result = runner.run({
+            name: 'Samurai POD 开局 smoke',
+            commands: samuraiPodDraft,
+        });
+        const core = result.finalState.core;
+
+        for (const step of result.steps) {
+            expect(step.success).toBe(true);
+        }
+
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(core.players['0'].factions).toEqual([SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ROBOTS]);
+        expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS]);
+        expect(core.players['0'].hand.length).toBe(5);
+    });
+
+    it('Cowboys POD 可进入选秀并完成开局链路', () => {
+        const cowboysPodDraft: SmashUpCommand[] = [
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS_POD } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS } },
+        ];
+
+        const runner = createRunner();
+        const result = runner.run({
+            name: 'Cowboys POD 开局 smoke',
+            commands: cowboysPodDraft,
+        });
+        const core = result.finalState.core;
+
+        for (const step of result.steps) {
+            expect(step.success).toBe(true);
+        }
+
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(core.players['0'].factions).toEqual([SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ROBOTS]);
+        expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS]);
+        expect(core.players['0'].hand.length).toBe(5);
+    });
+
+    it('Vikings POD 可进入选秀并完成开局链路', () => {
+        const vikingsPodDraft: SmashUpCommand[] = [
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.VIKINGS_POD } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS } },
+        ];
+
+        const runner = createRunner();
+        const result = runner.run({
+            name: 'Vikings POD 开局 smoke',
+            commands: vikingsPodDraft,
+        });
+        const core = result.finalState.core;
+
+        for (const step of result.steps) {
+            expect(step.success).toBe(true);
+        }
+
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(core.players['0'].factions).toEqual([SMASHUP_FACTION_IDS.VIKINGS_POD, SMASHUP_FACTION_IDS.ROBOTS]);
+        expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS]);
+        expect(core.players['0'].hand.length).toBe(5);
+    });
+
+    it('pecos_bill 可在你成为 challenger 时弃 1 张牌部署到该决斗基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('discard-1', 'wizard_summon', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon_pod',
+                minions: [
+                    makeMinion('ally-1', 'cowboys_gunfighter_pod', '0', 4),
+                    makeMinion('enemy-1', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            })],
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            }],
+        });
+
+        const started = startDuel(
+            makeMatchState(core),
+            {
+                sourceId: 'cowboys_gunfighter_pod',
+                sourcePlayerId: '0',
+                challengerMinionUid: 'ally-1',
+                challengedMinionUid: 'enemy-1',
+                outcome: 'destroy_loser',
+            },
+            1000,
+        );
+
+        const prompt = getInteractionsFromMS(started)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('titan_pecos_bill_duel_start');
+
+        const discardOption = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'discard-1');
+        const deployed = runCommand(
+            started,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: discardOption.id } } as any,
+            FIXED_RANDOM,
+        );
+
+        expect(deployed.events.map(event => event.type)).toEqual(expect.arrayContaining([
+            SU_EVENTS.CARDS_DISCARDED,
+            SU_EVENTS.TITAN_METADATA_UPDATED,
+            SU_EVENTS.TITAN_PLAYED,
+        ]));
+        const pecos = deployed.finalState.core.titans?.find(candidate => candidate.uid === 'pecos-1');
+        expect(pecos?.location).toMatchObject({ zone: 'base', baseIndex: 0 });
+        expect(pecos?.metadata?.deferClashUntilDuelEnds).toBe(true);
+        expect(deployed.finalState.core.activeDuel?.baseIndex).toBe(0);
+    });
+
+    it('pecos_bill 在决斗中会阻止其他玩家把该基地随从移走或回手', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_saloon_pod',
+                    minions: [
+                        makeMinion('ally-1', 'cowboys_gunfighter_pod', '0', 4),
+                        makeMinion('enemy-1', 'robot_microbot_alpha', '1', 3),
+                    ],
+                    ongoingActions: [],
+                }),
+                makeBase('base_b', []),
+            ],
+            activeDuel: {
+                id: 'pecos-duel',
+                baseIndex: 0,
+                sourceId: 'test_duel',
+                sourcePlayerId: '0',
+                challengerPlayerId: '0',
+                challengerMinionUid: 'ally-1',
+                challengedPlayerId: '1',
+                challengedMinionUid: 'enemy-1',
+                outcome: 'destroy_loser',
+            },
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            }],
+        });
+
+        const moveEvents = filterProtectedMoveEvents([{
+            type: SU_EVENTS.MINION_MOVED,
+            payload: {
+                minionUid: 'ally-1',
+                minionDefId: 'cowboys_gunfighter_pod',
+                fromBaseIndex: 0,
+                toBaseIndex: 1,
+                ownerId: '0',
+                controllerId: '0',
+                reason: 'enemy_move',
+            },
+            timestamp: 1001,
+        } as SmashUpEvent], core, '1');
+        expect(moveEvents).toEqual([]);
+
+        const returnEvents = filterProtectedReturnEvents([{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: {
+                minionUid: 'ally-1',
+                minionDefId: 'cowboys_gunfighter_pod',
+                fromBaseIndex: 0,
+                ownerId: '0',
+                controllerId: '0',
+                reason: 'enemy_return',
+            },
+            timestamp: 1002,
+        } as SmashUpEvent], core, '1');
+        expect(returnEvents).toEqual([]);
+    });
+
+    it('pecos_bill 在你赢得决斗后会摸 1 张牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('draw-1', 'robot_microbot_alpha', '0')],
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon_pod',
+                minions: [
+                    makeMinion('ally-1', 'cowboys_gunfighter_pod', '0', 4),
+                    makeMinion('enemy-1', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            })],
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            }],
+        });
+
+        const duelStarted = startDuel(
+            makeMatchState(core),
+            {
+                sourceId: 'cowboys_high_noon_pod',
+                sourcePlayerId: '0',
+                challengerMinionUid: 'ally-1',
+                challengedMinionUid: 'enemy-1',
+                outcome: 'destroy_loser',
+            },
+            1003,
+        );
+        const duelResolved = resolveDuelChain(duelStarted);
+
+        expect(duelResolved.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+        expect(duelResolved.finalState.core.players['0'].hand.some(card => card.uid === 'draw-1')).toBe(true);
+    });
+
+    it('pecos_bill 若在决斗中进入已有泰坦的基地，会把 clash 延后到决斗结束后处理', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('discard-1', 'wizard_summon', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.WIZARDS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon_pod',
+                minions: [
+                    makeMinion('ally-1', 'cowboys_gunfighter_pod', '0', 4),
+                    makeMinion('enemy-1', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            })],
+            titans: [
+                {
+                    uid: 'pecos-1',
+                    defId: 'pecos_bill',
+                    faction: SMASHUP_FACTION_IDS.COWBOYS,
+                    ownerId: '0',
+                    controllerId: '0',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'setaside' },
+                },
+                {
+                    uid: 'arcane-1',
+                    defId: 'wizards_arcane_protector',
+                    faction: SMASHUP_FACTION_IDS.WIZARDS,
+                    ownerId: '1',
+                    controllerId: '1',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+                },
+            ],
+        });
+
+        const duelStarted = startDuel(
+            makeMatchState(core),
+            {
+                sourceId: 'cowboys_high_noon_pod',
+                sourcePlayerId: '0',
+                challengerMinionUid: 'ally-1',
+                challengedMinionUid: 'enemy-1',
+                outcome: 'destroy_loser',
+            },
+            1004,
+        );
+        const pecosPrompt = getInteractionsFromMS(duelStarted)[0] as any;
+        const discardOption = pecosPrompt.data.options.find((entry: any) => entry.value?.cardUid === 'discard-1');
+        const deployed = runCommand(
+            duelStarted,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: discardOption.id } } as any,
+            FIXED_RANDOM,
+        );
+
+        expect(deployed.events.some(event => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(false);
+        const withBothTitans = deployed.finalState.core.titans?.filter(candidate => candidate.location.zone === 'base') ?? [];
+        expect(withBothTitans.map(candidate => candidate.uid).sort()).toEqual(['arcane-1', 'pecos-1']);
+
+        const duelResolved = resolveDuelChain(deployed.finalState);
+        expect(duelResolved.events.some(event => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
+        expect(duelResolved.events.some(event =>
+            event.type === SU_EVENTS.TITAN_METADATA_UPDATED
+            && (event as any).payload.reason === 'pecos_bill_duel_end',
+        )).toBe(true);
+
+        const finalPecos = duelResolved.finalState.core.titans?.find(candidate => candidate.uid === 'pecos-1');
+        const finalArcane = duelResolved.finalState.core.titans?.find(candidate => candidate.uid === 'arcane-1');
+        expect(finalPecos?.location).toMatchObject({ zone: 'base', baseIndex: 0 });
+        expect(finalPecos?.metadata?.deferClashUntilDuelEnds).toBe(false);
+        expect(finalArcane?.location.zone).toBe('setaside');
     });
 });

@@ -343,6 +343,118 @@ describe('派系选择系统', () => {
             ]));
         });
 
+        it('Ancient Egyptians POD 可被选中并完成整轮选秀', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Ancient Egyptians POD draft',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD,
+                SMASHUP_FACTION_IDS.COWBOYS,
+            ]);
+        });
+
+        it('Ancient Egyptians POD 返回 POD 基地池并复用 sphinx', () => {
+            const baseIds = getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD]).sort();
+            expect(baseIds).toEqual([
+                'base_pyramids_pod',
+                'base_star_portal_pod',
+            ]);
+
+            expect(getFactionTitans(SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD).map((titan) => titan.id)).toContain('sphinx');
+        });
+
+        it('Samurai POD can complete faction draft setup', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Samurai POD draft',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.SAMURAI_POD } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.SAMURAI_POD,
+                SMASHUP_FACTION_IDS.COWBOYS,
+            ]);
+        });
+
+        it('Samurai POD returns the POD base pool variant', () => {
+            const baseIds = getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.SAMURAI_POD]).sort();
+            expect(baseIds).toEqual([
+                'base_sakura_garden_pod',
+                'base_shoguns_palace_pod',
+            ]);
+        });
+
+        it('Cowboys POD 可被选中并完成整轮选秀', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Cowboys POD draft',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS_POD } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.VIKINGS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.COWBOYS_POD,
+                SMASHUP_FACTION_IDS.VIKINGS,
+            ]);
+        });
+
+        it('Cowboys POD 返回 POD 基地池并复用 pecos_bill', () => {
+            const baseIds = getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.COWBOYS_POD]).sort();
+            expect(baseIds).toEqual([
+                'base_saloon_pod',
+                'base_so_so_corral_pod',
+            ]);
+
+            expect(getFactionTitans(SMASHUP_FACTION_IDS.COWBOYS_POD).map((titan) => titan.id)).toContain('pecos_bill');
+        });
+
+        it('Vikings POD 可被选中并完成整轮选秀', () => {
+            const runner = createRunner();
+            const result = runner.run({
+                name: 'Vikings POD draft',
+                commands: [
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.VIKINGS_POD } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.COWBOYS } },
+                ],
+            });
+
+            expect(result.steps.every((step) => step.success)).toBe(true);
+            expect(result.finalState.core.players['0'].factions).toEqual([
+                SMASHUP_FACTION_IDS.VIKINGS_POD,
+                SMASHUP_FACTION_IDS.COWBOYS,
+            ]);
+        });
+
+        it('Vikings POD 返回 POD 基地池变体', () => {
+            const baseIds = getBaseDefIdsForFactions([SMASHUP_FACTION_IDS.VIKINGS_POD]).sort();
+            expect(baseIds).toEqual([
+                'base_drakkar_pod',
+                'base_longhouse_pod',
+            ]);
+        });
+
         it('POD factions reuse their original base pool', () => {
             const baseIds = getBaseDefIdsForFactions([
                 SMASHUP_FACTION_IDS.WIZARDS_POD,
@@ -398,11 +510,21 @@ describe('派系选择系统', () => {
                 Object.values(SMASHUP_FACTION_IDS)
                     .filter((factionId): factionId is string => typeof factionId === 'string' && factionId.endsWith('_pod')),
             );
+            const textFallbackPodBases = new Set([
+                'base_pyramids_pod',
+                'base_star_portal_pod',
+                'base_sakura_garden_pod',
+                'base_shoguns_palace_pod',
+                'base_saloon_pod',
+                'base_so_so_corral_pod',
+                'base_drakkar_pod',
+                'base_longhouse_pod',
+            ]);
 
             const missingPodBaseMappings = getAllBaseDefs()
                 .filter(base => getBasePodFactionIds(base).some(factionId => supportedPodFactions.has(factionId)))
                 .map(base => `${base.id}_pod`)
-                .filter(key => !englishMap[key]);
+                .filter(key => !englishMap[key] && !textFallbackPodBases.has(key));
 
             expect(missingPodBaseMappings).toEqual([]);
         });
@@ -429,6 +551,73 @@ describe('派系选择系统', () => {
                 base_secret_garden_pod: { atlasId: 'tts_atlas_0a564692f2', index: 5 },
                 base_inventors_salon_pod: { atlasId: 'tts_atlas_0a564692f2', index: 6 },
                 base_the_workshop_pod: { atlasId: 'tts_atlas_0a564692f2', index: 7 },
+            }));
+        });
+
+        it('uses the provided English titan atlas for supported titans, including sphinx and pecos bill', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                pirates_the_kraken: { atlasId: 'tts_atlas_8789f47742', index: 2 },
+                bear_cavalry_major_ursa: { atlasId: 'tts_atlas_8789f47742', index: 5 },
+                super_spies_moon_zero_three: { atlasId: 'tts_atlas_8789f47742', index: 10 },
+                ignobles_the_hill_that_strolls: { atlasId: 'tts_atlas_8789f47742', index: 21 },
+                sphinx: { atlasId: 'tts_atlas_8789f47742', index: 29 },
+                pecos_bill: { atlasId: 'tts_atlas_8789f47742', index: 30 },
+                penguins_emperor_penguin: { atlasId: 'tts_atlas_8789f47742', index: 31 },
+            }));
+        });
+
+        it('prewires the provided English titan atlas for future titan defIds and faction-specific aliases', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                dinosaurs_fort_titanosaurus: { atlasId: 'tts_atlas_8789f47742', index: 0 },
+                ninjas_invisible_ninja: { atlasId: 'tts_atlas_8789f47742', index: 1 },
+                killer_plants_killer_kudzu: { atlasId: 'tts_atlas_8789f47742', index: 7 },
+                frankenstein_the_bride: { atlasId: 'tts_atlas_8789f47742', index: 13 },
+                fairies_spirit_of_the_forest: { atlasId: 'tts_atlas_8789f47742', index: 16 },
+                sharks_helicoprion: { atlasId: 'tts_atlas_8789f47742', index: 17 },
+                superheroes_the_everything_glove: { atlasId: 'tts_atlas_8789f47742', index: 18 },
+                tornados_category_5: { atlasId: 'tts_atlas_8789f47742', index: 19 },
+                grannies_great_grandma: { atlasId: 'tts_atlas_8789f47742', index: 23 },
+                kung_fu_fighters_sifu: { atlasId: 'tts_atlas_8789f47742', index: 28 },
+                ancient_egyptians_sphinx: { atlasId: 'tts_atlas_8789f47742', index: 29 },
+                cowboys_pecos_bill: { atlasId: 'tts_atlas_8789f47742', index: 30 },
+            }));
+        });
+
+        it('uses the provided English POD card atlases for Ancient Egyptians, Samurai, Cowboys, and Vikings', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                ancient_egyptians_tomb_trap_pod: { atlasId: 'tts_atlas_79', index: 0 },
+                ancient_egyptians_mummy_pod: { atlasId: 'tts_atlas_79', index: 10 },
+                ancient_egyptians_pharaoh_pod: { atlasId: 'tts_atlas_79', index: 19 },
+                samurai_final_haiku_pod: { atlasId: 'tts_atlas_55', index: 0 },
+                samurai_samurai_chan_pod: { atlasId: 'tts_atlas_55', index: 10 },
+                samurai_shogun_pod: { atlasId: 'tts_atlas_55', index: 19 },
+                cowboys_gold_strike_pod: { atlasId: 'tts_atlas_54', index: 0 },
+                cowboys_deputy_pod: { atlasId: 'tts_atlas_54', index: 10 },
+                cowboys_sheriff_pod: { atlasId: 'tts_atlas_54', index: 19 },
+                vikings_pillage_pod: { atlasId: 'tts_atlas_56', index: 0 },
+                vikings_huscarl_pod: { atlasId: 'tts_atlas_56', index: 10 },
+                vikings_valkyrie_pod: { atlasId: 'tts_atlas_56', index: 19 },
+            }));
+        });
+
+        it('uses the provided English POD base atlas for Ancient Egyptians, Samurai, Cowboys, and Vikings', () => {
+            const englishMap = smashUpEnglishMap as Record<string, { atlasId: string; index: number }>;
+
+            expect(englishMap).toEqual(expect.objectContaining({
+                base_pyramids_pod: { atlasId: 'tts_atlas_78', index: 0 },
+                base_star_portal_pod: { atlasId: 'tts_atlas_78', index: 1 },
+                base_so_so_corral_pod: { atlasId: 'tts_atlas_78', index: 2 },
+                base_saloon_pod: { atlasId: 'tts_atlas_78', index: 3 },
+                base_shoguns_palace_pod: { atlasId: 'tts_atlas_78', index: 4 },
+                base_sakura_garden_pod: { atlasId: 'tts_atlas_78', index: 5 },
+                base_longhouse_pod: { atlasId: 'tts_atlas_78', index: 6 },
+                base_drakkar_pod: { atlasId: 'tts_atlas_78', index: 7 },
             }));
         });
 
@@ -494,6 +683,21 @@ describe('派系选择系统', () => {
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_0b888d02fd')).toBe(
                 'smashup/cards/tts_atlas_0b888d02fd',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_54')).toBe(
+                'smashup/cards/tts_atlas_54',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_55')).toBe(
+                'smashup/cards/tts_atlas_55',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_56')).toBe(
+                'smashup/cards/tts_atlas_56',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_78')).toBe(
+                'smashup/cards/tts_atlas_78',
+            );
+            expect(getSmashUpPodAtlasImagePath('tts_atlas_79')).toBe(
+                'smashup/cards/tts_atlas_79',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_9aed5872d2')).toBe(
                 'smashup/cards/tts_atlas_9aed5872d2',

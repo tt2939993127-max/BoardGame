@@ -20,6 +20,7 @@ import {
     addTitanPowerCounter,
     buildAbilityFeedback,
     buildBaseTargetOptions,
+    buildStandardDrawEvents,
     buildMinionTargetOptions,
     changeMinionController,
     drawMadnessCards,
@@ -37,6 +38,8 @@ import {
     recoverCardsFromDiscard,
 } from '../domain/abilityHelpers';
 import { appendResolvedActionAbility, getExternalActionEffectiveHandSize } from '../domain/externalActionPlay';
+import { buildBuryCardEvents, buildBuriedCardReturnedToHandEvent } from '../domain/bury';
+import { continueActiveDuel } from '../domain/duel';
 import { registerInterceptor, registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase, registerTitanPowerModifier } from '../domain/ongoingModifiers';
@@ -93,6 +96,36 @@ function getOtherBaseOptions(state: AbilityContext['state'], excludedBaseIndex: 
             baseIndex: index,
             label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${index + 1}`,
         }));
+}
+
+function getOwnedBuriedCardChoices(
+    state: AbilityContext['state'],
+    playerId: string,
+    restrictedBaseIndex?: number,
+) {
+    return state.bases.flatMap((base, baseIndex) => {
+        if (restrictedBaseIndex !== undefined && baseIndex !== restrictedBaseIndex) {
+            return [];
+        }
+
+        return (base.buriedCards ?? [])
+            .filter(card => card.controllerId === playerId)
+            .map(card => ({
+                cardUid: card.uid,
+                defId: card.defId,
+                baseIndex,
+                baseDefId: base.defId,
+                label: `${getCardDef(card.defId)?.name ?? card.defId} @ ${getBaseDef(base.defId)?.name ?? base.defId}`,
+            }));
+    });
+}
+
+function getOwnedSetAsideTitan(state: AbilityContext['state'], playerId: string, defId: string) {
+    return (state.titans ?? []).find(candidate =>
+        candidate.defId === defId
+        && candidate.ownerId === playerId
+        && candidate.location.zone === 'setaside',
+    );
 }
 
 function getHillOwnedMinionsControlledByOthers(
@@ -1097,6 +1130,179 @@ function timeTravelersTimeBoxTalent(ctx: AbilityContext): AbilityResult {
     };
 }
 
+function pecosBillOnDuelStarted(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
+    if (!ctx.matchState || !ctx.duel) return [];
+
+    const challengerPlayerId = ctx.duel.challengerPlayerId;
+    if (getTitanByController(ctx.state, challengerPlayerId)) return [];
+
+    const titan = getOwnedSetAsideTitan(ctx.state, challengerPlayerId, 'pecos_bill');
+    const player = ctx.state.players[challengerPlayerId];
+    if (!titan || !player || player.hand.length === 0) return [];
+
+    const duelBaseIndex = ctx.baseIndex ?? ctx.duel.baseIndex;
+    const duelBase = ctx.state.bases[duelBaseIndex];
+    const interaction = createSimpleChoice(
+        `titan_pecos_bill_duel_start_${titan.uid}_${ctx.now}`,
+        challengerPlayerId,
+        'Pecos Bill：你可以弃 1 张牌，将此泰坦打到这场决斗所在基地',
+        [
+            ...player.hand.map((card) => ({
+                id: `hand-${card.uid}`,
+                label: getCardDef(card.defId)?.name ?? card.defId,
+                value: { cardUid: card.uid, defId: card.defId },
+                _source: 'hand' as const,
+                displayMode: 'card' as const,
+            })),
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ],
+        { sourceId: 'titan_pecos_bill_duel_start', targetType: 'hand', autoRefresh: 'hand' },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        titanUid: titan.uid,
+        baseIndex: duelBaseIndex,
+        baseDefId: duelBase?.defId,
+    };
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function pecosBillMoveProtectionChecker(ctx: ProtectionCheckContext): boolean {
+    const duelBaseIndex = ctx.state.activeDuel?.baseIndex;
+    if (duelBaseIndex === undefined || duelBaseIndex !== ctx.targetBaseIndex) return false;
+
+    const pecosBill = (ctx.state.titans ?? []).find((titan) =>
+        titan.defId === 'pecos_bill'
+        && titan.location.zone === 'base'
+        && titan.location.baseIndex === ctx.targetBaseIndex,
+    );
+    if (!pecosBill) return false;
+
+    return ctx.sourcePlayerId !== pecosBill.controllerId;
+}
+
+function pecosBillOnDuelResolved(ctx: TriggerContext): SmashUpEvent[] {
+    if (ctx.duelTie || !ctx.duelWinner) return [];
+
+    const matchingPecosBills = (ctx.state.titans ?? []).filter((titan) =>
+        titan.defId === 'pecos_bill'
+        && titan.location.zone === 'base'
+        && titan.controllerId === ctx.duelWinner?.controller,
+    );
+    if (matchingPecosBills.length === 0) return [];
+
+    return buildStandardDrawEvents(ctx.state, ctx.duelWinner.controller, matchingPecosBills.length, ctx.random, ctx.now);
+}
+
+function sphinxOnTurnStart(ctx: TriggerContext) {
+    if (!ctx.matchState) return [];
+    if (getTitanByController(ctx.state, ctx.playerId)) return [];
+
+    const titan = getOwnedSetAsideTitan(ctx.state, ctx.playerId, 'sphinx');
+    if (!titan) return [];
+
+    const buriedChoices = getOwnedBuriedCardChoices(ctx.state, ctx.playerId);
+    if (buriedChoices.length === 0) return [];
+
+    const interaction = createSimpleChoice(
+        `titan_sphinx_start_turn_${ctx.now}`,
+        ctx.playerId,
+        '狮身人面像：选择一张你的埋葬牌，将其回手并把此泰坦放到其所在基地',
+        [
+            ...buriedChoices.map((choice) => ({
+                id: `buried-${choice.cardUid}`,
+                label: choice.label,
+                value: choice,
+                displayMode: 'button' as const,
+            })),
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ],
+        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        titanUid: titan.uid,
+        titanDefId: titan.defId,
+    };
+
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+function sphinxAfterScoring(ctx: {
+    state: AbilityContext['state'];
+    matchState?: AbilityContext['matchState'];
+    baseIndex?: number;
+    now: number;
+}): AbilityResult | SmashUpEvent[] {
+    if (ctx.baseIndex === undefined || !ctx.matchState) return [];
+
+    let nextMatchState = ctx.matchState;
+    const sphinxesOnScoringBase = (ctx.state.titans ?? []).filter(titan =>
+        titan.defId === 'sphinx'
+        && titan.location.zone === 'base'
+        && titan.location.baseIndex === ctx.baseIndex,
+    );
+
+    for (const titan of sphinxesOnScoringBase) {
+        const buriedChoices = getOwnedBuriedCardChoices(ctx.state, titan.controllerId, ctx.baseIndex);
+        if (buriedChoices.length === 0) continue;
+
+        const interaction = createSimpleChoice(
+            `titan_sphinx_after_scoring_${titan.uid}_${ctx.now}`,
+            titan.controllerId,
+            '狮身人面像：你可以将此处一张你的埋葬牌移回手牌',
+            [
+                ...buriedChoices.map((choice) => ({
+                    id: `buried-${choice.cardUid}`,
+                    label: choice.label,
+                    value: choice,
+                    displayMode: 'button' as const,
+                })),
+                { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+            ],
+            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic' },
+        );
+        nextMatchState = queueInteraction(nextMatchState, interaction);
+    }
+
+    return nextMatchState === ctx.matchState
+        ? []
+        : { events: [], matchState: nextMatchState };
+}
+
+function sphinxTalent(ctx: AbilityContext): AbilityResult {
+    const titan = getTitanByUid(ctx.state, ctx.cardUid);
+    if (!titan || titan.location.zone !== 'base' || titan.controllerId !== ctx.playerId) {
+        return { events: [] };
+    }
+
+    const player = ctx.state.players[ctx.playerId];
+    if (!player || player.hand.length === 0) {
+        return { events: [] };
+    }
+
+    const interaction = createSimpleChoice(
+        `titan_sphinx_talent_${ctx.now}`,
+        ctx.playerId,
+        '狮身人面像：选择一张手牌埋葬在此处',
+        player.hand.map((card) => ({
+            id: `hand-${card.uid}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
+            value: { cardUid: card.uid, defId: card.defId },
+            _source: 'hand' as const,
+            displayMode: 'card' as const,
+        })),
+        { sourceId: 'titan_sphinx_talent', targetType: 'hand' },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        baseIndex: titan.location.baseIndex,
+    };
+
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
 function superSpiesMoonZeroThreeSpecial(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -1138,7 +1344,7 @@ function superSpiesMoonZeroThreeTalent(ctx: AbilityContext): AbilityResult {
             value: { targetPlayerId: option.targetPlayerId },
             displayMode: 'button' as const,
         })),
-        { sourceId: 'titan_super_spies_moon_zero_three_choose_player', targetType: 'generic' },
+        { sourceId: 'titan_super_spies_moon_zero_three_choose_player', targetType: 'player' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -2193,6 +2399,25 @@ export function registerTitanAbilities(): void {
     registerTrigger('time_travelers_time_box', 'onTurnStart', timeTravelersTimeBoxOnTurnStart, { global: true, optional: true });
     registerTrigger('time_travelers_time_box', 'onCardReturnedToHand', timeTravelersTimeBoxOnCardReturnedToHand, { global: true, optional: true });
 
+    registerTrigger('pecos_bill', 'onDuelStarted', pecosBillOnDuelStarted, { global: true });
+    registerTrigger('pecos_bill', 'onDuelResolved', pecosBillOnDuelResolved);
+    registerProtection('pecos_bill', 'move', pecosBillMoveProtectionChecker);
+
+    registerAbility('sphinx', 'talent', sphinxTalent);
+    registerTitanTalentValidator('sphinx', ({ state, playerId, titan }) => {
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
+        return (state.players[playerId]?.hand.length ?? 0) > 0
+            ? null
+            : '你没有可埋葬的手牌';
+    });
+    registerTrigger('sphinx', 'onTurnStart', sphinxOnTurnStart, { global: true });
+    registerTrigger('sphinx', 'afterScoring', (ctx) => sphinxAfterScoring({
+        state: ctx.state,
+        matchState: ctx.matchState,
+        baseIndex: ctx.baseIndex,
+        now: ctx.now,
+    }), { global: true });
+
     registerAbility('magical_girls_walking_castle', 'special', magicalGirlsWalkingCastleSpecial);
     registerTitanSpecialValidator('magical_girls_walking_castle', ({ state, playerId, baseIndex, titan }) => {
         if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
@@ -2992,6 +3217,167 @@ export function registerTitanInteractionHandlers(): void {
                     selected.baseDefId,
                 ),
             ],
+        };
+    });
+
+    registerInteractionHandler('titan_pecos_bill_duel_start', (state, playerId, value, data, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string } | undefined;
+        const continuation = (data as {
+            continuationContext?: { titanUid?: string; baseIndex?: number; baseDefId?: string };
+        } | undefined)?.continuationContext;
+        if (!state.core.activeDuel) return { state, events: [] };
+
+        if (selected?.skip) {
+            return { state: continueActiveDuel(state, timestamp), events: [] };
+        }
+        if (!selected?.cardUid || continuation?.baseIndex === undefined || !continuation.titanUid) {
+            return { state: continueActiveDuel(state, timestamp), events: [] };
+        }
+
+        const titan = getTitanByUid(state.core, continuation.titanUid);
+        const player = state.core.players[playerId];
+        const discardedCard = player?.hand.find((card) => card.uid === selected.cardUid);
+        if (!titan || !player || !discardedCard) {
+            return { state: continueActiveDuel(state, timestamp), events: [] };
+        }
+
+        return {
+            state: continueActiveDuel(state, timestamp),
+            events: [
+                {
+                    type: SU_EVENTS.CARDS_DISCARDED,
+                    payload: { playerId, cardUids: [selected.cardUid] },
+                    timestamp,
+                } as SmashUpEvent,
+                {
+                    type: SU_EVENTS.TITAN_METADATA_UPDATED,
+                    payload: {
+                        titanUid: titan.uid,
+                        metadataUpdate: { deferClashUntilDuelEnds: true },
+                        reason: 'pecos_bill_duel_start',
+                    },
+                    timestamp,
+                } as SmashUpEvent,
+                playTitan(
+                    titan,
+                    playerId,
+                    continuation.baseIndex,
+                    'pecos_bill_duel_start',
+                    timestamp,
+                    continuation.baseDefId,
+                ),
+            ],
+        };
+    });
+
+    registerInteractionHandler('titan_sphinx_start_turn', (state, playerId, value, data, _random, timestamp) => {
+        const selected = value as {
+            skip?: boolean;
+            cardUid?: string;
+            defId?: string;
+            baseIndex?: number;
+            baseDefId?: string;
+        } | undefined;
+        const continuation = (data as {
+            continuationContext?: { titanUid?: string };
+        } | undefined)?.continuationContext;
+        if (selected?.skip) {
+            return { state, events: [] };
+        }
+        if (!selected?.cardUid || selected.baseIndex === undefined || !continuation?.titanUid) {
+            return { state, events: [] };
+        }
+
+        const titan = getTitanByUid(state.core, continuation.titanUid);
+        const returnEvent = buildBuriedCardReturnedToHandEvent({
+            core: state.core,
+            playerId,
+            cardUid: selected.cardUid,
+            baseIndex: selected.baseIndex,
+            source: 'sphinx-start-turn',
+            now: timestamp,
+        });
+        if (!titan || !returnEvent) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: [
+                returnEvent,
+                playTitan(
+                    titan,
+                    playerId,
+                    selected.baseIndex,
+                    'sphinx_start_turn',
+                    timestamp,
+                    selected.baseDefId,
+                ),
+            ],
+        };
+    });
+
+    registerInteractionHandler('titan_sphinx_after_scoring', (state, playerId, value, data, _random, timestamp) => {
+        const selected = value as {
+            skip?: boolean;
+            cardUid?: string;
+            baseIndex?: number;
+        } | undefined;
+        if (selected?.skip) {
+            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
+            return { state, events };
+        }
+        if (!selected?.cardUid || selected.baseIndex === undefined) {
+            return { state, events: [] };
+        }
+
+        const returnEvent = buildBuriedCardReturnedToHandEvent({
+            core: state.core,
+            playerId,
+            cardUid: selected.cardUid,
+            baseIndex: selected.baseIndex,
+            source: 'sphinx-after-scoring',
+            now: timestamp,
+        });
+        if (!returnEvent) {
+            return { state, events: [] };
+        }
+
+        const events = appendDeferredPostScoringEventsIfLast(
+            state,
+            data as Record<string, unknown> | undefined,
+            [returnEvent],
+        );
+        return { state, events };
+    });
+
+    registerInteractionHandler('titan_sphinx_talent', (state, playerId, value, data, random, timestamp) => {
+        const selected = value as { cardUid?: string; defId?: string; skip?: boolean } | undefined;
+        const continuation = (data as {
+            continuationContext?: { baseIndex?: number };
+        } | undefined)?.continuationContext;
+        if (selected?.skip) {
+            return { state, events: [] };
+        }
+        if (!selected?.cardUid || !selected.defId || continuation?.baseIndex === undefined) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: buildBuryCardEvents({
+                core: state.core,
+                matchState: state,
+                playerId,
+                cardUid: selected.cardUid,
+                defId: selected.defId,
+                baseIndex: continuation.baseIndex,
+                trueOwnerId: playerId,
+                buriedFrom: 'hand',
+                reason: 'sphinx_talent',
+                random,
+                now: timestamp,
+            }),
         };
     });
 

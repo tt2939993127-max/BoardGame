@@ -224,8 +224,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         ? t('matchRoom.creatingRoom')
         : t('matchRoom.joiningRoom');
     const matchEntryLoadingProgressText = matchEntryLoadingPhase === 'creating'
-        ? t('matchRoom.loadingProgress.step', { current: 1, total: 4 })
-        : t('matchRoom.loadingProgress.step', { current: 2, total: 4 });
+        ? t('matchRoom.loadingProgress.preparingRoom')
+        : t('matchRoom.loadingProgress.joiningRoom');
 
     useEffect(() => {
         pendingActionRef.current = pendingAction;
