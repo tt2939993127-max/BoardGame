@@ -154,7 +154,7 @@ const OnlineAiSeatBridge = ({
             if (nextClientKeys.has(playerId)) {
                 continue;
             }
-            client.destroy();
+            client.disconnect();
             delete clientsRef.current[playerId];
         }
 
@@ -177,7 +177,7 @@ const OnlineAiSeatBridge = ({
 
         return () => {
             for (const client of Object.values(clientsRef.current)) {
-                client.destroy();
+                client.disconnect();
             }
             clientsRef.current = {};
         };

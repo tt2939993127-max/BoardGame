@@ -223,6 +223,19 @@ export const startGamePackageInstall = (
     });
     stopActiveInstall(manifest.gameId);
 
+    const queuedState: StoredGamePackageState = {
+        gameId: manifest.gameId,
+        runtimeChannel: manifest.runtimeChannel,
+        status: 'queued',
+        progressMode: 'indeterminate',
+        modulePackId: manifest.modulePackId,
+        assetPackId: manifest.assetPackId,
+        modulePackBytes: manifest.modulePackBytes,
+        assetPackBytes: manifest.assetPackBytes,
+        updatedAt: Date.now(),
+    };
+    emitState(queuedState);
+
     let resolvedHandle: GamePackageInstallHandle | null = null;
     let cancelledBeforeReady = false;
 
@@ -232,24 +245,41 @@ export const startGamePackageInstall = (
             resolvedHandle?.cancel();
         },
         finished: (async () => {
-            const nativeHandle = await createNativeGamePackageInstallHandle(manifest, {
-                onStateChange: emitState,
-                onInstalledAssetBaseUrl: applyAssetBaseOverride,
-            });
-            logMobileRuntime('PackageManagerService', 'install-handle-resolved', {
-                gameId: manifest.gameId,
-                source: nativeHandle ? 'native' : 'mock',
-            });
-            resolvedHandle = nativeHandle ?? runMockGamePackageInstall(manifest, {
-                failureMessage,
-                onStateChange: emitState,
-            });
+            try {
+                const nativeHandle = await createNativeGamePackageInstallHandle(manifest, {
+                    onStateChange: emitState,
+                    onInstalledAssetBaseUrl: applyAssetBaseOverride,
+                });
+                logMobileRuntime('PackageManagerService', 'install-handle-resolved', {
+                    gameId: manifest.gameId,
+                    source: nativeHandle ? 'native' : 'mock',
+                });
+                resolvedHandle = nativeHandle ?? runMockGamePackageInstall(manifest, {
+                    failureMessage,
+                    onStateChange: emitState,
+                });
 
-            if (cancelledBeforeReady) {
-                resolvedHandle.cancel();
+                if (cancelledBeforeReady) {
+                    resolvedHandle.cancel();
+                }
+
+                return resolvedHandle.finished;
+            } catch (error) {
+                const failedState: StoredGamePackageState = {
+                    ...queuedState,
+                    status: 'failed',
+                    progressMode: undefined,
+                    progressPercent: undefined,
+                    errorMessage: error instanceof Error ? error.message : (failureMessage || '安装失败'),
+                    updatedAt: Date.now(),
+                };
+                logMobileRuntime('PackageManagerService', 'install-early-failure', {
+                    gameId: manifest.gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                }, 'error');
+                emitState(failedState);
+                return failedState;
             }
-
-            return resolvedHandle.finished;
         })(),
     };
 
