@@ -73,7 +73,8 @@ export const AndroidForceUpdateGate = ({
     const progressPercent = typeof state.progressPercent === 'number'
         ? Math.max(0, Math.min(100, Math.round(state.progressPercent)))
         : undefined;
-    const isProgressVisible = state.phase === 'downloading' || state.phase === 'applying';
+    const hasMeasuredDownloadProgress = state.phase === 'downloading' && typeof progressPercent === 'number';
+    const isProgressVisible = state.phase === 'downloading';
     const isRetryVisible = state.phase === 'native-update-required' || state.phase === 'error';
 
     return (
@@ -124,20 +125,26 @@ export const AndroidForceUpdateGate = ({
                             <div className="mb-2 flex items-center justify-between gap-3 text-xs text-amber-100/70">
                                 <span>{t('ota.forceUpdate.progressLabel')}</span>
                                 <span>
-                                    {typeof progressPercent === 'number'
+                                    {hasMeasuredDownloadProgress
                                         ? t('ota.forceUpdate.progressPercent', { percent: progressPercent })
-                                        : t('ota.forceUpdate.progressPending')}
+                                        : '等待原生返回下载进度'}
                                 </span>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                                <div
-                                    className={[
-                                        'h-full rounded-full bg-[linear-gradient(90deg,_#f9d989_0%,_#f3b24a_55%,_#dd7d1f_100%)] transition-[width] duration-300',
-                                        typeof progressPercent === 'number' ? '' : 'w-2/3 animate-pulse',
-                                    ].join(' ').trim()}
-                                    style={typeof progressPercent === 'number' ? { width: `${progressPercent}%` } : undefined}
-                                />
+                                {hasMeasuredDownloadProgress ? (
+                                    <div
+                                        className="h-full rounded-full bg-[linear-gradient(90deg,_#f9d989_0%,_#f3b24a_55%,_#dd7d1f_100%)] transition-[width] duration-300"
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                ) : (
+                                    <div className="h-full rounded-full bg-[repeating-linear-gradient(90deg,_rgba(249,217,137,0.16)_0px,_rgba(249,217,137,0.16)_10px,_rgba(255,255,255,0.04)_10px,_rgba(255,255,255,0.04)_20px)] opacity-80" />
+                                )}
                             </div>
+                            {!hasMeasuredDownloadProgress && (
+                                <p className="mt-2 text-left text-[11px] leading-5 text-amber-100/55">
+                                    现在还没收到原生插件返回的真实百分比，这里不再显示伪进度。
+                                </p>
+                            )}
                         </div>
                     )}
 

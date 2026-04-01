@@ -100,6 +100,25 @@ const markGamePackageInstalled = (gameId = 'dicethrone', installedVersion = '0.5
     }));
 };
 
+const setNativeAndroidRuntime = () => {
+    Object.defineProperty(window, 'Capacitor', {
+        configurable: true,
+        writable: true,
+        value: {
+            isNativePlatform: () => true,
+            getPlatform: () => 'android',
+        },
+    });
+};
+
+const setWebRuntime = () => {
+    Object.defineProperty(window, 'Capacitor', {
+        configurable: true,
+        writable: true,
+        value: undefined,
+    });
+};
+
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key: string) => key,
@@ -278,6 +297,7 @@ afterEach(() => {
 
 beforeEach(() => {
     window.localStorage.clear();
+    setNativeAndroidRuntime();
     resetGamePackageManagerForTests();
     __resetGameDetailsModalPackageStateLogForTests();
     navigateMock.mockReset();
@@ -600,8 +620,16 @@ describe('GameDetailsModal create room ai entry', () => {
 
         const packageCard = screen.getByTestId('game-details-mobile-package-card');
         expect(packageCard).toBeInTheDocument();
-        expect(packageCard.className).toContain('md:hidden');
+        expect(packageCard.className).not.toContain('md:hidden');
         expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+    });
+
+    it('网页版不渲染 package-managed 下载入口', () => {
+        setWebRuntime();
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
 
     it('相同 package 状态快照在重挂载后只记录一次日志', () => {
@@ -708,7 +736,7 @@ describe('GameDetailsModal create room ai entry', () => {
 
         const packageCard = screen.getByTestId('game-details-mobile-package-card');
         expect(packageCard).toBeInTheDocument();
-        expect(packageCard.className).toContain('md:hidden');
+        expect(packageCard.className).not.toContain('md:hidden');
         expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
