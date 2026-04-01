@@ -30,6 +30,10 @@
 - 交互提示：带轻微背景增强可读性，可使用 animate-pulse
 - 所有提示默认 pointer-events-none，除非需要交互
 
+### 6. 组件扩展规则（新增）
+- 对已内置居中/定位的浮层组件，**禁止用 containerClassName 完全替换默认定位类**（例如 left-0/right-0/translate 居中）。
+- 如需允许交互或调整样式，优先使用显式 props（如 allowPointerEvents / layout），或在 containerClassName **追加**样式，避免破坏默认居中布局。
+
 ## 动画 / 特效规范
 
 ### 1. 自适应尺寸（强制）

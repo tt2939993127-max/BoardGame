@@ -1130,7 +1130,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 </div>
 
                 {otherPids.length > 0 && (
-                    <div className="absolute top-[0.9vw] left-1/2 z-50 flex -translate-x-1/2 items-start gap-[0.6vw] pointer-events-none">
+                    <div className="absolute top-[0.9vw] inset-x-0 z-50 flex items-start justify-center gap-[0.6vw] pointer-events-none">
                         {otherPids.map((pid) => {
                             const headerPlayer = G.players[pid];
                             if (!headerPlayer) return null;
@@ -1165,7 +1165,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                     statusIconAtlas={statusIconAtlas}
                                     locale={locale}
                                     containerRef={isFocusedHeader ? opponentHeaderRef : undefined}
-                                    containerClassName="pointer-events-auto"
+                                    layout="inline"
+                                    allowPointerEvents
                                     tokenDefinitions={G.tokenDefinitions}
                                     damageFlashActive={isFocusedHeader && opponentImpact.flash.isActive}
                                     damageFlashDamage={isFocusedHeader ? opponentImpact.flash.damage : undefined}

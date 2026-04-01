@@ -56,6 +56,15 @@ const DevToolsSlicer = !isAndroidShellBuild ? React.lazy(() => import('./pages/d
 const DevToolsFxPreview = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
 const DevToolsAudioBrowser = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
 const DevToolsArchView = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
+const TestBookUI2D = !isAndroidShellBuild
+  ? React.lazy(() => import('./pages/test-book-ui/BookUI2D').then(m => ({ default: m.BookUI2D })))
+  : null;
+const TestBookUI3D = !isAndroidShellBuild
+  ? React.lazy(() => import('./pages/test-book-ui/BookUI3D').then(m => ({ default: m.BookUI3D })))
+  : null;
+const TestBookUIHybrid = !isAndroidShellBuild
+  ? React.lazy(() => import('./pages/test-book-ui/BookUIHybrid').then(m => ({ default: m.BookUIHybrid })))
+  : null;
 const UnifiedBuilder = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio')) : null;
 const UGCRuntimeViewPage = !isAndroidShellBuild ? React.lazy(() => import('./ugc/runtime/RuntimeViewPage')) : null;
 const UGCSandbox = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox }))) : null;
@@ -154,6 +163,15 @@ const AppContent = () => {
                     )}
                     {!isAndroidShellBuild && DevToolsArchView && (
                       <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && TestBookUI2D && (
+                      <Route path="/dev/book-2d" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI 2D" />}><TestBookUI2D /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && TestBookUI3D && (
+                      <Route path="/dev/book-3d" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI 3D" />}><TestBookUI3D /></React.Suspense>} />
+                    )}
+                    {!isAndroidShellBuild && TestBookUIHybrid && (
+                      <Route path="/dev/book-hybrid" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI Hybrid" />}><TestBookUIHybrid /></React.Suspense>} />
                     )}
                     {!isAndroidShellBuild && UnifiedBuilder && (
                       <Route

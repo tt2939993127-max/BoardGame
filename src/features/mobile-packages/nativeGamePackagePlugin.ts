@@ -1,5 +1,5 @@
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
-import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
 
 type CapacitorCoreModule = {
@@ -113,9 +113,44 @@ const toAssetBaseUrl = async (assetRootPath?: string) => {
 
 const loadCapacitorCore = async () => {
     if (!capacitorCoreLoader) {
-        capacitorCoreLoader = runtimeImport<CapacitorCoreModule>('@capacitor/core')
-            .then((module) => module as CapacitorCoreModule)
-            .catch(() => null);
+        capacitorCoreLoader = (async () => {
+            try {
+                const mod = await runtimeImport<CapacitorCoreModule>('@capacitor/core');
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'capacitor-core-import-ok', {
+                    hasCapacitor: Boolean(mod?.Capacitor),
+                    hasRegisterPlugin: typeof mod?.registerPlugin === 'function',
+                });
+                return mod as CapacitorCoreModule;
+            } catch (importError) {
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'capacitor-core-import-failed', {
+                    error: importError instanceof Error ? importError.message : String(importError),
+                });
+            }
+
+            // Fallback: use window.Capacitor global injected by the Capacitor bridge
+            const win = typeof window !== 'undefined' ? window as unknown as Record<string, unknown> : null;
+            const globalCap = win?.Capacitor as CapacitorCoreModule['Capacitor'] | undefined;
+            if (globalCap && typeof globalCap.isNativePlatform === 'function') {
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'capacitor-core-global-fallback', {
+                    isNative: globalCap.isNativePlatform(),
+                    platform: globalCap.getPlatform(),
+                });
+                const globalRegisterPlugin = (win as Record<string, unknown>)?.capacitorRegisterPlugin
+                    ?? (win?.Capacitor as Record<string, unknown>)?.registerPlugin;
+                return {
+                    Capacitor: globalCap,
+                    registerPlugin: typeof globalRegisterPlugin === 'function'
+                        ? globalRegisterPlugin as CapacitorCoreModule['registerPlugin']
+                        : <TPlugin,>(name: string) => {
+                            const plugins = (win?.Capacitor as Record<string, unknown>)?.Plugins as Record<string, unknown> | undefined;
+                            return (plugins?.[name] ?? {}) as TPlugin;
+                        },
+                } satisfies CapacitorCoreModule;
+            }
+
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'capacitor-core-unavailable');
+            return null;
+        })();
     }
 
     return capacitorCoreLoader;
@@ -126,12 +161,24 @@ const getNativePlugin = async () => {
         nativePluginLoader = (async () => {
             const capacitorCore = await loadCapacitorCore();
             if (!capacitorCore) {
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-no-core');
                 return null;
             }
-            if (!capacitorCore.Capacitor.isNativePlatform() || capacitorCore.Capacitor.getPlatform() !== 'android') {
+            const isNative = capacitorCore.Capacitor.isNativePlatform();
+            const platform = capacitorCore.Capacitor.getPlatform();
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-platform-check', {
+                isNative,
+                platform,
+            });
+            if (!isNative || platform !== 'android') {
                 return null;
             }
-            return capacitorCore.registerPlugin<NativeGamePackagePlugin>('GamePackage');
+            const plugin = capacitorCore.registerPlugin<NativeGamePackagePlugin>('GamePackage');
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-registered', {
+                hasPlugin: Boolean(plugin),
+                methods: plugin ? Object.keys(plugin).slice(0, 10) : [],
+            });
+            return plugin;
         })();
     }
 
@@ -248,7 +295,7 @@ export const createNativeGamePackageInstallHandle = async (
                 runtimeChannel: manifest.runtimeChannel,
                 assetPackId: manifest.assetPackId,
                 assetPackVersion: manifest.assetPackVersion,
-                assetPackUrl: manifest.assetPackUrl,
+                assetPackUrl: manifest.assetPackUrl!,
                 assetPackChecksum: manifest.assetPackChecksum,
             });
             logMobileRuntime('NativeGamePackagePlugin', 'install-native-call-resolved', {

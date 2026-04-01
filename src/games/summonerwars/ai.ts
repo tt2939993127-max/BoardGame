@@ -220,7 +220,16 @@ const buildSetupActions = (
     const isReady = state.core.readyPlayers[playerId];
 
     if (!selectedFaction || selectedFaction === 'unselected') {
-        for (const factionId of FACTION_PRIORITY) {
+        const takenFactions = new Set<FactionId>();
+        for (const value of Object.values(state.core.selectedFactions)) {
+            if (value && value !== 'unselected') {
+                takenFactions.add(value as FactionId);
+            }
+        }
+        const candidates = FACTION_PRIORITY.filter((factionId) => !takenFactions.has(factionId));
+        const availableFactions = candidates.length > 0 ? candidates : FACTION_PRIORITY;
+
+        for (const factionId of availableFactions) {
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('setup', 'select-faction', factionId),
                 kind: 'setup-select-faction',
