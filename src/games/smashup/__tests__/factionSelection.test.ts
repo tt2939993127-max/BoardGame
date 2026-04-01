@@ -685,19 +685,19 @@ describe('派系选择系统', () => {
                 'smashup/cards/tts_atlas_0b888d02fd',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_54')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_54',
+                'smashup/cards/tts_atlas_54',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_55')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_55',
+                'smashup/cards/tts_atlas_55',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_56')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_56',
+                'smashup/cards/tts_atlas_56',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_78')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_78',
+                'smashup/cards/tts_atlas_78',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_79')).toBe(
-                '/assets/i18n/en/smashup/cards/tts_atlas_79',
+                'smashup/cards/tts_atlas_79',
             );
             expect(getSmashUpPodAtlasImagePath('tts_atlas_9aed5872d2')).toBe(
                 'smashup/cards/tts_atlas_9aed5872d2',
