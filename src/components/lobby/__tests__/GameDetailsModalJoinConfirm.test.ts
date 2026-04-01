@@ -1,6 +1,6 @@
 /* @vitest-environment happy-dom */
 import { createElement, type ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     buildLocalMatchSearchParams,
@@ -168,6 +168,29 @@ vi.mock('../../../api/user-settings', () => ({
 vi.mock('../../../config/games.config', () => ({
     getGameById: getGameByIdMock,
 }));
+
+vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
+    createNativeGamePackageInstallHandle: vi.fn(async () => null),
+    listInstalledNativeGamePackages: vi.fn(async () => []),
+}));
+
+vi.mock('../../../features/mobile-packages/manifestClient', async () => {
+    const actual = await vi.importActual<typeof import('../../../features/mobile-packages/manifestClient')>(
+        '../../../features/mobile-packages/manifestClient',
+    );
+
+    return {
+        ...actual,
+        hasRemoteGamePackageManifestEndpoint: false,
+        resolveGamePackageManifest: vi.fn(async (gameId: string, delivery?: {
+            runtimeChannel?: string;
+            modulePackId?: string;
+            assetPackId?: string;
+            modulePackBytes?: number;
+            assetPackBytes?: number;
+        }) => actual.buildFallbackGamePackageManifest(gameId, delivery)),
+    };
+});
 
 vi.mock('../../../lib/logger', () => ({
     logger: {
@@ -665,23 +688,19 @@ describe('GameDetailsModal create room ai entry', () => {
         render(createElement(GameDetailsModal, baseProps));
 
         fireEvent.click(screen.getByText('packageManager.installAction'));
-
-        await waitFor(() => {
-            expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
-        });
+        expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
 
         const modalProps = latestPackageInstallModalProps.current as null | {
             onConfirm?: () => Promise<void>;
         };
 
         expect(modalProps?.onConfirm).toBeTypeOf('function');
-
-        await modalProps?.onConfirm?.();
-        await vi.runAllTimersAsync();
-
-        await waitFor(() => {
-            expect(screen.queryByText('package-install-confirm')).toBeNull();
+        await act(async () => {
+            await modalProps?.onConfirm?.();
+            await vi.runAllTimersAsync();
         });
+
+        expect(screen.queryByText('package-install-confirm')).toBeNull();
     });
 
     it('下载完成后，package-managed 游戏允许创建房间', async () => {
