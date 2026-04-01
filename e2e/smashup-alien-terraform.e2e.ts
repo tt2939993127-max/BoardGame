@@ -2290,7 +2290,9 @@ test.describe('Smash Up - Alien Terraform', () => {
         expect(finalState.core.titanOngoingSuppressedUntilTurnEnd).toContain('titan-mergacon-talent');
 
         await waitForLayoutSettle(page);
-        await game.screenshot('mergacon-talent-resolved', testInfo);
+        await expect(titan.getByText('已用', { exact: true })).toBeVisible();
+        await page.waitForTimeout(250);
+        await game.screenshot('mergacon-talent-resolved-with-used-state', testInfo);
     });
 
     test('移动城堡可通过牌库右侧泰坦栏按通常随从额打到有你至少两个随从的基地', async ({ game, page }, testInfo) => {

@@ -108,6 +108,8 @@
     "notInstalledHint": "首次进入 {{game}} 前，需要先下载对应的游戏资源包。",
     "installedTitle": "已可进入",
     "installedHint": "{{game}} 的移动端包已就绪，可以直接进入对局。",
+    "installedCompletedBadge": "已完成",
+    "installedVersionBadge": "已完成 · {{version}}",
     "installAction": "安装游戏包",
     "confirmEyebrow": "安装确认",
     "confirmTitle": "下载 {{game}} 游戏包",
@@ -120,7 +122,7 @@
     "assetPack": "素材包",
     "packIdUnknown": "包标识待同步",
     "sizeUnknown": "大小待同步",
-    "backendPending": "当前环境未启用原生下载器，已回退到预览安装流程。",
+    "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
     "retryAction": "重新发起",
@@ -256,6 +258,9 @@
     "namespaceLoadFailed": "游戏文案加载失败",
     "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}"
+    },
     "title": {
       "joining": "加入中",
       "creating": "创建中",

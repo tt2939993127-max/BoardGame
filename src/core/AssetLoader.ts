@@ -629,16 +629,18 @@ export function clearGameAssetsCache(gameId: string): void {
  */
 export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLImageElement): void {
     const effectiveLocale = locale || 'zh-CN';
-    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
-    const { webp } = getOptimizedImageUrls(localizedPath);
-    if (!webp) return;
+    const normalized = assetsPath(src);
+    const cacheKey = normalized.includes(`/${COMPRESSED_SUBDIR}/`)
+        ? `${stripExtension(normalized)}.webp`
+        : getOptimizedImageUrls(getLocalizedAssetPath(src, effectiveLocale)).webp;
+    if (!cacheKey) return;
     if (imgElement && imgElement.naturalWidth > 0) {
-        preloadedImages.set(webp, imgElement);
+        preloadedImages.set(cacheKey, imgElement);
     } else {
         // 回退：创建 Image 并设置 src，浏览器磁盘缓存命中时 naturalWidth 立即可用
         const img = new Image();
-        img.src = webp;
-        preloadedImages.set(webp, img);
+        img.src = cacheKey;
+        preloadedImages.set(cacheKey, img);
     }
 }
 
@@ -649,9 +651,11 @@ export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLI
  */
 export function getPreloadedImageElement(src: string, locale?: string): HTMLImageElement | null {
     const effectiveLocale = locale || 'zh-CN';
-    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
-    const { webp } = getOptimizedImageUrls(localizedPath);
-    return preloadedImages.get(webp) ?? null;
+    const normalized = assetsPath(src);
+    const cacheKey = normalized.includes(`/${COMPRESSED_SUBDIR}/`)
+        ? `${stripExtension(normalized)}.webp`
+        : getOptimizedImageUrls(getLocalizedAssetPath(src, effectiveLocale)).webp;
+    return preloadedImages.get(cacheKey) ?? null;
 }
 
 /**

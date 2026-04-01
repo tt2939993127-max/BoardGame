@@ -853,7 +853,9 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(page.getByText('获得1次额外随从机会')).toBeVisible({ timeout: 5000 });
 
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
-        await game.screenshot('13-monster-with-counter-grants-extra-minion', testInfo);
+        await expect(monster.getByText('已用', { exact: true })).toBeVisible();
+        await page.waitForTimeout(250);
+        await game.screenshot('13-monster-with-counter-grants-extra-minion-and-shows-used-state', testInfo);
     });
 });
 

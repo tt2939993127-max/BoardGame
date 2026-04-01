@@ -161,6 +161,101 @@ describe('Killer Plants POD Card Logic Verification', () => {
         expect(minionUids).toContain('wl-1');
     });
 
+    it('???? playCards ??? Sprout POD ????? onTurnStart ??', () => {
+        const core = makeState({
+            currentPlayerIndex: 1,
+            bases: [{ defId: 'base1', minions: [], ongoingActions: [] } as any],
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.KILLER_PLANTS_POD, SMASHUP_FACTION_IDS.BEAR_CAVALRY_POD],
+                    hand: [makeCard('sprout-hand', 'killer_plant_sprout_pod', 'minion', '0')],
+                    deck: [makeCard('wl-1', 'killer_plant_water_lily_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(core);
+        matchState.sys.phase = 'playCards';
+
+        const turnResult = runCommand(matchState, {
+            type: 'ADVANCE_PHASE' as any,
+            playerId: '1',
+            payload: undefined,
+            timestamp: 1002,
+        });
+
+        expect(turnResult.success).toBe(true);
+        expect(turnResult.finalState.sys.phase).toBe('playCards');
+        expect((turnResult.finalState.sys as any)._smashupStartTurnWindowActive).toBeUndefined();
+
+        const playResult = runCommand(turnResult.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'sprout-hand', baseIndex: 0 },
+            timestamp: 1003,
+        });
+
+        expect(playResult.success).toBe(true);
+        expect(playResult.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(playResult.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(false);
+        expect(playResult.finalState.sys.interaction.current).toBeUndefined();
+        expect(playResult.finalState.core.bases[0].minions.map(minion => minion.uid)).toContain('sprout-hand');
+    });
+
+    it('???? playCards ?????????? Sprout POD ????? onTurnStart ??', () => {
+        const core = makeState({
+            currentPlayerIndex: 1,
+            bases: [{ defId: 'base1', minions: [], ongoingActions: [] } as any],
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.KILLER_PLANTS_POD, SMASHUP_FACTION_IDS.BEAR_CAVALRY_POD],
+                    hand: [makeCard('venus-hand', 'killer_plant_venus_man_trap_pod', 'minion', '0')],
+                    deck: [makeCard('sprout-deck', 'killer_plant_sprout_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(core);
+        matchState.sys.phase = 'playCards';
+
+        const turnResult = runCommand(matchState, {
+            type: 'ADVANCE_PHASE' as any,
+            playerId: '1',
+            payload: undefined,
+            timestamp: 1004,
+        });
+
+        expect(turnResult.success).toBe(true);
+        expect(turnResult.finalState.sys.phase).toBe('playCards');
+        expect((turnResult.finalState.sys as any)._smashupStartTurnWindowActive).toBeUndefined();
+
+        const playVenusResult = runCommand(turnResult.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'venus-hand', baseIndex: 0 },
+            timestamp: 1005,
+        });
+
+        expect(playVenusResult.success).toBe(true);
+
+        const talentResult = runCommand(playVenusResult.finalState, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'venus-hand', baseIndex: 0 },
+            timestamp: 1006,
+        });
+
+        expect(talentResult.success).toBe(true);
+        const drawEvents = talentResult.events.filter(event => event.type === SU_EVENTS.CARDS_DRAWN);
+        expect(drawEvents).toHaveLength(1);
+        expect((drawEvents[0] as any).payload.cardUids).toEqual(['sprout-deck']);
+        expect(talentResult.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(talentResult.finalState.sys.interaction.current).toBeUndefined();
+        const finalMinionUids = talentResult.finalState.core.bases[0].minions.map(minion => minion.uid);
+        expect(finalMinionUids).toContain('venus-hand');
+        expect(finalMinionUids).toContain('sprout-deck');
+    });
+
     it('Water Lily played by Sprout on the same start-turn window should draw immediately', () => {
         const base = {
             defId: 'base1',

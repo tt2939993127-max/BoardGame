@@ -185,6 +185,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         pendingRunKeyRef.current = null;
         inFlightRef.current = true;
         setReady(false);
+        setLoadingProgress(undefined);
 
         const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
         const hasCriticalImages = (resolved.critical?.length ?? 0) > 0;
@@ -254,10 +255,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey)
     );
     if (shouldBlock) {
-        const desc = loadingProgress
-            ? (loadingDescription ? `${loadingDescription}（${loadingProgress}）` : `加载资源 ${loadingProgress}`)
-            : loadingDescription;
-        return <LoadingScreen anchor="container" description={desc} />;
+        return <LoadingScreen anchor="container" description={loadingDescription} progressText={loadingProgress} />;
     }
 
     return <>{children}</>;

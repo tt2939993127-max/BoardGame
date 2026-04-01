@@ -190,6 +190,29 @@ const emitForceState = (
     onForceStateChange?.(state);
 };
 
+const withTimeout = async <T,>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    errorMessage: string,
+): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timer = setTimeout(() => {
+                    reject(new Error(errorMessage));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timer) {
+            clearTimeout(timer);
+        }
+    }
+};
+
 const resolveManifestRequiredNativeVersion = (manifest: AndroidOtaManifest) => {
     if (typeof manifest.targetNativeVersion === 'string' && manifest.targetNativeVersion.trim()) {
         return manifest.targetNativeVersion.trim();
@@ -376,7 +399,8 @@ const queueDownloadedBundle = async (
 ) => {
     await updater.next({ id: bundleId });
     await updater.setMultiDelay({
-        delayConditions: [{ kind: 'background' }],
+        // Capgo 的 background delay 需要显式毫秒值；传空值会导致“已下载但切后台不生效”的假象。
+        delayConditions: [{ kind: 'background', value: '0' }],
     });
 };
 
@@ -470,6 +494,8 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 return { status: 'not-native' } as const;
             }
 
+            const nativeOperationTimeoutMs = Math.max(config.appReadyTimeoutMs, 8000);
+
             const updaterModule = await loadUpdater();
             if (!updaterModule) {
                 return { status: 'error', reason: '未能加载 OTA 插件' } as const;
@@ -493,7 +519,11 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
 
             try {
                 const { CapacitorUpdater } = updaterModule;
-                const current = await CapacitorUpdater.current();
+                const current = await withTimeout(
+                    CapacitorUpdater.current(),
+                    nativeOperationTimeoutMs,
+                    `OTA 校验超时：读取当前 bundle 超过 ${nativeOperationTimeoutMs}ms`,
+                );
                 const compatibility = isManifestCompatibleWithNativeVersion(manifest, current.native);
                 if (!compatibility.compatible) {
                     const requiredNativeVersion = resolveManifestRequiredNativeVersion(manifest);
@@ -528,7 +558,11 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     return { status: 'up-to-date' } as const;
                 }
 
-                const bundleList = await CapacitorUpdater.list();
+                const bundleList = await withTimeout(
+                    CapacitorUpdater.list(),
+                    nativeOperationTimeoutMs,
+                    `OTA 校验超时：读取本地 bundle 列表超过 ${nativeOperationTimeoutMs}ms`,
+                );
                 const cachedBundle = bundleList.bundles.find((bundle) => bundle.version === manifest.version && bundle.status !== 'error');
                 if (cachedBundle) {
                     if (isForceUpdate) {
@@ -561,6 +595,13 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
 
                 let downloadHandle: PluginListenerHandle | null = null;
                 if (isForceUpdate) {
+                    emitForceState(onForceStateChange, {
+                        phase: 'downloading',
+                        blocking: true,
+                        version: manifest.version,
+                        title: buildForceUpdateTitle(manifest, '正在下载更新'),
+                        message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
+                    });
                     downloadHandle = await CapacitorUpdater.addListener('download', (event) => {
                         emitForceState(onForceStateChange, {
                             phase: 'downloading',

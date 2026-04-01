@@ -913,6 +913,9 @@ test.describe('DiceThrone Simple Start', () => {
         await selectCharacter(players[2].page, 'pyromancer');
         await selectCharacter(players[3].page, 'paladin');
 
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '01-four-player-character-selection');
+
         await readyMultiplePlayersAndStartGame(
             hostPage,
             players.slice(1).map((player) => player.page),
@@ -921,9 +924,23 @@ test.describe('DiceThrone Simple Start', () => {
         for (const player of players) {
             await waitForGameBoard(player.page, 30000);
         }
+        await waitForHarnessPages(players.map((player) => player.page));
+        for (const player of players) {
+            await waitForPhase(player.page, 'main1', 30000);
+        }
 
-        await clearEvidenceScreenshotsForTest(testInfo);
+        const playerStates = await Promise.all(players.map((player) => readHarnessState<any>(player.page)));
+        for (const state of playerStates) {
+            expect(state.sys.phase).toBe('main1');
+            expect(state.core.activePlayerId).toBe('0');
+        }
+
         await saveEvidenceScreenshot(hostPage, testInfo, '02-four-player-host-game-started');
+        await expect(hostPage.locator('[data-testid^="dt-top-header-"]')).toHaveCount(3, { timeout: 10000 });
+        await expect(hostPage.getByTestId('dt-top-header-1')).toHaveAttribute('data-player-id', '1');
+        await expect(hostPage.getByTestId('dt-top-header-2')).toHaveAttribute('data-player-id', '2');
+        await expect(hostPage.getByTestId('dt-top-header-3')).toHaveAttribute('data-player-id', '3');
+        await saveEvidenceScreenshot(hostPage, testInfo, '03-four-player-first-turn-main1');
 
         const afterStartResponse = await hostPage.request.get(`${gameServerBaseURL}/games/dicethrone/${matchId}`);
         expect(afterStartResponse.ok()).toBe(true);

@@ -30,7 +30,7 @@ import {
 import { DICETHRONE_CHARACTER_CATALOG } from './domain/types';
 import { findPlayerAbility, getPlayerAbilityBaseDamage } from './domain/abilityLookup';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
-import { getOpponents } from './domain/rules';
+import { areTeammates, getOpponents } from './domain/rules';
 import { hasDebuffs, hasPurifyToken, getUsableTokensForTiming } from './domain/tokenResponse';
 import type {
     AbilityCard,
@@ -53,6 +53,36 @@ type DiceInteractionData = MultistepChoiceData<unknown, unknown> & {
         diceOwnerId?: PlayerId;
         targetOpponentDice?: boolean;
     };
+};
+
+type CardInteractionData = {
+    type?: string;
+    sourceCardId?: string;
+    titleKey?: string;
+    targetPlayerIds?: PlayerId[];
+    selectCount?: number;
+    requiresTargetWithStatus?: boolean;
+    resolveCustomActionId?: string;
+    transferConfig?: {
+        sourcePlayerId?: PlayerId;
+        statusId?: string;
+    };
+    tokenGrantConfig?: {
+        tokenId: string;
+        amount: number;
+    };
+    tokenGrantConfigs?: Array<{
+        tokenId: string;
+        amount: number;
+    }>;
+    statusGrantConfig?: {
+        statusId: string;
+        amount: number;
+    };
+    statusGrantConfigs?: Array<{
+        statusId: string;
+        amount: number;
+    }>;
 };
 
 const createCommand = (playerId: PlayerId, type: string, payload: unknown = {}): Command => ({
@@ -96,6 +126,137 @@ const buildSimpleChoicePayload = (
     return { optionIds };
 };
 
+const buildPlayerSelectionCombos = (
+    playerIds: PlayerId[],
+    selectCount: number,
+): PlayerId[][] => {
+    if (playerIds.length === 0) return [];
+
+    const normalizedCount = Math.max(1, Math.min(selectCount, playerIds.length));
+    const combinations: PlayerId[][] = [];
+    const current: PlayerId[] = [];
+
+    const dfs = (startIndex: number) => {
+        if (current.length === normalizedCount) {
+            combinations.push([...current]);
+            return;
+        }
+
+        for (let i = startIndex; i < playerIds.length; i += 1) {
+            current.push(playerIds[i]);
+            dfs(i + 1);
+            current.pop();
+        }
+    };
+
+    dfs(0);
+    return combinations;
+};
+
+const playerHasStatusOrToken = (state: DiceThroneState, playerId: PlayerId): boolean => {
+    const player = state.core.players[playerId];
+    if (!player) return false;
+
+    return Object.values(player.statusEffects ?? {}).some((value) => value > 0)
+        || Object.values(player.tokens ?? {}).some((value) => value > 0);
+};
+
+const getSelectableStatusIds = (state: DiceThroneState, playerId: PlayerId): string[] => {
+    const player = state.core.players[playerId];
+    if (!player) return [];
+
+    const effectIds = Object.entries(player.statusEffects ?? {})
+        .filter(([, value]) => value > 0)
+        .map(([statusId]) => statusId);
+    const tokenIds = Object.entries(player.tokens ?? {})
+        .filter(([, value]) => value > 0)
+        .map(([statusId]) => statusId);
+
+    return Array.from(new Set([...effectIds, ...tokenIds]));
+};
+
+const isFriendlyTarget = (state: DiceThroneState, actingPlayerId: PlayerId, targetPlayerId: PlayerId): boolean => {
+    return actingPlayerId === targetPlayerId
+        || areTeammates(state.core, actingPlayerId, targetPlayerId);
+};
+
+const getCardInteractionById = (
+    state: DiceThroneState,
+    interactionId: string | null,
+): CardInteractionData | null => {
+    if (!interactionId) return null;
+
+    const current = state.sys.interaction?.current as EngineInteractionDescriptor | undefined;
+    if (!current || current.kind !== 'dt:card-interaction' || current.id !== interactionId) {
+        return null;
+    }
+
+    return current.data as CardInteractionData;
+};
+
+const getEffectCategory = (
+    state: DiceThroneState,
+    effectId: string,
+): 'buff' | 'debuff' | 'consumable' | null => {
+    const category = state.core.tokenDefinitions.find((definition) => definition.id === effectId)?.category;
+    if (category === 'buff' || category === 'debuff' || category === 'consumable') {
+        return category;
+    }
+    return null;
+};
+
+const getGrantedEffectValue = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    targetPlayerId: PlayerId,
+    effectId: string,
+    amount: number,
+): number => {
+    const category = getEffectCategory(state, effectId);
+    if (!category) return 0;
+
+    const relationSign = isFriendlyTarget(state, actingPlayerId, targetPlayerId) ? 1 : -1;
+    const targetBenefitSign = category === 'debuff' ? -1 : 1;
+    let score = relationSign * targetBenefitSign * amount * 40;
+
+    const hp = state.core.players[targetPlayerId]?.resources[RESOURCE_IDS.HP] ?? 50;
+    if (targetBenefitSign > 0 && relationSign > 0) {
+        score += Math.max(0, 40 - hp);
+    }
+    if (targetBenefitSign < 0 && relationSign < 0) {
+        score += Math.max(0, 35 - hp);
+    }
+
+    return score;
+};
+
+const scoreRemoveAllStatusesTarget = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    targetPlayerId: PlayerId,
+): number => {
+    const player = state.core.players[targetPlayerId];
+    if (!player) return 0;
+
+    const relationSign = isFriendlyTarget(state, actingPlayerId, targetPlayerId) ? 1 : -1;
+    let score = 0;
+    for (const [effectId, amount] of [
+        ...Object.entries(player.statusEffects ?? {}),
+        ...Object.entries(player.tokens ?? {}),
+    ]) {
+        if (amount <= 0) continue;
+        const category = getEffectCategory(state, effectId);
+        if (!category) continue;
+
+        const removalValue = category === 'debuff'
+            ? relationSign
+            : -relationSign;
+        score += removalValue * amount * 30;
+    }
+
+    return score;
+};
+
 const buildInteractionActions = (
     state: DiceThroneState,
     playerId: PlayerId,
@@ -132,6 +293,121 @@ const buildInteractionActions = (
                 },
             };
         });
+    }
+
+    if (current.kind === 'dt:card-interaction') {
+        const data = current.data as CardInteractionData;
+
+        if (data.type === 'selectPlayer') {
+            const targetPlayerIds = (data.targetPlayerIds ?? Object.keys(state.core.players) as PlayerId[])
+                .filter((targetId) => !!state.core.players[targetId])
+                .filter((targetId) => !data.requiresTargetWithStatus || playerHasStatusOrToken(state, targetId));
+            const selections = buildPlayerSelectionCombos(targetPlayerIds, data.selectCount ?? 1);
+
+            return selections.map((selectedPlayerIds, index) => ({
+                actionId: createAiLegalActionId('interaction', current.id, 'select-player', index),
+                kind: 'interaction-select-player',
+                label: `选择玩家 ${selectedPlayerIds.join(', ')}`,
+                commands: [{
+                    type: 'RESOLVE_INTERACTION',
+                    payload: { selectedPlayerIds },
+                }],
+                metadata: {
+                    interactionId: current.id,
+                    selectedPlayerIds,
+                },
+            }));
+        }
+
+        if (data.type === 'selectStatus') {
+            const targetPlayerIds = (data.targetPlayerIds ?? Object.keys(state.core.players) as PlayerId[])
+                .filter((targetId) => !!state.core.players[targetId]);
+
+            if (data.transferConfig) {
+                const transferableActions = targetPlayerIds.flatMap((sourcePlayerId) => {
+                    return getSelectableStatusIds(state, sourcePlayerId).flatMap((statusId) => {
+                        return targetPlayerIds
+                            .filter((targetPlayerId) => targetPlayerId !== sourcePlayerId)
+                            .map((targetPlayerId, index) => ({
+                                actionId: createAiLegalActionId(
+                                    'interaction',
+                                    current.id,
+                                    'transfer-status',
+                                    sourcePlayerId,
+                                    statusId,
+                                    targetPlayerId,
+                                    index,
+                                ),
+                                kind: 'interaction-transfer-status',
+                                label: `转移 ${statusId} 到 ${targetPlayerId}`,
+                                commands: [{
+                                    type: 'TRANSFER_STATUS',
+                                    payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
+                                }],
+                                metadata: {
+                                    interactionId: current.id,
+                                    fromPlayerId: sourcePlayerId,
+                                    toPlayerId: targetPlayerId,
+                                    statusId,
+                                },
+                            }));
+                    });
+                });
+
+                return transferableActions;
+            }
+
+            return targetPlayerIds.flatMap((targetPlayerId) => {
+                return getSelectableStatusIds(state, targetPlayerId).map((statusId, index) => ({
+                    actionId: createAiLegalActionId('interaction', current.id, 'remove-status', targetPlayerId, statusId, index),
+                    kind: 'interaction-remove-status',
+                    label: `移除 ${targetPlayerId} 的 ${statusId}`,
+                    commands: [{
+                        type: 'REMOVE_STATUS',
+                        payload: { targetPlayerId, statusId },
+                    }],
+                    metadata: {
+                        interactionId: current.id,
+                        targetPlayerId,
+                        statusId,
+                    },
+                }));
+            });
+        }
+
+        if (data.type === 'selectTargetStatus' && data.transferConfig?.sourcePlayerId && data.transferConfig?.statusId) {
+            const sourcePlayerId = data.transferConfig.sourcePlayerId;
+            const statusId = data.transferConfig.statusId;
+            const targetPlayerIds = (data.targetPlayerIds ?? Object.keys(state.core.players) as PlayerId[])
+                .filter((targetId) => !!state.core.players[targetId])
+                .filter((targetId) => targetId !== sourcePlayerId);
+
+            return targetPlayerIds.map((targetPlayerId, index) => ({
+                actionId: createAiLegalActionId(
+                    'interaction',
+                    current.id,
+                    'transfer-target-status',
+                    sourcePlayerId,
+                    statusId,
+                    targetPlayerId,
+                    index,
+                ),
+                kind: 'interaction-transfer-status',
+                label: `转移 ${statusId} 到 ${targetPlayerId}`,
+                commands: [{
+                    type: 'TRANSFER_STATUS',
+                    payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
+                }],
+                metadata: {
+                    interactionId: current.id,
+                    fromPlayerId: sourcePlayerId,
+                    toPlayerId: targetPlayerId,
+                    statusId,
+                },
+            }));
+        }
+
+        return [];
     }
 
     if (current.kind !== 'multistep-choice') {
@@ -578,7 +854,7 @@ export function buildDiceThroneAiLegalActions(args: {
     const phase = (state.sys.phase ?? state.sys.flow?.phase ?? 'setup') as TurnPhase;
 
     const interactionActions = buildInteractionActions(state, args.playerId);
-    if (interactionActions && interactionActions.length > 0) {
+    if (interactionActions !== null) {
         return interactionActions.filter((action) =>
             action.commands.every((command) => isCommandValid(state, args.playerId, command.type, command.payload)),
         );
@@ -802,6 +1078,89 @@ const interactionValueScorer: LocalAiActionScorer = {
             return {
                 score: 5,
                 reason: '普通交互选项保留轻微优先级',
+            };
+        }
+
+        if (action.kind === 'interaction-select-player') {
+            const selectedPlayerIds = Array.isArray(action.metadata?.selectedPlayerIds)
+                ? action.metadata.selectedPlayerIds.filter((playerId): playerId is PlayerId => typeof playerId === 'string')
+                : [];
+            if (selectedPlayerIds.length === 0) return null;
+
+            const interactionId = typeof action.metadata?.interactionId === 'string'
+                ? action.metadata.interactionId
+                : null;
+            const interaction = getCardInteractionById(state, interactionId);
+
+            if (interaction) {
+                const tokenConfigs = interaction.tokenGrantConfigs ?? (
+                    interaction.tokenGrantConfig ? [interaction.tokenGrantConfig] : []
+                );
+                const statusConfigs = interaction.statusGrantConfigs ?? (
+                    interaction.statusGrantConfig ? [interaction.statusGrantConfig] : []
+                );
+
+                const grantScore = selectedPlayerIds.reduce((sum, targetPlayerId) => {
+                    const tokenScore = tokenConfigs.reduce((inner, config) => {
+                        return inner + getGrantedEffectValue(
+                            state,
+                            context.playerId,
+                            targetPlayerId,
+                            config.tokenId,
+                            config.amount,
+                        );
+                    }, 0);
+                    const statusScore = statusConfigs.reduce((inner, config) => {
+                        return inner + getGrantedEffectValue(
+                            state,
+                            context.playerId,
+                            targetPlayerId,
+                            config.statusId,
+                            config.amount,
+                        );
+                    }, 0);
+                    return sum + tokenScore + statusScore;
+                }, 0);
+
+                if (grantScore !== 0) {
+                    return {
+                        score: grantScore,
+                        reason: '选人交互会优先把增益交给友方、把减益交给敌方',
+                    };
+                }
+
+                const isRemoveAllStatuses =
+                    interaction.requiresTargetWithStatus === true
+                    && !interaction.resolveCustomActionId
+                    && tokenConfigs.length === 0
+                    && statusConfigs.length === 0;
+                if (isRemoveAllStatuses) {
+                    const cleanupScore = selectedPlayerIds.reduce((sum, targetPlayerId) => {
+                        return sum + scoreRemoveAllStatusesTarget(state, context.playerId, targetPlayerId);
+                    }, 0);
+
+                    if (cleanupScore !== 0) {
+                        return {
+                            score: cleanupScore,
+                            reason: '移除状态会优先清理己方减益或敌方增益更重的目标',
+                        };
+                    }
+                }
+            }
+
+            const allTargetsAreOpponents = selectedPlayerIds.every((targetPlayerId) => {
+                return !isFriendlyTarget(state, context.playerId, targetPlayerId);
+            });
+            if (!allTargetsAreOpponents) return null;
+
+            const pressureScore = selectedPlayerIds.reduce((sum, targetPlayerId) => {
+                const hp = state.core.players[targetPlayerId]?.resources[RESOURCE_IDS.HP] ?? 50;
+                return sum + Math.max(0, 60 - hp);
+            }, 0);
+
+            return {
+                score: pressureScore,
+                reason: '敌方目标选择优先压低血量更低的一侧',
             };
         }
 

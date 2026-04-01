@@ -1035,6 +1035,66 @@ describe('王权骰铸流程测试', () => {
             expect(state.core.pendingAttack?.defenderId).toBe('1');
         });
 
+        it('4 人模式 targetingRoll 不允许通过 mergedValue 伪造队友为目标', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            const random = createQueuedRandom([1, 1, 1, 1, 1, 6]);
+            let state = createNoResponseSetup()(playerIds, random);
+
+            const setupCommands: CommandInput[] = [
+                ...advanceTo('offensiveRoll', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: fistAttackAbilityId }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('ADVANCE_PHASE', '0'),
+            ];
+
+            for (const input of setupCommands) {
+                const command = {
+                    type: input.type,
+                    playerId: input.playerId,
+                    payload: input.payload,
+                    timestamp: Date.now(),
+                } as DiceThroneCommand;
+                const result = executePipeline(pipelineConfig, state, command, random, playerIds);
+                expect(result.success).toBe(true);
+                state = result.state as MatchState<DiceThroneCore>;
+            }
+
+            expect(state.sys.phase).toBe('targetingRoll');
+            expect(state.sys.interaction.current?.playerId).toBe('0');
+
+            const spoofResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'SYS_INTERACTION_RESPOND',
+                    playerId: '0',
+                    payload: {
+                        optionId: 'option-0',
+                        mergedValue: {
+                            customId: 'select-target:2',
+                            value: 1,
+                        },
+                    },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds
+            );
+
+            expect(spoofResult.success).toBe(false);
+            expect(spoofResult.error).toBe('非法的选择值');
+            expect(spoofResult.state.core.pendingAttack?.defenderId).toBeUndefined();
+            expect(spoofResult.state.core.pendingAttack?.targetingSelectionPending).toBe(true);
+        });
+
         it('响应窗口：对手持有任意骰子卡（roll）时应打开 afterRollConfirmed', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1]));
             const result = runner.run({

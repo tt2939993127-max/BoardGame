@@ -204,6 +204,44 @@ function parseEnvNumber(name, fallback) {
     return Number.isFinite(value) ? value : fallback;
 }
 
+function parseOptionalEnvNumber(name) {
+    const raw = process.env[name];
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+        return null;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+}
+
+function resolveAdaptiveMemoryMinFreeGb() {
+    const totalMemoryGb = os.totalmem() / (1024 ** 3);
+    if (totalMemoryGb >= 24) {
+        return 3;
+    }
+    if (totalMemoryGb >= 16) {
+        return 2.5;
+    }
+    if (totalMemoryGb >= 8) {
+        return 1.5;
+    }
+    return 1;
+}
+
+function resolveMemoryMinFreeGb(group) {
+    const normalizedGroup = normalizeName(group, 'default').toUpperCase().replace(/-/g, '_');
+    const groupOverride = parseOptionalEnvNumber(`BG_HEAVY_${normalizedGroup}_MEMORY_MIN_FREE_GB`);
+    if (groupOverride !== null) {
+        return groupOverride;
+    }
+
+    const globalOverride = parseOptionalEnvNumber('BG_HEAVY_MEMORY_MIN_FREE_GB');
+    if (globalOverride !== null) {
+        return globalOverride;
+    }
+
+    return resolveAdaptiveMemoryMinFreeGb();
+}
+
 function readBudgetConfig(group) {
     const normalizedGroup = normalizeName(group, 'default');
     const defaultGroupWeight = normalizedGroup === 'quality-gate' ? 2 : 1;
@@ -220,7 +258,7 @@ function readBudgetConfig(group) {
         cpuHardLimit: parseEnvNumber('BG_HEAVY_CPU_HARD_LIMIT', 85),
         cpuSampleCount: parseEnvNumber('BG_HEAVY_CPU_SAMPLE_COUNT', 3),
         cpuSampleIntervalMs: parseEnvNumber('BG_HEAVY_CPU_SAMPLE_INTERVAL_MS', 250),
-        memoryMinFreeGb: parseEnvNumber('BG_HEAVY_MEMORY_MIN_FREE_GB', 4),
+        memoryMinFreeGb: resolveMemoryMinFreeGb(normalizedGroup),
         startupCooldownMs: parseEnvNumber('BG_HEAVY_STARTUP_COOLDOWN_MS', 10000),
     };
 }
