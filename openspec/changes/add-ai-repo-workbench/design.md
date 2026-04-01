@@ -19,10 +19,9 @@
   - 先落地 local-first runtime 的职责边界，并为未来接入 Temporal 预留稳定接口。
   - 明确各成熟开源方案影响到哪些设计决策、哪些不照搬。
 - Non-Goals:
-  - 本 change 不实现通用自由画布编辑器。
   - 本 change 不要求第一版就覆盖“数据录入 / Bug 修复 / 审计 / PR merge”完整产品能力。
   - 本 change 不要求第一版就引入 Temporal、Kubernetes 或分布式调度。
-  - 本 change 不把 OpenHands、Flowise、n8n、Activepieces 直接当成可嵌入组件；这里只借鉴架构与交互模式。
+  - 本 change 不允许把外部 fork 底座直接变成领域真相源；即使采用 Flowise，也只让它承载节点画布与 workflow shell，不接管 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle`。
 
 ## Skeleton-First Principles
 
@@ -73,17 +72,17 @@
 
 ## Fork 评估与底座裁决
 
-### Decision: 当前不直接 fork 成熟开源仓库，采用“自研领域骨架 + 选择性吸收能力”
+### Decision: 当前采用 `Flowise` 作为 fork 起点，但只复用它的节点画布与 workflow shell
 
 老板要求的关键问题不是“能不能 fork”，而是“fork 之后会不会把产品重心带偏”。因此本 change 必须先给出显式裁决：
 
 | 候选底座 | 贴合度 | 能直接省掉什么 | 真正要付出的改造成本 | 为什么不作为第一版底座 / 为什么采用 | 结论 |
 | --- | --- | --- | --- | --- | --- |
-| OpenHands | 中高 | 能直接复用 repo 选取、工具执行、CLI/GUI 共后端、本地/容器 runtime 经验。 | 要把以 `conversation / agent / task` 为中心的产品骨架改造成 `RepoSession / WorkflowTemplate / DecisionRequest / ArtifactBundle`；还要处理 Python 主栈与现有 React + Node 产品壳错位。 | 它更像“通用 coding agent 产品”，而我们当前要的是“固定模板的 repo-aware 工作台”。若 fork，第一阶段大部分工作都会变成对主语义做逆向改造。 | **不 fork** |
-| Flowise | 中 | 能直接复用节点图 UI、运行流可视化、共享 flow state、HITL checkpoint 交互。 | 要把 visual builder 主心智收缩成固定模板产品，还要把 `$flow.state` 风格的运行态改造为可审计领域对象；同时接入现有认证、上传、OpenSpec 和证据体系。 | 它适合作为“节点编排交互参考”，不适合作为“第一版产品底座”；否则会反向驱动我们先做画布，而不是先做模板。 | **不 fork** |
-| n8n | 中低 | 能直接复用等待/恢复、执行历史、失败节点可见性、人审 tool-call 的成熟模式。 | 要绕开 connector/credential/marketplace 这条 iPaaS 主线，把自动化平台改造成 repo-local 工作台；此外 fair-code 许可也会让底座策略与未来分发方式变复杂。 | 它解决的是“自动化集成编排”，不是“仓库任务语义”；fork 后需要长期对抗其产品默认值。 | **不 fork** |
-| Activepieces | 中 | 能直接复用 TypeScript 栈、approval/form/chat 这套低心智负担的 HITL 交互，以及 flow pause/stop 控制流。 | 仍需把 piece/trigger/action 生态改造成 repo/worktree/workflow 模型，并补齐工作台级证据 bundle、仓库会话、模板化节点契约。 | 它在技术栈上最接近我们，但产品语义仍是 automation builder，不是 repo-aware workbench；直接 fork 依然会花大量精力对抗错误主语义。 | **不 fork** |
-| 现有 BoardGame 基础上扩展 | 高 | 直接复用现有 React 19、Node、认证、上传、本地脚本链路、OpenSpec、E2E、证据文档与 repo 内规则资产。 | 需要自建最小 `WorkflowOrchestrator`、`DecisionRequest`、运行详情页、`ArtifactBundle` 与 durable journal。 | 虽然要补 runtime 骨架，但这是“新增正确主语义”，不是“拆旧主语义再重装”；实现路径更短，也更符合当前产品目标。 | **采用** |
+| OpenHands | 中高 | 能直接复用 repo 选取、工具执行、CLI/GUI 共后端、本地/容器 runtime 经验。 | 要把以 `conversation / agent / task` 为中心的产品骨架改造成 `RepoSession / WorkflowTemplate / DecisionRequest / ArtifactBundle`；还要处理 Python 主栈与现有 React + Node 产品壳错位。 | 仓库语义强，但 UI 心智仍是对话式 coding agent；如果拿它做底座，节点画布反而要自己重做。 | **不选** |
+| Flowise | 高 | 能直接复用 AgentFlow V2 的节点画布、显式连线、共享 flow state、HITL checkpoint 与 AI workflow shell。 | 需要把 `$flow.state` 一类运行态限制在 UI / shell 层，并把 repo/worktree/domain 真相留在我们自己的领域层。 | 当前最缺的是“像成熟开源项目那样的节点图与工作流外壳”，而不是通用聊天壳或集成市场；Flowise 在这点上最贴题，且技术栈与前端改造成本可控。 | **选为 fork 起点** |
+| n8n | 中低 | 能直接复用等待/恢复、执行历史、失败节点可见性、人审 tool-call 的成熟模式。 | 要绕开 connector/credential/marketplace 这条 iPaaS 主线，把自动化平台改造成 repo-local 工作台；此外 fair-code 许可也会让底座策略与未来分发方式变复杂。 | UI 和执行历史成熟，但许可与产品主语义都不适合做我们这条线的底座。 | **不选** |
+| Activepieces | 中 | 能直接复用 TypeScript 栈、approval/form/chat 这套低心智负担的 HITL 交互，以及 flow pause/stop 控制流。 | 仍需把 piece/trigger/action 生态改造成 repo/worktree/workflow 模型，并补齐工作台级证据 bundle、仓库会话、模板化节点契约。 | 技术栈顺手，但产品语义仍偏 automation builder；当下对“节点画布像参考目标”这件事不如 Flowise 直接。 | **次选，不作为首选底座** |
+| 现有 BoardGame 基础上扩展 | 中 | 能直接复用现有 React 19、Node、认证、上传、本地脚本链路、OpenSpec、E2E、证据文档与 repo 内规则资产。 | 仍需自己补齐成熟的节点画布、连线交互和 workflow shell。 | 适合做领域真相源，不适合继续承担节点画布底座；当前继续纯自研只会重复造轮子。 | **保留为承载层，不再作为唯一底座** |
 
 ### Fork 裁决标准
 
@@ -95,14 +94,29 @@
 4. **本地仓库语义是否可保真**：是否能把 `RepoSession / WorktreeTask / ArtifactBundle` 维持为唯一真实来源，而不是被外部框架状态反客为主。
 5. **后续演进是否稳**：第一版之后接 LangGraph / Temporal 或扩模板时，是否还能保持领域边界稳定。
 
-结论上，四个外部产品底座都属于“需要大规模逆向改造主语义”，而“在现有 BoardGame 基础上扩展”属于“补齐缺失骨架但保留正确主语义”。因此第一版底座裁决不是“谨慎保守”，而是**从架构正确性出发的唯一最优解**。
+结论上，若目标是尽快拿到成熟节点画布并在其上实施 repo-aware workbench，`Flowise` 是最合适的 fork 起点；但它只负责 workflow shell 与节点画布，不负责领域真相。
 
 最终裁决：
 
-- **最正确方案：不直接 fork，上层自定义领域骨架，下层按需吸收成熟项目的局部模式。**
-- 理由不是“改动最小”，而是**架构正确性最高**：我们要先把 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 这套仓库工作台语义定成唯一真实来源，任何直接 fork 都会先继承对方的主语义，再被迫做大规模逆向改造。
-- 与其把 OpenHands / Flowise / n8n / Activepieces 其中之一硬改成 repo-aware workbench，不如在现有 BoardGame 基础上直接扩展；这样能保留现有用户系统、上传链路、规则文档、OpenSpec、E2E 与证据体系，避免“先拆自己，再装回去”。
-- 若未来目标切换为“聊天式 coding agent 平台”，再重新评估以 OpenHands 为底座；若未来目标切换为“通用自动化 / SaaS 集成市场”，再重新评估 n8n / Activepieces。当前目标下，两类 fork 都不是最正确路线。
+- **最正确方案：fork `Flowise`，但把它限制在节点画布 / workflow shell 层；`RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 仍由本项目领域层持有。**
+- 理由不是“它最火”，而是**当前问题的主矛盾就是节点图和 workflow shell 做得太差**。OpenHands 解决的是 repo agent，n8n/Activepieces 解决的是 automation builder，而 Flowise 最直接解决“节点画布像成熟开源项目”这件事。
+- 这不是把整个产品重心交给 Flowise。正确实施方式是：用 Flowise 提供节点画布、连线、节点交互和基础 workflow shell；用我们自己的 domain/runtime 接住 repo/worktree/run/decision/artifact 真相。
+- 若未来目标切换为“聊天式 coding agent 平台”，再重新评估以 OpenHands 为底座；若未来目标切换为“通用自动化 / SaaS 集成市场”，再重新评估 n8n / Activepieces。当前这条线的最佳 fork 目标固定为 Flowise。
+
+### 当前锁定的 fork 基线
+
+- 上游：`FlowiseAI/Flowise`
+- 锁定 tag：`flowise@3.1.1`
+- 锁定 commit：`34cf285`
+- release 日期：`2026-03-23`
+- 许可：`Apache-2.0`
+- 当前仓库内的单一真相落点：`src/features/ai-repo-workbench/flowiseForkBaseline.ts`
+
+锁定原因：
+
+1. 当前目标是 fork 一个“已验证的上游起点”，而不是追踪 upstream `main`。
+2. 后续升级必须按 tag 做增量兼容审计，不能把上游变化和本地适配改动混在一起。
+3. `Flowise` 历史上存在安全公告与 Node 兼容议题，因此升级必须显式记录风险，而不是默认跟进最新提交。
 
 ## MVP Boundary
 
@@ -140,6 +154,12 @@ MVP 的骨架不是“聊天框 + 若干工具调用”，而是当前明确采�
 5. `Artifact Publisher`：bundle 组装、证据索引、阶段产物发布。
 
 只有在这五层边界先被明确后，固定节点图才有意义；否则实现细节会反过来绑死领域模型。后续如果实践证明某层拆分需要调整，应通过文档和 schema 一起演进，而不是跳过分层直接堆实现。
+
+当前实现落点（2026-04-01）：
+
+- `src/features/ai-repo-workbench/runtime.ts`：继续持有领域模型、journal 持久化、selector，以及对外稳定 API。
+- `src/features/ai-repo-workbench/workflowServices.ts`：新增 `WorkflowOrchestrator` / `LocalRuntime` 契约和当前本地 orchestrator 实现。
+- `src/pages/devtools/AIRepoWorkbench.tsx`：页面仍使用原有 `startNewFactionRun / submitRuleSourceDecision / advanceWorkbenchJournal` 入口，但这些入口现在已经委托给 orchestrator，而不是页面直连内联状态机。
 
 ### Decision: 采用固定节点图 + 持久化运行日志，而不是自由聊天拼接
 
@@ -626,7 +646,7 @@ MVP **不** 让 `LocalRuntime` 负责：
 - **执行策略**：local-first `LocalRuntime`
 - **编排策略**：固定模板工作流；LangGraph 仅作为可插拔 orchestrator 适配层
 - **产品收敛**：只做 `new-faction`
-- **开源策略**：不 fork，局部吸收成熟模式
+- **开源策略**：fork `Flowise` 作为节点画布 / workflow shell 起点，但 repo/worktree/domain 真相继续留在本项目领域层
 
 成立原因：
 
@@ -640,7 +660,7 @@ MVP **不** 让 `LocalRuntime` 负责：
 | --- | --- | --- |
 | 领域骨架定义得不够清楚，后续又被实现细节反推 | 先写节点代码，再补 schema | 先定义当前 schema、接口与层次边界，再做节点实现；若实现中发现更优抽象，再显式回写文档 |
 | LangGraph 侵入过深，导致领域对象被其线程状态绑架 | 直接把 session / artifact 全塞进 graph state | 只允许保存引用与可重放状态，不让 LangGraph 成为领域真源 |
-| 不 fork 带来初期自研成本 | 前期需要自建运行详情、决策卡片、bundle 发布 | 只自研领域骨架与必要 UI，其他交互模式按成熟项目收敛 |
+| fork Flowise 仍有较高整合成本 | 需要把上游节点画布接入现有 React/Node 产品壳，并防止其状态模型侵入 repo/worktree/domain | 只复用画布与 workflow shell；所有 repo/run/decision/artifact 真相继续由本项目领域层与 journal 持有 |
 | local-first 在可靠性上弱于成熟编排平台 | 进程重启 / 长时暂停 / 重试策略不足 | 先用本地 durable journal，接口层提前为 Temporal 预留适配面 |
 
 还需要的优化：
@@ -659,12 +679,13 @@ MVP **不** 让 `LocalRuntime` 负责：
 
 ## Migration Plan
 
-1. 先完成《开源基线与可复用结论》与底座决策，锁定“在现有 BoardGame 基础上扩展，不 fork 外部产品”。
+1. 先完成《开源基线与可复用结论》与底座决策，锁定“fork Flowise 作为画布 / shell 起点，但不让它接管领域真相”。
 2. 再发布 `ai-repo-workbench` capability spec，明确 MVP 只支持 `new-faction`。
 3. 先用 local-first runtime 打通节点执行、暂停/恢复、证据回传。
 4. 第二阶段再增加“生成派系代码骨架 + 本地预览 + E2E”子流程。
 5. 第三阶段再评估是否需要把执行器切换为 Temporal-backed runtime。
 6. 在 `new-faction` 验证稳定后，再复制同一套领域模型到“数据录入 / Bug 修复”等模板。
+7. 另开单独实现 change 处理 `Flowise` fork 的真实接入：上游源码目录、Node 版本隔离、构建产物边界、升级审计与安全修补策略。
 
 ## Open Questions
 
