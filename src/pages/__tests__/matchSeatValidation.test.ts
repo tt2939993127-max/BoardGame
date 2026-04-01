@@ -28,17 +28,29 @@ describe('validateStoredMatchSeat', () => {
     });
 
     it('座位不存在时清理', () => {
-        const stored = buildStored();
+        const stored = buildStored({ updatedAt: Date.now() - 20_000 });
         const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 1, name: 'Bob' }]), '0');
         expect(result.shouldClear).toBe(true);
         expect(result.reason).toBe('missing_seat');
     });
 
+    it('新写入的凭证遇到短暂缺席位时不立刻清理', () => {
+        const stored = buildStored({ updatedAt: Date.now() });
+        const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 1, name: 'Bob' }]), '0');
+        expect(result.shouldClear).toBe(false);
+    });
+
     it('座位为空时清理', () => {
-        const stored = buildStored();
+        const stored = buildStored({ updatedAt: Date.now() - 20_000 });
         const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 0, name: '' }]), '0');
         expect(result.shouldClear).toBe(true);
         expect(result.reason).toBe('seat_empty');
+    });
+
+    it('新写入的凭证遇到 seat.name 短暂为空时不立刻清理', () => {
+        const stored = buildStored({ updatedAt: Date.now() });
+        const result = validateStoredMatchSeat(stored, buildPlayers([{ id: 0, name: '' }]), '0');
+        expect(result.shouldClear).toBe(false);
     });
 
     it('昵称不一致时不清理（凭据才是认证手段）', () => {

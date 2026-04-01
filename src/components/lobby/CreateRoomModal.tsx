@@ -114,7 +114,7 @@ export const CreateRoomModal = ({
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+        setEnableAi(initialPreferences ? countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0 : false);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);

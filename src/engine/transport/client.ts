@@ -326,6 +326,14 @@ export class GameTransportClient {
     }
 
     /**
+     * 兼容旧调用点：历史代码仍使用 destroy() 释放客户端。
+     * 当前语义等同于 disconnect()。
+     */
+    destroy(): void {
+        this.disconnect();
+    }
+
+    /**
      * 主动重新同步状态
      *
      * 页面恢复可见时调用：浏览器后台标签页可能冻结 JS 执行，
