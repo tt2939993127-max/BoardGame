@@ -58,6 +58,11 @@ type PendingRoomAction = {
 
 type MatchEntryLoadingPhase = 'creating' | 'joining';
 const LOBBY_CONNECT_ERROR_TOAST_DELAY_MS = 1500;
+const lastLoggedPackageStateByGame = new Map<string, string>();
+
+export function __resetGameDetailsModalPackageStateLogForTests(): void {
+    lastLoggedPackageStateByGame.clear();
+}
 
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
@@ -93,7 +98,19 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         enabled: true,
     });
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
-    const isPackageInstalledForMobileGame = packageInstallCardState.status === 'installed';
+    const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
+    const hasVerifiedInstalledPackageForMobileGame = packageInstallCardState.status === 'installed'
+        && Boolean(installedPackageVersionLabel);
+    const effectivePackageInstallCardState = hasVerifiedInstalledPackageForMobileGame
+        || packageInstallCardState.status !== 'installed'
+        ? packageInstallCardState
+        : {
+            ...packageInstallCardState,
+            status: 'not-installed' as const,
+            progressPercent: undefined,
+            progressMode: undefined,
+            errorMessage: undefined,
+        };
     const isNativeCapacitorRuntime = typeof window !== 'undefined'
         && typeof (
             window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
@@ -102,11 +119,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
         ).Capacitor?.isNativePlatform() === true;
     const shouldShowMobilePackageCard = isPackageManagedMobileGame
-        && (isAppUpdateRequiredForMobileGame || !isPackageInstalledForMobileGame);
-    const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
+        && (isAppUpdateRequiredForMobileGame || !hasVerifiedInstalledPackageForMobileGame);
     const shouldShowInstalledPackageBadge = isPackageManagedMobileGame
         && !isAppUpdateRequiredForMobileGame
-        && isPackageInstalledForMobileGame;
+        && hasVerifiedInstalledPackageForMobileGame;
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -147,6 +163,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const matchEntryLoadingDescription = matchEntryLoadingPhase === 'creating'
         ? t('matchRoom.creatingRoom')
         : t('matchRoom.joiningRoom');
+    const matchEntryLoadingProgressText = matchEntryLoadingPhase === 'creating'
+        ? t('matchRoom.loadingProgress.step', { current: 1, total: 4 })
+        : t('matchRoom.loadingProgress.step', { current: 2, total: 4 });
 
     useEffect(() => {
         pendingActionRef.current = pendingAction;
@@ -391,6 +410,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             return;
         }
 
+        const packageStateSnapshot = JSON.stringify({
+            pendingInstall: pendingPackageInstall ? 'yes' : 'no',
+            pendingModulePackId: pendingPackageInstall?.modulePackId || '',
+            pendingAssetPackId: pendingPackageInstall?.assetPackId || '',
+            status: packageInstallCardState.status,
+            progressMode: packageInstallCardState.progressMode || '',
+            progressPercent: packageInstallCardState.progressPercent ?? '',
+            errorMessage: packageInstallCardState.errorMessage || '',
+        });
+
+        if (lastLoggedPackageStateByGame.get(gameId) === packageStateSnapshot) {
+            return;
+        }
+
+        lastLoggedPackageStateByGame.set(gameId, packageStateSnapshot);
+
         logger.info('[GameDetailsModal] 游戏包状态变化', {
             gameId,
             gameName: gameDisplayName,
@@ -429,7 +464,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             return false;
         }
 
-        if (!isPackageInstalledForMobileGame) {
+        if (!hasVerifiedInstalledPackageForMobileGame) {
             handleOpenMobilePackageInstall();
             toast.warning(
                 { kind: 'i18n', key: 'packageManager.notInstalledHint', ns: 'lobby', params: { game: gameDisplayName } },
@@ -446,7 +481,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         gameManifest?.mobileDelivery?.requiredAppVersion,
         handleOpenMobilePackageInstall,
         isAppUpdateRequiredForMobileGame,
-        isPackageInstalledForMobileGame,
+        hasVerifiedInstalledPackageForMobileGame,
         isPackageManagedMobileGame,
         toast,
     ]);
@@ -1249,7 +1284,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         >
                             <GameDetailsMobilePackageCard
                                 gameName={gameDisplayName}
-                                state={packageInstallCardState}
+                                state={effectivePackageInstallCardState}
                                 onInstall={handleOpenMobilePackageInstall}
                                 onRetry={handleRetryPackageInstall}
                                 presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
@@ -1532,7 +1567,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             {pendingPackageInstall && (
                 <GamePackageInstallConfirmModal
                     gameName={pendingPackageInstall.gameName}
-                    state={packageInstallCardState}
+                    state={effectivePackageInstallCardState}
                     modulePackId={pendingPackageInstall.modulePackId}
                     assetPackId={pendingPackageInstall.assetPackId}
                     modulePackBytes={pendingPackageInstall.modulePackBytes}
@@ -1550,6 +1585,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <LoadingScreen
                         title={matchEntryLoadingTitle}
                         description={matchEntryLoadingDescription}
+                        progressText={matchEntryLoadingProgressText}
                         fullScreen={false}
                     />
                 </div>
@@ -1557,4 +1593,3 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         </>
     );
 };
-

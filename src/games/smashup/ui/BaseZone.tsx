@@ -269,9 +269,7 @@ export const BaseZone: React.FC<{
                     />
                 )}
                 {hasOngoingTalent && oa.talentUsed && (
-                    <div className="absolute -bottom-[0.3vw] left-1/2 -translate-x-1/2 bg-slate-600 text-white text-[0.35vw] font-bold px-[0.2vw] py-[0.02vw] rounded-sm shadow-sm border border-white z-10 whitespace-nowrap">
-                        {t('ui.talent_used')}
-                    </div>
+                    <UsedStateBadge label={t('ui.talent_used')} compact insetClassName="left-[0.12vw] right-[0.12vw]" />
                 )}
                 {((oa.metadata?.powerCounters as number) ?? 0) > 0 && (
                     <div
@@ -423,9 +421,7 @@ export const BaseZone: React.FC<{
                     </div>
                 )}
                 {titan.talentUsed && (
-                    <div className="absolute -bottom-[0.3vw] left-1/2 -translate-x-1/2 bg-slate-600 text-white text-[0.35vw] font-bold px-[0.24vw] py-[0.02vw] rounded-sm shadow-sm border border-white z-10 whitespace-nowrap">
-                        {t('ui.talent_used')}
-                    </div>
+                    <UsedStateBadge label={t('ui.talent_used')} compact insetClassName="left-[0.12vw] right-[0.12vw]" />
                 )}
                 {titan.powerCounters > 0 && (
                     <div
@@ -802,6 +798,24 @@ const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
     </div>
 );
 
+const UsedStateBadge: React.FC<{ label: string; compact?: boolean; insetClassName?: string }> = ({
+    label,
+    compact = false,
+    insetClassName = 'inset-x-0',
+}) => (
+    <div className={`absolute pointer-events-none z-40 flex justify-center ${insetClassName} ${compact ? 'bottom-[4%]' : 'bottom-[4.2%]'}`}>
+        <div
+            className={`whitespace-nowrap rounded-full border border-white/90 bg-slate-700/96 text-white shadow-[0_2px_8px_rgba(15,23,42,0.45)] ${
+                compact
+                    ? 'min-w-[34%] px-[10%] py-[3%] text-[clamp(9px,0.5vw,12px)] font-black leading-none text-center'
+                    : 'min-w-[38%] px-[12%] py-[4%] text-[clamp(10px,0.58vw,14px)] font-black leading-none text-center'
+            }`}
+        >
+            {label}
+        </div>
+    </div>
+);
+
 // ============================================================================
 // Minion Card
 // ============================================================================
@@ -1103,9 +1117,7 @@ const MinionCard: React.FC<{
 
             {/* 天赋已使用标记 */}
             {hasTalent && minion.talentUsed && !canUseTalent && (
-                <div className="absolute -bottom-[0.3vw] left-1/2 -translate-x-1/2 bg-slate-600 text-white text-[0.45vw] font-bold px-[0.3vw] py-[0.05vw] rounded-sm shadow-sm border border-white z-10 whitespace-nowrap">
-                    {t('ui.talent_used')}
-                </div>
+                <UsedStateBadge label={t('ui.talent_used')} insetClassName="left-[0.2vw] right-[0.2vw]" />
             )}
 
             {/* 附着的 ongoing 行动卡 - 角标 + hover 时弹出小卡片 */}

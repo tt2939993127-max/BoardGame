@@ -58,8 +58,9 @@ export default async function globalTeardown() {
     const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
     const managedRuntimeMode = process.env.PW_RUNTIME_MODE?.trim() || '';
     const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
+    const isListOnly = process.env.PW_E2E_LIST_ONLY === 'true';
 
-    if (!shouldStartServers) {
+    if (!shouldStartServers || isListOnly) {
         return;
     }
 

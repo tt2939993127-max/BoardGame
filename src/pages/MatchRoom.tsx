@@ -266,6 +266,7 @@ const OnlineRoomConnectionLoading = ({
     description: string;
     gameId?: string;
 }) => {
+    const { t } = useTranslation('lobby');
     const { state, isConnected, matchPlayers } = useGameClient();
     const core = state?.core as { turnNumber?: number; activePlayer?: number | string; phase?: string } | undefined;
     const activityKey = [
@@ -275,12 +276,17 @@ const OnlineRoomConnectionLoading = ({
         core?.activePlayer ?? 'no-player',
         core?.phase ?? 'no-phase',
     ].join(':');
+    const progressText = t('matchRoom.loadingProgress.step', {
+        current: isConnected ? 4 : 3,
+        total: 4,
+    });
 
     return (
         <ConnectionLoadingScreen
             anchor="container"
             title={title}
             description={description}
+            progressText={progressText}
             gameId={gameId}
             activityKey={activityKey}
             suppressTimeout={Boolean(state)}
@@ -309,6 +315,9 @@ export const MatchRoom = () => {
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+    const loadingStepText = useCallback((current: number, total: number = 4) => (
+        t('matchRoom.loadingProgress.step', { current, total })
+    ), [t]);
 
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
@@ -1179,12 +1188,12 @@ export const MatchRoom = () => {
     }
 
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+        return <LoadingScreen description={t('matchRoom.loadingResources')} progressText={loadingStepText(1)} />;
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} />;
+        return <LoadingScreen description={t('matchRoom.joiningRoom')} progressText={loadingStepText(2)} />;
     }
 
     if (shouldShowMatchError) {

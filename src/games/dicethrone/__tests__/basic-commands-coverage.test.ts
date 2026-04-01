@@ -30,6 +30,8 @@ import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
 import { resolveLocalPregameControlledPlayerId } from '../../../engine/transport/followCurrentTurnPlayer';
 import { RESOURCE_IDS } from '../domain/resources';
+import type { InteractionDescriptor } from '../domain/core-types';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -267,6 +269,239 @@ describe('AI legal actions', () => {
         });
 
         expect(actions.some((action) => action.kind === 'advance-phase')).toBe(true);
+    });
+
+    it('dt:card-interaction 的 selectPlayer 交互应生成 RESOLVE_INTERACTION 动作', () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toHaveLength(2);
+        expect(actions.every((action) => action.kind === 'interaction-select-player')).toBe(true);
+        expect(actions.map((action) => action.commands[0])).toEqual([
+            { type: 'RESOLVE_INTERACTION', payload: { selectedPlayerIds: ['1'] } },
+            { type: 'RESOLVE_INTERACTION', payload: { selectedPlayerIds: ['3'] } },
+        ]);
+    });
+
+    it('本地 AI runner 在 selectPlayer 交互里不会卡死', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]?.type).toBe('RESOLVE_INTERACTION');
+        expect([['1'], ['3']]).toContainEqual(
+            (resolution?.action.commands[0]?.payload as { selectedPlayerIds?: string[] } | undefined)?.selectedPlayerIds,
+        );
+    });
+
+    it('本地 AI 在敌方单选交互中优先选择更低血量的目标', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['1'].resources[RESOURCE_IDS.HP] = 30;
+        state.core.players['3'].resources[RESOURCE_IDS.HP] = 8;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player-low-hp',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['3'] },
+        });
+    });
+
+    it('本地 AI 在全体候选的增益选人交互里优先选择更需要增益的友方', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 40;
+        state.core.players['2'].resources[RESOURCE_IDS.HP] = 9;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-friendly-buff-target',
+            playerId: '0',
+            sourceCardId: 'card-consecrate',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayerForConsecrate',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2', '3'],
+            tokenGrantConfigs: [
+                { tokenId: TOKEN_IDS.PROTECT, amount: 1 },
+                { tokenId: TOKEN_IDS.RETRIBUTION, amount: 1 },
+                { tokenId: TOKEN_IDS.CRIT, amount: 1 },
+                { tokenId: TOKEN_IDS.ACCURACY, amount: 1 },
+            ],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['2'] },
+        });
+    });
+
+    it('本地 AI 在移除全部状态交互里优先清理净收益更高的目标', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.BURN] = 1;
+        state.core.players['3'].tokens[TOKEN_IDS.CRIT] = 1;
+        state.core.players['3'].tokens[TOKEN_IDS.PROTECT] = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-best-cleanse-target',
+            playerId: '0',
+            sourceCardId: 'card-what-status',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayerToRemoveAllStatus',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2', '3'],
+            requiresTargetWithStatus: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['3'] },
+        });
+    });
+
+    it('dt:card-interaction 的 selectStatus 交互应生成 REMOVE_STATUS 动作', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.players['1'].statusEffects.poison = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-status',
+            playerId: '0',
+            sourceCardId: 'remove-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToRemove',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-remove-status',
+            commands: [{
+                type: 'REMOVE_STATUS',
+                payload: { targetPlayerId: '1', statusId: 'poison' },
+            }],
+        }));
+    });
+
+    it('带 transferConfig 的 selectStatus 交互应生成 TRANSFER_STATUS 动作', () => {
+        const state = createInitializedState(['0', '1', '2'], fixedRandom);
+        state.core.players['1'].statusEffects.poison = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-transfer-status',
+            playerId: '0',
+            sourceCardId: 'transfer-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToTransfer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2'],
+            transferConfig: {},
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-transfer-status',
+            commands: [{
+                type: 'TRANSFER_STATUS',
+                payload: { fromPlayerId: '1', toPlayerId: '0', statusId: 'poison' },
+            }],
+        }));
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-transfer-status',
+            commands: [{
+                type: 'TRANSFER_STATUS',
+                payload: { fromPlayerId: '1', toPlayerId: '2', statusId: 'poison' },
+            }],
+        }));
     });
 
     it('本地 AI runner 应在 setup 阶段选择角色', async () => {

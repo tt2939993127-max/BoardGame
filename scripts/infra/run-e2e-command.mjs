@@ -18,6 +18,10 @@ const CLEANUP_CACHE_TTL_MS = 90_000;
 const ENCODING_CACHE_TTL_MS = 90_000;
 const SAFETY_CACHE_TTL_MS = 90_000;
 
+function createE2ESessionId() {
+    return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function run(command, args, env) {
     console.log(`🎭 启动 Playwright: ${[command, ...args].join(' ')}`);
     const result = spawnSync(command, args, withWindowsHide({
@@ -168,6 +172,25 @@ async function stopHeldManager(child) {
             }
         }
     });
+}
+
+function stopManagedRuntime(runtimeId, env) {
+    if (!runtimeId) {
+        return;
+    }
+
+    try {
+        runJsonCommand(runtimeNode, [
+            'scripts/infra/e2e-runtime-manager.mjs',
+            'stop',
+            '--json',
+            '--runtimeId',
+            runtimeId,
+        ], env);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️ 停止托管 E2E runtime 失败: runtimeId=${runtimeId}\n${message}`);
+    }
 }
 
 function createEnv(overrides = {}) {
@@ -330,7 +353,15 @@ function deriveManagedRuntimeScope(mode, explicitTargetPath) {
     return `single-${mode}-${worktreeName}-${baseName}-${digest}`;
 }
 
-export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } = {}) {
+function resolveBootstrapMode({ isListMode, shouldUseManagedSingleRuntime }) {
+    if (isListMode) {
+        return 'none';
+    }
+
+    return shouldUseManagedSingleRuntime ? 'attach-managed' : 'legacy-global-setup';
+}
+
+export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {}, entrypoint = 'run-e2e-command' } = {}) {
     if (!mode) {
         console.error('用法: node scripts/infra/run-e2e-command.mjs <default|dev|isolated|ci|critical|parallel> [...playwrightArgs]');
         process.exit(1);
@@ -342,7 +373,7 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
     };
     modeEnv.PW_RUNTIME_SCOPE = modeEnv.PW_RUNTIME_SCOPE
         || process.env.PW_RUNTIME_SCOPE
-        || `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        || '';
 
     const explicitTargetPath = getExplicitTargetPath(extraArgs);
     const isListMode = isPlaywrightListMode(extraArgs);
@@ -366,6 +397,20 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
         && !envOverrides.PW_USE_DEV_SERVERS
         && !isListMode
     );
+    const bootstrapMode = resolveBootstrapMode({ isListMode, shouldUseManagedSingleRuntime });
+    const commandSource = [runtimeNode, playwrightCli, 'test', ...extraArgs].join(' ');
+    modeEnv.PW_E2E_STANDARD_ENTRY = 'true';
+    modeEnv.PW_E2E_SESSION_ID = modeEnv.PW_E2E_SESSION_ID
+        || process.env.PW_E2E_SESSION_ID
+        || createE2ESessionId();
+    modeEnv.PW_E2E_ENTRYPOINT = entrypoint;
+    modeEnv.PW_E2E_COMMAND_SOURCE = commandSource;
+    modeEnv.PW_E2E_LIST_ONLY = isListMode ? 'true' : 'false';
+    modeEnv.PW_E2E_BOOTSTRAP_MODE = bootstrapMode;
+    modeEnv.PW_E2E_TARGET = explicitTargetPath || (isListMode ? '<list>' : '<all>');
+    if (bootstrapMode === 'legacy-global-setup') {
+        modeEnv.PW_ALLOW_LEGACY_GLOBAL_BOOTSTRAP = 'true';
+    }
 
     if (
         shouldUseManagedSingleRuntime
@@ -375,6 +420,10 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
     ) {
         modeEnv.PW_RUNTIME_SCOPE = deriveManagedRuntimeScope(mode, explicitTargetPath);
         console.log(`♻️ 单文件 E2E 将复用稳定 runtime scope: ${modeEnv.PW_RUNTIME_SCOPE}`);
+    }
+
+    if (!modeEnv.PW_RUNTIME_SCOPE) {
+        modeEnv.PW_RUNTIME_SCOPE = `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
 
     if (preferSharedSingleRun) {
@@ -432,6 +481,7 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
 
     let heldRuntimeManager = null;
     let globalBudgetHandle = null;
+    let managedRuntime = null;
     const taskGuard = acquireTaskGuard({
         name: 'e2e-run',
         conflicts: ['quality-gate'],
@@ -442,19 +492,29 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
             managedRuntime: shouldUseManagedSingleRuntime,
             runtimeScope: modeEnv.PW_RUNTIME_SCOPE || '',
             serviceReuse: preferSharedSingleRun ? 'shared-single' : 'isolated',
+            listOnly: isListMode,
+            sessionId: modeEnv.PW_E2E_SESSION_ID,
+            entrypoint,
         },
     });
     try {
-        globalBudgetHandle = await acquireGlobalHeavyBudget({
-            group: 'e2e',
-            command: [runtimeNode, playwrightCli, 'test', ...extraArgs].join(' '),
-            metadata: {
-                mode,
-                target: explicitTargetPath || '<all>',
-                runtimeScope: modeEnv.PW_RUNTIME_SCOPE || '',
-                serviceReuse: preferSharedSingleRun ? 'shared-single' : 'isolated',
-            },
-        });
+        if (isListMode) {
+            console.log('🪶 --list 属于轻量命令，跳过全局重任务内存门禁。');
+        } else {
+            globalBudgetHandle = await acquireGlobalHeavyBudget({
+                group: 'e2e',
+                command: [runtimeNode, playwrightCli, 'test', ...extraArgs].join(' '),
+                metadata: {
+                    mode,
+                    target: explicitTargetPath || '<all>',
+                    runtimeScope: modeEnv.PW_RUNTIME_SCOPE || '',
+                    serviceReuse: preferSharedSingleRun ? 'shared-single' : 'isolated',
+                    listOnly: isListMode,
+                    sessionId: modeEnv.PW_E2E_SESSION_ID,
+                    entrypoint,
+                },
+            });
+        }
 
         if (shouldUseManagedSingleRuntime) {
             const managerArgs = [
@@ -470,14 +530,15 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
             } else {
                 managerArgs.push('--scope', modeEnv.PW_RUNTIME_SCOPE);
             }
-            const { child, payload: managedRuntime } = await ensureManagedRuntimeWithHold(runtimeNode, managerArgs, modeEnv);
+            const { child, payload } = await ensureManagedRuntimeWithHold(runtimeNode, managerArgs, modeEnv);
             heldRuntimeManager = child;
-            const runtimeMode = managedRuntime.mode;
-            const runtimePorts = managedRuntime.ports;
-            modeEnv.PW_MANAGED_RUNTIME_ID = managedRuntime.runtimeId;
+            managedRuntime = payload;
+            const runtimeMode = payload.mode;
+            const runtimePorts = payload.ports;
+            modeEnv.PW_MANAGED_RUNTIME_ID = payload.runtimeId;
             modeEnv.PW_SKIP_RUNTIME_BOOTSTRAP = 'true';
             modeEnv.PW_RUNTIME_MODE = runtimeMode;
-            modeEnv.PW_RUNTIME_SCOPE = managedRuntime.scope;
+            modeEnv.PW_RUNTIME_SCOPE = payload.scope;
             modeEnv.PW_PORT = String(runtimePorts.frontend);
             modeEnv.PW_GAME_SERVER_PORT = String(runtimePorts.gameServer);
             modeEnv.GAME_SERVER_PORT = String(runtimePorts.gameServer);
@@ -508,6 +569,9 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {} } 
             process.exitCode = exitCode;
         }
     } finally {
+        if (managedRuntime?.mode === 'isolated-single') {
+            stopManagedRuntime(managedRuntime.runtimeId, modeEnv);
+        }
         await stopHeldManager(heldRuntimeManager);
         globalBudgetHandle?.release?.();
         taskGuard.release();

@@ -65,6 +65,7 @@
     "minion_count": "{{count}} Minions",
     "action_count": "{{count}} Actions",
     "selected": "Selected",
+    "click_to_cancel_selection": "Tap to cancel selection",
     "faction_selected_hint": "Selected, tap to cancel",
     "faction_selected_label": "Selected",
     "taken_by_other": "Taken by another player",

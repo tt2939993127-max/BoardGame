@@ -42,4 +42,5 @@ console.log(`[test:e2e:dev:file] 复用现服单文件运行: ${match}`);
 await runE2ECommand({
     mode: 'dev',
     extraArgs: [match, ...playwrightArgs],
+    entrypoint: 'run-e2e-dev-single',
 });

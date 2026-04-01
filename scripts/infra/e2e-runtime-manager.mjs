@@ -135,6 +135,10 @@ function createRuntimeEnv(runtime) {
         PW_RUNTIME_SCOPE: runtime.scope,
         PW_RUNTIME_MODE: runtime.mode,
         PW_SKIP_RUNTIME_BOOTSTRAP: 'true',
+        PW_E2E_SESSION_ID: runtime.sessionId ?? '',
+        PW_E2E_ENTRYPOINT: runtime.entrypoint ?? '',
+        PW_E2E_COMMAND_SOURCE: runtime.commandSource ?? '',
+        PW_E2E_TARGET: runtime.targetLabel ?? runtime.target ?? '',
         PW_PORT: String(runtime.ports.frontend),
         PW_GAME_SERVER_PORT: String(runtime.ports.gameServer),
         GAME_SERVER_PORT: String(runtime.ports.gameServer),
@@ -371,10 +375,14 @@ export async function ensureSingleWorkerRuntime(options = {}) {
         mode: plan.mode,
         workers: 1,
         target,
+        targetLabel: process.env.PW_E2E_TARGET?.trim() || target,
         ports,
         ownerPids: [bootstrap.pid],
         pids: [bootstrap.pid],
         bootstrapLogFiles: [bootstrap.logFile],
+        sessionId: process.env.PW_E2E_SESSION_ID?.trim() || '',
+        entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || '',
+        commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || '',
         health: {
             ready: false,
             checks: {},
@@ -460,13 +468,22 @@ async function main() {
         };
         console.log(jsonMode ? JSON.stringify(payload) : JSON.stringify(payload, null, 2));
         if (holdMode) {
-            await new Promise((resolve) => {
-                const finish = () => resolve();
-                process.once('SIGINT', finish);
-                process.once('SIGTERM', finish);
-                process.stdin.resume();
-                process.stdin.once('end', finish);
-            });
+            try {
+                await new Promise((resolve) => {
+                    const finish = () => resolve();
+                    process.once('SIGINT', finish);
+                    process.once('SIGTERM', finish);
+                    process.stdin.resume();
+                    process.stdin.once('end', finish);
+                });
+            } finally {
+                if (payload.mode === 'isolated-single') {
+                    await stopManagedRuntime({
+                        runtimeId: payload.runtimeId,
+                        logger,
+                    });
+                }
+            }
         }
         return;
     }

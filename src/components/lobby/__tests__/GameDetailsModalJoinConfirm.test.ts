@@ -8,7 +8,7 @@ import {
     resolveAiMinimumActionDelayMs,
     resolveSeatControllersFromSearchParams,
 } from '../../../engine/ai';
-import { GameDetailsModal } from '../GameDetailsModal';
+import { __resetGameDetailsModalPackageStateLogForTests, GameDetailsModal } from '../GameDetailsModal';
 import { AiSupportPills } from '../AiSupportPills';
 import { GameDetailsMobilePackageCard } from '../GameDetailsMobilePackageCard';
 import {
@@ -27,6 +27,7 @@ import { resetGamePackageManagerForTests } from '../../../features/mobile-packag
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
 const closeModalMock = vi.fn();
+const mockLoggerInfo = vi.fn();
 const { getGameByIdMock, latestCreateRoomModalProps, latestPackageInstallModalProps } = vi.hoisted(() => ({
     getGameByIdMock: vi.fn((gameId: string) => {
         if (gameId !== 'dicethrone') return null;
@@ -87,7 +88,7 @@ const toastMock = {
     error: vi.fn(),
 };
 
-const markGamePackageInstalled = (gameId = 'dicethrone', installedVersion?: string) => {
+const markGamePackageInstalled = (gameId = 'dicethrone', installedVersion = '0.5.0') => {
     window.localStorage.setItem(`mobile-package-state:${gameId}`, JSON.stringify({
         gameId,
         runtimeChannel: 'stable',
@@ -147,6 +148,15 @@ vi.mock('../../../api/user-settings', () => ({
 
 vi.mock('../../../config/games.config', () => ({
     getGameById: getGameByIdMock,
+}));
+
+vi.mock('../../../lib/logger', () => ({
+    logger: {
+        info: (...args: unknown[]) => mockLoggerInfo(...args),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+    },
 }));
 
 vi.mock('../../../services/lobbySocket', () => ({
@@ -269,6 +279,7 @@ afterEach(() => {
 beforeEach(() => {
     window.localStorage.clear();
     resetGamePackageManagerForTests();
+    __resetGameDetailsModalPackageStateLogForTests();
     navigateMock.mockReset();
     openModalMock.mockReset();
     openModalMock.mockReturnValue('modal-1');
@@ -280,6 +291,7 @@ beforeEach(() => {
     });
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
+    mockLoggerInfo.mockReset();
     latestCreateRoomModalProps.current = null;
     latestPackageInstallModalProps.current = null;
 });
@@ -592,6 +604,22 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
     });
 
+    it('相同 package 状态快照在重挂载后只记录一次日志', () => {
+        const firstRender = render(createElement(GameDetailsModal, baseProps));
+        firstRender.unmount();
+        render(createElement(GameDetailsModal, baseProps));
+
+        const packageStateLogs = mockLoggerInfo.mock.calls.filter(
+            ([message]) => message === '[GameDetailsModal] 游戏包状态变化',
+        );
+
+        expect(packageStateLogs).toHaveLength(1);
+        expect(packageStateLogs[0]?.[1]).toEqual(expect.objectContaining({
+            gameId: 'dicethrone',
+            status: 'not-installed',
+        }));
+    });
+
     it('未下载 package-managed 游戏时，创建房间会先拉起下载确认', async () => {
         render(createElement(GameDetailsModal, baseProps));
 
@@ -629,6 +657,36 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(screen.getByTestId('game-details-mobile-package-installed-badge')).toBeInTheDocument();
         expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.installedCompletedBadge')).toBeNull();
+    });
+
+    it('已安装状态缺少版本号时，回退显示下载入口而不是已完成角标', () => {
+        markGamePackageInstalled('dicethrone', '');
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-installed-badge')).toBeNull();
+        expect(screen.queryByText('packageManager.installedCompletedBadge')).toBeNull();
+    });
+
+    it('已安装状态缺少版本号时，创建房间仍先要求下载确认', async () => {
+        markGamePackageInstalled('dicethrone', '');
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+
+        await waitFor(() => {
+            expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('mock-create-room-confirm')).toBeNull();
+        expect(latestPackageInstallModalProps.current).toEqual(
+            expect.objectContaining({
+                gameName: 'games.dicethrone.title',
+                state: expect.objectContaining({
+                    status: 'not-installed',
+                }),
+            }),
+        );
     });
 
     it('标记必须更新时，渲染移动端更新提示入口', () => {
@@ -721,6 +779,7 @@ describe('GameDetailsModal create room ai entry', () => {
         await waitFor(() => {
             expect(screen.getByText('matchRoom.title.creating')).toBeInTheDocument();
             expect(screen.getByText('matchRoom.creatingRoom')).toBeInTheDocument();
+            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.step');
         });
 
         resolveCreateMatch?.({ matchID: 'match-created' });
