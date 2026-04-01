@@ -66,6 +66,7 @@
   },
   "accept": "接受",
   "reject": "拒绝",
+  "close": "关闭",
   "back": "返回",
   "loading": "加载中",
   "unknownUser": "未知用户",
