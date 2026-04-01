@@ -1,3 +1,5 @@
+import { logMobileRuntime } from './mobileRuntimeDebug';
+
 type CapacitorCoreModule = {
     Capacitor: {
         isNativePlatform(): boolean;
@@ -347,6 +349,7 @@ const getConfigFromMetaEnv = () => {
 };
 
 const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => {
+    logMobileRuntime('OTA', 'manifest-fetch-start', { url });
     try {
         const response = await fetch(url, {
             method: 'GET',
@@ -357,6 +360,7 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             cache: 'no-store',
         });
         if (response.status === 404) {
+            logMobileRuntime('OTA', 'manifest-fetch-404', { url }, 'warn');
             return null;
         }
         if (!response.ok) {
@@ -373,7 +377,7 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             throw new Error('manifest 缺少 version/url 或 url 非法');
         }
 
-        return {
+        const manifest = {
             version: data.version,
             url: data.url,
             checksum: data.checksum,
@@ -387,8 +391,17 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             forceUpdateTitle: data.forceUpdateTitle,
             forceUpdateMessage: data.forceUpdateMessage,
         };
+        logMobileRuntime('OTA', 'manifest-fetch-success', {
+            url,
+            manifest,
+        });
+        return manifest;
     } catch (error) {
         console.warn('[OTA] 读取 manifest 失败', error);
+        logMobileRuntime('OTA', 'manifest-fetch-failed', {
+            url,
+            error,
+        }, 'error');
         return null;
     }
 };
@@ -424,15 +437,23 @@ export const notifyAndroidBundleReady = async () => {
     if (!notifyAppReadyPromise) {
         notifyAppReadyPromise = (async () => {
             const nativeAndroid = await isNativeAndroidApp();
+            logMobileRuntime('OTA', 'notify-app-ready-native-check', {
+                nativeAndroid,
+            });
             if (!nativeAndroid) return;
 
             const updaterModule = await loadUpdater();
+            logMobileRuntime('OTA', 'notify-app-ready-updater-check', {
+                updaterLoaded: Boolean(updaterModule),
+            });
             if (!updaterModule) return;
 
             try {
                 await updaterModule.CapacitorUpdater.notifyAppReady();
+                logMobileRuntime('OTA', 'notify-app-ready-success');
             } catch (error) {
                 console.warn('[OTA] notifyAppReady 调用失败', error);
+                logMobileRuntime('OTA', 'notify-app-ready-failed', { error }, 'error');
             }
         })();
     }
@@ -447,6 +468,9 @@ export const registerAndroidLiveUpdateListeners = async () => {
             if (!nativeAndroid) return null;
 
             const updaterModule = await loadUpdater();
+            logMobileRuntime('OTA', 'register-listeners-updater-check', {
+                updaterLoaded: Boolean(updaterModule),
+            });
             if (!updaterModule) return null;
 
             const { CapacitorUpdater } = updaterModule;
@@ -485,11 +509,19 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
             emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
 
             const config = getConfigFromMetaEnv();
+            logMobileRuntime('OTA', 'background-check-start', {
+                force: options.force === true,
+                config,
+            });
             if (!config.enabled) {
+                logMobileRuntime('OTA', 'background-check-disabled', { config }, 'warn');
                 return { status: 'disabled' } as const;
             }
 
             const nativeAndroid = await isNativeAndroidApp();
+            logMobileRuntime('OTA', 'background-check-native-check', {
+                nativeAndroid,
+            });
             if (!nativeAndroid) {
                 return { status: 'not-native' } as const;
             }
@@ -498,11 +530,15 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
 
             const updaterModule = await loadUpdater();
             if (!updaterModule) {
+                logMobileRuntime('OTA', 'background-check-updater-missing', {}, 'error');
                 return { status: 'error', reason: '未能加载 OTA 插件' } as const;
             }
 
             const manifest = await readManifest(config.manifestUrl);
             if (!manifest) {
+                logMobileRuntime('OTA', 'background-check-manifest-missing', {
+                    manifestUrl: config.manifestUrl,
+                }, 'warn');
                 return { status: 'manifest-missing' } as const;
             }
 
@@ -524,7 +560,15 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     nativeOperationTimeoutMs,
                     `OTA 校验超时：读取当前 bundle 超过 ${nativeOperationTimeoutMs}ms`,
                 );
+                logMobileRuntime('OTA', 'current-bundle-read', {
+                    current,
+                });
                 const compatibility = isManifestCompatibleWithNativeVersion(manifest, current.native);
+                logMobileRuntime('OTA', 'compatibility-checked', {
+                    manifestVersion: manifest.version,
+                    nativeVersion: current.native,
+                    compatibility,
+                });
                 if (!compatibility.compatible) {
                     const requiredNativeVersion = resolveManifestRequiredNativeVersion(manifest);
                     if (isForceUpdate) {
@@ -554,6 +598,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 }
 
                 if (current.bundle.version === manifest.version) {
+                    logMobileRuntime('OTA', 'already-up-to-date', {
+                        currentVersion: current.bundle.version,
+                        manifestVersion: manifest.version,
+                    });
                     emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
                     return { status: 'up-to-date' } as const;
                 }
@@ -565,6 +613,9 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 );
                 const cachedBundle = bundleList.bundles.find((bundle) => bundle.version === manifest.version && bundle.status !== 'error');
                 if (cachedBundle) {
+                    logMobileRuntime('OTA', 'cached-bundle-hit', {
+                        cachedBundle,
+                    });
                     if (isForceUpdate) {
                         emitForceState(onForceStateChange, {
                             phase: 'applying',
@@ -584,6 +635,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     }
 
                     await queueDownloadedBundle(CapacitorUpdater, cachedBundle.id);
+                    logMobileRuntime('OTA', 'cached-bundle-queued', {
+                        bundleId: cachedBundle.id,
+                        version: manifest.version,
+                    });
                     emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
                     return {
                         status: 'queued',
@@ -615,10 +670,19 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 }
 
                 try {
+                    logMobileRuntime('OTA', 'download-start', {
+                        manifestVersion: manifest.version,
+                        bundleUrl: normalizeUrl(manifest.url),
+                        checksum: manifest.checksum ?? '',
+                        forceUpdate: isForceUpdate,
+                    });
                     const downloadedBundle = await CapacitorUpdater.download({
                         url: normalizeUrl(manifest.url),
                         version: manifest.version,
                         checksum: manifest.checksum,
+                    });
+                    logMobileRuntime('OTA', 'download-finished', {
+                        downloadedBundle,
                     });
 
                     await removeListenerSafely(downloadHandle);
@@ -633,6 +697,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                             message: buildForceUpdateMessage(manifest, '更新已下载完成，正在重启并切换到新版本。'),
                         });
                         await applyBundleImmediately(CapacitorUpdater, downloadedBundle.id);
+                        logMobileRuntime('OTA', 'downloaded-bundle-applied-immediately', {
+                            bundleId: downloadedBundle.id,
+                            version: manifest.version,
+                        });
                         return {
                             status: 'queued',
                             version: manifest.version,
@@ -642,6 +710,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     }
 
                     await queueDownloadedBundle(CapacitorUpdater, downloadedBundle.id);
+                    logMobileRuntime('OTA', 'downloaded-bundle-queued', {
+                        bundleId: downloadedBundle.id,
+                        version: manifest.version,
+                    });
                     emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
                     return {
                         status: 'queued',
@@ -655,6 +727,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 }
             } catch (error) {
                 const reason = error instanceof Error ? error.message : String(error);
+                logMobileRuntime('OTA', 'background-check-failed', {
+                    manifestVersion: manifest.version,
+                    reason,
+                }, 'error');
                 if (isForceUpdate) {
                     emitForceState(onForceStateChange, {
                         phase: 'error',

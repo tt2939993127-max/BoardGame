@@ -1,5 +1,6 @@
 import type { GameManifestMobileDelivery } from '../../games/manifest.types';
 import { resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
+import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
 import type { ResolvedGamePackageManifest } from './types';
 
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
@@ -147,10 +148,22 @@ export const resolveGamePackageManifest = async (
 ): Promise<ResolvedGamePackageManifest> => {
     const fallbackManifest = buildFallbackGamePackageManifest(gameId, delivery);
     if (!hasRemoteGamePackageManifestEndpoint || !delivery || delivery.mode !== 'package-managed') {
+        logMobileRuntime('MobilePackagesManifest', 'skip-remote-manifest', {
+            gameId,
+            hasRemoteGamePackageManifestEndpoint,
+            deliveryMode: delivery?.mode ?? 'none',
+            fallbackRuntimeChannel: fallbackManifest.runtimeChannel,
+        });
         return fallbackManifest;
     }
 
     const url = `${REMOTE_MANIFEST_BASE_URL}/${encodeURIComponent(fallbackManifest.runtimeChannel)}/games/${encodeURIComponent(gameId)}.json`;
+    logMobileRuntime('MobilePackagesManifest', 'fetch-start', {
+        gameId,
+        runtimeChannel: fallbackManifest.runtimeChannel,
+        url,
+        fallbackManifest,
+    });
 
     try {
         const response = await fetch(url, {
@@ -159,17 +172,39 @@ export const resolveGamePackageManifest = async (
             },
         });
         if (!response.ok) {
+            logMobileRuntime('MobilePackagesManifest', 'fetch-fallback-http', {
+                gameId,
+                url,
+                status: response.status,
+                statusText: response.statusText,
+            }, 'warn');
             return fallbackManifest;
         }
 
         const contentType = response.headers.get('content-type');
         if (!contentType?.includes('application/json')) {
+            logMobileRuntime('MobilePackagesManifest', 'fetch-fallback-content-type', {
+                gameId,
+                url,
+                contentType: contentType || 'unknown',
+            }, 'warn');
             return fallbackManifest;
         }
 
         const data = await response.json() as RemoteGamePackageManifestResponse;
-        return mapRemoteManifest(gameId, fallbackManifest, data.manifest ?? data.game ?? null);
-    } catch {
+        const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, data.manifest ?? data.game ?? null);
+        logMobileRuntime('MobilePackagesManifest', 'fetch-success', {
+            gameId,
+            url,
+            resolvedManifest,
+        });
+        return resolvedManifest;
+    } catch (error) {
+        logMobileRuntime('MobilePackagesManifest', 'fetch-exception', {
+            gameId,
+            url,
+            error,
+        }, 'error');
         return fallbackManifest;
     }
 };

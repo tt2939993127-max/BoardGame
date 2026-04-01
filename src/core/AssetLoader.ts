@@ -627,12 +627,21 @@ export function clearGameAssetsCache(gameId: string): void {
  *   确保 isImagePreloaded 能正确判断。未传时创建占位 Image 并设置 src，
  *   浏览器通常会从磁盘缓存命中使 naturalWidth 立即可用。
  */
-export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLImageElement): void {
+function normalizePreloadedImageCacheKey(src: string, locale?: string): string {
     const effectiveLocale = locale || 'zh-CN';
     const normalized = assetsPath(src);
-    const cacheKey = normalized.includes(`/${COMPRESSED_SUBDIR}/`)
-        ? `${stripExtension(normalized)}.webp`
-        : getOptimizedImageUrls(getLocalizedAssetPath(src, effectiveLocale)).webp;
+
+    if (!normalized) return '';
+
+    if (normalized.includes(`/${COMPRESSED_SUBDIR}/`)) {
+        return `${stripExtension(normalized)}.webp`;
+    }
+
+    return getOptimizedImageUrls(getLocalizedAssetPath(normalized, effectiveLocale)).webp;
+}
+
+export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLImageElement): void {
+    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
     if (!cacheKey) return;
     if (imgElement && imgElement.naturalWidth > 0) {
         preloadedImages.set(cacheKey, imgElement);
@@ -650,11 +659,7 @@ export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLI
  * 返回 null 表示图片尚未预加载
  */
 export function getPreloadedImageElement(src: string, locale?: string): HTMLImageElement | null {
-    const effectiveLocale = locale || 'zh-CN';
-    const normalized = assetsPath(src);
-    const cacheKey = normalized.includes(`/${COMPRESSED_SUBDIR}/`)
-        ? `${stripExtension(normalized)}.webp`
-        : getOptimizedImageUrls(getLocalizedAssetPath(src, effectiveLocale)).webp;
+    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
     return preloadedImages.get(cacheKey) ?? null;
 }
 
@@ -672,18 +677,8 @@ export function isImagePreloaded(src: string, locale?: string): boolean {
 
     if (check(src)) return true;
 
-    const effectiveLocale = locale || 'zh-CN';
-    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
-
-    // 如果 src 已经是 compressed/ 下的 URL，直接检查 webp 变体
-    if (localizedPath.includes(`/${COMPRESSED_SUBDIR}/`)) {
-        const base = stripExtension(localizedPath);
-        return check(`${base}.webp`);
-    }
-
-    // 转换为 optimized URL 后检查
-    const { webp } = getOptimizedImageUrls(localizedPath);
-    return check(webp);
+    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
+    return check(cacheKey);
 }
 
 // ============================================================================

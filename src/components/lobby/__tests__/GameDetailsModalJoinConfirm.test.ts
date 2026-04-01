@@ -1,6 +1,6 @@
 /* @vitest-environment happy-dom */
 import { createElement, type ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     buildLocalMatchSearchParams,
@@ -100,6 +100,18 @@ const markGamePackageInstalled = (gameId = 'dicethrone', installedVersion = '0.5
     }));
 };
 
+const markGamePackageFailed = (gameId = 'dicethrone', errorMessage = '下载失败') => {
+    window.localStorage.setItem(`mobile-package-state:${gameId}`, JSON.stringify({
+        gameId,
+        runtimeChannel: 'stable',
+        status: 'failed',
+        modulePackId: gameId,
+        assetPackId: gameId,
+        errorMessage,
+        updatedAt: Date.now(),
+    }));
+};
+
 const setNativeAndroidRuntime = () => {
     Object.defineProperty(window, 'Capacitor', {
         configurable: true,
@@ -167,6 +179,44 @@ vi.mock('../../../api/user-settings', () => ({
 
 vi.mock('../../../config/games.config', () => ({
     getGameById: getGameByIdMock,
+}));
+
+vi.mock('../../../features/mobile-packages/manifestClient', () => ({
+    hasRemoteGamePackageManifestEndpoint: true,
+    buildFallbackGamePackageManifest: (gameId: string, delivery?: {
+        runtimeChannel?: string;
+        modulePackId?: string;
+        assetPackId?: string;
+        modulePackBytes?: number;
+        assetPackBytes?: number;
+    }) => ({
+        gameId,
+        runtimeChannel: delivery?.runtimeChannel?.trim() || 'stable',
+        modulePackId: delivery?.modulePackId?.trim(),
+        assetPackId: delivery?.assetPackId?.trim(),
+        modulePackVersion: 'test-module-pack-v1',
+        assetPackVersion: 'test-asset-pack-v1',
+        modulePackBytes: delivery?.modulePackBytes,
+        assetPackBytes: delivery?.assetPackBytes,
+        source: 'fallback',
+    }),
+    resolveGamePackageManifest: vi.fn(async (gameId: string, delivery?: {
+        runtimeChannel?: string;
+        modulePackId?: string;
+        assetPackId?: string;
+        modulePackBytes?: number;
+        assetPackBytes?: number;
+    }) => ({
+        gameId,
+        runtimeChannel: delivery?.runtimeChannel?.trim() || 'stable',
+        modulePackId: delivery?.modulePackId?.trim(),
+        assetPackId: delivery?.assetPackId?.trim(),
+        modulePackVersion: 'test-module-pack-v1',
+        assetPackVersion: 'test-asset-pack-v1',
+        modulePackBytes: delivery?.modulePackBytes,
+        assetPackBytes: delivery?.assetPackBytes,
+        source: 'remote',
+    })),
 }));
 
 vi.mock('../../../lib/logger', () => ({
@@ -537,6 +587,21 @@ describe('GameDetailsMobilePackageCard', () => {
 
         expect(screen.getByText('packageManager.installedTitle')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
+        expect(screen.getByText('packageManager.installedCompletedBadge')).toBeInTheDocument();
+    });
+
+    it('已安装且有版本号时，显示版本角标', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'installed',
+                installedVersion: '2026.04.01',
+            },
+            onInstall: vi.fn(),
+        }));
+
+        expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-progress-track')).toBeNull();
     });
 });
 
@@ -615,19 +680,32 @@ describe('GameDetailsModal create room ai entry', () => {
         );
     });
 
-    it('package-managed 游戏默认渲染单一下载入口', () => {
+    it('package-managed 游戏默认只渲染悬浮下载按钮', () => {
         render(createElement(GameDetailsModal, baseProps));
 
-        const packageCard = screen.getByTestId('game-details-mobile-package-card');
-        expect(packageCard).toBeInTheDocument();
-        expect(packageCard.className).not.toContain('md:hidden');
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
+
+    it('点击悬浮下载按钮后展开卡片，并可再次收起', () => {
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
         expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-card-dismiss'));
+
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
     });
 
     it('网页版不渲染 package-managed 下载入口', () => {
         setWebRuntime();
         render(createElement(GameDetailsModal, baseProps));
 
+        expect(screen.queryByTestId('game-details-mobile-package-toggle')).toBeNull();
         expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });
@@ -661,9 +739,9 @@ describe('GameDetailsModal create room ai entry', () => {
     });
 
     it('模拟安装成功后关闭确认弹窗，不回退到确认下载', async () => {
-        vi.useFakeTimers();
         render(createElement(GameDetailsModal, baseProps));
 
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
         fireEvent.click(screen.getByText('packageManager.installAction'));
 
         await waitFor(() => {
@@ -676,13 +754,14 @@ describe('GameDetailsModal create room ai entry', () => {
 
         expect(modalProps?.onConfirm).toBeTypeOf('function');
 
-        await modalProps?.onConfirm?.();
-        await vi.runAllTimersAsync();
+        await act(async () => {
+            await modalProps?.onConfirm?.();
+        });
 
         await waitFor(() => {
             expect(screen.queryByText('package-install-confirm')).toBeNull();
-        });
-    });
+        }, { timeout: 4000 });
+    }, 10000);
 
     it('下载完成后，package-managed 游戏允许创建房间', async () => {
         markGamePackageInstalled();
@@ -694,24 +773,54 @@ describe('GameDetailsModal create room ai entry', () => {
         });
     });
 
-    it('已下载 package-managed 游戏时，房间详情页左下角显示单个绿色完成版本标而非下载卡片', () => {
+    it('已下载 package-managed 游戏时，默认展开已安装卡片并展示版本信息', () => {
         markGamePackageInstalled('dicethrone', '0.5.0');
         render(createElement(GameDetailsModal, baseProps));
 
-        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
-        expect(screen.getByTestId('game-details-mobile-package-installed-badge')).toBeInTheDocument();
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.installedTitle')).toBeInTheDocument();
         expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
-        expect(screen.queryByText('packageManager.installedCompletedBadge')).toBeNull();
     });
 
     it('已安装状态缺少版本号时，回退显示下载入口而不是已完成角标', () => {
         markGamePackageInstalled('dicethrone', '');
         render(createElement(GameDetailsModal, baseProps));
 
-        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
         expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
-        expect(screen.queryByTestId('game-details-mobile-package-installed-badge')).toBeNull();
-        expect(screen.queryByText('packageManager.installedCompletedBadge')).toBeNull();
+    });
+
+    it('已安装状态为 mock-installed 时，回退显示下载入口而不是误判为已安装', () => {
+        markGamePackageInstalled('dicethrone', 'mock-installed');
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.installedTitle')).toBeNull();
+    });
+
+    it('已安装状态为 mock-installed 时，会自动把本地状态归一化回未安装', async () => {
+        markGamePackageInstalled('dicethrone', 'mock-installed');
+        render(createElement(GameDetailsModal, baseProps));
+
+        await waitFor(() => {
+            const stored = window.localStorage.getItem('mobile-package-state:dicethrone');
+            expect(stored).not.toBeNull();
+            const parsed = JSON.parse(stored!);
+            expect(parsed).toEqual(expect.objectContaining({
+                status: 'not-installed',
+            }));
+            expect(parsed).not.toHaveProperty('installedVersion');
+        });
     });
 
     it('已安装状态缺少版本号时，创建房间仍走普通网页流程', async () => {
@@ -727,7 +836,41 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(latestPackageInstallModalProps.current).toBeNull();
     });
 
-    it('标记必须更新时，渲染移动端更新提示入口', () => {
+    it('已安装状态缺少版本号时，点击下载安装仍保持确认弹窗并按未安装态处理', async () => {
+        markGamePackageInstalled('dicethrone', '');
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+        fireEvent.click(screen.getByText('packageManager.installAction'));
+
+        await waitFor(() => {
+            expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
+        });
+
+        expect(latestPackageInstallModalProps.current).toEqual(expect.objectContaining({
+            closeOnBackdrop: false,
+            state: expect.objectContaining({
+                status: 'not-installed',
+                installedVersion: undefined,
+            }),
+        }));
+    });
+
+    it('失败状态默认收起为重试按钮，不自动展开下载详情', () => {
+        markGamePackageFailed();
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.queryByText('packageManager.retryAction')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
+        expect(screen.getByText('packageManager.retryAction')).toBeInTheDocument();
+    });
+
+    it('标记必须更新时，默认渲染悬浮提示按钮，展开后显示更新卡片', () => {
         getGameByIdMock.mockImplementation((gameId: string) => {
             if (gameId !== 'dicethrone') return null;
             return buildMockGameManifest({
@@ -744,9 +887,12 @@ describe('GameDetailsModal create room ai entry', () => {
 
         render(createElement(GameDetailsModal, baseProps));
 
-        const packageCard = screen.getByTestId('game-details-mobile-package-card');
-        expect(packageCard).toBeInTheDocument();
-        expect(packageCard.className).not.toContain('md:hidden');
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
         expect(screen.getByText('packageManager.updateRequiredTitle')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
     });

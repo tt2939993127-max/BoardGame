@@ -1,4 +1,5 @@
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
+import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
 
 type CapacitorCoreModule = {
@@ -140,6 +141,7 @@ const getNativePlugin = async () => {
 export const listInstalledNativeGamePackages = async (): Promise<NativeInstalledGamePackage[]> => {
     const plugin = await getNativePlugin();
     if (!plugin) {
+        logMobileRuntime('NativeGamePackagePlugin', 'list-installed-no-plugin', {}, 'warn');
         return [];
     }
 
@@ -158,7 +160,11 @@ export const listInstalledNativeGamePackages = async (): Promise<NativeInstalled
         })),
     );
 
-    return installedPackages.filter((item) => Boolean(item.gameId));
+    const filteredPackages = installedPackages.filter((item) => Boolean(item.gameId));
+    logMobileRuntime('NativeGamePackagePlugin', 'list-installed-success', {
+        packages: filteredPackages,
+    });
+    return filteredPackages;
 };
 
 const createNativeFailureHandle = (
@@ -187,10 +193,17 @@ export const createNativeGamePackageInstallHandle = async (
 ): Promise<GamePackageInstallHandle | null> => {
     const plugin = await getNativePlugin();
     if (!plugin) {
+        logMobileRuntime('NativeGamePackagePlugin', 'create-install-handle-no-plugin', {
+            gameId: manifest.gameId,
+        }, 'warn');
         return null;
     }
 
     if (!manifest.assetPackUrl) {
+        logMobileRuntime('NativeGamePackagePlugin', 'create-install-handle-missing-asset-pack-url', {
+            gameId: manifest.gameId,
+            manifest,
+        }, 'warn');
         return createNativeFailureHandle(manifest, '当前还没有可下载的游戏包，请先发布一版。', options);
     }
 
@@ -200,6 +213,10 @@ export const createNativeGamePackageInstallHandle = async (
 
     const finished = (async () => {
         try {
+            logMobileRuntime('NativeGamePackagePlugin', 'install-start', {
+                gameId: manifest.gameId,
+                manifest,
+            });
             listenerHandle = await plugin.addListener('installStateChanged', async (event) => {
                 if (event.gameId !== manifest.gameId) {
                     return;
@@ -218,6 +235,11 @@ export const createNativeGamePackageInstallHandle = async (
                     installedVersion: event.assetPackVersion?.trim() || undefined,
                     localAssetBaseUrl: assetBaseUrl,
                 });
+                logMobileRuntime('NativeGamePackagePlugin', 'install-state-changed', {
+                    gameId: manifest.gameId,
+                    event,
+                    currentState,
+                });
                 options.onStateChange(currentState);
             });
 
@@ -228,6 +250,10 @@ export const createNativeGamePackageInstallHandle = async (
                 assetPackVersion: manifest.assetPackVersion,
                 assetPackUrl: manifest.assetPackUrl,
                 assetPackChecksum: manifest.assetPackChecksum,
+            });
+            logMobileRuntime('NativeGamePackagePlugin', 'install-native-call-resolved', {
+                gameId: manifest.gameId,
+                result,
             });
 
             const assetBaseUrl = await toAssetBaseUrl(result.assetRootPath);
@@ -246,10 +272,18 @@ export const createNativeGamePackageInstallHandle = async (
                     ? result.installedAt
                     : Date.now(),
             });
+            logMobileRuntime('NativeGamePackagePlugin', 'install-finished', {
+                gameId: manifest.gameId,
+                currentState,
+            });
             options.onStateChange(currentState);
             return currentState;
         } catch (error) {
             if (cancelled) {
+                logMobileRuntime('NativeGamePackagePlugin', 'install-cancelled', {
+                    gameId: manifest.gameId,
+                    currentState,
+                }, 'warn');
                 return currentState;
             }
 
@@ -260,6 +294,11 @@ export const createNativeGamePackageInstallHandle = async (
                 errorMessage: error instanceof Error ? error.message : String(error ?? '安装失败'),
             });
             currentState = nextState;
+            logMobileRuntime('NativeGamePackagePlugin', 'install-failed', {
+                gameId: manifest.gameId,
+                error,
+                currentState,
+            }, 'error');
             options.onStateChange(nextState);
             return nextState;
         } finally {
@@ -272,6 +311,9 @@ export const createNativeGamePackageInstallHandle = async (
     return {
         cancel: () => {
             cancelled = true;
+            logMobileRuntime('NativeGamePackagePlugin', 'install-cancel-requested', {
+                gameId: manifest.gameId,
+            }, 'warn');
             void plugin.cancelInstall({ gameId: manifest.gameId }).catch(() => {});
         },
         finished,

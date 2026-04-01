@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameManifestMobileDelivery } from '../../games/manifest.types';
+import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
 import {
     buildFallbackGamePackageManifest,
     hasRemoteGamePackageManifestEndpoint,
@@ -8,7 +9,7 @@ import {
 } from './manifestClient';
 import { resetGamePackageState, startGamePackageInstall, subscribeGamePackageState, syncGamePackageState } from './packageManagerService';
 import type { GamePackageCardState, PendingGamePackageInstall } from './types';
-import { createDefaultGamePackageState, toGamePackageCardState } from './types';
+import { createDefaultGamePackageState, hasUsableInstalledGamePackageVersion, toGamePackageCardState } from './types';
 
 interface UseGamePackageStateOptions {
     gameId: string;
@@ -77,16 +78,39 @@ export const useGamePackageState = ({
     const requestSerialRef = useRef(0);
 
     useEffect(() => {
+        logMobileRuntime('UseGamePackageState', 'hook-init', {
+            gameId,
+            gameName,
+            enabled,
+            isPackageManaged,
+            delivery: normalizedDelivery,
+            fallbackManifest,
+        });
+    }, [enabled, fallbackManifest, gameId, gameName, isPackageManaged, normalizedDelivery]);
+
+    useEffect(() => {
         if (!isPackageManaged) {
+            logMobileRuntime('UseGamePackageState', 'disable-package-managed', {
+                gameId,
+                fallbackState,
+            });
             setPendingInstall(null);
             setCardState(toGamePackageCardState(fallbackState));
             return;
         }
 
+        logMobileRuntime('UseGamePackageState', 'sync-package-state', {
+            gameId,
+            fallbackState,
+        });
         setPendingInstall(null);
         setCardState(toGamePackageCardState(syncGamePackageState(gameId, fallbackState)));
 
         return subscribeGamePackageState(gameId, (state) => {
+            logMobileRuntime('UseGamePackageState', 'subscribe-state-changed', {
+                gameId,
+                state,
+            });
             setCardState(toGamePackageCardState(state));
         });
     }, [fallbackState, gameId, isPackageManaged]);
@@ -96,7 +120,7 @@ export const useGamePackageState = ({
             return;
         }
 
-        if (cardState.status !== 'installed') {
+        if (cardState.status !== 'installed' || !hasUsableInstalledGamePackageVersion(cardState.installedVersion)) {
             return;
         }
 
@@ -107,23 +131,47 @@ export const useGamePackageState = ({
 
     const requestInstall = useCallback(() => {
         if (!isPackageManaged) {
+            logMobileRuntime('UseGamePackageState', 'request-install-skipped', {
+                gameId,
+                reason: 'not-package-managed',
+            }, 'warn');
             return;
         }
 
         const requestSerial = requestSerialRef.current + 1;
         requestSerialRef.current = requestSerial;
+        logMobileRuntime('UseGamePackageState', 'request-install', {
+            gameId,
+            requestSerial,
+            fallbackManifest,
+        });
         setPendingInstall({
             gameName,
             ...fallbackManifest,
         });
 
         if (!hasRemoteGamePackageManifestEndpoint) {
+            logMobileRuntime('UseGamePackageState', 'request-install-no-remote-endpoint', {
+                gameId,
+                requestSerial,
+            }, 'warn');
             return;
         }
 
         void resolveGamePackageManifest(gameId, normalizedDelivery).then((resolvedManifest) => {
+            logMobileRuntime('UseGamePackageState', 'request-install-remote-manifest-resolved', {
+                gameId,
+                requestSerial,
+                resolvedManifest,
+            });
             setPendingInstall((current) => {
                 if (!current || requestSerialRef.current !== requestSerial) {
+                    logMobileRuntime('UseGamePackageState', 'request-install-remote-manifest-stale', {
+                        gameId,
+                        requestSerial,
+                        currentExists: Boolean(current),
+                        latestRequestSerial: requestSerialRef.current,
+                    }, 'warn');
                     return current;
                 }
 
@@ -137,16 +185,28 @@ export const useGamePackageState = ({
 
     const cancelInstall = useCallback(() => {
         requestSerialRef.current += 1;
+        logMobileRuntime('UseGamePackageState', 'cancel-install', {
+            gameId,
+            latestRequestSerial: requestSerialRef.current,
+        });
         setPendingInstall(null);
-    }, []);
+    }, [gameId]);
 
     const confirmInstall = useCallback(async () => {
         if (!pendingInstall) {
+            logMobileRuntime('UseGamePackageState', 'confirm-install-skipped', {
+                gameId,
+                reason: 'no-pending-install',
+            }, 'warn');
             return;
         }
 
         const installManifest = pendingInstall;
         setIsConfirmingInstall(true);
+        logMobileRuntime('UseGamePackageState', 'confirm-install', {
+            gameId,
+            installManifest,
+        });
 
         try {
             void startGamePackageInstall(installManifest, t('packageManager.runtimeUnsupported'));
@@ -157,9 +217,18 @@ export const useGamePackageState = ({
 
     const retryInstall = useCallback(() => {
         if (!isPackageManaged) {
+            logMobileRuntime('UseGamePackageState', 'retry-install-skipped', {
+                gameId,
+                reason: 'not-package-managed',
+            }, 'warn');
             return;
         }
 
+        logMobileRuntime('UseGamePackageState', 'retry-install', {
+            gameId,
+            pendingInstall,
+            fallbackState,
+        });
         resetGamePackageState(gameId, fallbackState);
         if (pendingInstall) {
             void startGamePackageInstall(pendingInstall, t('packageManager.runtimeUnsupported'));

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { render, waitFor } from '@testing-library/react';
 
 import { DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
 import { registerDiceDefinition } from '../domain/diceRegistry';
@@ -69,6 +70,48 @@ describe('StatusEffectsIcons', () => {
         const base = getAssetsBaseUrl();
         expect(urls.some(url => url.includes('/dice.webp'))).toBe(true);
         expect(urls.every(url => url.startsWith(`${base}/`))).toBe(true);
+    });
+
+    it('远端骰图探测应通过 Image 加载，不应依赖跨域 fetch 成功', async () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+
+        class MockImage {
+            onload: null | (() => void) = null;
+            onerror: null | (() => void) = null;
+            naturalWidth = 256;
+            complete = false;
+            decoding = 'auto';
+
+            set src(_value: string) {
+                queueMicrotask(() => {
+                    this.complete = true;
+                    this.onload?.();
+                });
+            }
+        }
+
+        const fetchMock = vi.fn(async () => {
+            throw new Error('remote fetch should not be used for dice sprite probing');
+        });
+
+        vi.stubGlobal('Image', MockImage as unknown as typeof Image);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const { getByTestId } = render(
+            <Dice3D
+                value={6}
+                isRolling={false}
+                size="48px"
+                locale="zh-CN"
+                characterId="moon_elf"
+                definitionId="moon_elf-dice"
+            />
+        );
+
+        await waitFor(() => {
+            expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-ready', 'true');
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('状态图集 JSON 在远程资源模式下应优先走官方资源域名', async () => {

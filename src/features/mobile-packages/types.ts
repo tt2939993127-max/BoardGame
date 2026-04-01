@@ -56,10 +56,27 @@ export interface GamePackageInstallHandle {
     finished: Promise<StoredGamePackageState>;
 }
 
+const INVALID_INSTALLED_VERSION_PLACEHOLDERS = new Set([
+    'mock-installed',
+]);
+
 const normalizeOptionalNumber = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0
         ? value
         : undefined;
+
+export const hasUsableInstalledGamePackageVersion = (value?: string) => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return false;
+    }
+
+    return !INVALID_INSTALLED_VERSION_PLACEHOLDERS.has(normalized.toLowerCase());
+};
 
 export const createDefaultGamePackageState = (
     gameId: string,
