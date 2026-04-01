@@ -102,6 +102,10 @@ function isPinkertonDefId(defId: string): boolean {
     return defId === 'cowboys_pinkerton' || defId === 'cowboys_pinkerton_pod';
 }
 
+function isDeputyDefId(defId: string): boolean {
+    return defId === 'cowboys_deputy' || defId === 'cowboys_deputy_pod';
+}
+
 function countPinkertons(core: SmashUpCore, playerId: PlayerId): number {
     let count = 0;
     for (const base of core.bases) {
@@ -230,7 +234,7 @@ function queueDuelCardPrompt(
 function collectDeputiesInHand(state: MatchState<SmashUpCore>, playerId: PlayerId) {
     const player = state.core.players[playerId];
     return (player?.hand ?? [])
-        .filter(card => card.defId === 'cowboys_deputy')
+        .filter(card => isDeputyDefId(card.defId))
         .map(card => ({
             id: `deputy-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,

@@ -461,7 +461,7 @@ function shouldSkipTriggerInstance(
         && (state.veryLargeBoulderTriggeredTurnByTitan ?? {})[located.titanUid] === state.turnNumber;
 }
 
-/** 闂佽　鍋撻柛顐ｆ礃閼茬娀鎮峰▎娆戠暠鐟滄澘鍊垮畷鎶藉Ω閵堝牏顦?TriggerInstance闂佹寧绋戦悧鍛箔婢跺瞼鍗氶悗锝庝簻缁侇噣鏌熺粭娑樻－閺€浠嬫煥濞戞﹩妾х紒杈ㄧ箞閹粙濡搁妶鍥闂佺绻堥崝宀勬儑椤掑嫬鐭楃€广儱鎳愮€瑰姊婚崘顏勬瀻闁?*/
+/** 收集符合当前时机的触发器实例，供全局反应队列后续排序与执行。 */
 export function collectTriggers(
     state: SmashUpCore,
     timing: TitanAwareTriggerTiming,
@@ -898,11 +898,11 @@ function hasTurnScopedMetadataProtection(
 }
 
 /**
- * 闂佸搫琚崕鍙夌珶濡　妲堥柛顐岛閸嬫挸螖閳ь剟鎮楅柨瀣攳婵犻潧娲よ闂佸搫顦崕鑼姳椤曗偓瀹曪繝鏁嶉崟顐澓
+ * 返回一个可被消耗的保护来源。
  *
- * 閻?isMinionProtected 闁哄鏅滈弻銊ッ?true 婵炴垶鎸婚弻褏鎹㈠璺虹闁靛牆妫欓梽宥嗙節瑜庨崝鏍ｇ粙搴撴闁割偓绲洪崑鎾澄旈埀顒勬倵閻戣姤鏅柛顐ｇ箥濞?trickster_hideout闂佹寧绋戦¨鈧紒?
- * 闁哄鏅滈弻銊ッ洪弽顓燁梿闁逞屽墰閹茬増鎷呴崷顓夈儵鏌ｈ箛锝呭箻婵?ongoing 闂佸憡顨愮槐鏇熸櫠濠靛洨鈹嶉柍鈺佸暕缁辨牠鏌ㄥ☉妯侯殭缂佸墎鏁搁幏顐﹀礃椤忓懏娈㈤梺鍝勫€婚幊鎾广亹閸屾粈鐒?ONGOING_DETACHED 婵炲瓨绮岄鍕枎閵忋倕违?
- * 闂傚倸鐗忛崑鐐电矓閻戣姤鍤€婵°倐鍋撻柣搴ㄦ敱缁屽崬鈹戦崶顬垿寮堕埡鍌涚叆婵?undefined闂?
+ * 只有在 `isMinionProtected()` 已确认目标受到保护时，这里才会继续查找具体来源；
+ * 例如 `trickster_hideout` 这类持续效果，会在真正拦截 destroy / move / affect 前
+ * 定位到对应的 ongoing 来源，供后续发出 `ONGOING_DETACHED` 或移除保护状态使用。
  */
 export function getConsumableProtectionSource(
     state: SmashUpCore,
