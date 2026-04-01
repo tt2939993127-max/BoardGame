@@ -13,6 +13,7 @@ const fallbackCache = new Map<string, StoredGamePackageState>();
 const listenerRegistry = new Map<string, Set<GamePackageStateListener>>();
 const activeInstallRegistry = new Map<string, GamePackageInstallHandle>();
 const appliedAssetBaseOverrides = new Map<string, string>();
+const isDevRuntime = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
 
 const hasInstalledVersion = (state: Pick<StoredGamePackageState, 'status' | 'installedVersion'>) =>
     state.status === 'installed' && hasUsableInstalledGamePackageVersion(state.installedVersion);
@@ -254,10 +255,32 @@ export const startGamePackageInstall = (
                     gameId: manifest.gameId,
                     source: nativeHandle ? 'native' : 'mock',
                 });
-                resolvedHandle = nativeHandle ?? runMockGamePackageInstall(manifest, {
-                    failureMessage,
-                    onStateChange: emitState,
-                });
+                if (nativeHandle) {
+                    resolvedHandle = nativeHandle;
+                } else if (isDevRuntime) {
+                    resolvedHandle = runMockGamePackageInstall(manifest, {
+                        failureMessage,
+                        onStateChange: emitState,
+                    });
+                } else {
+                    const failedState: StoredGamePackageState = {
+                        ...queuedState,
+                        status: 'failed',
+                        progressMode: undefined,
+                        progressPercent: undefined,
+                        errorMessage: failureMessage,
+                        updatedAt: Date.now(),
+                    };
+                    logMobileRuntime('PackageManagerService', 'install-native-handle-missing', {
+                        gameId: manifest.gameId,
+                        runtime: 'production',
+                    }, 'error');
+                    emitState(failedState);
+                    resolvedHandle = {
+                        cancel: () => {},
+                        finished: Promise.resolve(failedState),
+                    };
+                }
 
                 if (cancelledBeforeReady) {
                     resolvedHandle.cancel();

@@ -214,10 +214,15 @@ function handleSimpleChoiceRespond<TCore>(
             return { halt: true, error: '非法的选择值' };
         }
 
-        resolvedValue = {
-            ...selectedOptionValue,
+        const selectedOptionRecord = selectedOptionValue as Record<string, unknown>;
+        const resolvedSliderValue: Record<string, unknown> = {
+            ...selectedOptionRecord,
             value: mergedNumericValue,
         };
+        if (typeof selectedOptionRecord.amount === 'number' && Number.isFinite(selectedOptionRecord.amount)) {
+            resolvedSliderValue.amount = mergedNumericValue;
+        }
+        resolvedValue = resolvedSliderValue;
     } else {
         resolvedValue = isMulti
             ? selectedOptions.map((option) => option.value)

@@ -7,6 +7,7 @@
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import type { SmashUpCore, SmashUpEvent, AbilityTag, ActiveDuel } from './types';
+import { getTitanDef } from '../data/cards';
 
 // ============================================================================
 // 能力执行上下文与结果
@@ -135,6 +136,7 @@ export function registerPodAbilityAliases(): void {
     for (const [defId, tagMap] of allEntries) {
         // 跳过已经是 _pod 和非完整 defId 的条目
         if (defId.endsWith('_pod')) continue;
+        if (getTitanDef(defId)) continue;
 
         const podDefId = `${defId}_pod`;
         // 如果 _pod 版本已经有自己的注册，跳过（不覆盖最新定制)

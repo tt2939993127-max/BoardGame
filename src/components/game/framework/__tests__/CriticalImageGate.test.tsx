@@ -3,6 +3,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCriticalImageGateCacheForTests, CriticalImageGate } from '../CriticalImageGate';
 
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({
+        t: (key: string, params?: Record<string, unknown>) => {
+            if (!params) return key;
+            return Object.entries(params).reduce(
+                (s, [k, v]) => s.replace(`{{${k}}}`, String(v)),
+                key,
+            );
+        },
+    }),
+}));
+
 const {
     areAllCriticalImagesCached,
     cancelWarmPreload,
@@ -160,7 +172,7 @@ describe('CriticalImageGate', () => {
 
         await waitFor(() => {
             expect(screen.getByText('加载中')).toBeInTheDocument();
-            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('1/3');
+            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.loadingAssets');
         });
     });
 

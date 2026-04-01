@@ -120,6 +120,12 @@ const REQUIRED_SOURCE_CONFIGS: Record<string, { targetType?: string; autoRefresh
 };
 
 const APPROVED_GENERIC_SOURCE_REASONS: Record<string, string> = {
+    ancient_egyptians_pyramid_engineer_uncover: '翻开这里你的埋葬牌时，需要保留 buried card 与原基地上下文，不能压缩成单一实体直点。',
+    titan_sphinx_after_scoring: '狮身人面像结算后回收埋葬牌时，需要保留 buried card 与结算基地上下文，generic 语义更准确。',
+    titan_sphinx_start_turn: '狮身人面像部署时既要选埋葬牌又要读取其原基地用于放置泰坦，不能压成单一实体直点。',
+    ancient_egyptians_lost_knowledge_uncover: '翻开埋葬牌时要保留埋葬区卡牌与原基地上下文，不能压缩成单一 hand/base 直点。',
+    ancient_egyptians_pharaoh_before_scoring: '计分前翻开埋葬牌需要携带 buried card 与原基地上下文，保留 generic 更准确。',
+    ancient_egyptians_seal_the_tomb_uncover: '同基地多选翻开埋葬牌时需要同时保留 buried card 与基地上下文，不能简化为单一实体直点。',
     alien_probe: '目标同时包含对手玩家上下文与其手牌卡面，不能映射为当前玩家 hand 直选。',
     bear_cavalry_bear_necessities: '候选项混合了场上随从与持续行动卡，单一 base/minion/hand 语义不足以表达。',
     alien_terraform_choose_replacement: '候选目标来自替换基地池/基地牌面，不是当前场上的基地实体。',
