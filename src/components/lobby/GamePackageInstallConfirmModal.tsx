@@ -58,19 +58,27 @@ export const GamePackageInstallConfirmModal = ({
         : undefined;
     const progressPercent = Math.max(0, Math.min(100, state.progressPercent ?? 0));
     const progressMode = state.progressMode ?? 'indeterminate';
-    const isInProgress = state.status !== 'not-installed' && state.status !== 'failed';
+    const isInProgress = state.status === 'queued'
+        || state.status === 'manifest'
+        || state.status === 'downloading'
+        || state.status === 'verifying';
     const isFailed = state.status === 'failed';
-    const isPreview = !isInProgress && !isFailed;
+    const isInstalled = state.status === 'installed';
+    const isPreview = state.status === 'not-installed';
     const modalTitle = isPreview
         ? t('packageManager.confirmTitle', { game: gameName })
         : isFailed
             ? t('packageManager.failedTitle')
-            : t(`packageManager.progress.${state.status === 'queued' ? 'queuedTitle' : state.status === 'manifest' ? 'manifestTitle' : state.status === 'downloading' ? 'downloadTitle' : 'verifyTitle'}`);
+            : isInstalled
+                ? t('packageManager.installedTitle')
+                : t(`packageManager.progress.${state.status === 'queued' ? 'queuedTitle' : state.status === 'manifest' ? 'manifestTitle' : state.status === 'downloading' ? 'downloadTitle' : 'verifyTitle'}`);
     const modalDescription = isPreview
         ? t('packageManager.confirmDescription')
         : isFailed
             ? (state.errorMessage || t('packageManager.failedHint'))
-            : t(`packageManager.progress.${state.status === 'queued' ? 'queuedHint' : state.status === 'manifest' ? 'manifestHint' : state.status === 'downloading' ? 'downloadHint' : 'verifyHint'}`);
+            : isInstalled
+                ? t('packageManager.installedHint', { game: gameName })
+                : t(`packageManager.progress.${state.status === 'queued' ? 'queuedHint' : state.status === 'manifest' ? 'manifestHint' : state.status === 'downloading' ? 'downloadHint' : 'verifyHint'}`);
     const PrimaryIcon = isFailed ? RefreshCw : isInProgress ? LoaderCircle : Download;
     const primaryActionLabel = isInProgress
         ? modalTitle
@@ -177,26 +185,28 @@ export const GamePackageInstallConfirmModal = ({
                     >
                         {t('actions.cancel')}
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (isInProgress) {
-                                return;
-                            }
-                            if (isFailed) {
-                                void onRetry?.();
-                                return;
-                            }
+                    {!isInstalled && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (isInProgress) {
+                                    return;
+                                }
+                                if (isFailed) {
+                                    void onRetry?.();
+                                    return;
+                                }
 
-                            void onConfirm();
-                        }}
-                        disabled={isPrimaryDisabled}
-                        aria-busy={isLoading}
-                        className="touch-target-min inline-flex items-center justify-center gap-2 rounded-[4px] bg-parchment-base-text px-4 py-2 text-xs font-bold uppercase tracking-wider text-parchment-card-bg transition-colors hover:bg-parchment-brown disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        <PrimaryIcon size={14} className={isInProgress ? 'animate-spin' : ''} />
-                        <span>{primaryActionLabel}</span>
-                    </button>
+                                void onConfirm();
+                            }}
+                            disabled={isPrimaryDisabled}
+                            aria-busy={isLoading}
+                            className="touch-target-min inline-flex items-center justify-center gap-2 rounded-[4px] bg-parchment-base-text px-4 py-2 text-xs font-bold uppercase tracking-wider text-parchment-card-bg transition-colors hover:bg-parchment-brown disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <PrimaryIcon size={14} className={isInProgress ? 'animate-spin' : ''} />
+                            <span>{primaryActionLabel}</span>
+                        </button>
+                    )}
                 </div>
             </section>
         </ModalBase>
