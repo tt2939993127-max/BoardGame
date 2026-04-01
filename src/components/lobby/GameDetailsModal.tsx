@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } fro
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { Info } from 'lucide-react';
+import { AlertTriangle, Download, Info, LoaderCircle, RefreshCw } from 'lucide-react';
 import * as matchApi from '../../services/matchApi';
 import { getLocalMatchPreferences, updateLocalMatchPreferences } from '../../api/user-settings';
 import { useAuth } from '../../contexts/AuthContext';
@@ -109,23 +109,68 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     });
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
     const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
-    const hasVerifiedInstalledPackageForMobileGame = packageInstallCardState.status === 'installed'
-        && Boolean(installedPackageVersionLabel);
-    const effectivePackageInstallCardState = hasVerifiedInstalledPackageForMobileGame
-        || packageInstallCardState.status !== 'installed'
-        ? packageInstallCardState
-        : {
+    const hasInstalledPackageForMobileGame = packageInstallCardState.status === 'installed' && Boolean(installedPackageVersionLabel);
+    const mobilePackageCardDisplayState = !hasInstalledPackageForMobileGame && packageInstallCardState.status === 'installed'
+        ? {
             ...packageInstallCardState,
             status: 'not-installed' as const,
-            progressPercent: undefined,
-            progressMode: undefined,
-            errorMessage: undefined,
-        };
-    const shouldShowMobilePackageCard = isPackageManagedMobileGame
-        && (isAppUpdateRequiredForMobileGame || !hasVerifiedInstalledPackageForMobileGame);
+        }
+        : packageInstallCardState;
     const shouldShowInstalledPackageBadge = isPackageManagedMobileGame
         && !isAppUpdateRequiredForMobileGame
-        && hasVerifiedInstalledPackageForMobileGame;
+        && hasInstalledPackageForMobileGame;
+    const shouldShowMobilePackageCard = isPackageManagedMobileGame
+        && (isAppUpdateRequiredForMobileGame || !hasInstalledPackageForMobileGame);
+    const [isMobilePackageCardExpanded, setIsMobilePackageCardExpanded] = useState(false);
+    const shouldAutoExpandMobilePackageCard = packageInstallCardState.status === 'queued'
+        || packageInstallCardState.status === 'manifest'
+        || packageInstallCardState.status === 'downloading'
+        || packageInstallCardState.status === 'verifying'
+        || packageInstallCardState.status === 'failed';
+    const mobilePackageToggleMeta = useMemo(() => {
+        if (isAppUpdateRequiredForMobileGame) {
+            return {
+                icon: AlertTriangle,
+                iconClassName: '',
+                buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
+                label: t('packageManager.updateRequiredTitle'),
+            };
+        }
+
+        switch (mobilePackageCardDisplayState.status) {
+            case 'queued':
+            case 'verifying':
+                return {
+                    icon: LoaderCircle,
+                    iconClassName: 'animate-spin',
+                    buttonClassName: 'border-parchment-card-border/45 bg-parchment-card-bg/96 text-parchment-base-text hover:bg-parchment-base-bg',
+                    label: t('packageManager.progress.label'),
+                };
+            case 'manifest':
+            case 'downloading':
+                return {
+                    icon: Download,
+                    iconClassName: '',
+                    buttonClassName: 'border-parchment-card-border/45 bg-parchment-card-bg/96 text-parchment-base-text hover:bg-parchment-base-bg',
+                    label: t('packageManager.progress.label'),
+                };
+            case 'failed':
+                return {
+                    icon: RefreshCw,
+                    iconClassName: '',
+                    buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
+                    label: t('packageManager.retryAction'),
+                };
+            case 'not-installed':
+            default:
+                return {
+                    icon: Download,
+                    iconClassName: '',
+                    buttonClassName: 'border-parchment-base-text/15 bg-parchment-base-text text-parchment-card-bg hover:bg-parchment-brown',
+                    label: t('packageManager.installAction'),
+                };
+        }
+    }, [mobilePackageCardDisplayState.status, isAppUpdateRequiredForMobileGame, t]);
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -181,6 +226,24 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         roomsRef.current = rooms;
     }, [rooms]);
+
+    useEffect(() => {
+        if (!shouldShowMobilePackageCard) {
+            setIsMobilePackageCardExpanded(false);
+            return;
+        }
+
+        if (shouldAutoExpandMobilePackageCard) {
+            setIsMobilePackageCardExpanded(true);
+        }
+    }, [shouldAutoExpandMobilePackageCard, shouldShowMobilePackageCard]);
+
+    useEffect(() => {
+        if (isOpen) {
+            return;
+        }
+        setIsMobilePackageCardExpanded(false);
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
@@ -1230,38 +1293,62 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         overflow-hidden
                     "
                 >
-                    {shouldShowMobilePackageCard && (
-                        <div
-                            className={clsx(
-                                'absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)]',
-                                !isNativeCapacitorRuntime && 'md:hidden',
-                            )}
-                        >
-                            <GameDetailsMobilePackageCard
-                                gameName={gameDisplayName}
-                                state={effectivePackageInstallCardState}
-                                onInstall={handleOpenMobilePackageInstall}
-                                onRetry={handleRetryPackageInstall}
-                                presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
-                                requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
-                                className={isNativeCapacitorRuntime ? '' : 'md:hidden'}
-                            />
+                    {shouldShowInstalledPackageBadge && installedPackageVersionLabel && (
+                        <div className="pointer-events-none absolute bottom-3 left-3 z-20 md:hidden">
+                            <div
+                                data-testid="game-details-mobile-package-installed-badge"
+                                className="pointer-events-auto inline-flex items-center rounded-full border border-emerald-700/20 bg-emerald-50/92 px-3 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm"
+                            >
+                                {t('packageManager.installedVersionBadge', { version: installedPackageVersionLabel })}
+                            </div>
                         </div>
                     )}
 
-                    {shouldShowInstalledPackageBadge && (
+                    {shouldShowMobilePackageCard && (
                         <div
-                            data-testid="game-details-mobile-package-installed-badge"
-                            className={clsx(
-                                'pointer-events-none absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)]',
-                                !isNativeCapacitorRuntime && 'md:hidden',
-                            )}
+                            className="pointer-events-none absolute bottom-3 left-3 z-20"
                         >
-                            <span className="inline-flex rounded-full border border-emerald-700/25 bg-emerald-50/92 px-2.5 py-1 text-[10px] font-semibold tracking-[0.04em] text-emerald-900 shadow-[0_8px_18px_rgba(5,150,105,0.16)] backdrop-blur-sm">
-                                {installedPackageVersionLabel
-                                    ? t('packageManager.installedVersionBadge', { version: installedPackageVersionLabel })
-                                    : t('packageManager.installedCompletedBadge')}
-                            </span>
+                            <button
+                                type="button"
+                                data-testid="game-details-mobile-package-toggle"
+                                onClick={() => setIsMobilePackageCardExpanded((current) => !current)}
+                                aria-expanded={isMobilePackageCardExpanded}
+                                aria-label={mobilePackageToggleMeta.label}
+                                title={mobilePackageToggleMeta.label}
+                                className={clsx(
+                                    'pointer-events-auto absolute bottom-0 left-0 inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-parchment-base-text/25',
+                                    mobilePackageToggleMeta.buttonClassName,
+                                    isMobilePackageCardExpanded
+                                        ? 'pointer-events-none scale-90 opacity-0'
+                                        : 'scale-100 opacity-100',
+                                )}
+                            >
+                                <mobilePackageToggleMeta.icon
+                                    size={18}
+                                    strokeWidth={2.2}
+                                    className={mobilePackageToggleMeta.iconClassName}
+                                />
+                            </button>
+
+                            <div
+                                className={clsx(
+                                    'absolute bottom-0 left-0 w-[min(20rem,calc(100vw-5rem))] origin-bottom-left transition-all duration-200 ease-out md:w-[18rem]',
+                                    isMobilePackageCardExpanded
+                                        ? 'pointer-events-auto translate-y-0 scale-100 opacity-100'
+                                        : 'pointer-events-none translate-y-2 scale-95 opacity-0',
+                                )}
+                            >
+                                <GameDetailsMobilePackageCard
+                                    gameName={gameDisplayName}
+                                    state={mobilePackageCardDisplayState}
+                                    onInstall={handleOpenMobilePackageInstall}
+                                    onRetry={handleRetryPackageInstall}
+                                    onCollapse={() => setIsMobilePackageCardExpanded(false)}
+                                    presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
+                                    requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
+                                    className=""
+                                />
+                            </div>
                         </div>
                     )}
 
