@@ -186,4 +186,22 @@ export const TITAN_CARD_DEFS: TitanCardDef[] = [
         summonMode: 'explicit',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.TITANS, index: 16 },
     },
+    {
+        id: 'sphinx',
+        type: 'titan',
+        name: '狮身人面像',
+        faction: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS,
+        abilityTags: ['special', 'talent'],
+        summonMode: 'explicit',
+        previewRef: { type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 29 },
+    },
+    {
+        id: 'pecos_bill',
+        type: 'titan',
+        name: 'Pecos Bill',
+        faction: SMASHUP_FACTION_IDS.COWBOYS,
+        abilityTags: ['special', 'ongoing'],
+        summonMode: 'explicit',
+        previewRef: { type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 30 },
+    },
 ];
