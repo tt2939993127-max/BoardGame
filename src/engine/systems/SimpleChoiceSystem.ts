@@ -184,12 +184,47 @@ function handleSimpleChoiceRespond<TCore>(
         selectedOptions = [selectedOption];
     }
 
-    const newState = resolveInteraction(state);
-    const resolvedValue = payload.mergedValue !== undefined
-        ? payload.mergedValue
-        : isMulti
+    let resolvedValue: unknown;
+    if (payload.mergedValue !== undefined) {
+        if (isMulti || !data.slider) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedOptionValue = selectedOptions[0]?.value;
+        if (!selectedOptionValue || typeof selectedOptionValue !== 'object' || Array.isArray(selectedOptionValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const mergedValue = payload.mergedValue;
+        if (!mergedValue || typeof mergedValue !== 'object' || Array.isArray(mergedValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedNumericValue = (selectedOptionValue as { value?: unknown }).value;
+        const mergedNumericValue = (mergedValue as { value?: unknown }).value;
+        if (
+            typeof selectedNumericValue !== 'number'
+            || !Number.isFinite(selectedNumericValue)
+            || typeof mergedNumericValue !== 'number'
+            || !Number.isFinite(mergedNumericValue)
+            || !Number.isInteger(mergedNumericValue)
+            || mergedNumericValue < 1
+            || mergedNumericValue > selectedNumericValue
+        ) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        resolvedValue = {
+            ...selectedOptionValue,
+            value: mergedNumericValue,
+        };
+    } else {
+        resolvedValue = isMulti
             ? selectedOptions.map((option) => option.value)
             : selectedOptions[0]?.value;
+    }
+
+    const newState = resolveInteraction(state);
     const interactionDataForEvent = responseValidationMode === 'live'
         ? { ...current.data, options: availableOptions }
         : current.data;

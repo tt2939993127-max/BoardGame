@@ -14,6 +14,7 @@ const SLOW_DEVICE_CONNECTION_TIMEOUT_MS = 45_000;
 interface ConnectionLoadingScreenProps {
     title?: string;
     description?: string;
+    progressText?: string;
     gameId?: string;
     onRetry?: () => void;
     anchor?: 'viewport' | 'container';
@@ -33,6 +34,7 @@ interface ConnectionLoadingScreenProps {
 export const ConnectionLoadingScreen = ({
     title,
     description,
+    progressText,
     gameId,
     onRetry,
     anchor = 'viewport',
@@ -82,6 +84,7 @@ export const ConnectionLoadingScreen = ({
             <LoadingScreen
                 title={timedOut ? t('matchRoom.connectionTimeout.title') : title}
                 description={timedOut ? t('matchRoom.connectionTimeout.description') : description}
+                progressText={timedOut ? undefined : progressText}
                 anchor={anchor}
             />
             {timedOut && (

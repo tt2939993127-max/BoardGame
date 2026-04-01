@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } fro
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { Info } from 'lucide-react';
+import { AlertTriangle, Download, Info, LoaderCircle, RefreshCw } from 'lucide-react';
 import * as matchApi from '../../services/matchApi';
 import { getLocalMatchPreferences, updateLocalMatchPreferences } from '../../api/user-settings';
 import { useAuth } from '../../contexts/AuthContext';
@@ -58,6 +58,11 @@ type PendingRoomAction = {
 
 type MatchEntryLoadingPhase = 'creating' | 'joining';
 const LOBBY_CONNECT_ERROR_TOAST_DELAY_MS = 1500;
+const lastLoggedPackageStateByGame = new Map<string, string>();
+
+export function __resetGameDetailsModalPackageStateLogForTests(): void {
+    lastLoggedPackageStateByGame.clear();
+}
 
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
@@ -77,6 +82,16 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
+    const capacitorRuntime = typeof window !== 'undefined'
+        ? (window as Window & {
+            Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
+        }).Capacitor
+        : undefined;
+    const isNativeCapacitorRuntime = typeof capacitorRuntime?.isNativePlatform === 'function'
+        && capacitorRuntime.isNativePlatform() === true;
+    const isNativeAndroidCapacitorRuntime = isNativeCapacitorRuntime
+        && typeof capacitorRuntime?.getPlatform === 'function'
+        && capacitorRuntime.getPlatform() === 'android';
     const {
         isPackageManaged: isPackageManagedMobileGame,
         cardState: packageInstallCardState,
@@ -90,19 +105,72 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         gameId,
         gameName: gameDisplayName,
         delivery: gameManifest?.mobileDelivery,
-        enabled: true,
+        enabled: isNativeAndroidCapacitorRuntime,
     });
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
-    const isPackageInstalledForMobileGame = packageInstallCardState.status === 'installed';
-    const isNativeCapacitorRuntime = typeof window !== 'undefined'
-        && typeof (
-            window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
-        ).Capacitor?.isNativePlatform === 'function'
-        && (
-            window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
-        ).Capacitor?.isNativePlatform() === true;
+    const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
+    const hasInstalledPackageForMobileGame = packageInstallCardState.status === 'installed' && Boolean(installedPackageVersionLabel);
+    const mobilePackageCardDisplayState = !hasInstalledPackageForMobileGame && packageInstallCardState.status === 'installed'
+        ? {
+            ...packageInstallCardState,
+            status: 'not-installed' as const,
+        }
+        : packageInstallCardState;
+    const shouldShowInstalledPackageBadge = isPackageManagedMobileGame
+        && !isAppUpdateRequiredForMobileGame
+        && hasInstalledPackageForMobileGame;
     const shouldShowMobilePackageCard = isPackageManagedMobileGame
-        && (isAppUpdateRequiredForMobileGame || !isPackageInstalledForMobileGame);
+        && (isAppUpdateRequiredForMobileGame || !hasInstalledPackageForMobileGame);
+    const [isMobilePackageCardExpanded, setIsMobilePackageCardExpanded] = useState(false);
+    const shouldAutoExpandMobilePackageCard = packageInstallCardState.status === 'queued'
+        || packageInstallCardState.status === 'manifest'
+        || packageInstallCardState.status === 'downloading'
+        || packageInstallCardState.status === 'verifying'
+        || packageInstallCardState.status === 'failed';
+    const mobilePackageToggleMeta = useMemo(() => {
+        if (isAppUpdateRequiredForMobileGame) {
+            return {
+                icon: AlertTriangle,
+                iconClassName: '',
+                buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
+                label: t('packageManager.updateRequiredTitle'),
+            };
+        }
+
+        switch (mobilePackageCardDisplayState.status) {
+            case 'queued':
+            case 'verifying':
+                return {
+                    icon: LoaderCircle,
+                    iconClassName: 'animate-spin',
+                    buttonClassName: 'border-parchment-card-border/45 bg-parchment-card-bg/96 text-parchment-base-text hover:bg-parchment-base-bg',
+                    label: t('packageManager.progress.label'),
+                };
+            case 'manifest':
+            case 'downloading':
+                return {
+                    icon: Download,
+                    iconClassName: '',
+                    buttonClassName: 'border-parchment-card-border/45 bg-parchment-card-bg/96 text-parchment-base-text hover:bg-parchment-base-bg',
+                    label: t('packageManager.progress.label'),
+                };
+            case 'failed':
+                return {
+                    icon: RefreshCw,
+                    iconClassName: '',
+                    buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
+                    label: t('packageManager.retryAction'),
+                };
+            case 'not-installed':
+            default:
+                return {
+                    icon: Download,
+                    iconClassName: '',
+                    buttonClassName: 'border-parchment-base-text/15 bg-parchment-base-text text-parchment-card-bg hover:bg-parchment-brown',
+                    label: t('packageManager.installAction'),
+                };
+        }
+    }, [mobilePackageCardDisplayState.status, isAppUpdateRequiredForMobileGame, t]);
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -143,6 +211,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const matchEntryLoadingDescription = matchEntryLoadingPhase === 'creating'
         ? t('matchRoom.creatingRoom')
         : t('matchRoom.joiningRoom');
+    const matchEntryLoadingProgressText = matchEntryLoadingPhase === 'creating'
+        ? t('matchRoom.loadingProgress.step', { current: 1, total: 4 })
+        : t('matchRoom.loadingProgress.step', { current: 2, total: 4 });
 
     useEffect(() => {
         pendingActionRef.current = pendingAction;
@@ -155,6 +226,24 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     useEffect(() => {
         roomsRef.current = rooms;
     }, [rooms]);
+
+    useEffect(() => {
+        if (!shouldShowMobilePackageCard) {
+            setIsMobilePackageCardExpanded(false);
+            return;
+        }
+
+        if (shouldAutoExpandMobilePackageCard) {
+            setIsMobilePackageCardExpanded(true);
+        }
+    }, [shouldAutoExpandMobilePackageCard, shouldShowMobilePackageCard]);
+
+    useEffect(() => {
+        if (isOpen) {
+            return;
+        }
+        setIsMobilePackageCardExpanded(false);
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
@@ -387,6 +476,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             return;
         }
 
+        const packageStateSnapshot = JSON.stringify({
+            pendingInstall: pendingPackageInstall ? 'yes' : 'no',
+            pendingModulePackId: pendingPackageInstall?.modulePackId || '',
+            pendingAssetPackId: pendingPackageInstall?.assetPackId || '',
+            status: packageInstallCardState.status,
+            progressMode: packageInstallCardState.progressMode || '',
+            progressPercent: packageInstallCardState.progressPercent ?? '',
+            errorMessage: packageInstallCardState.errorMessage || '',
+        });
+
+        if (lastLoggedPackageStateByGame.get(gameId) === packageStateSnapshot) {
+            return;
+        }
+
+        lastLoggedPackageStateByGame.set(gameId, packageStateSnapshot);
+
         logger.info('[GameDetailsModal] 游戏包状态变化', {
             gameId,
             gameName: gameDisplayName,
@@ -409,48 +514,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         pendingPackageInstall,
     ]);
 
-    const guardRoomEntryWithPackageState = useCallback(() => {
-        if (!isPackageManagedMobileGame) {
-            return true;
-        }
-
-        if (isAppUpdateRequiredForMobileGame) {
-            toast.warning(
-                gameManifest?.mobileDelivery?.requiredAppVersion
-                    ? { kind: 'i18n', key: 'packageManager.updateRequiredHintWithVersion', ns: 'lobby', params: { game: gameDisplayName, version: gameManifest.mobileDelivery.requiredAppVersion } }
-                    : { kind: 'i18n', key: 'packageManager.updateRequiredHint', ns: 'lobby', params: { game: gameDisplayName } },
-                { kind: 'i18n', key: 'packageManager.updateRequiredTitle', ns: 'lobby' },
-                { dedupeKey: `package-update-required:${gameId}` },
-            );
-            return false;
-        }
-
-        if (!isPackageInstalledForMobileGame) {
-            handleOpenMobilePackageInstall();
-            toast.warning(
-                { kind: 'i18n', key: 'packageManager.notInstalledHint', ns: 'lobby', params: { game: gameDisplayName } },
-                { kind: 'i18n', key: 'packageManager.notInstalled', ns: 'lobby' },
-                { dedupeKey: `package-install-required:${gameId}` },
-            );
-            return false;
-        }
-
-        return true;
-    }, [
-        gameDisplayName,
-        gameId,
-        gameManifest?.mobileDelivery?.requiredAppVersion,
-        handleOpenMobilePackageInstall,
-        isAppUpdateRequiredForMobileGame,
-        isPackageInstalledForMobileGame,
-        isPackageManagedMobileGame,
-        toast,
-    ]);
-
     const handleTutorial = () => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         onNavigate?.();
         navigate(`/play/${gameId}/tutorial`);
     };
@@ -504,7 +568,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     // 打开创建房间弹窗
     const handleOpenCreateRoom = async () => {
         if (isPreparingCreateRoom) return;
-        if (!guardRoomEntryWithPackageState()) return;
 
         const namespace = `game-${gameId}`;
         setIsPreparingCreateRoom(true);
@@ -717,9 +780,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const handleJoinRoom = async (matchID: string, overrideGameName?: string, password?: string) => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         let shouldPreserveLoading = false;
         // 检查是否有已保存的凭证（重连场景）
         const savedCreds = localStorage.getItem(`match_creds_${matchID}`);
@@ -907,9 +967,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const handleSpectate = async (matchID: string) => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         const room = roomsRef.current.find((item) => item.matchID === matchID);
         const roomGameName = normalizeGameName(room?.gameName) || normalizedGameId || 'tictactoe';
 
@@ -1236,22 +1293,62 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         overflow-hidden
                     "
                 >
+                    {shouldShowInstalledPackageBadge && installedPackageVersionLabel && (
+                        <div className="pointer-events-none absolute bottom-3 left-3 z-20 md:hidden">
+                            <div
+                                data-testid="game-details-mobile-package-installed-badge"
+                                className="pointer-events-auto inline-flex items-center rounded-full border border-emerald-700/20 bg-emerald-50/92 px-3 py-1.5 text-[11px] font-semibold text-emerald-900 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm"
+                            >
+                                {t('packageManager.installedVersionBadge', { version: installedPackageVersionLabel })}
+                            </div>
+                        </div>
+                    )}
+
                     {shouldShowMobilePackageCard && (
                         <div
-                            className={clsx(
-                                'absolute bottom-3 left-3 z-20 max-w-[calc(100%-4.5rem)]',
-                                !isNativeCapacitorRuntime && 'md:hidden',
-                            )}
+                            className="pointer-events-none absolute bottom-3 left-3 z-20"
                         >
-                            <GameDetailsMobilePackageCard
-                                gameName={gameDisplayName}
-                                state={packageInstallCardState}
-                                onInstall={handleOpenMobilePackageInstall}
-                                onRetry={handleRetryPackageInstall}
-                                presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
-                                requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
-                                className={isNativeCapacitorRuntime ? '' : 'md:hidden'}
-                            />
+                            <button
+                                type="button"
+                                data-testid="game-details-mobile-package-toggle"
+                                onClick={() => setIsMobilePackageCardExpanded((current) => !current)}
+                                aria-expanded={isMobilePackageCardExpanded}
+                                aria-label={mobilePackageToggleMeta.label}
+                                title={mobilePackageToggleMeta.label}
+                                className={clsx(
+                                    'pointer-events-auto absolute bottom-0 left-0 inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-parchment-base-text/25',
+                                    mobilePackageToggleMeta.buttonClassName,
+                                    isMobilePackageCardExpanded
+                                        ? 'pointer-events-none scale-90 opacity-0'
+                                        : 'scale-100 opacity-100',
+                                )}
+                            >
+                                <mobilePackageToggleMeta.icon
+                                    size={18}
+                                    strokeWidth={2.2}
+                                    className={mobilePackageToggleMeta.iconClassName}
+                                />
+                            </button>
+
+                            <div
+                                className={clsx(
+                                    'absolute bottom-0 left-0 w-[min(20rem,calc(100vw-5rem))] origin-bottom-left transition-all duration-200 ease-out md:w-[18rem]',
+                                    isMobilePackageCardExpanded
+                                        ? 'pointer-events-auto translate-y-0 scale-100 opacity-100'
+                                        : 'pointer-events-none translate-y-2 scale-95 opacity-0',
+                                )}
+                            >
+                                <GameDetailsMobilePackageCard
+                                    gameName={gameDisplayName}
+                                    state={mobilePackageCardDisplayState}
+                                    onInstall={handleOpenMobilePackageInstall}
+                                    onRetry={handleRetryPackageInstall}
+                                    onCollapse={() => setIsMobilePackageCardExpanded(false)}
+                                    presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
+                                    requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
+                                    className=""
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -1530,6 +1627,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <LoadingScreen
                         title={matchEntryLoadingTitle}
                         description={matchEntryLoadingDescription}
+                        progressText={matchEntryLoadingProgressText}
                         fullScreen={false}
                     />
                 </div>
@@ -1537,4 +1635,3 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         </>
     );
 };
-

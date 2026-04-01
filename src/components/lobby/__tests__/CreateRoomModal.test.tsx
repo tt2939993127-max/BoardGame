@@ -12,8 +12,11 @@ vi.mock('react-i18next', () => ({
             if (key === 'createRoom.enabled') return 'Enabled';
             if (key === 'createRoom.disabled') return 'Disabled';
             if (key === 'createRoom.enableRoomAi') return '加入 AI';
-            if (key === 'createRoom.enableRoomAiHint') return '可选';
-            if (key === 'createRoom.enableRoomAiSummary') return `players:${options?.players ?? ''};aiCount:${options?.aiCount ?? ''}`;
+            if (key === 'ai.difficulty') return '难度';
+            if (key === 'ai.difficulties.easy') return '简单';
+            if (key === 'ai.difficulties.normal') return '普通';
+            if (key === 'ai.difficulties.hard') return '困难';
+            if (key === 'ai.difficulties.expert') return '专家';
             if (key === 'actions.cancel') return '取消';
             if (key === 'createRoom.confirm') return '确认';
             if (key === 'button.processing') return '处理中';
@@ -103,5 +106,57 @@ describe('CreateRoomModal AI default state', () => {
 
         expect(screen.getByText('Enabled')).toBeInTheDocument();
         expect(screen.getByText('AI 占位')).toBeInTheDocument();
+    });
+
+    it('开启 AI 后默认使用普通难度提交本地 AI 座位', () => {
+        const onConfirm = vi.fn();
+
+        render(createElement(CreateRoomModal, {
+            isOpen: true,
+            onClose: vi.fn(),
+            onConfirm,
+            gameManifest,
+            initialPreferences: null,
+        }));
+
+        fireEvent.click(screen.getByRole('button', { name: /加入 AI/i }));
+        fireEvent.click(screen.getByRole('button', { name: '确认' }));
+
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            enableAi: true,
+            seatControllers: expect.objectContaining({
+                '0': { type: 'human' },
+                '1': { type: 'local-ai', difficulty: 'normal' },
+            }),
+        }));
+    });
+
+    it('切换难度后会同步到本地 AI 座位', () => {
+        const onConfirm = vi.fn();
+        const initialPreferences: LocalMatchPreferences = {
+            numPlayers: 2,
+            setupSelections: {},
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai', difficulty: 'normal' },
+            },
+        };
+
+        render(createElement(CreateRoomModal, {
+            isOpen: true,
+            onClose: vi.fn(),
+            onConfirm,
+            gameManifest,
+            initialPreferences,
+        }));
+
+        fireEvent.click(screen.getByRole('button', { name: '困难' }));
+        fireEvent.click(screen.getByRole('button', { name: '确认' }));
+
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            seatControllers: expect.objectContaining({
+                '1': { type: 'local-ai', difficulty: 'hard' },
+            }),
+        }));
     });
 });

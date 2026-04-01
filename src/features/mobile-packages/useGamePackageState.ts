@@ -91,6 +91,20 @@ export const useGamePackageState = ({
         });
     }, [fallbackState, gameId, isPackageManaged]);
 
+    useEffect(() => {
+        if (!pendingInstall) {
+            return;
+        }
+
+        if (cardState.status !== 'installed') {
+            return;
+        }
+
+        requestSerialRef.current += 1;
+        setPendingInstall(null);
+        setIsConfirmingInstall(false);
+    }, [cardState.status, pendingInstall]);
+
     const requestInstall = useCallback(() => {
         if (!isPackageManaged) {
             return;
@@ -135,7 +149,7 @@ export const useGamePackageState = ({
         setIsConfirmingInstall(true);
 
         try {
-            void startGamePackageInstall(installManifest, t('packageManager.backendPending'));
+            void startGamePackageInstall(installManifest, t('packageManager.runtimeUnsupported'));
         } finally {
             setIsConfirmingInstall(false);
         }
@@ -148,7 +162,7 @@ export const useGamePackageState = ({
 
         resetGamePackageState(gameId, fallbackState);
         if (pendingInstall) {
-            void startGamePackageInstall(pendingInstall, t('packageManager.backendPending'));
+            void startGamePackageInstall(pendingInstall, t('packageManager.runtimeUnsupported'));
             return;
         }
 

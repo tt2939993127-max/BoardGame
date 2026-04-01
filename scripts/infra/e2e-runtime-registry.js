@@ -234,6 +234,18 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
   const ports = normalizePorts(record.ports ?? existing?.ports ?? {});
   const runtimeId = record.runtimeId ?? existing?.runtimeId ?? getRuntimeId(scope, cwd, worktreeRoot);
   const bootstrapLogFiles = uniqueStrings(record.bootstrapLogFiles ?? existing?.bootstrapLogFiles ?? record.logFile ?? existing?.logFile ?? []);
+  const sessionId = typeof (record.sessionId ?? existing?.sessionId) === 'string'
+    ? (record.sessionId ?? existing?.sessionId).trim()
+    : '';
+  const entrypoint = typeof (record.entrypoint ?? existing?.entrypoint) === 'string'
+    ? (record.entrypoint ?? existing?.entrypoint).trim()
+    : '';
+  const commandSource = typeof (record.commandSource ?? existing?.commandSource) === 'string'
+    ? (record.commandSource ?? existing?.commandSource).trim()
+    : '';
+  const targetLabel = typeof (record.targetLabel ?? existing?.targetLabel) === 'string'
+    ? (record.targetLabel ?? existing?.targetLabel).trim()
+    : '';
 
   return {
     ...existing,
@@ -249,6 +261,10 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
     ports,
     health: normalizeRuntimeHealth(record.health ?? existing?.health),
     bootstrapLogFiles,
+    sessionId,
+    entrypoint,
+    commandSource,
+    targetLabel,
     active: record.active ?? existing?.active ?? true,
     createdAt,
     updatedAt: nowIso(),
@@ -438,14 +454,16 @@ export function formatRuntimeSummary(runtime) {
     ? runtime.ports.join(', ')
     : Object.entries(runtime.ports ?? {}).map(([name, port]) => `${name}=${port}`).join(', ');
   const target = runtime.target?.trim() || '<unknown>';
-  return [
-    `[${runtime.worktreeName ?? path.basename(runtime.worktreeRoot ?? '<unknown>')}]`,
-    `status=${runtime.status ?? 'unknown'}`,
-    `scope=${runtime.scope ?? 'default'}`,
-    `ownerPid=${runtime.ownerPid ?? 'n/a'}`,
-    `target=${target}`,
-    ports ? `ports=${ports}` : '',
-    runtime.createdAt ? `createdAt=${runtime.createdAt}` : '',
+    return [
+        `[${runtime.worktreeName ?? path.basename(runtime.worktreeRoot ?? '<unknown>')}]`,
+        `status=${runtime.status ?? 'unknown'}`,
+        `scope=${runtime.scope ?? 'default'}`,
+        `ownerPid=${runtime.ownerPid ?? 'n/a'}`,
+        runtime.sessionId ? `session=${runtime.sessionId}` : '',
+        runtime.entrypoint ? `entry=${runtime.entrypoint}` : '',
+        `target=${target}`,
+        ports ? `ports=${ports}` : '',
+        runtime.createdAt ? `createdAt=${runtime.createdAt}` : '',
   ].filter(Boolean).join(' ');
 }
 

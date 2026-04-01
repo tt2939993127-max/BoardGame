@@ -21,6 +21,12 @@ const usePrebuiltRuntime = selectedRuntime === 'prebuilt';
 const prebuiltBundleRoot = process.env.PW_PREBUILT_BUNDLE_ROOT
   ?? path.join('temp', 'dev-bundles', `e2e-worker-${workerId}`);
 const bootstrapLogFile = process.env.PW_BOOTSTRAP_LOG_FILE?.trim() || '';
+const runtimeMetadata = {
+  sessionId: process.env.PW_E2E_SESSION_ID?.trim() || '',
+  entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || '',
+  commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || '',
+  targetLabel: process.env.PW_E2E_TARGET?.trim() || process.env.PW_TEST_TARGET?.trim() || '',
+};
 
 if (Number.isNaN(workerId)) {
   console.error('用法: node scripts/infra/start-worker-servers.js <workerId>');
@@ -158,6 +164,10 @@ const stopHeartbeat = startRuntimeHeartbeat(runtimeScope, () => ({
   ownerPids: [process.pid],
   servicePids: managedServices.map(service => service.child.pid).filter(pid => Number.isInteger(pid) && pid > 0),
   bootstrapLogFiles: bootstrapLogFile ? [bootstrapLogFile] : [],
+  targetLabel: runtimeMetadata.targetLabel,
+  sessionId: runtimeMetadata.sessionId,
+  entrypoint: runtimeMetadata.entrypoint,
+  commandSource: runtimeMetadata.commandSource,
 }));
 
 const cleanup = (exitCode = 0, reason = '') => {

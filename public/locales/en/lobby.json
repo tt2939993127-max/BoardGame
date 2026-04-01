@@ -108,6 +108,8 @@
     "notInstalledHint": "Before entering {{game}} on mobile, download its local game resource pack first.",
     "installedTitle": "Ready to play",
     "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
+    "installedCompletedBadge": "Completed",
+    "installedVersionBadge": "Completed · {{version}}",
     "installAction": "Install Pack",
     "confirmEyebrow": "Install Confirm",
     "confirmTitle": "Download {{game}} packages",
@@ -120,7 +122,7 @@
     "assetPack": "Asset Pack",
     "packIdUnknown": "Pack ID pending",
     "sizeUnknown": "Pending manifest",
-    "backendPending": "The native downloader is not enabled in the current runtime, so the flow falls back to preview mode.",
+    "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
     "failedTitle": "Download Failed",
     "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
     "retryAction": "Retry",
@@ -256,6 +258,9 @@
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}"
+    },
     "title": {
       "joining": "Joining",
       "creating": "Creating",
