@@ -208,11 +208,10 @@ export const useGamePackageState = ({
             installManifest,
         });
 
-        try {
-            void startGamePackageInstall(installManifest, t('packageManager.runtimeUnsupported'));
-        } finally {
-            setIsConfirmingInstall(false);
-        }
+        startGamePackageInstall(installManifest, t('packageManager.runtimeUnsupported'))
+            .finally(() => {
+                setIsConfirmingInstall(false);
+            });
     }, [pendingInstall, t]);
 
     const retryInstall = useCallback(() => {
