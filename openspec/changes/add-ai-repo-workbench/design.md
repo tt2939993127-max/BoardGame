@@ -83,42 +83,107 @@
 
 ### RepoSession
 
-- 仓库来源：clone / import
-- 本地根目录
-- 工作分支 / 隔离目录
-- gameId / 任务类型 / 当前 workflow
+- `sessionId`
+- 仓库来源：`template-clone | local-import | remote-clone`
+- 仓库标识（仓库名、默认分支、远端信息）
+- 本地根目录 / worktree 根目录 / 临时产物目录
+- 当前执行分支 / 基线 revision / head revision
+- 绑定的 `gameId`、任务类型、当前 `workflowTemplateId`
+- 会话级安全策略：允许写入范围、允许网络操作范围、是否允许提交/PR/merge
 
 ### WorkflowTemplate
 
-- 模板 id
-- 适用任务类型
+- `templateId`
+- 模板名称、适用任务类型、目标用户模式（小白 / 高级）
 - 固定节点序列
-- 可选分支节点
-- 默认门禁规则
+- 可选分支节点与启用条件
+- 默认门禁规则与默认恢复点
+- 关联的 skill/脚本/规范引用
 
 ### WorkflowRun
 
-- 当前运行状态
-- 已完成节点
-- 阻塞节点
-- 可恢复检查点
-- 关联日志与产物
+- `runId`
+- 当前运行状态：`pending | running | waiting-decision | blocked | failed | completed | canceled`
+- 已完成节点、当前节点、失败节点
+- 可恢复检查点与最近一次快照
+- 节点级日志、耗时、产物引用
+- 与 `RepoSession`、`DecisionRequest`、`ArtifactBundle` 的关联
+
+### WorkflowNode
+
+- `nodeId`
+- 节点类型：`input | automation | decision | gate | artifact | delivery`
+- 输入契约、输出契约、失败语义、重试策略
+- 是否允许自动跳过 / 是否必须人工确认
+- 对应的 skill、脚本、agent 运行器或仓库命令
 
 ### DecisionRequest
 
-- 决策项列表
-- 默认建议值
-- 来源节点
-- 必答/可跳过标记
+- `decisionRequestId`
+- 决策项列表、默认建议值、风险等级、来源节点
+- 必答/可跳过标记、截止时间、是否阻塞主链路
+- 决策结果、决策人、决策时间
 
 ### ArtifactBundle
 
-- E2E 截图
-- 证据文档
-- 测试摘要
-- 关键日志
-- diff 摘要
-- PR / merge 结果
+- `bundleId`
+- E2E 截图与缩略图
+- 证据文档 / 审计摘要 / 测试摘要
+- 关键日志、关键 diff、关键文件清单
+- commit / PR / merge 结果
+- 对外展示卡片与对内原始索引之间的映射
+
+## Workflow Node Taxonomy
+
+工作台首版将 skill 与仓库知识映射为六类节点，而不是直接暴露 prompt：
+
+1. `input`：收集最小输入（需求、素材、仓库来源）。
+2. `automation`：自动执行脚本、agent、审计、录入、生成等步骤。
+3. `decision`：汇总模糊项，暂停等待用户一次性确认。
+4. `gate`：检查测试、审计、截图、PR 策略等是否满足放行条件。
+5. `artifact`：整理截图、日志、diff、证据摘要并生成 `ArtifactBundle`。
+6. `delivery`：执行 commit、PR、merge、结果通知等最终交付动作。
+
+## Template Families
+
+### 新建游戏
+
+典型链路：
+
+`输入需求/素材 -> 初始化 RepoSession -> 结构扫描与缺口分析 -> 决策批次 -> 数据/资源接入 -> 功能实现 -> 审计与 E2E -> ArtifactBundle -> commit/PR/merge`
+
+### 数据录入
+
+典型链路：
+
+`输入素材 -> 规范预检查 -> 决策批次 -> 数据录入/资源上传 -> 审计 -> E2E 截图 -> ArtifactBundle -> commit/PR`
+
+### Bug 修复
+
+典型链路：
+
+`输入问题描述 -> 复现与根因定位 -> 决策批次（若需要） -> 修复 -> 回归测试 -> E2E 截图 -> ArtifactBundle -> commit/PR`
+
+## Recovery / Resume Model
+
+- 每个 `WorkflowRun` MUST 在节点完成、节点失败、等待决策、门禁结论产生时写入 checkpoint。
+- checkpoint 至少包含：当前节点、输入摘要、输出摘要、失败原因、下一步动作、关联产物索引。
+- 工作台刷新、进程重启或 agent 重连后，系统应从最近 checkpoint 恢复展示，并允许继续执行或重新运行当前节点。
+- 对长任务，恢复界面必须区分“真实活跃”“等待决策”“假活跃/健康检查失败”。
+
+## Artifact Return Path
+
+- 执行环境生成的截图、日志、测试结果必须先落到会话级产物目录。
+- 工作台服务将这些原始文件索引为 `ArtifactBundle`，再生成网页可浏览的卡片化摘要。
+- 截图卡片至少包含：图片、来源节点、时间戳、关联观察结论、可跳转原始文件。
+- 若某节点宣称完成但未生成要求的截图/证据，后续 `gate` 必须判定失败。
+
+## Delivery and Merge Policy
+
+- `commit`、`PR`、`merge` 都属于 `delivery` 节点，不属于普通自动节点。
+- 模板必须显式声明自己支持到哪一层交付：仅产物、可自动 commit、可自动 PR、可自动 merge。
+- 自动 merge 必须依赖独立 `gate` 输出，且复用 `pr-automation` 中“原始 PR 是唯一 merge 单元”的约束。
+- 对受保护分支或缺少权限的仓库，工作台应自动降级为“生成 PR/交付建议”，不得假装已完成 merge。
 
 ## Risks / Trade-offs
 
