@@ -27,7 +27,7 @@ import {
     getNextPhase,
     isCardPlayableInResponseWindow,
 } from './domain';
-import { DICETHRONE_CHARACTER_CATALOG } from './domain/types';
+import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId } from './domain/types';
 import { findPlayerAbility, getPlayerAbilityBaseDamage } from './domain/abilityLookup';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
 import { areTeammates, getOpponents } from './domain/rules';
@@ -473,7 +473,20 @@ const buildSetupActions = (state: DiceThroneState, playerId: PlayerId): AiLegalA
     const isReady = state.core.readyPlayers[playerId] === true;
 
     if (!hasSelectedCharacter) {
-        for (const character of DICETHRONE_CHARACTER_CATALOG) {
+        const takenCharacters = new Set<SelectableCharacterId>();
+        for (const value of Object.values(state.core.selectedCharacters)) {
+            if (value && value !== 'unselected') {
+                takenCharacters.add(value as SelectableCharacterId);
+            }
+        }
+        const availableCharacters = DICETHRONE_CHARACTER_CATALOG.filter(
+            (character) => !takenCharacters.has(character.id),
+        );
+        const candidates = availableCharacters.length > 0
+            ? availableCharacters
+            : DICETHRONE_CHARACTER_CATALOG;
+
+        for (const character of candidates) {
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('setup', 'select-character', character.id),
                 kind: 'setup-select-character',
@@ -885,6 +898,22 @@ const getContextPhase = (context: AiDecisionContext): TurnPhase => {
     return (state.sys.phase ?? state.sys.flow?.phase ?? 'setup') as TurnPhase;
 };
 
+const buildSetupSelectionNoise = (context: AiDecisionContext, action: AiLegalAction): number => {
+    const state = context.visibleState as DiceThroneState;
+    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : 0;
+    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
+        ? state.sys.eventStream.nextId
+        : 0;
+    const seed = `${context.matchId}|${context.playerId}|setup|${turnNumber}|${eventStreamNextId}|${action.actionId}`;
+    let hash = 2166136261;
+    for (let index = 0; index < seed.length; index += 1) {
+        hash ^= seed.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    const normalized = (hash >>> 0) / 0xffffffff;
+    return normalized * 2 - 1;
+};
+
 const findPlayerHandCard = (
     state: DiceThroneState,
     playerId: PlayerId,
@@ -919,20 +948,16 @@ const diceThroneKindScorer = createActionKindScorer('kind-weight', {
     'advance-phase': 10,
 });
 
-const setupCharacterScorer: LocalAiActionScorer = {
-    id: 'setup-character-preference',
-    score(_context, action) {
+const setupCharacterRandomScorer: LocalAiActionScorer = {
+    id: 'setup-character-random',
+    score(context, action) {
         if (action.kind !== 'setup-select-character') return null;
-        const characterId = typeof action.metadata?.characterId === 'string'
-            ? action.metadata.characterId
-            : null;
-        if (characterId === 'monk') {
-            return {
-                score: 80,
-                reason: '优先使用当前本地 AI 覆盖最完整的武僧样板',
-            };
-        }
-        return 10;
+        const noise = buildSetupSelectionNoise(context, action);
+        return {
+            score: Number((noise * 20).toFixed(3)),
+            reason: '角色选择随机扰动',
+            metadata: { noise },
+        };
     },
 };
 
@@ -1545,7 +1570,7 @@ const projectDiceThroneAction = (args: {
 
 const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     diceThroneKindScorer,
-    setupCharacterScorer,
+    setupCharacterRandomScorer,
     abilityValueScorer,
     cardValueScorer,
     interactionValueScorer,

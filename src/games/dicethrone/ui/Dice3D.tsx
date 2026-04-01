@@ -59,8 +59,9 @@ const probeSpriteUrl = (candidateUrl: string) => {
     // 对 DiceThrone 本地语言化资源直接放行：
     // 已验证同页环境下 /assets/i18n/... 的 fetch 与 Image.onload 都正常，
     // 但组件内的额外探测链在局内存在时序问题，导致状态长期卡在 loading。
-    // 这里先对这类稳定本地资源直接判 ready，避免把局内骰图继续卡空。
-    if (/^\/assets\/i18n\//i.test(candidateUrl)) {
+    // 这里仅对已确认存在的 zh-CN 资源直接判 ready；
+    // 其他语言仍需探测，以便在缺失时回退到 zh-CN。
+    if (/^\/assets\/i18n\/zh-CN\//i.test(candidateUrl)) {
         spriteProbeStatusCache.set(candidateUrl, 'ready');
         return Promise.resolve('ready');
     }

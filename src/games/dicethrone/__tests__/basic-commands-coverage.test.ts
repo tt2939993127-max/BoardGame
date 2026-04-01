@@ -24,7 +24,7 @@ import {
     type CommandInput,
     createHeroMatchup,
 } from './test-utils';
-import type { DiceThroneCore } from '../domain/types';
+import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
@@ -527,8 +527,9 @@ describe('AI legal actions', () => {
         expect(resolution?.action.kind).toBe('setup-select-character');
         expect(resolution?.action.commands[0]).toMatchObject({
             type: 'SELECT_CHARACTER',
-            payload: { characterId: 'monk' },
         });
+        const selectedCharacterId = (resolution?.action.commands[0]?.payload as { characterId?: string } | undefined)?.characterId;
+        expect(DICETHRONE_CHARACTER_CATALOG.map((item) => item.id)).toContain(selectedCharacterId);
     });
 
     it('本地 AI 在已选角色后应进入准备动作，而不是重复选角', () => {

@@ -105,3 +105,18 @@ export const logMobileRuntime = (
 
     console.info(message);
 };
+
+export const logMobileRuntimeCritical = (
+    scope: string,
+    stage: string,
+    payload?: MobileRuntimeLogPayload,
+) => {
+    const at = new Date().toISOString();
+    const normalizedPayload = normalizePayload(payload);
+    const message = `[MOBILE_CRITICAL][${scope}] ${JSON.stringify({
+        at,
+        stage,
+        ...normalizedPayload,
+    })}`;
+    console.info(message);
+};

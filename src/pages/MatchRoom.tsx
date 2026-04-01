@@ -276,16 +276,11 @@ const OnlineRoomConnectionLoading = ({
         core?.activePlayer ?? 'no-player',
         core?.phase ?? 'no-phase',
     ].join(':');
-    const progressText = isConnected
-        ? t('matchRoom.loadingProgress.syncing')
-        : t('matchRoom.loadingProgress.connecting');
-
     return (
         <ConnectionLoadingScreen
             anchor="container"
             title={title}
             description={description}
-            progressText={progressText}
             gameId={gameId}
             activityKey={activityKey}
             suppressTimeout={Boolean(state)}
@@ -1183,12 +1178,12 @@ export const MatchRoom = () => {
     }
 
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} progressText={t('matchRoom.loadingProgress.loadingGameModule')} />;
+        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} progressText={t('matchRoom.loadingProgress.joiningRoom')} />;
+        return <LoadingScreen description={t('matchRoom.joiningRoom')} />;
     }
 
     if (shouldShowMatchError) {

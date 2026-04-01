@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameManifestMobileDelivery } from '../../games/manifest.types';
-import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import {
     buildFallbackGamePackageManifest,
     hasRemoteGamePackageManifestEndpoint,
@@ -130,6 +130,10 @@ export const useGamePackageState = ({
     }, [cardState.status, pendingInstall]);
 
     const requestInstall = useCallback(() => {
+        logMobileRuntimeCritical('UseGamePackageState', 'request-install-clicked', {
+            gameId,
+            isPackageManaged,
+        });
         if (!isPackageManaged) {
             logMobileRuntime('UseGamePackageState', 'request-install-skipped', {
                 gameId,
@@ -193,6 +197,10 @@ export const useGamePackageState = ({
     }, [gameId]);
 
     const confirmInstall = useCallback(async () => {
+        logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-clicked', {
+            gameId,
+            hasPendingInstall: Boolean(pendingInstall),
+        });
         if (!pendingInstall) {
             logMobileRuntime('UseGamePackageState', 'confirm-install-skipped', {
                 gameId,
@@ -201,7 +209,24 @@ export const useGamePackageState = ({
             return;
         }
 
-        const installManifest = pendingInstall;
+        let installManifest = pendingInstall;
+
+        if (!installManifest.assetPackUrl && hasRemoteGamePackageManifestEndpoint) {
+            logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-re-resolve', {
+                gameId,
+                reason: 'missing-asset-pack-url',
+            });
+            try {
+                const resolved = await resolveGamePackageManifest(gameId, normalizedDelivery);
+                if (resolved.assetPackUrl) {
+                    installManifest = { ...installManifest, ...resolved };
+                    setPendingInstall(installManifest);
+                }
+            } catch {
+                logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-re-resolve-failed', { gameId });
+            }
+        }
+
         setIsConfirmingInstall(true);
         logMobileRuntime('UseGamePackageState', 'confirm-install', {
             gameId,
@@ -209,10 +234,24 @@ export const useGamePackageState = ({
         });
 
         startGamePackageInstall(installManifest, t('packageManager.runtimeUnsupported'))
+            .then((state) => {
+                logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-finished', {
+                    gameId,
+                    resultStatus: state.status,
+                    errorMessage: state.errorMessage,
+                    installedVersion: state.installedVersion,
+                });
+            })
+            .catch((error) => {
+                logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-rejected', {
+                    gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            })
             .finally(() => {
                 setIsConfirmingInstall(false);
             });
-    }, [pendingInstall, t]);
+    }, [gameId, normalizedDelivery, pendingInstall, t]);
 
     const retryInstall = useCallback(() => {
         if (!isPackageManaged) {

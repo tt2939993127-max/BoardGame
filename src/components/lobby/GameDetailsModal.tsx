@@ -26,6 +26,7 @@ import { GameDetailsMobilePackageCard } from './GameDetailsMobilePackageCard';
 import { GamePackageInstallConfirmModal } from './GamePackageInstallConfirmModal';
 import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
+import { logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { UI_Z_INDEX } from '../../core';
 import {
     normalizeLocalMatchPreferences,
@@ -223,10 +224,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const matchEntryLoadingDescription = matchEntryLoadingPhase === 'creating'
         ? t('matchRoom.creatingRoom')
         : t('matchRoom.joiningRoom');
-    const matchEntryLoadingProgressText = matchEntryLoadingPhase === 'creating'
-        ? t('matchRoom.loadingProgress.preparingRoom')
-        : t('matchRoom.loadingProgress.joiningRoom');
-
     useEffect(() => {
         pendingActionRef.current = pendingAction;
     }, [pendingAction]);
@@ -421,6 +418,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
 
     const handleOpenMobilePackageInstall = useCallback(() => {
+        logMobileRuntimeCritical('GameDetailsModal', 'open-package-install-clicked', {
+            gameId,
+            gameName: gameDisplayName,
+            isPackageManagedMobileGame,
+            isAppUpdateRequiredForMobileGame,
+            status: packageInstallCardState.status,
+            hasPendingInstall: Boolean(pendingPackageInstall),
+        });
         if (!isPackageManagedMobileGame || isAppUpdateRequiredForMobileGame) {
             return;
         }
@@ -462,11 +467,19 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             pendingInstall: pendingPackageInstall ? 'yes' : 'no',
             status: packageInstallCardState.status,
         });
+        logMobileRuntimeCritical('GameDetailsModal', 'confirm-package-install-clicked', {
+            gameId,
+            gameName: gameDisplayName,
+            status: packageInstallCardState.status,
+            hasPendingInstall: Boolean(pendingPackageInstall),
+            isConfirmingPackageInstall,
+        });
         await confirmGamePackageInstall();
     }, [
         confirmGamePackageInstall,
         gameDisplayName,
         gameId,
+        isConfirmingPackageInstall,
         packageInstallCardState.status,
         pendingPackageInstall,
     ]);
@@ -1628,7 +1641,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <LoadingScreen
                         title={matchEntryLoadingTitle}
                         description={matchEntryLoadingDescription}
-                        progressText={matchEntryLoadingProgressText}
                         fullScreen={false}
                     />
                 </div>
