@@ -56,7 +56,7 @@ function createRunner(
     return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
         domain: SmashUpDomain,
         systems,
-        playerIds: PLAYER_IDS,
+        playerIds,
         setup: (playerIds, random) => ({
             core: SmashUpDomain.setup(playerIds, random, setupData),
             sys: createInitialSystemState(playerIds, systems, undefined),
