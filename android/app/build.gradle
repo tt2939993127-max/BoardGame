@@ -123,6 +123,9 @@ def androidServerConfig = capacitorConfig.server instanceof Map ? capacitorConfi
 def androidWebviewMode = androidServerConfig.url ? 'remote' : 'embedded'
 def distAndroidBuildMetaFile = rootProject.file('../dist/android-build-meta.json')
 def syncedAndroidBuildMetaFile = file('src/main/assets/public/android-build-meta.json')
+def capacitorPluginsJsonFile = file('src/main/assets/capacitor.plugins.json')
+def capacitorSettingsGradleFile = rootProject.file('capacitor.settings.gradle')
+def capacitorBuildGradleFile = file('capacitor.build.gradle')
 def requiresSyncedWebAssets = androidWebviewMode == 'embedded' && gradle.startParameter.taskNames.any { taskName ->
     def lowerTaskName = taskName.toLowerCase()
     lowerTaskName.contains('assemble') || lowerTaskName.contains('bundle') || lowerTaskName.contains('install')
@@ -137,4 +140,32 @@ if (requiresSyncedWebAssets) {
     if (distAndroidBuildMetaFile.getText('UTF-8') != syncedAndroidBuildMetaFile.getText('UTF-8')) {
         throw new GradleException('Android web assets are out of sync with dist. Run npm run mobile:android:sync or npm run mobile:android:build:release.')
     }
+}
+if (!capacitorPluginsJsonFile.exists()) {
+    throw new GradleException('Missing android/app/src/main/assets/capacitor.plugins.json. Run npm run mobile:android:sync before building Android.')
+}
+if (!capacitorSettingsGradleFile.exists() || !capacitorBuildGradleFile.exists()) {
+    throw new GradleException('Missing generated Capacitor Gradle files. Run npm run mobile:android:sync before building Android.')
+}
+def capacitorPlugins = new JsonSlurper().parse(capacitorPluginsJsonFile)
+if (!(capacitorPlugins instanceof List)) {
+    throw new GradleException('android/app/src/main/assets/capacitor.plugins.json has invalid shape. Run npm run mobile:android:sync before building Android.')
+}
+def capacitorSettingsText = capacitorSettingsGradleFile.getText('UTF-8')
+def capacitorBuildText = capacitorBuildGradleFile.getText('UTF-8')
+def missingCapacitorPluginWiring = []
+capacitorPlugins.each { plugin ->
+    def pkg = plugin instanceof Map ? (plugin.pkg ?: '').toString().trim() : ''
+    if (!pkg) {
+        return
+    }
+    def projectName = pkg.replaceFirst('^@', '').replace('/', '-')
+    def includeLine = "include ':${projectName}'"
+    def implementationLine = "implementation project(':${projectName}')"
+    if (!capacitorSettingsText.contains(includeLine) || !capacitorBuildText.contains(implementationLine)) {
+        missingCapacitorPluginWiring << pkg
+    }
+}
+if (!missingCapacitorPluginWiring.isEmpty()) {
+    throw new GradleException("Capacitor plugin wiring is stale for: ${missingCapacitorPluginWiring.join(', ')}. Run npm run mobile:android:sync before building Android.")
 }

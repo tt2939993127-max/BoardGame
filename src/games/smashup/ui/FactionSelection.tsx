@@ -216,6 +216,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             ? getFactionMeta(selectedVariantId) ?? group.defaultVariant
                             : group.defaultVariant;
 
+                        const selectedOverlayText = isMyTurn
+                            ? t('ui.click_to_cancel_selection', { defaultValue: '点击取消选择' })
+                            : t('ui.selected', { defaultValue: '已选' });
+
                         return (
                             <motion.div
                                 key={group.groupId}
@@ -223,7 +227,14 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 animate={{ opacity: 1, y: 0, rotate: (idx % 4) - 2 }}
                                 whileHover={{ rotate: 0, scale: 1.05, zIndex: 30 }}
                                 transition={{ delay: idx * 0.03 }}
-                                onClick={() => handleOpenFactionGroup(group.groupId, selectedVariantId ?? group.defaultVariant.id)}
+                                onClick={() => {
+                                    if (isSelectedByMe && isMyTurn && selectedVariantId) {
+                                        handleCancelSelect(selectedVariantId);
+                                        return;
+                                    }
+
+                                    handleOpenFactionGroup(group.groupId, selectedVariantId ?? group.defaultVariant.id);
+                                }}
                                 data-testid={`faction-option-${group.groupId}`}
                                 className={`
                                     group relative flex w-full flex-col items-center cursor-pointer
@@ -259,13 +270,13 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                             )}
 
                                             {isSelectedByMe && (
-                                                <>
-                                                    <div className="absolute inset-0 z-20 rounded-[2px] border-[3px] border-green-300 shadow-[inset_0_0_0_2px_rgba(20,83,45,0.9)] pointer-events-none" />
-                                                    <div className="absolute top-1.5 left-1.5 z-30 inline-flex items-center gap-1 rounded-sm border border-green-200 bg-green-600 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_4px_10px_rgba(20,83,45,0.35)]">
-                                                        <Check size={12} strokeWidth={3} />
-                                                        <span>{t('ui.selected')}</span>
+                                                <div className="absolute inset-0 bg-emerald-950/55 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center z-30">
+                                                    <div className="rounded-sm border border-emerald-200/80 bg-emerald-600/90 px-3 py-2 shadow-[0_6px_16px_rgba(6,78,59,0.35)]">
+                                                        <span className="font-black text-white text-xs uppercase tracking-tight">
+                                                            {selectedOverlayText}
+                                                        </span>
                                                     </div>
-                                                </>
+                                                </div>
                                             )}
 
                                             <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent" />
@@ -274,12 +285,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 <h3 className="text-white font-black text-[11px] lg:text-base leading-none mb-0.5 lg:mb-1 drop-shadow-md uppercase italic tracking-tight lg:tracking-tighter">
                                                     {t(labelMeta.nameKey)}
                                                 </h3>
-                                                {isSelectedByMe && (
-                                                    <div className="mt-1 inline-flex items-center gap-1 rounded-sm bg-black/70 px-1.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-green-300">
-                                                        <Check size={10} strokeWidth={3} />
-                                                        <span>{t('ui.faction_selected_hint', { defaultValue: '已选，可点开取消' })}</span>
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
 
@@ -288,14 +293,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         </div>
                                     </div>
                                 </div>
-
-                                {isSelectedByMe && (
-                                    <div className="mt-1 rounded-sm border border-green-300 bg-green-50/95 px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.14em] text-green-800 shadow-[0_6px_18px_rgba(34,197,94,0.18)]">
-                                        {isMyTurn
-                                            ? t('ui.faction_selected_hint', { defaultValue: '已选，可点开取消' })
-                                            : t('ui.faction_selected_label', { defaultValue: '已选' })}
-                                    </div>
-                                )}
                             </motion.div>
                         );
                     })}

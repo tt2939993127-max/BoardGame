@@ -41,6 +41,19 @@ const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = process.env.PW_REUSE_EXISTING_SERVERS === 'true';
 const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 const runtimeNode = process.env.PW_NODE_BINARY || process.execPath;
+const isStandardEntry = process.env.PW_E2E_STANDARD_ENTRY === 'true';
+const bootstrapMode = process.env.PW_E2E_BOOTSTRAP_MODE?.trim() || '';
+const allowLegacyGlobalBootstrap = process.env.PW_ALLOW_LEGACY_GLOBAL_BOOTSTRAP === 'true';
+const isListOnly = process.env.PW_E2E_LIST_ONLY === 'true';
+
+function getRuntimeMetadata() {
+    return {
+        sessionId: process.env.PW_E2E_SESSION_ID?.trim() || `${getRuntimeScope()}-legacy`,
+        entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || 'playwright-global-setup',
+        commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || 'playwright-global-setup',
+        targetLabel: process.env.PW_E2E_TARGET?.trim() || process.env.PW_TEST_TARGET?.trim() || '',
+    };
+}
 
 function getRuntimeScope(): string {
     const normalized = (process.env.PW_RUNTIME_SCOPE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -195,16 +208,21 @@ function spawnDetachedServer(script: string, args: string[] = [], portsOverride 
 }
 
 function registerSingleWorkerRuntime(record: RuntimeRecord, mode: 'shared-single' | 'isolated-single', reusedExistingServers = false): void {
+    const metadata = getRuntimeMetadata();
     upsertRuntime({
         scope: getRuntimeScope(),
         active: true,
         mode,
         workers: 1,
         target: process.env.PW_TEST_TARGET || '',
+        targetLabel: metadata.targetLabel,
         ports: record.ports,
         ownerPids: Number.isInteger(record.pid) && record.pid > 0 ? [record.pid] : [],
         pids: Number.isInteger(record.pid) && record.pid > 0 ? [record.pid] : [],
         bootstrapLogFiles: record.logFile ? [record.logFile] : [],
+        sessionId: metadata.sessionId,
+        entrypoint: metadata.entrypoint,
+        commandSource: metadata.commandSource,
         reusedExistingServers,
         createdAt: new Date().toISOString(),
     });
@@ -253,7 +271,7 @@ export default async function globalSetup() {
     const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
     const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
 
-    if (!shouldStartServers) {
+    if (!shouldStartServers || isListOnly) {
         return;
     }
 
@@ -279,6 +297,28 @@ export default async function globalSetup() {
         process.env.API_SERVER_PORT = String(runtime.ports.apiServer);
         console.log(`♻️ globalSetup 附着托管 runtime: ${runtime.runtimeId}`);
         return;
+    }
+
+    if (isStandardEntry && bootstrapMode === 'attach-managed') {
+        throw new Error(
+            [
+                '当前运行已标记为标准 E2E supervisor 入口，但 globalSetup 没拿到可附着的 managed runtime。',
+                '为避免再次旁路启动 detached 测试服务，globalSetup 已拒绝自行起服。',
+                '请重新通过项目脚本发起运行，并确认 run-e2e-command / runtime-manager 没有提前退出。',
+            ].join('\n'),
+        );
+    }
+
+    if (!allowLegacyGlobalBootstrap && bootstrapMode !== 'legacy-global-setup') {
+        throw new Error(
+            [
+                '已阻止裸 Playwright 入口在 globalSetup 中直接起服。',
+                '请改用项目标准入口，例如：',
+                '1. node scripts/infra/run-e2e-command.mjs ci e2e/<相关文件>.e2e.ts',
+                '2. node scripts/infra/run-e2e-single.mjs ci e2e/<相关文件>.e2e.ts "可选用例名"',
+                '若确需沿用旧 globalSetup 起服链，请显式设置 PW_ALLOW_LEGACY_GLOBAL_BOOTSTRAP=true。',
+            ].join('\n'),
+        );
     }
 
     fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -376,10 +416,14 @@ export default async function globalSetup() {
         mode: 'isolated-multi',
         workers,
         target: process.env.PW_TEST_TARGET || '',
+        targetLabel: getRuntimeMetadata().targetLabel,
         ports: runtimes.map(runtime => runtime.ports),
         ownerPids: runtimes.map(runtime => runtime.pid),
         pids: runtimes.map(runtime => runtime.pid),
         bootstrapLogFiles: runtimes.map(runtime => runtime.logFile),
+        sessionId: getRuntimeMetadata().sessionId,
+        entrypoint: getRuntimeMetadata().entrypoint,
+        commandSource: getRuntimeMetadata().commandSource,
         createdAt: new Date().toISOString(),
     });
 

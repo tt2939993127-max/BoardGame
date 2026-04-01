@@ -113,6 +113,16 @@ describe('ConnectionLoadingScreen', () => {
         expect(screen.queryByText('matchRoom.connectionTimeout.retry')).toBeNull();
     });
 
+    it('未超时时显示传入的进度文本', () => {
+        render(
+            <MemoryRouter>
+                <ConnectionLoadingScreen gameId="dicethrone" progressText="3/4" />
+            </MemoryRouter>,
+        );
+
+        expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('3/4');
+    });
+
     it('activityKey 变化时会按真实进度重置超时', () => {
         const Wrapper = () => {
             const [activityKey, setActivityKey] = useState('10');

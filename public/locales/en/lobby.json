@@ -258,6 +258,9 @@
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}"
+    },
     "title": {
       "joining": "Joining",
       "creating": "Creating",

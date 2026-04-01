@@ -20,6 +20,12 @@ const defaultPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 const prebuiltBundleRoot = process.env.PW_PREBUILT_BUNDLE_ROOT
   ?? path.join('temp', 'dev-bundles', 'e2e-single');
 const bootstrapLogFile = process.env.PW_BOOTSTRAP_LOG_FILE?.trim() || '';
+const runtimeMetadata = {
+  sessionId: process.env.PW_E2E_SESSION_ID?.trim() || '',
+  entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || '',
+  commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || '',
+  targetLabel: process.env.PW_E2E_TARGET?.trim() || process.env.PW_TEST_TARGET?.trim() || '',
+};
 
 function resolvePort(value, fallback) {
   const port = Number.parseInt(String(value ?? '').trim(), 10);
@@ -166,9 +172,13 @@ const stopHeartbeat = startRuntimeHeartbeat(runtimeScope, () => ({
   workers: 1,
   ports,
   target: process.env.PW_TEST_TARGET || '',
+  targetLabel: runtimeMetadata.targetLabel,
   ownerPids: [process.pid],
   servicePids: managedServices.map(service => service.child.pid).filter(pid => Number.isInteger(pid) && pid > 0),
   bootstrapLogFiles: bootstrapLogFile ? [bootstrapLogFile] : [],
+  sessionId: runtimeMetadata.sessionId,
+  entrypoint: runtimeMetadata.entrypoint,
+  commandSource: runtimeMetadata.commandSource,
 }));
 
 const cleanup = (exitCode = 0, reason = '') => {
