@@ -715,6 +715,37 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND: {
+            const { playerId, cardUid, baseIndex } = event.payload as any;
+            const base = state.bases[baseIndex];
+            const buried = (base?.buriedCards ?? []).find((card) => card.uid === cardUid);
+            if (!base || !buried) return state;
+            const owner = state.players[playerId];
+            if (!owner) return state;
+
+            const returned: CardInstance = {
+                uid: buried.uid,
+                defId: buried.defId,
+                type: (getCardDef(buried.defId)?.type === 'minion' ? 'minion' : 'action') as CardType,
+                owner: buried.trueOwnerId,
+            };
+
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...owner,
+                        hand: [...owner.hand, returned],
+                    },
+                },
+                bases: state.bases.map((entry, index) => index !== baseIndex ? entry : ({
+                    ...entry,
+                    buriedCards: (entry.buriedCards ?? []).filter((card) => card.uid !== cardUid),
+                })),
+            };
+        }
+
         case SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE: {
             const { baseIndex } = event.payload as any;
             const base = state.bases[baseIndex];

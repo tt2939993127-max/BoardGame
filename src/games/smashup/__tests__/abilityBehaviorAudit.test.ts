@@ -64,6 +64,9 @@ function collectPodFactionIdsFromDataFiles(): string[] {
         for (const match of content.matchAll(/faction:\s*'([^']+_pod)'/g)) {
             podFactionIds.add(match[1]);
         }
+        for (const match of content.matchAll(/faction:\s*SMASHUP_FACTION_IDS\.([A-Z0-9_]+_POD)/g)) {
+            podFactionIds.add(match[1].toLowerCase());
+        }
     }
 
     return Array.from(podFactionIds).sort();
@@ -167,6 +170,22 @@ describe('SmashUp 能力行为审计', () => {
 
             expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES)).toBe(false);
             expect(enVisibleIds.has(SMASHUP_FACTION_IDS.PIRATES_POD)).toBe(true);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS)).toBe(false);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD)).toBe(true);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.SAMURAI)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.SAMURAI)).toBe(false);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.SAMURAI_POD)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.SAMURAI_POD)).toBe(true);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.COWBOYS)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.COWBOYS)).toBe(false);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.COWBOYS_POD)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.COWBOYS_POD)).toBe(true);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.VIKINGS)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.VIKINGS)).toBe(false);
+            expect(zhVisibleIds.has(SMASHUP_FACTION_IDS.VIKINGS_POD)).toBe(true);
+            expect(enVisibleIds.has(SMASHUP_FACTION_IDS.VIKINGS_POD)).toBe(true);
         });
 
         it('tricksters_pod 牌组总数保持 20 张', () => {

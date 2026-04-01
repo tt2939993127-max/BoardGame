@@ -66,6 +66,10 @@ type GoldPromptContext = {
     remainingCards: CardInstance[];
 };
 
+function isDynamiteSurpriseDefId(defId: string): boolean {
+    return defId === 'cowboys_dynamite_surprise' || defId === 'cowboys_dynamite_surprise_pod';
+}
+
 export function registerCowboysAbilities(): void {
     registerAbility('cowboys_gunfighter', 'onPlay', cowboysGunfighterOnPlay);
     registerAbility('cowboys_quick_draw', 'onPlay', cowboysQuickDrawOnPlay);
@@ -281,13 +285,13 @@ function cowboysDynamiteSurpriseSeenTrigger(ctx: TriggerContext): AbilityResult 
         if (!player) return false;
         const zoneCards = ctx.inspectionZone === 'hand' ? player.hand : player.deck;
         return ctx.inspectionCards!.some(card => (
-            card.defId === 'cowboys_dynamite_surprise' && zoneCards.some(entry => entry.uid === card.uid)
+            isDynamiteSurpriseDefId(card.defId) && zoneCards.some(entry => entry.uid === card.uid)
         ));
     });
     if (!ownerPlayerId || ownerPlayerId === ctx.inspectionCausePlayerId) return { events: [] };
 
     const exposedCard = ctx.inspectionCards.find((card) => {
-        if (card.defId !== 'cowboys_dynamite_surprise') return false;
+        if (!isDynamiteSurpriseDefId(card.defId)) return false;
         const player = ctx.state.players[ownerPlayerId];
         const zoneCards = ctx.inspectionZone === 'hand' ? player.hand : player.deck;
         return zoneCards.some(entry => entry.uid === card.uid);
@@ -716,7 +720,7 @@ const handleDynamiteSurpriseSeen = (state: MatchState<SmashUpCore>, playerId: st
     const owner = state.core.players[ctx.ownerPlayerId];
     if (!owner) return { state, events: [] };
     const sourceCards = ctx.sourceZone === 'hand' ? owner.hand : owner.deck;
-    const playedCard = sourceCards.find(card => card.uid === ctx.cardUid && card.defId === 'cowboys_dynamite_surprise');
+    const playedCard = sourceCards.find(card => card.uid === ctx.cardUid && isDynamiteSurpriseDefId(card.defId));
     if (!playedCard) return { state, events: [] };
 
     const remainingSourceCards = sourceCards.filter(card => card.uid !== ctx.cardUid);

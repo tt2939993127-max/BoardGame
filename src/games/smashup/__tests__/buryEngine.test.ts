@@ -7,7 +7,7 @@ import { makeMatchState, makePlayer, makeState, applyEvents } from './helpers';
 import { runCommand, defaultTestRandom } from './testRunner';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { buildBuryCardEvents } from '../domain/bury';
+import { buildBuryCardEvents, buildBuriedCardReturnedToHandEvent } from '../domain/bury';
 
 beforeAll(() => {
     clearRegistry();
@@ -256,6 +256,49 @@ describe('bury engine', () => {
         expect(next.bases[0].minions.some(minion => minion.uid === 'mummy-1')).toBe(false);
         expect(next.bases[0].buriedCards?.some(card => card.uid === 'mummy-1')).toBe(true);
         expect(next.players['1'].discard.some(card => card.uid === 'attach-1')).toBe(true);
+    });
+
+    it('BURIED_CARD_RETURNED_TO_HAND 会把埋葬牌直接移回手牌而不翻开或进弃牌堆', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', { hand: [], deck: [], discard: [] }),
+                '1': makePlayer('1', { hand: [], deck: [], discard: [] }),
+            },
+            bases: [{
+                defId: 'base_pyramids',
+                minions: [],
+                ongoingActions: [],
+                buriedCards: [{
+                    uid: 'buried-return',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            }],
+        });
+
+        const event = buildBuriedCardReturnedToHandEvent({
+            core,
+            playerId: '0',
+            cardUid: 'buried-return',
+            baseIndex: 0,
+            source: 'sphinx-start-turn',
+            now: 20,
+        });
+        expect(event).toBeDefined();
+
+        const next = applyEvents(core, [event!]);
+        expect(next.bases[0].buriedCards?.some(card => card.uid === 'buried-return') ?? false).toBe(false);
+        expect(next.players['0'].hand).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                uid: 'buried-return',
+                defId: 'robot_warbot',
+                owner: '0',
+            }),
+        ]));
+        expect(next.players['0'].discard).toHaveLength(0);
+        expect(next.bases[0].minions).toHaveLength(0);
     });
 });
 
