@@ -105,3 +105,73 @@
 - **WHEN** 工作流尝试自动 merge
 - **THEN** 系统 MUST 先确认模板要求的审计、测试、截图证据与 PR 状态全部通过
 - **AND** 任一门禁未满足时不得自动 merge
+
+### Requirement: 工作流运行 SHALL 以结构化节点执行与展示
+
+系统 SHALL 将工作流拆分为结构化节点，并在运行时保留节点级状态、输入输出摘要与失败语义，而不是只展示一条聊天记录。
+
+#### Scenario: 节点状态可追踪
+- **WHEN** 任一模板工作流开始执行
+- **THEN** 系统 MUST 为每个节点分配稳定标识与节点类型
+- **AND** 网页 MUST 能查看节点级状态、输入摘要、输出摘要与失败原因
+
+#### Scenario: 节点类型受约束
+- **WHEN** 模板定义工作流节点
+- **THEN** 节点类型 MUST 受限于 `input`、`automation`、`decision`、`gate`、`artifact`、`delivery`
+- **AND** `delivery` 节点不得与普通 `automation` 节点混淆
+
+### Requirement: 决策请求 MUST 以批次形式可恢复
+
+系统 MUST 将同一阶段产生的模糊项聚合为结构化 `DecisionRequest`，并支持中断后恢复，不得因为页面刷新或 agent 重连而丢失待确认项。
+
+#### Scenario: 同阶段多项歧义聚合
+- **WHEN** 同一阶段出现多个待确认问题
+- **THEN** 系统 MUST 生成单个 `DecisionRequest` 批次承载这些问题
+- **AND** 每个问题 MUST 提供来源节点、默认建议值与是否阻塞主链路的标记
+
+#### Scenario: 决策批次可恢复
+- **WHEN** 工作台页面刷新、执行器重启或会话暂时中断
+- **THEN** 系统 MUST 重新展示未完成的 `DecisionRequest`
+- **AND** 不得重复生成语义等价但标识不同的决策批次
+
+### Requirement: 工作流运行 MUST 支持 checkpoint 与恢复
+
+系统 MUST 为长任务和可中断任务保存 checkpoint，使运行状态可恢复、可审计、可重新附着。
+
+#### Scenario: 节点完成后写 checkpoint
+- **WHEN** 节点完成、失败、等待决策或 gate 产出结论
+- **THEN** 系统 MUST 写入新的 checkpoint
+- **AND** checkpoint MUST 包含当前节点、下一步动作、关键产物索引与最近错误摘要
+
+#### Scenario: 从最近 checkpoint 恢复
+- **WHEN** 用户重新打开工作台或执行器重新附着到既有运行
+- **THEN** 系统 MUST 从最近 checkpoint 恢复运行视图
+- **AND** 用户 MUST 能看到该运行是“继续执行”“等待决策”还是“失败待处理”
+
+### Requirement: ArtifactBundle MUST 同时保存原始证据与网页摘要
+
+系统 MUST 将执行环境产物整理为 `ArtifactBundle`，同时保存原始文件索引与网页可浏览摘要，避免只有卡片没有原始证据，或只有文件没有人类可读结论。
+
+#### Scenario: 截图产物可追溯
+- **WHEN** 工作流生成关键 E2E 截图
+- **THEN** 系统 MUST 保存截图原始路径、来源节点、时间戳与观察结论
+- **AND** 网页 MUST 能查看缩略图并跳转到原始证据
+
+#### Scenario: 产物缺失导致 gate 失败
+- **WHEN** 模板要求截图、日志或测试摘要，但 `ArtifactBundle` 缺少对应证据
+- **THEN** 后续 gate MUST 判定未通过
+- **AND** 工作台 MUST 显示缺失的是哪类证据而不是只显示笼统失败
+
+### Requirement: 交付动作 SHALL 显式声明上限并支持安全降级
+
+系统 SHALL 让每个模板显式声明其自动交付上限（仅产物 / commit / PR / merge），并在权限或分支策略不允许时安全降级。
+
+#### Scenario: 模板只允许到 PR
+- **WHEN** 某模板声明自动交付上限为 `PR`
+- **THEN** 系统 MAY 自动 commit 并创建 PR
+- **AND** 即使后续门禁通过也不得继续自动 merge
+
+#### Scenario: 受保护分支触发降级
+- **WHEN** 仓库策略、分支保护或权限限制禁止自动 merge
+- **THEN** 系统 MUST 降级为输出 PR 链接与待办说明
+- **AND** 不得将该运行标记为“已 merge 完成”
