@@ -419,7 +419,7 @@ test.describe('Lobby E2E', () => {
 
         await game.screenshot('lobby-mobile-package-entry-progress-card', testInfo);
 
-        await expect(page.getByText(/The real downloader is not wired in yet/i)).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/does not support downloading game packages yet/i)).toBeVisible({ timeout: 5000 });
         await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
         await expect(page.getByTestId('game-details-mobile-package-card')).toHaveAttribute('data-status', 'failed');
 

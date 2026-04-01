@@ -451,48 +451,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         pendingPackageInstall,
     ]);
 
-    const guardRoomEntryWithPackageState = useCallback(() => {
-        if (!isPackageManagedMobileGame) {
-            return true;
-        }
-
-        if (isAppUpdateRequiredForMobileGame) {
-            toast.warning(
-                gameManifest?.mobileDelivery?.requiredAppVersion
-                    ? { kind: 'i18n', key: 'packageManager.updateRequiredHintWithVersion', ns: 'lobby', params: { game: gameDisplayName, version: gameManifest.mobileDelivery.requiredAppVersion } }
-                    : { kind: 'i18n', key: 'packageManager.updateRequiredHint', ns: 'lobby', params: { game: gameDisplayName } },
-                { kind: 'i18n', key: 'packageManager.updateRequiredTitle', ns: 'lobby' },
-                { dedupeKey: `package-update-required:${gameId}` },
-            );
-            return false;
-        }
-
-        if (!hasVerifiedInstalledPackageForMobileGame) {
-            handleOpenMobilePackageInstall();
-            toast.warning(
-                { kind: 'i18n', key: 'packageManager.notInstalledHint', ns: 'lobby', params: { game: gameDisplayName } },
-                { kind: 'i18n', key: 'packageManager.notInstalled', ns: 'lobby' },
-                { dedupeKey: `package-install-required:${gameId}` },
-            );
-            return false;
-        }
-
-        return true;
-    }, [
-        gameDisplayName,
-        gameId,
-        gameManifest?.mobileDelivery?.requiredAppVersion,
-        handleOpenMobilePackageInstall,
-        isAppUpdateRequiredForMobileGame,
-        hasVerifiedInstalledPackageForMobileGame,
-        isPackageManagedMobileGame,
-        toast,
-    ]);
-
     const handleTutorial = () => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         onNavigate?.();
         navigate(`/play/${gameId}/tutorial`);
     };
@@ -546,7 +505,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     // 打开创建房间弹窗
     const handleOpenCreateRoom = async () => {
         if (isPreparingCreateRoom) return;
-        if (!guardRoomEntryWithPackageState()) return;
 
         const namespace = `game-${gameId}`;
         setIsPreparingCreateRoom(true);
@@ -759,9 +717,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const handleJoinRoom = async (matchID: string, overrideGameName?: string, password?: string) => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         let shouldPreserveLoading = false;
         // 检查是否有已保存的凭证（重连场景）
         const savedCreds = localStorage.getItem(`match_creds_${matchID}`);
@@ -949,9 +904,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const handleSpectate = async (matchID: string) => {
-        if (!guardRoomEntryWithPackageState()) {
-            return;
-        }
         const room = roomsRef.current.find((item) => item.matchID === matchID);
         const roomGameName = normalizeGameName(room?.gameName) || normalizedGameId || 'tictactoe';
 
@@ -1570,7 +1522,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             {pendingPackageInstall && (
                 <GamePackageInstallConfirmModal
                     gameName={pendingPackageInstall.gameName}
-                    state={effectivePackageInstallCardState}
+                    state={packageInstallCardState}
                     modulePackId={pendingPackageInstall.modulePackId}
                     assetPackId={pendingPackageInstall.assetPackId}
                     modulePackBytes={pendingPackageInstall.modulePackBytes}
