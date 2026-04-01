@@ -1243,7 +1243,7 @@ const handleUnderPressureChooseTarget: IH = (state, playerId, value, interaction
         `giant_ant_under_pressure_choose_amount_${timestamp}`,
         playerId,
         '承受压力：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, displayMode: 'button' as const }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount, value: maxAmount }, displayMode: 'button' as const }],
         {
             sourceId: 'giant_ant_under_pressure_choose_amount',
             targetType: 'button',
@@ -1381,7 +1381,7 @@ const handleWeAreTheChampionsChooseTarget: IH = (state, playerId, value, interac
         `giant_ant_we_are_the_champions_choose_amount_${timestamp}`,
         playerId,
         '我们乃最强：选择要转移的力量指示物数量',
-        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount }, displayMode: 'button' as const }],
+        [{ id: 'confirm-transfer', label: '确认转移', value: { amount: maxAmount, value: maxAmount }, displayMode: 'button' as const }],
         {
             sourceId: 'giant_ant_we_are_the_champions_choose_amount',
             targetType: 'button',

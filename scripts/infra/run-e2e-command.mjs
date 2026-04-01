@@ -569,10 +569,10 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {}, e
             process.exitCode = exitCode;
         }
     } finally {
-        if (managedRuntime?.mode === 'isolated-single') {
+        await stopHeldManager(heldRuntimeManager);
+        if (managedRuntime?.mode === 'isolated-single' && !heldRuntimeManager) {
             stopManagedRuntime(managedRuntime.runtimeId, modeEnv);
         }
-        await stopHeldManager(heldRuntimeManager);
         globalBudgetHandle?.release?.();
         taskGuard.release();
     }

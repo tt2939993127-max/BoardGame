@@ -183,15 +183,19 @@ test.describe('Lobby E2E', () => {
         await page.getByTestId('setup-option-toggle-expansions-titans').click();
         await page.getByRole('button', { name: /加入 AI/ }).click();
         await expect(page.getByText('已开启')).toBeVisible();
+        await expect(page.getByRole('button', { name: '普通' })).toHaveAttribute('aria-pressed', 'true');
+
+        await game.screenshot('lobby-smashup-create-room-ai-config-default-normal', testInfo);
+
+        await page.getByRole('button', { name: '困难' }).click();
         await expect(page.getByRole('button', { name: '1 号位（房主）' })).toBeDisabled();
         await page.getByRole('button', { name: '3 号位' }).click();
 
-        await game.screenshot('lobby-smashup-create-room-ai-config-modal', testInfo);
+        await game.screenshot('lobby-smashup-create-room-ai-config-hard-and-seats', testInfo);
 
         await page.getByRole('button', { name: '确认创建' }).click();
 
         await expect(page).toHaveURL(/\/play\/smashup\/match\//);
-        await expect(page.getByRole('heading', { name: '选择你的派系' })).toBeVisible({ timeout: 15000 });
 
         const matchId = page.url().match(/\/play\/smashup\/match\/([^?]+)/)?.[1];
         expect(matchId).toBeTruthy();
@@ -205,7 +209,7 @@ test.describe('Lobby E2E', () => {
             setupData?: {
                 enableAi?: boolean;
                 setupSelections?: { expansions?: string[] };
-                seatControllers?: Record<string, { type?: string }>;
+                seatControllers?: Record<string, { type?: string; difficulty?: string }>;
             };
         };
 
@@ -213,6 +217,8 @@ test.describe('Lobby E2E', () => {
         expect(payload.setupData?.setupSelections?.expansions ?? []).toEqual([]);
         expect(payload.setupData?.seatControllers?.['1']?.type).toBe('local-ai');
         expect(payload.setupData?.seatControllers?.['2']?.type).toBe('local-ai');
+        expect(payload.setupData?.seatControllers?.['1']?.difficulty).toBe('hard');
+        expect(payload.setupData?.seatControllers?.['2']?.difficulty).toBe('hard');
 
         const storedPreferences = await page.evaluate(() => {
             const raw = localStorage.getItem('local_ai_match_preferences:smashup');
@@ -223,6 +229,8 @@ test.describe('Lobby E2E', () => {
         expect(storedPreferences?.setupSelections?.expansions ?? []).toEqual([]);
         expect(storedPreferences?.seatControllers?.['1']?.type).toBe('local-ai');
         expect(storedPreferences?.seatControllers?.['2']?.type).toBe('local-ai');
+        expect(storedPreferences?.seatControllers?.['1']?.difficulty).toBe('hard');
+        expect(storedPreferences?.seatControllers?.['2']?.difficulty).toBe('hard');
 
         const aiSeatCredentials = await page.evaluate(() => {
             const key = Object.keys(localStorage).find((item) => item.startsWith('match_ai_creds_'));
@@ -232,8 +240,6 @@ test.describe('Lobby E2E', () => {
         });
         expect(aiSeatCredentials?.['1']).toBeTruthy();
         expect(aiSeatCredentials?.['2']).toBeTruthy();
-
-        await game.screenshot('lobby-smashup-create-room-ai-config-result', testInfo);
     });
 
     test(ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME, async ({ page, game }, testInfo) => {

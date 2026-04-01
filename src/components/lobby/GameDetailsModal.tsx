@@ -82,6 +82,16 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
+    const capacitorRuntime = typeof window !== 'undefined'
+        ? (window as Window & {
+            Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
+        }).Capacitor
+        : undefined;
+    const isNativeCapacitorRuntime = typeof capacitorRuntime?.isNativePlatform === 'function'
+        && capacitorRuntime.isNativePlatform() === true;
+    const isNativeAndroidCapacitorRuntime = isNativeCapacitorRuntime
+        && typeof capacitorRuntime?.getPlatform === 'function'
+        && capacitorRuntime.getPlatform() === 'android';
     const {
         isPackageManaged: isPackageManagedMobileGame,
         cardState: packageInstallCardState,
@@ -95,7 +105,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         gameId,
         gameName: gameDisplayName,
         delivery: gameManifest?.mobileDelivery,
-        enabled: true,
+        enabled: isNativeAndroidCapacitorRuntime,
     });
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
     const installedPackageVersionLabel = packageInstallCardState.installedVersion?.trim();
@@ -111,13 +121,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             progressMode: undefined,
             errorMessage: undefined,
         };
-    const isNativeCapacitorRuntime = typeof window !== 'undefined'
-        && typeof (
-            window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
-        ).Capacitor?.isNativePlatform === 'function'
-        && (
-            window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }
-        ).Capacitor?.isNativePlatform() === true;
     const shouldShowMobilePackageCard = isPackageManagedMobileGame
         && (isAppUpdateRequiredForMobileGame || !hasVerifiedInstalledPackageForMobileGame);
     const shouldShowInstalledPackageBadge = isPackageManagedMobileGame

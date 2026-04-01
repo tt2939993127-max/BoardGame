@@ -8,12 +8,17 @@ import { test, expect } from '@playwright/test';
 import { ensureGameServerAvailable, getGameServerBaseURL } from './helpers/common';
 
 test.describe('端口隔离验证', () => {
-    test('应该使用测试环境端口 20000', async () => {
+    test('应该使用测试环境端口范围而不是开发端口', async () => {
         const gameServerUrl = getGameServerBaseURL();
         console.log('Game Server URL:', gameServerUrl);
-        
-        // 验证使用的是测试环境端口
-        expect(gameServerUrl).toContain('20000');
+
+        const { port } = new URL(gameServerUrl);
+        const numericPort = Number.parseInt(port, 10);
+
+        // 允许 shared-single(20000) 与 isolated-single(20100+) 两类测试端口
+        expect(Number.isFinite(numericPort)).toBeTruthy();
+        expect(numericPort).toBeGreaterThanOrEqual(20000);
+        expect(numericPort).toBeLessThan(30000);
         expect(gameServerUrl).not.toContain('18000');
     });
 
