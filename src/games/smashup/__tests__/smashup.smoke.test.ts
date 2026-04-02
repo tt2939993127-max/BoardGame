@@ -1140,6 +1140,28 @@ describe('smashup', () => {
         expect(waitingPlayerActions).toHaveLength(0);
     });
 
+    it('Smash Up AI 选派系会避开已被拿走的派系', () => {
+        const runner = createRunner();
+        const result = runner.run({
+            name: '已选一派系后 AI 候选去重',
+            commands: [
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+            ],
+        });
+
+        const actions = buildSmashUpAiLegalActions({
+            playerId: '1',
+            state: result.finalState,
+        });
+
+        const selectableFactionIds = actions
+            .filter((action) => action.kind === 'select-faction')
+            .map((action) => action.metadata?.factionId);
+
+        expect(selectableFactionIds.length).toBeGreaterThan(0);
+        expect(selectableFactionIds).not.toContain(SMASHUP_FACTION_IDS.ALIENS);
+    });
+
     it('Smash Up baseline AI 在基础出牌阶段优先打随从', async () => {
         const runner = createRunner();
         const drafted = runner.run({
@@ -1193,6 +1215,78 @@ describe('smashup', () => {
 
         expect(legalActions.some((action) => action.kind === 'play-minion')).toBe(true);
         expect(chosenAction?.kind).toBe('play-minion');
+    });
+
+    it('Smash Up baseline AI 在高压评分响应窗口应优先响应，而不是直接 response-pass', async () => {
+        const pressuredMinion = makeMinion('minion-1', 'giant_ant_soldier', '0', 3, {
+            owner: '0',
+            powerCounters: 2,
+            tempPowerModifier: 0,
+        });
+        const enemyMinions = Array.from({ length: 4 }, (_, index) => makeMinion(
+            `enemy-${index}`,
+            'test_minion',
+            '1',
+            5,
+            {
+                owner: '1',
+                tempPowerModifier: 0,
+            },
+        ));
+
+        const core = makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('card-1', 'giant_ant_under_pressure', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.GIANT_ANTS, SMASHUP_FACTION_IDS.PIRATES],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_the_mothership',
+                    minions: [pressuredMinion, ...enemyMinions],
+                }),
+            ],
+        });
+        const stateForAi = makeMatchState(core);
+        stateForAi.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-urgent-base',
+                windowType: 'meFirst',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-response',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: stateForAi.sys.responseWindow?.current ?? null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'response-play-action')).toBe(true);
+        expect(chosenAction?.kind).toBe('response-play-action');
+        expect(chosenAction?.metadata).toMatchObject({
+            targetBaseIndex: 0,
+        });
     });
 
     it('domain 注册表加载正确', () => {

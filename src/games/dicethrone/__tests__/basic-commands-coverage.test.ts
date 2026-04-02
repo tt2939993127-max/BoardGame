@@ -532,6 +532,31 @@ describe('AI legal actions', () => {
         expect(DICETHRONE_CHARACTER_CATALOG.map((item) => item.id)).toContain(selectedCharacterId);
     });
 
+    it('setup 阶段应避开已被其他玩家选走的角色', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['0'] = 'monk';
+
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        const selectableCharacterIds = actions
+            .filter((action) => action.kind === 'setup-select-character')
+            .map((action) => (action.commands[0]?.payload as { characterId?: string } | undefined)?.characterId);
+
+        expect(selectableCharacterIds.length).toBeGreaterThan(0);
+        expect(selectableCharacterIds).not.toContain('monk');
+    });
+
     it('本地 AI 在已选角色后应进入准备动作，而不是重复选角', () => {
         const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
         core.selectedCharacters['1'] = 'monk';
@@ -802,7 +827,56 @@ describe('AI legal actions', () => {
         expect(next?.action.kind).toBe('advance-phase');
     });
 
-    it('本地 AI 在 offensiveRoll 有低点骰时应优先使用教皇税重掷，并在重掷后继续决策', async () => {
+    it('本地 AI 在致命伤害响应窗口应优先使用保命 token，而不是直接跳过响应', async () => {
+        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-lethal-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-lethal-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'skip-token-response')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'token-response')).toBe(true);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('token-response');
+        expect(resolution?.action.metadata).toMatchObject({
+            tokenId: TOKEN_IDS.TAIJI,
+        });
+    });
+
+    it('本地 AI 在 offensiveRoll 应先锁住高价值技能关键骰，再继续后续重投决策', async () => {
         const random = createQueuedRandom([6]);
         let state = createHeroMatchup('paladin', 'monk')(['0', '1'], random);
         state.sys.phase = 'offensiveRoll';
@@ -829,12 +903,8 @@ describe('AI legal actions', () => {
         });
 
         expect(first?.playerId).toBe('0');
-        expect(first?.action.kind).toBe('use-passive-ability');
-        expect(first?.action.metadata).toMatchObject({
-            passiveId: 'tithes',
-            actionIndex: 0,
-            targetDieId: 0,
-        });
+        expect(first?.action.kind).toBe('toggle-die-lock');
+        expect(typeof first?.action.metadata?.dieId).toBe('number');
         expect(first?.attemptKey).toBeTruthy();
 
         for (const command of first!.action.commands) {
@@ -845,8 +915,8 @@ describe('AI legal actions', () => {
             );
         }
 
-        expect(state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(1);
-        expect(state.core.dice[0]?.value).toBe(6);
+        const lockedDieId = first?.action.metadata?.dieId as number;
+        expect(state.core.dice.find((die) => die.id === lockedDieId)?.isKept).toBe(true);
 
         const second = await resolveNextLocalAiAction({
             engineConfig,
@@ -974,7 +1044,7 @@ describe('AI legal actions', () => {
         expect(second?.attemptKey).not.toBe(first?.attemptKey);
     });
 
-    it('不同难度会影响近似动作的最终选择与搜索行为', async () => {
+    it('不同难度会影响搜索行为，专家玩法噪声保持为 0', async () => {
         const state = createSetupWithHand(['card-enlightenment', 'card-boss-generous'], { cp: 0 })(['0', '1'], fixedRandom);
         const matchId = 'probe';
 
@@ -997,8 +1067,8 @@ describe('AI legal actions', () => {
 
         expect(easyResolution?.action.kind).toBe('play-card');
         expect(expertResolution?.action.kind).toBe('play-card');
-        expect(easyResolution?.action.metadata).toMatchObject({ cardId: 'card-boss-generous' });
         expect(expertResolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+        expect(easyResolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
 
         const easyContext = buildAiDecisionContext({
             gameId: 'dicethrone',

@@ -1,6 +1,11 @@
 import type { Command, MatchState, PlayerId } from '../../engine/types';
-import { createAiLegalActionId, createActionKindScorer, createScoredLocalAiPolicy } from '../../engine/ai';
-import type { AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
+import {
+    buildDeterministicAiNoise,
+    createAiLegalActionId,
+    createActionKindScorer,
+    createScoredLocalAiPolicy,
+} from '../../engine/ai';
+import type { AiDecisionContext, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
 import type { InteractionDescriptor as EngineInteractionDescriptor, PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import {
     SU_COMMANDS,
@@ -145,6 +150,23 @@ const getFactionPriority = (factionId: string): number => {
     return index >= 0 ? index : FACTION_PRIORITY.length + 10;
 };
 
+const getBasePressureMetrics = (state: SmashUpState, baseIndex: number): {
+    baseTotalPower: number;
+    breakpoint: number;
+    gapBefore: number;
+    scoringEligible: boolean;
+} => {
+    const base = state.core.bases[baseIndex];
+    const baseTotalPower = base ? getTotalEffectivePowerOnBase(state.core, base, baseIndex) : 0;
+    const breakpoint = getEffectiveBreakpoint(state.core, baseIndex);
+    return {
+        baseTotalPower,
+        breakpoint,
+        gapBefore: breakpoint - baseTotalPower,
+        scoringEligible: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
+    };
+};
+
 const appendAction = (
     actions: AiLegalAction[],
     state: SmashUpState,
@@ -190,9 +212,28 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
     const options = (data.options ?? []).filter((option): option is Required<Pick<SmashUpInteractionOption, 'id'>> & SmashUpInteractionOption => {
         return typeof option.id === 'string' && option.disabled !== true;
     });
-    const minCount = Math.max(1, data.multi?.min ?? 1);
+    const minCount = data.multi?.min ?? 1;
+    const actions: AiLegalAction[] = [];
 
-    return options.map((option, index) => ({
+    if (minCount === 0) {
+        actions.push({
+            actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
+            kind: 'interaction-choice',
+            label: '不选择任何项',
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: { optionIds: [] },
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionIds: [],
+                displayMode: 'button',
+                optionValue: [],
+            },
+        });
+    }
+
+    actions.push(...options.map((option, index) => ({
         actionId: createAiLegalActionId('interaction', current.id, option.id),
         kind: 'interaction-choice',
         label: option.label ?? `交互选择 ${index + 1}`,
@@ -210,7 +251,9 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
             displayMode: option.displayMode,
             optionValue: option.value,
         },
-    }));
+    })));
+
+    return actions;
 };
 
 const buildFactionSelectActions = (state: SmashUpState, playerId: PlayerId): AiLegalAction[] => {
@@ -218,9 +261,10 @@ const buildFactionSelectActions = (state: SmashUpState, playerId: PlayerId): AiL
     if (!selection) return [];
     const taken = new Set(selection.takenFactions);
     const actions: AiLegalAction[] = [];
+    const availableFactions = SELECTABLE_FACTIONS.filter((factionId) => !taken.has(factionId));
+    const candidates = availableFactions.length > 0 ? availableFactions : SELECTABLE_FACTIONS;
 
-    for (const factionId of SELECTABLE_FACTIONS) {
-        if (taken.has(factionId)) continue;
+    for (const factionId of candidates) {
         appendAction(actions, state, playerId, {
             actionId: createAiLegalActionId('select-faction', factionId),
             kind: 'select-faction',
@@ -247,10 +291,14 @@ const buildPlayMinionAction = (
     options?: { fromDiscard?: boolean; inResponseWindow?: boolean },
 ): AiLegalAction => {
     const power = getMinionLikePower(card.defId) ?? 0;
-    const base = state.core.bases[baseIndex];
-    const baseTotalPower = base ? getTotalEffectivePowerOnBase(state.core, base, baseIndex) : 0;
+    const {
+        baseTotalPower,
+        breakpoint,
+        gapBefore,
+        scoringEligible,
+    } = getBasePressureMetrics(state, baseIndex);
     const projectedTotalPower = baseTotalPower + power;
-    const breakpoint = getEffectiveBreakpoint(state.core, baseIndex);
+    const base = state.core.bases[baseIndex];
     const ownPowerBefore = base ? getPlayerEffectivePowerOnBase(state.core, base, baseIndex, playerId) : 0;
 
     return {
@@ -277,9 +325,11 @@ const buildPlayMinionAction = (
             power,
             ownPowerBefore,
             baseTotalPower,
+            gapBefore,
             projectedTotalPower,
             breakpoint,
             projectedMargin: projectedTotalPower - breakpoint,
+            scoringEligible,
             fromDiscard: options?.fromDiscard === true,
         },
     };
@@ -314,6 +364,7 @@ const buildPlayActionCandidates = (
     });
 
     for (let baseIndex = 0; baseIndex < state.core.bases.length; baseIndex += 1) {
+        const { baseTotalPower, breakpoint, gapBefore, scoringEligible } = getBasePressureMetrics(state, baseIndex);
         actions.push({
             actionId: createAiLegalActionId(kind, card.uid, 'base', baseIndex),
             kind,
@@ -331,6 +382,10 @@ const buildPlayActionCandidates = (
                 targetBaseIndex: baseIndex,
                 responseTiming,
                 needsBaseInWindow,
+                baseTotalPower,
+                breakpoint,
+                gapBefore,
+                scoringEligible,
             },
         });
 
@@ -355,6 +410,10 @@ const buildPlayActionCandidates = (
                     targetMinionDefId: minion.defId,
                     responseTiming,
                     needsBaseInWindow,
+                    baseTotalPower,
+                    breakpoint,
+                    gapBefore,
+                    scoringEligible,
                 },
             });
         }
@@ -681,6 +740,18 @@ const factionScorer: LocalAiActionScorer = {
     },
 };
 
+const setupFactionRandomScorer: LocalAiActionScorer = {
+    id: 'setup-faction-random',
+    score(context, action) {
+        if (action.kind !== 'select-faction') return null;
+        const noise = buildDeterministicAiNoise(context, action, 'setup');
+        return {
+            score: Number((noise * 12).toFixed(3)),
+            reason: '派系选择随机扰动',
+        };
+    },
+};
+
 const minionTempoScorer: LocalAiActionScorer = {
     id: 'minion-tempo',
     score(context, action) {
@@ -749,6 +820,95 @@ const actionTempoScorer: LocalAiActionScorer = {
     },
 };
 
+const urgentBaseTempoScorer: LocalAiActionScorer = {
+    id: 'urgent-base-tempo',
+    score(context, action) {
+        const scoringEligible = action.metadata?.scoringEligible === true;
+        const gapBefore = typeof action.metadata?.gapBefore === 'number'
+            ? action.metadata.gapBefore
+            : null;
+        const projectedMargin = typeof action.metadata?.projectedMargin === 'number'
+            ? action.metadata.projectedMargin
+            : null;
+
+        if (action.kind === 'play-minion' || action.kind === 'response-play-minion') {
+            let score = 0;
+            if (projectedMargin !== null && projectedMargin >= 0) {
+                score += 65 + Math.min(18, projectedMargin * 2);
+            } else if (gapBefore !== null && gapBefore <= 2) {
+                score += 26 - gapBefore * 8;
+            }
+            if (scoringEligible) score += 55;
+            if (gapBefore !== null && gapBefore >= 8) score -= 12;
+            if (action.kind === 'response-play-minion' && (scoringEligible || (projectedMargin ?? -99) >= 0)) {
+                score += 45;
+            }
+
+            if (score === 0) return null;
+            return {
+                score,
+                reason: projectedMargin !== null && projectedMargin >= 0
+                    ? '临近评分时优先用随从完成或改写基地结算'
+                    : '临近评分时优先把力量投向高压基地',
+            };
+        }
+
+        if (action.kind === 'play-action' || action.kind === 'response-play-action') {
+            const targetBaseIndex = typeof action.metadata?.targetBaseIndex === 'number'
+                ? action.metadata.targetBaseIndex
+                : null;
+
+            if (targetBaseIndex === null) {
+                const hasPlayableMinion = context.legalActions.some((candidate) => candidate.kind === 'play-minion');
+                if (!hasPlayableMinion) return null;
+                return {
+                    score: -12,
+                    reason: '当前有更直接的随从节奏，不急于空放关键行动牌',
+                };
+            }
+
+            let score = 0;
+            if (scoringEligible) score += 38;
+            if (gapBefore !== null && gapBefore <= 3) score += 30 - gapBefore * 6;
+            if (gapBefore !== null && gapBefore >= 8) score -= 18;
+            if (action.kind === 'response-play-action' && (scoringEligible || (gapBefore !== null && gapBefore <= 2))) {
+                score += 70;
+            }
+            if (score === 0) return null;
+
+            return {
+                score,
+                reason: action.kind === 'response-play-action'
+                    ? '响应窗口内优先处理即将评分的基地'
+                    : '行动牌优先投向临近评分的基地窗口',
+            };
+        }
+
+        if (action.kind === 'response-pass') {
+            const urgentResponseExists = context.legalActions.some((candidate) => {
+                if (candidate.actionId === action.actionId) return false;
+                const candidateGapBefore = typeof candidate.metadata?.gapBefore === 'number'
+                    ? candidate.metadata.gapBefore
+                    : null;
+                const candidateProjectedMargin = typeof candidate.metadata?.projectedMargin === 'number'
+                    ? candidate.metadata.projectedMargin
+                    : null;
+                return candidate.metadata?.scoringEligible === true
+                    || (candidateProjectedMargin !== null && candidateProjectedMargin >= 0)
+                    || (candidateGapBefore !== null && candidateGapBefore <= 2);
+            });
+
+            if (!urgentResponseExists) return null;
+            return {
+                score: -160,
+                reason: '响应窗口里存在立即抢分或改写评分的动作，不能直接让过',
+            };
+        }
+
+        return null;
+    },
+};
+
 const responsePassScorer: LocalAiActionScorer = {
     id: 'response-pass-control',
     score(context, action) {
@@ -797,8 +957,10 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
     scorers: [
         actionKindScorer,
         factionScorer,
+        setupFactionRandomScorer,
         minionTempoScorer,
         actionTempoScorer,
+        urgentBaseTempoScorer,
         responsePassScorer,
         discardScorer,
         advancePhaseScorer,
