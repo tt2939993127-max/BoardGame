@@ -114,10 +114,60 @@ describe('StatusEffectsIcons', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it('本地骰图应像手牌一样先走同源 fetch/blob 再渲染', async () => {
+        const OriginalURL = URL;
+        class MockUrl extends OriginalURL {
+            static createObjectURL = vi.fn(() => 'blob:dicethrone-dice');
+            static revokeObjectURL = vi.fn();
+        }
+
+        class MockImage {
+            onload: null | (() => void) = null;
+            onerror: null | (() => void) = null;
+            naturalWidth = 256;
+            complete = false;
+            decoding = 'auto';
+
+            set src(_value: string) {
+                queueMicrotask(() => {
+                    this.complete = true;
+                    this.onload?.();
+                });
+            }
+        }
+
+        const fetchMock = vi.fn(async () => ({
+            ok: true,
+            blob: async () => new Blob(['dice-sprite']),
+        }));
+
+        vi.stubGlobal('URL', MockUrl);
+        vi.stubGlobal('Image', MockImage as unknown as typeof Image);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const { getByTestId } = render(
+            <Dice3D
+                value={6}
+                isRolling={false}
+                size="48px"
+                locale="zh-CN"
+                characterId="moon_elf"
+                definitionId="moon_elf-dice"
+            />
+        );
+
+        await waitFor(() => {
+            expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-ready', 'true');
+        });
+        expect(fetchMock).toHaveBeenCalled();
+        expect(MockUrl.createObjectURL).toHaveBeenCalled();
+        expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-url', 'blob:dicethrone-dice');
+    });
+
     it('状态图集 JSON 在远程资源模式下应优先走官方资源域名', async () => {
         setAssetsBaseUrl('https://assets.easyboardgame.top/official');
 
-        const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({
             ok: true,
             json: async () => ({
                 meta: { image: 'status-icons-atlas.png', size: { w: 1314, h: 400 } },
