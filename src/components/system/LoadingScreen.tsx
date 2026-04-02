@@ -13,6 +13,7 @@ let hasPlayedEntryAnimation = false;
 interface LoadingScreenProps {
     title?: string;
     description?: string;
+    progressText?: string;
     fullScreen?: boolean;
     anchor?: 'viewport' | 'container';
     className?: string;
@@ -29,6 +30,7 @@ interface LoadingScreenProps {
 export const LoadingScreen = ({
     title,
     description,
+    progressText,
     fullScreen = true,
     anchor = 'viewport',
     className,
@@ -136,7 +138,7 @@ export const LoadingScreen = ({
 
                 {/* 文本提示区：固定到底部，给容差；不参与垂直居中计算 */}
                 <div className="absolute left-0 right-0 bottom-[calc(env(safe-area-inset-bottom)+4rem)] flex flex-col items-center text-center px-6">
-                    <div className="w-full max-w-sm min-h-[76px] flex flex-col items-center">
+                    <div className="w-full max-w-sm min-h-[96px] flex flex-col items-center">
                         {title && (
                             <motion.h2
                                 key={title}
@@ -161,9 +163,21 @@ export const LoadingScreen = ({
                                 "text-amber-200/60 text-xs md:text-sm font-serif tracking-widest leading-relaxed line-clamp-2",
                                 descriptionClassName
                             )}
-                        >
-                            {description || t('matchRoom.loadingResources')}
-                        </motion.p>
+                            >
+                                {description || t('matchRoom.loadingResources')}
+                            </motion.p>
+                        {progressText && (
+                            <motion.p
+                                key={`progress:${progressText}`}
+                                initial={textVariants.initial}
+                                animate={textVariants.animate}
+                                transition={shouldAnimate ? { delay: 0.35 } : { duration: 0.3 }}
+                                data-testid="loading-screen-progress"
+                                className="mt-3 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-medium tracking-[0.24em] text-amber-300/85 md:text-xs"
+                            >
+                                {progressText}
+                            </motion.p>
+                        )}
                     </div>
                 </div>
 

@@ -372,9 +372,11 @@ export function registerSamuraiCustomActions(): void {
     });
     registerCustomActionHandler('samurai-masamune', handleMasamune, {
         categories: ['dice', 'token', 'status'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('samurai-card-righteousness', handleRighteousness, {
         categories: ['card', 'dice', 'token', 'status'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('samurai-card-you-should-be-ashamed', handleYouShouldBeAshamed, {
         categories: ['card', 'token'],

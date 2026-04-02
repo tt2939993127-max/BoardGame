@@ -360,6 +360,7 @@ export function registerBarbarianCustomActions(): void {
     });
     registerCustomActionHandler('more-please-roll-damage', handleMorePleaseRollDamage, {
         categories: ['dice', 'damage', 'status'],
+        requiresSelectedDefender: true,
     });
 }
 

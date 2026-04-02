@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
+import { acquireTaskGuard } from './heavy-task-guard.mjs';
 
 const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
@@ -13,6 +15,7 @@ const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'thread
 const FAST_VITEST_ARGS = ['--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
 const CORE_TEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
+const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -243,6 +246,21 @@ function affectsBuild(file) {
     || file.startsWith('scripts/audio/');
 }
 
+function affectsDiceThroneStyleContract(file) {
+  return file === 'src/index.css'
+    || file === 'vite.config.ts'
+    || file === 'postcss.config.js'
+    || file === 'postcss-tailwind-legacy-structure.js'
+    || file === 'postcss-tailwind-legacy-colors.js'
+    || file === 'postcss-tailwind-legacy-translate.js'
+    || file === 'package.json'
+    || file === 'playwright.config.ts'
+    || file.startsWith('src/games/dicethrone/ui/')
+    || file === 'src/components/game/framework/presets.tsx'
+    || file === 'scripts/verify/dicethrone-style-contract.mjs'
+    || file === 'e2e/dicethrone-simple-start.e2e.ts';
+}
+
 function affectsI18n(file) {
   return file.startsWith('src/')
     || file.startsWith('apps/api/')
@@ -307,7 +325,7 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
 function buildVitestChangedArgs(baseRef, targets, options = {}) {
   const { gameOnly = false } = options;
   const stableArgs = gameOnly ? GAME_VITEST_ARGS : FAST_VITEST_ARGS;
-  const args = ['vitest', 'run', '--changed', baseRef, ...stableArgs];
+  const args = [...VITEST_SAFE_ENTRY, 'run', '--changed', baseRef, ...stableArgs];
   if (targets.length > 0) {
     args.push('--', ...targets);
   }
@@ -356,6 +374,14 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       command: 'npm',
       args: ['run', 'build'],
     });
+    if (hasAny(files, affectsDiceThroneStyleContract)) {
+      commands.push({
+        label: 'DiceThrone style contract',
+        reason: '涉及 DiceThrone HUD / Tailwind 兼容链改动，需验证构建产物关键样式合同',
+        command: 'npm',
+        args: ['run', 'verify:dicethrone:style-contract'],
+      });
+    }
   } else if (hasAny(files, affectsBuild) && isPrePushMode) {
     console.log('[changed-quality-gate] pre-push 模式：跳过 build，交给 CI 全量构建兜底。');
   }
@@ -401,13 +427,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       commands.push({
         label: 'Core+Games changed tests',
         reason: '核心源码改动，先跑核心 changed 测试集',
-        command: 'npx',
+        command: process.execPath,
         args: buildVitestChangedArgs(baseRef, CORE_TEST_TARGETS),
       });
       commands.push({
         label: 'Games changed tests',
         reason: '核心源码改动，同时跑游戏 changed 测试集',
-        command: 'npx',
+        command: process.execPath,
         args: buildVitestChangedArgs(baseRef, ['src/games'], { gameOnly: true }),
       });
     } else {
@@ -415,15 +441,15 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         commands.push({
           label: 'Changed core test files',
           reason: '仅改动核心测试文件，按文件精确运行',
-          command: 'npx',
-          args: ['vitest', 'run', ...dedupeValues(coreTestFiles), ...FAST_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(coreTestFiles), ...FAST_VITEST_ARGS],
         });
       }
       if (gameSourceIds.length > 0) {
         commands.push({
           label: 'Changed game source tests',
           reason: `${gameSourceIds.join(', ')} 源码改动，合并运行 changed 测试集`,
-          command: 'npx',
+          command: process.execPath,
           args: buildVitestChangedArgs(
             baseRef,
             gameSourceIds.map((gameId) => `src/games/${gameId}`),
@@ -434,8 +460,8 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         commands.push({
           label: 'Changed game test files',
           reason: '仅改动游戏测试文件，按文件精确运行',
-          command: 'npx',
-          args: ['vitest', 'run', ...dedupeValues(gameTestFiles), ...GAME_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(gameTestFiles), ...GAME_VITEST_ARGS],
         });
       }
     }
@@ -450,16 +476,16 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       commands.push({
         label: 'Games core tests',
         reason: '核心框架改动可能影响所有游戏',
-        command: 'npx',
-        args: ['vitest', 'run', 'src/games', ...GAME_VITEST_ARGS],
+        command: process.execPath,
+        args: [...VITEST_SAFE_ENTRY, 'run', 'src/games', ...GAME_VITEST_ARGS],
       });
     } else {
       for (const gameId of collectGameIds(files)) {
         commands.push({
           label: `${gameId} tests`,
           reason: `${gameId} 目录有改动`,
-          command: 'npx',
-          args: ['vitest', 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
         });
       }
     }
@@ -537,20 +563,28 @@ function commandToLine(command, args) {
   return [command, ...args].map(quoteArg).join(' ');
 }
 
+function shouldDirectSpawnOnWindows(command) {
+  if (process.platform !== 'win32') return true;
+  const normalized = command.trim().toLowerCase();
+  return path.isAbsolute(command)
+    || normalized.endsWith('.exe')
+    || normalized.endsWith('.com');
+}
+
 function runCommand({ label, reason, command, args }) {
   console.log(`\n[changed-quality-gate] ${label}`);
   console.log(`[changed-quality-gate] 原因: ${reason}`);
   console.log(`[changed-quality-gate] 命令: ${commandToLine(command, args)}`);
 
   const startAt = Date.now();
-  const result = process.platform === 'win32'
-    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
+  const result = shouldDirectSpawnOnWindows(command)
+    ? spawnSync(command, args, {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
         env: process.env,
       })
-    : spawnSync(command, args, {
+    : spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
@@ -609,86 +643,115 @@ for (const file of files) {
   console.log(`- ${file}`);
 }
 
-mkdirSync(CACHE_DIR, { recursive: true });
-runEncodingGuard(files);
+const taskGuard = acquireTaskGuard({
+  name: 'quality-gate',
+  conflicts: ['e2e-run'],
+  command: process.argv.join(' '),
+  metadata: {
+    mode,
+    baseRef,
+    fileCount: files.length,
+  },
+});
 
-const commands = collectCommands(files, baseRef, affectsTypecheck);
-if (commands.length === 0) {
-  console.log('[changed-quality-gate] 当前改动仅涉及文档/证据，跳过代码校验。');
-  process.exit(0);
-}
+try {
+  const globalBudgetHandle = await acquireGlobalHeavyBudget({
+    group: 'quality-gate',
+    command: process.argv.join(' '),
+    metadata: {
+      mode,
+      baseRef,
+      fileCount: files.length,
+    },
+  });
 
-const cachePayload = {
-  schemaVersion: CACHE_SCHEMA_VERSION,
-  mode,
-  baseRef,
-  mergeBase,
-  headSha,
-  files,
-  commands: commands.map((item) => ({ command: item.command, args: item.args })),
-};
-const cacheKey = createCacheKey(cachePayload);
+  try {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  runEncodingGuard(files);
 
-if (shouldUsePrePushCache()) {
-  const cache = readPrePushCache();
-  if (cache?.key === cacheKey) {
-    console.log('[changed-quality-gate] 命中 pre-push 缓存，本次跳过重复校验。');
+  const commands = collectCommands(files, baseRef, affectsTypecheck);
+  if (commands.length === 0) {
+    console.log('[changed-quality-gate] 当前改动仅涉及文档/证据，跳过代码校验。');
     process.exit(0);
   }
-}
 
-const startedAt = Date.now();
-const durations = [];
-const commandCache = shouldUsePrePushCache()
-  ? readCommandCache()
-  : { version: CACHE_SCHEMA_VERSION, entries: {} };
-for (const command of commands) {
-  const commandCacheKey = createCommandCacheKey({ baseRef, mergeBase, headSha, files }, command);
-  const cachedResult = shouldUsePrePushCache()
-    ? commandCache.entries?.[commandCacheKey]
-    : null;
-
-  if (cachedResult?.status === 'passed') {
-    console.log(`\n[changed-quality-gate] ${command.label}`);
-    console.log('[changed-quality-gate] 命中步骤缓存，跳过重复校验。');
-    durations.push({
-      label: `${command.label} (cached)`,
-      durationMs: cachedResult.durationMs ?? 0,
-    });
-    continue;
-  }
-
-  const durationMs = runCommand(command);
-  durations.push({ label: command.label, durationMs });
-  if (shouldUsePrePushCache()) {
-    commandCache.entries[commandCacheKey] = {
-      status: 'passed',
-      label: command.label,
-      durationMs,
-      completedAt: new Date().toISOString(),
-      headSha,
-      baseRef,
-      mergeBase,
-    };
-    writeCommandCache(trimCommandCache(commandCache));
-  }
-}
-
-const totalMs = Date.now() - startedAt;
-console.log('\n[changed-quality-gate] 执行耗时:');
-for (const item of durations) {
-  console.log(`- ${item.label}: ${(item.durationMs / 1000).toFixed(1)}s`);
-}
-console.log(`[changed-quality-gate] 总耗时: ${(totalMs / 1000).toFixed(1)}s`);
-console.log('[changed-quality-gate] 全部增量校验完成。');
-
-if (shouldUsePrePushCache()) {
-  writePrePushCache({
-    key: cacheKey,
+  const cachePayload = {
+    schemaVersion: CACHE_SCHEMA_VERSION,
     mode,
     baseRef,
     mergeBase,
     headSha,
-    generatedAt: new Date().toISOString(),
-  });
+    files,
+    commands: commands.map((item) => ({ command: item.command, args: item.args })),
+  };
+  const cacheKey = createCacheKey(cachePayload);
+
+  if (shouldUsePrePushCache()) {
+    const cache = readPrePushCache();
+    if (cache?.key === cacheKey) {
+      console.log('[changed-quality-gate] 命中 pre-push 缓存，本次跳过重复校验。');
+      process.exit(0);
+    }
+  }
+
+  const startedAt = Date.now();
+  const durations = [];
+  const commandCache = shouldUsePrePushCache()
+    ? readCommandCache()
+    : { version: CACHE_SCHEMA_VERSION, entries: {} };
+  for (const command of commands) {
+    const commandCacheKey = createCommandCacheKey({ baseRef, mergeBase, headSha, files }, command);
+    const cachedResult = shouldUsePrePushCache()
+      ? commandCache.entries?.[commandCacheKey]
+      : null;
+
+    if (cachedResult?.status === 'passed') {
+      console.log(`\n[changed-quality-gate] ${command.label}`);
+      console.log('[changed-quality-gate] 命中步骤缓存，跳过重复校验。');
+      durations.push({
+        label: `${command.label} (cached)`,
+        durationMs: cachedResult.durationMs ?? 0,
+      });
+      continue;
+    }
+
+    const durationMs = runCommand(command);
+    durations.push({ label: command.label, durationMs });
+    if (shouldUsePrePushCache()) {
+      commandCache.entries[commandCacheKey] = {
+        status: 'passed',
+        label: command.label,
+        durationMs,
+        completedAt: new Date().toISOString(),
+        headSha,
+        baseRef,
+        mergeBase,
+      };
+      writeCommandCache(trimCommandCache(commandCache));
+    }
+  }
+
+  const totalMs = Date.now() - startedAt;
+  console.log('\n[changed-quality-gate] 执行耗时:');
+  for (const item of durations) {
+    console.log(`- ${item.label}: ${(item.durationMs / 1000).toFixed(1)}s`);
+  }
+  console.log(`[changed-quality-gate] 总耗时: ${(totalMs / 1000).toFixed(1)}s`);
+  console.log('[changed-quality-gate] 全部增量校验完成。');
+
+  if (shouldUsePrePushCache()) {
+    writePrePushCache({
+      key: cacheKey,
+      mode,
+      baseRef,
+      mergeBase,
+      headSha,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+  } finally {
+    globalBudgetHandle.release();
+  }
+} finally {
+  taskGuard.release();
 }

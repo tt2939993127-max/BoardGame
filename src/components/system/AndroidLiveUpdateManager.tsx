@@ -1,22 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
+import { AndroidForceUpdateGate } from './AndroidForceUpdateGate';
 import {
+    type AndroidForceUpdateState,
     registerAndroidLiveUpdateListeners,
     startAndroidLiveUpdateBackgroundCheck,
 } from '../../lib/mobile/androidLiveUpdates';
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
+    const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>({
+        phase: 'hidden',
+        blocking: false,
+    });
 
     useEffect(() => {
         let disposed = false;
 
         void registerAndroidLiveUpdateListeners();
 
-        void startAndroidLiveUpdateBackgroundCheck().then((result) => {
+        void startAndroidLiveUpdateBackgroundCheck({
+            onForceStateChange: (state) => {
+                if (disposed) return;
+                setForceUpdateState(state);
+            },
+        }).then((result) => {
             if (disposed) return;
 
             if (result.status === 'queued') {
+                if (result.mode === 'immediate') {
+                    return;
+                }
                 toast.info(
                     `新版本 ${result.version} 已在后台准备完成，切到后台或重启 App 后生效。`,
                     '应用更新',
@@ -43,5 +57,17 @@ export const AndroidLiveUpdateManager = () => {
         };
     }, [toast]);
 
-    return null;
+    return (
+        <AndroidForceUpdateGate
+            state={forceUpdateState}
+            onRetry={() => {
+                void startAndroidLiveUpdateBackgroundCheck({
+                    force: true,
+                    onForceStateChange: (state) => {
+                        setForceUpdateState(state);
+                    },
+                });
+            }}
+        />
+    );
 };

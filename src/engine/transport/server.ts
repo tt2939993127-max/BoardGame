@@ -561,6 +561,7 @@ export class GameTransportServer {
     ): Promise<void> {
         // 加载或获取活跃对局
         let match = this.activeMatches.get(matchID);
+        const reusedActiveMatch = Boolean(match);
         if (!match) {
             match = await this.loadMatch(matchID);
             if (!match) {
@@ -572,7 +573,10 @@ export class GameTransportServer {
         // 认证（旁观者无需凭证）。
         // 这里必须基于存储层最新 metadata 做校验，避免 leave/join 后内存缓存滞后。
         if (playerID !== null) {
-            const ok = await this.validateCommandAuth(matchID, playerID, credentials);
+            const authMetadata = reusedActiveMatch
+                ? (await this.storage.fetch(matchID, { metadata: true })).metadata ?? match.metadata
+                : match.metadata;
+            const ok = await this.validateCommandAuth(matchID, playerID, credentials, authMetadata);
             if (!ok) {
                 socket.emit('error', matchID, 'unauthorized');
                 return;
@@ -1431,19 +1435,19 @@ export class GameTransportServer {
         matchID: string,
         playerID: string,
         credentials?: string,
+        metadata?: MatchMetadata,
     ): Promise<boolean> {
         if (!this.authenticate) return true;
 
-        const result = await this.storage.fetch(matchID, { metadata: true });
-        const metadata = result.metadata;
-        if (!metadata) return false;
+        const resolvedMetadata = metadata ?? (await this.storage.fetch(matchID, { metadata: true })).metadata;
+        if (!resolvedMetadata) return false;
 
-        const ok = await this.authenticate(matchID, playerID, credentials, metadata);
+        const ok = await this.authenticate(matchID, playerID, credentials, resolvedMetadata);
         if (!ok) return false;
 
         const active = this.activeMatches.get(matchID);
         if (active) {
-            active.metadata = metadata;
+            active.metadata = resolvedMetadata;
         }
         return true;
     }

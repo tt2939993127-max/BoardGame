@@ -94,7 +94,7 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
     if (!source) return { events: [] };
     const ownMinions = ctx.state.bases[source.baseIndex]?.minions.filter(minion => minion.controller === ctx.playerId) ?? [];
     if (ownMinions.length !== 1) return { events: [] };
-    const interaction = createSimpleChoice(
+    const roninInteraction = createSimpleChoice(
         `samurai_ronin_${ctx.now}`,
         ctx.playerId,
         '浪人：你可以在此随从上放置一个 +1 力量指示物',
@@ -114,11 +114,11 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
         ],
         { sourceId: 'samurai_ronin', targetType: 'button' },
     );
-    (interaction.data as any).continuationContext = {
+    (roninInteraction.data as any).continuationContext = {
         minionUid: source.minion.uid,
         baseIndex: source.baseIndex,
     } satisfies RoninContinuation;
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return { events: [], matchState: queueInteraction(ctx.matchState, roninInteraction) };
 }
 
 function samuraiYokaiAttackOnPlay(ctx: AbilityContext): AbilityResult {

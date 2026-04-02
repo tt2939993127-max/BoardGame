@@ -79,10 +79,11 @@ export const runMockGamePackageInstall = (
         {
             delayMs: 300,
             patch: {
-                status: 'failed',
+                status: 'installed',
                 progressMode: undefined,
                 progressPercent: undefined,
-                errorMessage: options.failureMessage,
+                errorMessage: undefined,
+                installedVersion: manifest.assetPackVersion ?? manifest.modulePackVersion ?? 'mock-installed',
             },
         },
     ];

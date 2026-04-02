@@ -1,4 +1,3 @@
-
 import {
     Anchor,
     Axe,
@@ -36,6 +35,32 @@ export interface FactionMeta {
     locales?: string[];
 }
 
+export interface FactionVariantGroup {
+    groupId: string;
+    icon: FactionMeta['icon'];
+    color: string;
+    variants: FactionMeta[];
+}
+
+const POD_SUFFIX = '_pod';
+
+function toFactionGroupId(factionId: string): string {
+    return factionId.endsWith(POD_SUFFIX) ? factionId.slice(0, -POD_SUFFIX.length) : factionId;
+}
+
+function isFactionVisibleInLocale(faction: FactionMeta, locale: string): boolean {
+    return !faction.locales || faction.locales.includes(locale);
+}
+
+function preferBaseVariant(variants: FactionMeta[], locale: string): FactionMeta {
+    const visibleVariants = variants.filter((variant) => isFactionVisibleInLocale(variant, locale));
+    const candidates = visibleVariants.length > 0 ? visibleVariants : variants;
+
+    return candidates.find((variant) => !variant.id.endsWith(POD_SUFFIX))
+        ?? candidates[0]
+        ?? variants[0];
+}
+
 export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.PIRATES, nameKey: 'factions.pirates.name', icon: Anchor, color: '#1e293b', descriptionKey: 'factions.pirates.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.PIRATES_POD, nameKey: 'factions.pirates_pod.name', icon: Anchor, color: '#1e293b', descriptionKey: 'factions.pirates_pod.description' },
@@ -45,14 +70,18 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.DINOSAURS_POD, nameKey: 'factions.dinosaurs_pod.name', icon: Bone, color: '#15803d', descriptionKey: 'factions.dinosaurs_pod.description' },
     { id: SMASHUP_FACTION_IDS.ALIENS, nameKey: 'factions.aliens.name', icon: Orbit, color: '#0ea5e9', descriptionKey: 'factions.aliens.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.ALIENS_POD, nameKey: 'factions.aliens_pod.name', icon: Orbit, color: '#0ea5e9', descriptionKey: 'factions.aliens_pod.description' },
-    { id: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, nameKey: 'factions.ancient_egyptians.name', icon: Pyramid, color: '#eab308', descriptionKey: 'factions.ancient_egyptians.description' },
-    { id: SMASHUP_FACTION_IDS.COWBOYS, nameKey: 'factions.cowboys.name', icon: CowboyHatIcon, color: '#92400e', descriptionKey: 'factions.cowboys.description' },
+    { id: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, nameKey: 'factions.ancient_egyptians.name', icon: Pyramid, color: '#eab308', descriptionKey: 'factions.ancient_egyptians.description', locales: ['zh-CN'] },
+    { id: SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD, nameKey: 'factions.ancient_egyptians_pod.name', icon: Pyramid, color: '#eab308', descriptionKey: 'factions.ancient_egyptians_pod.description' },
+    { id: SMASHUP_FACTION_IDS.COWBOYS, nameKey: 'factions.cowboys.name', icon: CowboyHatIcon, color: '#92400e', descriptionKey: 'factions.cowboys.description', locales: ['zh-CN'] },
+    { id: SMASHUP_FACTION_IDS.COWBOYS_POD, nameKey: 'factions.cowboys_pod.name', icon: CowboyHatIcon, color: '#92400e', descriptionKey: 'factions.cowboys_pod.description' },
     { id: SMASHUP_FACTION_IDS.ROBOTS, nameKey: 'factions.robots.name', icon: Bot, color: '#475569', descriptionKey: 'factions.robots.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.ROBOTS_POD, nameKey: 'factions.robots_pod.name', icon: Bot, color: '#475569', descriptionKey: 'factions.robots_pod.description' },
-    { id: SMASHUP_FACTION_IDS.SAMURAI, nameKey: 'factions.samurai.name', icon: Sword, color: '#94a3b8', descriptionKey: 'factions.samurai.description' },
+    { id: SMASHUP_FACTION_IDS.SAMURAI, nameKey: 'factions.samurai.name', icon: Sword, color: '#94a3b8', descriptionKey: 'factions.samurai.description', locales: ['zh-CN'] },
+    { id: SMASHUP_FACTION_IDS.SAMURAI_POD, nameKey: 'factions.samurai_pod.name', icon: Sword, color: '#94a3b8', descriptionKey: 'factions.samurai_pod.description' },
     { id: SMASHUP_FACTION_IDS.ZOMBIES, nameKey: 'factions.zombies.name', icon: Skull, color: '#10b981', descriptionKey: 'factions.zombies.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.ZOMBIES_POD, nameKey: 'factions.zombies_pod.name', icon: Skull, color: '#10b981', descriptionKey: 'factions.zombies_pod.description' },
-    { id: SMASHUP_FACTION_IDS.VIKINGS, nameKey: 'factions.vikings.name', icon: Axe, color: '#2563eb', descriptionKey: 'factions.vikings.description' },
+    { id: SMASHUP_FACTION_IDS.VIKINGS, nameKey: 'factions.vikings.name', icon: Axe, color: '#2563eb', descriptionKey: 'factions.vikings.description', locales: ['zh-CN'] },
+    { id: SMASHUP_FACTION_IDS.VIKINGS_POD, nameKey: 'factions.vikings_pod.name', icon: Axe, color: '#2563eb', descriptionKey: 'factions.vikings_pod.description' },
     { id: SMASHUP_FACTION_IDS.WIZARDS, nameKey: 'factions.wizards.name', icon: Wand2, color: '#8b5cf6', descriptionKey: 'factions.wizards.description', locales: ['zh-CN'] },
     { id: SMASHUP_FACTION_IDS.WIZARDS_POD, nameKey: 'factions.wizards_pod.name', icon: Wand2, color: '#8b5cf6', descriptionKey: 'factions.wizards_pod.description' },
     { id: SMASHUP_FACTION_IDS.TRICKSTERS, nameKey: 'factions.tricksters.name', icon: Theater, color: '#f59e0b', descriptionKey: 'factions.tricksters.description', locales: ['zh-CN'] },
@@ -85,8 +114,62 @@ export const FACTION_METADATA: FactionMeta[] = [
     { id: SMASHUP_FACTION_IDS.NINJAS_POD, nameKey: 'factions.ninjas_pod.name', icon: ShurikenIcon, color: '#991b1b', descriptionKey: 'factions.ninjas_pod.description' },
 ];
 
+export const FACTION_VARIANT_GROUPS: FactionVariantGroup[] = (() => {
+    const groups = new Map<string, FactionVariantGroup>();
+
+    for (const faction of FACTION_METADATA) {
+        const groupId = toFactionGroupId(faction.id);
+        const existing = groups.get(groupId);
+        if (existing) {
+            existing.variants.push(faction);
+            continue;
+        }
+
+        groups.set(groupId, {
+            groupId,
+            icon: faction.icon,
+            color: faction.color,
+            variants: [faction],
+        });
+    }
+
+    return Array.from(groups.values()).map((group) => ({
+        ...group,
+        variants: [...group.variants].sort((left, right) => {
+            const leftScore = left.id.endsWith(POD_SUFFIX) ? 1 : 0;
+            const rightScore = right.id.endsWith(POD_SUFFIX) ? 1 : 0;
+            return leftScore - rightScore;
+        }),
+    }));
+})();
+
 export function getVisibleFactionMetadata(locale: string): FactionMeta[] {
-    return FACTION_METADATA.filter((faction) => !faction.locales || faction.locales.includes(locale));
+    return FACTION_METADATA.filter((faction) => isFactionVisibleInLocale(faction, locale));
+}
+
+export function getVisibleFactionVariantGroups(locale: string): Array<FactionVariantGroup & { defaultVariant: FactionMeta }> {
+    return FACTION_VARIANT_GROUPS
+        .map((group) => {
+            const visibleVariants = group.variants.filter((variant) => isFactionVisibleInLocale(variant, locale));
+            if (visibleVariants.length === 0) return null;
+            return {
+                ...group,
+                variants: visibleVariants,
+                defaultVariant: preferBaseVariant(group.variants, locale),
+            };
+        })
+        .filter((group): group is FactionVariantGroup & { defaultVariant: FactionMeta } => Boolean(group));
+}
+
+export function getFactionVariantGroupById(factionId: string): FactionVariantGroup | undefined {
+    const groupId = toFactionGroupId(factionId);
+    return FACTION_VARIANT_GROUPS.find((group) => group.groupId === groupId);
+}
+
+export function getPreferredFactionVariant(groupId: string, locale: string): FactionMeta | undefined {
+    const group = getFactionVariantGroupById(groupId);
+    if (!group) return undefined;
+    return preferBaseVariant(group.variants, locale);
 }
 
 export function getFactionMeta(id: string): FactionMeta | undefined {

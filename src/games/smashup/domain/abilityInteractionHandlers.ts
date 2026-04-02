@@ -81,6 +81,7 @@ export function registerPodInteractionAliases(): void {
 
     for (const [sourceId, handler] of allEntries) {
         if (sourceId.endsWith('_pod')) continue;
+        if (sourceId.startsWith('titan_')) continue;
 
         const podSourceId = `${sourceId}_pod`;
         // 如果已存在则不覆盖

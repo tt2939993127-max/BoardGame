@@ -5,6 +5,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertChildProcessSupport } from './assert-child-process-support.mjs';
 import { installViteWindowsNetUseBypass } from './vite-windows-net-use-bypass.mjs';
 
+const installBrokenPipeGuard = (stream) => {
+    stream.on('error', (error) => {
+        if (error?.code === 'EPIPE') {
+            process.exit(0);
+            return;
+        }
+        setImmediate(() => {
+            throw error;
+        });
+    });
+};
+
+installBrokenPipeGuard(process.stdout);
+installBrokenPipeGuard(process.stderr);
+
 const readCliFlagValue = (flagName) => {
     const exactFlag = `--${flagName}`;
     const prefix = `${exactFlag}=`;

@@ -269,13 +269,15 @@ export const selectCharacter = async (page: Page, characterId: string) => {
 
 export const readyPlayersAndStartGame = async (hostPage: Page, guestPages: Page[]) => {
     for (const guestPage of guestPages) {
-        const guestReadyButton = guestPage.getByRole('button', { name: /Ready/i });
+        await waitForCharacterSelection(guestPage, 10000);
+        const guestReadyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i }).first();
         await expect(guestReadyButton).toBeVisible({ timeout: 5000 });
         await guestReadyButton.click();
         await guestPage.waitForTimeout(500);
     }
 
-    const hostStartButton = hostPage.getByRole('button', { name: /Start Game|Press.*Start/i });
+    await waitForCharacterSelection(hostPage, 10000);
+    const hostStartButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
     await expect(hostStartButton).toBeVisible({ timeout: 10000 });
     await expect(hostStartButton).toBeEnabled({ timeout: 5000 });
     await hostStartButton.click();

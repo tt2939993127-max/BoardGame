@@ -8,6 +8,7 @@ export type GamePackageInstallStatus =
     | 'manifest'
     | 'downloading'
     | 'verifying'
+    | 'installed'
     | 'failed';
 
 export interface ResolvedGamePackageManifest {
@@ -15,8 +16,16 @@ export interface ResolvedGamePackageManifest {
     runtimeChannel: string;
     modulePackId?: string;
     assetPackId?: string;
+    modulePackVersion?: string;
+    assetPackVersion?: string;
+    modulePackUrl?: string;
+    assetPackUrl?: string;
+    modulePackChecksum?: string;
+    assetPackChecksum?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    modulePackFileCount?: number;
+    assetPackFileCount?: number;
     source: 'fallback' | 'remote';
 }
 
@@ -30,6 +39,8 @@ export interface StoredGamePackageState {
     assetPackId?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    installedVersion?: string;
+    localAssetBaseUrl?: string;
     errorMessage?: string;
     updatedAt: number;
 }
@@ -45,10 +56,27 @@ export interface GamePackageInstallHandle {
     finished: Promise<StoredGamePackageState>;
 }
 
+const INVALID_INSTALLED_VERSION_PLACEHOLDERS = new Set([
+    'mock-installed',
+]);
+
 const normalizeOptionalNumber = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0
         ? value
         : undefined;
+
+export const hasUsableInstalledGamePackageVersion = (value?: string) => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return false;
+    }
+
+    return !INVALID_INSTALLED_VERSION_PLACEHOLDERS.has(normalized.toLowerCase());
+};
 
 export const createDefaultGamePackageState = (
     gameId: string,
@@ -87,5 +115,6 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     assetPackId: state.assetPackId,
     modulePackBytes: state.modulePackBytes,
     assetPackBytes: state.assetPackBytes,
+    installedVersion: state.installedVersion,
     errorMessage: state.errorMessage,
 });

@@ -52,6 +52,15 @@ type ExecuteUncoveredActionParams = {
     targetMinionUid?: string;
 };
 
+type BuildBuriedCardReturnedToHandEventParams = {
+    core: SmashUpCore;
+    playerId: PlayerId;
+    cardUid: string;
+    baseIndex: number;
+    source: 'sphinx-start-turn' | 'sphinx-after-scoring';
+    now: number;
+};
+
 export function registerBuryInteractionHandlers(): void {
     registerInteractionHandler('bury_uncover_start_turn', handleUncoverAtStartTurn);
     registerInteractionHandler('bury_uncover_ongoing_target', handleUncoverOngoingPickTargetMinion);
@@ -87,6 +96,27 @@ export function buildBuryCardEvents(params: BuildBuryCardEventsParams): SmashUpE
     });
     if (queued) events.push(queued);
     return events;
+}
+
+export function buildBuriedCardReturnedToHandEvent(
+    params: BuildBuriedCardReturnedToHandEventParams,
+): SmashUpEvent | undefined {
+    const base = params.core.bases[params.baseIndex];
+    const buried = (base?.buriedCards ?? []).find(card => card.uid === params.cardUid);
+    if (!base || !buried) return undefined;
+
+    return {
+        type: SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND,
+        payload: {
+            playerId: params.playerId,
+            cardUid: buried.uid,
+            defId: buried.defId,
+            baseIndex: params.baseIndex,
+            baseDefId: base.defId,
+            source: params.source,
+        },
+        timestamp: params.now,
+    } as SmashUpEvent;
 }
 
 export function uncoverBuriedCard(params: UncoverBuriedCardParams): {

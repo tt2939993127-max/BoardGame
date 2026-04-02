@@ -751,6 +751,9 @@ console.log('修改完成');
   - **运行时使用**：所有图片必须通过 `OptimizedImage` / `getOptimizedImageUrls` 使用，路径不含 `compressed/`（自动补全）
   - 未压缩则先运行 `npm run assets:compress` 生成 WebP 压缩版本
   - 压缩命令：`npm run assets:compress` 会自动扫描所有游戏资源目录，生成 WebP 格式并保存到 `compressed/` 子目录
+  - **禁止组件内另起图片加载状态机（强制）**：自定义图片组件、精灵图组件、3D 骰子组件、CSS background 精灵图组件，禁止各自再写一套 `fetch`/`Image.onload`/手动探测/本地特判 的加载状态机；必须优先复用 `AssetLoader`、`OptimizedImage`、`CardPreview`、`getLocalizedImageUrls`、`getOptimizedImageUrls` 这一套统一链路。确实需要特殊渲染时，也只能在统一链路之上做最小封装，不能绕开资源解析规则单独“补丁式”处理。
+  - **同模块已有正确用法优先（强制）**：如果同一游戏里已有稳定显示的图片组件（例如手牌、卡牌预览、状态图集），新增或修复其他图片组件时必须先对照这些现有正确用法，优先沿用相同的资源解析、回退和渲染路径；禁止在已有正确范式旁边再发明第二套实现。
+  - **资源显示回归先查接线一致性（强制）**：遇到“图片之前正常、后来空白/错图/偶发加载失败”时，先审查它是否偏离了统一图片链路、是否引入了组件内特判、是否绕过了 `AssetLoader` 的语言化/压缩/缓存逻辑；禁止第一反应继续叠加特例。
 - **国际化资源架构（强制）**：
   - **当前状态**：所有游戏图片资源已迁移到 `public/assets/i18n/zh-CN/<gameId>/` 目录。
   - **代码行为**：`OptimizedImage` 和 `CardPreview` 会自动从 `i18next` 获取当前语言（`i18n.language`），无需手动传递 `locale` prop。路径自动转换：`dicethrone/images/foo.png` → `i18n/zh-CN/dicethrone/images/foo.png`。

@@ -1042,6 +1042,38 @@ describe('ancient_egyptians audit regressions', () => {
         expect(getEffectivePower(withOwnBuried, ownPriest, 0)).toBe(6);
     });
 
+    it('Priest of Anubis POD 也只在你有埋葬牌时获得 +2 力量', () => {
+        const priest = makeMinion('priest-pod', 'ancient_egyptians_priest_of_anubis_pod', '0', 4, { powerModifier: 0 });
+        const withOpponentBuried = makeState({
+            bases: [makeBase({
+                minions: [priest],
+                buriedCards: [{
+                    uid: 'opp-buried-pod',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '1',
+                    controllerId: '1',
+                    buriedFrom: 'hand',
+                }],
+            })],
+        });
+        expect(getEffectivePower(withOpponentBuried, priest, 0)).toBe(4);
+
+        const ownPriest = makeMinion('priest-own-pod', 'ancient_egyptians_priest_of_anubis_pod', '0', 4, { powerModifier: 0 });
+        const withOwnBuried = makeState({
+            bases: [makeBase({
+                minions: [ownPriest],
+                buriedCards: [{
+                    uid: 'own-buried-pod',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            })],
+        });
+        expect(getEffectivePower(withOwnBuried, ownPriest, 0)).toBe(6);
+    });
+
     it('Pyramid Engineer onPlay 只允许翻开这里你的一张埋葬牌', () => {
         const executor = resolveAbility('ancient_egyptians_pyramid_engineer', 'onPlay');
         expect(executor).toBeDefined();
@@ -1526,6 +1558,78 @@ describe('ancient_egyptians audit regressions', () => {
         expect(buriedPrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_uncover');
         const optionCardUids = buriedPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toEqual(['own-here']);
+    });
+});
+
+describe('samurai_pod audit regressions', () => {
+    function makeMS(core: SmashUpCore) {
+        return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    }
+
+    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的两个 +1 指示物交互', () => {
+        const executor = resolveAbility('samurai_ronin_pod', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const ronin = makeMinion('ronin-pod', 'samurai_ronin_pod', '0', 3, { powerModifier: 0 });
+        const core = makeState({
+            bases: [makeBase({ minions: [ronin] })],
+        });
+
+        const prompted = executor!({
+            state: core,
+            matchState: makeMS(core),
+            playerId: '0',
+            cardUid: 'ronin-pod',
+            defId: 'samurai_ronin_pod',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 101,
+        });
+        const prompt = prompted.matchState?.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('samurai_ronin');
+
+        const yesOption = prompt.data.options.find((option: any) => option.value?.apply === true);
+        expect(yesOption).toBeDefined();
+
+        const handler = getInteractionHandler('samurai_ronin');
+        expect(handler).toBeDefined();
+        const resolved = handler!(prompted.matchState!, '0', yesOption.value, prompt.data, dummyRandom, 102);
+        const counterEvents = resolved.events.filter(event => event.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
+
+        expect(counterEvents).toHaveLength(2);
+        expect(counterEvents.every(event => event.payload.minionUid === 'ronin-pod')).toBe(true);
+    });
+
+    it('Samurai-Chan POD 在自己从场上进入弃牌堆后会抓一张牌', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [{ uid: 'draw-pod-1', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' } as CardInstance],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({
+                defId: 'base_a',
+                minions: [makeMinion('chan-pod-1', 'samurai_samurai_chan_pod', '0', 2, { powerModifier: 0 })],
+            })],
+        });
+
+        const result = fireTriggers(state, 'onMinionDiscardedFromBase', {
+            state,
+            matchState: makeMS(state),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: makeMinion('chan-pod-1', 'samurai_samurai_chan_pod', '0', 2, { powerModifier: 0 }),
+            triggerMinionUid: 'chan-pod-1',
+            triggerMinionDefId: 'samurai_samurai_chan_pod',
+            random: dummyRandom,
+            now: 103,
+        });
+
+        const drawEvent = result.events.find(event => event.type === SU_EVENTS.CARDS_DRAWN) as any;
+        expect(drawEvent).toBeDefined();
+        expect(drawEvent.payload.playerId).toBe('0');
+        expect(drawEvent.payload.count).toBe(1);
     });
 });
 

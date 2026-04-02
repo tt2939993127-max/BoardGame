@@ -7,9 +7,10 @@
 ## 2. Client Runtime
 
 - [ ] 2.1 实现 Android 本地 bundle registry 与激活状态机
-- [ ] 2.2 实现启动时更新检查、下载、校验、待激活标记
+- [x] 2.2 实现启动时更新检查、下载、校验、待激活标记
 - [ ] 2.3 实现 bundle 启动健康检查与失败自动回滚
 - [ ] 2.4 提供调试页或日志，用于查看当前 binary version / active bundle / pending bundle
+- [x] 2.5 为强制 OTA 提供阻塞式更新页、下载进度和立即切换能力
 
 ## 3. Publish Pipeline
 

@@ -105,22 +105,26 @@
     "eyebrow": "Mobile Package",
     "mode": "On-demand",
     "notInstalled": "Not installed",
-    "notInstalledHint": "Before entering {{game}} on mobile, download its code pack and asset pack first.",
+    "notInstalledHint": "Before entering {{game}} on mobile, download its local game resource pack first.",
+    "installedTitle": "Ready to play",
+    "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
+    "installedCompletedBadge": "Completed",
+    "installedVersionBadge": "Completed · {{version}}",
     "installAction": "Install Pack",
     "confirmEyebrow": "Install Confirm",
     "confirmTitle": "Download {{game}} packages",
-    "confirmDescription": "This download prepares a dedicated code pack and asset pack for the current game only.",
-    "confirmHint": "Final size and progress will come from the release manifest and downloader. This stage wires in the confirmation flow and preview shell first.",
-    "modalHint": "Until the real downloader is wired in, this area handles state sync, failure fallback, and the progress shell.",
+    "confirmDescription": "This download prepares a dedicated local resource pack for the current game only.",
+    "confirmHint": "Final size and progress come directly from the published manifest and live device download result.",
+    "modalHint": "After the download completes, the app verifies the package and switches to local installed resources.",
     "confirmAction": "Confirm Download",
     "totalSize": "Estimated Download",
     "modulePack": "Code Pack",
     "assetPack": "Asset Pack",
     "packIdUnknown": "Pack ID pending",
     "sizeUnknown": "Pending manifest",
-    "backendPending": "The real downloader is not wired in yet. This flow currently shows the confirmation, size preview, and progress shell only.",
-    "failedTitle": "Downloader Pending",
-    "failedHint": "The real download service is not connected yet. This card will switch to real progress once the manifest and downloader are in place.",
+    "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
+    "failedTitle": "Download Failed",
+    "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
     "retryAction": "Retry",
     "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
     "updateRequiredEyebrow": "App Update Required",
@@ -135,15 +139,37 @@
       "queuedTitle": "Preparing",
       "queuedHint": "Preparing the package list for the current game.",
       "manifestTitle": "Reading Manifest",
-      "manifestHint": "Waiting for the release manifest and real downloader integration.",
+      "manifestHint": "Loading the published manifest for this game.",
       "downloadTitle": "Downloading",
-      "downloadHint": "This area will show per-package download progress once the real downloader is connected.",
+      "downloadHint": "Downloading the files required for this game.",
       "verifyTitle": "Verifying",
-      "verifyHint": "After real downloads finish, this area will show verification and activation progress."
+      "verifyHint": "Verifying the downloaded content and activating local resources."
     }
   },
   "player": {
     "guest": "Guest{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "Updating",
+      "checkingTitle": "Preparing update",
+      "checkingDescription": "Checking and preparing the next version. Please wait.",
+      "downloadingTitle": "Downloading update",
+      "downloadingDescription": "Downloading the required update now. The app will switch automatically when it is ready.",
+      "applyingTitle": "Switching version",
+      "applyingDescription": "The update is ready. Restarting and switching to the new version now.",
+      "requiredTitle": "App update required",
+      "requiredDescription": "This app build is too old. Install a newer app version to continue.",
+      "requiredDescriptionWithVersion": "This app build is too old. Update to app version {{version}} or newer to continue.",
+      "errorTitle": "Update failed",
+      "errorDescription": "Downloading or switching to the new version failed. Please retry.",
+      "bundleVersion": "Target bundle version",
+      "requiredAppVersion": "Required app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "retryAction": "Check again"
+    }
   },
   "gameDetails": {
     "description": "Classic strategy play. Connect three symbols to win."
@@ -232,6 +258,15 @@
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "Preparing room...",
+      "joiningRoom": "Verifying seat assignment...",
+      "loadingGameModule": "Loading game module...",
+      "connecting": "Connecting to server...",
+      "syncing": "Syncing game state...",
+      "loadingAssets": "Loading assets {{loaded}}/{{total}}"
+    },
     "title": {
       "joining": "Joining",
       "creating": "Creating",
@@ -248,6 +283,14 @@
       "description": "Unable to connect to the game server. Please check your network or server status.",
       "retry": "Retry",
       "backToLobby": "Back to Lobby"
+    },
+    "connectionError": {
+      "unauthorizedTitle": "Failed to enter room",
+      "unauthorizedDescription": "The room credential is invalid or expired. Return to the lobby and join again.",
+      "matchNotFoundTitle": "Room not found",
+      "matchNotFoundDescription": "The target room may have been destroyed or expired. Return to the lobby and try again.",
+      "syncTimeoutTitle": "Failed to sync room state",
+      "syncTimeoutDescription": "Connected to the server, but the match state never arrived. Retry first; if this keeps happening, the server sync pipeline is abnormal."
     },
     "ugc": {
       "loading": "Loading UGC runtime…",

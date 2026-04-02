@@ -7,7 +7,7 @@ import { makeMatchState, makePlayer, makeState, applyEvents } from './helpers';
 import { runCommand, defaultTestRandom } from './testRunner';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { buildBuryCardEvents } from '../domain/bury';
+import { buildBuryCardEvents, buildBuriedCardReturnedToHandEvent } from '../domain/bury';
 
 beforeAll(() => {
     clearRegistry();
@@ -87,6 +87,59 @@ describe('bury engine', () => {
         expect(res.finalState.core.bases[0].buriedCards?.length ?? 0).toBe(0);
         // minion now in play
         expect(res.finalState.core.bases[0].minions.some(m => m.uid === 'b1')).toBe(true);
+    });
+
+    it('at startTurn, uncovering a buried onTurnStart minion should still resolve in the same window', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 1,
+            turnNumber: 1,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    deck: [{ uid: 'draw-1', defId: 'robot_warbot', type: 'minion', owner: '0' } as any],
+                    discard: [],
+                }),
+                '1': makePlayer('1', { hand: [], deck: [], discard: [] }),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [],
+                ongoingActions: [],
+                buriedCards: [{
+                    uid: 'wl-buried',
+                    defId: 'killer_plant_water_lily_pod',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            }],
+        });
+
+        const enter = runCommand(
+            makeMatchState(core),
+            { type: 'ADVANCE_PHASE' as any, playerId: '1', payload: {}, timestamp: 10 } as any,
+            defaultTestRandom,
+        );
+
+        const interaction = enter.finalState.sys.interaction.current as any;
+        expect(interaction?.data?.sourceId).toBe('bury_uncover_start_turn');
+        const option = interaction.data.options.find((entry: any) => entry.value?.cardUid === 'wl-buried');
+        expect(option).toBeTruthy();
+
+        const resolved = runCommand(
+            enter.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: option.id }, timestamp: 11 } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.success).toBe(true);
+        const drawEvents = resolved.events.filter(event => event.type === SU_EVENTS.CARDS_DRAWN);
+        expect(drawEvents).toHaveLength(1);
+        expect((drawEvents[0] as any).payload.cardUids).toEqual(['draw-1']);
+        expect(resolved.finalState.core.players['0'].hand.map(card => card.uid)).toEqual(['draw-1']);
+        expect(resolved.finalState.core.bases[0].minions.some(m => m.uid === 'wl-buried')).toBe(true);
+        expect(resolved.finalState.sys.phase).toBe('playCards');
     });
 
     it('base cleared discards buried cards to true owners without uncovering', () => {
@@ -203,6 +256,49 @@ describe('bury engine', () => {
         expect(next.bases[0].minions.some(minion => minion.uid === 'mummy-1')).toBe(false);
         expect(next.bases[0].buriedCards?.some(card => card.uid === 'mummy-1')).toBe(true);
         expect(next.players['1'].discard.some(card => card.uid === 'attach-1')).toBe(true);
+    });
+
+    it('BURIED_CARD_RETURNED_TO_HAND 会把埋葬牌直接移回手牌而不翻开或进弃牌堆', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', { hand: [], deck: [], discard: [] }),
+                '1': makePlayer('1', { hand: [], deck: [], discard: [] }),
+            },
+            bases: [{
+                defId: 'base_pyramids',
+                minions: [],
+                ongoingActions: [],
+                buriedCards: [{
+                    uid: 'buried-return',
+                    defId: 'robot_warbot',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            }],
+        });
+
+        const event = buildBuriedCardReturnedToHandEvent({
+            core,
+            playerId: '0',
+            cardUid: 'buried-return',
+            baseIndex: 0,
+            source: 'sphinx-start-turn',
+            now: 20,
+        });
+        expect(event).toBeDefined();
+
+        const next = applyEvents(core, [event!]);
+        expect(next.bases[0].buriedCards?.some(card => card.uid === 'buried-return') ?? false).toBe(false);
+        expect(next.players['0'].hand).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                uid: 'buried-return',
+                defId: 'robot_warbot',
+                owner: '0',
+            }),
+        ]));
+        expect(next.players['0'].discard).toHaveLength(0);
+        expect(next.bases[0].minions).toHaveLength(0);
     });
 });
 

@@ -64,3 +64,23 @@
 - **WHEN** 发布者触发正式 OTA 工作流
 - **THEN** 系统 MUST 要求显式指定正式 channel
 - **AND** MUST 经过 GitHub Environment 或等价审批门禁后才能执行
+
+### Requirement: 强制 OTA 必须提供阻塞式更新反馈
+
+系统 SHALL 支持把某个 OTA manifest 标记为强制更新，并在客户端用阻塞式更新页向用户展示检查、下载、切换或“必须更新 App”的状态。
+
+#### Scenario: 强制 OTA 下载并立即切换
+- **GIVEN** Android 客户端检测到一个与当前原生版本兼容的 OTA manifest
+- **AND** 该 manifest 明确标记 `forceUpdate = true`
+- **WHEN** 客户端启动并检查该更新
+- **THEN** 系统 MUST 显示全屏阻塞式更新页
+- **AND** MUST 显示下载进度
+- **AND** 下载完成后 MUST 立即切换到新 bundle，而不是等待下次后台切换
+
+#### Scenario: 强制 OTA 需要新原生壳
+- **GIVEN** Android 客户端检测到一个 OTA manifest
+- **AND** 该 manifest 明确标记 `forceUpdate = true`
+- **AND** 该 manifest 与当前 nativeVersion 不兼容
+- **WHEN** 客户端启动并检查该更新
+- **THEN** 系统 MUST 显示“需要更新 App”的阻塞式提示页
+- **AND** 不得继续把当前 H5 入口直接开放给用户

@@ -146,8 +146,8 @@ describe('smashUpCriticalImageResolver', () => {
             '0',
         );
 
-        expect(result.critical).toContain('/assets/i18n/en/smashup/cards/tts_atlas_9aed5872d2');
-        expect(result.critical).toContain('/assets/i18n/en/smashup/cards/tts_atlas_0b888d02fd');
+        expect(result.critical).toContain('smashup/cards/tts_atlas_9aed5872d2');
+        expect(result.critical).toContain('smashup/cards/tts_atlas_0b888d02fd');
     });
 
     it('playing 阶段缺少派系数据时回退到全量图集', () => {

@@ -21,7 +21,7 @@ import type { BaseAbilityUsedEvent, SmashUpCore, SmashUpEvent, BuriedCardOnBase 
 import { registerTrigger } from '../domain/ongoingEffects';
 import { getBaseDef, getCardDef } from '../data/cards';
 
-type BuriedChoice = { cardUid: string; baseIndex: number };
+type BuriedChoice = { cardUid: string; baseIndex: number; defId?: string; baseDefId?: string };
 type HandCardChoice = { cardUid: string; defId: string };
 const DEFAULT_RANDOM: any = {
     random: () => 0.5,
@@ -98,14 +98,14 @@ function ancientEgyptiansPyramidEngineerOnPlay(ctx: AbilityContext): AbilityResu
     if (!base || (base.buriedCards?.length ?? 0) === 0) return { events: [] };
     const options = buildBuriedCardOptions(ctx.state, ctx.playerId, base.buriedCards ?? [], true);
     if (options.length === 0) return { events: [] };
-    return queueBuriedCardPrompt(
-        ctx.matchState,
-        ctx.playerId,
+    const interaction = createSimpleChoice(
         `ancient_egyptians_pyramid_engineer_${ctx.now}`,
+        ctx.playerId,
         '金字塔工程师：你可以翻开这里你的一张埋葬牌',
-        'ancient_egyptians_pyramid_engineer_uncover',
-        options,
+        [createSkipOption(), ...options] as any[],
+        { sourceId: 'ancient_egyptians_pyramid_engineer_uncover', targetType: 'generic' },
     );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 function ancientEgyptiansPyramidEngineerTalent(ctx: AbilityContext): AbilityResult {
@@ -116,7 +116,7 @@ function ancientEgyptiansPyramidEngineerTalent(ctx: AbilityContext): AbilityResu
         ctx.playerId,
         '金字塔工程师：选择一张手牌埋葬在这里',
         buildHandCardOptions(player.hand),
-        { sourceId: 'ancient_egyptians_pyramid_engineer_talent', targetType: 'generic' },
+        { sourceId: 'ancient_egyptians_pyramid_engineer_talent', targetType: 'hand' },
     );
     (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -256,7 +256,7 @@ function ancientEgyptiansAncientCurse(ctx: AbilityContext): AbilityResult {
             {
                 id: 'apply',
                 label: '移除 1 个 +1 力量指示物',
-                value: { apply: true, targetMinionUid: target.uid, baseIndex: ctx.baseIndex },
+                value: { apply: true, targetMinionUid: target.uid, baseIndex: ctx.baseIndex, baseDefId: base?.defId },
                 displayMode: 'button' as const,
             },
             createSkipOption('跳过（不移除）'),
@@ -359,7 +359,7 @@ function ancientEgyptiansPyramidsDuringTurn(ctx: any): AbilityResult {
         ctx.playerId,
         '金字塔：你可以将一张手牌埋葬在这里',
         [createSkipOption(), ...buildHandCardOptions(player.hand)] as any[],
-        { sourceId: 'base_pyramids', targetType: 'generic' },
+        { sourceId: 'base_pyramids', targetType: 'hand' },
     );
     (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -367,21 +367,6 @@ function ancientEgyptiansPyramidsDuringTurn(ctx: any): AbilityResult {
 
 function ancientEgyptiansStarPortalOnActionPlayed(ctx: any): AbilityResult {
     return { events: buildStandardDrawEvents(ctx.state, ctx.playerId, 1, DEFAULT_RANDOM, ctx.now) };
-}
-
-function queueBuriedCardPrompt(
-    matchState: MatchState<SmashUpCore>,
-    playerId: PlayerId,
-    id: string,
-    title: string,
-    sourceId: string,
-    options: any[],
-): AbilityResult {
-    const interaction = createSimpleChoice(id, playerId, title, [createSkipOption(), ...options] as any[], {
-        sourceId,
-        targetType: 'generic',
-    });
-    return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
 
 function queueLostKnowledgeBury(
@@ -398,7 +383,7 @@ function queueLostKnowledgeBury(
         playerId,
         '失落知识：选择一张手牌埋葬',
         buildHandCardOptions(buriableHand),
-        { sourceId: 'ancient_egyptians_lost_knowledge_bury', targetType: 'generic' },
+        { sourceId: 'ancient_egyptians_lost_knowledge_bury', targetType: 'hand' },
     );
     return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
@@ -619,7 +604,7 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
             playerId,
             '封印墓穴：选择至多两张手牌埋葬到这里',
             buildHandCardOptions(buriableHand),
-            { sourceId: 'ancient_egyptians_seal_the_tomb_bury', targetType: 'generic', multi: { min: 0, max: Math.min(2, buriableHand.length) } },
+            { sourceId: 'ancient_egyptians_seal_the_tomb_bury', targetType: 'hand', multi: { min: 0, max: Math.min(2, buriableHand.length) } },
         );
         (interaction.data as any).continuationContext = { baseIndex };
         return { state: queueInteraction(state, interaction), events: [] };
@@ -766,14 +751,18 @@ function buildBuriedCardOptions(
     onlyOwned: boolean,
 ): any[] {
     const filtered = onlyOwned ? buriedCards.filter(card => card.controllerId === viewerPlayerId) : buriedCards;
-    return filtered.map((buried, index) => ({
-        id: `buried-${buried.uid}`,
+    return filtered.map((buried, index) => {
+        const baseIndex = state.bases.findIndex(base => (base.buriedCards ?? []).some(card => card.uid === buried.uid));
+        const baseDefId = baseIndex >= 0 ? state.bases[baseIndex]?.defId : undefined;
+        return {
+            id: `buried-${buried.uid}`,
         label: buried.controllerId === viewerPlayerId
             ? (getCardDef(buried.defId)?.name ?? buried.defId)
             : `埋葬牌 ${index + 1}`,
-        value: { cardUid: buried.uid, baseIndex: state.bases.findIndex(base => (base.buriedCards ?? []).some(card => card.uid === buried.uid)) },
+        value: { cardUid: buried.uid, defId: buried.defId, baseIndex, baseDefId },
         displayMode: 'button' as const,
-    }));
+        };
+    });
 }
 
 function getBuriedCardChoices(
@@ -786,7 +775,7 @@ function getBuriedCardChoices(
         if (restrictedBaseIndex !== undefined && baseIndex !== restrictedBaseIndex) continue;
         for (const buried of state.bases[baseIndex].buriedCards ?? []) {
             if (buried.controllerId !== playerId) continue;
-            choices.push({ cardUid: buried.uid, baseIndex });
+            choices.push({ cardUid: buried.uid, baseIndex, defId: buried.defId, baseDefId: state.bases[baseIndex].defId });
         }
     }
     return choices;
@@ -803,7 +792,7 @@ function buildBuriedCardChoiceOptions(
         return {
             id: `buried-${choice.cardUid}`,
             label: `${getCardDef(buried?.defId ?? '')?.name ?? buried?.defId ?? '埋葬牌'} @ ${baseName}`,
-            value: choice,
+            value: { ...choice, defId: choice.defId ?? buried?.defId, baseDefId: choice.baseDefId ?? state.bases[choice.baseIndex].defId },
             displayMode: 'button' as const,
         };
     });

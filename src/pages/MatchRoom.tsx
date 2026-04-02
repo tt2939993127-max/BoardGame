@@ -63,6 +63,7 @@ import {
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
+const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout']);
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
 
@@ -154,7 +155,7 @@ const OnlineAiSeatBridge = ({
             if (nextClientKeys.has(playerId)) {
                 continue;
             }
-            client.destroy();
+            client.disconnect();
             delete clientsRef.current[playerId];
         }
 
@@ -177,7 +178,7 @@ const OnlineAiSeatBridge = ({
 
         return () => {
             for (const client of Object.values(clientsRef.current)) {
-                client.destroy();
+                client.disconnect();
             }
             clientsRef.current = {};
         };
@@ -257,6 +258,95 @@ const OnlineAiSeatBridge = ({
     return null;
 };
 
+const OnlineRoomConnectionLoading = ({
+    title,
+    description,
+    gameId,
+    transportError,
+    onRetry,
+}: {
+    title: string;
+    description: string;
+    gameId?: string;
+    transportError?: string | null;
+    onRetry?: () => void;
+}) => {
+    const { t } = useTranslation('lobby');
+    const navigate = useNavigate();
+    const { state, isConnected, matchPlayers } = useGameClient();
+    const core = state?.core as { turnNumber?: number; activePlayer?: number | string; phase?: string } | undefined;
+    const activityKey = [
+        isConnected ? 'connected' : 'connecting',
+        matchPlayers.length,
+        core?.turnNumber ?? 'no-turn',
+        core?.activePlayer ?? 'no-player',
+        core?.phase ?? 'no-phase',
+    ].join(':');
+    const progressText = state
+        ? undefined
+        : t(isConnected
+            ? 'matchRoom.loadingProgress.syncing'
+            : 'matchRoom.loadingProgress.connecting');
+    if (transportError) {
+        const titleKey = transportError === 'match_not_found'
+            ? 'matchRoom.connectionError.matchNotFoundTitle'
+            : transportError === 'unauthorized'
+                ? 'matchRoom.connectionError.unauthorizedTitle'
+                : 'matchRoom.connectionError.syncTimeoutTitle';
+        const descriptionKey = transportError === 'match_not_found'
+            ? 'matchRoom.connectionError.matchNotFoundDescription'
+            : transportError === 'unauthorized'
+                ? 'matchRoom.connectionError.unauthorizedDescription'
+                : 'matchRoom.connectionError.syncTimeoutDescription';
+
+        return (
+            <div className="absolute inset-0 flex items-center justify-center bg-black px-6 text-center">
+                <div className="max-w-md">
+                    <div className="text-white/85 text-xl font-semibold mb-3">{t(titleKey)}</div>
+                    <div className="text-white/60 text-sm leading-6 mb-6">{t(descriptionKey)}</div>
+                    <div className="flex items-center justify-center gap-4">
+                        <button
+                            onClick={() => {
+                                if (onRetry) {
+                                    onRetry();
+                                    return;
+                                }
+                                navigate(0);
+                            }}
+                            className="px-5 py-2 rounded-lg bg-amber-600/80 hover:bg-amber-500/90 text-white text-sm font-medium transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.retry')}
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (gameId) {
+                                    navigate(`/?game=${gameId}`, { replace: true });
+                                } else {
+                                    navigate('/', { replace: true });
+                                }
+                            }}
+                            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.backToLobby')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    return (
+        <ConnectionLoadingScreen
+            anchor="container"
+            title={title}
+            description={description}
+            progressText={progressText}
+            gameId={gameId}
+            activityKey={activityKey}
+            suppressTimeout={Boolean(state)}
+        />
+    );
+};
+
 export const MatchRoom = () => {
     usePerformanceMonitor();
     const { playerID: debugPlayerID, setPlayerID } = useDebug();
@@ -268,6 +358,7 @@ export const MatchRoom = () => {
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
     const { user } = useAuth();
+    const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
@@ -278,8 +369,10 @@ export const MatchRoom = () => {
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
-
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
+    useEffect(() => {
+        setOnlineTransportError(null);
+    }, [gameId, matchId, isTutorialRoute]);
 
     // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
     const [gameImplReady, setGameImplReady] = useState(false);
@@ -306,7 +399,11 @@ export const MatchRoom = () => {
 
     // 在线模式：命令被服务端拒绝时的统一反馈
     const handleGameError = useCallback((error: string) => {
-        if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
+        if (ONLINE_TRANSPORT_ERRORS.has(error)) {
+            setOnlineTransportError(error);
+            return;
+        }
+        if (SYSTEM_ERRORS.has(error)) return; // 其他系统错误由独立逻辑处理
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.error.${error}` });
     }, [toast, i18n, gameId]);
@@ -325,9 +422,15 @@ export const MatchRoom = () => {
     // → WrappedBoard 重建 → Board 卸载重挂载 → CriticalImageGate 重新预加载 → 循环
     const tRef = useRef(t);
     tRef.current = t;
-    // 联机对局刷新时先给玩家看到棋盘，再让图片在后台补齐；
-    // 教程模式仍保留强门禁，避免首步引导和资源切阶段互相打架。
-    const shouldBlockBoardOnImagePreload = isTutorialRoute;
+    const [hasCompletedInitialOnlinePreload, setHasCompletedInitialOnlinePreload] = useState(false);
+    useEffect(() => {
+        setHasCompletedInitialOnlinePreload(false);
+    }, [gameId, matchId, isTutorialRoute]);
+
+    // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
+    // 联机模式仅在首次进入对局时阻塞并显示真实素材进度，首轮完成后恢复后台预加载，
+    // 避免后续阶段切换反复盖住棋盘。
+    const shouldBlockBoardOnImagePreload = isTutorialRoute || !hasCompletedInitialOnlinePreload;
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !gameImplReady) return null;
         const impl = getGameImplementation(gameId);
@@ -342,13 +445,25 @@ export const MatchRoom = () => {
                 enabled={!isUgcGame}
                 blockRendering={shouldBlockBoardOnImagePreload}
                 loadingDescription={tRef.current('matchRoom.loadingResources')}
+                onReady={() => {
+                    if (!isTutorialRoute) {
+                        setHasCompletedInitialOnlinePreload(true);
+                    }
+                }}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
         Wrapped.displayName = 'WrappedOnlineBoard';
         return Wrapped;
-    }, [gameId, i18n.language, isUgcGame, gameImplReady, shouldBlockBoardOnImagePreload]);
+    }, [
+        gameId,
+        gameImplReady,
+        i18n.language,
+        isTutorialRoute,
+        isUgcGame,
+        shouldBlockBoardOnImagePreload,
+    ]);
 
     // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
@@ -496,6 +611,7 @@ export const MatchRoom = () => {
 
     // 自动加入逻辑（调试重置跳转）
     const [isAutoJoining, setIsAutoJoining] = useState(false);
+    const [autoJoinError, setAutoJoinError] = useState<string | null>(null);
     const autoJoinStartedRef = useRef(false);
     // 自动加入完成后的宽限期（防止 validateStoredMatchSeat 在 matchStatus 刷新前清除凭据）
     const autoJoinGraceRef = useRef(false);
@@ -505,6 +621,7 @@ export const MatchRoom = () => {
             return;
         }
         autoJoinStartedRef.current = true;
+        setAutoJoinError(null);
 
         let cancelled = false;
         let retryTimer: number | undefined;
@@ -551,7 +668,10 @@ export const MatchRoom = () => {
                     .sort((a, b) => a.id - b.id)
                     .find(p => !p.name);
                 if (!openSeat) {
-                    if (!cancelled) setIsAutoJoining(false);
+                    if (!cancelled) {
+                        setAutoJoinError(t('error.roomFull'));
+                        setIsAutoJoining(false);
+                    }
                     return;
                 }
                 const targetPlayerID = String(openSeat.id);
@@ -572,7 +692,10 @@ export const MatchRoom = () => {
                     if (retryCount < maxRetries) {
                         scheduleRetry(500);
                     } else {
-                        if (!cancelled) setIsAutoJoining(false);
+                        if (!cancelled) {
+                            setAutoJoinError(t('error.joinRoomFailed'));
+                            setIsAutoJoining(false);
+                        }
                     }
                 }
             } catch {
@@ -581,7 +704,10 @@ export const MatchRoom = () => {
                 if (retryCount < maxRetries) {
                     scheduleRetry(500);
                 } else {
-                    if (!cancelled) setIsAutoJoining(false);
+                    if (!cancelled) {
+                        setAutoJoinError(t('error.joinRoomFailed'));
+                        setIsAutoJoining(false);
+                    }
                 }
             }
         };
@@ -1148,12 +1274,37 @@ export const MatchRoom = () => {
     }
 
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+        return (
+            <LoadingScreen
+                description={t('matchRoom.loadingResources')}
+                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+            />
+        );
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} />;
+        if (autoJoinError) {
+            return (
+                <div className="w-full game-page-viewport bg-black flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="text-white/60 text-lg mb-4">{autoJoinError}</div>
+                        <button
+                            onClick={() => navigateBackToLobby()}
+                            className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.backToLobby')}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return (
+            <LoadingScreen
+                description={t('matchRoom.joiningRoom')}
+                progressText={t('matchRoom.loadingProgress.joiningRoom')}
+            />
+        );
     }
 
     if (shouldShowMatchError) {
@@ -1258,10 +1409,22 @@ export const MatchRoom = () => {
                                             playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                             credentials={credentials}
                                             onError={handleGameError}
+                                            onConnectionChange={(connected) => {
+                                                if (connected) {
+                                                    setOnlineTransportError(null);
+                                                }
+                                            }}
                                         >
                                             <BoardBridge
                                                 board={ugcBoard}
-                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
+                                                loading={(
+                                                    <OnlineRoomConnectionLoading
+                                                        title={t('matchRoom.title.joining')}
+                                                        description={t('matchRoom.joiningRoom')}
+                                                        gameId={gameId}
+                                                        transportError={onlineTransportError}
+                                                    />
+                                                )}
                                             />
                                         </GameProvider>
                                     </RematchProvider>
@@ -1281,6 +1444,11 @@ export const MatchRoom = () => {
                                             engineConfig={engineConfig ?? undefined}
                                             latencyConfig={latencyConfig}
                                             onError={handleGameError}
+                                            onConnectionChange={(connected) => {
+                                                if (connected) {
+                                                    setOnlineTransportError(null);
+                                                }
+                                            }}
                                         >
                                             {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
                                                 <OnlineAiSeatBridge
@@ -1293,7 +1461,14 @@ export const MatchRoom = () => {
                                             )}
                                             <BoardBridge
                                                 board={WrappedBoard}
-                                                loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
+                                                loading={(
+                                                    <OnlineRoomConnectionLoading
+                                                        title={t('matchRoom.title.connecting')}
+                                                        description={t('matchRoom.loadingResources')}
+                                                        gameId={gameId}
+                                                        transportError={onlineTransportError}
+                                                    />
+                                                )}
                                             />
                                         </GameProvider>
                                     </RematchProvider>

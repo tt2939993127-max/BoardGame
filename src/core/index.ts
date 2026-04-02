@@ -15,6 +15,8 @@ export {
     clearGameAssetsCache,
     setAssetsBaseUrl,
     getAssetsBaseUrl,
+    setGameAssetBaseOverride,
+    clearGameAssetBaseOverrides,
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,

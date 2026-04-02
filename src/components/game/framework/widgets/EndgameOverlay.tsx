@@ -19,6 +19,7 @@ import { UI_Z_INDEX } from '../../../../core';
 
 export interface GameOverResult {
     winner?: string;
+    winners?: string[];
     draw?: boolean;
 }
 
@@ -28,11 +29,13 @@ export function shouldShowVictoryParticles(
     options?: { isLocalMode?: boolean; isSpectator?: boolean }
 ): boolean {
     if (!result || result.draw === true) return false;
-    if (result.winner === undefined) return false;
+    const winners = result.winners?.map(String)
+        ?? (result.winner !== undefined ? [String(result.winner)] : []);
+    if (winners.length === 0) return false;
     if (options?.isSpectator) return false;
     if (options?.isLocalMode) return true;
     if (playerID === undefined || playerID === null) return false;
-    return String(result.winner) === String(playerID);
+    return winners.includes(String(playerID));
 }
 
 const OVERLAY_FADE_MS = 300;
@@ -80,13 +83,14 @@ function DefaultContent({ result, playerID }: ContentSlotProps): React.ReactElem
     // 规则：
     // - 如果当前客户端是旁观者/本地同屏（没有 playerID），不显示“胜利/失败”，只显示“游戏结束”。
     // - 如果有 playerID，则基于 winner 与 playerID 判断胜负。
-    const winner = result.winner !== undefined ? String(result.winner) : undefined;
+    const winners = result.winners?.map(String)
+        ?? (result.winner !== undefined ? [String(result.winner)] : []);
     const me = playerID !== undefined && playerID !== null ? String(playerID) : undefined;
 
     const isDraw = result.draw === true;
     const canResolvePerspective = me !== undefined;
-    const isWinner = canResolvePerspective && winner !== undefined && winner === me;
-    const isLoser = canResolvePerspective && winner !== undefined && winner !== me;
+    const isWinner = canResolvePerspective && winners.includes(me);
+    const isLoser = canResolvePerspective && winners.length > 0 && !winners.includes(me);
 
     let title: string;
     let subtitle: string;

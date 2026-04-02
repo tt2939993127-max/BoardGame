@@ -291,4 +291,46 @@ describe('scoreBases 阶段自动推进', () => {
         expect(legalActions.some(action => action.kind === 'activate-special')).toBe(true);
         expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
     });
+
+    it('AI 在 optional multi 交互中应保留空选动作，避免 special 链卡死', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: {
+                    current: {
+                        id: 'miskatonic_field_trip_optional',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'miskatonic_field_trip',
+                            options: [
+                                { id: 'card-1', label: '选择 h1', value: { cardUid: 'h1' } },
+                                { id: 'card-2', label: '选择 h2', value: { cardUid: 'h2' } },
+                            ],
+                            multi: { min: 0, max: 2 },
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        const emptySelection = legalActions.find(action =>
+            action.kind === 'interaction-choice'
+            && (action.commands[0] as any)?.payload?.optionIds
+            && Array.isArray((action.commands[0] as any).payload.optionIds)
+            && (action.commands[0] as any).payload.optionIds.length === 0,
+        );
+
+        expect(emptySelection).toBeDefined();
+        expect(emptySelection?.label).toContain('不选择');
+    });
 });

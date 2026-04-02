@@ -15,14 +15,15 @@ const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['polling', 'webs
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 const isDev = metaEnv.DEV === true;
 const mode = typeof metaEnv.MODE === 'string' ? metaEnv.MODE : '';
+const isAndroidShellBuild = mode === 'android';
 const allowPollingOverride = metaEnv.VITE_SOCKET_ALLOW_POLLING === 'true';
-const allowPollingByEnvironment = isDev || mode === 'test' || allowPollingOverride;
+const allowPollingByEnvironment = isDev || mode === 'test' || isAndroidShellBuild || allowPollingOverride;
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 /**
- * 开发/测试和显式 env 覆盖始终允许 polling，便于调试。
- * 生产环境保留本地兼容模式开关，用于 websocket-only 被网络拦截时的降级。
+ * 开发/测试、Android 壳和显式 env 覆盖始终允许 polling，便于调试或规避 WebView / 代理链路不稳定。
+ * 纯 Web 生产环境保留本地兼容模式开关，用于 websocket-only 被网络拦截时的降级。
  */
 export const canToggleSocketCompatibilityMode = () => !allowPollingByEnvironment;
 
@@ -58,3 +59,5 @@ export const getSocketIoTransports = (): SocketIoTransport[] => {
         ? [...SOCKET_IO_TRANSPORTS_COMPATIBILITY]
         : [...SOCKET_IO_TRANSPORTS_DEFAULT];
 };
+
+export const shouldTryAllSocketTransports = (): boolean => getSocketIoTransports().length > 1;

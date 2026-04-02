@@ -110,6 +110,83 @@ const getAndroidBuildMetaPaths = () => ({
     syncedMetaPath: path.join(androidPublicDir, androidBuildMetaFileName),
 });
 
+const normalizeCapacitorPluginProjectName = (pkg) => pkg
+    .trim()
+    .replace(/^@/, '')
+    .replace(/\//g, '-');
+
+const getCapacitorPluginWiringStatus = () => {
+    const pluginsFile = path.join(androidDir, 'app', 'src', 'main', 'assets', 'capacitor.plugins.json');
+    const settingsFile = path.join(androidDir, 'capacitor.settings.gradle');
+    const buildFile = path.join(androidDir, 'app', 'capacitor.build.gradle');
+
+    if (!existsSync(pluginsFile)) {
+        return {
+            ok: false,
+            code: 'missing-plugins-json',
+            message: 'android/app/src/main/assets/capacitor.plugins.json 缺失。请先执行 npm run mobile:android:sync。',
+        };
+    }
+
+    if (!existsSync(settingsFile) || !existsSync(buildFile)) {
+        return {
+            ok: false,
+            code: 'missing-generated-gradle',
+            message: 'Capacitor 生成的 Gradle 文件缺失。请先执行 npm run mobile:android:sync。',
+        };
+    }
+
+    let plugins;
+    try {
+        plugins = JSON.parse(readText(pluginsFile));
+    } catch {
+        return {
+            ok: false,
+            code: 'invalid-plugins-json',
+            message: 'android/app/src/main/assets/capacitor.plugins.json 不是合法 JSON。',
+        };
+    }
+
+    if (!Array.isArray(plugins)) {
+        return {
+            ok: false,
+            code: 'invalid-plugins-shape',
+            message: 'android/app/src/main/assets/capacitor.plugins.json 结构异常。',
+        };
+    }
+
+    const settingsText = readText(settingsFile);
+    const buildText = readText(buildFile);
+    const missingProjects = [];
+
+    for (const plugin of plugins) {
+        const pkg = typeof plugin?.pkg === 'string' ? plugin.pkg.trim() : '';
+        if (!pkg) continue;
+
+        const projectName = normalizeCapacitorPluginProjectName(pkg);
+        const includeLine = `include ':${projectName}'`;
+        const implementationLine = `implementation project(':${projectName}')`;
+
+        if (!settingsText.includes(includeLine) || !buildText.includes(implementationLine)) {
+            missingProjects.push(pkg);
+        }
+    }
+
+    if (missingProjects.length > 0) {
+        return {
+            ok: false,
+            code: 'stale-plugin-wiring',
+            message: `Android 原生工程未接入这些 Capacitor 插件: ${missingProjects.join(', ')}。请先执行 npm run mobile:android:sync。`,
+        };
+    }
+
+    return {
+        ok: true,
+        code: 'ready',
+        message: `ready(${plugins.length} plugins)`,
+    };
+};
+
 const parseAndroidBuildMeta = (filePath, rawText) => {
     try {
         return JSON.parse(rawText);
@@ -309,18 +386,43 @@ const getAppConfig = () => ({
 });
 
 const isHttpUrl = (value) => /^http:\/\//i.test(value);
+const isHttpsUrl = (value) => /^https:\/\//i.test(value);
+const resolveEmbeddedAndroidScheme = () => {
+    const backendUrl = process.env.VITE_BACKEND_URL?.trim() || '';
+    if (isHttpUrl(backendUrl)) return 'http';
+    return 'https';
+};
 
 const writeCapacitorShellConfig = () => {
     const { appId, appName } = getAppConfig();
     const mode = getAndroidWebviewMode();
     const server = {
-        androidScheme: 'https',
+        androidScheme: mode === 'embedded' ? resolveEmbeddedAndroidScheme() : 'https',
     };
+    const otaEnabled = getAndroidOtaEnabled();
+    const otaAppReadyTimeout = Number.parseInt(process.env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?.trim() || '', 10);
 
     if (mode === 'remote') {
         server.url = ensureRemoteWebUrl();
         server.cleartext = isHttpUrl(server.url);
     }
+
+    const plugins = otaEnabled
+        ? {
+            CapacitorUpdater: {
+                autoUpdate: false,
+                appReadyTimeout: Number.isFinite(otaAppReadyTimeout) && otaAppReadyTimeout >= 1000
+                    ? otaAppReadyTimeout
+                    : 10000,
+                autoDeleteFailed: true,
+                autoDeletePrevious: true,
+                resetWhenUpdate: true,
+                keepUrlPathAfterReload: true,
+                allowManualBundleError: true,
+                defaultChannel: getAndroidOtaChannel() || undefined,
+            },
+        }
+        : undefined;
 
     writeText(
         path.join(androidDir, 'app', 'src', 'main', 'assets', 'capacitor.config.json'),
@@ -330,6 +432,7 @@ const writeCapacitorShellConfig = () => {
                 appName,
                 webDir: 'dist',
                 server,
+                ...(plugins ? { plugins } : {}),
             },
             null,
             2,
@@ -404,10 +507,10 @@ const ensureEmbeddedBackendUrl = () => {
     const backendUrl = process.env.VITE_BACKEND_URL?.trim();
     if (!backendUrl) {
         throw new Error(
-            '移动端壳构建必须显式配置 VITE_BACKEND_URL。请在 .env.android 或 .env.android.local 中设置绝对 HTTPS 地址。',
+            '移动端壳构建必须显式配置 VITE_BACKEND_URL。请在 .env.android 或 .env.android.local 中设置绝对 HTTP/HTTPS 地址。',
         );
     }
-    if (!/^https?:\/\//i.test(backendUrl)) {
+    if (!isHttpUrl(backendUrl) && !isHttpsUrl(backendUrl)) {
         throw new Error(`VITE_BACKEND_URL 必须是绝对地址，当前值为: ${backendUrl}`);
     }
 };
@@ -420,17 +523,22 @@ const ensureGeneratedAndroidFiles = () => {
         ? toUnixPath(path.relative(androidDir, capacitorAndroidDir))
         : '../node_modules/@capacitor/android/capacitor';
 
-    writeText(
-        path.join(androidDir, 'capacitor.settings.gradle'),
-        `// DO NOT EDIT THIS FILE! IT IS GENERATED EACH TIME "capacitor update" IS RUN
+    const capacitorSettingsPath = path.join(androidDir, 'capacitor.settings.gradle');
+    if (!existsSync(capacitorSettingsPath)) {
+        writeText(
+            capacitorSettingsPath,
+            `// DO NOT EDIT THIS FILE! IT IS GENERATED EACH TIME "capacitor update" IS RUN
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('${capacitorAndroidRelativePath}')
 `,
-    );
+        );
+    }
 
-    writeText(
-        path.join(androidDir, 'app', 'capacitor.build.gradle'),
-        `// DO NOT EDIT THIS FILE! IT IS GENERATED EACH TIME "capacitor update" IS RUN
+    const capacitorBuildGradlePath = path.join(androidDir, 'app', 'capacitor.build.gradle');
+    if (!existsSync(capacitorBuildGradlePath)) {
+        writeText(
+            capacitorBuildGradlePath,
+            `// DO NOT EDIT THIS FILE! IT IS GENERATED EACH TIME "capacitor update" IS RUN
 
 android {
   compileOptions {
@@ -447,7 +555,8 @@ if (hasProperty('postBuildExtras')) {
   postBuildExtras()
 }
 `,
-    );
+        );
+    }
 
     writeText(
         path.join(androidDir, 'capacitor-cordova-android-plugins', 'cordova.variables.gradle'),
@@ -573,6 +682,9 @@ const updateAppBuildGradle = (appId) => {
             `def androidWebviewMode = androidServerConfig.url ? 'remote' : 'embedded'\n` +
             `def distAndroidBuildMetaFile = rootProject.file('../dist/android-build-meta.json')\n` +
             `def syncedAndroidBuildMetaFile = file('src/main/assets/public/android-build-meta.json')\n` +
+            `def capacitorPluginsJsonFile = file('src/main/assets/capacitor.plugins.json')\n` +
+            `def capacitorSettingsGradleFile = rootProject.file('capacitor.settings.gradle')\n` +
+            `def capacitorBuildGradleFile = file('capacitor.build.gradle')\n` +
             `def requiresSyncedWebAssets = androidWebviewMode == 'embedded' && gradle.startParameter.taskNames.any { taskName ->\n` +
             `    def lowerTaskName = taskName.toLowerCase()\n` +
             `    lowerTaskName.contains('assemble') || lowerTaskName.contains('bundle') || lowerTaskName.contains('install')\n` +
@@ -587,16 +699,41 @@ const updateAppBuildGradle = (appId) => {
             `    if (distAndroidBuildMetaFile.getText('UTF-8') != syncedAndroidBuildMetaFile.getText('UTF-8')) {\n` +
             `        throw new GradleException('Android web assets are out of sync with dist. Run npm run mobile:android:sync or npm run mobile:android:build:release.')\n` +
             `    }\n` +
+            `}\n` +
+            `if (!capacitorPluginsJsonFile.exists()) {\n` +
+            `    throw new GradleException('Missing android/app/src/main/assets/capacitor.plugins.json. Run npm run mobile:android:sync before building Android.')\n` +
+            `}\n` +
+            `if (!capacitorSettingsGradleFile.exists() || !capacitorBuildGradleFile.exists()) {\n` +
+            `    throw new GradleException('Missing generated Capacitor Gradle files. Run npm run mobile:android:sync before building Android.')\n` +
+            `}\n` +
+            `def capacitorPlugins = new JsonSlurper().parse(capacitorPluginsJsonFile)\n` +
+            `if (!(capacitorPlugins instanceof List)) {\n` +
+            `    throw new GradleException('android/app/src/main/assets/capacitor.plugins.json has invalid shape. Run npm run mobile:android:sync before building Android.')\n` +
+            `}\n` +
+            `def capacitorSettingsText = capacitorSettingsGradleFile.getText('UTF-8')\n` +
+            `def capacitorBuildText = capacitorBuildGradleFile.getText('UTF-8')\n` +
+            `def missingCapacitorPluginWiring = []\n` +
+            `capacitorPlugins.each { plugin ->\n` +
+            `    def pkg = plugin instanceof Map ? (plugin.pkg ?: '').toString().trim() : ''\n` +
+            `    if (!pkg) {\n` +
+            `        return\n` +
+            `    }\n` +
+            `    def projectName = pkg.replaceFirst('^@', '').replace('/', '-')\n` +
+            `    def includeLine = "include ':\${projectName}'"\n` +
+            `    def implementationLine = "implementation project(':\${projectName}')"\n` +
+            `    if (!capacitorSettingsText.contains(includeLine) || !capacitorBuildText.contains(implementationLine)) {\n` +
+            `        missingCapacitorPluginWiring << pkg\n` +
+            `    }\n` +
+            `}\n` +
+            `if (!missingCapacitorPluginWiring.isEmpty()) {\n` +
+            `    throw new GradleException("Capacitor plugin wiring is stale for: \${missingCapacitorPluginWiring.join(', ')}. Run npm run mobile:android:sync before building Android.")\n` +
             `}\n`;
 
-        if (!next.includes('capacitorConfigFile = file(\'src/main/assets/capacitor.config.json\')')) {
-            next = `${next}\n${androidShellValidationBlock}`;
-        } else {
-            next = next.replace(
-                /def capacitorConfigFile = file\('src\/main\/assets\/capacitor\.config\.json'\)[\s\S]*?if \(requiresSyncedWebAssets\) \{[\s\S]*?\n\}/,
-                androidShellValidationBlock.trimEnd(),
-            );
-        }
+        next = next.replace(
+            /\n*(?:def capacitorConfigFile = file\('src\/main\/assets\/capacitor\.config\.json'\)[\s\S]*?)?if \(!capacitorPluginsJsonFile\.exists\(\)\) \{[\s\S]*?if \(!missingCapacitorPluginWiring\.isEmpty\(\)\) \{\n    throw new GradleException\("Capacitor plugin wiring is stale for: \$\{missingCapacitorPluginWiring\.join\(', '\)\}\. Run npm run mobile:android:sync before building Android\."\)\n\}\n*/g,
+            '\n',
+        ).trimEnd();
+        next = `${next}\n\n${androidShellValidationBlock}`;
 
         return next;
     });
@@ -691,6 +828,10 @@ const syncAndroid = async () => {
         clearBundledWebAssetsForRemote();
     }
     await prepareAndroidProject();
+    const pluginWiringStatus = getCapacitorPluginWiringStatus();
+    if (!pluginWiringStatus.ok) {
+        throw new Error(pluginWiringStatus.message);
+    }
     if (mode === 'embedded') {
         ensureAndroidWebAssetsSynced();
     } else {
@@ -740,6 +881,7 @@ const printDoctor = async () => {
     });
     const androidShellStatus = getAndroidShellStatus();
     const androidWebAssetsStatus = getAndroidWebAssetsStatus();
+    const capacitorPluginWiringStatus = getCapacitorPluginWiringStatus();
 
     const lines = [
         `JAVA_HOME=${process.env.JAVA_HOME || '(未设置)'}`,
@@ -761,6 +903,7 @@ const printDoctor = async () => {
         `ANDROID_RELEASE_SIGNING=${signingState.configured ? `ready(${signingState.source})` : 'missing'}`,
         `ANDROID_SHELL=${androidShellStatus.message}`,
         `ANDROID_WEB_ASSETS=${androidWebAssetsStatus.message}`,
+        `ANDROID_CAP_PLUGIN_WIRING=${capacitorPluginWiringStatus.message}`,
         `CHILD_PROCESS_BUILD=${probe.ok ? 'ready' : `blocked(${probe.stage})`}`,
     ];
 

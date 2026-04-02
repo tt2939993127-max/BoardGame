@@ -94,13 +94,13 @@ type ResultPerspective = 'victory' | 'defeat' | 'draw' | 'spectator';
 
 /** 根据游戏结果和当前玩家视角判断结果类型 */
 function getResultPerspective(
-    winner: string | undefined,
+    winners: string[],
     isDraw: boolean,
     myPlayerId: string | null,
 ): ResultPerspective {
     if (isDraw) return 'draw';
-    if (!myPlayerId || winner === undefined) return 'spectator';
-    return String(winner) === String(myPlayerId) ? 'victory' : 'defeat';
+    if (!myPlayerId || winners.length === 0) return 'spectator';
+    return winners.includes(String(myPlayerId)) ? 'victory' : 'defeat';
 }
 
 /** 获取结果类型对应的样式 */
@@ -220,8 +220,9 @@ export function DiceThroneEndgameContent({
 
     // 游戏结果解析
     const winner = result?.winner !== undefined ? String(result.winner) : undefined;
+    const winners = result?.winners?.map(String) ?? (winner ? [winner] : []);
     const isDraw = result?.draw === true;
-    const perspective = getResultPerspective(winner, isDraw, myPlayerId ?? playerID ?? null);
+    const perspective = getResultPerspective(winners, isDraw, myPlayerId ?? playerID ?? null);
     const resultStyles = getResultStyles(perspective);
 
     // 获取结果标题文案（使用 common namespace 中已有的翻译）
@@ -268,15 +269,15 @@ export function DiceThroneEndgameContent({
 
             {/* 英雄对决面板 */}
             <div className="flex items-start justify-center gap-8 w-full">
-                {playerEntries.map(([pid, player], index) => (
-                    <HeroPanel
-                        key={pid}
-                        player={player}
-                        isWinner={!isDraw && String(winner) === pid}
-                        isDraw={isDraw}
-                        index={index}
-                        locale={locale}
-                        t={t}
+                    {playerEntries.map(([pid, player], index) => (
+                        <HeroPanel
+                            key={pid}
+                            player={player}
+                            isWinner={!isDraw && winners.includes(String(pid))}
+                            isDraw={isDraw}
+                            index={index}
+                            locale={locale}
+                            t={t}
                     />
                 ))}
             </div>
