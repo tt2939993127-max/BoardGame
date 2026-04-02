@@ -380,8 +380,19 @@ describe('smashup', () => {
                 },
             },
         };
+        const withSixCards: SmashUpCore = {
+            ...withSevenCards,
+            players: {
+                ...withSevenCards.players,
+                '0': {
+                    ...withSevenCards.players['0'],
+                    hand: withSevenCards.players['0'].hand.slice(0, 6),
+                },
+            },
+        };
 
-        expect(getPlayerEffectivePowerOnBase(withSevenCards, withSevenCards.bases[0], 0, '0')).toBe(2);
+        expect(getPlayerEffectivePowerOnBase(withSixCards, withSixCards.bases[0], 0, '0')).toBe(3);
+        expect(getPlayerEffectivePowerOnBase(withSevenCards, withSevenCards.bases[0], 0, '0')).toBe(3);
     });
 
     it('奥术守护者使用天赋后抽 1 张牌并标记已使用', () => {

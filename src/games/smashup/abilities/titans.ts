@@ -2486,7 +2486,7 @@ export function registerTitanAbilities(): void {
 
     registerTitanPowerModifier('wizards_arcane_protector', ({ state, playerId }) => {
         const handSize = state.players[playerId]?.hand.length ?? 0;
-        return Math.floor(handSize / 3);
+        return Math.floor(handSize / 2);
     });
 
     registerAbility('cthulhu_cthulhu_titan', 'special', cthulhuTitanSpecial);
