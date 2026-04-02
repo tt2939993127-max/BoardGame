@@ -15,6 +15,64 @@ const REMOTE_MANIFEST_BASE_URL = typeof metaEnv.VITE_MOBILE_PACKAGE_MANIFEST_URL
 
 export const hasRemoteGamePackageManifestEndpoint = Boolean(REMOTE_MANIFEST_BASE_URL);
 
+const inFlightManifestRequests = new Map<string, Promise<ResolvedGamePackageManifest>>();
+
+const buildManifestRequestKey = (gameId: string, runtimeChannel: string) =>
+    `${runtimeChannel}:${gameId}`;
+
+const fetchRemoteManifestThroughWeb = async (
+    url: string,
+): Promise<RemoteGamePackageManifestResponse | null> => {
+    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const fetchTimeoutId = abortController
+        ? setTimeout(() => abortController.abort(), REMOTE_MANIFEST_TIMEOUT_MS)
+        : undefined;
+
+    try {
+        const response = await fetch(url, {
+            headers: {
+                Accept: 'application/json',
+            },
+            ...(abortController ? { signal: abortController.signal } : {}),
+        });
+
+        if (!response.ok) {
+            logMobileRuntimeCritical('MobilePackagesManifest', 'web-fetch-non-2xx', {
+                url,
+                status: response.status,
+                statusText: response.statusText,
+            });
+            return null;
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+            logMobileRuntimeCritical('MobilePackagesManifest', 'web-fetch-invalid-content-type', {
+                url,
+                contentType: contentType || 'unknown',
+            });
+            return null;
+        }
+
+        const data = await response.json() as RemoteGamePackageManifestResponse;
+        logMobileRuntimeCritical('MobilePackagesManifest', 'web-fetch-success', {
+            url,
+            contentType,
+        });
+        return data;
+    } catch (error) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'web-fetch-failed', {
+            url,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    } finally {
+        if (fetchTimeoutId !== undefined) {
+            clearTimeout(fetchTimeoutId);
+        }
+    }
+};
+
 const tryNativeHttpJson = async (url: string): Promise<RemoteGamePackageManifestResponse | null> => {
     logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-start', { url });
     const response = await fetchRemoteJsonThroughNativePlugin(url);
@@ -246,6 +304,17 @@ export const resolveGamePackageManifest = async (
     }
 
     const url = `${REMOTE_MANIFEST_BASE_URL}/${encodeURIComponent(fallbackManifest.runtimeChannel)}/games/${encodeURIComponent(gameId)}.json`;
+    const requestKey = buildManifestRequestKey(gameId, fallbackManifest.runtimeChannel);
+    const existingRequest = inFlightManifestRequests.get(requestKey);
+    if (existingRequest) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'reuse-inflight-request', {
+            gameId,
+            url,
+            requestKey,
+        });
+        return existingRequest;
+    }
+
     logMobileRuntime('MobilePackagesManifest', 'fetch-start', {
         gameId,
         runtimeChannel: fallbackManifest.runtimeChannel,
@@ -253,83 +322,77 @@ export const resolveGamePackageManifest = async (
         fallbackManifest,
     });
 
-    try {
-        const nativeResponse = await withTimeout(
-            tryNativeHttpJson(url),
-            REMOTE_MANIFEST_TIMEOUT_MS,
-            `remote manifest native request timed out after ${REMOTE_MANIFEST_TIMEOUT_MS}ms`,
-        );
-        if (nativeResponse) {
-            const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(nativeResponse));
-            logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-native', {
-                gameId,
-                url,
-                resolvedManifest,
-            });
-            return resolvedManifest;
-        }
-        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-fallback-web-fetch', {
-            gameId,
-            url,
-        });
-        const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const fetchTimeoutId = abortController
-            ? setTimeout(() => abortController.abort(), REMOTE_MANIFEST_TIMEOUT_MS)
-            : undefined;
-        const response = await fetch(url, {
-            headers: {
-                Accept: 'application/json',
-            },
-            ...(abortController ? { signal: abortController.signal } : {}),
-        }).finally(() => {
-            if (fetchTimeoutId !== undefined) {
-                clearTimeout(fetchTimeoutId);
+    const requestPromise = (async () => {
+        try {
+            const webResponse = await fetchRemoteManifestThroughWeb(url);
+            if (webResponse) {
+                const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(webResponse));
+                logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-web-fetch', {
+                    gameId,
+                    url,
+                    resolvedManifest,
+                });
+                logMobileRuntime('MobilePackagesManifest', 'fetch-success', {
+                    gameId,
+                    url,
+                    resolvedManifest,
+                });
+                return resolvedManifest;
             }
-        });
-        if (!response.ok) {
-            logMobileRuntime('MobilePackagesManifest', 'fetch-fallback-http', {
+
+            logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-fallback-native-fetch', {
                 gameId,
                 url,
-                status: response.status,
-                statusText: response.statusText,
-            }, 'warn');
-            return fallbackManifest;
-        }
+            });
 
-        const contentType = response.headers.get('content-type');
-        if (!contentType?.includes('application/json')) {
-            logMobileRuntime('MobilePackagesManifest', 'fetch-fallback-content-type', {
+            let nativeResponse: RemoteGamePackageManifestResponse | null = null;
+            try {
+                nativeResponse = await withTimeout(
+                    tryNativeHttpJson(url),
+                    REMOTE_MANIFEST_TIMEOUT_MS,
+                    `remote manifest native request timed out after ${REMOTE_MANIFEST_TIMEOUT_MS}ms`,
+                );
+            } catch (error) {
+                logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-timeout-after-web-failure', {
+                    gameId,
+                    url,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+
+            if (nativeResponse) {
+                const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(nativeResponse));
+                logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-native', {
+                    gameId,
+                    url,
+                    resolvedManifest,
+                });
+                return resolvedManifest;
+            }
+
+            logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-fallback-manifest', {
                 gameId,
                 url,
-                contentType: contentType || 'unknown',
-            }, 'warn');
+                reason: 'web-and-native-unavailable',
+            });
             return fallbackManifest;
+        } catch (error) {
+            logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-exception', {
+                gameId,
+                url,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            logMobileRuntime('MobilePackagesManifest', 'fetch-exception', {
+                gameId,
+                url,
+                error,
+            }, 'error');
+            return fallbackManifest;
+        } finally {
+            inFlightManifestRequests.delete(requestKey);
         }
+    })();
 
-        const data = await response.json() as RemoteGamePackageManifestResponse;
-        const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(data));
-        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-web-fetch', {
-            gameId,
-            url,
-            resolvedManifest,
-        });
-        logMobileRuntime('MobilePackagesManifest', 'fetch-success', {
-            gameId,
-            url,
-            resolvedManifest,
-        });
-        return resolvedManifest;
-    } catch (error) {
-        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-exception', {
-            gameId,
-            url,
-            error: error instanceof Error ? error.message : String(error),
-        });
-        logMobileRuntime('MobilePackagesManifest', 'fetch-exception', {
-            gameId,
-            url,
-            error,
-        }, 'error');
-        return fallbackManifest;
-    }
+    inFlightManifestRequests.set(requestKey, requestPromise);
+    return requestPromise;
 };

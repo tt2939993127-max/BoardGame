@@ -284,6 +284,14 @@
       "retry": "重试",
       "backToLobby": "返回大厅"
     },
+    "connectionError": {
+      "unauthorizedTitle": "进入房间失败",
+      "unauthorizedDescription": "当前房间凭证无效或已失效，请返回大厅后重新加入。",
+      "matchNotFoundTitle": "房间不存在",
+      "matchNotFoundDescription": "目标房间可能已被销毁或已失效，请返回大厅后重试。",
+      "syncTimeoutTitle": "同步房间状态失败",
+      "syncTimeoutDescription": "已连接到服务器，但迟迟没有收到对局状态。请重试；如果问题持续出现，说明服务端同步链路存在异常。"
+    },
     "ugc": {
       "loading": "UGC 运行态加载中…",
       "loadFailed": "UGC 运行态加载失败: {{error}}",
