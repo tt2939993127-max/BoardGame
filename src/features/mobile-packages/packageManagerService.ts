@@ -1,5 +1,5 @@
 import { clearGameAssetBaseOverrides, setGameAssetBaseOverride } from '../../core';
-import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { runMockGamePackageInstall } from './mockInstallRunner';
 import { createNativeGamePackageInstallHandle, listInstalledNativeGamePackages } from './nativeGamePackagePlugin';
 import { clearStoredGamePackageState, readStoredGamePackageState, writeStoredGamePackageState } from './storage';
@@ -222,6 +222,32 @@ export const startGamePackageInstall = (
         gameId: manifest.gameId,
         manifest,
     });
+    if (!manifest.assetPackUrl) {
+        const fallbackState = fallbackCache.get(manifest.gameId) ?? {
+            gameId: manifest.gameId,
+            runtimeChannel: manifest.runtimeChannel,
+            status: 'not-installed' as const,
+            modulePackId: manifest.modulePackId,
+            assetPackId: manifest.assetPackId,
+            modulePackBytes: manifest.modulePackBytes,
+            assetPackBytes: manifest.assetPackBytes,
+            updatedAt: Date.now(),
+        };
+        const failedState = mergeGamePackageState(fallbackState, {
+            status: 'failed',
+            progressMode: undefined,
+            progressPercent: undefined,
+            errorMessage: '当前还没有可下载的游戏包，请先发布一版。',
+        });
+        logMobileRuntimeCritical('PackageManagerService', 'start-install-missing-asset-pack-url', {
+            gameId: manifest.gameId,
+            manifestSource: manifest.source,
+            assetPackId: manifest.assetPackId,
+            assetPackVersion: manifest.assetPackVersion,
+        });
+        emitState(failedState);
+        return Promise.resolve(failedState);
+    }
     stopActiveInstall(manifest.gameId);
 
     const queuedState: StoredGamePackageState = {
@@ -252,6 +278,10 @@ export const startGamePackageInstall = (
                     onInstalledAssetBaseUrl: applyAssetBaseOverride,
                 });
                 logMobileRuntime('PackageManagerService', 'install-handle-resolved', {
+                    gameId: manifest.gameId,
+                    source: nativeHandle ? 'native' : 'mock',
+                });
+                logMobileRuntimeCritical('PackageManagerService', 'install-handle-resolved', {
                     gameId: manifest.gameId,
                     source: nativeHandle ? 'native' : 'mock',
                 });
@@ -300,6 +330,10 @@ export const startGamePackageInstall = (
                     gameId: manifest.gameId,
                     error: error instanceof Error ? error.message : String(error),
                 }, 'error');
+                logMobileRuntimeCritical('PackageManagerService', 'install-early-failure', {
+                    gameId: manifest.gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 emitState(failedState);
                 return failedState;
             }

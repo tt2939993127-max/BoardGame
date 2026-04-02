@@ -224,6 +224,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const matchEntryLoadingDescription = matchEntryLoadingPhase === 'creating'
         ? t('matchRoom.creatingRoom')
         : t('matchRoom.joiningRoom');
+    const matchEntryLoadingProgressText = matchEntryLoadingPhase === 'creating'
+        ? t('matchRoom.loadingProgress.preparingRoom')
+        : t('matchRoom.loadingProgress.joiningRoom');
     useEffect(() => {
         pendingActionRef.current = pendingAction;
     }, [pendingAction]);
@@ -474,6 +477,13 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             hasPendingInstall: Boolean(pendingPackageInstall),
             isConfirmingPackageInstall,
         });
+        if (isConfirmingPackageInstall) {
+            logMobileRuntimeCritical('GameDetailsModal', 'confirm-package-install-ignored', {
+                gameId,
+                reason: 'already-confirming',
+            });
+            return;
+        }
         await confirmGamePackageInstall();
     }, [
         confirmGamePackageInstall,
@@ -1641,6 +1651,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <LoadingScreen
                         title={matchEntryLoadingTitle}
                         description={matchEntryLoadingDescription}
+                        progressText={matchEntryLoadingProgressText}
                         fullScreen={false}
                     />
                 </div>

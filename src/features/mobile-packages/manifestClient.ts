@@ -1,17 +1,64 @@
 import type { GameManifestMobileDelivery } from '../../games/manifest.types';
 import { resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
-import { logMobileRuntime } from '../../lib/mobile/mobileRuntimeDebug';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
+import { fetchRemoteJsonThroughNativePlugin } from './nativeGamePackagePlugin';
 import type { ResolvedGamePackageManifest } from './types';
 
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
+const REMOTE_MANIFEST_TIMEOUT_MS = 15000;
 
 const REMOTE_MANIFEST_BASE_URL = typeof metaEnv.VITE_MOBILE_PACKAGE_MANIFEST_URL === 'string'
     ? normalizeUrl(metaEnv.VITE_MOBILE_PACKAGE_MANIFEST_URL)
     : `${normalizeUrl(resolveAssetsBaseUrlFromEnv(metaEnv))}/mobile-packages/android`;
 
 export const hasRemoteGamePackageManifestEndpoint = Boolean(REMOTE_MANIFEST_BASE_URL);
+
+const tryNativeHttpJson = async (url: string): Promise<RemoteGamePackageManifestResponse | null> => {
+    logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-start', { url });
+    const response = await fetchRemoteJsonThroughNativePlugin(url);
+    if (!response) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-no-response', { url });
+        return null;
+    }
+    const status = typeof response.status === 'number' ? response.status : 0;
+    if (status < 200 || status >= 300) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-non-2xx', {
+            url,
+            status,
+            contentType: response.contentType,
+        });
+        return null;
+    }
+    const body = typeof response.body === 'string' ? response.body.trim() : '';
+    if (!body) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-empty-body', {
+            url,
+            status,
+            contentType: response.contentType,
+        });
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(body) as RemoteGamePackageManifestResponse;
+        logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-success', {
+            url,
+            status,
+            contentType: response.contentType,
+            bodyLength: body.length,
+        });
+        return parsed;
+    } catch {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'native-fetch-invalid-json', {
+            url,
+            status,
+            contentType: response.contentType,
+            bodyPreview: body.slice(0, 200),
+        });
+        return null;
+    }
+};
 
 interface RemotePackInfo {
     id?: string | null;
@@ -29,10 +76,14 @@ interface RemoteGamePackageManifest {
     assetPack?: RemotePackInfo | null;
 }
 
-interface RemoteGamePackageManifestResponse {
+interface RemoteGamePackageManifestEnvelope {
     manifest?: RemoteGamePackageManifest;
     game?: RemoteGamePackageManifest;
 }
+
+type RemoteGamePackageManifestResponse =
+    | RemoteGamePackageManifest
+    | RemoteGamePackageManifestEnvelope;
 
 const normalizeOptionalNumber = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0
@@ -49,6 +100,24 @@ const normalizeOptionalString = (value: string | null | undefined) =>
 const normalizeOptionalHttpUrl = (value: string | null | undefined) => {
     const normalized = normalizeOptionalString(value);
     return normalized && /^https?:\/\//i.test(normalized) ? normalized : undefined;
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(timeoutMessage));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
 };
 
 const applyRemotePack = (
@@ -142,6 +211,25 @@ const mapRemoteManifest = (
     };
 };
 
+const extractRemoteManifest = (
+    response?: RemoteGamePackageManifestResponse | null,
+): RemoteGamePackageManifest | null => {
+    if (!response || typeof response !== 'object') {
+        return null;
+    }
+
+    const envelope = response as RemoteGamePackageManifestEnvelope;
+    if (envelope.manifest && typeof envelope.manifest === 'object') {
+        return envelope.manifest;
+    }
+
+    if (envelope.game && typeof envelope.game === 'object') {
+        return envelope.game;
+    }
+
+    return response as RemoteGamePackageManifest;
+};
+
 export const resolveGamePackageManifest = async (
     gameId: string,
     delivery?: GameManifestMobileDelivery,
@@ -166,10 +254,37 @@ export const resolveGamePackageManifest = async (
     });
 
     try {
+        const nativeResponse = await withTimeout(
+            tryNativeHttpJson(url),
+            REMOTE_MANIFEST_TIMEOUT_MS,
+            `remote manifest native request timed out after ${REMOTE_MANIFEST_TIMEOUT_MS}ms`,
+        );
+        if (nativeResponse) {
+            const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(nativeResponse));
+            logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-native', {
+                gameId,
+                url,
+                resolvedManifest,
+            });
+            return resolvedManifest;
+        }
+        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-fallback-web-fetch', {
+            gameId,
+            url,
+        });
+        const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const fetchTimeoutId = abortController
+            ? setTimeout(() => abortController.abort(), REMOTE_MANIFEST_TIMEOUT_MS)
+            : undefined;
         const response = await fetch(url, {
             headers: {
                 Accept: 'application/json',
             },
+            ...(abortController ? { signal: abortController.signal } : {}),
+        }).finally(() => {
+            if (fetchTimeoutId !== undefined) {
+                clearTimeout(fetchTimeoutId);
+            }
         });
         if (!response.ok) {
             logMobileRuntime('MobilePackagesManifest', 'fetch-fallback-http', {
@@ -192,7 +307,12 @@ export const resolveGamePackageManifest = async (
         }
 
         const data = await response.json() as RemoteGamePackageManifestResponse;
-        const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, data.manifest ?? data.game ?? null);
+        const resolvedManifest = mapRemoteManifest(gameId, fallbackManifest, extractRemoteManifest(data));
+        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-success-web-fetch', {
+            gameId,
+            url,
+            resolvedManifest,
+        });
         logMobileRuntime('MobilePackagesManifest', 'fetch-success', {
             gameId,
             url,
@@ -200,6 +320,11 @@ export const resolveGamePackageManifest = async (
         });
         return resolvedManifest;
     } catch (error) {
+        logMobileRuntimeCritical('MobilePackagesManifest', 'resolve-exception', {
+            gameId,
+            url,
+            error: error instanceof Error ? error.message : String(error),
+        });
         logMobileRuntime('MobilePackagesManifest', 'fetch-exception', {
             gameId,
             url,

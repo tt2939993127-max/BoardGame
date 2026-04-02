@@ -17,6 +17,7 @@ import { SocketCompatibilityToastListener } from './components/system/SocketComp
 import { ViewportDebugProbe } from './components/system/ViewportDebugProbe';
 import { Toaster } from 'react-hot-toast';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
+import { LoadingScreen } from './components/system/LoadingScreen';
 import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
 import { AndroidLiveUpdateManager } from './components/system/AndroidLiveUpdateManager';
 import { InteractionGuardProvider } from './components/game/framework/InteractionGuard';
@@ -35,7 +36,6 @@ const MatchRoom = React.lazy(() => import('./pages/MatchRoomWithAudio'));
 const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoomWithAudio'));
 const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoomWithAudio'));
 // 旧的测试路由已废弃，使用新的 TestHarness 框架
-const LazyLoadingScreen = React.lazy(() => import('./components/system/LoadingScreen').then(m => ({ default: m.LoadingScreen })));
 const LazyGlobalHUD = React.lazy(() => import('./components/system/GlobalHUD').then(m => ({ default: m.GlobalHUD })));
 const LazyModalStackRoot = React.lazy(() => import('./components/system/ModalStackRoot').then(m => ({ default: m.ModalStackRoot })));
 const LazyToastViewport = React.lazy(() => import('./components/system/ToastViewport').then(m => ({ default: m.ToastViewport })));
@@ -56,12 +56,6 @@ const DevToolsSlicer = !isAndroidShellBuild ? React.lazy(() => import('./pages/d
 const DevToolsFxPreview = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
 const DevToolsAudioBrowser = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
 const DevToolsArchView = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
-const TestBookUI2D = !isAndroidShellBuild
-  ? React.lazy(() => import('./pages/test-book-ui/BookUI2D').then(m => ({ default: m.BookUI2D })))
-  : null;
-const TestBookUI3D = !isAndroidShellBuild
-  ? React.lazy(() => import('./pages/test-book-ui/BookUI3D').then(m => ({ default: m.BookUI3D })))
-  : null;
 const TestBookUIHybrid = !isAndroidShellBuild
   ? React.lazy(() => import('./pages/test-book-ui/BookUIHybrid').then(m => ({ default: m.BookUIHybrid })))
   : null;
@@ -88,9 +82,7 @@ const DevMobileEvidenceCaptureAgent = import.meta.env.DEV
   : null;
 
 const RouteLoadingFallback = ({ title }: { title?: string }) => (
-  <React.Suspense fallback={null}>
-    <LazyLoadingScreen title={title} />
-  </React.Suspense>
+  <LoadingScreen title={title} />
 );
 
 const AppContent = () => {
@@ -125,7 +117,7 @@ const AppContent = () => {
                 <BrowserCompatibilityGate>
                 <MobileOrientationGuard>
                   <Routes>
-                    <Route path="/" element={<React.Suspense fallback={null}><Home /></React.Suspense>} />
+                    <Route path="/" element={<React.Suspense fallback={<RouteLoadingFallback />}><Home /></React.Suspense>} />
                     <Route
                       path="/play/:gameId/match/:matchId"
                       element={(
@@ -163,12 +155,6 @@ const AppContent = () => {
                     )}
                     {!isAndroidShellBuild && DevToolsArchView && (
                       <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
-                    )}
-                    {!isAndroidShellBuild && TestBookUI2D && (
-                      <Route path="/dev/book-2d" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI 2D" />}><TestBookUI2D /></React.Suspense>} />
-                    )}
-                    {!isAndroidShellBuild && TestBookUI3D && (
-                      <Route path="/dev/book-3d" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI 3D" />}><TestBookUI3D /></React.Suspense>} />
                     )}
                     {!isAndroidShellBuild && TestBookUIHybrid && (
                       <Route path="/dev/book-hybrid" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI Hybrid" />}><TestBookUIHybrid /></React.Suspense>} />

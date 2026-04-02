@@ -91,6 +91,60 @@ public class GamePackagePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void logDiagnostic(PluginCall call) {
+        String message = call.getString("message", "");
+        Log.i(TAG, "[JS-DIAG] " + message);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void fetchRemoteJson(PluginCall call) {
+        String urlValue = normalizeNonEmpty(call.getString("url"));
+        if (urlValue == null) {
+            call.reject("缺少 url");
+            return;
+        }
+
+        executor.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(urlValue).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                connection.setRequestProperty("Accept", "application/json");
+
+                int responseCode = connection.getResponseCode();
+                InputStream inputStream = responseCode >= 200 && responseCode < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+
+                JSObject result = new JSObject();
+                result.put("status", responseCode);
+                result.put("body", inputStream != null ? readInputStream(inputStream) : "");
+                String contentType = normalizeNonEmpty(connection.getContentType());
+                if (contentType != null) {
+                    result.put("contentType", contentType);
+                }
+
+                Log.i(
+                    TAG,
+                    "fetchRemoteJson success url=" + urlValue
+                        + " status=" + responseCode
+                        + " contentType=" + (contentType != null ? contentType : "")
+                );
+                resolveOnMainThread(call, result);
+            } catch (Exception error) {
+                Log.e(TAG, "fetchRemoteJson failed url=" + urlValue, error);
+                rejectOnMainThread(call, "拉取远程 JSON 失败", error);
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        });
+    }
+
+    @PluginMethod
     public void cancelInstall(PluginCall call) {
         String gameId = normalizeNonEmpty(call.getString("gameId"));
         if (gameId == null) {
@@ -416,6 +470,17 @@ public class GamePackagePlugin extends Plugin {
             }
         }
         return new JSONObject(builder.toString());
+    }
+
+    private String readInputStream(InputStream inputStream) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+        }
+        return builder.toString();
     }
 
     private void emitInstallState(

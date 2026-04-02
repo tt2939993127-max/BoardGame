@@ -2,6 +2,7 @@ import type { StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
 
 const STORAGE_PREFIX = 'mobile-package-state:';
+const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
 
 const getStorage = () => {
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
@@ -24,6 +25,12 @@ const isValidStatus = (value: unknown): value is StoredGamePackageState['status'
 
 const isValidProgressMode = (value: unknown): value is StoredGamePackageState['progressMode'] =>
     value === undefined || value === 'determinate' || value === 'indeterminate';
+
+const isInProgressStatus = (value: StoredGamePackageState['status']) =>
+    value === 'queued'
+    || value === 'manifest'
+    || value === 'downloading'
+    || value === 'verifying';
 
 const sanitizeStoredState = (
     gameId: string,
@@ -97,6 +104,16 @@ export const readStoredGamePackageState = (
         const parsed = sanitizeStoredState(gameId, JSON.parse(raw));
         if (!parsed) {
             return fallbackState;
+        }
+
+        if (parsed.status && isInProgressStatus(parsed.status)) {
+            return mergeGamePackageState(fallbackState, {
+                status: 'failed',
+                progressPercent: undefined,
+                progressMode: undefined,
+                errorMessage: parsed.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
+                updatedAt: parsed.updatedAt ?? Date.now(),
+            });
         }
 
         return mergeGamePackageState(fallbackState, parsed);

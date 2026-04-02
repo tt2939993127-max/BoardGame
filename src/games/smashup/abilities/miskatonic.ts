@@ -934,11 +934,14 @@ export function registerMiskatonicInteractionHandlers(): void {
         const player = state.core.players[playerId];
         const card = player.hand.find(c => c.uid === cardUid);
         if (!card || card.defId !== MADNESS_CARD_DEF_ID) return { state, events: [] };
-        const events: SmashUpEvent[] = [{
-            type: SU_EVENTS.ACTION_PLAYED,
-            payload: { playerId, cardUid: card.uid, defId: card.defId, isExtraAction: true },
-            timestamp,
-        } as SmashUpEvent];
+        const events: SmashUpEvent[] = [
+            grantExtraAction(playerId, 'miskatonic_librarian_pod', timestamp),
+            {
+                type: SU_EVENTS.ACTION_PLAYED,
+                payload: { playerId, cardUid: card.uid, defId: card.defId },
+                timestamp,
+            } as SmashUpEvent,
+        ];
         return appendResolvedActionAbility(state, events, playerId, card.uid, card.defId, random, timestamp, 0);
     });
 
