@@ -9,7 +9,7 @@ export const ToastViewport: React.FC = () => {
 
     return (
         <div
-            className="fixed top-4 right-4 flex flex-col gap-3 pointer-events-none"
+            className="fixed top-[calc(env(safe-area-inset-top)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] flex flex-col gap-3 pointer-events-none"
             style={{ zIndex: UI_Z_INDEX.toast }}
         >
             <AnimatePresence mode="popLayout">

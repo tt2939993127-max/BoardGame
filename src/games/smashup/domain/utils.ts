@@ -1,6 +1,6 @@
-import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './types';
-import { getBaseDef, getFactionCards } from '../data/cards';
+import type { PlayerId, RandomFn, ResponseWindowType } from '../../../engine/types';
+import type { ActionCardDef, CardInstance, FusionCardDef, PlayerState, SmashUpCore, MinionOnBase, SpecialTiming } from './types';
+import { getBaseDef, getCardDef, getFactionCards } from '../data/cards';
 
 // ============================================================================
 // 玩家显示名
@@ -28,6 +28,125 @@ export function getOpponentLabel(pid: PlayerId): string {
  */
 export function matchesDefId(defId: string | undefined | null, baseDefId: string): boolean {
     return defId === baseDefId || defId === `${baseDefId}_pod`;
+}
+
+/**
+ * 获取随从天赋当前不可发动的原因。
+ *
+ * 这里只放“卡牌自身规则前置条件”，供命令校验、UI 高亮和 execute 兜底共用，
+ * 避免出现前端显示可点、点了却没有实际效果的分层不一致问题。
+ */
+export function getMinionTalentActivationError(
+    state: SmashUpCore,
+    minion: MinionOnBase,
+    baseIndex: number,
+): string | null {
+    void state;
+    void baseIndex;
+
+    if (matchesDefId(minion.defId, 'frankenstein_the_monster') && (minion.powerCounters ?? 0) < 1) {
+        return '该随从当前无法发动天赋：没有+1力量指示物';
+    }
+
+    return null;
+}
+
+export function resolveLiveBaseIndex(
+    state: { bases: Array<{ defId: string }> },
+    baseIndex: number | undefined,
+    baseDefId?: string,
+): number | undefined {
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        if (!baseDefId || state.bases[baseIndex].defId === baseDefId) {
+            return baseIndex;
+        }
+    }
+    if (baseDefId) {
+        const liveIndex = state.bases.findIndex(base => base.defId === baseDefId);
+        if (liveIndex >= 0) return liveIndex;
+    }
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        return baseIndex;
+    }
+    return undefined;
+}
+
+function isFusionDef(defId: string): boolean {
+    const def = getCardDef(defId) as FusionCardDef | undefined;
+    return def?.type === 'fusion';
+}
+
+/**
+ * 融合卡规则：除非“正在被打出”，否则融合卡同时视为随从与战术。
+ *
+ * 引擎侧的 CardInstance.type 只能是单值，因此提供这两个 helper
+ * 统一处理“是否算随从/是否算战术”的判断。
+ */
+export function isCardMinionLike(card: CardInstance): boolean {
+    return card.type === 'minion' || (card.type === 'fusion' && isFusionDef(card.defId));
+}
+
+export function isCardActionLike(card: CardInstance): boolean {
+    return card.type === 'action' || (card.type === 'fusion' && isFusionDef(card.defId));
+}
+
+type ActionLikeDef = ActionCardDef | FusionCardDef;
+
+function isFusionActionDef(def: ActionLikeDef): def is FusionCardDef {
+    return def.type === 'fusion';
+}
+
+export function getActionLikeResponseWindowTiming(def: ActionLikeDef): SpecialTiming | undefined {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialTiming ?? 'beforeScoring';
+        }
+        return def.actionResponseWindowTiming;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialTiming ?? 'beforeScoring';
+    }
+    return def.responseWindowTiming;
+}
+
+export function actionLikeNeedsResponseWindowBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialNeedsBase === true;
+        }
+        return def.actionResponseWindowNeedsBase === true;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialNeedsBase === true;
+    }
+    return def.responseWindowNeedsBase === true;
+}
+
+export function actionLikeNeedsPlayBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsBase === true || def.actionPlayNeedsMinion === true;
+    }
+    return def.playNeedsBase === true || def.playNeedsMinion === true;
+}
+
+export function actionLikeNeedsPlayMinion(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsMinion === true;
+    }
+    return def.playNeedsMinion === true;
+}
+
+export function isActionLikeRespondableInWindow(
+    def: ActionLikeDef,
+    windowType: ResponseWindowType,
+): boolean {
+    const timing = getActionLikeResponseWindowTiming(def);
+    if (!timing) return false;
+    if (windowType === 'meFirst') return timing === 'beforeScoring';
+    if (windowType === 'afterScoring') return timing === 'afterScoring';
+    return false;
 }
 
 /**
@@ -79,6 +198,14 @@ export function canUseBaseLimitedMinionQuota(
     if (basePowerLimit !== undefined && basePower !== undefined && basePower > basePowerLimit) {
         return false;
     }
+    const restrictedCaps = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex);
+    if (restrictedCaps.length > 0) {
+        const unrestrictedQuotaRemaining = Math.max(0, quota - restrictedCaps.length);
+        if (unrestrictedQuotaRemaining <= 0) {
+            if (basePower === undefined) return false;
+            return restrictedCaps.some(powerCap => basePower <= powerCap);
+        }
+    }
     return true;
 }
 
@@ -104,6 +231,37 @@ export function mustUseBaseLimitedMinionQuota(
     if (canUseSameNameMinionQuota(player, cardDefId)) return false;
     const quota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
     return quota > 0;
+}
+
+/** 获取当前剩余的基地限定受限额外随从额度列表。 */
+export function getRemainingBaseLimitedPowerLimitedMinionQuotas(
+    player: PlayerState | undefined,
+    baseIndex: number,
+): number[] {
+    if (!player) return [];
+    return [...(player.baseLimitedMinionPowerCaps?.[baseIndex] ?? [])];
+}
+
+/** 获取当前卡可用的最严格基地限定受限额度（用于优先消耗受限额度）。 */
+export function getBestMatchingBaseLimitedPowerQuota(
+    player: PlayerState | undefined,
+    baseIndex: number,
+    basePower: number,
+): number | undefined {
+    const candidates = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex)
+        .filter(powerCap => basePower <= powerCap)
+        .sort((a, b) => a - b);
+    return candidates[0];
+}
+
+/** 获取当前剩余基地限定受限额度中最宽松的力量上限（用于错误提示）。 */
+export function getMaxRemainingBaseLimitedPowerQuota(
+    player: PlayerState | undefined,
+    baseIndex: number,
+): number | undefined {
+    const quotas = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex);
+    if (quotas.length === 0) return undefined;
+    return Math.max(...quotas);
 }
 
 /** 获取当前剩余的全局受限额外随从额度列表。 */
@@ -206,7 +364,7 @@ export function isMicrobot(state: SmashUpCore, minion: MinionOnBase): boolean {
  * alpha 在场时所有己方随从卡都算微型机
  */
 export function isDiscardMicrobot(state: SmashUpCore, card: CardInstance, playerId: PlayerId): boolean {
-    if (card.type !== 'minion') return false;
+    if (!isCardMinionLike(card)) return false;
     if (Array.from(MICROBOT_DEF_IDS).some(defId => matchesDefId(card.defId, defId))) return true;
     // 检查该玩家的 alpha 是否在场
     for (const base of state.bases) {

@@ -218,6 +218,51 @@ describe('ongoing-minion 目标选择', () => {
         expect(result.valid).toBe(true);
     });
 
+    it('武者之道需要选择随从目标并允许对该随从结算', () => {
+        const core = makeState({
+            phase: 'playCards',
+            currentPlayerId: '0',
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('c1', 'samurai_way_of_the_warrior', 'action', '0')],
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                }),
+                '1': makePlayer('1', {}),
+            },
+            bases: [
+                {
+                    defId: 'base_test_1',
+                    minions: [makeMinion('ally-1', 'samurai_bushi', '0', 4, { powerModifier: 0 })],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const state = makeMatchState(core);
+
+        const missingTarget = validate(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: {
+                cardUid: 'c1',
+            },
+        } as any);
+        expect(missingTarget.valid).toBe(false);
+        expect(missingTarget.error).toContain('需要选择目标随从');
+
+        const withTarget = validate(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: {
+                cardUid: 'c1',
+                targetBaseIndex: 0,
+                targetMinionUid: 'ally-1',
+            },
+        } as any);
+        expect(withTarget.valid).toBe(true);
+    });
+
     it('月之触可以附着到有 play_action 限制的基地上的随从', () => {
         // 场景：恐怖眺望台（Dread Lookout）禁止打出行动卡
         // 但 ongoing-minion 模式下，行动卡是附着到随从上的，不受此限制

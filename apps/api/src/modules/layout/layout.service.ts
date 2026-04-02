@@ -16,6 +16,12 @@ export type AbilitySlotLayoutItem = {
     h: number;
 };
 
+export type DiceThroneAbilityLayoutVersion = 'v1' | 'v2';
+
+export type DiceThroneAbilityLayoutsPayload = {
+    layouts: Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+};
+
 @Injectable()
 export class LayoutService {
     private readonly baseDir: string;
@@ -55,11 +61,11 @@ export class LayoutService {
         };
     }
 
-    async saveDiceThroneAbilityLayout(layout: AbilitySlotLayoutItem[]): Promise<LayoutSaveResult> {
-        if (!Array.isArray(layout) || layout.length === 0) {
+    async saveDiceThroneAbilityLayout(payload: DiceThroneAbilityLayoutsPayload): Promise<LayoutSaveResult> {
+        if (!payload || typeof payload !== 'object' || !payload.layouts) {
             throw new Error('layoutConfig.invalid');
         }
-        const content = this.buildDiceThroneAbilityLayoutFile(layout);
+        const content = this.buildDiceThroneAbilityLayoutFile(payload.layouts);
         await mkdir(dirname(this.abilityLayoutPath), { recursive: true });
         await writeFile(this.abilityLayoutPath, content, 'utf8');
         return {
@@ -69,15 +75,125 @@ export class LayoutService {
         };
     }
 
-    private buildDiceThroneAbilityLayoutFile(layout: AbilitySlotLayoutItem[]) {
-        const lines = layout.map((slot) => {
+    private buildDiceThroneAbilityLayoutFile(layouts: Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>) {
+        const versions: DiceThroneAbilityLayoutVersion[] = ['v1', 'v2'];
+        const hasInvalidVersion = versions.some((version) => !Array.isArray(layouts[version]) || layouts[version].length === 0);
+        if (hasInvalidVersion) {
+            throw new Error('layoutConfig.invalid');
+        }
+
+        const renderLayout = (items: AbilitySlotLayoutItem[]) => items.map((slot) => {
             const x = this.formatSlotValue(slot.x);
             const y = this.formatSlotValue(slot.y);
             const w = this.formatSlotValue(slot.w);
             const h = this.formatSlotValue(slot.h);
             return `    { id: '${slot.id}', x: ${x}, y: ${y}, w: ${w}, h: ${h} },`;
-        });
-        return `/**\n * DiceThrone 技能槽布局（游戏级配置）\n * - 使用百分比坐标，基于玩家面板图片\n * - 所有用户共享一致配置\n */\nexport interface AbilitySlotLayoutItem {\n    id: string;\n    x: number;\n    y: number;\n    w: number;\n    h: number;\n}\n\nexport const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [\n${lines.join('\n')}\n];\n`;
+        }).join('\n');
+
+        return `import type { CharacterId } from '../domain/types';
+
+/**
+ * DiceThrone 技能槽布局（游戏级配置）
+ * - 使用百分比坐标，基于玩家面板图片
+ * - 所有角色显式声明使用的布局版本
+ */
+export interface AbilitySlotLayoutItem {
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+export type DiceThronePlayerBoardLayoutVersion = 'v1' | 'v2';
+
+type PlayerBoardDimensions = {
+    width: number;
+    height: number;
+};
+
+type PlayerBoardUiTuning = {
+    shellTranslateX: number;
+    playerBoardTranslateY: number;
+    magnifyButtonTop: number;
+};
+
+const V1_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
+${renderLayout(layouts.v1)}
+];
+
+// v2 面板来自枪手 / 武士图片裁图坐标，顶部留白显著增加。
+const V2_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
+${renderLayout(layouts.v2)}
+];
+
+export const DICETHRONE_PLAYER_BOARD_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {
+    v1: V1_ABILITY_SLOT_LAYOUT,
+    v2: V2_ABILITY_SLOT_LAYOUT,
+};
+
+export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = DICETHRONE_PLAYER_BOARD_LAYOUTS.v1;
+
+export const DICETHRONE_PLAYER_BOARD_DIMENSIONS: Record<string, PlayerBoardDimensions> = {
+    barbarian: { width: 2048, height: 1675 },
+    gunslinger: { width: 2048, height: 1254 },
+    monk: { width: 2048, height: 1673 },
+    moon_elf: { width: 2048, height: 1670 },
+    paladin: { width: 2048, height: 1680 },
+    pyromancer: { width: 2048, height: 1674 },
+    samurai: { width: 2048, height: 1248 },
+    shadow_thief: { width: 2048, height: 1686 },
+};
+
+export const DICETHRONE_PLAYER_BOARD_LAYOUT_VERSION_BY_CHARACTER: Record<string, DiceThronePlayerBoardLayoutVersion> = {
+    monk: 'v1',
+    barbarian: 'v1',
+    pyromancer: 'v1',
+    moon_elf: 'v1',
+    shadow_thief: 'v1',
+    paladin: 'v1',
+    gunslinger: 'v2',
+    samurai: 'v2',
+};
+
+const DICETHRONE_PLAYER_BOARD_UI_TUNING: Record<DiceThronePlayerBoardLayoutVersion, PlayerBoardUiTuning> = {
+    v1: {
+        shellTranslateX: 0,
+        playerBoardTranslateY: 0,
+        magnifyButtonTop: 0.48,
+    },
+    v2: {
+        shellTranslateX: 1.1,
+        playerBoardTranslateY: -1.45,
+        magnifyButtonTop: 1.85,
+    },
+};
+
+export const getPlayerBoardLayoutVersion = (characterId?: string | null): DiceThronePlayerBoardLayoutVersion => (
+    DICETHRONE_PLAYER_BOARD_LAYOUT_VERSION_BY_CHARACTER[characterId ?? ''] ?? 'v1'
+);
+
+export const getAbilitySlotLayoutByVersion = (version: DiceThronePlayerBoardLayoutVersion): AbilitySlotLayoutItem[] => (
+    DICETHRONE_PLAYER_BOARD_LAYOUTS[version]
+);
+
+export const getAbilitySlotLayoutForCharacter = (characterId?: CharacterId | string | null): AbilitySlotLayoutItem[] => (
+    getAbilitySlotLayoutByVersion(getPlayerBoardLayoutVersion(characterId))
+);
+
+export const getPlayerBoardDimensions = (characterId?: CharacterId | string | null): PlayerBoardDimensions => (
+    DICETHRONE_PLAYER_BOARD_DIMENSIONS[characterId ?? ''] ?? DICETHRONE_PLAYER_BOARD_DIMENSIONS.monk
+);
+
+export const getPlayerBoardAspectRatio = (characterId?: CharacterId | string | null): number => {
+    const { width, height } = getPlayerBoardDimensions(characterId);
+    return width / height;
+};
+
+export const getPlayerBoardUiTuning = (characterId?: CharacterId | string | null): PlayerBoardUiTuning => (
+    DICETHRONE_PLAYER_BOARD_UI_TUNING[getPlayerBoardLayoutVersion(characterId)]
+);
+`;
     }
 
     private formatSlotValue(value: number) {

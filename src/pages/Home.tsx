@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import packageJson from '../../package.json';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
-import { GameDetailsModal } from '../components/lobby/GameDetailsModal';
 import { GameList } from '../components/lobby/GameList';
 import { getGamesByCategory, getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +18,7 @@ import {
     readMatchCleanupNotice,
     hasSeenMatchCleanupNotice,
     markMatchCleanupNoticeSeen,
+    isMatchNotFoundError,
     isOwnerActiveMatchSuppressed,
     rejoinMatch,
     getLatestStoredMatchCredentials,
@@ -39,6 +40,12 @@ import { SEO } from '../components/common/SEO';
 import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
+import { versionedPublicFileUrl } from '../lib/publicFileUrl';
+
+const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
+const APP_VERSION_LABEL = `v${packageJson.version}`;
+const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
+const isAndroidShellBuild = import.meta.env.MODE === 'android';
 
 export const Home = () => {
     useGlobalCursor();
@@ -46,11 +53,14 @@ export const Home = () => {
     const [, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const [registryVersion, setRegistryVersion] = useState(0);
+    const [gameModalReopenNonce, setGameModalReopenNonce] = useState(0);
 
     // 活跃对局状态
     const [activeMatch, setActiveMatch] = useState<{ matchID: string; gameName: string; players: Array<{ id: number; name?: string; isConnected?: boolean }> } | null>(null);
     const [myMatchRole, setMyMatchRole] = useState<{ playerID: string; credentials?: string; gameName?: string } | null>(null);
     const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
+    const [guestId, setGuestId] = useState<string | null>(null);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -63,31 +73,106 @@ export const Home = () => {
 
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
-    const toast = useToast();
-    const { t } = useTranslation(['lobby', 'auth']);
+    const { warning: toastWarning, error: toastError } = useToast();
+    const { t, i18n } = useTranslation(['lobby', 'auth']);
+    const getGuestId = () => getOrCreateGuestId();
+    const getGuestName = () => resolveGuestName(t, guestId ?? undefined);
+    const seoT = useMemo(() => {
+        if (typeof i18n?.getFixedT === 'function') {
+            return i18n.getFixedT('zh-CN', ['lobby', 'common']);
+        }
+        return t;
+    }, [i18n, t]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
+    useEffect(() => {
+        if (user?.id) return;
+        setGuestId((current) => current ?? getOrCreateGuestId());
+    }, [user?.id]);
+
+    const ownerActive = useMemo(() => getOwnerActiveMatch(), [localStorageTick]);
+    const ownerKey = useMemo(() => {
+        if (user?.id) return resolveOwnerKey(user.id);
+        if (!guestId) return null;
+        return resolveOwnerKey(undefined, guestId);
+    }, [guestId, user?.id]);
+    const suppressedOwnerMatchId = useMemo(() => {
+        if (!ownerActive?.matchID) return null;
+        return isOwnerActiveMatchSuppressed(ownerActive.matchID) ? ownerActive.matchID : null;
+    }, [ownerActive?.matchID, localStorageTick]);
+
+    useEffect(() => {
+        if (!suppressedOwnerMatchId) return;
+        clearOwnerActiveMatch(suppressedOwnerMatchId);
+    }, [suppressedOwnerMatchId]);
+
+    const storedLocalMatchRole = useMemo(() => {
+        const latestCreds = getLatestStoredMatchCredentials();
+        if (latestCreds?.matchID) {
+            const gameName = latestCreds.gameName || 'tictactoe';
+            return {
+                matchID: latestCreds.matchID,
+                playerID: latestCreds.playerID as string,
+                credentials: latestCreds.credentials as string | undefined,
+                gameName: gameName as string,
+            };
+        }
+
+        return null;
+    }, [localStorageTick]);
+
+    const ownerLocalMatchRole = useMemo(() => {
+        if (storedLocalMatchRole) {
+            return null;
+        }
+
+        if (suppressedOwnerMatchId) {
+            return null;
+        }
+
+        if (ownerActive?.matchID && (!ownerActive.ownerKey || (ownerKey && ownerActive.ownerKey === ownerKey))) {
+            return {
+                matchID: ownerActive.matchID,
+                playerID: '0',
+                credentials: undefined,
+                gameName: ownerActive.gameName,
+            };
+        }
+
+        return null;
+    }, [ownerActive, ownerKey, storedLocalMatchRole, suppressedOwnerMatchId]);
+    const localMatchRole = storedLocalMatchRole ?? ownerLocalMatchRole;
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
+    const missingMatchConfirmRef = useRef<string | null>(null);
+    const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
+    const initialUrlModalCheckDoneRef = useRef(false);
 
-    const { navigateAwayRef: gameModalNavigateAwayRef } = useUrlModal({
+    const {
+        paramValue: activeGameModalId,
+        isOpen: isGameModalOpen,
+        navigateAwayRef: gameModalNavigateAwayRef,
+    } = useUrlModal({
         paramKey: 'game',
+        reopenNonce: gameModalReopenNonce,
         getModalConfig: useCallback((gameId: string) => {
             const game = getGameById(gameId);
             if (!game) return null;
             return {
                 render: ({ close, closeOnBackdrop }: { close: () => void; closeOnBackdrop: boolean }) => (
-                    <GameDetailsModal
-                        isOpen
-                        onClose={close}
-                        gameId={game.id}
-                        titleKey={game.titleKey}
-                        descriptionKey={game.descriptionKey}
-                        thumbnail={game.thumbnail}
-                        closeOnBackdrop={closeOnBackdrop}
-                        onNavigate={() => gameModalNavigateAwayRef.current()}
-                    />
+                    <Suspense fallback={null}>
+                        <LazyGameDetailsModal
+                            isOpen
+                            onClose={close}
+                            gameId={game.id}
+                            titleKey={game.titleKey}
+                            descriptionKey={game.descriptionKey}
+                            thumbnail={game.thumbnail}
+                            closeOnBackdrop={closeOnBackdrop}
+                            onNavigate={() => gameModalNavigateAwayRef.current()}
+                        />
+                    </Suspense>
                 ),
             };
         }, []),
@@ -103,7 +188,20 @@ export const Home = () => {
         };
     }, []);
 
+    useEffect(() => {
+        if (initialUrlModalCheckDoneRef.current) {
+            return;
+        }
+        initialUrlModalCheckDoneRef.current = true;
+        if (activeGameModalId) {
+            setGameModalReopenNonce((nonce) => nonce + 1);
+        }
+    }, [activeGameModalId]);
+
     const handleGameClick = (id: string) => {
+        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+            return;
+        }
         if (id === 'assetslicer') {
             navigate('/dev/slicer');
             return;
@@ -124,11 +222,28 @@ export const Home = () => {
             navigate('/dev/arch');
             return;
         }
-        setSearchParams({ game: id });
+
+        if (activeGameModalId === id) {
+            setGameModalReopenNonce((nonce) => nonce + 1);
+            return;
+        }
+
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('game', id);
+            return next;
+        });
     };
 
-    const getGuestId = () => getOrCreateGuestId();
-    const getGuestName = () => resolveGuestName(t, getGuestId());
+    const handleGameIntent = useCallback((id: string) => {
+        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+            return;
+        }
+        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
+            return;
+        }
+        void import('../components/lobby/GameDetailsModal');
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -180,8 +295,8 @@ export const Home = () => {
         if (!notice) return;
         if (hasSeenMatchCleanupNotice(notice)) return;
         markMatchCleanupNoticeSeen(notice);
-        toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
-    }, [toast]);
+        toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    }, [toastWarning]);
 
     useEffect(() => {
         const handleStorageNotice = (event: StorageEvent) => {
@@ -198,65 +313,38 @@ export const Home = () => {
 
     useEffect(() => {
         let cancelled = false;
-
-        const findLocalMatch = () => {
-            const latestCreds = getLatestStoredMatchCredentials();
-            if (latestCreds?.matchID) {
-                const gameName = latestCreds.gameName || 'tictactoe';
-                return {
-                    matchID: latestCreds.matchID,
-                    playerID: latestCreds.playerID as string,
-                    credentials: latestCreds.credentials as string | undefined,
-                    gameName: gameName as string,
-                };
-            }
-            const ownerActive = getOwnerActiveMatch();
-            const ownerKey = resolveOwnerKey(user?.id, getGuestId());
-            if (ownerActive?.matchID && isOwnerActiveMatchSuppressed(ownerActive.matchID)) {
-                clearOwnerActiveMatch(ownerActive.matchID);
-                return null;
-            }
-            if (ownerActive?.matchID && (!ownerActive.ownerKey || ownerActive.ownerKey === ownerKey)) {
-                return {
-                    matchID: ownerActive.matchID,
-                    playerID: '0',
-                    credentials: undefined,
-                    gameName: ownerActive.gameName,
-                };
-            }
-            return null;
-        };
         pruneStoredMatchCredentials();
 
-        const local = findLocalMatch();
-        if (!local) {
+        if (!localMatchRole) {
             setActiveMatch(null);
             setMyMatchRole(null);
             return;
         }
 
-        setMyMatchRole({
-            playerID: local.playerID,
-            credentials: local.credentials,
-            gameName: local.gameName,
-        });
+        const resolvedRole = {
+            playerID: localMatchRole.playerID,
+            credentials: localMatchRole.credentials,
+            gameName: localMatchRole.gameName,
+        };
+        setMyMatchRole(resolvedRole);
 
-        void matchApi.getMatch(local.gameName, local.matchID)
+        void matchApi.getMatch(localMatchRole.gameName, localMatchRole.matchID)
             .then(match => {
                 if (cancelled) return;
-                const stored = readStoredMatchCredentials(local.matchID);
-                const validation = validateStoredMatchSeat(stored, match.players, local.playerID);
+                const stored = readStoredMatchCredentials(localMatchRole.matchID);
+                const validation = validateStoredMatchSeat(stored, match.players, localMatchRole.playerID);
                 if (validation.shouldClear) {
-                    clearMatchCredentials(local.matchID);
-                    clearOwnerActiveMatch(local.matchID);
+                    clearMatchCredentials(localMatchRole.matchID);
+                    clearOwnerActiveMatch(localMatchRole.matchID);
                     setActiveMatch(null);
                     setMyMatchRole(null);
                     setLocalStorageTick((t) => t + 1);
                     return;
                 }
+                setMyMatchRole(resolvedRole);
                 setActiveMatch({
-                    matchID: local.matchID,
-                    gameName: local.gameName,
+                    matchID: localMatchRole.matchID,
+                    gameName: localMatchRole.gameName,
                     players: match.players.map((p: MatchPlayer) => ({
                         id: p.id,
                         name: p.name,
@@ -264,13 +352,14 @@ export const Home = () => {
                     })),
                 });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 // 不在这里处理 404，交给 WebSocket 监听统一处理
                 // 只设置一个临时状态，等待 WebSocket 确认
+                setMyMatchRole(resolvedRole);
                 setActiveMatch({
-                    matchID: local.matchID,
-                    gameName: local.gameName,
+                    matchID: localMatchRole.matchID,
+                    gameName: localMatchRole.gameName,
                     players: [],
                 });
             });
@@ -278,7 +367,7 @@ export const Home = () => {
         return () => {
             cancelled = true;
         };
-    }, [localStorageTick, user]);
+    }, [localMatchRole]);
 
     const lobbyPresence = useLobbyMatchPresence({
         gameId: activeMatch?.gameName,
@@ -286,20 +375,92 @@ export const Home = () => {
         enabled: Boolean(activeMatch?.gameName && activeMatch?.matchID),
         requireSeen: false, // 允许立即判断房间是否存在，无需等待"先看到再消失"
     });
+    const activeMatchGameName = activeMatch?.gameName ?? null;
+    const activeMatchId = activeMatch?.matchID ?? null;
 
     useEffect(() => {
-        if (!activeMatch || !lobbyPresence.isMissing) return;
-        const notice = publishMatchCleanupNotice(activeMatch.matchID);
-        if (notice && !hasSeenMatchCleanupNotice(notice)) {
-            markMatchCleanupNoticeSeen(notice);
-            toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        return () => {
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!activeMatchGameName || !activeMatchId || !lobbyPresence.isMissing) {
+            missingMatchConfirmRef.current = null;
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+            return;
         }
-        clearMatchCredentials(activeMatch.matchID);
-        clearOwnerActiveMatch(activeMatch.matchID);
-        setActiveMatch(null);
-        setMyMatchRole(null);
-        setLocalStorageTick((t) => t + 1);
-    }, [activeMatch, lobbyPresence.isMissing, toast]);
+
+        const gameName = activeMatchGameName;
+        const matchID = activeMatchId;
+        if (missingMatchConfirmRef.current === matchID) return;
+        missingMatchConfirmRef.current = matchID;
+        if (missingMatchConfirmRetryTimerRef.current !== null) {
+            window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+            missingMatchConfirmRetryTimerRef.current = null;
+        }
+
+        let cancelled = false;
+
+        void matchApi.getMatch(gameName, matchID)
+            .then(() => {
+                if (cancelled) return;
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+            })
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                if (missingMatchConfirmRef.current === matchID) {
+                    missingMatchConfirmRef.current = null;
+                }
+                if (!isMatchNotFoundError(error)) {
+                    if (missingMatchConfirmRetryTimerRef.current === null) {
+                        missingMatchConfirmRetryTimerRef.current = window.setTimeout(() => {
+                            missingMatchConfirmRetryTimerRef.current = null;
+                            setMissingMatchConfirmRetryTick((t) => t + 1);
+                        }, MISSING_MATCH_CONFIRM_RETRY_DELAY_MS);
+                    }
+                    return;
+                }
+
+                if (missingMatchConfirmRetryTimerRef.current !== null) {
+                    window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                    missingMatchConfirmRetryTimerRef.current = null;
+                }
+                const notice = publishMatchCleanupNotice(matchID);
+                if (notice && !hasSeenMatchCleanupNotice(notice)) {
+                    markMatchCleanupNoticeSeen(notice);
+                    toastWarning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+                }
+                clearMatchCredentials(matchID);
+                clearOwnerActiveMatch(matchID);
+                setActiveMatch(null);
+                setMyMatchRole(null);
+                setLocalStorageTick((t) => t + 1);
+            });
+
+        return () => {
+            cancelled = true;
+            if (missingMatchConfirmRef.current === matchID) {
+                missingMatchConfirmRef.current = null;
+            }
+            if (missingMatchConfirmRetryTimerRef.current !== null) {
+                window.clearTimeout(missingMatchConfirmRetryTimerRef.current);
+                missingMatchConfirmRetryTimerRef.current = null;
+            }
+        };
+    }, [activeMatchGameName, activeMatchId, lobbyPresence.isMissing, missingMatchConfirmRetryTick, toastWarning]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
@@ -348,7 +509,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 } else {
@@ -381,7 +542,7 @@ export const Home = () => {
                         setActiveMatch(null);
                         setMyMatchRole(null);
                         setLocalStorageTick((t) => t + 1);
-                        toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                        toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
                         return;
                     }
                 }
@@ -450,12 +611,12 @@ export const Home = () => {
                 : result.error === 'network'
                     ? 'error.destroyNetwork'
                     : 'error.actionFailed';
-            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
+            toastError({ kind: 'i18n', key: errorKey, ns: 'lobby' });
             return;
         }
 
         if (result.cleanedLocal) {
-            toast.warning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
+            toastWarning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
         }
 
         // 成功后后端释放座位，本地状态同步更新
@@ -463,7 +624,13 @@ export const Home = () => {
         clearOwnerActiveMatch(pendingAction.matchID);
         setPendingAction(null);
         setLocalStorageTick(t => t + 1);
-    }, [activeMatch, myMatchRole, pendingAction]);
+    }, [
+        activeMatch,
+        myMatchRole,
+        pendingAction,
+        toastError,
+        toastWarning,
+    ]);
 
     const handleCancelAction = useCallback(() => {
         setPendingAction(null);
@@ -503,38 +670,19 @@ export const Home = () => {
     }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
 
     return (
-        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
+        <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
             <SEO
-                title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
-                description={t('lobby:home.subtitle')}
+                title={activeCategory === 'All' ? undefined : seoT(`common:category.${activeCategory}`)}
+                description={seoT('lobby:home.subtitle')}
+                canonical="https://easyboardgame.top/"
             />
-            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
-                {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
-                <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">
-                    {user ? (
-                        <UserMenu onLogout={handleLogout} />
-                    ) : (
-                        <div className="flex items-center gap-6">
-                            <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.login')}
-                                <span className="underline-center" />
-                            </button>
-                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
-                            <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
-                                {t('auth:menu.register')}
-                                <span className="underline-center" />
-                            </button>
-                        </div>
-                    )}
-                    <LanguageSwitcher />
-                </div>
-
+            <header className="w-full relative px-6 md:px-12 pt-[calc(env(safe-area-inset-top)+1.25rem)] md:pt-8 pb-0">
                 {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}
-                <div className="flex flex-col items-center justify-center mb-4">
+                <div className="flex flex-col items-center justify-center mb-1 md:mb-4">
                     {/* 标题行：Logo + H1 */}
                     <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
                         <img
-                            src="/logos/logo_1_grid.svg"
+                            src={versionedPublicFileUrl('/logos/logo_1_grid.svg')}
                             alt="logo"
                             className="w-8 md:w-10 opacity-90"
                         />
@@ -548,41 +696,91 @@ export const Home = () => {
                         {t('lobby:home.subtitle')}
                     </p>
                 </div>
+
+                {/* 顶级操作区域 - 移动端放在标题下方，桌面端锁定右上角 */}
+                <div className="flex items-center justify-center gap-4 mb-0 md:absolute md:top-8 md:right-12 md:mb-0 md:gap-4 md:justify-end">
+                    {user ? (
+                        <UserMenu onLogout={handleLogout} />
+                    ) : (
+                        <div className="flex items-center gap-6">
+                            <button onClick={() => openAuth('login')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
+                                {t('auth:menu.login')}
+                                <span className="underline-center" />
+                            </button>
+                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
+                            <button onClick={() => openAuth('register')} className="group relative inline-flex h-6 items-center hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider">
+                                {t('auth:menu.register')}
+                                <span className="underline-center" />
+                            </button>
+                        </div>
+                    )}
+                    <LanguageSwitcher />
+                </div>
             </header>
 
             {/* 主内容区域 - 商业级容器限制 */}
-            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-6 md:px-8">
+            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-4 sm:px-6 md:px-8">
                 {/* 分类筛选 */}
-                <nav className="mb-6 w-full">
+                <nav className="mb-4 md:mb-6 w-full">
                     <CategoryPills activeCategory={activeCategory} onSelect={setActiveCategory} />
                 </nav>
 
                 {/* 游戏列表 */}
                 <section className="w-full pb-20">
-                    <GameList games={filteredGames} onGameClick={handleGameClick} mostPopularGameId={mostPopularGameId} />
+                    <GameList
+                        games={filteredGames}
+                        onGameClick={handleGameClick}
+                        onGameIntent={handleGameIntent}
+                        mostPopularGameId={mostPopularGameId}
+                    />
                 </section>
             </main>
 
             {/* 活跃对局指示器 */}
+            <div
+                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 pointer-events-none select-none text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
+                aria-label={`Current version ${APP_VERSION_LABEL}`}
+            >
+                {APP_VERSION_LABEL}
+            </div>
+
             {activeMatch && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
-                    <div className="bg-parchment-base-text text-parchment-card-bg px-6 py-3 rounded shadow-xl border border-parchment-brown flex items-center gap-4">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-parchment-light-text uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>
-                            <span className="text-sm font-bold">
-                                {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
-                                <span className="mx-2 opacity-50">|</span>
-                                <span className={activeMatch.players.some(p => p.name) ? 'opacity-100' : 'opacity-50 italic'}>
+                <div
+                    data-testid="home-active-match-banner"
+                    className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 flex justify-center px-3 sm:px-4 md:px-6 animate-in slide-in-from-bottom-4 fade-in duration-300"
+                >
+                    <div
+                        data-testid="home-active-match-card"
+                        className="pointer-events-auto flex w-fit max-w-[calc(100vw-1.5rem)] flex-col gap-2 rounded-[10px] border border-parchment-brown bg-parchment-base-text/98 px-3 py-2.5 text-parchment-card-bg shadow-xl backdrop-blur-sm sm:max-w-[min(46rem,calc(100vw-2rem))] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3"
+                    >
+                        <div className="min-w-0 text-center sm:flex-1 sm:text-left">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-parchment-light-text sm:text-[10px] sm:tracking-wider">
+                                {t('lobby:home.activeMatch.status')}
+                            </span>
+                            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[13px] font-bold leading-tight sm:justify-start sm:gap-x-2 sm:gap-y-1 sm:text-sm">
+                                <span className="max-w-full truncate">
+                                    {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
+                                </span>
+                                <span className="hidden opacity-50 sm:inline">|</span>
+                                <span
+                                    className={clsx(
+                                        'max-w-full truncate',
+                                        activeMatch.players.some(p => p.name) ? 'opacity-100' : 'opacity-50 italic'
+                                    )}
+                                >
                                     {t('lobby:home.activeMatch.players', { count: activePlayerCount })}
                                 </span>
-                            </span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div
+                            data-testid="home-active-match-actions"
+                            className="flex w-fit max-w-full flex-row flex-wrap items-center justify-center gap-1.5 self-center sm:w-auto sm:max-w-none sm:flex-nowrap sm:justify-end sm:self-auto sm:gap-2"
+                        >
                             {myMatchRole?.credentials && (
                                 <button
                                     onClick={handleDestroyOrLeave}
                                     className={clsx(
-                                        "px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border",
+                                        "min-w-[4.5rem] rounded px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-all cursor-pointer border sm:min-w-0 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-wider",
                                         myMatchRole.playerID === '0'
                                             ? "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20"
                                             : "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20"
@@ -593,7 +791,7 @@ export const Home = () => {
                             )}
                             <button
                                 onClick={handleReconnect}
-                                className="bg-parchment-light-text hover:bg-[#a08060] text-white px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm border border-parchment-light-text"
+                                className="min-w-[5.75rem] rounded border border-parchment-light-text bg-parchment-light-text px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm transition-colors cursor-pointer hover:bg-[#a08060] sm:min-w-0 sm:px-6 sm:py-1.5 sm:text-xs sm:tracking-wider"
                             >
                                 {t('lobby:actions.reconnectEnter')}
                             </button>

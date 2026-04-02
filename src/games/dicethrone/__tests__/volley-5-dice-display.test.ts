@@ -63,6 +63,7 @@ function createVolleyState(playerIds: PlayerId[], random: RandomFn): MatchState<
         attackerId: '0',
         defenderId: '1',
         isDefendable: true,
+        sourceAbilityId: 'longbow',
         damage: 5,
         bonusDamage: 0,
     };
@@ -113,6 +114,7 @@ describe('Volley 5 Dice Display', () => {
         });
 
         expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(bowCount);
+        expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(bowCount);
 
         const entangleEvent = eventStream.find(entry =>
             entry.event.type === 'STATUS_APPLIED'

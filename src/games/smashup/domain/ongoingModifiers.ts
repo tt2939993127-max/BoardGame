@@ -11,8 +11,9 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
-import type { SmashUpCore, MinionOnBase, BaseInPlay } from './types';
+import type { SmashUpCore, MinionOnBase, BaseInPlay, TitanState } from './types';
 import { getBaseDef, getCardDef } from '../data/cards';
+import { getSuppressionFilteredStateForSource, isCardSuppressed } from './ongoingEffects';
 
 // ============================================================================
 // 类型定义
@@ -94,6 +95,54 @@ const breakpointModifierRegistry: BreakpointModifierEntry[] = [];
 /** 基地级别力量修正注册表 */
 const basePowerModifiers: Map<string, BasePowerModifierFn> = new Map();
 
+export interface TitanPowerModifierContext {
+    state: SmashUpCore;
+    titan: TitanState;
+    baseIndex: number;
+    base: BaseInPlay;
+    playerId: PlayerId;
+}
+
+export type TitanPowerModifierFn = (ctx: TitanPowerModifierContext) => number;
+
+const titanPowerModifiers: Map<string, TitanPowerModifierFn> = new Map();
+
+function getFilteredPowerModifierContext(
+    state: SmashUpCore,
+    minion: MinionOnBase,
+    baseIndex: number,
+    sourceDefId: string,
+    includePodAlias = false,
+): PowerModifierContext {
+    let filteredState = getSuppressionFilteredStateForSource(state, sourceDefId);
+    if (includePodAlias && !sourceDefId.endsWith('_pod')) {
+        filteredState = getSuppressionFilteredStateForSource(filteredState, `${sourceDefId}_pod`);
+    }
+    const filteredBase = filteredState.bases[baseIndex] ?? state.bases[baseIndex];
+    const filteredMinion = filteredBase?.minions.find(candidate => candidate.uid === minion.uid) ?? minion;
+    return {
+        state: filteredState,
+        minion: filteredMinion,
+        baseIndex,
+        base: filteredBase,
+    };
+}
+
+function getFilteredBreakpointModifierContext(
+    state: SmashUpCore,
+    baseIndex: number,
+    sourceDefId: string,
+    originalBreakpoint: number,
+): BreakpointModifierContext {
+    const filteredState = getSuppressionFilteredStateForSource(state, sourceDefId);
+    return {
+        state: filteredState,
+        baseIndex,
+        base: filteredState.bases[baseIndex] ?? state.bases[baseIndex],
+        originalBreakpoint,
+    };
+}
+
 /**
  * 注册一个持续力量修正
  * 
@@ -122,6 +171,10 @@ export function registerBasePowerModifier(defId: string, modifier: BasePowerModi
     basePowerModifiers.set(defId, modifier);
 }
 
+export function registerTitanPowerModifier(defId: string, modifier: TitanPowerModifierFn): void {
+    titanPowerModifiers.set(defId, modifier);
+}
+
 /**
  * 计算玩家在基地的额外力量（来自基地级别修正）
  * 
@@ -140,9 +193,17 @@ export function getBasePowerModifiers(
 
     // 遍历基地上的所有 ongoing 行动卡
     for (const ongoing of base.ongoingActions) {
+        if (isCardSuppressed(state, ongoing.uid)) continue;
         const modifier = basePowerModifiers.get(ongoing.defId);
         if (modifier) {
-            total += modifier({ state, baseIndex, base, playerId, ongoing });
+            const filteredState = getSuppressionFilteredStateForSource(state, ongoing.defId);
+            total += modifier({
+                state: filteredState,
+                baseIndex,
+                base: filteredState.bases[baseIndex] ?? base,
+                playerId,
+                ongoing,
+            });
         }
     }
 
@@ -260,6 +321,7 @@ export function clearPowerModifierRegistry(): void {
     modifierRegistry.length = 0;
     breakpointModifierRegistry.length = 0;
     basePowerModifiers.clear();
+    titanPowerModifiers.clear();
 }
 
 /**
@@ -327,8 +389,28 @@ export function getRegisteredModifierIds(): {
     powerModifierIds: Set<string>;
     breakpointModifierIds: Set<string>;
 } {
+    const powerModifierIds = new Set<string>();
+
+    for (const entry of modifierRegistry) {
+        powerModifierIds.add(entry.sourceDefId);
+        if (entry.handlesPodInternally && !entry.sourceDefId.endsWith('_pod')) {
+            powerModifierIds.add(`${entry.sourceDefId}_pod`);
+        }
+    }
+
+    for (const defId of basePowerModifiers.keys()) {
+        powerModifierIds.add(defId);
+        if (!defId.endsWith('_pod')) {
+            powerModifierIds.add(`${defId}_pod`);
+        }
+    }
+
+    for (const defId of titanPowerModifiers.keys()) {
+        powerModifierIds.add(defId);
+    }
+
     return {
-        powerModifierIds: new Set(modifierRegistry.map(e => e.sourceDefId)),
+        powerModifierIds,
         breakpointModifierIds: new Set(breakpointModifierRegistry.map(e => e.sourceDefId)),
     };
 }
@@ -365,7 +447,13 @@ export function getOngoingPowerModifierDetails(
 
     const details: PowerModifierDetail[] = [];
     for (const entry of modifierRegistry) {
-        const ctx: PowerModifierContext = { state, minion, baseIndex, base };
+        const ctx = getFilteredPowerModifierContext(
+            state,
+            minion,
+            baseIndex,
+            entry.sourceDefId,
+            entry.handlesPodInternally,
+        );
         const value = entry.modifier(ctx);
         if (value !== 0) {
             // 通过 getCardDef 获取 i18n 名称，fallback 到 defId
@@ -429,7 +517,13 @@ export function getOngoingPowerModifier(
 
     let total = 0;
     for (const entry of modifierRegistry) {
-        const ctx: PowerModifierContext = { state, minion, baseIndex, base };
+        const ctx = getFilteredPowerModifierContext(
+            state,
+            minion,
+            baseIndex,
+            entry.sourceDefId,
+            entry.handlesPodInternally,
+        );
         total += entry.modifier(ctx);
     }
     return total;
@@ -471,6 +565,35 @@ export function getOngoingCardPowerContribution(
 }
 
 /**
+ * 获取玩家在基地上的泰坦力量贡献。
+ *
+ * 当前基础模型先只纳入泰坦上的力量指示物。
+ * 各泰坦自身的持续文字带来的额外力量，后续通过专门修正器接入统一查询。
+ */
+export function getTitanPowerContribution(
+    state: SmashUpCore,
+    baseIndex: number,
+    playerId: PlayerId,
+): number {
+    let total = 0;
+    const base = state.bases[baseIndex];
+    if (!base) return 0;
+    for (const titan of state.titans ?? []) {
+        if (titan.location.zone !== 'base' || titan.location.baseIndex !== baseIndex) continue;
+        if (titan.controllerId !== playerId) continue;
+        total += titan.powerCounters;
+        total += titanPowerModifiers.get(titan.defId)?.({
+            state,
+            titan,
+            baseIndex,
+            base,
+            playerId,
+        }) ?? 0;
+    }
+    return total;
+}
+
+/**
  * 获取玩家在基地上的总有效力量（含持续修正 + ongoing 卡力量贡献 + 基地级别力量修正）
  */
 export function getPlayerEffectivePowerOnBase(
@@ -483,8 +606,9 @@ export function getPlayerEffectivePowerOnBase(
         .filter(m => m.controller === playerId)
         .reduce((sum, m) => sum + getEffectivePower(state, m, baseIndex), 0);
     const ongoingCardPower = getOngoingCardPowerContribution(base, playerId);
+    const titanPower = getTitanPowerContribution(state, baseIndex, playerId);
     const basePowerBonus = getBasePowerModifiers(state, baseIndex, playerId);
-    return minionPower + ongoingCardPower + basePowerBonus;
+    return minionPower + ongoingCardPower + titanPower + basePowerBonus;
 }
 
 /**
@@ -500,12 +624,14 @@ export function getTotalEffectivePowerOnBase(
     // 累加所有玩家的 ongoing 卡力量贡献（不限于有随从的玩家）
     // 修复 Bug：只有 ongoing 卡但没有随从的玩家，其力量贡献也应该计入总力量
     let ongoingBonus = 0;
+    let titanBonus = 0;
     let basePowerBonus = 0;
     for (const pid of Object.keys(state.players)) {
         ongoingBonus += getOngoingCardPowerContribution(base, pid);
+        titanBonus += getTitanPowerContribution(state, baseIndex, pid);
         basePowerBonus += getBasePowerModifiers(state, baseIndex, pid);
     }
-    return minionPower + ongoingBonus + basePowerBonus;
+    return minionPower + ongoingBonus + titanBonus + basePowerBonus;
 }
 
 /**
@@ -525,12 +651,12 @@ export function getEffectiveBreakpoint(
     let total = 0;
     if (breakpointModifierRegistry.length > 0) {
         for (const entry of breakpointModifierRegistry) {
-            const ctx: BreakpointModifierContext = {
+            const ctx = getFilteredBreakpointModifierContext(
                 state,
                 baseIndex,
-                base,
-                originalBreakpoint: baseDef.breakpoint,
-            };
+                entry.sourceDefId,
+                baseDef.breakpoint,
+            );
             total += entry.modifier(ctx);
         }
     }

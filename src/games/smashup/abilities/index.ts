@@ -37,14 +37,29 @@ import { registerFrankensteinAbilities, registerFrankensteinInteractionHandlers 
 import { registerWerewolfAbilities, registerWerewolfInteractionHandlers } from './werewolves';
 import { registerVampireAbilities, registerVampireInteractionHandlers } from './vampires';
 import { registerGiantAntAbilities, registerGiantAntInteractionHandlers } from './giant_ants';
-import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { registerAncientEgyptiansAbilities, registerAncientEgyptiansInteractionHandlers } from './ancient_egyptians';
+import { registerCowboysAbilities, registerCowboysInteractionHandlers } from './cowboys';
+import { registerSamuraiAbilities, registerSamuraiInteractionHandlers } from './samurai';
+import { registerVikingsAbilities, registerVikingsInteractionHandlers } from './vikings';
+import { registerTitanAbilities, registerTitanInteractionHandlers } from './titans';
+import { registerBuryInteractionHandlers } from '../domain/bury';
+import {
+    registerBaseAbilities,
+    registerBaseInteractionHandlers,
+    clearBaseAbilityRegistry,
+    registerPodBaseAbilityAliases,
+} from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
+import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
+import { registerMulliganInteractionHandlers } from '../domain/mulliganHandlers';
+import { registerDuelInteractionHandlers } from '../domain/duel';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry, registerPodPowerModifierAliases } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain/ongoingEffects';
 import { clearDiscardPlayProviders } from '../domain/discardPlayability';
 import { clearRegistry, registerPodAbilityAliases } from '../domain/abilityRegistry';
 import { clearInteractionHandlers, registerPodInteractionAliases } from '../domain/abilityInteractionHandlers';
+import { clearTitanAbilityValidators } from '../domain/titanAbilityValidators';
 
 let initialized = false;
 
@@ -60,6 +75,7 @@ export function initAllAbilities(): void {
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     clearDiscardPlayProviders();
+    clearTitanAbilityValidators();
 
     // 基础?8 派系
     registerAlienAbilities();
@@ -85,6 +101,12 @@ export function initAllAbilities(): void {
 
     // 多基地计分 Prompt 继续函数
     registerMultiBaseScoringInteractionHandler();
+
+    // 全局反应队列（同时触发排序）
+    registerReactionQueueInteractionHandlers();
+    registerMulliganInteractionHandlers();
+    registerBuryInteractionHandlers();
+    registerDuelInteractionHandlers();
 
     // 扩展派系
     registerGhostAbilities();
@@ -115,6 +137,16 @@ export function initAllAbilities(): void {
     registerVampireInteractionHandlers();
     registerGiantAntAbilities();
     registerGiantAntInteractionHandlers();
+    registerAncientEgyptiansAbilities();
+    registerAncientEgyptiansInteractionHandlers();
+    registerCowboysAbilities();
+    registerCowboysInteractionHandlers();
+    registerSamuraiAbilities();
+    registerSamuraiInteractionHandlers();
+    registerVikingsAbilities();
+    registerVikingsInteractionHandlers();
+    registerTitanAbilities();
+    registerTitanInteractionHandlers();
 
     // 持续力量修正
     registerAllOngoingModifiers();
@@ -124,6 +156,7 @@ export function initAllAbilities(): void {
     // 不需为每张 POD 卡单独写一行能力代码就能让其自动接继基础版的全套逻辑
     registerPodAbilityAliases();
     registerPodInteractionAliases();
+    registerPodBaseAbilityAliases();
     registerPodOngoingAliases(); // 自动映射 trigger/restriction/protection
     registerPodPowerModifierAliases(); // 自动映射力量修正
 }
@@ -137,4 +170,5 @@ export function resetAbilityInit(): void {
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     clearDiscardPlayProviders();
+    clearTitanAbilityValidators();
 }

@@ -4,6 +4,7 @@
 
 export * from './types';
 export * from './ui';
+export * from './WarmPreloadScheduler';
 export {
     // 注册表 API
     registerGameAssets,
@@ -14,9 +15,12 @@ export {
     clearGameAssetsCache,
     setAssetsBaseUrl,
     getAssetsBaseUrl,
+    setGameAssetBaseOverride,
+    clearGameAssetBaseOverrides,
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,
+    cancelWarmPreload,
     areAllCriticalImagesCached,
     isImagePreloaded,
     getPreloadedImageElement,

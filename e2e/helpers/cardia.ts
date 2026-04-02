@@ -9,7 +9,6 @@ import {
     getGameServerBaseURL,
     ensureGameServerAvailable,
     seedMatchCredentials,
-    waitForTestHarness,
 } from './common';
 
 // Re-export commonly used functions
@@ -34,6 +33,29 @@ export interface SetupOnlineMatchOptions {
     player2Deck?: string;
 }
 
+function resolveCardiaFrontendBaseURL(page?: Page): string {
+    const contextBaseURL = page?.context()._options?.baseURL;
+    if (contextBaseURL) {
+        return contextBaseURL;
+    }
+
+    if (process.env.VITE_FRONTEND_URL) {
+        return process.env.VITE_FRONTEND_URL;
+    }
+
+    const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || '6174';
+    return `http://127.0.0.1:${frontendPort}`;
+}
+
+async function warmCardiaMatchRoute(page: Page, baseURL: string) {
+    const matchRoomModuleUrl = new URL('/src/pages/MatchRoom.tsx', baseURL).toString();
+    const response = await page.request.get(matchRoomModuleUrl);
+
+    if (!response.ok()) {
+        throw new Error(`Failed to warm MatchRoom module: ${response.status()} ${matchRoomModuleUrl}`);
+    }
+}
+
 /**
  * 设置 Cardia 在线对局
  */
@@ -46,7 +68,7 @@ export const setupOnlineMatch = async (
     
     // 从 page 的 context 获取 baseURL，如果没有则使用默认值
     // 优先使用 context 的 baseURL，否则使用环境变量或默认值
-    const baseURL = page.context()._options?.baseURL || process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL(page);
     
     // 创建 player1 context
     const player1Context = await browser.newContext({ baseURL });
@@ -54,10 +76,21 @@ export const setupOnlineMatch = async (
     const player1Page = await player1Context.newPage();
     
     await player1Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    
-    if (!(await ensureGameServerAvailable(player1Page))) {
+
+    let gameServerReady = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (await ensureGameServerAvailable(player1Page)) {
+            gameServerReady = true;
+            break;
+        }
+        await player1Page.waitForTimeout(500);
+    }
+
+    if (!gameServerReady) {
         throw new Error('Game server not available');
     }
+
+    await warmCardiaMatchRoute(player1Page, baseURL);
     
     // 创建房间
     const player1GuestId = `e2e_player1_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -84,6 +117,7 @@ export const setupOnlineMatch = async (
     
     await player2Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
     await player2Page.waitForTimeout(500);
+    await warmCardiaMatchRoute(player2Page, baseURL);
     
     // Player2 加入房间
     const player2GuestId = `e2e_player2_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -478,7 +512,7 @@ export const setupCardiaTestScenario = async (
     scenario: CardiaTestScenario
 ): Promise<CardiaMatchSetup> => {
     // 1. 创建基础对局
-    const baseURL = process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL();
     const tempContext = await browser.newContext({ baseURL });
     const tempPage = await tempContext.newPage();
     
@@ -486,37 +520,12 @@ export const setupCardiaTestScenario = async (
         const setup = await setupOnlineMatch(tempPage);
         await tempPage.close();
         
-        // 2. 构建完整状态
         const currentState = await readCoreState(setup.player1Page);
-        const newState = await buildStateFromScenario(
-            setup.player1Page,
-            currentState,
-            scenario
-        );
-        
-        // 3. 注入状态到两个玩家页面
-        await applyCoreStateDirect(setup.player1Page, newState);
-        await applyCoreStateDirect(setup.player2Page, newState);
-        
-        // 4. 如果场景指定了阶段，需要同步设置 sys.phase
-        if (scenario.phase) {
-            await setup.player1Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-            await setup.player2Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-        }
-        
-        // 5. 等待UI更新
-        await setup.player1Page.waitForTimeout(500);
-        await setup.player2Page.waitForTimeout(500);
+        const newState = await buildStateFromScenario(setup.player1Page, currentState, scenario);
+
+        // 2. 注入状态到两个玩家页面
+        await applyCardiaScenarioToPage(setup.player1Page, scenario, newState);
+        await applyCardiaScenarioToPage(setup.player2Page, scenario, newState);
         
         return setup;
     } catch (error) {
@@ -524,6 +533,39 @@ export const setupCardiaTestScenario = async (
         await tempContext.close();
         throw error;
     }
+};
+
+/**
+ * 将 Cardia 场景注入到当前页面（适用于 `/play/cardia` TestHarness 页面）
+ */
+export const applyCardiaScenarioToPage = async (
+    page: Page,
+    scenario: CardiaTestScenario,
+    prebuiltCoreState?: Record<string, unknown>,
+) => {
+    const currentState = prebuiltCoreState ?? await readCoreState(page);
+    const nextCoreState = prebuiltCoreState ?? await buildStateFromScenario(page, currentState, scenario);
+
+    await applyCoreStateDirect(page, nextCoreState);
+
+    if (scenario.phase) {
+        await page.evaluate((phase) => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            harness?.state?.patch?.({
+                sys: {
+                    phase,
+                },
+            });
+
+            const liveState = (window as any).__BG_STATE__;
+            if (liveState?.sys) {
+                liveState.sys.phase = phase;
+            }
+        }, scenario.phase);
+    }
+
+    await page.waitForTimeout(500);
+    await ensureDebugPanelClosed(page);
 };
 
 /**
@@ -738,9 +780,9 @@ async function createCardInstances(
     page: Page,
     defIds: string[],
     ownerId: string,
-    startIndex: number
+    _startIndex: number
 ): Promise<Array<Record<string, unknown>>> {
-    return await page.evaluate(({ defIds, ownerId, startIndex }) => {
+    return await page.evaluate(({ defIds, ownerId }) => {
         // 访问游戏的 cardRegistry
         const cardRegistry = (window as unknown as { __BG_CARD_REGISTRY__?: Map<string, unknown> }).__BG_CARD_REGISTRY__;
         if (!cardRegistry) {
@@ -776,7 +818,7 @@ async function createCardInstances(
                 encounterIndex: -1,
             };
         });
-    }, { defIds, ownerId, startIndex });
+    }, { defIds, ownerId });
 }
 
 // ============================================================================

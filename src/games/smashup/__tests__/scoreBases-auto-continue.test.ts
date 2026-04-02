@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { smashUpFlowHooks } from '../domain/index';
+import { buildSmashUpAiLegalActions } from '../ai';
 import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
 
@@ -233,5 +234,103 @@ describe('scoreBases 阶段自动推进', () => {
         expect(result).toBeDefined();
         expect(result?.autoContinue).toBe(true);
         expect(result?.playerId).toBe('0');
+    });
+
+    it('达标基地上有可激活的侏儒 POD special 时不应该自动推进', () => {
+        const core = makeMinimalCore({
+            bases: [makeBase('base_pirate_cove', [
+                makeMinion('0', 'trickster_gnome_pod', 3),
+                makeMinion('0', 'robot_hoverbot', 4),
+                makeMinion('1', 'robot_microbot_guard', 3),
+            ])],
+            scoringEligibleBaseIndices: [0],
+        });
+
+        const state: MatchState<SmashUpCore> = {
+            core,
+            sys: {
+                phase: 'scoreBases',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const result = smashUpFlowHooks.onAutoContinueCheck!({
+            state,
+            events: [],
+            random: { next: () => 0.5 },
+        });
+
+        expect(result).toBeUndefined();
+    });
+
+    it('AI 在计分阶段存在可激活 special 时不应暴露 advance-phase', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                bases: [makeBase('base_pirate_cove', [
+                    makeMinion('0', 'trickster_gnome_pod', 3),
+                    makeMinion('0', 'robot_hoverbot', 4),
+                    makeMinion('1', 'robot_microbot_guard', 3),
+                ])],
+                scoringEligibleBaseIndices: [0],
+            }),
+            sys: {
+                phase: 'scoreBases',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(true);
+        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
+    });
+
+    it('AI 在 optional multi 交互中应保留空选动作，避免 special 链卡死', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: {
+                    current: {
+                        id: 'miskatonic_field_trip_optional',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'miskatonic_field_trip',
+                            options: [
+                                { id: 'card-1', label: '选择 h1', value: { cardUid: 'h1' } },
+                                { id: 'card-2', label: '选择 h2', value: { cardUid: 'h2' } },
+                            ],
+                            multi: { min: 0, max: 2 },
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        const emptySelection = legalActions.find(action =>
+            action.kind === 'interaction-choice'
+            && (action.commands[0] as any)?.payload?.optionIds
+            && Array.isArray((action.commands[0] as any).payload.optionIds)
+            && (action.commands[0] as any).payload.optionIds.length === 0,
+        );
+
+        expect(emptySelection).toBeDefined();
+        expect(emptySelection?.label).toContain('不选择');
     });
 });

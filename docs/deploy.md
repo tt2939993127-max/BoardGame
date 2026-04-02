@@ -45,6 +45,7 @@ bash deploy-image.sh
 
 ```bash
 bash deploy-image.sh update
+bash deploy-image.sh update v1.2.3  # 部署指定 tag
 ```
 
 ### 回滚 / 状态 / 日志
@@ -55,6 +56,17 @@ bash deploy-image.sh status             # 查看状态
 bash deploy-image.sh logs [service]     # 查看日志
 ```
 
+### 固定版本部署（推荐）
+
+```bash
+bash deploy-image.sh deploy v1.2.3  # 首次部署指定 tag
+bash deploy-image.sh update v1.2.3  # 更新到指定 tag
+```
+
+- 不传 tag 时默认部署 `latest`
+- 传入 tag 时，脚本会统一把 `game-server` 和 `web` 切到同一版本，便于排障与回滚
+- 这些 tag 来自 GitHub Actions 发布的镜像标签（例如推送 Git tag `v1.2.3` 后生成对应镜像）
+
 ### CI 配置说明
 
 镜像由 GitHub Actions 自动构建并推送到 GHCR（`.github/workflows/docker-publish.yml`）：
@@ -64,6 +76,8 @@ bash deploy-image.sh logs [service]     # 查看日志
   - `ghcr.io/zhuanggenhua/boardgame-game:latest`
   - `ghcr.io/zhuanggenhua/boardgame-web:latest`
 - **版本标签**：`latest`（main 分支）、`v1.2.3`（tag）、`sha-xxxxxx`（commit）
+
+> **当前自动部署脚本的真实入口**：`boardgame-web` 是基于 `docker/Dockerfile.monolith` 构建的单体镜像，负责静态资源、`/auth`、`/notifications`、`/social-socket` 等 API / WebSocket 入口；`deploy-image.sh` 不会部署独立的 `auth-server`，也不会使用 `docker/Dockerfile.web` / `docker/nginx.conf` 作为生产主链路。
 
 > **注意**：镜像构建由 GitHub Actions 自动完成，服务器脚本只负责拉取镜像。
 > 私有镜像需要登录（脚本会提示是否登录 ghcr.io）。
@@ -133,6 +147,9 @@ Cloudflare 控制台 → **Workers & Pages** → 选择你的 Pages 项目 → *
 - **环境变量**（非常重要）：
   - `VITE_BACKEND_URL` = `https://api.<你的域名>`
   - 例如：`VITE_BACKEND_URL=https://api.easyboardgame.top`
+- **如果 Android App 临时使用 remote WebView 模式**：
+  - `ANDROID_REMOTE_WEB_URL` 应指向实际对外可访问的前端页面入口，例如 `https://easyboardgame.top`
+  - 不要把 `ANDROID_REMOTE_WEB_URL` 指到纯 API 域名，例如 `https://api.easyboardgame.top`
 - **自定义域名**：
   - 点击「自定义域名」→ 添加你的根域（如 `easyboardgame.top`）
   - 系统会自动在 DNS 创建 CNAME 记录
@@ -177,6 +194,57 @@ SMTP_PASS=xxx
 >
 > 提示：首次运行 `deploy-image.sh` 时会交互式引导生成 `.env`。
 
+### Android remote WebView 额外约束
+
+如果 Android 壳临时使用 `ANDROID_WEBVIEW_MODE=remote`，部署侧还需要满足以下条件：
+
+- `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTP/HTTPS 地址，且应指向真实前端入口
+- 除局域网临时调试或短期灰度外，仍优先使用 HTTPS
+- 该前端入口加载出来的 H5 仍然会访问你的后端接口，因此 `WEB_ORIGINS` 必须包含这个前端域名
+- 远程模式下，Android App 会与线上 Web 同步更新；如果线上前端需要回滚，App 也会一起回滚，不再依赖重新发 APK
+- Android `remote` 打包应视为“纯壳模式”：不会执行 `vite build`，也不会把 `dist` 前端资源复制进 APK；打包只更新原生壳、Capacitor 配置和壳内静态资产（例如方向映射、图标、启动图）
+- Android `remote` 的 `build-debug / build-release / build-bundle` 不再自动执行 `capacitor sync/update`；如果你新增了 Capacitor 插件、修改了 Android 原生模板或首次初始化工程，先手动执行一次 `npm run mobile:android:sync`
+- 当前 Android 壳默认行为：游戏页按 `preferredOrientation` 自动切换横竖屏，并隐藏顶部状态栏；非游戏页恢复竖屏和系统状态栏
+- Android 壳进入后台、按 Home、锁屏或熄屏时，会主动通知 H5 停止当前 BGM；恢复前台后默认不自动续播
+
+> **主线口径**：`remote WebView` 只作为兼容 / 调试 / 短期灰度路径保留。Android 的长期主线应是 `embedded` 打包；若未来需要热更新 H5 本体，应演进为 `embedded + OTA/Live Update`，而不是继续把 `remote` 当默认产品方案。
+
+### Android embedded OTA 发布源
+
+当前 Android 主线热更新不再依赖 `remote`，而是：
+
+- App 打包仍走 `embedded`
+- H5 本体通过 OTA manifest + zip bundle 更新
+- 发布源复用同一个对象存储桶，路径前缀为 `official/app-updates/android/<channel>/...`
+
+默认约定：
+
+- `latest.json`：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/latest.json`
+- bundle zip：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/bundles/<bundleVersion>.zip`
+- version manifest：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/manifests/<bundleVersion>.json`
+
+发布命令：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --dry-run
+npm run mobile:android:ota:publish -- --channel stable --skip-latest
+npm run mobile:android:ota:publish -- --channel stable
+```
+
+GitHub Actions 自动化：
+
+- workflow：`.github/workflows/android-ota-publish.yml`
+- 自动触发：`main` 分支合入影响 H5 bundle 的改动后，自动发布到非生产 channel，默认 `edge`
+- 手动触发：可手动选择 `stable` / `gray` / `edge`，并支持 `dry_run`、`skip_latest`
+- 正式门禁：`stable` 发布应绑定 `android-ota-production` Environment 审批
+
+约束：
+
+- `--dry-run` 只本地打 zip 和 manifest，不上传
+- `--skip-latest` 会上传 bundle 与版本 manifest，但不会切换该 channel 的 `latest.json`
+- 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
+- OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
+
 ## Nginx 反向代理（自动管理）
 
 > **无需手动配置**。部署脚本自动安装 Nginx 并管理 `/etc/nginx/conf.d/boardgame.conf`。
@@ -202,7 +270,7 @@ SMTP_PASS=xxx
 
 ## 部署后注意事项
 
-> **生产环境更新必须使用部署脚本**：`bash scripts/deploy/deploy-image.sh update`
+> **生产环境更新必须使用部署脚本**：`bash scripts/deploy/deploy-image.sh update [tag]`
 >
 > 禁止在生产服务器上直接运行 `docker compose up -d`，因为默认使用 `docker-compose.yml` 而非 `docker-compose.prod.yml`，两者的端口映射和环境变量配置不同。
 
@@ -218,15 +286,27 @@ SMTP_PASS=xxx
   - 镜像部署：`docker-compose.prod.yml`（服务器不需要源码，推荐生产环境）
   - 本地开发：`docker-compose.yml`（同样使用 ghcr 预构建镜像）
   - 对外仅暴露 `web`（单体），`game-server` 仅容器网络内通信
-  - **注意**：两个 compose 文件都使用 `image:` 拉取 ghcr 镜像，不再本地 build。生产环境必须使用 `deploy-image.sh update`（基于 `docker-compose.prod.yml`），禁止直接 `docker compose up -d`（会使用默认的 `docker-compose.yml`，配置可能不同）
+  - **注意**：两个 compose 文件都使用 `image:` 拉取 ghcr 镜像，不再本地 build。生产环境必须使用 `deploy-image.sh update [tag]`（基于 `docker-compose.prod.yml`），禁止直接 `docker compose up -d`（会使用默认的 `docker-compose.yml`，配置可能不同）
 
 ## 资源 /assets 与对象存储映射（官方）
 
 - **开发**：直接使用 `public/assets`（不配置 R2 也能跑通）。
-- **生产**：`/assets/*` 反代到对象存储（如 Cloudflare R2）。
+- **生产默认**：前端资源基址为官方资源域名 `https://assets.easyboardgame.top/official`。
+- **生产兼容方案**：也可将 `/assets/*` 反代到对象存储（如 Cloudflare R2）。
 - **对象存储 key 前缀**：`official/<gameId>/...`
   - 路径对应：`/assets/<gameId>/...` ⇄ `official/<gameId>/...`
-- **可选独立资源域名**：前端可配置 `VITE_ASSETS_BASE_URL`（默认 `/assets`）。
+- **资源基址配置**：前端可通过 `VITE_ASSETS_BASE_URL` 覆盖；当前代码内置默认值为 `https://assets.easyboardgame.top/official`。
+- **缓存失效机制**：构建时会扫描 `public/assets`，为资源 URL 自动追加 `?v=<content-hash>`。资源内容变化后 URL 会自动变化，因此 R2 上的图片/音频/SVG 可以安全使用长期缓存。
+- **本地 JSON / 图集配置**：仍走本地 `/assets`，但同样会追加 `?v=<content-hash>`，避免本地回退路径拿到旧配置。
+
+## 非 /assets 静态资源缓存策略（当前主链路）
+
+- **适用范围**：`/fonts/*`、`/logos/*`、大多数 `/game-data/*` 即使没有上 R2，也可以使用长期缓存；关键不在“是否走对象存储”，而在“URL 是否带内容版本指纹”。
+- **当前实现**：构建阶段会为 `public/fonts`、`public/logos`、静态 `public/game-data` 生成内容 hash，并在最终 `index.html`、字体 CSS、运行时代码引用里自动追加 `?v=<content-hash>`。
+- **服务端缓存头**：生产单体服务会把上述目录按 `Cache-Control: public, max-age=31536000, immutable` 提供；浏览器或 Cloudflare 拿到新 URL 才会请求新内容。
+- **例外文件**：`/game-data/summonerwars.layout.json` 仍保持 `no-cache, no-store, must-revalidate`，因为它承载运行时布局编辑结果，不能误进长期缓存。
+- **入口页策略不变**：`index.html` 和 SPA fallback 继续 `no-cache, no-store, must-revalidate`，确保部署后刷新页面一定拿到新的资源引用关系。
+- **新增 game-data 的判断规则**：如果文件是“构建期静态产物”，应纳入版本指纹 + 长缓存；如果文件可能被后台、编辑器或运行时直接改写，则默认保守缓存，除非同时设计了独立版本号或发布链路。
 
 ## 资源发布流程（官方）
 
@@ -234,6 +314,24 @@ SMTP_PASS=xxx
 2. 生成清单：`npm run assets:manifest`（输出 `assets-manifest.json`）。
 3. 校验清单：`npm run assets:validate`（缺文件/变体不一致会报错）。
 4. 上传资源与清单到对象存储（路径 `official/<gameId>/...`）。
+5. 如仅修改了对象元数据（例如 `Cache-Control`），使用 `npm run assets:upload:force` 重新上传；常规资源内容更新不需要手动 purge，因为 URL 会随内容 hash 自动变化。
+
+### Android OTA 产物发布流程
+
+Android OTA 产物也走同一个对象存储桶，但前缀独立：
+
+1. 先执行 `npm run mobile:android:sync`，确保 `dist/` 与 Android embedded 资源同步
+2. 预演发布：`npm run mobile:android:ota:publish -- --channel gray --dry-run`
+3. 灰度上传但不切流：`npm run mobile:android:ota:publish -- --channel gray --skip-latest`
+4. 准备正式生效时，再执行不带 `--skip-latest` 的正式发布命令
+
+建议把 `stable`、`gray` 等 channel 作为独立发布轨道管理，不要把未验证 bundle 直接覆盖到 `stable/latest.json`
+
+建议的 OTA 发布节奏：
+
+1. `main` 自动发 `edge`
+2. 测试确认后手动发 `gray`
+3. 最后经审批手动发 `stable`
 
 ## UGC 资源前缀预留（未实现）
 
@@ -267,6 +365,8 @@ SMTP_PASS=xxx
 | `.env.server` | 生产 .env 生成脚本 | ✘ | ✔ |
 
 **本地开发**：直接复制 `.env.example` 即可。
+
+**强制约定**：凡是本地开发脚本、资源脚本或校验脚本会读取的环境变量，新增或修改时必须同步更新 `.env.example`。不能假设“只写进 `.env` 就够了”，也不能依赖“`.env` 缺字段时自动回退到 `.env.example`”，因为只要本机存在 `.env`，很多脚本就会优先读取它；如果 `.env` 里缺少某个字段，脚本可能直接报错。`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 属于这类必须同时维护在 `.env.example` 的变量。
 
 **生产环境（最小配置）**：只需密钥和域名，其余由 `docker-compose.prod.yml` 覆盖。
 
@@ -312,6 +412,8 @@ WEB_ORIGINS=https://your-domain.com
 - `docker compose ps` 确认 web/game-server/mongodb 为 Running/Healthy
 - `ss -lntp | grep ':80'` 确认 80 端口已监听
 - `curl -I http://127.0.0.1/` 验证本机入口可达
+- `curl http://127.0.0.1/notifications` 应返回 JSON
+- `curl http://127.0.0.1/game-changelogs/dicethrone` 应返回 JSON（即使无数据也应是 `{"changelogs":[]}`，不能返回 HTML）
 
 - **健康检查**：
   - 后端：`http://<服务器IP>/health` 或 `https://api.<你的域名>/health`（若未实现则返回 404，属于正常）
@@ -338,7 +440,9 @@ WEB_ORIGINS=https://your-domain.com
   - `VITE_GAME_SERVER_URL` 仅用于分离部署；本地 dev 建议留空，走 Vite 代理。
   - 查看 `src/config/server.ts` 的回退逻辑，确保 dev 时不会强制指向 `http://127.0.0.1:18000`。
 - **为什么 dev 没问题但部署报错**：
-  - 本地 `npm run dev:api` 使用 `tsx --tsconfig apps/api/tsconfig.json`，自动启用 `experimentalDecorators`；
-    Docker 若未指定 tsconfig，会导致 NestJS 装饰器报错。
-  - 本地 `npm run dev:game` 使用 `vite-node`，ESM 解析与 Docker 中 `tsx` 直接运行不同；
-    可能触发 `某些 ESM 模块` 解析到不存在的 `index.jsx`.
+  - 本地 `npm run dev:api` 现在通过 `node scripts/infra/dev-bundle-runner.mjs --label api --entry apps/api/src/main.ts --outfile temp/dev-bundles/api/main.mjs --tsconfig apps/api/tsconfig.json`
+    先 bundle 再运行产物；Docker 若直接跑源码、tsconfig 或环境变量不一致，仍可能暴露与本地不同的问题。
+  - 本地 `npm run dev:game` 现在通过 `node scripts/infra/dev-bundle-runner.mjs --label game --entry server.ts --outfile temp/dev-bundles/game/server.mjs --tsconfig tsconfig.server.json`
+    先 bundle 再运行产物；这比直接 `tsx` 更接近“构建后运行”的链路，但仍不等于生产镜像。
+  - 默认 `npm run dev` 由 `scripts/infra/dev-orchestrator.js` 协调：API 和 game-server 并行 ready 后才启动前端。
+    如果你在 Docker / 服务器环境里没有这层编排，代理目标未就绪、端口未监听或 bundle 产物不存在，都可能只在部署链路中暴露。

@@ -58,7 +58,8 @@ scripts/
 - `profile_scan.py`：扫描性能分析
 - `extract_assets.js`：资源提取脚本（需在脚本内配置本地路径）
 - `generate_asset_manifests.js`：生成/校验 `assets-manifest.json`
-- `upload-to-r2.js`：上传资源到 Cloudflare R2
+- `upload-to-r2.js`：上传资源到 Cloudflare R2（先读 `.env`，再用 `.env.example` 补齐缺失 R2 变量）
+- `download-from-r2.js`：从 Cloudflare R2 增量下载资源到本地（同样支持 `.env` + `.env.example` 补缺）
 
 ### 游戏（scripts/game/）
 
@@ -85,7 +86,7 @@ scripts/
 
 ### 基础设施（scripts/infra/）
 
-- `clean_ports.js`：清理端口进程（默认 5173/18000/18001，可配置）
+- `clean_ports.js`：清理端口进程（默认 4173/5173/18000/18001，兼容旧前端端口，可配置）
 - `wait_for_ports.js`：等待端口就绪（用于脚本/CI 串联）
 - `simulate-host.ts`：模拟房主创建/加入/离开流程
 - `verify_social_ws.ts`：社交 WebSocket 验证入口（转发到 `scripts/verify/social-ws.ts`）

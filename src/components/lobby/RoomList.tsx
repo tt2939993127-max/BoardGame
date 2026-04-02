@@ -5,7 +5,8 @@ import type { RoomItem, ActiveMatchInfo } from './roomActions';
 interface RoomListProps {
     roomItems: RoomItem[];
     activeMatch: ActiveMatchInfo | null;
-    isLoading: boolean;
+    isActionLoading: boolean;
+    isLobbyLoading: boolean;
     onJoinRoom: (matchID: string, gameName?: string) => void;
     onJoinRequest: (matchID: string, gameName?: string) => void;
     onAction: (matchID: string, playerID: string, credentials: string, isHost: boolean) => void;
@@ -17,7 +18,8 @@ interface RoomListProps {
 export const RoomList = ({
     roomItems,
     activeMatch,
-    isLoading,
+    isActionLoading,
+    isLobbyLoading,
     onJoinRoom,
     onJoinRequest,
     onAction,
@@ -78,10 +80,10 @@ export const RoomList = ({
                     return (
                         <button
                             onClick={onOpenCreateRoom}
-                            disabled={isLoading}
+                            disabled={isActionLoading}
                             className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                         >
-                            {isLoading ? t('button.processing') : t('actions.createRoom')}
+                            {isActionLoading ? t('button.processing') : t('actions.createRoom')}
                         </button>
                     );
                 })()}
@@ -89,7 +91,18 @@ export const RoomList = ({
 
             {/* 房间列表 */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                {roomItems.length === 0 ? (
+                {isLobbyLoading ? (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        className="flex h-40 flex-col items-center justify-center gap-3 rounded-[6px] border border-dashed border-parchment-card-border/30 bg-parchment-base-bg/35"
+                    >
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-parchment-brown/20 border-t-parchment-brown" />
+                        <p className="text-xs italic tracking-wider text-parchment-light-text">
+                            {t('rooms.loading')}
+                        </p>
+                    </div>
+                ) : roomItems.length === 0 ? (
                     <div className="text-center text-parchment-light-text py-10 italic text-sm border border-dashed border-parchment-card-border/30 rounded-[4px]">
                         {t('rooms.empty')}
                     </div>
@@ -134,7 +147,7 @@ export const RoomList = ({
                                                 )}
                                             </div>
                                             <div className="text-[10px] text-parchment-light-text mt-0.5">
-                                                {seatLabels.join(' vs ')}
+                                                {seatLabels.join(t('rooms.seatSeparator'))}
                                             </div>
                                         </>
                                     );

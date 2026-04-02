@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CardPreview, registerCardAtlasSource, registerCardPreviewRenderer } from '../CardPreview';
+import { CardPreview, getCardAtlasCandidateUrls, registerCardAtlasSource, registerCardPreviewRenderer } from '../CardPreview';
 import type { SpriteAtlasConfig } from '../../../../engine/primitives/spriteAtlas';
+import { getCardAtlasSource, getLazyRegistration, registerLazyCardAtlasSource } from '../cardAtlasRegistry';
+import { markImageLoaded, setAssetsBaseUrl } from '../../../../core';
 
 const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
     imageW: 100,
@@ -15,6 +17,10 @@ const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
 };
 
 describe('CardPreview i18n atlas path', () => {
+    beforeEach(() => {
+        setAssetsBaseUrl('/assets');
+    });
+
     it('atlas 预览在未传 locale 时默认使用 zh-CN 路径', () => {
         const atlasId = 'test:card-preview:atlas-default-locale';
         registerCardAtlasSource(atlasId, {
@@ -44,5 +50,51 @@ describe('CardPreview i18n atlas path', () => {
         );
 
         expect(receivedLocale).toBe('zh-CN');
+    });
+
+    it('懒注册图集在图片未预加载时应保持 undefined，交给 AtlasCard fallback 加载', () => {
+        const atlasId = 'test:card-preview:lazy-atlas-unresolved';
+        registerLazyCardAtlasSource(atlasId, {
+            image: 'smashup/taitan/taitan1',
+            grid: { rows: 7, cols: 3 },
+        });
+
+        expect(getCardAtlasSource(atlasId, 'zh-CN')).toBeUndefined();
+        expect(getLazyRegistration(atlasId)).toBeDefined();
+    });
+
+    it('atlas 候选 URL 应包含本地 /assets 降级路径', () => {
+        const candidates = getCardAtlasCandidateUrls('smashup/taitan/taitan1', 'zh-CN');
+
+        expect(candidates.some((url) => url.endsWith('/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp'))).toBe(true);
+        expect(candidates).toContain('/assets/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp');
+    });
+
+    it('远程资源模式下 atlas 候选 URL 应先尝试远端，再回退本地 /assets', () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+
+        const candidates = getCardAtlasCandidateUrls('smashup/taitan/taitan1', 'zh-CN');
+        const remotePrimary = 'https://assets.easyboardgame.top/official/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp';
+        const localPrimary = '/assets/i18n/zh-CN/smashup/taitan/compressed/taitan1.webp';
+
+        expect(candidates[0]).toBe(remotePrimary);
+        expect(candidates).toContain(localPrimary);
+        expect(candidates.indexOf(localPrimary)).toBeGreaterThan(candidates.indexOf(remotePrimary));
+    });
+
+    it('懒注册图集不应把 1x1 占位图当成有效 atlas', () => {
+        const atlasId = 'test:card-preview:lazy-atlas-placeholder';
+        registerLazyCardAtlasSource(atlasId, {
+            image: 'smashup/taitan/taitan1',
+            grid: { rows: 7, cols: 3 },
+        });
+
+        const img = new Image();
+        Object.defineProperty(img, 'naturalWidth', { value: 1, configurable: true });
+        Object.defineProperty(img, 'naturalHeight', { value: 1, configurable: true });
+        markImageLoaded('smashup/taitan/taitan1', 'zh-CN', img);
+
+        expect(getCardAtlasSource(atlasId, 'zh-CN')).toBeUndefined();
+        expect(getLazyRegistration(atlasId)).toBeDefined();
     });
 });

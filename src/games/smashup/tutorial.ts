@@ -94,10 +94,10 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             showMask: true,
             aiActions: [
                 // 蛇形选秀：P0 → P1 → P1 → P0
-                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS }, playerId: '1' },
-                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS }, playerId: '1' },
-                { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY } },
+                { commandType: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+                { commandType: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS } },
+                { commandType: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
+                { commandType: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY } },
                 // 注意：不需要显式 ADVANCE_PHASE。
                 // ALL_FACTIONS_SELECTED 事件清除 factionSelection 后，
                 // FlowSystem.onAutoContinueCheck 会自动推进 factionSelect → startTurn → playCards。

@@ -78,16 +78,13 @@ const gotoLocalSmashUp = async (page: Page) => {
     );
 };
 
-/** 蛇形选秀完成派系选择 — 按索引点击，确保 P0 选到 Zombies（index 5） */
+/** 蛇形选秀完成派系选择，保持 P0 仍能选到 Zombies（index 5）。 */
 const completeFactionSelectionLocal = async (page: Page) => {
     const factionHeading = page.locator('h1').filter({ hasText: /Draft Your Factions|选择你的派系/i });
     if (!await factionHeading.isVisible().catch(() => false)) return;
     const factionCards = page.locator('.grid > div');
     const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-    // 蛇形选秀：P0选1 → P1选2 → P0选1
-    // P0 第一选：僵尸（index 5）— 确保弃牌堆出牌能力注册
-    // P1 选两个：index 0, 1
-    // P0 第二选：index 2
+    // 蛇形选秀：P0 先拿 Zombies，P1 再拿 Pirates + Ninjas，最后 P0 拿 Dinosaurs。
     const pickOrder = [5, 0, 1, 2];
     for (const idx of pickOrder) {
         await factionCards.nth(idx).click();

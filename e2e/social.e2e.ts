@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { setChineseLocale } from './helpers/common';
 
-test.describe('Social Hub E2E', () => {
+test.describe('社交中心 E2E', () => {
 
     // Mock Data
     const mockUser = {
         id: 'user_123',
-        username: 'TestPlayer',
+        username: '测试玩家',
         email: 'test@example.com',
         emailVerified: true,
         lastOnline: new Date().toISOString()
@@ -14,7 +15,7 @@ test.describe('Social Hub E2E', () => {
     const mockFriends = [
         {
             id: 'friend_001',
-            username: 'BestFriend',
+            username: '好友甲',
             avatar: 'avatar_1.png',
             online: true
         }
@@ -25,7 +26,7 @@ test.describe('Social Hub E2E', () => {
             id: 'msg_1',
             from: 'friend_001',
             to: 'user_123',
-            content: 'Hello! Want to play?',
+            content: '来一局吗？',
             createdAt: new Date(Date.now() - 10000).toISOString(),
             read: true,
             type: 'text'
@@ -35,14 +36,14 @@ test.describe('Social Hub E2E', () => {
     const mockConversations = [
         {
             userId: 'friend_001',
-            username: 'BestFriend',
+            username: '好友甲',
             avatar: 'avatar_1.png',
             online: true,
             lastMessage: {
                 id: 'msg_1',
                 from: 'friend_001',
                 to: 'user_123',
-                content: 'Hello! Want to play?',
+                content: '来一局吗？',
                 createdAt: new Date(Date.now() - 10000).toISOString(),
                 read: true,
                 type: 'text'
@@ -52,9 +53,7 @@ test.describe('Social Hub E2E', () => {
     ];
 
     test.beforeEach(async ({ page }) => {
-        await page.addInitScript(() => {
-            localStorage.setItem('i18nextLng', 'en');
-        });
+        await setChineseLocale(page);
         const messagesStore = [...mockMessages];
         // 1. Mock API Responses
         await page.route('**/auth/me', async route => {
@@ -126,7 +125,7 @@ test.describe('Social Hub E2E', () => {
             localStorage.setItem('auth_token', 'fake_jwt_token');
             localStorage.setItem('auth_user', JSON.stringify({
                 id: 'user_123',
-                username: 'TestPlayer',
+                username: '测试玩家',
                 email: 'test@example.com'
             }));
         });
@@ -139,7 +138,7 @@ test.describe('Social Hub E2E', () => {
         await page.goto('/');
     });
 
-    test('Should open Social Hub via Global HUD and view friend chat', async ({ page }) => {
+    test('可以通过全局 HUD 打开社交并查看好友聊天', async ({ page }) => {
         // 1. Wait for GlobalHUD to appear
         const hudTrigger = page.locator('[data-testid="fab-menu"] [data-fab-id]').first();
         await expect(hudTrigger).toBeVisible();
@@ -158,7 +157,7 @@ test.describe('Social Hub E2E', () => {
         // If headless UI doesn't use role="dialog" by default, fallback to class
         // Our ModalStack uses a simple div structure usually.
         // Let's look for text "Social" or "好友" as header in the modal.
-        await expect(page.getByText(/Social|好友|社交/i).first()).toBeVisible();
+        await expect(page.getByText(/好友|社交/i).first()).toBeVisible();
 
         // 5. Switch to Friends Tab (if not already active)
         // Note: Skipping deep content verification to focus on HUD entry point connection
@@ -168,21 +167,21 @@ test.describe('Social Hub E2E', () => {
         // }
 
         // 6. Check Friend List (from mock)
-        await expect(page.getByText('BestFriend')).toBeVisible();
+        await expect(page.getByText('好友甲')).toBeVisible();
 
         // 7. Open chat and verify history
-        await page.getByRole('button', { name: /BestFriend/i }).click();
-        await expect(page.locator('.whitespace-pre-wrap', { hasText: 'Hello! Want to play?' })).toBeVisible();
+        await page.getByRole('button', { name: /好友甲/i }).click();
+        await expect(page.locator('.whitespace-pre-wrap', { hasText: '来一局吗？' })).toBeVisible();
 
         // 8. Send a message and verify it appears
-        const chatInput = page.getByPlaceholder('Type a message...');
+        const chatInput = page.getByPlaceholder('输入消息...');
         await expect(chatInput).toBeVisible();
-        await chatInput.fill("Let's play later!");
+        await chatInput.fill('稍后再玩！');
         const [sendResponse] = await Promise.all([
             page.waitForResponse('**/auth/messages/send'),
             chatInput.press('Enter')
         ]);
         expect(sendResponse.ok()).toBeTruthy();
-        await expect(page.locator('.whitespace-pre-wrap', { hasText: "Let's play later!" })).toBeVisible();
+        await expect(page.locator('.whitespace-pre-wrap', { hasText: '稍后再玩！' })).toBeVisible();
     });
 });

@@ -315,6 +315,36 @@ describe('Property 6: 天赋每回合一次', () => {
         } as any);
         expect(s.bases[0].minions[0].talentUsed).toBe(false);
     });
+
+    test('TURN_STARTED 会清空所有玩家的 minionsPlayedPerBase', () => {
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS], {
+                    minionsPlayed: 2,
+                    minionsPlayedPerBase: { 0: 2 },
+                }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS], {
+                    minionsPlayedPerBase: { 0: 1 },
+                }),
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            bases: [makeBase('b')],
+            baseDeck: [],
+            turnNumber: 1,
+            nextUid: 100,
+        };
+
+        const s = reduce(state, {
+            type: SU_EVENTS.TURN_STARTED,
+            payload: { playerId: '1', turnNumber: 1 },
+            timestamp: Date.now(),
+        } as any);
+
+        expect(s.players['0'].minionsPlayedPerBase).toBeUndefined();
+        expect(s.players['1'].minionsPlayedPerBase).toBeUndefined();
+        expect(s.players['1'].minionsPlayed).toBe(0);
+    });
 });
 
 // ============================================================================
@@ -424,6 +454,25 @@ describe('Property 9: 持续行动卡附着', () => {
             { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'og-3' } } as any,
         );
         expect(result.valid).toBe(false);
+    });
+
+    test('普通行动卡声明 playNeedsBase 时缺少 targetBaseIndex 应校验失败', () => {
+        const card = makeCard('bury-1', 'ancient_egyptians_you_can_take_it_with_you', 'action');
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ROBOTS], { hand: [card] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.NINJAS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('test_base')],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const result = validate(
+            { core: state, sys: { phase: 'playCards' } as any },
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'bury-1' } } as any,
+        );
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('需要选择目标基地');
     });
 
     test('ongoing（随从目标）缺少 targetMinionUid 时应校验失败', () => {
@@ -848,7 +897,7 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 'a-1' },
         } as any);
         expect(r.valid).toBe(false);
-        expect(r.error).toContain('特殊');
+        expect(r.error).toBe('该行动卡不能在响应窗口中打出');
     });
 
     test('非当前响应者不能在 Me First 窗口中打牌', () => {
@@ -1056,7 +1105,7 @@ describe('Property 19: 疯狂牌库生命周期', () => {
         };
         const s = reduce(state, event as any);
         expect(s.players['0'].hand.length).toBe(0);
-        expect(s.madnessDeck!.length).toBe(30);
+        expect(s.madnessDeck!.length).toBe(29);
     });
 
     test('疯狂卡 VP 惩罚：每 2 张扣 1 VP', () => {

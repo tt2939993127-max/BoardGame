@@ -1,22 +1,23 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSocial } from '../../contexts/SocialContext';
+import { useOptionalSocial } from '../../contexts/SocialContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { FriendsChatModal } from '../social/FriendsChatModal';
 import { FabMenu, type FabAction } from './FabMenu';
-import { AudioControlSection } from '../game/framework/widgets/AudioControlSection';
 import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { AboutModal } from './AboutModal';
-import { FeedbackModal } from './FeedbackModal';
 
 const HUD_MODAL_NS = 'hud';
+const LazyAudioProvider = lazy(() => import('../../contexts/AudioContext').then(m => ({ default: m.AudioProvider })));
+const LazyAudioControlSection = lazy(() => import('../game/framework/widgets/AudioControlSection').then(m => ({ default: m.AudioControlSection })));
+const LazyFriendsChatModal = lazy(() => import('../social/FriendsChatModal').then(m => ({ default: m.FriendsChatModal })));
+const LazyAboutModal = lazy(() => import('./AboutModal').then(m => ({ default: m.AboutModal })));
+const LazyFeedbackModal = lazy(() => import('./FeedbackModal').then(m => ({ default: m.FeedbackModal })));
 
 export const GlobalHUD = () => {
     const { t } = useTranslation('game');
-    const { unreadTotal, requests } = useSocial();
+    const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();
     const { user } = useAuth();
     const location = useLocation();
@@ -101,9 +102,13 @@ export const GlobalHUD = () => {
         icon: <Settings size={22} />,
         label: t('hud.actions.settings'),
         content: (
-            <div>
-                <AudioControlSection isDark={isDark} />
-            </div>
+            <Suspense fallback={null}>
+                <LazyAudioProvider>
+                    <div>
+                        <LazyAudioControlSection isDark={isDark} />
+                    </div>
+                </LazyAudioProvider>
+            </Suspense>
         )
     });
 
@@ -147,6 +152,7 @@ export const GlobalHUD = () => {
             ),
             label: t('hud.actions.social'),
             onClick: () => {
+                ensureRealtimeConnection();
                 if (socialModalId) {
                     closeModal(socialModalId);
                     return;
@@ -157,7 +163,9 @@ export const GlobalHUD = () => {
                     closeOnEsc: true,
                     onClose: () => setSocialModalId(null),
                     render: ({ close }) => (
-                        <FriendsChatModal isOpen onClose={close} />
+                        <Suspense fallback={null}>
+                            <LazyFriendsChatModal isOpen onClose={close} />
+                        </Suspense>
                     ),
                 });
                 setSocialModalId(id);
@@ -173,8 +181,16 @@ export const GlobalHUD = () => {
                 position="bottom-right"
             />
 
-            {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
-            {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
+            {showAbout && (
+                <Suspense fallback={null}>
+                    <LazyAboutModal onClose={() => setShowAbout(false)} />
+                </Suspense>
+            )}
+            {showFeedback && (
+                <Suspense fallback={null}>
+                    <LazyFeedbackModal onClose={() => setShowFeedback(false)} />
+                </Suspense>
+            )}
         </>
     );
 };

@@ -12,6 +12,7 @@ import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverl
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
+import { getPlayerBoardAspectRatio } from './abilitySlotLayout';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import clsx from 'clsx';
@@ -23,9 +24,11 @@ export interface DiceThroneHeroSelectionProps {
     selectedCharacters: Record<PlayerId, CharacterId>;
     readyPlayers: Record<PlayerId, boolean>;
     playerNames: Record<PlayerId, string>;
+    seatingOrder?: PlayerId[];
     onSelect: (characterId: SelectableCharacterId) => void;
     onReady: () => void;
     onUnready: () => void;
+    onMoveSeat: (playerId: PlayerId, targetSeatIndex: number) => void;
     onStart: () => void;
     locale: string;
 }
@@ -46,6 +49,11 @@ const PLAYER_LABELS: Record<string, string> = {
 
 const HERO_SELECTION_CLICK_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 
+type MagnifyPreview =
+    | { src: string; kind: 'player-board'; characterId: CharacterId }
+    | { src: string; kind: 'tip-board'; characterId: CharacterId }
+    | null;
+
 export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = ({
     isOpen,
     currentPlayerId,
@@ -53,15 +61,18 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     selectedCharacters,
     readyPlayers,
     playerNames,
+    seatingOrder,
     onSelect,
     onReady,
     onUnready,
+    onMoveSeat,
     onStart,
     locale,
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
+    const isFourPlayerMode = playerIds.length === 4;
 
     const everyoneReady = playerIds.every(pid => {
         const char = selectedCharacters[pid as PlayerId];
@@ -73,9 +84,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const hasSelectedChar = selectedCharacters[currentPlayerId] && selectedCharacters[currentPlayerId] !== 'unselected';
 
     const availableCharacters = useMemo(() => {
-        return DICETHRONE_CHARACTER_CATALOG.filter(char =>
-            ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief', 'paladin'].includes(char.id)
-        );
+        return DICETHRONE_CHARACTER_CATALOG;
     }, []);
 
     const previewCharId = useMemo(() => {
@@ -84,7 +93,35 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
         return availableCharacters[0]?.id || 'monk';
     }, [selectedCharacters, currentPlayerId, availableCharacters]);
 
-    const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
+    const [magnifyPreview, setMagnifyPreview] = useState<MagnifyPreview>(null);
+    const [pendingSeatPlayerId, setPendingSeatPlayerId] = useState<PlayerId | null>(null);
+    const [seatFeedbackKey, setSeatFeedbackKey] = useState<string | null>(null);
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(previewCharId);
+
+    const effectiveSeatingOrder = useMemo(() => {
+        const orderedPlayers = seatingOrder?.filter((pid) => playerIds.includes(pid)) ?? [];
+        return orderedPlayers.length === playerIds.length ? orderedPlayers : playerIds;
+    }, [seatingOrder, playerIds]);
+    const selectedSeatIndex = pendingSeatPlayerId
+        ? effectiveSeatingOrder.indexOf(pendingSeatPlayerId)
+        : -1;
+    const teamAPlayers = effectiveSeatingOrder.filter((_, index) => index % 2 === 0);
+    const teamBPlayers = effectiveSeatingOrder.filter((_, index) => index % 2 === 1);
+    const remainingSeatPlayers = pendingSeatPlayerId
+        ? effectiveSeatingOrder.filter((pid) => pid !== pendingSeatPlayerId)
+        : effectiveSeatingOrder;
+    const seatTargetIndexes = pendingSeatPlayerId
+        ? Array.from({ length: remainingSeatPlayers.length + 1 }, (_, index) => index)
+        : [];
+
+    const getPlayerLabel = (pid: string) => PLAYER_LABELS[pid] ?? `P${Number(pid) + 1}`;
+
+    React.useEffect(() => {
+        if (pendingSeatPlayerId && !effectiveSeatingOrder.includes(pendingSeatPlayerId)) {
+            setPendingSeatPlayerId(null);
+            setSeatFeedbackKey(null);
+        }
+    }, [pendingSeatPlayerId, effectiveSeatingOrder]);
 
     const handleSelectCharacter = (characterId: SelectableCharacterId) => {
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
@@ -104,6 +141,132 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     const handleStart = () => {
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
         onStart();
+    };
+
+    const handleSeatPlayerClick = (pid: PlayerId) => {
+        if (!isHost) {
+            setSeatFeedbackKey('selection.seating.readOnly');
+            return;
+        }
+        if (!isFourPlayerMode) {
+            return;
+        }
+        if (pendingSeatPlayerId && pendingSeatPlayerId !== pid) {
+            setSeatFeedbackKey('selection.seating.occupied');
+            return;
+        }
+
+        setSeatFeedbackKey(null);
+        setPendingSeatPlayerId((current) => (current === pid ? null : pid));
+    };
+
+    const handleSeatTargetClick = (targetSeatIndex: number) => {
+        if (!pendingSeatPlayerId) {
+            return;
+        }
+        setSeatFeedbackKey(null);
+        onMoveSeat(pendingSeatPlayerId, targetSeatIndex);
+        setPendingSeatPlayerId(null);
+    };
+
+    const seatHintText = (() => {
+        if (!isFourPlayerMode) {
+            return null;
+        }
+        if (seatFeedbackKey) {
+            return i18n.exists(seatFeedbackKey) ? t(seatFeedbackKey) : seatFeedbackKey;
+        }
+        if (!isHost) {
+            return t('selection.seating.readOnly');
+        }
+        if (pendingSeatPlayerId) {
+            return t('selection.seating.moveHint', {
+                player: getPlayerLabel(pendingSeatPlayerId),
+            });
+        }
+        return t('selection.seating.hostTip');
+    })();
+
+    const renderSeatPlayerCard = (pid: PlayerId, seatIndex: number, compact = false) => {
+        const isSelected = pendingSeatPlayerId === pid;
+        const colors = PLAYER_COLORS[pid] || PLAYER_COLORS['0'];
+        const hasSelected = selectedCharacters[pid] && selectedCharacters[pid] !== 'unselected';
+
+        return (
+            <button
+                key={`seat-player-${pid}-${seatIndex}`}
+                type="button"
+                onClick={() => handleSeatPlayerClick(pid)}
+                className={clsx(
+                    'rounded-[0.8vw] border text-left transition-all',
+                    compact
+                        ? 'min-w-[4.8vw] px-[0.55vw] py-[0.45vw]'
+                        : 'min-w-[8.4vw] px-[0.8vw] py-[0.65vw]',
+                    isSelected
+                        ? 'border-amber-400 bg-amber-500/12 shadow-[0_0_1vw_rgba(245,158,11,0.3)]'
+                        : 'border-white/12 bg-black/25 hover:border-white/28 hover:bg-white/8',
+                    !isHost && 'cursor-default hover:border-white/12 hover:bg-black/25'
+                )}
+            >
+                <div className="flex items-center gap-[0.5vw]">
+                    <div
+                        className={clsx(
+                            'rounded-full flex items-center justify-center font-black',
+                            compact ? 'h-[1.2vw] w-[1.2vw] text-[0.5vw]' : 'h-[1.5vw] w-[1.5vw] text-[0.62vw]'
+                        )}
+                        style={{
+                            backgroundColor: colors.bg,
+                            color: colors.text,
+                            boxShadow: `0 0 12px ${colors.glow}`,
+                        }}
+                    >
+                        {getPlayerLabel(pid)}
+                    </div>
+                    <div className="min-w-0">
+                        <div className={clsx('font-black text-white/90', compact ? 'text-[0.46vw]' : 'text-[0.56vw]')}>
+                            {t('selection.seating.seatNumber', { seat: seatIndex + 1 })}
+                        </div>
+                        <div className={clsx('truncate', compact ? 'text-[0.42vw] text-white/55' : 'text-[0.52vw] text-white/60')}>
+                            {playerNames[pid]}
+                        </div>
+                    </div>
+                </div>
+                <div className={clsx(
+                    'mt-[0.35vw] truncate font-bold',
+                    compact ? 'text-[0.42vw]' : 'text-[0.5vw]',
+                    hasSelected ? 'text-amber-300' : 'text-white/35'
+                )}>
+                    {hasSelected ? t(`characters.${selectedCharacters[pid]}`) : t('selection.notSelected')}
+                </div>
+            </button>
+        );
+    };
+
+    const renderSeatTargetCard = (targetSeatIndex: number) => {
+        const isCurrentSlot = targetSeatIndex === selectedSeatIndex;
+        return (
+            <button
+                key={`seat-target-${targetSeatIndex}`}
+                type="button"
+                disabled={isCurrentSlot}
+                onClick={() => handleSeatTargetClick(targetSeatIndex)}
+                className={clsx(
+                    'min-w-[3.8vw] rounded-[0.75vw] border border-dashed px-[0.55vw] py-[0.45vw] text-center transition-all',
+                    isCurrentSlot
+                        ? 'border-white/10 bg-white/5 text-white/30 cursor-not-allowed'
+                        : 'border-emerald-400/45 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/16 hover:border-emerald-300'
+                )}
+            >
+                <div className="text-[0.42vw] font-black uppercase tracking-[0.18em]">
+                    {t('selection.seating.emptySlot')}
+                </div>
+                <div className="mt-[0.16vw] text-[0.48vw] font-semibold">
+                    {isCurrentSlot
+                        ? t('selection.seating.currentSlot')
+                        : t('selection.seating.seatNumber', { seat: targetSeatIndex + 1 })}
+                </div>
+            </button>
+        );
     };
 
     const readyProgressDots = useMemo(() => {
@@ -133,7 +296,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 h-full flex bg-[#050510] overflow-hidden select-none text-white font-sans"
+            data-testid="character-selection-overlay"
+            className="absolute inset-0 flex h-full w-full max-h-full max-w-full overflow-hidden bg-[#050510] select-none text-white font-sans"
             style={{ zIndex: UI_Z_INDEX.overlay }}
         >
             {/* 动态氛围背景（铺满整个 overlay） */}
@@ -222,31 +386,103 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 {/* 物理面板预览 - OptimizedImage 自动处理本地化路径 */}
                                 <div
                                     className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
+                                    style={{ aspectRatio: String(playerBoardAspectRatio) }}
+                                    onClick={() => setMagnifyPreview({
+                                        src: ASSETS.PLAYER_BOARD(previewCharId as CharacterId),
+                                        kind: 'player-board',
+                                        characterId: previewCharId as CharacterId,
+                                    })}
                                 >
                                     <OptimizedImage
                                         src={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
-                                        className="h-full w-auto object-contain"
-                                        alt="Player Board"
+                                        className="block h-full w-auto object-contain"
+                                        alt="玩家面板"
                                     />
                                 </div>
 
                                 <div
                                     className="relative h-[85%] w-auto rounded-[0.6vw] overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    onClick={() => setMagnifyImage(ASSETS.TIP_BOARD(previewCharId as CharacterId))}
+                                    onClick={() => setMagnifyPreview({
+                                        src: ASSETS.TIP_BOARD(previewCharId as CharacterId),
+                                        kind: 'tip-board',
+                                        characterId: previewCharId as CharacterId,
+                                    })}
                                 >
                                     <OptimizedImage
                                         src={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
                                         locale={locale}
                                         className="h-full w-auto object-contain"
-                                        alt="Tip Board"
+                                        alt="提示板"
                                     />
                                 </div>
                             </div>
                         </motion.div>
                     </AnimatePresence>
                 </div>
+
+                {isFourPlayerMode && (
+                    <div className="absolute right-[2vw] bottom-[9vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
+                        <div className="flex items-start justify-between gap-[0.8vw]">
+                            <div>
+                                <div className="text-[0.72vw] font-black uppercase tracking-[0.18em] text-white/88">
+                                    {t('selection.seating.title')}
+                                </div>
+                                <div className="mt-[0.2vw] text-[0.5vw] leading-relaxed text-white/56">
+                                    {seatHintText}
+                                </div>
+                            </div>
+                            {pendingSeatPlayerId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPendingSeatPlayerId(null);
+                                        setSeatFeedbackKey(null);
+                                    }}
+                                    className="rounded-full border border-white/15 px-[0.65vw] py-[0.25vw] text-[0.48vw] font-semibold text-white/68 transition hover:border-white/30 hover:text-white"
+                                >
+                                    {t('selection.seating.cancel')}
+                                </button>
+                            )}
+                        </div>
+
+                        {!pendingSeatPlayerId && (
+                            <div className="mt-[0.85vw] flex flex-wrap gap-[0.45vw]">
+                                {effectiveSeatingOrder.map((pid, seatIndex) => renderSeatPlayerCard(pid, seatIndex))}
+                            </div>
+                        )}
+
+                        {pendingSeatPlayerId && (
+                            <div className="mt-[0.85vw] flex flex-wrap items-center gap-[0.38vw]">
+                                {seatTargetIndexes.map((targetSeatIndex, index) => (
+                                    <React.Fragment key={`seat-editor-${targetSeatIndex}`}>
+                                        {renderSeatTargetCard(targetSeatIndex)}
+                                        {remainingSeatPlayers[index] && renderSeatPlayerCard(remainingSeatPlayers[index], index, true)}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="mt-[0.8vw] grid grid-cols-2 gap-[0.45vw] text-[0.48vw] text-white/72">
+                            <div className="rounded-[0.8vw] border border-sky-400/22 bg-sky-500/10 px-[0.7vw] py-[0.55vw]">
+                                <div className="font-black uppercase tracking-[0.16em] text-sky-200/90">
+                                    {t('selection.seating.teamA')}
+                                </div>
+                                <div className="mt-[0.18vw] text-white/78">
+                                    {teamAPlayers.map(getPlayerLabel).join(' / ')}
+                                </div>
+                            </div>
+                            <div className="rounded-[0.8vw] border border-rose-400/22 bg-rose-500/10 px-[0.7vw] py-[0.55vw]">
+                                <div className="font-black uppercase tracking-[0.16em] text-rose-200/90">
+                                    {t('selection.seating.teamB')}
+                                </div>
+                                <div className="mt-[0.18vw] text-white/78">
+                                    {teamBPlayers.map(getPlayerLabel).join(' / ')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* 底部玩家面板 (8vw) */}
                 <div
@@ -355,18 +591,26 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
             {/* 放大预览弹窗 - OptimizedImage 自动处理本地化路径 */}
             <MagnifyOverlay
-                isOpen={!!magnifyImage}
-                onClose={() => setMagnifyImage(null)}
+                isOpen={!!magnifyPreview}
+                onClose={() => setMagnifyPreview(null)}
                 containerClassName="max-h-[90vh] max-w-[90vw]"
                 closeLabel={t('actions.closePreview')}
+                overlayTestId="character-selection-magnify-overlay"
             >
-                {magnifyImage && (
-                    <OptimizedImage
-                        src={magnifyImage}
-                        locale={locale}
-                        className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                        alt="Preview"
-                    />
+                {magnifyPreview && (
+                    <div
+                        className="relative"
+                        style={magnifyPreview.kind === 'player-board'
+                            ? { aspectRatio: String(getPlayerBoardAspectRatio(magnifyPreview.characterId)) }
+                            : undefined}
+                    >
+                        <OptimizedImage
+                            src={magnifyPreview.src}
+                            locale={locale}
+                            className="block max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
+                            alt="预览图"
+                        />
+                    </div>
                 )}
             </MagnifyOverlay>
         </motion.div>

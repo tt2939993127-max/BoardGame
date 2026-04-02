@@ -13,6 +13,17 @@ export interface LazyGridRegistration {
     grid: { rows: number; cols: number };
 }
 
+const MIN_CARD_ATLAS_CELL_PX = 16;
+
+function hasUsableAtlasDimensions(
+    img: HTMLImageElement | null | undefined,
+    grid: { rows: number; cols: number },
+): img is HTMLImageElement {
+    if (!img) return false;
+    return img.naturalWidth >= grid.cols * MIN_CARD_ATLAS_CELL_PX
+        && img.naturalHeight >= grid.rows * MIN_CARD_ATLAS_CELL_PX;
+}
+
 // CardPreview 专用注册表：存储 base path（不带扩展名），由 AtlasCard 构建本地化 URL。
 const cardAtlasRegistry = new Map<string, CardAtlasSource>();
 // 懒解析注册表：存储尚未解析的 grid-only 注册
@@ -48,7 +59,7 @@ export function getCardAtlasSource(id: string, locale?: string): CardAtlasSource
 
     // 尝试从预加载缓存获取 HTMLImageElement 的 naturalWidth/naturalHeight
     const img = getPreloadedImageElement(lazy.image, locale);
-    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    if (hasUsableAtlasDimensions(img, lazy.grid)) {
         const config = generateUniformAtlasConfig(
             img.naturalWidth, img.naturalHeight,
             lazy.grid.rows, lazy.grid.cols,
@@ -63,7 +74,7 @@ export function getCardAtlasSource(id: string, locale?: string): CardAtlasSource
         return source;
     }
 
-    // 图片尚未预加载（边缘情况），返回 undefined，AtlasCard 会 fallback 加载
+    // 图片尚未预加载时保持懒注册，交给 AtlasCard 的 fallback 加载流程处理。
     return undefined;
 }
 

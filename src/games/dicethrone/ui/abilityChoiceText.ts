@@ -130,15 +130,20 @@ export function getAbilityChoiceText(
 
     const variantNameKey = `abilities.${abilityId}.name`;
     const variantDescriptionKey = `abilities.${abilityId}.description`;
+    const reusesParentDescriptionKey = match.ability.description === variantDescriptionKey;
+    const parentDescription =
+        match.ability.description && !reusesParentDescriptionKey
+            ? resolver.t(match.ability.description)
+            : undefined;
 
     const fallbackDescription =
         buildEffectDescription(match.variant.effects ?? [], resolver)
-        ?? (match.ability.description ? resolver.t(match.ability.description) : undefined);
+        ?? parentDescription;
 
     if (resolver.exists(variantNameKey)) {
         return {
             name: resolver.t(variantNameKey),
-            description: resolver.exists(variantDescriptionKey)
+            description: resolver.exists(variantDescriptionKey) && !reusesParentDescriptionKey
                 ? resolver.t(variantDescriptionKey)
                 : fallbackDescription,
         };

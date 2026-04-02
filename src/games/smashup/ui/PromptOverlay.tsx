@@ -13,10 +13,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { logger } from '@/lib/logger';
+import { logger } from '../../../lib/logger';
 import { GameButton } from './GameButton';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
-import { CARD_DISPLAY_CONFIG } from './cardDisplayConfig';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { PlayerId } from '../../../engine/types';
 import { UI_Z_INDEX } from '../../../core';
@@ -42,6 +41,15 @@ interface Props {
         selectHint?: string;
         /** 可打出的卡牌 defId 集合（同 defId 的卡功能一样，选哪张都行） */
         playableDefIds?: Set<string>;
+    };
+}
+
+function buildRendererPreviewRef(defId: string | undefined): CardPreviewRef | undefined {
+    if (!defId) return undefined;
+    return {
+        type: 'renderer',
+        rendererId: 'smashup-card-renderer',
+        payload: { defId },
     };
 }
 
@@ -76,15 +84,30 @@ function isCardOption(option: { value: unknown; displayMode?: 'card' | 'button' 
 function extractContextPreview(prompt: any): CardPreviewRef | undefined {
     const ctx = prompt?.continuationContext as Record<string, unknown> | undefined;
     if (!ctx || typeof ctx.defId !== 'string') return undefined;
-    const def = getCardDef(ctx.defId as string) ?? getBaseDef(ctx.defId as string);
-    return def?.previewRef;
+    return buildRendererPreviewRef(ctx.defId);
 }
 
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
 export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
-    return text.replace(/cards\.[\w-]+\.\w+/gi, key => {
-        const lowerKey = key.toLowerCase();
-        const resolved = t(lowerKey, { defaultValue: '' });
+    const directResolved = t(text, { defaultValue: '' });
+    if (directResolved && directResolved !== text) {
+        return directResolved;
+    }
+
+    return text.replace(/cards\.[\w-]+\.\w+|ui\.reaction_timing\.[\w-]+/gi, key => {
+        if (/^cards\./i.test(key)) {
+            const match = /^cards\.([\w-]+)\.(\w+)$/i.exec(key);
+            const defId = match?.[1];
+            const field = match?.[2]?.toLowerCase();
+            const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
+
+            if (def && field === 'name') {
+                const resolvedName = resolveCardName(def, (localeKey: string) => t(localeKey, { defaultValue: localeKey }));
+                return resolvedName || key;
+            }
+        }
+
+        const resolved = t(key, { defaultValue: '' });
         return resolved || key;
     });
 }
@@ -218,7 +241,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const contextPreviewRef = useMemo(() => prompt ? extractContextPreview(prompt) : undefined, [prompt]);
 
     // 少量选项 + 非卡牌模式 → 内联面板
-    const useInlineMode = !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
+    const useInlineMode = !isMulti && !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
 
     // 解析标题中的 i18n key（使用 useMemo 确保响应式更新）
     const title = useMemo(() => {
@@ -231,7 +254,12 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
         if (!prompt?.options) return [];
         return prompt.options.map(opt => ({
             ...opt,
-            label: resolveI18nKeys(opt.label, t),
+            label: typeof (opt as { labelKey?: unknown }).labelKey === 'string'
+                ? t((opt as { labelKey: string }).labelKey, {
+                    ...((opt as { labelParams?: Record<string, string | number> }).labelParams ?? {}),
+                    defaultValue: resolveI18nKeys(opt.label, t),
+                })
+                : resolveI18nKeys(opt.label, t),
         }));
     }, [prompt?.options, t]);
 
@@ -341,18 +369,18 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         }`}>
                                             <div className="rounded shadow-xl overflow-hidden">
                                                 <CardPreview
-                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId } }}
+                                                    previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: card.defId, cardUid: card.uid } }}
                                                     className="w-[8.5vw] aspect-[0.714] bg-slate-900 rounded"
                                                     alt={name}
                                                 />
                                             </div>
                                         </div>
                                         <button
-                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
+                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                             onClick={(e) => { e.stopPropagation(); setMagnifyTarget({ defId: card.defId, type: def?.type ?? 'action' }); }}
                                         >
                                             <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M8 4a4 4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                                                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                             </svg>
                                         </button>
                                         <span className={`text-xs font-bold max-w-[8.5vw] truncate text-center ${isSel ? 'text-amber-300' : 'text-white/80'}`}>
@@ -641,7 +669,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                             {cardOptions.map((option, idx) => {
                                 const defId = extractDefId(option.value);
                                 const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
-                                const previewRef = def?.previewRef;
+                                const previewRef = buildRendererPreviewRef(defId);
                                 const name = def ? resolveCardName(def, t) : option.label;
                                 const isSelected = selectedIds.includes(option.id);
                                 const isBase = !!getBaseDef(defId ?? '');
@@ -696,7 +724,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         {/* 放大镜按钮 - 右上角突出显示，多选模式下勾选在左上角 */}
                                         {defId && (
                                             <button
-                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
+                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     const cardType = getBaseDef(defId) ? 'base' as const : (def && 'type' in def ? def.type : 'action' as const);

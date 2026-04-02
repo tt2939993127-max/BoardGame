@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MousePointerClick } from 'lucide-react';
-import type { AbilityCard, Die, TurnPhase } from '../types';
+import type { AbilityCard, Die, PlayerId, TurnPhase } from '../types';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { MultistepChoiceData } from '../../../engine/systems/InteractionSystem';
 import { useMultistepInteraction } from '../../../engine/systems/useMultistepInteraction';
@@ -16,7 +16,6 @@ import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { ActiveModifierBadge } from './ActiveModifierBadge';
-import { AttackBonusDamageDisplay } from './AttackBonusDamageDisplay';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
 
@@ -49,8 +48,10 @@ export const RightSidebar = ({
     interaction,
     dispatch,
     activeModifiers,
-    bonusDamage,
+    attackModifierBonusDamage,
     passiveAbilityProps,
+    rootPlayerId,
+    teamIdByPlayerId,
 }: {
     dice: Die[];
     rollCount: number;
@@ -77,32 +78,24 @@ export const RightSidebar = ({
     onUndoDiscard: () => void;
     discardHighlighted: boolean;
     sellButtonVisible: boolean;
-    /** 当前骰子交互（从 sys.interaction.current 读取） */
     interaction?: InteractionDescriptor;
-    /** dispatch 函数（用于响应交互） */
     dispatch: (type: string, payload?: unknown) => void;
-    /** 已激活的攻击修正卡 */
     activeModifiers?: ActiveModifier[];
-    /** 当前攻击的伤害加成（从 pendingAttack.bonusDamage 读取） */
-    bonusDamage?: number;
-    /** 被动能力面板 props */
+    attackModifierBonusDamage?: number;
     passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
+    rootPlayerId: PlayerId;
+    teamIdByPlayerId?: Record<PlayerId, string>;
 }) => {
-    // 骰子多步交互状态（统一管理，替代旧的 4 个 useState + useEffect）
     const isDiceMultistep = interaction?.kind === 'multistep-choice' &&
         ((interaction.data as any)?.meta?.dtType === 'modifyDie' ||
          (interaction.data as any)?.meta?.dtType === 'selectDie');
 
-    // 序列化边界修复：服务端状态经 JSON 传输后，multistep-choice 的函数（localReducer/toCommands）丢失。
-    // 根据 meta 中的纯数据重新注入客户端函数，确保 useMultistepInteraction 能正常工作。
     const diceInteraction = useMemo(() => {
         if (!isDiceMultistep || !interaction) return undefined;
         const data = interaction.data as MultistepChoiceData<DiceModifyStep | DiceSelectStep, DiceModifyResult | DiceSelectResult>;
-        // 检查函数是否存在（乐观状态中函数完整，服务端状态中函数丢失）
         if (typeof data?.localReducer === 'function' && typeof data?.toCommands === 'function') {
             return interaction as InteractionDescriptor<MultistepChoiceData<DiceModifyStep | DiceSelectStep, DiceModifyResult | DiceSelectResult>>;
         }
-        // 函数丢失：根据 meta.dtType 重新注入
         const meta = (data as any)?.meta;
         if (!meta) return undefined;
         let hydratedData: MultistepChoiceData<DiceModifyStep | DiceSelectStep, DiceModifyResult | DiceSelectResult>;
@@ -114,7 +107,6 @@ export const RightSidebar = ({
                 initialResult: data.initialResult ?? { modifications: {}, modCount: 0, totalAdjustment: 0 },
                 localReducer: (current: any, step: any) => diceModifyReducer(current, step, config),
                 toCommands: diceModifyToCommands as any,
-                // any/adjust 模式：maxSteps 应为 undefined（手动确认），hydration 时修正
                 maxSteps: isManualConfirmMode ? undefined : data.maxSteps,
                 minSteps: isManualConfirmMode ? 1 : data.minSteps,
             };
@@ -134,9 +126,17 @@ export const RightSidebar = ({
 
     const multistepInteraction = useMultistepInteraction(diceInteraction, dispatch);
 
-    // 骰子交互操作提示
     const { t } = useTranslation('game-dicethrone');
-    
+    const actionRailWidthClassName = 'w-[10.2vw]';
+    const sidebarFrameClassName = 'absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto';
+    const advanceButtonSizeClassName = '!text-[0.75vw] !px-[0.5vw] !py-0 !min-h-0 h-[2.5vw] !rounded-[0.5vw]';
+    const stackGapClassName = 'gap-[0.75vw]';
+    const modifierBadgeRowClassName = 'pointer-events-none absolute left-1/2 bottom-full mb-[0.55vw] flex -translate-x-1/2 items-center justify-center gap-[0.35vw] whitespace-nowrap';
+    const hintOffsetClassName = 'mr-[0.6vw]';
+    const hintBubbleClassName = 'flex max-w-[8.8vw] min-w-0 items-center gap-[0.4vw] overflow-hidden rounded-[0.5vw] border border-amber-500/50 bg-amber-950/95 px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
+    const hintIconClassName = 'w-[1vw] h-[1vw] text-amber-400 shrink-0';
+    const hintTextClassName = 'min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.75vw] text-amber-200 font-medium leading-snug';
+
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;
         const dtMeta = getDtMeta(interaction);
@@ -153,7 +153,6 @@ export const RightSidebar = ({
         const currentCount = isSelectMode ? selectCount : modCount;
         const maxCount = dtMeta.selectCount ?? 1;
 
-        // copy 模式：分步提示
         if (isModifyMode && mode === 'copy') {
             if (currentCount === 0) return t('interaction.hint_copy_step1');
             if (currentCount === 1) {
@@ -162,72 +161,80 @@ export const RightSidebar = ({
             }
             return t('interaction.hint_done');
         }
-        // set 模式
         if (isModifyMode && mode === 'set') {
             if (currentCount >= maxCount) return t('interaction.hint_done');
             return t('interaction.hint_set', { value: config?.targetValue ?? '?' });
         }
-        // adjust 模式
         if (isModifyMode && mode === 'adjust') return t('interaction.hint_adjust');
-        // any 模式
         if (isModifyMode && mode === 'any') {
             if (currentCount >= maxCount) return t('interaction.hint_done');
             return t('interaction.hint_any');
         }
-        // selectDie 模式（重投）
         if (isSelectMode) {
             if (currentCount >= maxCount) return t('interaction.hint_done');
-            const key = dtMeta.targetOpponentDice ? 'interaction.hint_select_opponent' : 'interaction.hint_select';
+            let key = dtMeta.targetOpponentDice ? 'interaction.hint_select_opponent' : 'interaction.hint_select';
+            if (dtMeta.diceOwnerId) {
+                const ownerTeamId = teamIdByPlayerId?.[dtMeta.diceOwnerId];
+                const rootTeamId = teamIdByPlayerId?.[rootPlayerId];
+                if (dtMeta.diceOwnerId === rootPlayerId) {
+                    key = 'interaction.hint_select';
+                } else if (ownerTeamId && rootTeamId && ownerTeamId === rootTeamId) {
+                    key = 'interaction.hint_select_ally';
+                } else {
+                    key = 'interaction.hint_select_opponent';
+                }
+            }
             return t(key, { current: currentCount, max: maxCount });
         }
         return null;
-    }, [isDiceMultistep, interaction, multistepInteraction?.result, t]);
+    }, [isDiceMultistep, interaction, multistepInteraction?.result, rootPlayerId, t, teamIdByPlayerId]);
 
     return (
         <div
-            className="absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
+            className={sidebarFrameClassName}
             style={{ zIndex: UI_Z_INDEX.hud }}
         >
             <div className="flex-grow" />
-            <div className="relative w-full flex flex-col items-center gap-[0.75vw]">
-                {/* 攻击修正徽章：absolute 定位，不挤压骰子区域布局 */}
-                {activeModifiers && activeModifiers.length > 0 && (
-                    <div className="absolute -top-[2.2vw] left-1/2 -translate-x-1/2 z-10">
-                        <ActiveModifierBadge modifiers={activeModifiers} />
-                    </div>
-                )}
-                {/* 伤害加成显示：absolute 定位，在 ActiveModifierBadge 下方 */}
-                {bonusDamage && bonusDamage > 0 && (
-                    <div className="absolute -top-[3.8vw] left-1/2 -translate-x-1/2 z-10">
-                        <AttackBonusDamageDisplay bonusDamage={bonusDamage} />
-                    </div>
-                )}
+            <div className={`relative w-full flex flex-col items-center ${stackGapClassName}`}>
                 <div className="relative">
-                    {/* 骰子交互操作提示：骰子盘左侧居中 */}
+                    {(activeModifiers && activeModifiers.length > 0) || (attackModifierBonusDamage && attackModifierBonusDamage > 0) ? (
+                        <div
+                            className={modifierBadgeRowClassName}
+                            style={{ zIndex: UI_Z_INDEX.hint }}
+                        >
+                            {activeModifiers && activeModifiers.length > 0 && (
+                                <ActiveModifierBadge
+                                    modifiers={activeModifiers}
+                                    bonusDamage={attackModifierBonusDamage ?? 0}
+                                />
+                            )}
+                        </div>
+                    ) : null}
                     {isDiceMultistep && interactionHint && (
-                        <div className="absolute right-full top-1/2 -translate-y-1/2 mr-[0.6vw] z-10 pointer-events-none">
-                            <div className="flex items-center gap-[0.4vw] bg-amber-950/95 border border-amber-500/50 rounded-[0.5vw] px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap">
-                                <MousePointerClick className="w-[1vw] h-[1vw] text-amber-400 shrink-0" />
-                                <span className="text-[0.75vw] text-amber-200 font-medium leading-snug">
+                        <div className={`absolute right-full top-1/2 -translate-y-1/2 ${hintOffsetClassName} z-10 pointer-events-none`}>
+                            <div className={hintBubbleClassName}>
+                                <MousePointerClick className={hintIconClassName} />
+                                <span className={hintTextClassName}>
                                     {interactionHint}
                                 </span>
                             </div>
                         </div>
                     )}
                     <DiceTray
-                    dice={dice}
-                    onToggleLock={(id) => {
-                        if (!canInteractDice) return;
-                        onToggleLock(id);
-                    }}
-                    currentPhase={currentPhase}
-                    canInteract={canInteractDice}
-                    isRolling={isRolling}
-                    rerollingDiceIds={rerollingDiceIds}
-                    locale={locale}
-                    interaction={isDiceMultistep ? interaction : undefined}
-                    multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
-                    isPassiveRerollMode={!!passiveAbilityProps?.rerollSelectingAction}
+                        dice={dice}
+                        rollCount={rollCount}
+                        onToggleLock={(id) => {
+                            if (!canInteractDice) return;
+                            onToggleLock(id);
+                        }}
+                        currentPhase={currentPhase}
+                        canInteract={canInteractDice}
+                        isRolling={isRolling}
+                        rerollingDiceIds={rerollingDiceIds}
+                        locale={locale}
+                        interaction={isDiceMultistep ? interaction : undefined}
+                        multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
+                        isPassiveRerollMode={!!passiveAbilityProps?.rerollSelectingAction}
                     />
                 </div>
                 <DiceActions
@@ -244,25 +251,23 @@ export const RightSidebar = ({
                     multistepInteraction={isDiceMultistep ? multistepInteraction : undefined}
                     setRerollingDiceIds={setRerollingDiceIds}
                 />
-                {/* 下一阶段按钮：始终占位，隐藏时使用 invisible 且禁用 pointer-events */}
                 <div className={`w-full flex justify-center ${showAdvancePhaseButton ? '' : 'invisible pointer-events-none'}`}>
                     <GameButton
                         onClick={onAdvance}
                         disabled={!isAdvanceButtonEnabled}
                         variant={isAdvanceButtonEnabled ? "primary" : "secondary"}
                         clickSoundKey={null}
-                        className="w-[10.2vw] !text-[0.75vw] !py-[0.7vw]"
+                        className={`${actionRailWidthClassName} ${advanceButtonSizeClassName}`}
                         size="sm"
                         data-tutorial-id="advance-phase-button"
                     >
                         {advanceLabel}
                     </GameButton>
                 </div>
-                {/* 被动能力面板（如教皇税） */}
                 {passiveAbilityProps && passiveAbilityProps.passives.length > 0 && (
                     <PassiveAbilityPanel {...passiveAbilityProps} />
                 )}
-                <div className="w-[10.2vw] flex justify-center">
+                <div className={`${actionRailWidthClassName} flex justify-center`}>
                     <DiscardPile
                         ref={discardPileRef}
                         cards={discardCards}

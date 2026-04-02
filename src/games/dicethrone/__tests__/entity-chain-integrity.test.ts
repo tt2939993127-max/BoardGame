@@ -136,6 +136,14 @@ describe('customActionId 引用链', () => {
                     });
                 }
             }
+            if (def.activeUse?.customActionId) {
+                chains.push({
+                    sourceLabel: 'TokenDef.activeUse',
+                    sourceId: def.id,
+                    refType: 'customAction',
+                    refId: def.activeUse.customActionId,
+                });
+            }
             return chains;
         },
     );
@@ -393,8 +401,8 @@ createEffectContractSuite({
 // 6c. TokenDef 被动触发契约
 // --------------------------------------------------------------------------
 
-/** TokenDef 被动触发效果契约规则 */
-const tokenPassiveRules: EffectContractRule<{ tokenId: string; action: AbilityEffect['action'] }>[] = [
+/** TokenDef custom action 契约规则 */
+const tokenCustomActionRules: EffectContractRule<{ tokenId: string; action: AbilityEffect['action'] }>[] = [
     {
         name: 'custom action 的 customActionId 必须在注册表中',
         appliesTo: (e) => e.action?.type === 'custom' && !!e.action.customActionId,
@@ -405,12 +413,29 @@ const tokenPassiveRules: EffectContractRule<{ tokenId: string; action: AbilityEf
 ];
 
 createEffectContractSuite({
-    suiteName: 'TokenDef 被动触发数据契约',
-    getSources: () => ALL_TOKEN_DEFINITIONS.filter(d => d.passiveTrigger?.actions?.length),
+    suiteName: 'TokenDef custom action 数据契约',
+    getSources: () => ALL_TOKEN_DEFINITIONS.filter(d =>
+        (d.passiveTrigger?.actions ?? []).some(a => a.type === 'custom' && !!a.customActionId)
+        || !!d.activeUse?.customActionId
+    ),
     getSourceId: (def) => def.id,
-    extractEffects: (def) =>
-        (def.passiveTrigger?.actions ?? []).map(a => ({ tokenId: def.id, action: a })),
-    rules: tokenPassiveRules,
+    extractEffects: (def) => {
+        const passiveEffects = (def.passiveTrigger?.actions ?? [])
+            .filter(a => a.type === 'custom' && !!a.customActionId)
+            .map(a => ({ tokenId: def.id, action: a }));
+        const activeUseEffects = def.activeUse?.customActionId
+            ? [{
+                tokenId: def.id,
+                action: {
+                    type: 'custom',
+                    target: 'self',
+                    customActionId: def.activeUse.customActionId,
+                } as AbilityEffect['action'],
+            }]
+            : [];
+        return [...passiveEffects, ...activeUseEffects];
+    },
+    rules: tokenCustomActionRules,
     minSourceCount: 1,
 });
 
@@ -584,6 +609,12 @@ describe('Token 响应窗口契约完整性', () => {
         TOKEN_IDS.FIRE_MASTERY, // 由 resolveBurnDown / resolveDmgPerFM 等 custom actions 自动消耗
     ]);
 
+    const ZERO_VALUE_DYNAMIC_PROCESSOR_TOKEN_IDS = new Set([
+        TOKEN_IDS.ACCURACY,
+        TOKEN_IDS.PROTECT,
+        TOKEN_IDS.RETRIBUTION,
+    ]);
+
     it('自动消耗的 token 不应该有 activeUse 配置', () => {
         const violations: string[] = [];
         for (const def of ALL_TOKEN_DEFINITIONS) {
@@ -622,6 +653,24 @@ describe('Token 响应窗口契约完整性', () => {
             const effectType = def.activeUse!.effect.type;
             if (!UI_KNOWN_EFFECT_TYPES.has(effectType)) {
                 violations.push(`[${def.id}] effect type "${effectType}" 不在 UI 已知分类中`);
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('value=0 的主动 token 必须显式声明 customActionId 或列入动态处理白名单', () => {
+        const violations: string[] = [];
+        for (const def of consumableTokens) {
+            const effect = def.activeUse!.effect;
+            if (effect.value !== 0) continue;
+            if (!['modifyDamageDealt', 'modifyDamageReceived'].includes(effect.type)) continue;
+
+            const hasExplicitCustomAction = !!def.activeUse!.customActionId;
+            const isDynamicProcessorToken = ZERO_VALUE_DYNAMIC_PROCESSOR_TOKEN_IDS.has(def.id);
+            if (!hasExplicitCustomAction && !isDynamicProcessorToken) {
+                violations.push(
+                    `[${def.id}] activeUse.effect.value=0，但既没有 activeUse.customActionId，也不在动态处理白名单中`
+                );
             }
         }
         expect(violations).toEqual([]);

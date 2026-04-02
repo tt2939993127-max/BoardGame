@@ -12,6 +12,7 @@ import { AuthService } from '../src/modules/auth/auth.service';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { UserSettingsModule } from '../src/modules/user-settings/user-settings.module';
 import { UserAudioSettings, type UserAudioSettingsDocument } from '../src/modules/user-settings/schemas/user-audio-settings.schema';
+import { UserUISettings, type UserUISettingsDocument } from '../src/modules/user-settings/schemas/user-ui-settings.schema';
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 
 describe('UserSettings Module (e2e)', () => {
@@ -19,6 +20,7 @@ describe('UserSettings Module (e2e)', () => {
     let app: import('@nestjs/common').INestApplication;
     let userModel: Model<UserDocument>;
     let settingsModel: Model<UserAudioSettingsDocument>;
+    let uiSettingsModel: Model<UserUISettingsDocument>;
     let authService: AuthService;
 
     beforeAll(async () => {
@@ -41,6 +43,7 @@ describe('UserSettings Module (e2e)', () => {
         app = moduleRef.createNestApplication();
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
         settingsModel = moduleRef.get<Model<UserAudioSettingsDocument>>(getModelToken(UserAudioSettings.name));
+        uiSettingsModel = moduleRef.get<Model<UserUISettingsDocument>>(getModelToken(UserUISettings.name));
         authService = moduleRef.get<AuthService>(AuthService);
         app.useGlobalPipes(
             new ValidationPipe({
@@ -56,6 +59,7 @@ describe('UserSettings Module (e2e)', () => {
         await Promise.all([
             userModel.deleteMany({}),
             settingsModel.deleteMany({}),
+            uiSettingsModel.deleteMany({}),
         ]);
     });
 
@@ -149,5 +153,57 @@ describe('UserSettings Module (e2e)', () => {
             .set('Authorization', `Bearer ${token}`)
             .send({ muted: false, masterVolume: 1.5, sfxVolume: 0.5, bgmVolume: 0.5 })
             .expect(400);
+    });
+
+    it('读取与更新本地 AI 开局偏好', async () => {
+        const email = 'local-ai-user@example.com';
+        const code = '999888';
+        await authService.storeEmailCode(email, code);
+
+        const registerRes = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'local-ai-user', email, code, password: 'pass1234' })
+            .expect(201);
+
+        const token = registerRes.body.token as string;
+        const userId = registerRes.body.user.id as string;
+
+        const emptyRes = await request(app.getHttpServer())
+            .get('/auth/user-settings/local-ai/smashup')
+            .set('Authorization', `Bearer ${token}`)
+            .expect(200);
+
+        expect(emptyRes.body.empty).toBe(true);
+        expect(emptyRes.body.settings).toBeNull();
+
+        const payload = {
+            numPlayers: 3,
+            seatControllers: {
+                '1': { type: 'local-ai', policyId: 'opening-v1' },
+                '2': { type: 'human' },
+            },
+            setupSelections: {
+                expansions: ['titans'],
+            },
+        };
+
+        const updateRes = await request(app.getHttpServer())
+            .put('/auth/user-settings/local-ai/smashup')
+            .set('Authorization', `Bearer ${token}`)
+            .send(payload)
+            .expect(201);
+
+        expect(updateRes.body.settings).toMatchObject(payload);
+
+        const getRes = await request(app.getHttpServer())
+            .get('/auth/user-settings/local-ai/smashup')
+            .set('Authorization', `Bearer ${token}`)
+            .expect(200);
+
+        expect(getRes.body.empty).toBe(false);
+        expect(getRes.body.settings).toMatchObject(payload);
+
+        const saved = await uiSettingsModel.findOne({ userId }).lean();
+        expect(saved?.localAiMatchPreferences?.smashup).toMatchObject(payload);
     });
 });

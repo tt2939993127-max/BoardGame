@@ -22,11 +22,14 @@ import {
 import { createGameEngine } from '../../engine/adapter';
 import { buildDamageBreakdownSegment, type DamageSourceResolver } from '../../engine/primitives/actionLogHelpers';
 import { DiceThroneDomain } from './domain';
-import { DICETHRONE_COMMANDS } from './domain/ids';
+import { getDiceDefinition } from './domain/diceRegistry';
+import { DICETHRONE_COMMANDS, TOKEN_IDS } from './domain/ids';
 import type {
     AbilityCard,
     DiceThroneCore,
+    DtResponseWindowType,
     TurnPhase,
+    ChoiceResolvedEvent,
     DamageDealtEvent,
     AttackResolvedEvent,
     HealAppliedEvent,
@@ -43,11 +46,15 @@ import type {
 } from './domain/types';
 import { getCommandCategory, CommandCategory, validateCommandCategories } from './domain/commandCategories';
 import { createDiceThroneEventSystem } from './domain/systems';
-import { getNextPhase, getRollerId, getActiveDice } from './domain/rules';
+import { getNextPhase, getRollerId, getActiveDice, areTeammates } from './domain/rules';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
+import { isCardPlayableInResponseWindow } from './domain/rules';
+import { isDirectDiceInterferenceActor } from './domain/responseWindowGuards';
 import { ASSETS } from './ui/assets';
+import { registerGameAiRuntime } from '../../engine/ai';
+import { diceThroneAiRuntime } from './ai';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -66,6 +73,8 @@ const ACTION_LOG_ALLOWLIST = [
     'USE_PASSIVE_ABILITY',
     // 确认投掷：记录最终骰面结果
     'CONFIRM_ROLL',
+    // 交互确认会承载关键选择结果（如暴击/精准），需要进入操作日志
+    'SYS_INTERACTION_RESPOND',
 ] as const;
 
 const UNDO_ALLOWLIST = [
@@ -78,6 +87,20 @@ const UNDO_ALLOWLIST = [
 
 const DT_NS = 'game-dicethrone';
 
+const OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS: Partial<Record<string, string>> = {
+    [TOKEN_IDS.CRIT]: 'actionLog.offensiveRollEndTokenEffect.crit',
+    [TOKEN_IDS.ACCURACY]: 'actionLog.offensiveRollEndTokenEffect.accuracy',
+    [TOKEN_IDS.LOADED]: 'actionLog.offensiveRollEndTokenEffect.loaded',
+};
+
+function getOffensiveRollEndTokenEffectKey(
+    tokenId?: string,
+    customId?: string,
+): string | null {
+    if (!tokenId || !customId?.startsWith('use-')) return null;
+    return OFFENSIVE_ROLL_END_TOKEN_EFFECT_KEYS[tokenId] ?? null;
+}
+
 /** DiceThrone 伤害来源解析器（实现 DamageSourceResolver 接口） */
 const dtDamageSourceResolver: DamageSourceResolver = {
     resolve(sourceAbilityId: string) {
@@ -86,6 +109,7 @@ const dtDamageSourceResolver: DamageSourceResolver = {
             case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true, ns: DT_NS };
             case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true, ns: DT_NS };
             case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true, ns: DT_NS };
+            case 'samurai-back-strike-reflect': return { label: 'actionLog.damageSource.backStrike', isI18n: true, ns: DT_NS };
         }
         return null;
     },
@@ -378,7 +402,8 @@ function formatDiceThroneActionEntry({
         const characterId = core.players[rollerId]?.characterId;
 
         if (characterId && characterId !== 'unselected' && activeDice.length > 0) {
-            const spriteAsset = ASSETS.DICE_SPRITE(characterId);
+            const spriteAsset = getDiceDefinition(activeDice[0]?.definitionId)?.assets?.spriteSheet
+                ?? ASSETS.DICE_SPRITE(characterId);
             const SPRITE_COLS = 3;
             const SPRITE_ROWS = 3;
             // 精灵图中骰面值→网格位置的映射
@@ -441,6 +466,35 @@ function formatDiceThroneActionEntry({
         // 否则 newest-first 排序时效果会显示在命令下方（看起来先于命令发生）
         const rawEventTs = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
         const entryTimestamp = Math.max(rawEventTs, timestamp + 1 + index);
+
+        if (command.type === 'SYS_INTERACTION_RESPOND' && event.type === 'CHOICE_RESOLVED') {
+            const choiceEvent = event as ChoiceResolvedEvent;
+            const { tokenId, customId, playerId } = choiceEvent.payload;
+            const effectKey = getOffensiveRollEndTokenEffectKey(tokenId, customId);
+
+            if (tokenId && effectKey) {
+                const tokenKey = getTokenI18nKey(tokenId);
+                const paramI18nKeys = ['effectLabel'];
+                if (tokenKey.includes('.')) {
+                    paramI18nKeys.push('tokenLabel');
+                }
+
+                entries.push({
+                    id: `TOKEN_USED-${playerId}-${entryTimestamp}-${index}`,
+                    timestamp: entryTimestamp,
+                    actorId: playerId,
+                    kind: 'TOKEN_USED',
+                    segments: [
+                        i18nSeg(
+                            'actionLog.offensiveRollEndTokenUsed',
+                            { tokenLabel: tokenKey, effectLabel: effectKey },
+                            paramI18nKeys,
+                        ),
+                    ],
+                });
+                return;
+            }
+        }
 
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;
@@ -784,7 +838,7 @@ function formatDiceThroneActionEntry({
             const isCardI18n = cardName?.includes('.');
             
             const segments: ActionLogSegment[] = [
-                i18nSeg('actionLog.dieRerolled', { 
+                i18nSeg('actionLog.dieRerolled', {
                     dieId: dieId + 1, 
                     oldValue, 
                     newValue 
@@ -913,6 +967,35 @@ const systems = [
         ],
         
         responderExemptCommands: ['USE_TOKEN', 'SKIP_TOKEN_RESPONSE', 'USE_PASSIVE_ABILITY'],
+        allowNonResponderCommand: ({ state, command, currentWindow }) => {
+            if (command.type !== 'PLAY_CARD' || currentWindow.windowType !== 'afterRollConfirmed') {
+                return false;
+            }
+
+            const matchState = state as MatchState<DiceThroneCore>;
+            const cardId = (command.payload as { cardId?: string } | undefined)?.cardId;
+            if (!cardId) {
+                return false;
+            }
+
+            if (!isDirectDiceInterferenceActor(matchState.core, currentWindow, command.playerId)) {
+                return false;
+            }
+
+            const player = matchState.core.players[command.playerId];
+            const card = player?.hand.find((item) => item.id === cardId);
+            if (!card) {
+                return false;
+            }
+
+            return isCardPlayableInResponseWindow(
+                matchState.core,
+                command.playerId,
+                card,
+                currentWindow.windowType as DtResponseWindowType,
+                matchState.sys.phase as TurnPhase,
+            );
+        },
         responseAdvanceEvents: [
             { eventType: 'CARD_PLAYED' },
         ],
@@ -956,6 +1039,7 @@ const COMMAND_TYPES = [
     // 选角相关
     'SELECT_CHARACTER',
     'HOST_START_GAME',
+    'MOVE_SEAT',
     'PLAYER_READY',
     'PLAYER_UNREADY',
     // Token 响应系统
@@ -987,7 +1071,7 @@ const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 2,
+    maxPlayers: 4,
     commandTypes: COMMAND_TYPES,
 };
 
@@ -1011,3 +1095,5 @@ registerCriticalImageResolver('dicethrone', diceThroneCriticalImageResolver);
 
 // 导出类型（兼容）
 export type { DiceThroneCore } from './domain';
+
+registerGameAiRuntime(diceThroneAiRuntime);

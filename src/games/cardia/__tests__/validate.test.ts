@@ -47,7 +47,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Not in play phase');
+            expect(result.error).toBe('not_in_play_phase');
         });
         
         it('should allow any player to play card in play phase (simultaneous play)', () => {
@@ -70,7 +70,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Card not in hand');
+            expect(result.error).toBe('card_not_in_hand');
         });
         
         it('should reject playing card when already played', () => {
@@ -83,7 +83,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Already played a card this turn');
+            expect(result.error).toBe('already_played_card_this_turn');
         });
     });
     
@@ -138,7 +138,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Not in ability phase');
+            expect(result.error).toBe('not_in_ability_phase');
         });
         
         it('should reject activating ability when not loser', () => {
@@ -173,7 +173,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Only the loser can activate abilities');
+            expect(result.error).toBe('only_loser_can_activate_abilities');
         });
     });
     
@@ -212,7 +212,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Not in ability phase');
+            expect(result.error).toBe('not_in_ability_phase');
         });
     });
     
@@ -239,7 +239,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Not in end phase');
+            expect(result.error).toBe('not_in_end_phase');
         });
         
         it('should reject ending turn when not current player', () => {
@@ -252,7 +252,7 @@ describe('Cardia - Command Validation', () => {
             });
             
             expect(result.valid).toBe(false);
-            expect(result.error).toContain('Not your turn');
+            expect(result.error).toBe('not_your_turn');
         });
     });
 });

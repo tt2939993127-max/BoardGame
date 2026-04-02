@@ -4,10 +4,14 @@ import https from 'https';
 // 派系映射
 const FACTION_WIKI_NAMES = {
   aliens: 'Aliens',
+  ancient_egyptians: 'Ancient_Egyptians',
+  cowboys: 'Cowboys',
   ninjas: 'Ninjas',
   pirates: 'Pirates',
   robots: 'Robots',
+  samurai: 'Samurai',
   tricksters: 'Tricksters',
+  vikings: 'Vikings',
   wizards: 'Wizards',
   zombies: 'Zombies',
   dinosaurs: 'Dinosaurs',
@@ -124,11 +128,23 @@ async function fetchFactionCards(factionId) {
 
 // 主函数
 async function main() {
-  console.log('开始从 Wiki 抓取所有派系的卡牌信息（包含效果描述）...\n');
+  const requestedFactions = process.argv.slice(2);
+  const factionIds = requestedFactions.length > 0
+    ? requestedFactions
+    : Object.keys(FACTION_WIKI_NAMES);
+
+  const invalidFactionIds = factionIds.filter((factionId) => !FACTION_WIKI_NAMES[factionId]);
+  if (invalidFactionIds.length > 0) {
+    console.error(`❌ 未知派系: ${invalidFactionIds.join(', ')}`);
+    console.error(`可用派系: ${Object.keys(FACTION_WIKI_NAMES).join(', ')}`);
+    process.exit(1);
+  }
+
+  console.log(`开始从 Wiki 抓取卡牌信息（包含效果描述），目标派系：${factionIds.join(', ')}\n`);
   
   const allFactions = {};
   
-  for (const factionId of Object.keys(FACTION_WIKI_NAMES)) {
+  for (const factionId of factionIds) {
     const cards = await fetchFactionCards(factionId);
     allFactions[factionId] = cards;
     

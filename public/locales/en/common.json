@@ -30,11 +30,22 @@
     "recommended_players": "Recommended"
   },
   "language": {
+    "label": "Language",
     "zhCN": "Chinese",
     "en": "English"
   },
   "toast": {
     "close": "Close"
+  },
+  "socketCompatibility": {
+    "title": "Real-time connection looks unstable",
+    "description": "This network may not support websocket-only connections. You can enable compatibility mode for a steadier connection, though it may be slightly slower.",
+    "enable": "Enable compatibility mode",
+    "enabledTitle": "Compatibility mode enabled",
+    "enabledDescription": "Polling fallback is now allowed for real-time updates. If your network becomes normal again, you can turn it off to recover faster response.",
+    "disable": "Turn compatibility mode off",
+    "disabledTitle": "Compatibility mode disabled",
+    "disabledDescription": "Returned to websocket-only mode and reconnecting now."
   },
   "rematch": {
     "playAgain": "Play Again",
@@ -55,6 +66,7 @@
   },
   "accept": "Accept",
   "reject": "Reject",
+  "close": "Close",
   "back": "Back",
   "loading": "Loading",
   "unknownUser": "Unknown User",
@@ -78,10 +90,39 @@
     "backHome": "Try returning home",
     "status": "Status: 503 Service Unavailable"
   },
+  "compatibility": {
+    "seoTitle": "Browser Compatibility Issue",
+    "seoDescription": "This browser is missing modern CSS features required by the app. Please try the latest Chrome or update Android System WebView.",
+    "badge": "Compatibility Notice",
+    "currentBrowser": "Detected browser: {{browser}}",
+    "requiredVersions": "In practice Chrome 88+, Edge 88+, Android WebView 88+, Safari 14+, and Firefox 78+ are more stable, but lower versions are still allowed when the required capabilities are present.",
+    "title": "This browser is not fully compatible",
+    "description": "This environment is missing critical capabilities that the project does not currently have a safe fallback for. We only block in that case. If the page can still run correctly, a lower browser version alone will not be blocked.",
+    "reasonTitle": "Missing capabilities",
+    "reasonRuntimeCore": "Core runtime features such as Promise, fetch, or URLSearchParams are missing, so the main app flow cannot be trusted to work.",
+    "reasonResizeObserver": "ResizeObserver is missing, so board sizing and critical layout calculations in gameplay are likely to break.",
+    "recommendationTitle": "Recommended next steps",
+    "recommendationChrome": "Open this page with the latest Chrome, Edge, or another up-to-date browser.",
+    "recommendationWebView": "If this page is opened inside an app, update Android System WebView or open it in an external browser instead.",
+    "recommendationRetry": "After updating the browser or system component, come back and tap “Retry check”.",
+    "continueAnyway": "Continue anyway",
+    "retry": "Retry check",
+    "backHome": "Back home",
+    "note": "Continuing only skips this notice for the current session. It does not fix compatibility.",
+    "contextWebView": "In-app WebView detected",
+    "contextBrowser": "Older browser engine detected"
+  },
   "game_names": {
+    "archview": "Architecture View",
+    "assetslicer": "Asset Slicer",
+    "audiobrowser": "Audio Browser",
+    "cardia": "Cardia",
     "tictactoe": "Tic-Tac-Toe",
     "dicethrone": "Dice Throne",
-    "summonerwars": "Summoner Wars"
+    "fxpreview": "Effect Preview",
+    "smashup": "Smash Up",
+    "summonerwars": "Summoner Wars",
+    "ugcbuilder": "UGC Prototype Builder"
   },
   "matchRoom": {
     "tutorialTitle": "{{game}} - Tutorial",

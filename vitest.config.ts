@@ -1,10 +1,20 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const workspaceRoot = fileURLToPath(new URL('.', import.meta.url));
+const rootSetupFile = path.resolve(workspaceRoot, 'vitest.setup.ts');
+const apiSetupFile = path.resolve(workspaceRoot, 'apps/api/test/vitest.setup.ts');
 
 export default defineConfig({
+    server: {
+        fs: {
+            strict: false,
+        },
+    },
     resolve: {
         alias: {
-            '@locales': path.resolve(__dirname, './public/locales'),
+            '@locales': path.resolve(workspaceRoot, 'public/locales'),
         },
     },
     esbuild: {
@@ -53,7 +63,7 @@ export default defineConfig({
             '**/.{idea,git,cache,output,temp}/**',
         ],
         testTimeout: 180000,
-        hookTimeout: 60000, // 60 秒 hook 超时（MongoDB 内存服务器启动可能较慢）
-        setupFiles: ['./vitest.setup.ts', './apps/api/test/vitest.setup.ts'],
+        hookTimeout: 180000, // 首次拉起 mongodb-memory-server 可能需要下载/解压二进制，60 秒不够稳定。
+        setupFiles: [rootSetupFile, apiSetupFile],
     },
 });

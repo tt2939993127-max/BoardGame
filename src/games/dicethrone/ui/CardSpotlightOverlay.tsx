@@ -23,8 +23,8 @@ const SummaryText: React.FC<{
     effectParams: Record<string, string | number>;
     locale?: string;
 }> = ({ effectKey, effectParams }) => {
-    const { t } = useTranslation('game-dicethrone');
-    const text = t(effectKey, effectParams);
+    const { t, i18n } = useTranslation('game-dicethrone');
+    const text = i18n.exists(effectKey) ? t(effectKey, effectParams) : effectKey;
     
     return (
         <motion.div
@@ -54,6 +54,7 @@ export interface CardSpotlightItem {
     playerName?: string;
     /** 若该卡牌触发了额外骰子，附带骰子信息（支持多颗骰子） */
     bonusDice?: Array<{
+        index?: number;
         value: number;
         face?: DieFace;
         timestamp: number;

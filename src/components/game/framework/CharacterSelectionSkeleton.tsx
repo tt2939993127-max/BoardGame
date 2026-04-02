@@ -123,7 +123,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 flex bg-[#0F0F23] overflow-hidden select-none text-white font-sans w-screen h-screen"
+            data-testid="character-selection-overlay"
+            className="absolute inset-0 flex h-full w-full max-h-full max-w-full overflow-hidden bg-[#0F0F23] select-none text-white font-sans"
             style={{ zIndex: UI_Z_INDEX.overlay }}
         >
             {/* 背景层：动态氛围 */}
@@ -226,7 +227,7 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                                         src={previewAssets.playerBoard}
                                                         locale={locale}
                                                         className="h-full w-auto object-contain"
-                                                        alt="Player Board"
+                                                        alt="玩家面板"
                                                     />
                                                 </div>
 
@@ -240,7 +241,7 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                                             src={previewAssets.tipBoard}
                                                             locale={locale}
                                                             className="h-full w-auto object-contain"
-                                                            alt="Tip Board"
+                                                            alt="提示板"
                                                         />
                                                     </div>
                                                 )}
@@ -397,7 +398,7 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                         src={magnifyImage}
                         locale={locale}
                         className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                        alt="Preview"
+                        alt="预览图"
                     />
                 )}
             </MagnifyOverlay>

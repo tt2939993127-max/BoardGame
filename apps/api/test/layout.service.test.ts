@@ -46,10 +46,18 @@ describe('LayoutService', () => {
     it('应保存 DiceThrone 技能槽布局到指定文件', async () => {
         process.env.DICETHRONE_ABILITY_LAYOUT_PATH = join(TEST_DIR, ABILITY_LAYOUT_FILE);
         const service = new LayoutService();
-        const layout = [
-            { id: 'fist', x: 0.1, y: 1.2, w: 20.5, h: 30.4 },
-            { id: 'chi', x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
-        ];
+        const layout = {
+            layouts: {
+                v1: [
+                    { id: 'fist', x: 0.1, y: 1.2, w: 20.5, h: 30.4 },
+                    { id: 'chi', x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
+                ],
+                v2: [
+                    { id: 'fist', x: 0.0, y: 13.6, w: 16.1, h: 38.8 },
+                    { id: 'chi', x: 16.1, y: 13.6, w: 16.6, h: 38.8 },
+                ],
+            },
+        };
 
         const result = await service.saveDiceThroneAbilityLayout(layout);
         const expectedPath = join(process.cwd(), TEST_DIR, ABILITY_LAYOUT_FILE);
@@ -59,8 +67,9 @@ describe('LayoutService', () => {
         expect(existsSync(expectedPath)).toBe(true);
 
         const saved = readFileSync(expectedPath, 'utf8');
-        expect(saved).toContain('DEFAULT_ABILITY_SLOT_LAYOUT');
+        expect(saved).toContain('DICETHRONE_PLAYER_BOARD_LAYOUTS');
         expect(saved).toContain("id: 'fist'");
         expect(saved).toContain('x: 0.10');
+        expect(saved).toContain("gunslinger: 'v2'");
     });
 });

@@ -23,17 +23,6 @@ export const SHIMMER_BG: React.CSSProperties = {
     animation: 'img-shimmer 1.5s linear infinite',
 };
 
-/**
- * 回退策略（CDN 不稳定时自动降级）：
- * 0 = CDN 国际化路径（首选）
- * 1 = CDN 重试（加 ?retry=1 绕过浏览器缓存，处理瞬时连接中断）
- * 2 = 本地 /assets/ 路径（CDN 完全不可用时降级）
- * 3 = 最终失败，显示错误状态
- */
-const CDN_RETRY_LEVEL = 1;
-const LANGUAGE_FALLBACK_LEVEL = 2; // 语言回退级别
-const LOCAL_FALLBACK_LEVEL = 3; // 本地降级级别
-
 /** 指数退避自动重试配置 */
 const AUTO_RETRY_MAX = 5;           // 最多自动重试 5 轮
 const AUTO_RETRY_BASE_MS = 2000;    // 首次 2s
@@ -46,8 +35,21 @@ const getRetryDelay = (attempt: number) => {
     return Math.round(jitter);
 };
 
-/** 判断 src 是否为 CDN 外部 URL（http/https），本地路径无需重试/降级 */
-const isCdnUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
+/**
+ * 判断 src 是否为真正的远端资源：
+ * - /assets/... 与相对路径都视为本地资源链
+ * - 指向当前页面同源 origin 的绝对 URL 也视为本地资源链
+ * - 只有跨域 http/https 才按远端 CDN 处理
+ */
+const isRemoteUrl = (url: string) => {
+    if (!/^https?:\/\//i.test(url)) return false;
+    if (typeof window === 'undefined' || !window.location?.origin) return true;
+    try {
+        return new URL(url, window.location.href).origin !== window.location.origin;
+    } catch {
+        return true;
+    }
+};
 
 /** 为 URL 追加重试参数，绕过浏览器对失败请求的缓存 */
 const appendRetryParam = (url: string, retry: number) => {
@@ -55,13 +57,28 @@ const appendRetryParam = (url: string, retry: number) => {
     return `${url}${sep}retry=${retry}`;
 };
 
-export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, onError, onLoad: onLoadProp, style: styleProp, placeholder = true, className, ...rest }: OptimizedImageProps) => {
+export const OptimizedImage = ({
+    src,
+    fallbackSrc: _fallbackSrc,
+    locale,
+    alt,
+    onError,
+    onLoad: onLoadProp,
+    onDragStart,
+    style: styleProp,
+    placeholder = true,
+    className,
+    draggable = false,
+    ...rest
+}: OptimizedImageProps) => {
     const { i18n } = useTranslation();
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     const [fallbackLevel, setFallbackLevel] = React.useState(0);
     const preloaded = isImagePreloaded(src, effectiveLocale);
     const [loaded, setLoaded] = React.useState(() => preloaded);
     const [errored, setErrored] = React.useState(false);
+    const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
+    const [localFetchDebug, setLocalFetchDebug] = React.useState('idle');
     const imgRef = React.useRef<HTMLImageElement>(null);
     /** 自动重试轮次（所有回退用尽后从 0 开始计数） */
     const autoRetryRef = React.useRef(0);
@@ -84,10 +101,9 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
 
     // 本地降级路径（/assets/i18n/{locale}/...compressed/xxx.webp）
     const localUrl = React.useMemo(() => {
-        if (!isCdnUrl(cdnUrl)) return cdnUrl; // 已经是本地路径，无需降级
-        // 从原始 src 构建本地国际化压缩路径
+        if (!isRemoteUrl(cdnUrl)) return cdnUrl; // 已经是本地路径，无需再构造 fallback
+        // 只有远端 URL 才需要从原始 src 构建本地国际化压缩路径
         const localBase = getLocalizedLocalAssetPath(src, effectiveLocale);
-        // 插入 compressed/ 并替换扩展名为 .webp
         const base = localBase.replace(/\.[^/.]+$/, '');
         const lastSlash = base.lastIndexOf('/');
         const dir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
@@ -98,35 +114,33 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
     }, [cdnUrl, src, effectiveLocale]);
 
-    // 根据 fallbackLevel 计算当前实际 src
-    // 降级顺序：CDN primary → CDN primary retry → CDN fallback (语言回退) → 本地 primary
-    const currentSrc = React.useMemo(() => {
-        if (!isCdnUrl(cdnUrl)) {
-            return cdnUrl; // 本地路径不走降级
-        }
-        
-        let result: string;
-        switch (fallbackLevel) {
-            case 0: 
-                result = cdnUrl;
-                break;
-            case CDN_RETRY_LEVEL: 
-                result = appendRetryParam(cdnUrl, 1);
-                break;
-            case LANGUAGE_FALLBACK_LEVEL: 
-                result = cdnFallbackUrl; // 语言回退
-                break;
-            case LOCAL_FALLBACK_LEVEL: 
-                result = localUrl;
-                break;
-            default: 
-                result = cdnUrl;
-        }
-        
-        return result;
-    }, [cdnUrl, cdnFallbackUrl, localUrl, fallbackLevel]);
+    const fallbackCandidates = React.useMemo(() => {
+        const candidates: Array<{ url: string; label: string }> = [];
+        const pushCandidate = (url: string, label: string) => {
+            if (!url) return;
+            if (candidates.some(candidate => candidate.url === url)) return;
+            candidates.push({ url, label });
+        };
 
-    const isSvg = isSvgSource(currentSrc);
+        // 本地 /assets/... 主链路：只保留 primary + language fallback，
+        // 不再套用远端 CDN 的 retry/local fallback 逻辑，避免把本地图片走歪。
+        pushCandidate(cdnUrl, 'primary');
+        pushCandidate(cdnFallbackUrl, 'language-fallback');
+        if (isRemoteUrl(cdnUrl)) {
+            pushCandidate(appendRetryParam(cdnUrl, 1), 'retry');
+            pushCandidate(localUrl, 'local');
+        }
+
+        return candidates;
+    }, [cdnFallbackUrl, cdnUrl, localUrl]);
+
+    const currentCandidate = fallbackCandidates[Math.min(fallbackLevel, Math.max(fallbackCandidates.length - 1, 0))];
+    const currentSrc = currentCandidate?.url ?? cdnUrl;
+    const isLocalFallback = currentCandidate?.label === 'local';
+    const isLocalPrimary = !isRemoteUrl(currentSrc);
+    const renderedSrc = objectUrl ?? currentSrc;
+
+    const isSvg = isSvgSource(renderedSrc);
     
     // 同步修正：如果 loaded 为 false 但缓存已就绪，立即同步为 true，
     // 避免 useLayoutEffect 异步更新导致的一帧 shimmer 闪烁
@@ -145,16 +159,21 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
             setLoaded(true);
         } else if (isImagePreloaded(src, effectiveLocale)) {
             setLoaded(true);
+        } else if (!isRemoteUrl(cdnUrl)) {
+            // 本地主链路默认先按可显示处理，避免 /assets/... 资源被错误套进远端加载状态机后长时间黑屏。
+            setLoaded(true);
         } else {
             setLoaded(false);
         }
-    }, [src, effectiveLocale]);
+    }, [src, effectiveLocale, cdnUrl]);
 
     // currentSrc 变化时（fallbackLevel 切换导致）检查新 URL 是否已缓存
     const prevSrcRef = React.useRef(currentSrc);
     React.useLayoutEffect(() => {
         if (prevSrcRef.current !== currentSrc) {
             prevSrcRef.current = currentSrc;
+            setObjectUrl(null);
+            setLocalFetchDebug('idle');
             if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
                 setLoaded(true);
             } else if (isImagePreloaded(src, effectiveLocale)) {
@@ -166,11 +185,74 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         }
     }, [currentSrc, src, effectiveLocale]);
 
+    // 本地 /assets/... 资源：先 fetch 成 blob 再喂给 <img>，
+    // 规避开发环境里部分 webp 在直接 <img src="/assets/..."> 链路上挂住的问题。
+    React.useEffect(() => {
+        if (!isLocalPrimary || isSvg) return undefined;
+        let cancelled = false;
+        let nextObjectUrl: string | null = null;
+        setLocalFetchDebug('fetching');
+
+        void (async () => {
+            try {
+                const response = await fetch(currentSrc, { credentials: 'same-origin' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const blob = await response.blob();
+                if (cancelled) return;
+                setLoaded(false);
+                nextObjectUrl = URL.createObjectURL(blob);
+                setObjectUrl(nextObjectUrl);
+                setLocalFetchDebug('blob-ready');
+            } catch (error) {
+                if (!cancelled) {
+                    setObjectUrl(null);
+                    setLocalFetchDebug(`fetch-error:${error instanceof Error ? error.message : 'unknown'}`);
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            if (nextObjectUrl) {
+                URL.revokeObjectURL(nextObjectUrl);
+            }
+        };
+    }, [currentSrc, isLocalPrimary, isSvg]);
+
+    // 某些浏览器/资源组合下，img 已经拿到尺寸，但 onload 事件没有稳定触发；
+    // 这会让组件一直停在 shimmer/黑底占位。这里补一个基于 DOM 实际状态的兜底收敛。
+    React.useEffect(() => {
+        if (loaded || errored) return undefined;
+        let frameId = 0;
+        let cancelled = false;
+
+        const settleFromDom = () => {
+            if (cancelled) return;
+            const img = imgRef.current;
+            if (img?.complete && img.naturalWidth > 0) {
+                markImageLoaded(src, effectiveLocale, img);
+                setLoaded(true);
+                return;
+            }
+            frameId = window.requestAnimationFrame(settleFromDom);
+        };
+
+        frameId = window.requestAnimationFrame(settleFromDom);
+        return () => {
+            cancelled = true;
+            if (frameId) {
+                window.cancelAnimationFrame(frameId);
+            }
+        };
+    }, [effectiveLocale, errored, loaded, renderedSrc, src]);
+
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
         autoRetryRef.current = 0; // 加载成功，重置重试计数
         markImageLoaded(src, effectiveLocale, event.currentTarget);
-        if (fallbackLevel === LOCAL_FALLBACK_LEVEL) {
+        if (isLocalFallback) {
             console.warn('[OptimizedImage] CDN 不可用，已降级到本地资源:', src);
         }
         onLoadProp?.(event);
@@ -186,8 +268,8 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
             error: event.type
         });
         
-        // 非 CDN 路径或已到最终失败层级 → 进入自动重试
-        if (!isCdnUrl(cdnUrl) || fallbackLevel >= LOCAL_FALLBACK_LEVEL) {
+        const hasMoreFallback = fallbackLevel + 1 < fallbackCandidates.length;
+        if (!hasMoreFallback) {
             const attempt = autoRetryRef.current;
             if (attempt < AUTO_RETRY_MAX) {
                 // 指数退避自动重试：重置回退链从头再来
@@ -206,7 +288,7 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         }
         // 还有回退层级，推进到下一级
         const nextLevel = fallbackLevel + 1;
-        console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel} (${['primary', 'retry', 'language-fallback', 'local'][nextLevel]}):`, src);
+        console.warn(`[OptimizedImage] 加载失败，尝试回退 level ${nextLevel} (${fallbackCandidates[nextLevel]?.label ?? 'unknown'}):`, src);
         setFallbackLevel(nextLevel);
     };
 
@@ -242,11 +324,50 @@ export const OptimizedImage = ({ src, fallbackSrc: _fallbackSrc, locale, alt, on
         opacity: errored ? 0 : effectiveLoaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
     };
 
+    const handleDragStart: React.DragEventHandler<HTMLImageElement> = (event) => {
+        if (draggable !== true) {
+            event.preventDefault();
+        }
+        onDragStart?.(event);
+    };
+
     if (isSvg) {
-        return <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />;
+        return (
+            <img
+                ref={imgRef}
+                src={renderedSrc}
+                alt={alt ?? ''}
+                draggable={draggable}
+                onDragStart={handleDragStart}
+                onError={handleError}
+                onLoad={handleLoad}
+                style={imgStyle}
+                className={className}
+                data-debug-current-src={currentSrc}
+                data-debug-rendered-src={renderedSrc}
+                data-debug-object-url={objectUrl ?? ''}
+                data-debug-local-fetch={localFetchDebug}
+                {...rest}
+            />
+        );
     }
 
     return (
-        <img ref={imgRef} src={currentSrc} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />
+        <img
+            ref={imgRef}
+            src={renderedSrc}
+            alt={alt ?? ''}
+            draggable={draggable}
+            onDragStart={handleDragStart}
+            onError={handleError}
+            onLoad={handleLoad}
+            style={imgStyle}
+            className={className}
+            data-debug-current-src={currentSrc}
+            data-debug-rendered-src={renderedSrc}
+            data-debug-object-url={objectUrl ?? ''}
+            data-debug-local-fetch={localFetchDebug}
+            {...rest}
+        />
     );
 };

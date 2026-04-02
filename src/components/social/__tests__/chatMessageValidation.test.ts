@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { generateUUID } from '../../../lib/uuid';
 import { MAX_CHAT_LENGTH } from '../../../shared/chat';
+import { scheduleDeferredSocialConnect } from '../../../services/socialSocket';
 
 /**
  * 聊天消息验证测试。
@@ -82,5 +83,68 @@ describe('聊天消息验证', () => {
         expect(typeof serverResponse.message).toBe('string');
         // 新代码：从 messageData 构造 → 得到正确的 id
         expect(serverResponse.messageData.id).toBe('msg_123');
+    });
+});
+
+describe('SocialSocket 寤惰繜寤鸿繛璋冨害', () => {
+    it('浼樺厛鍦ㄥ欢鏃跺悗浜ゆ潈缁? requestIdleCallback 鎵ц', () => {
+        const task = vi.fn();
+        const timeoutCallbacks: Array<() => void> = [];
+        const idleCallbacks: Array<() => void> = [];
+        const clearTimeout = vi.fn();
+        const cancelIdleCallback = vi.fn();
+
+        const cancel = scheduleDeferredSocialConnect(task, {
+            setTimeout: ((callback: TimerHandler) => {
+                timeoutCallbacks.push(callback as () => void);
+                return 11;
+            }) as typeof window.setTimeout,
+            clearTimeout: ((handle: number) => {
+                clearTimeout(handle);
+            }) as typeof window.clearTimeout,
+            requestIdleCallback: ((callback: IdleRequestCallback) => {
+                idleCallbacks.push(() => callback({
+                    didTimeout: false,
+                    timeRemaining: () => 8,
+                }));
+                return 22;
+            }) as never,
+            cancelIdleCallback: ((handle: number) => {
+                cancelIdleCallback(handle);
+            }) as never,
+        });
+
+        expect(task).not.toHaveBeenCalled();
+        expect(timeoutCallbacks).toHaveLength(1);
+
+        timeoutCallbacks[0]();
+        expect(task).not.toHaveBeenCalled();
+        expect(idleCallbacks).toHaveLength(1);
+
+        idleCallbacks[0]();
+        expect(task).toHaveBeenCalledTimes(1);
+
+        cancel();
+        expect(clearTimeout).not.toHaveBeenCalled();
+        expect(cancelIdleCallback).not.toHaveBeenCalled();
+    });
+
+    it('鍦ㄤ笉鏀寔 requestIdleCallback 鏃剁洿鎺ヨ蛋 setTimeout 鍥炶皟', () => {
+        const task = vi.fn();
+        const timeoutCallbacks: Array<() => void> = [];
+
+        scheduleDeferredSocialConnect(task, {
+            setTimeout: ((callback: TimerHandler) => {
+                timeoutCallbacks.push(callback as () => void);
+                return 33;
+            }) as typeof window.setTimeout,
+            clearTimeout: (() => {}) as typeof window.clearTimeout,
+        });
+
+        expect(task).not.toHaveBeenCalled();
+        expect(timeoutCallbacks).toHaveLength(1);
+
+        timeoutCallbacks[0]();
+        expect(task).toHaveBeenCalledTimes(1);
     });
 });

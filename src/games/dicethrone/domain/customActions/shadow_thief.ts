@@ -23,7 +23,7 @@ import type {
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
-import { resolveTargetOpponentDice } from './common';
+import { resolveDiceOwnerId, resolveTargetOpponentDice } from './common';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
@@ -179,6 +179,7 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
         selectCount,
         selected: [],
         dieModifyConfig: { mode: 'any' },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{
@@ -776,9 +777,15 @@ export function registerShadowThiefCustomActions(): void {
     });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice', 'damage'] });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'damage', 'resource', 'card'] });
-    registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, { categories: ['card', 'other'] });
+    registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, {
+        categories: ['card', 'other'],
+        requiresSelectedDefender: true,
+    });
     registerCustomActionHandler('shadow_thief-cornucopia-discard', handleCornucopiaDiscard, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, { categories: ['card', 'resource', 'other'] });
+    registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, {
+        categories: ['card', 'resource', 'other'],
+        requiresSelectedDefender: true,
+    });
     registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, {
         categories: ['damage'],
         estimateDamage: estimateCpPlus5Damage,

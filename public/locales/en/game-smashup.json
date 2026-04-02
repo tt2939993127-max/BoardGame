@@ -2,6 +2,12 @@
   "title": "Smash Up",
   "description": "Smash Up is a 2-4 player card battle game! Combine two different factions to compete for base control and victory points; the first to 15 points wins. The base game includes 8 distinct factions, enabling many strategic pairings and playstyles. (Year: 2012; Type: Competitive/Card; Rating: 7.2)",
   "players": "2-4 Players",
+  "setup": {
+    "expansions": {
+      "label": "Expansion Rules",
+      "titans": "Titans"
+    }
+  },
   "phases": {
     "factionSelect": "Draft",
     "startTurn": "Start",
@@ -11,6 +17,8 @@
     "endTurn": "End"
   },
   "error": {
+    "invalid_command_missing_type": "Invalid command: missing type",
+    "me_first_response_window_active": "Me First! response window is still active",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped"
@@ -23,6 +31,7 @@
     "finish_turn": "Finish Turn",
     "deck": "Deck",
     "discard": "Discard",
+    "titan": "Titan",
     "viewing": "Viewing",
     "discard_pile": "Discard Pile",
     "empty_pile": "Empty Pile",
@@ -56,11 +65,19 @@
     "minion_count": "{{count}} Minions",
     "action_count": "{{count}} Actions",
     "selected": "Selected",
+    "click_to_cancel_selection": "Tap to cancel selection",
+    "faction_selected_hint": "Selected, tap to cancel",
+    "faction_selected_label": "Selected",
     "taken_by_other": "Taken by another player",
     "faction_full": "Already selected 2 factions",
     "confirm_selection": "Confirm Selection",
+    "cancel_selection": "Cancel Selection",
     "wait_turn": "Wait for your turn",
     "preview_cards": "Included Card Preview",
+    "faction_titan_preview": "Titan Preview",
+    "faction_titan_missing": "This faction's titan is not available yet",
+    "faction_variant_base": "Base",
+    "faction_variant_pod": "POD",
     "minion": "Minion",
     "action": "Action",
     "discard_badge": "Discard",
@@ -76,6 +93,36 @@
     "card_placeholder": "Card",
     "me_first_title": "⚡ Me First!",
     "after_scoring_title": "After Scoring Response",
+    "duel_in_progress": "Duel in progress: resolve Pinkerton / duel cards / Deputy before deciding the winner",
+    "duel_prompt_pinkerton_title": "Pinkerton: choose how many +1 power counters to place before this duel",
+    "duel_prompt_card_title": "Duel: choose 1 duel card from hand, or skip",
+    "duel_prompt_deputy_title": "Deputy: you may discard a Deputy to give a minion +2 power until end of turn",
+    "duel_prompt_deputy_target_title": "Deputy: choose a minion to gain +2 power until end of turn",
+    "duel_prompt_ongoing_base_title": "Duel card: choose the base target for this ongoing action",
+    "duel_prompt_ongoing_minion_title": "Duel card: choose the minion target for this ongoing action",
+    "duel_prompt_run_em_off_title": "Run 'Em Off: choose where to move the loser",
+    "duel_prompt_run_em_off_tie_title": "Run 'Em Off: choose where to move the opposing minion",
+    "duel_prompt_resolve_title": "Resolve Duel",
+    "duel_option_no_counters": "Place no counters",
+    "duel_option_add_counters": "Place {{count}} counter(s)",
+    "duel_option_skip_duel_card": "Skip (play no duel card)",
+    "duel_option_skip_deputy": "Skip (discard no Deputy)",
+    "reaction_timing": {
+      "onMinionPlayed": "After minion play",
+      "onActionPlayed": "After action play",
+      "onCardBuried": "After bury",
+      "onBuriedCardUncovered": "After uncover",
+      "onBaseRevealed": "After base reveal",
+      "onMinionDestroyed": "After minion destruction",
+      "onMinionMoved": "After minion movement",
+      "onMinionAffected": "After minion is affected",
+      "onMinionDiscardedFromBase": "After minion is discarded from base",
+      "onTurnEnd": "At turn end",
+      "onTurnStart": "At turn start",
+      "beforeScoring": "Before scoring",
+      "afterScoring": "After scoring",
+      "unknown": "Triggered"
+    },
     "thinking": "Thinking...",
     "loading": "Loading...",
     "reveal_hand_title": "P{{player}}'s Hand",
@@ -95,6 +142,8 @@
     "action_short": "Action",
     "action_global_quota": "Global Quota",
     "action_extra_hint": "Includes extra action quota +{{extra}}",
+    "show_end_turn_controls": "Show end turn button and quota hints",
+    "hide_end_turn_controls": "Hide end turn button and quota hints",
     "close": "Close",
     "reveal_your_hand_shown": "Your hand is being shown",
     "reveal_confirmed": "Confirmed",
@@ -105,7 +154,12 @@
     "waiting_opponent": "Waiting for opponent",
     "power_counter": "Power Counter",
     "skip": "Skip",
-    "wait_for_your_turn": "Wait for your response turn"
+    "wait_for_your_turn": "Wait for your response turn",
+    "fusion_choose_playas": "Choose how to play",
+    "fusion_choose_playas_desc": "Fusion cards can be played as a Minion or an Action. Choose the type for this play.",
+    "play_as_minion": "Play as Minion",
+    "play_as_action": "Play as Action",
+    "tap_again_to_activate": "Tap again to activate"
   },
   "feedback": {
     "deck_search_no_match": "No matching card found in deck. Deck reshuffled.",
@@ -154,7 +208,8 @@
     "baseScoredRankingWithBreakdown": "{{playerId}} +{{vp}}VP Power:",
     "powerModifier": {
       "permanent": "Power Counters",
-      "temp": "Temp Power Modifier"
+      "temp": "Temp Power Modifier",
+      "nonMinion": "Non-minion Power Modifier"
     },
     "damageSource": {
       "original": "Base Power"
@@ -162,6 +217,7 @@
     "vpAwarded": "{{playerId}} gains {{amount}}VP",
     "cardsDrawn": "{{playerId}} draws {{count}} cards",
     "cardsDiscarded": "{{playerId}} discards {{count}} cards",
+    "cardsMilled": "{{playerId}} mills {{count}} cards",
     "turnStarted": "{{playerId}} starts turn",
     "turnEnded": "{{playerId}} ends turn",
     "baseReplaced": "Base replaced:",
@@ -174,7 +230,7 @@
     "cardRecovered": "{{playerId}} recovers {{count}} cards",
     "handShuffledIntoDeck": "Shuffle {{playerId}} hand into deck",
     "madnessDrawn": "{{playerId}} draws {{count}} madness cards",
-    "madnessReturned": "{{playerId}} returns a madness card",
+    "madnessReturned": "{{playerId}} consumes a Madness card",
     "baseDeckReordered": "Base deck reordered",
     "onBase": " → {{base}}",
     "revealHand": "{{playerId}} reveals hand ({{count}} cards)",
@@ -350,6 +406,38 @@
     "giant_ants_pod": {
       "name": "Giant Ants (POD)",
       "description": "Flexibly distribute and transfer power counters, teamwork."
+    },
+    "ancient_egyptians": {
+      "name": "Ancient Egyptians",
+      "description": "Bury cards, recycle them, and convert hidden value into tempo."
+    },
+    "ancient_egyptians_pod": {
+      "name": "Ancient Egyptians",
+      "description": "Bury cards, recycle them, and convert hidden value into tempo."
+    },
+    "cowboys": {
+      "name": "Cowboys",
+      "description": "Duel enemies, play from low hand, and cash in buried cards."
+    },
+    "samurai": {
+      "name": "Samurai",
+      "description": "Honor, duels, and sacrifice-driven tempo around destruction."
+    },
+    "samurai_pod": {
+      "name": "Samurai",
+      "description": "Honor, duels, and sacrifice-driven tempo around destruction."
+    },
+    "vikings": {
+      "name": "Vikings",
+      "description": "Force discards and burials, then turn them into extra payoff."
+    },
+    "cowboys_pod": {
+      "name": "Cowboys",
+      "description": "Duel enemies, play from low hand, and cash in buried cards."
+    },
+    "vikings_pod": {
+      "name": "Vikings",
+      "description": "Force discards and burials, then turn them into extra payoff."
     }
   },
   "tutorial": {
@@ -580,7 +668,7 @@
     },
     "elder_thing_elder_thing": {
       "name": "Elder Thing",
-      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players' cards."
+      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. Ongoing: This minion is not affected by other players' cards."
     },
     "elder_thing_shoggoth": {
       "name": "Shoggoth",
@@ -760,7 +848,7 @@
     },
     "special_madness": {
       "name": "Madness",
-      "effectText": "Draw two cards OR return this card to the Madness deck."
+      "effectText": "Draw two cards OR consume this card."
     },
     "miskatonic_professor": {
       "name": "Professor",
@@ -772,7 +860,7 @@
     },
     "miskatonic_psychologist": {
       "name": "Psychologist",
-      "abilityText": "You may return a Madness card from your hand or discard pile to the Madness deck."
+      "abilityText": "You may consume a Madness card from your hand or discard pile."
     },
     "miskatonic_researcher": {
       "name": "Researcher",
@@ -1138,6 +1226,84 @@
       "name": "Mall Crawl",
       "effectText": "Search your deck for any number of cards of the same name and put them into your discard pile. Shuffle your deck."
     },
+    "changerbots_mergacon": {
+      "name": "Mergacon",
+      "effectText": "Special: At the start of your turn, if you have two or more minions on a base, you may play this titan there. Ongoing: You have +3 power here. Talent: Move this titan to another base. It loses its ongoing ability until the end of the turn."
+    },
+    "explorers_very_large_boulder": {
+      "name": "Very Large Boulder",
+      "effectText": "Special: Instead of your regular minion play, you may play this titan on a base that has no player's minions. Ongoing: Once per turn, after a minion moves from here, you may move this titan to the same base. Then destroy a minion at that base with less power than the number of +1 power counters on this titan. Ongoing: At the end of your turn, if this titan didn't move, place a +1 power counter on it."
+    },
+    "fairies_spirit_of_the_forest": {
+      "name": "Spirit of the Forest",
+      "effectText": "Special: Instead of your regular minion and action play, you may play this titan. Ongoing: Once per turn, when you use an ability that says OR, you may use both parts in any order. Ongoing: If this titan would be removed when it loses a clash of titans, you may move it to another base instead."
+    },
+    "ignobles_the_hill_that_strolls": {
+      "name": "The Hill that Strolls",
+      "effectText": "Special: On your turn, you may play this titan if two or more minions you own are controlled by other players. Ongoing: After you give control of one of your minions to another player, you may place a +1 power counter on it. Talent: Give control of one of your minions to another player to draw a card, or take control of a minion here you own."
+    },
+    "itty_critters_rainboroc": {
+      "name": "Rainboroc",
+      "effectText": "Special: After you win a base while this titan is not in play, you may play it on the base that replaces it. Ongoing: After the first time each turn you play a minion of power 2 or less here, place a +1 power counter on this titan. Talent: Shuffle a minion of power 2 or less from your discard pile into your deck. If you do, you may move this titan to another base."
+    },
+    "kaiju_gorgodzolla": {
+      "name": "Gorgodzolla",
+      "effectText": "Special: Instead of your regular minion play, you may play this titan on a base where you have two or more actions. Ongoing: After you play an action or a minion on this base, place a +1 power counter on this titan. Ongoing: After you play an action on this base, you may draw a card."
+    },
+    "magical_girls_walking_castle": {
+      "name": "Walking Castle",
+      "effectText": "Special: Instead of your regular minion play, you may play this titan on a base where you have at least two minions. Ongoing: Your minions here cannot be destroyed by other players' card effects. Talent: Move this titan and up to three of your minions from here to another base."
+    },
+    "mega_troopers_megabot": {
+      "name": "Megabot",
+      "effectText": "Special: Instead of your regular minion play, you may play this titan on a base where you have at least three minions. Ongoing: You have +1 power here for each of your minions here. Special: Before another base scores, you may move this titan there."
+    },
+    "penguins_emperor_penguin": {
+      "name": "Emperor Penguin",
+      "effectText": "Special: At the start of your turn, you may play this titan on a base where you have three or more minions. Ongoing: You may play minions off the top of your deck here instead of your regular minion play. Talent: Reveal a minion of power 3 or less in your hand or discard pile and shuffle it into your deck to place a +1 power counter on this titan."
+    },
+    "super_spies_moon_zero_three": {
+      "name": "Moon Zero Three",
+      "effectText": "Special: Instead of your regular minion play, you may play this titan on a base with no other players' minions. Ongoing: After the first time each turn an ability is used to reveal, look at, or search for one or more cards from a player's deck, place a +1 power counter on this titan. Talent: Look at the top card of any deck. Place it on the top or bottom of that deck."
+    },
+    "time_travelers_time_box": {
+      "name": "Time Box",
+      "effectText": "Special: At the start of your turn or when a card goes to your hand from play or the discard pile, place a counter on this titan if it is not in play. After you place the fifth or higher counter on it, you may remove all the counters and play this titan. Talent: Play an extra minion here of power 2 or less, and/or play an extra action."
+    },
+    "sphinx": {
+      "name": "Sphinx",
+      "effectText": "Special: At the start of your turn, you may return one of your buried cards to your hand to play this titan on its base. Special: After a base scores while this titan is in play, you may return one of your buried cards there to your hand. Talent: Bury a card from your hand here."
+    },
+    "bear_cavalry_major_ursa": {
+      "name": "Major Ursa"
+    },
+    "ghosts_creampuff_man": {
+      "name": "Creampuff Man"
+    },
+    "giant_ants_death_on_six_legs": {
+      "name": "Death on Six Legs"
+    },
+    "innsmouth_dagon": {
+      "name": "Dagon"
+    },
+    "cthulhu_cthulhu_titan": {
+      "name": "Cthulhu"
+    },
+    "pirates_the_kraken": {
+      "name": "The Kraken"
+    },
+    "tricksters_big_funny_giant": {
+      "name": "Big Funny Giant"
+    },
+    "vampires_ancient_lord": {
+      "name": "Ancient Lord"
+    },
+    "werewolves_great_wolf_spirit": {
+      "name": "Great Wolf Spirit"
+    },
+    "wizards_arcane_protector": {
+      "name": "Arcane Protector"
+    },
     "base_the_homeworld": {
       "name": "The Homeworld",
       "abilityText": "After each time a minion is played here, its owner may play an extra minion of power 2 or less."
@@ -1200,6 +1366,45 @@
     "base_wizard_academy": {
       "name": "Wizard Academy",
       "abilityText": "After this base scores, the winner looks at the top three cards of the base deck. They may choose one of those bases to replace this one, then place the other two on top of the base deck in any order."
+    },
+    "base_central_brain_pod": {
+      "name": "The Central Brain",
+      "abilityText": "Each minion here has +1 power."
+    },
+    "base_the_factory_pod": {
+      "name": "Factory 436-1337",
+      "abilityText": "When this base scores, the winner gains 1 VP for every 5 power they have here."
+    },
+    "base_ninja_dojo_pod": {
+      "name": "Ninja Dojo"
+    },
+    "base_temple_of_goju_pod": {
+      "name": "Temple of Goju",
+      "abilityText": "After each time a minion is destroyed here, place it on the bottom of its owner's deck."
+    },
+    "base_cave_of_shinies_pod": {
+      "name": "Cave of Shinies",
+      "abilityText": "Once per turn, after a minion here you own is destroyed, gain 1 VP."
+    },
+    "base_mushroom_kingdom_pod": {
+      "name": "Mushroom Kingdom",
+      "abilityText": "At the start of your turn, if you have more cards in your hand than any other player, you may move a minion to or from this base."
+    },
+    "base_wizard_academy_pod": {
+      "name": "School of Wizardry",
+      "abilityText": "After this base scores, the winner looks at the top three cards of the base deck, chooses one to replace this base, and returns the others in any order."
+    },
+    "base_great_library_pod": {
+      "name": "The Great Library",
+      "abilityText": "After this base scores, all players with minions here may draw one card."
+    },
+    "base_haunted_house_pod": {
+      "name": "Evans City Cemetery",
+      "abilityText": "After this base scores, the winner discards their hand and draws five cards."
+    },
+    "base_rhodes_plaza_pod": {
+      "name": "Rhodes Plaza Mall",
+      "abilityText": "When this base scores, each player gains 1 VP for each minion that player has here."
     },
     "base_dread_lookout": {
       "name": "Dread Lookout",
@@ -1269,6 +1474,10 @@
       "name": "North Pole",
       "abilityText": "Each player may play only one minion at this base each turn."
     },
+    "base_antarctic_base": {
+      "name": "Antarctic Base",
+      "abilityText": "Each player may play only one minion at this base each turn."
+    },
     "base_ritual_site": {
       "name": "Ritual Site",
       "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."
@@ -1279,7 +1488,7 @@
     },
     "base_the_asylum": {
       "name": "The Asylum",
-      "abilityText": "After each time a minion is played here, its owner may return a Madness card from their hand to the Madness deck."
+      "abilityText": "After each time a minion is played here, its owner may consume a Madness card from their hand."
     },
     "base_innsmouth_base": {
       "name": "Innsmouth",
@@ -1291,7 +1500,7 @@
     },
     "base_miskatonic_university_base": {
       "name": "Miskatonic University",
-      "abilityText": "After this base scores, the winner may search their hand and discard pile for any number of Madness cards and return them to the Madness deck."
+      "abilityText": "After this base scores, the winner may consume any number of Madness cards from their hand and discard pile."
     },
     "base_plateau_of_leng": {
       "name": "Plateau of Leng",
@@ -1339,23 +1548,23 @@
     },
     "frankenstein_german_engineering": {
       "name": "German Engineering",
-      "effectText": "打出到基地上。持续：在你打出一个随从到这后，在它上面放置一个+1力量指示物。"
+      "effectText": "Play on a base. Ongoing: After you play a minion here, place a +1 power counter on it."
     },
     "frankenstein_jolt": {
       "name": "Jolt",
-      "effectText": "在你的每个随从上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions."
     },
     "frankenstein_grave_situation": {
       "name": "Grave Situation",
-      "effectText": "打出到基地上。持续：当你的一个随从在这里被消灭后，把它放到手牌而不是弃牌堆。"
+      "effectText": "Play on a base. Ongoing: When one of your minions here would be destroyed, return it to your hand instead of the discard pile."
     },
     "frankenstein_its_alive": {
       "name": "Its Alive",
-      "effectText": "打出一个额外的随从并在它的身上放置一个+1力量指示物。"
+      "effectText": "Play an extra minion. Place a +1 power counter on it."
     },
     "frankenstein_angry_mob": {
       "name": "Angry Mob",
-      "effectText": "选择你的一个随从。从你的手上放置任意数量的卡牌到你的牌库底。你每放一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Place any number of cards from your hand on the bottom of your deck. For each card placed, place a +1 power counter on that minion."
     },
     "frankenstein_igor": {
       "name": "Igor",
@@ -1363,15 +1572,15 @@
     },
     "frankenstein_body_shop": {
       "name": "Body Shop",
-      "effectText": "消灭你的一个随从。放置等同于该随从力量的+1力量指示物到你的随从上，你可以任意分配它们。"
+      "effectText": "Destroy one of your minions. Place +1 power counters equal to its power on your minions, divided as you choose."
     },
     "frankenstein_lab_assistant": {
       "name": "Lab Assistant",
-      "abilityText": "在你的另一个随从上放置一个+1力量指示物。"
+      "abilityText": "Place a +1 power counter on one of your other minions."
     },
     "frankenstein_uberserum": {
       "name": "Uberserum",
-      "effectText": "打出到一个随从上。持续：在你的回合开始时，在该随从上放置一个+1力量指示物。该随从不能被消灭。"
+      "effectText": "Play on a minion. Ongoing: At the start of your turn, place a +1 power counter on this minion. This minion cannot be destroyed."
     },
     "frankenstein_the_monster": {
       "name": "The Monster",
@@ -1379,155 +1588,155 @@
     },
     "frankenstein_blitzed": {
       "name": "Blitzed",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。消灭一个力量少于或等于你移除的数量的随从。"
+      "effectText": "Remove any number of +1 power counters from your minions. Destroy a minion with power less than or equal to the number you removed."
     },
     "frankenstein_herr_doktor": {
       "name": "Herr Doktor",
-      "abilityText": "天赋：在你的另一个随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Place a +1 power counter on one of your other minions."
     },
     "werewolf_full_moon": {
       "name": "Full Moon",
-      "effectText": "打出到基地上。持续：每个你在这里的随从获得+1力量。"
+      "effectText": "Play on a base. Ongoing: Each of your minions here has +1 power."
     },
     "werewolf_frenzy": {
       "name": "Frenzy",
-      "effectText": "每个你的力量为4或更高的随从获得+1力量直到回合结束。"
+      "effectText": "Each of your minions of power 4 or more gains +1 power until the end of the turn."
     },
     "werewolf_marking_territory": {
       "name": "Marking Territory",
-      "effectText": "打出到一个基地上。持续：在你的回合开始的时候，如果你在这里比其他玩家有更高的总力量，将本基地的爆破点降低到0。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, if you have more power here than each other player, reduce this base's breakpoint to 0."
     },
     "werewolf_chew_toy": {
       "name": "Chew Toy",
-      "effectText": "选择你的一个随从。消灭一个在你的随从所在基地中比它力量低的随从。"
+      "effectText": "Choose one of your minions on a base. Destroy a minion there with less power than yours."
     },
     "werewolf_leader_of_the_pack": {
       "name": "Leader Of The Pack",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，你就可以额外打出一个行动。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, you may play an extra action."
     },
     "werewolf_howler": {
       "name": "Howler",
-      "abilityText": "本随从获得+2力量直到回合结束。"
+      "abilityText": "This minion has +2 power until the end of the turn."
     },
     "werewolf_unstoppable": {
       "name": "Unstoppable",
-      "effectText": "打出到一个随从上。持续：本随从不能够被消灭。"
+      "effectText": "Play on a minion. Ongoing: This minion cannot be destroyed."
     },
     "werewolf_teenage_wolf": {
       "name": "Teenage Wolf",
-      "abilityText": "天赋：本随从获得+1力量直到回合结束。"
+      "abilityText": "Talent: This minion gains +1 power until the end of the turn."
     },
     "werewolf_let_the_dog_out": {
       "name": "Let The Dog Out",
-      "effectText": "选择一个你的随从。消灭任意数量力量加起来小于或等于你随从的力量的随从。"
+      "effectText": "Choose one of your minions. Destroy any number of minions with total power less than or equal to that minion's power."
     },
     "werewolf_loup_garou": {
       "name": "Loup Garou",
-      "abilityText": "异能：在本基地计分前，本随从获得+2力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, this minion has +2 power until the end of the turn."
     },
     "werewolf_moontouched": {
       "name": "Moontouched",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，抽一张牌。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, draw a card."
     },
     "werewolf_pack_alpha": {
       "name": "Pack Alpha",
-      "abilityText": "异能：在本基地计分前，每个你在这里的随从获得+1力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, each of your minions here gains +1 power until the end of the turn."
     },
     "vampire_dinner_date": {
       "name": "Dinner Date",
-      "effectText": "在你的一个随从身上放置一个+1力量指示物。消灭一个与该随从在同一个基地力量为2或以下的随从。"
+      "effectText": "Place a +1 power counter on one of your minions. Destroy a minion of power 2 or less at the same base."
     },
     "vampire_big_gulp": {
       "name": "Big Gulp",
-      "effectText": "消灭一个力量为4或者以下的随从。"
+      "effectText": "Destroy a minion of power 4 or less."
     },
     "vampire_opportunist": {
       "name": "Opportunist",
-      "effectText": "打出到一个随从上。持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "effectText": "Play on a minion. Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "vampire_mad_monster_party": {
       "name": "Mad Monster Party",
-      "effectText": "在每个你没有+1力量指示物的随从身上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions without one."
     },
     "vampire_cull_the_weak": {
       "name": "Cull The Weak",
-      "effectText": "选择你的一个随从。从你的手中弃置任意数量的随从卡。你每弃一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Discard any number of minion cards from your hand. For each card discarded, place a +1 power counter on that minion."
     },
     "vampire_fledgling_vampire": {
       "name": "Fledgling Vampire",
-      "abilityText": "在你打出本随从后，如果另一个玩家在这里比你有更高的力量，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "After you play this minion, if another player has more power here than you, place a +1 power counter on this minion."
     },
     "vampire_buffet": {
       "name": "Buffet",
-      "effectText": "异能：在一个基地计分后，如果你是赢家，在你的每个随从身上放置+1力量标记。"
+      "effectText": "Special: After a base scores, if you are the winner, place a +1 power counter on each of your minions."
     },
     "vampire_heavy_drinker": {
       "name": "Heavy Drinker",
-      "abilityText": "你可以消灭你的一个随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy one of your minions to place a +1 power counter on this minion."
     },
     "vampire_crack_of_dusk": {
       "name": "Crack Of Dusk",
-      "effectText": "从你的弃牌堆额外打出一个力量为2或以下的随从。放置一个+1力量指示物在它的上面。"
+      "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
     "vampire_nightstalker": {
       "name": "Nightstalker",
-      "abilityText": "消灭一个这里的力量为2或以下的随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy a minion of power 2 or less here to place a +1 power counter on this minion."
     },
     "vampire_summon_wolves": {
       "name": "Summon Wolves",
-      "effectText": "打出到基地上。持续：在你的回合开始时，在本卡上放置一个+1力量指示物。如果你有随从在这，指示物会被加进你的总力量中。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, place a +1 power counter on this card. If you have a minion here, this card's power counts toward your total power here."
     },
     "vampire_the_count": {
       "name": "The Count",
-      "abilityText": "持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "giant_ant_who_wants_to_live_forever": {
       "name": "Ant Who Wants To Live Forever",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。之后你每移除一个指示物，就抽一张卡。"
+      "effectText": "Remove any number of +1 power counters from your minions. Draw a card for each counter removed."
     },
     "giant_ant_a_kind_of_magic": {
       "name": "Ant A Kind Of Magic",
-      "effectText": "在你的随从之中随意分配它们身上的+1力量指示物。"
+      "effectText": "Redistribute any number of +1 power counters among your minions."
     },
     "giant_ant_we_will_rock_you": {
       "name": "Ant We Will Rock You",
-      "effectText": "每个你的随从为它自身上的每个+1力量指示物获得+1力量直到回合结束。"
+      "effectText": "Each of your minions gains +1 power for each +1 power counter on it until the end of the turn."
     },
     "giant_ant_claim_the_prize": {
       "name": "Ant Claim The Prize",
-      "effectText": "在至多3个你的随从的身上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of up to three of your minions."
     },
     "giant_ant_under_pressure": {
       "name": "Ant Under Pressure",
-      "effectText": "异能：在一个基地即将计分前，你可以从你的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: Before a base scores, you may move any number of +1 power counters from one of your minions to another."
     },
     "giant_ant_worker": {
       "name": "Ant Worker",
-      "abilityText": "在本随从身上放置两个+1力量指示物。"
+      "abilityText": "Place two +1 power counters on this minion."
     },
     "giant_ant_headlong": {
       "name": "Ant Headlong",
-      "effectText": "移动你的一个随从到另一个基地。在本随从上放置两个+1力量指示物。"
+      "effectText": "Move one of your minions to another base. Place two +1 power counters on it."
     },
     "giant_ant_soldier": {
       "name": "Ant Soldier",
-      "abilityText": "在本随从上放置两个+1力量指示物。天赋：从本随从身上移除两个+1力量指示物来移动另一个随从到另一个基地上。"
+      "abilityText": "Place two +1 power counters on this minion. Talent: Remove two +1 power counters from this minion to move a minion to another base."
     },
     "giant_ant_the_show_must_go_on": {
       "name": "Ant The Show Must Go On",
-      "effectText": "打出到基地上。持续：你在这里的拥有+1力量指示物的随从不受其他玩家卡牌的影响。"
+      "effectText": "Play on a base. Ongoing: Your minions here with +1 power counters are not affected by other players' cards."
     },
     "giant_ant_drone": {
       "name": "Ant Drone",
-      "abilityText": "在本随从上放置一个+1力量指示物。持续：在你的一个随从被消灭前，你可以从本随从身上移除一个+1力量指示物来防止你的随从被消灭。"
+      "abilityText": "Place a +1 power counter on this minion. Ongoing: Before one of your minions would be destroyed, you may remove a +1 power counter from this minion to prevent that destruction."
     },
     "giant_ant_we_are_the_champions": {
       "name": "Ant We Are The Champions",
-      "effectText": "异能：在一个基地计分后，从你在这里的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: After a base scores, you may move any number of +1 power counters from one of your minions here to another."
     },
     "giant_ant_killer_queen": {
       "name": "Ant Killer Queen",
-      "abilityText": "天赋：如果你在本回合中打出了一个随从到此基地，在该随从以及本随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: If you played a minion here this turn, place a +1 power counter on that minion and on this minion."
     },
     "alien_supreme_overlord_pod": {
       "name": "Supreme Overlord",
@@ -1583,19 +1792,19 @@
     },
     "bear_cavalry_polar_commando_pod": {
       "name": "Polar Commando",
-      "abilityText": "Ongoing: If this is your only minion on this base, it has +2 power and cannot be destroyed."
+      "abilityText": "Talent: Place a +1 power counter on this minion or a minion with less power than this minion."
     },
     "bear_cavalry_bear_cavalry_pod": {
       "name": "Bear Cavalry",
-      "abilityText": "Move another player's minion from this base to another base."
+      "abilityText": "You may move another player's minion from this base to another base."
     },
     "bear_cavalry_cub_scout_pod": {
       "name": "Cub Scout",
-      "abilityText": "Ongoing: After another player's minion is moved to this base, if it has less power than this minion, destroy it."
+      "abilityText": "Ongoing: After another player's minion moves here, if it has less power than this minion, you may destroy it. If you do, you may move one of your minions of printed power 3 or less to this base."
     },
     "bear_cavalry_bear_hug_pod": {
       "name": "Bear Hug",
-      "effectText": "Each other player destroys their lowest-power minion. (They choose in case of a tie.)"
+      "effectText": "Each other player destroys their minion with the least power. (Controller chooses in case of ties.)"
     },
     "bear_cavalry_youre_screwed_pod": {
       "name": "You're Screwed",
@@ -1603,7 +1812,7 @@
     },
     "bear_cavalry_bear_necessities_pod": {
       "name": "Bear Necessities",
-      "effectText": "Destroy a minion or an action played on a base."
+      "effectText": "Play on a base. Talent: Until the start of your turn, other players with a minion here cannot play extra cards. At the start of your next turn, destroy this action."
     },
     "bear_cavalry_youre_pretty_much_borscht_pod": {
       "name": "You're Pretty Much Borscht",
@@ -1611,19 +1820,23 @@
     },
     "bear_cavalry_bear_rides_you_pod": {
       "name": "Bear Rides You",
-      "effectText": "Move one of your minions to another base."
+      "effectText": "Move a minion. If you moved a minion you control, you may cancel the abilities of a card at its new base until the start of your next turn."
     },
     "bear_cavalry_commission_pod": {
       "name": "Commission",
-      "effectText": "Play an extra minion. Move another player's minion from that base to another base."
+      "effectText": "Play an extra minion immediately. You may move another player's minion from the extra minion's base to another base."
+    },
+    "bear_cavalry_bearing_down_pod": {
+      "name": "Bearing Down",
+      "effectText": "Play on a base. Ongoing: This base's breakpoint is increased by 2 for each player with a minion here, or decreased instead if you have moved another player's minion to this base this turn."
     },
     "bear_cavalry_superiority_pod": {
       "name": "Superiority",
-      "effectText": "Play on a base. Ongoing: Your minions here cannot be destroyed, moved, or returned to your hand or deck by other players' cards."
+      "effectText": "Play on a base. Talent: If you have the most power here, either draw a card OR your minions here cannot be affected by other players' cards until the start of your next turn."
     },
     "bear_cavalry_high_ground_pod": {
       "name": "High Ground",
-      "effectText": "Play on a base. Ongoing: If you have a minion here, destroy any minion another player moves here."
+      "effectText": "Play on a base. Ongoing: If you have a minion here, after another player's minion moves to this base, you may destroy this action to either destroy that minion OR to draw a card and play an action."
     },
     "cthulhu_star_spawn_pod": {
       "name": "Star-Spawn of Cthulhu",
@@ -1726,31 +1939,31 @@
     },
     "elder_thing_elder_thing_pod": {
       "name": "Elder Thing",
-      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players' cards."
+      "abilityText": "You must either destroy two of your other minions or place this minion on the bottom of your deck. Ongoing: This minion is not affected by other players' cards."
     },
     "elder_thing_shoggoth_pod": {
       "name": "Shoggoth",
-      "abilityText": "You may only play this card on a base where you have at least 6 power. Each other player may draw a Madness card. Destroy a minion on this base belonging to each player who did not."
+      "abilityText": "Each other player may draw a Madness card. For each other player who does not, you may destroy one of their minions here. Then, if you have less than 12 total power here, draw two Madness cards."
     },
     "elder_thing_mi_go_pod": {
       "name": "Mi-go",
-      "abilityText": "Each other player may draw a Madness card. For each player that does not, draw a card."
+      "abilityText": "Each other player may draw a Madness card. For each other player that does not, you may draw a card. If no other players drew a Madness card, you may place a +1 power counter on a minion."
     },
     "elder_thing_byakhee_pod": {
       "name": "Byakhee",
-      "abilityText": "If another player has a minion on this base, draw a Madness card."
+      "abilityText": "Each other player with a minion here draws a Madness card."
     },
     "elder_thing_power_of_madness_pod": {
       "name": "Power of Madness",
-      "effectText": "Each other player reveals their hand, discards all Madness cards in it, and shuffles their discard pile into their deck."
+      "effectText": "For each other player, name an action and reveal their hand. They must discard all copies of that action and then shuffle their discard pile into their deck."
     },
     "elder_thing_insanity_pod": {
       "name": "Insanity",
-      "effectText": "Each other player draws two Madness cards."
+      "effectText": "Each other player draws two Madness cards. Place this action in the box."
     },
     "elder_thing_dunwich_horror_pod": {
       "name": "Dunwich Horror",
-      "effectText": "Play on a minion. This minion has +5 power. Destroy this minion at the end of the turn."
+      "effectText": "Play on a minion. Ongoing: This minion has +5 power. Special: Before this base scores, this minion's controller must either draw two Madness cards or destroy this minion."
     },
     "elder_thing_begin_the_summoning_pod": {
       "name": "Begin the Summoning",
@@ -1758,15 +1971,15 @@
     },
     "elder_thing_spreading_horror_pod": {
       "name": "Spreading Horror",
-      "effectText": "Each other player discards cards at random until they discard a card that is not a Madness card."
+      "effectText": "Each other player may discard two non-Madness cards. For each other player who does not, you may play a minion of power 3 or less from your discard pile on a different base."
     },
     "elder_thing_the_price_of_power_pod": {
       "name": "The Price of Power",
-      "effectText": "Special: Before a base scores, each other player with a minion here reveals their hand. For each Madness card revealed, one of your minions here gains +2 power until the end of the turn."
+      "effectText": "Each other player reveals their hand. For each Madness card revealed, place a +1 power counter on one of your minions. Special: Play before a base scores. Reveal the hands of all other players with a minion there instead."
     },
     "elder_thing_unfathomable_goals_pod": {
       "name": "Unfathomable Goals",
-      "effectText": "Each other player reveals their hand. Each player who reveals a Madness card must destroy one of their minions."
+      "effectText": "Each other player reveals their hand. If a player reveals at least two Madness cards, play an extra minion. If at least four total Madness cards are revealed, play an extra action."
     },
     "elder_thing_touch_of_madness_pod": {
       "name": "Touch of Madness",
@@ -1778,7 +1991,7 @@
     },
     "frankenstein_lab_assistant_pod": {
       "name": "Lab Assistant",
-      "abilityText": "在你的另一个随从上放置一个+1力量指示物。"
+      "abilityText": "Place a +1 power counter on one of your other minions."
     },
     "frankenstein_the_monster_pod": {
       "name": "The Monster",
@@ -1786,39 +1999,39 @@
     },
     "frankenstein_herr_doktor_pod": {
       "name": "Herr Doktor",
-      "abilityText": "天赋：在你的另一个随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Place a +1 power counter on one of your other minions."
     },
     "frankenstein_german_engineering_pod": {
       "name": "German Engineering",
-      "effectText": "打出到基地上。持续：在你打出一个随从到这后，在它上面放置一个+1力量指示物。"
+      "effectText": "Play on a base. Ongoing: After you play a minion here, place a +1 power counter on it."
     },
     "frankenstein_jolt_pod": {
       "name": "Jolt",
-      "effectText": "在你的每个随从上放置一个+1力量指示物。"
+      "effectText": "Place a +1 power counter on each of your minions."
     },
     "frankenstein_grave_situation_pod": {
       "name": "Grave Situation",
-      "effectText": "打出到基地上。持续：当你的一个随从在这里被消灭后，把它放到手牌而不是弃牌堆。"
+      "effectText": "Play on a base. Ongoing: If your minions here would be destroyed, return them to your hand instead."
     },
     "frankenstein_its_alive_pod": {
       "name": "Its Alive",
-      "effectText": "打出一个额外的随从并在它的身上放置一个+1力量指示物。"
+      "effectText": "Play an extra minion. Place a +1 power counter on it."
     },
     "frankenstein_angry_mob_pod": {
       "name": "Angry Mob",
-      "effectText": "选择你的一个随从。从你的手上放置任意数量的卡牌到你的牌库底。你每放一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Choose one of your minions. Place any number of cards from your hand on the bottom of your deck. For each card placed, place a +1 power counter on that minion."
     },
     "frankenstein_body_shop_pod": {
       "name": "Body Shop",
-      "effectText": "消灭你的一个随从。放置等同于该随从力量的+1力量指示物到你的随从上，你可以任意分配它们。"
+      "effectText": "Destroy one of your minions. Place +1 power counters equal to its power on your minions, divided as you choose."
     },
     "frankenstein_uberserum_pod": {
       "name": "Uberserum",
-      "effectText": "打出到一个随从上。持续：在你的回合开始时，在该随从上放置一个+1力量指示物。该随从不能被消灭。"
+      "effectText": "Play on a minion. Ongoing: At the start of your turn, place a +1 power counter on this minion. This minion cannot be destroyed."
     },
     "frankenstein_blitzed_pod": {
       "name": "Blitzed",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。消灭一个力量少于或等于你移除的数量的随从。"
+      "effectText": "Remove any number of +1 power counters from your minions. Destroy a minion with power less than or equal to the number you removed."
     },
     "ghost_spectre_pod": {
       "name": "Spectre",
@@ -1870,51 +2083,51 @@
     },
     "giant_ant_worker_pod": {
       "name": "Ant Worker",
-      "abilityText": "在本随从身上放置两个+1力量指示物。"
+      "abilityText": "Place two +1 power counters on this minion. Ongoing: After this minion goes to the discard pile from play, if it had no +1 power counters on it, you may play it on another base."
     },
     "giant_ant_soldier_pod": {
       "name": "Ant Soldier",
-      "abilityText": "在本随从上放置两个+1力量指示物。天赋：从本随从身上移除两个+1力量指示物来移动另一个随从到另一个基地上。"
+      "abilityText": "Place two +1 power counters on this minion. Talent: Transfer a +1 power counter between two of your minions."
     },
     "giant_ant_drone_pod": {
       "name": "Ant Drone",
-      "abilityText": "在本随从上放置一个+1力量指示物。持续：在你的一个随从被消灭前，你可以从本随从身上移除一个+1力量指示物来防止你的随从被消灭。"
+      "abilityText": "Place a +1 power counter on this minion. Ongoing: When one of your minions would be destroyed, you may remove a +1 power counter from this minion instead. Talent: Remove a +1 power counter from this minion to draw a card."
     },
     "giant_ant_killer_queen_pod": {
       "name": "Ant Killer Queen",
-      "abilityText": "天赋：如果你在本回合中打出了一个随从到此基地，在该随从以及本随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: Draw a minion of power 1 or less off the top of your deck OR choose another minion you played this turn and place a +1 power counter on this minion and that minion."
     },
     "giant_ant_who_wants_to_live_forever_pod": {
       "name": "Ant Who Wants To Live Forever",
-      "effectText": "从你的随从身上移除任意数量的+1力量指示物。之后你每移除一个指示物，就抽一张卡。"
+      "effectText": "Destroy one of your minions. Search your deck for a card and place it on top of your deck without revealing it."
     },
     "giant_ant_a_kind_of_magic_pod": {
       "name": "Ant A Kind Of Magic",
-      "effectText": "在你的随从之中随意分配它们身上的+1力量指示物。"
+      "effectText": "Transfer any number of +1 power counters between your cards."
     },
     "giant_ant_we_will_rock_you_pod": {
       "name": "Ant We Will Rock You",
-      "effectText": "每个你的随从为它自身上的每个+1力量指示物获得+1力量直到回合结束。"
+      "effectText": "Each of your minions on one base gain +1 power until the end of the turn for each +1 power counter on them."
     },
-    "giant_ant_claim_the_prize_pod": {
-      "name": "Ant Claim The Prize",
-      "effectText": "在至多3个你的随从的身上放置一个+1力量指示物。"
+    "giant_ant_gimme_the_prize_pod": {
+      "name": "Ant Gimme the Prize",
+      "effectText": "Place two +1 power counters on a minion and a +1 power counter on another minion."
     },
     "giant_ant_under_pressure_pod": {
       "name": "Ant Under Pressure",
-      "effectText": "异能：在一个基地即将计分前，你可以从你的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: Before a base scores, transfer any number of +1 power counters from one of your minions to another minion."
     },
     "giant_ant_headlong_pod": {
       "name": "Ant Headlong",
-      "effectText": "移动你的一个随从到另一个基地。在本随从上放置两个+1力量指示物。"
+      "effectText": "Move one of your minions to another base. Place two +1 power counters on it."
     },
     "giant_ant_the_show_must_go_on_pod": {
       "name": "Ant The Show Must Go On",
-      "effectText": "打出到基地上。持续：你在这里的拥有+1力量指示物的随从不受其他玩家卡牌的影响。"
+      "effectText": "Play on a base. Ongoing: Your minions here with +1 power counters are not affected by other players' cards."
     },
     "giant_ant_we_are_the_champions_pod": {
       "name": "Ant We Are The Champions",
-      "effectText": "异能：在一个基地计分后，从你在这里的一个随从身上转移任意数量的+1力量指示物到另一个随从身上。"
+      "effectText": "Special: After a base scores, transfer any number of +1 power counters from one of your minions there to another minion."
     },
     "innsmouth_the_locals_pod": {
       "name": "The Locals",
@@ -1946,7 +2159,7 @@
     },
     "innsmouth_in_plain_sight_pod": {
       "name": "In Plain Sight",
-      "effectText": "Play on a base. Your minions of power 2 or less here are not affected by other players' cards."
+      "effectText": "Play on a base. Your minions of printed power 2 or less here are not affected by other players' cards."
     },
     "innsmouth_the_deep_ones_pod": {
       "name": "The Deep Ones",
@@ -1958,7 +2171,7 @@
     },
     "killer_plant_weed_eater_pod": {
       "name": "Weed Eater",
-      "abilityText": "This minion has -2 power on the turn you play it."
+      "abilityText": "Ongoing: At the start of your turn, this minion gains +2 power until the start of your next turn."
     },
     "killer_plant_water_lily_pod": {
       "name": "Water Lily",
@@ -2006,47 +2219,47 @@
     },
     "miskatonic_librarian_pod": {
       "name": "Librarian",
-      "abilityText": "Talent: Discard a Madness card. If you do, draw a card."
+      "abilityText": "Talent: Draw a Madness card OR play a Madness card from your hand as an extra action."
     },
     "miskatonic_psychologist_pod": {
       "name": "Psychologist",
-      "abilityText": "You may return a Madness card from your hand or discard pile to the Madness deck."
+      "abilityText": "Consume a Madness card from your hand or discard pile OR draw a Madness card from your discard pile."
     },
     "miskatonic_researcher_pod": {
       "name": "Researcher",
-      "abilityText": "You may draw a Madness card."
+      "abilityText": "You may draw a Madness card to place a +1 power counter on a minion."
     },
-    "miskatonic_book_of_iter_the_unseen_pod": {
-      "name": "Jinkies!",
-      "effectText": "Look at any player's hand. Draw a Madness card and play two extra actions."
-    },
-    "miskatonic_it_might_just_work_pod": {
-      "name": "It Just Might Work",
-      "effectText": "Discard two Madness cards to destroy a minion."
-    },
-    "miskatonic_thing_on_the_doorstep_pod": {
-      "name": "Old Man Jenkins!?",
-      "effectText": "Search your deck for a minion or action and add it to your hand. Draw a Madness card. Shuffle your deck."
-    },
-    "miskatonic_lost_knowledge_pod": {
-      "name": "Gate to Beyond",
-      "effectText": "If you have two Madness cards in hand, reveal them to draw two cards and play an extra minion and an extra action this turn."
-    },
-    "miskatonic_mandatory_reading_pod": {
-      "name": "Things Best Not Known",
-      "effectText": "Choose a player. That player draws two Madness cards. You may play an extra action."
-    },
-    "miskatonic_psychological_profiling_pod": {
-      "name": "That's So Crazy...",
-      "effectText": "Draw two cards and draw a Madness card."
-    },
-    "miskatonic_those_meddling_kids_pod": {
-      "name": "Those Meddling Kids",
-      "effectText": "Destroy any number of actions on a base."
+    "miskatonic_old_man_jenkins_pod": {
+      "name": "\"Old Man Jenkins?\"",
+      "effectText": "Special: Before a base scores, destroy a minion with the highest power there."
     },
     "miskatonic_field_trip_pod": {
       "name": "Field Trip",
-      "effectText": "Place any number of cards from your hand on the bottom of your deck and draw a card for each card placed."
+      "effectText": "Place any number of cards from your hand on the bottom of your deck to draw that number plus one cards."
+    },
+    "miskatonic_eldritch_gate_pod": {
+      "name": "Eldritch Gate",
+      "effectText": "Play on a base. Talent: Draw a Madness card. You may play an extra minion here."
+    },
+    "miskatonic_jinkies_pod": {
+      "name": "Jinkies!",
+      "effectText": "Consume up to two Madness cards from your hand and/or discard pile."
+    },
+    "miskatonic_thats_so_crazy_pod": {
+      "name": "That's So Crazy...",
+      "effectText": "Draw a Madness card. Each of your minions gains +1 power until the end of the turn. You may play an extra action."
+    },
+    "miskatonic_it_just_might_work_pod": {
+      "name": "...It Just Might Work",
+      "effectText": "Discard up to two Madness cards to give your minions +1 power until the end of the turn for each."
+    },
+    "miskatonic_things_best_not_known_pod": {
+      "name": "Things Best Not Known",
+      "effectText": "Special: Before a base scores, draw up to three Madness cards. Give a minion there +2 power until the end of the turn for each Madness card drawn."
+    },
+    "miskatonic_those_meddling_kids_pod": {
+      "name": "Those Meddling Kids",
+      "effectText": "Destroy any number of actions on a single base OR draw a Madness card and play an extra action."
     },
     "ninja_master_pod": {
       "name": "Ninja Master",
@@ -2234,35 +2447,39 @@
     },
     "trickster_leprechaun_pod": {
       "name": "Leprechaun",
-      "abilityText": "Ongoing: After another player plays a minion here with less power than this minion, destroy it (after its ability resolves)."
+      "abilityText": "Ongoing: After the first time each turn another player plays a minion here that has less power here than this minion after resolving its ability, destroy it."
     },
     "trickster_brownie_pod": {
       "name": "Brownie",
-      "abilityText": "Ongoing: If another player's card affects this minion, that player discards two cards at random."
+      "abilityText": "Ongoing: Once per turn, after another player plays a minion on another base, draw a card."
     },
     "trickster_gnome_pod": {
       "name": "Gnome",
-      "abilityText": "You may destroy a minion here with power less than the number of minions you have here."
+      "abilityText": "Special: Before this base scores, you may destroy a minion here with less power than the number of minions and titans you have here."
     },
     "trickster_gremlin_pod": {
       "name": "Gremlin",
-      "abilityText": "Ongoing: After this minion is destroyed, draw a card and each other player discards a random card."
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, draw a card. If it was destroyed, each other player discards a random card."
+    },
+    "trickster_pixie_pod": {
+      "name": "Pixie",
+      "abilityText": "Minion: If you have more cards in your hand than at least one other player, place a +1 power counter on any number of your minions here.\nAction: Destroy an action to place two +1 power counters among your minions."
     },
     "trickster_enshrouding_mist_pod": {
       "name": "Enshrouding Mist",
-      "effectText": "Play on a base. Ongoing: On your turn, you may play an extra minion on this base."
+      "effectText": "Play on a base. Talent: Play an extra minion here."
     },
     "trickster_hideout_pod": {
       "name": "Hideout",
-      "effectText": "Play on a base. Ongoing: If another player's action would affect your minions on this base, destroy this card to cancel that action."
+      "effectText": "Play on a base. Ongoing: Other players cannot move minions to this base. Talent: Swap this action with a play-on-base action from your hand or deck, then you may destroy a minion of power 2 or less here."
     },
     "trickster_mark_of_sleep_pod": {
       "name": "Mark of Sleep",
-      "effectText": "Choose a player. That player cannot play actions on their next turn."
+      "effectText": "For each other player, choose one: until the start of your turn, that player either cannot play actions or cannot move minions."
     },
     "trickster_flame_trap_pod": {
       "name": "Flame Trap",
-      "effectText": "Play on a base. Ongoing: When another player plays a minion here, destroy that minion (after its ability resolves) and this card."
+      "effectText": "Play on a base. Ongoing: After another player plays a minion here, destroy this card to destroy that minion. At the start of your turn, you may reduce this base's breakpoint by 4 until the end of the turn."
     },
     "trickster_take_the_shinies_pod": {
       "name": "Take the Shinies",
@@ -2270,7 +2487,7 @@
     },
     "trickster_block_the_path_pod": {
       "name": "Block the Path",
-      "effectText": "Play on a base. Ongoing: Choose a faction. Minions of that faction cannot be played here."
+      "effectText": "Play on a base. For each other player, name a faction they own. Ongoing: Minions of the named factions cannot be played here."
     },
     "trickster_disenchant_pod": {
       "name": "Disenchant",
@@ -2282,103 +2499,107 @@
     },
     "vampire_fledgling_vampire_pod": {
       "name": "Fledgling Vampire",
-      "abilityText": "在你打出本随从后，如果另一个玩家在这里比你有更高的力量，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "If this minion was played from anywhere other than your hand, place a +1 power counter on it. Special: After you destroy another minion, you may bury this card from your hand or discard pile on any base."
     },
     "vampire_heavy_drinker_pod": {
       "name": "Heavy Drinker",
-      "abilityText": "你可以消灭你的一个随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "You may destroy a minion of power 2 or less here or one of your other minions on any base to place two +1 power counters on this minion."
     },
     "vampire_nightstalker_pod": {
       "name": "Nightstalker",
-      "abilityText": "消灭一个这里的力量为2或以下的随从来在本随从身上放置一个+1力量指示物。"
+      "abilityText": "Talent: If you have destroyed a minion this turn, draw a card and give this minion +2 power until the end of the turn."
     },
     "vampire_the_count_pod": {
       "name": "The Count",
-      "abilityText": "持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "abilityText": "Ongoing: After a minion is destroyed, you may place a +1 power counter on a minion at its base. Talent: Give a minion -1 power until the start of your turn."
     },
     "vampire_dinner_date_pod": {
       "name": "Dinner Date",
-      "effectText": "在你的一个随从身上放置一个+1力量指示物。消灭一个与该随从在同一个基地力量为2或以下的随从。"
+      "effectText": "Play on a minion. Place two +1 power counters on one of your minions. Ongoing: This minion has -2 power. If this minion has 0 power, destroy it."
     },
     "vampire_big_gulp_pod": {
       "name": "Big Gulp",
-      "effectText": "消灭一个力量为4或者以下的随从。"
+      "effectText": "Destroy a minion of power 4 or less."
     },
     "vampire_opportunist_pod": {
       "name": "Opportunist",
-      "effectText": "打出到一个随从上。持续：在另一个玩家的随从被消灭后，在本随从身上放置一个+1力量指示物。"
+      "effectText": "Play on a minion. Ongoing: After another player's minion is destroyed, place a +1 power counter on this minion."
     },
     "vampire_mad_monster_party_pod": {
       "name": "Mad Monster Party",
-      "effectText": "在每个你没有+1力量指示物的随从身上放置一个+1力量指示物。"
+      "effectText": "Choose a base and place a +1 power counter on each of your minions there. Special: Play after you destroy a minion. Choose its base."
     },
     "vampire_cull_the_weak_pod": {
       "name": "Cull The Weak",
-      "effectText": "选择你的一个随从。从你的手中弃置任意数量的随从卡。你每弃一张牌，你就在该随从身上放置一个+1力量指示物。"
+      "effectText": "Search your deck for up to two minions and discard them. For each minion discarded, place a +1 power counter on a minion."
     },
     "vampire_buffet_pod": {
       "name": "Buffet",
-      "effectText": "异能：在一个基地计分后，如果你是赢家，在你的每个随从身上放置+1力量标记。"
+      "effectText": "Draw two cards. Special: Play after you destroy a minion."
     },
     "vampire_crack_of_dusk_pod": {
-      "name": "Crack Of Dusk",
-      "effectText": "从你的弃牌堆额外打出一个力量为2或以下的随从。放置一个+1力量指示物在它的上面。"
+      "name": "Crack of Dusk",
+      "effectText": "Play an extra minion of power 2 or less from your discard pile. Place a +1 power counter on it."
     },
-    "vampire_summon_wolves_pod": {
-      "name": "Summon Wolves",
-      "effectText": "打出到基地上。持续：在你的回合开始时，在本卡上放置一个+1力量指示物。如果你有随从在这，指示物会被加进你的总力量中。"
+    "vampire_stakeout_pod": {
+      "name": "Stakeout",
+      "effectText": "Play on a base. Talent: If another player's power here has decreased this turn, other players cannot play minions of power 3 or more here until the start of your next turn."
+    },
+    "vampire_wolf_pact_pod": {
+      "name": "Wolf Pact",
+      "abilityText": "Fusion. Minion: You may give a minion -1 power until the start of your next turn to place a +1 power counter on another one of your minions here. Action: Shuffle a card from your discard pile into your deck."
     },
     "werewolf_howler_pod": {
       "name": "Howler",
-      "abilityText": "本随从获得+2力量直到回合结束。"
+      "abilityText": "This minion has +2 power until the end of the turn."
     },
     "werewolf_teenage_wolf_pod": {
       "name": "Teenage Wolf",
-      "abilityText": "天赋：本随从获得+1力量直到回合结束。"
+      "abilityText": "Talent: This minion gains +1 power until the end of the turn."
     },
     "werewolf_loup_garou_pod": {
       "name": "Loup Garou",
-      "abilityText": "异能：在本基地计分前，本随从获得+2力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, this minion has +2 power until the end of the turn."
     },
     "werewolf_pack_alpha_pod": {
       "name": "Pack Alpha",
-      "abilityText": "异能：在本基地计分前，每个你在这里的随从获得+1力量直到回合结束。"
+      "abilityText": "Special: Before this base scores, each of your minions here gains +1 power until the end of the turn."
     },
     "werewolf_full_moon_pod": {
       "name": "Full Moon",
-      "effectText": "打出到基地上。持续：每个你在这里的随从获得+1力量。"
+      "effectText": "Play on a base. Ongoing: Each of your minions here has +1 power."
     },
     "werewolf_frenzy_pod": {
       "name": "Frenzy",
-      "effectText": "每个你的力量为4或更高的随从获得+1力量直到回合结束。"
+      "effectText": "Each of your minions of power 4 or more gains +1 power until the end of the turn."
     },
     "werewolf_marking_territory_pod": {
       "name": "Marking Territory",
-      "effectText": "打出到一个基地上。持续：在你的回合开始的时候，如果你在这里比其他玩家有更高的总力量，将本基地的爆破点降低到0。"
+      "effectText": "Play on a base. Ongoing: At the start of your turn, if you have more power here than each other player, reduce this base's breakpoint to 0."
     },
     "werewolf_chew_toy_pod": {
       "name": "Chew Toy",
-      "effectText": "选择你的一个随从。消灭一个在你的随从所在基地中比它力量低的随从。"
+      "effectText": "Choose one of your minions on a base. Destroy a minion there with less power than yours."
     },
     "werewolf_leader_of_the_pack_pod": {
       "name": "Leader Of The Pack",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，你就可以额外打出一个行动。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, you may play an extra action."
     },
     "werewolf_unstoppable_pod": {
       "name": "Unstoppable",
-      "effectText": "打出到一个随从上。持续：本随从不能够被消灭。"
+      "effectText": "Play on a minion. Ongoing: This minion cannot be destroyed."
     },
     "werewolf_let_the_dog_out_pod": {
       "name": "Let The Dog Out",
-      "effectText": "选择一个你的随从。消灭任意数量力量加起来小于或等于你随从的力量的随从。"
+      "effectText": "Choose one of your minions. Destroy any number of minions with total power less than or equal to that minion's power."
     },
     "werewolf_moontouched_pod": {
       "name": "Moontouched",
-      "effectText": "打出到一个随从上。天赋：如果本随从在这里拥有最高的力量，抽一张牌。"
+      "effectText": "Play on a minion. Talent: If this minion has the most power here, draw a card."
     },
     "wizard_archmage_pod": {
       "name": "Archmage",
-      "abilityText": "Ongoing: You may play one extra action on each of your turns."
+      "abilityText": "Talent: Play an extra action."
     },
     "wizard_chronomage_pod": {
       "name": "Chronomage",
@@ -2472,8 +2693,618 @@
       "name": "Mall Crawl",
       "effectText": "Search your deck for any number of cards of the same name and put them into your discard pile. Shuffle your deck."
     },
+    "miskatonic_book_of_iter_the_unseen_pod": {
+      "name": "Book of Iters"
+    },
+    "miskatonic_thing_on_the_doorstep_pod": {
+      "name": "Thing on the Doorstep"
+    },
+    "miskatonic_lost_knowledge_pod": {
+      "name": "Lost Knowledge"
+    },
+    "miskatonic_mandatory_reading_pod": {
+      "name": "Mandatory Reading"
+    },
+    "miskatonic_psychological_profiling_pod": {
+      "name": "Psychological Profiling"
+    },
+    "vampire_summon_wolves_pod": {
+      "name": "Summon Wolves"
+    },
+    "base_miskatonic_university_base_pod": {
+      "name": "Miskatonic University",
+      "abilityText": "Once per turn, after you play a minion here, you may draw two Madness cards or discard a Madness card from your hand to play an extra action."
+    },
+    "base_the_asylum_pod": {
+      "name": "The Asylum",
+      "abilityText": "After you play a minion here, you may put a card from your hand back in the box to place a +1 power counter on a minion."
+    },
+    "base_the_grey_opal_pod": {
+      "name": "The Grey Opal"
+    },
+    "base_tortuga_pod": {
+      "name": "Tortuga"
+    },
+    "base_factory_436_1337_pod": {
+      "name": "Factory 436-1337"
+    },
+    "base_the_central_brain_pod": {
+      "name": "The Central Brain"
+    },
+    "base_inventors_salon_pod": {
+      "name": "Inventor's Salon"
+    },
+    "base_the_workshop_pod": {
+      "name": "The Workshop"
+    },
+    "base_the_homeworld_pod": {
+      "name": "The Homeworld"
+    },
+    "base_the_mothership_pod": {
+      "name": "The Mothership"
+    },
+    "base_the_jungle_pod": {
+      "name": "The Jungle"
+    },
+    "base_tar_pits_pod": {
+      "name": "Tar Pits"
+    },
+    "base_pirate_cove_pod": {
+      "name": "Pirate Cove"
+    },
+    "base_dread_lookout_pod": {
+      "name": "Dread Lookout"
+    },
+    "base_haunted_house_al9000_pod": {
+      "name": "Haunted House"
+    },
+    "base_the_field_of_honor_pod": {
+      "name": "The Field of Honor"
+    },
+    "base_tsars_palace_pod": {
+      "name": "Tsar's Palace"
+    },
+    "base_greenhouse_pod": {
+      "name": "Greenhouse"
+    },
+    "base_secret_garden_pod": {
+      "name": "Secret Garden"
+    },
+    "base_cat_fanciers_alley_pod": {
+      "name": "Cat Fancier's Alley"
+    },
+    "base_house_of_nine_lives_pod": {
+      "name": "House of Nine Lives"
+    },
+    "base_enchanted_glade_pod": {
+      "name": "Enchanted Glade"
+    },
+    "base_fairy_ring_pod": {
+      "name": "Fairy Ring"
+    },
+    "base_beautiful_castle_pod": {
+      "name": "Beautiful Castle"
+    },
+    "base_castle_of_ice_pod": {
+      "name": "Castle of Ice"
+    },
+    "base_land_of_balance_pod": {
+      "name": "Land of Balance"
+    },
+    "base_pony_paradise_pod": {
+      "name": "Pony Paradise"
+    },
+    "base_north_pole_pod": {
+      "name": "North Pole"
+    },
+    "base_antarctic_base_pod": {
+      "name": "Antarctic Base",
+      "abilityText": "Each player may play only one minion at this base each turn."
+    },
+    "base_ritual_site_pod": {
+      "name": "Ritual Site",
+      "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."
+    },
+    "base_rlyeh_pod": {
+      "name": "R'lyeh",
+      "abilityText": "At the start of each player's turn, that player may destroy one of their minions here to gain 1 VP."
+    },
+    "base_innsmouth_base_pod": {
+      "name": "Innsmouth",
+      "abilityText": "After each time a minion is played here, its owner may place a card from any player's discard pile on the bottom of its owner's deck."
+    },
+    "base_mountains_of_madness_pod": {
+      "name": "Mountains of Madness",
+      "abilityText": "After each time a minion is played here, its owner draws a Madness card."
+    },
+    "base_plateau_of_leng_pod": {
+      "name": "Plateau of Leng",
+      "abilityText": "The first time a player plays a minion here from their hand each turn, they may play an extra minion of the same name here."
+    },
+    "base_the_pasture_pod": {
+      "name": "The Pasture"
+    },
+    "base_sheep_shrine_pod": {
+      "name": "Sheep Shrine"
+    },
+    "base_castle_blood_pod": {
+      "name": "Castle Blood"
+    },
+    "base_crypt_pod": {
+      "name": "Crypt"
+    },
+    "base_laboratorium_pod": {
+      "name": "Laboratorium"
+    },
+    "base_golem_schloss_pod": {
+      "name": "Golem Schloss"
+    },
+    "base_moot_site_pod": {
+      "name": "Moot Site"
+    },
+    "base_standing_stones_pod": {
+      "name": "Standing Stones"
+    },
+    "base_egg_chamber_pod": {
+      "name": "Egg Chamber"
+    },
+    "base_the_hill_pod": {
+      "name": "The Hill"
+    },
     "pirate_cut_lass": {
       "name": "Cut Lass"
+    },
+    "ancient_egyptians_mummy": {
+      "name": "Mummy",
+      "abilityText": "Special: After this base scores, bury this card on another base instead of discarding it."
+    },
+    "ancient_egyptians_pyramid_engineer": {
+      "name": "Pyramid Engineer",
+      "abilityText": "You may uncover a buried card here. Talent: Bury a card from your hand here."
+    },
+    "ancient_egyptians_priest_of_anubis": {
+      "name": "Priest of Anubis",
+      "abilityText": "Ongoing: This minion has +2 power if there is a buried card here."
+    },
+    "ancient_egyptians_pharaoh": {
+      "name": "Pharaoh",
+      "abilityText": "Ongoing: After another buried card is uncovered, draw a card. Special: Before this base scores, you may uncover one of your buried cards here."
+    },
+    "ancient_egyptians_you_can_take_it_with_you": {
+      "name": "You Can Take It With You",
+      "effectText": "Bury this card. Special: When this card is uncovered, draw three cards."
+    },
+    "ancient_egyptians_tomb_trap": {
+      "name": "Tomb Trap",
+      "effectText": "Bury this card. Special: When this card is uncovered, you may destroy a minion of power 4 or less here."
+    },
+    "ancient_egyptians_seal_the_tomb": {
+      "name": "Seal the Tomb",
+      "effectText": "Bury up to two cards from your hand on the same base OR uncover up to two of your buried cards on the same base."
+    },
+    "ancient_egyptians_plague_of_locusts": {
+      "name": "Plague of Locusts",
+      "effectText": "Special: Play before a base scores. Choose a base. All other players' minions there have -1 power until the end of the turn."
+    },
+    "ancient_egyptians_mummy_strength": {
+      "name": "Mummy Strength",
+      "effectText": "Choose one of your minions on a base where there is a buried card. Give that minion +4 power until the end of the turn. Or give one of your minions +2 power until the end of the turn."
+    },
+    "ancient_egyptians_lost_knowledge": {
+      "name": "Lost Knowledge",
+      "effectText": "Special: Play before a base scores. Bury a card from your hand OR uncover one of your buried cards."
+    },
+    "ancient_egyptians_blessing_of_anubis": {
+      "name": "Blessing of Anubis",
+      "effectText": "Bury this card. Special: When this card is uncovered, your minions here have +2 power until the end of the turn."
+    },
+    "ancient_egyptians_ancient_curse": {
+      "name": "Ancient Curse",
+      "effectText": "Play on a minion. You may remove a +1 power counter from it. Ongoing: This minion has -2 power."
+    },
+    "ancient_egyptians_mummy_pod": {
+      "name": "Mummy",
+      "abilityText": "Special: After this base scores, you may bury this minion on another base."
+    },
+    "ancient_egyptians_pyramid_engineer_pod": {
+      "name": "Pyramid Engineer",
+      "abilityText": "You may uncover one of your buried cards here. Talent: Bury a card from your hand here."
+    },
+    "ancient_egyptians_priest_of_anubis_pod": {
+      "name": "Priest of Anubis",
+      "abilityText": "Ongoing: This minion has +2 power if you have a card buried here."
+    },
+    "ancient_egyptians_pharaoh_pod": {
+      "name": "Pharaoh",
+      "abilityText": "Ongoing: After another buried card is uncovered, draw a card. Special: Before this base scores, you may uncover one of your buried cards here."
+    },
+    "ancient_egyptians_lost_knowledge_pod": {
+      "name": "Lost Knowledge",
+      "effectText": "Bury a card from your hand OR uncover one of your buried cards. Special: You may play this card before a base scores."
+    },
+    "ancient_egyptians_you_can_take_it_with_you_pod": {
+      "name": "You Can Take It With You",
+      "effectText": "Bury this card. Special: When this card is uncovered, draw three cards."
+    },
+    "ancient_egyptians_plague_of_locusts_pod": {
+      "name": "Plague of Locusts",
+      "effectText": "Choose a base. All other players’ minions there get -1 power until the end of the turn. Special: You may play this before a base scores."
+    },
+    "ancient_egyptians_mummy_strength_pod": {
+      "name": "Mummy Strength",
+      "effectText": "Choose one of your minions. If there is a card buried on its base, it gains +4 power until the end of the turn, otherwise it gains +2 power until the end of the turn."
+    },
+    "ancient_egyptians_tomb_trap_pod": {
+      "name": "Tomb Trap",
+      "effectText": "Bury this card. Special: When this card is uncovered, you may destroy a minion of power 4 or less here."
+    },
+    "ancient_egyptians_ancient_curse_pod": {
+      "name": "Ancient Curse",
+      "effectText": "Play on a minion. You may remove a +1 power counter from it. Ongoing: This minion has -2 power."
+    },
+    "ancient_egyptians_blessing_of_anubis_pod": {
+      "name": "Blessing of Anubis",
+      "effectText": "Bury this card. Special: When this card is uncovered, your minions here each gain +2 power until the end of the turn."
+    },
+    "ancient_egyptians_seal_the_tomb_pod": {
+      "name": "Seal the Tomb",
+      "effectText": "Bury up to two cards from your hand on the same base OR uncover up to two of your buried cards on the same base."
+    },
+    "cowboys_deputy": {
+      "name": "Deputy",
+      "abilityText": "Special: On your turn or during a duel involving your minion, you may discard this card from your hand to give a minion +2 power until the end of the turn."
+    },
+    "cowboys_gunfighter": {
+      "name": "Gunfighter",
+      "abilityText": "This minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_pinkerton": {
+      "name": "Pinkerton",
+      "abilityText": "Ongoing: Once per duel, when one of your minions is in a duel, you may place a +1 power counter on it."
+    },
+    "cowboys_sheriff": {
+      "name": "Sheriff",
+      "abilityText": "Special: Before this base scores, this minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_stagecoach": {
+      "name": "Stagecoach",
+      "effectText": "Move or transfer up to 2 of your cards on the same base to another base."
+    },
+    "cowboys_run_em_off": {
+      "name": "Run 'Em Off",
+      "effectText": "One of your minions duels another player's minion on the same base. The winning minion gets +3 power until the end of the turn, and its controller moves the loser's minion to another base."
+    },
+    "cowboys_quick_draw": {
+      "name": "Quick Draw",
+      "effectText": "Choose one of your minions. If it is in a duel, it gets +4 power until the end of the turn. Otherwise, it gets +2 power until the end of the turn."
+    },
+    "cowboys_high_noon": {
+      "name": "High Noon",
+      "effectText": "One of your minions duels another player's minion on the same base. Destroy the loser's minion. If your minion wins, you may play an extra minion there."
+    },
+    "cowboys_gold_strike": {
+      "name": "Gold Strike",
+      "effectText": "Play on a base. Ongoing: After you play a minion here, draw a card."
+    },
+    "cowboys_gold_in_them_thar_hills": {
+      "name": "Gold in Them Thar Hills",
+      "effectText": "Look at the top three cards of your deck. Reveal and draw one of them; you may play it as an extra card. Return the rest in any order."
+    },
+    "cowboys_form_a_posse": {
+      "name": "Form a Posse",
+      "effectText": "Each of your minions gains +1 power and cannot be destroyed, moved, or returned to the hand until the end of the turn."
+    },
+    "cowboys_dynamite_surprise": {
+      "name": "Dynamite Surprise",
+      "effectText": "Special: Before a base scores where you have a minion and are not winning, destroy a minion of power 4 or less there. Special: If another player's card reveals or looks at a card in your hand or deck, destroy one of their minions of power 4 or less."
+    },
+    "samurai_samurai_chan": {
+      "name": "Samurai-Chan",
+      "abilityText": "After this minion goes to the discard pile from play, draw a card."
+    },
+    "samurai_ronin": {
+      "name": "Ronin",
+      "abilityText": "If this is your only minion on this base, you may place two +1 power counters on it."
+    },
+    "samurai_bushi": {
+      "name": "Bushi",
+      "abilityText": "After this minion goes to the discard pile from play, if it had power 5 or more, gain 1 VP."
+    },
+    "samurai_shogun": {
+      "name": "Shogun",
+      "abilityText": "After another of your minions goes to the discard pile from play, place a +1 power counter on this minion."
+    },
+    "samurai_yokai_attack": {
+      "name": "Yokai Attack!",
+      "effectText": "Destroy one of your minions to play an extra minion and an extra action."
+    },
+    "samurai_way_of_the_warrior": {
+      "name": "Way of the Warrior",
+      "effectText": "Until the end of the turn, one of your minions gains +3 power, and if it goes to the discard pile from play, draw a card."
+    },
+    "samurai_honorable_combat": {
+      "name": "Honorable Combat",
+      "effectText": "Choose a base where another player has more power than you. One of your minions there duels one of that player's minions there. The controller of the winning minion gains 1 VP."
+    },
+    "samurai_honor_the_fallen": {
+      "name": "Honor the Fallen",
+      "effectText": "Play on a base. Ongoing: After one of your minions here goes to the discard pile, draw a card."
+    },
+    "samurai_honor_the_ancestors": {
+      "name": "Honor the Ancestors",
+      "effectText": "Place a +1 power counter on one of your minions. For each other player in the game, you may shuffle a minion from your discard pile back into your deck."
+    },
+    "samurai_heart_of_the_battle": {
+      "name": "Heart of the Battle",
+      "effectText": "Special: Play before a base scores. One of your minions there duels another player's minion there. Destroy the losing minion."
+    },
+    "samurai_final_haiku": {
+      "name": "Final Haiku",
+      "effectText": "Play on one of your minions. Ongoing: After this minion goes to the discard pile from play, your minions each gain +2 power until the end of the turn."
+    },
+    "samurai_code_of_bushido": {
+      "name": "Code of Bushido",
+      "effectText": "Place three total +1 power counters on your minions."
+    },
+    "samurai_samurai_chan_pod": {
+      "name": "Samurai-Chan",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, draw a card."
+    },
+    "samurai_ronin_pod": {
+      "name": "Ronin",
+      "abilityText": "If this is your only minion on this base, you may place two +1 power counters on it."
+    },
+    "samurai_bushi_pod": {
+      "name": "Bushi",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play while it has 5 or more power, gain 1 VP."
+    },
+    "samurai_shogun_pod": {
+      "name": "Shogun",
+      "abilityText": "Ongoing: After another of your minions goes to the discard pile from play, place a +1 power counter on this minion."
+    },
+    "samurai_yokai_attack_pod": {
+      "name": "Yokai Attack!",
+      "effectText": "Destroy one of your minions to play an extra minion and an extra action."
+    },
+    "samurai_way_of_the_warrior_pod": {
+      "name": "Way of the Warrior",
+      "effectText": "Until the end of the turn, one of your minions gains +3 power, and if it goes to the discard pile from play, draw a card."
+    },
+    "samurai_honorable_combat_pod": {
+      "name": "Honorable Combat",
+      "effectText": "Choose a base where another player has more power than you. One of your minions there duels one of that player's minions there. The controller of the winning minion gains 1 VP."
+    },
+    "samurai_honor_the_fallen_pod": {
+      "name": "Honor the Fallen",
+      "effectText": "Play on a base. Ongoing: After one of your minions here goes to the discard pile, draw a card."
+    },
+    "samurai_honor_the_ancestors_pod": {
+      "name": "Honor the Ancestors",
+      "effectText": "Place a +1 power counter on one of your minions. For each other player in the game, you may shuffle a minion from your discard pile back into your deck."
+    },
+    "samurai_heart_of_the_battle_pod": {
+      "name": "Heart of the Battle",
+      "effectText": "Special: Play before a base scores. One of your minions there duels another player's minion there. Destroy the losing minion."
+    },
+    "samurai_final_haiku_pod": {
+      "name": "Final Haiku",
+      "effectText": "Play on one of your minions. Ongoing: After this minion goes to the discard pile from play, your minions each gain +2 power until the end of the turn."
+    },
+    "samurai_code_of_bushido_pod": {
+      "name": "Code of Bushido",
+      "effectText": "Place three total +1 power counters on your minions."
+    },
+    "vikings_huscarl": {
+      "name": "Huscarl",
+      "abilityText": "Talent: Place a card from your hand on top of your deck to give this minion +2 power until the end of the turn."
+    },
+    "vikings_shield_maiden": {
+      "name": "Shield Maiden",
+      "abilityText": "Reveal the top card of another player's deck. If it is an action, or a minion of power 3 or less, place it into your hand. Otherwise, return it."
+    },
+    "vikings_raider": {
+      "name": "Raider",
+      "abilityText": "Talent: Place up to three cards from your hand on top of your deck. This minion gains +1 power for each one until the end of the turn."
+    },
+    "vikings_valkyrie": {
+      "name": "Valkyrie",
+      "abilityText": "Place a minion from another player's discard pile into your hand."
+    },
+    "vikings_viking_funeral": {
+      "name": "Viking Funeral",
+      "effectText": "Play on a minion of power 5 or more. Ongoing: After this minion goes to the discard pile, gain 1 VP. If you own it, place it into the box."
+    },
+    "vikings_tribute": {
+      "name": "Tribute",
+      "effectText": "Draw 3 cards."
+    },
+    "vikings_ransack": {
+      "name": "Ransack",
+      "effectText": "Place an action on a minion, an action on a base, or a buried card into your hand."
+    },
+    "vikings_raiding_party": {
+      "name": "Raiding Party",
+      "effectText": "Reveal the top three cards of another player's deck. You may play a revealed action, or minion of power 4 or less, as an extra card. Return the rest in any order."
+    },
+    "vikings_pillage": {
+      "name": "Pillage",
+      "effectText": "Take a random card from another player's hand and place it into your hand."
+    },
+    "vikings_combat_training": {
+      "name": "Combat Training",
+      "effectText": "Your minions gain +1 power until the end of the turn."
+    },
+    "vikings_cast_the_runes": {
+      "name": "Cast the Runes",
+      "effectText": "Look at another player's hand. Look at the top 2 cards of their deck and replace them in any order. Play an extra action."
+    },
+    "vikings_berserk": {
+      "name": "Berserk",
+      "effectText": "Place a card from your hand on top of your deck to give one of your minions +4 power until the end of the turn."
+    },
+    "base_saloon": {
+      "name": "Saloon",
+      "abilityText": "After a minion is destroyed here, each player with a minion here draws a card."
+    },
+    "base_so_so_corral": {
+      "name": "So-So Corral",
+      "abilityText": "After you play a minion here, it may duel another player's minion here. Destroy the losing minion."
+    },
+    "base_pyramids": {
+      "name": "Pyramids",
+      "abilityText": "On your turn, you may bury a card from your hand here."
+    },
+    "base_star_portal": {
+      "name": "Star Portal",
+      "abilityText": "After a card is buried here or an action is played on this base, its controller draws a card."
+    },
+    "base_pyramids_pod": {
+      "name": "Pyramids",
+      "abilityText": "On your turn, you may bury a card from your hand here."
+    },
+    "base_star_portal_pod": {
+      "name": "Star Portal",
+      "abilityText": "After a card is buried here or an action is played on this base, its controller draws a card."
+    },
+    "base_shoguns_palace": {
+      "name": "Shogun's Palace",
+      "abilityText": "Once per turn, after you play a minion here, it may duel another player's minion here. The controller of the winning minion draws two cards."
+    },
+    "base_sakura_garden": {
+      "name": "Sakura Garden",
+      "abilityText": "Each turn, the first time one of your minions here goes to the discard pile, draw a card."
+    },
+    "base_shoguns_palace_pod": {
+      "name": "Shogun's Palace",
+      "abilityText": "Once per turn, after you play a minion here, it may duel another player's minion here. The controller of the winning minion draws two cards."
+    },
+    "base_sakura_garden_pod": {
+      "name": "Sakura Garden",
+      "abilityText": "Each turn, the first time one of your minions here goes to the discard pile, draw a card."
+    },
+    "base_drakkar": {
+      "name": "Drakkar",
+      "abilityText": "After the first time you play a minion here each turn, you may reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, you may draw it. Otherwise, return it."
+    },
+    "base_longhouse": {
+      "name": "Longhouse",
+      "abilityText": "On your turn, you may place a card from your hand on top of your deck to give one of your minions here +2 power until the end of the turn."
+    },
+    "cowboys_deputy_pod": {
+      "name": "Deputy",
+      "abilityText": "Special: On your turn or during a duel involving your minion, you may discard this card from your hand to give a minion +2 power until the end of the turn."
+    },
+    "cowboys_gunfighter_pod": {
+      "name": "Gunfighter",
+      "abilityText": "This minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_pinkerton_pod": {
+      "name": "Pinkerton",
+      "abilityText": "Ongoing: Once per duel, when one of your minions is in a duel, you may place a +1 power counter on it."
+    },
+    "cowboys_sheriff_pod": {
+      "name": "Sheriff",
+      "abilityText": "Special: Before this base scores, this minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_form_a_posse_pod": {
+      "name": "Form a Posse",
+      "effectText": "Each of your minions gains +1 power and cannot be destroyed, moved, or returned to the hand until the end of the turn."
+    },
+    "cowboys_quick_draw_pod": {
+      "name": "Quick Draw",
+      "effectText": "Choose one of your minions. If it is in a duel, it gains +4 power until the end of the turn, otherwise it gains +2 power until the end of the turn."
+    },
+    "cowboys_gold_in_them_thar_hills_pod": {
+      "name": "Gold in Them Thar Hills",
+      "effectText": "Look at the top three cards of your deck. Reveal and draw one of them; you may play it as an extra card. Return the rest in any order."
+    },
+    "cowboys_stagecoach_pod": {
+      "name": "Stagecoach",
+      "effectText": "Move or transfer up to two of your cards on the same base to another base."
+    },
+    "cowboys_run_em_off_pod": {
+      "name": "Run 'Em Off",
+      "effectText": "One of your minions duels another player's minion at the same base. The winning minion gains +3 power until the end of the turn, and its controller moves the losing minion to another base."
+    },
+    "cowboys_high_noon_pod": {
+      "name": "High Noon",
+      "effectText": "One of your minions duels another player's minion at the same base. Destroy the losing minion. If your minion wins, you may play an extra minion there."
+    },
+    "cowboys_dynamite_surprise_pod": {
+      "name": "Dynamite Surprise",
+      "effectText": "Special: Before a base scores where you have a minion and are not winning, destroy a minion of power 4 or less there. Special: If another player's card reveals or looks at a card in your hand or deck, destroy one of their minions of power 4 or less."
+    },
+    "cowboys_gold_strike_pod": {
+      "name": "Gold Strike",
+      "effectText": "Play on a base. Ongoing: After you play a minion here, draw a card."
+    },
+    "base_saloon_pod": {
+      "name": "Saloon",
+      "abilityText": "After a minion here is destroyed, each player with a minion here may draw a card."
+    },
+    "base_so_so_corral_pod": {
+      "name": "So-So Corral",
+      "abilityText": "After you play a minion here, it may duel another player's minion here. Destroy the losing minion."
+    },
+    "vikings_huscarl_pod": {
+      "name": "Huscarl",
+      "abilityText": "Talent: Place a card from your hand on top of your deck to give this minion +2 power until the end of the turn."
+    },
+    "vikings_shield_maiden_pod": {
+      "name": "Shield Maiden",
+      "abilityText": "Reveal the top card of another player's deck. If it is an action, or a minion of power 3 or less, place it into your hand. Otherwise, return it."
+    },
+    "vikings_raider_pod": {
+      "name": "Raider",
+      "abilityText": "Talent: Place up to three cards from your hand on top of your deck. This minion gains +1 power for each one until the end of the turn."
+    },
+    "vikings_valkyrie_pod": {
+      "name": "Valkyrie",
+      "abilityText": "Place a minion from another player's discard pile into your hand."
+    },
+    "vikings_berserk_pod": {
+      "name": "Berserk",
+      "effectText": "Place a card from your hand on top of your deck to give one of your minions +4 power until the end of the turn."
+    },
+    "vikings_cast_the_runes_pod": {
+      "name": "Cast the Runes",
+      "effectText": "Look at another player's hand. Look at the top two cards of their deck and return them in any order. Play an extra action."
+    },
+    "vikings_combat_training_pod": {
+      "name": "Combat Training",
+      "effectText": "Each of your minions gains +1 power until the end of the turn."
+    },
+    "vikings_pillage_pod": {
+      "name": "Pillage",
+      "effectText": "Take a random card from another player's hand and place it in yours."
+    },
+    "vikings_raiding_party_pod": {
+      "name": "Raiding Party",
+      "effectText": "Reveal the top three cards of another player's deck. You may play a revealed action, or minion of power 4 or less, as an extra card. Return the rest in any order."
+    },
+    "vikings_ransack_pod": {
+      "name": "Ransack",
+      "effectText": "Place an action on a minion, an action on a base, or a buried card into your hand."
+    },
+    "vikings_tribute_pod": {
+      "name": "Tribute",
+      "effectText": "Draw three cards."
+    },
+    "vikings_viking_funeral_pod": {
+      "name": "Viking Funeral",
+      "effectText": "Play on one of your minions of power 5 or more. Ongoing: After this minion goes to the discard pile, gain 1 VP. If you own it, put it back in the box."
+    },
+    "base_drakkar_pod": {
+      "name": "Drakkar",
+      "abilityText": "After the first time you play a minion here each turn, you may reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, you may draw it. Otherwise, return it."
+    },
+    "base_longhouse_pod": {
+      "name": "Longhouse",
+      "abilityText": "On your turn, you may place a card from your hand on top of your deck to give one of your minions here +2 power until the end of the turn."
+    },
+    "pecos_bill": {
+      "name": "Pecos Bill",
+      "effectText": "Special: When you become the challenger in a duel, you may discard a card to play this titan there. Do not resolve any titan clashes until after the end of the duel. Ongoing: During duels here, other players may not move minions from here or return them to a player's hand. Ongoing: After you win a duel, draw a card."
     }
   },
   "endgame": {

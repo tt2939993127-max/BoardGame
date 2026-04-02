@@ -22,6 +22,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
+import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { findHeroCard } from '../heroes';
 
 /** 已激活的修正卡信息 */
@@ -45,13 +46,24 @@ export interface UseActiveModifiersConfig {
  * 
  * 逻辑：找到最后一个 ATTACK_RESOLVED 事件之后的所有 CARD_PLAYED 事件
  */
+function isModifierResetEvent(entry: EventStreamEntry): boolean {
+    if (entry.event.type === 'ATTACK_RESOLVED' || entry.event.type === 'TURN_CHANGED') {
+        return true;
+    }
+    if (entry.event.type === FLOW_EVENTS.PHASE_CHANGED) {
+        const payload = (entry.event as { payload?: { to?: string } }).payload;
+        return payload?.to === 'main2';
+    }
+    return false;
+}
+
 function scanActiveModifiers(entries: EventStreamEntry[]): ActiveModifier[] {
     console.log('[scanActiveModifiers] 开始扫描，总事件数:', entries.length);
     
     // 从后往前找最后一个 ATTACK_RESOLVED
     let lastResolvedIndex = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
-        if (entries[i].event.type === 'ATTACK_RESOLVED') {
+        if (isModifierResetEvent(entries[i])) {
             lastResolvedIndex = i;
             console.log('[scanActiveModifiers] 找到最后一个 ATTACK_RESOLVED，索引:', i);
             break;
@@ -199,8 +211,8 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
         console.log('[useActiveModifiers] 新事件类型:', newEventTypes);
         
         let attackResolvedIndex = -1;
-        for (let i = 0; i < newEntries.length; i++) {
-            if (newEntries[i].event.type === 'ATTACK_RESOLVED') {
+        for (let i = newEntries.length - 1; i >= 0; i--) {
+            if (isModifierResetEvent(newEntries[i])) {
                 attackResolvedIndex = i;
                 console.log('[useActiveModifiers] 找到 ATTACK_RESOLVED 事件，索引:', i);
                 break;
@@ -211,7 +223,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
             // 有 ATTACK_RESOLVED 事件：清空旧修正卡，收集 ATTACK_RESOLVED 之后的新修正卡
             const newModifiers: ActiveModifier[] = [];
             
-            console.log('[useActiveModifiers] 处理 ATTACK_RESOLVED，当前 modifiers 数量:', modifiers.length);
+            console.log('[useActiveModifiers] 处理 ATTACK_RESOLVED，清空旧修正卡');
             
             for (let i = attackResolvedIndex + 1; i < newEntries.length; i++) {
                 const entry = newEntries[i];
@@ -270,7 +282,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
                 setModifiers(prev => [...prev, ...newModifiers]);
             }
         }
-    }, [eventStreamEntries, modifiers]);
+    }, [eventStreamEntries]); // 移除 modifiers 依赖，避免无限循环
 
     return { activeModifiers: modifiers };
 }

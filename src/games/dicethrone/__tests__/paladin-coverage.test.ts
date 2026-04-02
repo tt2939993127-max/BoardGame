@@ -30,7 +30,7 @@ import {
 import type { DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
-import { BLESSING_OF_MIGHT_2 } from '../heroes/paladin/abilities';
+import { BLESSING_OF_MIGHT_2, HOLY_STRIKE_2 } from '../heroes/paladin/abilities';
 
 // ============================================================================
 // 自定义 Setup：双方圣骑士，移除响应卡避免干扰
@@ -112,6 +112,7 @@ describe('圣骑士 GTR 技能覆盖', () => {
             });
             expect(result.assertionErrors).toEqual([]);
         });
+
     });
 
     // ========================================================================
@@ -121,10 +122,7 @@ describe('圣骑士 GTR 技能覆盖', () => {
         it('小顺造成 5 伤害 + 治疗 1（防御骰全祈祷=0防御）', () => {
             // 进攻骰: [1,2,3,4,5] → 小顺
             // 防御骰: [6,6,6] → 3 pray（holy-defense: 0剑0盔0心3祈祷 → +3CP，0防御）
-            // 流程：defensiveRoll exit → resolveAttack → holy-defense 投 3 骰
-            //   → BONUS_DICE_REROLL_REQUESTED (displayOnly) → halt
-            //   → SKIP_BONUS_DICE_REROLL '1'（防御方=settlement.attackerId）
-            //   → auto-continue → main2
+            // 流程：defensiveRoll → holy-defense 投 3 骰 → 攻击结算 → main2
             const random = createQueuedRandom([1, 2, 3, 4, 5, 6, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
@@ -141,15 +139,59 @@ describe('圣骑士 GTR 技能覆盖', () => {
                     cmd('ADVANCE_PHASE', '0'),       // → defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'divine-shield' }),
-                    cmd('ADVANCE_PHASE', '1'),       // defensiveRoll exit → halt (BONUS_DICE_REROLL)
-                    cmd('SKIP_BONUS_DICE_REROLL', '1'), // 防御方跳过 → auto-continue → main2
+                    cmd('ADVANCE_PHASE', '1'),       // defensiveRoll exit → resolveAttack → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
                     players: {
                         '0': { hp: 51 }, // 50 + 1 = 51（未超上限 60）
                         '1': { hp: 45 }, // 50 - 5 = 45
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('II 级小顺 + 暴击只应额外增加 1 次 +4 伤害', () => {
+            // 进攻骰: [1,2,3,4,5] → 小顺
+            // 防御骰: [6,6,6] → holy-defense: 0 防御，直接结算
+            const random = createQueuedRandom([1, 2, 3, 4, 5, 6, 6, 6]);
+            const setup = (playerIds: PlayerId[], rng: RandomFn): MatchState<DiceThroneCore> => {
+                const base = createPaladinSetup()(playerIds, rng);
+                const attacker = base.core.players['0'];
+                const idx = attacker.abilities.findIndex(a => a.id === 'holy-strike');
+                if (idx >= 0) attacker.abilities[idx] = HOLY_STRIKE_2 as any;
+                attacker.abilityLevels['holy-strike'] = 2;
+                attacker.tokens[TOKEN_IDS.CRIT] = 1;
+                return base;
+            };
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup, assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '神圣攻击II 小顺 + 暴击 = 11伤害',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'holy-strike-2-small' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': {
+                            hp: 51,
+                            tokens: { [TOKEN_IDS.CRIT]: 0 },
+                        },
+                        '1': { hp: 39 },
                     },
                 },
             });

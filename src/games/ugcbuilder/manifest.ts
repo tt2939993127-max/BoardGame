@@ -8,7 +8,14 @@ const entry: GameManifestEntry = {
     descriptionKey: 'games.ugcbuilder.description',
     category: 'tools',
     playersKey: 'games.ugcbuilder.players',
-    icon: '🧩',
+    ai: {
+        capture: false,
+        localAi: false,
+        remoteAi: false,
+    },
+    icon: '🎨',
+    mobileProfile: 'none',
+    shellTargets: ['pwa'],
 };
 
 export const UGC_BUILDER_MANIFEST: GameManifestEntry = entry;

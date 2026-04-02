@@ -77,7 +77,9 @@ export function registerCthulhuAbilities(): void {
     // 深化目标：回合结束时条件获VP
     registerTrigger('cthulhu_furthering_the_cause', 'onTurnEnd', cthulhuFurtheringTheCauseTrigger);
     // 天选之人：基地计分前抽疑狂卡?2力量
-    registerTrigger('cthulhu_chosen', 'beforeScoring', cthulhuChosenBeforeScoring);
+    registerTrigger('cthulhu_chosen', 'beforeScoring', cthulhuChosenBeforeScoringPerInstance, {
+        perInstance: true,
+    });
     // 完成仪式：回合开始时清场并换基地
     registerTrigger('cthulhu_complete_the_ritual', 'onTurnStart', cthulhuCompleteTheRitualTrigger);
 }
@@ -149,7 +151,8 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
 /** 克苏鲁的馈赠 onPlay：从牌库顶搜索直到找到2张行动卡，放入手牌，其余放牌库底 */
 function cthulhuFhtagn(ctx: AbilityContext): AbilityResult {
     const { events } = revealAndPickFromDeck({
-        player: ctx.state.players[ctx.playerId],
+        state: ctx.state,
+        random: ctx.random,
         playerId: ctx.playerId,
         predicate: card => card.type === 'action',
         maxPick: 2,
@@ -215,24 +218,24 @@ function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 疑狂释放 onPlay：弃掉手中任意数量的疑狂卡，每张 = ?张牌 + 额外行动
- * 
- * - 无疑狂卡时无效果
- * - 只有1张疑狂卡时自动弃掉?
- * - 多张疑狂卡时创建 Prompt 让玩家选择弃几张（多选，最?张）
+ * 疯狂解放 onPlay：弃掉手中任意数量的疯狂卡；每弃 1 张，就可以抽 1 张牌并获得 1 个额外行动额度。
+ *
+ * 官方 FAQ 明确：
+ * 1. 必须先决定并弃掉所有要弃的疯狂卡，再开始抽牌
+ * 2. 每次选择结算该收益时，抽牌和额外行动是绑定的一组收益，不应拆成二次确认
  */
 function cthulhuMadnessUnleashed(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 排除当前打出的卡，找手中的疑狂卡
+    // 排除当前打出的卡，找手中的疯狂卡
     const madnessInHand = player.hand.filter(
         c => c.defId === MADNESS_CARD_DEF_ID && c.uid !== ctx.cardUid
     );
     if (madnessInHand.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
 
-    // Prompt 选择弃几?
+    // 由玩家一次性选择要弃掉的疯狂卡数量（可为 0）
     const options = madnessInHand.map((c, i) => ({
         id: `madness-${i}`,
-        label: `疑狂卡?${i + 1}`,
+        label: `疯狂卡 ${i + 1}`,
         value: { cardUid: c.uid, defId: c.defId },
         _source: 'hand' as const,
         displayMode: 'card' as const,
@@ -243,7 +246,7 @@ function cthulhuMadnessUnleashed(ctx: AbilityContext): AbilityResult {
     ];
     const interaction = createSimpleChoice<CardChoiceValue | SkipChoiceValue>(
         `cthulhu_madness_unleashed_${ctx.now}`, ctx.playerId,
-        '选择要弃掉的疑狂卡（任意数量，可跳过）', promptOptions,
+        '选择要弃掉的疯狂卡（任意数量，可跳过）', promptOptions,
         { sourceId: 'cthulhu_madness_unleashed', targetType: 'hand', multi: { min: 0, max: madnessInHand.length } },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -268,7 +271,7 @@ function cthulhuCompleteTheRitualTrigger(ctx: TriggerContext): SmashUpEvent[] {
         );
         if (!ritual) continue;
 
-        // 1. 将所有随从放回拥有者牌库底
+        // 1. 将所有随从放回拥有者牌库底；普通随从的附着行动也一并放底
         for (const m of base.minions) {
             events.push({
                 type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
@@ -280,6 +283,20 @@ function cthulhuCompleteTheRitualTrigger(ctx: TriggerContext): SmashUpEvent[] {
                 },
                 timestamp: ctx.now,
             } as CardToDeckBottomEvent);
+
+            // 随从上的附着行动也放回其拥有者牌库底
+            for (const a of m.attachedActions) {
+                events.push({
+                    type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+                    payload: {
+                        cardUid: a.uid,
+                        defId: a.defId,
+                        ownerId: a.ownerId,
+                        reason: 'cthulhu_complete_the_ritual',
+                    },
+                    timestamp: ctx.now,
+                } as CardToDeckBottomEvent);
+            }
         }
 
         // 2. 将所?ongoing 行动卡放回拥有者牌库底（包括仪式本身）
@@ -387,6 +404,62 @@ function cthulhuChosenBeforeScoring(ctx: TriggerContext): TriggerResult {
     return { events: [], matchState: ms };
 }
 
+function cthulhuChosenBeforeScoringPerInstance(ctx: TriggerContext): TriggerResult {
+    const locatedChosen = ctx.sourceCardUid
+        ? ctx.state.bases
+            .flatMap((base, baseIndex) => base.minions.map(minion => ({ minion, baseIndex })))
+            .find(entry => entry.minion.uid === ctx.sourceCardUid)
+        : ctx.state.bases
+            .flatMap((base, baseIndex) => base.minions.map(minion => ({ minion, baseIndex })))
+            .find(entry => matchesDefId(entry.minion.defId, 'cthulhu_chosen'));
+
+    if (!locatedChosen) return { events: [] };
+
+    const chosen = locatedChosen.minion;
+    const chosenBaseIndex = locatedChosen.baseIndex;
+
+    if (!ctx.matchState) {
+        const events: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(chosen.controller, 1, ctx.state, 'cthulhu_chosen', ctx.now);
+        if (madnessEvt) events.push(madnessEvt);
+        events.push(addTempPower(chosen.uid, chosenBaseIndex, 2, 'cthulhu_chosen', ctx.now));
+        return { events };
+    }
+
+    const interaction = createSimpleChoice(
+        `cthulhu_chosen_confirm_${chosen.uid}_${ctx.now}`,
+        chosen.controller,
+        '天选之人：是否抽一张疯狂牌来获得 +2 力量？',
+        [
+            {
+                id: 'yes',
+                label: '是（抽疯狂牌，+2 力量）',
+                value: {
+                    activate: true,
+                    uid: chosen.uid,
+                    minionUid: chosen.uid,
+                    defId: chosen.defId,
+                    minionDefId: chosen.defId,
+                    baseIndex: chosenBaseIndex,
+                    controller: chosen.controller,
+                },
+                displayMode: 'button' as const,
+                baseDefId: ctx.state.bases[chosenBaseIndex]?.defId,
+            },
+            {
+                id: 'no',
+                label: '否（不触发）',
+                value: { activate: false },
+                displayMode: 'button' as const,
+                baseDefId: ctx.state.bases[chosenBaseIndex]?.defId,
+            },
+        ],
+        { sourceId: 'cthulhu_chosen_confirm', targetType: 'minion' }
+    );
+
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
 // ============================================================================
 // ongoing 效果触发器?
 // ============================================================================
@@ -398,11 +471,29 @@ function cthulhuAltarTrigger(ctx: TriggerContext): SmashUpEvent[] {
     if (baseIndex === undefined) return events;
     const base = ctx.state.bases[baseIndex];
     if (!base) return events;
+    // 原版 altar：每次在这里打随从就给 1 次额外行动
+    // POD 版：每回合每张 altar 只能触发一次
+    const usedUids = ctx.state.turnUsedOngoingUids ?? [];
+    const newUsedUids = [...usedUids];
+
     for (const ongoing of base.ongoingActions) {
         if (!matchesDefId(ongoing.defId, 'cthulhu_altar')) continue;
         if (ongoing.ownerId !== ctx.playerId) continue;
+
+        const isPod = ongoing.defId.endsWith('_pod');
+        if (isPod && usedUids.includes(ongoing.uid)) continue;
+
         events.push(grantExtraAction(ctx.playerId, 'cthulhu_altar', ctx.now));
+
+        if (isPod && !newUsedUids.includes(ongoing.uid)) {
+            newUsedUids.push(ongoing.uid);
+        }
     }
+
+    if (newUsedUids.length !== usedUids.length) {
+        ctx.state.turnUsedOngoingUids = newUsedUids;
+    }
+
     return events;
 }
 
@@ -440,6 +531,9 @@ function madnessOnPlay(ctx: AbilityContext): AbilityResult {
         `special_madness_${ctx.now}`, ctx.playerId,
         '疯狂卡：选择一个效果', options,
         { sourceId: 'special_madness', targetType: 'button' },
+    );
+    interaction.data.options = interaction.data.options.map(option =>
+        option.id === 'return' ? { ...option, label: '消耗这张疯狂牌' } : option,
     );
     return {
         events: [],
@@ -571,14 +665,22 @@ export function registerCthulhuInteractionHandlers(): void {
         
         const { targetPlayerId, madnessUid } = selected;
         
-        // 正常执行：转移疯狂卡
+        // 正常执行：将这张具体的疯狂卡从当前玩家手牌移到目标玩家手牌
         if (!targetPlayerId || !madnessUid) return { state, events: [] };
-        
-        const events: SmashUpEvent[] = [];
-        events.push(returnMadnessCard(playerId, madnessUid, 'cthulhu_star_spawn', timestamp));
-        const drawEvt = drawMadnessCards(targetPlayerId, 1, state.core, 'cthulhu_star_spawn', timestamp);
-        if (drawEvt) events.push(drawEvt);
-        return { state, events };
+
+        const core = state.core;
+        const fromPlayer = core.players[playerId];
+        const toPlayer = core.players[targetPlayerId];
+        if (!fromPlayer || !toPlayer) return { state, events: [] };
+
+        const idx = fromPlayer.hand.findIndex(c => c.uid === madnessUid);
+        if (idx === -1) return { state, events: [] };
+
+        const [card] = fromPlayer.hand.splice(idx, 1);
+        toPlayer.hand.push(card);
+
+        void timestamp; // 时间戳对直接状态修改无影响，这里不产生事件
+        return { state, events: [] };
     });
 
     registerInteractionHandler('special_madness', (state, playerId, value, iData, _random, timestamp) => {
@@ -624,19 +726,32 @@ export function registerCthulhuInteractionHandlers(): void {
         if (!Array.isArray(selectedCards) || selectedCards.length === 0) return { state, events: [] };
         const madnessUids = selectedCards.map(v => v.cardUid).filter(Boolean) as string[];
         if (madnessUids.length === 0) return { state, events: [] };
-        const events: SmashUpEvent[] = [];
         const player = state.core.players[playerId];
-        for (const uid of madnessUids) {
-            events.push(returnMadnessCard(playerId, uid, 'cthulhu_madness_unleashed', timestamp));
-        }
+        if (!player) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+
+        // 1) 先一次性弃掉所有选中的疯狂卡
+        events.push({
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId, cardUids: madnessUids },
+            timestamp,
+        });
+
+        // 2) 按弃牌数直接结算“抽 1 + 额外行动”
         const drawCount = Math.min(madnessUids.length, player.deck.length);
         if (drawCount > 0) {
             const drawnUids = player.deck.slice(0, drawCount).map(c => c.uid);
-            events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: drawCount, cardUids: drawnUids }, timestamp } as CardsDrawnEvent);
+            events.push({
+                type: SU_EVENTS.CARDS_DRAWN,
+                payload: { playerId, count: drawCount, cardUids: drawnUids },
+                timestamp,
+            } as CardsDrawnEvent);
         }
+
         for (let i = 0; i < madnessUids.length; i++) {
             events.push(grantExtraAction(playerId, 'cthulhu_madness_unleashed', timestamp));
         }
+
         return { state, events };
     });
 

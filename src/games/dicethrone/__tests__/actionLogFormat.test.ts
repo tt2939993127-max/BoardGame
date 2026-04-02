@@ -9,6 +9,7 @@ import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState }
 import type {
     AbilityActivatedEvent,
     AttackResolvedEvent,
+    ChoiceResolvedEvent,
     DamageDealtEvent,
     DiceThroneCore,
     HealAppliedEvent,
@@ -330,6 +331,43 @@ describe('formatDiceThroneActionEntry', () => {
         expect(seg?.paramI18nKeys).toContain('phase');
     });
 
+    it('SYS_INTERACTION_RESPOND 选择暴击时应生成明确的 Token 使用日志', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: 'option-0' },
+            timestamp: 35,
+        };
+        const choiceResolvedEvent: ChoiceResolvedEvent = {
+            type: 'CHOICE_RESOLVED',
+            payload: {
+                playerId: '0',
+                tokenId: TOKEN_IDS.CRIT,
+                value: 1,
+                customId: 'use-crit',
+                sourceAbilityId: 'holy-strike-2-small',
+            },
+            timestamp: 35,
+        };
+
+        const result = formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [choiceResolvedEvent] as GameEvent[],
+        });
+        const entries = normalizeEntries(result);
+
+        expect(entries).toHaveLength(1);
+        expect(entries[0].kind).toBe('TOKEN_USED');
+        const seg = findI18nSegment(entries[0].segments, 'actionLog.offensiveRollEndTokenUsed');
+        expect(seg).toBeTruthy();
+        expect(seg?.params?.tokenLabel).toBe('tokens.crit.name');
+        expect(seg?.params?.effectLabel).toBe('actionLog.offensiveRollEndTokenEffect.crit');
+        expect(seg?.paramI18nKeys).toContain('tokenLabel');
+        expect(seg?.paramI18nKeys).toContain('effectLabel');
+    });
+
     it('效果 entries 的 timestamp 严格大于命令 entry（newest-first 排序正确）', () => {
         const state = createState();
         const command: Command = {
@@ -418,4 +456,5 @@ describe('formatDiceThroneActionEntry', () => {
         expect(statusSeg?.params?.statusLabel).toBe('statusEffects.daze.name');
         expect(statusSeg?.paramI18nKeys).toContain('statusLabel');
     });
+
 });

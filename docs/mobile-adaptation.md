@@ -1,239 +1,405 @@
 # 移动端适配说明
 
-## 功能概述
+## 当前结论
 
-项目已实现移动端适配，主要特性：
+- 前端运行时仍然只有一套：`React + Vite + 现有 UI / 引擎框架`。
+- 产品策略是 `PC 为主，移动端做适配`。
+- 移动端以 `手机横屏尽量适配` 为主，不承诺所有游戏都完整支持。
+- `WebView / App 壳 / 小程序 web-view` 只是分发容器，不是第二套 UI。
+- 移动端适配的真实验收对象，是同一套 H5 / PWA 在手机与平板视口下的真实交互。
 
-1. **主页自适应**：主页支持竖屏和横屏，自动适配不同屏幕尺寸
-2. **游戏页面横屏建议**：游戏页面（`/play/*`）在移动设备竖屏时显示顶部横幅建议旋转（可关闭）
-3. **用户可缩放**：允许用户双指缩放（0.5x - 3x）和拖拽平移，解决内容被截断问题
-4. **触摸优化**：增大按钮点击区域
+## PC 优先硬规则
 
-## 技术实现
+### 1. PC 是唯一权威布局
 
-### 1. 横屏建议组件
+- PC 的视觉层级、尺寸基线、布局流和主交互路径默认不可动。
+- 任何移动端适配都必须证明“不会影响 PC”。
+- 一旦出现“为了适配手机而把桌面一起缩小”的方案，默认视为错误实现。
 
-**文件**：`src/components/common/MobileOrientationGuard.tsx`
+### 2. 移动端改动只能条件化生效
 
-- 使用 `useLocation` 检测当前路由
-- 仅在游戏页面（`/play/*`）且移动设备（< 1024px）竖屏时显示顶部横幅建议
-- 建议横幅采用羊皮纸风格（`bg-parchment-brown`），与游戏整体风格一致
-- 使用 SVG 图标（竖屏手机 → 横屏手机）替代 emoji
-- 提供关闭按钮，用户可手动关闭建议
-- 切换到横屏后自动重置关闭状态（下次竖屏时再显示）
-- 不阻止用户访问，游戏内容仍然可见
-- 主页和其他页面不显示建议，支持竖屏访问
+- 允许的移动端改动包括：窄屏压缩、触控替代入口、抽屉化次要信息、底部操作轨道、安全区适配。
+- 这些改动必须只在移动条件下生效，不能全局覆盖。
+- 任何为触控补的 `armed / 二次点击激活 / 展开后再操作 / 长按查看` 之类状态机，都必须只影响移动触控分支；PC 端原有的 `单击触发 / 单击查看 / 单击展开` 语义不得被卷入同一套门控。
+- 任何移动端适配都不得顺带改写 PC 端的“可用 / 已用 / 不可用”视觉反馈；描边、发光、徽记、标签等状态提示若有调整，必须证明桌面端仍与改动前一致。
+- 推荐门控顺序：
+1. [mobileSupport.ts](/F:/gongzuo/webgame/BoardGame/src/games/mobileSupport.ts) 的 `1023px` 视口断点。
+2. manifest 驱动的 `mobileProfile / mobileLayoutPreset`。
+3. `(pointer: coarse)` 仅用于 hover 替代入口显隐，不可单独用来压缩 PC 尺寸。
 
-### 2. 视口配置
+### 3. 平板策略（强制）
 
-**文件**：`index.html`
+- 平板（横屏）默认走 **PC 风格布局**，不以“手机壳等比”作为目标。
+- 移动端适配的主要收敛对象是 **手机横屏**，平板只要求可用性与无遮挡，不要求与手机同一缩放比例。
+- 验收时必须分开看：
+  - 手机：按移动端适配标准验收（缩放、可触达、无遮挡）。
+  - 平板：按 PC 风格一致性验收（结构一致、信息层级一致、交互不退化）。
+- 禁止为了满足手机比例阈值而牺牲平板/PC 结构。
 
-```html
-<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=3.0, user-scalable=yes, viewport-fit=cover">
+### 4. 不接受的做法
+
+- 不接受全局调小 `clamp(...)` 来“顺带适配”移动端。
+- 不接受把桌面常驻侧栏改成所有视口都生效的抽屉。
+- 不接受要求用户双指缩放之后再完成主操作。
+- 不接受为了移动端复制一套完整桌面 UI。
+
+## 双端适配裁决
+
+### 1. 先分类，再选方案
+
+- 每次做移动端适配前，必须先判断当前界面属于哪一类；**禁止**看着哪里挤就临时发明一套新手法。
+- 默认只分两类：
+  - **固定构图类**：PC 上有明确几何关系、栏位比例、卡牌矩阵、固定主次关系的界面。
+  - **流式信息类**：天然允许换行、折叠、抽屉化、单列化的列表与信息面板。
+- 一旦归类完成，就应套用对应方案；不要同一个区域一半按“等比缩放”做，一半又按“手机断点重排”做。
+
+### 2. 固定构图类：优先等比缩放
+
+- 典型对象：
+  - 棋盘 / 战区 / 地图主画布
+  - 角色面板 / 派系详情 / 牌库预览
+  - PC 上本来就是双栏或多栏、且列数本身属于信息语义的一类面板
+- 目标不是“在手机上重新排一版更窄的布局”，而是“保持 PC 同构关系后缩进手机横屏”。
+- 推荐手段：
+  - 先定义设计尺寸（例如 `designWidth / designHeight`）
+  - 再按可用视口计算统一缩放因子：`scale = min(availableWidth / designWidth, availableHeight / designHeight)`
+  - 整块内容一起 `scale-to-fit`
+- 这类界面**不要**把 `vw`、`sm/md/lg` 断点、局部字号缩小，当作主适配手段；这些做法只会导致“局部变小”或“结构重排”，无法保证和 PC 对等。
+- 这类界面允许在移动条件下补局部例外：
+  - 安全区 padding
+  - 固定按钮改为底部 rail / 悬浮层
+  - hover 替代入口
+  - 独立滚动容器
+- 但这些例外不得破坏主结构同构关系。
+
+### 3. 流式信息类：优先响应式重排
+
+- 典型对象：
+  - 设置页
+  - 帮助 / 规则 / 日志 / 列表
+  - 筛选器 / 表单 / 非核心信息侧栏
+- 这类界面允许：
+  - 多栏改单栏
+  - 次级区域改抽屉 / 标签页
+  - 文案折行
+  - 卡片列表列数减少
+- 但前提是这些变化不会改变主交互语义。
+- 这类界面不需要强行做“PC 缩小版”；如果硬套整块等比缩放，通常会导致文字太小、可点击区域过密。
+
+### 4. 归类判断题
+
+- 只要下面任意一条成立，默认判为**固定构图类**：
+  - 用户明确要求“像 PC”“和 PC 对等”“保持桌面端气质”
+  - 栏位比例、列数、卡牌矩阵本身就是信息语义的一部分
+  - 改成单栏或少一列后，用户会合理地认为“这不是同一个界面了”
+  - 该区域的核心问题是“整体比例不对”，而不是“单个元素太挤”
+- 只要下面任意一条成立，默认判为**流式信息类**：
+  - 用户的真正目标是可读、可点、可滚，而不是 PC 同构
+  - 该区域在桌面端本来就没有严格几何关系
+  - 变成单列后不会改变理解路径和操作路径
+
+### 5. 高优先级反模式
+
+- 看到手机端挤了，就先用 `vw` 把一切缩小。
+- 看到高度不够，就直接减少列数、改单栏、把双栏打散。
+- 固定构图类界面同时依赖：
+  - 容器 `scale(...)`
+  - 内部 `sm/md/lg` 断点改列数
+  - 局部 `vw` 缩字 / 缩卡
+- 这种“缩放 + 重排 + 局部缩尺”混用，几乎一定会让移动端和 PC 失去对等关系。
+
+### 6. 新游戏默认流程
+
+1. 先根据 manifest 选定 `mobileProfile / mobileLayoutPreset`。
+2. 再对该游戏的主要界面逐块归类：固定构图类或流式信息类。
+3. 固定构图类优先接入等比缩放舞台，不要先写一堆断点类名再试错。
+4. 流式信息类再做响应式重排，不要把所有区域都塞进统一缩放容器。
+5. E2E 验收时，固定构图类必须检查“是否仍与 PC 同构”；流式信息类必须检查“是否可读、可达、无遮挡”。
+
+## manifest 契约
+
+每个启用中的 `manifest.ts` 必须显式声明移动能力：
+
+```ts
+mobileProfile: 'none' | 'landscape-adapted' | 'portrait-adapted' | 'tablet-only';
+preferredOrientation?: 'landscape' | 'portrait';
+mobileLayoutPreset?: 'board-shell' | 'portrait-simple' | 'map-shell';
+shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
 ```
 
-- `user-scalable=yes`：允许用户双指缩放
-- `minimum-scale=0.5, maximum-scale=3.0`：缩放范围 0.5x - 3x
-- `viewport-fit=cover`：支持刘海屏等异形屏幕
+字段含义：
 
-### 3. 自动缩放 CSS
+- `mobileProfile`
+  - `none`：暂不承诺手机可用。
+  - `landscape-adapted`：手机横屏适配。
+  - `portrait-adapted`：手机竖屏适配。
+  - `tablet-only`：手机降级，平板 / PC 优先。
+- `preferredOrientation`
+  - 用于横竖屏提示策略。
+- `mobileLayoutPreset`
+  - `board-shell`：复杂桌游的横屏外壳方案。
+  - `portrait-simple`：轻量游戏的竖屏方案。
+  - `map-shell`：地图区自己缩放拖拽，HUD 保持原始尺寸，不做整页缩放；移动端应支持触摸拖拽/双指缩放。
+- `shellTargets`
+  - 标记允许进入哪些分发容器。
 
-**文件**：`src/index.css`
+## 当前实现
 
-```css
-@media (max-width: 1023px) and (orientation: landscape) {
-    /* 移动设备横屏时，游戏页面基于设计宽度 1280px 进行缩放 */
-    /* 召唤师战争有自己的 MapContainer 缩放系统，不使用 CSS 自动缩放 */
-    body:has([data-game-page]):not(:has([data-game-id="summonerwars"])) #root {
-        transform-origin: top left;
-        transform: scale(calc(100vw / 1280));
-        width: 1280px;
-        height: calc(100vh / (100vw / 1280));
-        overflow: hidden;
-    }
-}
-```
+### 1. manifest 驱动
 
-**重要**：召唤师战争（Summoner Wars）有自己的 `MapContainer` 缩放系统（支持鼠标滚轮缩放和拖拽），不使用 CSS 自动缩放，避免双重缩放冲突。
+- [mobileSupport.ts](/F:/gongzuo/webgame/BoardGame/src/games/mobileSupport.ts) 负责归一化默认值和运行时判断。
+- [games.config.tsx](/F:/gongzuo/webgame/BoardGame/src/config/games.config.tsx) 在注册表阶段把 manifest 补成显式字段。
+- `scripts/game/generate_game_manifests.js` 会校验启用中的 manifest 是否显式声明必需字段。
 
-### 4. 游戏页面标记
+### 2. 页面根节点数据属性
 
-**文件**：`src/pages/MatchRoom.tsx`、`src/pages/LocalMatchRoom.tsx`
+对局页会输出：
 
-在根容器添加 `data-game-page` 属性：
+- `data-game-page`
+- `data-game-id`
+- `data-mobile-profile`
+- `data-preferred-orientation`
+- `data-mobile-layout-preset`
+- `data-shell-targets`
 
-```tsx
-<div className="..." data-game-page>
-```
+这些属性是移动壳、横竖屏提示和 CSS fallback 的统一消费入口。
 
-**文件**：`src/games/summonerwars/Board.tsx`
+### 3. 通用移动壳
 
-召唤师战争额外添加 `data-game-id="summonerwars"` 属性，排除 CSS 自动缩放：
+- `src/components/game/framework/MobileBoardShell.tsx`
 
-```tsx
-<div className="..." data-game-page data-game-id="summonerwars">
-```
+职责：
 
-### 5. 悬浮球缩小
+- 承接安全区 `padding`
+- 作为顶部 rail、侧边 dock、底部 action rail 的统一壳层
+- 不重写游戏 `Board` 本体
 
-**文件**：`src/components/system/FabMenu.tsx`
+### 4. 横竖屏提示
 
-移动端按钮从 48px 缩小到 36px，间距和边距也相应缩小：
+- `src/components/common/MobileOrientationGuard.tsx`
 
-```tsx
-const isMobile = window.innerWidth < 1024;
-const buttonSize = isMobile ? 36 : 48;
-const gap = isMobile ? 8 : 12;
-const margin = isMobile ? 16 : 32;
-```
+按 manifest 判断：
 
-响应式尺寸，窗口变化时自动更新。
+- 横屏游戏在手机竖屏时提示旋转
+- 竖屏游戏在手机横屏时提示切回竖屏
+- `tablet-only` 游戏提示使用平板或 PC
+- `none` 游戏提示当前不推荐手机端
 
-### 6. 触摸优化
+### 5. CSS fallback
 
-**文件**：`src/index.css`
+- `src/index.css`
 
-```css
-@media (max-width: 1023px) {
-    /* 增大按钮点击区域 */
-    button {
-        min-height: 44px;
-        min-width: 44px;
-    }
-}
-```
+当前仍保留横屏缩放兜底，但只对同时满足以下条件的页面生效：
 
-## 测试方法
+- `mobileProfile="landscape-adapted"`
+- `mobileLayoutPreset="board-shell"`
 
-### 方法 1：浏览器开发者工具
+它只是兜底，不是适配完成的标准。
 
-1. 打开 Chrome DevTools（F12）
-2. 点击设备工具栏图标（Ctrl+Shift+M）
-3. 选择移动设备（如 iPhone 12 Pro）
-4. 测试主页：
-   - 竖屏：应正常显示，支持滚动浏览，无旋转建议
-   - 横屏：应正常显示，自适应布局
-5. 测试游戏页面（访问 `/play/tictactoe/local`）：
-   - 竖屏：应显示顶部横幅"建议旋转至横屏以获得更佳体验"，带 SVG 图标和关闭按钮
-   - 点击关闭按钮：建议消失
-   - 横屏：不显示建议，正常显示游戏界面
-   - 双指缩放：可以放大/缩小查看内容（0.5x - 3x）
-   - 拖拽平移：缩放后可以拖拽查看被截断的内容
+## 已声明的首批 profile
 
-### 方法 2：真机测试
+- `dicethrone`
+  - `landscape-adapted`
+  - `board-shell`
+  - `shellTargets = ['pwa', 'app-webview', 'mini-program-webview']`
+- `tictactoe`
+  - `portrait-adapted`
+  - `portrait-simple`
+- `summonerwars`
+  - `landscape-adapted`
+  - `map-shell`
+- `smashup`
+  - `landscape-adapted`
+  - `board-shell`
 
-1. 在移动设备上访问开发服务器（如 `http://192.168.x.x:3000`）
-2. 测试主页：
-   - 竖屏访问：应正常显示游戏列表，无旋转建议
-   - 横屏访问：应正常显示，布局自适应
-3. 测试游戏页面：
-   - 竖屏访问游戏：应显示顶部横幅建议，带关闭按钮
-   - 点击关闭：建议消失，游戏内容仍可见
-   - 旋转至横屏：建议消失，显示游戏界面
-   - 双指缩放：测试放大/缩小功能
-   - 拖拽平移：测试查看被截断的内容
-4. 测试触摸交互：按钮点击、卡牌拖拽等
+说明：
 
-### 方法 3：E2E 自动化测试
+- `dicethrone` 当前已经声明更多容器目标，这是仓库现状记录，不代表后续新游戏首轮接入也应照抄。
+- 对新的复杂桌游或新的首轮接入，仍默认从 `shellTargets = ['pwa']` 起步。
 
-**文件**：`e2e/mobile-orientation.e2e.ts`
+## 新游戏接入要求
+
+新增游戏时必须做三件事：
+
+1. 在 `manifest.ts` 里显式声明 `mobileProfile`。
+2. 选择匹配的 `mobileLayoutPreset`。
+3. 再决定是否允许投放到 `app-webview` / `mini-program-webview`。
+
+不能再依赖：
+
+- “响应式会自动适配”
+- “先让浏览器缩放顶住”
+- “后面再猜这个游戏算不算支持手机”
+
+## 验证要求
+
+- 桌面端仍是主要覆盖面；移动端适配不是把所有桌面测试重跑一遍。
+- 只要本次改动涉及移动布局、触控替代入口、侧栏折叠、移动轨道或桌面防回归，就必须做 PC 对比验收。
+- 只要本次改动涉及移动端 UI / 交互，就必须补 H5 移动视口 E2E。
+- 只要本次改动触及共享交互组件、共享触控 hook、`coarse pointer` 分支或卡牌可用态样式，就必须额外核对桌面端：
+- 原本 `单击` 可达的主流程仍然是单击。
+- 原本“可用 / 已用 / 不可用”的描边、发光、徽记、标签层级仍然存在，且不会要求桌面端先选中、先展开或先进入 armed 状态。
+- **测试方向必须与游戏声明一致（强制）**：移动端 E2E 的主验证视口必须跟随该游戏 manifest 的 `preferredOrientation`。`preferredOrientation: 'landscape'` 的游戏必须用手机横屏作为主验收视口；`preferredOrientation: 'portrait'` 的游戏必须用手机竖屏作为主验收视口。不要把“统一横屏”或“统一竖屏”当成通用规则。
+- 优先复用同一条测试流程，通过参数化或切换 viewport 运行，而不是复制两份测试文件。
+- 每个支持移动的游戏通常补 1 到 3 条关键移动验收路径即可。
+
+## 浏览器兼容门禁补充（强制）
+
+- 移动端/旧浏览器适配默认遵循“能兼容就继续兼容，真缺关键能力才提示”。
+- 禁止按 Chrome、Android WebView 或其他浏览器版本号直接硬拦；版本号只能作为经验范围参考。
+- `matchMedia`、监听 API 差异、hover/click/touch 语义差异这类问题，优先补 fallback 或交互降级，不要直接升级成全站兼容门槛。
+- `ResizeObserver` 只有在**该游戏的核心游玩布局**确实依赖它、缺失后会导致棋盘/地图/主操作区不可用时，才允许进入兼容门禁。
+- 兼容门禁必须按具体 `gameId` 或具体页面判断，禁止把某个游戏或某个 dev 工具的依赖外扩成所有 `/play/*` 路由统一拦截。
+- 主验收视口之外，再按风险补 1 个同方向补充视口（例如平板横屏或更小手机竖屏）；若要验证错误方向提示，则单独补旋转提示用例，不得拿错误方向视口替代主验收。
+- 需要快速构造局面时，优先使用 TestHarness。
+- 运行 E2E 时，单文件/单用例优先使用 `npm run test:e2e:ci:file -- <测试文件名> "<用例名>"`。
+- 需要整文件复跑时，使用 `npm run test:e2e:ci -- <测试文件名>`。
+- 保留截图并写入 `evidence/`。
+
+## 开发期截图补录旁路（非 E2E 替代）
+
+当当前终端被沙箱限制住 `child_process`，导致 Playwright worker 不能启动，但你已经确认“只差新版移动端截图证据”时，可以使用仓库内的补录工具：
 
 ```bash
-npm run test:e2e -- e2e/mobile-orientation.e2e.ts
+npm run capture:mobile:evidence -- smashup-tutorial-mobile-landscape
+npm run capture:mobile:evidence -- summonerwars-tutorial-phone-landscape
+npm run capture:mobile:evidence -- smashup-4p-mobile-attached-actions
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-11-hand-magnify-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-12-phase-detail-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-13-action-log-open
+node scripts/infra/capture-mobile-evidence.mjs --scenario summonerwars-mobile-20-tablet-landscape-board
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-07-minion-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-08-base-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-09-base-ongoing-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-10-attached-action-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-11-hand-long-press
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-4p-mobile-12-tablet-landscape
 ```
 
-测试覆盖：
-- ✅ 主页竖屏时正常显示（不显示建议）
-- ✅ 游戏页面竖屏时显示旋转建议（可关闭）
-- ✅ 游戏页面横屏时不显示建议
-- ✅ PC 端不显示旋转建议
-- ✅ 游戏页面方向切换时动态更新建议显示（含关闭状态重置）
+如需避开默认 `6173` 端口冲突，可直接使用 Node 入口并显式指定：
 
-## 支持的设备
+```bash
+node scripts/infra/capture-mobile-evidence.mjs --scenario smashup-tutorial-mobile-landscape --vitePort 4273
+```
 
-### 移动设备（< 1024px）
+当前预置场景与输出路径：
 
-- ✅ iPhone（所有型号）
-- ✅ iPad Mini（横屏模式）
-- ✅ Android 手机（所有尺寸）
-- ✅ Android 平板（小尺寸）
+- `smashup-tutorial-mobile-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-tutorial.e2e\smashup-tutorial-mobile-landscape\tutorial-mobile-landscape.png`
+- `summonerwars-tutorial-phone-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\10-phone-landscape-board.png`
+- `summonerwars-mobile-11-hand-magnify-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\11-phone-hand-magnify-open.png`
+- `summonerwars-mobile-12-phase-detail-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\12-phone-phase-detail-open.png`
+- `summonerwars-mobile-13-action-log-open`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\13-phone-action-log-open.png`
+- `summonerwars-mobile-20-tablet-landscape-board`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\summonerwars-mobile-phone-landscape\20-tablet-landscape-board.png`
+- `smashup-4p-mobile-attached-actions`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\05-mobile-single-tap-expands-attached-actions.png`
+- `smashup-4p-mobile-07-minion-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\07-mobile-minion-long-press-magnify.png`
+- `smashup-4p-mobile-08-base-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\08-mobile-base-long-press-magnify.png`
+- `smashup-4p-mobile-09-base-ongoing-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\09-mobile-base-ongoing-long-press-magnify.png`
+- `smashup-4p-mobile-10-attached-action-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\10-mobile-attached-action-long-press-magnify.png`
+- `smashup-4p-mobile-11-hand-long-press`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\11-mobile-hand-long-press-magnify.png`
+- `smashup-4p-mobile-12-tablet-landscape`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-4p-layout-test.e2e\移动端横屏应保持四人局布局可用，并支持手牌长按看牌\12-tablet-landscape-layout.png`
 
-### PC/平板（≥ 1024px）
+实现方式：
 
-- ✅ iPad Pro（保持原始布局）
-- ✅ 笔记本电脑
-- ✅ 台式机
+- 页面内由 `MobileEvidenceCaptureAgent` 自动等待场景就绪。
+- 就绪后用本地打包的 `html2canvas` 在页面内截取当前游戏页，并直接 `POST` 到同源开发端点 `/__capture/save`。
+- `/__capture/save` 由 `vite-plugins/ready-check.ts` 在 `BG_ENABLE_CAPTURE_SAVE=1` 时开放，只允许写入工作区内路径。
+- `scripts/infra/capture-mobile-evidence.mjs` 负责按场景组装 URL 与输出路径，底层复用 `scripts/infra/capture-mobile-evidence-browser.ps1` 拉起 Vite，并按可用性依次尝试 `chrome-headless-shell --single-process --no-zygote`、系统 Edge/Chrome 的 `cdp-window`、系统 Edge/Chrome 的 `direct-window`。
+- 若当前环境装有 Playwright 自带的 `chrome-headless-shell`，补图脚本会优先用它直接打开目标 URL，尽量绕开“GUI 窗口已起但根本没把页面请求打到本地 Vite”的假成功状态。
+- 如果某一启动方案在 8 秒内完全没有任何 capture phase，上述脚本会自动回退到下一条方案，避免单一路径卡死。
+- 补图模式会自动开启 `BG_CAPTURE_TRACE_REQUESTS=1`，Vite 日志会打印浏览器真实请求链，便于区分：
+  - 浏览器确实打开了页面，但页面脚本/场景失败。
+  - 浏览器根本没有请求本地页面，问题停在浏览器启动或导航层。
 
-## 已知限制
+限制说明：
 
-1. **游戏页面竖屏体验受限**：游戏页面在移动设备竖屏时可访问但体验不佳（显示建议横幅）
-2. **主页支持竖屏**：主页和非游戏页面支持竖屏访问，自适应布局
-3. **需要手动缩放**：用户需要双指缩放和拖拽来查看被截断的内容
-4. **缩放状态不持久**：刷新页面后缩放和平移状态会重置
+- 这条旁路只用于补录 PNG 证据，不替代 Playwright E2E 的断言链。
+- 最终“移动端交互已通过”结论仍必须回到允许 `child_process` 的终端或 CI，重跑正式 E2E。
+- 当前实现不再依赖外部 CDN 拉取 `html2canvas`；若补录仍失败，优先排查页面场景是否真正进入 `capture-ready`，以及 `/__capture/save` 是否收到上传。
+- 若失败日志里只看到 `PowerShell` 对 `/__capture/status` 的轮询，而完全没有任何浏览器对 `/play/...`、`/src/main.tsx`、`/@vite/client`、`/__capture/status` 的请求，说明浏览器压根没真正打到本地页面；此时应优先排查浏览器启动策略，而不是继续怀疑前端页面逻辑。
 
-## 后续优化方向
+## Android first 落地
 
-### 短期（可选）
+当前仓库采用 `Capacitor + Android WebView` 作为第一阶段原生壳方案：
 
-- [ ] 优化旋转提示动画（更流畅的过渡效果）
-- [ ] 添加横屏锁定提示（提醒用户关闭屏幕旋转锁定）
-- [ ] 持久化缩放状态（记住用户的缩放和平移偏好）
+- Web 运行时保持不变，仍然是同一套 `React + Vite` 构建产物。
+- Android 壳只负责把 `dist/` 打包进原生容器，不单独维护第二套前端。
+- Android 构建使用 `vite build --mode android`，因此 App 专用后端地址必须放在 `.env.android` 或 `.env.android.local`。
 
-### 中期（可选）
+当前自动化脚本：
 
-- [ ] 实现触摸手势（长按查看卡牌详情）
-- [ ] 优化拖拽交互（触摸反馈、拖拽预览）
-- [ ] 自适应布局（根据屏幕尺寸自动调整 UI 元素大小）
+- `npm run mobile:android:doctor`
+- `npm run mobile:android:init`
+- `npm run mobile:android:sync`
+- `npm run mobile:android:open`
+- `npm run mobile:android:build:debug`
 
-### 长期（可选）
+服务端若要放行原生壳请求，需在生产 `.env` 里增加：
 
-- [ ] PWA 支持（添加到主屏幕、离线缓存）
-- [ ] 性能优化（移动端降低粒子特效密度）
-- [ ] 小游戏竖屏支持（为井字棋等简单游戏提供竖屏布局）
-- [ ] 响应式 UI（根据屏幕尺寸自动调整布局）
+```env
+APP_WEB_ORIGINS=http://localhost,https://localhost,capacitor://localhost
+```
 
-## 设计决策
+这不会影响现有 Docker / Pages 主链路，只是在已有 `WEB_ORIGINS` 之外追加原生容器 origin。
 
-### 为什么主页支持竖屏？
+## 后续实施顺序
 
-1. **用户体验**：用户可能在任意方向打开网站，主页应该友好地展示游戏列表
-2. **SEO 友好**：搜索引擎爬虫可能以竖屏模式访问，主页需要正常渲染
-3. **渐进式引导**：用户在主页浏览后，进入游戏时才提示旋转设备
+1. 继续把 `board-shell` 框架能力补齐。
+2. 以 `dicethrone` 作为首个完整 pilot。
+3. 再把游戏层接入流程沉淀成独立 skill，供其他开发者复用。
 
-### 为什么游戏页面不强制横屏？
 
-1. **用户体验**：强制全屏遮挡会让用户感到受限，顶部横幅建议更友好
-2. **可关闭**：用户可以手动关闭建议，尊重用户选择
-3. **可访问性**：某些场景下用户可能需要竖屏快速查看游戏状态
-4. **渐进增强**：建议而非强制，提供更好的用户体验
+## 2026-03 横向溢出防回归补充
 
-### 为什么游戏页面建议横屏？
+### 1) 缩放表达式规范（强制）
+- 禁止：`transform: scale(calc(100vw / 1280))`。
+- 原因：`scale()` 需要无单位数字；上式会退化为无效值，浏览器可能按 `transform: none` 处理。
+- 正确：`transform: scale(calc(100vw / 1280px))`，或先定义变量再 `scale(var(--mobile-board-shell-scale))`。
 
-1. **游戏设计**：桌游通常需要横向布局（手牌、棋盘、对手信息）
-2. **视野需求**：横屏提供更宽的视野，适合展示游戏状态
-3. **一致性**：所有游戏统一横屏体验，避免混乱
+### 2) board-shell 选择器命中规范（强制）
+- 默认使用后代选择器：`[data-game-page... ] .mobile-board-shell`。
+- 不要默认写直系子：`> .mobile-board-shell`。
+- 原因：不同页面层级（MatchRoom / LocalMatchRoom / TestMatchRoom）可能不一致，直系子容易漏命中。
 
-## 维护注意事项
+### 3) 缩放壳层内高度规范（强制）
+- 在被缩放的壳层内，内部主容器优先使用 `h-full` 跟随外层 shell。
+- 禁止“外层 scale + 内层 `h-dvh` / `100dvh` 锁高”的组合。
+- 原因：会放大底部空白或导致交互区视觉错位。
 
-1. **新增 UI 组件**：确保按钮最小尺寸 ≥ 44px（触摸友好）
-2. **布局调整**：避免依赖固定像素值，使用相对单位（rem/em/%）或允许用户缩放
-3. **测试覆盖**：新功能必须在移动端测试（Chrome DevTools 设备模式 + 真机测试）
-4. **性能监控**：移动设备性能较弱，避免过度使用动画和特效
-5. **缩放适配**：确保 UI 元素在 0.5x - 3x 缩放下仍然可用
+### 4) 允许按 gameId 覆盖设计宽度
+- 通用默认设计宽度可为 `1280px`。
+- 对复杂游戏允许按 `data-game-id` 局部覆盖（例如 DiceThrone 使用 `940px`）。
+- 覆盖只能在移动条件下生效，不得改动 PC 设计基线。
 
-## 相关文件
+### 4.1) board-shell 全屏面板视觉一致性（强制）
+- 对 `mobileLayoutPreset="board-shell"` 的游戏，全屏设置面板、选人/选派系面板、结算面板等若本身存在明确 PC 布局，移动端主效果默认必须与 PC 保持同构。
+- 在该游戏的 `preferredOrientation` 方向下，优先采用**整面板等比缩放**，让移动端呈现 PC 布局的缩小版；不要先改成另一套单栏手机稿，再把主操作藏到滚动末端。
+- 最低验收标准不是“最终能滚到按钮”，而是“主方向下主要布局结构不变，主操作首屏可见，信息层级与 PC 一致”。
 
-- `src/components/common/MobileOrientationGuard.tsx` - 横屏建议组件（路由感知，顶部横幅，可关闭）
-- `src/App.tsx` - 应用入口（包裹 MobileOrientationGuard）
-- `src/pages/MatchRoom.tsx` - 在线对局页面（添加 `data-game-page` 标记）
-- `src/pages/LocalMatchRoom.tsx` - 本地对局页面（添加 `data-game-page` 标记）
-- `index.html` - 视口配置（允许用户缩放 0.5x - 3x）
-- `src/index.css` - 触摸优化样式
-- `e2e/mobile-orientation.e2e.ts` - E2E 测试
-- `docs/mobile-adaptation.md` - 本文档
+### 5) 移动端 E2E 布局断言（强制）
+除功能断言外，至少补 3 条布局断言：
+1. `documentElement/body/#root` 满足 `scrollWidth <= innerWidth + 1`。
+2. `.mobile-board-shell` 的 left/right 边界落在视口内。
+3. 关键入口（如 Roll / Confirm / 放大入口）位于视口内可点击。
 
-## 参考资料
+### 6) 结论证据要求
+- E2E 结论必须附“已人工核对”的截图完整工作区绝对路径，便于直接复制打开，禁止只给相对路径。
+- 仅有日志或断言通过，不足以判定“移动端布局正常”。
 
-- [MDN - Viewport meta tag](https://developer.mozilla.org/en-US/docs/Web/HTML/Viewport_meta_tag)
-- [CSS Tricks - Responsive Design](https://css-tricks.com/snippets/css/a-guide-to-flexbox/)
-- [Apple - Designing for iOS](https://developer.apple.com/design/human-interface-guidelines/ios)
+## 基线分辨率补充
+
+- 本项目默认 `PC` 对照分辨率为 `1920x1080`。
+- 本项目默认手机横屏验收分辨率为固定 `16:9`；用户未另行指定时，优先使用 `800x450`。
+- 若用户明确说明“平板按 PC 看”或“这轮不关心平板”，则该轮移动端验收可以不单独补平板横屏档。

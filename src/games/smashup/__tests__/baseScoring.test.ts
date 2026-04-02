@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, beforeAll } from 'vitest';
-import { SmashUpDomain } from '../domain';
+import { SmashUpDomain, scoreOneBase } from '../domain';
 import type {
     SmashUpCore, SmashUpEvent, MinionOnBase, BaseInPlay,
     OngoingActionOnBase, AttachedActionOnMinion,
@@ -31,6 +31,10 @@ function makePlayer(id: string, overrides: Partial<any> = {}) {
         factions: [SMASHUP_FACTION_IDS.ALIENS, SMASHUP_FACTION_IDS.DINOSAURS] as [string, string],
         ...overrides,
     };
+}
+
+function makeBaseOngoing(uid: string, defId: string, ownerId: string): OngoingActionOnBase {
+    return { uid, defId, ownerId };
 }
 
 describe('基地记分与力量计算', () => {
@@ -74,6 +78,38 @@ describe('基地记分与力量计算', () => {
 
     // Property 16: VP 分配正确性
     describe('Property 16: VP 分配', () => {
+        it('scoreOneBase 会把基地级总力量修正计入 rankings.power', () => {
+            const state: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1', { factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS] }),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'base_tar_pits',
+                    minions: [
+                        { uid: 'p0', defId: 'd1', controller: '0', owner: '0', basePower: 5, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'p1', defId: 'd2', controller: '1', owner: '1', basePower: 8, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [makeBaseOngoing('oa1', 'steampunk_aggromotive', '0')],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const result = scoreOneBase(state, 0, [], '0', 1000);
+            const scoredEvent = result.events.find((event) => event.type === SU_EVENTS.BASE_SCORED);
+
+            expect(scoredEvent).toBeDefined();
+            const rankings = (scoredEvent as any).payload.rankings as Array<{ playerId: string; power: number; vp: number }>;
+            expect(rankings).toEqual([
+                { playerId: '0', power: 10, vp: 4 },
+                { playerId: '1', power: 8, vp: 3 },
+            ]);
+        });
+
         it('reduce BASE_SCORED 正确分配 VP', () => {
             const { reduce } = SmashUpDomain;
             const state: SmashUpCore = {
@@ -317,6 +353,51 @@ describe('基地记分与力量计算', () => {
             // P0 弃牌堆：随从 m1
             expect(newState.players['0'].discard.some(c => c.uid === 'm1')).toBe(true);
             // P1 弃牌堆：附着卡 att1
+            expect(newState.players['1'].discard.some(c => c.uid === 'att1')).toBe(true);
+        });
+
+        it('随从进入牌库底时附着的行动卡回各自所有者弃牌堆', () => {
+            const { reduce } = SmashUpDomain;
+            const attached1: AttachedActionOnMinion = { uid: 'att1', defId: 'action_def1', ownerId: '1' };
+            const attached2: AttachedActionOnMinion = { uid: 'att2', defId: 'action_def2', ownerId: '0' };
+
+            const state: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1', { factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS] }),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'test_base',
+                    minions: [{
+                        uid: 'm1', defId: 'd1', controller: '0', owner: '0',
+                        basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false,
+                        attachedActions: [attached1, attached2],
+                    }],
+                    ongoingActions: [],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const event: SmashUpEvent = {
+                type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+                payload: {
+                    cardUid: 'm1',
+                    defId: 'd1',
+                    ownerId: '0',
+                    reason: '测试入牌库底',
+                },
+                timestamp: 1000,
+            } as any;
+
+            const newState = reduce(state, event);
+
+            expect(newState.bases[0].minions).toHaveLength(0);
+            expect(newState.players['0'].deck.at(-1)?.uid).toBe('m1');
+            expect(newState.players['0'].discard.some(c => c.uid === 'att2')).toBe(true);
             expect(newState.players['1'].discard.some(c => c.uid === 'att1')).toBe(true);
         });
     });

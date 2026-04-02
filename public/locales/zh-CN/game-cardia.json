@@ -58,7 +58,32 @@
   "validation": {
     "opponent_must_play_first": "对手必须先出牌（占卜师能力）"
   },
+  "error": {
+    "unknown_command": "未知命令",
+    "not_in_play_phase": "当前不是出牌阶段",
+    "player_not_found": "玩家不存在",
+    "already_played_card_this_turn": "本回合已经打出过一张卡牌",
+    "opponent_must_play_first": "对手必须先出牌（占卜师能力）",
+    "card_not_in_hand": "手牌中没有该卡牌",
+    "not_in_ability_phase": "当前不是能力阶段",
+    "no_current_encounter": "当前没有遭遇",
+    "only_loser_can_activate_abilities": "只有失败者可以发动能力",
+    "card_not_found_on_board": "场上找不到该卡牌",
+    "ability_not_found_on_card": "该卡牌上找不到该能力",
+    "only_loser_can_skip_abilities": "只有失败者可以跳过能力",
+    "invalid_modifier_value": "无效的修正值",
+    "no_interaction_id": "缺少交互 ID",
+    "no_cards_selected": "未选择任何卡牌",
+    "invalid_faction": "无效的派系",
+    "not_in_end_phase": "当前不是结束阶段",
+    "not_your_turn": "不是你的回合"
+  },
   
+  "hud": {
+    "offlineBanner": {
+      "message": "{{name}} 已离线{{time}}"
+    }
+  },
   "abilities": {
     "mercenary_swordsman": {
       "name": "雇佣剑士",

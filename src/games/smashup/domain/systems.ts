@@ -6,23 +6,14 @@
  * - 对交互解决产生的事件应用保护过滤和触发链（与 execute() 后处理对齐）
  */
 
-import type { GameEvent, RandomFn } from '../../../engine/types';
+import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { INTERACTION_EVENTS, resolveInteraction } from '../../../engine/systems/InteractionSystem';
-import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
-import type { SmashUpCore, SmashUpEvent, MinionPlayedEvent, PendingPostScoringAction } from './types';
+import type { SmashUpCore, SmashUpEvent, MinionPlayedEvent, PendingPostScoringAction, TitanPlayedEvent } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
-import {
-    processDestroyMoveCycle,
-    processAffectTriggers,
-    filterProtectedReturnEvents,
-    filterProtectedDeckBottomEvents,
-} from './reducer';
-import { buildValidatedMoveEvents } from './abilityHelpers';
-import { interceptEvent } from './ongoingEffects';
-import { triggerExtendedBaseAbility } from './baseAbilities';
-import type { BaseClearedEvent, BaseReplacedEvent } from './events';
+import { buildValidatedMoveEvents, getTitanByController } from './abilityHelpers';
 import { SU_EVENT_TYPES } from './events';
+import { maybeResolveReactionQueue } from './reactionQueue';
 
 // ============================================================================
 // SmashUp 事件处理系统
@@ -62,11 +53,37 @@ function buildPendingPostScoringActionEvents(
             continue;
         }
 
+        if (action.kind === 'playTitanOnReplacementBase') {
+            const titan = (state.core.titans ?? []).find(candidate =>
+                candidate.uid === action.titanUid
+                && candidate.defId === action.defId
+                && candidate.location.zone === 'setaside',
+            );
+            if (!titan || getTitanByController(state.core, action.controllerId)) {
+                continue;
+            }
+            events.push({
+                type: SU_EVENT_TYPES.TITAN_PLAYED,
+                payload: {
+                    titanUid: action.titanUid,
+                    defId: action.defId,
+                    ownerId: action.ownerId,
+                    controllerId: action.controllerId,
+                    baseIndex: action.baseIndex,
+                    baseDefId: action.targetBaseDefId,
+                    reason: action.reason,
+                },
+                timestamp,
+            } as TitanPlayedEvent);
+            continue;
+        }
+
         events.push(...buildValidatedMoveEvents(state as any, {
             minionUid: action.minionUid,
             minionDefId: action.minionDefId,
             fromBaseIndex: action.fromBaseIndex,
             toBaseIndex: action.toBaseIndex,
+            toBaseDefId: action.targetBaseDefId,
             reason: action.reason,
             now: timestamp,
         }));
@@ -100,6 +117,8 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             let newState = state;
             const nextEvents: GameEvent[] = [];
             const pendingReduceFlag = '_waitForPostScoringReduce';
+            const pendingStartTurnInteractionReduceFlag = '_waitForStartTurnInteractionReduce';
+            let latestTimestamp = 0;
 
             // 同一轮 afterEvents 中，后续系统看不到本轮新发出事件的 reduce 结果。
             // 上一轮如果刚补发了 BASE_CLEARED / BASE_REPLACED，需要先等 pipeline 在轮末完成 reduce，
@@ -114,65 +133,17 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                 };
             }
 
+            if ((newState.sys as any)[pendingStartTurnInteractionReduceFlag]) {
+                newState = {
+                    ...newState,
+                    sys: {
+                        ...newState.sys,
+                        [pendingStartTurnInteractionReduceFlag]: undefined,
+                    } as typeof newState.sys,
+                };
+            }
+
             for (const event of events) {
-                // 监听 RESPONSE_WINDOW_CLOSED → 补发 afterScoring 延迟事件
-                if (event.type === RESPONSE_WINDOW_EVENTS.CLOSED) {
-                    const payload = event.payload as {
-                        windowId: string;
-                        allPassed: boolean;
-                    };
-                    const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
-
-                    // 检查是否是 afterScoring 响应窗口关闭
-                    // 如果是，需要补发 BASE_CLEARED 和 BASE_REPLACED 事件
-                    if (newState.sys.afterScoringInitialPowers) {
-                        const { baseIndex: scoredBaseIndex } = newState.sys.afterScoringInitialPowers as any;
-                        const currentBase = newState.core.bases[scoredBaseIndex];
-                        
-                        if (currentBase) {
-                            // 发出 BASE_CLEARED 事件
-                            const clearEvt: BaseClearedEvent = {
-                                type: SU_EVENT_TYPES.BASE_CLEARED,
-                                payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId },
-                                timestamp: eventTimestamp,
-                            };
-                            nextEvents.push(clearEvt);
-                            
-                            // 替换基地
-                            if (newState.core.baseDeck.length > 0) {
-                                const newBaseDefId = newState.core.baseDeck[0];
-                                const replaceEvt: BaseReplacedEvent = {
-                                    type: SU_EVENT_TYPES.BASE_REPLACED,
-                                    payload: {
-                                        baseIndex: scoredBaseIndex,
-                                        oldBaseDefId: currentBase.defId,
-                                        newBaseDefId,
-                                    },
-                                    timestamp: eventTimestamp,
-                                };
-                                nextEvents.push(replaceEvt);
-                                
-                                // 触发新基地的 onBaseRevealed 扩展时机（如绵羊神社：每位玩家可移动一个随从到此）
-                                const revealCtx = {
-                                    state: newState.core,
-                                    matchState: newState,
-                                    baseIndex: scoredBaseIndex,
-                                    baseDefId: newBaseDefId,
-                                    playerId: newState.core.turnOrder[newState.core.currentPlayerIndex],
-                                    now: eventTimestamp,
-                                };
-                                const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
-                                nextEvents.push(...revealResult.events);
-                                if (revealResult.matchState) newState = revealResult.matchState;
-                            }
-                        }
-                        
-                        // ⚠️ 不在这里清理 afterScoringInitialPowers
-                        // 原因：onPhaseExit 重新进入时需要检查力量变化，如果变化则重新计分
-                        // afterScoringInitialPowers 会在 onPhaseExit 的重新计分逻辑之后清除
-                    }
-                }
-
                 // 监听 SYS_INTERACTION_RESOLVED → 从 sourceId 查找处理函数 → 生成后续事件
                 if (event.type === INTERACTION_EVENTS.RESOLVED) {
                     const payload = event.payload as {
@@ -184,11 +155,16 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         interactionData?: Record<string, unknown>;
                     };
                     const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+                    latestTimestamp = eventTimestamp;
 
 
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
                         if (handler) {
+                            const startTurnWindowActive =
+                                newState.sys.phase === 'startTurn'
+                                || Boolean((newState.sys as any)._smashupStartTurnWindowActive);
+
                             const result = handler(
                                 newState,
                                 payload.playerId,
@@ -211,28 +187,23 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     newState = resolveInteraction(newState);
                                 }
                                 
-                                // 【关键修复】交互处理函数返回的事件必须经过拦截器过滤
-                                // 原因：pipeline.reduceEventsToCore 只处理 execute() 返回的事件，
-                                // 而 SmashUpEventSystem.afterEvents 返回的事件走的是系统事件路径，
-                                // 不会自动经过 domain.interceptEvent。
-                                // 必须在这里手动调用拦截器，确保 tooth_and_claw 等保护机制生效。
-                                const rawEvents = result.events as SmashUpEvent[];
-                                const interceptedEvents: SmashUpEvent[] = [];
-                                for (const evt of rawEvents) {
-                                    const interceptResult = interceptEvent(newState.core, evt);
-                                    if (interceptResult === null) {
-                                        // 事件被吞噬，跳过
-                                        continue;
-                                    } else if (interceptResult === undefined) {
-                                        // 无拦截器匹配，保持原事件
-                                        interceptedEvents.push(evt);
-                                    } else {
-                                        // 事件被替换（如 MINION_RETURNED → ONGOING_DETACHED）
-                                        const batch = Array.isArray(interceptResult) ? interceptResult : [interceptResult];
-                                        interceptedEvents.push(...batch as SmashUpEvent[]);
-                                    }
+                                // 交互处理器返回的领域事件统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
+                                // 这里如果手动先调用 interceptEvent，会让同一批事件在轮末 reduce 时再次被拦截，
+                                // 导致像 Cthulhu 这类“交互返回 MADNESS_DRAWN，再由拦截器补标记”的链路被重复处理。
+                                nextEvents.push(...result.events as SmashUpEvent[]);
+
+                                const producedMinionPlayed = result.events.some(
+                                    (resultEvent) => resultEvent.type === SU_EVENT_TYPES.MINION_PLAYED,
+                                );
+                                if (startTurnWindowActive && producedMinionPlayed) {
+                                    newState = {
+                                        ...newState,
+                                        sys: {
+                                            ...newState.sys,
+                                            [pendingStartTurnInteractionReduceFlag]: true,
+                                        } as typeof newState.sys,
+                                    };
                                 }
-                                nextEvents.push(...interceptedEvents);
 
                                 // 补发延迟的 BASE_CLEARED/BASE_REPLACED 事件
                                 // afterScoring 基地能力创建交互时，清除事件被延迟到交互解决后发出，
@@ -287,6 +258,14 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                             }
                         }
                     }
+                }
+            }
+
+            if (!newState.sys.interaction?.current) {
+                const reactionQueueResult = maybeResolveReactionQueue(newState as { core: SmashUpCore; sys: any }, random, latestTimestamp);
+                if (reactionQueueResult) {
+                    newState = reactionQueueResult.state;
+                    nextEvents.push(...reactionQueueResult.events as GameEvent[]);
                 }
             }
 

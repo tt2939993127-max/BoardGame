@@ -16,18 +16,14 @@
  * - 应用效果
  */
 
-import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './framework';
+import type { BrowserContext, Page } from '@playwright/test';
 import { cloneState } from './helpers/summonerwars';
+import { setChineseLocale } from './helpers/common';
 
 // ============================================================================
 // 辅助函数（从 summonerwars-push-pull-direction.e2e.ts 复用）
 // ============================================================================
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
-};
 
 const resetMatchStorage = async (context: BrowserContext | Page) => {
   await context.addInitScript(() => {
@@ -478,7 +474,7 @@ test.describe('召唤师战争 - 选择控制/伤害（二选一）', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -498,7 +494,7 @@ test.describe('召唤师战争 - 选择控制/伤害（二选一）', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -568,7 +564,7 @@ test.describe('召唤师战争 - 选择控制/伤害（二选一）', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -588,7 +584,7 @@ test.describe('召唤师战争 - 选择控制/伤害（二选一）', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);

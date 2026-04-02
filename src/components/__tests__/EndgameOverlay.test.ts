@@ -32,4 +32,9 @@ describe('shouldShowVictoryParticles', () => {
     it('赢家与玩家不一致不触发', () => {
         expect(shouldShowVictoryParticles({ winner: '1' }, '0')).toBe(false);
     });
+
+    it('多人 winners 数组包含当前玩家时也触发', () => {
+        expect(shouldShowVictoryParticles({ winner: '0', winners: ['0', '2'] }, '2')).toBe(true);
+        expect(shouldShowVictoryParticles({ winner: '0', winners: ['0', '2'] }, '1')).toBe(false);
+    });
 });

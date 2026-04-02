@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
-import { type SpriteAtlasConfig, computeSpriteStyle, isSpriteAtlasConfig } from '../../../engine/primitives/spriteAtlas';
+import { type SpriteAtlasConfig, computeSpriteStyle, generateUniformAtlasConfig, isSpriteAtlasConfig } from '../../../engine/primitives/spriteAtlas';
 import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
-import { DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
+import { DICETHRONE_CARD_ATLAS_IDS, DICETHRONE_HAND_CARD_ATLAS_IDS } from '../domain/ids';
 import { ASSETS } from './assets';
 // 直接 import src/ 下的 JSON（同步，Vite 构建时内联）
 import atlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-cards-common.atlas.json';
@@ -18,6 +18,8 @@ function parseAtlasConfig(): SpriteAtlasConfig {
 
 /** 所有英雄共享的不规则网格配置（4行10列，帧间距不均匀） */
 export const COMMON_CARD_ATLAS_CONFIG = parseAtlasConfig();
+const GUNSLINGER_HAND_CARD_ATLAS_CONFIG = generateUniformAtlasConfig(2392, 4825, 5, 4);
+const SAMURAI_HAND_CARD_ATLAS_CONFIG = generateUniformAtlasConfig(664, 1072, 4, 4);
 
 /**
  * 初始化 DiceThrone 所有英雄的卡牌图集（模块加载时同步注册）
@@ -28,9 +30,17 @@ export function initDiceThroneCardAtlases() {
     for (const [, atlasId] of Object.entries(DICETHRONE_CARD_ATLAS_IDS)) {
         // 从 atlasId 提取 charId：'dicethrone:monk-cards' → 'monk'
         const charId = atlasId.replace('dicethrone:', '').replace('-cards', '');
-        const imageBase = ASSETS.CARDS_ATLAS(charId);
-        registerCardAtlasSource(atlasId, { image: imageBase, config });
+        registerCardAtlasSource(atlasId, { image: ASSETS.CARDS_ATLAS(charId), config });
     }
+
+    registerCardAtlasSource(DICETHRONE_HAND_CARD_ATLAS_IDS.GUNSLINGER, {
+        image: ASSETS.HAND_CARDS_ATLAS('gunslinger'),
+        config: GUNSLINGER_HAND_CARD_ATLAS_CONFIG,
+    });
+    registerCardAtlasSource(DICETHRONE_HAND_CARD_ATLAS_IDS.SAMURAI, {
+        image: ASSETS.HAND_CARDS_ATLAS('samurai'),
+        config: SAMURAI_HAND_CARD_ATLAS_CONFIG,
+    });
 }
 
 // 模块加载时同步注册

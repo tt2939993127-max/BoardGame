@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 閲庤洰浜?(Barbarian) 涓撳睘 Custom Action 澶勭悊鍣?
  */
 
@@ -360,6 +360,7 @@ export function registerBarbarianCustomActions(): void {
     });
     registerCustomActionHandler('more-please-roll-damage', handleMorePleaseRollDamage, {
         categories: ['dice', 'damage', 'status'],
+        requiresSelectedDefender: true,
     });
 }
 

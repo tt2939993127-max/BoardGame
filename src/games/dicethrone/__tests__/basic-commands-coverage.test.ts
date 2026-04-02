@@ -9,20 +9,29 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
+import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
+import { buildDiceThroneAiLegalActions, diceThroneAiRuntime } from '../ai';
+import { engineConfig } from '../game';
 import {
     testSystems,
     createQueuedRandom,
     createNoResponseSetup,
     assertState,
     cmd,
+    createSetupWithHand,
     fixedRandom,
     type CommandInput,
+    createHeroMatchup,
 } from './test-utils';
-import type { DiceThroneCore } from '../domain/types';
+import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
+import { resolveLocalPregameControlledPlayerId } from '../../../engine/transport/followCurrentTurnPlayer';
+import { RESOURCE_IDS } from '../domain/resources';
+import type { InteractionDescriptor } from '../domain/core-types';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -137,6 +146,15 @@ describe('TOGGLE_DIE_LOCK 锁定/解锁骰子', () => {
         expect(result.success).toBe(false);
     });
 
+    it('未投掷前锁定骰子失败', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+
+        const result = tryCmd(state, cmd('TOGGLE_DIE_LOCK', '0', { dieId: 0 }));
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('no_roll_yet');
+    });
+
 
 
     it('非当前玩家锁定骰子失败', () => {
@@ -217,6 +235,926 @@ describe('TOGGLE_DIE_LOCK 锁定/解锁骰子', () => {
 
         const tryResult = tryCmd(result.finalState, cmd('TOGGLE_DIE_LOCK', '0', { dieId: 99 }));
         expect(tryResult.success).toBe(false);
+    });
+});
+
+describe('AI legal actions', () => {
+    it('setup 阶段应为本地 AI 生成选角动作', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        expect(actions.some((action) =>
+            action.kind === 'setup-select-character'
+            && action.commands[0]?.type === 'SELECT_CHARACTER'
+        )).toBe(true);
+    });
+
+    it('主流程阶段应生成推进回合动作', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(true);
+    });
+
+    it('dt:card-interaction 的 selectPlayer 交互应生成 RESOLVE_INTERACTION 动作', () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toHaveLength(2);
+        expect(actions.every((action) => action.kind === 'interaction-select-player')).toBe(true);
+        expect(actions.map((action) => action.commands[0])).toEqual([
+            { type: 'RESOLVE_INTERACTION', payload: { selectedPlayerIds: ['1'] } },
+            { type: 'RESOLVE_INTERACTION', payload: { selectedPlayerIds: ['3'] } },
+        ]);
+    });
+
+    it('本地 AI runner 在 selectPlayer 交互里不会卡死', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]?.type).toBe('RESOLVE_INTERACTION');
+        expect([['1'], ['3']]).toContainEqual(
+            (resolution?.action.commands[0]?.payload as { selectedPlayerIds?: string[] } | undefined)?.selectedPlayerIds,
+        );
+    });
+
+    it('本地 AI 在敌方单选交互中优先选择更低血量的目标', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['1'].resources[RESOURCE_IDS.HP] = 30;
+        state.core.players['3'].resources[RESOURCE_IDS.HP] = 8;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-player-low-hp',
+            playerId: '0',
+            sourceCardId: 'moon-shadow-strike',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1', '3'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['3'] },
+        });
+    });
+
+    it('本地 AI 在全体候选的增益选人交互里优先选择更需要增益的友方', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 40;
+        state.core.players['2'].resources[RESOURCE_IDS.HP] = 9;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-friendly-buff-target',
+            playerId: '0',
+            sourceCardId: 'card-consecrate',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayerForConsecrate',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2', '3'],
+            tokenGrantConfigs: [
+                { tokenId: TOKEN_IDS.PROTECT, amount: 1 },
+                { tokenId: TOKEN_IDS.RETRIBUTION, amount: 1 },
+                { tokenId: TOKEN_IDS.CRIT, amount: 1 },
+                { tokenId: TOKEN_IDS.ACCURACY, amount: 1 },
+            ],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['2'] },
+        });
+    });
+
+    it('本地 AI 在移除全部状态交互里优先清理净收益更高的目标', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.BURN] = 1;
+        state.core.players['3'].tokens[TOKEN_IDS.CRIT] = 1;
+        state.core.players['3'].tokens[TOKEN_IDS.PROTECT] = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-best-cleanse-target',
+            playerId: '0',
+            sourceCardId: 'card-what-status',
+            type: 'selectPlayer',
+            titleKey: 'interaction.selectPlayerToRemoveAllStatus',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2', '3'],
+            requiresTargetWithStatus: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-select-player');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'RESOLVE_INTERACTION',
+            payload: { selectedPlayerIds: ['3'] },
+        });
+    });
+
+    it('dt:card-interaction 的 selectStatus 交互应生成 REMOVE_STATUS 动作', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.players['1'].statusEffects.poison = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-status',
+            playerId: '0',
+            sourceCardId: 'remove-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToRemove',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['1'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-remove-status',
+            commands: [{
+                type: 'REMOVE_STATUS',
+                payload: { targetPlayerId: '1', statusId: 'poison' },
+            }],
+        }));
+    });
+
+    it('带 transferConfig 的 selectStatus 交互应生成 TRANSFER_STATUS 动作', () => {
+        const state = createInitializedState(['0', '1', '2'], fixedRandom);
+        state.core.players['1'].statusEffects.poison = 1;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-transfer-status',
+            playerId: '0',
+            sourceCardId: 'transfer-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToTransfer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2'],
+            transferConfig: {},
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-transfer-status',
+            commands: [{
+                type: 'TRANSFER_STATUS',
+                payload: { fromPlayerId: '1', toPlayerId: '0', statusId: 'poison' },
+            }],
+        }));
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'interaction-transfer-status',
+            commands: [{
+                type: 'TRANSFER_STATUS',
+                payload: { fromPlayerId: '1', toPlayerId: '2', statusId: 'poison' },
+            }],
+        }));
+    });
+
+    it('本地 AI runner 应在 setup 阶段选择角色', async () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('setup-select-character');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: 'SELECT_CHARACTER',
+        });
+        const selectedCharacterId = (resolution?.action.commands[0]?.payload as { characterId?: string } | undefined)?.characterId;
+        expect(DICETHRONE_CHARACTER_CATALOG.map((item) => item.id)).toContain(selectedCharacterId);
+    });
+
+    it('setup 阶段应避开已被其他玩家选走的角色', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['0'] = 'monk';
+
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        const selectableCharacterIds = actions
+            .filter((action) => action.kind === 'setup-select-character')
+            .map((action) => (action.commands[0]?.payload as { characterId?: string } | undefined)?.characterId);
+
+        expect(selectableCharacterIds.length).toBeGreaterThan(0);
+        expect(selectableCharacterIds).not.toContain('monk');
+    });
+
+    it('本地 AI 在已选角色后应进入准备动作，而不是重复选角', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        core.selectedCharacters['1'] = 'monk';
+
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        expect(actions.some((action) => action.kind === 'setup-select-character')).toBe(false);
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'setup-ready',
+        }));
+    });
+
+    it('本地 AI 在 main1 应优先打出可用升级牌而不是直接推进阶段', async () => {
+        const state = createSetupWithHand(['card-storm-assault-2'], { cp: 1 })(['0', '1'], fixedRandom);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('play-upgrade-card');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: 'PLAY_UPGRADE_CARD',
+            payload: {
+                cardId: 'card-storm-assault-2',
+                targetAbilityId: 'thunder-strike',
+            },
+        });
+    });
+
+    it('本地 AI 在 defensiveRoll 已选防御技能后应直接掷骰，而不是重复选择技能', async () => {
+        const state = createHeroMatchup('monk', 'shadow_thief')(['0', '1'], fixedRandom);
+        state.sys.phase = 'defensiveRoll';
+        state.core.rollCount = 0;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'fist-technique-5',
+            defenseAbilityId: 'shadow-defense',
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+        expect(actions.some((action) => action.kind === 'select-ability')).toBe(false);
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'roll-dice',
+        }));
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('roll-dice');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: 'ROLL_DICE',
+        });
+    });
+
+    it('防御阶段掷骰后应只暴露符合当前防御骰数量的最终技能，而不是全部防御技能', () => {
+        const state = createHeroMatchup('monk', 'shadow_thief')(['0', '1'], fixedRandom);
+        state.sys.phase = 'defensiveRoll';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 1;
+        state.core.rollDiceCount = 4;
+        state.core.rollConfirmed = false;
+        state.core.dice = state.core.dice.slice(0, 4);
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'fist-technique-5',
+            defenseAbilityId: 'fearless-riposte',
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+        const abilityIds = actions
+            .filter((action) => action.kind === 'select-ability')
+            .map((action) => action.metadata?.abilityId);
+
+        expect(abilityIds).toEqual(['shadow-defense']);
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
+        expect(tryCmd(state, cmd('ADVANCE_PHASE', '1')).success).toBe(false);
+    });
+
+    it('本地 AI 在 defensiveRoll 骰面已确认且最终防御技能已选定后应推进阶段，而不是重复确认或重复选技能', async () => {
+        const state = createHeroMatchup('monk', 'shadow_thief')(['0', '1'], fixedRandom);
+        state.sys.phase = 'defensiveRoll';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 1;
+        state.core.rollDiceCount = 4;
+        state.core.rollConfirmed = true;
+        state.core.dice = state.core.dice.slice(0, 4);
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'fist-technique-5',
+            defenseAbilityId: 'shadow-defense',
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '1',
+            state,
+        });
+        expect(actions.some((action) => action.kind === 'select-ability')).toBe(false);
+        expect(actions.some((action) => action.kind === 'confirm-roll')).toBe(false);
+        expect(actions).toContainEqual(expect.objectContaining({
+            kind: 'advance-phase',
+        }));
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('advance-phase');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: 'ADVANCE_PHASE',
+        });
+    });
+
+    it('本地 AI 在 defensiveRoll 应能连续自动执行到离开防御阶段，而不是在重复动作上卡住', async () => {
+        const random = createQueuedRandom([1, 1, 1, 1]);
+        let state = createHeroMatchup('monk', 'shadow_thief')(['0', '1'], random);
+        state.sys.phase = 'defensiveRoll';
+        state.core.rollCount = 0;
+        state.core.rollLimit = 1;
+        state.core.rollDiceCount = 0;
+        state.core.rollConfirmed = false;
+        state.core.pendingAttack = {
+            attackerId: '0',
+            defenderId: '1',
+            isDefendable: true,
+            sourceAbilityId: 'fist-technique-5',
+            defenseAbilityId: 'shadow-defense',
+        };
+
+        const executedKinds: string[] = [];
+        for (let step = 0; step < 3; step += 1) {
+            const resolution = await resolveNextLocalAiAction({
+                engineConfig,
+                state,
+                matchId: 'local:test',
+                seatControllers: {
+                    '1': { type: 'local-ai' },
+                },
+            });
+
+            expect(resolution?.playerId).toBe('1');
+            expect(resolution?.action).toBeTruthy();
+            executedKinds.push(resolution!.action.kind);
+
+            for (const command of resolution!.action.commands) {
+                state = execCmd(
+                    state,
+                    cmd(command.type as CommandInput['type'], resolution!.playerId, command.payload ?? {}),
+                    random,
+                );
+            }
+        }
+
+        expect(executedKinds).toEqual(['roll-dice', 'confirm-roll', 'advance-phase']);
+        expect(state.sys.phase).toBe('main2');
+    });
+
+    it('本地 AI 在太极响应窗口应执行一次 token 后跳过响应，并正确关闭窗口', async () => {
+        const random = createQueuedRandom([1, 1]);
+        let state = createHeroMatchup('monk', 'monk')(['0', '1'], random);
+        state.core.players['0'].tokens.taiji = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-token',
+            sourcePlayerId: '0',
+            targetPlayerId: '1',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageDealt',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-token',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const executedKinds: string[] = [];
+        const attemptKeys: string[] = [];
+        for (let step = 0; step < 2; step += 1) {
+            const resolution = await resolveNextLocalAiAction({
+                engineConfig,
+                state,
+                matchId: 'local:test',
+                seatControllers: {
+                    '0': { type: 'local-ai' },
+                },
+            });
+
+            expect(resolution?.playerId).toBe('0');
+            expect(resolution?.action).toBeTruthy();
+            expect(resolution?.attemptKey).toBeTruthy();
+            executedKinds.push(resolution!.action.kind);
+            attemptKeys.push(resolution!.attemptKey);
+
+            for (const command of resolution!.action.commands) {
+                state = execCmd(
+                    state,
+                    cmd(command.type as CommandInput['type'], resolution!.playerId, command.payload ?? {}),
+                    random,
+                );
+            }
+        }
+
+        expect(executedKinds).toEqual(['token-response', 'skip-token-response']);
+        expect(new Set(attemptKeys).size).toBe(2);
+        expect(state.core.players['0'].tokens.taiji).toBe(1);
+        expect(state.core.pendingDamage).toBeUndefined();
+        expect(state.sys.interaction.current).toBeUndefined();
+        expect(state.sys.responseWindow?.current).toBeUndefined();
+        expect(state.core.activePlayerId).toBe('0');
+
+        const next = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(next?.playerId).toBe('0');
+        expect(next?.action.kind).toBe('advance-phase');
+    });
+
+    it('本地 AI 在致命伤害响应窗口应优先使用保命 token，而不是直接跳过响应', async () => {
+        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-lethal-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-lethal-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'skip-token-response')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'token-response')).toBe(true);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('token-response');
+        expect(resolution?.action.metadata).toMatchObject({
+            tokenId: TOKEN_IDS.TAIJI,
+        });
+    });
+
+    it('本地 AI 在 offensiveRoll 应先锁住高价值技能关键骰，再继续后续重投决策', async () => {
+        const random = createQueuedRandom([6]);
+        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], random);
+        state.sys.phase = 'offensiveRoll';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 2;
+        state.core.rollDiceCount = 5;
+        state.core.rollConfirmed = false;
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 2;
+        state.core.dice = [
+            { id: 0, value: 1, symbol: 'fist', isKept: false },
+            { id: 1, value: 2, symbol: 'sword', isKept: false },
+            { id: 2, value: 6, symbol: 'pray', isKept: false },
+            { id: 3, value: 2, symbol: 'sword', isKept: false },
+            { id: 4, value: 6, symbol: 'pray', isKept: false },
+        ];
+
+        const first = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(first?.playerId).toBe('0');
+        expect(first?.action.kind).toBe('toggle-die-lock');
+        expect(typeof first?.action.metadata?.dieId).toBe('number');
+        expect(first?.attemptKey).toBeTruthy();
+
+        for (const command of first!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], first!.playerId, command.payload ?? {}),
+                random,
+            );
+        }
+
+        const lockedDieId = first?.action.metadata?.dieId as number;
+        expect(state.core.dice.find((die) => die.id === lockedDieId)?.isKept).toBe(true);
+
+        const second = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(second?.playerId).toBe('0');
+        expect(second?.action).toBeTruthy();
+        expect(second?.attemptKey).toBeTruthy();
+        expect(second?.attemptKey).not.toBe(first?.attemptKey);
+    });
+
+    it('本地 AI 在响应窗口存在可打补牌牌时，应优先出牌而不是直接 pass', async () => {
+        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'main2';
+        state.core.activePlayerId = '1';
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 2;
+        state.core.players['0'].hand = [
+            {
+                id: 'card-super-double',
+                name: 'Undefendable',
+                type: 'action',
+                cpCost: 2,
+                timing: 'instant',
+                description: 'draw 3',
+                effects: [{ description: '抽取3张牌', action: { type: 'drawCard', target: 'self', drawCount: 3 }, timing: 'immediate' }],
+            },
+        ];
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-then-breakpoint',
+                windowType: 'thenBreakpoint',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const first = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(first?.playerId).toBe('0');
+        expect(first?.action.kind).toBe('response-play-card');
+        expect(first?.action.metadata).toMatchObject({ cardId: 'card-super-double' });
+
+        for (const command of first!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], first!.playerId, command.payload ?? {}),
+            );
+        }
+
+        expect(state.sys.responseWindow?.current).toBeUndefined();
+        expect(state.core.players['0'].hand.length).toBe(3);
+
+        const second = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(second).toBeNull();
+    });
+
+    it('本地 AI 在手牌偏少时应优先使用教皇税抽牌，而不是直接推进阶段', async () => {
+        const random = createQueuedRandom([6]);
+        let state = createHeroMatchup('paladin', 'monk')(['0', '1'], random);
+        state.sys.phase = 'main2';
+        state.core.activePlayerId = '0';
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 3;
+        state.core.players['0'].hand = [];
+
+        const first = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(first?.playerId).toBe('0');
+        expect(first?.action.kind).toBe('use-passive-ability');
+        expect(first?.action.metadata).toMatchObject({
+            passiveId: 'tithes',
+            actionIndex: 1,
+        });
+
+        for (const command of first!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], first!.playerId, command.payload ?? {}),
+                random,
+            );
+        }
+
+        expect(state.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(0);
+        expect(state.core.players['0'].hand.length).toBe(1);
+
+        const second = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(second?.playerId).toBe('0');
+        expect(second?.action).toBeTruthy();
+        expect(second?.attemptKey).toBeTruthy();
+        expect(second?.attemptKey).not.toBe(first?.attemptKey);
+    });
+
+    it('不同难度会影响搜索行为，专家玩法噪声保持为 0', async () => {
+        const state = createSetupWithHand(['card-enlightenment', 'card-boss-generous'], { cp: 0 })(['0', '1'], fixedRandom);
+        const matchId = 'probe';
+
+        const easyResolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId,
+            seatControllers: {
+                '0': { type: 'local-ai', difficulty: 'easy' },
+            },
+        });
+        const expertResolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId,
+            seatControllers: {
+                '0': { type: 'local-ai', difficulty: 'expert' },
+            },
+        });
+
+        expect(easyResolution?.action.kind).toBe('play-card');
+        expect(expertResolution?.action.kind).toBe('play-card');
+        expect(expertResolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+        expect(easyResolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+
+        const easyContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId,
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'easy' },
+        });
+        const expertContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId,
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const easyDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(easyContext);
+        const expertDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(expertContext);
+        const easyEvaluations = (easyDecision?.providerMetadata?.evaluations ?? []) as Array<{ searched?: boolean; noiseScore?: number }>;
+        const expertEvaluations = (expertDecision?.providerMetadata?.evaluations ?? []) as Array<{ searched?: boolean; noiseScore?: number }>;
+
+        expect(easyEvaluations.some((item) => item.searched)).toBe(false);
+        expect(expertEvaluations.some((item) => item.searched)).toBe(true);
+        expect(expertEvaluations.every((item) => item.noiseScore === 0)).toBe(true);
+    });
+});
+
+describe('本地 AI setup 视角切换', () => {
+    it('应先保留房主视角，房主选完后切到 AI 座位，AI 准备后回到房主', () => {
+        const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+        const state: MatchState<DiceThroneCore> = {
+            core,
+            sys: {
+                phase: 'setup',
+                interaction: { queue: [] },
+            } as MatchState<DiceThroneCore>['sys'],
+        };
+
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('0');
+
+        core.selectedCharacters['0'] = 'barbarian';
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('1');
+
+        core.selectedCharacters['1'] = 'monk';
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('1');
+
+        core.readyPlayers['1'] = true;
+        expect(resolveLocalPregameControlledPlayerId({
+            gameId: 'dicethrone',
+            state,
+            localPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        })).toBe('0');
     });
 });
 

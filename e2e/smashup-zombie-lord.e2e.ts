@@ -1,7 +1,8 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './framework';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
 const SMASHUP_TEST_QUERY = {
     p0: 'zombies,ghosts',
@@ -18,10 +19,8 @@ const NINJA_DIRECT_CLICK_QUERY = {
 };
 
 async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, subdir: string, filename: string): Promise<void> {
-    const dir = join(testInfo.config.rootDir, 'test-results', 'evidence-screenshots', subdir);
-    mkdirSync(dir, { recursive: true });
-    const path = join(dir, filename);
-    console.log(`[E2E screenshot] ${path}`);
+    const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });
+    mkdirSync(dirname(path), { recursive: true });
     await page.screenshot({ path, fullPage: true });
 }
 
@@ -158,6 +157,96 @@ test.describe('SmashUp 僵尸领主直点交互', () => {
 
         await game.screenshot('zombie-lord-no-eligible-discard', testInfo);
         await saveEvidenceScreenshot(page, testInfo, 'smashup-zombie-lord', '04-no-eligible-discard.png');
+    });
+
+    test('zombie_they_keep_coming: 应从弃牌堆直接额外打出，不回手也不返还随从位', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await game.openTestGame('smashup', SMASHUP_TEST_QUERY, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'hand-they-keep-coming', defId: 'zombie_they_keep_coming', type: 'action' },
+                ],
+                deck: [],
+                discard: [
+                    { uid: 'discard-zombie-walker', defId: 'zombie_walker', type: 'minion' },
+                    { uid: 'discard-zombie-tenacious-z', defId: 'zombie_tenacious_z', type: 'minion' },
+                ],
+                factions: ['zombies', 'ghosts'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                factions: ['aliens', 'ninjas'],
+            },
+            bases: [
+                { defId: 'base_the_mothership' },
+                { defId: 'base_jungle_oasis' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        await page.waitForFunction(
+            () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.sys?.phase === 'playCards'
+                    && state?.core?.players?.['0']?.hand?.some((card: any) => card.uid === 'hand-they-keep-coming')
+                    && state?.core?.players?.['0']?.discard?.some((card: any) => card.uid === 'discard-zombie-walker')
+                    && state?.core?.players?.['0']?.minionsPlayed === 1
+                    && state?.core?.players?.['0']?.minionLimit === 1;
+            },
+            { timeout: 5000 }
+        );
+
+        await game.playCard('zombie_they_keep_coming');
+        await game.waitForInteraction('zombie_they_keep_coming', 10000);
+
+        const discardPanel = page.locator('[data-discard-view-panel]');
+        await expect(discardPanel).toBeVisible();
+        await expect(page.locator('[data-discard-view-panel] [data-card-uid="discard-zombie-walker"]')).toBeVisible();
+        await game.screenshot('they-keep-coming-discard-panel', testInfo);
+        await saveEvidenceScreenshot(page, testInfo, 'smashup-they-keep-coming', '01-discard-panel.png');
+
+        const didSelectDiscardCard = await page.evaluate(() => {
+            const card = document.querySelector('[data-discard-view-panel] [data-card-uid="discard-zombie-walker"]') as HTMLElement | null;
+            if (!card) return false;
+            card.click();
+            return true;
+        });
+        expect(didSelectDiscardCard).toBe(true);
+        await expect(page.getByText(/Click a base to deploy|点击基地部署/i)).toBeVisible();
+        await game.screenshot('they-keep-coming-card-selected', testInfo);
+        await saveEvidenceScreenshot(page, testInfo, 'smashup-they-keep-coming', '02-card-selected.png');
+
+        await game.selectBase(1);
+
+        await page.waitForFunction(
+            () => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return !state?.sys?.interaction?.current;
+            },
+            { timeout: 5000 }
+        );
+
+        const finalState = await game.getState();
+        expect(finalState.core.bases[1].minions.some((minion: any) =>
+            minion.uid === 'discard-zombie-walker'
+                && minion.defId === 'zombie_walker'
+                && minion.owner === '0'
+        )).toBe(true);
+        expect(finalState.core.players['0'].discard.some((card: any) => card.uid === 'discard-zombie-walker')).toBe(false);
+        expect(finalState.core.players['0'].hand.some((card: any) => card.uid === 'discard-zombie-walker')).toBe(false);
+        expect(finalState.core.players['0'].minionLimit).toBe(1);
+        expect(finalState.core.players['0'].minionsPlayed).toBe(1);
+
+        await game.screenshot('they-keep-coming-after-deploy', testInfo);
+        await saveEvidenceScreenshot(page, testInfo, 'smashup-they-keep-coming', '03-after-deploy.png');
     });
 
     test('ninja_acolyte_play 应该直接点击手牌而不是弹 PromptOverlay', async ({ page, game }, testInfo) => {

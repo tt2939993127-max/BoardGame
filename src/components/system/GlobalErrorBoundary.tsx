@@ -1,6 +1,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { setLastErrorContext } from "../../lib/feedback/errorContext";
 
 interface Props {
     children: ReactNode;
@@ -24,6 +25,12 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     }
 
     public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        setLastErrorContext({
+            message: error.message || 'React render error',
+            name: error.name,
+            stack: [error.stack ?? '', errorInfo.componentStack ?? ''].filter(Boolean).join('\n'),
+            source: 'react.error_boundary',
+        });
         console.error("Uncaught error:", error, errorInfo);
         // Here you would log to Sentry
         // Sentry.captureException(error);
@@ -40,7 +47,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     public render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] relative overflow-hidden">
                     {/* Background Texture/Effect */}
                     <div className="absolute inset-0 opacity-5 pointer-events-none"
                         style={{
@@ -63,12 +70,10 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                         </div>
 
                         <h1 className="text-3xl font-bold text-parchment-brown mb-2 tracking-wide">
-                            Something went wrong
+                            页面出了点问题
                         </h1>
                         <p className="text-parchment-light-text mb-6">
-                            系统遇到了一点小麻烦，魔法卷轴暂时无法通过。
-                            <br />
-                            The scrolls are momentarily illegible.
+                            当前页面渲染失败了，请先刷新重试；如果反复出现，再返回大厅。
                         </p>
 
                         {/* Error Details (Only in Dev) */}

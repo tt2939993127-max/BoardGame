@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
+import { resolveNextLocalAiAction } from '../../../engine/ai';
 
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -13,7 +14,15 @@ import {
     BOARD_COLS,
     getValidSummonPositions,
 } from '../domain/helpers';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, placeTestUnit } from './test-helpers';
+import { engineConfig } from '../game';
+
+const aiTestRandom = {
+    random: () => 0,
+    d: () => 1,
+    range: (min: number) => min,
+    shuffle: <T>(arr: T[]) => [...arr],
+};
 
 // ============================================================================
 // 召唤师战争专用断言
@@ -741,5 +750,156 @@ describe('召唤师战争流程测试', () => {
     it.each(testCases)('$name', (testCase) => {
         const result = runner.run(testCase);
         expect(result.assertionErrors).toEqual([]);
+    });
+});
+
+describe('召唤师战争本地 AI', () => {
+    it('选角阶段应为房主选择阵营', async () => {
+        const core = SummonerWarsDomain.setup(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-setup-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: SW_COMMANDS.SELECT_FACTION,
+            payload: { factionId: 'necromancer' },
+        });
+    });
+
+    it('选角阶段应避开已被其他玩家选走的阵营', async () => {
+        const core = SummonerWarsDomain.setup(['0', '1'], aiTestRandom);
+        core.selectedFactions['0'] = 'necromancer';
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-setup-unique-ai',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]?.type).toBe(SW_COMMANDS.SELECT_FACTION);
+        expect(resolution?.action.commands[0]).not.toMatchObject({
+            payload: { factionId: 'necromancer' },
+        });
+    });
+
+    it('召唤阶段应优先选择合法召唤动作，而不是直接结束阶段', async () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-summon-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]?.type).toBe(SW_COMMANDS.SUMMON_UNIT);
+
+        const summonCommand = resolution?.action.commands[0];
+        const summonPosition = (summonCommand?.payload as { position?: { row: number; col: number } } | undefined)?.position;
+        const validPositions = getValidSummonPositions(core, '0');
+        expect(summonPosition).toBeTruthy();
+        expect(validPositions).toContainEqual(summonPosition);
+    });
+
+    it('召唤师受致命威胁时应优先攻击威胁单位，而不是追击其他目标', async () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'attack';
+        core.board[7][3].unit!.damage = core.board[7][3].unit!.card.life - 2;
+        core.board[6][2].unit = undefined;
+        core.board[6][3].unit = undefined;
+        core.board[5][2].unit = undefined;
+
+        const defenderCard: UnitCard = {
+            id: 'test-guard',
+            cardType: 'unit',
+            name: '测试护卫',
+            unitClass: 'common',
+            faction: 'necromancer',
+            strength: 2,
+            life: 3,
+            cost: 1,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+        const threateningCard: UnitCard = {
+            id: 'test-threat',
+            cardType: 'unit',
+            name: '测试威胁兵',
+            unitClass: 'common',
+            faction: 'paladin',
+            strength: 2,
+            life: 3,
+            cost: 1,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+        const championCard: UnitCard = {
+            id: 'test-champion',
+            cardType: 'unit',
+            name: '测试冠军',
+            unitClass: 'champion',
+            faction: 'paladin',
+            strength: 3,
+            life: 1,
+            cost: 3,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+
+        placeTestUnit(core, { row: 6, col: 2 }, {
+            card: defenderCard,
+            owner: '0',
+        });
+        placeTestUnit(core, { row: 6, col: 3 }, {
+            card: threateningCard,
+            owner: '1',
+        });
+        placeTestUnit(core, { row: 5, col: 2 }, {
+            card: championCard,
+            owner: '1',
+            damage: 0,
+        });
+
+        const sys = createInitialSystemState(['0', '1'], []);
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-threat-response-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: SW_COMMANDS.DECLARE_ATTACK,
+            payload: {
+                target: { row: 6, col: 3 },
+            },
+        });
     });
 });

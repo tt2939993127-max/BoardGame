@@ -29,8 +29,8 @@ import { getCustomActionHandler } from './effects';
 import { applyEvents } from './utils';
 
 /**
- * 根据 tokenId 查找该 token 所属英雄的前缀（用于拼接 custom action ID）
- * 例如 sneak_attack → shadow_thief
+ * 旧 token 定义未显式声明 customActionId 时的兼容兜底。
+ * 新定义必须优先使用 activeUse.customActionId。
  */
 function findTokenHeroPrefix(state: DiceThroneCore, tokenId: string): string | undefined {
     // 从 state 中查找持有该 token 的玩家的 characterId
@@ -115,11 +115,19 @@ export function executeTokenCommand(
 
             // 伏击等 value=0 的 token：触发对应 custom action（如掷骰加伤）
             if (result.success && result.damageModifier === 0 && tokenDef.activeUse?.effect?.value === 0) {
-                const customActionId = `${tokenDef.id.replace(/_/g, '-')}-use`;
-                // 尝试查找 hero-prefixed custom action（如 shadow_thief-sneak-attack-use）
-                const heroPrefix = findTokenHeroPrefix(state, tokenId);
-                const prefixedActionId = heroPrefix ? `${heroPrefix}-${customActionId}` : customActionId;
-                const handler = getCustomActionHandler(prefixedActionId) ?? getCustomActionHandler(customActionId);
+                const customActionId =
+                    tokenDef.activeUse?.customActionId
+                    ?? `${tokenDef.id.replace(/_/g, '-')}-use`;
+                // 新定义优先使用显式 customActionId；仅旧定义才回退到前缀推断
+                let resolvedCustomActionId = customActionId;
+                let handler = getCustomActionHandler(resolvedCustomActionId);
+                if (!handler && !tokenDef.activeUse?.customActionId) {
+                    const heroPrefix = findTokenHeroPrefix(state, tokenId);
+                    if (heroPrefix) {
+                        resolvedCustomActionId = `${heroPrefix}-${customActionId}`;
+                        handler = getCustomActionHandler(resolvedCustomActionId);
+                    }
+                }
                 if (handler) {
                     const customCtx: import('../domain/effects').CustomActionContext = {
                         ctx: {
@@ -136,7 +144,7 @@ export function executeTokenCommand(
                         state,
                         timestamp,
                         random,
-                        action: { type: 'custom', target: 'opponent', customActionId: prefixedActionId },
+                        action: { type: 'custom', target: 'opponent', customActionId: resolvedCustomActionId },
                     };
                     const customEvents = handler(customCtx);
                     events.push(...customEvents);
@@ -350,6 +358,27 @@ export function executeTokenCommand(
             
             // displayOnly 模式：仅展示骰子结果，伤害/状态已由 custom action 处理
             if (settlement.displayOnly) {
+                break;
+            }
+
+            if (settlement.resolutionMode === 'attackBonus') {
+                const attackBonus = settlement.attackBonusScale === 'halfUp'
+                    ? Math.ceil(totalDamage / 2)
+                    : totalDamage;
+                events.push({
+                    type: 'BONUS_DAMAGE_ADDED',
+                    payload: {
+                        playerId: settlement.attackerId,
+                        amount: attackBonus,
+                        sourceCardId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+                break;
+            }
+
+            if (settlement.resolutionMode === 'none') {
                 break;
             }
 

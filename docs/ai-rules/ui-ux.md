@@ -7,6 +7,13 @@
 
 ## 0. UI 改动分级流程（强制）
 
+### 0.0 样式任务边界（强制）
+
+- 当任务表述是“改小一点、改大一点、调间距、修溢出、修遮挡、修错位、改视觉层级、改颜色、改圆角、改阴影”这类样式目标时，默认只允许动视觉呈现，不允许顺手改交互编排。
+- 交互编排包括但不限于：入口顺序、主按钮是谁、默认展开哪一项、点击一次还是两次、弹窗从哪里触发、菜单项上下次序、常驻入口变抽屉、hover 改 click、click 改 long press。
+- 如果视觉问题与交互编排耦合，必须先向用户显式确认“需要连交互一起改”，否则只能提交纯样式方案。
+- 只要任务涉及“PC 同构”“移动端等比缩放”“手机横屏像桌面端”“双端布局策略”“到底该缩放还是重排”，必须先读 `docs/mobile-adaptation.md`，不要只凭通用 UI 审美规则判断。
+
 > ### 0.1 修 bug / 微调（无需额外流程）
 > 修复布局错位、调整间距/字号/颜色微调、修复交互 bug 等。直接改即可。
 >
@@ -15,6 +22,7 @@
 > - **必须复用同模块已有组件**（如 `GameButton`、`SpotlightContainer`），禁止手写原生 `<button>` / `<div>` 替代已有封装
 > - **必须参考同文件/同模块的现有样式**（配色、圆角、间距、字号），保持视觉一致
 > - **禁止引入与当前风格不一致的颜色/样式**（如现有模块用 amber 主色调，不得引入紫色）
+> - **响应式适配必须保持默认视觉基线**：如果任务目标是“适配/防裁剪/防溢出/多端自适应”，默认桌面尺寸、信息层级、视觉比例必须与原版保持一致；只能在受限视口条件下做降级或压缩，禁止把原本正常视口下的卡牌、字号、间距整体改小后当作“适配完成”
 >
 > ### 0.3 大规模 UI 改动（必须先读设计系统）
 > **判定条件**：涉及 ≥3 个组件文件的样式变更、新增整页/整区域布局、全局配色/字体/间距调整、新游戏 Board 搭建。
@@ -41,6 +49,7 @@
   - **常规交互**（Hover/Focus）：使用简单 `transition`（150-200ms）
   - **高频交互**（快速点击/连续操作）：仅用颜色/透明度变化，禁止复杂动画
 - **布局稳定性 (Layout)**：动态内容通过 `absolute` 或预留空间实现。**辅助按钮严禁占据核心业务流空间，必须以悬浮 (Overlay) 方式贴边/贴底显示。**
+- **禁止无意义重复信息填充（强制）**：当前上下文已经明确的信息（例如当前 tab、页面标题、区块标题、卡片标题）默认不应在子内容区机械重复，除非该重复能明显提升理解效率。允许重复的场景包括：消歧、跨区块跳读、无障碍提示、风险提示、需要脱离上下文单独成立的卡片/弹窗标题。禁止的场景包括：仅为了“看起来信息更满”而重复标题、在空状态里重复当前 tab 名称、同一视窗内对同一事实做无新增价值的二次强调。示例：tab 已叫“更新”时，空状态写“暂无日志”即可；若是从外部入口打开的独立弹窗，标题写“更新”则是合理重复。
 - **临时/瞬态 UI 不得挤压已有布局（强制）**：攻击修正徽章、buff 提示、倒计时标签等"出现/消失"的临时 UI 元素，必须使用 `absolute`/`fixed` 定位，禁止插入 flex/grid 正常流导致其他元素位移。若需占位，必须在初始布局中预留固定空间（如 `invisible` 占位符）。
 - **Flex 容器可滚动子元素必须加 `min-h-0`（强制）**：在 `flex-col` 容器中，使用 `flex-1 overflow-y-auto` 的子元素**必须同时加 `min-h-0`**。原因：flex 子元素默认 `min-height: auto`（内容撑开），导致 `overflow-y-auto` 不生效，内容被父级 `overflow-hidden` 裁剪而非滚动。同理，`flex-row` 容器中横向滚动的子元素需加 `min-w-0`。
   - ✅ `<div className="flex-1 min-h-0 overflow-y-auto">` — 正确，可滚动
@@ -64,6 +73,9 @@
 | Hook | 用途 | 说明 |
 |------|------|------|
 | `useHorizontalDragScroll` | 横向滚动容器增强 | 滚轮纵向→横向转换 + 鼠标拖拽左右滑动。所有横向卡牌列表/弃牌堆浏览必须使用，禁止手写 wheel 事件监听。返回 `{ ref, dragProps }`，`dragProps` 需展开到容器元素。 |
+| `useTouchLongPress` | mobile long-press interaction | Provides touch long-press trigger, move-cancel, and post-long-press click suppression. Returns pointer handlers, `clearLongPressState`, and `shouldBlockClick`. |
+| `useTouchInspectGesture` | coarse-pointer inspect gesture | Combines coarse-pointer detection with long-press inspect behavior. Use when touch devices need long-press preview while keeping tap for the primary action. |
+| `useArmedActivation` | armed tap-to-activate interaction | Provides "first tap arms, second tap activates" state for touch-first UIs. Use when coarse-pointer devices need explicit selection before firing a primary action. |
 | `useDeferredRender` | 延迟渲染 | 避免首帧闪烁 |
 | `useDelayedBackdropBlur` | 延迟毛玻璃 | 毛玻璃效果延迟启用，避免动画期间性能问题 |
 
@@ -252,4 +264,5 @@ React.useEffect(() => {
     - **场景层 (Scene)**：棋盘、卡片等核心实体，需通过 `anchorPoint` 处理坐标缩放，确保跨平台逻辑一致性。
     - **UI 层 (HUD)**：状态信息、控制面板，执行 Overlay 挂载逻辑。
 - **高度稳定性**：核心游戏区（棋盘/面板）**必须**使用明确高度约束（如 `h-[35vw]`）代替 `h-full`，彻底解耦父级 Flex 依赖。
+- **`MobileBoardShell` 容器约束（强制）**：凡是 manifest 声明 `mobileLayoutPreset: 'board-shell'` 的游戏，Board 根容器必须跟随壳内画布高度，使用 `h-full` / `absolute inset-0` 等容器高度方案；**禁止**在 Board 根容器上写 `h-screen`、`min-h-screen`、`100vh`、`100dvh`。原因：`board-shell` 会在移动横屏下先做整体缩放，若子树继续读取原始视口高度，会导致内容实际渲染高度小于壳高度，出现底部黑边、下半截空白或布局漂移。
 - **相位敏感性**：UI 必须清晰反馈当前"游戏相位"与"操作权限"，通过高亮合规动作 (Valid Actions) 降低认知负荷。

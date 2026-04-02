@@ -1,19 +1,77 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-// 触发所有游戏光标主题的自注册（副作用 import，必须在组件渲染前）
-import './games/cursorRegistry';
-// 初始化 i18n（语言检测 + 本地缓存）
 import { i18nInitPromise } from './lib/i18n';
 import App from './App.tsx';
 import { SENTRY_DSN } from './config/server';
+import { notifyAndroidBundleReady } from './lib/mobile/androidLiveUpdates';
+import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
+import { hydrateInstalledNativeGamePackages } from './features/mobile-packages/packageManagerService';
 
-// 限制堆栈深度，减少控制台噪音（开发环境）
+const captureParams = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search)
+  : null;
+const captureScenario = captureParams?.get('bgCapture');
+const captureStatusUrl = captureParams?.get('bgCaptureStatusUrl') || '/__capture/status';
+
+const reportCaptureBootstrapStatus = (phase: string, message?: string) => {
+  if (!import.meta.env.DEV || !captureScenario) {
+    return;
+  }
+
+  void fetch(captureStatusUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      scenario: captureScenario,
+      phase,
+      message,
+    }),
+  }).catch(() => {
+    // capture 旁路诊断不能影响正常页面启动。
+  });
+};
+
+if (import.meta.env.DEV && captureScenario) {
+  document.title = `capture-bootstrap:${captureScenario}`;
+  reportCaptureBootstrapStatus('capture-bootstrap');
+
+  window.addEventListener('error', (event) => {
+    const message = event.error instanceof Error
+      ? event.error.message
+      : (event.message || 'unknown');
+    document.title = `capture-window-error:${message.slice(0, 80)}`;
+    reportCaptureBootstrapStatus('capture-window-error', message.slice(0, 400));
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason instanceof Error
+      ? event.reason.message
+      : String(event.reason ?? 'unknown');
+    document.title = `capture-window-rejection:${reason.slice(0, 80)}`;
+    reportCaptureBootstrapStatus('capture-window-rejection', reason.slice(0, 400));
+  });
+}
+
 if (import.meta.env.DEV) {
   Error.stackTraceLimit = 10;
 }
 
-// 异步初始化 Sentry（不阻塞首屏渲染，85KB gzip 延迟加载）
+if (typeof window !== 'undefined') {
+  window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault()
+    reloadForStaleChunkOnce('vite:preloadError')
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (!isStaleChunkError(event.reason)) return
+    event.preventDefault()
+    reloadForStaleChunkOnce('unhandledrejection')
+  })
+}
+
 if (SENTRY_DSN) {
   void import('@sentry/react').then((Sentry) => {
     Sentry.init({
@@ -29,19 +87,26 @@ if (SENTRY_DSN) {
   });
 }
 
+void notifyAndroidBundleReady();
+void hydrateInstalledNativeGamePackages().catch((error) => {
+  console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
+});
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  // 立即渲染，不等 i18n 初始化完成。
-  // react-i18next 已配置 useSuspense: false，未就绪时组件用 key 作 fallback，不会崩溃。
-  // i18n 初始化完成后 react-i18next 会自动触发重渲染，文本无缝切换。
   createRoot(rootElement).render(
     <StrictMode>
       <App />
     </StrictMode>,
   );
 
-  // 后台继续等待 i18n 完成（仅用于错误捕获，不阻塞渲染）
+  if (import.meta.env.DEV && captureScenario) {
+    document.title = `capture-rendered:${captureScenario}`;
+    reportCaptureBootstrapStatus('capture-rendered');
+  }
+
   void i18nInitPromise.catch(() => {
     console.warn('[i18n] 初始化失败，将使用 fallback key 显示文本');
+    reportCaptureBootstrapStatus('capture-i18n-init-failed', 'i18n initialization failed');
   });
 }

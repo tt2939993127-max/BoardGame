@@ -2,8 +2,15 @@ import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGu
 import { FeedbackService } from './feedback.service';
 import { BulkFeedbackIdsDto, CreateFeedbackDto, FeedbackFilterDto, UpdateFeedbackStatusDto, QueryFeedbackDto } from './dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../shared/guards/optional-jwt-auth.guard';
 import { Roles } from '../admin/guards/roles.decorator';
 import { AdminGuard } from '../admin/guards/admin.guard';
+
+type FeedbackAdminRequest = {
+    user: {
+        userId: string;
+    };
+};
 
 @Controller('feedback')
 export class FeedbackController {
@@ -19,8 +26,9 @@ export class FeedbackController {
      * TODO: 添加 @nestjs/throttler 依赖后启用速率限制
      * @Throttle({ default: { limit: 3, ttl: 60000 } }) // 匿名用户限制
      */
+    @UseGuards(OptionalJwtAuthGuard)
     @Post()
-    async create(@Request() req: any, @Body() dto: CreateFeedbackDto) {
+    async create(@Request() req: FeedbackAdminRequest, @Body() dto: CreateFeedbackDto) {
         // 如果用户已登录，使用用户 ID；否则使用 null（匿名反馈）
         const userId = req.user?.userId || null;
         return this.feedbackService.create(userId, dto);
@@ -28,38 +36,42 @@ export class FeedbackController {
 }
 
 @UseGuards(JwtAuthGuard, AdminGuard)
-@Roles('admin')
+@Roles('admin', 'developer')
 @Controller('admin/feedback')
 export class FeedbackAdminController {
     constructor(@Inject(FeedbackService) private readonly feedbackService: FeedbackService) { }
 
     @Get()
-    async findAll(@Query() query: QueryFeedbackDto) {
-        return this.feedbackService.findAll(query);
+    async findAll(@Request() req: FeedbackAdminRequest, @Query() query: QueryFeedbackDto) {
+        return this.feedbackService.findAll(req.user.userId, query);
     }
 
+    @Roles('admin', 'developer')
     @Patch(':id/status')
-    async updateStatus(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
-        const updated = await this.feedbackService.updateStatus(id, dto.status);
+    async updateStatus(@Request() req: FeedbackAdminRequest, @Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
+        const updated = await this.feedbackService.updateStatus(req.user.userId, id, dto.status);
         if (!updated) {
             throw new NotFoundException('feedback not found');
         }
         return updated;
     }
 
+    @Roles('admin', 'developer')
     @Delete(':id')
-    async deleteOne(@Param('id') id: string) {
-        const ok = await this.feedbackService.deleteOne(id);
+    async deleteOne(@Request() req: FeedbackAdminRequest, @Param('id') id: string) {
+        const ok = await this.feedbackService.deleteOne(req.user.userId, id);
         return { ok };
     }
 
+    @Roles('admin', 'developer')
     @Post('bulk-delete')
-    async bulkDelete(@Body() body: BulkFeedbackIdsDto) {
-        return this.feedbackService.bulkDeleteByIds(body.ids || []);
+    async bulkDelete(@Request() req: FeedbackAdminRequest, @Body() body: BulkFeedbackIdsDto) {
+        return this.feedbackService.bulkDeleteByIds(req.user.userId, body.ids || []);
     }
 
+    @Roles('admin', 'developer')
     @Post('bulk-delete-by-filter')
-    async bulkDeleteByFilter(@Body() body: FeedbackFilterDto) {
-        return this.feedbackService.bulkDeleteByFilter(body);
+    async bulkDeleteByFilter(@Request() req: FeedbackAdminRequest, @Body() body: FeedbackFilterDto) {
+        return this.feedbackService.bulkDeleteByFilter(req.user.userId, body);
     }
 }

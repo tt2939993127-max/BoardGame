@@ -14,7 +14,8 @@ test.describe('Cardia UI 标记显示', () => {
         // 注入状态：玩家1场上有一张带持续能力标记的卡牌
         await player1Page.evaluate(() => {
             const harness = (window as any).__BG_TEST_HARNESS__;
-            const state = harness.state.read();
+            const state = harness.state.get?.() ?? harness.state.read();
+            const core = state.core ?? state;
             
             // 创建一张带持续能力标记的卡牌
             const testCard = {
@@ -35,11 +36,11 @@ test.describe('Cardia UI 标记显示', () => {
             
             harness.state.patch({
                 core: {
-                    ...state.core,
+                    ...core,
                     players: {
-                        ...state.core.players,
+                        ...core.players,
                         '0': {
-                            ...state.core.players['0'],
+                            ...core.players['0'],
                             playedCards: [testCard],
                         },
                     },
@@ -66,7 +67,12 @@ test.describe('Cardia UI 标记显示', () => {
         // 注入状态：玩家1场上有一张带修正标记的卡牌
         await player1Page.evaluate(() => {
             const harness = (window as any).__BG_TEST_HARNESS__;
-            const state = harness.state.read();
+            const state = harness.state.get?.() ?? harness.state.read();
+            const core = state.core ?? state;
+            const modifierTokens = [
+                { cardId: 'test-card-2', value: 2, source: 'ability', timestamp: 1 },
+                { cardId: 'test-card-2', value: 1, source: 'ability', timestamp: 2 },
+            ];
             
             // 创建一张带修正标记的卡牌（基础影响力10，修正+3）
             const testCard = {
@@ -81,21 +87,18 @@ test.describe('Cardia UI 标记显示', () => {
                 tags: { tags: [] },
                 signets: 0,
                 ongoingMarkers: [],
-                modifierTokens: [
-                    { cardId: 'test-card-2', value: 2, source: 'ability', timestamp: 1 },
-                    { cardId: 'test-card-2', value: 1, source: 'ability', timestamp: 2 },
-                ],
                 encounterIndex: 1,
                 imagePath: 'cardia/cards/2.jpg',
             };
             
             harness.state.patch({
                 core: {
-                    ...state.core,
+                    ...core,
+                    modifierTokens,
                     players: {
-                        ...state.core.players,
+                        ...core.players,
                         '0': {
-                            ...state.core.players['0'],
+                            ...core.players['0'],
                             playedCards: [testCard],
                         },
                     },

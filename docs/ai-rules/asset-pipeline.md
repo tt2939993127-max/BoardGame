@@ -78,13 +78,22 @@ public/assets/
 - `OptimizedImage` 默认 `locale="zh-CN"`，自动转换路径为 `i18n/zh-CN/dicethrone/images/foo.png`
 - 符号链接使浏览器能正确加载该路径（实际指向 `../../dicethrone/images/foo.png`）
 - 未来英文版上线时，传入 `locale="en"` 即可切换到英文资源
+- 生产构建会为 `public/assets` 中的资源 URL 自动追加 `?v=<content-hash>`，因此不要手动拼接版本参数；内容变更后缓存会自动失效
 
 ### 路径规则（强制）
 
 - `src` 传相对路径（如 `dicethrone/images/foo.png`），**不带** `/assets/` 前缀
 - 内部自动补全 `/assets/` 并转换为 `compressed/foo.webp`
 - **禁止在路径中硬编码 `compressed/` 子目录**（如 `'dicethrone/images/compressed/foo.png'`）
+- **禁止手动拼 `?v=` / 时间戳参数**，统一交给 `AssetLoader` 的内容 hash 机制处理
 - **原因**：`getOptimizedImageUrls()` 会自动插入 `compressed/`，硬编码会导致路径重复（`compressed/compressed/`）
+
+### 图集语义判定门禁（强制）
+
+- 素材外观不等于运行时语义。看到空白格、黑边、角落装饰、额外立绘、复合排版时，禁止直接推断它“不是卡”“要裁掉”“要拆成两张”或“必须改单元格配置”。
+- 修改 atlas 用法、`previewRef` 指向、rows/cols、frame 映射、split/topCrop 之类资源接线前，必须先对照同游戏旧实现、现有资源配置和专项规范。
+- 如果旧实现和现有文档仍不能唯一说明这张图该怎么接，必须先问用户，不能靠肉眼猜图。
+- 允许存在“一张正式图对应多个运行时对象”的复用模式；这种关系必须体现在配置或专项文档里，不能在代码里临时脑补。
 
 ### 精灵图路径处理规范（强制）
 
@@ -165,6 +174,16 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 6. ✅ **确认路径中不含 `compressed/` 子目录**
 7. ❌ **禁止**直接写 `<img src="/assets/xxx.png" />`
 8. ❌ **禁止**硬编码 `compressed/` 路径
+
+## R2 / CDN 上传收口规则（强制）
+
+适用于任意游戏的图片、音频、atlas、裁图、图标、提示板切片等运行时资源。
+
+1. **录入或资源改动完成后，AI 必须主动上传**：只要本轮改动涉及运行时资源新增、替换、移动或裁图派生，就必须主动执行 manifest 重建、`assets:check` / `assets:upload` 或等价上传流程，不等待用户额外提醒。
+2. **没有远端回查不算完成**：上传后至少抽查 1 个主资源 URL 和 1-3 个代表性裁图 / 子资源 URL，确认远端返回 `200`。
+3. **本地存在不代表交付完成**：即使本地文件、manifest、代码引用都已齐全，只要默认资源基址仍指向 R2 / CDN，就必须把远端状态作为最终完成判据。
+4. **上传失败必须显式告知用户**：如果因为 `.env` / `.env.example` 缺失、权限不足、脚本报错、网络失败或用户明确要求暂不上传而没有完成上传，最终汇报必须明确写出“未上传资源列表 + 原因 + 当前运行态风险”，禁止省略。
+5. **该规则不分游戏**：`dicethrone`、`smashup`、`summonerwars` 以及后续新游戏都按同一口径执行。
 
 ---
 

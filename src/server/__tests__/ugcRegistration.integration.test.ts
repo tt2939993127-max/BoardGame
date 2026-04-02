@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { buildUgcServerGames } from '../ugcRegistration';
 import { getUgcPackageModel } from '../models/UgcPackage';
+import { MONGO_TEST_HOOK_TIMEOUT_MS, createSharedMongoMemoryServer } from '../testUtils/mongoMemory';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -29,7 +30,7 @@ const buildDomainCode = () => `
 
 // UGC 功能暂时跳过测试
 // 如需运行这些测试，请移除下面的 .skip
-describe.skip('UGC 动态注册集成', () => {
+describe('UGC 动态注册集成', () => {
     let mongo: MongoMemoryServer | null = null;
     const uploadDir = join(process.cwd(), 'uploads-test-ugc');
 
@@ -37,12 +38,12 @@ describe.skip('UGC 动态注册集成', () => {
         process.env.MONGO_URI = '';
         process.env.UGC_LOCAL_PATH = uploadDir;
         process.env.UGC_PUBLIC_URL_BASE = '/assets';
-        mongo = await MongoMemoryServer.create();
+        mongo = await createSharedMongoMemoryServer();
         const uri = mongo.getUri();
         await mongoose.connect(uri);
         mkdirSync(join(uploadDir, 'ugc', 'user-1', 'pkg-1'), { recursive: true });
         writeFileSync(join(uploadDir, 'ugc', 'user-1', 'pkg-1', 'domain.js'), buildDomainCode(), 'utf-8');
-    });
+    }, MONGO_TEST_HOOK_TIMEOUT_MS);
 
     beforeEach(async () => {
         const Model = getUgcPackageModel();

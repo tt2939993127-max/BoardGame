@@ -11,11 +11,29 @@ import { type BrowserContext, type Page } from '@playwright/test';
 // 浏览器上下文初始化（注入 localStorage / 拦截请求）
 // ============================================================================
 
-/** 设置英文 locale */
+export type E2ETestLocale = 'zh-CN' | 'en';
+
+const DEFAULT_E2E_LOCALE: E2ETestLocale = 'zh-CN';
+
+/** 设置指定 locale */
+export const setTestLocale = async (
+    context: BrowserContext | Page,
+    locale: E2ETestLocale = DEFAULT_E2E_LOCALE,
+) => {
+    await context.addInitScript((nextLocale) => {
+        localStorage.setItem('bg_locale_preference', nextLocale);
+        localStorage.setItem('i18nextLng', nextLocale);
+    }, locale);
+};
+
+/** 设置中文 locale（默认推荐） */
+export const setChineseLocale = async (context: BrowserContext | Page) => {
+    await setTestLocale(context, 'zh-CN');
+};
+
+/** 设置英文 locale（仅英文断言/双语回归时显式使用） */
 export const setEnglishLocale = async (context: BrowserContext | Page) => {
-    await context.addInitScript(() => {
-        localStorage.setItem('i18nextLng', 'en');
-    });
+    await setTestLocale(context, 'en');
 };
 
 /** 跳过教学引导 */
@@ -43,7 +61,7 @@ export const blockAudioRequests = async (context: BrowserContext) => {
 
 /**
  * 拦截 CDN 资源请求（图片/字体等），返回空响应。
- * E2E 测试不需要加载真实图片，大量 CDN 404 会严重拖慢页面加载。
+ * 仅适用于不关心真实图片渲染的快测场景；视觉/E2E 验收不要默认开启。
  */
 export const blockCdnRequests = async (context: BrowserContext) => {
     // 拦截 assets.easyboardgame.top 域名的所有请求
@@ -122,19 +140,28 @@ export const getGameServerBaseURL = () => {
 };
 
 /** 检查游戏服务器是否可用 */
-export const ensureGameServerAvailable = async (page: Page) => {
-    const gameServerBaseURL = getGameServerBaseURL();
-    // 游戏服务器没有 /games 根路由，尝试创建一个测试房间来检查可用性
-    const testUrl = `${gameServerBaseURL}/games/smashup/create`;
-    try {
-        const response = await page.request.post(testUrl, {
-            data: { numPlayers: 2, setupData: { guestId: `test_${Date.now()}` } },
-        });
-        // 201 Created 或 200 OK 都表示服务器可用
-        return response.ok() || response.status() === 201;
-    } catch {
-        return false;
+export const ensureGameServerAvailable = async (
+    page: Page,
+    gameServerBaseURLOverride?: string,
+) => {
+    const gameServerBaseURL = gameServerBaseURLOverride ?? getGameServerBaseURL();
+    const listUrl = `${gameServerBaseURL}/games`;
+    const startedAt = Date.now();
+    const timeoutMs = 15000;
+
+    while (Date.now() - startedAt < timeoutMs) {
+        try {
+            const response = await page.request.get(listUrl);
+            if (response.ok()) {
+                return true;
+            }
+        } catch {
+            // ignore transient startup/network errors
+        }
+        await page.waitForTimeout(1000);
     }
+
+    return false;
 };
 
 /**
@@ -322,8 +349,11 @@ export const blockLobbySocket = async (context: BrowserContext) => {
  * 注入 __FORCE_GAME_SERVER_URL__，让客户端直接连接游戏服务器，
  * 绕过 Vite 代理（多 WebSocket 并发时代理不稳定）。
  */
-export const injectDirectGameServerUrl = async (context: BrowserContext) => {
-    const gameServerUrl = getGameServerBaseURL();
+export const injectDirectGameServerUrl = async (
+    context: BrowserContext,
+    gameServerBaseURLOverride?: string,
+) => {
+    const gameServerUrl = gameServerBaseURLOverride ?? getGameServerBaseURL();
     await context.addInitScript((url) => {
         (window as Window & { __FORCE_GAME_SERVER_URL__?: string }).__FORCE_GAME_SERVER_URL__ = url;
     }, gameServerUrl);
@@ -333,10 +363,13 @@ export const injectDirectGameServerUrl = async (context: BrowserContext) => {
  * 注入 __E2E_SKIP_IMAGE_GATE__，跳过 CriticalImageGate 图片预加载门禁。
  * E2E 测试不需要等待图片预加载完成。
  */
-export const injectSkipImageGate = async (context: BrowserContext) => {
-    await context.addInitScript(() => {
-        (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
-    });
+export const injectSkipImageGate = async (
+    context: BrowserContext,
+    enabled = true,
+) => {
+    await context.addInitScript((shouldSkip) => {
+        (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = shouldSkip;
+    }, enabled);
 };
 
 /**
@@ -358,20 +391,41 @@ export const waitForTestHarness = async (page: Page, timeout = 5000) => {
     );
 };
 
-/** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 拦截 CDN + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器 + 跳过图片门禁） */
+type InitContextOptions = {
+    storageKey?: string;
+    skipTutorial?: boolean;
+    skipImageGate?: boolean;
+    gameServerBaseURL?: string;
+    locale?: E2ETestLocale;
+    blockCdnAssets?: boolean;
+};
+
+const normalizeInitContextOptions = (
+    opts?: string | InitContextOptions,
+): InitContextOptions => {
+    if (typeof opts === 'string') {
+        return { storageKey: opts };
+    }
+    return opts ?? {};
+};
+
+/** 对 BrowserContext 执行标准初始化（中文 locale + 禁音 + 拦截音频 + 可选跳过教学/图片门禁/远端图片） */
 export const initContext = async (
     context: BrowserContext,
-    opts?: { storageKey?: string; skipTutorial?: boolean },
+    opts?: string | InitContextOptions,
 ) => {
+    const resolved = normalizeInitContextOptions(opts);
     await enableTestMode(context); // 启用测试模式
     await blockAudioRequests(context);
-    await blockCdnRequests(context);
     await blockLobbySocket(context);
-    await injectDirectGameServerUrl(context);
-    await injectSkipImageGate(context);
-    await setEnglishLocale(context);
-    await resetMatchStorage(context, opts?.storageKey);
-    if (opts?.skipTutorial !== false) await disableTutorial(context);
+    await injectDirectGameServerUrl(context, resolved.gameServerBaseURL);
+    if (resolved.blockCdnAssets === true) {
+        await blockCdnRequests(context);
+    }
+    await injectSkipImageGate(context, resolved.skipImageGate ?? false);
+    await setTestLocale(context, resolved.locale ?? DEFAULT_E2E_LOCALE);
+    await resetMatchStorage(context, resolved.storageKey);
+    if (resolved.skipTutorial !== false) await disableTutorial(context);
     await disableAudio(context);
     return context; // ✅ 返回 context
 };

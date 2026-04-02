@@ -10,8 +10,8 @@ export const MaintenancePage = () => {
     const { t } = useTranslation('common');
 
     return (
-        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center p-6 relative overflow-hidden">
-            <SEO title={t('maintenance.seoTitle')} description={t('maintenance.seoDescription')} />
+        <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] relative overflow-hidden">
+            <SEO title={t('maintenance.seoTitle')} description={t('maintenance.seoDescription')} noIndex />
 
             {/* Background Texture/Effect */}
             <div className="absolute inset-0 opacity-5 pointer-events-none"

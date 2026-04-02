@@ -22,15 +22,21 @@ import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
 import { hybridStorage } from './src/server/storage/HybridStorage';
+import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
-import { hasOccupiedPlayers } from './src/server/matchOccupancy';
+import { areAllSeatsOccupied, hasOccupiedPlayers, isSupportedPlayerCount } from './src/server/matchOccupancy';
+import {
+    decideDuplicateOwnerRoomAction,
+    DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+} from './src/server/duplicateOwnerRooms';
 import { buildUgcServerGames } from './src/server/ugcRegistration';
 import { GameTransportServer } from './src/engine/transport/server';
 import type { GameEngineConfig } from './src/engine/transport/server';
 import type { MatchMetadata, MatchStorage } from './src/engine/transport/storage';
 import { resolveMatchStatus } from './src/engine/transport/storage';
 import logger, { gameLogger } from './server/logger';
+import { createTrainingDataRecorderFromEnv } from './server/trainingDataRecorder';
 import { requestLogger, errorHandler } from './server/middleware/logging';
 
 // ============================================================================
@@ -133,6 +139,17 @@ const RAW_WEB_ORIGINS = (process.env.WEB_ORIGINS || '')
     .map((s) => s.trim())
     .filter(Boolean);
 
+const DEFAULT_APP_WEB_ORIGINS = [
+    'http://localhost',
+    'https://localhost',
+    'capacitor://localhost',
+] as const;
+
+const RAW_APP_WEB_ORIGINS = (process.env.APP_WEB_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
 const DEV_CORS_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
@@ -142,15 +159,33 @@ const DEV_CORS_ORIGINS = [
     'http://127.0.0.1:5174',
 ];
 
-const CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS;
+const APP_CORS_ORIGINS = RAW_APP_WEB_ORIGINS.length > 0
+    ? RAW_APP_WEB_ORIGINS
+    : [...DEFAULT_APP_WEB_ORIGINS];
+const CORS_ORIGINS = Array.from(new Set([
+    ...(RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS),
+    ...APP_CORS_ORIGINS,
+]));
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
+const SOCKET_IO_SERVER_TRANSPORTS =
+    process.env.SOCKET_IO_ALLOW_POLLING === 'true'
+        ? ['websocket', 'polling']
+        : ['websocket'];
 
 // ============================================================================
 // 归档逻辑
 // ============================================================================
 
-let storage: MatchStorage;
+const storage: MatchStorage = hybridStorage;
+
+type OwnerMatchLookupStorage = {
+    findMatchesByOwnerKey: (ownerKey: string) => Promise<Array<{ matchID: string; gameName: string }>>;
+};
+
+const supportsOwnerMatchLookup = (value: MatchStorage): value is MatchStorage & OwnerMatchLookupStorage => {
+    return typeof (value as Partial<OwnerMatchLookupStorage>).findMatchesByOwnerKey === 'function';
+};
 
 const archiveMatchResult = async ({
     matchID,
@@ -161,6 +196,10 @@ const archiveMatchResult = async ({
     gameName: string;
     gameover?: { winner?: string | number };
 }) => {
+    if (!USE_PERSISTENT_STORAGE) {
+        return;
+    }
+
     try {
         const existing = await MatchRecord.findOne({ matchID });
         if (existing) return;
@@ -229,12 +268,14 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
         engines.push(engineConfig);
     }
 
-    // UGC 游戏注册
-    const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
-        existingGameIds: manifestGameIds,
-    });
-    ugcEngines.forEach((cfg) => engines.push(cfg));
-    ugcGameIds.forEach((id) => gameIds.push(id));
+    if (USE_PERSISTENT_STORAGE) {
+        // 纯内存模式不依赖 Mongo，跳过 UGC 数据库查询，保证无库也能起服务。
+        const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
+            existingGameIds: manifestGameIds,
+        });
+        ugcEngines.forEach((cfg) => engines.push(cfg));
+        ugcGameIds.forEach((id) => gameIds.push(id));
+    }
 
     return { engines, gameIds };
 };
@@ -243,12 +284,13 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
 // 初始化
 // ============================================================================
 
-await connectDB();
+if (USE_PERSISTENT_STORAGE) {
+    await connectDB();
+} else {
+    logger.info('[GameServer] 当前以纯内存模式启动，跳过 Mongo / UGC / 排行榜归档');
+}
 const { engines: SERVER_ENGINES, gameIds: SERVER_GAME_IDS } = await buildServerEngines();
 registerSupportedGames(SERVER_GAME_IDS);
-
-// 存储层：HybridStorage 直接实现 MatchStorage 接口
-storage = hybridStorage;
 
 // 创建 Koa 应用
 const app = new Koa();
@@ -265,6 +307,7 @@ const httpServer = http.createServer(app.callback());
 // 使用 MessagePack 序列化替代 JSON，减少 20-30% 传输体积
 const io = new IOServer(httpServer, {
     parser: msgpackParser,
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
@@ -286,10 +329,14 @@ const io = new IOServer(httpServer, {
 });
 
 // 创建游戏传输服务器
+const trainingDataRecorder = createTrainingDataRecorderFromEnv(process.env);
+
 const gameTransport = new GameTransportServer({
     io,
     storage,
     games: SERVER_ENGINES,
+    trainingDataRecorder,
+    rulesVersion: process.env.npm_package_version ?? null,
     offlineGraceMs: 300000, // 5 分钟：给断线玩家充足的重连时间
     authenticate: async (matchID, playerID, credentials, metadata) => {
         if (!credentials) return false;
@@ -418,16 +465,11 @@ const isEmptyRoomByMetadata = (metadata?: MatchMetadata | null): boolean => {
     return !hasOccupiedPlayers(metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }>);
 };
 
-const cleanupMissingOwnerRoom = async (
+const cleanupMatchRoom = async (
     matchID: string,
     metadata?: MatchMetadata | null,
-    context?: string,
     emitRemoval = false,
-): Promise<boolean> => {
-    if (!isEmptyRoomByMetadata(metadata)) return false;
-    const ownerKey = resolveOwnerKeyFromMetadata(metadata);
-    if (ownerKey) return false;
-
+): Promise<void> => {
     await storage.wipe(matchID);
     gameTransport.unloadMatch(matchID, { disconnectSockets: true });
 
@@ -441,6 +483,19 @@ const cleanupMissingOwnerRoom = async (
     matchSubscribers.delete(matchID);
     rematchStateByMatch.delete(matchID);
     chatHistoryByMatch.delete(matchID);
+};
+
+const cleanupMissingOwnerRoom = async (
+    matchID: string,
+    metadata?: MatchMetadata | null,
+    context?: string,
+    emitRemoval = false,
+): Promise<boolean> => {
+    if (!isEmptyRoomByMetadata(metadata)) return false;
+    const ownerKey = resolveOwnerKeyFromMetadata(metadata);
+    if (ownerKey) return false;
+
+    await cleanupMatchRoom(matchID, metadata, emitRemoval);
     logger.warn(`[RoomCleanup] reason=missing_owner context=${context ?? 'unknown'} matchID=${matchID}`);
     return true;
 };
@@ -462,19 +517,68 @@ router.get('/games', async (ctx) => {
 });
 
 // POST /games/:name/create — 创建对局
+router.get('/internal/rooms', async (ctx) => {
+    const requestedGame = typeof ctx.query.gameName === 'string'
+        ? normalizeGameName(ctx.query.gameName)
+        : '';
+
+    if (requestedGame) {
+        if (!isSupportedGame(requestedGame)) {
+            ctx.throw(400, `Game ${ctx.query.gameName} not found`);
+        }
+        ctx.body = { items: await getLobbySnapshot(requestedGame) };
+        return;
+    }
+
+    ctx.body = { items: await getLobbySnapshotAll() };
+});
+
+router.delete('/internal/rooms/:matchID', async (ctx) => {
+    const matchID = String(ctx.params.matchID || '').trim();
+    if (!matchID) {
+        ctx.throw(400, 'Missing matchID');
+    }
+
+    const deleted = await destroyLobbyRoom(matchID);
+    ctx.body = { deleted, matchID };
+});
+
+router.post('/internal/rooms/bulk-delete', async (ctx) => {
+    const body = ctx.request.body as { ids?: unknown } | undefined;
+    const ids = Array.isArray(body?.ids)
+        ? body.ids
+            .filter((value): value is string => typeof value === 'string')
+            .map(value => value.trim())
+            .filter(Boolean)
+        : [];
+    const uniqueIds = Array.from(new Set(ids));
+
+    let deleted = 0;
+    for (const matchID of uniqueIds) {
+        const ok = await destroyLobbyRoom(matchID);
+        if (ok) {
+            deleted++;
+        }
+    }
+
+    ctx.body = { requested: uniqueIds.length, deleted };
+});
+
 router.post('/games/:name/create', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
     if (!gameName || !isSupportedGame(gameName)) {
         ctx.throw(404, `Game ${ctx.params.name} not found`);
     }
 
-    const gameEngine = SERVER_ENGINES.find((engine) => normalizeGameName(engine.gameId) === gameName);
+    const gameEntry = GAME_SERVER_MANIFEST.find((entry) => normalizeGameName(entry.manifest.id) === gameName);
+    const gameEngine = gameEntry?.engineConfig;
 
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
     const minPlayers = gameEngine?.minPlayers ?? 2;
     const maxPlayers = gameEngine?.maxPlayers ?? 2;
-    if (isNaN(numPlayers) || numPlayers < minPlayers || numPlayers > maxPlayers) {
+    const playerOptions = gameEntry?.manifest.playerOptions;
+    if (!isSupportedPlayerCount(numPlayers, minPlayers, maxPlayers, playerOptions)) {
         ctx.throw(400, 'Invalid numPlayers');
     }
 
@@ -526,6 +630,65 @@ router.post('/games/:name/create', async (ctx) => {
         delete setupData.prevMatchID;
     }
 
+    if (ownerKey) {
+        const ownerMatches = supportsOwnerMatchLookup(storage)
+            ? await storage.findMatchesByOwnerKey(ownerKey)
+            : [];
+
+        if (ownerMatches.length > 0) {
+            const existingMatches = await Promise.all(ownerMatches.map(async (match) => {
+                const { metadata: existingMetadata } = await storage.fetch(match.matchID, { metadata: true });
+                return {
+                    ...match,
+                    metadata: existingMetadata,
+                    decision: decideDuplicateOwnerRoomAction(existingMetadata, {
+                        disconnectGraceMs: DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+                    }),
+                };
+            }));
+
+            const blockingMatches = existingMatches
+                .filter((match) => match.decision.action === 'block')
+                .sort((a, b) => (b.metadata?.updatedAt ?? 0) - (a.metadata?.updatedAt ?? 0));
+
+            if (blockingMatches.length > 0) {
+                const activeMatch = blockingMatches[0];
+                logger.info('duplicate_owner_room_blocked', {
+                    ownerKey,
+                    ownerType: ownerType ?? 'unknown',
+                    matchID: activeMatch.matchID,
+                    gameName: activeMatch.gameName,
+                    reason: activeMatch.decision.reason,
+                });
+                ctx.status = 409;
+                ctx.body = {
+                    error: 'ACTIVE_MATCH_EXISTS',
+                    gameName: activeMatch.gameName,
+                    matchID: activeMatch.matchID,
+                };
+                return;
+            }
+
+            const cleanableMatches = existingMatches.filter((match) => match.decision.action === 'cleanup');
+            if (cleanableMatches.length > 0) {
+                logger.info('cleanup_duplicate_owner_rooms', {
+                    ownerKey,
+                    ownerType: ownerType ?? 'unknown',
+                    count: cleanableMatches.length,
+                    matches: cleanableMatches.map((match) => ({
+                        matchID: match.matchID,
+                        gameName: match.gameName,
+                        reason: match.decision.reason,
+                    })),
+                });
+
+                await Promise.all(cleanableMatches.map(async (match) => {
+                    await cleanupMatchRoom(match.matchID, match.metadata, true);
+                }));
+            }
+        }
+    }
+
     // 初始化游戏状态
     const setupResult = await gameTransport.setupMatch(matchID, gameName, playerIds, seed, setupData);
     if (!setupResult) {
@@ -548,46 +711,6 @@ router.post('/games/:name/create', async (ctx) => {
         setupData,
         status: 'waiting',
     };
-
-    // ✅ 单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
-    if (ownerKey) {
-        try {
-            const allMatchIds = await storage.listMatches();
-            const ownerMatches: Array<{ matchID: string; gameName: string }> = [];
-            
-            // 查找该 ownerKey 的所有房间
-            for (const existingMatchID of allMatchIds) {
-                const { metadata: existingMetadata } = await storage.fetch(existingMatchID, { metadata: true });
-                if (existingMetadata?.setupData?.ownerKey === ownerKey) {
-                    ownerMatches.push({
-                        matchID: existingMatchID,
-                        gameName: existingMetadata.gameName,
-                    });
-                }
-            }
-            
-            // 删除旧房间并发送 MATCH_ENDED 事件
-            if (ownerMatches.length > 0) {
-                gameLogger.info('清理旧房间', {
-                    ownerKey,
-                    ownerType: ownerType ?? 'unknown',
-                    count: ownerMatches.length,
-                    matchIds: ownerMatches.map(m => m.matchID),
-                });
-                
-                for (const match of ownerMatches) {
-                    await storage.wipe(match.matchID);
-                    emitMatchEnded(match.gameName as SupportedGame, match.matchID);
-                }
-            }
-        } catch (err) {
-            // 清理失败不应阻止创建新房间，记录日志后继续
-            logger.error('清理旧房间失败', {
-                ownerKey,
-                error: err instanceof Error ? err.message : String(err),
-            });
-        }
-    }
 
     try {
         await storage.createMatch(matchID, {
@@ -700,8 +823,7 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
 
     // 状态机：所有座位都有玩家时，从 waiting → playing
     if (metadata.status === 'waiting' || !metadata.status) {
-        const allSeated = Object.values(metadata.players).every(p => p.name || p.credentials);
-        if (allSeated) {
+        if (areAllSeatsOccupied(metadata.players)) {
             metadata.status = 'playing';
         }
     }
@@ -835,6 +957,11 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
 // GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
+    if (!USE_PERSISTENT_STORAGE) {
+        ctx.body = { leaderboard: [] };
+        return;
+    }
+
     try {
         const records = await MatchRecord.find({ gameName });
         // 用 ownerKey 聚合（新数据），旧数据 fallback 到 name
@@ -1251,6 +1378,27 @@ const resolveGameFromMatch = (match: LobbyMatch | null): SupportedGame | null =>
     return normalized;
 };
 
+const destroyLobbyRoom = async (matchID: string): Promise<boolean> => {
+    if (!matchID) return false;
+
+    const match = await fetchLobbyMatch(matchID);
+    const indexed = matchGameIndex.get(matchID) ?? null;
+    const game = indexed || resolveGameFromMatch(match);
+
+    try {
+        await storage.wipe(matchID);
+    } catch (error) {
+        logger.warn(`[LobbyInternal] destroy room failed matchID=${matchID} error=${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+
+    if (game) {
+        emitMatchEnded(game, matchID);
+    }
+
+    return true;
+};
+
 const handleMatchCreated = async (matchID?: string, gameNameFromUrl?: string) => {
     const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
     if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
@@ -1344,6 +1492,7 @@ async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
 const lobbySocketIO = new IOServer(httpServer, {
     parser: msgpackParser,
     path: '/lobby-socket',
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
@@ -1609,33 +1758,53 @@ lobbySocketIO.on('connection', (socket) => {
 // 服务器启动
 // ============================================================================
 
+const runStartupCleanupInBackground = async () => {
+    const cleanupTasks: StartupCleanupTask[] = [
+        {
+            reason: 'cleanupEmptyMatches:boot',
+            run: () => mongoStorage.cleanupEmptyMatches(),
+            errorMessage: '[MongoStorage] 启动清理空房间失败:',
+        },
+        {
+            reason: 'cleanupEphemeralMatches:boot',
+            run: () => hybridStorage.cleanupEphemeralMatches(),
+            errorMessage: '[MongoStorage] 启动清理临时房间失败:',
+        },
+        {
+            reason: 'cleanupExpiredTtlMatches:boot',
+            run: () => mongoStorage.cleanupExpiredTtlMatches(),
+            errorMessage: '[MongoStorage] 启动清理过期 TTL 房间失败:',
+        },
+        {
+            reason: 'cleanupLegacyMatches:boot',
+            run: () => mongoStorage.cleanupLegacyMatches(0),
+            errorMessage: '[MongoStorage] 启动清理遗留房间失败:',
+        },
+        {
+            reason: 'cleanupDuplicateOwnerMatches:boot',
+            run: () => mongoStorage.cleanupDuplicateOwnerMatches(),
+            errorMessage: '[MongoStorage] 启动清理重复 ownerKey 房间失败:',
+        },
+    ];
+
+    await runStartupCleanupTasks(cleanupTasks, {
+        onDirty: (reason) => {
+            for (const gameName of SUPPORTED_GAMES) {
+                void broadcastLobbySnapshot(gameName, reason);
+            }
+        },
+        onError: (message, error) => {
+            logger.error(message, error);
+        },
+    });
+};
+
 async function startServer() {
+    const bootstrapStartedAt = Date.now();
+
     // 连接存储后端
     if (USE_PERSISTENT_STORAGE) {
         await hybridStorage.connect();
-
-        // 启动时清理损坏/临时/遗留/重复房间
-        try {
-            const cleanedEmpty = await mongoStorage.cleanupEmptyMatches();
-            if (cleanedEmpty > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEmptyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理空房间失败:', err);
-        }
-
-        try {
-            const cleanedEphemeral = await hybridStorage.cleanupEphemeralMatches();
-            if (cleanedEphemeral > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理临时房间失败:', err);
-        }
 
         // 定时清理断线超时的临时房间 + 过期 TTL 房间
         setInterval(async () => {
@@ -1660,39 +1829,6 @@ async function startServer() {
                 logger.error('[MongoStorage] 定时清理过期 TTL 房间失败:', err);
             }
         }, 60 * 1000);
-
-        try {
-            const cleanedExpiredTtl = await mongoStorage.cleanupExpiredTtlMatches();
-            if (cleanedExpiredTtl > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupExpiredTtlMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理过期 TTL 房间失败:', err);
-        }
-
-        try {
-            const cleanedLegacy = await mongoStorage.cleanupLegacyMatches(0);
-            if (cleanedLegacy > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupLegacyMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理遗留房间失败:', err);
-        }
-
-        try {
-            const cleanedDuplicate = await mongoStorage.cleanupDuplicateOwnerMatches();
-            if (cleanedDuplicate > 0) {
-                for (const gameName of SUPPORTED_GAMES) {
-                    void broadcastLobbySnapshot(gameName, 'cleanupDuplicateOwnerMatches:boot');
-                }
-            }
-        } catch (err) {
-            logger.error('[MongoStorage] 启动清理重复 ownerKey 房间失败:', err);
-        }
     }
 
     // 启动游戏传输层
@@ -1700,10 +1836,22 @@ async function startServer() {
 
     // 启动 HTTP 服务器
     httpServer.listen(GAME_SERVER_PORT, () => {
+        logger.info('[GameServer] 启动完成', {
+            port: GAME_SERVER_PORT,
+            bootstrap_ms: Date.now() - bootstrapStartedAt,
+            registered_engines: SERVER_ENGINES.length,
+            registered_game_ids: SERVER_GAME_IDS.length,
+            use_persistent_storage: USE_PERSISTENT_STORAGE,
+        });
         logger.info(`🎮 游戏服务器运行在 http://localhost:${GAME_SERVER_PORT}`);
         logger.info('📡 大厅广播服务已启动 (namespace: /lobby-socket)');
-        logger.info(`🎯 游戏传输层已启动 (namespace: /game)`);
+        logger.info('🎯 游戏传输层已启动 (namespace: /game)');
         logger.info(`📦 已注册 ${SERVER_ENGINES.length} 个游戏引擎, ${SERVER_GAME_IDS.length} 个游戏 ID`);
+
+        if (USE_PERSISTENT_STORAGE) {
+            // 先对外提供服务，再在后台执行启动清理，避免清理耗时阻塞 ready
+            void runStartupCleanupInBackground();
+        }
     });
 }
 

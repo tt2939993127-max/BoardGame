@@ -68,8 +68,20 @@ export function markMatchCleanupNoticeSeen(notice: MatchCleanupNotice): void {
     }
 }
 
+export function isMatchNotFoundError(err: unknown): boolean {
+    const status = typeof err === 'object' && err !== null && 'status' in err
+        ? (err as { status?: unknown }).status
+        : undefined;
+    if (status === 404) {
+        return true;
+    }
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return errorMessage.includes('404') || errorMessage.toLowerCase().includes('not found');
+}
+
 const OWNER_ACTIVE_MATCH_KEY = 'owner_active_match';
 const MATCH_CREDENTIALS_PREFIX = 'match_creds_';
+const MATCH_AI_CREDENTIALS_PREFIX = 'match_ai_creds_';
 const OWNER_ACTIVE_MATCH_SUPPRESS_KEY = 'owner_active_match_suppressed';
 const MATCH_CLEANUP_NOTICE_KEY = 'match_cleanup_notice';
 const MATCH_CLEANUP_NOTICE_SEEN_KEY = 'match_cleanup_notice_seen';
@@ -135,6 +147,8 @@ export interface StoredMatchCredentials {
     updatedAt?: number;
 }
 
+export type StoredAiSeatCredentials = Record<string, string>;
+
 export type MatchSeatValidationReason = 'missing_seat' | 'seat_empty' | 'name_mismatch';
 
 export type MatchSeatValidationResult = {
@@ -159,9 +173,39 @@ export interface ExitMatchResult {
 export function clearMatchCredentials(matchID: string): void {
     if (!matchID) return;
     localStorage.removeItem(`${MATCH_CREDENTIALS_PREFIX}${matchID}`);
+    localStorage.removeItem(`${MATCH_AI_CREDENTIALS_PREFIX}${matchID}`);
 
     // 让同一标签页监听器（Home 活跃对局横幅、lobby 弹窗）立即刷新。
     // 原生 `storage` 事件不会在同一 document 触发。
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('match-credentials-changed'));
+    }
+}
+
+export function readStoredAiSeatCredentials(matchID: string): StoredAiSeatCredentials {
+    if (!matchID) return {};
+    try {
+        const raw = localStorage.getItem(`${MATCH_AI_CREDENTIALS_PREFIX}${matchID}`);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        return Object.fromEntries(
+            Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+        );
+    } catch {
+        return {};
+    }
+}
+
+export function persistAiSeatCredentials(matchID: string, seatCredentials: StoredAiSeatCredentials): void {
+    if (!matchID) return;
+    const normalized = Object.fromEntries(
+        Object.entries(seatCredentials).filter((entry): entry is [string, string] => Boolean(entry[0]) && Boolean(entry[1])),
+    );
+    if (Object.keys(normalized).length === 0) {
+        localStorage.removeItem(`${MATCH_AI_CREDENTIALS_PREFIX}${matchID}`);
+    } else {
+        localStorage.setItem(`${MATCH_AI_CREDENTIALS_PREFIX}${matchID}`, JSON.stringify(normalized));
+    }
     if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('match-credentials-changed'));
     }
@@ -436,7 +480,7 @@ export async function destroyMatch(
 
         // 不做“兜底直连”以掩盖问题：销毁必须明确走 proxy 或生产反代。
         // 诊断：
-        // - 5173 404：Vite proxy 未生效（或请求没到 Vite dev server）。
+        // - 4173 404：Vite proxy 未生效（或请求没到 Vite dev server）。
         // - 18000 404：后端没有命中 destroy 中间件（中间件顺序或路由吞掉）。
 
         const response = await fetch(url, {
@@ -521,12 +565,14 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
 
     // 获取房间状态（无外部依赖，引用稳定）
     const fetchMatchStatus = useCallback(async () => {
-        const currentMatchID = matchIDRef.current;
-        if (!currentMatchID) return;
+        const requestMatchID = matchIDRef.current;
+        if (!requestMatchID) return;
 
         try {
             const effectiveGameName = gameNameRef.current || 'tictactoe';
-            const match = await matchApi.getMatch(effectiveGameName, currentMatchID);
+            const match = await matchApi.getMatch(effectiveGameName, requestMatchID);
+            // 切换到新房间后，忽略旧请求的迟到结果，避免旧房间状态污染
+            if (requestMatchID !== matchIDRef.current) return;
             setPlayers(match.players.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -536,15 +582,14 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             lastFailureAtRef.current = null;
             setError(null);
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
             console.error('获取房间状态失败:', err);
-            
+            // 切房间后旧请求报错也直接忽略
+            if (requestMatchID !== matchIDRef.current) return;
             // 404 错误（房间不存在）立即触发错误状态，无需等待 3 次失败
-            const is404 = errorMessage.includes('404') || errorMessage.includes('not found');
+            const is404 = isMatchNotFoundError(err);
             if (is404) {
-                clearMatchCredentials(currentMatchID);
+                clearMatchCredentials(requestMatchID);
                 setError('房间不存在或已被删除');
-                setIsLoading(false);
                 return;
             }
             
@@ -560,9 +605,20 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
                 setError(null);
             }
         } finally {
-            setIsLoading(false);
+            if (requestMatchID === matchIDRef.current) {
+                setIsLoading(false);
+            }
         }
     }, []); // 依赖为空，引用永远稳定
+
+    // 切换房间时重置状态，避免旧房间错误态阻塞新房间轮询
+    useEffect(() => {
+        failureCountRef.current = 0;
+        lastFailureAtRef.current = null;
+        setError(null);
+        setPlayers([]);
+        setIsLoading(Boolean(matchID));
+    }, [matchID, gameName]);
 
     // 定期轮询房间状态
     useEffect(() => {
@@ -621,10 +677,9 @@ export async function leaveMatch(
         clearMatchCredentials(matchID);
         return { success: true };
     } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('离开房间失败:', err);
         // 404 说明房间已不存在，视为成功并清理凭据
-        if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        if (isMatchNotFoundError(err)) {
             clearMatchCredentials(matchID);
             return { success: true, cleanedLocal: true, error: 'not_found' };
         }

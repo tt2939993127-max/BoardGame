@@ -1,5 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const workspaceRoot = fileURLToPath(new URL('.', import.meta.url));
+const rootSetupFile = path.resolve(workspaceRoot, 'vitest.setup.ts');
 
 /**
  * 核心功能测试配置
@@ -13,9 +17,14 @@ import path from 'path';
  * 命令：npm run test:games:core
  */
 export default defineConfig({
+    server: {
+        fs: {
+            strict: false,
+        },
+    },
     resolve: {
         alias: {
-            '@locales': path.resolve(__dirname, './public/locales'),
+            '@locales': path.resolve(workspaceRoot, 'public/locales'),
         },
     },
     esbuild: {
@@ -31,6 +40,10 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'jsdom',
+        // 当前 Windows 环境下 forks worker 偶发启动超时，核心校验固定为单线程串行运行。
+        pool: 'threads',
+        fileParallelism: false,
+        maxWorkers: 1,
         include: [
             'src/games/**/__tests__/**/*.test.{ts,tsx}',
         ],
@@ -52,6 +65,6 @@ export default defineConfig({
             '**/.{idea,git,cache,output,temp}/**',
         ],
         testTimeout: 180000,
-        setupFiles: ['./vitest.setup.ts'],
+        setupFiles: [rootSetupFile],
     },
 });

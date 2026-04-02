@@ -30,17 +30,19 @@ import { matchSocket, type MatchChatMessage } from '../../../../services/matchSo
 import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../../../shared/chat';
 import { useModalStack } from '../../../../contexts/ModalStackContext';
 import { FriendsChatModal } from '../../../social/FriendsChatModal';
-import { useSocial } from '../../../../contexts/SocialContext';
+import { useOptionalSocial } from '../../../../contexts/SocialContext';
 import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
 import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
 import { generateId, copyToClipboard } from '../../../../lib/utils';
 import { OpponentOfflineBanner } from './OpponentOfflineBanner';
+import { logger } from '../../../../lib/logger';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
     matchId?: string;
     gameId?: string;
+    localModeLabel?: string;
     isHost?: boolean;
     credentials?: string;
     myPlayerId?: string | null;
@@ -93,6 +95,7 @@ export const GameHUD = ({
     mode,
     matchId,
     gameId: _gameId,
+    localModeLabel,
     isHost,
     credentials,
     myPlayerId,
@@ -120,7 +123,7 @@ export const GameHUD = ({
 
     const locale = i18n.language;
     const { openModal, closeModal } = useModalStack();
-    const { unreadTotal, requests } = useSocial();
+    const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const [copied, setCopied] = useState(false);
 
     // 撤回状态
@@ -138,9 +141,13 @@ export const GameHUD = ({
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
     const isChatReadonly = isSpectator;
-    const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const [unreadChatState, setUnreadChatState] = useState<{ matchId?: string; count: number }>({
+        matchId,
+        count: 0,
+    });
     const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
     const isChatPanelOpenRef = useRef(false);
+    const unreadChatCount = unreadChatState.matchId === matchId ? unreadChatState.count : 0;
 
     const myDisplayName = useMemo(() => {
         if (user?.username) return user.username;
@@ -148,7 +155,7 @@ export const GameHUD = ({
         return matched?.name ?? (myPlayerId != null
             ? t('hud.status.player', { id: myPlayerId })
             : t('hud.status.playerUnknown'));
-    }, [myPlayerId, players, user?.username]);
+    }, [myPlayerId, players, t, user?.username]);
 
     const playerNameMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -175,24 +182,34 @@ export const GameHUD = ({
         return isSelfChatMessage(message, myPlayerId, myDisplayName);
     }, [myPlayerId, myDisplayName]);
 
+    const resetUnreadChatCount = useCallback(() => {
+        setUnreadChatState({
+            matchId,
+            count: 0,
+        });
+    }, [matchId]);
+
+    const incrementUnreadChatCount = useCallback(() => {
+        setUnreadChatState((prev) => ({
+            matchId,
+            count: (prev.matchId === matchId ? prev.count : 0) + 1,
+        }));
+    }, [matchId]);
+
+    const handleChatPanelOpenChange = useCallback((isActive: boolean) => {
+        setIsChatPanelOpen(isActive);
+        if (isActive) {
+            resetUnreadChatCount();
+        }
+    }, [resetUnreadChatCount]);
+
     const latestIncomingMessage = useMemo(() => {
         return getLatestIncomingMessage(chatMessages, myPlayerId, myDisplayName);
     }, [chatMessages, myPlayerId, myDisplayName]);
 
-    // 临时日志：确认局内聊天面板内容高度/布局是否生效（问题定位后删除）
-    const chatPanelRef = useRef<HTMLDivElement>(null);
-    // 日志已移除：ChatPanel 布局调试已完成
-
     useEffect(() => {
         isChatPanelOpenRef.current = isChatPanelOpen;
-        if (isChatPanelOpen) {
-            setUnreadChatCount(0);
-        }
     }, [isChatPanelOpen]);
-
-    useEffect(() => {
-        setUnreadChatCount(0);
-    }, [matchId]);
 
     useEffect(() => {
         if (!isOnline || !matchId) return;
@@ -222,12 +239,17 @@ export const GameHUD = ({
                 const trimmed = next.length > MAX_CHAT_MESSAGES;
                 const nextMessages = trimChatMessages(next);
                 if (trimmed) {
-                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'unknown'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                    logger.warn('HUD 聊天消息达到裁剪阈值', {
+                        event: 'trim_messages',
+                        matchId: matchId ?? 'unknown',
+                        size: next.length,
+                        max: MAX_CHAT_MESSAGES,
+                    });
                 }
                 return nextMessages;
             });
             if (!isSelfMessage(message) && !isChatPanelOpenRef.current) {
-                setUnreadChatCount((prev) => prev + 1);
+                incrementUnreadChatCount();
             }
             setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
         });
@@ -237,7 +259,7 @@ export const GameHUD = ({
             unsubHistory();
             matchSocket.leaveChat();
         };
-    }, [isOnline, matchId, isSelfMessage]);
+    }, [incrementUnreadChatCount, isOnline, matchId, isSelfMessage]);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -277,7 +299,12 @@ export const GameHUD = ({
                 const trimmed = next.length > MAX_CHAT_MESSAGES;
                 const nextMessages = trimChatMessages(next);
                 if (trimmed) {
-                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'local'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                    logger.warn('HUD 聊天消息达到裁剪阈值', {
+                        event: 'trim_messages',
+                        matchId: matchId ?? 'local',
+                        size: next.length,
+                        max: MAX_CHAT_MESSAGES,
+                    });
                 }
                 return nextMessages;
             });
@@ -305,7 +332,7 @@ export const GameHUD = ({
                     await elem.webkitRequestFullscreen((Element as any).ALLOW_KEYBOARD_INPUT);
                 }
                 setIsFullscreen(true);
-            } catch (error) {
+            } catch {
                 toast.error(t('hud.fullscreen.enterFailed'));
             }
             return;
@@ -322,7 +349,7 @@ export const GameHUD = ({
                 await doc.webkitExitFullscreen();
             }
             setIsFullscreen(false);
-        } catch (error) {
+        } catch {
             toast.error(t('hud.fullscreen.exitFailed'));
         }
     };
@@ -371,7 +398,7 @@ export const GameHUD = ({
         icon: <ListOrdered size={20} />,
         label: t('hud.actions.actionLog'),
         content: (
-            <div className="flex flex-col gap-2 pr-1">
+            <div className="flex flex-col gap-2 pr-0.5 sm:pr-1">
                 {actionLogRows.length === 0 ? (
                     <div className="text-xs text-white/40 text-center py-6">
                         {t('hud.actionLog.empty')}
@@ -379,12 +406,12 @@ export const GameHUD = ({
                 ) : (
                     <div className="flex flex-col gap-2">
                         {actionLogRows.map((row) => (
-                            <div key={row.id} className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-                                <div className="flex items-center justify-between text-[10px] text-white/50">
-                                    <span className="font-mono">{row.timeLabel}</span>
-                                    <span className="font-semibold text-white/70">{row.playerLabel}</span>
+                            <div key={row.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5" data-testid="hud-action-log-row">
+                                <div className="flex flex-col gap-1 text-[10px] text-white/50 sm:flex-row sm:items-center sm:justify-between" data-testid="hud-action-log-meta">
+                                    <span className="font-mono leading-none">{row.timeLabel}</span>
+                                    <span className="font-semibold leading-tight text-white/70 break-words sm:max-w-[10rem] sm:text-right">{row.playerLabel}</span>
                                 </div>
-                                <div className="text-xs text-white/90 mt-1 leading-relaxed">
+                                <div className="mt-1.5 break-words text-xs leading-relaxed text-white/90">
                                     <ActionLogSegments
                                         segments={row.segments}
                                         locale={locale}
@@ -401,8 +428,8 @@ export const GameHUD = ({
     };
 
     // 0. 主按钮逻辑
-    // 在线模式：聊天为主按钮
-    // 本地模式：设置为主按钮（聊天无效）
+    // 在线/教程模式：聊天为主按钮
+    // 本地模式：无聊天主按钮，设置按钮应作为离主球最近的第一个卫星按钮
     const useChatAsMain = isOnline || isTutorial;
 
     if (useChatAsMain) {
@@ -421,9 +448,9 @@ export const GameHUD = ({
                     })}
                 </div>
             ) : undefined,
-            onActivate: (isActive) => setIsChatPanelOpen(isActive),
+            onActivate: handleChatPanelOpenChange,
             content: (
-                <div ref={chatPanelRef} className="flex flex-col h-80">
+                <div className="flex flex-col h-80">
                     {isOnline && (
                         <div className="mb-2 space-y-1 text-[10px] text-white/60">
                             <div className="flex items-center gap-2">
@@ -513,7 +540,7 @@ export const GameHUD = ({
                         <div className="flex items-center gap-2 mb-2">
                             <Monitor size={14} className="text-neon-blue" />
                             <span className="text-neon-blue font-bold text-xs uppercase tracking-wider">
-                                {t('hud.mode.local')}
+                                {localModeLabel ?? t('hud.mode.local')}
                             </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
@@ -568,12 +595,13 @@ export const GameHUD = ({
     };
 
     // ===== 联机模式卫星按钮顺序（push 顺序 = 从上到下显示顺序） =====
-    // 目标：退出 → 反馈 → 社交 → 全屏 → 设置 → 撤回 → 操作日志 → 聊天(主按钮)
+    // 目标：退出 → 反馈 → 社交 → 全屏 → 撤回 → 操作日志 → 设置 → 聊天(主按钮)
 
     const exitAction: FabAction = {
         id: 'exit',
         icon: <LogOut size={20} />,
         label: t('hud.actions.exit'),
+        mobilePanelVariant: 'sheet',
         content: (
             <div className="space-y-3">
                 {/* 本地模式：只显示返回大厅 */}
@@ -587,7 +615,7 @@ export const GameHUD = ({
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 transition-all font-bold text-xs"
                     >
                         <LogOut size={16} />
-                        <div className="flex flex-col items-start">
+                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                             <span>{t('hud.actions.backToLobby')}</span>
                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.backToLobbyHint')}</span>
                         </div>
@@ -608,7 +636,7 @@ export const GameHUD = ({
                                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all font-bold text-xs"
                                     >
                                         <Trash2 size={16} />
-                                        <div className="flex flex-col items-start">
+                                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                             <span>{t('hud.actions.destroy')}</span>
                                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.destroyHint')}</span>
                                         </div>
@@ -623,7 +651,7 @@ export const GameHUD = ({
                                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all font-bold text-xs"
                                     >
                                         <LogOut size={16} />
-                                        <div className="flex flex-col items-start">
+                                        <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                             <span>{t('hud.actions.leaveRoom')}</span>
                                             <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.leaveRoomHint')}</span>
                                         </div>
@@ -640,7 +668,7 @@ export const GameHUD = ({
                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-all font-bold text-xs"
                                 >
                                     <LogOut size={16} />
-                                    <div className="flex flex-col items-start">
+                                    <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                         <span>{t('hud.actions.tempLeave')}</span>
                                         <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.tempLeaveHint')}</span>
                                     </div>
@@ -656,7 +684,7 @@ export const GameHUD = ({
                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 transition-all font-bold text-xs"
                             >
                                 <LogOut size={16} />
-                                <div className="flex flex-col items-start">
+                                <div className="min-w-0 flex-1 text-left flex flex-col items-start">
                                     <span>{t('hud.actions.forceExit')}</span>
                                     <span className="text-[9px] opacity-60 font-normal">{t('hud.actions.forceExitHint')}</span>
                                 </div>
@@ -688,6 +716,7 @@ export const GameHUD = ({
             label: t('hud.actions.social'),
             active: totalBadge > 0,
             onClick: () => {
+                ensureRealtimeConnection();
                 if (socialModalId) {
                     closeModal(socialModalId);
                     return;
@@ -714,12 +743,7 @@ export const GameHUD = ({
         onClick: toggleFullscreen,
     });
 
-    // 5. 设置
-    if (useChatAsMain) {
-        items.push(settingsAction);
-    }
-
-    // 6. 撤回
+    // 5. 撤回
     if (!isSpectator) {
         if (!undoState) {
             items.push({
@@ -796,15 +820,20 @@ export const GameHUD = ({
         }
     }
 
-    // 7. 操作日志
+    // 6. 操作日志
     if (useChatAsMain) {
         items.push(actionLogAction);
     }
 
+    // 7. 设置（联机/教程模式中紧贴聊天主按钮）
+    if (useChatAsMain) {
+        items.push(settingsAction);
+    }
+
     // ===== 本地模式卫星按钮顺序 =====
     if (!useChatAsMain) {
-        items.push(settingsAction);
         items.push(actionLogAction);
+        items.push(settingsAction);
     }
 
     return (
@@ -827,6 +856,12 @@ export const GameHUD = ({
             {showFeedback && (
                 <FeedbackModal
                     onClose={() => setShowFeedback(false)}
+                    runtimeContext={{
+                        mode,
+                        matchId,
+                        playerId: myPlayerId,
+                        gameId: _gameId,
+                    }}
                     actionLogText={(() => {
                         const G = undoState?.G;
                         if (!G) return undefined;

@@ -1,77 +1,79 @@
-# Task Plan: Dice Throne 攻击修正持续存在问题排查
+# Task Plan: Smash Up Oops 四派系接入与玩法实施
 
 ## Goal
-- 核对 `dicethrone` 中“攻击修正”在未立即发起攻击时是否会异常持续存在。
-- 完成从规则到实现的调用链检查，确认是规则如此、还是实现缺陷。
-- 若确认是缺陷，则做最小且架构正确的修复，并补充针对性验证。
-
-## Current Phase
-- Phase 1：读取规则与相关规范
+> 分两阶段完成 Smash Up `Oops, You Did It Again` 四个派系（埃及、牛仔、武士、维京人）的完整交付：先完成图片 intake、可复刻工作流与静态接入；再按 `Ancient Egyptians → Vikings → Cowboys → Samurai` 的顺序逐派系实施正式玩法、补齐 UI、新交互类型 E2E、统一审计与证据留档。
 
 ## Phases
 
-### Phase 1：读取规则与相关规范
-- [ ] 阅读 `src/games/dicethrone/rule/` 规则文档中的攻击/攻击修正相关描述
-- [ ] 阅读 `docs/ai-rules/engine-systems.md` 中与状态、命令、系统有关的规范
-- [ ] 记录本次任务的已知事实与待验证点
-- **Status:** in_progress
+- [x] **Phase 1: 发现与设计（intake）**
+  - [x] 阅读 AGENTS、OpenSpec、资产/录入/测试/审计规范
+  - [x] 创建独立 worktree 与任务分支
+  - [x] 盘点现有 Smash Up 图片接入链路、脚本、数据结构与目标素材
+  - [x] 创建 OpenSpec proposal/tasks/design/spec delta
 
-### Phase 2：定位攻击修正数据链路
-- [ ] 搜索 `dicethrone` 中“攻击修正”相关状态字段、命令、事件、选择器
-- [ ] 检查写入链：攻击修正在哪里创建、何时生效、何时清理
-- [ ] 检查消费链：攻击流程在哪里读取攻击修正
-- **Status:** pending
+- [x] **Phase 2: 资产处理与录入（intake）**
+  - [x] 锁定权威来源与图片清单，建立 Markdown 核对契约
+  - [x] 完成图片压缩、图集/切片配置与资源落盘
+  - [x] 完成 i18n / 静态数据 / atlas / faction metadata 的同步录入
+  - [x] 沉淀“给一批图片即可录入”的复刻工作流文档
 
-### Phase 3：确认根因并修复
-- [ ] 对照规则判断当前行为是否正确
-- [ ] 若存在缺陷，实施最小修复
-- [ ] 同步更新文档或说明（若规则说明缺失/不一致）
-- **Status:** pending
+- [x] **Phase 3: 审计与验证（intake）**
+  - [x] 对照描述、资源路径、加载链路做 intake 审计
+  - [x] 运行相关 Vitest / 审计脚本
+  - [x] 编写并运行相关 E2E，用截图留证
+  - [x] 汇总 evidence、结果与残留风险
 
-### Phase 4：验证
-- [ ] 运行与本次修复最相关的测试
-- [ ] 必要时补充最小测试覆盖正常与边界场景
-- [ ] 记录验证结果
-- **Status:** pending
+- [x] **Phase 4: 玩法提案与实施设计（gameplay）**
+  - [x] 创建 `add-smashup-oops-faction-gameplay` OpenSpec 变更
+  - [x] 明确用户要求的实施顺序：逐派系实现，全部完成后统一审计与 E2E
+  - [x] 将 bury UI 与新交互类型纳入正式 scope
+  - [x] 运行 `openspec validate add-smashup-oops-faction-gameplay --strict --no-interactive`
+  - [x] 等待用户确认 proposal 后进入 `Ancient Egyptians`
 
-### Phase 5：交付
-- [ ] 更新 `findings.md` 与 `progress.md`
-- [ ] 输出调用链检查报告、根因、修复点与验证结果
-- [ ] 给出下一步建议
-- **Status:** pending
+- [x] **Phase 5: Ancient Egyptians**
+  - [x] 补齐 card defs 元数据与 `abilityTags`
+  - [x] 实现埋葬、翻开、替代去向与相关 base/action/minion ability
+  - [x] 补齐 owner-visible bury UI 与对手隐藏占位
+  - [x] 补领域测试与统一 E2E 证据收口
 
-## Key Questions
-1. `dicethrone` 中“攻击修正”在领域层对应的状态字段是什么？
-2. 该状态理论上应持续到“下一次攻击”，还是应在回合/阶段结束前清除？
-3. 当前问题出在写入、消费还是清理链路？
-4. 修复后是否会影响未来 100 个游戏的通用性？
+- [x] **Phase 6: Vikings**
+  - [x] 按官方规则书 / Fandom 口径修正 defs、locale 与 ability metadata
+  - [x] 实现 deck-top / discard / steal / extra-action 联动与相关基地能力
+  - [x] 补领域测试并完成增量门禁验证
+  - [x] 统一 E2E 与更严格语义收口已在四派系统一审计阶段完成
 
-## Decisions Made
-| Decision | Rationale |
-|----------|-----------|
-| 先查规则再查代码 | 先确认期望行为，避免按错误假设修代码 |
-| 先做全链路检查再决定是否修复 | 遵守 bug 排查规范，避免盲改 |
-| 使用项目根目录计划文件持续记录 | 便于中断恢复与审计 |
+- [x] **Phase 7: Cowboys**
+  - [x] 实现官方 duel 内核、move / destroy / ongoing draw 与相关 metadata
+  - [x] 补决斗/目标选择最小交互断言
+  - [x] 补完整 duel 浏览器 E2E 与证据收口
 
-## Errors Encountered
-| Error | Attempt | Resolution |
-|-------|---------|------------|
-| 暂无 | - | - |
+- [x] **Phase 8: Samurai**
+  - [x] 按官方规则书 / Fandom 口径修正 defs、locale 与 ability metadata
+  - [x] 实现 honor / duel / destroy / temporary-buff / ongoing draw 与相关基地能力
+  - [x] Samurai 专项浏览器 E2E、临时触发精细语义与更严格审计已在统一审计阶段完成
 
----
+- [x] **Phase 9: 统一审计与收尾**
+  - [x] 四派系完成后再统一做 gameplay 审计
+  - [x] 运行相关 Vitest / typecheck / OpenSpec 校验
+  - [x] 运行覆盖新交互类型的 E2E 并留证
+  - [x] 汇总最终 evidence、残留风险与后续扩展点
 
-## Addendum（2026-03-10）：传输层状态注入 P1 收尾
+## Technical Decisions
+| Decision | Rationale | Status |
+| :--- | :--- | :--- |
+| 使用独立 worktree `feat/smashup-base-faction-assets` | 根工作区已有并行任务与规划文件，隔离当前任务避免串改 | Approved |
+| 使用 OpenSpec + planning-with-files 双轨记录 | 本次既要落地实现，也要沉淀可复刻流程和验收证据 | Approved |
+| 以用户提供图片作为当前任务的直接权威来源 | 符合数据录入规范第 3 优先级，可直接用于资源与索引录入 | Approved |
+| Smash Up 规则文本与审计必须走 Wiki 爬虫 | 项目专用强制规范，不能只凭图片或记忆录入 | Approved |
+| 本轮 scope 以 intake/静态接入为准 | 用户要求整条资源接入链路，但 OpenSpec 已收束为图片、atlas、静态数据、文档、测试、E2E；不在本 change 内补完四派系完整 gameplay ability | Approved |
+| `aiji.png` 按 `7x7`、`aiji_base.png` 按 `2x4` row-major 切片 | 已通过直接看图确认 48 张卡 + 1 尾格、8 张基地；后续 atlas/index 以此为唯一切片基准 | Approved |
+| 武士基地 defId 使用 canonical 英文名，图面英文差异写入证据文档 | 图面为 `Kyuden Konbini / Sakura Shigemi`，TTS / Wiki canonical 为 `Shogun's Palace / Sakura Garden`；运行时名称与来源说明必须分离 | Approved |
+| 先完整录入 locale 文本，再最小化卡牌结构标签 | 为避免把“未实现玩法”误录成“已实现 ability”，本轮卡牌 defs 仅承载图片、数量、力量、所属派系与最小结构，详细文本放入 locale | Approved |
+| gameplay 以独立 OpenSpec change 推进，而不与 intake 混写 | intake 已完成并可单独验收；玩法补完涉及新交互类型、UI 与审计范围，必须单独建模 | Approved |
+| gameplay 实施顺序固定为 `Ancient Egyptians → Vikings → Cowboys → Samurai` | 先打通 bury 主链路与 UI，再做 duel / movement / replacement，更容易收敛和审计 | Approved |
+| bury UI 必须纳入 Ancient Egyptians 第一波范围 | 用户已指出吸血鬼 pod 时 bury 体系只有领域逻辑，没有正式 UI；若继续只做逻辑会重复留下未完成实现 | Approved |
 
-### Goal
-- 核对并收尾 `src/engine/transport/react.tsx` 与 `src/engine/transport/server.ts` 两个高优先级状态注入 / 鉴权问题。
-
-### Result
-- [x] 确认联机 `GameProvider` 的 `StateInjector` 已经只读，客户端不能再把 `playerView` 过滤后的状态回灌服务端。
-- [x] 确认 `/game` socket 不再暴露 `test:injectState`。
-- [x] 为 `/test/*` 路由补上座位级鉴权（`playerId + credentials`）。
-- [x] 为 `restore-state` 增加快照结构校验，避免无效状态直接注入权威状态。
-- [x] 跑通目标 Vitest 与 `npm run typecheck`。
-
-### Validation
-- `npx vitest run src/server/routes/__tests__/test.routes.test.ts src/engine/transport/__tests__/server.test.ts src/engine/transport/__tests__/server-injectState.test.ts --reporter=dot --silent --maxWorkers=1`
-- `npm run typecheck`
+## Critical Errors / Blockers
+| Error | Impact | Resolution |
+| :--- | :--- | :--- |
+| 根工作区 `task_plan.md/findings.md/progress.md` 已服务其他任务 | 不能在原工作区继续维护本次计划 | 新建独立 worktree 承载本任务 |

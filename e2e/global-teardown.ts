@@ -3,19 +3,38 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scripts/infra/e2e-port-config.js';
 import {
+    allocatePorts,
     cleanupAllWorkerPortFiles,
     cleanupPorts,
     cleanupWorkerPorts,
+    loadWorkerPorts,
+    releaseReservedPortsForScope,
     waitForPortsFree,
 } from '../scripts/infra/port-allocator.js';
+import { removeRuntime } from '../scripts/infra/e2e-runtime-registry.js';
+import { stopManagedRuntime } from '../scripts/infra/e2e-runtime-manager.mjs';
 
 interface RuntimeRecord {
     workerId: number;
     pid: number;
+    reusedExistingServers?: boolean;
+    ports?: {
+        frontend: number;
+        gameServer: number;
+        apiServer: number;
+    };
 }
 
-const PROCESS_FILE = path.join(process.cwd(), '.tmp', 'playwright-worker-runtime.json');
 const PORT_CLEANUP_TIMEOUT_MS = Number.parseInt(process.env.PW_PORT_CLEANUP_TIMEOUT_MS || '10000', 10);
+
+function getRuntimeScope(): string {
+    const normalized = (process.env.PW_RUNTIME_SCOPE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    return normalized || 'default';
+}
+
+function getProcessFilePath(): string {
+    return path.join(process.cwd(), '.tmp', `playwright-worker-runtime-${getRuntimeScope()}.json`);
+}
 
 function killProcessTree(pid: number): void {
     try {
@@ -36,31 +55,91 @@ export default async function globalTeardown() {
     const forceStartServers = process.env.PW_START_SERVERS === 'true';
     const shouldStartServers = forceStartServers || !useDevServers;
     const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+    const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
+    const managedRuntimeMode = process.env.PW_RUNTIME_MODE?.trim() || '';
+    const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
+    const isListOnly = process.env.PW_E2E_LIST_ONLY === 'true';
 
-    if (!shouldStartServers) {
+    if (!shouldStartServers || isListOnly) {
+        return;
+    }
+
+    if (workers <= 1 && shouldSkipBootstrap && managedRuntimeId) {
+        if (managedRuntimeMode === 'isolated-single') {
+            await stopManagedRuntime({
+                runtimeId: managedRuntimeId,
+                scope: getRuntimeScope(),
+                logger: console,
+            });
+        } else {
+            console.log(`♻️ 本次运行附着共享 runtime，teardown 不主动停止: ${managedRuntimeId}`);
+        }
+        cleanupAllWorkerPortFiles();
         return;
     }
 
     console.log(`\n🧹 清理${workers > 1 ? '多 worker 隔离' : '单 worker'} E2E 服务...\n`);
 
-    if (fs.existsSync(PROCESS_FILE)) {
-        const runtimes = JSON.parse(fs.readFileSync(PROCESS_FILE, 'utf-8')) as RuntimeRecord[];
-        for (const runtime of runtimes) {
-            killProcessTree(runtime.pid);
+    const processFile = getProcessFilePath();
+    let runtimes: RuntimeRecord[] = [];
+    let reusedExistingServers = false;
+    if (fs.existsSync(processFile)) {
+        try {
+            runtimes = JSON.parse(fs.readFileSync(processFile, 'utf-8')) as RuntimeRecord[];
+            reusedExistingServers = runtimes.length > 0 && runtimes.every(runtime => runtime.reusedExistingServers === true);
+            for (const runtime of runtimes) {
+                if (!runtime.reusedExistingServers && Number.isInteger(runtime.pid) && runtime.pid > 0) {
+                    killProcessTree(runtime.pid);
+                }
+            }
+        } finally {
+            try {
+                fs.unlinkSync(processFile);
+            } catch {
+                // ignore
+            }
         }
-        fs.unlinkSync(PROCESS_FILE);
     }
 
     if (workers <= 1) {
-        cleanupPorts(singleWorkerPorts, 'Single Worker');
-        await waitForPortsFree(toPortArray(singleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
+        const ownedSingleWorkerPorts = runtimes[0]?.ports ?? singleWorkerPorts;
+        if (!reusedExistingServers) {
+            cleanupPorts(ownedSingleWorkerPorts, 'Single Worker');
+            await waitForPortsFree(toPortArray(ownedSingleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
+        } else {
+            console.log('♻️ 本次运行复用了现有单 worker E2E 服务，teardown 不会停止共享服务。');
+        }
         cleanupAllWorkerPortFiles();
+        releaseReservedPortsForScope(getRuntimeScope());
+        removeRuntime(getRuntimeScope());
         return;
     }
 
-    for (let workerIndex = 0; workerIndex < workers; workerIndex++) {
-        cleanupWorkerPorts(workerIndex);
+    const recordedWorkerPorts = runtimes
+        .map(runtime => runtime.ports)
+        .filter((ports): ports is NonNullable<RuntimeRecord['ports']> => Boolean(ports));
+
+    if (recordedWorkerPorts.length > 0) {
+        for (const ports of recordedWorkerPorts) {
+            cleanupPorts(ports, 'Worker Runtime');
+        }
+    } else {
+        for (let workerIndex = 0; workerIndex < workers; workerIndex++) {
+            cleanupWorkerPorts(workerIndex);
+        }
+    }
+
+    const multiWorkerPorts = (recordedWorkerPorts.length > 0
+        ? recordedWorkerPorts
+        : Array.from({ length: workers }, (_, workerIndex) => (
+            loadWorkerPorts(workerIndex) ?? allocatePorts(workerIndex)
+        ))).flatMap(ports => toPortArray(ports));
+    const released = await waitForPortsFree(multiWorkerPorts, PORT_CLEANUP_TIMEOUT_MS);
+    if (!released) {
+        console.warn(`⚠️ 多 worker E2E 端口释放超时: ${multiWorkerPorts.join(', ')}`);
     }
 
     cleanupAllWorkerPortFiles();
+    releaseReservedPortsForScope(getRuntimeScope());
+    removeRuntime(getRuntimeScope());
 }

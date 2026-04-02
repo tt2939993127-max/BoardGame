@@ -61,6 +61,7 @@ function CardSpotlightQueueInner<TData = unknown>({
                 key={current.id}
                 className="fixed inset-0 flex items-center justify-center"
                 style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+                data-testid="card-spotlight-queue"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -74,6 +75,7 @@ function CardSpotlightQueueInner<TData = unknown>({
                 {/* 卡牌内容 */}
                 <motion.div
                     className="relative pointer-events-auto cursor-pointer"
+                    data-testid="card-spotlight-content"
                     initial={{ scale: 0.5, opacity: 0, y: 40 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.8, opacity: 0, y: -20 }}

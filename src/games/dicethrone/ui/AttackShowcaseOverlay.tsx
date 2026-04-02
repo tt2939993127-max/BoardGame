@@ -16,7 +16,10 @@ import { buildLocalizedImageSet } from '../../../core';
 import { UI_Z_INDEX } from '../../../core';
 import { GameButton } from './components/GameButton';
 import { ASSETS } from './assets';
-import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import {
+    getAbilitySlotLayoutForCharacter,
+    getPlayerBoardAspectRatio,
+} from './abilitySlotLayout';
 import type { AttackShowcaseData } from '../hooks/useAttackShowcase';
 
 interface AttackShowcaseOverlayProps {
@@ -30,17 +33,14 @@ interface AttackShowcaseOverlayProps {
     onDismiss: () => void;
 }
 
-/** 玩家面板原始宽高比（2048×1673） */
-const PLAYER_BOARD_ASPECT = 2048 / 1673;
-
 /**
  * 根据槽位百分比和面板宽高比，计算槽位的实际宽高比
  */
-function getSlotAspectRatio(slot: { w: number; h: number }): number {
+function getSlotAspectRatio(slot: { w: number; h: number }, playerBoardAspectRatio: number): number {
     // 槽位像素宽 = boardWidth × (slot.w / 100)
     // 槽位像素高 = boardHeight × (slot.h / 100)
     // ratio = pixelW / pixelH = (boardW × slot.w) / (boardH × slot.h) = ASPECT × slot.w / slot.h
-    return PLAYER_BOARD_ASPECT * slot.w / slot.h;
+    return playerBoardAspectRatio * slot.w / slot.h;
 }
 
 /**
@@ -52,7 +52,7 @@ const AbilitySlotCrop: React.FC<{
     slotId: string;
     locale?: string;
 }> = ({ characterId, slotId, locale }) => {
-    const slot = DEFAULT_ABILITY_SLOT_LAYOUT.find(s => s.id === slotId);
+    const slot = getAbilitySlotLayoutForCharacter(characterId).find(s => s.id === slotId);
     if (!slot) return null;
 
     const boardPath = ASSETS.PLAYER_BOARD(characterId);
@@ -86,12 +86,14 @@ export const AttackShowcaseOverlay: React.FC<AttackShowcaseOverlayProps> = ({
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const hasUpgradeCard = Boolean(data.upgradePreviewRef);
+    const layout = getAbilitySlotLayoutForCharacter(data.attackerCharacterId);
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(data.attackerCharacterId);
 
     // 根据槽位数据动态计算宽高比
     const slot = data.slotId
-        ? DEFAULT_ABILITY_SLOT_LAYOUT.find(s => s.id === data.slotId)
+        ? layout.find(s => s.id === data.slotId)
         : null;
-    const slotAspect = slot ? getSlotAspectRatio(slot) : 0.66;
+    const slotAspect = slot ? getSlotAspectRatio(slot, playerBoardAspectRatio) : 0.66;
     const isUltimate = data.slotId === 'ultimate';
 
     // 升级卡用卡牌比例 0.61；基础技能用槽位实际比例

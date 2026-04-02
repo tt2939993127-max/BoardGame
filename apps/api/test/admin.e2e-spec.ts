@@ -11,6 +11,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { AdminAuditLog, type AdminAuditLogDocument } from '../src/modules/auth/schemas/admin-audit-log.schema';
 import { AdminModule } from '../src/modules/admin/admin.module';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { Friend, type FriendDocument } from '../src/modules/friend/schemas/friend.schema';
@@ -21,14 +22,115 @@ import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from '../src/modules/ad
 import { UgcPackage, type UgcPackageDocument } from '../src/modules/ugc/schemas/ugc-package.schema';
 import { UgcAsset, type UgcAssetDocument } from '../src/modules/ugc/schemas/ugc-asset.schema';
 import { AdminService } from '../src/modules/admin/admin.service';
+import { GameChangelogModule } from '../src/modules/game-changelog/game-changelog.module';
+import { GameChangelog, type GameChangelogDocument } from '../src/modules/game-changelog/game-changelog.schema';
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
+
+describe('AdminService stats aggregation', () => {
+    it('应正确构建统计数据而不是把聚合结果错位到 todayMatches', async () => {
+        const userModel = {
+            countDocuments: vi
+                .fn()
+                .mockResolvedValueOnce(2)
+                .mockResolvedValueOnce(2)
+                .mockResolvedValueOnce(1),
+        };
+        const matchRecordModel = {
+            countDocuments: vi
+                .fn()
+                .mockResolvedValueOnce(5)
+                .mockResolvedValueOnce(2),
+            aggregate: vi.fn().mockResolvedValue([{ _id: 'tictactoe', count: 5 }]),
+        };
+        const cacheManager = {
+            get: vi.fn().mockResolvedValue(null),
+            set: vi.fn().mockResolvedValue(undefined),
+            del: vi.fn().mockResolvedValue(undefined),
+            store: {},
+        };
+
+        const service = new AdminService(
+            userModel as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            matchRecordModel as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            cacheManager as never,
+        );
+
+        vi.spyOn(service as never, 'getOnlineUserIds').mockResolvedValue([]);
+        vi.spyOn(service as never, 'countActiveUsers24h').mockResolvedValue(0);
+        vi.spyOn(service as never, 'getGamePlayStats').mockResolvedValue([]);
+
+        const stats = await service.getStats();
+
+        expect(stats.totalUsers).toBe(2);
+        expect(stats.todayUsers).toBe(2);
+        expect(stats.bannedUsers).toBe(1);
+        expect(stats.totalMatches).toBe(5);
+        expect(stats.todayMatches).toBe(2);
+        expect(stats.games).toEqual([{ name: 'tictactoe', count: 5 }]);
+    });
+
+    it('当游戏聚合结果异常为 undefined 时不应因 map 崩溃', async () => {
+        const userModel = {
+            countDocuments: vi
+                .fn()
+                .mockResolvedValueOnce(2)
+                .mockResolvedValueOnce(1)
+                .mockResolvedValueOnce(0),
+        };
+        const matchRecordModel = {
+            countDocuments: vi
+                .fn()
+                .mockResolvedValueOnce(3)
+                .mockResolvedValueOnce(1),
+            aggregate: vi.fn().mockResolvedValue(undefined),
+        };
+        const cacheManager = {
+            get: vi.fn().mockResolvedValue(null),
+            set: vi.fn().mockResolvedValue(undefined),
+            del: vi.fn().mockResolvedValue(undefined),
+            store: {},
+        };
+
+        const service = new AdminService(
+            userModel as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            matchRecordModel as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            cacheManager as never,
+        );
+
+        vi.spyOn(service as never, 'getOnlineUserIds').mockResolvedValue([]);
+        vi.spyOn(service as never, 'countActiveUsers24h').mockResolvedValue(0);
+        vi.spyOn(service as never, 'getGamePlayStats').mockResolvedValue([]);
+
+        const stats = await service.getStats();
+
+        expect(stats.totalUsers).toBe(2);
+        expect(stats.todayUsers).toBe(1);
+        expect(stats.bannedUsers).toBe(0);
+        expect(stats.totalMatches).toBe(3);
+        expect(stats.todayMatches).toBe(1);
+        expect(stats.games).toEqual([]);
+    });
+});
 
 // MongoDB 内存服务器在某些环境下启动很慢或超时，暂时跳过测试
 // 如需运行这些测试，请移除下面的 .skip
-describe.skip('Admin Module (e2e)', () => {
+describe('Admin Module (e2e)', () => {
     let mongo: MongoMemoryServer | null;
     let app: import('@nestjs/common').INestApplication;
     let userModel: Model<UserDocument>;
+    let adminAuditModel: Model<AdminAuditLogDocument>;
     let matchRecordModel: Model<MatchRecordDocument>;
     let roomMatchModel: Model<RoomMatchDocument>;
     let friendModel: Model<FriendDocument>;
@@ -58,6 +160,7 @@ describe.skip('Admin Module (e2e)', () => {
 
         app = moduleRef.createNestApplication();
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
+        adminAuditModel = moduleRef.get<Model<AdminAuditLogDocument>>(getModelToken(AdminAuditLog.name));
         authService = moduleRef.get<AuthService>(AuthService);
         matchRecordModel = moduleRef.get<Model<MatchRecordDocument>>(getModelToken(MatchRecord.name));
         roomMatchModel = moduleRef.get<Model<RoomMatchDocument>>(getModelToken(ROOM_MATCH_MODEL_NAME));
@@ -80,6 +183,7 @@ describe.skip('Admin Module (e2e)', () => {
     beforeEach(async () => {
         await Promise.all([
             userModel.deleteMany({}),
+            adminAuditModel.deleteMany({}),
             matchRecordModel.deleteMany({}),
             roomMatchModel.deleteMany({}),
             friendModel.deleteMany({}),
@@ -107,31 +211,54 @@ describe.skip('Admin Module (e2e)', () => {
         }
     });
 
+    const registerUser = async ({
+        username,
+        email,
+        code,
+        role = 'user',
+    }: {
+        username: string;
+        email: string;
+        code: string;
+        role?: 'user' | 'admin';
+    }) => {
+        await authService.storeEmailCode(email, code);
+        const registerRes = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username, email, code, password: 'pass1234' })
+            .expect(201);
+
+        const token = registerRes.body.token as string;
+        const userId = registerRes.body.user.id as string;
+
+        if (role !== 'user') {
+            await userModel.updateOne({ _id: userId }, { role });
+        }
+
+        return { token, userId, email };
+    };
+
     const seedUsers = async () => {
-        const adminEmail = 'admin-user@example.com';
-        const adminCode = '123456';
-        await authService.storeEmailCode(adminEmail, adminCode);
-        const adminRegister = await request(app.getHttpServer())
-            .post('/auth/register')
-            .send({ username: 'admin-user', email: adminEmail, code: adminCode, password: 'pass1234' })
-            .expect(201);
+        const admin = await registerUser({
+            username: 'admin-user',
+            email: 'admin-user@example.com',
+            code: '123456',
+            role: 'admin',
+        });
+        const user = await registerUser({
+            username: 'player-a',
+            email: 'player-a@example.com',
+            code: '654321',
+        });
 
-        const adminToken = adminRegister.body.token as string;
-        const adminId = adminRegister.body.user.id as string;
-        await userModel.updateOne({ _id: adminId }, { role: 'admin' });
-
-        const userEmail = 'player-a@example.com';
-        const userCode = '654321';
-        await authService.storeEmailCode(userEmail, userCode);
-        const userRegister = await request(app.getHttpServer())
-            .post('/auth/register')
-            .send({ username: 'player-a', email: userEmail, code: userCode, password: 'pass1234' })
-            .expect(201);
-
-        const userToken = userRegister.body.token as string;
-        const userId = userRegister.body.user.id as string;
-
-        return { adminToken, adminId, userToken, userId };
+        return {
+            adminToken: admin.token,
+            adminId: admin.userId,
+            adminEmail: admin.email,
+            userToken: user.token,
+            userId: user.userId,
+            userEmail: user.email,
+        };
     };
 
     const seedMatch = async () => {
@@ -262,6 +389,123 @@ describe.skip('Admin Module (e2e)', () => {
             .expect(200);
 
         expect(matchDetailRes.body.matchID).toBe(matchID);
+    });
+
+    it('绠＄悊鍛樺彲浠ヨ幏鍙栫暀瀛樹笌娲昏穬鍒嗗眰缁熻', async () => {
+        const now = Date.now();
+        const { adminToken, adminId, userId } = await seedUsers();
+        const retainedUser = await registerUser({
+            username: 'retained-player',
+            email: 'retained-player@example.com',
+            code: '111111',
+        });
+        const silentUser = await registerUser({
+            username: 'silent-player',
+            email: 'silent-player@example.com',
+            code: '222222',
+        });
+        const churnedUser = await registerUser({
+            username: 'churned-player',
+            email: 'churned-player@example.com',
+            code: '333333',
+        });
+        const bannedUser = await registerUser({
+            username: 'banned-player',
+            email: 'banned-player@example.com',
+            code: '444444',
+        });
+
+        await Promise.all([
+            userModel.collection.updateOne({ _id: new Types.ObjectId(adminId) }, { $set: { lastOnline: new Date(now - 60 * 60 * 1000) } }),
+            userModel.collection.updateOne({ _id: new Types.ObjectId(userId) }, { $set: { lastOnline: new Date(now - 24 * 60 * 60 * 1000) } }),
+            userModel.collection.updateOne(
+                { _id: new Types.ObjectId(retainedUser.userId) },
+                {
+                    $set: {
+                        createdAt: new Date(now - 2 * 24 * 60 * 60 * 1000),
+                        lastOnline: new Date(now - 24 * 60 * 60 * 1000),
+                    },
+                },
+            ),
+            userModel.collection.updateOne(
+                { _id: new Types.ObjectId(silentUser.userId) },
+                { $set: { lastOnline: new Date(now - 10 * 24 * 60 * 60 * 1000) } },
+            ),
+            userModel.collection.updateOne(
+                { _id: new Types.ObjectId(churnedUser.userId) },
+                { $set: { lastOnline: new Date(now - 40 * 24 * 60 * 60 * 1000) } },
+            ),
+            userModel.collection.updateOne(
+                { _id: new Types.ObjectId(bannedUser.userId) },
+                { $set: { banned: true, bannedAt: new Date(now - 2 * 60 * 60 * 1000) } },
+            ),
+        ]);
+
+        const retentionRes = await request(app.getHttpServer())
+            .get('/admin/stats/retention')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(retentionRes.body.items).toHaveLength(5);
+        const retentionMap = new Map(
+            retentionRes.body.items.map((item: { label: string; total: number; retained: number; rate: number }) => [item.label, item])
+        );
+        expect(retentionMap.get('次日留存')).toMatchObject({
+            total: 1,
+            retained: 1,
+            rate: 1,
+        });
+
+        const activityRes = await request(app.getHttpServer())
+            .get('/admin/stats/activity-tiers')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(activityRes.body.totalUsers).toBe(6);
+        const tierMap = new Map(
+            activityRes.body.tiers.map((item: { label: string; count: number }) => [item.label, item.count])
+        );
+        expect(tierMap.get('活跃')).toBe(3);
+        expect(tierMap.get('沉默')).toBe(1);
+        expect(tierMap.get('流失')).toBe(1);
+        expect(tierMap.get('封禁')).toBe(1);
+    });
+
+    it('管理员可以更新用户角色并写入审计日志', async () => {
+        const { adminToken, adminId, userId, userEmail } = await seedUsers();
+
+        const promoteRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'admin' })
+            .expect(200);
+
+        expect(promoteRes.body.user.role).toBe('admin');
+        expect(promoteRes.body.changed).toBe(true);
+
+        const promotedUser = await userModel.findById(userId).lean();
+        expect(promotedUser?.role).toBe('admin');
+
+        const demoteRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'user' })
+            .expect(200);
+
+        expect(demoteRes.body.user.role).toBe('user');
+        expect(demoteRes.body.changed).toBe(true);
+
+        const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
+        expect(logs).toHaveLength(2);
+        expect(logs.map(log => log.action)).toEqual(['change-role', 'change-role']);
+        expect(logs.every(log => log.status === 'updated')).toBe(true);
+        expect(logs.every(log => typeof log.message === 'string' && log.message.includes(`targetUserId=${userId}`))).toBe(true);
+
+        await request(app.getHttpServer())
+            .patch(`/admin/users/${adminId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'user' })
+            .expect(400);
     });
 
     it('封禁/解封用户流程', async () => {
@@ -465,7 +709,6 @@ describe.skip('Admin Module (e2e)', () => {
 
     it('删除用户 - 级联清理', async () => {
         const { adminToken, adminId, userId } = await seedUsers();
-        const otherId = new Types.ObjectId();
         await friendModel.create({ user: adminId, friend: userId, status: 'accepted' });
         await messageModel.create({ from: adminId, to: userId, content: 'hi', type: 'text' });
         await reviewModel.create({ user: userId, gameId: 'tictactoe', isPositive: true, content: '好玩' });
@@ -497,7 +740,9 @@ describe.skip('Admin Module (e2e)', () => {
         expect(friendCount).toBe(0);
         expect(messageCount).toBe(0);
         expect(reviewCount).toBe(0);
-        expect(match?.players?.some(player => player.name === '[已删除用户]')).toBe(true);
+        expect(
+            match?.players?.some(player => player.ownerKey === `deleted:${userId}` && player.name !== 'player-a')
+        ).toBe(true);
 
         await request(app.getHttpServer())
             .delete(`/admin/users/${adminId}`)
@@ -506,76 +751,550 @@ describe.skip('Admin Module (e2e)', () => {
     });
 });
 
-describe('AdminService.getRooms 容错', () => {
-    it('跳过异常房间并容忍旧 ownerKey 脏数据', async () => {
+describe('Admin user role update (e2e)', () => {
+    let mongo: MongoMemoryServer | null;
+    let app: import('@nestjs/common').INestApplication;
+    let userModel: Model<UserDocument>;
+    let adminAuditModel: Model<AdminAuditLogDocument>;
+    let authService: AuthService;
+
+    beforeAll(async () => {
+        const externalMongoUri = process.env.MONGO_URI;
+        mongo = externalMongoUri ? null : await MongoMemoryServer.create();
+        const mongoUri = externalMongoUri ?? mongo?.getUri();
+        if (!mongoUri) {
+            throw new Error('缺少 MongoDB 连接地址，请配置 MONGO_URI 或启用内存 MongoDB');
+        }
+
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                CacheModule.register({ isGlobal: true }),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_admin_role' } : undefined),
+                AuthModule,
+                AdminModule,
+            ],
+        }).compile();
+
+        app = moduleRef.createNestApplication();
+        userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
+        adminAuditModel = moduleRef.get<Model<AdminAuditLogDocument>>(getModelToken(AdminAuditLog.name));
+        authService = moduleRef.get<AuthService>(AuthService);
+        app.useGlobalPipes(
+            new ValidationPipe({
+                whitelist: true,
+                transform: true,
+            })
+        );
+        app.useGlobalFilters(new GlobalHttpExceptionFilter());
+        await app.init();
+    });
+
+    beforeEach(async () => {
+        await Promise.all([
+            userModel.deleteMany({}),
+            adminAuditModel.deleteMany({}),
+        ]);
+    });
+
+    afterAll(async () => {
+        if (app) {
+            await app.close();
+        }
+        if (mongo) {
+            await mongo.stop();
+        }
+    });
+
+    const seedUsers = async () => {
+        const adminEmail = 'admin-role@example.com';
+        const adminCode = '123456';
+        await authService.storeEmailCode(adminEmail, adminCode);
+        const adminRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'admin-role', email: adminEmail, code: adminCode, password: 'pass1234' })
+            .expect(201);
+
+        const adminToken = adminRegister.body.token as string;
+        const adminId = adminRegister.body.user.id as string;
+        await userModel.updateOne({ _id: adminId }, { role: 'admin' });
+
+        const userEmail = 'player-role@example.com';
+        const userCode = '654321';
+        await authService.storeEmailCode(userEmail, userCode);
+        const userRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'player-role', email: userEmail, code: userCode, password: 'pass1234' })
+            .expect(201);
+
+        return {
+            adminToken,
+            adminId,
+            adminEmail,
+            userToken: userRegister.body.token as string,
+            userId: userRegister.body.user.id as string,
+            userEmail,
+        };
+    };
+
+    it('更新用户角色并写入审计日志', async () => {
+        const { adminToken, adminId, adminEmail, userId, userEmail } = await seedUsers();
+
+        const promoteRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'admin' })
+            .expect(200);
+
+        expect(promoteRes.body.user.role).toBe('admin');
+        expect(promoteRes.body.changed).toBe(true);
+        expect((await userModel.findById(userId).lean())?.role).toBe('admin');
+
+        const demoteRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'user' })
+            .expect(200);
+
+        expect(demoteRes.body.user.role).toBe('user');
+        expect(demoteRes.body.changed).toBe(true);
+
+        await request(app.getHttpServer())
+            .patch(`/admin/users/${adminId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ role: 'user' })
+            .expect(400);
+
+        const logs = await adminAuditModel
+            .find({ targetEmail: { $in: [userEmail, adminEmail] } })
+            .sort({ createdAt: 1 })
+            .lean();
+
+        expect(logs.map(log => log.action)).toEqual(['change-role', 'change-role', 'change-role']);
+        expect(logs.map(log => log.status)).toEqual(['updated', 'updated', 'failed']);
+        expect(logs[0]?.targetEmail).toBe(userEmail);
+        expect(logs[2]?.targetEmail).toBe(adminEmail);
+        expect(logs[2]?.message).toContain('self_role_change_forbidden');
+    });
+
+    it('可将用户设置为 developer 并保存多个游戏', async () => {
+        const { adminToken, userId, userEmail } = await seedUsers();
+
+        const updateRes = await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                role: 'developer',
+                developerGameIds: ['smashup', 'dicethrone', 'smashup'],
+            })
+            .expect(200);
+
+        expect(updateRes.body.user.role).toBe('developer');
+        expect(updateRes.body.user.developerGameIds).toEqual(['smashup', 'dicethrone']);
+        expect(updateRes.body.changed).toBe(true);
+
+        const updatedUser = await userModel.findById(userId).lean();
+        expect(updatedUser?.role).toBe('developer');
+        expect(updatedUser?.developerGameIds).toEqual(['smashup', 'dicethrone']);
+
+        const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
+        expect(logs.at(-1)?.action).toBe('change-role');
+        expect(logs.at(-1)?.status).toBe('updated');
+        expect(logs.at(-1)?.message).toContain('developerGameIds=smashup,dicethrone');
+    });
+
+    it('将用户设置为 developer 但不分配游戏会被拒绝', async () => {
+        const { adminToken, userId, userEmail } = await seedUsers();
+
+        await request(app.getHttpServer())
+            .patch(`/admin/users/${userId}/role`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                role: 'developer',
+                developerGameIds: [],
+            })
+            .expect(400);
+
+        const updatedUser = await userModel.findById(userId).lean();
+        expect(updatedUser?.role).toBe('user');
+        expect(updatedUser?.developerGameIds ?? []).toEqual([]);
+
+        const logs = await adminAuditModel.find({ targetEmail: userEmail }).sort({ createdAt: 1 }).lean();
+        expect(logs.at(-1)?.action).toBe('change-role');
+        expect(logs.at(-1)?.status).toBe('failed');
+        expect(logs.at(-1)?.message).toContain('developer_games_required');
+    });
+
+    it('并发互相降权时仍会保留至少一名管理员', async () => {
+        const { adminToken, adminId, userToken, userId } = await seedUsers();
+        await userModel.updateOne({ _id: userId }, { role: 'admin' });
+
+        const [demotePeer, demoteActor] = await Promise.all([
+            request(app.getHttpServer())
+                .patch(`/admin/users/${userId}/role`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ role: 'user' }),
+            request(app.getHttpServer())
+                .patch(`/admin/users/${adminId}/role`)
+                .set('Authorization', `Bearer ${userToken}`)
+                .send({ role: 'user' }),
+        ]);
+
+        const statuses = [demotePeer.status, demoteActor.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 400]);
+        expect(await userModel.countDocuments({ role: 'admin' })).toBe(1);
+
+        const revokeLogs = await adminAuditModel
+            .find({ action: 'change-role' })
+            .sort({ createdAt: 1 })
+            .lean();
+
+        expect(revokeLogs).toHaveLength(2);
+        expect(revokeLogs.map((log) => log.status).sort()).toEqual(['failed', 'updated']);
+        expect(revokeLogs.some((log) => log.message?.includes('must_keep_one_admin'))).toBe(true);
+    });
+});
+
+describe('Game changelog access (e2e)', () => {
+    let mongo: MongoMemoryServer | null;
+    let app: import('@nestjs/common').INestApplication;
+    let userModel: Model<UserDocument>;
+    let changelogModel: Model<GameChangelogDocument>;
+    let authService: AuthService;
+
+    beforeAll(async () => {
+        const externalMongoUri = process.env.MONGO_URI;
+        mongo = externalMongoUri ? null : await MongoMemoryServer.create();
+        const mongoUri = externalMongoUri ?? mongo?.getUri();
+        if (!mongoUri) {
+            throw new Error('缺少 MongoDB 连接地址，请配置 MONGO_URI 或启用内存 MongoDB');
+        }
+
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                CacheModule.register({ isGlobal: true }),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_game_changelog' } : undefined),
+                AuthModule,
+                AdminModule,
+                GameChangelogModule,
+            ],
+        }).compile();
+
+        app = moduleRef.createNestApplication();
+        userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
+        changelogModel = moduleRef.get<Model<GameChangelogDocument>>(getModelToken(GameChangelog.name));
+        authService = moduleRef.get<AuthService>(AuthService);
+        app.useGlobalPipes(
+            new ValidationPipe({
+                whitelist: true,
+                transform: true,
+            })
+        );
+        app.useGlobalFilters(new GlobalHttpExceptionFilter());
+        await app.init();
+    });
+
+    beforeEach(async () => {
+        await Promise.all([
+            userModel.deleteMany({}),
+            changelogModel.deleteMany({}),
+        ]);
+    });
+
+    afterAll(async () => {
+        if (app) {
+            await app.close();
+        }
+        if (mongo) {
+            await mongo.stop();
+        }
+    });
+
+    const seedBackofficeUsers = async () => {
+        const adminEmail = 'admin-changelog@example.com';
+        const developerEmail = 'developer-changelog@example.com';
+
+        await authService.storeEmailCode(adminEmail, '123456');
+        const adminRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'admin-changelog', email: adminEmail, code: '123456', password: 'pass1234' })
+            .expect(201);
+        await userModel.updateOne({ _id: adminRegister.body.user.id }, { role: 'admin' });
+
+        await authService.storeEmailCode(developerEmail, '654321');
+        const developerRegister = await request(app.getHttpServer())
+            .post('/auth/register')
+            .send({ username: 'developer-changelog', email: developerEmail, code: '654321', password: 'pass1234' })
+            .expect(201);
+        await userModel.updateOne(
+            { _id: developerRegister.body.user.id },
+            {
+                role: 'developer',
+                developerGameIds: ['smashup', 'dicethrone'],
+            }
+        );
+
+        return {
+            adminId: adminRegister.body.user.id as string,
+            developerToken: developerRegister.body.token as string,
+        };
+    };
+
+    it('developer 只能读取并管理自己被分配的游戏', async () => {
+        const { adminId, developerToken } = await seedBackofficeUsers();
+        const now = new Date();
+
+        await changelogModel.create([
+            {
+                gameId: 'smashup',
+                title: 'Smash Up 更新',
+                content: '开发者可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+            {
+                gameId: 'tictactoe',
+                title: '井字棋更新',
+                content: '开发者不可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .expect(200);
+
+        expect(listRes.body.availableGameIds).toEqual(['smashup', 'dicethrone']);
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0]?.gameId).toBe('smashup');
+
+        await request(app.getHttpServer())
+            .post('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                gameId: 'tictactoe',
+                title: '越权更新',
+                content: '不应成功',
+            })
+            .expect(403);
+
+        const forbiddenTarget = await changelogModel.findOne({ gameId: 'tictactoe' }).lean();
+        expect(forbiddenTarget?._id).toBeDefined();
+
+        await request(app.getHttpServer())
+            .put(`/admin/game-changelogs/${forbiddenTarget!._id.toString()}`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                title: '越权修改',
+            })
+            .expect(403);
+
+        await request(app.getHttpServer())
+            .delete(`/admin/game-changelogs/${forbiddenTarget!._id.toString()}`)
+            .set('Authorization', `Bearer ${developerToken}`)
+            .expect(403);
+
+        const createRes = await request(app.getHttpServer())
+            .post('/admin/game-changelogs')
+            .set('Authorization', `Bearer ${developerToken}`)
+            .send({
+                gameId: 'dicethrone',
+                title: 'Dice Throne 更新',
+                versionLabel: 'v1.0.0',
+                content: '开发者可创建',
+                published: true,
+            })
+            .expect(201);
+
+        expect(createRes.body.changelog.gameId).toBe('dicethrone');
+        expect(createRes.body.changelog.published).toBe(true);
+    });
+
+    it('公开接口只返回已发布的游戏更新日志', async () => {
+        const { adminId } = await seedBackofficeUsers();
+        const now = new Date();
+
+        await changelogModel.create([
+            {
+                gameId: 'smashup',
+                title: '已发布日志',
+                content: '前台可见',
+                published: true,
+                pinned: true,
+                publishedAt: now,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+            {
+                gameId: 'smashup',
+                title: '草稿日志',
+                content: '前台不可见',
+                published: false,
+                pinned: false,
+                publishedAt: null,
+                createdBy: adminId,
+                updatedBy: adminId,
+                createdAt: now,
+                updatedAt: now,
+            },
+        ]);
+
+        const res = await request(app.getHttpServer())
+            .get('/game-changelogs/smashup')
+            .expect(200);
+
+        expect(res.body.changelogs).toHaveLength(1);
+        expect(res.body.changelogs[0]?.title).toBe('已发布日志');
+    });
+});
+
+describe('AdminService.getRooms compatibility', () => {
+    it('merges live room snapshots with persisted fallback data', async () => {
         const validOwnerId = new Types.ObjectId().toString();
         const ownerLean = vi.fn().mockResolvedValue([
             { _id: new Types.ObjectId(validOwnerId), username: 'owner-user' },
         ]);
         const ownerSelect = vi.fn().mockReturnValue({ lean: ownerLean });
         const userFind = vi.fn().mockReturnValue({ select: ownerSelect });
+        const roomMatchLean = vi.fn().mockResolvedValue([
+            {
+                matchID: 'legacy-room',
+                gameName: 'tictactoe',
+                metadata: {
+                    players: { '0': { name: 'legacy-player' } },
+                    setupData: {
+                        roomName: 'legacy-room',
+                        ownerKey: { legacy: true } as unknown as string,
+                    },
+                },
+                state: null,
+                createdAt: new Date('2026-03-20T10:00:00.000Z'),
+                updatedAt: new Date('2026-03-20T10:30:00.000Z'),
+            },
+        ]);
+        const roomMatchSelect = vi.fn().mockReturnValue({ lean: roomMatchLean });
+        const roomMatchFind = vi.fn().mockReturnValue({ select: roomMatchSelect });
         const cacheManager = {
             get: vi.fn(),
             set: vi.fn(),
             del: vi.fn(),
         };
         const now = Date.now();
-        const hybridStorage = {
-            listMatches: vi.fn().mockResolvedValue(['boom-room', 'legacy-room', 'good-room']),
-            fetch: vi.fn().mockImplementation(async (matchID: string) => {
-                if (matchID === 'boom-room') {
-                    throw new Error('broken metadata');
-                }
-                if (matchID === 'legacy-room') {
-                    return {
-                        metadata: {
+        const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    items: [
+                        {
+                            matchID: 'good-room',
                             gameName: 'tictactoe',
-                            players: { '0': { name: 'legacy-player' } },
-                            setupData: {
-                                roomName: 'legacy-room',
-                                ownerKey: { legacy: true } as unknown as string,
-                            },
-                            createdAt: now - 2000,
-                            updatedAt: now - 1000,
-                        },
-                    };
-                }
-                return {
-                    metadata: {
-                        gameName: 'tictactoe',
-                        players: { '0': { name: 'good-player', isConnected: true } },
-                        setupData: {
+                            players: [{ id: 0, name: 'good-player', isConnected: true }],
                             roomName: 'good-room',
                             ownerKey: `user:${validOwnerId}`,
                             ownerType: 'user',
+                            isLocked: false,
+                            createdAt: now - 5000,
+                            updatedAt: now,
                         },
-                        createdAt: now - 5000,
-                        updatedAt: now,
-                    },
-                };
-            }),
-        };
-
-        const service = new AdminService(
-            { find: userFind } as unknown as Model<UserDocument>,
-            {} as Model<FriendDocument>,
-            {} as Model<MessageDocument>,
-            {} as Model<ReviewDocument>,
-            {} as Model<MatchRecordDocument>,
-            {} as Model<RoomMatchDocument>,
-            {} as Model<UgcPackageDocument>,
-            {} as Model<UgcAssetDocument>,
-            cacheManager as unknown as Cache,
-            hybridStorage as never,
+                    ],
+                }),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                },
+            ),
         );
 
-        const result = await service.getRooms({ page: 1, limit: 10 } as never);
+        try {
+            const service = new AdminService(
+                { find: userFind } as unknown as Model<UserDocument>,
+                {} as Model<FriendDocument>,
+                {} as Model<MessageDocument>,
+                {} as Model<ReviewDocument>,
+                {} as Model<MatchRecordDocument>,
+                { find: roomMatchFind } as unknown as Model<RoomMatchDocument>,
+                {} as Model<UgcPackageDocument>,
+                {} as Model<UgcAssetDocument>,
+                cacheManager as unknown as Cache,
+            );
 
-        expect(result.total).toBe(2);
-        expect(result.items.map(item => item.matchID)).toEqual(['good-room', 'legacy-room']);
-        expect(result.items[0].ownerName).toBe('owner-user');
-        expect(result.items[1].ownerName).toBeUndefined();
-        expect(userFind).toHaveBeenCalledTimes(1);
-        expect(hybridStorage.fetch).toHaveBeenCalledTimes(3);
+            const result = await service.getRooms({ page: 1, limit: 10 } as never);
+
+            expect(result.total).toBe(2);
+            expect(result.items.map(item => item.matchID)).toEqual(['good-room', 'legacy-room']);
+            expect(result.items[0].ownerName).toBe('owner-user');
+            expect(result.items[1].ownerName).toBeUndefined();
+            expect(userFind).toHaveBeenCalledTimes(1);
+            expect(roomMatchFind).toHaveBeenCalledWith({});
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+            expect(String(fetchSpy.mock.calls[0]?.[0] ?? '')).toContain('/internal/rooms');
+        } finally {
+            fetchSpy.mockRestore();
+        }
+    });
+
+    it('falls back to persisted room records when game-server is unavailable', async () => {
+        const cacheManager = {
+            get: vi.fn(),
+            set: vi.fn(),
+            del: vi.fn(),
+        };
+        const roomMatchLean = vi.fn().mockResolvedValue([
+            {
+                matchID: 'mongo-room',
+                gameName: 'smashup',
+                metadata: {
+                    players: {
+                        '0': { name: 'mongo-player', isConnected: false },
+                    },
+                    setupData: {
+                        roomName: 'mongo fallback room',
+                    },
+                },
+                state: null,
+                createdAt: new Date('2026-03-20T10:00:00.000Z'),
+                updatedAt: new Date('2026-03-20T11:00:00.000Z'),
+            },
+        ]);
+        const roomMatchSelect = vi.fn().mockReturnValue({ lean: roomMatchLean });
+        const roomMatchFind = vi.fn().mockReturnValue({ select: roomMatchSelect });
+        const userLean = vi.fn().mockResolvedValue([]);
+        const userSelect = vi.fn().mockReturnValue({ lean: userLean });
+        const userFind = vi.fn().mockReturnValue({ select: userSelect });
+        const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED'));
+
+        try {
+            const service = new AdminService(
+                { find: userFind } as unknown as Model<UserDocument>,
+                {} as Model<FriendDocument>,
+                {} as Model<MessageDocument>,
+                {} as Model<ReviewDocument>,
+                {} as Model<MatchRecordDocument>,
+                { find: roomMatchFind } as unknown as Model<RoomMatchDocument>,
+                {} as Model<UgcPackageDocument>,
+                {} as Model<UgcAssetDocument>,
+                cacheManager as unknown as Cache,
+            );
+
+            const result = await service.getRooms({ page: 1, limit: 10 } as never);
+
+            expect(result.total).toBe(1);
+            expect(result.items.map(item => item.matchID)).toEqual(['mongo-room']);
+            expect(roomMatchFind).toHaveBeenCalledWith({});
+        } finally {
+            fetchSpy.mockRestore();
+        }
     });
 });

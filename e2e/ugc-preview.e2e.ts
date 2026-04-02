@@ -1,13 +1,8 @@
 import { test, expect, type BrowserContext, type FrameLocator, type Page } from '@playwright/test';
+import { setChineseLocale } from './helpers/common';
 
 const PACKAGE_ID = 'doudizhu-preview';
 const GAME_NAME = /斗地主预览/i;
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
-};
 
 const disableTutorial = async (context: BrowserContext | Page) => {
   await context.addInitScript(() => {
@@ -59,7 +54,7 @@ const dismissViteOverlay = async (page: Page) => {
 const dismissLobbyConfirmIfNeeded = async (page: Page) => {
   const confirmButton = page
     .locator('button:has-text("确认")')
-    .or(page.locator('button:has-text("Confirm")'));
+    .first();
   if (await confirmButton.isVisible().catch(() => false)) {
     await confirmButton.click();
     await page.waitForTimeout(1000);
@@ -338,7 +333,7 @@ test.describe('UGC 斗地主预览流程', () => {
     // 创建房主客户端
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
     await resetMatchIdentity(hostContext);
@@ -379,12 +374,12 @@ test.describe('UGC 斗地主预览流程', () => {
       await lobbyTab.click();
     }
 
-    const createButton = modalRoot.locator('button:visible', { hasText: /Create Room|创建房间/i }).first();
+    const createButton = modalRoot.locator('button:visible', { hasText: /创建房间/i }).first();
     await expect(createButton).toBeVisible({ timeout: 20000 });
     await createButton.click();
 
-    await expect(hostPage.getByRole('heading', { name: /Create Room|创建房间/i })).toBeVisible({ timeout: 10000 });
-    const confirmButton = hostPage.getByRole('button', { name: /Confirm|确认/i });
+    await expect(hostPage.getByRole('heading', { name: /创建房间/i })).toBeVisible({ timeout: 10000 });
+    const confirmButton = hostPage.getByRole('button', { name: /确认/i });
     await expect(confirmButton).toBeEnabled({ timeout: 5000 });
     await confirmButton.click();
 
@@ -397,7 +392,7 @@ test.describe('UGC 斗地主预览流程', () => {
     // 创建其他玩家客户端
     const player2Context = await browser.newContext({ baseURL });
     await blockAudioRequests(player2Context);
-    await setEnglishLocale(player2Context);
+    await setChineseLocale(player2Context);
     await disableAudio(player2Context);
     await disableTutorial(player2Context);
     
@@ -413,7 +408,7 @@ test.describe('UGC 斗地主预览流程', () => {
 
     const player3Context = await browser.newContext({ baseURL });
     await blockAudioRequests(player3Context);
-    await setEnglishLocale(player3Context);
+    await setChineseLocale(player3Context);
     await disableAudio(player3Context);
     await disableTutorial(player3Context);
     

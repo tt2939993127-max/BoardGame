@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { RIGHTEOUS_COMBAT_3 } from '../heroes/paladin/abilities';
+import { ECLIPSE_2 } from '../heroes/moon_elf/abilities';
 import { evaluateTriggerCondition } from '../domain/combat/conditions';
 import { registerDiceThroneConditions } from '../conditions';
 import { PALADIN_DICE_FACE_IDS as FACES } from '../domain/ids';
@@ -148,5 +149,41 @@ describe('变体选择文案兜底', () => {
         expect(text.name).toContain('头盔');
         expect(description).toContain('heal-2');
         expect(description).toContain('damage-2-unblockable');
+    });
+
+    it('主变体复用父技能 description key 时，优先展示 effect 汇总', () => {
+        const eclipse = ECLIPSE_2.variants?.find(variant => variant.id === 'eclipse-2');
+        if (!eclipse) {
+            throw new Error('missing eclipse-2');
+        }
+
+        const text = getAbilityChoiceText('eclipse-2', {
+            ability: ECLIPSE_2,
+            variant: eclipse,
+        }, {
+            t: (key: string) => ({
+                'abilities.eclipse-2.name': '星蚀 II',
+                'abilities.eclipse-2.description': '包含星蚀与暗月两个变体',
+                'abilities.eclipse-2.effects.inflictBlinded': '施加1个致盲标记',
+                'abilities.eclipse-2.effects.inflictEntangle': '施加1个缠绕标记',
+                'abilities.eclipse-2.effects.inflictTargeted': '施加1个锁定标记',
+                'abilities.eclipse-2.effects.damage9': '造成9点伤害',
+            }[key] ?? key),
+            exists: (key: string) => [
+                'abilities.eclipse-2.name',
+                'abilities.eclipse-2.description',
+                'abilities.eclipse-2.effects.inflictBlinded',
+                'abilities.eclipse-2.effects.inflictEntangle',
+                'abilities.eclipse-2.effects.inflictTargeted',
+                'abilities.eclipse-2.effects.damage9',
+            ].includes(key),
+        });
+
+        expect(text.name).toBe('星蚀 II');
+        expect(text.description).toContain('施加1个致盲标记');
+        expect(text.description).toContain('施加1个缠绕标记');
+        expect(text.description).toContain('施加1个锁定标记');
+        expect(text.description).toContain('造成9点伤害');
+        expect(text.description).not.toContain('包含星蚀与暗月两个变体');
     });
 });

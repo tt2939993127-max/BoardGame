@@ -41,8 +41,10 @@
     "reconnect": "Reconnect",
     "reconnectEnter": "Rejoin",
     "join": "Join",
-    "localPlay": "👥 Local",
-    "tutorial": "🎓 Tutorial",
+    "localPlay": "Single Device",
+    "singleDevice": "Single Device",
+    "playAi": "Play AI",
+    "tutorial": "Tutorial",
     "createRoom": "Create Room",
     "confirm": "Confirm",
     "cancel": "Cancel"
@@ -58,9 +60,11 @@
     "return": "Return to match (#{{id}})"
   },
   "rooms": {
+    "loading": "Loading rooms...",
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",
     "mine": "Mine",
+    "seatSeparator": " / ",
     "emptySlot": "Empty",
     "ownerMustReconnect": "This is your room. Please reconnect.",
     "ownerRejoinOnly": "Only the room owner can rejoin an empty room (guests must use the original browser/device; clearing storage requires creating a new room)",
@@ -71,17 +75,101 @@
   "tabs": {
     "lobby": "Lobby",
     "reviews": "Reviews",
-    "leaderboard": "Leaderboard"
+    "leaderboard": "Leaderboard",
+    "changelog": "Updates"
   },
   "leaderboard": {
     "loading": "Loading...",
     "title": "Top Wins",
     "empty": "No data",
     "record": "{{wins}} W / {{matches}} G",
-    "error": "Failed to load leaderboard"
+    "error": "Failed to load leaderboard",
+    "changelogEmpty": "No updates yet"
+  },
+  "changelog": {
+    "loading": "Loading changelog...",
+    "error": "Failed to load changelog",
+    "pinned": "Pinned"
+  },
+  "authorInfo": {
+    "button": "Digital edition: {{author}}",
+    "mobileButton": "Digital edition: {{author}}",
+    "buttonHint": "Click to view digital edition author information",
+    "title": "Digital Edition Author",
+    "game": "Work: {{game}}",
+    "hint": "This entry currently shows the credited digital edition author. More detailed creator info can expand here later.",
+    "close": "Close"
+  },
+  "packageManager": {
+    "cardLabel": "{{game}} mobile package management",
+    "eyebrow": "Mobile Package",
+    "mode": "On-demand",
+    "notInstalled": "Not installed",
+    "notInstalledHint": "Before entering {{game}} on mobile, download its local game resource pack first.",
+    "installedTitle": "Ready to play",
+    "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
+    "installedCompletedBadge": "Completed",
+    "installedVersionBadge": "Completed · {{version}}",
+    "installAction": "Install Pack",
+    "confirmEyebrow": "Install Confirm",
+    "confirmTitle": "Download {{game}} packages",
+    "confirmDescription": "This download prepares a dedicated local resource pack for the current game only.",
+    "confirmHint": "Final size and progress come directly from the published manifest and live device download result.",
+    "modalHint": "After the download completes, the app verifies the package and switches to local installed resources.",
+    "confirmAction": "Confirm Download",
+    "totalSize": "Estimated Download",
+    "modulePack": "Code Pack",
+    "assetPack": "Asset Pack",
+    "packIdUnknown": "Pack ID pending",
+    "sizeUnknown": "Pending manifest",
+    "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
+    "failedTitle": "Download Failed",
+    "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
+    "retryAction": "Retry",
+    "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
+    "updateRequiredEyebrow": "App Update Required",
+    "updateRequiredBadge": "Update Needed",
+    "updateRequiredTitle": "This version is not supported yet",
+    "updateRequiredHint": "{{game}} requires a newer app build before it can be played. The entry stays hidden on the current build.",
+    "updateRequiredHintWithVersion": "{{game}} requires app version {{version}} or newer before it can be played. The entry stays hidden on the current build.",
+    "progress": {
+      "label": "Progress",
+      "percent": "{{percent}}%",
+      "pendingPercent": "Pending",
+      "queuedTitle": "Preparing",
+      "queuedHint": "Preparing the package list for the current game.",
+      "manifestTitle": "Reading Manifest",
+      "manifestHint": "Loading the published manifest for this game.",
+      "downloadTitle": "Downloading",
+      "downloadHint": "Downloading the files required for this game.",
+      "verifyTitle": "Verifying",
+      "verifyHint": "Verifying the downloaded content and activating local resources."
+    }
   },
   "player": {
     "guest": "Guest{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "Updating",
+      "checkingTitle": "Preparing update",
+      "checkingDescription": "Checking and preparing the next version. Please wait.",
+      "downloadingTitle": "Downloading update",
+      "downloadingDescription": "Downloading the required update now. The app will switch automatically when it is ready.",
+      "applyingTitle": "Switching version",
+      "applyingDescription": "The update is ready. Restarting and switching to the new version now.",
+      "requiredTitle": "App update required",
+      "requiredDescription": "This app build is too old. Install a newer app version to continue.",
+      "requiredDescriptionWithVersion": "This app build is too old. Update to app version {{version}} or newer to continue.",
+      "errorTitle": "Update failed",
+      "errorDescription": "Downloading or switching to the new version failed. Please retry.",
+      "bundleVersion": "Target bundle version",
+      "requiredAppVersion": "Required app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "retryAction": "Check again"
+    }
   },
   "gameDetails": {
     "description": "Classic strategy play. Connect three symbols to win."
@@ -166,9 +254,22 @@
     "tutorialTitle": "Learning {{game}}",
     "matchTitle": "Playing {{game}}",
     "loadingResources": "Loading match resources...",
+    "creatingRoom": "Creating room and entering match...",
+    "namespaceLoadFailed": "Failed to load game translations",
+    "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "Preparing room...",
+      "joiningRoom": "Verifying seat assignment...",
+      "loadingGameModule": "Loading game module...",
+      "connecting": "Connecting to server...",
+      "syncing": "Syncing game state...",
+      "loadingAssets": "Loading assets {{loaded}}/{{total}}"
+    },
     "title": {
       "joining": "Joining",
+      "creating": "Creating",
       "connecting": "Connecting",
       "tutorial": "Tutorial",
       "local": "Local Match",
@@ -224,12 +325,44 @@
     "roomFull": "Room is full",
     "ownerClaimFailed": "Unable to reconnect: guest identity may be lost or credentials expired after server restart. Please retry with the original browser or create a new room.",
     "roomCreatedButClaimFailed": "Room was created but failed to claim seat. Please go back to the lobby and try again.",
+    "aiSeatClaimFailed": "Some AI seats failed to initialize. You have entered the room, but please verify the seat state.",
     "joinRoomFailed": "Failed to join room",
     "actionFailed": "Action failed, please try again later.",
     "serviceUnavailable": {
       "title": "Service Unavailable",
       "desc": "Unable to connect to backend services. Please check your connection and ensure the backend containers (MongoDB/Server) are running."
     }
+  },
+  "ai": {
+    "supportTitle": "AI Support",
+    "unsupported": "No AI support",
+    "capture": "Data Capture",
+    "local": "Local AI",
+    "remote": "Remote AI",
+    "configureTitle": "Local Match Setup",
+    "configureHint": "Choose how many players join this device and which seats should be controlled by AI.",
+    "playerCount": "Local Players",
+    "seat": "Seat {{seat}}",
+    "primarySeat": "Primary",
+    "secondarySeat": "Secondary",
+    "controllers": {
+      "human": "Human",
+      "local": "Local AI",
+      "remote": "Remote AI"
+    },
+    "difficulty": "Difficulty",
+    "difficulties": {
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard",
+      "expert": "Expert"
+    },
+    "policyId": "Policy ID",
+    "policyPlaceholder": "Leave blank for default policy",
+    "providerId": "Provider ID",
+    "providerPlaceholder": "Leave blank to use astrbot",
+    "quickStart": "Default quick start: the first seat stays human, and the second seat will use the game's local AI when available.",
+    "startLocal": "Start Local Match"
   },
   "createRoom": {
     "title": "Create Room",
@@ -248,7 +381,25 @@
       "3days": "3 days",
       "7days": "7 days"
     },
-    "retentionHint": "Reconnect within retention period; auto-cleanup after expiry"
+    "retentionHint": "Reconnect within retention period; auto-cleanup after expiry",
+    "multiSelectPlaceholder": "Select expansions",
+    "multiSelectButton": "{{count}} selected",
+    "multiSelectSelected": "{{count}} enabled",
+    "multiSelectNone": "Disabled",
+    "enableOption": "Enable {{label}}",
+    "disableOption": "Disable {{label}}",
+    "removeSelectedOption": "Remove {{label}}",
+    "enableRoomAi": "Add AI",
+    "enableRoomAiHint": "Enable AI seats for this room. The section collapses automatically when disabled.",
+    "enableRoomAiSummary": "Enabled · {{players}}P · {{aiCount}} AI",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "occupiedSeats": "AI Seats",
+    "occupiedSeatsHint": "Click the seats that AI should occupy. Seat 1 is always reserved for the host.",
+    "ownerSeatUnit": "Seat {{seat}} (Host)",
+    "occupiedSeatUnit": "Seat {{seat}}",
+    "aiPlayerName": "AI Seat {{seat}}",
+    "confirm": "Create Room"
   },
   "socket": {
     "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",

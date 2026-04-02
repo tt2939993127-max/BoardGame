@@ -4,7 +4,12 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
-import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import {
+    DICETHRONE_PLAYER_BOARD_LAYOUTS,
+    getAbilitySlotLayoutForCharacter,
+    getPlayerBoardLayoutVersion,
+    type DiceThronePlayerBoardLayoutVersion,
+} from './abilitySlotLayout';
 import type { CardPreviewRef } from '../../../core';
 import type { AbilityCard } from '../types';
 import {
@@ -19,6 +24,8 @@ import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
 import { MOON_ELF_CARDS } from '../heroes/moon_elf/cards';
 import { SHADOW_THIEF_CARDS } from '../heroes/shadow_thief/cards';
+import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 
 // 角色 ID 到卡牌定义的映射
 const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
@@ -28,6 +35,8 @@ const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
     paladin: PALADIN_CARDS,
     moon_elf: MOON_ELF_CARDS,
     shadow_thief: SHADOW_THIEF_CARDS,
+    gunslinger: GUNSLINGER_CARDS,
+    samurai: SAMURAI_CARDS,
 };
 
 // 被动能力配置（按角色）
@@ -122,6 +131,28 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         meditate: 'fearless-riposte', // 恐惧反击 (防御)
         ultimate: 'shadow-shank',     // 暗影刺杀 (终极)
     },
+    gunslinger: {
+        fist: 'revolver',
+        chi: 'bounty-hunter',
+        sky: 'quick-draw',
+        lotus: 'take-cover',
+        combo: 'showdown',
+        lightning: 'deadeye',
+        calm: 'fan-the-hammer',
+        meditate: 'duel',
+        ultimate: 'fill-em-with-lead',
+    },
+    samurai: {
+        fist: 'katana-slice',
+        chi: 'wakizashi',
+        sky: 'bushido',
+        lotus: 'solemnity',
+        combo: 'budo',
+        lightning: 'samurai-slot-06',
+        calm: 'masamune',
+        meditate: 'stand-tall',
+        ultimate: 'samurai-ultimate',
+    },
 };
 
     // 获取槽位对应的基础技能 ID
@@ -194,28 +225,38 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
     }, ref) => {
         const { t } = useTranslation('game-dicethrone');
 
-        // 游戏级布局配置：所有用户共享一致的默认布局
-        const [slots, setSlots] = React.useState(() => {
-            const initial = DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }));
-            return initial;
-        });
+        const layoutVersion = React.useMemo<DiceThronePlayerBoardLayoutVersion>(
+            () => getPlayerBoardLayoutVersion(characterId),
+            [characterId],
+        );
+        const [allLayouts, setAllLayouts] = React.useState(() => ({
+            v1: DICETHRONE_PLAYER_BOARD_LAYOUTS.v1.map(slot => ({ ...slot })),
+            v2: DICETHRONE_PLAYER_BOARD_LAYOUTS.v2.map(slot => ({ ...slot })),
+        }));
+        const slots = allLayouts[layoutVersion] ?? getAbilitySlotLayoutForCharacter(characterId);
         const [editingId, setEditingId] = React.useState<string | null>(null);
         const containerRef = React.useRef<HTMLDivElement>(null);
         const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
+        const editingGuideClassName = 'absolute inset-0 rounded-lg border-2 border-amber-300/90 bg-amber-200/10 shadow-[0_0_0_1px_rgba(120,53,15,0.7),0_0_14px_rgba(251,191,36,0.28)] pointer-events-none';
+        const editingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-slate-950/65 pointer-events-none';
+        const activeEditingGuideClassName = 'absolute inset-0 rounded-lg border-[2.5px] border-emerald-300 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(6,95,70,0.95),0_0_18px_rgba(52,211,153,0.55)] pointer-events-none';
+        const activeEditingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-emerald-950/80 pointer-events-none';
 
         // 通过 ref 暴露保存方法，供调试面板调用
         React.useImperativeHandle(ref, () => ({
             saveLayout: async () => {
                 try {
-                    const result = await saveDiceThroneAbilityLayout(slots);
-                    const hint = result.relativePath ? `已写入 ${result.relativePath}` : '已写入布局文件';
+                    const result = await saveDiceThroneAbilityLayout({ layouts: allLayouts });
+                    const hint = result.relativePath
+                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()}）`
+                        : `已写入布局文件（${layoutVersion.toUpperCase()}）`;
                     return { hint };
                 } catch (error) {
                     const message = error instanceof Error ? error.message : '保存失败';
                     return { hint: message };
                 }
             },
-        }), [slots]);
+        }), [allLayouts, layoutVersion]);
 
         const resolveAbilityId = (slotId: string) => {
             const mapping = ABILITY_SLOT_MAP[slotId];
@@ -239,12 +280,15 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 const rect = containerRef.current.getBoundingClientRect();
                 const deltaX = ((e.clientX - startX) / rect.width) * 100;
                 const deltaY = ((e.clientY - startY) / rect.height) * 100;
-                setSlots(prev => prev.map(s => s.id === id ? {
-                    ...s,
-                    ...(type === 'move'
-                        ? { x: Number((startVal.x + deltaX).toFixed(2)), y: Number((startVal.y + deltaY).toFixed(2)) }
-                        : { w: Number(Math.max(5, startVal.w + deltaX).toFixed(2)), h: Number(Math.max(5, startVal.h + deltaY).toFixed(2)) })
-                } : s));
+                setAllLayouts(prev => ({
+                    ...prev,
+                    [layoutVersion]: prev[layoutVersion].map(s => s.id === id ? {
+                        ...s,
+                        ...(type === 'move'
+                            ? { x: Number((startVal.x + deltaX).toFixed(2)), y: Number((startVal.y + deltaY).toFixed(2)) }
+                            : { w: Number(Math.max(5, startVal.w + deltaX).toFixed(2)), h: Number(Math.max(5, startVal.h + deltaY).toFixed(2)) })
+                    } : s),
+                }));
             };
             const handleMouseUp = () => { dragInfo.current = null; };
             if (isEditing) {
@@ -255,7 +299,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
             };
-        }, [isEditing]);
+        }, [isEditing, layoutVersion]);
 
         return (
             <div
@@ -288,11 +332,17 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 onMouseDown={(e) => isEditing ? handleMouseDown(e, slot.id, 'move') : undefined}
                                 className={`
                                     absolute transition-all duration-200 rounded-lg
-                                    ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-none'}
-                                    ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
+                                    ${isEditing ? 'pointer-events-auto cursor-move' : 'pointer-events-none'}
+                                    ${isEditing && editingId === slot.id ? 'z-50' : ''}
                                 `}
                                 style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
                             >
+                                {isEditing && (
+                                    <>
+                                        <div className={editingId === slot.id ? activeEditingGuideClassName : editingGuideClassName} />
+                                        <div className={editingId === slot.id ? activeEditingGuideInnerClassName : editingGuideInnerClassName} />
+                                    </>
+                                )}
                                 {/* 只有升级后才叠加升级卡图片，未升级时玩家面板底图已有基础被动图案 */}
                                 {isUpgraded && passiveCard?.previewRef && (
                                     <div className="absolute inset-0 flex items-center justify-center">
@@ -344,8 +394,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             onMouseDown={(e) => handleMouseDown(e, slot.id, 'move')}
                             className={`
                             absolute transition-all duration-200 rounded-lg
-                            ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-auto cursor-pointer group'}
-                            ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
+                            ${isEditing ? 'pointer-events-auto cursor-move' : 'pointer-events-auto cursor-pointer group'}
+                            ${isEditing && editingId === slot.id ? 'z-50' : ''}
                             ${canClick ? 'hover:border-2 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.5)] hover:z-30' : ''}
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
@@ -360,6 +410,12 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 }
                             }}
                         >
+                            {isEditing && (
+                                <>
+                                    <div className={editingId === slot.id ? activeEditingGuideClassName : editingGuideClassName} />
+                                    <div className={editingId === slot.id ? activeEditingGuideInnerClassName : editingGuideInnerClassName} />
+                                </>
+                            )}
                             {/* 方案 A：不渲染基础精灵图，玩家面板本身已包含基础技能图案 */}
                             {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
                             {!isUltimate && upgradePreviewRef && (

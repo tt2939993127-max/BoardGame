@@ -41,12 +41,12 @@ function createRunner(setup?: (ids: PlayerId[], random: RandomFn) => MatchState<
     });
 }
 
-/** 顺序选秀（多轮 afterEvents 自动推进 factionSelect → startTurn → playCards） */
+/** 蛇形选秀（多轮 afterEvents 自动推进 factionSelect → startTurn → playCards） */
 const DRAFT_COMMANDS: SmashUpCommand[] = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
 ] as any[];
 
 // ============================================================================
@@ -76,6 +76,58 @@ describe('完整回合循环', () => {
         expect(p0.hand.length).toBe(7);
     });
 
+    it('draw phase reshuffles after drawing the last card in deck', () => {
+        const runner = createRunner();
+        const draftResult = runner.run({
+            name: 'draft',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const p0 = draftResult.finalState.core.players['0'];
+        const deckCard = p0.deck[0];
+        const discardCards = p0.deck.slice(1, 3);
+
+        expect(deckCard).toBeDefined();
+        expect(discardCards).toHaveLength(2);
+        if (!deckCard) {
+            throw new Error('expected one card left in deck for reshuffle test');
+        }
+
+        const modifiedState: MatchState<SmashUpCore> = {
+            ...draftResult.finalState,
+            core: {
+                ...draftResult.finalState.core,
+                players: {
+                    ...draftResult.finalState.core.players,
+                    ['0']: {
+                        ...p0,
+                        hand: [],
+                        deck: [deckCard],
+                        discard: discardCards,
+                    },
+                },
+            },
+        };
+
+        const runner2 = createRunner(() => modifiedState);
+        const result = runner2.run({
+            name: 'draw 1 then reshuffle then draw 1',
+            commands: [
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+            ] as any[],
+        });
+
+        const p0After = result.finalState.core.players['0'];
+        const handUids = p0After.hand.map(card => card.uid);
+        const discardUids = new Set(discardCards.map(card => card.uid));
+
+        expect(p0After.hand).toHaveLength(2);
+        expect(handUids).toContain(deckCard.uid);
+        expect(handUids.some(uid => discardUids.has(uid))).toBe(true);
+        expect(p0After.deck).toHaveLength(1);
+        expect(p0After.discard).toHaveLength(0);
+    });
+
     it('两个完整回合后回到 P0', () => {
         const runner = createRunner();
         const result = runner.run({
@@ -103,12 +155,12 @@ describe('完整回合循环', () => {
 describe('随从消灭能力集成', () => {
     it('打出有 onPlay 消灭能力的随从时触发消灭', () => {
         const runner = createRunner();
-        // 选秀：P0 选 ninjas+pirates，P1 选 aliens+dinosaurs
+        // 蛇形选秀：P0 选 ninjas+pirates，P1 选 aliens+dinosaurs
         const ninjasDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
         ] as any[];
 
         const result = runner.run({
@@ -218,12 +270,12 @@ describe('Property 9: 持续行动卡附着', () => {
 describe('额度修改能力', () => {
     it('时间法师 onPlay 增加行动额度', () => {
         const runner = createRunner();
-        // P0 选 wizards + aliens
+        // 蛇形选秀：P0 选 wizards + aliens
         const wizardsDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
-            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
         ] as any[];
 
         const result = runner.run({

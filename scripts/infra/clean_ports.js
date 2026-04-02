@@ -1,7 +1,13 @@
 import 'dotenv/config';
 import { execSync } from 'node:child_process';
+import { assertChildProcessSupport } from './assert-child-process-support.mjs';
+import { removeDevRuntimePorts } from './dev-port-runtime.js';
+import { cleanupPorts as cleanupBoundPorts } from './port-allocator.js';
+import { waitForPortsFree } from './port-allocator.js';
 
-const defaultPorts = [5173, 18000, 18001];
+await assertChildProcessSupport('开发端口清理');
+
+const defaultPorts = [4173, 5173, 18000, 18001];
 const envPorts = process.env.CLEAN_PORTS
     ? process.env.CLEAN_PORTS.split(',').map((value) => Number(value.trim()))
     : [];
@@ -106,24 +112,35 @@ function isRepoDevProcess(commandLine = '') {
 
 function collectResidualDevProcessPids() {
     if (process.platform === 'win32') {
-        const output = execSync(
-            'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"',
-            { encoding: 'utf8' }
-        ).trim();
+        try {
+            const output = execSync(
+                'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"',
+                { encoding: 'utf8' }
+            ).trim();
 
-        if (!output) {
+            if (!output) {
+                return [];
+            }
+
+            const parsed = JSON.parse(output);
+            const entries = Array.isArray(parsed) ? parsed : [parsed];
+            return entries
+                .filter((entry) => Number(entry?.ProcessId) !== process.pid && isRepoDevProcess(entry?.CommandLine))
+                .map((entry) => Number(entry.ProcessId))
+                .filter((pid) => Number.isFinite(pid) && pid > 0);
+        } catch {
             return [];
         }
-
-        const parsed = JSON.parse(output);
-        const entries = Array.isArray(parsed) ? parsed : [parsed];
-        return entries
-            .filter((entry) => Number(entry?.ProcessId) !== process.pid && isRepoDevProcess(entry?.CommandLine))
-            .map((entry) => Number(entry.ProcessId))
-            .filter((pid) => Number.isFinite(pid) && pid > 0);
     }
 
-    const output = execSync('ps -axo pid=,command=', { encoding: 'utf8' });
+    let output = '';
+    try {
+        output = execSync('ps -axo pid=,command=', { encoding: 'utf8' });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[Dev] 跳过残留进程扫描：无法执行 ps (${message})`);
+        return [];
+    }
     const pids = [];
 
     for (const line of output.split(/\r?\n/)) {
@@ -159,50 +176,28 @@ function cleanResidualDevProcesses() {
 }
 
 async function cleanPorts() {
+    removeDevRuntimePorts();
+
     if (ports.length === 0) {
         console.log('未配置需要清理的端口');
         cleanResidualDevProcesses();
         return;
     }
 
-    const portSet = new Set(ports);
-    let killedAny = false;
-
-    if (process.platform === 'win32') {
-        const output = execSync('netstat -ano -p tcp', { encoding: 'utf8' });
-        const pidsByPort = collectWindowsPids(output, portSet);
-
-        for (const port of ports) {
-            const pids = pidsByPort.get(port);
-            if (!pids || pids.size === 0) {
-                continue;
-            }
-
-            killedAny = true;
-            killPids(pids, `端口 ${port}`);
-        }
-    } else {
-        for (const port of ports) {
-            try {
-                const output = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { encoding: 'utf8' }).trim();
-                if (!output) {
-                    continue;
-                }
-
-                killedAny = true;
-                const pids = new Set(output.split(/\s+/).map((value) => Number(value)));
-                killPids(pids, `端口 ${port}`);
-            } catch {
-            }
-        }
-    }
-
-    if (killedAny) {
-        console.log('等待端口释放...');
-        await sleep(500);
-    }
+    cleanupBoundPorts(ports, 'Dev');
+    console.log('等待端口释放...');
+    await sleep(500);
 
     cleanResidualDevProcesses();
+
+    const portsFreed = await waitForPortsFree(ports, 1500);
+    const strictPortCleanup = process.env.DEV_STRICT_PORT_CLEANUP === 'true';
+    if (!portsFreed && strictPortCleanup) {
+        throw new Error(`以下端口仍被占用且当前进程无权清理: ${ports.join(', ')}。请先手动结束占用进程后再启动。`);
+    }
+    if (!portsFreed) {
+        console.warn(`[Dev] 以下端口仍可能被占用，继续启动并交由后续启动流程自行报错: ${ports.join(', ')}`);
+    }
 }
 
 cleanPorts().catch((error) => {

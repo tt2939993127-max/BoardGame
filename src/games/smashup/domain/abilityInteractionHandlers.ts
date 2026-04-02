@@ -32,11 +32,18 @@ export type InteractionHandler = (
 
 const interactionHandlers = new Map<string, InteractionHandler>();
 
+type InteractionHandlerRegistration =
+    | string
+    | {
+        sourceId: string;
+    };
+
 /** 注册交互处理函数 */
 export function registerInteractionHandler(
-    sourceId: string,
+    source: InteractionHandlerRegistration,
     handler: InteractionHandler
 ): void {
+    const sourceId = typeof source === 'string' ? source : source.sourceId;
     interactionHandlers.set(sourceId, handler);
 }
 
@@ -74,6 +81,7 @@ export function registerPodInteractionAliases(): void {
 
     for (const [sourceId, handler] of allEntries) {
         if (sourceId.endsWith('_pod')) continue;
+        if (sourceId.startsWith('titan_')) continue;
 
         const podSourceId = `${sourceId}_pod`;
         // 如果已存在则不覆盖

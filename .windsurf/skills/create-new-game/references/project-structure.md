@@ -20,6 +20,12 @@
 - `src/engine/systems/index.ts`：`createBaseSystems` 入口
 - `src/engine/primitives/`：引擎原语（expression/condition/target/effects/zones/dice/resources/grid）
 
+## 资源与本地化
+- `public/assets/i18n/<locale>/<gameId>/`：运行时图片原图与 `compressed/` 产物
+- `public/assets/atlas-configs/<gameId>/`：图集配置（与语言无关）
+- `public/locales/zh-CN/game-<gameId>.json`：中文文案
+- `public/locales/en/game-<gameId>.json`：英文文案
+
 ## 清单生成
 - `scripts/game/generate_game_manifests.js`：扫描 `src/games/*/manifest.ts` 自动生成清单
 - `src/games/manifest*.generated.ts(x)`：自动生成，禁止手改

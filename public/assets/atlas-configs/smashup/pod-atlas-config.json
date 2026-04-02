@@ -150,6 +150,36 @@
         "cols": 5
       }
     },
+    "tts_atlas_54": {
+      "grid": {
+        "rows": 4,
+        "cols": 5
+      }
+    },
+    "tts_atlas_55": {
+      "grid": {
+        "rows": 4,
+        "cols": 5
+      }
+    },
+    "tts_atlas_56": {
+      "grid": {
+        "rows": 4,
+        "cols": 5
+      }
+    },
+    "tts_atlas_78": {
+      "grid": {
+        "rows": 2,
+        "cols": 4
+      }
+    },
+    "tts_atlas_79": {
+      "grid": {
+        "rows": 4,
+        "cols": 5
+      }
+    },
     "tts_atlas_6": {
       "grid": {
         "rows": 4,
@@ -174,6 +204,12 @@
         "cols": 4
       }
     },
+    "tts_atlas_8789f47742": {
+      "grid": {
+        "rows": 4,
+        "cols": 8
+      }
+    },
     "tts_atlas_9": {
       "grid": {
         "rows": 4,
@@ -189,6 +225,30 @@
     "tts_atlas_bd2112e526": {
       "grid": {
         "rows": 3,
+        "cols": 4
+      }
+    },
+    "tts_atlas_1": {
+      "grid": {
+        "rows": 4,
+        "cols": 4
+      }
+    },
+    "tts_atlas_0a564692f2": {
+      "grid": {
+        "rows": 2,
+        "cols": 4
+      }
+    },
+    "tts_atlas_0b888d02fd": {
+      "grid": {
+        "rows": 2,
+        "cols": 4
+      }
+    },
+    "tts_atlas_9aed5872d2": {
+      "grid": {
+        "rows": 2,
         "cols": 4
       }
     }

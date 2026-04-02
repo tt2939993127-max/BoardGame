@@ -24,7 +24,7 @@ import { GameButton } from './GameButton';
 /** 胜利分数线（用于终点虚线标记） */
 const VP_WIN_LINE = VP_TO_WIN;
 
-/** 计算玩家的疯狂卡数量 */
+/** 计算玩家的疯狂卡数量（仅用于前端展示；真实结算由领域层完成） */
 function countMadness(player: PlayerState): number {
     let count = 0;
     for (const c of player.hand) if (c.defId === MADNESS_CARD_DEF_ID) count++;
@@ -49,7 +49,7 @@ interface SmashUpEndgameContentProps extends ContentSlotProps {
 }
 
 export function SmashUpEndgameContent({ core, myPlayerId, result }: SmashUpEndgameContentProps) {
-    const { t } = useTranslation('game-smashup');
+    const { t: tSmashUp } = useTranslation('game-smashup');
     const finalScores = useMemo(() => getScores(core), [core]);
     const winner = result?.winner;
     const trackMax = useMemo(() => getTrackMax(finalScores), [finalScores]);
@@ -167,7 +167,7 @@ export function SmashUpEndgameContent({ core, myPlayerId, result }: SmashUpEndga
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm font-black text-slate-800">
-                                            {isMe ? t('ui.you', { defaultValue: '你自己' }) : t('ui.player_short', { defaultValue: 'P{{id}}', id: pid })}
+                                            {isMe ? tSmashUp('ui.you', { defaultValue: '你自己' }) : tSmashUp('ui.player_short', { defaultValue: 'P{{id}}', id: pid })}
                                         </span>
                                         {isThisWinner && <Trophy className="w-4 h-4 text-amber-500" />}
                                     </div>
@@ -177,7 +177,7 @@ export function SmashUpEndgameContent({ core, myPlayerId, result }: SmashUpEndga
                                             if (!meta) return null;
                                             const Icon = meta.icon;
                                             return (
-                                                <span key={meta.id} title={t(meta.nameKey)}>
+                                                <span key={meta.id} title={tSmashUp(meta.nameKey)}>
                                                     <Icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
                                                 </span>
                                             );
@@ -190,7 +190,7 @@ export function SmashUpEndgameContent({ core, myPlayerId, result }: SmashUpEndga
                                     <div className="text-lg font-black text-slate-800">{finalVp} <span className="text-[10px] text-slate-400">VP</span></div>
                                     {penalty > 0 && (
                                         <div className="text-red-500 text-[10px]">
-                                            {t('endgame.madnessPenalty', { defaultValue: '疯狂卡 ×{{count}} (-{{penalty}})', count: madnessCount, penalty })}
+                                            {tSmashUp('endgame.madnessPenalty', { defaultValue: '疯狂卡 ×{{count}} (-{{penalty}})', count: madnessCount, penalty })}
                                         </div>
                                     )}
                                 </div>
@@ -215,7 +215,7 @@ export function SmashUpEndgameActions({
     onVote,
     onBackToLobby,
 }: ActionsSlotProps) {
-    const { t } = useTranslation('common');
+    const { t: tCommon } = useTranslation('common');
     const navigate = useNavigate();
 
     const ready = rematchState?.ready ?? false;
@@ -240,10 +240,10 @@ export function SmashUpEndgameActions({
                 className="flex items-center gap-3 mt-2"
             >
                 <GameButton variant="primary" size="md" onClick={() => reset?.()}>
-                    {t('rematch.playAgain')}
+                    {tCommon('rematch.playAgain')}
                 </GameButton>
                 <GameButton variant="secondary" size="md" onClick={handleBackToLobby}>
-                    {t('rematch.backToLobby')}
+                    {tCommon('rematch.backToLobby')}
                 </GameButton>
             </motion.div>
         );
@@ -259,24 +259,24 @@ export function SmashUpEndgameActions({
         >
             {ready ? (
                 <GameButton variant="primary" size="md" disabled>
-                    {t('rematch.restarting')}
+                    {tCommon('rematch.restarting')}
                 </GameButton>
             ) : myVote ? (
                 <>
                     <GameButton variant="secondary" size="md" onClick={() => onVote?.()}>
-                        {t('rematch.cancelVote')}
+                        {tCommon('rematch.cancelVote')}
                     </GameButton>
                     <span className="text-white/50 text-sm animate-pulse font-bold">
-                        {t('rematch.waitingForOpponent')}
+                        {tCommon('rematch.waitingForOpponent')}
                     </span>
                 </>
             ) : (
                 <GameButton variant="primary" size="md" onClick={() => onVote?.()}>
-                    {t('rematch.votePlayAgain')}
+                    {tCommon('rematch.votePlayAgain')}
                 </GameButton>
             )}
             <GameButton variant="secondary" size="md" onClick={handleBackToLobby}>
-                {t('rematch.backToLobby')}
+                {tCommon('rematch.backToLobby')}
             </GameButton>
         </motion.div>
     );
