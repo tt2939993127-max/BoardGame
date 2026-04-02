@@ -23,6 +23,8 @@ import * as matchApi from '../../../services/matchApi';
 import * as matchStatus from '../../../hooks/match/useMatchStatus';
 import { lobbySocket } from '../../../services/lobbySocket';
 import { resetGamePackageManagerForTests } from '../../../features/mobile-packages/packageManagerService';
+import * as manifestClient from '../../../features/mobile-packages/manifestClient';
+import * as nativeGamePackagePlugin from '../../../features/mobile-packages/nativeGamePackagePlugin';
 
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
@@ -218,6 +220,7 @@ vi.mock('../../../features/mobile-packages/manifestClient', () => ({
         assetPackId: delivery?.assetPackId?.trim(),
         modulePackVersion: 'test-module-pack-v1',
         assetPackVersion: 'test-asset-pack-v1',
+        assetPackUrl: `https://example.com/${gameId}.zip`,
         modulePackBytes: delivery?.modulePackBytes,
         assetPackBytes: delivery?.assetPackBytes,
         source: 'remote',
@@ -743,6 +746,28 @@ describe('GameDetailsModal create room ai entry', () => {
     });
 
     it('模拟安装成功后关闭确认弹窗，不回退到确认下载', async () => {
+        vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockImplementationOnce(
+            async (_manifest, options) => {
+                const installedState = {
+                    gameId: 'dicethrone',
+                    runtimeChannel: 'stable',
+                    status: 'installed' as const,
+                    modulePackId: 'dicethrone',
+                    assetPackId: 'dicethrone',
+                    installedVersion: 'test-asset-pack-v1',
+                    updatedAt: Date.now(),
+                };
+
+                return {
+                    cancel: vi.fn(),
+                    finished: (async () => {
+                        options.onStateChange(installedState);
+                        return installedState;
+                    })(),
+                };
+            },
+        );
+
         render(createElement(GameDetailsModal, baseProps));
 
         fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
@@ -763,6 +788,73 @@ describe('GameDetailsModal create room ai entry', () => {
             expect(screen.queryByText('package-install-confirm')).toBeNull();
         }, { timeout: 4000 });
     }, 10000);
+
+    it('确认下载进行中时重复点击只触发一次 re-resolve', async () => {
+        let resolveManifestPromise: ((value: {
+            gameId: string;
+            runtimeChannel: string;
+            modulePackId?: string;
+            assetPackId?: string;
+            modulePackVersion?: string;
+            assetPackVersion?: string;
+            assetPackUrl?: string;
+            source: 'fallback' | 'remote';
+        }) => void) | null = null;
+
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockImplementationOnce(async (gameId: string, delivery?: {
+            runtimeChannel?: string;
+            modulePackId?: string;
+            assetPackId?: string;
+        }) => await new Promise((resolve) => {
+            resolveManifestPromise = resolve;
+        }));
+        vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockResolvedValueOnce({
+            cancel: vi.fn(),
+            finished: Promise.resolve({
+                gameId: 'dicethrone',
+                runtimeChannel: 'stable',
+                status: 'installed',
+                installedVersion: 'test-asset-pack-v1',
+                updatedAt: Date.now(),
+            }),
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+        fireEvent.click(screen.getByText('packageManager.installAction'));
+        expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockClear();
+
+        const modalProps = latestPackageInstallModalProps.current as null | {
+            onConfirm?: () => Promise<void>;
+        };
+        expect(modalProps?.onConfirm).toBeTypeOf('function');
+
+        let firstConfirm: Promise<void> | undefined;
+        let secondConfirm: Promise<void> | undefined;
+        await act(async () => {
+            firstConfirm = modalProps?.onConfirm?.();
+            secondConfirm = modalProps?.onConfirm?.();
+        });
+
+        expect(vi.mocked(manifestClient.resolveGamePackageManifest)).toHaveBeenCalledTimes(1);
+
+        resolveManifestPromise?.({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            modulePackVersion: 'test-module-pack-v1',
+            assetPackVersion: 'test-asset-pack-v1',
+            assetPackUrl: 'https://example.com/dicethrone.zip',
+            source: 'remote',
+        });
+
+        await act(async () => {
+            await Promise.allSettled([firstConfirm, secondConfirm]);
+        });
+    });
 
     it('下载完成后，package-managed 游戏允许创建房间', async () => {
         markGamePackageInstalled();

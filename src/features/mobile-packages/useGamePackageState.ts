@@ -76,6 +76,7 @@ export const useGamePackageState = ({
     const [pendingInstall, setPendingInstall] = useState<PendingGamePackageInstall | null>(null);
     const [isConfirmingInstall, setIsConfirmingInstall] = useState(false);
     const requestSerialRef = useRef(0);
+    const confirmInFlightRef = useRef(false);
 
     useEffect(() => {
         logMobileRuntime('UseGamePackageState', 'hook-init', {
@@ -126,6 +127,7 @@ export const useGamePackageState = ({
 
         requestSerialRef.current += 1;
         setPendingInstall(null);
+        confirmInFlightRef.current = false;
         setIsConfirmingInstall(false);
     }, [cardState.status, pendingInstall]);
 
@@ -201,11 +203,12 @@ export const useGamePackageState = ({
             gameId,
             hasPendingInstall: Boolean(pendingInstall),
             isConfirmingInstall,
+            confirmInFlight: confirmInFlightRef.current,
         });
-        if (isConfirmingInstall) {
+        if (confirmInFlightRef.current || isConfirmingInstall) {
             logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-ignored', {
                 gameId,
-                reason: 'already-confirming',
+                reason: confirmInFlightRef.current ? 'confirm-ref-locked' : 'already-confirming',
             });
             return;
         }
@@ -217,6 +220,7 @@ export const useGamePackageState = ({
             return;
         }
 
+        confirmInFlightRef.current = true;
         setIsConfirmingInstall(true);
         let installManifest = pendingInstall;
 
@@ -274,6 +278,7 @@ export const useGamePackageState = ({
                 error: error instanceof Error ? error.message : String(error),
             });
         } finally {
+            confirmInFlightRef.current = false;
             setIsConfirmingInstall(false);
         }
     }, [gameId, isConfirmingInstall, normalizedDelivery, pendingInstall, t]);

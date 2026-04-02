@@ -276,11 +276,17 @@ const OnlineRoomConnectionLoading = ({
         core?.activePlayer ?? 'no-player',
         core?.phase ?? 'no-phase',
     ].join(':');
+    const progressText = state
+        ? undefined
+        : t(isConnected
+            ? 'matchRoom.loadingProgress.syncing'
+            : 'matchRoom.loadingProgress.connecting');
     return (
         <ConnectionLoadingScreen
             anchor="container"
             title={title}
             description={description}
+            progressText={progressText}
             gameId={gameId}
             activityKey={activityKey}
             suppressTimeout={Boolean(state)}
@@ -355,9 +361,15 @@ export const MatchRoom = () => {
     // → WrappedBoard 重建 → Board 卸载重挂载 → CriticalImageGate 重新预加载 → 循环
     const tRef = useRef(t);
     tRef.current = t;
-    // 联机对局刷新时先给玩家看到棋盘，再让图片在后台补齐；
-    // 教程模式仍保留强门禁，避免首步引导和资源切阶段互相打架。
-    const shouldBlockBoardOnImagePreload = isTutorialRoute;
+    const [hasCompletedInitialOnlinePreload, setHasCompletedInitialOnlinePreload] = useState(false);
+    useEffect(() => {
+        setHasCompletedInitialOnlinePreload(false);
+    }, [gameId, matchId, isTutorialRoute]);
+
+    // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
+    // 联机模式仅在首次进入对局时阻塞并显示真实素材进度，首轮完成后恢复后台预加载，
+    // 避免后续阶段切换反复盖住棋盘。
+    const shouldBlockBoardOnImagePreload = isTutorialRoute || !hasCompletedInitialOnlinePreload;
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !gameImplReady) return null;
         const impl = getGameImplementation(gameId);
@@ -372,13 +384,25 @@ export const MatchRoom = () => {
                 enabled={!isUgcGame}
                 blockRendering={shouldBlockBoardOnImagePreload}
                 loadingDescription={tRef.current('matchRoom.loadingResources')}
+                onReady={() => {
+                    if (!isTutorialRoute) {
+                        setHasCompletedInitialOnlinePreload(true);
+                    }
+                }}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
         Wrapped.displayName = 'WrappedOnlineBoard';
         return Wrapped;
-    }, [gameId, i18n.language, isUgcGame, gameImplReady, shouldBlockBoardOnImagePreload]);
+    }, [
+        gameId,
+        gameImplReady,
+        i18n.language,
+        isTutorialRoute,
+        isUgcGame,
+        shouldBlockBoardOnImagePreload,
+    ]);
 
     // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
@@ -1178,12 +1202,22 @@ export const MatchRoom = () => {
     }
 
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+        return (
+            <LoadingScreen
+                description={t('matchRoom.loadingResources')}
+                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+            />
+        );
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} />;
+        return (
+            <LoadingScreen
+                description={t('matchRoom.joiningRoom')}
+                progressText={t('matchRoom.loadingProgress.joiningRoom')}
+            />
+        );
     }
 
     if (shouldShowMatchError) {
