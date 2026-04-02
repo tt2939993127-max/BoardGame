@@ -115,6 +115,8 @@ export interface CustomActionMeta {
     categories: CustomActionCategory[];
     /** 是否需要玩家交互 */
     requiresInteraction?: boolean;
+    /** 是否依赖当前已选中的单一 defender（常见于 2v2 攻击修正/主阶段对手卡） */
+    requiresSelectedDefender?: boolean;
     /** 可用阶段（不指定则不限制） */
     phases?: string[];
     /**

@@ -16,6 +16,8 @@ const appName = process.env.CAPACITOR_APP_NAME?.trim() || '易桌游';
 const mode = (process.env.ANDROID_WEBVIEW_MODE?.trim().toLowerCase() || 'embedded');
 const remoteUrl = process.env.ANDROID_REMOTE_WEB_URL?.trim() || '';
 const isHttpRemoteUrl = /^http:\/\//i.test(remoteUrl);
+const backendUrl = process.env.VITE_BACKEND_URL?.trim() || '';
+const embeddedAndroidScheme = /^http:\/\//i.test(backendUrl) ? 'http' : 'https';
 const otaEnabled = /^(1|true|yes|on)$/i.test(process.env.VITE_ANDROID_OTA_ENABLED?.trim() || '');
 const otaAppReadyTimeout = Number.parseInt(process.env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?.trim() || '', 10);
 
@@ -28,7 +30,7 @@ if (mode === 'remote' && !/^https?:\/\//i.test(remoteUrl)) {
 }
 
 const server: NonNullable<CapacitorConfig['server']> = {
-    androidScheme: 'https',
+    androidScheme: mode === 'embedded' ? embeddedAndroidScheme : 'https',
 };
 
 if (mode === 'remote') {

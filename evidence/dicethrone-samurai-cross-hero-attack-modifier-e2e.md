@@ -6,7 +6,7 @@
 
 1. `card-righteousness` 对僧侣时，固定命中 `Katana` 分支并展示 `+2 damage`
 2. `card-zanshin` 对圣骑士时，固定产出 5 颗额外骰并同步伤害 / 耻辱 / 反击结果
-3. 不强行裁决 `Masamune II`；证据不足时明确保留为 blocker
+3. `Masamune II` 不在本次 E2E 目标内；其升级差异以规则文档、locale 与定向回归为准
 
 ## 执行命令
 
@@ -20,7 +20,8 @@
 - 结果是 `window.__BG_TEST_HARNESS__.dice.setValues([...])` 在本地 E2E 中无法稳定控制 `random.d(6)`，会让武士奖励骰分支看起来“像随机失控”。
 - 本次已在 `src/engine/transport/react.tsx` 中补齐测试环境随机桥接，让本地 provider 在测试模式下通过 `TestHarness.random.wrap(...)` 驱动 `random()` / `d()` / `range()` / `shuffle()`。
 - 在此基础上，`e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增了两条武士跨角色用例，并使用固定骰值注入验证真实 UI。
-- `Masamune II` 仍未修改实现。当前只确认“代码定义 / OCR 图证 / 现有规则文档裁决”三者尚未形成足够安全的闭环，因此继续作为审计 blocker 保留。
+- `Masamune II` 不属于本次新增 E2E 的验证目标。
+- 当前仓库内与 `Masamune II` 相关的代码、locale、规则文档和定向回归已经形成闭环；因此这里不再把它保留为 blocker，而是把它视为“由非 E2E 证据承担”的已闭环项。
 
 ## 截图审查
 
@@ -64,4 +65,4 @@
 
 - 武士跨角色攻击修正的 UI 链路已经有可重复、可审查的 E2E 证据。
 - 本轮修复的真实收益点是测试基础设施：以后本地 Dice Throne E2E 使用 `TestHarness.dice.setValues()` 时，`random.d(6)` 终于会被同一套注入控制。
-- `Masamune II` 仍是唯一未闭环证据点，本轮不做实现层硬改。
+- `Masamune II` 当前不再是这条证据链上的 blocker；本文件只记录 `Righteousness / Zanshin` 真实 UI 链路的补证结果。

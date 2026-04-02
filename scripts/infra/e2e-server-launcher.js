@@ -3,15 +3,19 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withWindowsHide } from './windows-hide.js';
 
-export function spawnNodeScript(scriptPath, env, args = []) {
-  return spawn(process.execPath, [scriptPath, ...args], {
-    stdio: 'inherit',
+function createSpawnOptions(env, overrides = {}) {
+  return {
+    stdio: overrides.stdio ?? 'inherit',
     env,
     ...withWindowsHide({}, env),
-  });
+  };
 }
 
-export function spawnBundleRunner({ label, entry, outfile, tsconfig, env, watch = true }) {
+export function spawnNodeScript(scriptPath, env, args = [], spawnOptions = {}) {
+  return spawn(process.execPath, [scriptPath, ...args], createSpawnOptions(env, spawnOptions));
+}
+
+export function spawnBundleRunner({ label, entry, outfile, tsconfig, env, watch = true, spawnOptions = {} }) {
   const runnerArgs = [
     '--label', label,
     '--entry', entry,
@@ -24,30 +28,26 @@ export function spawnBundleRunner({ label, entry, outfile, tsconfig, env, watch 
 
   return spawnNodeScript('scripts/infra/dev-bundle-runner.mjs', env, [
     ...runnerArgs,
-  ]);
+  ], spawnOptions);
 }
 
-export function spawnTsxEntry({ entry, tsconfig, env }) {
+export function spawnTsxEntry({ entry, tsconfig, env, spawnOptions = {} }) {
   return spawn(process.execPath, [
     'node_modules/tsx/dist/cli.mjs',
     '--tsconfig',
     tsconfig,
     entry,
-  ], {
-    stdio: 'inherit',
-    env,
-    ...withWindowsHide({}, env),
-  });
+  ], createSpawnOptions(env, spawnOptions));
 }
 
-export function spawnTsLoaderEntry({ entry, env, tsconfig }) {
+export function spawnTsLoaderEntry({ entry, env, tsconfig, spawnOptions = {} }) {
   const loaderUrl = pathToFileURL(path.resolve('scripts/infra/ts-runtime-loader.mjs')).href;
   return spawn(process.execPath, [
     '--loader',
     loaderUrl,
     entry,
   ], {
-    stdio: 'inherit',
+    stdio: spawnOptions.stdio ?? 'inherit',
     env: {
       ...env,
       ...(tsconfig ? { TS_RUNTIME_TSCONFIG: path.resolve(tsconfig) } : {}),
@@ -57,11 +57,7 @@ export function spawnTsLoaderEntry({ entry, env, tsconfig }) {
 }
 
 export function spawnNpxCommand(args, env) {
-  return spawn(process.execPath, ['node_modules/npm/bin/npm-cli.js', 'exec', '--yes', '--', ...args], {
-    stdio: 'inherit',
-    env,
-    ...withWindowsHide({}, env),
-  });
+  return spawn(process.execPath, ['node_modules/npm/bin/npm-cli.js', 'exec', '--yes', '--', ...args], createSpawnOptions(env));
 }
 
 export function registerExitGuard(child, label, onFailure, options = {}) {

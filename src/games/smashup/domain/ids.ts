@@ -26,8 +26,10 @@ export const SMASHUP_CARD_BACK = {
 export const SMASHUP_FACTION_IDS = {
     ALIENS: 'aliens',
     ANCIENT_EGYPTIANS: 'ancient_egyptians',
+    ANCIENT_EGYPTIANS_POD: 'ancient_egyptians_pod',
     ALIENS_POD: 'aliens_pod',
     COWBOYS: 'cowboys',
+    COWBOYS_POD: 'cowboys_pod',
     CHANGERBOTS: 'changerbots',
     DINOSAURS: 'dinosaurs',
     DINOSAURS_POD: 'dinosaurs_pod',
@@ -47,11 +49,13 @@ export const SMASHUP_FACTION_IDS = {
     ROBOTS: 'robots',
     ROBOTS_POD: 'robots_pod',
     SAMURAI: 'samurai',
+    SAMURAI_POD: 'samurai_pod',
     SUPER_SPIES: 'super_spies',
     TIME_TRAVELERS: 'time_travelers',
     TRICKSTERS: 'tricksters',
     TRICKSTERS_POD: 'tricksters_pod',
     VIKINGS: 'vikings',
+    VIKINGS_POD: 'vikings_pod',
     WIZARDS: 'wizards',
     WIZARDS_POD: 'wizards_pod',
     ZOMBIES: 'zombies',
@@ -141,3 +145,8 @@ export const FACTION_DISPLAY_NAMES: Record<string, string> = {
     [SMASHUP_FACTION_IDS.SUPER_SPIES]: '超级间谍',
     [SMASHUP_FACTION_IDS.TIME_TRAVELERS]: '时间旅行者',
 };
+
+FACTION_DISPLAY_NAMES[SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD] = '古埃及人 (POD版)';
+FACTION_DISPLAY_NAMES[SMASHUP_FACTION_IDS.COWBOYS_POD] = '牛仔 (POD版)';
+FACTION_DISPLAY_NAMES[SMASHUP_FACTION_IDS.SAMURAI_POD] = '武士 (POD版)';
+FACTION_DISPLAY_NAMES[SMASHUP_FACTION_IDS.VIKINGS_POD] = '维京人 (POD版)';

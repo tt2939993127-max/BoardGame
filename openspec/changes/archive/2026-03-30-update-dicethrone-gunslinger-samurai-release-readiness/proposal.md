@@ -14,6 +14,11 @@
 - 明确“代表性 E2E”不是要求穷举所有牌，而是要求覆盖每名角色本轮新增或高风险的交互家族，并且至少包含真实入口。
 - 明确禁止把“已识别缺口闭环”直接上升表述为“两个角色所有技能、所有卡牌、所有多人分支都已穷尽式审计完成”。
 
+## Current Residual Scope
+- 枪手当前已有最小开局、`The Law` 多目标、四人 `2v2` 目标牌等代表性真实入口证据；旧“专属手牌仍是通用牌组兜底”的说法已过期。`Loaded / 装填弹药` 的通用时机也已按角色 leaflet / 角色板 / 具体卡文完成裁定，当前不再保留这条角色级 residual。
+- 武士当前已有 `Honor / Back Strike` 真实整局入口、跨角色攻击修正与四人 `2v2` 目标牌证据；`Masamune II` 的代码、locale、规则文档和定向回归已闭环，旧 blocker 已失效。`Budo / 武道` 的基础 `6 damage` 与升级 `8 damage` 已由本地裁图 OCR 再次复核，当前不再保留这条角色级 residual。
+- 因此，这条 change 的长期口径应理解为：“角色级审计标准已建立，且必须持续按 audited scope 汇报”，而不是“历史 blocker 全关就自动等于穷尽式全量完成”。
+
 ## Impact
 - Affected specs:
   - `dicethrone-hero-release-readiness`

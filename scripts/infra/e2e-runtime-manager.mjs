@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +21,7 @@ import {
     touchRuntime,
     upsertRuntime,
 } from './e2e-runtime-registry.js';
-import { withWindowsHide } from './windows-hide.js';
+import { startSingleWorkerRuntime } from './single-worker-runtime.js';
 
 const TMP_DIR = path.join(process.cwd(), '.tmp');
 const RUNTIME_READY_TIMEOUT_MS = Number.parseInt(process.env.PW_SERVICE_READY_TIMEOUT_MS || '420000', 10);
@@ -135,6 +134,10 @@ function createRuntimeEnv(runtime) {
         PW_RUNTIME_SCOPE: runtime.scope,
         PW_RUNTIME_MODE: runtime.mode,
         PW_SKIP_RUNTIME_BOOTSTRAP: 'true',
+        PW_E2E_SESSION_ID: runtime.sessionId ?? '',
+        PW_E2E_ENTRYPOINT: runtime.entrypoint ?? '',
+        PW_E2E_COMMAND_SOURCE: runtime.commandSource ?? '',
+        PW_E2E_TARGET: runtime.targetLabel ?? runtime.target ?? '',
         PW_PORT: String(runtime.ports.frontend),
         PW_GAME_SERVER_PORT: String(runtime.ports.gameServer),
         GAME_SERVER_PORT: String(runtime.ports.gameServer),
@@ -169,51 +172,28 @@ function getLocalRuntimeByScope(scope, cwd = process.cwd()) {
     )) ?? null;
 }
 
-function spawnSingleWorkerBootstrap({ scope, target, mode, ports }) {
+async function cleanupManagedRuntimeGracefully(runtime, controller, logger = console) {
+    if (!runtime) {
+        return;
+    }
+
+    logger.log?.(`🛑 停止 E2E runtime: ${formatRuntimeSummary(runtime)}`);
+
+    if (controller) {
+        controller.stop('runtime-manager graceful shutdown');
+    } else {
+        stopRuntime(runtime, { logger });
+    }
+
+    await waitForPortsFree(Object.values(runtime.ports ?? {}), RUNTIME_STOP_TIMEOUT_MS);
+    releaseReservedPortsForScope(runtime.scope, process.cwd());
+    removeRuntimeById(runtime.runtimeId, process.cwd());
+}
+
+function getRuntimeBootstrapLogFile(scope) {
     const logFile = getBootstrapLogFile(scope);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    const logFd = fs.openSync(logFile, 'a');
-    const shouldDetachBootstrap = !(
-        process.platform === 'win32'
-        && process.env.CODEX_MANAGED_BY_NPM === '1'
-    );
-
-    let child;
-    try {
-        child = spawn(process.execPath, ['scripts/infra/start-single-worker-servers.js'], {
-            cwd: process.cwd(),
-            env: {
-                ...process.env,
-                PW_RUNTIME_SCOPE: scope,
-                PW_TEST_TARGET: target,
-                PW_BOOTSTRAP_LOG_FILE: logFile,
-                PW_E2E_DAEMON: mode,
-                PW_PORT: String(ports.frontend),
-                PW_GAME_SERVER_PORT: String(ports.gameServer),
-                GAME_SERVER_PORT: String(ports.gameServer),
-                PW_API_SERVER_PORT: String(ports.apiServer),
-                API_SERVER_PORT: String(ports.apiServer),
-            },
-            detached: shouldDetachBootstrap,
-            stdio: ['ignore', logFd, logFd],
-            ...withWindowsHide({}, process.env),
-        });
-    } finally {
-        fs.closeSync(logFd);
-    }
-
-    if (!child.pid) {
-        throw new Error(`启动 runtime 失败，未获取到 PID: scope=${scope}`);
-    }
-
-    if (shouldDetachBootstrap) {
-        child.unref();
-    }
-
-    return {
-        pid: child.pid,
-        logFile,
-    };
+    return logFile;
 }
 
 async function waitForRuntimeReady(runtime, options = {}) {
@@ -358,42 +338,88 @@ export async function ensureSingleWorkerRuntime(options = {}) {
         });
     }
 
-    const bootstrap = spawnSingleWorkerBootstrap({
-        scope: plan.scope,
-        target,
-        mode: plan.mode,
-        ports,
-    });
+    const logFile = getRuntimeBootstrapLogFile(plan.scope);
+    let controller = null;
+    let provisionalRuntime = null;
 
-    const provisionalRuntime = upsertRuntime({
-        scope: plan.scope,
-        active: true,
-        mode: plan.mode,
-        workers: 1,
-        target,
-        ports,
-        ownerPids: [bootstrap.pid],
-        pids: [bootstrap.pid],
-        bootstrapLogFiles: [bootstrap.logFile],
-        health: {
-            ready: false,
-            checks: {},
-            urls: getSingleWorkerUrls(ports),
-            lastHealthCheckAt: null,
-        },
-        createdAt: new Date().toISOString(),
-    }, process.cwd());
+    try {
+        controller = await startSingleWorkerRuntime({
+            env: {
+                ...process.env,
+                PW_RUNTIME_SCOPE: plan.scope,
+                PW_TEST_TARGET: target,
+                PW_BOOTSTRAP_LOG_FILE: logFile,
+                PW_E2E_DAEMON: plan.mode,
+                PW_PORT: String(ports.frontend),
+                PW_GAME_SERVER_PORT: String(ports.gameServer),
+                GAME_SERVER_PORT: String(ports.gameServer),
+                PW_API_SERVER_PORT: String(ports.apiServer),
+                API_SERVER_PORT: String(ports.apiServer),
+                PW_E2E_TARGET: process.env.PW_E2E_TARGET?.trim() || target,
+            },
+            logger,
+            logFile,
+            childStdio: ['ignore', 'pipe', 'pipe'],
+            runtimeScope: plan.scope,
+            runtimeMode: plan.mode,
+            target,
+            targetLabel: process.env.PW_E2E_TARGET?.trim() || target,
+            sessionId: process.env.PW_E2E_SESSION_ID?.trim() || '',
+            entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || '',
+            commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || '',
+        });
 
-    const readyRuntime = await waitForRuntimeReady(provisionalRuntime, {
-        timeoutMs: options.timeoutMs,
-    });
-    logger.log?.(`✅ E2E runtime 已就绪: ${formatRuntimeSummary(readyRuntime)}`);
+        provisionalRuntime = upsertRuntime({
+            scope: plan.scope,
+            active: true,
+            mode: plan.mode,
+            workers: 1,
+            target,
+            targetLabel: process.env.PW_E2E_TARGET?.trim() || target,
+            ports,
+            ownerPids: [process.pid],
+            servicePids: controller.getServicePids(),
+            pids: [process.pid, ...controller.getServicePids()],
+            bootstrapLogFiles: [logFile],
+            sessionId: process.env.PW_E2E_SESSION_ID?.trim() || '',
+            entrypoint: process.env.PW_E2E_ENTRYPOINT?.trim() || '',
+            commandSource: process.env.PW_E2E_COMMAND_SOURCE?.trim() || '',
+            health: {
+                ready: false,
+                checks: {},
+                urls: getSingleWorkerUrls(ports),
+                lastHealthCheckAt: null,
+            },
+            createdAt: new Date().toISOString(),
+        }, process.cwd());
 
-    return {
-        runtime: readyRuntime,
-        env: createRuntimeEnv(readyRuntime),
-        reused: false,
-    };
+        const readyRuntime = await Promise.race([
+            waitForRuntimeReady(provisionalRuntime, {
+                timeoutMs: options.timeoutMs,
+            }),
+            controller.failurePromise.then((error) => {
+                throw error;
+            }),
+        ]);
+        logger.log?.(`✅ E2E runtime 已就绪: ${formatRuntimeSummary(readyRuntime)}`);
+
+        return {
+            runtime: readyRuntime,
+            env: createRuntimeEnv(readyRuntime),
+            reused: false,
+            controller,
+        };
+    } catch (error) {
+        if (controller) {
+            controller.stop('runtime startup failed');
+            await waitForPortsFree(Object.values(ports ?? {}), RUNTIME_STOP_TIMEOUT_MS);
+        }
+        releaseReservedPortsForScope(plan.scope, process.cwd());
+        if (provisionalRuntime?.runtimeId) {
+            removeRuntimeById(provisionalRuntime.runtimeId, process.cwd());
+        }
+        throw error;
+    }
 }
 
 function formatStatus(runtime) {
@@ -460,13 +486,32 @@ async function main() {
         };
         console.log(jsonMode ? JSON.stringify(payload) : JSON.stringify(payload, null, 2));
         if (holdMode) {
-            await new Promise((resolve) => {
-                const finish = () => resolve();
-                process.once('SIGINT', finish);
-                process.once('SIGTERM', finish);
-                process.stdin.resume();
-                process.stdin.once('end', finish);
-            });
+            try {
+                await Promise.race([
+                    new Promise((resolve) => {
+                        const finish = () => resolve();
+                        process.once('SIGINT', finish);
+                        process.once('SIGTERM', finish);
+                        process.stdin.resume();
+                        process.stdin.once('end', finish);
+                    }),
+                    result.controller?.failurePromise ?? new Promise(() => {}),
+                ]);
+            } finally {
+                if (payload.mode === 'isolated-single') {
+                    if (result.controller) {
+                        await cleanupManagedRuntimeGracefully(result.runtime, result.controller, logger);
+                    } else {
+                        await stopManagedRuntime({
+                            runtimeId: payload.runtimeId,
+                            logger,
+                        });
+                    }
+                }
+            }
+        } else if (result.controller) {
+            await cleanupManagedRuntimeGracefully(result.runtime, result.controller, logger);
+            throw new Error('start/ensure 创建新 runtime 时必须使用 --hold，避免 owner 进程提前退出。');
         }
         return;
     }

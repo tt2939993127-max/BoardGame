@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useReducer, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLocalizedImageUrls, getPreloadedImageElement, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
 import { getOptimizedImageUrls, getLocalizedAssetPath, getLocalizedLocalAssetPath } from '../../../core/AssetLoader';
@@ -181,10 +181,13 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     const [loaded, setLoaded] = useState(() => preloaded);
     const checkKey = checkUrls.join('|');
     const [activeUrl, setActiveUrl] = useState(() => checkUrls.find(isUsableAtlasUrlLoaded) ?? checkUrls[0] ?? '');
+    const loadAttemptRef = useRef(0);
 
-    // 同步修正：如果 loaded 为 false 但缓存已就绪，或已经解析出可用 activeUrl，立即视为已加载，
-    // 避免 atlas 背景已挂上但 shimmer 仍长期覆盖。
-    const effectiveLoaded = loaded || preloaded || Boolean(activeUrl);
+    // 只有真实加载完成（loaded）或预加载缓存已命中（preloaded）时，才允许移除 shimmer。
+    // 不能仅因为 activeUrl 已解析出来就视为已加载：
+    // activeUrl 只代表“选中了候选 URL”，不代表图片请求/解码已经完成。
+    // 否则会出现 atlas 在真实像素尚未就绪时就提前暴露，导致“早截空、晚截有图”。
+    const effectiveLoaded = loaded || preloaded;
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
     // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer
@@ -195,7 +198,11 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         const { webp } = getOptimizedImageUrls(localizedPath);
         if (!webp) return;
         // 防御竞态：订阅前图片可能已在后台加载完成，立即检查一次
-        if (hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale))) {
+        const readyUrl = checkUrls.find(isUsableAtlasUrlLoaded);
+        if (hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale)) || readyUrl) {
+            if (readyUrl) {
+                setActiveUrl(readyUrl);
+            }
             setLoaded(true);
         }
         return onImageReady((url) => {
@@ -225,22 +232,27 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             setLoaded(true);
             return;
         }
+        const currentAttempt = loadAttemptRef.current + 1;
+        loadAttemptRef.current = currentAttempt;
         setLoaded(false);
         let cancelled = false;
-        const markReady = () => {
-            if (!cancelled) {
+        const markReady = (url?: string) => {
+            if (!cancelled && loadAttemptRef.current === currentAttempt) {
+                if (url) {
+                    setActiveUrl(url);
+                }
                 setLoaded(true);
             }
         };
 
         const tryLoad = (idx: number) => {
             if (idx >= checkUrls.length) {
-                markReady(); // 全部候选都明确失败后再移除 shimmer
                 return;
             }
             const url = checkUrls[idx];
             const img = new Image();
             img.onload = () => {
+                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
                 if (!hasUsableAtlasImage(img)) {
                     tryLoad(idx + 1);
                     return;
@@ -248,10 +260,10 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
                 // 注册到统一缓存，供其他组件复用
                 markImageLoaded(source.image, effectiveLocale, img);
                 markImageLoaded(url, undefined, img);
-                setActiveUrl(url);
-                markReady();
+                markReady(url);
             };
             img.onerror = () => {
+                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
                 tryLoad(idx + 1);
             };
             img.src = url;
@@ -318,7 +330,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     }
 
     const atlasStyle = computeSpriteStyle(index, source.config);
-    const backgroundImage = activeUrl ? `url("${activeUrl}")` : '';
+    const backgroundImage = effectiveLoaded && activeUrl ? `url("${activeUrl}")` : '';
 
     return (
         <div

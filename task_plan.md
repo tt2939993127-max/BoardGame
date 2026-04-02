@@ -36,21 +36,21 @@
   - [x] 补齐 owner-visible bury UI 与对手隐藏占位
   - [x] 补领域测试与统一 E2E 证据收口
 
-- [/] **Phase 6: Vikings**
+- [x] **Phase 6: Vikings**
   - [x] 按官方规则书 / Fandom 口径修正 defs、locale 与 ability metadata
   - [x] 实现 deck-top / discard / steal / extra-action 联动与相关基地能力
   - [x] 补领域测试并完成增量门禁验证
-  - [ ] 统一 E2E 与更严格语义收口留待四派系完成后处理
+  - [x] 统一 E2E 与更严格语义收口已在四派系统一审计阶段完成
 
 - [x] **Phase 7: Cowboys**
   - [x] 实现官方 duel 内核、move / destroy / ongoing draw 与相关 metadata
   - [x] 补决斗/目标选择最小交互断言
   - [x] 补完整 duel 浏览器 E2E 与证据收口
 
-- [/] **Phase 8: Samurai**
+- [x] **Phase 8: Samurai**
   - [x] 按官方规则书 / Fandom 口径修正 defs、locale 与 ability metadata
   - [x] 实现 honor / duel / destroy / temporary-buff / ongoing draw 与相关基地能力
-  - [ ] 补 Samurai 专项浏览器 E2E、临时触发精细语义与更严格审计
+  - [x] Samurai 专项浏览器 E2E、临时触发精细语义与更严格审计已在统一审计阶段完成
 
 - [x] **Phase 9: 统一审计与收尾**
   - [x] 四派系完成后再统一做 gameplay 审计

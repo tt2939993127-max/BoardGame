@@ -20,6 +20,7 @@ import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
 import { MONK_CARDS } from '../heroes/monk/cards';
+import { findHeroCard } from '../heroes';
 
 // ============================================================================
 // 固定随机数（保证回放确定性）
@@ -132,7 +133,7 @@ export function createInitializedState(playerIds: PlayerId[], random: RandomFn):
 }
 
 export const getCardById = (cardId: string): AbilityCard => {
-    const card = MONK_CARDS.find(c => c.id === cardId);
+    const card = findHeroCard(cardId) ?? MONK_CARDS.find(c => c.id === cardId);
     if (!card) throw new Error(`找不到卡牌: ${cardId}`);
     return JSON.parse(JSON.stringify(card)) as AbilityCard;
 };

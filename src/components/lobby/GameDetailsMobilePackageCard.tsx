@@ -1,6 +1,10 @@
-import { AlertTriangle, Download, HardDriveDownload, LoaderCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Download, HardDriveDownload, LoaderCircle, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { GamePackageCardState, GamePackageInstallStatus } from '../../features/mobile-packages/types';
+import {
+    hasUsableInstalledGamePackageVersion,
+    type GamePackageCardState,
+    type GamePackageInstallStatus,
+} from '../../features/mobile-packages/types';
 import { formatPackageBytes } from './packageManagerFormat';
 
 export type GamePackageCardStatus = GamePackageInstallStatus;
@@ -11,8 +15,10 @@ interface GameDetailsMobilePackageCardProps {
     state: GamePackageCardState;
     onInstall: () => void;
     onRetry?: () => void;
+    onCollapse?: () => void;
     presentation?: 'install' | 'update-required';
     requiredAppVersion?: string;
+    className?: string;
 }
 
 const getProgressTitleKey = (status: Extract<GamePackageCardStatus, 'queued' | 'manifest' | 'downloading' | 'verifying'>) => {
@@ -110,6 +116,15 @@ const getStatusMeta = (
                 iconClassName: '',
                 iconToneClassName: 'border-amber-800/20 bg-amber-50/70 text-amber-900',
             };
+        case 'installed':
+            return {
+                title: t('packageManager.installedTitle'),
+                description: t('packageManager.installedHint', { game: gameName }),
+                actionLabel: null,
+                icon: HardDriveDownload,
+                iconClassName: '',
+                iconToneClassName: 'border-emerald-700/20 bg-emerald-50/70 text-emerald-900',
+            };
         case 'not-installed':
         default:
             return {
@@ -128,37 +143,60 @@ export const GameDetailsMobilePackageCard = ({
     state,
     onInstall,
     onRetry,
+    onCollapse,
     presentation = 'install',
     requiredAppVersion,
+    className = 'md:hidden',
 }: GameDetailsMobilePackageCardProps) => {
     const { t } = useTranslation('lobby');
     const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
     const StatusIcon = statusMeta.icon;
-    const isInProgress = state.status !== 'not-installed' && state.status !== 'failed';
+    const showLeadingStatusIcon = state.status !== 'not-installed';
+    const isInProgress = state.status === 'queued'
+        || state.status === 'manifest'
+        || state.status === 'downloading'
+        || state.status === 'verifying';
     const progressMode = state.progressMode ?? 'indeterminate';
     const progressPercent = Math.max(0, Math.min(100, state.progressPercent ?? 0));
-    const totalBytes = [state.modulePackBytes, state.assetPackBytes].every((value) => typeof value === 'number' && Number.isFinite(value))
-        ? (state.modulePackBytes ?? 0) + (state.assetPackBytes ?? 0)
+    const knownTotalBytes = [state.modulePackBytes, state.assetPackBytes].reduce((total, value) => (
+        typeof value === 'number' && Number.isFinite(value)
+            ? total + value
+            : total
+    ), 0);
+    const totalBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => typeof value === 'number' && Number.isFinite(value))
+        ? knownTotalBytes
         : undefined;
     const sizeLabel = formatPackageBytes(totalBytes, t('packageManager.sizeUnknown'));
     const actionHandler = state.status === 'failed' ? (onRetry ?? onInstall) : onInstall;
+    const badgeLabel = presentation === 'update-required'
+        ? t('packageManager.updateRequiredBadge')
+        : state.status === 'installed'
+            ? hasUsableInstalledGamePackageVersion(state.installedVersion)
+                ? t('packageManager.installedVersionBadge', { version: state.installedVersion?.trim() })
+                : t('packageManager.installedCompletedBadge')
+            : sizeLabel;
 
     return (
         <section
             data-testid="game-details-mobile-package-card"
             data-status={state.status}
-            className="pointer-events-auto w-full rounded-[8px] border border-parchment-card-border/45 bg-parchment-card-bg/96 p-3 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm md:hidden"
+            className={[
+                'pointer-events-auto w-full rounded-[8px] border border-parchment-card-border/45 bg-parchment-card-bg/96 p-3 shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm',
+                className,
+            ].filter(Boolean).join(' ')}
             aria-label={t('packageManager.cardLabel', { game: gameName })}
         >
-            <div className="flex items-start gap-3">
-                <div
-                    className={[
-                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
-                        statusMeta.iconToneClassName,
-                    ].join(' ')}
-                >
-                    <StatusIcon size={18} strokeWidth={2.2} className={statusMeta.iconClassName} />
-                </div>
+            <div className={showLeadingStatusIcon ? 'flex items-start gap-3' : 'flex items-start'}>
+                {showLeadingStatusIcon && (
+                    <div
+                        className={[
+                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+                            statusMeta.iconToneClassName,
+                        ].join(' ')}
+                    >
+                        <StatusIcon size={18} strokeWidth={2.2} className={statusMeta.iconClassName} />
+                    </div>
+                )}
 
                 <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
@@ -170,9 +208,23 @@ export const GameDetailsMobilePackageCard = ({
                                 {statusMeta.title}
                             </p>
                         </div>
-                        <span className="shrink-0 rounded-full border border-parchment-card-border/35 bg-parchment-base-bg/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-parchment-light-text">
-                            {presentation === 'update-required' ? t('packageManager.updateRequiredBadge') : sizeLabel}
-                        </span>
+                        <div className="flex shrink-0 items-start gap-2">
+                            <span className="rounded-full border border-parchment-card-border/35 bg-parchment-base-bg/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-parchment-light-text">
+                                {badgeLabel}
+                            </span>
+                            {onCollapse && (
+                                <button
+                                    type="button"
+                                    data-testid="game-details-mobile-package-card-dismiss"
+                                    onClick={onCollapse}
+                                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-parchment-card-border/35 bg-parchment-base-bg/60 text-parchment-light-text transition-colors hover:bg-parchment-base-bg hover:text-parchment-base-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-parchment-base-text/20"
+                                    aria-label={t('common:close')}
+                                    title={t('common:close')}
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <p className="mt-1 text-[11px] leading-5 text-parchment-light-text">

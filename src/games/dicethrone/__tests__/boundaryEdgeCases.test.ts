@@ -475,6 +475,7 @@ describe('胜负判定边界', () => {
         const result = DiceThroneDomain.isGameOver!(core);
         expect(result).toBeDefined();
         expect(result!.winner).toBe('1');
+        expect(result!.winners).toEqual(['1', '3']);
     });
 
     it('2v2 模式下双方共享体力同时归零时判定平局', () => {

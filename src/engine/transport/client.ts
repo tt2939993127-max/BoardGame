@@ -9,7 +9,7 @@
 
 import { io, type Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
-import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from '../../lib/socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports, shouldTryAllSocketTransports } from '../../lib/socketConnectionConfig';
 import type { MatchPlayerInfo, ServerToClientEvents, ClientToServerEvents } from './protocol';
 import { applyPatches } from './patch';
 
@@ -117,6 +117,7 @@ export class GameTransportClient {
             {
                 parser: msgpackParser,
                 transports: getSocketIoTransports(),
+                tryAllTransports: shouldTryAllSocketTransports(),
                 reconnection: true,
                 reconnectionAttempts: Infinity,
                 reconnectionDelay: 1000,

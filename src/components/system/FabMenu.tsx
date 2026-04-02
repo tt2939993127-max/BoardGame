@@ -31,7 +31,7 @@ interface FabMenuProps {
 
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
-const FAB_EDGE_PEEK_SIZE_MOBILE = 18;
+const FAB_EDGE_PEEK_SIZE_MOBILE = 32;
 const FAB_EDGE_PEEK_SIZE_DESKTOP = 20;
 
 export interface FabAction {

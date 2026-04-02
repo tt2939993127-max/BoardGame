@@ -314,6 +314,31 @@ describe('Property 3: 标题颜色匹配结果类型', () => {
         unmount();
     });
 
+    it('2v2 winners 数组包含当前玩家时应显示胜利视角', () => {
+        const players: Record<string, HeroState> = {
+            '0': createTestHero({ id: '0' }),
+            '1': createTestHero({ id: '1' }),
+            '2': createTestHero({ id: '2' }),
+            '3': createTestHero({ id: '3' }),
+        };
+
+        const { unmount } = render(
+            <DiceThroneEndgameContent
+                result={{ winner: '0', winners: ['0', '2'] }}
+                playerID="2"
+                players={players}
+                myPlayerId="2"
+                locale="zh-CN"
+            />,
+        );
+
+        const title = screen.getByTestId('dt-endgame-title');
+        expect(title).toHaveAttribute('data-result', 'victory');
+        expect(title.className).toContain('amber');
+
+        unmount();
+    });
+
     it('平局使用白银色系（white/slate）', () => {
         const players: Record<string, HeroState> = {
             '0': createTestHero({ id: '0' }),

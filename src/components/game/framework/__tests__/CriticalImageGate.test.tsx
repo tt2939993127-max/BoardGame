@@ -3,6 +3,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCriticalImageGateCacheForTests, CriticalImageGate } from '../CriticalImageGate';
 
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({
+        t: (key: string, params?: Record<string, unknown>) => {
+            if (!params) return key;
+            return Object.entries(params).reduce(
+                (s, [k, v]) => s.replace(`{{${k}}}`, String(v)),
+                key,
+            );
+        },
+    }),
+}));
+
 const {
     areAllCriticalImagesCached,
     cancelWarmPreload,
@@ -46,11 +58,33 @@ vi.mock('../../../../core/CriticalImageResolverRegistry', () => ({
 }));
 
 vi.mock('../../../system/LoadingScreen', () => ({
-    LoadingScreen: ({ description, anchor }: { description?: string; anchor?: string }) => (
-        <div data-loading="true" data-anchor={anchor ?? 'viewport'}>{description ?? 'loading'}</div>
+    LoadingScreen: ({
+        description,
+        progressText,
+        anchor,
+    }: {
+        description?: string;
+        progressText?: string;
+        anchor?: string;
+    }) => (
+        <div data-loading="true" data-anchor={anchor ?? 'viewport'}>
+            <span>{description ?? 'loading'}</span>
+            {progressText ? <span data-testid="loading-screen-progress">{progressText}</span> : null}
+        </div>
     ),
-    default: ({ description, anchor }: { description?: string; anchor?: string }) => (
-        <div data-loading="true" data-anchor={anchor ?? 'viewport'}>{description ?? 'loading'}</div>
+    default: ({
+        description,
+        progressText,
+        anchor,
+    }: {
+        description?: string;
+        progressText?: string;
+        anchor?: string;
+    }) => (
+        <div data-loading="true" data-anchor={anchor ?? 'viewport'}>
+            <span>{description ?? 'loading'}</span>
+            {progressText ? <span data-testid="loading-screen-progress">{progressText}</span> : null}
+        </div>
     ),
 }));
 
@@ -109,6 +143,37 @@ describe('CriticalImageGate', () => {
         );
 
         expect(html).toContain('data-anchor="container"');
+    });
+
+    it('阻塞预加载时会把真实 loaded/total 显示到独立进度行', async () => {
+        vi.mocked(resolveCriticalImages).mockReturnValue({
+            critical: ['smashup/images/card-back', 'smashup/images/base-1', 'smashup/images/base-2'],
+            warm: [],
+            phaseKey: 'opening-hand',
+        });
+        vi.mocked(preloadCriticalImages).mockImplementation(
+            (_gameId, _gameState, _locale, _playerID, onProgress) => {
+                onProgress?.(1, 3);
+                return new Promise<string[]>(() => {});
+            },
+        );
+
+        render(
+            <CriticalImageGate
+                enabled={true}
+                gameId="smashup"
+                gameState={{}}
+                locale="zh-CN"
+                loadingDescription="加载中"
+            >
+                <div>子内容</div>
+            </CriticalImageGate>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('加载中')).toBeInTheDocument();
+            expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.loadingAssets');
+        });
     });
 
     it('空 critical 阶段会快速放行，不会卡在加载页', async () => {
