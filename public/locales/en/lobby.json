@@ -284,6 +284,14 @@
       "retry": "Retry",
       "backToLobby": "Back to Lobby"
     },
+    "connectionError": {
+      "unauthorizedTitle": "Failed to enter room",
+      "unauthorizedDescription": "The room credential is invalid or expired. Return to the lobby and join again.",
+      "matchNotFoundTitle": "Room not found",
+      "matchNotFoundDescription": "The target room may have been destroyed or expired. Return to the lobby and try again.",
+      "syncTimeoutTitle": "Failed to sync room state",
+      "syncTimeoutDescription": "Connected to the server, but the match state never arrived. Retry first; if this keeps happening, the server sync pipeline is abnormal."
+    },
     "ugc": {
       "loading": "Loading UGC runtime…",
       "loadFailed": "UGC runtime load failed: {{error}}",
