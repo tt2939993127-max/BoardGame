@@ -992,15 +992,19 @@ export function registerMiskatonicInteractionHandlers(): void {
         const { cardUid: ongoingUid, defId, ownerId } = selected;
         if (!ongoingUid) return { state, events: [] };
         const ctx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
-        const events: SmashUpEvent[] = [{
+        const detachEvent: OngoingDetachedEvent = {
             type: SU_EVENTS.ONGOING_DETACHED,
             payload: { cardUid: ongoingUid, defId: defId!, ownerId: ownerId!, reason: 'miskatonic_those_meddling_kids' },
             timestamp,
-        } as OngoingDetachedEvent];
-        // 继续显示剩余行动卡（排除刚消灭的）
+        };
+        const events: SmashUpEvent[] = [detachEvent];
+        // 继续显示剩余行动卡时，必须基于“已应用本次消灭”的 live state 重新计算，
+        // 否则第三张及后续行动卡会因为沿用旧 state 而回显/断链。
         if (ctx) {
-            const result = meddlingKidsShowNextAction(state, playerId, ctx.baseIndex, timestamp, ongoingUid);
-            if (result.state !== state) {
+            const nextCore = reduce(state.core, detachEvent);
+            const nextState = { ...state, core: nextCore };
+            const result = meddlingKidsShowNextAction(nextState, playerId, ctx.baseIndex, timestamp, ongoingUid);
+            if (result.state !== nextState) {
                 return { state: result.state, events };
             }
         }

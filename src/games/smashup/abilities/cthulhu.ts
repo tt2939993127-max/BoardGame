@@ -688,7 +688,13 @@ export function registerCthulhuInteractionHandlers(): void {
         const ctx = getContinuationContext<{ cardUid: string }>(iData);
         if (!ctx) return { state, events: [] };
         if (action === 'return') {
-            return { state, events: [returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp)] };
+            return {
+                state,
+                events: [
+                    returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp),
+                    grantExtraAction(playerId, 'special_madness', timestamp),
+                ],
+            };
         }
         const player = state.core.players[playerId];
         const drawCount = Math.min(2, player.deck.length);

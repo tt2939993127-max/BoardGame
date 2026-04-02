@@ -233,9 +233,13 @@ function handleSimpleChoiceRespond<TCore>(
     const interactionDataForEvent = responseValidationMode === 'live'
         ? { ...current.data, options: availableOptions }
         : current.data;
+    const isEmergencySkip = !isMulti
+        && resolvedValue
+        && typeof resolvedValue === 'object'
+        && (resolvedValue as { __emergency_skip__?: boolean }).__emergency_skip__ === true;
 
     const event: GameEvent = {
-        type: INTERACTION_EVENTS.RESOLVED,
+        type: isEmergencySkip ? INTERACTION_EVENTS.CANCELLED : INTERACTION_EVENTS.RESOLVED,
         payload: {
             interactionId: current.id,
             playerId,
@@ -244,6 +248,7 @@ function handleSimpleChoiceRespond<TCore>(
             value: resolvedValue,
             sourceId: data.sourceId,
             interactionData: stripNonSerializableFromData(interactionDataForEvent),
+            ...(isEmergencySkip ? { reason: 'empty-options' } : {}),
         },
         timestamp,
     };
